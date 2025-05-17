@@ -81,7 +81,7 @@ func init() {
 	bootstrapAddrs := viper.GetString("node.bootstrap")
 
 	split := strings.Split(bootstrapAddrs, ",")
-	if len(split) != 0 {
+	if bootstrapAddrs != "" {
 		bootstrapAddrList = split
 	}
 
