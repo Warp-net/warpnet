@@ -29,7 +29,7 @@
       <a href="#general-principles-of-the-warp-network">General Principles</a>
     </li>
     <li><a href="#getting-started">Getting Started</a></li>
-    <li><a href="https://github.com/Warp-net/Warp-net/docs">Documentation</a></li>
+    <li><a href="https://github.com/Warp-net/docs">Documentation</a></li>
     <li><a href="#TODO">TODO</a></li>
     <li><a href="#Contributing">Contributing</a></li>
     <li><a href="#Contact">Contact</a></li>
