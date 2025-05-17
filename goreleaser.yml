@@ -1,0 +1,34 @@
+project_name: warpnet
+version: 2
+builds:
+  - id: member
+    main: ./cmd/node/member/
+    binary: member
+    env: [CGO_ENABLED=0,GOPROXY='',GOSUMDB='',GOPRIVATE='github.com/Warp-net/warpnet']
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    gcflags:
+    - all=-l
+    ldflags:
+      - -s -w
+    flags:
+      - -mod=vendor
+      - -v
+nfpms:
+- maintainer: Vadim Filin <github.com.mecdy@passmail.net>
+  description: P2P social network.
+  homepage: https://github.com/Warp-net/warpnet
+  license: ''
+  formats:
+  - deb
+  - rpm
+
+release:
+  github:
+    owner: filinvadim
+    name: warpnet

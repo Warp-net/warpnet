@@ -1,0 +1,27 @@
+name: Deploy Warpnet Bootstrap Node
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH agent
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DO_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HOST_1 }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Warpnet Droplet
+        run: |
+          scp ./deploy.sh root@${{ secrets.HOST_1 }}:/root
+          scp ./docker-compose-warpnet.yml root@${{ secrets.HOST_1 }}:/root/docker-compose-warpnet.yml
+          ssh root@${{ secrets.HOST_1 }} 'GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} bash /root/deploy.sh'

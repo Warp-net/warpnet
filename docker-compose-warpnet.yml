@@ -1,0 +1,47 @@
+services:
+  warpnet1:
+    container_name: warpnet1
+    image: ghcr.io/warp-net/warpnet-bootstrap:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4001
+      - NODE_SEED=warpnet1
+      - NODE_NETWORK=warpnet
+      - NODE_HOST=207.154.221.44
+      - LOGGING_LEVEL=debug
+    volumes:
+    - snapshot1:/tmp/snapshot:rw
+
+  warpnet2:
+    container_name: warpnet2
+    image: ghcr.io/warp-net/warpnet-bootstrap:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4002
+      - NODE_SEED=warpnet2
+      - NODE_NETWORK=warpnet
+      - NODE_HOST=207.154.221.44
+      - LOGGING_LEVEL=debug
+    volumes:
+    - snapshot2:/tmp/snapshot:rw
+
+  warpnet3:
+    container_name: warpnet3
+    image: ghcr.io/warp-net/warpnet-bootstrap:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_SEED=warpnet3
+      - NODE_NETWORK=warpnet
+      - NODE_PORT=4003
+      - NODE_HOST=207.154.221.44
+      - LOGGING_LEVEL=debug
+    volumes:
+    - snapshot3:/tmp/snapshot:rw
+
+volumes:
+  snapshot1:
+  snapshot2:
+  snapshot3:

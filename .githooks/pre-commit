@@ -1,0 +1,24 @@
+#!/bin/bash
+
+echo "Pre-commit hook started..."
+
+CONFIG="version"
+
+if [ ! -f "$CONFIG" ]; then
+    echo "Config file not found!"
+    exit 1
+fi
+
+CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG")
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+PATCH=$((PATCH + 1))
+NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
+
+git add "$CONFIG"
+
+git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
+
+echo "Version updated to $NEW_VERSION and tagged as v$NEW_VERSION."

@@ -1,0 +1,33 @@
+#!/bin/bash
+
+echo "Pre-push hook started..."
+
+FILE="version"
+
+if [ ! -f "$FILE" ]; then
+    echo "Version file not found!"
+    exit 1
+fi
+
+# CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z\.-]+)?' "$FILE")
+CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$FILE")
+
+while read local_ref local_sha remote_ref remote_sha; do
+    if [[ "$remote_ref" == "refs/tags/"* ]]; then
+        TAG_NAME=$(basename "$remote_ref")
+
+        if [[ "$TAG_NAME" == "v$CURRENT_VERSION" ]]; then
+            echo "Pushing existing tag v$CURRENT_VERSION..."
+            exit 0
+        fi
+    fi
+done
+
+if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
+    echo "Pushing tag v$CURRENT_VERSION ..."
+    git push origin "v$CURRENT_VERSION"
+    exit 0
+else
+    echo "Tag v$CURRENT_VERSION does not exist locally. Skipping."
+    exit 1
+fi

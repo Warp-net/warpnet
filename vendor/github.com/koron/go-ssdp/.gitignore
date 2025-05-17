@@ -1,0 +1,5 @@
+*.exe
+*~
+default.pgo
+tags
+tmp/

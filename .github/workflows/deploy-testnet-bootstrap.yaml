@@ -1,0 +1,27 @@
+name: Deploy Testnet Bootstrap Node
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH agent
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DO_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HOST_SASHA }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Testnet Droplet
+        run: |
+          scp ./deploy.sh chmo@${{ secrets.HOST_SASHA }}:/home/chmo
+          scp ./docker-compose-testnet.yml chmo@${{ secrets.HOST_SASHA }}:/home/chmo/docker-compose-warpnet.yml
+          ssh chmo@${{ secrets.HOST_SASHA }} 'NODE_HOST=${{ secrets.HOST_SASHA }} GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} bash /home/chmo/deploy.sh'
