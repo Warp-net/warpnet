@@ -12,6 +12,10 @@ fi
 # CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z\.-]+)?' "$FILE")
 CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$FILE")
 
+git tag -a "v$CURRENT_VERSION" -m "Release version $CURRENT_VERSION"
+
+echo "Version updated to $CURRENT_VERSION and tagged as v$CURRENT_VERSION."
+
 while read local_ref local_sha remote_ref remote_sha; do
     if [[ "$remote_ref" == "refs/tags/"* ]]; then
         TAG_NAME=$(basename "$remote_ref")

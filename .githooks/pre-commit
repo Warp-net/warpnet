@@ -19,6 +19,4 @@ sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
 
 git add "$CONFIG"
 
-git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
 
-echo "Version updated to $NEW_VERSION and tagged as v$NEW_VERSION."
