@@ -1,13 +1,7 @@
 name: Member Node Release
 
 on:
-  push:
-    branches:
-      - release
-
-#  push:
-#    tags:
-#      - 'v*'
+  workflow_dispatch:
 
 jobs:
   release:

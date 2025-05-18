@@ -4,7 +4,7 @@ builds:
   - id: member
     main: ./cmd/node/member/
     binary: member
-    env: [CGO_ENABLED=0,GOPROXY='',GOSUMDB='',GOPRIVATE='github.com/Warp-net/warpnet']
+    env: [CGO_ENABLED=0]
     goos:
       - linux
       - windows

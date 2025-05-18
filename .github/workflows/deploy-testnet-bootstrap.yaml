@@ -18,10 +18,10 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           eval "$(ssh-agent -s)"
           ssh-add ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HOST_SASHA }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H 88.119.169.156 >> ~/.ssh/known_hosts
 
       - name: Deploy to Testnet Droplet
         run: |
-          scp ./deploy.sh chmo@${{ secrets.HOST_SASHA }}:/home/chmo
-          scp ./docker-compose-testnet.yml chmo@${{ secrets.HOST_SASHA }}:/home/chmo/docker-compose-warpnet.yml
-          ssh chmo@${{ secrets.HOST_SASHA }} 'NODE_HOST=${{ secrets.HOST_SASHA }} GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} bash /home/chmo/deploy.sh'
+          scp ./deploy.sh chmo@88.119.169.156:/home/chmo
+          scp ./docker-compose-testnet.yml chmo@88.119.169.156:/home/chmo/docker-compose-warpnet.yml
+          ssh chmo@88.119.169.156 'GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} bash /home/chmo/deploy.sh'
