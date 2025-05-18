@@ -30,5 +30,5 @@ nfpms:
 
 release:
   github:
-    owner: filinvadim
+    owner: Warp-net
     name: warpnet
