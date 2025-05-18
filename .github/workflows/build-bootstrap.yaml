@@ -40,3 +40,13 @@ jobs:
           push: true
           tags: ghcr.io/warp-net/warpnet-bootstrap:latest
           build-args: --dns 8.8.8.8
+
+      - name: Build and push Member Docker image
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/warp-net/warpnet-member:latest
+          build-args: |
+            NODE_TYPE=member
