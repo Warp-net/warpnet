@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
@@ -29,11 +32,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push Bootstrap Docker image
         id: docker_build
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ghcr.io/warp-net/warpnet-bootstrap-bootstrap:latest
+          tags: ghcr.io/warp-net/warpnet-bootstrap:latest
           build-args: --dns 8.8.8.8
