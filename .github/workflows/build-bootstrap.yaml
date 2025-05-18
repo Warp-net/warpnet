@@ -33,7 +33,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Bootstrap Docker image
-        id: docker_build
+        id: docker_build_bootstrap
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -42,7 +42,7 @@ jobs:
           build-args: --dns 8.8.8.8
 
       - name: Build and push Member Docker image
-        id: docker_build
+        id: docker_build_member
         uses: docker/build-push-action@v6
         with:
           context: .
