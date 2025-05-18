@@ -85,20 +85,20 @@ func main() {
 		FullTimestamp:   true,
 		TimestampFormat: time.DateTime,
 	})
-	if !config.Config().Node.IsTestnet() {
-		logDir := filepath.Join(appPath, "log")
-		err := os.MkdirAll(logDir, 0755)
-		if err != nil {
-			log.Fatal(err)
-		}
-		logPath := filepath.Join(logDir, fmt.Sprintf("%s.log", time.Now().Format(time.DateOnly)))
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer f.Close()
-		log.SetOutput(f)
-	}
+	//if !config.Config().Node.IsTestnet() {
+	//	logDir := filepath.Join(appPath, "log")
+	//	err := os.MkdirAll(logDir, 0755)
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//	logPath := filepath.Join(logDir, fmt.Sprintf("%s.log", time.Now().Format(time.DateOnly)))
+	//	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//	defer f.Close()
+	//	log.SetOutput(f)
+	//}
 
 	var interruptChan = make(chan os.Signal, 1)
 	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT)

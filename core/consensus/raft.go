@@ -159,7 +159,6 @@ func newRaft(
 
 	infos, err := config.Config().Node.AddrInfos()
 
-	fmt.Println("ADDDR infos", infos)
 	if err != nil {
 		return nil, err
 	}
