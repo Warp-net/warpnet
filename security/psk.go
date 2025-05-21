@@ -51,6 +51,7 @@ func (s PSK) String() string {
 	return fmt.Sprintf("%x", []byte(s))
 }
 
+// TODO use github.com/karrick/godirwalk instead
 func walkAndHash(fsys FileSystem, dir string, h io.Writer) error {
 	entries, err := fsys.ReadDir(dir)
 	if err != nil {

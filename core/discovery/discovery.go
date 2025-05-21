@@ -29,9 +29,13 @@ package discovery
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
+	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -40,7 +44,10 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/retrier"
+	"github.com/Warp-net/warpnet/security"
+	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	log "github.com/sirupsen/logrus"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -60,7 +67,7 @@ type DiscoveryInfoStorer interface {
 type NodeStorer interface {
 	BlocklistRemove(ctx context.Context, peerId warpnet.WarpPeerID) (err error)
 	IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID) (bool, error)
-	Blocklist(ctx context.Context, peerId warpnet.WarpPeerID) error
+	Blocklist24h(ctx context.Context, peerId warpnet.WarpPeerID) error
 }
 
 type UserStorer interface {
@@ -107,6 +114,7 @@ func NewDiscoveryService(
 	for _, info := range addrInfos {
 		addrs[info.ID] = discoveryBoostrapNode{info.Addrs, false}
 	}
+
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
 		config.Config().Version, "", handlers,
@@ -234,11 +242,31 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.PeerAddrInfo
 		return
 	}
 
+	ok, err := s.nodeRepo.IsBlocklisted(s.ctx, peerInfo.ID)
+	if ok && err == nil {
+		log.Infof("discovery: found blocklisted peer: %s", peerInfo.ID.String())
+		return
+	}
+
 	if err := s.node.Connect(peerInfo); err != nil {
 		log.Errorf(
 			"discovery: default handler: failed to connect to peer %s: %v\n",
 			peerInfo.ID.String(),
 			err,
+		)
+		return
+	}
+
+	err = s.requestChallenge(peerInfo)
+	if errors.Is(err, ErrChallengeMismatch) {
+		log.Warnf("discovery: default handler: challenge mismatch for peer: %s\n", peerInfo.ID.String())
+		_ = s.nodeRepo.Blocklist24h(context.Background(), peerInfo.ID)
+		return
+	}
+	if err != nil {
+		log.Errorf(
+			"discovery: default handler: failed to request challenge for peer %s: %v\n",
+			peerInfo.ID, err,
 		)
 		return
 	}
@@ -317,6 +345,17 @@ func (s *discoveryService) handle(pi warpnet.PeerAddrInfo) {
 		return
 	}
 
+	err = s.requestChallenge(pi)
+	if errors.Is(err, ErrChallengeMismatch) {
+		log.Warnf("discovery: challenge mismatch for peer: %s\n", pi.ID.String())
+		_ = s.nodeRepo.Blocklist24h(context.Background(), pi.ID)
+		return
+	}
+	if err != nil {
+		log.Errorf("discovery: failed to request challenge for peer %s: %v\n", pi.ID, err)
+		return
+	}
+
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
 		log.Errorf("discovery: %v", err)
@@ -387,6 +426,76 @@ func (s *discoveryService) markBootstrapDiscovered(pi warpnet.PeerAddrInfo) {
 	s.node.Peerstore().AddAddrs(pi.ID, bNode.addrs, time.Hour*24) // update local bootstrap addresses with public ones
 	bNode.isDiscovered = true
 	s.bootstrapAddrs[pi.ID] = bNode
+}
+
+const (
+	ErrChallengeMismatch         warpnet.WarpError = "challenge mismatch"
+	ErrChallengeSignatureInvalid warpnet.WarpError = "invalid challenge signature"
+)
+
+func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
+	if s == nil {
+		return errors.New("nil discovery service")
+	}
+
+	nonce := rand.Int64()
+	ownChallenge, location, err := security.GenerateChallenge(root.GetCodeBase(), nonce)
+	if err != nil {
+		return err
+	}
+
+	resp, err := s.node.GenericStream(
+		pi.ID.String(),
+		event.PUBLIC_GET_NODE_CHALLENGE,
+		event.GetChallengeEvent{
+			DirStack:  location.DirStack,
+			FileStack: location.FileStack,
+			Nonce:     nonce,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get challenge from new peer %s: %v", pi.ID.String(), err)
+	}
+
+	if resp == nil || len(resp) == 0 {
+		return fmt.Errorf("no challenge response from new peer %s", pi.ID.String())
+	}
+
+	var challengeResp event.GetChallengeResponse
+	err = json.JSON.Unmarshal(resp, &challengeResp)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal challenge from new peer: %s %v", resp, err)
+	}
+
+	challengeRespOrigin, err := hex.DecodeString(challengeResp.Challenge)
+	if err != nil {
+		return fmt.Errorf("failed to decode challenge origin: %v", err)
+	}
+
+	if string(ownChallenge) != string(challengeRespOrigin) {
+		return ErrChallengeMismatch
+	}
+
+	peerstorePubKey := s.node.Peerstore().PubKey(pi.ID)
+	if peerstorePubKey.Type() != pb.KeyType_Ed25519 {
+		return errors.New("peer is not an Ed25519 public key")
+	}
+
+	rawPubKey, err := peerstorePubKey.Raw()
+	if err != nil {
+		return err
+	}
+
+	decodedSig, err := base64.StdEncoding.DecodeString(challengeResp.Signature)
+	if err != nil {
+		return fmt.Errorf("invalid signature base64: %v", err)
+	}
+
+	if !ed25519.Verify(rawPubKey, challengeRespOrigin, decodedSig) {
+		return ErrChallengeSignatureInvalid
+	}
+
+	return nil
 }
 
 func (s *discoveryService) requestNodeInfo(pi warpnet.PeerAddrInfo) (info warpnet.NodeInfo, err error) {

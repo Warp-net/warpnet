@@ -29,9 +29,10 @@ package event
 
 const (
 	// admin
-	PUBLIC_POST_NODE_VERIFY = "/public/post/admin/verifynode/0.0.0"
-	PRIVATE_POST_PAIR       = "/private/post/admin/pair/0.0.0"
-	PRIVATE_GET_STATS       = "/private/get/admin/stats/0.0.0"
+	PUBLIC_POST_NODE_VERIFY   = "/public/post/admin/verifynode/0.0.0"
+	PUBLIC_GET_NODE_CHALLENGE = "/public/get/admin/challenge/0.0.0"
+	PRIVATE_POST_PAIR         = "/private/post/admin/pair/0.0.0"
+	PRIVATE_GET_STATS         = "/private/get/admin/stats/0.0.0"
 	// application
 	PRIVATE_DELETE_CHAT       = "/private/delete/chat/0.0.0"
 	PRIVATE_DELETE_MESSAGE    = "/private/delete/message/0.0.0"

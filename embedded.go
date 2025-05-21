@@ -31,15 +31,15 @@ import (
 )
 
 //go:embed *.go */*.go */*/*.go */*/*/*.go */*/*/*/*.go
-var codeBase embed.FS
+var codeBaseSingleton embed.FS
 
 func GetCodeBase() embed.FS {
-	return codeBase
+	return codeBaseSingleton
 }
 
 //go:embed version
-var version []byte
+var versionSingleton []byte
 
 func GetVersion() []byte {
-	return version
+	return versionSingleton
 }

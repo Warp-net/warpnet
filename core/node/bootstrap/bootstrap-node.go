@@ -27,6 +27,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
@@ -120,13 +121,16 @@ func NewBootstrapNode(
 	logMw := mw.LoggingMiddleware
 	bn.SetStreamHandler(
 		event.PUBLIC_POST_NODE_VERIFY,
-		mw.LoggingMiddleware(mw.UnwrapStreamMiddleware(handler.StreamVerifyHandler(bn.raft))),
+		logMw(mw.UnwrapStreamMiddleware(handler.StreamVerifyHandler(bn.raft))),
 	)
 	bn.SetStreamHandler(
 		event.PUBLIC_GET_INFO,
 		logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
 	)
-
+	bn.SetStreamHandler(
+		event.PUBLIC_GET_NODE_CHALLENGE,
+		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase()))),
+	)
 	return bn, nil
 }
 

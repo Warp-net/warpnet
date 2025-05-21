@@ -362,3 +362,14 @@ type GetImageResponse struct {
 	// Image mime type + "," + base64
 	File string `json:"file"`
 }
+
+type GetChallengeEvent struct {
+	DirStack  []int `json:"dir_stack"` // every index is level and value is dir num
+	FileStack []int `json:"file_stack"`
+	Nonce     int64 `json:"nonce"`
+}
+
+type GetChallengeResponse struct {
+	Challenge string `json:"challenge"`
+	Signature string `json:"signature"`
+}
