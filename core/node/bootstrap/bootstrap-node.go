@@ -129,7 +129,7 @@ func NewBootstrapNode(
 	)
 	bn.SetStreamHandler(
 		event.PUBLIC_GET_NODE_CHALLENGE,
-		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase()))),
+		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), warpPrivKey))),
 	)
 	return bn, nil
 }
