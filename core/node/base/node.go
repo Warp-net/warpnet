@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/backoff"
 	_ "github.com/Warp-net/warpnet/core/logging"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -37,6 +38,7 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
 	"strings"
 	"sync/atomic"
@@ -49,11 +51,17 @@ type Streamer interface {
 	Send(peerAddr warpnet.PeerAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
+type BackoffEnabler interface {
+	IsBackoffEnabled(id peer.ID) bool
+	Reset(id peer.ID)
+}
+
 type WarpNode struct {
 	ctx      context.Context
 	node     warpnet.P2PNode
 	relay    warpnet.WarpRelayCloser
 	streamer Streamer
+	backoff  BackoffEnabler
 
 	ownerId  string
 	pskHash  string
@@ -151,6 +159,7 @@ func NewWarpNode(
 		isClosed:  new(atomic.Bool),
 		version:   config.Config().Version,
 		startTime: time.Now(),
+		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 	}
 
 	return wn, wn.validateSupportedProtocols()
@@ -166,11 +175,16 @@ func (n *WarpNode) Connect(p warpnet.PeerAddrInfo) error {
 	if isConnected {
 		return nil
 	}
+	if n.backoff.IsBackoffEnabled(p.ID) {
+		return backoff.ErrBackoffEnabled
+	}
 
 	log.Debugf("node: connect attempt to node: %s", p.String())
 	if err := n.node.Connect(n.ctx, p); err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
+
+	n.backoff.Reset(p.ID)
 	log.Debugf("node: connect attempt successful: %s", p.ID.String())
 
 	return nil

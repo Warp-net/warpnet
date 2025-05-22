@@ -29,6 +29,8 @@ package mdns
 
 import (
 	"context"
+	"errors"
+	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -104,12 +106,13 @@ func (m *mdnsDiscoveryService) HandlePeerFound(p peer.AddrInfo) {
 }
 
 func (m *mdnsDiscoveryService) defaultDiscoveryHandler(peerInfo warpnet.PeerAddrInfo) {
-	if err := m.node.Connect(peerInfo); err != nil {
-		log.Errorf(
-			"mdns: discovery: failed to connect to peer %s: %v",
-			peerInfo.String(),
-			err,
-		)
+	err := m.node.Connect(peerInfo)
+	if errors.Is(err, backoff.ErrBackoffEnabled) {
+		log.Debugf("mdns: discovery: backoffed: %s %s", peerInfo.Addrs, peerInfo.ID)
+		return
+	}
+	if err != nil {
+		log.Errorf("mdns: discovery: failed to connect to peer %s: %v", peerInfo.String(), err)
 		return
 	}
 	log.Debugf("mdns: discovery: connected to peer: %s %s", peerInfo.Addrs, peerInfo.ID)

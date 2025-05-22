@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package discovery
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -37,6 +38,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -48,7 +50,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	log "github.com/sirupsen/logrus"
 	"math/rand/v2"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -76,11 +77,6 @@ type UserStorer interface {
 	GetByNodeID(nodeID string) (user domain.User, err error)
 }
 
-type discoveryBoostrapNode struct {
-	addrs        []warpnet.WarpAddress
-	isDiscovered bool
-}
-
 type discoveryService struct {
 	ctx      context.Context
 	node     DiscoveryInfoStorer
@@ -91,11 +87,10 @@ type discoveryService struct {
 
 	handlers []DiscoveryHandler
 
-	mx             *sync.RWMutex
-	bootstrapAddrs map[warpnet.WarpPeerID]discoveryBoostrapNode
-
-	retrier retrier.Retrier
-	limiter *leakyBucketRateLimiter
+	retrier        retrier.Retrier
+	limiter        *leakyBucketRateLimiter
+	cache          *discoveryCache
+	bootstrapAddrs []warpnet.PeerAddrInfo
 
 	discoveryChan chan warpnet.PeerAddrInfo
 	stopChan      chan struct{}
@@ -109,18 +104,15 @@ func NewDiscoveryService(
 	nodeRepo NodeStorer,
 	handlers ...DiscoveryHandler,
 ) *discoveryService {
-	addrs := make(map[warpnet.WarpPeerID]discoveryBoostrapNode)
 	addrInfos, _ := config.Config().Node.AddrInfos()
-	for _, info := range addrInfos {
-		addrs[info.ID] = discoveryBoostrapNode{info.Addrs, false}
-	}
 
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
 		config.Config().Version, "", handlers,
-		new(sync.RWMutex), addrs,
 		retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		newRateLimiter(16, 1),
+		newDiscoveryCache(),
+		addrInfos,
 		make(chan warpnet.PeerAddrInfo, 1000), make(chan struct{}),
 		new(atomic.Bool),
 	}
@@ -172,14 +164,12 @@ func (s *discoveryService) syncBootstrapDiscovery() error {
 		s.syncDone.Store(true)
 	}()
 
-	s.mx.RLock()
-	for id, discNode := range s.bootstrapAddrs {
-		if s.node.NodeInfo().ID == id {
+	for _, info := range s.bootstrapAddrs {
+		if s.node.NodeInfo().ID == info.ID {
 			continue
 		}
-		s.discoveryChan <- warpnet.PeerAddrInfo{ID: id, Addrs: discNode.addrs}
+		s.discoveryChan <- info
 	}
-	s.mx.RUnlock()
 
 	if s.node.NodeInfo().IsBootstrap() {
 		return nil
@@ -198,14 +188,13 @@ func (s *discoveryService) syncBootstrapDiscovery() error {
 		case <-s.stopChan:
 			return nil
 		case <-ticker.C:
-			s.mx.RLock()
-			for _, discNode := range s.bootstrapAddrs {
-				if !discNode.isDiscovered {
+			for _, info := range s.bootstrapAddrs {
+				if !s.cache.IsChallengedAlready(info.ID) {
 					isAllDiscovered = false
 					break
 				}
 			}
-			s.mx.RUnlock()
+
 			if isAllDiscovered {
 				log.Infof("discovery: all bootstrap addresses discovered")
 				return nil
@@ -248,18 +237,21 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.PeerAddrInfo
 		return
 	}
 
-	if err := s.node.Connect(peerInfo); err != nil {
-		log.Errorf(
-			"discovery: default handler: failed to connect to peer %s: %v\n",
-			peerInfo.ID.String(),
-			err,
-		)
+	err = s.node.Connect(peerInfo)
+	if errors.Is(err, backoff.ErrBackoffEnabled) {
+		return
+	}
+	if err != nil {
+		if errors.Is(err, warpnet.ErrAllDialsFailed) {
+			err = warpnet.ErrAllDialsFailed
+		}
+		log.Errorf("discovery: default handler: connecting to peer %s: %v\n", peerInfo.ID.String(), err)
 		return
 	}
 
 	err = s.requestChallenge(peerInfo)
-	if errors.Is(err, ErrChallengeMismatch) {
-		log.Warnf("discovery: default handler: challenge mismatch for peer: %s\n", peerInfo.ID.String())
+	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
+		log.Warnf("discovery: default handler: challenge is invalid for peer: %s\n", peerInfo.ID.String())
 		_ = s.nodeRepo.Blocklist24h(context.Background(), peerInfo.ID)
 		return
 	}
@@ -327,16 +319,17 @@ func (s *discoveryService) handle(pi warpnet.PeerAddrInfo) {
 		h(pi)
 	}
 
-	if s.isMineBootstrapNodes(pi) {
-		return
-	}
-
-	if !s.hasPublicAddresses(pi.Addrs) {
+	if !hasPublicAddresses(pi.Addrs) {
 		log.Debugf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
 		return
 	}
 
-	if err := s.node.Connect(pi); err != nil {
+	err = s.node.Connect(pi)
+	if errors.Is(err, backoff.ErrBackoffEnabled) {
+		log.Debugf("discovery: connecting is backoffed: %s", pi.ID)
+		return
+	}
+	if err != nil {
 		log.Debugf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
@@ -346,8 +339,8 @@ func (s *discoveryService) handle(pi warpnet.PeerAddrInfo) {
 	}
 
 	err = s.requestChallenge(pi)
-	if errors.Is(err, ErrChallengeMismatch) {
-		log.Warnf("discovery: challenge mismatch for peer: %s\n", pi.ID.String())
+	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
+		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
 		_ = s.nodeRepo.Blocklist24h(context.Background(), pi.ID)
 		return
 	}
@@ -367,7 +360,6 @@ func (s *discoveryService) handle(pi warpnet.PeerAddrInfo) {
 	}
 
 	if info.IsBootstrap() {
-		s.markBootstrapDiscovered(pi)
 		return
 	}
 
@@ -403,31 +395,6 @@ func (s *discoveryService) handle(pi warpnet.PeerAddrInfo) {
 	)
 }
 
-func (s *discoveryService) isMineBootstrapNodes(pi warpnet.PeerAddrInfo) bool {
-	if !s.syncDone.Load() {
-		return false
-	}
-
-	s.mx.Lock()
-	defer s.mx.Unlock()
-
-	_, ok := s.bootstrapAddrs[pi.ID]
-	return ok
-}
-
-func (s *discoveryService) markBootstrapDiscovered(pi warpnet.PeerAddrInfo) {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-
-	bNode, ok := s.bootstrapAddrs[pi.ID]
-	if !ok {
-		return
-	}
-	s.node.Peerstore().AddAddrs(pi.ID, bNode.addrs, time.Hour*24) // update local bootstrap addresses with public ones
-	bNode.isDiscovered = true
-	s.bootstrapAddrs[pi.ID] = bNode
-}
-
 const (
 	ErrChallengeMismatch         warpnet.WarpError = "challenge mismatch"
 	ErrChallengeSignatureInvalid warpnet.WarpError = "invalid challenge signature"
@@ -436,6 +403,10 @@ const (
 func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 	if s == nil {
 		return errors.New("nil discovery service")
+	}
+	if s.cache.IsChallengedAlready(pi.ID) {
+		log.Infof("discovery: peer %s already challenged", pi.ID.String())
+		return nil
 	}
 
 	nonce := rand.Int64()
@@ -472,11 +443,14 @@ func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 		return fmt.Errorf("failed to decode challenge origin: %v", err)
 	}
 
-	if string(ownChallenge) != string(challengeRespOrigin) {
+	if !bytes.Equal(ownChallenge, challengeRespOrigin) {
 		return ErrChallengeMismatch
 	}
 
 	peerstorePubKey := s.node.Peerstore().PubKey(pi.ID)
+	if peerstorePubKey == nil {
+		return fmt.Errorf("peer %s has no public key", pi.ID.String())
+	}
 	if peerstorePubKey.Type() != pb.KeyType_Ed25519 {
 		return errors.New("peer is not an Ed25519 public key")
 	}
@@ -495,12 +469,13 @@ func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 		return ErrChallengeSignatureInvalid
 	}
 
+	s.cache.SetAsChallenged(pi.ID)
 	return nil
 }
 
 func (s *discoveryService) requestNodeInfo(pi warpnet.PeerAddrInfo) (info warpnet.NodeInfo, err error) {
 	if s == nil {
-		return info, err
+		return info, errors.New("nil discovery service")
 	}
 
 	infoResp, err := s.node.GenericStream(pi.ID.String(), event.PUBLIC_GET_INFO, nil)
@@ -524,7 +499,7 @@ func (s *discoveryService) requestNodeInfo(pi warpnet.PeerAddrInfo) (info warpne
 
 func (s *discoveryService) requestNodeUser(pi warpnet.PeerAddrInfo, userId string) (user domain.User, err error) {
 	if s == nil {
-		return user, err
+		return user, errors.New("nil discovery service")
 	}
 
 	getUserEvent := event.GetUserEvent{UserId: userId}
@@ -549,7 +524,7 @@ func (s *discoveryService) requestNodeUser(pi warpnet.PeerAddrInfo, userId strin
 	return user, nil
 }
 
-func (s *discoveryService) hasPublicAddresses(addrs []warpnet.WarpAddress) bool {
+func hasPublicAddresses(addrs []warpnet.WarpAddress) bool {
 	for _, addr := range addrs {
 		if warpnet.IsPublicMultiAddress(addr) {
 			return true

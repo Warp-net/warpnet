@@ -63,7 +63,6 @@ const (
 
 type PubsubServerNodeConnector interface {
 	Node() warpnet.P2PNode
-	Connect(warpnet.PeerAddrInfo) error
 	NodeInfo() warpnet.NodeInfo
 }
 
