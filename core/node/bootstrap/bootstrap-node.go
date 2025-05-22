@@ -26,6 +26,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
@@ -156,8 +157,12 @@ func (bn *BootstrapNode) Start() error {
 }
 
 func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
-	// stub
-	return nil, nil
+	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+	bt, err := bn.Stream(nodeId, path, data)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		return bt, nil
+	}
+	return bt, err
 }
 
 func (bn *BootstrapNode) Stop() {
