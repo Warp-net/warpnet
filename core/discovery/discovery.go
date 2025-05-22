@@ -445,6 +445,8 @@ func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 
 	if !bytes.Equal(ownChallenge, challengeRespOrigin) {
 		return ErrChallengeMismatch
+	} else {
+		log.Infof("discovery: challenge match: %s == %s", hex.EncodeToString(ownChallenge), hex.EncodeToString(challengeRespOrigin))
 	}
 
 	peerstorePubKey := s.node.Peerstore().PubKey(pi.ID)
@@ -467,6 +469,8 @@ func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 
 	if !ed25519.Verify(rawPubKey, challengeRespOrigin, decodedSig) {
 		return ErrChallengeSignatureInvalid
+	} else {
+		log.Infof("discovery: signature verified for peer %s", pi.ID.String())
 	}
 
 	s.cache.SetAsChallenged(pi.ID)
