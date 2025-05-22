@@ -118,6 +118,12 @@ func NewBootstrapNode(
 		psk:               psk,
 	}
 
+	codeBase := root.GetCodeBase()
+	codeHash, err := security.GetCodebaseHash(codeBase)
+	if err != nil {
+		log.Fatalf("bootstrap: failed to get code base hash: %v", err)
+	}
+
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
 	bn.SetStreamHandler(
@@ -130,7 +136,7 @@ func NewBootstrapNode(
 	)
 	bn.SetStreamHandler(
 		event.PUBLIC_GET_NODE_CHALLENGE,
-		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), warpPrivKey))),
+		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(codeBase, codeHash, warpPrivKey))),
 	)
 	return bn, nil
 }

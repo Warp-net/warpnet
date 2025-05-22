@@ -218,6 +218,12 @@ func (m *MemberNode) setupHandlers(
 		NodeInfo: m.NodeInfo(),
 	}
 
+	codeBase := root.GetCodeBase()
+	codeHash, err := security.GetCodebaseHash(codeBase)
+	if err != nil {
+		log.Fatalf("member: failed to get code base hash: %v", err)
+	}
+
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
 	authMw := mw.AuthMiddleware
@@ -228,7 +234,7 @@ func (m *MemberNode) setupHandlers(
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_NODE_CHALLENGE,
-		logMw(unwrapMw(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
+		logMw(unwrapMw(handler.StreamChallengeHandler(codeBase, codeHash, privKey))),
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_INFO,

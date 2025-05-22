@@ -27,7 +27,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/bootstrap"
 	"github.com/Warp-net/warpnet/metrics"
@@ -42,10 +41,8 @@ import (
 
 func main() {
 	defer closeWriter()
-
-	log.Infoln("Warpnet version:", config.Config().Version)
-
-	psk, err := security.GeneratePSK(root.GetCodeBase(), config.Config().Version)
+	
+	psk, err := security.GeneratePSK(config.Config().Version)
 	if err != nil {
 		panic(err)
 	}

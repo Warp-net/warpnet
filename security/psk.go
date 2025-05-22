@@ -104,7 +104,7 @@ func hashFile(fsys FileSystem, path string) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-func getCodebaseHash(codebase FileSystem) ([]byte, error) {
+func GetCodebaseHash(codebase FileSystem) ([]byte, error) {
 	h := sha256.New()
 
 	err := walkAndHash(codebase, ".", h)
@@ -127,23 +127,15 @@ func generateAnchoredEntropy() []byte {
 	return input
 }
 
-// GeneratePSK TODO access this approach
-func GeneratePSK(codebase FileSystem, v *semver.Version) (PSK, error) {
-	if config.Config().Node.IsTestnet() {
-		return ConvertToSHA256([]byte(config.Config().Node.Network)), nil
-	}
-	if codebase == nil || v == nil {
+// GeneratePSK TODO rotate PSK
+func GeneratePSK(v *semver.Version) (PSK, error) {
+	if v == nil {
 		return nil, errors.New("psk: codebase or version required")
-	}
-	codeHash, err := getCodebaseHash(codebase)
-	if err != nil {
-		return nil, err
 	}
 	entropy := generateAnchoredEntropy()
 	majorStr := strconv.FormatInt(int64(v.Major()), 10)
 
-	seed := append([]byte(config.Config().Node.Network), codeHash...)
-	seed = append(seed, []byte(majorStr)...)
+	seed := append([]byte(config.Config().Node.Network), []byte(majorStr)...)
 	seed = append(seed, entropy...)
 	return ConvertToSHA256(seed), nil
 }
