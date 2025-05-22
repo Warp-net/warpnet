@@ -86,6 +86,9 @@ func init() {
 	}
 
 	network := strings.TrimSpace(viper.GetString("node.network"))
+	if network == "mainnet" {
+		network = warpnetNetwork
+	}
 	if network == warpnetNetwork {
 		bootstrapAddrList = append(bootstrapAddrList, warpnetBootstrapNodes...)
 	}

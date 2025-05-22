@@ -26,7 +26,9 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
@@ -120,13 +122,16 @@ func NewBootstrapNode(
 	logMw := mw.LoggingMiddleware
 	bn.SetStreamHandler(
 		event.PUBLIC_POST_NODE_VERIFY,
-		mw.LoggingMiddleware(mw.UnwrapStreamMiddleware(handler.StreamVerifyHandler(bn.raft))),
+		logMw(mw.UnwrapStreamMiddleware(handler.StreamVerifyHandler(bn.raft))),
 	)
 	bn.SetStreamHandler(
 		event.PUBLIC_GET_INFO,
 		logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
 	)
-
+	bn.SetStreamHandler(
+		event.PUBLIC_GET_NODE_CHALLENGE,
+		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), warpPrivKey))),
+	)
 	return bn, nil
 }
 
@@ -152,8 +157,12 @@ func (bn *BootstrapNode) Start() error {
 }
 
 func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
-	// stub
-	return nil, nil
+	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+	bt, err := bn.Stream(nodeId, path, data)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		return bt, nil
+	}
+	return bt, err
 }
 
 func (bn *BootstrapNode) Stop() {

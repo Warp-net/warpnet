@@ -1,9 +1,10 @@
-name: Build Bootstrap Node
+name: Build
 
 on:
   push:
     branches:
       - main
+      - develop
 
 jobs:
   build:

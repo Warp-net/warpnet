@@ -28,13 +28,19 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
+	"io/fs"
 )
 
 type AdminStreamer interface {
@@ -81,5 +87,45 @@ func StreamConsensusResetHandler(consRepo ConsensusResetter) middleware.WarpHand
 		}
 
 		return event.Accepted, consRepo.Reset()
+	}
+}
+
+type FileSystem interface {
+	ReadDir(name string) ([]fs.DirEntry, error)
+	ReadFile(name string) ([]byte, error)
+	Open(name string) (fs.File, error)
+}
+
+func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) middleware.WarpHandler {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		if fs == nil {
+			panic("challenge handler called with nil file system")
+		}
+		var req event.GetChallengeEvent
+		err := json.JSON.Unmarshal(buf, &req)
+		if err != nil {
+			return nil, err
+		}
+
+		challenge, err := security.ResolveChallenge(
+			fs,
+			security.SampleLocation{
+				DirStack:  req.DirStack,
+				FileStack: req.FileStack,
+			},
+			req.Nonce,
+		)
+
+		edKey, err := privateKey.Raw()
+		if err != nil {
+			return nil, fmt.Errorf("challenge handler failed to get raw ed25519 key: %v", err)
+		}
+
+		sig := ed25519.Sign(edKey, challenge)
+
+		return event.GetChallengeResponse{
+			Challenge: hex.EncodeToString(challenge),
+			Signature: base64.StdEncoding.EncodeToString(sig),
+		}, nil
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/dht"
@@ -122,7 +123,7 @@ func NewMemberNode(
 		userRepo:      userRepo,
 	}
 
-	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db)
+	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)
 	return mn, nil
 }
 
@@ -198,7 +199,12 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 }
 
 func (m *MemberNode) setupHandlers(
-	authRepo AuthProvider, userRepo UserProvider, followRepo FollowStorer, consRepo ConsensusStorer, db Storer,
+	authRepo AuthProvider,
+	userRepo UserProvider,
+	followRepo FollowStorer,
+	consRepo ConsensusStorer,
+	db Storer,
+	privKey warpnet.WarpPrivateKey,
 ) {
 	timelineRepo := database.NewTimelineRepo(db)
 	tweetRepo := database.NewTweetRepo(db)
@@ -219,6 +225,10 @@ func (m *MemberNode) setupHandlers(
 	m.SetStreamHandler(
 		event.PUBLIC_POST_NODE_VERIFY,
 		logMw(unwrapMw(handler.StreamVerifyHandler(m.raft))),
+	)
+	m.SetStreamHandler(
+		event.PUBLIC_GET_NODE_CHALLENGE,
+		logMw(unwrapMw(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_INFO,
