@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	root "github.com/Warp-net/warpnet"
 	frontend "github.com/Warp-net/warpnet-frontend"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/client"
@@ -71,7 +70,7 @@ func main() {
 	defer closeWriter()
 	appPath := getAppPath()
 
-	psk, err := security.GeneratePSK(root.GetCodeBase(), config.Config().Version)
+	psk, err := security.GeneratePSK(config.Config().Version)
 	if err != nil {
 		log.Fatal(err)
 	}

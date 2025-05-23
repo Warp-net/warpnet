@@ -82,6 +82,11 @@ func (c *consensusLogger) Error(msg string, args ...interface{}) {
 		c.failedRequestCount++
 		return
 	}
+	if strings.Contains(msg, "failed to heartbeat") && c.failedRequestCount < 10 {
+		c.failedRequestCount++
+		return
+	}
+
 	if strings.Contains(msg, "failed to decode incoming command") && c.decodeCount < 3 {
 		c.decodeCount++
 		return

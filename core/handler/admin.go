@@ -39,7 +39,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
-	log "github.com/sirupsen/logrus"
 	"io/fs"
 )
 
@@ -65,11 +64,6 @@ func StreamVerifyHandler(state AdminStateCommitter) middleware.WarpHandler {
 		if err != nil {
 			return nil, err
 		}
-
-		log.Infof(
-			"node verify request received: %s %s",
-			s.Conn().RemotePeer().String(), s.Conn().RemoteMultiaddr().String(),
-		)
 
 		updatedState, err := state.CommitState(newState)
 		if err != nil {
@@ -107,6 +101,11 @@ func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) mi
 			return nil, err
 		}
 
+		codeHash, err := security.GetCodebaseHash(fs)
+		if err != nil {
+			return nil, err
+		}
+
 		challenge, err := security.ResolveChallenge(
 			fs,
 			security.SampleLocation{
@@ -121,10 +120,13 @@ func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) mi
 			return nil, fmt.Errorf("challenge handler failed to get raw ed25519 key: %v", err)
 		}
 
-		sig := ed25519.Sign(edKey, challenge)
+		message := append(challenge, codeHash...)
+
+		sig := ed25519.Sign(edKey, message)
 
 		return event.GetChallengeResponse{
 			Challenge: hex.EncodeToString(challenge),
+			CodeHash:  hex.EncodeToString(codeHash),
 			Signature: base64.StdEncoding.EncodeToString(sig),
 		}, nil
 	}

@@ -26,7 +26,6 @@ package base
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
@@ -64,7 +63,6 @@ type WarpNode struct {
 	backoff  BackoffEnabler
 
 	ownerId  string
-	pskHash  string
 	isClosed *atomic.Bool
 	version  *semver.Version
 
@@ -154,7 +152,6 @@ func NewWarpNode(
 		node:      node,
 		relay:     relayService,
 		ownerId:   ownerId,
-		pskHash:   hex.EncodeToString(security.ConvertToSHA256(psk)),
 		streamer:  stream.NewStreamPool(ctx, node),
 		isClosed:  new(atomic.Bool),
 		version:   config.Config().Version,
@@ -257,7 +254,6 @@ func (n *WarpNode) NodeInfo() warpnet.NodeInfo {
 		OwnerId:    n.ownerId,
 		StartTime:  n.startTime,
 		RelayState: relayState,
-		PSKHash:    n.pskHash,
 	}
 }
 
