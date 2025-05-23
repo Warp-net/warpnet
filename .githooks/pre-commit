@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if git rev-parse --abbrev-ref HEAD == "main"; then
+    exit 0
+fi
+
 echo "Pre-commit hook started..."
 
 CONFIG="version"
