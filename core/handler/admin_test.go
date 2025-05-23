@@ -14,8 +14,7 @@ import (
 	"testing"
 )
 
-// todo
-func testStreamChallengeHandler_Success(t *testing.T) {
+func TestStreamChallengeHandler_Success(t *testing.T) {
 	privKey, err := security.GenerateKeyFromSeed([]byte("test"))
 	if err != nil {
 		t.Fatalf("failed to generate key: %v", err)
@@ -29,6 +28,11 @@ func testStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to generate challenge: %v", err)
 	}
 
+	ownCodeHash, err := security.GetCodebaseHash(root.GetCodeBase())
+	if err != nil {
+		t.Fatalf("failed to generate code hash: %v", err)
+	}
+
 	ev := event.GetChallengeEvent{
 		DirStack:  location.DirStack,
 		FileStack: location.FileStack,
@@ -40,7 +44,7 @@ func testStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to marshal challenge: %v", err)
 	}
 
-	resp, err := StreamChallengeHandler(root.GetCodeBase(), nil, warpPrivKey)(bt, nil) // TODO
+	resp, err := StreamChallengeHandler(root.GetCodeBase(), warpPrivKey)(bt, nil)
 	if err != nil {
 		t.Fatalf("challenge handler: %v", err)
 	}
@@ -51,11 +55,13 @@ func testStreamChallengeHandler_Success(t *testing.T) {
 	}
 
 	hexedOwnChallenge := hex.EncodeToString(ownChallenge)
+	hexedOwnCodeHash := hex.EncodeToString(ownCodeHash)
 
 	if challengeResp.Challenge != hexedOwnChallenge {
-		t.Fatalf("challenge handler returned unexpected challenge: %s != %s", hexedOwnChallenge, challengeResp.Challenge)
-	} else {
-		fmt.Printf("challenges are matching: %s === %s\n", hexedOwnChallenge, challengeResp.Challenge)
+		t.Fatalf("challenge: %s != %s", hexedOwnChallenge, challengeResp.Challenge)
+	}
+	if challengeResp.CodeHash != hexedOwnCodeHash {
+		t.Fatalf("code hash: %s != %s", hexedOwnCodeHash, challengeResp.CodeHash)
 	}
 
 	decodedSig, err := base64.StdEncoding.DecodeString(challengeResp.Signature)
@@ -73,7 +79,9 @@ func testStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to decode challenge origin: %v", err)
 	}
 
-	if !ed25519.Verify(rawPubKey, challengeOrigin, decodedSig) {
+	message := append(challengeOrigin, ownCodeHash...)
+
+	if !ed25519.Verify(rawPubKey, message, decodedSig) {
 		t.Fatalf("failed to verify challenge")
 	} else {
 		fmt.Println("challenge verified")

@@ -120,14 +120,14 @@ const spbFounding = -((int64(133129) << 16) + 51200)
 func generateAnchoredEntropy() []byte {
 	spbFoundingStr := strconv.FormatInt(spbFounding, 10)
 	input := []byte(spbFoundingStr)
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10; i++ {
 		sum := sha256.Sum256(input)
 		input = sum[:]
 	}
 	return input
 }
 
-// GeneratePSK TODO rotate PSK
+// GeneratePSK TODO rotate PSK?
 func GeneratePSK(v *semver.Version) (PSK, error) {
 	if v == nil {
 		return nil, errors.New("psk: codebase or version required")

@@ -39,7 +39,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
-	log "github.com/sirupsen/logrus"
 	"io/fs"
 )
 
@@ -66,11 +65,6 @@ func StreamVerifyHandler(state AdminStateCommitter) middleware.WarpHandler {
 			return nil, err
 		}
 
-		log.Infof(
-			"node verify request received: %s %s",
-			s.Conn().RemotePeer().String(), s.Conn().RemoteMultiaddr().String(),
-		)
-
 		updatedState, err := state.CommitState(newState)
 		if err != nil {
 			return nil, err
@@ -96,13 +90,18 @@ type FileSystem interface {
 	Open(name string) (fs.File, error)
 }
 
-func StreamChallengeHandler(fs FileSystem, codeHash []byte, privateKey warpnet.WarpPrivateKey) middleware.WarpHandler {
+func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) middleware.WarpHandler {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		if fs == nil {
 			panic("challenge handler called with nil file system")
 		}
 		var req event.GetChallengeEvent
 		err := json.JSON.Unmarshal(buf, &req)
+		if err != nil {
+			return nil, err
+		}
+
+		codeHash, err := security.GetCodebaseHash(fs)
 		if err != nil {
 			return nil, err
 		}
