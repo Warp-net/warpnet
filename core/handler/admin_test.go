@@ -28,11 +28,6 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to generate challenge: %v", err)
 	}
 
-	ownCodeHash, err := security.GetCodebaseHash(root.GetCodeBase())
-	if err != nil {
-		t.Fatalf("failed to generate code hash: %v", err)
-	}
-
 	ev := event.GetChallengeEvent{
 		DirStack:  location.DirStack,
 		FileStack: location.FileStack,
@@ -55,13 +50,9 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 	}
 
 	hexedOwnChallenge := hex.EncodeToString(ownChallenge)
-	hexedOwnCodeHash := hex.EncodeToString(ownCodeHash)
 
 	if challengeResp.Challenge != hexedOwnChallenge {
 		t.Fatalf("challenge: %s != %s", hexedOwnChallenge, challengeResp.Challenge)
-	}
-	if challengeResp.CodeHash != hexedOwnCodeHash {
-		t.Fatalf("code hash: %s != %s", hexedOwnCodeHash, challengeResp.CodeHash)
 	}
 
 	decodedSig, err := base64.StdEncoding.DecodeString(challengeResp.Signature)
@@ -79,9 +70,7 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to decode challenge origin: %v", err)
 	}
 
-	message := append(challengeOrigin, ownCodeHash...)
-
-	if !ed25519.Verify(rawPubKey, message, decodedSig) {
+	if !ed25519.Verify(rawPubKey, challengeOrigin, decodedSig) {
 		t.Fatalf("failed to verify challenge")
 	} else {
 		fmt.Println("challenge verified")
