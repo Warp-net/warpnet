@@ -90,6 +90,7 @@ type FileSystem interface {
 	Open(name string) (fs.File, error)
 }
 
+// TODO nonce cache check
 func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) middleware.WarpHandler {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		if fs == nil {
@@ -120,9 +121,7 @@ func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) mi
 			return nil, fmt.Errorf("challenge handler failed to get raw ed25519 key: %v", err)
 		}
 
-		message := append(challenge, codeHash...)
-
-		sig := ed25519.Sign(edKey, message)
+		sig := ed25519.Sign(edKey, challenge)
 
 		return event.GetChallengeResponse{
 			Challenge: hex.EncodeToString(challenge),

@@ -398,7 +398,6 @@ func (s *discoveryService) handle(pi warpnet.PeerAddrInfo) {
 
 const (
 	ErrChallengeMismatch         warpnet.WarpError = "challenge mismatch"
-	ErrCodeHashMismatch          warpnet.WarpError = "code hash mismatch"
 	ErrChallengeSignatureInvalid warpnet.WarpError = "invalid challenge signature"
 )
 
@@ -411,9 +410,8 @@ func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 		return nil
 	}
 
-	codeBase := root.GetCodeBase()
 	nonce := rand.Int64()
-	ownChallenge, location, err := security.GenerateChallenge(codeBase, nonce)
+	ownChallenge, location, err := security.GenerateChallenge(root.GetCodeBase(), nonce)
 	if err != nil {
 		return err
 	}
@@ -445,21 +443,11 @@ func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode challenge origin: %v", err)
 	}
-	codeHashRespRemote, err := hex.DecodeString(challengeResp.CodeHash)
-	if err != nil {
-		return fmt.Errorf("failed to decode code hash origin: %v", err)
-	}
 
 	if !bytes.Equal(ownChallenge, challengeRespRemote) {
 		return ErrChallengeMismatch
 	} else {
 		log.Debugf("discovery: challenge match: %s == %s", hex.EncodeToString(ownChallenge), hex.EncodeToString(challengeRespRemote))
-	}
-
-	if !bytes.Equal(s.codeHash, codeHashRespRemote) {
-		return ErrCodeHashMismatch
-	} else {
-		log.Debugf("discovery: code hash match: %s == %s", hex.EncodeToString(s.codeHash), hex.EncodeToString(codeHashRespRemote))
 	}
 
 	peerstorePubKey := s.node.Peerstore().PubKey(pi.ID)
@@ -480,9 +468,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 		return fmt.Errorf("invalid signature base64: %v", err)
 	}
 
-	message := append(challengeRespRemote, codeHashRespRemote...)
-
-	if !ed25519.Verify(rawPubKey, message, decodedSig) {
+	if !ed25519.Verify(rawPubKey, challengeRespRemote, decodedSig) {
 		return ErrChallengeSignatureInvalid
 	} else {
 		log.Debugf("discovery: signature verified for peer %s", pi.ID.String())
