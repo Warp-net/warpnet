@@ -1,6 +1,6 @@
 [![Go Version](https://img.shields.io/badge/Go-1.24+-brightgreen)](https://golang.org/dl/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-[![Build Bootstrap Node](https://github.com/Warp-net/Warp-net/actions/workflows/build-bootstrap.yaml/badge.svg)](https://github.com/Warp-net/Warp-net/actions/workflows/build-bootstrap.yaml)
+[![Build](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml)
 [![Telegram Chat](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)
 <br />
 <div align="center">
@@ -29,7 +29,6 @@
       <a href="#general-principles-of-the-warp-network">General Principles</a>
     </li>
     <li><a href="#getting-started">Getting Started</a></li>
-    <li><a href="https://github.com/Warp-net/docs">Documentation</a></li>
     <li><a href="#TODO">TODO</a></li>
     <li><a href="#Contributing">Contributing</a></li>
     <li><a href="#Contact">Contact</a></li>
@@ -71,7 +70,7 @@ List of software needed and how to install them.
 - [ ] Create DMG package
 - [ ] Create Snap package
 - [ ] Set up bootstrap nodes on each continent
-- [ ] TODO
+- [ ] ...
 
 See the [open issues](https://github.com/Warp-net/warpnet/issues) for a full list of proposed features (and known issues).
 

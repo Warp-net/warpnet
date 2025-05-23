@@ -28,13 +28,18 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	log "github.com/sirupsen/logrus"
+	"github.com/Warp-net/warpnet/security"
+	"io/fs"
 )
 
 type AdminStreamer interface {
@@ -60,11 +65,6 @@ func StreamVerifyHandler(state AdminStateCommitter) middleware.WarpHandler {
 			return nil, err
 		}
 
-		log.Infof(
-			"node verify request received: %s %s",
-			s.Conn().RemotePeer().String(), s.Conn().RemoteMultiaddr().String(),
-		)
-
 		updatedState, err := state.CommitState(newState)
 		if err != nil {
 			return nil, err
@@ -81,5 +81,53 @@ func StreamConsensusResetHandler(consRepo ConsensusResetter) middleware.WarpHand
 		}
 
 		return event.Accepted, consRepo.Reset()
+	}
+}
+
+type FileSystem interface {
+	ReadDir(name string) ([]fs.DirEntry, error)
+	ReadFile(name string) ([]byte, error)
+	Open(name string) (fs.File, error)
+}
+
+func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) middleware.WarpHandler {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		if fs == nil {
+			panic("challenge handler called with nil file system")
+		}
+		var req event.GetChallengeEvent
+		err := json.JSON.Unmarshal(buf, &req)
+		if err != nil {
+			return nil, err
+		}
+
+		codeHash, err := security.GetCodebaseHash(fs)
+		if err != nil {
+			return nil, err
+		}
+
+		challenge, err := security.ResolveChallenge(
+			fs,
+			security.SampleLocation{
+				DirStack:  req.DirStack,
+				FileStack: req.FileStack,
+			},
+			req.Nonce,
+		)
+
+		edKey, err := privateKey.Raw()
+		if err != nil {
+			return nil, fmt.Errorf("challenge handler failed to get raw ed25519 key: %v", err)
+		}
+
+		message := append(challenge, codeHash...)
+
+		sig := ed25519.Sign(edKey, message)
+
+		return event.GetChallengeResponse{
+			Challenge: hex.EncodeToString(challenge),
+			CodeHash:  hex.EncodeToString(codeHash),
+			Signature: base64.StdEncoding.EncodeToString(sig),
+		}, nil
 	}
 }

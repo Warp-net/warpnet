@@ -673,7 +673,7 @@ func (b *batch) Cancel() error {
 	return nil
 }
 
-func (d *NodeRepo) Blocklist(ctx context.Context, peerId warpnet.WarpPeerID) error {
+func (d *NodeRepo) Blocklist24h(ctx context.Context, peerId warpnet.WarpPeerID) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
@@ -685,7 +685,7 @@ func (d *NodeRepo) Blocklist(ctx context.Context, peerId warpnet.WarpPeerID) err
 		AddRootID(peerId.String()).
 		Build()
 
-	return d.Put(ctx, ds.NewKey(blocklistKey.String()), []byte(peerId.String()))
+	return d.PutWithTTL(ctx, ds.NewKey(blocklistKey.String()), []byte(peerId.String()), time.Hour*24)
 }
 
 func (d *NodeRepo) IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID) (bool, error) {

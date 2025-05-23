@@ -117,7 +117,7 @@ func (s *NodeRepoTestSuite) TestBlocklist() {
 	id, err := warpnet.IDFromPrivateKey(warpPrivKey)
 	s.Require().NoError(err)
 
-	err = s.repo.Blocklist(s.ctx, id)
+	err = s.repo.Blocklist24h(s.ctx, id)
 	s.Require().NoError(err)
 
 	isBlocked, err := s.repo.IsBlocklisted(s.ctx, id)

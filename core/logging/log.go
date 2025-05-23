@@ -80,21 +80,20 @@ var subsystems = []string{
 }
 
 func init() {
+	level := "error"
+	_ = golog.SetLogLevel("raftlib", level)
+	_ = golog.SetLogLevel("raft", level)
+	_ = golog.SetLogLevel("libp2p-raft", level)
 
-	level := "debug"
-	_ = golog.SetLogLevel("raftlib", "debug")
-	_ = golog.SetLogLevel("raft", "debug")
-	_ = golog.SetLogLevel("libp2p-raft", "debug")
-
-	_ = golog.SetLogLevel("autonatv2", level)
-	_ = golog.SetLogLevel("autonat", level)
+	_ = golog.SetLogLevel("autonatv2", "debug")
+	_ = golog.SetLogLevel("autonat", "debug")
 	_ = golog.SetLogLevel("p2p-holepunch", "debug")
-	_ = golog.SetLogLevel("relay", level)
-	_ = golog.SetLogLevel("nat", level)
-	_ = golog.SetLogLevel("p2p-circuit", level)
-	_ = golog.SetLogLevel("basichost", "error")
-	_ = golog.SetLogLevel("swarm2", "error")
-	_ = golog.SetLogLevel("autorelay", level)
-	_ = golog.SetLogLevel("net/identify", "error")
-	_ = golog.SetLogLevel("tcp-tpt", "error")
+	_ = golog.SetLogLevel("relay", "debug")
+	_ = golog.SetLogLevel("nat", "debug")
+	_ = golog.SetLogLevel("p2p-circuit", "debug")
+	_ = golog.SetLogLevel("basichost", level)
+	_ = golog.SetLogLevel("swarm2", level)
+	_ = golog.SetLogLevel("autorelay", "debug")
+	_ = golog.SetLogLevel("net/identify", level)
+	_ = golog.SetLogLevel("tcp-tpt", level)
 }
