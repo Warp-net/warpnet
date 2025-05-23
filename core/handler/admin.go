@@ -90,6 +90,7 @@ type FileSystem interface {
 	Open(name string) (fs.File, error)
 }
 
+// TODO nonce cache check
 func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) middleware.WarpHandler {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		if fs == nil {
