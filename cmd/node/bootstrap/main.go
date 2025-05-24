@@ -61,6 +61,9 @@ func main() {
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: time.DateTime,
+		FieldMap: log.FieldMap{
+			"network": config.Config().Node.Network,
+		},
 	})
 
 	var interruptChan = make(chan os.Signal, 1)

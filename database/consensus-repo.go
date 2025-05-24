@@ -53,11 +53,12 @@ type ConsensusStorer interface {
 }
 
 type ConsensusRepo struct {
-	db ConsensusStorer
+	db      ConsensusStorer
+	network string
 }
 
-func NewConsensusRepo(db ConsensusStorer) *ConsensusRepo {
-	return &ConsensusRepo{db: db}
+func NewConsensusRepo(db ConsensusStorer, network string) *ConsensusRepo {
+	return &ConsensusRepo{db: db, network: network}
 }
 
 func (cr *ConsensusRepo) Sync() error {
@@ -69,7 +70,7 @@ func (cr *ConsensusRepo) Sync() error {
 
 func (cr *ConsensusRepo) SnapshotsPath() (path string) {
 	if cr == nil || cr.db == nil {
-		return "/tmp/snapshots"
+		return "/tmp/snapshots/" + cr.network
 	}
 	return filepath.Join(cr.db.Path(), "snapshots")
 }

@@ -70,7 +70,7 @@ func NewMemberNode(
 	authRepo AuthProvider,
 	db Storer,
 ) (_ *MemberNode, err error) {
-	consensusRepo := database.NewConsensusRepo(db)
+	consensusRepo := database.NewConsensusRepo(db, config.Config().Node.Network)
 	nodeRepo := database.NewNodeRepo(db)
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {

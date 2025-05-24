@@ -31,7 +31,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/storage"
 	"github.com/dgraph-io/badger/v3"
@@ -74,8 +73,8 @@ type NodeStorer interface {
 }
 
 type NodeRepo struct {
-	db       NodeStorer
-	network  string
+	db NodeStorer
+
 	stopChan chan struct{}
 }
 
@@ -83,16 +82,16 @@ type NodeRepo struct {
 // the badger Datastore.
 type batch struct {
 	ds         *NodeRepo
-	network    string
 	writeBatch *badger.WriteBatch
 }
 
 func NewNodeRepo(db NodeStorer) *NodeRepo {
-	return &NodeRepo{
+	nr := &NodeRepo{
 		db:       db,
-		network:  config.Config().Node.Network,
 		stopChan: make(chan struct{}),
 	}
+
+	return nr
 }
 
 func (d *NodeRepo) Put(ctx context.Context, key ds.Key, value []byte) error {
@@ -106,7 +105,6 @@ func (d *NodeRepo) Put(ctx context.Context, key ds.Key, value []byte) error {
 	rootKey := buildRootKey(key)
 
 	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(rootKey).
 		Build()
 	return d.db.Set(prefix, value)
@@ -133,7 +131,6 @@ func (d *NodeRepo) PutWithTTL(ctx context.Context, key ds.Key, value []byte, ttl
 	rootKey := buildRootKey(key)
 
 	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(rootKey).
 		Build()
 
@@ -177,7 +174,6 @@ func (d *NodeRepo) GetExpiration(ctx context.Context, key ds.Key) (t time.Time, 
 	rootKey := buildRootKey(key)
 
 	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(rootKey).
 		Build()
 
@@ -211,7 +207,6 @@ func (d *NodeRepo) Get(ctx context.Context, key ds.Key) (value []byte, err error
 	rootKey := buildRootKey(key)
 
 	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(rootKey).
 		Build()
 
@@ -241,7 +236,6 @@ func (d *NodeRepo) Has(ctx context.Context, key ds.Key) (_ bool, err error) {
 	rootKey := buildRootKey(key)
 
 	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(rootKey).
 		Build()
 
@@ -273,7 +267,6 @@ func (d *NodeRepo) GetSize(ctx context.Context, key ds.Key) (_ int, err error) {
 	rootKey := buildRootKey(key)
 
 	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(rootKey).
 		Build()
 
@@ -303,7 +296,6 @@ func (d *NodeRepo) Delete(ctx context.Context, key ds.Key) error {
 	rootKey := buildRootKey(key)
 
 	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(rootKey).
 		Build()
 
@@ -357,7 +349,6 @@ func (d *NodeRepo) query(tx *storage.WarpTxn, q dsq.Query, implicit bool) (dsq.R
 	key = strings.TrimPrefix(key, "/")
 
 	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(key).
 		Build().
 		Bytes()
@@ -580,7 +571,7 @@ func (d *NodeRepo) Batch(ctx context.Context) (ds.Batch, error) {
 		return nil, storage.ErrNotRunning
 	}
 
-	b := &batch{d, d.network, d.db.InnerDB().NewWriteBatch()}
+	b := &batch{d, d.db.InnerDB().NewWriteBatch()}
 	// Ensure that incomplete transaction resources are cleaned up in case
 	// batch is abandoned.
 	runtime.SetFinalizer(b, func(b *batch) { _ = b.Cancel() })
@@ -613,7 +604,6 @@ func (b *batch) put(key ds.Key, value []byte) error {
 	rootKey := buildRootKey(key)
 
 	batchKey := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(b.network).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.Set(batchKey.Bytes(), value)
@@ -627,7 +617,6 @@ func (b *batch) putWithTTL(key ds.Key, value []byte, ttl time.Duration) error {
 	rootKey := buildRootKey(key)
 
 	batchKey := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(b.network).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.SetEntry(badger.NewEntry(batchKey.Bytes(), value).WithTTL(ttl))
@@ -648,7 +637,6 @@ func (b *batch) Delete(ctx context.Context, key ds.Key) error {
 	rootKey := buildRootKey(key)
 
 	batchKey := storage.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(b.network).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.Delete(batchKey.Bytes())
@@ -694,7 +682,6 @@ func (d *NodeRepo) Blocklist24h(ctx context.Context, peerId warpnet.WarpPeerID) 
 	}
 	blocklistKey := storage.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(peerId.String()).
 		Build()
 
@@ -710,7 +697,6 @@ func (d *NodeRepo) IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID)
 	}
 	blocklistKey := storage.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(peerId.String()).
 		Build()
 	_, err := d.Get(ctx, ds.NewKey(blocklistKey.String()))
@@ -733,7 +719,6 @@ func (d *NodeRepo) BlocklistRemove(ctx context.Context, peerId warpnet.WarpPeerI
 	}
 	blocklistKey := storage.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
-		AddSubPrefix(d.network).
 		AddRootID(peerId.String()).
 		Build()
 

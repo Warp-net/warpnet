@@ -50,7 +50,7 @@ func (s *ConsensusRepoTestSuite) SetupSuite() {
 
 	err = authRepo.Authenticate("test", "test")
 	s.Require().NoError(err)
-	s.repo = NewConsensusRepo(s.db)
+	s.repo = NewConsensusRepo(s.db, "test")
 }
 
 func (s *ConsensusRepoTestSuite) TearDownSuite() {
