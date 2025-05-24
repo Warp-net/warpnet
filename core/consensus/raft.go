@@ -169,7 +169,7 @@ func newRaft(
 		if isInMemory {
 			snapshotStore = raft.NewInmemSnapshotStore()
 		} else {
-			basePath := "/tmp/snapshot"
+			basePath := "/tmp/snapshots/bootstrap"
 			snapshotStore, err = raft.NewFileSnapshotStoreWithLogger(basePath, 5, l)
 			if err != nil {
 				return nil, fmt.Errorf("consensus: failed to create snapshot store: %v", err)
