@@ -90,7 +90,7 @@ type RoutingStorer interface {
 type DistributedHashTable struct {
 	ctx           context.Context
 	db            RoutingStorer
-	boostrapNodes []warpnet.PeerAddrInfo
+	boostrapNodes []warpnet.WarpAddrInfo
 	addFuncs      []discovery.DiscoveryHandler
 	removeF       func(warpnet.WarpPeerID)
 	dht           *dht.IpfsDHT
@@ -260,7 +260,7 @@ func (d *DistributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 	}
 }
 
-func (d *DistributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.PeerAddrInfo) {
+func (d *DistributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // common timeout
 	defer cancel()
 

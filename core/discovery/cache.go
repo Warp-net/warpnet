@@ -10,7 +10,7 @@ import (
 const maxLiveTime = 24 * time.Hour
 
 type cacheEntry struct {
-	info          warpnet.PeerAddrInfo
+	info          warpnet.WarpAddrInfo
 	nextChallenge time.Time
 }
 

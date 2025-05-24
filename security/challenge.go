@@ -22,7 +22,7 @@ func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, 
 		return "", result, fmt.Errorf("challenge: read dir %s: %w", dir, err)
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
+	sort.SliceStable(entries, func(i, j int) bool {
 		return entries[i].Name() < entries[j].Name()
 	})
 
@@ -126,7 +126,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 			return "", fmt.Errorf("challenge: read dir %s: %w", currentDir, err)
 		}
 
-		sort.Slice(entries, func(i, j int) bool {
+		sort.SliceStable(entries, func(i, j int) bool {
 			return entries[i].Name() < entries[j].Name()
 		})
 
@@ -149,7 +149,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 		return "", fmt.Errorf("challenge: read files from %s: %w", currentDir, err)
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
+	sort.SliceStable(entries, func(i, j int) bool {
 		return entries[i].Name() < entries[j].Name()
 	})
 

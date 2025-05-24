@@ -58,7 +58,7 @@ func NewStreamPool(
 	return pool
 }
 
-func (p *streamPool) Send(peerAddr warpnet.PeerAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
+func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
 	if p == nil {
 		return nil, warpnet.WarpError("nil stream pool")
 	}
@@ -81,7 +81,7 @@ func (p *streamPool) Send(peerAddr warpnet.PeerAddrInfo, r WarpRoute, data []byt
 
 func send(
 	ctx context.Context, n NodeStreamer,
-	serverInfo warpnet.PeerAddrInfo, r WarpRoute, data []byte,
+	serverInfo warpnet.WarpAddrInfo, r WarpRoute, data []byte,
 ) ([]byte, error) {
 	if n == nil || serverInfo.String() == "" || r == "" {
 		return nil, warpnet.WarpError("stream: parameters improperly configured")

@@ -68,7 +68,7 @@ type API struct {
 
 func main() {
 	defer closeWriter()
-	appPath := getAppPath()
+	appPath := getAppPath(config.Config().Node.Network, "member")
 
 	psk, err := security.GeneratePSK(config.Config().Version)
 	if err != nil {
@@ -83,6 +83,9 @@ func main() {
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: time.DateTime,
+		FieldMap: log.FieldMap{
+			"network": config.Config().Node.Network,
+		},
 	})
 	if !config.Config().Node.IsTestnet() {
 		logDir := filepath.Join(appPath, "log")
@@ -188,7 +191,7 @@ func main() {
 	log.Infoln("interrupted...")
 }
 
-func getAppPath() string {
+func getAppPath(network, nodeType string) string {
 	var dbPath string
 
 	switch runtime.GOOS {
@@ -210,6 +213,8 @@ func getAppPath() string {
 	default:
 		log.Fatal("unsupported OS")
 	}
+
+	dbPath = filepath.Join(dbPath, network, nodeType)
 
 	err := os.MkdirAll(dbPath, 0750)
 	if err != nil {

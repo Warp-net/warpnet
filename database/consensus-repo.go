@@ -69,7 +69,7 @@ func (cr *ConsensusRepo) Sync() error {
 
 func (cr *ConsensusRepo) SnapshotsPath() (path string) {
 	if cr == nil || cr.db == nil {
-		return "/tmp/snapshots"
+		return "/tmp/snapshots/member"
 	}
 	return filepath.Join(cr.db.Path(), "snapshots")
 }

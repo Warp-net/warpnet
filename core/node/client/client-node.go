@@ -45,7 +45,7 @@ import (
 )
 
 type ClientStreamer interface {
-	Send(peerAddr warpnet.PeerAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
+	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
 type WarpClientNode struct {

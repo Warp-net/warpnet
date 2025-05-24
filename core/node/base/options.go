@@ -37,7 +37,7 @@ import (
 	"unsafe"
 )
 
-func EnableAutoRelayWithStaticRelays(static []warpnet.PeerAddrInfo, currentNodeID warpnet.WarpPeerID) func() libp2p.Option {
+func EnableAutoRelayWithStaticRelays(static []warpnet.WarpAddrInfo, currentNodeID warpnet.WarpPeerID) func() libp2p.Option {
 	for i, info := range static {
 		if info.ID == currentNodeID {
 			static = slices.Delete(static, i, i+1)
@@ -61,7 +61,7 @@ func EnableAutoRelayWithStaticRelays(static []warpnet.PeerAddrInfo, currentNodeI
 	}
 }
 
-func DisableOption() func() libp2p.Option {
+func EmptyOption() func() libp2p.Option {
 	return func() libp2p.Option {
 		return func(cfg *libp2pConfig.Config) error {
 			return nil

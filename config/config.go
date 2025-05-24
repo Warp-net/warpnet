@@ -162,7 +162,7 @@ func (n node) IsTestnet() bool {
 	return n.Network == testNetNetwork
 }
 
-func (n node) AddrInfos() (infos []warpnet.PeerAddrInfo, err error) {
+func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
 	for _, addr := range n.Bootstrap {
 		maddr, err := warpnet.NewMultiaddr(addr)
 		if err != nil {
