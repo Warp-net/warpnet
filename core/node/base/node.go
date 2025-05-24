@@ -47,7 +47,7 @@ import (
 const DefaultTimeout = 60 * time.Second
 
 type Streamer interface {
-	Send(peerAddr warpnet.PeerAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
+	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
 type BackoffEnabler interface {
@@ -101,11 +101,11 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	reachibilityOption := libp2p.ForceReachabilityPrivate
+	reachibilityOption := EmptyOption()
 	autoStaticRelaysOption := EnableAutoRelayWithStaticRelays(infos, currentNodeID)
 	if ownerId == warpnet.BootstrapOwner {
 		reachibilityOption = libp2p.ForceReachabilityPublic
-		autoStaticRelaysOption = DisableOption()
+		autoStaticRelaysOption = EmptyOption()
 	}
 
 	node, err := warpnet.NewP2PNode(
@@ -162,7 +162,7 @@ func NewWarpNode(
 	return wn, wn.validateSupportedProtocols()
 }
 
-func (n *WarpNode) Connect(p warpnet.PeerAddrInfo) error {
+func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	if n == nil || n.node == nil {
 		return nil
 	}

@@ -123,7 +123,7 @@ type consensusService struct {
 	syncMx         *sync.RWMutex
 	retrier        retrier.Retrier
 	l              *consensusLogger
-	bootstrapNodes []warpnet.PeerAddrInfo
+	bootstrapNodes []warpnet.WarpAddrInfo
 	stopChan       chan struct{}
 	isPrivate      bool
 }
@@ -510,7 +510,7 @@ func isVoter(srvID raft.ServerID, cfg raft.Configuration) bool {
 	return false
 }
 
-func (c *consensusService) AddVoter(info warpnet.PeerAddrInfo) {
+func (c *consensusService) AddVoter(info warpnet.WarpAddrInfo) {
 	c.waitSync()
 
 	if c.raft == nil {

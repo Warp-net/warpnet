@@ -54,14 +54,14 @@ import (
 	"time"
 )
 
-type DiscoveryHandler func(warpnet.PeerAddrInfo)
+type DiscoveryHandler func(warpnet.WarpAddrInfo)
 
 type DiscoveryInfoStorer interface {
 	NodeInfo() warpnet.NodeInfo
 	Peerstore() warpnet.WarpPeerstore
 	Mux() warpnet.WarpProtocolSwitch
 	Network() warpnet.WarpNetwork
-	Connect(p warpnet.PeerAddrInfo) error
+	Connect(p warpnet.WarpAddrInfo) error
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
 
@@ -90,9 +90,9 @@ type discoveryService struct {
 	retrier        retrier.Retrier
 	limiter        *leakyBucketRateLimiter
 	cache          *discoveryCache
-	bootstrapAddrs []warpnet.PeerAddrInfo
+	bootstrapAddrs []warpnet.WarpAddrInfo
 
-	discoveryChan chan warpnet.PeerAddrInfo
+	discoveryChan chan warpnet.WarpAddrInfo
 	stopChan      chan struct{}
 	syncDone      *atomic.Bool
 }
@@ -113,7 +113,7 @@ func NewDiscoveryService(
 		newRateLimiter(16, 1),
 		newDiscoveryCache(),
 		addrInfos,
-		make(chan warpnet.PeerAddrInfo, 1000), make(chan struct{}),
+		make(chan warpnet.WarpAddrInfo, 1000), make(chan struct{}),
 		new(atomic.Bool),
 	}
 }
@@ -226,7 +226,7 @@ func (s *discoveryService) Close() {
 	close(s.discoveryChan)
 }
 
-func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.PeerAddrInfo) {
+func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo) {
 	if s == nil {
 		return
 	}
@@ -277,7 +277,7 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.PeerAddrInfo
 
 const dropMessagesLimit = 5
 
-func (s *discoveryService) HandlePeerFound(pi warpnet.PeerAddrInfo) {
+func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
 	if s == nil {
 		return
 	}
@@ -298,7 +298,7 @@ func (s *discoveryService) HandlePeerFound(pi warpnet.PeerAddrInfo) {
 	s.discoveryChan <- pi
 }
 
-func (s *discoveryService) handle(pi warpnet.PeerAddrInfo) {
+func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	if s == nil || s.node == nil || s.nodeRepo == nil || s.userRepo == nil {
 		return
 	}
@@ -401,7 +401,7 @@ const (
 	ErrChallengeSignatureInvalid warpnet.WarpError = "invalid challenge signature"
 )
 
-func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
+func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 	if s == nil {
 		return errors.New("nil discovery service")
 	}
@@ -478,7 +478,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.PeerAddrInfo) error {
 	return nil
 }
 
-func (s *discoveryService) requestNodeInfo(pi warpnet.PeerAddrInfo) (info warpnet.NodeInfo, err error) {
+func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpnet.NodeInfo, err error) {
 	if s == nil {
 		return info, errors.New("nil discovery service")
 	}
@@ -502,7 +502,7 @@ func (s *discoveryService) requestNodeInfo(pi warpnet.PeerAddrInfo) (info warpne
 	return info, nil
 }
 
-func (s *discoveryService) requestNodeUser(pi warpnet.PeerAddrInfo, userId string) (user domain.User, err error) {
+func (s *discoveryService) requestNodeUser(pi warpnet.WarpAddrInfo, userId string) (user domain.User, err error) {
 	if s == nil {
 		return user, errors.New("nil discovery service")
 	}

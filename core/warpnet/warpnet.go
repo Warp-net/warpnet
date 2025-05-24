@@ -35,7 +35,9 @@ import (
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/providers"
+	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -43,6 +45,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/pnet"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
+	"github.com/libp2p/go-libp2p/p2p/host/autonat"
+	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
+
 	"github.com/libp2p/go-libp2p/core/transport"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds"
@@ -83,6 +88,10 @@ const (
 
 	ErrNodeIsOffline = WarpError("node is offline")
 	ErrUserIsOffline = WarpError("user is offline")
+
+	ReachabilityPublic  WarpReachability = network.ReachabilityPublic
+	ReachabilityPrivate WarpReachability = network.ReachabilityPrivate
+	ReachabilityUnknown WarpReachability = network.ReachabilityUnknown
 )
 
 var (
@@ -114,12 +123,13 @@ type (
 
 type (
 	// types
-
 	WarpMDNS        mdns.Service
 	WarpPrivateKey  crypto.PrivKey
 	WarpRoutingFunc func(node P2PNode) (WarpPeerRouting, error)
 
 	// aliases
+	WarpReachability = network.Reachability
+
 	TCPTransport       = tcp.TcpTransport
 	TCPOption          = tcp.Option
 	Swarm              = swarm.Swarm
@@ -130,20 +140,24 @@ type (
 	WarpStreamHandler  = network.StreamHandler
 	WarpBatching       = datastore.Batching
 	WarpProviderStore  = providers.ProviderStore
-	PeerAddrInfo       = peer.AddrInfo
+	WarpAddrInfo       = peer.AddrInfo
 	WarpStreamStats    = network.Stats
 	WarpPeerRouting    = routing.PeerRouting
-	P2PNode            = host.Host
 	WarpPeerstore      = peerstore.Peerstore
 	WarpProtocolSwitch = protocol.Switch
 	WarpNetwork        = network.Network
 	WarpPeerID         = peer.ID
 	WarpDHT            = dht.IpfsDHT
 	WarpAddress        = multiaddr.Multiaddr
+	WarpConnManager    = coreconnmgr.ConnManager
+	WarpEventBus       = event.Bus
+	WarpIDService      = identify.IDService
+	WarpAutoNAT        = autonat.AutoNAT
+	P2PNode            = host.Host
 )
 
 // structures
-type WarpAddrInfo struct {
+type WarpPubInfo struct {
 	ID    WarpPeerID `json:"peer_id"`
 	Addrs []string   `json:"addrs"`
 }
@@ -155,7 +169,7 @@ type NodeInfo struct {
 	Addresses      []string        `json:"addresses"`
 	StartTime      time.Time       `json:"start_time"`
 	RelayState     string          `json:"relay_state"`
-	BootstrapPeers []PeerAddrInfo  `json:"bootstrap_peers"`
+	BootstrapPeers []WarpAddrInfo  `json:"bootstrap_peers"`
 }
 
 func (ni NodeInfo) IsBootstrap() bool {
@@ -185,7 +199,7 @@ type NodeStats struct {
 	PeersStored int `json:"peers_stored"`
 }
 
-func NewP2PNode(opts ...libp2p.Option) (host.Host, error) {
+func NewP2PNode(opts ...libp2p.Option) (P2PNode, error) {
 	return libp2p.New(opts...)
 }
 
@@ -297,11 +311,11 @@ func IDFromPrivateKey(sk crypto.PrivKey) (WarpPeerID, error) {
 	return peer.IDFromPublicKey(sk.GetPublic())
 }
 
-func AddrInfoFromP2pAddr(m multiaddr.Multiaddr) (*PeerAddrInfo, error) {
+func AddrInfoFromP2pAddr(m multiaddr.Multiaddr) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromP2pAddr(m)
 }
 
-func AddrInfoFromString(s string) (*PeerAddrInfo, error) {
+func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromString(s)
 }
 

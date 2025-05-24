@@ -105,7 +105,7 @@ func (m *mdnsDiscoveryService) HandlePeerFound(p peer.AddrInfo) {
 	m.defaultDiscoveryHandler(p)
 }
 
-func (m *mdnsDiscoveryService) defaultDiscoveryHandler(peerInfo warpnet.PeerAddrInfo) {
+func (m *mdnsDiscoveryService) defaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo) {
 	err := m.node.Connect(peerInfo)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("mdns: discovery: backoffed: %s %s", peerInfo.Addrs, peerInfo.ID)

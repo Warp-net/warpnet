@@ -460,16 +460,16 @@ func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
 }
 
 func (g *warpPubSub) handlePubSubDiscovery(msg *pubsub.Message) {
-	var discoveryAddrInfos []warpnet.WarpAddrInfo
+	var discoveryAddrInfos []warpnet.WarpPubInfo
 
 	outerErr := json.JSON.Unmarshal(msg.Data, &discoveryAddrInfos)
 	if outerErr != nil {
-		var single warpnet.WarpAddrInfo
+		var single warpnet.WarpPubInfo
 		if innerErr := json.JSON.Unmarshal(msg.Data, &single); innerErr != nil {
 			log.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, msg.Data)
 			return
 		}
-		discoveryAddrInfos = []warpnet.WarpAddrInfo{single}
+		discoveryAddrInfos = []warpnet.WarpPubInfo{single}
 	}
 	if len(discoveryAddrInfos) == 0 {
 		return
@@ -484,7 +484,7 @@ func (g *warpPubSub) handlePubSubDiscovery(msg *pubsub.Message) {
 			return
 		}
 
-		peerInfo := warpnet.PeerAddrInfo{
+		peerInfo := warpnet.WarpAddrInfo{
 			ID:    info.ID,
 			Addrs: make([]warpnet.WarpAddress, 0, len(info.Addrs)),
 		}
@@ -552,7 +552,7 @@ const publishPeerInfoLimit = 10
 
 func (g *warpPubSub) publishPeerInfo(topic *pubsub.Topic) error {
 	myInfo := g.serverNode.NodeInfo()
-	addrInfosMessage := []warpnet.WarpAddrInfo{{
+	addrInfosMessage := []warpnet.WarpPubInfo{{
 		ID:    myInfo.ID,
 		Addrs: myInfo.Addresses,
 	}}
@@ -563,7 +563,7 @@ func (g *warpPubSub) publishPeerInfo(topic *pubsub.Topic) error {
 			break
 		}
 		pi := g.serverNode.Node().Peerstore().PeerInfo(id)
-		addrInfo := warpnet.WarpAddrInfo{ID: pi.ID, Addrs: make([]string, 0, len(pi.Addrs))}
+		addrInfo := warpnet.WarpPubInfo{ID: pi.ID, Addrs: make([]string, 0, len(pi.Addrs))}
 		for _, addr := range pi.Addrs {
 			addrInfo.Addrs = append(addrInfo.Addrs, addr.String())
 		}

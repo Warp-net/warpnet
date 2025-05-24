@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	root "github.com/Warp-net/warpnet"
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -62,6 +61,7 @@ func NewBootstrapNode(
 	isInMemory bool,
 	seed []byte,
 	psk security.PSK,
+	listenAddr string,
 ) (_ *BootstrapNode, err error) {
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
@@ -101,7 +101,7 @@ func NewBootstrapNode(
 		memoryStore,
 		warpnet.BootstrapOwner,
 		psk,
-		fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.Host, config.Config().Node.Port),
+		listenAddr,
 		dHashTable.StartRouting,
 	)
 	if err != nil {
