@@ -1,3 +1,12 @@
+# github.com/Arceliar/ironwood v0.0.0-20241213013129-743fe2fccbd3
+## explicit; go 1.21
+github.com/Arceliar/ironwood/encrypted
+github.com/Arceliar/ironwood/encrypted/internal/e2c
+github.com/Arceliar/ironwood/network
+github.com/Arceliar/ironwood/types
+# github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d
+## explicit; go 1.19
+github.com/Arceliar/phony
 # github.com/Masterminds/semver/v3 v3.3.1
 ## explicit; go 1.21
 github.com/Masterminds/semver/v3
@@ -16,12 +25,26 @@ github.com/benbjohnson/clock
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
+# github.com/bits-and-blooms/bitset v1.13.0
+## explicit; go 1.16
+github.com/bits-and-blooms/bitset
+# github.com/bits-and-blooms/bloom/v3 v3.7.0
+## explicit; go 1.16
+github.com/bits-and-blooms/bloom/v3
 # github.com/cespare/xxhash v1.1.0
 ## explicit
 github.com/cespare/xxhash
 # github.com/cespare/xxhash/v2 v2.3.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
+# github.com/coder/websocket v1.8.12
+## explicit; go 1.19
+github.com/coder/websocket
+github.com/coder/websocket/internal/bpool
+github.com/coder/websocket/internal/errd
+github.com/coder/websocket/internal/util
+github.com/coder/websocket/internal/wsjs
+github.com/coder/websocket/internal/xsync
 # github.com/containerd/cgroups v1.1.0
 ## explicit; go 1.17
 github.com/containerd/cgroups
@@ -157,6 +180,9 @@ github.com/golang/protobuf/proto
 # github.com/golang/snappy v1.0.0
 ## explicit
 github.com/golang/snappy
+# github.com/gologme/log v1.3.0
+## explicit; go 1.17
+github.com/gologme/log
 # github.com/google/flatbuffers v25.2.10+incompatible
 ## explicit
 github.com/google/flatbuffers/go
@@ -200,6 +226,9 @@ github.com/hashicorp/golang-lru/v2/simplelru
 # github.com/hashicorp/raft v1.7.3
 ## explicit; go 1.20
 github.com/hashicorp/raft
+# github.com/hjson/hjson-go/v4 v4.4.0
+## explicit; go 1.11
+github.com/hjson/hjson-go/v4
 # github.com/huin/goupnp v1.3.0
 ## explicit; go 1.14
 github.com/huin/goupnp
@@ -844,6 +873,13 @@ github.com/valyala/bytebufferpool
 # github.com/valyala/fasttemplate v1.2.2
 ## explicit; go 1.12
 github.com/valyala/fasttemplate
+# github.com/vishvananda/netlink v1.3.0
+## explicit; go 1.12
+github.com/vishvananda/netlink
+github.com/vishvananda/netlink/nl
+# github.com/vishvananda/netns v0.0.5
+## explicit; go 1.17
+github.com/vishvananda/netns
 # github.com/vmihailenco/msgpack/v5 v5.4.1
 ## explicit; go 1.19
 github.com/vmihailenco/msgpack/v5
@@ -859,6 +895,15 @@ github.com/whyrusleeping/go-keyspace
 # github.com/wlynxg/anet v0.0.5
 ## explicit; go 1.20
 github.com/wlynxg/anet
+# github.com/yggdrasil-network/yggdrasil-go v0.5.12
+## explicit; go 1.22
+github.com/yggdrasil-network/yggdrasil-go/src/address
+github.com/yggdrasil-network/yggdrasil-go/src/admin
+github.com/yggdrasil-network/yggdrasil-go/src/config
+github.com/yggdrasil-network/yggdrasil-go/src/core
+github.com/yggdrasil-network/yggdrasil-go/src/multicast
+github.com/yggdrasil-network/yggdrasil-go/src/tun
+github.com/yggdrasil-network/yggdrasil-go/src/version
 # github.com/yusufpapurcu/wmi v1.2.4
 ## explicit; go 1.16
 github.com/yusufpapurcu/wmi
@@ -953,6 +998,8 @@ golang.org/x/crypto/curve25519
 golang.org/x/crypto/hkdf
 golang.org/x/crypto/internal/alias
 golang.org/x/crypto/internal/poly1305
+golang.org/x/crypto/nacl/box
+golang.org/x/crypto/nacl/secretbox
 golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/sha3
 # golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
@@ -993,6 +1040,9 @@ golang.org/x/sync/errgroup
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
+golang.org/x/sys/windows/registry
+golang.org/x/sys/windows/svc
+golang.org/x/sys/windows/svc/mgr
 # golang.org/x/text v0.24.0
 ## explicit; go 1.23.0
 golang.org/x/text/encoding
@@ -1036,6 +1086,20 @@ golang.org/x/tools/internal/stdlib
 golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
 golang.org/x/tools/internal/versions
+# golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
+## explicit; go 1.17
+golang.zx2c4.com/wintun
+# golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
+## explicit; go 1.20
+golang.zx2c4.com/wireguard/conn
+golang.zx2c4.com/wireguard/conn/winrio
+golang.zx2c4.com/wireguard/rwcancel
+golang.zx2c4.com/wireguard/tun
+# golang.zx2c4.com/wireguard/windows v0.5.3
+## explicit; go 1.18
+golang.zx2c4.com/wireguard/windows/elevate
+golang.zx2c4.com/wireguard/windows/tunnel/winipcfg
+golang.zx2c4.com/wireguard/windows/version
 # gonum.org/v1/gonum v0.16.0
 ## explicit; go 1.23.0
 gonum.org/v1/gonum/mathext
@@ -1096,3 +1160,6 @@ gopkg.in/yaml.v3
 lukechampine.com/blake3
 lukechampine.com/blake3/bao
 lukechampine.com/blake3/guts
+# suah.dev/protect v1.2.4
+## explicit; go 1.14
+suah.dev/protect

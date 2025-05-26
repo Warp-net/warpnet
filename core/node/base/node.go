@@ -26,17 +26,18 @@ package base
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	_ "github.com/Warp-net/warpnet/core/logging"
-	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
+	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
 	"strings"
@@ -71,11 +72,11 @@ type WarpNode struct {
 
 func NewWarpNode(
 	ctx context.Context,
-	privKey warpnet.WarpPrivateKey,
+	privKey ed25519.PrivateKey,
 	store warpnet.WarpPeerstore,
 	ownerId string,
 	psk security.PSK,
-	listenAddr string,
+	listenAddrs []string,
 	routingFn func(node warpnet.P2PNode) (warpnet.WarpPeerRouting, error),
 ) (*WarpNode, error) {
 
@@ -91,34 +92,39 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	infos, err := config.Config().Node.AddrInfos()
+	//infos, err := config.Config().Node.AddrInfos()
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public())
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	//reachibilityOption := EmptyOption()
+	//autoStaticRelaysOption := EnableAutoRelayWithStaticRelays(infos, currentNodeID)
+	//if ownerId == warpnet.BootstrapOwner {
+	//	reachibilityOption = libp2p.ForceReachabilityPublic
+	//	autoStaticRelaysOption = EmptyOption()
+	//}
+
+	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
 	if err != nil {
 		return nil, err
-	}
-
-	currentNodeID, err := warpnet.IDFromPrivateKey(privKey)
-	if err != nil {
-		return nil, err
-	}
-
-	reachibilityOption := EmptyOption()
-	autoStaticRelaysOption := EnableAutoRelayWithStaticRelays(infos, currentNodeID)
-	if ownerId == warpnet.BootstrapOwner {
-		reachibilityOption = libp2p.ForceReachabilityPublic
-		autoStaticRelaysOption = EmptyOption()
 	}
 
 	node, err := warpnet.NewP2PNode(
 		libp2p.WithDialTimeout(DefaultTimeout),
 		libp2p.ListenAddrStrings(
-			listenAddr,
+			listenAddrs...,
 		),
 		libp2p.SwarmOpts(
 			WithDialTimeout(DefaultTimeout),
 			WithDialTimeoutLocal(DefaultTimeout),
 		),
 		libp2p.Transport(warpnet.NewTCPTransport, WithDefaultTCPConnectionTimeout(DefaultTimeout)),
-		libp2p.Identity(privKey),
+		libp2p.Identity(p2pPrivKey),
 		libp2p.Ping(true),
 		libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
 		libp2p.Peerstore(store),
@@ -128,29 +134,29 @@ func NewWarpNode(
 		libp2p.ConnectionManager(manager),
 		libp2p.Routing(routingFn),
 
-		libp2p.EnableAutoNATv2(),
-		libp2p.EnableRelay(),
-		libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
-		libp2p.EnableHolePunching(),
-		libp2p.EnableNATService(),
-		libp2p.NATPortMap(),
-
-		autoStaticRelaysOption(),
-		reachibilityOption(),
+		//libp2p.EnableAutoNATv2(),
+		//libp2p.EnableRelay(),
+		//libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
+		//libp2p.EnableHolePunching(),
+		//libp2p.EnableNATService(),
+		//libp2p.NATPortMap(),
+		//
+		//autoStaticRelaysOption(),
+		//reachibilityOption(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
 
-	relayService, err := relay.NewRelay(node)
-	if err != nil {
-		return nil, fmt.Errorf("node: failed to create relay	: %v", err)
-	}
+	//relayService, err := relay.NewRelay(node)
+	//if err != nil {
+	//	return nil, fmt.Errorf("node: failed to create relay	: %v", err)
+	//}
 
 	wn := &WarpNode{
-		ctx:       ctx,
-		node:      node,
-		relay:     relayService,
+		ctx:  ctx,
+		node: node,
+		//relay:     relayService,
 		ownerId:   ownerId,
 		streamer:  stream.NewStreamPool(ctx, node),
 		isClosed:  new(atomic.Bool),
@@ -159,7 +165,7 @@ func NewWarpNode(
 		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 	}
 
-	return wn, wn.validateSupportedProtocols()
+	return wn, nil //wn.validateSupportedProtocols()
 }
 
 func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {

@@ -50,8 +50,8 @@ var warpnetBootstrapNodes = []string{
 
 var testnetBootstrapNodes = []string{
 	"/ip4/88.119.169.156/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
-	"/ip4/88.119.169.156/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
-	"/ip4/88.119.169.156/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
+	//"/ip4/88.119.169.156/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
+	//"/ip4/88.119.169.156/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
 }
 
 var configSingleton config

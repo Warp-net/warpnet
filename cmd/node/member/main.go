@@ -31,9 +31,9 @@ import (
 	"fmt"
 	frontend "github.com/Warp-net/warpnet-frontend"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/mesh"
 	"github.com/Warp-net/warpnet/core/node/client"
 	"github.com/Warp-net/warpnet/core/node/member"
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/database/storage"
 	"github.com/Warp-net/warpnet/domain"
@@ -156,9 +156,18 @@ func main() {
 		log.Infoln("authentication was successful")
 	}
 
+	privKey := authRepo.PrivateKey()
+
+	meshRouter, err := mesh.NewMeshRouter(ctx, mesh.DefaultPeers, privKey, log.NewEntry(log.StandardLogger()))
+	if err != nil {
+		log.Fatalf("failed to init mesh router: %v", err)
+	}
+	defer meshRouter.Stop()
+
 	serverNode, err := member.NewMemberNode(
 		ctx,
-		authRepo.PrivateKey().(warpnet.WarpPrivateKey),
+		meshRouter,
+		privKey,
 		psk,
 		authRepo,
 		db,

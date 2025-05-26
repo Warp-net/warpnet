@@ -31,7 +31,6 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -91,7 +90,7 @@ type FileSystem interface {
 }
 
 // TODO nonce cache check
-func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) middleware.WarpHandler {
+func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middleware.WarpHandler {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		if fs == nil {
 			panic("challenge handler called with nil file system")
@@ -116,12 +115,7 @@ func StreamChallengeHandler(fs FileSystem, privateKey warpnet.WarpPrivateKey) mi
 			req.Nonce,
 		)
 
-		edKey, err := privateKey.Raw()
-		if err != nil {
-			return nil, fmt.Errorf("challenge handler failed to get raw ed25519 key: %v", err)
-		}
-
-		sig := ed25519.Sign(edKey, challenge)
+		sig := ed25519.Sign(privateKey, challenge)
 
 		return event.GetChallengeResponse{
 			Challenge: hex.EncodeToString(challenge),
