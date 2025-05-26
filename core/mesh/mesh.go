@@ -20,9 +20,7 @@ import (
 	"github.com/yggdrasil-network/yggdrasil-go/src/tun"
 )
 
-var DefaultPeers = []string{
-	"tls://[2a04:2181:c011:1::38bc:d823]:7090",
-}
+const DefaultPeer = "tls://[2a04:2181:c011:1::38bc:d823]:7090"
 
 type MeshLogger interface {
 	Printf(s string, i ...interface{})
@@ -70,6 +68,10 @@ func NewMeshRouter(
 		},
 	})
 
+	if len(libp2pBootstrapNodes) == 0 {
+		libp2pBootstrapNodes = []string{DefaultPeer}
+	}
+
 	logger.Infof("default peers: %v", libp2pBootstrapNodes)
 
 	cfg := config.NodeConfig{
@@ -103,7 +105,7 @@ func NewMeshRouter(
 		core.NodeInfo(cfg.NodeInfo),
 		core.NodeInfoPrivacy(cfg.NodeInfoPrivacy),
 		core.PeerFilter(func(ip net.IP) bool {
-			return !iprange.Contains(ip)
+			return !iprange.Contains(ip) || strings.Contains(DefaultPeer, ip.String())
 		}),
 	}
 	for _, addr := range cfg.Listen {

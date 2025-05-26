@@ -84,7 +84,7 @@ func main() {
 		log.Fatalf("bootstrap: fail generating key: %v", err)
 	}
 
-	meshRouter, err := mesh.NewMeshRouter(ctx, mesh.DefaultPeers, privKey, log.NewEntry(log.StandardLogger()))
+	meshRouter, err := mesh.NewMeshRouter(ctx, nil, privKey, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		log.Fatalf("failed to init mesh router: %v", err)
 	}

@@ -158,7 +158,7 @@ func main() {
 
 	privKey := authRepo.PrivateKey()
 
-	meshRouter, err := mesh.NewMeshRouter(ctx, mesh.DefaultPeers, privKey, log.NewEntry(log.StandardLogger()))
+	meshRouter, err := mesh.NewMeshRouter(ctx, nil, privKey, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		log.Fatalf("failed to init mesh router: %v", err)
 	}
