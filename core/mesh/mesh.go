@@ -21,7 +21,7 @@ import (
 	"github.com/yggdrasil-network/yggdrasil-go/src/tun"
 )
 
-const DefaultPeer = "tls://[2a04:2181:c011:1::38bc:d823]:7090"
+const DefaultPeer = "tls://[200:aa2a:2032:d056:27c4:cdc3:f425:ab4d]:7090"
 
 type MeshLogger interface {
 	Printf(s string, i ...interface{})
