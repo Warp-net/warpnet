@@ -161,6 +161,11 @@ func NewMeshRouter(
 		}
 
 		logme := gologme.New(os.Stdout, "multicast", gologme.LstdFlags)
+		logme.EnableLevel("debug")
+		logme.EnableLevel("warn")
+		logme.EnableLevel("info")
+		logme.EnableLevel("error")
+		logme.EnableLevel("trace")
 
 		if n.multicast, err = multicast.New(n.core, logme, options...); err != nil {
 			return nil, fmt.Errorf("mesh: multicast: %v", err)
