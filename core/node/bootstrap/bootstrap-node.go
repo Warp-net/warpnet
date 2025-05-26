@@ -123,6 +123,7 @@ func NewBootstrapNode(
 	}
 
 	node.Peerstore().AddAddr(node.Node().ID(), meshMaddr, warpnet.PermanentAddrTTL)
+	node.Network().Listen(meshMaddr)
 
 	bn := &BootstrapNode{
 		WarpNode:          node,

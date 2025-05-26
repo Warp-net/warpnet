@@ -21,7 +21,7 @@ import (
 )
 
 var DefaultPeers = []string{
-	"tls://[2a03:b0c0:3:f0::51e5:9000]:7090",
+	"tls://[2a04:2181:c011:1::38bc:d823]:7090",
 }
 
 type MeshLogger interface {

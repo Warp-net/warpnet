@@ -26,8 +26,6 @@ package client
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/config"
@@ -39,7 +37,6 @@ import (
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
-	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"sync/atomic"
@@ -56,16 +53,11 @@ type WarpClientNode struct {
 	streamer       ClientStreamer
 	retrier        retrier.Retrier
 	serverNodeAddr string
-	privKey        ed25519.PrivateKey
 	psk            security.PSK
 	isRunning      *atomic.Bool
 }
 
 func NewClientNode(ctx context.Context, psk security.PSK) (_ *WarpClientNode, err error) {
-	privKey, err := security.GenerateKeyFromSeed([]byte(rand.Text()))
-	if err != nil {
-		log.Fatalf("client: fail generating key: %v", err)
-	}
 	serverNodeAddrDefault := fmt.Sprintf("/ip4/127.0.0.1/tcp/%s/p2p/", config.Config().Node.Port)
 
 	n := &WarpClientNode{
@@ -73,7 +65,6 @@ func NewClientNode(ctx context.Context, psk security.PSK) (_ *WarpClientNode, er
 		clientNode:     nil,
 		retrier:        retrier.New(time.Second*5, 10, retrier.ExponentialBackoff),
 		serverNodeAddr: serverNodeAddrDefault,
-		privKey:        privKey,
 		isRunning:      new(atomic.Bool),
 		psk:            psk,
 	}
@@ -84,10 +75,6 @@ func NewClientNode(ctx context.Context, psk security.PSK) (_ *WarpClientNode, er
 func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 	if n == nil {
 		return warpnet.WarpError("client: not initialized")
-	}
-	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(n.privKey)
-	if err != nil {
-		return err
 	}
 
 	if serverInfo.NodeInfo.ID.String() == "" {
@@ -105,7 +92,7 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 		return fmt.Errorf("client: creating address info: %s", err)
 	}
 	client, err := libp2p.New(
-		libp2p.Identity(p2pPrivKey),
+		libp2p.RandomIdentity,
 		libp2p.NoListenAddrs,
 		libp2p.DisableMetrics(),
 		libp2p.DisableRelay(),
