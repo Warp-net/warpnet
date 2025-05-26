@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/mr-tron/base58/base58"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/sirupsen/logrus"
 	"net"
 	"os"
@@ -43,6 +43,7 @@ type MeshRouter struct {
 	tun       *tun.TunAdapter
 	multicast *multicast.Multicast
 	admin     *admin.AdminSocket
+	humanID   string
 }
 
 // NewMesh function is responsible for configuring and starting Yggdrasil.
@@ -160,7 +161,7 @@ func NewMeshRouter(
 			})
 		}
 
-		logme := gologme.New(os.Stdout, "multicast", gologme.LstdFlags)
+		logme := gologme.New(os.Stdout, "multicast: ", gologme.LstdFlags)
 		logme.EnableLevel("debug")
 		logme.EnableLevel("warn")
 		logme.EnableLevel("info")
@@ -170,6 +171,7 @@ func NewMeshRouter(
 		if n.multicast, err = multicast.New(n.core, logme, options...); err != nil {
 			return nil, fmt.Errorf("mesh: multicast: %v", err)
 		}
+
 		//if n.admin != nil && n.multicast != nil {
 		//	n.multicast.SetupAdminHandlers(n.admin)
 		//}
@@ -189,7 +191,16 @@ func NewMeshRouter(
 	//}
 	//}
 
-	id := base58.Encode(n.core.GetSelf().Key)
+	lp2pPubKey, err := warpnet.UnmarshalEd25519PublicKey(n.core.GetSelf().Key)
+	if err != nil {
+		return nil, fmt.Errorf("mesh: failed to unmarshal key: %v", err)
+	}
+	id, err := warpnet.IDFromPublicKey(lp2pPubKey)
+	if err != nil {
+		return nil, fmt.Errorf("mesh: failed to get human ID: %v", err)
+	}
+	n.humanID = id.String()
+
 	println()
 	fmt.Printf(
 		"\033[1mMESH NETWORK LAYER INITIATED WITH ID %v AND ADDRESS %s\033[0m\n",
@@ -198,6 +209,10 @@ func NewMeshRouter(
 	println()
 
 	return n, nil
+}
+
+func (mr *MeshRouter) HumanID() string {
+	return mr.humanID
 }
 
 func (mr *MeshRouter) Address() net.IP {

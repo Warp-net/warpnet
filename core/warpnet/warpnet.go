@@ -312,6 +312,10 @@ func IDFromPublicKey(pk crypto.PublicKey) (WarpPeerID, error) {
 	return peer.IDFromPublicKey(pk.(p2pCrypto.PubKey))
 }
 
+func UnmarshalEd25519PublicKey(data []byte) (p2pCrypto.PubKey, error) {
+	return p2pCrypto.UnmarshalEd25519PublicKey(data)
+}
+
 func AddrInfoFromP2pAddr(m multiaddr.Multiaddr) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromP2pAddr(m)
 }
