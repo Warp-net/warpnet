@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/mr-tron/base58/base58"
 	"github.com/sirupsen/logrus"
 	"net"
 	"os"
@@ -182,6 +183,14 @@ func NewMeshRouter(
 	//	n.tun.SetupAdminHandlers(n.admin)
 	//}
 	//}
+
+	id := base58.Encode(n.core.GetSelf().Key)
+	println()
+	fmt.Printf(
+		"\033[1mMESH NETWORK LAYER INITIATED WITH ID %v AND ADDRESS %s\033[0m\n",
+		id, n.core.Address().String(),
+	)
+	println()
 
 	return n, nil
 }
