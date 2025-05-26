@@ -26,6 +26,7 @@ package client
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -38,6 +39,7 @@ import (
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
+	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"sync/atomic"
@@ -54,7 +56,7 @@ type WarpClientNode struct {
 	streamer       ClientStreamer
 	retrier        retrier.Retrier
 	serverNodeAddr string
-	privKey        warpnet.WarpPrivateKey
+	privKey        ed25519.PrivateKey
 	psk            security.PSK
 	isRunning      *atomic.Bool
 }
@@ -71,7 +73,7 @@ func NewClientNode(ctx context.Context, psk security.PSK) (_ *WarpClientNode, er
 		clientNode:     nil,
 		retrier:        retrier.New(time.Second*5, 10, retrier.ExponentialBackoff),
 		serverNodeAddr: serverNodeAddrDefault,
-		privKey:        privKey.(warpnet.WarpPrivateKey),
+		privKey:        privKey,
 		isRunning:      new(atomic.Bool),
 		psk:            psk,
 	}
@@ -83,6 +85,11 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 	if n == nil {
 		return warpnet.WarpError("client: not initialized")
 	}
+	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(n.privKey)
+	if err != nil {
+		return err
+	}
+
 	if serverInfo.NodeInfo.ID.String() == "" {
 		return warpnet.WarpError("client node: server node ID is empty")
 	}
@@ -98,7 +105,7 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 		return fmt.Errorf("client: creating address info: %s", err)
 	}
 	client, err := libp2p.New(
-		libp2p.Identity(n.privKey),
+		libp2p.Identity(p2pPrivKey),
 		libp2p.NoListenAddrs,
 		libp2p.DisableMetrics(),
 		libp2p.DisableRelay(),
