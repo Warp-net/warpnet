@@ -105,7 +105,7 @@ func NewMeshRouter(
 		core.NodeInfo(cfg.NodeInfo),
 		core.NodeInfoPrivacy(cfg.NodeInfoPrivacy),
 		core.PeerFilter(func(ip net.IP) bool {
-			return !iprange.Contains(ip) || strings.Contains(DefaultPeer, ip.String())
+			return !iprange.Contains(ip)
 		}),
 	}
 	for _, addr := range cfg.Listen {
