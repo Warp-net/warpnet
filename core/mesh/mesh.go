@@ -155,6 +155,7 @@ func NewMeshRouter(
 		}
 
 		logme := gologme.New(os.Stdout, "multicast: ", gologme.LstdFlags)
+		logme.EnableLevel("debug")
 		if n.multicast, err = multicast.New(n.core, logme, options...); err != nil {
 			return nil, fmt.Errorf("mesh: multicast: %v", err)
 		}
@@ -202,10 +203,12 @@ func NewMeshRouter(
 				return
 			default:
 				for _, p := range n.core.GetPeers() {
-					fmt.Printf("mesh peer %#v\n", p)
+					l.Infof("mesh peer %s status: %t", p.URI, p.Up)
+				}
+				for _, s := range n.core.GetSessions() {
+					l.Infof("mesh session %s status: %d", s.Key, s.Uptime)
 				}
 				time.Sleep(time.Minute)
-				n.core.RetryPeersNow()
 			}
 		}
 	}()

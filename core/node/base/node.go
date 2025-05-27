@@ -32,6 +32,7 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	_ "github.com/Warp-net/warpnet/core/logging"
+	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
@@ -92,22 +93,22 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	//infos, err := config.Config().Node.AddrInfos()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public())
-	//if err != nil {
-	//	return nil, err
-	//}
+	infos, err := config.Config().Node.AddrInfos()
+	if err != nil {
+		return nil, err
+	}
 
-	//reachibilityOption := EmptyOption()
-	//autoStaticRelaysOption := EnableAutoRelayWithStaticRelays(infos, currentNodeID)
-	//if ownerId == warpnet.BootstrapOwner {
-	//	reachibilityOption = libp2p.ForceReachabilityPublic
-	//	autoStaticRelaysOption = EmptyOption()
-	//}
+	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public())
+	if err != nil {
+		return nil, err
+	}
+
+	reachibilityOption := EmptyOption()
+	autoStaticRelaysOption := EnableAutoRelayWithStaticRelays(infos, currentNodeID)
+	if ownerId == warpnet.BootstrapOwner {
+		reachibilityOption = libp2p.ForceReachabilityPublic
+		autoStaticRelaysOption = EmptyOption()
+	}
 
 	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
 	if err != nil {
@@ -134,29 +135,29 @@ func NewWarpNode(
 		libp2p.ConnectionManager(manager),
 		libp2p.Routing(routingFn),
 
-		//libp2p.EnableAutoNATv2(),
-		//libp2p.EnableRelay(),
-		//libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
-		//libp2p.EnableHolePunching(),
-		//libp2p.EnableNATService(),
-		//libp2p.NATPortMap(),
-		//
-		//autoStaticRelaysOption(),
-		//reachibilityOption(),
+		libp2p.EnableAutoNATv2(),
+		libp2p.EnableRelay(),
+		libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
+		libp2p.EnableHolePunching(),
+		libp2p.EnableNATService(),
+		libp2p.NATPortMap(),
+
+		autoStaticRelaysOption(),
+		reachibilityOption(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
 
-	//relayService, err := relay.NewRelay(node)
-	//if err != nil {
-	//	return nil, fmt.Errorf("node: failed to create relay	: %v", err)
-	//}
+	relayService, err := relay.NewRelay(node)
+	if err != nil {
+		return nil, fmt.Errorf("node: failed to create relay	: %v", err)
+	}
 
 	wn := &WarpNode{
-		ctx:  ctx,
-		node: node,
-		//relay:     relayService,
+		ctx:       ctx,
+		node:      node,
+		relay:     relayService,
 		ownerId:   ownerId,
 		streamer:  stream.NewStreamPool(ctx, node),
 		isClosed:  new(atomic.Bool),
