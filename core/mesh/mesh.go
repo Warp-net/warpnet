@@ -79,9 +79,11 @@ func NewMeshRouter(
 	l.Infof("default peers: %v", libp2pBootstrapNodes)
 
 	cfg := config.NodeConfig{
-		PrivateKey:  privKey,
-		Peers:       libp2pBootstrapNodes,
-		Listen:      []string{fmt.Sprintf("tls://[::]:%s", config2.Config().Mesh.Port)},
+		PrivateKey: privKey,
+		Peers:      libp2pBootstrapNodes,
+		Listen: []string{
+			fmt.Sprintf("tls://%s:%s", config2.Config().Mesh.Host, config2.Config().Mesh.Port),
+		},
 		AdminListen: "none",
 		MulticastInterfaces: []config.MulticastInterfaceConfig{
 			{Regex: ".*", Beacon: true, Listen: true},
@@ -100,17 +102,9 @@ func NewMeshRouter(
 
 	n := &MeshRouter{ctx: ctx}
 
-	// Set up the Yggdrasil node itself.
-	iprange := net.IPNet{
-		IP:   net.ParseIP("200::"),
-		Mask: net.CIDRMask(7, 128),
-	}
 	options := []core.SetupOption{
 		core.NodeInfo(cfg.NodeInfo),
 		core.NodeInfoPrivacy(cfg.NodeInfoPrivacy),
-		core.PeerFilter(func(ip net.IP) bool {
-			return ip.To16() != nil && iprange.Contains(ip)
-		}),
 	}
 	for _, addr := range cfg.Listen {
 		options = append(options, core.ListenAddress(addr))
