@@ -700,6 +700,8 @@ func (l *links) findSuitableIP(url *url.URL, fn func(hostname string, ip net.IP,
 		return nil, err
 	}
 	resp, err := net.LookupIP(host)
+
+	fmt.Println(resp, "?????????????????")
 	if err != nil {
 		return nil, err
 	}
