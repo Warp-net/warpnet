@@ -18,6 +18,7 @@ import (
 	"github.com/yggdrasil-network/yggdrasil-go/src/admin"
 	"github.com/yggdrasil-network/yggdrasil-go/src/config"
 	"github.com/yggdrasil-network/yggdrasil-go/src/core"
+	"github.com/yggdrasil-network/yggdrasil-go/src/ipv6rwc"
 	"github.com/yggdrasil-network/yggdrasil-go/src/multicast"
 	"github.com/yggdrasil-network/yggdrasil-go/src/tun"
 )
@@ -99,9 +100,17 @@ func NewMeshRouter(
 
 	n := &MeshRouter{ctx: ctx}
 
+	iprange := net.IPNet{
+		IP:   net.ParseIP("200::"),
+		Mask: net.CIDRMask(7, 128),
+	}
+
 	options := []core.SetupOption{
 		core.NodeInfo(cfg.NodeInfo),
 		core.NodeInfoPrivacy(cfg.NodeInfoPrivacy),
+		core.PeerFilter(func(ip net.IP) bool {
+			return iprange.Contains(ip)
+		}),
 	}
 	for _, addr := range cfg.Listen {
 		options = append(options, core.ListenAddress(addr))
@@ -166,18 +175,18 @@ func NewMeshRouter(
 	}
 
 	// Set up the TUN module.
-	//{
-	//	options := []tun.SetupOption{
-	//		tun.InterfaceName(cfg.IfName),
-	//		tun.InterfaceMTU(cfg.IfMTU),
-	//	}
-	//	if n.tun, err = tun.New(ipv6rwc.NewReadWriteCloser(n.core), logger, options...); err != nil {
-	//		return nil, fmt.Errorf("mesh: TUN: %v", err)
-	//	}
-	//if n.admin != nil && n.tun != nil {
-	//	n.tun.SetupAdminHandlers(n.admin)
-	//}
-	//}
+	{
+		options := []tun.SetupOption{
+			tun.InterfaceName(cfg.IfName),
+			tun.InterfaceMTU(cfg.IfMTU),
+		}
+		if n.tun, err = tun.New(ipv6rwc.NewReadWriteCloser(n.core), l, options...); err != nil {
+			return nil, fmt.Errorf("mesh: TUN: %v", err)
+		}
+		//if n.admin != nil && n.tun != nil {
+		//	n.tun.SetupAdminHandlers(n.admin)
+		//}
+	}
 
 	lp2pPubKey, err := warpnet.UnmarshalEd25519PublicKey(n.core.GetSelf().Key)
 	if err != nil {

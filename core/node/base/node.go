@@ -166,7 +166,7 @@ func NewWarpNode(
 		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 	}
 
-	return wn, nil //wn.validateSupportedProtocols()
+	return wn, wn.validateSupportedProtocols()
 }
 
 func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {

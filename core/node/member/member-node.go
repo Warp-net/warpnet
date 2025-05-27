@@ -46,6 +46,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"time"
@@ -80,6 +81,14 @@ func NewMemberNode(
 	authRepo AuthProvider,
 	db Storer,
 ) (_ *MemberNode, err error) {
+	meshHost := meshRouter.Address().String()
+	meshMaddr, err := multiaddr.NewMultiaddr(
+		fmt.Sprintf("/ip6/%s/tcp/%s", meshHost, config.Config().Node.Port),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	consensusRepo := database.NewConsensusRepo(db)
 	nodeRepo := database.NewNodeRepo(db)
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
@@ -122,6 +131,8 @@ func NewMemberNode(
 	if err != nil {
 		return nil, fmt.Errorf("member: failed to init node: %v", err)
 	}
+
+	node.Peerstore().AddAddr(node.Node().ID(), meshMaddr, warpnet.PermanentAddrTTL)
 
 	mn := &MemberNode{
 		WarpNode:      node,

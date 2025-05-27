@@ -44,6 +44,7 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
+	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
 	"net"
 )
@@ -72,6 +73,13 @@ func NewBootstrapNode(
 	isInMemory bool,
 	psk security.PSK,
 ) (_ *BootstrapNode, err error) {
+	meshHost := meshRouter.Address().String()
+	meshMaddr, err := multiaddr.NewMultiaddr(
+		fmt.Sprintf("/ip6/%s/tcp/%s", meshHost, config.Config().Node.Port),
+	)
+	if err != nil {
+		return nil, err
+	}
 	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory)
 	if err != nil {
 		return nil, err
@@ -113,6 +121,8 @@ func NewBootstrapNode(
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: failed to init node: %v", err)
 	}
+
+	node.Peerstore().AddAddr(node.Node().ID(), meshMaddr, warpnet.PermanentAddrTTL)
 
 	bn := &BootstrapNode{
 		WarpNode:          node,
