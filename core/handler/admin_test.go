@@ -19,7 +19,7 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to generate key: %v", err)
 	}
-	warpPrivKey := privKey.(warpnet.WarpPrivateKey)
+	warpPrivKey := privKey
 	pubKey := warpPrivKey.GetPublic()
 	nonce := rand.Int64()
 

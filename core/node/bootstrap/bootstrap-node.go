@@ -26,9 +26,11 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	root "github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -42,12 +44,15 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
+	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
+	"net"
 )
 
 type BootstrapNode struct {
 	*base.WarpNode
 
+	meshRouter        MeshRouter
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	raft              ConsensusProvider
@@ -56,19 +61,25 @@ type BootstrapNode struct {
 	psk               security.PSK
 }
 
+type MeshRouter interface {
+	Address() net.IP
+	Subnet() net.IPNet
+}
+
 func NewBootstrapNode(
 	ctx context.Context,
+	meshRouter MeshRouter,
+	privKey ed25519.PrivateKey,
 	isInMemory bool,
-	seed []byte,
 	psk security.PSK,
-	listenAddr string,
 ) (_ *BootstrapNode, err error) {
-	privKey, err := security.GenerateKeyFromSeed(seed)
+	meshHost := meshRouter.Address().String()
+	meshMaddr, err := multiaddr.NewMultiaddr(
+		fmt.Sprintf("/ip6/%s/tcp/%s", meshHost, config.Config().Node.Port),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: fail generating key: %v", err)
+		return nil, err
 	}
-	warpPrivKey := privKey.(warpnet.WarpPrivateKey)
-
 	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory)
 	if err != nil {
 		return nil, err
@@ -97,16 +108,21 @@ func NewBootstrapNode(
 
 	node, err := base.NewWarpNode(
 		ctx,
-		warpPrivKey,
+		privKey,
 		memoryStore,
 		warpnet.BootstrapOwner,
 		psk,
-		listenAddr,
+		[]string{
+			fmt.Sprintf("/ip6/::/tcp/%s", config.Config().Node.Port),
+			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.Host, config.Config().Node.Port),
+		},
 		dHashTable.StartRouting,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: failed to init node: %v", err)
 	}
+
+	node.Peerstore().AddAddr(node.Node().ID(), meshMaddr, warpnet.PermanentAddrTTL)
 
 	bn := &BootstrapNode{
 		WarpNode:          node,
@@ -116,6 +132,7 @@ func NewBootstrapNode(
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
+		meshRouter:        meshRouter,
 	}
 
 	mw := middleware.NewWarpMiddleware()
@@ -130,7 +147,7 @@ func NewBootstrapNode(
 	)
 	bn.SetStreamHandler(
 		event.PUBLIC_GET_NODE_CHALLENGE,
-		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), warpPrivKey))),
+		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	return bn, nil
 }
@@ -141,9 +158,9 @@ func (bn *BootstrapNode) Start() error {
 		return err
 	}
 
-	if err := bn.raft.Start(bn); err != nil {
-		return err
-	}
+	//if err := bn.raft.Start(bn); err != nil {
+	//	return err
+	//}
 
 	nodeInfo := bn.NodeInfo()
 

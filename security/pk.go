@@ -30,6 +30,7 @@ package security
 import (
 	"bytes"
 	go_crypto "crypto"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -39,7 +40,7 @@ import (
 
 type PrivateKey crypto.PrivKey
 
-func GenerateKeyFromSeed(seed []byte) (go_crypto.PrivateKey, error) {
+func GenerateKeyFromSeed(seed []byte) (ed25519.PrivateKey, error) {
 	if len(seed) == 0 {
 		return nil, errors.New("seed is empty")
 	}
@@ -52,6 +53,5 @@ func GenerateKeyFromSeed(seed []byte) (go_crypto.PrivateKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
-
-	return privKey, nil
+	return privKey.Raw()
 }

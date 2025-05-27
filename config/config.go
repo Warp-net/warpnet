@@ -60,6 +60,8 @@ func init() {
 	pflag.String("database.dir", "storage", "Database directory name")
 	pflag.String("server.host", "localhost", "Server host")
 	pflag.String("server.port", "4002", "Server port")
+	pflag.String("mesh.port", "7090", "Mesh overlay network port")
+	pflag.String("mesh.host", "[::]", "Mesh overlay network host")
 	pflag.String("node.host", "0.0.0.0", "Node host")
 	pflag.String("node.port", "4001", "Node port")
 	pflag.String("node.seed", "", "Bootstrap node seed for deterministic ID generation (random string)")
@@ -102,6 +104,10 @@ func init() {
 
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
+		Mesh: mesh{
+			Port: viper.GetString("mesh.port"),
+			Host: viper.GetString("mesh.host"),
+		},
 		Node: node{
 			Bootstrap:  bootstrapAddrList,
 			Seed:       strings.TrimSpace(viper.GetString("node.seed")),
@@ -129,9 +135,14 @@ func Config() config {
 type config struct {
 	Version  *semver.Version
 	Node     node
+	Mesh     mesh
 	Database database
 	Server   server
 	Logging  logging
+}
+
+type mesh struct {
+	Host, Port string
 }
 type node struct {
 	Bootstrap  []string

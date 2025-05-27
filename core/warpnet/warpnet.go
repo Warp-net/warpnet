@@ -29,6 +29,7 @@ package warpnet
 
 import (
 	"context"
+	"crypto"
 	"github.com/Masterminds/semver/v3"
 	"github.com/docker/go-units"
 	"github.com/ipfs/go-datastore"
@@ -36,7 +37,7 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/providers"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
-	"github.com/libp2p/go-libp2p/core/crypto"
+	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -124,7 +125,7 @@ type (
 type (
 	// types
 	WarpMDNS        mdns.Service
-	WarpPrivateKey  crypto.PrivKey
+	WarpPrivateKey  p2pCrypto.PrivKey
 	WarpRoutingFunc func(node P2PNode) (WarpPeerRouting, error)
 
 	// aliases
@@ -203,7 +204,7 @@ func NewP2PNode(opts ...libp2p.Option) (P2PNode, error) {
 	return libp2p.New(opts...)
 }
 
-func NewNoise(id protocol.ID, pk crypto.PrivKey, mxs []tptu.StreamMuxer) (*noise.Transport, error) {
+func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*noise.Transport, error) {
 	return noise.New(id, pk, mxs)
 }
 
@@ -307,8 +308,12 @@ func NewMultiaddr(s string) (a multiaddr.Multiaddr, err error) {
 	return multiaddr.NewMultiaddr(s)
 }
 
-func IDFromPrivateKey(sk crypto.PrivKey) (WarpPeerID, error) {
-	return peer.IDFromPublicKey(sk.GetPublic())
+func IDFromPublicKey(pk crypto.PublicKey) (WarpPeerID, error) {
+	return peer.IDFromPublicKey(pk.(p2pCrypto.PubKey))
+}
+
+func UnmarshalEd25519PublicKey(data []byte) (p2pCrypto.PubKey, error) {
+	return p2pCrypto.UnmarshalEd25519PublicKey(data)
 }
 
 func AddrInfoFromP2pAddr(m multiaddr.Multiaddr) (*WarpAddrInfo, error) {
