@@ -5,7 +5,7 @@ services:
     network_mode: host
     restart: always
     environment:
-      - MESH_HOST=0.0.0.0
+      - MESH_HOST=[2a04:2181:c011:1::38bc:d823]
       - MESH_PORT=7090
       - NODE_PORT=4001
       - NODE_HOST=88.119.169.156
@@ -22,7 +22,7 @@ services:
     network_mode: host
     restart: always
     environment:
-      - MESH_HOST=0.0.0.0
+      - MESH_HOST=[2a04:2181:c011:1::38bc:d823]
       - MESH_PORT=7092
       - NODE_PORT=4002
       - NODE_HOST=88.119.169.156
@@ -39,7 +39,7 @@ services:
     network_mode: host
     restart: always
     environment:
-      - MESH_HOST=0.0.0.0
+      - MESH_HOST=[2a04:2181:c011:1::38bc:d823]
       - MESH_PORT=7093
       - NODE_PORT=4003
       - NODE_HOST=88.119.169.156
