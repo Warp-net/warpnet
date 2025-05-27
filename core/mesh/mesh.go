@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	config2 "github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"regexp"
@@ -60,26 +60,16 @@ func NewMeshRouter(
 		return nil, fmt.Errorf("unveil: %v", err)
 	}
 
-	logger := logrus.New()
-	logger.SetLevel(logrus.DebugLevel)
-	logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: time.DateTime,
-		FieldMap: logrus.FieldMap{
-			"network": "mesh",
-		},
-	})
-
 	if len(libp2pBootstrapNodes) == 0 {
 		libp2pBootstrapNodes = []string{DefaultPeer}
 	}
 
-	logger.Infof("default peers: %v", libp2pBootstrapNodes)
+	l.Infof("default peers: %v", libp2pBootstrapNodes)
 
 	cfg := config.NodeConfig{
 		PrivateKey:  privKey,
 		Peers:       libp2pBootstrapNodes,
-		Listen:      []string{"tls://[::]:7090"},
+		Listen:      []string{fmt.Sprintf("tls://[::]:%s", config2.Config().Mesh.Port)},
 		AdminListen: "none",
 		MulticastInterfaces: []config.MulticastInterfaceConfig{
 			{Regex: ".*", Beacon: true, Listen: true},
@@ -128,7 +118,7 @@ func NewMeshRouter(
 		}
 		options = append(options, core.AllowedPublicKey(k[:]))
 	}
-	if n.core, err = core.New(cfg.Certificate, logger, options...); err != nil {
+	if n.core, err = core.New(cfg.Certificate, l, options...); err != nil {
 		return nil, fmt.Errorf("mesh: core: %v", err)
 	}
 
@@ -162,12 +152,6 @@ func NewMeshRouter(
 		}
 
 		logme := gologme.New(os.Stdout, "multicast: ", gologme.LstdFlags)
-		logme.EnableLevel("debug")
-		logme.EnableLevel("warn")
-		logme.EnableLevel("info")
-		logme.EnableLevel("error")
-		logme.EnableLevel("trace")
-
 		if n.multicast, err = multicast.New(n.core, logme, options...); err != nil {
 			return nil, fmt.Errorf("mesh: multicast: %v", err)
 		}
@@ -207,6 +191,23 @@ func NewMeshRouter(
 		id, n.core.Address().String(),
 	)
 	println()
+
+	go func() {
+		for {
+			select {
+			case <-n.ctx.Done():
+				return
+			default:
+				for _, p := range n.core.GetPeers() {
+					fmt.Printf("mesh peer %#v\n", p)
+				}
+				time.Sleep(time.Minute)
+				n.core.RetryPeersNow()
+			}
+		}
+	}()
+
+	//u, _ := url.Parse(DefaultPeer)
 
 	return n, nil
 }

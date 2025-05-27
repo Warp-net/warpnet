@@ -113,8 +113,7 @@ func (s *NodeRepoTestSuite) TestBlocklist() {
 	pk, err := security.GenerateKeyFromSeed([]byte("peer123"))
 	s.Require().NoError(err)
 
-	warpPrivKey := pk.(warpnet.WarpPrivateKey)
-	id, err := warpnet.IDFromPrivateKey(warpPrivKey)
+	id, err := warpnet.IDFromPublicKey(pk.Public())
 	s.Require().NoError(err)
 
 	err = s.repo.Blocklist24h(s.ctx, id)

@@ -212,7 +212,7 @@ func (d *DistributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 			log.Infoln("dht rendezvous: timeout - no peers found")
 			return
 		}
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 5)
 		tryouts--
 	}
 

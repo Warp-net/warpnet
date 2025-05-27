@@ -5,6 +5,7 @@ services:
     network_mode: host
     restart: always
     environment:
+      - MESH_PORT=7090
       - NODE_PORT=4001
       - NODE_HOST=88.119.169.156
       - NODE_NETWORK=testnet
@@ -14,35 +15,37 @@ services:
     volumes:
     - snapshot1:/tmp/snapshot:rw
 
-#  warpnet2:
-#    container_name: warpnet2
-#    image: ghcr.io/warp-net/warpnet-bootstrap:latest
-#    network_mode: host
-#    restart: always
-#    environment:
-#      - NODE_PORT=4002
-#      - NODE_HOST=88.119.169.156
-#      - NODE_NETWORK=testnet
-#      - NODE_INMEMORY=false
-#      - LOGGING_LEVEL=debug
-#      - NODE_SEED=warpnet2
-#    volumes:
-#      - snapshot2:/tmp/snapshot:rw
-#
-#  warpnet3:
-#    container_name: warpnet3
-#    image: ghcr.io/warp-net/warpnet-bootstrap:latest
-#    network_mode: host
-#    restart: always
-#    environment:
-#      - NODE_PORT=4003
-#      - NODE_HOST=88.119.169.156
-#      - NODE_NETWORK=testnet
-#      - NODE_INMEMORY=false
-#      - LOGGING_LEVEL=debug
-#      - NODE_SEED=warpnet3
-#    volumes:
-#      - snapshot3:/tmp/snapshot:rw
+  warpnet2:
+    container_name: warpnet2
+    image: ghcr.io/warp-net/warpnet-bootstrap:latest
+    network_mode: host
+    restart: always
+    environment:
+      - MESH_PORT=7092
+      - NODE_PORT=4002
+      - NODE_HOST=88.119.169.156
+      - NODE_NETWORK=testnet
+      - NODE_INMEMORY=false
+      - LOGGING_LEVEL=debug
+      - NODE_SEED=warpnet2
+    volumes:
+      - snapshot2:/tmp/snapshot:rw
+
+  warpnet3:
+    container_name: warpnet3
+    image: ghcr.io/warp-net/warpnet-bootstrap:latest
+    network_mode: host
+    restart: always
+    environment:
+      - MESH_PORT=7093
+      - NODE_PORT=4003
+      - NODE_HOST=88.119.169.156
+      - NODE_NETWORK=testnet
+      - NODE_INMEMORY=false
+      - LOGGING_LEVEL=debug
+      - NODE_SEED=warpnet3
+    volumes:
+      - snapshot3:/tmp/snapshot:rw
 
 volumes:
   snapshot1:

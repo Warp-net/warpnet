@@ -26,7 +26,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/mesh"
 	"github.com/Warp-net/warpnet/core/node/bootstrap"
@@ -74,7 +73,7 @@ func main() {
 
 	seed := []byte(config.Config().Node.Seed)
 	if len(seed) == 0 {
-		seed = []byte(rand.Text())
+		seed = []byte("test")
 	}
 
 	isInMemory := config.Config().Node.IsInMemory

@@ -50,8 +50,8 @@ var warpnetBootstrapNodes = []string{
 
 var testnetBootstrapNodes = []string{
 	"/ip4/88.119.169.156/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
-	//"/ip4/88.119.169.156/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
-	//"/ip4/88.119.169.156/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
+	"/ip4/88.119.169.156/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
+	"/ip4/88.119.169.156/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
 }
 
 var configSingleton config
@@ -60,6 +60,7 @@ func init() {
 	pflag.String("database.dir", "storage", "Database directory name")
 	pflag.String("server.host", "localhost", "Server host")
 	pflag.String("server.port", "4002", "Server port")
+	pflag.String("mesh.port", "7090", "Mesh overlay network port")
 	pflag.String("node.host", "0.0.0.0", "Node host")
 	pflag.String("node.port", "4001", "Node port")
 	pflag.String("node.seed", "", "Bootstrap node seed for deterministic ID generation (random string)")
@@ -102,6 +103,7 @@ func init() {
 
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
+		Mesh:    mesh{Port: viper.GetString("mesh.port")},
 		Node: node{
 			Bootstrap:  bootstrapAddrList,
 			Seed:       strings.TrimSpace(viper.GetString("node.seed")),
@@ -129,9 +131,14 @@ func Config() config {
 type config struct {
 	Version  *semver.Version
 	Node     node
+	Mesh     mesh
 	Database database
 	Server   server
 	Logging  logging
+}
+
+type mesh struct {
+	Port string
 }
 type node struct {
 	Bootstrap  []string
