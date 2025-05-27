@@ -26,6 +26,9 @@ var DefaultPeers = []string{
 	"tls://[200:aa2a:2032:d056:27c4:cdc3:f425:ab4d]:7090",
 	"tls://[200:944:3126:96c3:52b2:b217:f466:a23f]:7092",
 	"tls://[200:865c:9948:4280:8440:44fb:bbe5:e92a]:7093",
+	"tls://127.0.0.1:7090",
+	"tls://127.0.0.1:7092",
+	"tls://127.0.0.1:7093",
 }
 
 type MeshLogger interface {
@@ -97,9 +100,17 @@ func NewMeshRouter(
 
 	n := &MeshRouter{ctx: ctx}
 
+	// Set up the Yggdrasil node itself.
+	iprange := net.IPNet{
+		IP:   net.ParseIP("200::"),
+		Mask: net.CIDRMask(7, 128),
+	}
 	options := []core.SetupOption{
 		core.NodeInfo(cfg.NodeInfo),
 		core.NodeInfoPrivacy(cfg.NodeInfoPrivacy),
+		core.PeerFilter(func(ip net.IP) bool {
+			return ip.To16() != nil && iprange.Contains(ip)
+		}),
 	}
 	for _, addr := range cfg.Listen {
 		options = append(options, core.ListenAddress(addr))
