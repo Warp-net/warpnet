@@ -9,7 +9,7 @@ services:
       - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
       - NODE_INMEMORY=false
-      - LOGGING_LEVEL=debug
+      - LOGGING_LEVEL=info
       - NODE_SEED=warpnet1
     volumes:
     - snapshot1:/tmp/snapshot:rw
@@ -24,7 +24,7 @@ services:
       - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
       - NODE_INMEMORY=false
-      - LOGGING_LEVEL=debug
+      - LOGGING_LEVEL=info
       - NODE_SEED=warpnet2
     volumes:
       - snapshot2:/tmp/snapshot:rw
@@ -39,7 +39,7 @@ services:
       - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
       - NODE_INMEMORY=false
-      - LOGGING_LEVEL=debug
+      - LOGGING_LEVEL=info
       - NODE_SEED=warpnet3
     volumes:
       - snapshot3:/tmp/snapshot:rw

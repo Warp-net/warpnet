@@ -117,7 +117,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(fn WarpHandler) warpnet.WarpStre
 			encoder  = json.JSON.NewEncoder(s)
 		)
 
-		reader := io.LimitReader(s, units.MiB) // TODO size limit???
+		reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
 		data, err := io.ReadAll(reader)
 		if err != nil && err != io.EOF {
 			log.Errorf("middleware: reading from stream: %v", err)

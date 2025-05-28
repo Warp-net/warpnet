@@ -119,6 +119,8 @@ func NewService(h host.Host, ids identify.IDService, listenAddrs func() []ma.Mul
 	s.refCount.Add(1)
 	go s.waitForPublicAddr()
 
+	fmt.Println("HOLE PUNCHING STARTED")
+
 	return s, nil
 }
 
