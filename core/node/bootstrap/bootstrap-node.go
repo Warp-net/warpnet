@@ -107,21 +107,6 @@ func NewBootstrapNode(
 		return nil, fmt.Errorf("bootstrap: failed to init node: %v", err)
 	}
 
-	node.Network().Notify(&network.NotifyBundle{
-		ConnectedF: func(_ network.Network, conn network.Conn) {
-			go func() {
-				info := node.Peerstore().PeerInfo(conn.RemotePeer())
-
-				fmt.Println("Attempting back-connect to:", info)
-				err := node.Connect(info)
-				if err != nil {
-					fmt.Println("Back-connect failed:", err)
-				} else {
-					fmt.Println("Back-connect success")
-				}
-			}()
-		},
-	})
 	bn := &BootstrapNode{
 		WarpNode:          node,
 		discService:       discService,
@@ -131,6 +116,10 @@ func NewBootstrapNode(
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 	}
+
+	bn.Network().Notify(&network.NotifyBundle{
+		ConnectedF: bn.backConnect,
+	})
 
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
@@ -147,6 +136,21 @@ func NewBootstrapNode(
 		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	return bn, nil
+}
+
+func (bn *BootstrapNode) backConnect(_ network.Network, conn network.Conn) {
+	go func() {
+		info := bn.Peerstore().PeerInfo(conn.RemotePeer())
+
+		log.Infof("bootstrap: attempting back-connect to: %v", info)
+		err := bn.Connect(info)
+		if err != nil {
+			log.Errorf("bootstrap: back-connect failed: %v", err)
+			return
+		}
+		log.Infoln("bootstrap: back-connect success")
+		return
+	}()
 }
 
 func (bn *BootstrapNode) Start() error {
