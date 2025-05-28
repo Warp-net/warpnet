@@ -44,15 +44,12 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
-	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
-	"net"
 )
 
 type BootstrapNode struct {
 	*base.WarpNode
 
-	meshRouter        MeshRouter
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	raft              ConsensusProvider
@@ -61,25 +58,12 @@ type BootstrapNode struct {
 	psk               security.PSK
 }
 
-type MeshRouter interface {
-	Address() net.IP
-	Subnet() net.IPNet
-}
-
 func NewBootstrapNode(
 	ctx context.Context,
-	meshRouter MeshRouter,
 	privKey ed25519.PrivateKey,
 	isInMemory bool,
 	psk security.PSK,
 ) (_ *BootstrapNode, err error) {
-	meshHost := meshRouter.Address().String()
-	meshMaddr, err := multiaddr.NewMultiaddr(
-		fmt.Sprintf("/ip6/%s/tcp/%s", meshHost, config.Config().Node.Port),
-	)
-	if err != nil {
-		return nil, err
-	}
 	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory)
 	if err != nil {
 		return nil, err
@@ -113,16 +97,14 @@ func NewBootstrapNode(
 		warpnet.BootstrapOwner,
 		psk,
 		[]string{
-			fmt.Sprintf("/ip6/::/tcp/%s", config.Config().Node.Port),
-			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.Host, config.Config().Node.Port),
+			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
+			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		},
 		dHashTable.StartRouting,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: failed to init node: %v", err)
 	}
-
-	node.Peerstore().AddAddr(node.Node().ID(), meshMaddr, warpnet.PermanentAddrTTL)
 
 	bn := &BootstrapNode{
 		WarpNode:          node,
@@ -132,7 +114,6 @@ func NewBootstrapNode(
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
-		meshRouter:        meshRouter,
 	}
 
 	mw := middleware.NewWarpMiddleware()
@@ -158,9 +139,9 @@ func (bn *BootstrapNode) Start() error {
 		return err
 	}
 
-	//if err := bn.raft.Start(bn); err != nil {
-	//	return err
-	//}
+	if err := bn.raft.Start(bn); err != nil {
+		return err
+	}
 
 	nodeInfo := bn.NodeInfo()
 

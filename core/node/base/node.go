@@ -98,7 +98,7 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public())
+	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	if err != nil {
 		return nil, err
 	}

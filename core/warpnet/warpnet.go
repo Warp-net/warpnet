@@ -29,7 +29,7 @@ package warpnet
 
 import (
 	"context"
-	"crypto"
+	"crypto/ed25519"
 	"github.com/Masterminds/semver/v3"
 	"github.com/docker/go-units"
 	"github.com/ipfs/go-datastore"
@@ -308,8 +308,12 @@ func NewMultiaddr(s string) (a multiaddr.Multiaddr, err error) {
 	return multiaddr.NewMultiaddr(s)
 }
 
-func IDFromPublicKey(pk crypto.PublicKey) (WarpPeerID, error) {
-	return peer.IDFromPublicKey(pk.(p2pCrypto.PubKey))
+func IDFromPublicKey(pk ed25519.PublicKey) (WarpPeerID, error) {
+	pub, err := p2pCrypto.UnmarshalEd25519PublicKey(pk)
+	if err != nil {
+		return "", err
+	}
+	return peer.IDFromPublicKey(pub)
 }
 
 func UnmarshalEd25519PublicKey(data []byte) (p2pCrypto.PubKey, error) {

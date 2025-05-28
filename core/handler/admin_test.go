@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	root "github.com/Warp-net/warpnet"
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -19,8 +18,10 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to generate key: %v", err)
 	}
-	warpPrivKey := privKey
-	pubKey := warpPrivKey.GetPublic()
+	pubKey, ok := privKey.Public().(ed25519.PublicKey)
+	if !ok {
+		t.Fatalf("failed to cast public key")
+	}
 	nonce := rand.Int64()
 
 	ownChallenge, location, err := security.GenerateChallenge(root.GetCodeBase(), nonce)
@@ -39,7 +40,7 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to marshal challenge: %v", err)
 	}
 
-	resp, err := StreamChallengeHandler(root.GetCodeBase(), warpPrivKey)(bt, nil)
+	resp, err := StreamChallengeHandler(root.GetCodeBase(), privKey)(bt, nil)
 	if err != nil {
 		t.Fatalf("challenge handler: %v", err)
 	}
@@ -60,17 +61,12 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to decode signature: %v", err)
 	}
 
-	rawPubKey, err := pubKey.Raw()
-	if err != nil {
-		t.Fatalf("failed to get raw public key: %v", err)
-	}
-
 	challengeOrigin, err := hex.DecodeString(challengeResp.Challenge)
 	if err != nil {
 		t.Fatalf("failed to decode challenge origin: %v", err)
 	}
 
-	if !ed25519.Verify(rawPubKey, challengeOrigin, decodedSig) {
+	if !ed25519.Verify([]byte(pubKey), challengeOrigin, decodedSig) {
 		t.Fatalf("failed to verify challenge")
 	} else {
 		fmt.Println("challenge verified")

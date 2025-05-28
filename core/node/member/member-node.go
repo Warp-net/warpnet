@@ -46,9 +46,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
-	"net"
 	"time"
 )
 
@@ -56,7 +54,6 @@ type MemberNode struct {
 	*base.WarpNode
 
 	ctx           context.Context
-	meshRouter    MeshRouter
 	discService   DiscoveryHandler
 	mdnsService   MDNSStarterCloser
 	pubsubService PubSubProvider
@@ -67,28 +64,13 @@ type MemberNode struct {
 	userRepo      UserFetcher
 }
 
-type MeshRouter interface {
-	Address() net.IP
-	Subnet() net.IPNet
-	Stop()
-}
-
 func NewMemberNode(
 	ctx context.Context,
-	meshRouter MeshRouter,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	authRepo AuthProvider,
 	db Storer,
 ) (_ *MemberNode, err error) {
-	meshHost := meshRouter.Address().String()
-	meshMaddr, err := multiaddr.NewMultiaddr(
-		fmt.Sprintf("/ip6/%s/tcp/%s", meshHost, config.Config().Node.Port),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	consensusRepo := database.NewConsensusRepo(db)
 	nodeRepo := database.NewNodeRepo(db)
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
@@ -123,16 +105,14 @@ func NewMemberNode(
 		owner.UserId,
 		psk,
 		[]string{
-			fmt.Sprintf("/ip6/::/tcp/%s", config.Config().Node.Port),
-			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.Host, config.Config().Node.Port),
+			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
+			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		},
 		dHashTable.StartRouting,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("member: failed to init node: %v", err)
 	}
-
-	node.Peerstore().AddAddr(node.Node().ID(), meshMaddr, warpnet.PermanentAddrTTL)
 
 	mn := &MemberNode{
 		WarpNode:      node,
@@ -145,7 +125,6 @@ func NewMemberNode(
 		nodeRepo:      nodeRepo,
 		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		userRepo:      userRepo,
-		meshRouter:    meshRouter,
 	}
 
 	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)

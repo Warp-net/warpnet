@@ -26,8 +26,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/mesh"
 	"github.com/Warp-net/warpnet/core/node/bootstrap"
 	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
@@ -73,7 +73,7 @@ func main() {
 
 	seed := []byte(config.Config().Node.Seed)
 	if len(seed) == 0 {
-		seed = []byte("test")
+		seed = []byte(rand.Text())
 	}
 
 	isInMemory := config.Config().Node.IsInMemory
@@ -83,13 +83,7 @@ func main() {
 		log.Fatalf("bootstrap: fail generating key: %v", err)
 	}
 
-	meshRouter, err := mesh.NewMeshRouter(ctx, nil, privKey, log.NewEntry(log.StandardLogger()))
-	if err != nil {
-		log.Fatalf("failed to init mesh router: %v", err)
-	}
-	defer meshRouter.Stop()
-
-	n, err := bootstrap.NewBootstrapNode(ctx, meshRouter, privKey, isInMemory, psk)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, isInMemory, psk)
 	if err != nil {
 		log.Fatalf("failed to init bootstrap node: %v", err)
 	}

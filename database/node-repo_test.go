@@ -29,6 +29,7 @@ package database
 
 import (
 	"context"
+	"crypto/ed25519"
 	"github.com/Warp-net/warpnet/security"
 	"go.uber.org/goleak"
 	"testing"
@@ -113,7 +114,7 @@ func (s *NodeRepoTestSuite) TestBlocklist() {
 	pk, err := security.GenerateKeyFromSeed([]byte("peer123"))
 	s.Require().NoError(err)
 
-	id, err := warpnet.IDFromPublicKey(pk.Public())
+	id, err := warpnet.IDFromPublicKey(pk.Public().(ed25519.PublicKey))
 	s.Require().NoError(err)
 
 	err = s.repo.Blocklist24h(s.ctx, id)
