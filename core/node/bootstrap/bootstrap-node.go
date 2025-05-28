@@ -43,7 +43,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
@@ -117,10 +116,6 @@ func NewBootstrapNode(
 		psk:               psk,
 	}
 
-	bn.Network().Notify(&network.NotifyBundle{
-		ConnectedF: bn.backConnect,
-	})
-
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
 	bn.SetStreamHandler(
@@ -136,21 +131,6 @@ func NewBootstrapNode(
 		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	return bn, nil
-}
-
-func (bn *BootstrapNode) backConnect(_ network.Network, conn network.Conn) {
-	go func() {
-		info := bn.Peerstore().PeerInfo(conn.RemotePeer())
-
-		log.Infof("bootstrap: attempting back-connect to: %v", info)
-		err := bn.Connect(info)
-		if err != nil {
-			log.Errorf("bootstrap: back-connect failed: %v", err)
-			return
-		}
-		log.Infoln("bootstrap: back-connect success")
-		return
-	}()
 }
 
 func (bn *BootstrapNode) Start() error {

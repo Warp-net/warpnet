@@ -194,6 +194,10 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	return nil
 }
 
+func (n *WarpNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+	return n.node.Connect(n.ctx, info)
+}
+
 func (n *WarpNode) SetStreamHandler(route stream.WarpRoute, handler warpnet.WarpStreamHandler) {
 	if !stream.IsValidRoute(route) {
 		log.Fatalf("node: invalid route: %v", route)
