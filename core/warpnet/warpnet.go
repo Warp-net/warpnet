@@ -164,13 +164,14 @@ type WarpPubInfo struct {
 }
 
 type NodeInfo struct {
-	OwnerId        string          `json:"owner_id"`
-	ID             WarpPeerID      `json:"node_id"`
-	Version        *semver.Version `json:"version"`
-	Addresses      []string        `json:"addresses"`
-	StartTime      time.Time       `json:"start_time"`
-	RelayState     string          `json:"relay_state"`
-	BootstrapPeers []WarpAddrInfo  `json:"bootstrap_peers"`
+	OwnerId        string           `json:"owner_id"`
+	ID             WarpPeerID       `json:"node_id"`
+	Version        *semver.Version  `json:"version"`
+	Addresses      []string         `json:"addresses"`
+	StartTime      time.Time        `json:"start_time"`
+	RelayState     string           `json:"relay_state"`
+	BootstrapPeers []WarpAddrInfo   `json:"bootstrap_peers"`
+	Reachability   WarpReachability `json:"reachability"`
 }
 
 func (ni NodeInfo) IsBootstrap() bool {

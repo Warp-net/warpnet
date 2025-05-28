@@ -62,6 +62,7 @@ type MemberNode struct {
 	nodeRepo      ProviderCloser
 	retrier       retrier.Retrier
 	userRepo      UserFetcher
+	ownerId       string
 }
 
 func NewMemberNode(
@@ -102,7 +103,7 @@ func NewMemberNode(
 		ctx,
 		privKey,
 		store,
-		owner.UserId,
+		warpnet.ReachabilityUnknown,
 		psk,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
@@ -125,10 +126,17 @@ func NewMemberNode(
 		nodeRepo:      nodeRepo,
 		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		userRepo:      userRepo,
+		ownerId:       owner.UserId,
 	}
 
 	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)
 	return mn, nil
+}
+
+func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
+	bi := m.BaseNodeInfo()
+	bi.OwnerId = m.ownerId
+	return bi
 }
 
 func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
@@ -144,7 +152,7 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 
 	m.mdnsService.Start(m)
 
-	ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
+	ownerUser, err := m.userRepo.Get(m.ownerId)
 	if err != nil {
 		return fmt.Errorf("member: failed to get owner user: %v", err)
 	}
@@ -162,6 +170,8 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
+	log.Infoln("node: supported protocols:", m.Node().Mux().Protocols())
+
 	return nil
 }
 

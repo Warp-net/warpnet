@@ -94,7 +94,7 @@ func NewBootstrapNode(
 		ctx,
 		privKey,
 		memoryStore,
-		warpnet.BootstrapOwner,
+		warpnet.ReachabilityPublic,
 		psk,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
@@ -131,6 +131,12 @@ func NewBootstrapNode(
 		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	return bn, nil
+}
+
+func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
+	bi := bn.BaseNodeInfo()
+	bi.OwnerId = warpnet.BootstrapOwner
+	return bi
 }
 
 func (bn *BootstrapNode) Start() error {

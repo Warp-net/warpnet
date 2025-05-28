@@ -38,8 +38,13 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/event"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/routing"
+	mem "github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 	"strings"
 	"sync/atomic"
@@ -64,18 +69,22 @@ type WarpNode struct {
 	streamer Streamer
 	backoff  BackoffEnabler
 
-	ownerId  string
 	isClosed *atomic.Bool
 	version  *semver.Version
 
-	startTime time.Time
+	startTime       time.Time
+	reachibility    warpnet.WarpReachability
+	reachibilitySub event.Subscription
+	psk             warpnet.PSK
+
+	satellite warpnet.P2PNode
 }
 
 func NewWarpNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	store warpnet.WarpPeerstore,
-	ownerId string,
+	reachability warpnet.WarpReachability,
 	psk security.PSK,
 	listenAddrs []string,
 	routingFn func(node warpnet.P2PNode) (warpnet.WarpPeerRouting, error),
@@ -105,7 +114,7 @@ func NewWarpNode(
 
 	reachibilityOption := EmptyOption()
 	autoStaticRelaysOption := EnableAutoRelayWithStaticRelays(infos, currentNodeID)
-	if ownerId == warpnet.BootstrapOwner {
+	if reachability == warpnet.ReachabilityPublic {
 		reachibilityOption = libp2p.ForceReachabilityPublic
 		autoStaticRelaysOption = EmptyOption()
 	}
@@ -149,21 +158,32 @@ func NewWarpNode(
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
 
+	sub, err := node.EventBus().Subscribe(new(event.EvtLocalReachabilityChanged))
+	if err != nil {
+		return nil, fmt.Errorf("node: failed to subscribe: %v", err)
+	}
+
 	relayService, err := relay.NewRelay(node)
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to create relay	: %v", err)
 	}
 
 	wn := &WarpNode{
-		ctx:       ctx,
-		node:      node,
-		relay:     relayService,
-		ownerId:   ownerId,
-		streamer:  stream.NewStreamPool(ctx, node),
-		isClosed:  new(atomic.Bool),
-		version:   config.Config().Version,
-		startTime: time.Now(),
-		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		ctx:             ctx,
+		node:            node,
+		relay:           relayService,
+		streamer:        stream.NewStreamPool(ctx, node),
+		isClosed:        new(atomic.Bool),
+		version:         config.Config().Version,
+		startTime:       time.Now(),
+		backoff:         backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		reachibility:    reachability,
+		reachibilitySub: sub,
+		psk:             warpnet.PSK(psk),
+	}
+
+	if reachability != warpnet.ReachabilityPublic {
+		go wn.runSatelliteIfReachable()
 	}
 
 	return wn, wn.validateSupportedProtocols()
@@ -184,7 +204,7 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	}
 
 	log.Debugf("node: connect attempt to node: %s", p.String())
-	if err := n.node.Connect(n.ctx, p); err != nil {
+	if err := n.SimpleConnect(p); err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
 
@@ -207,7 +227,6 @@ func (n *WarpNode) SetStreamHandler(route stream.WarpRoute, handler warpnet.Warp
 
 func (n *WarpNode) validateSupportedProtocols() error {
 	protocols := n.node.Mux().Protocols()
-	log.Infoln("node: supported protocols:", protocols)
 	var (
 		isAutoNatBackFound, isAutoNatRequestFound, isRelayHopFound, isRelayStopFound bool
 	)
@@ -240,10 +259,11 @@ const (
 	relayStatusRunning = "running"
 )
 
-func (n *WarpNode) NodeInfo() warpnet.NodeInfo {
+func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 	if n == nil || n.node == nil || n.node.Network() == nil || n.node.Peerstore() == nil {
 		return warpnet.NodeInfo{}
 	}
+
 	relayState := relayStatusWaiting
 
 	addrs := n.node.Peerstore().Addrs(n.node.ID())
@@ -259,13 +279,84 @@ func (n *WarpNode) NodeInfo() warpnet.NodeInfo {
 	}
 
 	return warpnet.NodeInfo{
-		ID:         n.node.ID(),
-		Addresses:  addresses,
-		Version:    n.version,
-		OwnerId:    n.ownerId,
-		StartTime:  n.startTime,
-		RelayState: relayState,
+		ID:           n.node.ID(),
+		Addresses:    addresses,
+		Version:      n.version,
+		StartTime:    n.startTime,
+		RelayState:   relayState,
+		Reachability: n.reachibility,
 	}
+}
+
+// TODO prettify it
+func (n *WarpNode) runSatelliteIfReachable() {
+	if n.reachibilitySub == nil {
+		return
+	}
+
+	for ev := range n.reachibilitySub.Out() {
+		before := n.reachibility
+
+		reachabilityEvent := ev.(*event.EvtLocalReachabilityChanged)
+		log.Infoln("reachability changed!", reachabilityEvent.Reachability)
+		n.reachibility = reachabilityEvent.Reachability
+
+		if before == warpnet.ReachabilityPublic {
+			continue
+		}
+		if n.reachibility != warpnet.ReachabilityPublic {
+			if n.satellite != nil {
+				_ = n.satellite.Close()
+				n.satellite = nil
+			}
+			continue
+		}
+
+		if n.satellite != nil {
+			continue
+		}
+
+		satellite, err := n.newSatelliteNode()
+		if err != nil {
+			log.Errorf("node: failed to init satellite bootstrap node: %v", err)
+			continue
+		}
+
+		n.satellite = satellite
+		log.Infoln("satellite node launched due to reachability = public")
+	}
+}
+
+func (n *WarpNode) newSatelliteNode() (warpnet.P2PNode, error) {
+	return warpnet.NewP2PNode(
+		libp2p.ListenAddrStrings(
+			"/ip4/0.0.0.0/tcp/0",
+			"/ip6/::/tcp/0",
+		),
+		libp2p.Transport(warpnet.NewTCPTransport),
+		libp2p.RandomIdentity,
+		libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
+		libp2p.Peerstore(func() warpnet.WarpPeerstore { s, _ := mem.NewPeerstore(); return s }()),
+		libp2p.DisableMetrics(),
+		libp2p.PrivateNetwork(n.psk),
+		libp2p.UserAgent("satellite"),
+		libp2p.Routing(func(host host.Host) (routing.PeerRouting, error) {
+			d, err := dht.New(n.ctx, host, dht.Mode(dht.ModeServer))
+			if err != nil {
+				return nil, err
+			}
+			go d.Bootstrap(n.ctx)
+			return d, nil
+		}),
+		libp2p.ForceReachabilityPublic(),
+		libp2p.EnableAutoNATv2(),
+		libp2p.EnableRelay(),
+		libp2p.EnableRelayService(relay.WithDefaultResources()),
+		libp2p.EnableHolePunching(),
+		libp2p.EnableNATService(),
+		libp2p.NATPortMap(),
+		libp2p.EnableAutoRelayWithPeerSource(nil),
+	)
 }
 
 func (n *WarpNode) Node() warpnet.P2PNode {
@@ -302,7 +393,7 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 	if nodeId == "" {
 		return nil, warpnet.WarpError("node: empty node id")
 	}
-	if n.NodeInfo().ID == nodeId {
+	if n.node.ID() == nodeId {
 		return nil, ErrSelfRequest
 	}
 
@@ -335,6 +426,13 @@ func (n *WarpNode) StopNode() {
 	}()
 	if n == nil || n.node == nil {
 		return
+	}
+
+	if n.satellite != nil {
+		_ = n.satellite.Close()
+	}
+	if n.reachibilitySub != nil {
+		_ = n.reachibilitySub.Close()
 	}
 
 	if n.relay != nil {
