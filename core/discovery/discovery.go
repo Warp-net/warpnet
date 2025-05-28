@@ -61,7 +61,8 @@ type DiscoveryInfoStorer interface {
 	Peerstore() warpnet.WarpPeerstore
 	Mux() warpnet.WarpProtocolSwitch
 	Network() warpnet.WarpNetwork
-	Connect(p warpnet.WarpAddrInfo) error
+	SimpleConnect(warpnet.WarpAddrInfo) error
+	Connect(warpnet.WarpAddrInfo) error
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
 
@@ -242,10 +243,7 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 		return
 	}
 
-	err = s.node.Connect(peerInfo)
-	if errors.Is(err, backoff.ErrBackoffEnabled) {
-		return
-	}
+	err = s.node.SimpleConnect(peerInfo)
 	if err != nil {
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
@@ -329,7 +327,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	err = s.node.Connect(pi)
+	err = s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: connecting is backoffed: %s", pi.ID)
 		return

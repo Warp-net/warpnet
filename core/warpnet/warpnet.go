@@ -342,7 +342,12 @@ func IsPublicMultiAddress(maddr WarpAddress) bool {
 		}
 	}
 	ip := gonet.ParseIP(ipStr)
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+	if ip.IsLoopback() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified() ||
+		IsRelayAddress(ip.String()) {
 		return false
 	}
 

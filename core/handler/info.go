@@ -36,7 +36,6 @@ import (
 
 type NodeInformer interface {
 	NodeInfo() warpnet.NodeInfo
-	SimpleConnect(warpnet.WarpAddrInfo) error
 }
 
 func StreamGetInfoHandler(
@@ -64,20 +63,6 @@ func StreamGetInfoHandler(
 			log.Errorf("fail encoding generic response: %v", err)
 		}
 
-		go backConnect(i, info)
 		return
 	}
-}
-
-// track nodes-behind-NAT connectivity
-func backConnect(connector NodeInformer, info warpnet.WarpAddrInfo) {
-	if connector.NodeInfo().OwnerId != warpnet.BootstrapOwner {
-		return
-	}
-	err := connector.SimpleConnect(info)
-	if err != nil {
-		log.Errorf("bootstrap: back-connect failed: %v", err)
-		return
-	}
-	log.Infoln("bootstrap: back-connect success")
 }
