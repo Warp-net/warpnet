@@ -43,6 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
@@ -106,6 +107,21 @@ func NewBootstrapNode(
 		return nil, fmt.Errorf("bootstrap: failed to init node: %v", err)
 	}
 
+	node.Network().Notify(&network.NotifyBundle{
+		ConnectedF: func(_ network.Network, conn network.Conn) {
+			go func() {
+				info := node.Peerstore().PeerInfo(conn.RemotePeer())
+
+				fmt.Println("Attempting back-connect to:", info)
+				err := node.Connect(info)
+				if err != nil {
+					fmt.Println("Back-connect failed:", err)
+				} else {
+					fmt.Println("Back-connect success")
+				}
+			}()
+		},
+	})
 	bn := &BootstrapNode{
 		WarpNode:          node,
 		discService:       discService,
