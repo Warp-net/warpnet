@@ -50,6 +50,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	log "github.com/sirupsen/logrus"
 	"math/rand/v2"
+	"sync/atomic"
 	"time"
 )
 
@@ -93,6 +94,7 @@ type discoveryService struct {
 
 	discoveryChan chan warpnet.WarpAddrInfo
 	stopChan      chan struct{}
+	syncDone      *atomic.Bool
 }
 
 //goland:noinspection ALL
@@ -112,6 +114,7 @@ func NewDiscoveryService(
 		newDiscoveryCache(),
 		addrInfos,
 		make(chan warpnet.WarpAddrInfo, 1000), make(chan struct{}),
+		new(atomic.Bool),
 	}
 }
 
@@ -158,7 +161,56 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 			}
 		}
 	}()
-	return nil
+	return s.syncBootstrapDiscovery()
+}
+
+func (s *discoveryService) syncBootstrapDiscovery() error {
+	defer func() {
+		s.syncDone.Store(true)
+	}()
+
+	for _, info := range s.bootstrapAddrs {
+		if s.node.NodeInfo().ID == info.ID {
+			continue
+		}
+		s.discoveryChan <- info
+	}
+
+	if s.node.NodeInfo().IsBootstrap() {
+		return nil
+	}
+
+	tryouts := 30
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		var isAllDiscovered = true
+
+		select {
+		case <-s.ctx.Done():
+			return s.ctx.Err()
+		case <-s.stopChan:
+			return nil
+		case <-ticker.C:
+			for _, info := range s.bootstrapAddrs {
+				if !s.cache.IsChallengedAlready(info.ID) {
+					isAllDiscovered = false
+					break
+				}
+			}
+
+			if isAllDiscovered {
+				log.Infof("discovery: all bootstrap addresses discovered")
+				return nil
+			}
+
+			tryouts--
+			if tryouts == 0 {
+				return warpnet.WarpError("discovery: all discovery attempts failed")
+			}
+		}
+	}
 }
 
 func (s *discoveryService) Close() {
