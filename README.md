@@ -104,6 +104,10 @@ Remember to give the project a star! Thanks again!
 
 * [warpnetdev](https://t.me/warpnetdev)
 
+## Codeberg
+
+https://codeberg.org/Warpnet/warpnet
+
 ## License
 
 Warpnet is free software licensed under the GNU General Public License v3.0 or later.
