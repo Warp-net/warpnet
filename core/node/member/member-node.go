@@ -165,15 +165,20 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 	}
 
 	err = m.retrier.Try(context.Background(), func() error {
-		if err := m.raft.AskUserValidation(ownerUser); err != nil {
-			return err
-		}
+		return m.raft.AskUserValidation(ownerUser)
+	})
+	if err != nil {
+		return fmt.Errorf("member: validate owner user by consensus: %v", err)
+	}
+	log.Infoln("member: owner user validated")
+	err = m.retrier.Try(context.Background(), func() error {
 		return m.raft.AskSelfHashValidation(m.selfHashHex)
 	})
 	if err != nil {
-		//log.Errorf("member: validate owner user by consensus: %v", err)
-		return fmt.Errorf("member: validate owner user by consensus: %v", err)
+		return fmt.Errorf("member: validate self hash by consensus: %v", err)
 	}
+	log.Infoln("member: selfhash validated")
+
 	println()
 	fmt.Printf(
 		"\033[1mNODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",

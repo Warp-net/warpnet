@@ -125,7 +125,7 @@ func (stk StreamTagKey) String() string {
 	return fmt.Sprintf("%d:%d", stk.RecordNumber, stk.DatasetNumber)
 }
 
-// Data is a convenience wrapper around a byte-slice.
+// TagData is a convenience wrapper around a byte-slice.
 type TagData []byte
 
 // IsPrintable returns true if all characters are printable.
@@ -151,9 +151,9 @@ func (tg TagData) IsPrintable() bool {
 func (tg TagData) String() string {
 	if tg.IsPrintable() == true {
 		return string(tg)
-	} else {
-		return fmt.Sprintf("BINARY<(%d) bytes>", len(tg))
 	}
+
+	return fmt.Sprintf("BINARY<(%d) bytes>", len(tg))
 }
 
 // ParsedTags is the complete, unordered set of tags parsed from the stream.

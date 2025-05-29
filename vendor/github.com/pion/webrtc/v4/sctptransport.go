@@ -120,6 +120,10 @@ func (r *SCTPTransport) Start(capabilities SCTPCapabilities) error {
 		RTOMax:               float64(r.api.settingEngine.sctp.rtoMax) / float64(time.Millisecond),
 		BlockWrite:           r.api.settingEngine.detach.DataChannels && r.api.settingEngine.dataChannelBlockWrite,
 		MaxMessageSize:       maxMessageSize,
+		MTU:                  outboundMTU,
+		MinCwnd:              r.api.settingEngine.sctp.minCwnd,
+		FastRtxWnd:           r.api.settingEngine.sctp.fastRtxWnd,
+		CwndCAStep:           r.api.settingEngine.sctp.cwndCAStep,
 	})
 	if err != nil {
 		return err
@@ -429,4 +433,15 @@ func (r *SCTPTransport) association() *sctp.Association {
 	r.lock.RUnlock()
 
 	return association
+}
+
+// BufferedAmount returns total amount (in bytes) of currently buffered user data.
+func (r *SCTPTransport) BufferedAmount() int {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	if r.sctpAssociation == nil {
+		return 0
+	}
+
+	return r.sctpAssociation.BufferedAmount()
 }

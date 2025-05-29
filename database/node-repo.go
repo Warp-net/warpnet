@@ -860,6 +860,8 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion string) error {
 	return txn.Commit()
 }
 
+var ErrNotInRecords = errors.New("self hash is not in the rconsensus records")
+
 const SelfHashConsensusKey = "selfhash"
 
 func (d *NodeRepo) SelfHashExists(k, selfHashHex string) error {
@@ -901,7 +903,7 @@ func (d *NodeRepo) SelfHashExists(k, selfHashHex string) error {
 			return txn.Commit()
 		}
 	}
-	return errors.New("self hash wasn't recorded")
+	return ErrNotInRecords
 }
 
 func buildRootKey(key ds.Key) string {
