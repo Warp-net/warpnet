@@ -180,7 +180,7 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
-	log.Infoln("node: supported protocols:", m.Node().Mux().Protocols())
+	//log.Infoln("node: supported protocols:", m.Node().Mux().Protocols())
 
 	return nil
 }

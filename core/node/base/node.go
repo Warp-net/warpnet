@@ -39,6 +39,7 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
 	"strings"
@@ -68,6 +69,7 @@ type WarpNode struct {
 	version  *semver.Version
 
 	startTime time.Time
+	eventsSub event.Subscription
 }
 
 func NewWarpNode(
@@ -139,10 +141,10 @@ func NewWarpNode(
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
 
-	//sub, err := node.EventBus().Subscribe(node.EventBus().GetAllEventTypes())
-	//if err != nil {
-	//	return nil, fmt.Errorf("node: failed to subscribe: %v", err)
-	//}
+	sub, err := node.EventBus().Subscribe(event.WildcardSubscription)
+	if err != nil {
+		return nil, fmt.Errorf("node: failed to subscribe: %v", err)
+	}
 
 	relayService, err := relay.NewRelay(node)
 	if err != nil {
@@ -158,9 +160,14 @@ func NewWarpNode(
 		version:   config.Config().Version,
 		startTime: time.Now(),
 		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		eventsSub: sub,
+	}
+	if err := wn.validateSupportedProtocols(); err != nil {
+		return nil, err
 	}
 
-	return wn, wn.validateSupportedProtocols()
+	go wn.trackIncomingEvents()
+	return wn, nil
 }
 
 func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
@@ -226,6 +233,12 @@ func (n *WarpNode) validateSupportedProtocols() error {
 		"node: not all supported protocols: autonat/dial-back=%t, autonat/dial-request=%t, relay/hop=%t, relay/stop=%t",
 		isAutoNatBackFound, isAutoNatRequestFound, isRelayHopFound, isRelayStopFound,
 	)
+}
+
+func (n *WarpNode) trackIncomingEvents() {
+	for ev := range n.eventsSub.Out() {
+		log.Infof("node: new event: %+v", ev)
+	}
 }
 
 const (
@@ -328,6 +341,10 @@ func (n *WarpNode) StopNode() {
 	}()
 	if n == nil || n.node == nil {
 		return
+	}
+
+	if n.eventsSub != nil {
+		_ = n.eventsSub.Close()
 	}
 
 	if n.relay != nil {
