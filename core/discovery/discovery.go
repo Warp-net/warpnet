@@ -67,8 +67,8 @@ type DiscoveryInfoStorer interface {
 }
 
 type NodeStorer interface {
-	BlocklistRemove(ctx context.Context, peerId warpnet.WarpPeerID) (err error)
-	IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID) (bool, error)
+	BlocklistRemove(peerId warpnet.WarpPeerID) (err error)
+	IsBlocklisted(peerId warpnet.WarpPeerID) (bool, error)
 	BlocklistExponential(peerId warpnet.WarpPeerID) error
 }
 
@@ -230,7 +230,7 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 		return
 	}
 
-	ok, err := s.nodeRepo.IsBlocklisted(s.ctx, peerInfo.ID)
+	ok, err := s.nodeRepo.IsBlocklisted(peerInfo.ID)
 	if ok && err == nil {
 		log.Infof("discovery: found blocklisted peer: %s", peerInfo.ID.String())
 		return
@@ -302,7 +302,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	ok, err := s.nodeRepo.IsBlocklisted(s.ctx, pi.ID)
+	ok, err := s.nodeRepo.IsBlocklisted(pi.ID)
 	if err != nil {
 		log.Errorf("discovery: failed to check blocklist: %s", err)
 	}

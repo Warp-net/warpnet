@@ -59,7 +59,9 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo, _ = NewNodeRepo(s.db, "")
+	s.repo, err = NewNodeRepo(s.db, "0.0.0")
+	s.Require().NoError(err)
+
 }
 
 func (s *NodeRepoTestSuite) TearDownSuite() {
@@ -120,14 +122,14 @@ func (s *NodeRepoTestSuite) TestBlocklist() {
 	err = s.repo.BlocklistExponential(id)
 	s.Require().NoError(err)
 
-	isBlocked, err := s.repo.IsBlocklisted(s.ctx, id)
+	isBlocked, err := s.repo.IsBlocklisted(id)
 	s.Require().NoError(err)
 	s.True(isBlocked)
 
-	err = s.repo.BlocklistRemove(s.ctx, id)
+	err = s.repo.BlocklistRemove(id)
 	s.Require().NoError(err)
 
-	isBlocked, err = s.repo.IsBlocklisted(s.ctx, id)
+	isBlocked, err = s.repo.IsBlocklisted(id)
 	s.Require().NoError(err)
 	s.False(isBlocked)
 }

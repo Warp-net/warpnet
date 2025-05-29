@@ -741,7 +741,7 @@ func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
 	return txn.Commit()
 }
 
-func (d *NodeRepo) IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID) (bool, error) {
+func (d *NodeRepo) IsBlocklisted(peerId warpnet.WarpPeerID) (bool, error) {
 	if d == nil {
 		return false, ErrNilNodeRepo
 	}
@@ -752,7 +752,7 @@ func (d *NodeRepo) IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID)
 		AddSubPrefix(BlocklistSubNamespace).
 		AddRootID(peerId.String()).
 		Build()
-	_, err := d.Get(ctx, ds.NewKey(blocklistKey.String()))
+	_, err := d.db.Get(blocklistKey)
 
 	if errors.Is(err, storage.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound) {
 		return false, nil
@@ -763,7 +763,7 @@ func (d *NodeRepo) IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID)
 	return true, nil
 }
 
-func (d *NodeRepo) BlocklistRemove(ctx context.Context, peerId warpnet.WarpPeerID) (err error) {
+func (d *NodeRepo) BlocklistRemove(peerId warpnet.WarpPeerID) (err error) {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
@@ -775,7 +775,7 @@ func (d *NodeRepo) BlocklistRemove(ctx context.Context, peerId warpnet.WarpPeerI
 		AddRootID(peerId.String()).
 		Build()
 
-	err = d.Delete(ctx, ds.NewKey(blocklistKey.String()))
+	err = d.db.Delete(blocklistKey)
 	if errors.Is(err, storage.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound) {
 		return nil
 	}
