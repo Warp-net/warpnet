@@ -101,11 +101,6 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 			return nil, err
 		}
 
-		codeHash, err := security.GetCodebaseHash(fs)
-		if err != nil {
-			return nil, err
-		}
-
 		challenge, err := security.ResolveChallenge(
 			fs,
 			security.SampleLocation{
@@ -119,7 +114,6 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 
 		return event.GetChallengeResponse{
 			Challenge: hex.EncodeToString(challenge),
-			CodeHash:  hex.EncodeToString(codeHash),
 			Signature: base64.StdEncoding.EncodeToString(sig),
 		}, nil
 	}

@@ -603,48 +603,35 @@ func (c *consensusService) AskUserValidation(user domain.User) error {
 		database.UserConsensusKey: string(bt),
 	}
 
-	leaderId := c.LeaderID().String()
-	if leaderId == "" {
-		return warpnet.WarpError("consensus: no leader found")
-	}
-	if leaderId == string(c.raftID) {
-		_, err := c.CommitState(newState)
-		if errors.Is(err, ErrNoRaftCluster) {
-			return nil
-		}
-		log.Errorf("consensus: failed to add user validation to raft cluster: %v", err)
-		return fmt.Errorf("consensus: failed to commit validate user state: %w", err)
+	return c.validate(newState)
+}
+
+func (c *consensusService) AskSelfHashValidation(selfHashHex string) error {
+	log.Infoln("consensus: asking for selfhash validation...")
+
+	newState := map[string]string{
+		database.SelfHashConsensusKey: selfHashHex,
 	}
 
-	resp, err := c.node.GenericStream(leaderId, event.PUBLIC_POST_NODE_VERIFY, newState)
-	if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-		log.Errorf("consensus: failed to stream user validation to raft cluster: %v", err)
-		return fmt.Errorf("consensus: node verify stream: %w", err)
-	}
-	if len(resp) == 0 {
-		return warpnet.WarpError("consensus: node verify stream returned empty response")
-	}
-
-	var errResp event.ErrorResponse
-	if _ = json.JSON.Unmarshal(resp, &errResp); errResp.Message != "" {
-		log.Errorf("consensus: verify response unmarshal failed: %v", errResp)
-		return fmt.Errorf("consensus: verify response unmarshal failed: %w", errResp)
-	}
-
-	log.Infoln("consensus: user validated")
-	return nil
+	return c.validate(newState)
 }
 
 func (c *consensusService) AskLeaderValidation() error {
 	log.Infoln("consensus: asking for leader validation...")
 
 	leaderId := c.LeaderID().String()
-	if leaderId == "" {
-		return warpnet.WarpError("consensus: no leader found")
-	}
 
 	newState := map[string]string{
 		"leader": leaderId,
+	}
+
+	return c.validate(newState)
+}
+
+func (c *consensusService) validate(newState KVState) error {
+	leaderId := c.LeaderID().String()
+	if leaderId == "" {
+		return warpnet.WarpError("consensus: no leader found")
 	}
 
 	if leaderId == string(c.raftID) {
@@ -667,8 +654,6 @@ func (c *consensusService) AskLeaderValidation() error {
 	if _ = json.JSON.Unmarshal(resp, &errResp); errResp.Message != "" {
 		return fmt.Errorf("consensus: verify leader response unmarshal failed: %w", errResp)
 	}
-
-	log.Infoln("consensus: leader validated")
 	return nil
 }
 

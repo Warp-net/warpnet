@@ -51,8 +51,7 @@ type ReplyStorer interface {
 	Set(key storage.DatabaseKey, value []byte) error
 	Get(key storage.DatabaseKey) ([]byte, error)
 	Delete(key storage.DatabaseKey) error
-	NewReadTxn() (storage.WarpTxReader, error)
-	NewWriteTxn() (storage.WarpTxWriter, error)
+	NewTxn() (storage.WarpTransactioner, error)
 }
 
 type ReplyRepo struct {
@@ -107,7 +106,7 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 		AddRootID(*reply.ParentId).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return reply, fmt.Errorf("error creating transaction: %w", err)
 	}
@@ -137,7 +136,7 @@ func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Twe
 		AddParentId(replyId).
 		Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return tweet, fmt.Errorf("error creating transaction: %w", err)
 	}
@@ -195,7 +194,7 @@ func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 		AddRootID(parentID).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return fmt.Errorf("error creating transaction: %w", err)
 	}
@@ -228,7 +227,7 @@ func (repo *ReplyRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cu
 		AddParentId(parentId).
 		Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return nil, "", fmt.Errorf("error creating transaction: %w", err)
 	}

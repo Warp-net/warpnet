@@ -59,7 +59,7 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo = NewNodeRepo(s.db)
+	s.repo, _ = NewNodeRepo(s.db, "")
 }
 
 func (s *NodeRepoTestSuite) TearDownSuite() {
@@ -117,7 +117,7 @@ func (s *NodeRepoTestSuite) TestBlocklist() {
 	id, err := warpnet.IDFromPublicKey(pk.Public().(ed25519.PublicKey))
 	s.Require().NoError(err)
 
-	err = s.repo.Blocklist24h(s.ctx, id)
+	err = s.repo.BlocklistExponential(id)
 	s.Require().NoError(err)
 
 	isBlocked, err := s.repo.IsBlocklisted(s.ctx, id)

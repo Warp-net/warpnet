@@ -27,6 +27,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/bootstrap"
 	"github.com/Warp-net/warpnet/metrics"
@@ -82,8 +83,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap: fail generating key: %v", err)
 	}
+	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, isInMemory, psk)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, isInMemory, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init bootstrap node: %v", err)
 	}

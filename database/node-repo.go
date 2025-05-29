@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/jbenet/goprocess"
 	log "github.com/sirupsen/logrus"
@@ -50,6 +51,7 @@ const (
 	NodesNamespace        = "/NODES"
 	ProvidersSubNamespace = "PROVIDERS"
 	BlocklistSubNamespace = "BLOCKLIST"
+	SelfHashSubNamespace  = "SELFHASH"
 	InfoSubNamespace      = "INFO"
 )
 
@@ -59,8 +61,7 @@ var (
 )
 
 type NodeStorer interface {
-	NewWriteTxn() (storage.WarpTxWriter, error)
-	NewReadTxn() (storage.WarpTxReader, error)
+	NewTxn() (storage.WarpTransactioner, error)
 	Get(key storage.DatabaseKey) ([]byte, error)
 	GetExpiration(key storage.DatabaseKey) (uint64, error)
 	GetSize(key storage.DatabaseKey) (int64, error)
@@ -85,13 +86,13 @@ type batch struct {
 	writeBatch *badger.WriteBatch
 }
 
-func NewNodeRepo(db NodeStorer) *NodeRepo {
+func NewNodeRepo(db NodeStorer, version string) (*NodeRepo, error) {
 	nr := &NodeRepo{
 		db:       db,
 		stopChan: make(chan struct{}),
 	}
 
-	return nr
+	return nr, nr.PruneOldSelfHashes(version)
 }
 
 func (d *NodeRepo) Put(ctx context.Context, key ds.Key, value []byte) error {
@@ -341,7 +342,7 @@ func (d *NodeRepo) Query(ctx context.Context, q dsq.Query) (res dsq.Results, err
 	return d.query(tx, q, true)
 }
 
-func (d *NodeRepo) query(tx *storage.WarpTxn, q dsq.Query, implicit bool) (dsq.Results, error) {
+func (d *NodeRepo) query(tx *storage.Txn, q dsq.Query, implicit bool) (dsq.Results, error) {
 	opt := badger.DefaultIteratorOptions
 	opt.PrefetchValues = !q.KeysOnly
 
@@ -673,7 +674,17 @@ func (b *batch) Cancel() error {
 	return nil
 }
 
-func (d *NodeRepo) Blocklist24h(ctx context.Context, peerId warpnet.WarpPeerID) error {
+const (
+	ForeverBlockDuration time.Duration = 0
+	MaxBlockDuration                   = 90 * 24 * time.Hour
+)
+
+type BlocklistedItem struct {
+	PeerID   warpnet.WarpPeerID
+	Duration *time.Duration
+}
+
+func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
@@ -685,7 +696,49 @@ func (d *NodeRepo) Blocklist24h(ctx context.Context, peerId warpnet.WarpPeerID) 
 		AddRootID(peerId.String()).
 		Build()
 
-	return d.PutWithTTL(ctx, ds.NewKey(blocklistKey.String()), []byte(peerId.String()), time.Hour*24)
+	txn, err := d.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	bt, err := txn.Get(blocklistKey)
+	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+		return err
+	}
+
+	var item BlocklistedItem
+	if len(bt) != 0 {
+		if err := json.JSON.Unmarshal(bt, &item); err != nil {
+			return err
+		}
+	}
+
+	if item.Duration == nil {
+		item.Duration = func(d time.Duration) *time.Duration { return &d }(time.Hour)
+	}
+	if *item.Duration == ForeverBlockDuration {
+		return nil
+	}
+
+	newDuration := *item.Duration * 2
+	item.Duration = &newDuration
+	item.PeerID = peerId
+
+	if *item.Duration > MaxBlockDuration {
+		*item.Duration = ForeverBlockDuration
+	}
+
+	bt, err = json.JSON.Marshal(item)
+	if err != nil {
+		return err
+	}
+
+	if err := txn.SetWithTTL(blocklistKey, bt, *item.Duration); err != nil {
+		return err
+	}
+
+	return txn.Commit()
 }
 
 func (d *NodeRepo) IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID) (bool, error) {
@@ -727,6 +780,128 @@ func (d *NodeRepo) BlocklistRemove(ctx context.Context, peerId warpnet.WarpPeerI
 		return nil
 	}
 	return err
+}
+
+func (d *NodeRepo) SetSelfHash(selfHashHex, version string) error {
+	if d == nil {
+		return ErrNilNodeRepo
+	}
+	if len(selfHashHex) == 0 {
+		return errors.New("empty codebase hash")
+	}
+	selfHashKey := storage.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(SelfHashSubNamespace).
+		AddRootID(version).
+		Build()
+
+	txn, err := d.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	bt, err := txn.Get(selfHashKey)
+	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+		return err
+	}
+
+	var item = make(map[string]struct{})
+	if len(bt) != 0 {
+		if err := json.JSON.Unmarshal(bt, &item); err != nil {
+			return err
+		}
+	}
+
+	item[selfHashHex] = struct{}{}
+
+	bt, err = json.JSON.Marshal(item)
+	if err != nil {
+		return err
+	}
+
+	if err := txn.Set(selfHashKey, bt); err != nil {
+		return err
+	}
+
+	return txn.Commit()
+}
+
+func (d *NodeRepo) PruneOldSelfHashes(currentVersion string) error {
+	if d == nil {
+		return ErrNilNodeRepo
+	}
+	if len(currentVersion) == 0 {
+		return errors.New("empty current version value")
+	}
+
+	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(SelfHashSubNamespace).Build()
+
+	txn, err := d.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	var limit uint64 = 100
+	items, _, err := txn.List(selfHashPrefix, &limit, nil)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range items {
+		key := item.Key
+		if !strings.Contains(key, currentVersion) {
+			if err := txn.Delete(storage.DatabaseKey(key)); err != nil {
+				return err
+			}
+		}
+	}
+	return txn.Commit()
+}
+
+const SelfHashConsensusKey = "selfhash"
+
+func (d *NodeRepo) SelfHashExists(k, selfHashHex string) error {
+	if d == nil {
+		return ErrNilNodeRepo
+	}
+	if k != SelfHashConsensusKey {
+		return nil
+	}
+
+	if len(selfHashHex) == 0 {
+		return errors.New("empty codebase hash")
+	}
+
+	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(SelfHashSubNamespace).Build()
+
+	txn, err := d.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	var limit uint64 = 100
+	items, _, err := txn.List(selfHashPrefix, &limit, nil)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range items {
+		var hashes map[string]struct{}
+		if err := json.JSON.Unmarshal(item.Value, &hashes); err != nil {
+			return err
+		}
+		if hashes == nil {
+			continue
+		}
+		if _, ok := hashes[selfHashHex]; ok {
+			return txn.Commit()
+		}
+	}
+	return errors.New("self hash wasn't recorded")
 }
 
 func buildRootKey(key ds.Key) string {

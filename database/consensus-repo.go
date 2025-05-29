@@ -48,7 +48,7 @@ type ConsensusStorer interface {
 	Get(key storage.DatabaseKey) ([]byte, error)
 	Sync() error
 	Path() string
-	NewReadTxn() (storage.WarpTxReader, error)
+	NewTxn() (storage.WarpTransactioner, error)
 	Delete(key storage.DatabaseKey) error
 }
 
@@ -78,7 +78,7 @@ func (cr *ConsensusRepo) Reset() error {
 	if cr == nil || cr.db == nil {
 		return nil
 	}
-	txn, err := cr.db.NewReadTxn()
+	txn, err := cr.db.NewTxn()
 	if err != nil {
 		return err
 	}

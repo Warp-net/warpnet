@@ -69,7 +69,7 @@ type DiscoveryInfoStorer interface {
 type NodeStorer interface {
 	BlocklistRemove(ctx context.Context, peerId warpnet.WarpPeerID) (err error)
 	IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID) (bool, error)
-	Blocklist24h(ctx context.Context, peerId warpnet.WarpPeerID) error
+	BlocklistExponential(peerId warpnet.WarpPeerID) error
 }
 
 type UserStorer interface {
@@ -84,7 +84,6 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 	version  *semver.Version
-	codeHash []byte
 
 	handlers []DiscoveryHandler
 
@@ -109,7 +108,7 @@ func NewDiscoveryService(
 
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
-		config.Config().Version, nil, handlers,
+		config.Config().Version, handlers,
 		retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		newRateLimiter(16, 1),
 		newDiscoveryCache(),
@@ -138,12 +137,6 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 	log.Infoln("discovery: service started")
 
 	s.node = n
-
-	ownCodeHash, err := security.GetCodebaseHash(root.GetCodeBase())
-	if err != nil {
-		return err
-	}
-	s.codeHash = ownCodeHash
 
 	go func() {
 		for {
@@ -255,7 +248,7 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 	err = s.requestChallenge(peerInfo)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: default handler: challenge is invalid for peer: %s\n", peerInfo.ID.String())
-		_ = s.nodeRepo.Blocklist24h(context.Background(), peerInfo.ID)
+		_ = s.nodeRepo.BlocklistExponential(peerInfo.ID)
 		return
 	}
 	if err != nil {
@@ -344,7 +337,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
-		_ = s.nodeRepo.Blocklist24h(context.Background(), pi.ID)
+		_ = s.nodeRepo.BlocklistExponential(pi.ID)
 		return
 	}
 	if err != nil {

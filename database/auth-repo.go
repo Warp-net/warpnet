@@ -59,8 +59,7 @@ type AuthStorer interface {
 	Run(username, password string) (err error)
 	Set(key storage.DatabaseKey, value []byte) error
 	Get(key storage.DatabaseKey) ([]byte, error)
-	NewReadTxn() (storage.WarpTxReader, error)
-	NewWriteTxn() (storage.WarpTxWriter, error)
+	NewTxn() (storage.WarpTransactioner, error)
 }
 
 type AuthRepo struct {

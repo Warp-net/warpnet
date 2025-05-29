@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
@@ -63,17 +64,27 @@ type MemberNode struct {
 	retrier       retrier.Retrier
 	userRepo      UserFetcher
 	ownerId       string
+	selfHashHex   string
 }
 
 func NewMemberNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
+	selfHashHex string,
+	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
 ) (_ *MemberNode, err error) {
 	consensusRepo := database.NewConsensusRepo(db)
-	nodeRepo := database.NewNodeRepo(db)
+	nodeRepo, err := database.NewNodeRepo(db, version.String())
+	if err != nil {
+		return nil, err
+	}
+	if err := nodeRepo.SetSelfHash(selfHashHex, version.String()); err != nil {
+		return nil, err
+	}
+
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {
 		return nil, err
@@ -83,7 +94,9 @@ func NewMemberNode(
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
 
-	raft, err := consensus.NewMemberRaft(ctx, consensusRepo, userRepo.ValidateUser)
+	raft, err := consensus.NewMemberRaft(
+		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.SelfHashExists,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("member: consensus initialization: %v", err)
 	}
@@ -103,7 +116,6 @@ func NewMemberNode(
 		ctx,
 		privKey,
 		store,
-		warpnet.ReachabilityUnknown,
 		psk,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
@@ -127,16 +139,11 @@ func NewMemberNode(
 		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		userRepo:      userRepo,
 		ownerId:       owner.UserId,
+		selfHashHex:   selfHashHex,
 	}
 
 	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)
 	return mn, nil
-}
-
-func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
-	bi := m.BaseNodeInfo()
-	bi.OwnerId = m.ownerId
-	return bi
 }
 
 func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
@@ -158,7 +165,10 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 	}
 
 	err = m.retrier.Try(context.Background(), func() error {
-		return m.raft.AskUserValidation(ownerUser)
+		if err := m.raft.AskUserValidation(ownerUser); err != nil {
+			return err
+		}
+		return m.raft.AskSelfHashValidation(m.selfHashHex)
 	})
 	if err != nil {
 		//log.Errorf("member: validate owner user by consensus: %v", err)
@@ -173,6 +183,12 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 	log.Infoln("node: supported protocols:", m.Node().Mux().Protocols())
 
 	return nil
+}
+
+func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
+	bi := m.BaseNodeInfo()
+	bi.OwnerId = m.ownerId
+	return bi
 }
 
 type streamNodeID = string

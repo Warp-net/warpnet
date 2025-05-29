@@ -56,6 +56,7 @@ type BootstrapNode struct {
 	dHashTable        DistributedHashTableCloser
 	memoryStoreCloseF func() error
 	psk               security.PSK
+	selfHashHex       string
 }
 
 func NewBootstrapNode(
@@ -63,8 +64,12 @@ func NewBootstrapNode(
 	privKey ed25519.PrivateKey,
 	isInMemory bool,
 	psk security.PSK,
+	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
-	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory)
+	hashesCache := codeHashesCache{make(map[string]struct{})}
+	hashesCache.hashes[selfHashHex] = struct{}{}
+
+	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory, hashesCache.SelfHashExists)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +99,6 @@ func NewBootstrapNode(
 		ctx,
 		privKey,
 		memoryStore,
-		warpnet.ReachabilityPublic,
 		psk,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
@@ -114,6 +118,7 @@ func NewBootstrapNode(
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
+		selfHashHex:       selfHashHex,
 	}
 
 	mw := middleware.NewWarpMiddleware()
@@ -146,6 +151,10 @@ func (bn *BootstrapNode) Start() error {
 	}
 
 	if err := bn.raft.Start(bn); err != nil {
+		return err
+	}
+
+	if err := bn.raft.AskSelfHashValidation(bn.selfHashHex); err != nil {
 		return err
 	}
 
