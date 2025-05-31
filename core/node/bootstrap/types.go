@@ -50,6 +50,7 @@ type ConsensusProvider interface {
 	LeaderID() warpnet.WarpPeerID
 	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
 	Shutdown()
+	AskSelfHashValidation(selfHashes map[string]struct{}) error
 }
 
 type DistributedHashTableCloser interface {

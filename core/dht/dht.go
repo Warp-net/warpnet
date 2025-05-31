@@ -126,7 +126,7 @@ func NewDHTable(
 
 func (d *DistributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
 	cacheOption := providers.Cache(newLRU())
-	providerStore, err := providers.NewProviderManager(n.ID(), n.Peerstore(), d.db, cacheOption)
+	providerStore, err := providers.NewProviderManager(d.ctx, n.ID(), n.Peerstore(), d.db, cacheOption)
 	if err != nil {
 		return nil, err
 	}

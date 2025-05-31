@@ -26,7 +26,6 @@ package client
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/config"
@@ -54,16 +53,11 @@ type WarpClientNode struct {
 	streamer       ClientStreamer
 	retrier        retrier.Retrier
 	serverNodeAddr string
-	privKey        warpnet.WarpPrivateKey
 	psk            security.PSK
 	isRunning      *atomic.Bool
 }
 
 func NewClientNode(ctx context.Context, psk security.PSK) (_ *WarpClientNode, err error) {
-	privKey, err := security.GenerateKeyFromSeed([]byte(rand.Text()))
-	if err != nil {
-		log.Fatalf("client: fail generating key: %v", err)
-	}
 	serverNodeAddrDefault := fmt.Sprintf("/ip4/127.0.0.1/tcp/%s/p2p/", config.Config().Node.Port)
 
 	n := &WarpClientNode{
@@ -71,7 +65,6 @@ func NewClientNode(ctx context.Context, psk security.PSK) (_ *WarpClientNode, er
 		clientNode:     nil,
 		retrier:        retrier.New(time.Second*5, 10, retrier.ExponentialBackoff),
 		serverNodeAddr: serverNodeAddrDefault,
-		privKey:        privKey.(warpnet.WarpPrivateKey),
 		isRunning:      new(atomic.Bool),
 		psk:            psk,
 	}
@@ -83,6 +76,7 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 	if n == nil {
 		return warpnet.WarpError("client: not initialized")
 	}
+
 	if serverInfo.NodeInfo.ID.String() == "" {
 		return warpnet.WarpError("client node: server node ID is empty")
 	}
@@ -98,7 +92,7 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 		return fmt.Errorf("client: creating address info: %s", err)
 	}
 	client, err := libp2p.New(
-		libp2p.Identity(n.privKey),
+		libp2p.RandomIdentity,
 		libp2p.NoListenAddrs,
 		libp2p.DisableMetrics(),
 		libp2p.DisableRelay(),

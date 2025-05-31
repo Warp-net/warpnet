@@ -29,6 +29,8 @@ package database
 
 import (
 	"context"
+	"crypto/ed25519"
+	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/security"
 	"go.uber.org/goleak"
 	"testing"
@@ -58,7 +60,9 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo = NewNodeRepo(s.db)
+	s.repo, err = NewNodeRepo(s.db, semver.MustParse("0.0.0"))
+	s.Require().NoError(err)
+
 }
 
 func (s *NodeRepoTestSuite) TearDownSuite() {
@@ -113,21 +117,20 @@ func (s *NodeRepoTestSuite) TestBlocklist() {
 	pk, err := security.GenerateKeyFromSeed([]byte("peer123"))
 	s.Require().NoError(err)
 
-	warpPrivKey := pk.(warpnet.WarpPrivateKey)
-	id, err := warpnet.IDFromPrivateKey(warpPrivKey)
+	id, err := warpnet.IDFromPublicKey(pk.Public().(ed25519.PublicKey))
 	s.Require().NoError(err)
 
-	err = s.repo.Blocklist24h(s.ctx, id)
+	err = s.repo.BlocklistExponential(id)
 	s.Require().NoError(err)
 
-	isBlocked, err := s.repo.IsBlocklisted(s.ctx, id)
+	isBlocked, err := s.repo.IsBlocklisted(id)
 	s.Require().NoError(err)
 	s.True(isBlocked)
 
-	err = s.repo.BlocklistRemove(s.ctx, id)
+	err = s.repo.BlocklistRemove(id)
 	s.Require().NoError(err)
 
-	isBlocked, err = s.repo.IsBlocklisted(s.ctx, id)
+	isBlocked, err = s.repo.IsBlocklisted(id)
 	s.Require().NoError(err)
 	s.False(isBlocked)
 }

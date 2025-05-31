@@ -52,8 +52,7 @@ const (
 )
 
 type UserStorer interface {
-	NewWriteTxn() (storage.WarpTxWriter, error)
-	NewReadTxn() (storage.WarpTxReader, error)
+	NewTxn() (storage.WarpTransactioner, error)
 	Set(key storage.DatabaseKey, value []byte) error
 	Get(key storage.DatabaseKey) ([]byte, error)
 	Delete(key storage.DatabaseKey) error
@@ -105,7 +104,7 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 		AddParentId(user.Id).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return user, err
 	}
@@ -140,7 +139,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		AddParentId(userId).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return existingUser, err
 	}
@@ -287,7 +286,7 @@ func (repo *UserRepo) Delete(userId string) error {
 		AddParentId(userId).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
 	}
@@ -334,7 +333,7 @@ func (repo *UserRepo) Delete(userId string) error {
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	prefix := storage.NewPrefixBuilder(UsersRepoName).AddRootID(userSubNamespace).Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return nil, "", err
 	}
@@ -367,7 +366,7 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 		return users, nil
 	}
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return nil, err
 	}

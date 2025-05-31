@@ -45,20 +45,24 @@ func StreamGetInfoHandler(
 	return func(s warpnet.WarpStream) {
 		defer func() { s.Close() }() //#nosec
 
+		remoteID := s.Conn().RemotePeer()
 		remoteAddr := s.Conn().RemoteMultiaddr()
 
-		log.Debugf("node info request received: %s %s", s.Conn().RemotePeer().String(), remoteAddr)
+		info := warpnet.WarpAddrInfo{
+			ID:    remoteID,
+			Addrs: []warpnet.WarpAddress{remoteAddr},
+		}
+
+		log.Debugf("node info request received: %s %s", remoteID, remoteAddr)
 
 		if handler != nil {
-			handler(warpnet.WarpAddrInfo{
-				ID:    s.Conn().RemotePeer(),
-				Addrs: []warpnet.WarpAddress{remoteAddr},
-			})
+			handler(info)
 		}
 
 		if err := json.JSON.NewEncoder(s).Encode(i.NodeInfo()); err != nil {
 			log.Errorf("fail encoding generic response: %v", err)
 		}
+
 		return
 	}
 }

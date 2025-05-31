@@ -355,7 +355,7 @@ func (r *RTPSender) Send(parameters RTPSendParameters) error {
 			parameters.Encodings[idx].FEC.SSRC,
 			codec.PayloadType,
 			findRTXPayloadType(codec.PayloadType, rtpParameters.Codecs),
-			0,
+			findFECPayloadType(rtpParameters.Codecs),
 			codec.RTPCodecCapability,
 			parameters.HeaderExtensions,
 		)
@@ -437,11 +437,16 @@ func (r *RTPSender) ReadRTCP() ([]rtcp.Packet, interceptor.Attributes, error) {
 func (r *RTPSender) ReadSimulcast(b []byte, rid string) (n int, a interceptor.Attributes, err error) {
 	select {
 	case <-r.sendCalled:
+		r.mu.Lock()
 		for _, t := range r.trackEncodings {
 			if t.track != nil && t.track.RID() == rid {
-				return t.rtcpInterceptor.Read(b, a)
+				reader := t.rtcpInterceptor
+				r.mu.Unlock()
+
+				return reader.Read(b, a)
 			}
 		}
+		r.mu.Unlock()
 
 		return 0, nil, fmt.Errorf("%w: %s", errRTPSenderNoTrackForRID, rid)
 	case <-r.stopCalled:

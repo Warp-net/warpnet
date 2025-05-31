@@ -61,14 +61,15 @@ type DiscoveryInfoStorer interface {
 	Peerstore() warpnet.WarpPeerstore
 	Mux() warpnet.WarpProtocolSwitch
 	Network() warpnet.WarpNetwork
-	Connect(p warpnet.WarpAddrInfo) error
+	SimpleConnect(warpnet.WarpAddrInfo) error
+	Connect(warpnet.WarpAddrInfo) error
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
 
 type NodeStorer interface {
-	BlocklistRemove(ctx context.Context, peerId warpnet.WarpPeerID) (err error)
-	IsBlocklisted(ctx context.Context, peerId warpnet.WarpPeerID) (bool, error)
-	Blocklist24h(ctx context.Context, peerId warpnet.WarpPeerID) error
+	BlocklistRemove(peerId warpnet.WarpPeerID) (err error)
+	IsBlocklisted(peerId warpnet.WarpPeerID) (bool, error)
+	BlocklistExponential(peerId warpnet.WarpPeerID) error
 }
 
 type UserStorer interface {
@@ -83,7 +84,6 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 	version  *semver.Version
-	codeHash []byte
 
 	handlers []DiscoveryHandler
 
@@ -108,7 +108,7 @@ func NewDiscoveryService(
 
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
-		config.Config().Version, nil, handlers,
+		config.Config().Version, handlers,
 		retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		newRateLimiter(16, 1),
 		newDiscoveryCache(),
@@ -137,12 +137,6 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 	log.Infoln("discovery: service started")
 
 	s.node = n
-
-	ownCodeHash, err := security.GetCodebaseHash(root.GetCodeBase())
-	if err != nil {
-		return err
-	}
-	s.codeHash = ownCodeHash
 
 	go func() {
 		for {
@@ -236,28 +230,25 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 		return
 	}
 
-	ok, err := s.nodeRepo.IsBlocklisted(s.ctx, peerInfo.ID)
+	ok, err := s.nodeRepo.IsBlocklisted(peerInfo.ID)
 	if ok && err == nil {
-		log.Infof("discovery: found blocklisted peer: %s", peerInfo.ID.String())
+		log.Infof("discovery: found blocklisted peer: %s", peerInfo.ID.String()[len(peerInfo.ID.String())-1:])
 		return
 	}
 
-	err = s.node.Connect(peerInfo)
-	if errors.Is(err, backoff.ErrBackoffEnabled) {
-		return
-	}
+	err = s.node.SimpleConnect(peerInfo)
 	if err != nil {
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
-		log.Errorf("discovery: default handler: connecting to peer %s: %v\n", peerInfo.ID.String(), err)
+		log.Errorf("discovery: default handler: connecting to peer %s: %v\n", peerInfo.ID.String()[len(peerInfo.ID.String())-1:], err)
 		return
 	}
 
 	err = s.requestChallenge(peerInfo)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: default handler: challenge is invalid for peer: %s\n", peerInfo.ID.String())
-		_ = s.nodeRepo.Blocklist24h(context.Background(), peerInfo.ID)
+		log.Warnf("discovery: default handler: challenge is invalid for peer: %s\n", peerInfo.ID.String()[len(peerInfo.ID.String())-1:])
+		_ = s.nodeRepo.BlocklistExponential(peerInfo.ID)
 		return
 	}
 	if err != nil {
@@ -284,7 +275,7 @@ func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
 	defer func() { recover() }()
 
 	if !s.limiter.Allow() {
-		log.Debugf("discovery: limited by rate limiter: %s", pi.ID.String())
+		log.Debugf("discovery: limited by rate limiter: %s", pi.ID.String()[len(pi.ID.String())-1:])
 		return
 	}
 
@@ -311,12 +302,12 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	ok, err := s.nodeRepo.IsBlocklisted(s.ctx, pi.ID)
+	ok, err := s.nodeRepo.IsBlocklisted(pi.ID)
 	if err != nil {
 		log.Errorf("discovery: failed to check blocklist: %s", err)
 	}
 	if ok {
-		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String())
+		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String()[len(pi.ID.String())-1:])
 		return
 	}
 
@@ -325,28 +316,28 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	}
 
 	if !hasPublicAddresses(pi.Addrs) {
-		log.Debugf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
+		log.Debugf("discovery: peer %s has no public addresses: %v", pi.ID.String()[len(pi.ID.String())-1:], pi.Addrs)
 		return
 	}
 
-	err = s.node.Connect(pi)
+	err = s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: connecting is backoffed: %s", pi.ID)
 		return
 	}
 	if err != nil {
-		log.Debugf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
+		log.Debugf("discovery: failed to connect to new peer %s: %v", pi.ID.String()[len(pi.ID.String())-1:], err)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
-		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
+		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String()[len(pi.ID.String())-1:], err)
 		return
 	}
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
-		_ = s.nodeRepo.Blocklist24h(context.Background(), pi.ID)
+		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String()[len(pi.ID.String())-1:])
+		_ = s.nodeRepo.BlocklistExponential(pi.ID)
 		return
 	}
 	if err != nil {
@@ -406,7 +397,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return errors.New("nil discovery service")
 	}
 	if s.cache.IsChallengedAlready(pi.ID) {
-		log.Debugf("discovery: peer %s already challenged", pi.ID.String())
+		log.Debugf("discovery: peer %s already challenged", pi.ID.String()[len(pi.ID.String())-1:])
 		return nil
 	}
 
@@ -426,7 +417,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to get challenge from new peer %s: %v", pi.ID.String(), err)
+		return fmt.Errorf("failed to get challenge from new peer %s: %v", pi.ID.String()[len(pi.ID.String())-1:], err)
 	}
 
 	if resp == nil || len(resp) == 0 {

@@ -43,8 +43,7 @@ var ErrLikesNotFound = errors.New("like not found")
 
 type LikeStorer interface {
 	Get(key storage.DatabaseKey) ([]byte, error)
-	NewWriteTxn() (storage.WarpTxWriter, error)
-	NewReadTxn() (storage.WarpTxReader, error)
+	NewTxn() (storage.WarpTransactioner, error)
 }
 
 type LikeRepo struct {
@@ -75,7 +74,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 		AddParentId(userId).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return 0, err
 	}
@@ -117,7 +116,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 		AddParentId(userId).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return 0, err
 	}
@@ -172,7 +171,7 @@ func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ l
 		AddRootID(tweetId).
 		Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return nil, "", err
 	}

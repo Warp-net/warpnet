@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"crypto"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -59,15 +59,14 @@ type AuthStorer interface {
 	Run(username, password string) (err error)
 	Set(key storage.DatabaseKey, value []byte) error
 	Get(key storage.DatabaseKey) ([]byte, error)
-	NewReadTxn() (storage.WarpTxReader, error)
-	NewWriteTxn() (storage.WarpTxWriter, error)
+	NewTxn() (storage.WarpTransactioner, error)
 }
 
 type AuthRepo struct {
 	db           AuthStorer
 	owner        domain.Owner
 	sessionToken string
-	privateKey   crypto.PrivateKey
+	privateKey   ed25519.PrivateKey
 }
 
 func NewAuthRepo(db AuthStorer) *AuthRepo {
@@ -91,7 +90,7 @@ func (repo *AuthRepo) Authenticate(username, password string) (err error) {
 	return err
 }
 
-func (repo *AuthRepo) generateSecrets(username, password string) (token string, pk crypto.PrivateKey, err error) {
+func (repo *AuthRepo) generateSecrets(username, password string) (token string, pk ed25519.PrivateKey, err error) {
 	n, err := rand.Int(rand.Reader, big.NewInt(127))
 	if err != nil {
 		return "", nil, err
@@ -117,9 +116,9 @@ func (repo *AuthRepo) SessionToken() string {
 	return repo.sessionToken
 }
 
-func (repo *AuthRepo) PrivateKey() crypto.PrivateKey {
+func (repo *AuthRepo) PrivateKey() ed25519.PrivateKey {
 	if repo == nil {
-		return ErrNilAuthRepo
+		return nil
 	}
 	if repo.privateKey == nil {
 		panic("private key is nil")

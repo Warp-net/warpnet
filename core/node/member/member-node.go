@@ -26,8 +26,10 @@ package member
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
@@ -58,20 +60,30 @@ type MemberNode struct {
 	pubsubService PubSubProvider
 	raft          ConsensusProvider
 	dHashTable    DistributedHashTableCloser
-	nodeRepo      ProviderCloser
+	nodeRepo      NodeProvider
 	retrier       retrier.Retrier
 	userRepo      UserFetcher
+	ownerId       string
 }
 
 func NewMemberNode(
 	ctx context.Context,
-	privKey warpnet.WarpPrivateKey,
+	privKey ed25519.PrivateKey,
 	psk security.PSK,
+	selfHashHex string,
+	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
 ) (_ *MemberNode, err error) {
 	consensusRepo := database.NewConsensusRepo(db)
-	nodeRepo := database.NewNodeRepo(db)
+	nodeRepo, err := database.NewNodeRepo(db, version)
+	if err != nil {
+		return nil, err
+	}
+	if err := nodeRepo.AddSelfHash(selfHashHex, version.String()); err != nil {
+		return nil, err
+	}
+
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {
 		return nil, err
@@ -81,7 +93,9 @@ func NewMemberNode(
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
 
-	raft, err := consensus.NewMemberRaft(ctx, consensusRepo, userRepo.ValidateUser)
+	raft, err := consensus.NewMemberRaft(
+		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.ValidateSelfHashes,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("member: consensus initialization: %v", err)
 	}
@@ -101,9 +115,11 @@ func NewMemberNode(
 		ctx,
 		privKey,
 		store,
-		owner.UserId,
 		psk,
-		fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.Host, config.Config().Node.Port),
+		[]string{
+			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
+			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
+		},
 		dHashTable.StartRouting,
 	)
 	if err != nil {
@@ -121,6 +137,7 @@ func NewMemberNode(
 		nodeRepo:      nodeRepo,
 		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		userRepo:      userRepo,
+		ownerId:       owner.UserId,
 	}
 
 	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)
@@ -140,7 +157,7 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 
 	m.mdnsService.Start(m)
 
-	ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
+	ownerUser, err := m.userRepo.Get(m.ownerId)
 	if err != nil {
 		return fmt.Errorf("member: failed to get owner user: %v", err)
 	}
@@ -149,16 +166,37 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 		return m.raft.AskUserValidation(ownerUser)
 	})
 	if err != nil {
-		//log.Errorf("member: validate owner user by consensus: %v", err)
 		return fmt.Errorf("member: validate owner user by consensus: %v", err)
 	}
+	log.Infoln("member: owner user validated")
+
+	hashes, err := m.nodeRepo.GetSelfHashes()
+	if err != nil {
+		return fmt.Errorf("member: failed to get self hashes: %v", err)
+	}
+	err = m.retrier.Try(context.Background(), func() error {
+		return m.raft.AskSelfHashValidation(hashes)
+	})
+	if err != nil {
+		return fmt.Errorf("member: validate self hash by consensus: %v", err)
+	}
+	log.Infoln("member: selfhash validated")
+
 	println()
 	fmt.Printf(
 		"\033[1mNODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
+	//log.Infoln("node: supported protocols:", m.Node().Mux().Protocols())
+
 	return nil
+}
+
+func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
+	bi := m.BaseNodeInfo()
+	bi.OwnerId = m.ownerId
+	return bi
 }
 
 type streamNodeID = string
@@ -204,7 +242,7 @@ func (m *MemberNode) setupHandlers(
 	followRepo FollowStorer,
 	consRepo ConsensusStorer,
 	db Storer,
-	privKey warpnet.WarpPrivateKey,
+	privKey ed25519.PrivateKey,
 ) {
 	timelineRepo := database.NewTimelineRepo(db)
 	tweetRepo := database.NewTweetRepo(db)

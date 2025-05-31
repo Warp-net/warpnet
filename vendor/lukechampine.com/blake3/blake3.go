@@ -68,7 +68,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		h.buflen += n
 		p = p[n:]
 	}
-	if h.buflen == len(h.buf) {
+	if h.buflen == len(h.buf) && len(p) > 0 {
 		n := guts.CompressChunk(h.buf[:], &h.key, h.counter, h.flags)
 		h.pushSubtree(guts.ChainingValue(n), 0)
 		h.buflen = 0

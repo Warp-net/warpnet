@@ -60,7 +60,8 @@ func init() {
 	pflag.String("database.dir", "storage", "Database directory name")
 	pflag.String("server.host", "localhost", "Server host")
 	pflag.String("server.port", "4002", "Server port")
-	pflag.String("node.host", "0.0.0.0", "Node host")
+	pflag.String("node.host.v4", "0.0.0.0", "Node host IPv4")
+	pflag.String("node.host.v6", "::", "Node host IPv6")
 	pflag.String("node.port", "4001", "Node port")
 	pflag.String("node.seed", "", "Bootstrap node seed for deterministic ID generation (random string)")
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env.")
@@ -105,7 +106,8 @@ func init() {
 		Node: node{
 			Bootstrap:  bootstrapAddrList,
 			Seed:       strings.TrimSpace(viper.GetString("node.seed")),
-			Host:       viper.GetString("node.host"),
+			HostV4:     viper.GetString("node.host.v4"),
+			HostV6:     viper.GetString("node.host.v6"),
 			Port:       viper.GetString("node.port"),
 			Network:    network,
 			IsInMemory: viper.GetBool("node.inmemory"),
@@ -133,9 +135,11 @@ type config struct {
 	Server   server
 	Logging  logging
 }
+
 type node struct {
 	Bootstrap  []string
-	Host       string
+	HostV4     string
+	HostV6     string
 	Port       string
 	Network    string
 	IsInMemory bool

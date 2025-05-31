@@ -29,11 +29,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	root "github.com/Warp-net/warpnet"
 	frontend "github.com/Warp-net/warpnet-frontend"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/client"
 	"github.com/Warp-net/warpnet/core/node/member"
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/database/storage"
 	"github.com/Warp-net/warpnet/domain"
@@ -69,8 +69,9 @@ type API struct {
 func main() {
 	defer closeWriter()
 	appPath := getAppPath(config.Config().Node.Network, "member")
+	version := config.Config().Version
 
-	psk, err := security.GeneratePSK(config.Config().Version)
+	psk, err := security.GeneratePSK(version)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -156,10 +157,17 @@ func main() {
 		log.Infoln("authentication was successful")
 	}
 
+	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	serverNode, err := member.NewMemberNode(
 		ctx,
-		authRepo.PrivateKey().(warpnet.WarpPrivateKey),
+		authRepo.PrivateKey(),
 		psk,
+		codeHashHex,
+		version,
 		authRepo,
 		db,
 	)

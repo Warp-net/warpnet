@@ -50,8 +50,7 @@ const (
 )
 
 type ChatStorer interface {
-	NewWriteTxn() (storage.WarpTxWriter, error)
-	NewReadTxn() (storage.WarpTxReader, error)
+	NewTxn() (storage.WarpTransactioner, error)
 }
 
 type ChatRepo struct {
@@ -77,7 +76,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 	repo.mx.Lock()
 	defer repo.mx.Unlock()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return domain.Chat{}, err
 	}
@@ -140,7 +139,7 @@ func (repo *ChatRepo) DeleteChat(chatId string) error {
 		return errors.New("chat ID is empty")
 	}
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
 	}
@@ -173,7 +172,7 @@ func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 		return chat, errors.New("chat ID is empty")
 	}
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return chat, err
 	}
@@ -209,7 +208,7 @@ func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string)
 
 	prefix := storage.NewPrefixBuilder(ChatNamespace).Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return []domain.Chat{}, "", err
 	}
@@ -276,7 +275,7 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 		return msg, fmt.Errorf("message: marshal: %w", err)
 	}
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return msg, err
 	}
@@ -301,7 +300,7 @@ func (repo *ChatRepo) ListMessages(chatId string, limit *uint64, cursor *string)
 		AddRootID(chatId).
 		Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return nil, "", err
 	}
@@ -339,7 +338,7 @@ func (repo *ChatRepo) GetMessage(chatId, id string) (m domain.ChatMessage, err e
 		AddParentId(id).
 		Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return m, err
 	}
@@ -376,7 +375,7 @@ func (repo *ChatRepo) DeleteMessage(chatId, id string) error {
 		AddParentId(id).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
 	}

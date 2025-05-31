@@ -104,17 +104,6 @@ func hashFile(fsys FileSystem, path string) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-func GetCodebaseHash(codebase FileSystem) ([]byte, error) {
-	h := sha256.New()
-
-	err := walkAndHash(codebase, ".", h)
-	if err != nil {
-		return nil, err
-	}
-
-	return h.Sum(nil), nil
-}
-
 const spbFounding = -((int64(133129) << 16) + 51200)
 
 func generateAnchoredEntropy() []byte {

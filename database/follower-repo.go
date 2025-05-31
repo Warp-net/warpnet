@@ -47,8 +47,7 @@ const (
 )
 
 type FollowerStorer interface {
-	NewWriteTxn() (storage.WarpTxWriter, error)
-	NewReadTxn() (storage.WarpTxReader, error)
+	NewTxn() (storage.WarpTransactioner, error)
 	Set(key storage.DatabaseKey, value []byte) error
 	Get(key storage.DatabaseKey) ([]byte, error)
 	Delete(key storage.DatabaseKey) error
@@ -84,7 +83,7 @@ func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Followi
 		AddParentId(toUserId).
 		Build()
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
 	}
@@ -174,7 +173,7 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 		return err
 	}
 
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
 	}
@@ -210,7 +209,7 @@ func (repo *FollowRepo) GetFollowersCount(userId string) (uint64, error) {
 		AddSubPrefix(followerCountSubName).
 		AddRootID(userId).
 		Build()
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return 0, err
 	}
@@ -234,7 +233,7 @@ func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
 		AddSubPrefix(followeeCountSubName).
 		AddRootID(userId).
 		Build()
-	txn, err := repo.db.NewWriteTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return 0, err
 	}
@@ -256,7 +255,7 @@ func (repo *FollowRepo) GetFollowers(userId string, limit *uint64, cursor *strin
 		AddRootID(userId).
 		Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return nil, "", err
 	}
@@ -291,7 +290,7 @@ func (repo *FollowRepo) GetFollowees(userId string, limit *uint64, cursor *strin
 		AddRootID(userId).
 		Build()
 
-	txn, err := repo.db.NewReadTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return nil, "", err
 	}

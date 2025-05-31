@@ -532,10 +532,10 @@ func (c *consensusService) AddVoter(info warpnet.WarpAddrInfo) {
 		log.Errorf("consensus: failed to add voted: %v", wait.Error())
 		return
 	}
-	log.Debugf("consensus: new voter added %s", info.ID.String())
+	log.Debugf("consensus: new voter added %s", info.ID.String()[len(info.ID.String())-6:])
 
 	if _, err := c.cache.getVoter(id); errors.Is(err, errVoterNotFound) {
-		log.Infof("consensus: new voter added %s", info.ID.String())
+		log.Infof("consensus: new voter added %s", info.ID.String()[len(info.ID.String())-6:])
 	}
 
 	c.cache.addVoter(id, raft.Server{ // this cache only prevents voter removal from flapping
@@ -563,10 +563,10 @@ func (c *consensusService) RemoveVoter(id warpnet.WarpPeerID) {
 	err := c.cache.removeVoter(raft.ServerID(id.String()))
 
 	if errors.Is(err, errTooSoonToRemoveVoter) {
-		log.Infof("consensus: removing voter %s is too soon, abort", id.String())
+		log.Infof("consensus: removing voter %s is too soon, abort", id.String()[len(id.String())-1:])
 		return
 	}
-	log.Infof("consensus: removing voter %s", id.String())
+	log.Infof("consensus: removing voter %s", id.String()[len(id.String())-1:])
 
 	wait := c.raft.RemoveServer(raft.ServerID(id.String()), 0, 30*time.Second)
 	if err := wait.Error(); err != nil {
@@ -603,48 +603,37 @@ func (c *consensusService) AskUserValidation(user domain.User) error {
 		database.UserConsensusKey: string(bt),
 	}
 
-	leaderId := c.LeaderID().String()
-	if leaderId == "" {
-		return warpnet.WarpError("consensus: no leader found")
-	}
-	if leaderId == string(c.raftID) {
-		_, err := c.CommitState(newState)
-		if errors.Is(err, ErrNoRaftCluster) {
-			return nil
-		}
-		log.Errorf("consensus: failed to add user validation to raft cluster: %v", err)
-		return fmt.Errorf("consensus: failed to commit validate user state: %w", err)
+	return c.validate(newState)
+}
+
+func (c *consensusService) AskSelfHashValidation(selfHashes map[string]struct{}) error {
+	log.Infoln("consensus: asking for selfhash validation...")
+
+	bt, _ := json.JSON.Marshal(selfHashes)
+
+	newState := map[string]string{
+		database.SelfHashConsensusKey: string(bt),
 	}
 
-	resp, err := c.node.GenericStream(leaderId, event.PUBLIC_POST_NODE_VERIFY, newState)
-	if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-		log.Errorf("consensus: failed to stream user validation to raft cluster: %v", err)
-		return fmt.Errorf("consensus: node verify stream: %w", err)
-	}
-	if len(resp) == 0 {
-		return warpnet.WarpError("consensus: node verify stream returned empty response")
-	}
-
-	var errResp event.ErrorResponse
-	if _ = json.JSON.Unmarshal(resp, &errResp); errResp.Message != "" {
-		log.Errorf("consensus: verify response unmarshal failed: %v", errResp)
-		return fmt.Errorf("consensus: verify response unmarshal failed: %w", errResp)
-	}
-
-	log.Infoln("consensus: user validated")
-	return nil
+	return c.validate(newState)
 }
 
 func (c *consensusService) AskLeaderValidation() error {
 	log.Infoln("consensus: asking for leader validation...")
 
 	leaderId := c.LeaderID().String()
-	if leaderId == "" {
-		return warpnet.WarpError("consensus: no leader found")
-	}
 
 	newState := map[string]string{
 		"leader": leaderId,
+	}
+
+	return c.validate(newState)
+}
+
+func (c *consensusService) validate(newState KVState) error {
+	leaderId := c.LeaderID().String()
+	if leaderId == "" {
+		return warpnet.WarpError("consensus: no leader found")
 	}
 
 	if leaderId == string(c.raftID) {
@@ -652,7 +641,10 @@ func (c *consensusService) AskLeaderValidation() error {
 		if errors.Is(err, ErrNoRaftCluster) {
 			return nil
 		}
-		return fmt.Errorf("consensus: failed to commit validate leader state: %w", err)
+		if err != nil {
+			return fmt.Errorf("consensus: failed to commit: %w", err)
+		}
+		return nil
 	}
 
 	resp, err := c.node.GenericStream(leaderId, event.PUBLIC_POST_NODE_VERIFY, newState)
@@ -667,8 +659,6 @@ func (c *consensusService) AskLeaderValidation() error {
 	if _ = json.JSON.Unmarshal(resp, &errResp); errResp.Message != "" {
 		return fmt.Errorf("consensus: verify leader response unmarshal failed: %w", errResp)
 	}
-
-	log.Infoln("consensus: leader validated")
 	return nil
 }
 

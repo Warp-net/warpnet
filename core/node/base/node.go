@@ -26,6 +26,7 @@ package base
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
@@ -37,6 +38,8 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
+	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
 	"strings"
@@ -62,20 +65,19 @@ type WarpNode struct {
 	streamer Streamer
 	backoff  BackoffEnabler
 
-	ownerId  string
 	isClosed *atomic.Bool
 	version  *semver.Version
 
 	startTime time.Time
+	eventsSub event.Subscription
 }
 
 func NewWarpNode(
 	ctx context.Context,
-	privKey warpnet.WarpPrivateKey,
+	privKey ed25519.PrivateKey,
 	store warpnet.WarpPeerstore,
-	ownerId string,
 	psk security.PSK,
-	listenAddr string,
+	listenAddrs []string,
 	routingFn func(node warpnet.P2PNode) (warpnet.WarpPeerRouting, error),
 ) (*WarpNode, error) {
 
@@ -96,29 +98,27 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	currentNodeID, err := warpnet.IDFromPrivateKey(privKey)
+	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	if err != nil {
 		return nil, err
 	}
 
-	reachibilityOption := EmptyOption()
-	autoStaticRelaysOption := EnableAutoRelayWithStaticRelays(infos, currentNodeID)
-	if ownerId == warpnet.BootstrapOwner {
-		reachibilityOption = libp2p.ForceReachabilityPublic
-		autoStaticRelaysOption = EmptyOption()
+	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
+	if err != nil {
+		return nil, err
 	}
 
 	node, err := warpnet.NewP2PNode(
 		libp2p.WithDialTimeout(DefaultTimeout),
 		libp2p.ListenAddrStrings(
-			listenAddr,
+			listenAddrs...,
 		),
 		libp2p.SwarmOpts(
 			WithDialTimeout(DefaultTimeout),
 			WithDialTimeoutLocal(DefaultTimeout),
 		),
 		libp2p.Transport(warpnet.NewTCPTransport, WithDefaultTCPConnectionTimeout(DefaultTimeout)),
-		libp2p.Identity(privKey),
+		libp2p.Identity(p2pPrivKey),
 		libp2p.Ping(true),
 		libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
 		libp2p.Peerstore(store),
@@ -135,11 +135,15 @@ func NewWarpNode(
 		libp2p.EnableNATService(),
 		libp2p.NATPortMap(),
 
-		autoStaticRelaysOption(),
-		reachibilityOption(),
+		EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
+	}
+
+	sub, err := node.EventBus().Subscribe(event.WildcardSubscription)
+	if err != nil {
+		return nil, fmt.Errorf("node: failed to subscribe: %v", err)
 	}
 
 	relayService, err := relay.NewRelay(node)
@@ -151,15 +155,19 @@ func NewWarpNode(
 		ctx:       ctx,
 		node:      node,
 		relay:     relayService,
-		ownerId:   ownerId,
 		streamer:  stream.NewStreamPool(ctx, node),
 		isClosed:  new(atomic.Bool),
 		version:   config.Config().Version,
 		startTime: time.Now(),
 		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		eventsSub: sub,
+	}
+	if err := wn.validateSupportedProtocols(); err != nil {
+		return nil, err
 	}
 
-	return wn, wn.validateSupportedProtocols()
+	go wn.trackIncomingEvents()
+	return wn, nil
 }
 
 func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
@@ -177,7 +185,7 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	}
 
 	log.Debugf("node: connect attempt to node: %s", p.String())
-	if err := n.node.Connect(n.ctx, p); err != nil {
+	if err := n.SimpleConnect(p); err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
 
@@ -185,6 +193,10 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	log.Debugf("node: connect attempt successful: %s", p.ID.String())
 
 	return nil
+}
+
+func (n *WarpNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+	return n.node.Connect(n.ctx, info)
 }
 
 func (n *WarpNode) SetStreamHandler(route stream.WarpRoute, handler warpnet.WarpStreamHandler) {
@@ -196,7 +208,6 @@ func (n *WarpNode) SetStreamHandler(route stream.WarpRoute, handler warpnet.Warp
 
 func (n *WarpNode) validateSupportedProtocols() error {
 	protocols := n.node.Mux().Protocols()
-	log.Infoln("node: supported protocols:", protocols)
 	var (
 		isAutoNatBackFound, isAutoNatRequestFound, isRelayHopFound, isRelayStopFound bool
 	)
@@ -224,15 +235,86 @@ func (n *WarpNode) validateSupportedProtocols() error {
 	)
 }
 
+func (n *WarpNode) trackIncomingEvents() {
+	localAddrActions := map[int]string{
+		0: "unknown",
+		1: "added",
+		2: "maintained",
+		3: "removed",
+	}
+
+	for ev := range n.eventsSub.Out() {
+		switch ev.(type) {
+		case event.EvtLocalProtocolsUpdated:
+			protoUpdatedEvent := ev.(event.EvtLocalProtocolsUpdated)
+			if len(protoUpdatedEvent.Added) != 0 {
+				log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
+			} else {
+				log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
+			}
+		case event.EvtPeerConnectednessChanged:
+			connectednessEvent := ev.(event.EvtPeerConnectednessChanged)
+			pid := connectednessEvent.Peer.String()
+			log.Infof(
+				"node: event: peer ...%s connectedness updated: %s",
+				pid[len(pid)-6:],
+				strings.ToLower(connectednessEvent.Connectedness.String()),
+			)
+		case event.EvtPeerIdentificationFailed:
+			identificationEvent := ev.(event.EvtPeerIdentificationFailed)
+			pid := identificationEvent.Peer.String()
+			log.Errorf(
+				"node: event: peer ...%s identification failed, reason: %s",
+				pid[len(pid)-6:], identificationEvent.Reason,
+			)
+
+		case event.EvtPeerIdentificationCompleted:
+			identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
+			pid := identificationEvent.Peer.String()
+			log.Infof(
+				"node: event: peer ...%s identification completed, observed address: %s",
+				pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
+			)
+		case event.EvtLocalReachabilityChanged:
+			log.Infof(
+				"node: event: reachability changed: %s",
+				strings.ToLower(ev.(event.EvtLocalReachabilityChanged).Reachability.String()),
+			)
+		case event.EvtNATDeviceTypeChanged:
+			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
+			log.Infof(
+				"node: event: NAT device type changed: %s, transport: %s",
+				natDeviceTypeChangedEvent.NatDeviceType.String(), natDeviceTypeChangedEvent.TransportProtocol.String(),
+			)
+		case event.EvtAutoRelayAddrsUpdated:
+			log.Infof(
+				"node: event: relay addresses updated: %v",
+				ev.(event.EvtAutoRelayAddrsUpdated).RelayAddrs,
+			)
+		case event.EvtLocalAddressesUpdated:
+			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
+				log.Infof(
+					"node: event: local address %s: %s",
+					addr.Address.String(), localAddrActions[int(addr.Action)],
+				)
+			}
+		default:
+			bt, _ := json.JSON.Marshal(ev)
+			log.Infof("node: event: %T %s", ev, bt)
+		}
+	}
+}
+
 const (
 	relayStatusWaiting = "waiting"
 	relayStatusRunning = "running"
 )
 
-func (n *WarpNode) NodeInfo() warpnet.NodeInfo {
+func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 	if n == nil || n.node == nil || n.node.Network() == nil || n.node.Peerstore() == nil {
 		return warpnet.NodeInfo{}
 	}
+
 	relayState := relayStatusWaiting
 
 	addrs := n.node.Peerstore().Addrs(n.node.ID())
@@ -251,7 +333,6 @@ func (n *WarpNode) NodeInfo() warpnet.NodeInfo {
 		ID:         n.node.ID(),
 		Addresses:  addresses,
 		Version:    n.version,
-		OwnerId:    n.ownerId,
 		StartTime:  n.startTime,
 		RelayState: relayState,
 	}
@@ -291,7 +372,7 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 	if nodeId == "" {
 		return nil, warpnet.WarpError("node: empty node id")
 	}
-	if n.NodeInfo().ID == nodeId {
+	if n.node.ID() == nodeId {
 		return nil, ErrSelfRequest
 	}
 
@@ -324,6 +405,10 @@ func (n *WarpNode) StopNode() {
 	}()
 	if n == nil || n.node == nil {
 		return
+	}
+
+	if n.eventsSub != nil {
+		_ = n.eventsSub.Close()
 	}
 
 	if n.relay != nil {

@@ -27,7 +27,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
+	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/bootstrap"
 	"github.com/Warp-net/warpnet/metrics"
@@ -72,7 +72,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	log.Infoln("bootstrap seed:", config.Config().Node.Seed)
 	seed := []byte(config.Config().Node.Seed)
 	if len(seed) == 0 {
 		seed = []byte(rand.Text())
@@ -80,10 +79,16 @@ func main() {
 
 	isInMemory := config.Config().Node.IsInMemory
 
-	n, err := bootstrap.NewBootstrapNode(
-		ctx, isInMemory, seed, psk,
-		fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.Host, config.Config().Node.Port),
-	)
+	privKey, err := security.GenerateKeyFromSeed(seed)
+	if err != nil {
+		log.Fatalf("bootstrap: fail generating key: %v", err)
+	}
+	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, isInMemory, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init bootstrap node: %v", err)
 	}

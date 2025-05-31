@@ -371,6 +371,5 @@ type GetChallengeEvent struct {
 
 type GetChallengeResponse struct {
 	Challenge string `json:"challenge"`
-	CodeHash  string `json:"code_hash"`
 	Signature string `json:"signature"`
 }

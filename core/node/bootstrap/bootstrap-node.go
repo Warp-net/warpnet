@@ -26,9 +26,11 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	root "github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -54,22 +56,20 @@ type BootstrapNode struct {
 	dHashTable        DistributedHashTableCloser
 	memoryStoreCloseF func() error
 	psk               security.PSK
+	selfHashHex       string
 }
 
 func NewBootstrapNode(
 	ctx context.Context,
+	privKey ed25519.PrivateKey,
 	isInMemory bool,
-	seed []byte,
 	psk security.PSK,
-	listenAddr string,
+	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
-	privKey, err := security.GenerateKeyFromSeed(seed)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: fail generating key: %v", err)
-	}
-	warpPrivKey := privKey.(warpnet.WarpPrivateKey)
+	hashesCache := codeHashesCache{make(map[string]struct{})}
+	hashesCache.items[selfHashHex] = struct{}{}
 
-	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory)
+	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory, hashesCache.ValidateSelfHashes)
 	if err != nil {
 		return nil, err
 	}
@@ -97,11 +97,13 @@ func NewBootstrapNode(
 
 	node, err := base.NewWarpNode(
 		ctx,
-		warpPrivKey,
+		privKey,
 		memoryStore,
-		warpnet.BootstrapOwner,
 		psk,
-		listenAddr,
+		[]string{
+			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
+			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
+		},
 		dHashTable.StartRouting,
 	)
 	if err != nil {
@@ -116,6 +118,7 @@ func NewBootstrapNode(
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
+		selfHashHex:       selfHashHex,
 	}
 
 	mw := middleware.NewWarpMiddleware()
@@ -130,9 +133,15 @@ func NewBootstrapNode(
 	)
 	bn.SetStreamHandler(
 		event.PUBLIC_GET_NODE_CHALLENGE,
-		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), warpPrivKey))),
+		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	return bn, nil
+}
+
+func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
+	bi := bn.BaseNodeInfo()
+	bi.OwnerId = warpnet.BootstrapOwner
+	return bi
 }
 
 func (bn *BootstrapNode) Start() error {
@@ -142,6 +151,11 @@ func (bn *BootstrapNode) Start() error {
 	}
 
 	if err := bn.raft.Start(bn); err != nil {
+		return err
+	}
+
+	selfHashes := map[string]struct{}{bn.selfHashHex: {}}
+	if err := bn.raft.AskSelfHashValidation(selfHashes); err != nil {
 		return err
 	}
 
