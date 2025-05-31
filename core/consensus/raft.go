@@ -532,10 +532,10 @@ func (c *consensusService) AddVoter(info warpnet.WarpAddrInfo) {
 		log.Errorf("consensus: failed to add voted: %v", wait.Error())
 		return
 	}
-	log.Debugf("consensus: new voter added %s", info.ID.String())
+	log.Debugf("consensus: new voter added %s", info.ID.String()[len(info.ID.String())-6:])
 
 	if _, err := c.cache.getVoter(id); errors.Is(err, errVoterNotFound) {
-		log.Infof("consensus: new voter added %s", info.ID.String())
+		log.Infof("consensus: new voter added %s", info.ID.String()[len(info.ID.String())-6:])
 	}
 
 	c.cache.addVoter(id, raft.Server{ // this cache only prevents voter removal from flapping
@@ -563,10 +563,10 @@ func (c *consensusService) RemoveVoter(id warpnet.WarpPeerID) {
 	err := c.cache.removeVoter(raft.ServerID(id.String()))
 
 	if errors.Is(err, errTooSoonToRemoveVoter) {
-		log.Infof("consensus: removing voter %s is too soon, abort", id.String())
+		log.Infof("consensus: removing voter %s is too soon, abort", id.String()[len(id.String())-1:])
 		return
 	}
-	log.Infof("consensus: removing voter %s", id.String())
+	log.Infof("consensus: removing voter %s", id.String()[len(id.String())-1:])
 
 	wait := c.raft.RemoveServer(raft.ServerID(id.String()), 0, 30*time.Second)
 	if err := wait.Error(); err != nil {

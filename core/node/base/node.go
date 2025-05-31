@@ -254,23 +254,26 @@ func (n *WarpNode) trackIncomingEvents() {
 			}
 		case event.EvtPeerConnectednessChanged:
 			connectednessEvent := ev.(event.EvtPeerConnectednessChanged)
+			pid := connectednessEvent.Peer.String()
 			log.Infof(
 				"node: event: peer ...%s connectedness updated: %s",
-				connectednessEvent.Peer.ShortString(),
+				pid[len(pid)-6:],
 				strings.ToLower(connectednessEvent.Connectedness.String()),
 			)
 		case event.EvtPeerIdentificationFailed:
 			identificationEvent := ev.(event.EvtPeerIdentificationFailed)
+			pid := identificationEvent.Peer.String()
 			log.Errorf(
 				"node: event: peer ...%s identification failed, reason: %s",
-				identificationEvent.Peer.ShortString(), identificationEvent.Reason,
+				pid[len(pid)-6:], identificationEvent.Reason,
 			)
 
 		case event.EvtPeerIdentificationCompleted:
 			identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
+			pid := identificationEvent.Peer.String()
 			log.Infof(
 				"node: event: peer ...%s identification completed, observed address: %s",
-				identificationEvent.Peer.ShortString(), identificationEvent.ObservedAddr.String(),
+				pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
 			)
 		case event.EvtLocalReachabilityChanged:
 			log.Infof(
