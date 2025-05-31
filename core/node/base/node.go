@@ -255,26 +255,27 @@ func (n *WarpNode) trackIncomingEvents() {
 		case event.EvtPeerConnectednessChanged:
 			connectednessEvent := ev.(event.EvtPeerConnectednessChanged)
 			log.Infof(
-				"node: event: peer %s connectedness updated: %s",
-				connectednessEvent.Peer.String(), connectednessEvent.Connectedness.String(),
+				"node: event: peer ...%s connectedness updated: %s",
+				connectednessEvent.Peer.ShortString(),
+				strings.ToLower(connectednessEvent.Connectedness.String()),
 			)
 		case event.EvtPeerIdentificationFailed:
 			identificationEvent := ev.(event.EvtPeerIdentificationFailed)
 			log.Errorf(
-				"node: event: peer %s identification failed, reason: %s",
-				identificationEvent.Peer.String(), identificationEvent.Reason,
+				"node: event: peer ...%s identification failed, reason: %s",
+				identificationEvent.Peer.ShortString(), identificationEvent.Reason,
 			)
 
 		case event.EvtPeerIdentificationCompleted:
 			identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
 			log.Infof(
-				"node: event: peer %s identification completed, observed address: %s",
-				identificationEvent.Peer.String(), identificationEvent.ObservedAddr.String(),
+				"node: event: peer ...%s identification completed, observed address: %s",
+				identificationEvent.Peer.ShortString(), identificationEvent.ObservedAddr.String(),
 			)
 		case event.EvtLocalReachabilityChanged:
 			log.Infof(
 				"node: event: reachability changed: %s",
-				ev.(event.EvtLocalReachabilityChanged).Reachability.String(),
+				strings.ToLower(ev.(event.EvtLocalReachabilityChanged).Reachability.String()),
 			)
 		case event.EvtNATDeviceTypeChanged:
 			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
