@@ -30,6 +30,7 @@ package database
 import (
 	"context"
 	"crypto/ed25519"
+	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/security"
 	"go.uber.org/goleak"
 	"testing"
@@ -59,7 +60,7 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo, err = NewNodeRepo(s.db, "0.0.0")
+	s.repo, err = NewNodeRepo(s.db, semver.MustParse("0.0.0"))
 	s.Require().NoError(err)
 
 }

@@ -238,7 +238,7 @@ func (n *WarpNode) validateSupportedProtocols() error {
 func (n *WarpNode) trackIncomingEvents() {
 	for ev := range n.eventsSub.Out() {
 		bt, _ := json.JSON.Marshal(ev)
-		log.Infof("node: new event: %s", bt)
+		log.Infof("node: new event: %T %s", ev, bt)
 	}
 }
 

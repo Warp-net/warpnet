@@ -60,11 +60,10 @@ type MemberNode struct {
 	pubsubService PubSubProvider
 	raft          ConsensusProvider
 	dHashTable    DistributedHashTableCloser
-	nodeRepo      ProviderCloser
+	nodeRepo      NodeProvider
 	retrier       retrier.Retrier
 	userRepo      UserFetcher
 	ownerId       string
-	selfHashHex   string
 }
 
 func NewMemberNode(
@@ -77,11 +76,11 @@ func NewMemberNode(
 	db Storer,
 ) (_ *MemberNode, err error) {
 	consensusRepo := database.NewConsensusRepo(db)
-	nodeRepo, err := database.NewNodeRepo(db, version.String())
+	nodeRepo, err := database.NewNodeRepo(db, version)
 	if err != nil {
 		return nil, err
 	}
-	if err := nodeRepo.SetSelfHash(selfHashHex, version.String()); err != nil {
+	if err := nodeRepo.AddSelfHash(selfHashHex, version.String()); err != nil {
 		return nil, err
 	}
 
@@ -95,7 +94,7 @@ func NewMemberNode(
 	owner := authRepo.GetOwner()
 
 	raft, err := consensus.NewMemberRaft(
-		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.SelfHashExists,
+		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.ValidateSelfHashes,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("member: consensus initialization: %v", err)
@@ -139,7 +138,6 @@ func NewMemberNode(
 		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		userRepo:      userRepo,
 		ownerId:       owner.UserId,
-		selfHashHex:   selfHashHex,
 	}
 
 	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)
@@ -171,8 +169,13 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 		return fmt.Errorf("member: validate owner user by consensus: %v", err)
 	}
 	log.Infoln("member: owner user validated")
+
+	hashes, err := m.nodeRepo.GetSelfHashes()
+	if err != nil {
+		return fmt.Errorf("member: failed to get self hashes: %v", err)
+	}
 	err = m.retrier.Try(context.Background(), func() error {
-		return m.raft.AskSelfHashValidation(m.selfHashHex)
+		return m.raft.AskSelfHashValidation(hashes)
 	})
 	if err != nil {
 		return fmt.Errorf("member: validate self hash by consensus: %v", err)

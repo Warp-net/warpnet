@@ -68,7 +68,7 @@ type ConsensusProvider interface {
 	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
 	Shutdown()
 	AskUserValidation(user domain.User) error
-	AskSelfHashValidation(selfHashHex string) error
+	AskSelfHashValidation(hashes map[string]struct{}) error
 	Stats() map[string]string
 }
 
@@ -76,8 +76,9 @@ type DistributedHashTableCloser interface {
 	Close()
 }
 
-type ProviderCloser interface {
+type NodeProvider interface {
 	io.Closer
+	GetSelfHashes() (map[string]struct{}, error)
 }
 
 type AuthProvider interface {

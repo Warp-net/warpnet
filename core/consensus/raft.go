@@ -606,11 +606,13 @@ func (c *consensusService) AskUserValidation(user domain.User) error {
 	return c.validate(newState)
 }
 
-func (c *consensusService) AskSelfHashValidation(selfHashHex string) error {
+func (c *consensusService) AskSelfHashValidation(selfHashes map[string]struct{}) error {
 	log.Infoln("consensus: asking for selfhash validation...")
 
+	bt, _ := json.JSON.Marshal(selfHashes)
+
 	newState := map[string]string{
-		database.SelfHashConsensusKey: selfHashHex,
+		database.SelfHashConsensusKey: string(bt),
 	}
 
 	return c.validate(newState)

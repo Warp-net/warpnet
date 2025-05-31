@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/storage"
 	"github.com/Warp-net/warpnet/json"
@@ -86,7 +87,7 @@ type batch struct {
 	writeBatch *badger.WriteBatch
 }
 
-func NewNodeRepo(db NodeStorer, version string) (*NodeRepo, error) {
+func NewNodeRepo(db NodeStorer, version *semver.Version) (*NodeRepo, error) {
 	nr := &NodeRepo{
 		db:       db,
 		stopChan: make(chan struct{}),
@@ -782,7 +783,7 @@ func (d *NodeRepo) BlocklistRemove(peerId warpnet.WarpPeerID) (err error) {
 	return err
 }
 
-func (d *NodeRepo) SetSelfHash(selfHashHex, version string) error {
+func (d *NodeRepo) AddSelfHash(selfHashHex, version string) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
@@ -826,11 +827,11 @@ func (d *NodeRepo) SetSelfHash(selfHashHex, version string) error {
 	return txn.Commit()
 }
 
-func (d *NodeRepo) PruneOldSelfHashes(currentVersion string) error {
+func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
-	if len(currentVersion) == 0 {
+	if currentVersion == nil {
 		return errors.New("empty current version value")
 	}
 
@@ -851,7 +852,14 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion string) error {
 
 	for _, item := range items {
 		key := item.Key
-		if !strings.Contains(key, currentVersion) {
+
+		versionSuffix := strings.TrimPrefix(selfHashPrefix.String(), key)
+		itemVersion, err := semver.NewVersion(versionSuffix)
+		if err != nil {
+			return err
+		}
+
+		if itemVersion.Major() < currentVersion.Major() {
 			if err := txn.Delete(storage.DatabaseKey(key)); err != nil {
 				return err
 			}
@@ -860,11 +868,11 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion string) error {
 	return txn.Commit()
 }
 
-var ErrNotInRecords = errors.New("self hash is not in the rconsensus records")
+var ErrNotInRecords = errors.New("self hash is not in the consensus records")
 
 const SelfHashConsensusKey = "selfhash"
 
-func (d *NodeRepo) SelfHashExists(k, selfHashHex string) error {
+func (d *NodeRepo) ValidateSelfHashes(k, selfHashObj string) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
@@ -872,8 +880,13 @@ func (d *NodeRepo) SelfHashExists(k, selfHashHex string) error {
 		return nil
 	}
 
-	if len(selfHashHex) == 0 {
-		return errors.New("empty codebase hash")
+	if len(selfHashObj) == 0 {
+		return errors.New("empty codebase hashes")
+	}
+
+	var incomingSelfHashes = make(map[string]struct{})
+	if err := json.JSON.Unmarshal([]byte(selfHashObj), &incomingSelfHashes); err != nil {
+		return err
 	}
 
 	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
@@ -891,19 +904,49 @@ func (d *NodeRepo) SelfHashExists(k, selfHashHex string) error {
 		return err
 	}
 
+	itemsHashes := make(map[string]struct{})
 	for _, item := range items {
-		var hashes map[string]struct{}
-		if err := json.JSON.Unmarshal(item.Value, &hashes); err != nil {
+		if err := json.JSON.Unmarshal(item.Value, &itemsHashes); err != nil {
 			return err
 		}
-		if hashes == nil {
-			continue
-		}
-		if _, ok := hashes[selfHashHex]; ok {
-			return txn.Commit()
+	}
+
+	for h := range incomingSelfHashes {
+		if _, ok := itemsHashes[h]; ok {
+			return txn.Discard()
 		}
 	}
+
 	return ErrNotInRecords
+}
+
+func (d *NodeRepo) GetSelfHashes() (map[string]struct{}, error) {
+	if d == nil {
+		return nil, ErrNilNodeRepo
+	}
+
+	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(SelfHashSubNamespace).Build()
+
+	txn, err := d.db.NewTxn()
+	if err != nil {
+		return nil, err
+	}
+	defer txn.Rollback()
+
+	var limit uint64 = 100
+	items, _, err := txn.List(selfHashPrefix, &limit, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	allVersionsHashes := make(map[string]struct{})
+	for _, item := range items {
+		if err := json.JSON.Unmarshal(item.Value, &allVersionsHashes); err != nil {
+			return nil, err
+		}
+	}
+	return allVersionsHashes, nil
 }
 
 func buildRootKey(key ds.Key) string {

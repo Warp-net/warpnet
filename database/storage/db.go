@@ -357,6 +357,7 @@ type WarpTransactioner interface {
 	Increment(key DatabaseKey) (uint64, error)
 	Decrement(key DatabaseKey) (uint64, error)
 	Commit() error
+	Discard() error
 	Rollback()
 	IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error
 	ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) error
@@ -650,6 +651,11 @@ func (t *WarpTxn) BatchGet(keys ...DatabaseKey) ([]ListItem, error) {
 
 func (t *WarpTxn) Commit() error {
 	return t.txn.Commit()
+}
+
+func (t *WarpTxn) Discard() error {
+	t.txn.Discard()
+	return nil
 }
 
 func (t *WarpTxn) Rollback() {
