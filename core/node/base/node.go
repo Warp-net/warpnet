@@ -236,9 +236,68 @@ func (n *WarpNode) validateSupportedProtocols() error {
 }
 
 func (n *WarpNode) trackIncomingEvents() {
+	localAddrActions := map[int]string{
+		0: "unknown",
+		1: "added",
+		2: "maintained",
+		3: "removed",
+	}
+
 	for ev := range n.eventsSub.Out() {
-		bt, _ := json.JSON.Marshal(ev)
-		log.Infof("node: new event: %T %s", ev, bt)
+		switch ev.(type) {
+		case event.EvtLocalProtocolsUpdated:
+			protoUpdatedEvent := ev.(event.EvtLocalProtocolsUpdated)
+			if len(protoUpdatedEvent.Added) != 0 {
+				log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
+			} else {
+				log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
+			}
+		case event.EvtPeerConnectednessChanged:
+			connectednessEvent := ev.(event.EvtPeerConnectednessChanged)
+			log.Infof(
+				"node: event: peer %s connectedness updated: %s",
+				connectednessEvent.Peer.String(), connectednessEvent.Connectedness.String(),
+			)
+		case event.EvtPeerIdentificationFailed:
+			identificationEvent := ev.(event.EvtPeerIdentificationFailed)
+			log.Errorf(
+				"node: event: peer %s identification failed, reason: %s",
+				identificationEvent.Peer.String(), identificationEvent.Reason,
+			)
+
+		case event.EvtPeerIdentificationCompleted:
+			identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
+			log.Infof(
+				"node: event: peer %s identification completed, observed address: %s",
+				identificationEvent.Peer.String(), identificationEvent.ObservedAddr.String(),
+			)
+		case event.EvtLocalReachabilityChanged:
+			log.Infof(
+				"node: event: reachability changed: %s",
+				ev.(event.EvtLocalReachabilityChanged).Reachability.String(),
+			)
+		case event.EvtNATDeviceTypeChanged:
+			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
+			log.Infof(
+				"node: event: NAT device type changed: %s, transport: %s",
+				natDeviceTypeChangedEvent.NatDeviceType.String(), natDeviceTypeChangedEvent.TransportProtocol.String(),
+			)
+		case event.EvtAutoRelayAddrsUpdated:
+			log.Infof(
+				"node: event: relay addresses updated: %v",
+				ev.(event.EvtAutoRelayAddrsUpdated).RelayAddrs,
+			)
+		case event.EvtLocalAddressesUpdated:
+			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
+				log.Infof(
+					"node: event: local address %s: %s",
+					addr.Address.String(), localAddrActions[int(addr.Action)],
+				)
+			}
+		default:
+			bt, _ := json.JSON.Marshal(ev)
+			log.Infof("node: event: %T %s", ev, bt)
+		}
 	}
 }
 

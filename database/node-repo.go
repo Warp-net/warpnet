@@ -853,10 +853,10 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 	for _, item := range items {
 		key := item.Key
 
-		versionSuffix := strings.TrimPrefix(selfHashPrefix.String(), key)
+		versionSuffix := strings.TrimPrefix(key, selfHashPrefix.String()+"/")
 		itemVersion, err := semver.NewVersion(versionSuffix)
 		if err != nil {
-			return err
+			return fmt.Errorf("node repo: semver: %s, %v", versionSuffix, err)
 		}
 
 		if itemVersion.Major() < currentVersion.Major() {
