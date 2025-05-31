@@ -1,28 +1,39 @@
 package bootstrap
 
-import "errors"
+import (
+	"errors"
+	"github.com/Warp-net/warpnet/json"
+)
 
 type codeHashesCache struct {
-	hashes map[string]struct{}
+	items map[string]struct{}
 }
 
 const SelfHashConsensusKey = "selfhash"
 
-// SelfHashExists reads only. No mutex needed
-func (c *codeHashesCache) SelfHashExists(k, selfHashHex string) error {
+// ValidateSelfHashes reads only. No mutex needed
+func (c *codeHashesCache) ValidateSelfHashes(k, selfHashObj string) error {
 	if c == nil {
-		return errors.New("bootstrap: nil bootstrap hashes cache")
+		return errors.New("nil code hashes cache")
 	}
 	if k != SelfHashConsensusKey {
 		return nil
 	}
 
-	if len(selfHashHex) == 0 {
-		return errors.New("empty codebase hash")
-	}
-	if _, ok := c.hashes[selfHashHex]; ok {
-		return nil
+	if len(selfHashObj) == 0 {
+		return errors.New("empty codebase hashes")
 	}
 
-	return errors.New("self hash wasn't recorded")
+	var incomingSelfHashes = make(map[string]struct{})
+	if err := json.JSON.Unmarshal([]byte(selfHashObj), &incomingSelfHashes); err != nil {
+		return err
+	}
+
+	for h := range incomingSelfHashes {
+		if _, ok := c.items[h]; ok {
+			return nil
+		}
+	}
+
+	return errors.New("self hash is not in the consensus records")
 }
