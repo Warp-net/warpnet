@@ -67,9 +67,9 @@ func NewBootstrapNode(
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
 	hashesCache := codeHashesCache{make(map[string]struct{})}
-	hashesCache.hashes[selfHashHex] = struct{}{}
+	hashesCache.items[selfHashHex] = struct{}{}
 
-	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory, hashesCache.SelfHashExists)
+	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory, hashesCache.ValidateSelfHashes)
 	if err != nil {
 		return nil, err
 	}
