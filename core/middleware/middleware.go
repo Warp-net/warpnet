@@ -36,6 +36,7 @@ import (
 	"github.com/docker/go-units"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"runtime/debug"
 	"time"
 )
 
@@ -108,7 +109,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(fn WarpHandler) warpnet.WarpStre
 		defer func() {
 			s.Close()
 			if r := recover(); r != nil {
-				log.Errorf("middleware: unwrap stream middleware panic: %v", r)
+				log.Errorf("middleware: unwrap stream middleware panic: %v %s", r, debug.Stack())
 			}
 		}() //#nosec
 

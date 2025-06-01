@@ -199,7 +199,7 @@ func StreamGetUsersHandler(
 
 		var usersResp event.UsersResponse
 		if err := json.JSON.Unmarshal(usersDataResp, &usersResp); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ummarshal users response:%v %s", err, usersDataResp)
 		}
 
 		for _, user := range usersResp.Users {
