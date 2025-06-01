@@ -100,6 +100,7 @@ func NewBootstrapNode(
 		privKey,
 		memoryStore,
 		psk,
+		nil,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),

@@ -77,6 +77,9 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 	if tweet.CreatedAt.IsZero() {
 		tweet.CreatedAt = time.Now()
 	}
+	if tweet.Network == "" {
+		tweet.Network = "warpnet"
+	}
 	tweet.RootId = tweet.Id
 
 	txn, err := repo.db.NewTxn()

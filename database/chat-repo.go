@@ -66,12 +66,6 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 	if ownerId == "" || otherUserId == "" {
 		return domain.Chat{}, errors.New("user ID or other user ID is empty")
 	}
-	if _, err := ulid.ParseStrict(ownerId); err != nil {
-		return domain.Chat{}, err
-	}
-	if _, err := ulid.ParseStrict(otherUserId); err != nil {
-		return domain.Chat{}, err
-	}
 
 	repo.mx.Lock()
 	defer repo.mx.Unlock()

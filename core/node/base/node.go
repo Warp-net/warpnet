@@ -53,6 +53,10 @@ type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
+type MastodonPseudoStreamer interface {
+	stream.MastodonPseudoStreamer
+}
+
 type BackoffEnabler interface {
 	IsBackoffEnabled(id peer.ID) bool
 	Reset(id peer.ID)
@@ -77,10 +81,10 @@ func NewWarpNode(
 	privKey ed25519.PrivateKey,
 	store warpnet.WarpPeerstore,
 	psk security.PSK,
+	mastodonPesudoNode MastodonPseudoStreamer,
 	listenAddrs []string,
 	routingFn func(node warpnet.P2PNode) (warpnet.WarpPeerRouting, error),
 ) (*WarpNode, error) {
-
 	limiter := warpnet.NewAutoScaledLimiter()
 
 	manager, err := warpnet.NewConnManager(limiter)
@@ -150,14 +154,15 @@ func NewWarpNode(
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to create relay	: %v", err)
 	}
+	version := config.Config().Version
 
 	wn := &WarpNode{
 		ctx:       ctx,
 		node:      node,
 		relay:     relayService,
-		streamer:  stream.NewStreamPool(ctx, node),
+		streamer:  stream.NewStreamPool(ctx, node, mastodonPesudoNode),
 		isClosed:  new(atomic.Bool),
-		version:   config.Config().Version,
+		version:   version,
 		startTime: time.Now(),
 		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub: sub,

@@ -82,6 +82,9 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 	if user.Latency == 0 {
 		user.Latency = defaultAverageLatency
 	}
+	if user.Network == "" {
+		user.Network = "warpnet"
+	}
 
 	rttRange := storage.RangePrefix(strconv.FormatInt(user.Latency, 10))
 

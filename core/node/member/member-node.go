@@ -36,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node/base"
@@ -111,11 +112,19 @@ func NewMemberNode(
 		raft.RemoveVoter, raft.AddVoter, discService.HandlePeerFound,
 	)
 
+	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
+	if err != nil {
+		log.Errorf("mastodon: creating mastodon pseudo-node: %v", err)
+	}
+
+	userRepo.Create(mastodonPseudoNode.MastodonUser())
+
 	node, err := base.NewWarpNode(
 		ctx,
 		privKey,
 		store,
 		psk,
+		mastodonPseudoNode,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),

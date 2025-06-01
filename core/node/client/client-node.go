@@ -112,7 +112,7 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 		return warpnet.WarpError("client: must have no addresses")
 	}
 
-	n.streamer = stream.NewStreamPool(n.ctx, n.clientNode)
+	n.streamer = stream.NewStreamPool(n.ctx, n.clientNode, nil)
 
 	err = n.pairNodes(peerInfo.ID.String(), serverInfo)
 	if err != nil && !errors.Is(err, io.EOF) {

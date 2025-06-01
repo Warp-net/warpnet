@@ -119,6 +119,7 @@ type Tweet struct {
 	UserId      string  `json:"user_id"`
 	Username    string  `json:"username"`
 	ImageKey    string  `json:"image_key"`
+	Network     string  `json:"network"`
 }
 
 // User defines model for User.
@@ -136,9 +137,9 @@ type User struct {
 	Id                 string    `json:"id"`
 	IsOffline          bool      `json:"isOffline"`
 	NodeId             string    `json:"node_id"`
-
-	Latency     int64   `json:"latency"`
-	TweetsCount uint64  `json:"tweets_count"`
-	Username    string  `json:"username"`
-	Website     *string `json:"website,omitempty"`
+	Network            string    `json:"network"`
+	Latency            int64     `json:"latency"`
+	TweetsCount        uint64    `json:"tweets_count"`
+	Username           string    `json:"username"`
+	Website            *string   `json:"website,omitempty"`
 }
