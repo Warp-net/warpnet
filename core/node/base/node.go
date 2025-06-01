@@ -284,7 +284,7 @@ func (n *WarpNode) trackIncomingEvents() {
 		case event.EvtPeerIdentificationCompleted:
 			identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
 			pid := identificationEvent.Peer.String()
-			log.Infof(
+			log.Debugf(
 				"node: event: peer ...%s identification completed, observed address: %s",
 				pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
 			)
@@ -306,7 +306,7 @@ func (n *WarpNode) trackIncomingEvents() {
 			)
 		case event.EvtLocalAddressesUpdated:
 			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
-				log.Infof(
+				log.Debugf(
 					"node: event: local address %s: %s",
 					addr.Address.String(), localAddrActions[int(addr.Action)],
 				)

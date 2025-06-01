@@ -75,7 +75,7 @@ func NewWarpnetMastodonPseudoNode(
 			CreatedAt:          acct.CreatedAt,
 			FolloweesCount:     uint64(acct.FollowingCount),
 			FollowersCount:     uint64(acct.FollowersCount),
-			Id:                 acct.Acct,
+			Id:                 string(acct.ID),
 			NodeId:             pseudoPeerID.String(),
 			TweetsCount:        uint64(acct.StatusesCount),
 			Username:           acct.DisplayName,
@@ -83,7 +83,7 @@ func NewWarpnetMastodonPseudoNode(
 			Network:            Network,
 		},
 		nodeInfo: warpnet.NodeInfo{
-			OwnerId:        acct.Acct, // owned by Warpnet as a gateway
+			OwnerId:        string(acct.ID), // owned by Warpnet as a gateway
 			ID:             mastodonPseudoPeerID,
 			Version:        version,
 			Addresses:      []string{mastodonPseudoMaddr},
@@ -220,7 +220,7 @@ func (m *WarpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 		CreatedAt:          acct.CreatedAt,
 		FolloweesCount:     uint64(acct.FollowingCount),
 		FollowersCount:     uint64(acct.FollowersCount),
-		Id:                 acct.Acct,
+		Id:                 string(acct.ID),
 		IsOffline:          false,
 		NodeId:             m.pseudoPeerID.String(),
 		Latency:            elapsed.Milliseconds(), // TODO
@@ -274,7 +274,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 		if len(media) > 0 && media[0].Type == "image" {
 			imageKey = media[0].URL
 		}
-		retweetedBy := toot.Reblog.Account.Acct
+		retweetedBy := string(toot.Reblog.Account.ID)
 
 		parentId := ""
 		if pid, ok := toot.InReplyToID.(string); ok {
@@ -288,7 +288,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			RetweetedBy: &retweetedBy,
 			RootId:      parentId,
 			Text:        toot.Content,
-			UserId:      toot.Account.Acct,
+			UserId:      string(toot.Account.ID),
 			Username:    toot.Account.DisplayName,
 			ImageKey:    imageKey,
 			Network:     Network,
@@ -311,7 +311,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 	if len(media) > 0 && media[0].Type == "image" {
 		imageKey = media[0].URL
 	}
-	retweetedBy := status.Reblog.Account.Acct
+	retweetedBy := string(status.Reblog.Account.ID)
 
 	parentId := ""
 	if pid, ok := status.InReplyToID.(string); ok {
@@ -325,7 +325,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		RetweetedBy: &retweetedBy,
 		RootId:      parentId,
 		Text:        status.Content,
-		UserId:      status.Account.Acct,
+		UserId:      string(status.Account.ID),
 		Username:    status.Account.DisplayName,
 		ImageKey:    imageKey,
 		Network:     Network,
@@ -375,7 +375,7 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 		if len(media) > 0 && media[0].Type == "image" {
 			imageKey = media[0].URL
 		}
-		retweetedBy := status.Reblog.Account.Acct
+		retweetedBy := string(status.Reblog.Account.ID)
 
 		parentId := ""
 		if pid, ok := status.InReplyToID.(string); ok {
@@ -389,7 +389,7 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 			RetweetedBy: &retweetedBy,
 			RootId:      parentId,
 			Text:        status.Content,
-			UserId:      status.Account.Acct,
+			UserId:      string(status.Account.ID),
 			Username:    status.Account.DisplayName,
 			ImageKey:    imageKey,
 			Network:     Network,
@@ -433,7 +433,7 @@ func (m *WarpnetMastodonPseudoNode) getFollowersHandler(userId string, cursor *s
 		}
 		resp.Followers = append(resp.Followers, domain.Following{
 			Followee: userId,
-			Follower: follower.Acct,
+			Follower: string(follower.ID),
 		})
 	}
 
@@ -473,7 +473,7 @@ func (m *WarpnetMastodonPseudoNode) getFolloweesHandler(userId string, cursor *s
 			continue
 		}
 		resp.Followees = append(resp.Followees, domain.Following{
-			Followee: followee.Acct,
+			Followee: string(followee.ID),
 			Follower: userId,
 		})
 	}
