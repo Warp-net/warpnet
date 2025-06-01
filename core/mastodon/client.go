@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -58,12 +59,12 @@ func NewWarpnetMastodonPseudoNode(
 	c := mastodon.NewClient(config)
 	err := c.AuthenticateApp(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mastodon: failed to authenticate app: %w", err)
 	}
 
 	acct, err := c.GetAccountCurrentUser(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mastodon: failed to get current user: %w", err)
 	}
 
 	return &WarpnetMastodonPseudoNode{
@@ -98,18 +99,30 @@ func NewWarpnetMastodonPseudoNode(
 }
 
 func (m *WarpnetMastodonPseudoNode) ID() warpnet.WarpPeerID {
+	if m == nil {
+		return ""
+	}
 	return m.pseudoPeerID
 }
 
 func (m *WarpnetMastodonPseudoNode) IsMastodonID(id warpnet.WarpPeerID) bool {
+	if m == nil {
+		return false
+	}
 	return m.pseudoPeerID == id
 }
 
 func (m *WarpnetMastodonPseudoNode) MastodonUser() domain.User {
+	if m == nil {
+		return domain.User{}
+	}
 	return m.proxyUser
 }
 
 func (m *WarpnetMastodonPseudoNode) Addrs() []warpnet.WarpAddress {
+	if m == nil {
+		return []warpnet.WarpAddress{}
+	}
 	pseudoMaddr, err := warpnet.NewMultiaddr(m.nodeInfo.Addresses[0])
 	if err != nil {
 		log.Errorf("pseudo mastodon: failed to parse address %s", err)
@@ -158,7 +171,7 @@ func (m *WarpnetMastodonPseudoNode) Route(r stream.WarpRoute, data []byte) (_ []
 		return nil, warpnet.WarpError("unknown route")
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mastodon: failed to handle request, route: %s, message: %w", r.String(), err)
 	}
 
 	return json.JSON.Marshal(resp)
