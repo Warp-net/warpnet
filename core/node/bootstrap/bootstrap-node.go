@@ -146,6 +146,9 @@ func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
 }
 
 func (bn *BootstrapNode) Start() error {
+	if bn == nil {
+		return errors.New("bootstrap: nil node")
+	}
 	bn.pubsubService.Run(bn, nil)
 	if err := bn.discService.Run(bn); err != nil {
 		return err

@@ -181,7 +181,7 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	if n == nil || n.node == nil {
 		return nil
 	}
-	if n.mastodonPseudoNode.IsMastodonID(p.ID) {
+	if n.mastodonPseudoNode != nil && n.mastodonPseudoNode.IsMastodonID(p.ID) {
 		return nil
 	}
 
@@ -206,7 +206,7 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 }
 
 func (n *WarpNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
-	if n.mastodonPseudoNode.IsMastodonID(info.ID) {
+	if n.mastodonPseudoNode != nil && n.mastodonPseudoNode.IsMastodonID(info.ID) {
 		return nil
 	}
 	return n.node.Connect(n.ctx, info)
@@ -389,7 +389,11 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		return nil, ErrSelfRequest
 	}
 
-	isMastodonID := n.mastodonPseudoNode.IsMastodonID(nodeId)
+	var isMastodonID bool
+	if n.mastodonPseudoNode != nil {
+		isMastodonID = n.mastodonPseudoNode.IsMastodonID(nodeId)
+	}
+
 	peerInfo := n.Peerstore().PeerInfo(nodeId)
 	if len(peerInfo.Addrs) == 0 && !isMastodonID {
 		log.Warningf("node %v is offline", nodeId)
@@ -434,5 +438,6 @@ func (n *WarpNode) StopNode() {
 	}
 	n.isClosed.Store(true)
 	n.node = nil
+	n.mastodonPseudoNode = nil
 	return
 }

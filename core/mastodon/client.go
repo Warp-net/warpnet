@@ -23,16 +23,17 @@ const (
 	// pk, _ = security.GenerateKeyFromSeed([]byte(mastodonServer))
 	// mastodonPseudoPeerID, _ := warpnet.IDFromPublicKey(pk.Public().(ed25519.PublicKey))
 	mastodonPseudoPeerID = "12D3KooWDfpE8bR2iBjEMMe7gTVwEiahF9duFxETLHq3N6en9hsG"
-	mastodonPseudoMaddr  = "/dns4/mastodon.social/tcp/443/"
+	mastodonPseudoMaddr  = "/dns4/mastodon.social/tcp/443"
 
 	// read only proxy account
 	clientID     = "GMhQuzhygPDmyNW5RN6p2vMOLokLUkt86TPyObJwE7E"
 	clientSecret = "qGDlFgu--O4j9fy4ZIs5ov_nl_Oq32-rWdWdxHjN2hg"
 	accessToken  = "1FP-aJ5pPbhMdoaGLuVNDSOT2HeO7BWPciK8ST4_a8o"
 
-	defaultLimit = 20
-	website      = "https://github.com/Warp-net/warpnet"
-	Network      = "mastodon"
+	defaultLimit          = 20
+	defaultMastodonUserID = "13179"
+	website               = "https://github.com/Warp-net/warpnet"
+	Network               = "mastodon"
 )
 
 type WarpnetMastodonPseudoNode struct {
@@ -85,7 +86,7 @@ func NewWarpnetMastodonPseudoNode(
 			OwnerId:        acct.Acct, // owned by Warpnet as a gateway
 			ID:             mastodonPseudoPeerID,
 			Version:        version,
-			Addresses:      []string{mastodonPseudoMaddr + pseudoPeerID.String()},
+			Addresses:      []string{mastodonPseudoMaddr},
 			StartTime:      time.Now(),
 			RelayState:     "off",
 			BootstrapPeers: nil,
@@ -93,8 +94,7 @@ func NewWarpnetMastodonPseudoNode(
 		},
 	}
 
-	n.defaultUser, err = n.getUserHandler("Gargron") // creator of Mastodon
-
+	n.defaultUser, err = n.getUserHandler(defaultMastodonUserID)
 	return n, err
 }
 
@@ -195,7 +195,7 @@ func (m *WarpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 	now := time.Now()
 	acct, err := m.bridge.GetAccount(m.ctx, id)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("masotodon: bridge: get account: %w", err)
 	}
 	elapsed := time.Since(now)
 
