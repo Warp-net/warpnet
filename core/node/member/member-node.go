@@ -118,7 +118,12 @@ func NewMemberNode(
 	}
 
 	if mastodonPseudoNode != nil {
-		if _, err := userRepo.Create(mastodonPseudoNode.MastodonUser()); err != nil {
+		mastodonUser := mastodonPseudoNode.MastodonUser()
+		_, err := userRepo.Create(mastodonUser)
+		if errors.Is(err, database.ErrUserAlreadyExists) {
+			_, _ = userRepo.Update(mastodonUser.Id, mastodonUser)
+		}
+		if err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
 			return nil, fmt.Errorf("mastodon: creating mastodon user: %w", err)
 		}
 	}
