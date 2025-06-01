@@ -41,7 +41,6 @@ import (
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
 	log "github.com/sirupsen/logrus"
 	"strings"
 	"sync/atomic"
@@ -64,11 +63,12 @@ type BackoffEnabler interface {
 }
 
 type WarpNode struct {
-	ctx      context.Context
-	node     warpnet.P2PNode
-	relay    warpnet.WarpRelayCloser
-	streamer Streamer
-	backoff  BackoffEnabler
+	ctx                context.Context
+	node               warpnet.P2PNode
+	relay              warpnet.WarpRelayCloser
+	streamer           Streamer
+	mastodonPseudoNode MastodonPseudoStreamer
+	backoff            BackoffEnabler
 
 	isClosed *atomic.Bool
 	version  *semver.Version
@@ -157,18 +157,17 @@ func NewWarpNode(
 	}
 	version := config.Config().Version
 
-	node.Peerstore().AddAddrs(mastodonPseudoNode.ID(), mastodonPseudoNode.Addrs(), peerstore.PermanentAddrTTL)
-
 	wn := &WarpNode{
-		ctx:       ctx,
-		node:      node,
-		relay:     relayService,
-		streamer:  stream.NewStreamPool(ctx, node, mastodonPseudoNode),
-		isClosed:  new(atomic.Bool),
-		version:   version,
-		startTime: time.Now(),
-		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
-		eventsSub: sub,
+		ctx:                ctx,
+		node:               node,
+		relay:              relayService,
+		streamer:           stream.NewStreamPool(ctx, node, mastodonPseudoNode),
+		isClosed:           new(atomic.Bool),
+		version:            version,
+		startTime:          time.Now(),
+		backoff:            backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		eventsSub:          sub,
+		mastodonPseudoNode: mastodonPseudoNode,
 	}
 	if err := wn.validateSupportedProtocols(); err != nil {
 		return nil, err
@@ -180,6 +179,9 @@ func NewWarpNode(
 
 func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	if n == nil || n.node == nil {
+		return nil
+	}
+	if n.mastodonPseudoNode.IsMastodonID(p.ID) {
 		return nil
 	}
 
@@ -204,6 +206,9 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 }
 
 func (n *WarpNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+	if n.mastodonPseudoNode.IsMastodonID(info.ID) {
+		return nil
+	}
 	return n.node.Connect(n.ctx, info)
 }
 
@@ -384,8 +389,9 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		return nil, ErrSelfRequest
 	}
 
+	isMastodonID := n.mastodonPseudoNode.IsMastodonID(nodeId)
 	peerInfo := n.Peerstore().PeerInfo(nodeId)
-	if len(peerInfo.Addrs) == 0 {
+	if len(peerInfo.Addrs) == 0 && !isMastodonID {
 		log.Warningf("node %v is offline", nodeId)
 		return nil, warpnet.ErrNodeIsOffline
 	}
