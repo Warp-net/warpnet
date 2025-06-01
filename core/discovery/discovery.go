@@ -430,15 +430,16 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return fmt.Errorf("failed to unmarshal challenge from new peer: %s %v", resp, err)
 	}
 
-	challengeRespRemote, err := hex.DecodeString(challengeResp.Challenge)
+	challengeRespDecoded, err := hex.DecodeString(challengeResp.Challenge)
 	if err != nil {
 		return fmt.Errorf("failed to decode challenge origin: %v", err)
 	}
 
-	if !bytes.Equal(ownChallenge, challengeRespRemote) {
+	if !bytes.Equal(ownChallenge, challengeRespDecoded) {
+		log.Errorf("discovery: challenge mismatch: %s != %s", hex.EncodeToString(ownChallenge), challengeResp.Challenge)
 		return ErrChallengeMismatch
 	} else {
-		log.Debugf("discovery: challenge match: %s == %s", hex.EncodeToString(ownChallenge), hex.EncodeToString(challengeRespRemote))
+		log.Debugf("discovery: challenge match: %s == %s", hex.EncodeToString(ownChallenge), challengeResp.Challenge)
 	}
 
 	peerstorePubKey := s.node.Peerstore().PubKey(pi.ID)
@@ -459,7 +460,8 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return fmt.Errorf("invalid signature base64: %v", err)
 	}
 
-	if !ed25519.Verify(rawPubKey, challengeRespRemote, decodedSig) {
+	if !ed25519.Verify(rawPubKey, challengeRespDecoded, decodedSig) {
+		log.Errorf("discovery: signature invalid: %s", challengeResp.Signature)
 		return ErrChallengeSignatureInvalid
 	} else {
 		log.Debugf("discovery: signature verified for peer %s", pi.ID.String())

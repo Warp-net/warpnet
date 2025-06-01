@@ -76,6 +76,7 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	}
 
 	if p.mastodonPseudoNode != nil && p.mastodonPseudoNode.IsMastodonID(peerAddr.ID) {
+		log.Infof("stream: peer %s is mastodon", peerAddr.ID)
 		return p.mastodonPseudoNode.Route(r, data)
 	}
 	// long-long wait in case of p2p-circuit stream
