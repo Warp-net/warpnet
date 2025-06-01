@@ -117,7 +117,11 @@ func NewMemberNode(
 		log.Errorf("mastodon: creating mastodon pseudo-node: %v", err)
 	}
 
-	userRepo.Create(mastodonPseudoNode.MastodonUser())
+	if mastodonPseudoNode != nil {
+		if _, err := userRepo.Create(mastodonPseudoNode.MastodonUser()); err != nil {
+			return nil, fmt.Errorf("mastodon: creating mastodon user: %w", err)
+		}
+	}
 
 	node, err := base.NewWarpNode(
 		ctx,
