@@ -126,6 +126,7 @@ func NewMemberNode(
 		if err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
 			return nil, fmt.Errorf("mastodon: creating mastodon user: %w", err)
 		}
+		_, _ = userRepo.Create(mastodonPseudoNode.DefaultUser())
 	}
 
 	node, err := base.NewWarpNode(
@@ -142,6 +143,10 @@ func NewMemberNode(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("member: failed to init node: %v", err)
+	}
+
+	if mastodonPseudoNode != nil {
+		node.Peerstore().AddAddrs(mastodonPseudoNode.ID(), mastodonPseudoNode.Addrs(), time.Hour*24)
 	}
 
 	mn := &MemberNode{

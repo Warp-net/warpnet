@@ -36,11 +36,11 @@ const (
 )
 
 type WarpnetMastodonPseudoNode struct {
-	ctx          context.Context
-	pseudoPeerID warpnet.WarpPeerID
-	nodeInfo     warpnet.NodeInfo
-	bridge       *mastodon.Client
-	proxyUser    domain.User
+	ctx                    context.Context
+	pseudoPeerID           warpnet.WarpPeerID
+	nodeInfo               warpnet.NodeInfo
+	bridge                 *mastodon.Client
+	proxyUser, defaultUser domain.User
 }
 
 func NewWarpnetMastodonPseudoNode(
@@ -63,7 +63,7 @@ func NewWarpnetMastodonPseudoNode(
 		return nil, fmt.Errorf("mastodon: failed to get current user: %w", err)
 	}
 
-	return &WarpnetMastodonPseudoNode{
+	n := &WarpnetMastodonPseudoNode{
 		ctx:          ctx,
 		pseudoPeerID: pseudoPeerID,
 		bridge:       c,
@@ -91,7 +91,11 @@ func NewWarpnetMastodonPseudoNode(
 			BootstrapPeers: nil,
 			Reachability:   warpnet.ReachabilityPublic,
 		},
-	}, nil
+	}
+
+	n.defaultUser, err = n.getUserHandler("Gargron") // creator of Mastodon
+
+	return n, err
 }
 
 func (m *WarpnetMastodonPseudoNode) ID() warpnet.WarpPeerID {
@@ -113,6 +117,13 @@ func (m *WarpnetMastodonPseudoNode) MastodonUser() domain.User {
 		return domain.User{}
 	}
 	return m.proxyUser
+}
+
+func (m *WarpnetMastodonPseudoNode) DefaultUser() domain.User {
+	if m == nil {
+		return domain.User{}
+	}
+	return m.defaultUser
 }
 
 func (m *WarpnetMastodonPseudoNode) Addrs() []warpnet.WarpAddress {
