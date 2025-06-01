@@ -14,7 +14,7 @@ tests:
 	CGO_ENABLED=0 go test -count=1 -short ./...
 
 prune:
-	- rm -rf $(HOME)/.badgerdb
+	pkill -9 main && rm -rf $(HOME)/.badgerdb
 
 check-heap:
 	go build -gcflags="-m" main.go

@@ -57,11 +57,6 @@ func NewWarpnetMastodonPseudoNode(
 	}
 
 	c := mastodon.NewClient(config)
-	err := c.AuthenticateApp(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("mastodon: failed to authenticate app: %w", err)
-	}
-
 	acct, err := c.GetAccountCurrentUser(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mastodon: failed to get current user: %w", err)
