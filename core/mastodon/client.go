@@ -15,6 +15,7 @@ import (
 	"io"
 	"time"
 
+	stripper "github.com/grokify/html-strip-tags-go"
 	"github.com/mattn/go-mastodon"
 )
 
@@ -71,7 +72,7 @@ func NewWarpnetMastodonPseudoNode(
 		proxyUser: domain.User{
 			AvatarKey:          acct.AvatarStatic,
 			BackgroundImageKey: acct.HeaderStatic,
-			Bio:                acct.Note,
+			Bio:                stripper.StripTags(acct.Note),
 			CreatedAt:          acct.CreatedAt,
 			FolloweesCount:     uint64(acct.FollowingCount),
 			FollowersCount:     uint64(acct.FollowersCount),
@@ -201,21 +202,21 @@ func (m *WarpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 
 	var (
 		birthdate string
-		website   string
+		site      string
 	)
 	for _, f := range acct.Fields {
 		if f.Name == "birthdate" {
 			birthdate = f.Value
 		}
 		if f.Name == "website" {
-			website = f.Value
+			site = f.Value
 		}
 	}
 
 	warpnetUser := domain.User{
 		AvatarKey:          acct.AvatarStatic,
 		BackgroundImageKey: acct.HeaderStatic,
-		Bio:                acct.Note,
+		Bio:                stripper.StripTags(acct.Note),
 		Birthdate:          birthdate,
 		CreatedAt:          acct.CreatedAt,
 		FolloweesCount:     uint64(acct.FollowingCount),
@@ -226,7 +227,7 @@ func (m *WarpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 		Latency:            elapsed.Milliseconds(), // TODO
 		TweetsCount:        uint64(acct.StatusesCount),
 		Username:           acct.DisplayName,
-		Website:            &website,
+		Website:            &site,
 		Network:            Network,
 	}
 	return warpnetUser, nil
@@ -274,7 +275,11 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 		if len(media) > 0 && media[0].Type == "image" {
 			imageKey = media[0].URL
 		}
-		retweetedBy := string(toot.Reblog.Account.ID)
+
+		retweetedBy := ""
+		if toot.Reblog != nil {
+			retweetedBy = string(toot.Reblog.Account.ID)
+		}
 
 		parentId := ""
 		if pid, ok := toot.InReplyToID.(string); ok {
@@ -287,7 +292,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			ParentId:    &parentId,
 			RetweetedBy: &retweetedBy,
 			RootId:      parentId,
-			Text:        toot.Content,
+			Text:        stripper.StripTags(toot.Content),
 			UserId:      string(toot.Account.ID),
 			Username:    toot.Account.DisplayName,
 			ImageKey:    imageKey,
@@ -311,8 +316,10 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 	if len(media) > 0 && media[0].Type == "image" {
 		imageKey = media[0].URL
 	}
-	retweetedBy := string(status.Reblog.Account.ID)
-
+	retweetedBy := ""
+	if status.Reblog != nil {
+		retweetedBy = string(status.Reblog.Account.ID)
+	}
 	parentId := ""
 	if pid, ok := status.InReplyToID.(string); ok {
 		parentId = pid
@@ -324,7 +331,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		ParentId:    &parentId,
 		RetweetedBy: &retweetedBy,
 		RootId:      parentId,
-		Text:        status.Content,
+		Text:        stripper.StripTags(status.Content),
 		UserId:      string(status.Account.ID),
 		Username:    status.Account.DisplayName,
 		ImageKey:    imageKey,
@@ -375,7 +382,11 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 		if len(media) > 0 && media[0].Type == "image" {
 			imageKey = media[0].URL
 		}
-		retweetedBy := string(status.Reblog.Account.ID)
+
+		retweetedBy := ""
+		if status.Reblog != nil {
+			retweetedBy = string(status.Reblog.Account.ID)
+		}
 
 		parentId := ""
 		if pid, ok := status.InReplyToID.(string); ok {
@@ -388,7 +399,7 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 			ParentId:    &parentId,
 			RetweetedBy: &retweetedBy,
 			RootId:      parentId,
-			Text:        status.Content,
+			Text:        stripper.StripTags(status.Content),
 			UserId:      string(status.Account.ID),
 			Username:    status.Account.DisplayName,
 			ImageKey:    imageKey,

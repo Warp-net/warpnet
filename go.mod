@@ -18,6 +18,7 @@ require (
 	github.com/dsoprea/go-jpeg-image-structure/v2 v2.0.0-20221012074422-4f3f7e934102
 	github.com/getkin/kin-openapi v0.132.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/grokify/html-strip-tags-go v0.1.0
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/raft v1.7.3
