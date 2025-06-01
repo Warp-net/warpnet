@@ -172,6 +172,9 @@ func (bn *BootstrapNode) Start() error {
 }
 
 func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
+	if bn == nil {
+		return
+	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	bt, err := bn.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {

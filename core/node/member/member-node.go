@@ -206,8 +206,6 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
-	//log.Infoln("node: supported protocols:", m.Node().Mux().Protocols())
-
 	return nil
 }
 
@@ -220,6 +218,9 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 type streamNodeID = string
 
 func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute, data any) (_ []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	bt, err := m.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
@@ -238,6 +239,9 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 }
 
 func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
+	if m == nil {
+		return
+	}
 	u, err := m.userRepo.GetByNodeID(nodeIdStr)
 	if errors.Is(err, database.ErrUserNotFound) {
 		return
@@ -262,6 +266,9 @@ func (m *MemberNode) setupHandlers(
 	db Storer,
 	privKey ed25519.PrivateKey,
 ) {
+	if m == nil {
+		panic("member: setup handlers: nil node")
+	}
 	timelineRepo := database.NewTimelineRepo(db)
 	tweetRepo := database.NewTweetRepo(db)
 	replyRepo := database.NewRepliesRepo(db)
