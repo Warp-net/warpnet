@@ -109,6 +109,9 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 			},
 			req.Nonce,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		sig := ed25519.Sign(privateKey, challenge)
 

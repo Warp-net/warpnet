@@ -57,6 +57,7 @@ func NewWarpnetMastodonPseudoNode(
 	}
 
 	c := mastodon.NewClient(config)
+
 	acct, err := c.GetAccountCurrentUser(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mastodon: failed to get current user: %w", err)
