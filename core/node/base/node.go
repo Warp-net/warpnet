@@ -41,6 +41,7 @@ import (
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	log "github.com/sirupsen/logrus"
 	"strings"
 	"sync/atomic"
@@ -81,7 +82,7 @@ func NewWarpNode(
 	privKey ed25519.PrivateKey,
 	store warpnet.WarpPeerstore,
 	psk security.PSK,
-	mastodonPesudoNode MastodonPseudoStreamer,
+	mastodonPseudoNode MastodonPseudoStreamer,
 	listenAddrs []string,
 	routingFn func(node warpnet.P2PNode) (warpnet.WarpPeerRouting, error),
 ) (*WarpNode, error) {
@@ -156,11 +157,13 @@ func NewWarpNode(
 	}
 	version := config.Config().Version
 
+	node.Peerstore().AddAddrs(mastodonPseudoNode.ID(), mastodonPseudoNode.Addrs(), peerstore.PermanentAddrTTL)
+
 	wn := &WarpNode{
 		ctx:       ctx,
 		node:      node,
 		relay:     relayService,
-		streamer:  stream.NewStreamPool(ctx, node, mastodonPesudoNode),
+		streamer:  stream.NewStreamPool(ctx, node, mastodonPseudoNode),
 		isClosed:  new(atomic.Bool),
 		version:   version,
 		startTime: time.Now(),
