@@ -276,9 +276,10 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			imageKey = media[0].URL
 		}
 
-		retweetedBy := ""
+		var retweetedBy *string
 		if toot.Reblog != nil {
-			retweetedBy = string(toot.Reblog.Account.ID)
+			retweetedBy = func(s string) *string { return &s }(string(toot.Reblog.Account.ID))
+			toot.ID = domain.RetweetPrefix + toot.ID
 		}
 
 		parentId := ""
@@ -290,7 +291,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			CreatedAt:   toot.CreatedAt,
 			Id:          string(toot.ID),
 			ParentId:    &parentId,
-			RetweetedBy: &retweetedBy,
+			RetweetedBy: retweetedBy,
 			RootId:      parentId,
 			Text:        stripper.StripTags(toot.Content),
 			UserId:      string(toot.Account.ID),
@@ -316,10 +317,13 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 	if len(media) > 0 && media[0].Type == "image" {
 		imageKey = media[0].URL
 	}
-	retweetedBy := ""
+
+	var retweetedBy *string
 	if status.Reblog != nil {
-		retweetedBy = string(status.Reblog.Account.ID)
+		retweetedBy = func(s string) *string { return &s }(string(status.Reblog.Account.ID))
+		status.ID = domain.RetweetPrefix + status.ID
 	}
+
 	parentId := ""
 	if pid, ok := status.InReplyToID.(string); ok {
 		parentId = pid
@@ -329,7 +333,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		CreatedAt:   status.CreatedAt,
 		Id:          string(status.ID),
 		ParentId:    &parentId,
-		RetweetedBy: &retweetedBy,
+		RetweetedBy: retweetedBy,
 		RootId:      parentId,
 		Text:        stripper.StripTags(status.Content),
 		UserId:      string(status.Account.ID),
@@ -383,9 +387,10 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 			imageKey = media[0].URL
 		}
 
-		retweetedBy := ""
+		var retweetedBy *string
 		if status.Reblog != nil {
-			retweetedBy = string(status.Reblog.Account.ID)
+			retweetedBy = func(s string) *string { return &s }(string(status.Reblog.Account.ID))
+			status.ID = domain.RetweetPrefix + status.ID
 		}
 
 		parentId := ""
@@ -397,7 +402,7 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 			CreatedAt:   status.CreatedAt,
 			Id:          string(status.ID),
 			ParentId:    &parentId,
-			RetweetedBy: &retweetedBy,
+			RetweetedBy: retweetedBy,
 			RootId:      parentId,
 			Text:        stripper.StripTags(status.Content),
 			UserId:      string(status.Account.ID),

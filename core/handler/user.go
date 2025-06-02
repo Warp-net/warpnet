@@ -111,7 +111,7 @@ func StreamGetUserHandler(
 		}
 
 		otherUser, err := repo.Get(ev.UserId)
-		if err != nil {
+		if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 			return nil, err
 		}
 
