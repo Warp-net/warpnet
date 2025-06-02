@@ -51,7 +51,7 @@ type FollowingAuthStorer interface {
 
 type FollowingUserStorer interface {
 	Get(userId string) (user domain.User, err error)
-	List(network string, limit *uint64, cursor *string) ([]domain.User, string, error)
+	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Create(user domain.User) (domain.User, error)
 }
 

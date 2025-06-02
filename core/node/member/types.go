@@ -91,10 +91,9 @@ type UserProvider interface {
 	ValidateUser(k, v string) error
 	GetByNodeID(nodeID string) (user domain.User, err error)
 	Get(userId string) (user domain.User, err error)
-	List(network string, limit *uint64, cursor *string) ([]domain.User, string, error)
+	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	GetBatch(userIds ...string) (users []domain.User, err error)
-	GetOtherNetworkUser(network, userId string) (user domain.User, err error)
 }
 
 type ClientNodeStreamer interface {

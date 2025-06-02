@@ -92,7 +92,7 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 
 	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID(user.Network).
+		AddRootID("None").
 		AddRange(storage.FixedRangeKey).
 		AddParentId(user.Id).
 		Build()
@@ -104,7 +104,7 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 
 	sortableKey := storage.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID(DefaultWarpnetUserNetwork).
+		AddRootID("None").
 		AddRange(rttRange).
 		AddParentId(user.Id).
 		Build()
@@ -139,7 +139,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 
 	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID(DefaultWarpnetUserNetwork).
+		AddRootID("None").
 		AddRange(storage.FixedRangeKey).
 		AddParentId(userId).
 		Build()
@@ -224,27 +224,10 @@ func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 	}
 	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID(DefaultWarpnetUserNetwork).
+		AddRootID("None").
 		AddRange(storage.FixedRangeKey).
 		AddParentId(userId).
 		Build()
-	return repo.get(fixedKey)
-}
-
-func (repo *UserRepo) GetOtherNetworkUser(network, userId string) (user domain.User, err error) {
-	if userId == "" || network == "" {
-		return user, ErrUserNotFound
-	}
-	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
-		AddSubPrefix(userSubNamespace).
-		AddRootID(network).
-		AddRange(storage.FixedRangeKey).
-		AddParentId(userId).
-		Build()
-	return repo.get(fixedKey)
-}
-
-func (repo *UserRepo) get(fixedKey storage.DatabaseKey) (user domain.User, err error) {
 	sortableKeyBytes, err := repo.db.Get(fixedKey)
 	if errors.Is(err, storage.ErrKeyNotFound) {
 		return user, ErrUserNotFound
@@ -306,7 +289,7 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 func (repo *UserRepo) Delete(userId string) error {
 	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID(DefaultWarpnetUserNetwork).
+		AddRootID("None").
 		AddRange(storage.FixedRangeKey).
 		AddParentId(userId).
 		Build()
@@ -355,14 +338,8 @@ func (repo *UserRepo) Delete(userId string) error {
 	return txn.Commit()
 }
 
-func (repo *UserRepo) List(network string, limit *uint64, cursor *string) ([]domain.User, string, error) {
-	if network == "" {
-		network = DefaultWarpnetUserNetwork
-	}
-	prefix := storage.NewPrefixBuilder(UsersRepoName).
-		AddSubPrefix(userSubNamespace).
-		AddRootID(network).
-		Build()
+func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
+	prefix := storage.NewPrefixBuilder(UsersRepoName).AddRootID(userSubNamespace).Build()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -408,7 +385,7 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 	for _, userID := range userIDs {
 		fixedKey := storage.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(userSubNamespace).
-			AddRootID(DefaultWarpnetUserNetwork).
+			AddRootID("None").
 			AddRange(storage.FixedRangeKey).
 			AddParentId(userID).
 			Build()

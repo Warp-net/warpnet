@@ -337,22 +337,26 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			imageKey = media[0].URL
 		}
 
-		fmt.Printf("REBLOG %#v\n", toot.Reblog)
-
-		var retweetedBy *string
-		if toot.Reblog != nil {
-			retweetedBy = func(s string) *string { return &s }(string(toot.Reblog.Account.ID))
-			toot.ID = domain.RetweetPrefix + toot.ID
-		}
-
-		parentId := ""
+		var (
+			retweetedBy       *string
+			tweetId, parentId string
+		)
 		if pid, ok := toot.InReplyToID.(string); ok {
 			parentId = pid
 		}
 
+		originalTweet := toot.Reblog
+		if originalTweet != nil {
+			retweetedBy = func(s string) *string { return &s }(string(toot.Account.ID))
+			tweetId = string(domain.RetweetPrefix + originalTweet.Account.ID)
+			if pid, ok := originalTweet.InReplyToID.(string); ok {
+				parentId = pid
+			}
+		}
+
 		resp.Tweets = append(resp.Tweets, domain.Tweet{
 			CreatedAt:   toot.CreatedAt,
-			Id:          string(toot.ID),
+			Id:          tweetId,
 			ParentId:    &parentId,
 			RetweetedBy: retweetedBy,
 			RootId:      parentId,
