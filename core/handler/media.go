@@ -33,6 +33,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -89,6 +90,7 @@ type MediaStorer interface {
 
 type MediaUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
+	GetOtherNetworkUser(network, userId string) (user domain.User, err error)
 }
 
 func StreamUploadImageHandler(
@@ -198,8 +200,14 @@ func StreamGetImageHandler(
 		}
 
 		u, err := userRepo.Get(ev.UserId)
-		if err != nil {
+		if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 			return nil, fmt.Errorf("get image: fetching user: %w", err)
+		}
+		if errors.Is(err, database.ErrUserNotFound) {
+			u, err = userRepo.GetOtherNetworkUser(mastodon.MastodonNetwork, ev.UserId)
+			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
+				return nil, fmt.Errorf("get image: fetching user: %w", err)
+			}
 		}
 
 		resp, err := streamer.GenericStream(u.NodeId, event.PUBLIC_GET_IMAGE, ev)

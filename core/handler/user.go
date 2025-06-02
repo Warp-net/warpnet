@@ -184,8 +184,14 @@ func StreamGetUsersHandler(
 		}
 
 		otherUser, err := userRepo.Get(ev.UserId)
-		if err != nil {
+		if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 			return nil, fmt.Errorf("other user get: %v", err)
+		}
+		if otherUser.Id == "" {
+			otherUser, err = userRepo.GetOtherNetworkUser(mastodon.MastodonNetwork, ev.UserId)
+			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
+				return nil, err
+			}
 		}
 
 		usersDataResp, err := streamer.GenericStream(

@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -47,6 +48,7 @@ import (
 
 type TweetUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
+	GetOtherNetworkUser(network, userId string) (user domain.User, err error)
 }
 
 type TweetStreamer interface {
@@ -144,7 +146,14 @@ func StreamGetTweetHandler(repo TweetsStorer) middleware.WarpHandler {
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		return repo.Get(ev.UserId, ev.TweetId)
+		t, err := repo.Get(ev.UserId, ev.TweetId)
+		if err != nil && !errors.Is(err, database.ErrTweetNotFound) {
+			return nil, err
+		}
+		if t.Id == "" {
+			t, err = repo.GetOtherNetworkTweet(mastodon.MastodonNetwork, ev.UserId, ev.TweetId)
+		}
+		return t, err
 	}
 }
 
@@ -183,8 +192,14 @@ func StreamGetTweetsHandler(
 		}
 
 		otherUser, err := userRepo.Get(ev.UserId)
-		if err != nil {
+		if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 			return nil, fmt.Errorf("other user get: %v", err)
+		}
+		if otherUser.Id == "" {
+			otherUser, err = userRepo.GetOtherNetworkUser(mastodon.MastodonNetwork, ev.UserId)
+			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
+				return nil, err
+			}
 		}
 
 		tweetsDataResp, err := streamer.GenericStream(
