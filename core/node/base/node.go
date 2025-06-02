@@ -382,9 +382,7 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 	if n == nil || n.streamer == nil {
 		return nil, warpnet.WarpError("node is not initialized")
 	}
-	if nodeId == "" {
-		return nil, warpnet.WarpError("node: empty node id")
-	}
+
 	if n.node.ID() == nodeId {
 		return nil, ErrSelfRequest
 	}

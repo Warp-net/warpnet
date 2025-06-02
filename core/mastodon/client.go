@@ -13,6 +13,8 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"math"
+	"strings"
 	"time"
 
 	stripper "github.com/grokify/html-strip-tags-go"
@@ -34,7 +36,8 @@ const (
 	defaultLimit          = 20
 	defaultMastodonUserID = "13179"
 	website               = "https://github.com/Warp-net/warpnet"
-	Network               = "mastodon"
+
+	MastodonNetwork = "mastodon"
 )
 
 type WarpnetMastodonPseudoNode struct {
@@ -81,10 +84,10 @@ func NewWarpnetMastodonPseudoNode(
 			TweetsCount:        uint64(acct.StatusesCount),
 			Username:           acct.DisplayName,
 			Website:            func(s string) *string { return &s }(website),
-			Network:            Network,
+			Network:            MastodonNetwork,
 		},
 		nodeInfo: warpnet.NodeInfo{
-			OwnerId:        string(acct.ID), // owned by Warpnet as a gateway
+			OwnerId:        string(acct.ID),
 			ID:             mastodonPseudoPeerID,
 			Version:        version,
 			Addresses:      []string{mastodonPseudoMaddr},
@@ -113,7 +116,7 @@ func (m *WarpnetMastodonPseudoNode) IsMastodonID(id warpnet.WarpPeerID) bool {
 	return m.pseudoPeerID == id
 }
 
-func (m *WarpnetMastodonPseudoNode) MastodonUser() domain.User {
+func (m *WarpnetMastodonPseudoNode) WarpnetUser() domain.User {
 	if m == nil {
 		return domain.User{}
 	}
@@ -153,7 +156,8 @@ func (m *WarpnetMastodonPseudoNode) Route(r stream.WarpRoute, data []byte) (_ []
 		_ = json.JSON.Unmarshal(data, &getOneEvent)
 		resp, err = m.getUserHandler(getOneEvent.UserId)
 	case event.PUBLIC_GET_USERS:
-		resp, err = m.getUsersHandler(), nil
+		_ = json.JSON.Unmarshal(data, &getAllEvent)
+		resp, err = m.getUsersHandler(getAllEvent.UserId, getAllEvent.Cursor)
 	case event.PUBLIC_GET_TWEETS:
 		_ = json.JSON.Unmarshal(data, &getAllEvent)
 		resp, err = m.getTweetsHandler(getAllEvent.UserId, getAllEvent.Cursor)
@@ -193,17 +197,12 @@ func (m *WarpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
-	now := time.Now()
 	acct, err := m.bridge.GetAccount(m.ctx, id)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("masotodon: bridge: get account: %w", err)
 	}
-	elapsed := time.Since(now)
 
-	var (
-		birthdate string
-		site      string
-	)
+	var birthdate, site string
 	for _, f := range acct.Fields {
 		if f.Name == "birthdate" {
 			birthdate = f.Value
@@ -224,17 +223,80 @@ func (m *WarpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 		Id:                 string(acct.ID),
 		IsOffline:          false,
 		NodeId:             m.pseudoPeerID.String(),
-		Latency:            elapsed.Milliseconds(), // TODO
+		Latency:            math.MaxInt64, // TODO
 		TweetsCount:        uint64(acct.StatusesCount),
 		Username:           acct.DisplayName,
 		Website:            &site,
-		Network:            Network,
+		Network:            MastodonNetwork,
 	}
 	return warpnetUser, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getUsersHandler() []domain.User {
-	return []domain.User{}
+func (m *WarpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *string) (event.UsersResponse, error) {
+	var id mastodon.ID
+	_ = id.UnmarshalJSON([]byte(userId))
+
+	pagination := &mastodon.Pagination{
+		Limit: defaultLimit,
+	}
+	if cursor != nil {
+		var cursorId mastodon.ID
+		_ = cursorId.UnmarshalJSON([]byte(*cursor))
+		pagination.SinceID = cursorId
+	}
+	defaultUsers := event.UsersResponse{
+		Users: []domain.User{m.defaultUser, m.proxyUser},
+	}
+
+	followers, err := m.bridge.GetAccountFollowers(m.ctx, id, pagination)
+	if err != nil {
+		return defaultUsers, err
+	}
+	if len(followers) == 0 {
+		return defaultUsers, nil
+	}
+
+	resp := event.UsersResponse{
+		Users:  make([]domain.User, 0, len(followers)),
+		Cursor: string(followers[len(followers)-1].ID),
+	}
+	resp.Users = append(resp.Users, defaultUsers.Users...)
+
+	for _, acct := range followers {
+		if acct == nil {
+			continue
+		}
+		var birthdate, site string
+
+		for _, f := range acct.Fields {
+			if f.Name == "birthdate" {
+				birthdate = f.Value
+			}
+			if f.Name == "website" {
+				site = f.Value
+			}
+		}
+		u := domain.User{
+			AvatarKey:          acct.AvatarStatic,
+			BackgroundImageKey: acct.HeaderStatic,
+			Bio:                stripper.StripTags(acct.Note),
+			Birthdate:          birthdate,
+			CreatedAt:          acct.CreatedAt,
+			FolloweesCount:     uint64(acct.FollowingCount),
+			FollowersCount:     uint64(acct.FollowersCount),
+			Id:                 string(acct.ID),
+			IsOffline:          false,
+			NodeId:             m.pseudoPeerID.String(),
+			Latency:            math.MaxInt64, // TODO
+			TweetsCount:        uint64(acct.StatusesCount),
+			Username:           acct.DisplayName,
+			Website:            &site,
+			Network:            MastodonNetwork,
+		}
+		resp.Users = append(resp.Users, u)
+	}
+
+	return resp, nil
 }
 
 func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *string) (event.TweetsResponse, error) {
@@ -242,8 +304,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 	_ = id.UnmarshalJSON([]byte(userId))
 
 	pagination := &mastodon.Pagination{
-		Limit:   defaultLimit,
-		SinceID: "",
+		Limit: defaultLimit,
 	}
 	if cursor != nil {
 		var cursorId mastodon.ID
@@ -276,6 +337,8 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			imageKey = media[0].URL
 		}
 
+		fmt.Printf("REBLOG %#v\n", toot.Reblog)
+
 		var retweetedBy *string
 		if toot.Reblog != nil {
 			retweetedBy = func(s string) *string { return &s }(string(toot.Reblog.Account.ID))
@@ -297,7 +360,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			UserId:      string(toot.Account.ID),
 			Username:    toot.Account.DisplayName,
 			ImageKey:    imageKey,
-			Network:     Network,
+			Network:     MastodonNetwork,
 		})
 	}
 
@@ -339,14 +402,17 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		UserId:      string(status.Account.ID),
 		Username:    status.Account.DisplayName,
 		ImageKey:    imageKey,
-		Network:     Network,
+		Network:     MastodonNetwork,
 	}
 	return tweet, nil
 }
 
 func (m *WarpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.TweetStatsResponse, error) {
+	tweetId = strings.TrimPrefix(tweetId, domain.RetweetPrefix)
+
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(tweetId))
+
 	status, err := m.bridge.GetStatus(context.Background(), id)
 	if err != nil {
 		return event.TweetStatsResponse{}, err
@@ -363,6 +429,8 @@ func (m *WarpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.
 }
 
 func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.RepliesResponse, error) {
+	tweetId = strings.TrimPrefix(tweetId, domain.RetweetPrefix)
+
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(tweetId))
 	replies, err := m.bridge.GetStatusContext(m.ctx, id)
@@ -408,7 +476,7 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 			UserId:      string(status.Account.ID),
 			Username:    status.Account.DisplayName,
 			ImageKey:    imageKey,
-			Network:     Network,
+			Network:     MastodonNetwork,
 		}
 		resp.Replies = append(resp.Replies, domain.ReplyNode{Reply: tweet})
 	}

@@ -33,7 +33,9 @@ import (
 	"fmt"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/dgraph-io/badger/v3"
+	log "github.com/sirupsen/logrus"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/database/storage"
@@ -48,6 +50,8 @@ const (
 	tweetsCountSubspace   = "TWEETSCOUNT"
 	reTweetsCountSubspace = "RETWEETSCOUNT"
 	reTweetersSubspace    = "RETWEETERS"
+
+	DefaultWarpnetTweetNetwork = "warpnet"
 )
 
 type TweetsStorer interface {
@@ -58,8 +62,7 @@ type TweetsStorer interface {
 }
 
 type TweetRepo struct {
-	db        TweetsStorer
-	tweetsNum int64
+	db TweetsStorer
 }
 
 func NewTweetRepo(db TweetsStorer) *TweetRepo {
@@ -78,7 +81,7 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 		tweet.CreatedAt = time.Now()
 	}
 	if tweet.Network == "" {
-		tweet.Network = "warpnet"
+		tweet.Network = DefaultWarpnetTweetNetwork
 	}
 	tweet.RootId = tweet.Id
 
@@ -100,12 +103,14 @@ func storeTweet(
 	txn storage.WarpTransactioner, userId string, tweet domain.Tweet,
 ) (domain.Tweet, error) {
 	fixedKey := storage.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweet.Network).
 		AddRootID(userId).
 		AddRange(storage.FixedRangeKey).
 		AddParentId(tweet.Id).
 		Build()
 
 	sortableKey := storage.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweet.Network).
 		AddRootID(userId).
 		AddReversedTimestamp(tweet.CreatedAt).
 		AddParentId(tweet.Id).
@@ -113,6 +118,7 @@ func storeTweet(
 
 	countKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(tweetsCountSubspace).
+		AddSubPrefix(tweet.Network).
 		AddRootID(userId).
 		Build()
 
@@ -136,10 +142,25 @@ func storeTweet(
 // Get retrieves a tweet by its ID
 func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err error) {
 	fixedKey := storage.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(DefaultWarpnetTweetNetwork).
 		AddRootID(userID).
 		AddRange(storage.FixedRangeKey).
 		AddParentId(tweetID).
 		Build()
+	return repo.get(fixedKey)
+}
+
+func (repo *TweetRepo) GetOtherNetworkTweet(network, userID, tweetID string) (tweet domain.Tweet, err error) {
+	fixedKey := storage.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(network).
+		AddRootID(userID).
+		AddRange(storage.FixedRangeKey).
+		AddParentId(tweetID).
+		Build()
+	return repo.get(fixedKey)
+}
+
+func (repo *TweetRepo) get(fixedKey storage.DatabaseKey) (tweet domain.Tweet, err error) {
 	sortableKeyBytes, err := repo.db.Get(fixedKey)
 	if errors.Is(err, badger.ErrKeyNotFound) {
 		return tweet, ErrTweetNotFound
@@ -160,7 +181,6 @@ func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err erro
 	if err != nil {
 		return tweet, err
 	}
-	data = nil
 	return tweet, nil
 }
 
@@ -170,6 +190,7 @@ func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
 	}
 	countKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(tweetsCountSubspace).
+		AddSubPrefix(DefaultWarpnetTweetNetwork).
 		AddRootID(userId).
 		Build()
 	txn, err := repo.db.NewTxn()
@@ -206,10 +227,12 @@ func (repo *TweetRepo) Delete(userID, tweetID string) error {
 func deleteTweet(txn storage.WarpTransactioner, userId, tweetId string) error {
 	countKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(tweetsCountSubspace).
+		AddSubPrefix(DefaultWarpnetTweetNetwork).
 		AddRootID(userId).
 		Build()
 
 	fixedKey := storage.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(DefaultWarpnetTweetNetwork).
 		AddRootID(userId).
 		AddRange(storage.FixedRangeKey).
 		AddParentId(tweetId).
@@ -231,12 +254,15 @@ func deleteTweet(txn storage.WarpTransactioner, userId, tweetId string) error {
 	return nil
 }
 
-func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+func (repo *TweetRepo) List(network, userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if userId == "" {
 		return nil, "", errors.New("ID cannot be blank")
 	}
-
+	if network == "" {
+		network = DefaultWarpnetTweetNetwork
+	}
 	prefix := storage.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(network).
 		AddRootID(userId).
 		Build()
 
@@ -278,11 +304,13 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	}
 	retweetCountKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
+		AddSubPrefix(tweet.Network).
 		AddRootID(tweet.Id).
 		Build()
 
 	retweetersKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetersSubspace).
+		AddSubPrefix(tweet.Network).
 		AddRootID(tweet.Id).
 		AddRange(storage.NoneRangeKey).
 		AddParentId(*tweet.RetweetedBy).
@@ -309,7 +337,10 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 
 	_, err = repo.db.Get(retweetCountKey)
 	if !errors.Is(err, storage.ErrKeyNotFound) {
-		return newTweet, txn.Commit()
+		if _, err = txn.Increment(retweetCountKey); err != nil {
+			log.Debugf("Failed to increment retweet count for %s - %s", tweet.Id, err)
+			return newTweet, txn.Commit()
+		}
 	}
 	_, err = txn.Increment(retweetCountKey)
 	if err != nil {
@@ -324,8 +355,13 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 		return errors.New("unretweet: empty tweet ID or user ID")
 	}
 
+	if !strings.HasPrefix(tweetId, domain.RetweetPrefix) {
+		tweetId = domain.RetweetPrefix + tweetId
+	}
+
 	retweetCountKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
+		AddSubPrefix(DefaultWarpnetTweetNetwork).
 		AddRootID(tweetId).
 		Build()
 
@@ -371,6 +407,7 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 	}
 	retweetCountKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
+		AddSubPrefix(DefaultWarpnetTweetNetwork).
 		AddRootID(tweetId).
 		Build()
 
@@ -400,6 +437,7 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 
 	retweetersPrefix := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetersSubspace).
+		AddSubPrefix(DefaultWarpnetTweetNetwork).
 		AddRootID(tweetId).
 		Build()
 
@@ -420,10 +458,10 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 		return nil, "", err
 	}
 
-	likers := make(likedUserIDs, 0, len(items))
+	retweeters := make(retweetersIDs, 0, len(items))
 	for _, item := range items {
 		userId := string(item.Value)
-		likers = append(likers, userId)
+		retweeters = append(retweeters, userId)
 	}
-	return likers, cur, nil
+	return retweeters, cur, nil
 }

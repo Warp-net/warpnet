@@ -110,7 +110,7 @@ func (s *TweetRepoTestSuite) TestListTweets() {
 	}
 
 	limit := uint64(10)
-	tweets, cursor, err := s.repo.List(userId, &limit, nil)
+	tweets, cursor, err := s.repo.List(DefaultWarpnetTweetNetwork, userId, &limit, nil)
 	s.Require().NoError(err)
 	s.Len(tweets, 3)
 	s.Equal(cursor, "end")

@@ -64,9 +64,10 @@ type TweetBroadcaster interface {
 
 type TweetsStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
-	List(string, *uint64, *string) ([]domain.Tweet, string, error)
+	List(string, string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
+	GetOtherNetworkTweet(network, userID, tweetID string) (tweet domain.Tweet, err error)
 }
 
 type TimelineUpdater interface {
@@ -164,7 +165,10 @@ func StreamGetTweetsHandler(
 
 		ownerId := streamer.NodeInfo().OwnerId
 		if ev.UserId == ownerId {
-			tweets, cursor, err := repo.List(ev.UserId, ev.Limit, ev.Cursor)
+			tweets, cursor, err := repo.List(
+				database.DefaultWarpnetTweetNetwork,
+				ev.UserId, ev.Limit, ev.Cursor,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -189,7 +193,10 @@ func StreamGetTweetsHandler(
 			ev,
 		)
 		if err != nil {
-			tweets, cursor, err := repo.List(ev.UserId, ev.Limit, ev.Cursor)
+			tweets, cursor, err := repo.List(
+				database.DefaultWarpnetTweetNetwork,
+				ev.UserId, ev.Limit, ev.Cursor,
+			)
 			if err != nil {
 				return nil, err
 			}

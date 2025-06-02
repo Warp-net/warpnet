@@ -30,6 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -56,7 +57,8 @@ type UserFollowsCounter interface {
 type UserFetcher interface {
 	Create(user domain.User) (domain.User, error)
 	Get(userId string) (user domain.User, err error)
-	List(limit *uint64, cursor *string) ([]domain.User, string, error)
+	GetOtherNetworkUser(network, userId string) (user domain.User, err error)
+	List(network string, limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 }
 
@@ -114,6 +116,12 @@ func StreamGetUserHandler(
 		if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 			return nil, err
 		}
+		if otherUser.Id == "" {
+			otherUser, err = repo.GetOtherNetworkUser(mastodon.MastodonNetwork, ev.UserId)
+			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
+				return nil, err
+			}
+		}
 
 		otherUserData, err := streamer.GenericStream(
 			otherUser.NodeId,
@@ -164,7 +172,7 @@ func StreamGetUsersHandler(
 		ownerId := authRepo.GetOwner().UserId
 
 		if ev.UserId == ownerId {
-			users, cursor, err := userRepo.List(ev.Limit, ev.Cursor)
+			users, cursor, err := userRepo.List(database.DefaultWarpnetUserNetwork, ev.Limit, ev.Cursor)
 			if err != nil {
 				return nil, err
 			}

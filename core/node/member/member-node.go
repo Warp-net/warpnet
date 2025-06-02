@@ -116,17 +116,11 @@ func NewMemberNode(
 	if err != nil {
 		log.Errorf("mastodon: creating mastodon pseudo-node: %v", err)
 	}
-
 	if mastodonPseudoNode != nil {
-		mastodonUser := mastodonPseudoNode.MastodonUser()
-		_, err := userRepo.Create(mastodonUser)
-		if errors.Is(err, database.ErrUserAlreadyExists) {
-			_, _ = userRepo.Update(mastodonUser.Id, mastodonUser)
-		}
-		if err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
-			return nil, fmt.Errorf("mastodon: creating mastodon user: %w", err)
-		}
+		_, _ = userRepo.Create(mastodonPseudoNode.WarpnetUser())
+		_, _ = userRepo.Update(mastodonPseudoNode.WarpnetUser().Id, mastodonPseudoNode.WarpnetUser())
 		_, _ = userRepo.Create(mastodonPseudoNode.DefaultUser())
+		_, _ = userRepo.Update(mastodonPseudoNode.DefaultUser().Id, mastodonPseudoNode.DefaultUser())
 	}
 
 	node, err := base.NewWarpNode(
@@ -227,11 +221,13 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 		return nil, nil
 	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+
 	bt, err := m.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		m.setUserOffline(nodeIdStr)
 		return bt, err
 	}
+
 	if err != nil {
 		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancelF()

@@ -136,7 +136,7 @@ func (s *UserRepoTestSuite) TestListAndGetBatch() {
 	}
 
 	limit := uint64(10)
-	all, _, err := s.repo.List(&limit, nil)
+	all, _, err := s.repo.List("warpnet", &limit, nil)
 	s.Require().NoError(err)
 	s.GreaterOrEqual(len(all), 3)
 
