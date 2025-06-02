@@ -310,6 +310,8 @@ func StreamGetTweetStatsHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
+		fmt.Println("HANDLER TWEET STATS REQUEST", ev.TweetId, ev.UserId)
+
 		if ev.UserId != streamer.NodeInfo().OwnerId {
 			u, err := userRepo.Get(ev.UserId)
 			if err != nil {

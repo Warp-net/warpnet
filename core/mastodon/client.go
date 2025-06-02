@@ -165,6 +165,7 @@ func (m *WarpnetMastodonPseudoNode) Route(r stream.WarpRoute, data []byte) (_ []
 		_ = json.JSON.Unmarshal(data, &getOneEvent)
 		resp, err = m.getTweetHandler(getOneEvent.TweetId)
 	case event.PUBLIC_GET_TWEET_STATS:
+		fmt.Println("MASTODON CLIENT TWEET STATS REQUEST", string(data))
 		_ = json.JSON.Unmarshal(data, &getOneEvent)
 		resp, err = m.getTweetStatsHandler(getOneEvent.TweetId)
 	case event.PUBLIC_GET_REPLIES:

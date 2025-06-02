@@ -32,6 +32,7 @@ import (
 	"errors"
 	"github.com/Warp-net/warpnet/database/storage"
 	"github.com/dgraph-io/badger/v3"
+	log "github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 )
@@ -112,6 +113,7 @@ func (cr *ConsensusRepo) Get(key []byte) ([]byte, error) {
 	prefix := storage.DatabaseKey(append([]byte(ConsensusConfigNamespace), key...))
 	val, err := cr.db.Get(prefix)
 	if errors.Is(err, badger.ErrKeyNotFound) {
+		log.Errorf("consensus key not found [%s]", string(key))
 		return nil, ErrConsensusKeyNotFound
 	}
 	return val, err
