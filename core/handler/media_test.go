@@ -120,6 +120,10 @@ type (
 	s struct{}
 )
 
+func (u u) GetOtherNetworkUser(network, userId string) (user domain.User, err error) {
+	return domain.User{}, err
+}
+
 func (m m) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
 	return nil
 }
