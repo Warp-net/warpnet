@@ -488,8 +488,7 @@ func (m *WarpnetMastodonPseudoNode) getFollowersHandler(userId string, cursor *s
 	_ = id.UnmarshalJSON([]byte(userId))
 
 	pagination := &mastodon.Pagination{
-		Limit:   defaultLimit,
-		SinceID: "",
+		Limit: defaultLimit,
 	}
 	if cursor != nil {
 		var cursorId mastodon.ID
