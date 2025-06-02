@@ -30,7 +30,6 @@ package database
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"github.com/Warp-net/warpnet/database/storage"
 	"github.com/dgraph-io/badger/v3"
 	"os"
@@ -113,7 +112,7 @@ func (cr *ConsensusRepo) Get(key []byte) ([]byte, error) {
 	prefix := storage.DatabaseKey(append([]byte(ConsensusConfigNamespace), key...))
 	val, err := cr.db.Get(prefix)
 	if errors.Is(err, badger.ErrKeyNotFound) {
-		return nil, fmt.Errorf("%s %w", key, ErrConsensusKeyNotFound)
+		return nil, ErrConsensusKeyNotFound
 	}
 	return val, err
 }
