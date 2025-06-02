@@ -35,7 +35,6 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	log "github.com/sirupsen/logrus"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/database/storage"
@@ -353,10 +352,6 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	if tweetId == "" || retweetedByUserID == "" {
 		return errors.New("unretweet: empty tweet ID or user ID")
-	}
-
-	if !strings.HasPrefix(tweetId, domain.RetweetPrefix) {
-		tweetId = domain.RetweetPrefix + tweetId
 	}
 
 	retweetCountKey := storage.NewPrefixBuilder(TweetsNamespace).
