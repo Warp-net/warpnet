@@ -300,10 +300,10 @@ func (n *WarpNode) trackIncomingEvents() {
 				natDeviceTypeChangedEvent.NatDeviceType.String(), natDeviceTypeChangedEvent.TransportProtocol.String(),
 			)
 		case event.EvtAutoRelayAddrsUpdated:
-			log.Infof(
-				"node: event: relay addresses updated: %v",
-				ev.(event.EvtAutoRelayAddrsUpdated).RelayAddrs,
-			)
+			if len(ev.(event.EvtAutoRelayAddrsUpdated).RelayAddrs) != 0 {
+				log.Infoln("node: event: relay addresses added")
+			}
+
 		case event.EvtLocalAddressesUpdated:
 			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
 				log.Debugf(

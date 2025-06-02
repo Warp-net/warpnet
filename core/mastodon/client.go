@@ -348,7 +348,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 		originalTweet := toot.Reblog
 		if originalTweet != nil {
 			retweetedBy = func(s string) *string { return &s }(string(toot.Account.ID))
-			tweetId = string(domain.RetweetPrefix + originalTweet.Account.ID)
+			tweetId = string(originalTweet.Account.ID)
 			if pid, ok := originalTweet.InReplyToID.(string); ok {
 				parentId = pid
 			}
@@ -372,6 +372,8 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 }
 
 func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Tweet, error) {
+	tweetId = strings.TrimPrefix(tweetId, domain.RetweetPrefix)
+
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(tweetId))
 	status, err := m.bridge.GetStatus(m.ctx, id)
@@ -385,20 +387,26 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		imageKey = media[0].URL
 	}
 
-	var retweetedBy *string
-	if status.Reblog != nil {
-		retweetedBy = func(s string) *string { return &s }(string(status.Reblog.Account.ID))
-		status.ID = domain.RetweetPrefix + status.ID
-	}
-
-	parentId := ""
+	var (
+		retweetedBy        *string
+		statusId, parentId string
+	)
 	if pid, ok := status.InReplyToID.(string); ok {
 		parentId = pid
 	}
 
+	originalTweet := status.Reblog
+	if originalTweet != nil {
+		retweetedBy = func(s string) *string { return &s }(string(status.Account.ID))
+		statusId = string(originalTweet.Account.ID)
+		if pid, ok := originalTweet.InReplyToID.(string); ok {
+			parentId = pid
+		}
+	}
+
 	tweet := domain.Tweet{
 		CreatedAt:   status.CreatedAt,
-		Id:          string(status.ID),
+		Id:          statusId,
 		ParentId:    &parentId,
 		RetweetedBy: retweetedBy,
 		RootId:      parentId,

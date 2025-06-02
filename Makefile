@@ -23,7 +23,7 @@ update-deps:
 	go get -v -u all && go mod vendor
 
 get-frontend:
-	go get github.com/Warp-net/warpnet-frontend && go mod vendor
+	go get github.com/Warp-net/warpnet-frontend@latest && go mod vendor
 
 setup-hooks:
 	git config core.hooksPath .githooks
