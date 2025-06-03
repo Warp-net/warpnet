@@ -887,7 +887,7 @@ func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) error {
 	}
 
 	if d.db == nil {
-		if !strings.EqualFold(d.BootstrapSelfHashHex, selfHashHex) {
+		if d.BootstrapSelfHashHex == selfHashHex {
 			return ErrNotInRecords
 		}
 		return nil
@@ -916,7 +916,7 @@ func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) error {
 	}
 
 	for h := range itemsHashes {
-		if strings.EqualFold(h, selfHashHex) {
+		if h == selfHashHex {
 			return txn.Discard()
 		}
 	}

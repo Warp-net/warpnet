@@ -95,7 +95,7 @@ func NewMemberNode(
 	owner := authRepo.GetOwner()
 
 	raft, err := consensus.NewMemberRaft(
-		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.ValidateSelfHashes,
+		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.ValidateSelfHash,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("member: consensus initialization: %v", err)
