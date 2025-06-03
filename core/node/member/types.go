@@ -68,7 +68,7 @@ type ConsensusProvider interface {
 	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
 	Shutdown()
 	AskUserValidation(user domain.User) error
-	AskSelfHashValidation(hashes map[string]struct{}) error
+	AskSelfHashValidation(hashHex string) error
 	Stats() map[string]string
 }
 

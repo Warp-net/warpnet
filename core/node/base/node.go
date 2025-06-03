@@ -70,8 +70,9 @@ type WarpNode struct {
 	mastodonPseudoNode MastodonPseudoStreamer
 	backoff            BackoffEnabler
 
-	isClosed *atomic.Bool
-	version  *semver.Version
+	isClosed     *atomic.Bool
+	version      *semver.Version
+	reachability warpnet.WarpReachability
 
 	startTime time.Time
 	eventsSub event.Subscription
@@ -289,10 +290,12 @@ func (n *WarpNode) trackIncomingEvents() {
 				pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
 			)
 		case event.EvtLocalReachabilityChanged:
+			r := ev.(event.EvtLocalReachabilityChanged).Reachability
 			log.Infof(
 				"node: event: reachability changed: %s",
-				strings.ToLower(ev.(event.EvtLocalReachabilityChanged).Reachability.String()),
+				strings.ToLower(r.String()),
 			)
+			n.reachability = r
 		case event.EvtNATDeviceTypeChanged:
 			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
 			log.Infof(
@@ -343,11 +346,12 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 	}
 
 	return warpnet.NodeInfo{
-		ID:         n.node.ID(),
-		Addresses:  addresses,
-		Version:    n.version,
-		StartTime:  n.startTime,
-		RelayState: relayState,
+		ID:           n.node.ID(),
+		Addresses:    addresses,
+		Version:      n.version,
+		StartTime:    n.startTime,
+		RelayState:   relayState,
+		Reachability: n.reachability,
 	}
 }
 

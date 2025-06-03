@@ -872,7 +872,7 @@ var ErrNotInRecords = errors.New("self hash is not in the consensus records")
 
 const SelfHashConsensusKey = "selfhash"
 
-func (d *NodeRepo) ValidateSelfHashes(k, selfHashObj string) error {
+func (d *NodeRepo) ValidateSelfHashes(k, selfHashHex string) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
@@ -880,13 +880,8 @@ func (d *NodeRepo) ValidateSelfHashes(k, selfHashObj string) error {
 		return nil
 	}
 
-	if len(selfHashObj) == 0 {
-		return errors.New("empty codebase hashes")
-	}
-
-	var incomingSelfHashes = make(map[string]struct{})
-	if err := json.JSON.Unmarshal([]byte(selfHashObj), &incomingSelfHashes); err != nil {
-		return err
+	if len(selfHashHex) == 0 {
+		return errors.New("empty codebase hash")
 	}
 
 	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
@@ -911,8 +906,8 @@ func (d *NodeRepo) ValidateSelfHashes(k, selfHashObj string) error {
 		}
 	}
 
-	for h := range incomingSelfHashes {
-		if _, ok := itemsHashes[h]; ok {
+	for h := range itemsHashes {
+		if strings.EqualFold(h, selfHashHex) {
 			return txn.Discard()
 		}
 	}

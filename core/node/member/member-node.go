@@ -55,16 +55,16 @@ import (
 type MemberNode struct {
 	*base.WarpNode
 
-	ctx           context.Context
-	discService   DiscoveryHandler
-	mdnsService   MDNSStarterCloser
-	pubsubService PubSubProvider
-	raft          ConsensusProvider
-	dHashTable    DistributedHashTableCloser
-	nodeRepo      NodeProvider
-	retrier       retrier.Retrier
-	userRepo      UserFetcher
-	ownerId       string
+	ctx                  context.Context
+	discService          DiscoveryHandler
+	mdnsService          MDNSStarterCloser
+	pubsubService        PubSubProvider
+	raft                 ConsensusProvider
+	dHashTable           DistributedHashTableCloser
+	nodeRepo             NodeProvider
+	retrier              retrier.Retrier
+	userRepo             UserFetcher
+	ownerId, selfHashHex string
 }
 
 func NewMemberNode(
@@ -155,6 +155,7 @@ func NewMemberNode(
 		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		userRepo:      userRepo,
 		ownerId:       owner.UserId,
+		selfHashHex:   selfHashHex,
 	}
 
 	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)
@@ -187,12 +188,8 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 	}
 	log.Infoln("member: owner user validated")
 
-	hashes, err := m.nodeRepo.GetSelfHashes()
-	if err != nil {
-		return fmt.Errorf("member: failed to get self hashes: %v", err)
-	}
 	err = m.retrier.Try(context.Background(), func() error {
-		return m.raft.AskSelfHashValidation(hashes)
+		return m.raft.AskSelfHashValidation(m.selfHashHex)
 	})
 	if err != nil {
 		return fmt.Errorf("member: validate self hash by consensus: %v", err)

@@ -35,12 +35,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack/v5"
 	"io"
+	"runtime/debug"
 	"sync"
 )
 
 const ErrConsensusRejection = warpnet.WarpError("consensus: quorum rejected your node. Try to delete database and update app version")
 
-type KVState map[string]string
+type KVState map[string]string // TODO remove
 
 type fsm struct {
 	state     *KVState
@@ -71,9 +72,11 @@ func (fsm *fsm) AmendValidator(validator ConsensusValidatorFunc) {
 func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 	fsm.mux.Lock()
 	defer fsm.mux.Unlock()
+
 	defer func() {
 		if r := recover(); r != nil {
 			*fsm.state = fsm.prevState
+			log.Errorf("recovered from panic: %v %s", r, debug.Stack())
 			result = warpnet.WarpError("consensus: fsm apply panic: rollback")
 		}
 	}()
@@ -95,6 +98,8 @@ func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 			}
 		}
 	}
+
+	fmt.Println("INCOMING STATE", newState)
 
 	fsm.prevState = make(KVState, len(*fsm.state))
 	for k, v := range *fsm.state {

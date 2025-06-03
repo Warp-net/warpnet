@@ -158,8 +158,7 @@ func (bn *BootstrapNode) Start() error {
 		return err
 	}
 
-	selfHashes := map[string]struct{}{bn.selfHashHex: {}}
-	if err := bn.raft.AskSelfHashValidation(selfHashes); err != nil {
+	if err := bn.raft.AskSelfHashValidation(bn.selfHashHex); err != nil {
 		return err
 	}
 

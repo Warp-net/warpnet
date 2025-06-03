@@ -267,6 +267,9 @@ func (m *WarpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *strin
 		if acct == nil {
 			continue
 		}
+		if acct.StatusesCount == 0 && acct.AvatarStatic == "" { // TODO
+			continue
+		}
 		var birthdate, site string
 
 		for _, f := range acct.Fields {
@@ -345,6 +348,8 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 		if pid, ok := toot.InReplyToID.(string); ok {
 			parentId = pid
 		}
+
+		fmt.Printf("MASTODON TWEET %#v\n", toot)
 
 		originalTweet := toot.Reblog
 		if originalTweet != nil {
