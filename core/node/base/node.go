@@ -72,7 +72,7 @@ type WarpNode struct {
 
 	isClosed     *atomic.Bool
 	version      *semver.Version
-	reachability warpnet.WarpReachability
+	reachability atomic.Int32
 
 	startTime time.Time
 	eventsSub event.Subscription
@@ -290,12 +290,12 @@ func (n *WarpNode) trackIncomingEvents() {
 				pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
 			)
 		case event.EvtLocalReachabilityChanged:
-			r := ev.(event.EvtLocalReachabilityChanged).Reachability
+			r := ev.(event.EvtLocalReachabilityChanged).Reachability // it's int32 under the hood
 			log.Infof(
 				"node: event: reachability changed: %s",
 				strings.ToLower(r.String()),
 			)
-			n.reachability = r
+			n.reachability.Store(int32(r))
 		case event.EvtNATDeviceTypeChanged:
 			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
 			log.Infof(
@@ -351,7 +351,7 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 		Version:      n.version,
 		StartTime:    n.startTime,
 		RelayState:   relayState,
-		Reachability: n.reachability,
+		Reachability: warpnet.WarpReachability(n.reachability.Load()),
 	}
 }
 

@@ -41,7 +41,7 @@ import (
 
 const ErrConsensusRejection = warpnet.WarpError("consensus: quorum rejected your node. Try to delete database and update app version")
 
-type KVState map[string]string // TODO remove
+type KVState map[string]string
 
 type fsm struct {
 	state     *KVState
@@ -99,17 +99,7 @@ func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 		}
 	}
 
-	fmt.Println("INCOMING STATE", newState)
-
-	fsm.prevState = make(KVState, len(*fsm.state))
-	for k, v := range *fsm.state {
-		fsm.prevState[k] = v
-	}
-
-	for k, v := range newState {
-		(*fsm.state)[k] = v
-	}
-	newState = nil
+	// no state changed
 	return fsm.state
 }
 
