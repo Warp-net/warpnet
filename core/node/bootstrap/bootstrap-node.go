@@ -40,6 +40,7 @@ import (
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
@@ -66,10 +67,10 @@ func NewBootstrapNode(
 	psk security.PSK,
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
-	hashesCache := codeHashesCache{make(map[string]struct{})}
-	hashesCache.items[selfHashHex] = struct{}{}
-
-	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory, hashesCache.ValidateSelfHashes)
+	raft, err := consensus.NewBootstrapRaft(
+		ctx, isInMemory,
+		(&database.NodeRepo{BootstrapSelfHashHex: selfHashHex}).ValidateSelfHash,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -212,4 +213,19 @@ func (bn *BootstrapNode) Stop() {
 	}
 
 	bn.WarpNode.StopNode()
+}
+
+func validateSelfHash(k, selfHashHexOwn, selfHashHexRemote string) error {
+	if k != database.SelfHashConsensusKey {
+		return nil
+	}
+
+	if len(selfHashHexRemote) == 0 {
+		return errors.New("empty codebase hash")
+	}
+	if selfHashHexOwn != selfHashHexRemote {
+		return errors.New("self hash is not in the consensus records")
+	}
+
+	return nil
 }

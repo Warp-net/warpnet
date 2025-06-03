@@ -107,6 +107,7 @@ func (fsm *fsm) Snapshot() (raft.FSMSnapshot, error) {
 	buf := new(bytes.Buffer)
 	err := msgpack.NewEncoder(buf).Encode(fsm.state)
 	if err != nil {
+		log.Errorf("consensus: failed to encode snapshot: %v", err)
 		return nil, err
 	}
 
@@ -121,7 +122,7 @@ func (fsm *fsm) Restore(reader io.ReadCloser) error {
 
 	err := msgpack.NewDecoder(reader).Decode(fsm.state)
 	if err != nil {
-		log.Errorf("consensus: fsm: decoding snapshot: %s", err)
+		log.Errorf("consensus: fsm: restoring snapshot: %s", err)
 		return err
 	}
 

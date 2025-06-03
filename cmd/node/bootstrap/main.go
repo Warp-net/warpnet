@@ -44,7 +44,8 @@ import (
 func main() {
 	defer closeWriter()
 
-	psk, err := security.GeneratePSK(config.Config().Version)
+	version := config.Config().Version
+	psk, err := security.GeneratePSK(version)
 	if err != nil {
 		panic(err)
 	}

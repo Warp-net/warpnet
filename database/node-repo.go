@@ -75,9 +75,10 @@ type NodeStorer interface {
 }
 
 type NodeRepo struct {
-	db NodeStorer
-
+	db       NodeStorer
 	stopChan chan struct{}
+
+	BootstrapSelfHashHex string
 }
 
 // Implements the datastore.Batch interface, enabling batching support for
@@ -872,16 +873,24 @@ var ErrNotInRecords = errors.New("self hash is not in the consensus records")
 
 const SelfHashConsensusKey = "selfhash"
 
-func (d *NodeRepo) ValidateSelfHashes(k, selfHashHex string) error {
+func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
+
 	if k != SelfHashConsensusKey {
 		return nil
 	}
 
 	if len(selfHashHex) == 0 {
 		return errors.New("empty codebase hash")
+	}
+
+	if d.db == nil {
+		if !strings.EqualFold(d.BootstrapSelfHashHex, selfHashHex) {
+			return ErrNotInRecords
+		}
+		return nil
 	}
 
 	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
