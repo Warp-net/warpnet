@@ -83,7 +83,7 @@ func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 
 	var newState = make(KVState, 1)
 	if err := msgpack.Unmarshal(rlog.Data, &newState); err != nil {
-		log.Errorf("consensus: failed to decode log: %v", err)
+		log.Errorf("consensus: failed to decode log: %s,  %v", rlog.Data, err)
 		return fmt.Errorf("consensus: failed to decode log: %w", err)
 	}
 
