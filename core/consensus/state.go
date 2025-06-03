@@ -96,7 +96,7 @@ func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 	}
 
 	// no state changed
-	return newState
+	return &newState
 }
 
 // Snapshot encodes the current state so that we can save a snapshot.

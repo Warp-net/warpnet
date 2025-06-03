@@ -618,10 +618,7 @@ func (c *consensusService) validate(newState KVState) error {
 		if errors.Is(err, ErrNoRaftCluster) {
 			return nil
 		}
-		if err != nil {
-			return fmt.Errorf("consensus: failed to commit state: %v %w", newState, err)
-		}
-		return nil
+		return err
 	}
 
 	resp, err := c.node.GenericStream(leaderId, event.PUBLIC_POST_NODE_VERIFY, newState)
