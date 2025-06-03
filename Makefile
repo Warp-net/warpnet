@@ -34,4 +34,4 @@ build-macos:
 
 reset-consensus:
 	docker volume prune --all
-	rm -rf /tmp/snapshot
+	rm -rf /tmp/snapshots

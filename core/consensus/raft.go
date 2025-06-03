@@ -619,7 +619,7 @@ func (c *consensusService) validate(newState KVState) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("consensus: failed to commit: %w", err)
+			return fmt.Errorf("consensus: failed to commit state: %v %w", newState, err)
 		}
 		return nil
 	}

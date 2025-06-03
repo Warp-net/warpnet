@@ -44,10 +44,8 @@ const ErrConsensusRejection = warpnet.WarpError("consensus: quorum rejected your
 type KVState map[string]string
 
 type fsm struct {
-	state     *KVState
-	prevState KVState
-
-	mux *sync.Mutex
+	mux   *sync.Mutex
+	state KVState
 
 	validators []ConsensusValidatorFunc
 }
@@ -57,8 +55,7 @@ type ConsensusValidatorFunc func(k, v string) error
 func newFSM(validators ...ConsensusValidatorFunc) *fsm {
 	state := KVState{"genesis": ""}
 	return &fsm{
-		state:      &state,
-		prevState:  KVState{},
+		state:      state,
 		mux:        new(sync.Mutex),
 		validators: validators,
 	}
@@ -75,7 +72,6 @@ func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			*fsm.state = fsm.prevState
 			log.Errorf("recovered from panic: %v %s", r, debug.Stack())
 			result = warpnet.WarpError("consensus: fsm apply panic: rollback")
 		}
@@ -100,7 +96,7 @@ func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 	}
 
 	// no state changed
-	return fsm.state
+	return newState
 }
 
 // Snapshot encodes the current state so that we can save a snapshot.
@@ -129,7 +125,6 @@ func (fsm *fsm) Restore(reader io.ReadCloser) error {
 		return err
 	}
 
-	fsm.prevState = make(map[string]string, len(*fsm.state))
 	return nil
 }
 
@@ -147,6 +142,4 @@ func (snap *fsmSnapshot) Persist(sink raft.SnapshotSink) error {
 	return sink.Close()
 }
 
-func (snap *fsmSnapshot) Release() {
-	log.Debugln("consensus: fsm: releasing snapshot")
-}
+func (snap *fsmSnapshot) Release() {}
