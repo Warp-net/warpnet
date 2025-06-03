@@ -887,7 +887,7 @@ func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) error {
 	}
 
 	if d.db == nil {
-		if d.BootstrapSelfHashHex == selfHashHex {
+		if d.BootstrapSelfHashHex != selfHashHex {
 			return ErrNotInRecords
 		}
 		return nil
