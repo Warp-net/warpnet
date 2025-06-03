@@ -694,6 +694,8 @@ func (c *consensusService) waitSync() {
 func (c *consensusService) runLeadershipExpiration() {
 	c.waitSync()
 
+	time.Sleep(time.Minute * 5)
+
 	reachabilityTicker := time.NewTicker(time.Second * 5)
 	defer reachabilityTicker.Stop()
 	expirationTicker := time.NewTicker(time.Hour)
@@ -719,7 +721,7 @@ func (c *consensusService) runLeadershipExpiration() {
 		case <-expirationTicker.C:
 			c.dropLeadership("leadership expiration") // constantly rotate leader
 		case <-reachabilityTicker.C:
-			isPrivate := c.node.NodeInfo().Reachability != warpnet.ReachabilityPublic
+			isPrivate := c.node.NodeInfo().Reachability == warpnet.ReachabilityPrivate
 			if isPrivate { // unreachable private node could potentially block all consensus
 				c.dropLeadership("private reachability")
 			}
