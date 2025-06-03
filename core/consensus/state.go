@@ -45,7 +45,7 @@ type KVState map[string]string
 
 type fsm struct {
 	mux   *sync.Mutex
-	state KVState
+	state *KVState
 
 	validators []ConsensusValidatorFunc
 }
@@ -55,7 +55,7 @@ type ConsensusValidatorFunc func(k, v string) error
 func newFSM(validators ...ConsensusValidatorFunc) *fsm {
 	state := KVState{"genesis": ""}
 	return &fsm{
-		state:      state,
+		state:      &state,
 		mux:        new(sync.Mutex),
 		validators: validators,
 	}
