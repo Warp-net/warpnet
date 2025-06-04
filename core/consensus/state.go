@@ -98,7 +98,7 @@ func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 				return err
 			}
 			if isValidatorApplied {
-				return nil
+				return fsm.state
 			}
 		}
 	}
