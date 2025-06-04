@@ -873,24 +873,24 @@ var ErrNotInRecords = errors.New("self hash is not in the consensus records")
 
 const SelfHashConsensusKey = "selfhash"
 
-func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) error {
+func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) (isValidatorApplied bool, err error) {
 	if d == nil {
-		return ErrNilNodeRepo
+		return false, ErrNilNodeRepo
 	}
 
 	if k != SelfHashConsensusKey {
-		return nil
+		return false, nil
 	}
 
 	if len(selfHashHex) == 0 {
-		return errors.New("empty codebase hash")
+		return true, errors.New("empty codebase hash")
 	}
 
 	if d.db == nil {
 		if d.BootstrapSelfHashHex != selfHashHex {
-			return ErrNotInRecords
+			return true, ErrNotInRecords
 		}
-		return nil
+		return true, nil
 	}
 
 	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
@@ -898,30 +898,30 @@ func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) error {
 
 	txn, err := d.db.NewTxn()
 	if err != nil {
-		return err
+		return true, err
 	}
 	defer txn.Rollback()
 
 	var limit uint64 = 100
 	items, _, err := txn.List(selfHashPrefix, &limit, nil)
 	if err != nil {
-		return err
+		return true, err
 	}
 
 	itemsHashes := make(map[string]struct{})
 	for _, item := range items {
 		if err := json.JSON.Unmarshal(item.Value, &itemsHashes); err != nil {
-			return err
+			return true, err
 		}
 	}
 
 	for h := range itemsHashes {
 		if h == selfHashHex {
-			return txn.Discard()
+			return true, txn.Discard()
 		}
 	}
 
-	return ErrNotInRecords
+	return true, ErrNotInRecords
 }
 
 func (d *NodeRepo) GetSelfHashes() (map[string]struct{}, error) {

@@ -106,6 +106,7 @@ type votersCacher interface {
 	print()
 }
 
+// TODO raft tree
 type consensusService struct {
 	ctx       context.Context
 	consensus *Consensus
@@ -155,7 +156,6 @@ func newRaft(
 	)
 
 	infos, err := config.Config().Node.AddrInfos()
-
 	if err != nil {
 		return nil, err
 	}
@@ -588,9 +588,7 @@ func (c *consensusService) AskUserValidation(user domain.User) error {
 func (c *consensusService) AskSelfHashValidation(selfHashHex string) error {
 	log.Infoln("consensus: asking for selfhash validation...")
 
-	newState := map[string]string{
-		database.SelfHashConsensusKey: selfHashHex,
-	}
+	newState := map[string]string{database.SelfHashConsensusKey: selfHashHex}
 
 	return c.validate(newState)
 }
@@ -600,9 +598,7 @@ func (c *consensusService) AskLeaderValidation() error {
 
 	leaderId := c.LeaderID().String()
 
-	newState := map[string]string{
-		"leader": leaderId,
-	}
+	newState := map[string]string{"leader": leaderId}
 
 	return c.validate(newState)
 }
@@ -706,6 +702,16 @@ func (c *consensusService) runLeadershipExpiration() {
 		addr     raft.ServerAddress
 	)
 	for {
+		select {
+		case <-c.stopChan:
+			return
+		case <-c.ctx.Done():
+			return
+		default:
+		}
+		if c.raft == nil {
+			return
+		}
 		addr, leaderID = c.raft.LeaderWithID()
 		if addr == "" {
 			continue
@@ -725,10 +731,6 @@ func (c *consensusService) runLeadershipExpiration() {
 			if isPrivate { // unreachable private node could potentially block all consensus
 				c.dropLeadership("private reachability")
 			}
-		case <-c.stopChan:
-			return
-		case <-c.ctx.Done():
-			return
 		}
 	}
 }

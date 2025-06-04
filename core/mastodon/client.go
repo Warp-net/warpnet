@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
@@ -165,7 +166,6 @@ func (m *WarpnetMastodonPseudoNode) Route(r stream.WarpRoute, data []byte) (_ []
 		_ = json.JSON.Unmarshal(data, &getOneEvent)
 		resp, err = m.getTweetHandler(getOneEvent.TweetId)
 	case event.PUBLIC_GET_TWEET_STATS:
-		fmt.Println("MASTODON CLIENT TWEET STATS REQUEST", string(data))
 		_ = json.JSON.Unmarshal(data, &getOneEvent)
 		resp, err = m.getTweetStatsHandler(getOneEvent.TweetId)
 	case event.PUBLIC_GET_REPLIES:
@@ -342,14 +342,13 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 		}
 
 		var (
-			retweetedBy       *string
-			tweetId, parentId string
+			retweetedBy *string
+			parentId    string
+			tweetId     = string(toot.ID)
 		)
 		if pid, ok := toot.InReplyToID.(string); ok {
 			parentId = pid
 		}
-
-		fmt.Printf("MASTODON TWEET %#v\n", toot)
 
 		originalTweet := toot.Reblog
 		if originalTweet != nil {
@@ -394,8 +393,9 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 	}
 
 	var (
-		retweetedBy        *string
-		statusId, parentId string
+		retweetedBy *string
+		parentId    string
+		statusId    = string(status.ID)
 	)
 	if pid, ok := status.InReplyToID.(string); ok {
 		parentId = pid
@@ -431,8 +431,14 @@ func (m *WarpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(tweetId))
 
-	status, err := m.bridge.GetStatus(context.Background(), id)
+	status, err := m.bridge.GetStatus(m.ctx, id)
 	if err != nil {
+		var apiErr *mastodon.APIError
+		if errors.As(err, &apiErr) {
+			if apiErr.StatusCode == http.StatusNotFound {
+				return event.TweetStatsResponse{}, nil
+			}
+		}
 		return event.TweetStatsResponse{}, err
 	}
 
@@ -473,10 +479,13 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 			imageKey = media[0].URL
 		}
 
-		var retweetedBy *string
+		var (
+			retweetedBy *string
+			statusId    = string(status.ID)
+		)
 		if status.Reblog != nil {
 			retweetedBy = func(s string) *string { return &s }(string(status.Reblog.Account.ID))
-			status.ID = domain.RetweetPrefix + status.ID
+			statusId = string(status.ID)
 		}
 
 		parentId := ""
@@ -486,7 +495,7 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 
 		tweet := domain.Tweet{
 			CreatedAt:   status.CreatedAt,
-			Id:          string(status.ID),
+			Id:          statusId,
 			ParentId:    &parentId,
 			RetweetedBy: retweetedBy,
 			RootId:      parentId,

@@ -153,14 +153,14 @@ func (s *UserRepoTestSuite) TestValidateUser() {
 	bt, err := json.JSON.Marshal(user)
 	s.NoError(err)
 
-	err = s.repo.ValidateUser(UserConsensusKey, string(bt))
+	_, err = s.repo.ValidateUser(UserConsensusKey, string(bt))
 	s.NoError(err) // FIXME!
 
 	user.Id = "nonexistent"
 	bt, err = json.JSON.Marshal(user)
 	s.NoError(err)
 
-	err = s.repo.ValidateUser(UserConsensusKey, string(bt))
+	_, err = s.repo.ValidateUser(UserConsensusKey, string(bt))
 	s.NoError(err)
 }
 

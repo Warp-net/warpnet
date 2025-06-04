@@ -259,6 +259,14 @@ func (n *WarpNode) trackIncomingEvents() {
 
 	for ev := range n.eventsSub.Out() {
 		switch ev.(type) {
+		case event.EvtPeerProtocolsUpdated:
+			protoUpdatedEvent := ev.(event.EvtPeerProtocolsUpdated)
+			if len(protoUpdatedEvent.Added) != 0 {
+				log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
+			}
+			if len(protoUpdatedEvent.Removed) != 0 {
+				log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
+			}
 		case event.EvtLocalProtocolsUpdated:
 			protoUpdatedEvent := ev.(event.EvtLocalProtocolsUpdated)
 			if len(protoUpdatedEvent.Added) != 0 {
