@@ -35,6 +35,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/dgraph-io/badger/v3"
 	log "github.com/sirupsen/logrus"
+	"math"
 	"sort"
 	"time"
 
@@ -71,7 +72,7 @@ func NewTweetRepo(db TweetsStorer) *TweetRepo {
 
 // Create adds a new tweet to the database
 func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, error) {
-	return repo.CreateWithTTL(userId, tweet, 0)
+	return repo.CreateWithTTL(userId, tweet, math.MaxInt64)
 }
 
 func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {

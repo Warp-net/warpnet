@@ -31,6 +31,7 @@ import (
 	"errors"
 	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
+	"math"
 	"strconv"
 	"time"
 
@@ -70,7 +71,7 @@ func NewUserRepo(db UserStorer) *UserRepo {
 
 // Create adds a new user to the database
 func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
-	return repo.CreateWithTTL(user, 0)
+	return repo.CreateWithTTL(user, math.MaxInt64)
 }
 
 func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error) {
