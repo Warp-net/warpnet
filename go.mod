@@ -11,7 +11,7 @@ replace (
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/Warp-net/warpnet-frontend v0.0.568
+	github.com/Warp-net/warpnet-frontend v0.0.569
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
