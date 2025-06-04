@@ -33,11 +33,11 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type UserStreamer interface {
@@ -58,6 +58,7 @@ type UserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
+	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 }
 
 type UserAuthStorer interface {
@@ -147,7 +148,6 @@ func StreamGetUserHandler(
 
 func StreamGetUsersHandler(
 	userRepo UserFetcher,
-	authRepo UserAuthStorer,
 	streamer UserStreamer,
 ) middleware.WarpHandler {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -161,61 +161,55 @@ func StreamGetUsersHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		ownerId := authRepo.GetOwner().UserId
+		users, cursor, err := userRepo.List(ev.Limit, ev.Cursor)
 
-		if ev.UserId == ownerId {
-			users, cursor, err := userRepo.List(ev.Limit, ev.Cursor)
-			if err != nil {
-				return nil, err
-			}
+		go usersRefreshBack(userRepo, ev, streamer)
 
-			return event.UsersResponse{
-				Cursor: cursor,
-				Users:  users,
-			}, nil
-		}
-
-		otherUser, err := userRepo.Get(ev.UserId)
-		if err != nil {
-			return nil, fmt.Errorf("other user get: %v", err)
-		}
-
-		usersDataResp, err := streamer.GenericStream(
-			otherUser.NodeId,
-			event.PUBLIC_GET_USERS,
-			ev,
-		)
-		if err != nil {
-			return event.UsersResponse{
-				Cursor: "",
-				Users:  []domain.User{},
-			}, nil
-		}
-
-		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
-			return nil, fmt.Errorf("unmarshal other users error response: %s", possibleError.Message)
-		}
-
-		var usersResp event.UsersResponse
-		if err := json.JSON.Unmarshal(usersDataResp, &usersResp); err != nil {
-			return nil, fmt.Errorf("ummarshal users response:%v %s", err, usersDataResp)
-		}
-
-		for _, user := range usersResp.Users {
-			_, err := userRepo.Create(user)
-			if errors.Is(err, database.ErrUserAlreadyExists) {
-				_, _ = userRepo.Update(user.Id, user)
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-		return usersResp, nil
+		return event.UsersResponse{
+			Cursor: cursor,
+			Users:  users,
+		}, err
 	}
 }
 
+func usersRefreshBack(
+	userRepo UserFetcher,
+	ev event.GetAllUsersEvent,
+	streamer UserStreamer,
+) {
+	otherUser, err := userRepo.Get(ev.UserId)
+	if err != nil {
+		log.Errorf("get users handler: get user %v", err)
+		return
+	}
+
+	usersDataResp, err := streamer.GenericStream(
+		otherUser.NodeId,
+		event.PUBLIC_GET_USERS,
+		ev,
+	)
+	if err != nil {
+		log.Errorf("get users handler: stream %v", err)
+		return
+	}
+
+	var possibleError event.ErrorResponse
+	if _ = json.JSON.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
+		log.Errorf("unmarshal other users error response: %s", possibleError.Message)
+		return
+	}
+
+	var usersResp event.UsersResponse
+	if err := json.JSON.Unmarshal(usersDataResp, &usersResp); err != nil {
+		log.Errorf("ummarshal users response:%v %s", err, usersDataResp)
+		return
+	}
+
+	for _, user := range usersResp.Users {
+		_, _ = userRepo.Create(user)
+		_, _ = userRepo.Update(user.Id, user)
+	}
+}
 func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) middleware.WarpHandler {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewUserEvent

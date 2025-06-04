@@ -107,7 +107,7 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 	}
 
 	n.clientNode = client
-	client.Peerstore().AddAddrs(peerInfo.ID, peerInfo.Addrs, warpnet.PermanentAddrTTL)
+	client.Peerstore().AddAddrs(peerInfo.ID, peerInfo.Addrs, warpnet.PermanentTTL)
 	if len(client.Addrs()) != 0 {
 		return warpnet.WarpError("client: must have no addresses")
 	}

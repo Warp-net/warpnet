@@ -183,7 +183,7 @@ func (d *DistributedHashTable) bootstrapDHT() {
 		if ownID == info.ID {
 			continue
 		}
-		d.dht.Host().Peerstore().AddAddrs(info.ID, info.Addrs, warpnet.PermanentAddrTTL)
+		d.dht.Host().Peerstore().AddAddrs(info.ID, info.Addrs, warpnet.PermanentTTL)
 	}
 
 	if err := d.dht.Bootstrap(d.ctx); err != nil {

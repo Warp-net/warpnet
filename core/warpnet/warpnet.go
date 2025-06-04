@@ -85,7 +85,7 @@ const (
 	P_IP6 = multiaddr.P_IP6
 	P_TCP = multiaddr.P_TCP
 
-	PermanentAddrTTL = peerstore.PermanentAddrTTL
+	PermanentTTL = peerstore.PermanentAddrTTL
 
 	ErrNodeIsOffline = WarpError("node is offline")
 	ErrUserIsOffline = WarpError("user is offline")

@@ -31,6 +31,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/dgraph-io/badger/v3"
 	log "github.com/sirupsen/logrus"
@@ -70,6 +71,10 @@ func NewTweetRepo(db TweetsStorer) *TweetRepo {
 
 // Create adds a new tweet to the database
 func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, error) {
+	return repo.CreateWithTTL(userId, tweet, 0)
+}
+
+func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
 	if tweet == (domain.Tweet{}) {
 		return tweet, errors.New("nil tweet")
 	}
@@ -90,7 +95,7 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 	}
 	defer txn.Rollback()
 
-	newTweet, err := storeTweet(txn, userId, tweet)
+	newTweet, err := storeTweet(txn, userId, tweet, duration)
 	if err != nil {
 		return tweet, err
 	}
@@ -99,7 +104,7 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 }
 
 func storeTweet(
-	txn storage.WarpTransactioner, userId string, tweet domain.Tweet,
+	txn storage.WarpTransactioner, userId string, tweet domain.Tweet, duration time.Duration,
 ) (domain.Tweet, error) {
 	fixedKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddRootID(userId).
@@ -123,10 +128,10 @@ func storeTweet(
 		return tweet, fmt.Errorf("tweet marshal: %w", err)
 	}
 
-	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
+	if err = txn.SetWithTTL(fixedKey, sortableKey.Bytes(), duration); err != nil {
 		return tweet, err
 	}
-	if err = txn.Set(sortableKey, data); err != nil {
+	if err = txn.SetWithTTL(sortableKey, data, duration); err != nil {
 		return tweet, err
 	}
 	if _, err := txn.Increment(countKey); err != nil {
@@ -303,7 +308,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		tweet.Id = domain.RetweetPrefix + tweet.Id
 	}
 
-	newTweet, err := storeTweet(txn, *tweet.RetweetedBy, tweet)
+	newTweet, err := storeTweet(txn, *tweet.RetweetedBy, tweet, warpnet.PermanentTTL)
 	if err != nil {
 		return tweet, err
 	}

@@ -94,6 +94,7 @@ type UserProvider interface {
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	GetBatch(userIds ...string) (users []domain.User, err error)
+	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 }
 
 type ClientNodeStreamer interface {

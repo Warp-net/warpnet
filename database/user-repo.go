@@ -70,6 +70,10 @@ func NewUserRepo(db UserStorer) *UserRepo {
 
 // Create adds a new user to the database
 func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
+	return repo.CreateWithTTL(user, 0)
+}
+
+func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error) {
 	if user.Id == "" {
 		return user, errors.New("user id is empty")
 	}
@@ -120,15 +124,15 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(user.NodeId).
 			Build()
-		if err = txn.Set(nodeUserKey, sortableKey.Bytes()); err != nil {
+		if err = txn.SetWithTTL(nodeUserKey, sortableKey.Bytes(), ttl); err != nil {
 			return user, err
 		}
 	}
 
-	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
+	if err = txn.SetWithTTL(fixedKey, sortableKey.Bytes(), ttl); err != nil {
 		return user, err
 	}
-	if err = txn.Set(sortableKey, data); err != nil {
+	if err = txn.SetWithTTL(sortableKey, data, ttl); err != nil {
 		return user, err
 	}
 	return user, txn.Commit()

@@ -341,7 +341,7 @@ func (m *MemberNode) setupHandlers(
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_USERS,
-		logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, authRepo, m)))),
+		logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, m)))),
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_TWEETS,
