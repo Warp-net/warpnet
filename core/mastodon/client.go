@@ -339,7 +339,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 		media := toot.MediaAttachments
 		imageKey := ""
 		if len(media) > 0 && media[0].Type == "image" {
-			imageKey = media[0].URL
+			imageKey = media[0].URL // TODO all images!
 		}
 
 		var (

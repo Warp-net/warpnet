@@ -1,7 +1,7 @@
 # github.com/Masterminds/semver/v3 v3.3.1
 ## explicit; go 1.21
 github.com/Masterminds/semver/v3
-# github.com/Warp-net/warpnet-frontend v0.0.570
+# github.com/Warp-net/warpnet-frontend v0.0.571
 ## explicit; go 1.24.0
 github.com/Warp-net/warpnet-frontend
 # github.com/apapsch/go-jsonmerge/v2 v2.0.0
@@ -144,7 +144,7 @@ github.com/godbus/dbus/v5
 github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
-# github.com/golang/geo v0.0.0-20250516193853-92f93c4cb289
+# github.com/golang/geo v0.0.0-20250602202553-92e1c6cfbc31
 ## explicit; go 1.21.0
 github.com/golang/geo/r1
 github.com/golang/geo/r2
@@ -166,7 +166,7 @@ github.com/google/flatbuffers/go
 # github.com/google/gopacket v1.1.19
 ## explicit; go 1.12
 github.com/google/gopacket/routing
-# github.com/google/pprof v0.0.0-20250501235452-c0086092b71a
+# github.com/google/pprof v0.0.0-20250602020802-c6617b811d0e
 ## explicit; go 1.23.0
 github.com/google/pprof/profile
 # github.com/google/uuid v1.6.0
@@ -511,8 +511,8 @@ github.com/multiformats/go-multiaddr-fmt
 # github.com/multiformats/go-multibase v0.2.0
 ## explicit; go 1.19
 github.com/multiformats/go-multibase
-# github.com/multiformats/go-multicodec v0.9.0
-## explicit; go 1.19
+# github.com/multiformats/go-multicodec v0.9.1
+## explicit; go 1.23
 github.com/multiformats/go-multicodec
 # github.com/multiformats/go-multihash v0.2.3
 ## explicit; go 1.19
@@ -525,8 +525,8 @@ github.com/multiformats/go-multihash/register/miniosha256
 github.com/multiformats/go-multihash/register/murmur3
 github.com/multiformats/go-multihash/register/sha256
 github.com/multiformats/go-multihash/register/sha3
-# github.com/multiformats/go-multistream v0.6.0
-## explicit; go 1.22
+# github.com/multiformats/go-multistream v0.6.1
+## explicit; go 1.23
 github.com/multiformats/go-multistream
 # github.com/multiformats/go-varint v0.0.7
 ## explicit; go 1.18
@@ -657,7 +657,7 @@ github.com/pion/randutil
 # github.com/pion/rtcp v1.2.15
 ## explicit; go 1.20
 github.com/pion/rtcp
-# github.com/pion/rtp v1.8.16
+# github.com/pion/rtp v1.8.17
 ## explicit; go 1.20
 github.com/pion/rtp
 github.com/pion/rtp/codecs
@@ -808,9 +808,10 @@ github.com/spaolacci/murmur3
 github.com/spf13/afero
 github.com/spf13/afero/internal/common
 github.com/spf13/afero/mem
-# github.com/spf13/cast v1.8.0
-## explicit; go 1.19
+# github.com/spf13/cast v1.9.2
+## explicit; go 1.21.0
 github.com/spf13/cast
+github.com/spf13/cast/internal
 # github.com/spf13/pflag v1.0.6
 ## explicit; go 1.12
 github.com/spf13/pflag
@@ -959,7 +960,7 @@ golang.org/x/crypto/internal/alias
 golang.org/x/crypto/internal/poly1305
 golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/sha3
-# golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
+# golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b
 ## explicit; go 1.23.0
 golang.org/x/exp/slices
 # golang.org/x/mod v0.24.0
