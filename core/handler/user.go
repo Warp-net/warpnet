@@ -42,6 +42,7 @@ import (
 
 type UserStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
 }
 
 type UserTweetsCounter interface {
@@ -177,6 +178,9 @@ func usersRefreshBack(
 	ev event.GetAllUsersEvent,
 	streamer UserStreamer,
 ) {
+	if streamer.NodeInfo().OwnerId == ev.UserId {
+		return
+	}
 	otherUser, err := userRepo.Get(ev.UserId)
 	if err != nil {
 		log.Errorf("get users handler: get user %v", err)

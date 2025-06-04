@@ -183,6 +183,9 @@ func tweetsRefreshBack(
 	ev event.GetAllTweetsEvent,
 	streamer TweetStreamer,
 ) {
+	if streamer.NodeInfo().OwnerId == ev.UserId {
+		return
+	}
 	otherUser, err := userRepo.Get(ev.UserId)
 	if err != nil {
 		log.Errorf("get tweets handler: get user: %v", err)
