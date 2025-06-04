@@ -339,7 +339,10 @@ func (repo *UserRepo) Delete(userId string) error {
 }
 
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
-	prefix := storage.NewPrefixBuilder(UsersRepoName).AddRootID(userSubNamespace).Build()
+	prefix := storage.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace).
+		AddRootID("None").
+		Build()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {

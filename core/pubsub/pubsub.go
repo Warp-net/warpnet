@@ -303,7 +303,7 @@ func (g *warpPubSub) subscribe(topics ...string) (err error) {
 		if err != nil {
 			return err
 		}
-
+		
 		sub, err := topic.Subscribe()
 		if err != nil {
 			return err
