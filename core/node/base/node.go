@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -53,20 +53,26 @@ type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
+type MastodonPseudoStreamer interface {
+	stream.MastodonPseudoStreamer
+}
+
 type BackoffEnabler interface {
 	IsBackoffEnabled(id peer.ID) bool
 	Reset(id peer.ID)
 }
 
 type WarpNode struct {
-	ctx      context.Context
-	node     warpnet.P2PNode
-	relay    warpnet.WarpRelayCloser
-	streamer Streamer
-	backoff  BackoffEnabler
+	ctx                context.Context
+	node               warpnet.P2PNode
+	relay              warpnet.WarpRelayCloser
+	streamer           Streamer
+	mastodonPseudoNode MastodonPseudoStreamer
+	backoff            BackoffEnabler
 
-	isClosed *atomic.Bool
-	version  *semver.Version
+	isClosed     *atomic.Bool
+	version      *semver.Version
+	reachability atomic.Int32
 
 	startTime time.Time
 	eventsSub event.Subscription
@@ -77,10 +83,10 @@ func NewWarpNode(
 	privKey ed25519.PrivateKey,
 	store warpnet.WarpPeerstore,
 	psk security.PSK,
+	mastodonPseudoNode MastodonPseudoStreamer,
 	listenAddrs []string,
 	routingFn func(node warpnet.P2PNode) (warpnet.WarpPeerRouting, error),
 ) (*WarpNode, error) {
-
 	limiter := warpnet.NewAutoScaledLimiter()
 
 	manager, err := warpnet.NewConnManager(limiter)
@@ -150,17 +156,19 @@ func NewWarpNode(
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to create relay	: %v", err)
 	}
+	version := config.Config().Version
 
 	wn := &WarpNode{
-		ctx:       ctx,
-		node:      node,
-		relay:     relayService,
-		streamer:  stream.NewStreamPool(ctx, node),
-		isClosed:  new(atomic.Bool),
-		version:   config.Config().Version,
-		startTime: time.Now(),
-		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
-		eventsSub: sub,
+		ctx:                ctx,
+		node:               node,
+		relay:              relayService,
+		streamer:           stream.NewStreamPool(ctx, node, mastodonPseudoNode),
+		isClosed:           new(atomic.Bool),
+		version:            version,
+		startTime:          time.Now(),
+		backoff:            backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		eventsSub:          sub,
+		mastodonPseudoNode: mastodonPseudoNode,
 	}
 	if err := wn.validateSupportedProtocols(); err != nil {
 		return nil, err
@@ -172,6 +180,9 @@ func NewWarpNode(
 
 func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	if n == nil || n.node == nil {
+		return nil
+	}
+	if n.mastodonPseudoNode != nil && n.mastodonPseudoNode.IsMastodonID(p.ID) {
 		return nil
 	}
 
@@ -196,6 +207,9 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 }
 
 func (n *WarpNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+	if n.mastodonPseudoNode != nil && n.mastodonPseudoNode.IsMastodonID(info.ID) {
+		return nil
+	}
 	return n.node.Connect(n.ctx, info)
 }
 
@@ -245,6 +259,14 @@ func (n *WarpNode) trackIncomingEvents() {
 
 	for ev := range n.eventsSub.Out() {
 		switch ev.(type) {
+		case event.EvtPeerProtocolsUpdated:
+			protoUpdatedEvent := ev.(event.EvtPeerProtocolsUpdated)
+			if len(protoUpdatedEvent.Added) != 0 {
+				log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
+			}
+			if len(protoUpdatedEvent.Removed) != 0 {
+				log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
+			}
 		case event.EvtLocalProtocolsUpdated:
 			protoUpdatedEvent := ev.(event.EvtLocalProtocolsUpdated)
 			if len(protoUpdatedEvent.Added) != 0 {
@@ -271,15 +293,17 @@ func (n *WarpNode) trackIncomingEvents() {
 		case event.EvtPeerIdentificationCompleted:
 			identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
 			pid := identificationEvent.Peer.String()
-			log.Infof(
+			log.Debugf(
 				"node: event: peer ...%s identification completed, observed address: %s",
 				pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
 			)
 		case event.EvtLocalReachabilityChanged:
+			r := ev.(event.EvtLocalReachabilityChanged).Reachability // it's int32 under the hood
 			log.Infof(
 				"node: event: reachability changed: %s",
-				strings.ToLower(ev.(event.EvtLocalReachabilityChanged).Reachability.String()),
+				strings.ToLower(r.String()),
 			)
+			n.reachability.Store(int32(r))
 		case event.EvtNATDeviceTypeChanged:
 			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
 			log.Infof(
@@ -287,13 +311,13 @@ func (n *WarpNode) trackIncomingEvents() {
 				natDeviceTypeChangedEvent.NatDeviceType.String(), natDeviceTypeChangedEvent.TransportProtocol.String(),
 			)
 		case event.EvtAutoRelayAddrsUpdated:
-			log.Infof(
-				"node: event: relay addresses updated: %v",
-				ev.(event.EvtAutoRelayAddrsUpdated).RelayAddrs,
-			)
+			if len(ev.(event.EvtAutoRelayAddrsUpdated).RelayAddrs) != 0 {
+				log.Infoln("node: event: relay addresses added")
+			}
+
 		case event.EvtLocalAddressesUpdated:
 			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
-				log.Infof(
+				log.Debugf(
 					"node: event: local address %s: %s",
 					addr.Address.String(), localAddrActions[int(addr.Action)],
 				)
@@ -330,11 +354,12 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 	}
 
 	return warpnet.NodeInfo{
-		ID:         n.node.ID(),
-		Addresses:  addresses,
-		Version:    n.version,
-		StartTime:  n.startTime,
-		RelayState: relayState,
+		ID:           n.node.ID(),
+		Addresses:    addresses,
+		Version:      n.version,
+		StartTime:    n.startTime,
+		RelayState:   relayState,
+		Reachability: warpnet.WarpReachability(n.reachability.Load()),
 	}
 }
 
@@ -369,15 +394,18 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 	if n == nil || n.streamer == nil {
 		return nil, warpnet.WarpError("node is not initialized")
 	}
-	if nodeId == "" {
-		return nil, warpnet.WarpError("node: empty node id")
-	}
+
 	if n.node.ID() == nodeId {
 		return nil, ErrSelfRequest
 	}
 
+	var isMastodonID bool
+	if n.mastodonPseudoNode != nil {
+		isMastodonID = n.mastodonPseudoNode.IsMastodonID(nodeId)
+	}
+
 	peerInfo := n.Peerstore().PeerInfo(nodeId)
-	if len(peerInfo.Addrs) == 0 {
+	if len(peerInfo.Addrs) == 0 && !isMastodonID {
 		log.Warningf("node %v is offline", nodeId)
 		return nil, warpnet.ErrNodeIsOffline
 	}
@@ -420,5 +448,6 @@ func (n *WarpNode) StopNode() {
 	}
 	n.isClosed.Store(true)
 	n.node = nil
+	n.mastodonPseudoNode = nil
 	return
 }

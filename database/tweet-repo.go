@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package database
 
@@ -31,8 +31,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/dgraph-io/badger/v3"
+	log "github.com/sirupsen/logrus"
+	"math"
 	"sort"
 	"time"
 
@@ -48,6 +51,8 @@ const (
 	tweetsCountSubspace   = "TWEETSCOUNT"
 	reTweetsCountSubspace = "RETWEETSCOUNT"
 	reTweetersSubspace    = "RETWEETERS"
+
+	DefaultWarpnetTweetNetwork = "warpnet"
 )
 
 type TweetsStorer interface {
@@ -58,8 +63,7 @@ type TweetsStorer interface {
 }
 
 type TweetRepo struct {
-	db        TweetsStorer
-	tweetsNum int64
+	db TweetsStorer
 }
 
 func NewTweetRepo(db TweetsStorer) *TweetRepo {
@@ -68,6 +72,10 @@ func NewTweetRepo(db TweetsStorer) *TweetRepo {
 
 // Create adds a new tweet to the database
 func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, error) {
+	return repo.CreateWithTTL(userId, tweet, math.MaxInt64)
+}
+
+func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
 	if tweet == (domain.Tweet{}) {
 		return tweet, errors.New("nil tweet")
 	}
@@ -77,6 +85,9 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 	if tweet.CreatedAt.IsZero() {
 		tweet.CreatedAt = time.Now()
 	}
+	if tweet.Network == "" {
+		tweet.Network = "warpnet"
+	}
 	tweet.RootId = tweet.Id
 
 	txn, err := repo.db.NewTxn()
@@ -85,7 +96,7 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 	}
 	defer txn.Rollback()
 
-	newTweet, err := storeTweet(txn, userId, tweet)
+	newTweet, err := storeTweet(txn, userId, tweet, duration)
 	if err != nil {
 		return tweet, err
 	}
@@ -94,7 +105,7 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 }
 
 func storeTweet(
-	txn storage.WarpTransactioner, userId string, tweet domain.Tweet,
+	txn storage.WarpTransactioner, userId string, tweet domain.Tweet, duration time.Duration,
 ) (domain.Tweet, error) {
 	fixedKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddRootID(userId).
@@ -118,10 +129,10 @@ func storeTweet(
 		return tweet, fmt.Errorf("tweet marshal: %w", err)
 	}
 
-	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
+	if err = txn.SetWithTTL(fixedKey, sortableKey.Bytes(), duration); err != nil {
 		return tweet, err
 	}
-	if err = txn.Set(sortableKey, data); err != nil {
+	if err = txn.SetWithTTL(sortableKey, data, duration); err != nil {
 		return tweet, err
 	}
 	if _, err := txn.Increment(countKey); err != nil {
@@ -157,7 +168,6 @@ func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err erro
 	if err != nil {
 		return tweet, err
 	}
-	data = nil
 	return tweet, nil
 }
 
@@ -299,14 +309,17 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		tweet.Id = domain.RetweetPrefix + tweet.Id
 	}
 
-	newTweet, err := storeTweet(txn, *tweet.RetweetedBy, tweet)
+	newTweet, err := storeTweet(txn, *tweet.RetweetedBy, tweet, warpnet.PermanentTTL)
 	if err != nil {
 		return tweet, err
 	}
 
 	_, err = repo.db.Get(retweetCountKey)
 	if !errors.Is(err, storage.ErrKeyNotFound) {
-		return newTweet, txn.Commit()
+		if _, err = txn.Increment(retweetCountKey); err != nil {
+			log.Debugf("Failed to increment retweet count for %s - %s", tweet.Id, err)
+			return newTweet, txn.Commit()
+		}
 	}
 	_, err = txn.Increment(retweetCountKey)
 	if err != nil {
@@ -417,10 +430,10 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 		return nil, "", err
 	}
 
-	likers := make(likedUserIDs, 0, len(items))
+	retweeters := make(retweetersIDs, 0, len(items))
 	for _, item := range items {
 		userId := string(item.Value)
-		likers = append(likers, userId)
+		retweeters = append(retweeters, userId)
 	}
-	return likers, cur, nil
+	return retweeters, cur, nil
 }

@@ -25,7 +25,6 @@ go.work.sum
 # env file
 .env
 
-bin
 var
 .idea
 *.pem

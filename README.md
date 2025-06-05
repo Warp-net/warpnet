@@ -1,5 +1,5 @@
 [![Go Version](https://img.shields.io/badge/Go-1.24+-brightgreen)](https://golang.org/dl/)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE.md)
 [![Build](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml)
 [![Telegram Chat](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)
 <br />
@@ -110,6 +110,6 @@ https://codeberg.org/Warpnet/warpnet
 
 ## License
 
-Warpnet is free software licensed under the GNU General Public License v3.0 or later.
+Warpnet is free software licensed under the GNU Affero General Public License v3.0 or later.
 
-See the [LICENSE](./LICENSE) file for details.
+See the [LICENSE](LICENSE.md) file for details.

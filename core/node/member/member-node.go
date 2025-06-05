@@ -5,16 +5,16 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License
+You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -36,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node/base"
@@ -54,16 +55,16 @@ import (
 type MemberNode struct {
 	*base.WarpNode
 
-	ctx           context.Context
-	discService   DiscoveryHandler
-	mdnsService   MDNSStarterCloser
-	pubsubService PubSubProvider
-	raft          ConsensusProvider
-	dHashTable    DistributedHashTableCloser
-	nodeRepo      NodeProvider
-	retrier       retrier.Retrier
-	userRepo      UserFetcher
-	ownerId       string
+	ctx                  context.Context
+	discService          DiscoveryHandler
+	mdnsService          MDNSStarterCloser
+	pubsubService        PubSubProvider
+	raft                 ConsensusProvider
+	dHashTable           DistributedHashTableCloser
+	nodeRepo             NodeProvider
+	retrier              retrier.Retrier
+	userRepo             UserFetcher
+	ownerId, selfHashHex string
 }
 
 func NewMemberNode(
@@ -94,7 +95,7 @@ func NewMemberNode(
 	owner := authRepo.GetOwner()
 
 	raft, err := consensus.NewMemberRaft(
-		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.ValidateSelfHashes,
+		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.ValidateSelfHash,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("member: consensus initialization: %v", err)
@@ -111,11 +112,23 @@ func NewMemberNode(
 		raft.RemoveVoter, raft.AddVoter, discService.HandlePeerFound,
 	)
 
+	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
+	if err != nil {
+		log.Errorf("mastodon: creating mastodon pseudo-node: %v", err)
+	}
+	if mastodonPseudoNode != nil {
+		_, _ = userRepo.Create(mastodonPseudoNode.WarpnetUser())
+		_, _ = userRepo.Update(mastodonPseudoNode.WarpnetUser().Id, mastodonPseudoNode.WarpnetUser())
+		_, _ = userRepo.Create(mastodonPseudoNode.DefaultUser())
+		_, _ = userRepo.Update(mastodonPseudoNode.DefaultUser().Id, mastodonPseudoNode.DefaultUser())
+	}
+
 	node, err := base.NewWarpNode(
 		ctx,
 		privKey,
 		store,
 		psk,
+		mastodonPseudoNode,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
@@ -124,6 +137,10 @@ func NewMemberNode(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("member: failed to init node: %v", err)
+	}
+
+	if mastodonPseudoNode != nil {
+		node.Peerstore().AddAddrs(mastodonPseudoNode.ID(), mastodonPseudoNode.Addrs(), time.Hour*24)
 	}
 
 	mn := &MemberNode{
@@ -138,6 +155,7 @@ func NewMemberNode(
 		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
 		userRepo:      userRepo,
 		ownerId:       owner.UserId,
+		selfHashHex:   selfHashHex,
 	}
 
 	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)
@@ -157,25 +175,8 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 
 	m.mdnsService.Start(m)
 
-	ownerUser, err := m.userRepo.Get(m.ownerId)
-	if err != nil {
-		return fmt.Errorf("member: failed to get owner user: %v", err)
-	}
-
-	err = m.retrier.Try(context.Background(), func() error {
-		return m.raft.AskUserValidation(ownerUser)
-	})
-	if err != nil {
-		return fmt.Errorf("member: validate owner user by consensus: %v", err)
-	}
-	log.Infoln("member: owner user validated")
-
-	hashes, err := m.nodeRepo.GetSelfHashes()
-	if err != nil {
-		return fmt.Errorf("member: failed to get self hashes: %v", err)
-	}
-	err = m.retrier.Try(context.Background(), func() error {
-		return m.raft.AskSelfHashValidation(hashes)
+	err := m.retrier.Try(context.Background(), func() error {
+		return m.raft.AskSelfHashValidation(m.selfHashHex)
 	})
 	if err != nil {
 		return fmt.Errorf("member: validate self hash by consensus: %v", err)
@@ -188,8 +189,6 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
-	//log.Infoln("node: supported protocols:", m.Node().Mux().Protocols())
-
 	return nil
 }
 
@@ -202,12 +201,17 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 type streamNodeID = string
 
 func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute, data any) (_ []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+
 	bt, err := m.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		m.setUserOffline(nodeIdStr)
 		return bt, err
 	}
+
 	if err != nil {
 		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancelF()
@@ -220,6 +224,9 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 }
 
 func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
+	if m == nil {
+		return
+	}
 	u, err := m.userRepo.GetByNodeID(nodeIdStr)
 	if errors.Is(err, database.ErrUserNotFound) {
 		return
@@ -244,6 +251,9 @@ func (m *MemberNode) setupHandlers(
 	db Storer,
 	privKey ed25519.PrivateKey,
 ) {
+	if m == nil {
+		panic("member: setup handlers: nil node")
+	}
 	timelineRepo := database.NewTimelineRepo(db)
 	tweetRepo := database.NewTweetRepo(db)
 	replyRepo := database.NewRepliesRepo(db)
@@ -318,7 +328,7 @@ func (m *MemberNode) setupHandlers(
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_USERS,
-		logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, authRepo, m)))),
+		logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, m)))),
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_TWEETS,

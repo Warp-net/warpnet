@@ -5,16 +5,16 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License
+You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package consensus
 
@@ -106,6 +106,7 @@ type votersCacher interface {
 	print()
 }
 
+// TODO raft tree
 type consensusService struct {
 	ctx       context.Context
 	consensus *Consensus
@@ -125,7 +126,6 @@ type consensusService struct {
 	l              *consensusLogger
 	bootstrapNodes []warpnet.WarpAddrInfo
 	stopChan       chan struct{}
-	isPrivate      bool
 }
 
 func NewBootstrapRaft(ctx context.Context, isInMemory bool, validators ...ConsensusValidatorFunc) (_ *consensusService, err error) {
@@ -141,8 +141,6 @@ func NewMemberRaft(
 	if err != nil {
 		return nil, err
 	}
-	go svc.runLeadershipMonitoring()
-
 	return svc, nil
 }
 
@@ -158,7 +156,6 @@ func newRaft(
 	)
 
 	infos, err := config.Config().Node.AddrInfos()
-
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +196,6 @@ func newRaft(
 		syncMx:         new(sync.RWMutex),
 		retrier:        retrier.New(time.Second*3, 5, retrier.ArithmeticalBackoff),
 		l:              l,
-		isPrivate:      !isBootstrap,
 		bootstrapNodes: infos,
 		stopChan:       make(chan struct{}),
 	}, nil
@@ -282,26 +278,9 @@ func (c *consensusService) Start(node NodeTransporter) (err error) {
 
 	log.Infof("consensus: ready node %s with last index: %d", c.raftID, c.raft.LastIndex())
 	c.node = node
+	go c.runLeadershipExpiration()
+
 	return nil
-}
-
-func (c *consensusService) runLeadershipMonitoring() {
-	ticker := time.NewTicker(time.Second * 5)
-	defer ticker.Stop()
-
-	for {
-		if c.ctx.Err() != nil {
-			return
-		}
-		select {
-		case <-ticker.C:
-			c.dropPrivateLeadership()
-		case <-c.stopChan:
-			return
-		case <-c.ctx.Done():
-			return
-		}
-	}
 }
 
 func (c *consensusService) bootstrap(id raft.ServerID) error {
@@ -606,14 +585,10 @@ func (c *consensusService) AskUserValidation(user domain.User) error {
 	return c.validate(newState)
 }
 
-func (c *consensusService) AskSelfHashValidation(selfHashes map[string]struct{}) error {
+func (c *consensusService) AskSelfHashValidation(selfHashHex string) error {
 	log.Infoln("consensus: asking for selfhash validation...")
 
-	bt, _ := json.JSON.Marshal(selfHashes)
-
-	newState := map[string]string{
-		database.SelfHashConsensusKey: string(bt),
-	}
+	newState := map[string]string{database.SelfHashConsensusKey: selfHashHex}
 
 	return c.validate(newState)
 }
@@ -623,9 +598,7 @@ func (c *consensusService) AskLeaderValidation() error {
 
 	leaderId := c.LeaderID().String()
 
-	newState := map[string]string{
-		"leader": leaderId,
-	}
+	newState := map[string]string{"leader": leaderId}
 
 	return c.validate(newState)
 }
@@ -641,10 +614,7 @@ func (c *consensusService) validate(newState KVState) error {
 		if errors.Is(err, ErrNoRaftCluster) {
 			return nil
 		}
-		if err != nil {
-			return fmt.Errorf("consensus: failed to commit: %w", err)
-		}
-		return nil
+		return err
 	}
 
 	resp, err := c.node.GenericStream(leaderId, event.PUBLIC_POST_NODE_VERIFY, newState)
@@ -717,36 +687,73 @@ func (c *consensusService) waitSync() {
 	c.syncMx.RUnlock()
 }
 
-// unreachable private node could potentially block all consensus
-func (c *consensusService) dropPrivateLeadership() {
+func (c *consensusService) runLeadershipExpiration() {
+	c.waitSync()
+
+	time.Sleep(time.Minute * 5)
+
+	reachabilityTicker := time.NewTicker(time.Second * 5)
+	defer reachabilityTicker.Stop()
+	expirationTicker := time.NewTicker(time.Hour)
+	defer expirationTicker.Stop()
+
+	var (
+		leaderID raft.ServerID
+		addr     raft.ServerAddress
+	)
+	for {
+		select {
+		case <-c.stopChan:
+			return
+		case <-c.ctx.Done():
+			return
+		default:
+		}
+		if c.raft == nil {
+			return
+		}
+		addr, leaderID = c.raft.LeaderWithID()
+		if addr == "" {
+			continue
+		}
+		if c.raftID != leaderID {
+			continue
+		}
+
+		if c.ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-expirationTicker.C:
+			c.dropLeadership("leadership expiration") // constantly rotate leader
+		case <-reachabilityTicker.C:
+			isPrivate := c.node.NodeInfo().Reachability == warpnet.ReachabilityPrivate
+			if isPrivate { // unreachable private node could potentially block all consensus
+				c.dropLeadership("private reachability")
+			}
+		}
+	}
+}
+
+func (c *consensusService) dropLeadership(reason string) {
 	if c == nil || c.raft == nil {
 		return
 	}
-	if !c.isPrivate {
-		return
-	}
 
-	addr, leaderID := c.raft.LeaderWithID()
-	if addr == "" {
-		return
-	}
-	if c.raftID != leaderID {
-		return
-	}
+	peers := c.node.Network().Peers() // list of peers CONNECTED
+	randomPeerID := peers[rand.Intn(len(peers))]
 
-	randomServer := c.bootstrapNodes[rand.Intn(len(c.bootstrapNodes))]
-
-	log.Infof("consensus: dropping leadership because of private reachability %s, transferring to %s", leaderID, randomServer.ID)
+	log.Infof("consensus: dropping leadership, transferring to %s, reason: %s", randomPeerID, reason)
 
 	wait := c.raft.LeadershipTransferToServer(
-		raft.ServerID(randomServer.ID.String()), raft.ServerAddress(randomServer.ID.String()),
+		raft.ServerID(randomPeerID.String()), raft.ServerAddress(randomPeerID.String()),
 	)
 	if wait.Error() == nil {
 		return
 	}
 	log.Errorf(
 		"consensus: failed to send leader ship transfer to server %s: %v",
-		randomServer.String(), wait.Error(),
+		randomPeerID.String(), wait.Error(),
 	)
 }
 

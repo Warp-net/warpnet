@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package database
 
@@ -75,9 +75,10 @@ type NodeStorer interface {
 }
 
 type NodeRepo struct {
-	db NodeStorer
-
+	db       NodeStorer
 	stopChan chan struct{}
+
+	BootstrapSelfHashHex string
 }
 
 // Implements the datastore.Batch interface, enabling batching support for
@@ -872,21 +873,24 @@ var ErrNotInRecords = errors.New("self hash is not in the consensus records")
 
 const SelfHashConsensusKey = "selfhash"
 
-func (d *NodeRepo) ValidateSelfHashes(k, selfHashObj string) error {
+func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) (isValidatorApplied bool, err error) {
 	if d == nil {
-		return ErrNilNodeRepo
+		return false, ErrNilNodeRepo
 	}
+
 	if k != SelfHashConsensusKey {
-		return nil
+		return false, nil
 	}
 
-	if len(selfHashObj) == 0 {
-		return errors.New("empty codebase hashes")
+	if len(selfHashHex) == 0 {
+		return true, errors.New("empty codebase hash")
 	}
 
-	var incomingSelfHashes = make(map[string]struct{})
-	if err := json.JSON.Unmarshal([]byte(selfHashObj), &incomingSelfHashes); err != nil {
-		return err
+	if d.db == nil {
+		if d.BootstrapSelfHashHex != selfHashHex {
+			return true, ErrNotInRecords
+		}
+		return true, nil
 	}
 
 	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
@@ -894,30 +898,30 @@ func (d *NodeRepo) ValidateSelfHashes(k, selfHashObj string) error {
 
 	txn, err := d.db.NewTxn()
 	if err != nil {
-		return err
+		return true, err
 	}
 	defer txn.Rollback()
 
 	var limit uint64 = 100
 	items, _, err := txn.List(selfHashPrefix, &limit, nil)
 	if err != nil {
-		return err
+		return true, err
 	}
 
 	itemsHashes := make(map[string]struct{})
 	for _, item := range items {
 		if err := json.JSON.Unmarshal(item.Value, &itemsHashes); err != nil {
-			return err
+			return true, err
 		}
 	}
 
-	for h := range incomingSelfHashes {
-		if _, ok := itemsHashes[h]; ok {
-			return txn.Discard()
+	for h := range itemsHashes {
+		if h == selfHashHex {
+			return true, txn.Discard()
 		}
 	}
 
-	return ErrNotInRecords
+	return true, ErrNotInRecords
 }
 
 func (d *NodeRepo) GetSelfHashes() (map[string]struct{}, error) {

@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package database
 
@@ -31,6 +31,7 @@ import (
 	"errors"
 	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
+	"math"
 	"strconv"
 	"time"
 
@@ -49,6 +50,8 @@ const (
 	nodeSubNamespace = "NODE"
 
 	defaultAverageLatency int64 = 125000
+
+	DefaultWarpnetUserNetwork = "warpnet"
 )
 
 type UserStorer interface {
@@ -68,6 +71,10 @@ func NewUserRepo(db UserStorer) *UserRepo {
 
 // Create adds a new user to the database
 func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
+	return repo.CreateWithTTL(user, math.MaxInt64)
+}
+
+func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error) {
 	if user.Id == "" {
 		return user, errors.New("user id is empty")
 	}
@@ -81,6 +88,9 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 
 	if user.Latency == 0 {
 		user.Latency = defaultAverageLatency
+	}
+	if user.Network == "" {
+		user.Network = DefaultWarpnetUserNetwork
 	}
 
 	rttRange := storage.RangePrefix(strconv.FormatInt(user.Latency, 10))
@@ -115,15 +125,15 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(user.NodeId).
 			Build()
-		if err = txn.Set(nodeUserKey, sortableKey.Bytes()); err != nil {
+		if err = txn.SetWithTTL(nodeUserKey, sortableKey.Bytes(), ttl); err != nil {
 			return user, err
 		}
 	}
 
-	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
+	if err = txn.SetWithTTL(fixedKey, sortableKey.Bytes(), ttl); err != nil {
 		return user, err
 	}
-	if err = txn.Set(sortableKey, data); err != nil {
+	if err = txn.SetWithTTL(sortableKey, data, ttl); err != nil {
 		return user, err
 	}
 	return user, txn.Commit()
@@ -183,6 +193,9 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	}
 	if newUser.NodeId != "" {
 		existingUser.NodeId = newUser.NodeId
+	}
+	if newUser.Network != "" {
+		existingUser.Network = newUser.Network
 	}
 	existingUser.Latency = newUser.Latency
 
@@ -331,7 +344,10 @@ func (repo *UserRepo) Delete(userId string) error {
 }
 
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
-	prefix := storage.NewPrefixBuilder(UsersRepoName).AddRootID(userSubNamespace).Build()
+	prefix := storage.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace).
+		AddRootID("None").
+		Build()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -412,14 +428,17 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 const UserConsensusKey = "user"
 
 // ValidateUser if already taken
-func (repo *UserRepo) ValidateUser(k, v string) error {
+func (repo *UserRepo) ValidateUser(k, v string) (isValidatorApplied bool, err error) {
+	if repo == nil {
+		return false, nil
+	}
 	if k != UserConsensusKey {
-		return nil
+		return false, nil
 	}
 
 	var outerUser domain.User
 	if err := json.JSON.Unmarshal([]byte(v), &outerUser); err != nil {
-		return err
+		return true, err
 	}
 
 	innerUser, err := repo.Get(outerUser.Id)
@@ -429,8 +448,8 @@ func (repo *UserRepo) ValidateUser(k, v string) error {
 	isOuterNewer := outerUser.CreatedAt.After(innerUser.CreatedAt)
 
 	if isUserAlreadyExists && isOuterNewer && !isSameNode {
-		return errors.New("validator rejected new user")
+		return true, errors.New("validator rejected new user")
 	}
 
-	return nil
+	return true, nil
 }

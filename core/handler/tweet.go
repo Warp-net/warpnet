@@ -5,16 +5,16 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License
+You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package handler
 
@@ -67,6 +67,7 @@ type TweetsStorer interface {
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
+	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
 }
 
 type TimelineUpdater interface {
@@ -162,58 +163,75 @@ func StreamGetTweetsHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
-		if ev.UserId == ownerId {
-			tweets, cursor, err := repo.List(ev.UserId, ev.Limit, ev.Cursor)
-			if err != nil {
-				return nil, err
-			}
-
-			if tweets != nil {
-				return event.TweetsResponse{
-					Cursor: cursor,
-					Tweets: tweets,
-					UserId: ev.UserId,
-				}, nil
-			}
-		}
-
-		otherUser, err := userRepo.Get(ev.UserId)
-		if err != nil {
-			return nil, fmt.Errorf("other user get: %v", err)
-		}
-
-		tweetsDataResp, err := streamer.GenericStream(
-			otherUser.NodeId,
-			event.PUBLIC_GET_TWEETS,
-			ev,
+		tweets, cursor, err := repo.List(
+			ev.UserId, ev.Limit, ev.Cursor,
 		)
 		if err != nil {
-			tweets, cursor, err := repo.List(ev.UserId, ev.Limit, ev.Cursor)
-			if err != nil {
-				return nil, err
-			}
-
-			if tweets != nil {
-				return event.TweetsResponse{
-					Cursor: cursor,
-					Tweets: tweets,
-					UserId: ev.UserId,
-				}, nil
-			}
-		}
-
-		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(tweetsDataResp, &possibleError); possibleError.Message != "" {
-			return nil, fmt.Errorf("unmarshal other tweets error response: %s", possibleError.Message)
-		}
-
-		var tweetsResp event.TweetsResponse
-		if err := json.JSON.Unmarshal(tweetsDataResp, &tweetsResp); err != nil {
 			return nil, err
 		}
+		if len(tweets) != 0 {
+			go tweetsRefreshBackground(repo, userRepo, ev, streamer)
 
-		return tweetsResp, nil
+			return event.TweetsResponse{
+				Cursor: cursor,
+				Tweets: tweets,
+				UserId: ev.UserId,
+			}, err
+		}
+
+		tweetsRefreshBackground(repo, userRepo, ev, streamer)
+
+		tweets, cursor, _ = repo.List(
+			ev.UserId, ev.Limit, ev.Cursor,
+		)
+
+		return event.TweetsResponse{
+			Cursor: cursor,
+			Tweets: tweets,
+			UserId: ev.UserId,
+		}, err
+	}
+}
+
+func tweetsRefreshBackground(
+	repo TweetsStorer,
+	userRepo TweetUserFetcher,
+	ev event.GetAllTweetsEvent,
+	streamer TweetStreamer,
+) {
+	if streamer.NodeInfo().OwnerId == ev.UserId {
+		return
+	}
+	otherUser, err := userRepo.Get(ev.UserId)
+	if err != nil {
+		log.Errorf("get tweets handler: get user: %v", err)
+		return
+	}
+
+	tweetsDataResp, err := streamer.GenericStream(
+		otherUser.NodeId,
+		event.PUBLIC_GET_TWEETS,
+		ev,
+	)
+	if err != nil {
+		log.Errorf("get tweets handler: stream: %v", err)
+		return
+	}
+
+	var possibleError event.ErrorResponse
+	if _ = json.JSON.Unmarshal(tweetsDataResp, &possibleError); possibleError.Message != "" {
+		log.Errorf("get tweets handler: unmarshal other tweets error response: %s", possibleError.Message)
+		return
+	}
+
+	var tweetsResp event.TweetsResponse
+	if err := json.JSON.Unmarshal(tweetsDataResp, &tweetsResp); err != nil {
+		log.Errorf("get tweets handler: unmarshalresponse: %s", tweetsDataResp)
+		return
+	}
+
+	for _, tweet := range tweetsResp.Tweets {
+		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24)
 	}
 }
 

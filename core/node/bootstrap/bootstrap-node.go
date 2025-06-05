@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -40,6 +40,7 @@ import (
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
@@ -66,10 +67,10 @@ func NewBootstrapNode(
 	psk security.PSK,
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
-	hashesCache := codeHashesCache{make(map[string]struct{})}
-	hashesCache.items[selfHashHex] = struct{}{}
-
-	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory, hashesCache.ValidateSelfHashes)
+	raft, err := consensus.NewBootstrapRaft(
+		ctx, isInMemory,
+		(&database.NodeRepo{BootstrapSelfHashHex: selfHashHex}).ValidateSelfHash,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -100,6 +101,7 @@ func NewBootstrapNode(
 		privKey,
 		memoryStore,
 		psk,
+		nil,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
@@ -145,6 +147,9 @@ func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
 }
 
 func (bn *BootstrapNode) Start() error {
+	if bn == nil {
+		return errors.New("bootstrap: nil node")
+	}
 	bn.pubsubService.Run(bn, nil)
 	if err := bn.discService.Run(bn); err != nil {
 		return err
@@ -154,8 +159,7 @@ func (bn *BootstrapNode) Start() error {
 		return err
 	}
 
-	selfHashes := map[string]struct{}{bn.selfHashHex: {}}
-	if err := bn.raft.AskSelfHashValidation(selfHashes); err != nil {
+	if err := bn.raft.AskSelfHashValidation(bn.selfHashHex); err != nil {
 		return err
 	}
 
@@ -171,6 +175,9 @@ func (bn *BootstrapNode) Start() error {
 }
 
 func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
+	if bn == nil {
+		return
+	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	bt, err := bn.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
@@ -206,4 +213,19 @@ func (bn *BootstrapNode) Stop() {
 	}
 
 	bn.WarpNode.StopNode()
+}
+
+func validateSelfHash(k, selfHashHexOwn, selfHashHexRemote string) error {
+	if k != database.SelfHashConsensusKey {
+		return nil
+	}
+
+	if len(selfHashHexRemote) == 0 {
+		return errors.New("empty codebase hash")
+	}
+	if selfHashHexOwn != selfHashHexRemote {
+		return errors.New("self hash is not in the consensus records")
+	}
+
+	return nil
 }

@@ -14,16 +14,13 @@ tests:
 	CGO_ENABLED=0 go test -count=1 -short ./...
 
 prune:
-	- rm -rf $(HOME)/.badgerdb
+	(pkill -9 main || true) && rm -rf $(HOME)/.badgerdb
 
 check-heap:
 	go build -gcflags="-m" main.go
 
 update-deps:
 	go get -v -u all && go mod vendor
-
-get-frontend:
-	go get github.com/Warp-net/warpnet-frontend && go mod vendor
 
 setup-hooks:
 	git config core.hooksPath .githooks
@@ -37,4 +34,4 @@ build-macos:
 
 reset-consensus:
 	docker volume prune --all
-	rm -rf /tmp/snapshot
+	rm -rf /tmp/snapshots

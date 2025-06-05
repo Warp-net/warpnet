@@ -5,16 +5,16 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License
+You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package consensus
 
@@ -35,6 +35,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack/v5"
 	"io"
+	"runtime/debug"
 	"sync"
 )
 
@@ -51,7 +52,7 @@ type fsm struct {
 	validators []ConsensusValidatorFunc
 }
 
-type ConsensusValidatorFunc func(k, v string) error
+type ConsensusValidatorFunc func(k, v string) (bool, error)
 
 func newFSM(validators ...ConsensusValidatorFunc) *fsm {
 	state := KVState{"genesis": ""}
@@ -69,14 +70,16 @@ func (fsm *fsm) AmendValidator(validator ConsensusValidatorFunc) {
 
 // Apply is invoked by Raft once a log entry is commited. Do not use directly.
 func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
-	fsm.mux.Lock()
-	defer fsm.mux.Unlock()
 	defer func() {
 		if r := recover(); r != nil {
+			log.Errorf("recovered from panic: %v %s", r, debug.Stack())
 			*fsm.state = fsm.prevState
 			result = warpnet.WarpError("consensus: fsm apply panic: rollback")
 		}
 	}()
+
+	fsm.mux.Lock()
+	defer fsm.mux.Unlock()
 
 	if rlog.Type != raft.LogCommand {
 		return nil
@@ -84,14 +87,18 @@ func (fsm *fsm) Apply(rlog *raft.Log) (result interface{}) {
 
 	var newState = make(KVState, 1)
 	if err := msgpack.Unmarshal(rlog.Data, &newState); err != nil {
-		log.Errorf("consensus: failed to decode log: %v", err)
+		log.Errorf("consensus: failed to decode log: %s,  %v", rlog.Data, err)
 		return fmt.Errorf("consensus: failed to decode log: %w", err)
 	}
 
 	for _, validator := range fsm.validators {
 		for k, v := range newState {
-			if err := validator(k, v); err != nil {
+			isValidatorApplied, err := validator(k, v)
+			if err != nil {
 				return err
+			}
+			if isValidatorApplied {
+				return fsm.state
 			}
 		}
 	}
@@ -116,6 +123,7 @@ func (fsm *fsm) Snapshot() (raft.FSMSnapshot, error) {
 	buf := new(bytes.Buffer)
 	err := msgpack.NewEncoder(buf).Encode(fsm.state)
 	if err != nil {
+		log.Errorf("consensus: failed to encode snapshot: %v", err)
 		return nil, err
 	}
 
@@ -130,7 +138,7 @@ func (fsm *fsm) Restore(reader io.ReadCloser) error {
 
 	err := msgpack.NewDecoder(reader).Decode(fsm.state)
 	if err != nil {
-		log.Errorf("consensus: fsm: decoding snapshot: %s", err)
+		log.Errorf("consensus: fsm: restoring snapshot: %s", err)
 		return err
 	}
 
@@ -152,6 +160,4 @@ func (snap *fsmSnapshot) Persist(sink raft.SnapshotSink) error {
 	return sink.Close()
 }
 
-func (snap *fsmSnapshot) Release() {
-	log.Debugln("consensus: fsm: releasing snapshot")
-}
+func (snap *fsmSnapshot) Release() {}

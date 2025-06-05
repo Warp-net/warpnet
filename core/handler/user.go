@@ -5,16 +5,16 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License
+You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package handler
 
@@ -33,15 +33,16 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type UserStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
 }
 
 type UserTweetsCounter interface {
@@ -58,6 +59,7 @@ type UserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
+	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 }
 
 type UserAuthStorer interface {
@@ -147,7 +149,6 @@ func StreamGetUserHandler(
 
 func StreamGetUsersHandler(
 	userRepo UserFetcher,
-	authRepo UserAuthStorer,
 	streamer UserStreamer,
 ) middleware.WarpHandler {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -161,61 +162,71 @@ func StreamGetUsersHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		ownerId := authRepo.GetOwner().UserId
-
-		if ev.UserId == ownerId {
-			users, cursor, err := userRepo.List(ev.Limit, ev.Cursor)
-			if err != nil {
-				return nil, err
-			}
+		users, cursor, err := userRepo.List(ev.Limit, ev.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		if len(users) != 0 {
+			go usersRefreshBackground(userRepo, ev, streamer)
 
 			return event.UsersResponse{
 				Cursor: cursor,
 				Users:  users,
-			}, nil
+			}, err
 		}
 
-		otherUser, err := userRepo.Get(ev.UserId)
-		if err != nil {
-			return nil, fmt.Errorf("other user get: %v", err)
-		}
+		usersRefreshBackground(userRepo, ev, streamer)
 
-		usersDataResp, err := streamer.GenericStream(
-			otherUser.NodeId,
-			event.PUBLIC_GET_USERS,
-			ev,
-		)
-		if err != nil {
-			return event.UsersResponse{
-				Cursor: "",
-				Users:  []domain.User{},
-			}, nil
-		}
+		users, cursor, _ = userRepo.List(ev.Limit, ev.Cursor)
 
-		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
-			return nil, fmt.Errorf("unmarshal other users error response: %s", possibleError.Message)
-		}
-
-		var usersResp event.UsersResponse
-		if err := json.JSON.Unmarshal(usersDataResp, &usersResp); err != nil {
-			return nil, err
-		}
-
-		for _, user := range usersResp.Users {
-			_, err := userRepo.Create(user)
-			if errors.Is(err, database.ErrUserAlreadyExists) {
-				_, _ = userRepo.Update(user.Id, user)
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-		return usersResp, nil
+		return event.UsersResponse{
+			Cursor: cursor,
+			Users:  users,
+		}, err
 	}
 }
 
+func usersRefreshBackground(
+	userRepo UserFetcher,
+	ev event.GetAllUsersEvent,
+	streamer UserStreamer,
+) {
+	if streamer.NodeInfo().OwnerId == ev.UserId {
+		return
+	}
+	otherUser, err := userRepo.Get(ev.UserId)
+	if err != nil {
+		log.Errorf("get users handler: get user %v", err)
+		return
+	}
+
+	usersDataResp, err := streamer.GenericStream(
+		otherUser.NodeId,
+		event.PUBLIC_GET_USERS,
+		ev,
+	)
+	if err != nil {
+		log.Errorf("get users handler: stream %v", err)
+		return
+	}
+
+	var possibleError event.ErrorResponse
+	if _ = json.JSON.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
+		log.Errorf("unmarshal other users error response: %s", possibleError.Message)
+		return
+	}
+
+	var usersResp event.UsersResponse
+	if err := json.JSON.Unmarshal(usersDataResp, &usersResp); err != nil {
+		log.Errorf("ummarshal users response:%v %s", err, usersDataResp)
+		return
+	}
+
+	for _, user := range usersResp.Users {
+		_, _ = userRepo.Create(user)
+		_, _ = userRepo.Update(user.Id, user)
+	}
+}
 func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) middleware.WarpHandler {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewUserEvent

@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -68,7 +68,7 @@ type ConsensusProvider interface {
 	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
 	Shutdown()
 	AskUserValidation(user domain.User) error
-	AskSelfHashValidation(hashes map[string]struct{}) error
+	AskSelfHashValidation(hashHex string) error
 	Stats() map[string]string
 }
 
@@ -88,12 +88,13 @@ type AuthProvider interface {
 
 type UserProvider interface {
 	Create(user domain.User) (domain.User, error)
-	ValidateUser(k, v string) error
+	ValidateUser(k, v string) (bool, error)
 	GetByNodeID(nodeID string) (user domain.User, err error)
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	GetBatch(userIds ...string) (users []domain.User, err error)
+	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 }
 
 type ClientNodeStreamer interface {
