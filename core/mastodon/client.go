@@ -280,7 +280,7 @@ func (m *WarpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *strin
 				site = f.Value
 			}
 		}
-		fmt.Println("AVATAR", acct.AvatarStatic)
+
 		u := domain.User{
 			AvatarKey:          acct.AvatarStatic,
 			BackgroundImageKey: acct.HeaderStatic,
