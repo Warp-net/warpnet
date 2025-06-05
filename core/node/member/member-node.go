@@ -175,20 +175,7 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 
 	m.mdnsService.Start(m)
 
-	ownerUser, err := m.userRepo.Get(m.ownerId)
-	if err != nil {
-		return fmt.Errorf("member: failed to get owner user: %v", err)
-	}
-
-	err = m.retrier.Try(context.Background(), func() error {
-		return m.raft.AskUserValidation(ownerUser)
-	})
-	if err != nil {
-		return fmt.Errorf("member: validate owner user by consensus: %v", err)
-	}
-	log.Infoln("member: owner user validated")
-
-	err = m.retrier.Try(context.Background(), func() error {
+	err := m.retrier.Try(context.Background(), func() error {
 		return m.raft.AskSelfHashValidation(m.selfHashHex)
 	})
 	if err != nil {

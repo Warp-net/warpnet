@@ -166,8 +166,24 @@ func StreamGetTweetsHandler(
 		tweets, cursor, err := repo.List(
 			ev.UserId, ev.Limit, ev.Cursor,
 		)
+		if err != nil {
+			return nil, err
+		}
+		if len(tweets) != 0 {
+			go tweetsRefreshBackground(repo, userRepo, ev, streamer)
 
-		go tweetsRefreshBack(repo, userRepo, ev, streamer)
+			return event.TweetsResponse{
+				Cursor: cursor,
+				Tweets: tweets,
+				UserId: ev.UserId,
+			}, err
+		}
+
+		tweetsRefreshBackground(repo, userRepo, ev, streamer)
+
+		tweets, cursor, _ = repo.List(
+			ev.UserId, ev.Limit, ev.Cursor,
+		)
 
 		return event.TweetsResponse{
 			Cursor: cursor,
@@ -177,7 +193,7 @@ func StreamGetTweetsHandler(
 	}
 }
 
-func tweetsRefreshBack(
+func tweetsRefreshBackground(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
 	ev event.GetAllTweetsEvent,

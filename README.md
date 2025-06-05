@@ -110,6 +110,6 @@ https://codeberg.org/Warpnet/warpnet
 
 ## License
 
-Warpnet is free software licensed under the GNU General Public License v3.0 or later.
+Warpnet is free software licensed under the GNU Affero General Public License v3.0 or later.
 
 See the [LICENSE](./LICENSE) file for details.

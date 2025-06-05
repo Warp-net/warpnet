@@ -346,6 +346,9 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			retweetedBy *string
 			parentId    string
 			tweetId     = string(toot.ID)
+			content     = stripper.StripTags(toot.Content)
+			username    = toot.Account.DisplayName
+			tootUserId  = string(toot.Account.ID)
 		)
 		if pid, ok := toot.InReplyToID.(string); ok {
 			parentId = pid
@@ -358,6 +361,9 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			if pid, ok := originalTweet.InReplyToID.(string); ok {
 				parentId = pid
 			}
+			content = stripper.StripTags(originalTweet.Content)
+			username = originalTweet.Account.DisplayName
+			tootUserId = string(originalTweet.Account.ID)
 		}
 
 		resp.Tweets = append(resp.Tweets, domain.Tweet{
@@ -366,9 +372,9 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			ParentId:    &parentId,
 			RetweetedBy: retweetedBy,
 			RootId:      parentId,
-			Text:        stripper.StripTags(toot.Content),
-			UserId:      string(toot.Account.ID),
-			Username:    toot.Account.DisplayName,
+			Text:        content,
+			UserId:      tootUserId,
+			Username:    username,
 			ImageKey:    imageKey,
 			Network:     MastodonNetwork,
 		})
@@ -397,6 +403,9 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		retweetedBy *string
 		parentId    string
 		statusId    = string(status.ID)
+		content     = stripper.StripTags(status.Content)
+		username    = status.Account.DisplayName
+		userId      = string(status.Account.ID)
 	)
 	if pid, ok := status.InReplyToID.(string); ok {
 		parentId = pid
@@ -409,6 +418,9 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		if pid, ok := originalTweet.InReplyToID.(string); ok {
 			parentId = pid
 		}
+		content = stripper.StripTags(originalTweet.Content)
+		username = originalTweet.Account.DisplayName
+		userId = string(originalTweet.Account.ID)
 	}
 
 	tweet := domain.Tweet{
@@ -417,9 +429,9 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		ParentId:    &parentId,
 		RetweetedBy: retweetedBy,
 		RootId:      parentId,
-		Text:        stripper.StripTags(status.Content),
-		UserId:      string(status.Account.ID),
-		Username:    status.Account.DisplayName,
+		Text:        content,
+		UserId:      userId,
+		Username:    username,
 		ImageKey:    imageKey,
 		Network:     MastodonNetwork,
 	}
@@ -476,7 +488,7 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 
 		media := status.MediaAttachments
 		imageKey := ""
-		if len(media) > 0 && media[0].Type == "image" {
+		if len(media) > 0 && media[0].Type == "image" { // TODO
 			imageKey = media[0].URL
 		}
 

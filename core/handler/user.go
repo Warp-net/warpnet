@@ -163,8 +163,21 @@ func StreamGetUsersHandler(
 		}
 
 		users, cursor, err := userRepo.List(ev.Limit, ev.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		if len(users) != 0 {
+			go usersRefreshBackground(userRepo, ev, streamer)
 
-		go usersRefreshBack(userRepo, ev, streamer)
+			return event.UsersResponse{
+				Cursor: cursor,
+				Users:  users,
+			}, err
+		}
+
+		usersRefreshBackground(userRepo, ev, streamer)
+
+		users, cursor, _ = userRepo.List(ev.Limit, ev.Cursor)
 
 		return event.UsersResponse{
 			Cursor: cursor,
@@ -173,7 +186,7 @@ func StreamGetUsersHandler(
 	}
 }
 
-func usersRefreshBack(
+func usersRefreshBackground(
 	userRepo UserFetcher,
 	ev event.GetAllUsersEvent,
 	streamer UserStreamer,
