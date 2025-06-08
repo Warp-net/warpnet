@@ -31,12 +31,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/consensus/gossip"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 	"slices"
@@ -54,11 +56,10 @@ func (t topicPrefix) isIn(s string) bool {
 
 const (
 	// full names
-	pubSubDiscoveryTopic     = "peer-discovery"
-	leaderAnnouncementsTopic = "leader-announcements"
-
+	pubSubDiscoveryTopic = "peer-discovery"
 	// prefixes
-	userUpdateTopicPrefix topicPrefix = "user-update"
+	userUpdateTopicPrefix             topicPrefix = "user-update"
+	pubSubConsensusAnnounsementsTopic             = "consensus-announcements"
 )
 
 type PubsubServerNodeConnector interface {
@@ -88,6 +89,7 @@ type warpPubSub struct {
 	relayCancelFuncs map[string]pubsub.RelayCancelFunc
 	topics           map[string]*pubsub.Topic
 	discoveryHandler discovery.DiscoveryHandler
+	consensusHandler gossip.ConsensusHandler
 
 	isRunning *atomic.Bool
 }
@@ -97,6 +99,7 @@ func NewPubSub(
 	followRepo PubsubFollowingStorer,
 	ownerId string,
 	discoveryHandler discovery.DiscoveryHandler,
+	consensusHandler gossip.ConsensusHandler,
 ) *warpPubSub {
 
 	g := &warpPubSub{
@@ -105,6 +108,7 @@ func NewPubSub(
 		serverNode:       nil,
 		clientNode:       nil,
 		discoveryHandler: discoveryHandler,
+		consensusHandler: consensusHandler,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
 		topics:           map[string]*pubsub.Topic{},
@@ -120,8 +124,9 @@ func NewPubSub(
 func NewPubSubBootstrap(
 	ctx context.Context,
 	discoveryHandler discovery.DiscoveryHandler,
+	consensusHandler gossip.ConsensusHandler,
 ) *warpPubSub {
-	return NewPubSub(ctx, nil, warpnet.BootstrapOwner, discoveryHandler)
+	return NewPubSub(ctx, nil, warpnet.BootstrapOwner, discoveryHandler, consensusHandler)
 }
 
 func (g *warpPubSub) Run(
@@ -192,8 +197,13 @@ func (g *warpPubSub) runListener() error {
 			case pubSubDiscoveryTopic:
 				g.handlePubSubDiscovery(msg)
 				continue
-			case leaderAnnouncementsTopic:
-				log.WithField("topic", *msg.Topic).Info("pubsub: leader announcement:", string(msg.Data))
+			case pubSubConsensusAnnounsementsTopic: // TODO
+				var consensusMsg event.Message
+				if err := json.JSON.Unmarshal(msg.Data, &consensusMsg); err != nil {
+					log.Errorf("pubsub: failed to decode user update message: %v %s", err, msg.Data)
+					return err
+				}
+				g.consensusHandler(consensusMsg)
 				continue
 			default:
 			}
@@ -231,7 +241,10 @@ func (g *warpPubSub) runPubSub(n PubsubServerNodeConnector) (err error) {
 	if err := g.subscribe(pubSubDiscoveryTopic); err != nil {
 		return err
 	}
-	if err := g.subscribe(leaderAnnouncementsTopic); err != nil {
+	if err := g.subscribe(pubSubConsensusAnnounsementsTopic); err != nil {
+		return err
+	}
+	if err := g.SubscribeUserUpdate(g.ownerId); err != nil {
 		return err
 	}
 
@@ -278,6 +291,10 @@ func (g *warpPubSub) subscribeFollowees() error {
 	return nil
 }
 
+func (g *warpPubSub) GenericSubscribe(topics ...string) (err error) {
+	return g.subscribe(topics...)
+}
+
 func (g *warpPubSub) subscribe(topics ...string) (err error) {
 	if g == nil || !g.isRunning.Load() {
 		return warpnet.WarpError("pubsub: service not initialized")
@@ -303,7 +320,7 @@ func (g *warpPubSub) subscribe(topics ...string) (err error) {
 		if err != nil {
 			return err
 		}
-		
+
 		sub, err := topic.Subscribe()
 		if err != nil {
 			return err
@@ -318,12 +335,15 @@ func (g *warpPubSub) subscribe(topics ...string) (err error) {
 	return nil
 }
 
-func (g *warpPubSub) GetSubscribers() []warpnet.WarpPeerID {
+func (g *warpPubSub) OwnerID() string {
+	return g.ownerId
+}
+
+func (g *warpPubSub) GetDiscoverySubscribers() []warpnet.WarpPeerID {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 
-	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, g.ownerId)
-	topic, ok := g.topics[topicName]
+	topic, ok := g.topics[pubSubDiscoveryTopic]
 	if !ok {
 		return nil
 	}
@@ -382,6 +402,19 @@ func (g *warpPubSub) publish(msg event.Message, topics ...string) (err error) {
 				return err
 			}
 			g.topics[topicName] = topic
+		}
+
+		if msg.MessageId == "" {
+			msg.MessageId = uuid.New().String()
+		}
+		if msg.NodeId == "" {
+			msg.NodeId = g.serverNode.NodeInfo().ID.String()
+		}
+		if msg.Version == "" {
+			msg.Version = "0.0.0"
+		}
+		if msg.Timestamp.IsZero() {
+			msg.Timestamp = time.Now()
 		}
 
 		data, err := json.JSON.Marshal(msg)
@@ -498,6 +531,13 @@ func (g *warpPubSub) handlePubSubDiscovery(msg *pubsub.Message) {
 			g.discoveryHandler(peerInfo)
 		}
 	}
+}
+
+func (g *warpPubSub) PublishConsensusAnnouncement(msg event.Message) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	return g.publish(msg, pubSubConsensusAnnounsementsTopic)
 }
 
 // PublishOwnerUpdate - publish for followers

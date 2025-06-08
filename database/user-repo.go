@@ -33,6 +33,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/database/storage"
@@ -377,6 +378,52 @@ func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string
 	return users, cur, nil
 }
 
+// TODO refactor
+func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error) {
+	profile, err := repo.Get(profileId)
+	if err != nil {
+		return nil, "", err
+	}
+	if cursor == nil {
+		cursor = new(string)
+	}
+
+	users, cur, err := repo.List(limit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+
+	recommended := make([]domain.User, 0, len(users))
+	for _, u := range users {
+		if u.IsOffline {
+			continue
+		}
+		if u.AvatarKey == "" || strings.Contains(strings.ToLower(u.AvatarKey), "missing") {
+			continue
+		}
+		if u.TweetsCount == 0 {
+			continue
+		}
+		if profile.Network != u.Network { // if profile from Warpnet - don't show other network recommendations
+			continue
+		}
+		recommended = append(recommended, u)
+	}
+
+	left := len(users) - len(recommended)
+	if left <= 0 || cur == "end" || cur == *cursor {
+		return recommended, cur, nil
+	}
+
+	left64 := uint64(left)
+	leftUsers, cur, err := repo.WhoToFollow(profileId, &left64, &cur)
+	if err != nil {
+		return nil, "", err
+	}
+	recommended = append(recommended, leftUsers...)
+	return recommended, cur, nil
+}
+
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
 	if len(userIDs) == 0 {
 		return users, nil
@@ -425,20 +472,15 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 	return users, txn.Commit()
 }
 
-const UserConsensusKey = "user"
-
 // ValidateUser if already taken
-func (repo *UserRepo) ValidateUser(k, v string) (isValidatorApplied bool, err error) {
+func (repo *UserRepo) ValidateUserID(v string) error {
 	if repo == nil {
-		return false, nil
-	}
-	if k != UserConsensusKey {
-		return false, nil
+		return nil
 	}
 
 	var outerUser domain.User
 	if err := json.JSON.Unmarshal([]byte(v), &outerUser); err != nil {
-		return true, err
+		return err
 	}
 
 	innerUser, err := repo.Get(outerUser.Id)
@@ -448,8 +490,8 @@ func (repo *UserRepo) ValidateUser(k, v string) (isValidatorApplied bool, err er
 	isOuterNewer := outerUser.CreatedAt.After(innerUser.CreatedAt)
 
 	if isUserAlreadyExists && isOuterNewer && !isSameNode {
-		return true, errors.New("validator rejected new user")
+		return errors.New("validator rejected new user")
 	}
 
-	return true, nil
+	return nil
 }

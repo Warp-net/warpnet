@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package bootstrap
 
 import (
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -43,14 +42,6 @@ type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector, clientNode pubsub.PubsubClientNodeStreamer)
 	PublishOwnerUpdate(ownerId string, msg event.Message) (err error)
 	Close() error
-}
-
-type ConsensusProvider interface {
-	Start(node consensus.NodeTransporter) (err error)
-	LeaderID() warpnet.WarpPeerID
-	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
-	Shutdown()
-	AskSelfHashValidation(selfHashHex string) error
 }
 
 type DistributedHashTableCloser interface {

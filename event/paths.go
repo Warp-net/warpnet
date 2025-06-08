@@ -29,7 +29,6 @@ package event
 
 const (
 	// admin
-	PUBLIC_POST_NODE_VERIFY   = "/public/post/admin/verifynode/0.0.0"
 	PUBLIC_GET_NODE_CHALLENGE = "/public/get/admin/challenge/0.0.0"
 	PRIVATE_POST_PAIR         = "/private/post/admin/pair/0.0.0"
 	PRIVATE_GET_STATS         = "/private/get/admin/stats/0.0.0"
@@ -58,6 +57,7 @@ const (
 	PUBLIC_GET_TWEETS         = "/public/get/tweets/0.0.0"
 	PUBLIC_GET_USER           = "/public/get/user/0.0.0"
 	PUBLIC_GET_USERS          = "/public/get/users/0.0.0"
+	PUBLIC_GET_WHOTOFOLLOW    = "/public/get/whotofollow/0.0.0"
 	PUBLIC_POST_CHAT          = "/public/post/chat/0.0.0"
 	PUBLIC_POST_FOLLOW        = "/public/post/follow/0.0.0"
 	PUBLIC_POST_LIKE          = "/public/post/like/0.0.0"

@@ -31,7 +31,6 @@ import (
 	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -53,7 +52,6 @@ type BootstrapNode struct {
 
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
-	raft              ConsensusProvider
 	dHashTable        DistributedHashTableCloser
 	memoryStoreCloseF func() error
 	psk               security.PSK
@@ -67,15 +65,7 @@ func NewBootstrapNode(
 	psk security.PSK,
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
-	raft, err := consensus.NewBootstrapRaft(
-		ctx, isInMemory,
-		(&database.NodeRepo{BootstrapSelfHashHex: selfHashHex}).ValidateSelfHash,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	discService := discovery.NewBootstrapDiscoveryService(ctx, raft.AddVoter)
+	discService := discovery.NewBootstrapDiscoveryService(ctx)
 
 	pubsubService := pubsub.NewPubSubBootstrap(ctx, discService.DefaultDiscoveryHandler)
 
@@ -93,7 +83,7 @@ func NewBootstrapNode(
 
 	dHashTable := dht.NewDHTable(
 		ctx, mapStore,
-		raft.RemoveVoter, discService.DefaultDiscoveryHandler, raft.AddVoter,
+		nil, discService.DefaultDiscoveryHandler,
 	)
 
 	node, err := base.NewWarpNode(
@@ -116,7 +106,6 @@ func NewBootstrapNode(
 		WarpNode:          node,
 		discService:       discService,
 		pubsubService:     pubsubService,
-		raft:              raft,
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
@@ -125,10 +114,6 @@ func NewBootstrapNode(
 
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
-	bn.SetStreamHandler(
-		event.PUBLIC_POST_NODE_VERIFY,
-		logMw(mw.UnwrapStreamMiddleware(handler.StreamVerifyHandler(bn.raft))),
-	)
 	bn.SetStreamHandler(
 		event.PUBLIC_GET_INFO,
 		logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
@@ -152,14 +137,6 @@ func (bn *BootstrapNode) Start() error {
 	}
 	bn.pubsubService.Run(bn, nil)
 	if err := bn.discService.Run(bn); err != nil {
-		return err
-	}
-
-	if err := bn.raft.Start(bn); err != nil {
-		return err
-	}
-
-	if err := bn.raft.AskSelfHashValidation(bn.selfHashHex); err != nil {
 		return err
 	}
 
@@ -203,9 +180,7 @@ func (bn *BootstrapNode) Stop() {
 	if bn.dHashTable != nil {
 		bn.dHashTable.Close()
 	}
-	if bn.raft != nil {
-		bn.raft.Shutdown()
-	}
+
 	if bn.memoryStoreCloseF != nil {
 		if err := bn.memoryStoreCloseF(); err != nil {
 			log.Errorf("bootstrap: failed to close memory store: %v", err)

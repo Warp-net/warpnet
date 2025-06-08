@@ -47,7 +47,6 @@ type StatsProvider interface {
 func StreamGetStatsHandler(
 	i StatsNodeInformer,
 	db StatsProvider,
-	consensus StatsProvider,
 ) middleware.WarpHandler {
 	return func(_ []byte, s warpnet.WarpStream) (any, error) {
 		sent, recv := warpnet.GetNetworkIO()
@@ -75,7 +74,7 @@ func StreamGetStatsHandler(
 			NetworkState:    networkState,
 			RelayState:      nodeInfo.RelayState,
 			DatabaseStats:   db.Stats(),
-			ConsensusStats:  consensus.Stats(),
+			ConsensusStats:  nil,
 			MemoryStats:     warpnet.GetMemoryStats(),
 			CPUStats:        warpnet.GetCPUStats(),
 			BytesSent:       sent,

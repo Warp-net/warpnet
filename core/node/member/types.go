@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package member
 
 import (
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/pubsub"
@@ -62,16 +61,6 @@ type UserFetcher interface {
 	GetByNodeID(nodeID string) (user domain.User, err error)
 }
 
-type ConsensusProvider interface {
-	Start(node consensus.NodeTransporter) (err error)
-	LeaderID() warpnet.WarpPeerID
-	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
-	Shutdown()
-	AskUserValidation(user domain.User) error
-	AskSelfHashValidation(hashHex string) error
-	Stats() map[string]string
-}
-
 type DistributedHashTableCloser interface {
 	Close()
 }
@@ -88,13 +77,13 @@ type AuthProvider interface {
 
 type UserProvider interface {
 	Create(user domain.User) (domain.User, error)
-	ValidateUser(k, v string) (bool, error)
 	GetByNodeID(nodeID string) (user domain.User, err error)
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	GetBatch(userIds ...string) (users []domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
+	WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error)
 }
 
 type ClientNodeStreamer interface {
