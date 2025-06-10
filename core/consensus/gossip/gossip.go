@@ -142,6 +142,7 @@ func (g *gossipConsensus) listenResponses() error {
 
 // internal call from client node from PubSub
 func (g *gossipConsensus) Validate(data []byte, _ warpnet.WarpStream) (any, error) {
+	log.Infof("gossip consensus: validation request received: %s", data)
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -163,7 +164,9 @@ func (g *gossipConsensus) Validate(data []byte, _ warpnet.WarpStream) (any, erro
 			break
 		}
 	}
-	return g.streamer.GenericStream(
+
+	log.Infof("gossip consensus: sending validation result to: %s", ev.ValidatedNodeID)
+	bt, err := g.streamer.GenericStream(
 		ev.ValidatedNodeID,
 		event.PUBLIC_GET_NODE_VALIDATION_RESULT,
 		event.ValidationEventResponse{
@@ -171,10 +174,16 @@ func (g *gossipConsensus) Validate(data []byte, _ warpnet.WarpStream) (any, erro
 			ValidatedID: ev.ValidatedNodeID,
 			Reason:      &reason,
 		})
+	if err != nil {
+		log.Errorf("gossip consensus: failed to send validation result: %v", err)
+	}
+	return bt, err
 }
 
 func (g *gossipConsensus) ValidationResult(data []byte, s warpnet.WarpStream) (any, error) {
+	log.Infof("gossip consensus: validation result received: %s", data)
 	if g.isClosed.Load() {
+		log.Infoln("gossip consensus: closed")
 		return nil, nil
 	}
 	if len(data) == 0 {
@@ -182,6 +191,7 @@ func (g *gossipConsensus) ValidationResult(data []byte, s warpnet.WarpStream) (a
 	}
 	var resp event.ValidationEventResponse
 	if err := json.JSON.Unmarshal(data, &resp); err != nil {
+		log.Errorf("gossip consensus: failed to decode validation result: %v %s", err, data)
 		return nil, err
 	}
 	resp.ValidatorID = s.Conn().RemotePeer().String()
