@@ -30,6 +30,7 @@ package database
 import (
 	"errors"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 	"math"
 	"strconv"
@@ -473,21 +474,20 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 }
 
 // ValidateUser if already taken
-func (repo *UserRepo) ValidateUserID(v string) error {
+func (repo *UserRepo) ValidateUserID(ev event.ValidationEvent) error {
 	if repo == nil {
 		return nil
 	}
 
-	var outerUser domain.User
-	if err := json.JSON.Unmarshal([]byte(v), &outerUser); err != nil {
-		return err
+	if ev.User == nil {
+		return nil
 	}
 
-	innerUser, err := repo.Get(outerUser.Id)
+	innerUser, err := repo.Get(ev.User.Id)
 
 	isUserAlreadyExists := !errors.Is(err, ErrUserNotFound) || err == nil
-	isSameNode := outerUser.NodeId == innerUser.NodeId
-	isOuterNewer := outerUser.CreatedAt.After(innerUser.CreatedAt)
+	isSameNode := ev.User.NodeId == innerUser.NodeId
+	isOuterNewer := ev.User.CreatedAt.After(innerUser.CreatedAt)
 
 	if isUserAlreadyExists && isOuterNewer && !isSameNode {
 		return errors.New("validator rejected new user")

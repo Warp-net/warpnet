@@ -3,9 +3,12 @@
 
 package srtp
 
-import "bytes"
+import (
+	"bytes"
+	"unsafe"
+)
 
-// Grow the buffer size to the given number of bytes.
+// growBufferSize grows the buffer size to the given number of bytes.
 func growBufferSize(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
@@ -13,10 +16,11 @@ func growBufferSize(buf []byte, size int) []byte {
 
 	buf2 := make([]byte, size)
 	copy(buf2, buf)
+
 	return buf2
 }
 
-// Check if buffers match, if not allocate a new buffer and return it
+// allocateIfMismatch checks if buffers match, if not allocates a new buffer and returns it.
 func allocateIfMismatch(dst, src []byte) []byte {
 	if dst == nil {
 		dst = make([]byte, len(src))
@@ -24,7 +28,7 @@ func allocateIfMismatch(dst, src []byte) []byte {
 	} else if !bytes.Equal(dst, src) { // bytes.Equal returns on ref equality, no optimization needed
 		extraNeeded := len(src) - len(dst)
 		if extraNeeded > 0 {
-			dst = append(dst, make([]byte, extraNeeded)...)
+			dst = append(dst, make([]byte, extraNeeded)...) //nolint:makezero // todo: fix
 		} else if extraNeeded < 0 {
 			dst = dst[:len(dst)+extraNeeded]
 		}
@@ -33,4 +37,23 @@ func allocateIfMismatch(dst, src []byte) []byte {
 	}
 
 	return dst
+}
+
+// isSameBuffer returns true if slices a and b share the same underlying buffer.
+func isSameBuffer(a, b []byte) bool {
+	// If both are nil, they are technically the same (no buffer)
+	if a == nil && b == nil {
+		return true
+	}
+
+	// If either is nil, or both have 0 capacity, they can't share backing buffer
+	if cap(a) == 0 || cap(b) == 0 {
+		return false
+	}
+
+	// Create a slice of length 1 from each if possible
+	aPtr := unsafe.Pointer(&a[:1][0]) // nolint:gosec
+	bPtr := unsafe.Pointer(&b[:1][0]) // nolint:gosec
+
+	return aPtr == bPtr
 }

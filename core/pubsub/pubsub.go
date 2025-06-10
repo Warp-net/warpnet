@@ -31,7 +31,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/consensus/gossip"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -48,6 +47,7 @@ import (
 	"time"
 )
 
+// TODO clean up the mess
 type topicPrefix string
 
 func (t topicPrefix) isIn(s string) bool {
@@ -57,9 +57,9 @@ func (t topicPrefix) isIn(s string) bool {
 const (
 	// full names
 	pubSubDiscoveryTopic = "peer-discovery"
+	pubSubConsensusTopic = "peer-consensus"
 	// prefixes
-	userUpdateTopicPrefix             topicPrefix = "user-update"
-	pubSubConsensusAnnounsementsTopic             = "consensus-announcements"
+	userUpdateTopicPrefix topicPrefix = "user-update"
 )
 
 type PubsubServerNodeConnector interface {
@@ -89,7 +89,6 @@ type warpPubSub struct {
 	relayCancelFuncs map[string]pubsub.RelayCancelFunc
 	topics           map[string]*pubsub.Topic
 	discoveryHandler discovery.DiscoveryHandler
-	consensusHandler gossip.ConsensusHandler
 
 	isRunning *atomic.Bool
 }
@@ -99,16 +98,13 @@ func NewPubSub(
 	followRepo PubsubFollowingStorer,
 	ownerId string,
 	discoveryHandler discovery.DiscoveryHandler,
-	consensusHandler gossip.ConsensusHandler,
 ) *warpPubSub {
-
-	g := &warpPubSub{
+	return &warpPubSub{
 		ctx:              ctx,
 		pubsub:           nil,
 		serverNode:       nil,
 		clientNode:       nil,
 		discoveryHandler: discoveryHandler,
-		consensusHandler: consensusHandler,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
 		topics:           map[string]*pubsub.Topic{},
@@ -117,16 +113,13 @@ func NewPubSub(
 		ownerId:          ownerId,
 		isRunning:        new(atomic.Bool),
 	}
-
-	return g
 }
 
 func NewPubSubBootstrap(
 	ctx context.Context,
 	discoveryHandler discovery.DiscoveryHandler,
-	consensusHandler gossip.ConsensusHandler,
 ) *warpPubSub {
-	return NewPubSub(ctx, nil, warpnet.BootstrapOwner, discoveryHandler, consensusHandler)
+	return NewPubSub(ctx, nil, warpnet.BootstrapOwner, discoveryHandler)
 }
 
 func (g *warpPubSub) Run(
@@ -197,13 +190,11 @@ func (g *warpPubSub) runListener() error {
 			case pubSubDiscoveryTopic:
 				g.handlePubSubDiscovery(msg)
 				continue
-			case pubSubConsensusAnnounsementsTopic: // TODO
-				var consensusMsg event.Message
-				if err := json.JSON.Unmarshal(msg.Data, &consensusMsg); err != nil {
-					log.Errorf("pubsub: failed to decode user update message: %v %s", err, msg.Data)
-					return err
+
+			case pubSubConsensusTopic:
+				if err := g.handleUserUpdate(msg); err != nil {
+					log.Infof("pubsub: consensus update error: %v", err)
 				}
-				g.consensusHandler(consensusMsg)
 				continue
 			default:
 			}
@@ -238,13 +229,7 @@ func (g *warpPubSub) runPubSub(n PubsubServerNodeConnector) (err error) {
 	}
 	g.isRunning.Store(true)
 
-	if err := g.subscribe(pubSubDiscoveryTopic); err != nil {
-		return err
-	}
-	if err := g.subscribe(pubSubConsensusAnnounsementsTopic); err != nil {
-		return err
-	}
-	if err := g.SubscribeUserUpdate(g.ownerId); err != nil {
+	if err := g.subscribe(pubSubDiscoveryTopic, pubSubConsensusTopic); err != nil {
 		return err
 	}
 
@@ -291,8 +276,46 @@ func (g *warpPubSub) subscribeFollowees() error {
 	return nil
 }
 
+func (g *warpPubSub) OwnerID() string {
+	return g.ownerId
+}
+
+func (g *warpPubSub) GetDiscoverySubscribers() []warpnet.WarpPeerID {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+
+	topic, ok := g.topics[pubSubDiscoveryTopic]
+	if !ok {
+		return nil
+	}
+
+	return topic.ListPeers()
+}
+
 func (g *warpPubSub) GenericSubscribe(topics ...string) (err error) {
 	return g.subscribe(topics...)
+}
+
+// SubscribeUserUpdate - follow someone
+func (g *warpPubSub) SubscribeUserUpdate(userId string) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	if g.ownerId == userId {
+		return warpnet.WarpError("pubsub: can't subscribe to own user")
+	}
+
+	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
+	return g.subscribe(topicName)
+}
+
+// UnsubscribeUserUpdate - unfollow someone
+func (g *warpPubSub) UnsubscribeUserUpdate(userId string) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
+	return g.unsubscribe(topicName)
 }
 
 func (g *warpPubSub) subscribe(topics ...string) (err error) {
@@ -331,24 +354,7 @@ func (g *warpPubSub) subscribe(topics ...string) (err error) {
 		g.relayCancelFuncs[topicName] = relayCancel
 		g.subs = append(g.subs, sub)
 	}
-
 	return nil
-}
-
-func (g *warpPubSub) OwnerID() string {
-	return g.ownerId
-}
-
-func (g *warpPubSub) GetDiscoverySubscribers() []warpnet.WarpPeerID {
-	g.mx.RLock()
-	defer g.mx.RUnlock()
-
-	topic, ok := g.topics[pubSubDiscoveryTopic]
-	if !ok {
-		return nil
-	}
-
-	return topic.ListPeers()
 }
 
 func (g *warpPubSub) unsubscribe(topics ...string) (err error) {
@@ -384,6 +390,30 @@ func (g *warpPubSub) unsubscribe(topics ...string) (err error) {
 	}
 
 	return err
+}
+
+func (g *warpPubSub) GenericPublish(topicName string, msg event.Message) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	return g.publish(msg, topicName)
+}
+
+func (g *warpPubSub) PublishValidationRequest(msg event.Message) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	return g.publish(msg, pubSubConsensusTopic)
+}
+
+// PublishUpdateToFollowers - publish for followers
+func (g *warpPubSub) PublishUpdateToFollowers(ownerId string, msg event.Message) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
+
+	return g.publish(msg, topicName)
 }
 
 func (g *warpPubSub) publish(msg event.Message, topics ...string) (err error) {
@@ -435,46 +465,62 @@ func (g *warpPubSub) publish(msg event.Message, topics ...string) (err error) {
 	return nil
 }
 
-// SubscribeUserUpdate - follow someone
-func (g *warpPubSub) SubscribeUserUpdate(userId string) (err error) {
-	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("pubsub: service not initialized")
+func (g *warpPubSub) runPeerInfoPublishing() {
+	g.mx.RLock()
+	discTopic, ok := g.topics[pubSubDiscoveryTopic]
+	g.mx.RUnlock()
+	if !ok {
+		log.Fatalf("pubsub: discovery topic not found: %s", pubSubDiscoveryTopic)
 	}
-	if g.ownerId == userId {
-		return warpnet.WarpError("pubsub: can't subscribe to own user")
+	defer func() {
+		_ = discTopic.Close()
+	}()
+
+	ticker := time.NewTicker(time.Minute * 5)
+	defer ticker.Stop()
+
+	log.Infoln("pubsub: publisher started")
+	defer log.Infoln("pubsub: publisher stopped")
+
+	if err := g.publishPeerInfo(discTopic); err != nil { // initial publishing
+		log.Errorf("pubsub: failed to publish peer info: %v", err)
 	}
 
-	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
-	return g.subscribe(topicName)
-}
+	for {
+		if !g.isRunning.Load() {
+			return
+		}
 
-// UnsubscribeUserUpdate - unfollow someone
-func (g *warpPubSub) UnsubscribeUserUpdate(userId string) (err error) {
-	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("pubsub: service not initialized")
+		select {
+		case <-g.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := g.publishPeerInfo(discTopic); err != nil {
+				log.Errorf("pubsub: failed to publish peer info: %v", err)
+				continue
+			}
+		}
 	}
-	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
-	return g.unsubscribe(topicName)
 }
 
 func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
-	var simulatedMessage event.Message
-	if err := json.JSON.Unmarshal(msg.Data, &simulatedMessage); err != nil {
+	var simulatedStreamMessage event.Message
+	if err := json.JSON.Unmarshal(msg.Data, &simulatedStreamMessage); err != nil {
 		log.Errorf("pubsub: failed to decode user update message: %v %s", err, msg.Data)
 		return err
 	}
-	if simulatedMessage.NodeId == g.serverNode.NodeInfo().ID.String() {
+	if simulatedStreamMessage.NodeId == g.serverNode.NodeInfo().ID.String() {
 		return nil
 	}
 
-	if simulatedMessage.Path == "" {
-		log.Errorln("pubsub: user update message has no path", simulatedMessage.Path)
+	if simulatedStreamMessage.Path == "" {
+		log.Warningln("pubsub: user update message has no destination")
 		return fmt.Errorf("pubsub: user update message has no path: %s", string(msg.Data))
 	}
-	if simulatedMessage.Body == nil {
+	if simulatedStreamMessage.Body == nil {
 		return nil
 	}
-	if stream.WarpRoute(simulatedMessage.Path).IsGet() { // only store data
+	if stream.WarpRoute(simulatedStreamMessage.Path).IsGet() { // only store data
 		return nil
 	}
 
@@ -482,12 +528,12 @@ func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
 		return nil
 	}
 
-	log.Infof("pubsub: new user update: %s", *simulatedMessage.Body)
+	log.Infof("pubsub: new user update: %s", *simulatedStreamMessage.Body)
 
 	_, err := g.clientNode.ClientStream( // send it to self
 		g.serverNode.NodeInfo().ID.String(),
-		simulatedMessage.Path,
-		*simulatedMessage.Body,
+		simulatedStreamMessage.Path,
+		*simulatedStreamMessage.Body,
 	)
 	return err
 }
@@ -529,61 +575,6 @@ func (g *warpPubSub) handlePubSubDiscovery(msg *pubsub.Message) {
 
 		if g.discoveryHandler != nil {
 			g.discoveryHandler(peerInfo)
-		}
-	}
-}
-
-func (g *warpPubSub) PublishConsensusAnnouncement(msg event.Message) (err error) {
-	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("pubsub: service not initialized")
-	}
-	return g.publish(msg, pubSubConsensusAnnounsementsTopic)
-}
-
-// PublishOwnerUpdate - publish for followers
-func (g *warpPubSub) PublishOwnerUpdate(ownerId string, msg event.Message) (err error) {
-	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("pubsub: service not initialized")
-	}
-	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
-
-	return g.publish(msg, topicName)
-}
-
-func (g *warpPubSub) runPeerInfoPublishing() {
-	g.mx.RLock()
-	discTopic, ok := g.topics[pubSubDiscoveryTopic]
-	g.mx.RUnlock()
-	if !ok {
-		log.Fatalf("pubsub: discovery topic not found: %s", pubSubDiscoveryTopic)
-	}
-	defer func() {
-		_ = discTopic.Close()
-	}()
-
-	ticker := time.NewTicker(time.Minute * 5)
-	defer ticker.Stop()
-
-	log.Infoln("pubsub: publisher started")
-	defer log.Infoln("pubsub: publisher stopped")
-
-	if err := g.publishPeerInfo(discTopic); err != nil { // initial publishing
-		log.Errorf("pubsub: failed to publish peer info: %v", err)
-	}
-
-	for {
-		if !g.isRunning.Load() {
-			return
-		}
-
-		select {
-		case <-g.ctx.Done():
-			return
-		case <-ticker.C:
-			if err := g.publishPeerInfo(discTopic); err != nil {
-				log.Errorf("pubsub: failed to publish peer info: %v", err)
-				continue
-			}
 		}
 	}
 }

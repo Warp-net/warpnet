@@ -375,8 +375,9 @@ type GetChallengeResponse struct {
 }
 
 type ValidationEvent struct {
-	SelfHashHex string       `json:"self_hash_hex"`
-	User        *domain.User `json:"user"`
+	ValidatedNodeID string       `json:"validated_node_id"`
+	SelfHashHex     string       `json:"self_hash_hex"`
+	User            *domain.User `json:"user"`
 }
 
 type ValidationResult int
@@ -387,6 +388,8 @@ const (
 )
 
 type ValidationEventResponse struct {
-	Result   ValidationResult `json:"result"`
-	UniqueID string           `json:"unique_id"`
+	Result      ValidationResult `json:"result"`
+	Reason      *string          `json:"reason"`
+	ValidatedID string           `json:"validated_id"`
+	ValidatorID string           `json:"validator_id"`
 }

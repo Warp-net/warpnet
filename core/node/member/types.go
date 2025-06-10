@@ -51,7 +51,7 @@ type PubSubProvider interface {
 	SubscribeUserUpdate(userId string) (err error)
 	UnsubscribeUserUpdate(userId string) (err error)
 	Run(m pubsub.PubsubServerNodeConnector, clientNode pubsub.PubsubClientNodeStreamer)
-	PublishOwnerUpdate(ownerId string, msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
 	Close() error
 }
 
@@ -90,10 +90,6 @@ type ClientNodeStreamer interface {
 	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
 }
 
-type ConsensusStorer interface {
-	Reset() error
-}
-
 type FollowStorer interface {
 	GetFollowersCount(userId string) (uint64, error)
 	GetFolloweesCount(userId string) (uint64, error)
@@ -117,4 +113,10 @@ type Storer interface {
 	Path() string
 	Stats() map[string]string
 	IsFirstRun() bool
+}
+
+type ConsensusServicer interface {
+	AskValidation(data event.ValidationEvent) error
+	Validate(data []byte, _ warpnet.WarpStream) (any, error)
+	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
 }
