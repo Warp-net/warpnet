@@ -29,8 +29,8 @@ package event
 
 const (
 	// admin
-	PUBLIC_GET_NODE_VALIDATE          = "/public/get/admin/validate/0.0.0"
-	PUBLIC_GET_NODE_VALIDATION_RESULT = "/public/get/admin/validate/result/0.0.0"
+	PUBLIC_GET_NODE_VALIDATE          = "/public/post/admin/validate/0.0.0"
+	PUBLIC_GET_NODE_VALIDATION_RESULT = "/public/post/admin/validate/result/0.0.0"
 	PUBLIC_GET_NODE_CHALLENGE         = "/public/get/admin/challenge/0.0.0"
 	PRIVATE_POST_PAIR                 = "/private/post/admin/pair/0.0.0"
 	PRIVATE_GET_STATS                 = "/private/get/admin/stats/0.0.0"

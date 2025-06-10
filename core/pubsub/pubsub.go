@@ -192,8 +192,9 @@ func (g *warpPubSub) runListener() error {
 				continue
 
 			case pubSubConsensusTopic:
+				log.Infof("pubsub: received consensus message: %s", msg.Data)
 				if err := g.handleUserUpdate(msg); err != nil {
-					log.Infof("pubsub: consensus update error: %v", err)
+					log.Errorf("pubsub: consensus update: %v", err)
 				}
 				continue
 			default:
@@ -203,7 +204,7 @@ func (g *warpPubSub) runListener() error {
 			switch {
 			case userUpdateTopicPrefix.isIn(*msg.Topic):
 				if err := g.handleUserUpdate(msg); err != nil {
-					log.Infof("pubsub: user update error: %v", err)
+					log.Errorf("pubsub: user update: %v", err)
 				}
 				continue
 			default:
@@ -510,6 +511,7 @@ func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
 		return err
 	}
 	if simulatedStreamMessage.NodeId == g.serverNode.NodeInfo().ID.String() {
+		log.Warningln("pubsub: handle user update: same node ID")
 		return nil
 	}
 
@@ -518,6 +520,7 @@ func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
 		return fmt.Errorf("pubsub: user update message has no path: %s", string(msg.Data))
 	}
 	if simulatedStreamMessage.Body == nil {
+		log.Warningln("pubsub: handle user update: empty body")
 		return nil
 	}
 	if stream.WarpRoute(simulatedStreamMessage.Path).IsGet() { // only store data
