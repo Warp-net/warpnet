@@ -83,14 +83,16 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
 func (g *gossipConsensus) listenResponses() error {
 	var (
 		timeoutTicker  = time.NewTicker(time.Minute * 5)
+		runTicker      = time.NewTicker(time.Second * 5)
 		knownPeers     = make(map[string]struct{})
 		peersResponded = map[string]struct{}{}
 	)
 	defer timeoutTicker.Stop()
+	defer runTicker.Stop()
 	defer g.isClosed.Store(true)
 	defer close(g.recvChan)
 
-	for {
+	for range timeoutTicker.C {
 		peers := g.broadcaster.GetDiscoverySubscribers()
 		for _, id := range peers {
 			knownPeers[id.String()] = struct{}{}
@@ -114,7 +116,7 @@ func (g *gossipConsensus) listenResponses() error {
 			}
 			return nil
 		case <-g.ctx.Done():
-			return nil
+			return ErrConsensusRejection
 		case resp := <-g.recvChan:
 			if _, isKnown := knownPeers[resp.ValidatorID]; !isKnown {
 				continue
@@ -129,12 +131,13 @@ func (g *gossipConsensus) listenResponses() error {
 				return ErrConsensusRejection
 			}
 			peersResponded[resp.ValidatorID] = struct{}{}
-		}
-
-		if count == total {
-			return nil
+		default:
+			if total != 0 && count == total {
+				return nil
+			}
 		}
 	}
+	return ErrConsensusRejection
 }
 
 // internal call from client node from PubSub
