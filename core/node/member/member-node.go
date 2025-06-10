@@ -268,15 +268,15 @@ func (m *MemberNode) setupHandlers(
 	authMw := mw.AuthMiddleware
 	unwrapMw := mw.UnwrapStreamMiddleware
 	m.SetStreamHandler(
-		event.PUBLIC_GET_NODE_VALIDATE,
+		event.PRIVATE_POST_NODE_VALIDATE,
 		logMw(unwrapMw(handler.StreamValidateHandler(consensusService))),
 	)
 	m.SetStreamHandler(
-		event.PUBLIC_GET_NODE_VALIDATION_RESULT,
+		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
 		logMw(unwrapMw(handler.StreamValidationResponseHandler(consensusService))),
 	)
 	m.SetStreamHandler(
-		event.PUBLIC_GET_NODE_CHALLENGE,
+		event.PUBLIC_POST_NODE_CHALLENGE,
 		logMw(unwrapMw(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	m.SetStreamHandler(

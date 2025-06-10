@@ -29,11 +29,11 @@ package event
 
 const (
 	// admin
-	PUBLIC_GET_NODE_VALIDATE          = "/public/post/admin/validate/0.0.0"
-	PUBLIC_GET_NODE_VALIDATION_RESULT = "/public/post/admin/validate/result/0.0.0"
-	PUBLIC_GET_NODE_CHALLENGE         = "/public/get/admin/challenge/0.0.0"
-	PRIVATE_POST_PAIR                 = "/private/post/admin/pair/0.0.0"
-	PRIVATE_GET_STATS                 = "/private/get/admin/stats/0.0.0"
+	PRIVATE_POST_NODE_VALIDATE         = "/private/post/admin/validate/0.0.0"
+	PUBLIC_POST_NODE_VALIDATION_RESULT = "/public/post/admin/validate/result/0.0.0"
+	PUBLIC_POST_NODE_CHALLENGE         = "/public/post/admin/challenge/0.0.0"
+	PRIVATE_POST_PAIR                  = "/private/post/admin/pair/0.0.0"
+	PRIVATE_GET_STATS                  = "/private/get/admin/stats/0.0.0"
 	// application
 	PRIVATE_DELETE_CHAT       = "/private/delete/chat/0.0.0"
 	PRIVATE_DELETE_MESSAGE    = "/private/delete/message/0.0.0"

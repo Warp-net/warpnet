@@ -30,6 +30,7 @@ import (
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/bootstrap"
+	"github.com/Warp-net/warpnet/core/node/client"
 	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	writer "github.com/ipfs/go-log/writer"
@@ -93,7 +94,13 @@ func main() {
 	}
 	defer n.Stop()
 
-	if err := n.Start(); err != nil {
+	clientNode, err := client.NewClientNode(ctx, psk)
+	if err != nil {
+		log.Fatalf("failed to init client node: %v", err)
+	}
+	defer clientNode.Stop()
+
+	if err := n.Start(clientNode); err != nil {
 		log.Fatalf("failed to start bootstrap node: %v", err)
 	}
 

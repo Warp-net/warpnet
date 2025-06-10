@@ -125,15 +125,15 @@ func NewBootstrapNode(
 		logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
 	)
 	bn.SetStreamHandler(
-		event.PUBLIC_GET_NODE_CHALLENGE,
+		event.PUBLIC_POST_NODE_CHALLENGE,
 		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	bn.SetStreamHandler(
-		event.PUBLIC_GET_NODE_VALIDATE,
+		event.PRIVATE_POST_NODE_VALIDATE,
 		logMw(unwrapMw(handler.StreamValidateHandler(consensusService))),
 	)
 	bn.SetStreamHandler(
-		event.PUBLIC_GET_NODE_VALIDATION_RESULT,
+		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
 		logMw(unwrapMw(handler.StreamValidationResponseHandler(consensusService))),
 	)
 	return bn, nil
@@ -145,11 +145,11 @@ func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
 	return bi
 }
 
-func (bn *BootstrapNode) Start() error {
+func (bn *BootstrapNode) Start(clientNode ClientNodeStreamer) error {
 	if bn == nil {
 		return errors.New("bootstrap: nil node")
 	}
-	bn.pubsubService.Run(bn, nil)
+	bn.pubsubService.Run(bn, clientNode)
 	if err := bn.discService.Run(bn); err != nil {
 		return err
 	}

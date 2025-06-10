@@ -409,7 +409,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 
 	resp, err := s.node.GenericStream(
 		pi.ID.String(),
-		event.PUBLIC_GET_NODE_CHALLENGE,
+		event.PUBLIC_POST_NODE_CHALLENGE,
 		event.GetChallengeEvent{
 			DirStack:  location.DirStack,
 			FileStack: location.FileStack,

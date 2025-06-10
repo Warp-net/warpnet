@@ -67,7 +67,7 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
 
 	msg := event.Message{
 		Body:      &body,
-		Path:      event.PUBLIC_GET_NODE_VALIDATE,
+		Path:      event.PRIVATE_POST_NODE_VALIDATE,
 		NodeId:    g.broadcaster.OwnerID(),
 		Timestamp: time.Now(),
 		Version:   "0.0.0",
@@ -168,7 +168,7 @@ func (g *gossipConsensus) Validate(data []byte, _ warpnet.WarpStream) (any, erro
 	log.Infof("gossip consensus: sending validation result to: %s", ev.ValidatedNodeID)
 	bt, err := g.streamer.GenericStream(
 		ev.ValidatedNodeID,
-		event.PUBLIC_GET_NODE_VALIDATION_RESULT,
+		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
 		event.ValidationEventResponse{
 			Result:      result,
 			ValidatedID: ev.ValidatedNodeID,
