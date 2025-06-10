@@ -92,7 +92,7 @@ func (g *gossipConsensus) listenResponses() error {
 	defer g.isClosed.Store(true)
 	defer close(g.recvChan)
 
-	for range timeoutTicker.C {
+	for range runTicker.C {
 		peers := g.broadcaster.GetDiscoverySubscribers()
 		for _, id := range peers {
 			knownPeers[id.String()] = struct{}{}
