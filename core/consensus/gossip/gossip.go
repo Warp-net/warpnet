@@ -30,7 +30,7 @@ type ConsensusHandler func(message *event.Message)
 type ConsensusBroadcaster interface {
 	GenericSubscribe(topics ...string) (err error)
 	PublishValidationRequest(msg event.Message) (err error)
-	GetDiscoverySubscribers() []warpnet.WarpPeerID
+	GetConsensusTopicSubscribers() []warpnet.WarpPeerID
 	OwnerID() string
 }
 
@@ -54,7 +54,7 @@ func NewGossipConsensus(
 		broadcaster: broadcaster,
 		streamer:    streamer,
 		validators:  validators,
-		recvChan:    make(chan event.ValidationEventResponse, len(broadcaster.GetDiscoverySubscribers())),
+		recvChan:    make(chan event.ValidationEventResponse, len(broadcaster.GetConsensusTopicSubscribers())),
 	}, nil
 }
 
@@ -93,7 +93,7 @@ func (g *gossipConsensus) listenResponses() error {
 	defer close(g.recvChan)
 
 	for range runTicker.C {
-		peers := g.broadcaster.GetDiscoverySubscribers()
+		peers := g.broadcaster.GetConsensusTopicSubscribers()
 		for _, id := range peers {
 			knownPeers[id.String()] = struct{}{}
 		}
@@ -140,7 +140,7 @@ func (g *gossipConsensus) listenResponses() error {
 	return ErrConsensusRejection
 }
 
-// internal call from client node from PubSub
+// Validate is internal call from client node and from PubSub
 func (g *gossipConsensus) Validate(data []byte, _ warpnet.WarpStream) (any, error) {
 	log.Infof("gossip consensus: validation request received: %s", data)
 	if len(data) == 0 {

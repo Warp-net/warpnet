@@ -230,8 +230,13 @@ func (g *warpPubSub) runPubSub(n PubsubServerNodeConnector) (err error) {
 	}
 	g.isRunning.Store(true)
 
-	if err := g.subscribe(pubSubDiscoveryTopic, pubSubConsensusTopic); err != nil {
+	if err := g.subscribe(pubSubDiscoveryTopic); err != nil {
 		return err
+	}
+	if g.ownerId != warpnet.BootstrapOwner {
+		if err := g.subscribe(pubSubConsensusTopic); err != nil {
+			return err
+		}
 	}
 
 	go g.runPeerInfoPublishing()
@@ -281,13 +286,13 @@ func (g *warpPubSub) OwnerID() string {
 	return g.ownerId
 }
 
-func (g *warpPubSub) GetDiscoverySubscribers() []warpnet.WarpPeerID {
+func (g *warpPubSub) GetConsensusTopicSubscribers() []warpnet.WarpPeerID {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 
-	topic, ok := g.topics[pubSubDiscoveryTopic]
+	topic, ok := g.topics[pubSubConsensusTopic]
 	if !ok {
-		return nil
+		return []warpnet.WarpPeerID{}
 	}
 
 	return topic.ListPeers()
@@ -520,7 +525,7 @@ func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
 		return fmt.Errorf("pubsub: user update message has no path: %s", string(msg.Data))
 	}
 	if simulatedStreamMessage.Body == nil {
-		log.Warningln("pubsub: handle user update: empty body")
+		log.Warningln("pubsub: handle user update: same node ID")
 		return nil
 	}
 	if stream.WarpRoute(simulatedStreamMessage.Path).IsGet() { // only store data

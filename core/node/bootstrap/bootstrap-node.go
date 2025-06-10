@@ -31,7 +31,6 @@ import (
 	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus/gossip"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -52,7 +51,6 @@ type BootstrapNode struct {
 
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
-	consensusService  ConsensusServicer
 	dHashTable        DistributedHashTableCloser
 	memoryStoreCloseF func() error
 	psk               security.PSK
@@ -66,7 +64,7 @@ func NewBootstrapNode(
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
-	pubsubService := pubsub.NewPubSubBootstrap(ctx, discService.DefaultDiscoveryHandler)
+	pubsubService := pubsub.NewPubSub(ctx, nil, warpnet.BootstrapOwner, discService.DefaultDiscoveryHandler)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: fail creating memory peerstore: %w", err)
@@ -109,17 +107,8 @@ func NewBootstrapNode(
 		selfHashHex:       selfHashHex,
 	}
 
-	consensusService, err := gossip.NewGossipConsensus(
-		ctx, pubsubService, bn, BasicValidator{selfHashHex}.validateSelfHash,
-	)
-	if err != nil {
-		return nil, err
-	}
-	bn.consensusService = consensusService
-
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
-	unwrapMw := mw.UnwrapStreamMiddleware
 	bn.SetStreamHandler(
 		event.PUBLIC_GET_INFO,
 		logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
@@ -127,14 +116,6 @@ func NewBootstrapNode(
 	bn.SetStreamHandler(
 		event.PUBLIC_POST_NODE_CHALLENGE,
 		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
-	)
-	bn.SetStreamHandler(
-		event.PRIVATE_POST_NODE_VALIDATE,
-		logMw(unwrapMw(handler.StreamValidateHandler(consensusService))),
-	)
-	bn.SetStreamHandler(
-		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-		logMw(unwrapMw(handler.StreamValidationResponseHandler(consensusService))),
 	)
 	return bn, nil
 }
@@ -145,24 +126,16 @@ func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
 	return bi
 }
 
-func (bn *BootstrapNode) Start(clientNode ClientNodeStreamer) error {
+func (bn *BootstrapNode) Start() error {
 	if bn == nil {
 		return errors.New("bootstrap: nil node")
 	}
-	bn.pubsubService.Run(bn, clientNode)
+	bn.pubsubService.Run(bn, nil)
 	if err := bn.discService.Run(bn); err != nil {
 		return err
 	}
 
 	nodeInfo := bn.NodeInfo()
-
-	if err := bn.consensusService.AskValidation(event.ValidationEvent{
-		ValidatedNodeID: nodeInfo.ID.String(),
-		SelfHashHex:     bn.selfHashHex,
-		User:            nil,
-	}); err != nil {
-		return err
-	}
 
 	println()
 	fmt.Printf(
@@ -210,19 +183,4 @@ func (bn *BootstrapNode) Stop() {
 	}
 
 	bn.WarpNode.StopNode()
-}
-
-type BasicValidator struct {
-	OwnSelfHashHex string
-}
-
-func (bv BasicValidator) validateSelfHash(ev event.ValidationEvent) error {
-	if len(ev.SelfHashHex) == 0 {
-		return errors.New("empty codebase hash")
-	}
-	if bv.OwnSelfHashHex != ev.SelfHashHex {
-		return errors.New("self hash is not in the consensus records")
-	}
-
-	return nil
 }

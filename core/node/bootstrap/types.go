@@ -55,9 +55,3 @@ type ProviderCloser interface {
 type ClientNodeStreamer interface {
 	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
 }
-
-type ConsensusServicer interface {
-	AskValidation(data event.ValidationEvent) error
-	Validate(data []byte, _ warpnet.WarpStream) (any, error)
-	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
-}
