@@ -11,7 +11,6 @@
 <h3 align="center">Warpnet</h3>
 
   <p align="center">
-    An awesome README template to jumpstart your projects!
     <br />
     <a href="https://github.com/Warp-net/docs"><strong>Explore the docs »</strong></a>
     <br />
