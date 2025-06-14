@@ -157,7 +157,7 @@ func (g *gossipConsensus) listenResponses() {
 }
 
 func (g *gossipConsensus) runBackgroundValidation(data event.ValidationEvent) {
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 
 	for {
