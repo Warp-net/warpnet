@@ -88,7 +88,8 @@ func (g *gossipConsensus) Start(data event.ValidationEvent) (err error) {
 
 func (g *gossipConsensus) listenResponses() {
 	var (
-		timeoutTicker  = time.NewTicker(time.Minute)
+		timeout        = time.Minute * 5
+		timeoutTicker  = time.NewTicker(timeout)
 		runTicker      = time.NewTicker(time.Second * 5)
 		knownPeers     = make(map[string]struct{})
 		peersResponded = map[string]struct{}{}
@@ -102,7 +103,7 @@ func (g *gossipConsensus) listenResponses() {
 		}
 		peers := g.broadcaster.GetConsensusTopicSubscribers()
 		if isMeAlone(peers, g.broadcaster.OwnerID()) {
-			timeoutTicker.Reset(time.Minute)
+			timeoutTicker.Reset(timeout)
 			continue
 		}
 		for _, id := range peers {
