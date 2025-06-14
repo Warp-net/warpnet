@@ -159,6 +159,10 @@ func (g *warpPubSub) runListener() error {
 		if !g.isRunning.Load() {
 			return nil
 		}
+		if g.clientNode == nil || !g.clientNode.IsRunning() {
+			time.Sleep(time.Second) // TODO
+			continue
+		}
 
 		if err := g.ctx.Err(); err != nil {
 			return err
@@ -195,10 +199,6 @@ func (g *warpPubSub) runListener() error {
 				continue
 
 			case pubSubConsensusTopic:
-				if g.clientNode == nil || !g.clientNode.IsRunning() {
-					time.Sleep(time.Second) // TODO
-					continue
-				}
 				log.Infof("pubsub: received consensus message: %s", msg.Data)
 				if err := g.handleUserUpdate(msg); err != nil {
 					log.Errorf("pubsub: consensus update: %v", err)
@@ -536,10 +536,6 @@ func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
 		return nil
 	}
 	if stream.WarpRoute(simulatedStreamMessage.Path).IsGet() { // only store data
-		return nil
-	}
-
-	if g.clientNode == nil || !g.clientNode.IsRunning() {
 		return nil
 	}
 

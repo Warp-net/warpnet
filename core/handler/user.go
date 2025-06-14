@@ -262,8 +262,12 @@ func StreamGetWhoToFollowHandler(
 			followedUsers[follow.Followee] = struct{}{}
 		}
 
+		ownerId := authRepo.GetOwner().UserId
 		whotofollow := make([]domain.User, 0, len(users))
 		for _, user := range users {
+			if user.Id == ownerId {
+				continue
+			}
 			if _, ok := followedUsers[user.Id]; ok {
 				continue
 			}
