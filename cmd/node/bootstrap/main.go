@@ -78,8 +78,6 @@ func main() {
 		seed = []byte(rand.Text())
 	}
 
-	isInMemory := config.Config().Node.IsInMemory
-
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
 		log.Fatalf("bootstrap: fail generating key: %v", err)
@@ -89,7 +87,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, isInMemory, psk, codeHashHex)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init bootstrap node: %v", err)
 	}

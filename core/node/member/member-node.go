@@ -32,7 +32,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus"
+	"github.com/Warp-net/warpnet/core/consensus/gossip"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -49,6 +49,7 @@ import (
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
+	"os"
 	"time"
 )
 
@@ -59,7 +60,7 @@ type MemberNode struct {
 	discService          DiscoveryHandler
 	mdnsService          MDNSStarterCloser
 	pubsubService        PubSubProvider
-	raft                 ConsensusProvider
+	consensusService     ConsensusServicer
 	dHashTable           DistributedHashTableCloser
 	nodeRepo             NodeProvider
 	retrier              retrier.Retrier
@@ -75,8 +76,8 @@ func NewMemberNode(
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
+	interruptChan chan os.Signal,
 ) (_ *MemberNode, err error) {
-	consensusRepo := database.NewConsensusRepo(db)
 	nodeRepo, err := database.NewNodeRepo(db, version)
 	if err != nil {
 		return nil, err
@@ -94,14 +95,7 @@ func NewMemberNode(
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
 
-	raft, err := consensus.NewMemberRaft(
-		ctx, consensusRepo, userRepo.ValidateUser, nodeRepo.ValidateSelfHash,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("member: consensus initialization: %v", err)
-	}
-
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, raft.AddVoter)
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.HandlePeerFound)
 	pubsubService := pubsub.NewPubSub(
 		ctx, followRepo, owner.UserId, discService.HandlePeerFound,
@@ -109,7 +103,7 @@ func NewMemberNode(
 
 	dHashTable := dht.NewDHTable(
 		ctx, nodeRepo,
-		raft.RemoveVoter, raft.AddVoter, discService.HandlePeerFound,
+		nil, discService.HandlePeerFound,
 	)
 
 	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
@@ -149,16 +143,19 @@ func NewMemberNode(
 		discService:   discService,
 		mdnsService:   mdnsService,
 		pubsubService: pubsubService,
-		raft:          raft,
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
-		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
+		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		ownerId:       owner.UserId,
 		selfHashHex:   selfHashHex,
 	}
 
-	mn.setupHandlers(authRepo, userRepo, followRepo, consensusRepo, db, privKey)
+	mn.consensusService = gossip.NewGossipConsensus(
+		ctx, pubsubService, mn, interruptChan, nodeRepo.ValidateSelfHash, userRepo.ValidateUserID,
+	)
+
+	mn.setupHandlers(authRepo, userRepo, followRepo, db, privKey)
 	return mn, nil
 }
 
@@ -167,21 +164,19 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 	if err := m.discService.Run(m); err != nil {
 		return err
 	}
-
-	if err := m.raft.Start(m); err != nil {
-		return fmt.Errorf("member: consensus failed to sync: %v", err)
-	}
-	nodeInfo := m.NodeInfo()
-
 	m.mdnsService.Start(m)
 
-	err := m.retrier.Try(context.Background(), func() error {
-		return m.raft.AskSelfHashValidation(m.selfHashHex)
-	})
-	if err != nil {
-		return fmt.Errorf("member: validate self hash by consensus: %v", err)
+	nodeInfo := m.NodeInfo()
+
+	ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
+
+	if err := m.consensusService.Start(event.ValidationEvent{
+		ValidatedNodeID: nodeInfo.ID.String(),
+		SelfHashHex:     m.selfHashHex,
+		User:            &ownerUser,
+	}); err != nil {
+		return err
 	}
-	log.Infoln("member: selfhash validated")
 
 	println()
 	fmt.Printf(
@@ -247,7 +242,6 @@ func (m *MemberNode) setupHandlers(
 	authRepo AuthProvider,
 	userRepo UserProvider,
 	followRepo FollowStorer,
-	consRepo ConsensusStorer,
 	db Storer,
 	privKey ed25519.PrivateKey,
 ) {
@@ -271,24 +265,25 @@ func (m *MemberNode) setupHandlers(
 	authMw := mw.AuthMiddleware
 	unwrapMw := mw.UnwrapStreamMiddleware
 	m.SetStreamHandler(
-		event.PUBLIC_POST_NODE_VERIFY,
-		logMw(unwrapMw(handler.StreamVerifyHandler(m.raft))),
+		event.PRIVATE_POST_NODE_VALIDATE,
+		logMw(unwrapMw(handler.StreamValidateHandler(m.consensusService))),
 	)
 	m.SetStreamHandler(
-		event.PUBLIC_GET_NODE_CHALLENGE,
+		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+		logMw(unwrapMw(handler.StreamValidationResponseHandler(m.consensusService))),
+	)
+	m.SetStreamHandler(
+		event.PUBLIC_POST_NODE_CHALLENGE,
 		logMw(unwrapMw(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_INFO,
 		logMw(handler.StreamGetInfoHandler(m, m.discService.HandlePeerFound)),
 	)
-	m.SetStreamHandler(
-		event.PRIVATE_POST_RESET,
-		logMw(authMw(unwrapMw(handler.StreamConsensusResetHandler(consRepo)))),
-	)
+
 	m.SetStreamHandler(
 		event.PRIVATE_GET_STATS,
-		logMw(authMw(unwrapMw(handler.StreamGetStatsHandler(m, db, m.raft)))),
+		logMw(authMw(unwrapMw(handler.StreamGetStatsHandler(m, db)))),
 	)
 	m.SetStreamHandler(
 		event.PRIVATE_POST_PAIR,
@@ -329,6 +324,10 @@ func (m *MemberNode) setupHandlers(
 	m.SetStreamHandler(
 		event.PUBLIC_GET_USERS,
 		logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, m)))),
+	)
+	m.SetStreamHandler(
+		event.PUBLIC_GET_WHOTOFOLLOW,
+		logMw(authMw(unwrapMw(handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo)))),
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_GET_TWEETS,
@@ -438,8 +437,8 @@ func (m *MemberNode) Stop() {
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
 	}
-	if m.raft != nil {
-		m.raft.Shutdown()
+	if m.consensusService != nil {
+		m.consensusService.Close()
 	}
 	if m.nodeRepo != nil {
 		if err := m.nodeRepo.Close(); err != nil {

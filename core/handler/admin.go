@@ -31,9 +31,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/middleware"
-	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -41,52 +39,15 @@ import (
 	"io/fs"
 )
 
-type AdminStreamer interface {
-	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
-}
-
-type AdminStateCommitter interface {
-	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
-}
-
-type ConsensusResetter interface {
-	Reset() error
-}
-
-func StreamVerifyHandler(state AdminStateCommitter) middleware.WarpHandler {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		if state == nil {
-			return nil, nil
-		}
-		var newState map[string]string
-		err := json.JSON.Unmarshal(buf, &newState)
-		if err != nil {
-			return nil, err
-		}
-
-		updatedState, err := state.CommitState(newState)
-		if err != nil {
-			return nil, err
-		}
-
-		return updatedState, nil
-	}
-}
-
-func StreamConsensusResetHandler(consRepo ConsensusResetter) middleware.WarpHandler {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		if consRepo == nil {
-			return nil, nil
-		}
-
-		return event.Accepted, consRepo.Reset()
-	}
-}
-
 type FileSystem interface {
 	ReadDir(name string) ([]fs.DirEntry, error)
 	ReadFile(name string) ([]byte, error)
 	Open(name string) (fs.File, error)
+}
+
+type AdminConsensusServicer interface {
+	Validate(data []byte, _ warpnet.WarpStream) (any, error)
+	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
 }
 
 // TODO nonce cache check
@@ -120,4 +81,12 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 			Signature: base64.StdEncoding.EncodeToString(sig),
 		}, nil
 	}
+}
+
+func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
+	return svc.Validate
+}
+
+func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.WarpHandler {
+	return svc.ValidationResult
 }

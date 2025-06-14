@@ -34,6 +34,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/jbenet/goprocess"
@@ -873,24 +874,20 @@ var ErrNotInRecords = errors.New("self hash is not in the consensus records")
 
 const SelfHashConsensusKey = "selfhash"
 
-func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) (isValidatorApplied bool, err error) {
+func (d *NodeRepo) ValidateSelfHash(ev event.ValidationEvent) error {
 	if d == nil {
-		return false, ErrNilNodeRepo
+		return ErrNilNodeRepo
 	}
 
-	if k != SelfHashConsensusKey {
-		return false, nil
-	}
-
-	if len(selfHashHex) == 0 {
-		return true, errors.New("empty codebase hash")
+	if len(ev.SelfHashHex) == 0 {
+		return errors.New("empty codebase hash")
 	}
 
 	if d.db == nil {
-		if d.BootstrapSelfHashHex != selfHashHex {
-			return true, ErrNotInRecords
+		if d.BootstrapSelfHashHex != ev.SelfHashHex {
+			return ErrNotInRecords
 		}
-		return true, nil
+		return nil
 	}
 
 	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
@@ -898,30 +895,30 @@ func (d *NodeRepo) ValidateSelfHash(k, selfHashHex string) (isValidatorApplied b
 
 	txn, err := d.db.NewTxn()
 	if err != nil {
-		return true, err
+		return err
 	}
 	defer txn.Rollback()
 
 	var limit uint64 = 100
 	items, _, err := txn.List(selfHashPrefix, &limit, nil)
 	if err != nil {
-		return true, err
+		return err
 	}
 
 	itemsHashes := make(map[string]struct{})
 	for _, item := range items {
 		if err := json.JSON.Unmarshal(item.Value, &itemsHashes); err != nil {
-			return true, err
+			return err
 		}
 	}
 
 	for h := range itemsHashes {
-		if h == selfHashHex {
-			return true, txn.Discard()
+		if h == ev.SelfHashHex {
+			return txn.Discard()
 		}
 	}
 
-	return true, ErrNotInRecords
+	return ErrNotInRecords
 }
 
 func (d *NodeRepo) GetSelfHashes() (map[string]struct{}, error) {

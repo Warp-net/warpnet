@@ -109,7 +109,7 @@ func NewDiscoveryService(
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
 		config.Config().Version, handlers,
-		retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
+		retrier.New(time.Second, 5, retrier.FixedBackoff),
 		newRateLimiter(16, 1),
 		newDiscoveryCache(),
 		addrInfos,
@@ -409,7 +409,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 
 	resp, err := s.node.GenericStream(
 		pi.ID.String(),
-		event.PUBLIC_GET_NODE_CHALLENGE,
+		event.PUBLIC_POST_NODE_CHALLENGE,
 		event.GetChallengeEvent{
 			DirStack:  location.DirStack,
 			FileStack: location.FileStack,

@@ -373,3 +373,23 @@ type GetChallengeResponse struct {
 	Challenge string `json:"challenge"`
 	Signature string `json:"signature"`
 }
+
+type ValidationEvent struct {
+	ValidatedNodeID string       `json:"validated_node_id"`
+	SelfHashHex     string       `json:"self_hash_hex"`
+	User            *domain.User `json:"user"`
+}
+
+type ValidationResult int
+
+const (
+	Invalid ValidationResult = 0
+	Valid   ValidationResult = 1
+)
+
+type ValidationEventResponse struct {
+	Result      ValidationResult `json:"result"`
+	Reason      *string          `json:"reason"`
+	ValidatedID string           `json:"validated_id"`
+	ValidatorID string           `json:"validator_id"`
+}

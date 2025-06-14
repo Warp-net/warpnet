@@ -52,12 +52,15 @@ type UserTweetsCounter interface {
 type UserFollowsCounter interface {
 	GetFollowersCount(userId string) (uint64, error)
 	GetFolloweesCount(userId string) (uint64, error)
+	GetFollowers(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
+	GetFollowees(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
 }
 
 type UserFetcher interface {
 	Create(user domain.User) (domain.User, error)
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
+	WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 }
@@ -227,6 +230,60 @@ func usersRefreshBackground(
 		_, _ = userRepo.Update(user.Id, user)
 	}
 }
+
+const whoToFollowDefaultLimit uint64 = 8
+
+func StreamGetWhoToFollowHandler(
+	authRepo UserAuthStorer,
+	userRepo UserFetcher,
+	followRepo UserFollowsCounter,
+) middleware.WarpHandler {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetAllUsersEvent
+		err := json.JSON.Unmarshal(buf, &ev)
+		if err != nil {
+			return nil, err
+		}
+
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("empty profile id")
+		}
+
+		limit := whoToFollowDefaultLimit
+		users, cursor, err := userRepo.WhoToFollow(ev.UserId, &limit, ev.Cursor)
+		if err != nil {
+			return nil, err
+		}
+
+		followees, _, err := followRepo.GetFollowees(authRepo.GetOwner().UserId, nil, nil)
+		if err != nil {
+			log.Errorf("get who to follow handler: get followers %v", err)
+		}
+
+		followedUsers := map[string]struct{}{}
+		for _, follow := range followees {
+			followedUsers[follow.Followee] = struct{}{}
+		}
+
+		ownerId := authRepo.GetOwner().UserId
+		whotofollow := make([]domain.User, 0, len(users))
+		for _, user := range users {
+			if user.Id == ownerId {
+				continue
+			}
+			if _, ok := followedUsers[user.Id]; ok {
+				continue
+			}
+			whotofollow = append(whotofollow, user)
+		}
+
+		return event.UsersResponse{
+			Cursor: cursor,
+			Users:  whotofollow,
+		}, err
+	}
+}
+
 func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) middleware.WarpHandler {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewUserEvent

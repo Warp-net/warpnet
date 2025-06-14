@@ -64,7 +64,7 @@ type (
 
 const (
 	NoBackoff backoff = iota
-	ArithmeticalBackoff
+	FixedBackoff
 	ExponentialBackoff
 )
 
@@ -101,7 +101,7 @@ func (r *retrier) Try(ctx context.Context, f RetrierFunc) (err error) {
 		switch r.backoff {
 		case NoBackoff:
 
-		case ArithmeticalBackoff:
+		case FixedBackoff:
 			interval = interval + interval
 		case ExponentialBackoff:
 			interval = interval * interval

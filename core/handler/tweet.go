@@ -59,7 +59,7 @@ type OwnerTweetStorer interface {
 }
 
 type TweetBroadcaster interface {
-	PublishOwnerUpdate(ownerId string, msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
 }
 
 type TweetsStorer interface {
@@ -122,7 +122,7 @@ func StreamNewTweetHandler(
 				Path:      event.PRIVATE_POST_TWEET,
 				Timestamp: time.Now(),
 			}
-			if err := broadcaster.PublishOwnerUpdate(owner.UserId, msg); err != nil {
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, msg); err != nil {
 				log.Infoln("broadcaster publish owner tweet update:", err)
 			}
 		}
@@ -283,7 +283,7 @@ func StreamDeleteTweetHandler(
 				Path:      event.PRIVATE_DELETE_TWEET,
 				Timestamp: time.Now(),
 			}
-			if err := broadcaster.PublishOwnerUpdate(owner.UserId, msg); err != nil {
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, msg); err != nil {
 				log.Infoln("broadcaster publish owner tweet update:", err)
 			}
 		}

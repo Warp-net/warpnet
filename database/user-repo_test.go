@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/event"
 	"go.uber.org/goleak"
 	"testing"
 	"time"
@@ -146,21 +146,25 @@ func (s *UserRepoTestSuite) TestListAndGetBatch() {
 }
 
 func (s *UserRepoTestSuite) TestValidateUser() {
-	user := domain.User{Id: "uniqueUser", CreatedAt: time.Now()}
+	nodeId := "node123"
+	user := domain.User{Id: "uniqueUser", CreatedAt: time.Now(), NodeId: nodeId}
 	_, err := s.repo.Create(user)
 	s.Require().NoError(err)
 
-	bt, err := json.JSON.Marshal(user)
-	s.NoError(err)
-
-	_, err = s.repo.ValidateUser(UserConsensusKey, string(bt))
+	err = s.repo.ValidateUserID(event.ValidationEvent{
+		ValidatedNodeID: nodeId,
+		SelfHashHex:     "",
+		User:            &user,
+	})
 	s.NoError(err) // FIXME!
 
 	user.Id = "nonexistent"
-	bt, err = json.JSON.Marshal(user)
-	s.NoError(err)
 
-	_, err = s.repo.ValidateUser(UserConsensusKey, string(bt))
+	err = s.repo.ValidateUserID(event.ValidationEvent{
+		ValidatedNodeID: nodeId,
+		SelfHashHex:     "",
+		User:            &user,
+	})
 	s.NoError(err)
 }
 
