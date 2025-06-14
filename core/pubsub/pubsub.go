@@ -539,7 +539,7 @@ func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
 		return nil
 	}
 
-	if g.clientNode == nil {
+	if g.clientNode == nil || !g.clientNode.IsRunning() {
 		return nil
 	}
 
