@@ -199,7 +199,6 @@ func (g *warpPubSub) runListener() error {
 				continue
 
 			case pubSubConsensusTopic:
-				log.Infof("pubsub: received consensus message: %s", msg.Data)
 				if err := g.handleUserUpdate(msg); err != nil {
 					log.Errorf("pubsub: consensus update: %v", err)
 				}
@@ -539,7 +538,7 @@ func (g *warpPubSub) handleUserUpdate(msg *pubsub.Message) error {
 		return nil
 	}
 
-	log.Infof("pubsub: new user update: %s", *simulatedStreamMessage.Body)
+	log.Debugf("pubsub: new user update: %s", *simulatedStreamMessage.Body)
 
 	_, err := g.clientNode.ClientStream( // send it to self
 		g.serverNode.NodeInfo().ID.String(),

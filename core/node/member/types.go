@@ -118,6 +118,7 @@ type Storer interface {
 
 type ConsensusServicer interface {
 	Start(data event.ValidationEvent) error
+	Close()
 	Validate(data []byte, _ warpnet.WarpStream) (any, error)
 	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
 }

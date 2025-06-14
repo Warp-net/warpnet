@@ -437,7 +437,9 @@ func (m *MemberNode) Stop() {
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
 	}
-
+	if m.consensusService != nil {
+		m.consensusService.Close()
+	}
 	if m.nodeRepo != nil {
 		if err := m.nodeRepo.Close(); err != nil {
 			log.Errorf("member: failed to close node repo: %v", err)

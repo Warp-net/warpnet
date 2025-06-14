@@ -38,13 +38,13 @@ type ConsensusBroadcaster interface {
 }
 
 type gossipConsensus struct {
-	ctx           context.Context
-	broadcaster   ConsensusBroadcaster
-	streamer      ConsensusStreamer
-	recvChan      chan event.ValidationEventResponse
-	isClosed      atomic.Bool
-	interruptChan chan os.Signal
-	validators    []ValidatorFunc
+	ctx                   context.Context
+	broadcaster           ConsensusBroadcaster
+	streamer              ConsensusStreamer
+	recvChan              chan event.ValidationEventResponse
+	isClosed, isValidated atomic.Bool
+	interruptChan         chan os.Signal
+	validators            []ValidatorFunc
 }
 
 func NewGossipConsensus(
@@ -101,6 +101,9 @@ func (g *gossipConsensus) listenResponses() {
 		if g.isClosed.Load() {
 			return
 		}
+		if g.isValidated.Load() {
+			return
+		}
 		peers := g.broadcaster.GetConsensusTopicSubscribers()
 		if isMeAlone(peers, g.broadcaster.OwnerID()) {
 			timeoutTicker.Reset(timeout)
@@ -128,6 +131,8 @@ func (g *gossipConsensus) listenResponses() {
 				g.interruptChan <- os.Interrupt
 				return
 			}
+			log.Infoln("gossip consensus: consensus successful!")
+			g.isValidated.Store(true)
 			return
 		case <-g.ctx.Done():
 			return
@@ -151,6 +156,8 @@ func (g *gossipConsensus) listenResponses() {
 			peersResponded[resp.ValidatorID] = struct{}{}
 		default:
 			if total != 0 && count == total {
+				g.isValidated.Store(true)
+				log.Infoln("gossip consensus: consensus successful!")
 				return
 			}
 		}
@@ -165,6 +172,10 @@ func (g *gossipConsensus) runBackgroundValidation(data event.ValidationEvent) {
 		if g.isClosed.Load() {
 			return
 		}
+		if g.isValidated.Load() {
+			return
+		}
+
 		select {
 		case <-g.ctx.Done():
 			return
@@ -186,6 +197,9 @@ func isMeAlone(peers []warpnet.WarpPeerID, ownerId string) bool {
 }
 
 func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
+	if g.isValidated.Load() {
+		return nil
+	}
 	bt, err := json.JSON.Marshal(data)
 	if err != nil {
 		return err
