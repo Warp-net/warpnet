@@ -90,7 +90,7 @@ func (g *gossipConsensus) listenResponses() {
 	var (
 		timeout        = time.Minute * 5
 		timeoutTicker  = time.NewTicker(timeout)
-		runTicker      = time.NewTicker(time.Second * 5)
+		runTicker      = time.NewTicker(time.Minute)
 		knownPeers     = make(map[string]struct{})
 		peersResponded = map[string]struct{}{}
 	)
