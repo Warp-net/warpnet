@@ -8,7 +8,7 @@ services:
       - NODE_PORT=4001
       - NODE_SEED=warpnet1
       - NODE_NETWORK=warpnet
-      - NODE_HOST=207.154.221.44
+      - NODE_HOST_V4=207.154.221.44
       - LOGGING_LEVEL=debug
     volumes:
     - snapshot1:/tmp/snapshot:rw
@@ -22,7 +22,7 @@ services:
       - NODE_PORT=4002
       - NODE_SEED=warpnet2
       - NODE_NETWORK=warpnet
-      - NODE_HOST=207.154.221.44
+      - NODE_HOST_V4=207.154.221.44
       - LOGGING_LEVEL=debug
     volumes:
     - snapshot2:/tmp/snapshot:rw
@@ -36,7 +36,7 @@ services:
       - NODE_SEED=warpnet3
       - NODE_NETWORK=warpnet
       - NODE_PORT=4003
-      - NODE_HOST=207.154.221.44
+      - NODE_HOST_V4=207.154.221.44
       - LOGGING_LEVEL=debug
     volumes:
     - snapshot3:/tmp/snapshot:rw
