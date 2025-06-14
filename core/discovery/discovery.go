@@ -109,7 +109,7 @@ func NewDiscoveryService(
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
 		config.Config().Version, handlers,
-		retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
+		retrier.New(time.Second, 5, retrier.FixedBackoff),
 		newRateLimiter(16, 1),
 		newDiscoveryCache(),
 		addrInfos,

@@ -69,6 +69,7 @@ type PubsubServerNodeConnector interface {
 
 type PubsubClientNodeStreamer interface {
 	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
+	IsRunning() bool
 }
 
 type PubsubFollowingStorer interface {
@@ -158,9 +159,14 @@ func (g *warpPubSub) runListener() error {
 		if !g.isRunning.Load() {
 			return nil
 		}
+		if !g.clientNode.IsRunning() {
+			time.Sleep(time.Second) // TODO
+			continue
+		}
 		if err := g.ctx.Err(); err != nil {
 			return err
 		}
+
 		g.mx.RLock()
 		subs := make([]*pubsub.Subscription, len(g.subs))
 		copy(subs, g.subs)

@@ -88,6 +88,7 @@ type UserProvider interface {
 
 type ClientNodeStreamer interface {
 	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
+	IsRunning() bool
 }
 
 type FollowStorer interface {
@@ -116,7 +117,7 @@ type Storer interface {
 }
 
 type ConsensusServicer interface {
-	AskValidation(data event.ValidationEvent) error
+	Start(data event.ValidationEvent) error
 	Validate(data []byte, _ warpnet.WarpStream) (any, error)
 	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
 }

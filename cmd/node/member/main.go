@@ -170,6 +170,7 @@ func main() {
 		version,
 		authRepo,
 		db,
+		interruptChan,
 	)
 	if err != nil {
 		log.Fatalf("failed to init node: %v", err)

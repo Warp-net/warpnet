@@ -145,6 +145,9 @@ func (n *WarpClientNode) pairNodes(nodeId string, serverInfo domain.AuthNodeInfo
 }
 
 func (n *WarpClientNode) IsRunning() bool {
+	if n == nil {
+		return false
+	}
 	return n.isRunning.Load()
 }
 

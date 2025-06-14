@@ -49,6 +49,7 @@ import (
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
+	"os"
 	"time"
 )
 
@@ -75,6 +76,7 @@ func NewMemberNode(
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
+	interruptChan chan os.Signal,
 ) (_ *MemberNode, err error) {
 	nodeRepo, err := database.NewNodeRepo(db, version)
 	if err != nil {
@@ -143,21 +145,17 @@ func NewMemberNode(
 		pubsubService: pubsubService,
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
-		retrier:       retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
+		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		ownerId:       owner.UserId,
 		selfHashHex:   selfHashHex,
 	}
 
-	consensusService, err := gossip.NewGossipConsensus(
-		ctx, pubsubService, mn, nodeRepo.ValidateSelfHash, userRepo.ValidateUserID,
+	mn.consensusService = gossip.NewGossipConsensus(
+		ctx, pubsubService, mn, interruptChan, nodeRepo.ValidateSelfHash, userRepo.ValidateUserID,
 	)
-	if err != nil {
-		return nil, err
-	}
-	mn.consensusService = consensusService
 
-	mn.setupHandlers(authRepo, userRepo, followRepo, consensusService, db, privKey)
+	mn.setupHandlers(authRepo, userRepo, followRepo, db, privKey)
 	return mn, nil
 }
 
@@ -172,7 +170,7 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 
 	ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
 
-	if err := m.consensusService.AskValidation(event.ValidationEvent{
+	if err := m.consensusService.Start(event.ValidationEvent{
 		ValidatedNodeID: nodeInfo.ID.String(),
 		SelfHashHex:     m.selfHashHex,
 		User:            &ownerUser,
@@ -244,7 +242,6 @@ func (m *MemberNode) setupHandlers(
 	authRepo AuthProvider,
 	userRepo UserProvider,
 	followRepo FollowStorer,
-	consensusService ConsensusServicer,
 	db Storer,
 	privKey ed25519.PrivateKey,
 ) {
@@ -269,11 +266,11 @@ func (m *MemberNode) setupHandlers(
 	unwrapMw := mw.UnwrapStreamMiddleware
 	m.SetStreamHandler(
 		event.PRIVATE_POST_NODE_VALIDATE,
-		logMw(unwrapMw(handler.StreamValidateHandler(consensusService))),
+		logMw(unwrapMw(handler.StreamValidateHandler(m.consensusService))),
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-		logMw(unwrapMw(handler.StreamValidationResponseHandler(consensusService))),
+		logMw(unwrapMw(handler.StreamValidationResponseHandler(m.consensusService))),
 	)
 	m.SetStreamHandler(
 		event.PUBLIC_POST_NODE_CHALLENGE,
