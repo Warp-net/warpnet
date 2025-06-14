@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package member
 
 import (
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/pubsub"
@@ -52,7 +51,7 @@ type PubSubProvider interface {
 	SubscribeUserUpdate(userId string) (err error)
 	UnsubscribeUserUpdate(userId string) (err error)
 	Run(m pubsub.PubsubServerNodeConnector, clientNode pubsub.PubsubClientNodeStreamer)
-	PublishOwnerUpdate(ownerId string, msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
 	Close() error
 }
 
@@ -60,16 +59,6 @@ type UserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 	Update(userId string, newUser domain.User) (domain.User, error)
 	GetByNodeID(nodeID string) (user domain.User, err error)
-}
-
-type ConsensusProvider interface {
-	Start(node consensus.NodeTransporter) (err error)
-	LeaderID() warpnet.WarpPeerID
-	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
-	Shutdown()
-	AskUserValidation(user domain.User) error
-	AskSelfHashValidation(hashes map[string]struct{}) error
-	Stats() map[string]string
 }
 
 type DistributedHashTableCloser interface {
@@ -88,20 +77,18 @@ type AuthProvider interface {
 
 type UserProvider interface {
 	Create(user domain.User) (domain.User, error)
-	ValidateUser(k, v string) error
 	GetByNodeID(nodeID string) (user domain.User, err error)
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	GetBatch(userIds ...string) (users []domain.User, err error)
+	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
+	WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error)
 }
 
 type ClientNodeStreamer interface {
 	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
-}
-
-type ConsensusStorer interface {
-	Reset() error
+	IsRunning() bool
 }
 
 type FollowStorer interface {
@@ -127,4 +114,11 @@ type Storer interface {
 	Path() string
 	Stats() map[string]string
 	IsFirstRun() bool
+}
+
+type ConsensusServicer interface {
+	Start(data event.ValidationEvent) error
+	Close()
+	Validate(data []byte, _ warpnet.WarpStream) (any, error)
+	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
 }

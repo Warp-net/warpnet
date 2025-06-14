@@ -5,16 +5,16 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License
+You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package handler
 
@@ -47,7 +47,6 @@ type StatsProvider interface {
 func StreamGetStatsHandler(
 	i StatsNodeInformer,
 	db StatsProvider,
-	consensus StatsProvider,
 ) middleware.WarpHandler {
 	return func(_ []byte, s warpnet.WarpStream) (any, error) {
 		sent, recv := warpnet.GetNetworkIO()
@@ -75,7 +74,7 @@ func StreamGetStatsHandler(
 			NetworkState:    networkState,
 			RelayState:      nodeInfo.RelayState,
 			DatabaseStats:   db.Stats(),
-			ConsensusStats:  consensus.Stats(),
+			ConsensusStats:  nil,
 			MemoryStats:     warpnet.GetMemoryStats(),
 			CPUStats:        warpnet.GetCPUStats(),
 			BytesSent:       sent,

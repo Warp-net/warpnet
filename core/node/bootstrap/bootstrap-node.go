@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -31,7 +31,6 @@ import (
 	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -52,7 +51,6 @@ type BootstrapNode struct {
 
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
-	raft              ConsensusProvider
 	dHashTable        DistributedHashTableCloser
 	memoryStoreCloseF func() error
 	psk               security.PSK
@@ -62,27 +60,15 @@ type BootstrapNode struct {
 func NewBootstrapNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
-	isInMemory bool,
 	psk security.PSK,
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
-	hashesCache := codeHashesCache{make(map[string]struct{})}
-	hashesCache.items[selfHashHex] = struct{}{}
-
-	raft, err := consensus.NewBootstrapRaft(ctx, isInMemory, hashesCache.ValidateSelfHashes)
-	if err != nil {
-		return nil, err
-	}
-
-	discService := discovery.NewBootstrapDiscoveryService(ctx, raft.AddVoter)
-
-	pubsubService := pubsub.NewPubSubBootstrap(ctx, discService.DefaultDiscoveryHandler)
-
+	discService := discovery.NewBootstrapDiscoveryService(ctx)
+	pubsubService := pubsub.NewPubSub(ctx, nil, warpnet.BootstrapOwner, discService.DefaultDiscoveryHandler)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: fail creating memory peerstore: %w", err)
 	}
-
 	mapStore := datastore.NewMapDatastore()
 
 	closeF := func() error {
@@ -92,7 +78,7 @@ func NewBootstrapNode(
 
 	dHashTable := dht.NewDHTable(
 		ctx, mapStore,
-		raft.RemoveVoter, discService.DefaultDiscoveryHandler, raft.AddVoter,
+		nil, discService.DefaultDiscoveryHandler,
 	)
 
 	node, err := base.NewWarpNode(
@@ -100,6 +86,7 @@ func NewBootstrapNode(
 		privKey,
 		memoryStore,
 		psk,
+		nil,
 		[]string{
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
@@ -114,7 +101,6 @@ func NewBootstrapNode(
 		WarpNode:          node,
 		discService:       discService,
 		pubsubService:     pubsubService,
-		raft:              raft,
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
@@ -124,15 +110,11 @@ func NewBootstrapNode(
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
 	bn.SetStreamHandler(
-		event.PUBLIC_POST_NODE_VERIFY,
-		logMw(mw.UnwrapStreamMiddleware(handler.StreamVerifyHandler(bn.raft))),
-	)
-	bn.SetStreamHandler(
 		event.PUBLIC_GET_INFO,
 		logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
 	)
 	bn.SetStreamHandler(
-		event.PUBLIC_GET_NODE_CHALLENGE,
+		event.PUBLIC_POST_NODE_CHALLENGE,
 		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
 	)
 	return bn, nil
@@ -145,17 +127,11 @@ func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
 }
 
 func (bn *BootstrapNode) Start() error {
+	if bn == nil {
+		return errors.New("bootstrap: nil node")
+	}
 	bn.pubsubService.Run(bn, nil)
 	if err := bn.discService.Run(bn); err != nil {
-		return err
-	}
-
-	if err := bn.raft.Start(bn); err != nil {
-		return err
-	}
-
-	selfHashes := map[string]struct{}{bn.selfHashHex: {}}
-	if err := bn.raft.AskSelfHashValidation(selfHashes); err != nil {
 		return err
 	}
 
@@ -171,6 +147,9 @@ func (bn *BootstrapNode) Start() error {
 }
 
 func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
+	if bn == nil {
+		return
+	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	bt, err := bn.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
@@ -196,9 +175,7 @@ func (bn *BootstrapNode) Stop() {
 	if bn.dHashTable != nil {
 		bn.dHashTable.Close()
 	}
-	if bn.raft != nil {
-		bn.raft.Shutdown()
-	}
+
 	if bn.memoryStoreCloseF != nil {
 		if err := bn.memoryStoreCloseF(); err != nil {
 			log.Errorf("bootstrap: failed to close memory store: %v", err)

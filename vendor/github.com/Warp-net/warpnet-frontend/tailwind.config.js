@@ -53,8 +53,17 @@ module.exports = {
           text: "#f6bcdc",
           secondary: "#ffffff",
           accent: "#C5007F",
-          input: "#ea86ac",       // Фон инпутов
-          card: "#ea86ac",        // Фон карточек (например, "Who to follow")
+          input: "#ea86ac",
+          card: "#ea86ac",
+        },
+        mastodon: {
+          background: "#2d0136",
+          foreground: "#6c029e",
+          text: "#c156f5",
+          secondary: "#ffffff",
+          accent: "#5d1a98",
+          input: "#c07af5",
+          card: "#d8acea",
         },
       },
     },
@@ -77,9 +86,9 @@ module.exports = {
   },
   variants: {
     extend: {
-      backgroundColor: ["dark"],
-      textColor: ["dark"],
-      borderColor: ["dark"],
+      backgroundColor: ["dark", "mastodon"],
+      textColor: ["dark", "mastodon"],
+      borderColor: ["dark", "mastodon"],
     },
   },
   plugins: [

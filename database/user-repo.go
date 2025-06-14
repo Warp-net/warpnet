@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,15 +23,18 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package database
 
 import (
 	"errors"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
+	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/database/storage"
@@ -49,6 +52,8 @@ const (
 	nodeSubNamespace = "NODE"
 
 	defaultAverageLatency int64 = 125000
+
+	DefaultWarpnetUserNetwork = "warpnet"
 )
 
 type UserStorer interface {
@@ -68,6 +73,10 @@ func NewUserRepo(db UserStorer) *UserRepo {
 
 // Create adds a new user to the database
 func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
+	return repo.CreateWithTTL(user, math.MaxInt64)
+}
+
+func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error) {
 	if user.Id == "" {
 		return user, errors.New("user id is empty")
 	}
@@ -81,6 +90,9 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 
 	if user.Latency == 0 {
 		user.Latency = defaultAverageLatency
+	}
+	if user.Network == "" {
+		user.Network = DefaultWarpnetUserNetwork
 	}
 
 	rttRange := storage.RangePrefix(strconv.FormatInt(user.Latency, 10))
@@ -115,15 +127,15 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(user.NodeId).
 			Build()
-		if err = txn.Set(nodeUserKey, sortableKey.Bytes()); err != nil {
+		if err = txn.SetWithTTL(nodeUserKey, sortableKey.Bytes(), ttl); err != nil {
 			return user, err
 		}
 	}
 
-	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
+	if err = txn.SetWithTTL(fixedKey, sortableKey.Bytes(), ttl); err != nil {
 		return user, err
 	}
-	if err = txn.Set(sortableKey, data); err != nil {
+	if err = txn.SetWithTTL(sortableKey, data, ttl); err != nil {
 		return user, err
 	}
 	return user, txn.Commit()
@@ -183,6 +195,9 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	}
 	if newUser.NodeId != "" {
 		existingUser.NodeId = newUser.NodeId
+	}
+	if newUser.Network != "" {
+		existingUser.Network = newUser.Network
 	}
 	existingUser.Latency = newUser.Latency
 
@@ -331,7 +346,10 @@ func (repo *UserRepo) Delete(userId string) error {
 }
 
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
-	prefix := storage.NewPrefixBuilder(UsersRepoName).AddRootID(userSubNamespace).Build()
+	prefix := storage.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace).
+		AddRootID("None").
+		Build()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -359,6 +377,52 @@ func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string
 	}
 
 	return users, cur, nil
+}
+
+// TODO refactor
+func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error) {
+	profile, err := repo.Get(profileId)
+	if err != nil {
+		return nil, "", err
+	}
+	if cursor == nil {
+		cursor = new(string)
+	}
+
+	users, cur, err := repo.List(limit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+
+	recommended := make([]domain.User, 0, len(users))
+	for _, u := range users {
+		if u.IsOffline {
+			continue
+		}
+		if u.AvatarKey == "" || strings.Contains(strings.ToLower(u.AvatarKey), "missing") {
+			continue
+		}
+		if u.TweetsCount == 0 {
+			continue
+		}
+		if profile.Network != u.Network { // if profile from Warpnet - don't show other network recommendations
+			continue
+		}
+		recommended = append(recommended, u)
+	}
+
+	left := len(users) - len(recommended)
+	if left <= 0 || cur == "end" || cur == *cursor {
+		return recommended, cur, nil
+	}
+
+	left64 := uint64(left)
+	leftUsers, cur, err := repo.WhoToFollow(profileId, &left64, &cur)
+	if err != nil {
+		return nil, "", err
+	}
+	recommended = append(recommended, leftUsers...)
+	return recommended, cur, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
@@ -409,24 +473,21 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 	return users, txn.Commit()
 }
 
-const UserConsensusKey = "user"
-
 // ValidateUser if already taken
-func (repo *UserRepo) ValidateUser(k, v string) error {
-	if k != UserConsensusKey {
+func (repo *UserRepo) ValidateUserID(ev event.ValidationEvent) error {
+	if repo == nil {
 		return nil
 	}
 
-	var outerUser domain.User
-	if err := json.JSON.Unmarshal([]byte(v), &outerUser); err != nil {
-		return err
+	if ev.User == nil {
+		return nil
 	}
 
-	innerUser, err := repo.Get(outerUser.Id)
+	innerUser, err := repo.Get(ev.User.Id)
 
 	isUserAlreadyExists := !errors.Is(err, ErrUserNotFound) || err == nil
-	isSameNode := outerUser.NodeId == innerUser.NodeId
-	isOuterNewer := outerUser.CreatedAt.After(innerUser.CreatedAt)
+	isSameNode := ev.User.NodeId == innerUser.NodeId
+	isOuterNewer := ev.User.CreatedAt.After(innerUser.CreatedAt)
 
 	if isUserAlreadyExists && isOuterNewer && !isSameNode {
 		return errors.New("validator rejected new user")

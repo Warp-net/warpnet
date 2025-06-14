@@ -5,16 +5,16 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License
+You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 // Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: gpl
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 package discovery
 
@@ -109,7 +109,7 @@ func NewDiscoveryService(
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
 		config.Config().Version, handlers,
-		retrier.New(time.Second, 5, retrier.ArithmeticalBackoff),
+		retrier.New(time.Second, 5, retrier.FixedBackoff),
 		newRateLimiter(16, 1),
 		newDiscoveryCache(),
 		addrInfos,
@@ -232,7 +232,7 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 
 	ok, err := s.nodeRepo.IsBlocklisted(peerInfo.ID)
 	if ok && err == nil {
-		log.Infof("discovery: found blocklisted peer: %s", peerInfo.ID.String()[len(peerInfo.ID.String())-1:])
+		log.Infof("discovery: found blocklisted peer: %s", peerInfo.ID.String())
 		return
 	}
 
@@ -241,13 +241,13 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
-		log.Errorf("discovery: default handler: connecting to peer %s: %v\n", peerInfo.ID.String()[len(peerInfo.ID.String())-1:], err)
+		log.Errorf("discovery: default handler: connecting to peer %s: %v\n", peerInfo.ID.String(), err)
 		return
 	}
 
 	err = s.requestChallenge(peerInfo)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: default handler: challenge is invalid for peer: %s\n", peerInfo.ID.String()[len(peerInfo.ID.String())-1:])
+		log.Warnf("discovery: default handler: challenge is invalid for peer: %s\n", peerInfo.ID.String())
 		_ = s.nodeRepo.BlocklistExponential(peerInfo.ID)
 		return
 	}
@@ -275,7 +275,7 @@ func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
 	defer func() { recover() }()
 
 	if !s.limiter.Allow() {
-		log.Debugf("discovery: limited by rate limiter: %s", pi.ID.String()[len(pi.ID.String())-1:])
+		log.Debugf("discovery: limited by rate limiter: %s", pi.ID.String())
 		return
 	}
 
@@ -307,7 +307,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		log.Errorf("discovery: failed to check blocklist: %s", err)
 	}
 	if ok {
-		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String()[len(pi.ID.String())-1:])
+		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String())
 		return
 	}
 
@@ -316,7 +316,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	}
 
 	if !hasPublicAddresses(pi.Addrs) {
-		log.Debugf("discovery: peer %s has no public addresses: %v", pi.ID.String()[len(pi.ID.String())-1:], pi.Addrs)
+		log.Debugf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
 		return
 	}
 
@@ -326,17 +326,17 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 	if err != nil {
-		log.Debugf("discovery: failed to connect to new peer %s: %v", pi.ID.String()[len(pi.ID.String())-1:], err)
+		log.Debugf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
-		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String()[len(pi.ID.String())-1:], err)
+		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
 		return
 	}
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String()[len(pi.ID.String())-1:])
+		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
 		_ = s.nodeRepo.BlocklistExponential(pi.ID)
 		return
 	}
@@ -397,7 +397,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return errors.New("nil discovery service")
 	}
 	if s.cache.IsChallengedAlready(pi.ID) {
-		log.Debugf("discovery: peer %s already challenged", pi.ID.String()[len(pi.ID.String())-1:])
+		log.Debugf("discovery: peer %s already challenged", pi.ID.String())
 		return nil
 	}
 
@@ -409,7 +409,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 
 	resp, err := s.node.GenericStream(
 		pi.ID.String(),
-		event.PUBLIC_GET_NODE_CHALLENGE,
+		event.PUBLIC_POST_NODE_CHALLENGE,
 		event.GetChallengeEvent{
 			DirStack:  location.DirStack,
 			FileStack: location.FileStack,
@@ -417,7 +417,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to get challenge from new peer %s: %v", pi.ID.String()[len(pi.ID.String())-1:], err)
+		return fmt.Errorf("failed to get challenge from new peer %s: %v", pi.ID.String(), err)
 	}
 
 	if resp == nil || len(resp) == 0 {
@@ -430,15 +430,16 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return fmt.Errorf("failed to unmarshal challenge from new peer: %s %v", resp, err)
 	}
 
-	challengeRespRemote, err := hex.DecodeString(challengeResp.Challenge)
+	challengeRespDecoded, err := hex.DecodeString(challengeResp.Challenge)
 	if err != nil {
 		return fmt.Errorf("failed to decode challenge origin: %v", err)
 	}
 
-	if !bytes.Equal(ownChallenge, challengeRespRemote) {
+	if !bytes.Equal(ownChallenge, challengeRespDecoded) {
+		log.Errorf("discovery: challenge mismatch: %s != %s", hex.EncodeToString(ownChallenge), challengeResp.Challenge)
 		return ErrChallengeMismatch
 	} else {
-		log.Debugf("discovery: challenge match: %s == %s", hex.EncodeToString(ownChallenge), hex.EncodeToString(challengeRespRemote))
+		log.Debugf("discovery: challenge match: %s == %s", hex.EncodeToString(ownChallenge), challengeResp.Challenge)
 	}
 
 	peerstorePubKey := s.node.Peerstore().PubKey(pi.ID)
@@ -459,7 +460,8 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return fmt.Errorf("invalid signature base64: %v", err)
 	}
 
-	if !ed25519.Verify(rawPubKey, challengeRespRemote, decodedSig) {
+	if !ed25519.Verify(rawPubKey, challengeRespDecoded, decodedSig) {
+		log.Errorf("discovery: signature invalid: %s", challengeResp.Signature)
 		return ErrChallengeSignatureInvalid
 	} else {
 		log.Debugf("discovery: signature verified for peer %s", pi.ID.String())

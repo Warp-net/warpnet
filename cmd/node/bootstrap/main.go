@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -44,7 +44,8 @@ import (
 func main() {
 	defer closeWriter()
 
-	psk, err := security.GeneratePSK(config.Config().Version)
+	version := config.Config().Version
+	psk, err := security.GeneratePSK(version)
 	if err != nil {
 		panic(err)
 	}
@@ -77,8 +78,6 @@ func main() {
 		seed = []byte(rand.Text())
 	}
 
-	isInMemory := config.Config().Node.IsInMemory
-
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
 		log.Fatalf("bootstrap: fail generating key: %v", err)
@@ -88,7 +87,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, isInMemory, psk, codeHashHex)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init bootstrap node: %v", err)
 	}

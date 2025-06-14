@@ -5,16 +5,16 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License
+You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -38,22 +38,31 @@ import (
 	"time"
 )
 
+type MastodonPseudoStreamer interface {
+	ID() warpnet.WarpPeerID
+	IsMastodonID(id warpnet.WarpPeerID) bool
+	Addrs() []warpnet.WarpAddress
+	Route(r WarpRoute, data []byte) (_ []byte, err error)
+}
+
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
 	Network() network.Network
 }
 
 type streamPool struct {
-	ctx          context.Context
-	n            NodeStreamer
-	clientPeerID warpnet.WarpPeerID
+	ctx                context.Context
+	n                  NodeStreamer
+	clientPeerID       warpnet.WarpPeerID
+	mastodonPseudoNode MastodonPseudoStreamer
 }
 
 func NewStreamPool(
 	ctx context.Context,
 	n NodeStreamer,
+	mastodonPseudoNode MastodonPseudoStreamer,
 ) *streamPool {
-	pool := &streamPool{ctx: ctx, n: n}
+	pool := &streamPool{ctx: ctx, n: n, mastodonPseudoNode: mastodonPseudoNode}
 
 	return pool
 }
@@ -64,6 +73,11 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	}
 	if p.ctx.Err() != nil {
 		return nil, p.ctx.Err()
+	}
+
+	if p.mastodonPseudoNode != nil && p.mastodonPseudoNode.IsMastodonID(peerAddr.ID) {
+		log.Debugf("stream: peer %s is mastodon", peerAddr.ID)
+		return p.mastodonPseudoNode.Route(r, data)
 	}
 	// long-long wait in case of p2p-circuit stream
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

@@ -5,16 +5,16 @@
  <github.com.mecdy@passmail.net>
 
  This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
+ it under the terms of the GNU Affero General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU General Public License
+ You should have received a copy of the GNU Affero General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package bootstrap
 
 import (
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -41,16 +40,8 @@ type DiscoveryHandler interface {
 
 type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector, clientNode pubsub.PubsubClientNodeStreamer)
-	PublishOwnerUpdate(ownerId string, msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
 	Close() error
-}
-
-type ConsensusProvider interface {
-	Start(node consensus.NodeTransporter) (err error)
-	LeaderID() warpnet.WarpPeerID
-	CommitState(newState consensus.KVState) (_ *consensus.KVState, err error)
-	Shutdown()
-	AskSelfHashValidation(selfHashes map[string]struct{}) error
 }
 
 type DistributedHashTableCloser interface {
