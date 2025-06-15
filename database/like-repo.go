@@ -39,7 +39,7 @@ const (
 	LikerSubNamespace = "LIKER"
 )
 
-var ErrLikesNotFound = errors.New("like not found")
+var ErrLikesNotFound = storage.DBError("like not found")
 
 type LikeStorer interface {
 	Get(key storage.DatabaseKey) ([]byte, error)
@@ -56,10 +56,10 @@ func NewLikeRepo(db LikeStorer) *LikeRepo {
 
 func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error) {
 	if tweetId == "" {
-		return 0, errors.New("empty tweet id")
+		return 0, storage.DBError("empty tweet id")
 	}
 	if userId == "" {
-		return 0, errors.New("empty user id")
+		return 0, storage.DBError("empty user id")
 	}
 
 	likeKey := storage.NewPrefixBuilder(LikeRepoName).
@@ -82,7 +82,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 
 	_, err = txn.Get(likerKey)
 	if !errors.Is(err, storage.ErrKeyNotFound) {
-		txn.Commit()
+		_ = txn.Commit()
 		return repo.LikesCount(tweetId) // like exists
 	}
 
@@ -98,10 +98,10 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 
 func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err error) {
 	if tweetId == "" {
-		return 0, errors.New("empty tweet id")
+		return 0, storage.DBError("empty tweet id")
 	}
 	if userId == "" {
-		return 0, errors.New("empty user id")
+		return 0, storage.DBError("empty user id")
 	}
 
 	likeKey := storage.NewPrefixBuilder(LikeRepoName).
@@ -124,7 +124,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 
 	_, err = txn.Get(likerKey)
 	if errors.Is(err, storage.ErrKeyNotFound) { // already unliked
-		txn.Commit()
+		_ = txn.Commit()
 		return repo.LikesCount(tweetId)
 	}
 	if err = txn.Delete(likerKey); err != nil {
@@ -142,7 +142,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 
 func (repo *LikeRepo) LikesCount(tweetId string) (likesNum uint64, err error) {
 	if tweetId == "" {
-		return 0, errors.New("empty tweet id")
+		return 0, storage.DBError("empty tweet id")
 	}
 	likeKey := storage.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(IncrSubNamespace).
@@ -163,7 +163,7 @@ type likedUserIDs = []string
 
 func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ likedUserIDs, cur string, err error) {
 	if tweetId == "" {
-		return nil, "", errors.New("empty tweet id")
+		return nil, "", storage.DBError("empty tweet id")
 	}
 
 	likePrefix := storage.NewPrefixBuilder(LikeRepoName).

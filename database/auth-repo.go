@@ -46,14 +46,9 @@ const (
 	AuthRepoName    = "/AUTH"
 	PassSubName     = "PASS" // TODO pass restore functionality
 	DefaultOwnerKey = "OWNER"
-	pskNamespace    = "PSK"
 )
 
-var (
-	ErrOwnerNotFound = errors.New("owner not found")
-	ErrPSKNotFound   = errors.New("PSK not found")
-	ErrNilAuthRepo   = errors.New("auth repo is nil")
-)
+var ErrNilAuthRepo = storage.DBError("auth repo is nil")
 
 type AuthStorer interface {
 	Run(username, password string) (err error)

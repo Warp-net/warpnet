@@ -56,7 +56,7 @@ func NewTimelineRepo(db TimelineStorer) *TimelineRepo {
 
 func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) error {
 	if userId == "" {
-		return errors.New("userID cannot be blank")
+		return storage.DBError("userID cannot be blank")
 	}
 	if tweet.Id == "" {
 		return fmt.Errorf("tweet id should not be nil")
@@ -80,7 +80,7 @@ func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) 
 
 func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string, createdAt time.Time) error {
 	if userID == "" {
-		return errors.New("user ID cannot be blank")
+		return storage.DBError("user ID cannot be blank")
 	}
 	if createdAt.IsZero() {
 		return fmt.Errorf("created time should not be zero")
@@ -96,7 +96,7 @@ func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string, create
 // GetTimeline retrieves a user's timeline sorted from newest to oldest
 func (repo *TimelineRepo) GetTimeline(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if userId == "" {
-		return nil, "", errors.New("user ID cannot be blank")
+		return nil, "", storage.DBError("user ID cannot be blank")
 	}
 
 	prefix := storage.NewPrefixBuilder(TimelineRepoName).AddRootID(userId).Build()

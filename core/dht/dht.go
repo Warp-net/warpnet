@@ -87,7 +87,7 @@ type RoutingStorer interface {
 	warpnet.WarpBatching
 }
 
-type DistributedHashTable struct {
+type distributedHashTable struct {
 	ctx           context.Context
 	db            RoutingStorer
 	boostrapNodes []warpnet.WarpAddrInfo
@@ -111,10 +111,10 @@ func NewDHTable(
 	nodeRepo RoutingStorer,
 	removeF func(warpnet.WarpPeerID),
 	addFuncs ...discovery.DiscoveryHandler,
-) *DistributedHashTable {
+) *distributedHashTable {
 	bootstrapAddrs, _ := config.Config().Node.AddrInfos()
 	log.Infoln("dht: bootstrap addresses:", bootstrapAddrs)
-	return &DistributedHashTable{
+	return &distributedHashTable{
 		ctx:           ctx,
 		db:            nodeRepo,
 		boostrapNodes: bootstrapAddrs,
@@ -124,7 +124,7 @@ func NewDHTable(
 	}
 }
 
-func (d *DistributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
+func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
 	cacheOption := providers.Cache(newLRU())
 	providerStore, err := providers.NewProviderManager(d.ctx, n.ID(), n.Peerstore(), d.db, cacheOption)
 	if err != nil {
@@ -172,7 +172,7 @@ func (d *DistributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	return d.dht, nil
 }
 
-func (d *DistributedHashTable) bootstrapDHT() {
+func (d *distributedHashTable) bootstrapDHT() {
 	if d == nil || d.dht == nil {
 		return
 	}
@@ -198,7 +198,7 @@ func (d *DistributedHashTable) bootstrapDHT() {
 	go d.runRendezvousDiscovery(ownID)
 }
 
-func (d *DistributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) {
+func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) {
 	defer func() { recover() }()
 	if d == nil || d.dht == nil {
 		return
@@ -260,7 +260,7 @@ func (d *DistributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 	}
 }
 
-func (d *DistributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
+func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // common timeout
 	defer cancel()
 
@@ -292,7 +292,7 @@ func (d *DistributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 	}
 }
 
-func (d *DistributedHashTable) Close() {
+func (d *distributedHashTable) Close() {
 	defer func() { recover() }()
 	if d == nil || d.dht == nil {
 		return

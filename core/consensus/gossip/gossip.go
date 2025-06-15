@@ -16,10 +16,7 @@ import (
 	"time"
 )
 
-const (
-	ErrConsensusRejection         = warpnet.WarpError("request rejected by consensus")
-	quorumRatio           float64 = 0.75
-)
+const quorumRatio float64 = 0.75
 
 type ConsensusStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
@@ -92,7 +89,7 @@ func (g *gossipConsensus) listenResponses() {
 		timeoutTicker  = time.NewTicker(timeout)
 		runTicker      = time.NewTicker(time.Minute)
 		knownPeers     = make(map[string]struct{})
-		peersResponded = map[string]struct{}{}
+		validResponses = map[string]struct{}{}
 	)
 	defer timeoutTicker.Stop()
 	defer runTicker.Stop()
@@ -114,7 +111,7 @@ func (g *gossipConsensus) listenResponses() {
 		}
 		var (
 			total = len(peers)
-			count = len(peersResponded)
+			count = len(validResponses)
 		)
 
 		log.Infof("gossip consensus: validation in progess: %d/%d", count, total)
@@ -143,17 +140,18 @@ func (g *gossipConsensus) listenResponses() {
 			if _, isKnown := knownPeers[resp.ValidatorID]; !isKnown {
 				continue
 			}
-			if _, isSeen := peersResponded[resp.ValidatorID]; isSeen {
+			if _, isSeen := validResponses[resp.ValidatorID]; isSeen {
 				continue
 			}
 			if resp.Result == event.Invalid {
 				if resp.Reason != nil {
-					log.Errorf("gossip consensus: validator responded with 'invalid node' result: %s", *resp.Reason)
+					log.Debugf(
+						"gossip consensus: validator responded with 'invalid node' result: %s", *resp.Reason,
+					)
 				}
-				g.interruptChan <- os.Interrupt
-				return
+				continue
 			}
-			peersResponded[resp.ValidatorID] = struct{}{}
+			validResponses[resp.ValidatorID] = struct{}{}
 		default:
 			if total != 0 && count == total {
 				g.isValidated.Store(true)
@@ -211,7 +209,7 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
 		Path:      event.PRIVATE_POST_NODE_VALIDATE,
 		NodeId:    g.broadcaster.OwnerID(),
 		Timestamp: time.Now(),
-		Version:   "0.0.0", // TODO
+		Version:   "0.0.0", // TODO manage protocol versions properly
 		MessageId: uuid.New().String(),
 	}
 

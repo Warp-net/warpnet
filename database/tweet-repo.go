@@ -44,7 +44,7 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-var ErrTweetNotFound = errors.New("tweet not found")
+var ErrTweetNotFound = storage.DBError("tweet not found")
 
 const (
 	TweetsNamespace       = "/TWEETS"
@@ -77,7 +77,7 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 
 func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
 	if tweet == (domain.Tweet{}) {
-		return tweet, errors.New("nil tweet")
+		return tweet, storage.DBError("nil tweet")
 	}
 	if tweet.Id == "" {
 		tweet.Id = ulid.Make().String()
@@ -173,7 +173,7 @@ func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err erro
 
 func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
 	if userId == "" {
-		return 0, errors.New("tweet count: empty userID")
+		return 0, storage.DBError("tweet count: empty userID")
 	}
 	countKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(tweetsCountSubspace).
@@ -240,7 +240,7 @@ func deleteTweet(txn storage.WarpTransactioner, userId, tweetId string) error {
 
 func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if userId == "" {
-		return nil, "", errors.New("ID cannot be blank")
+		return nil, "", storage.DBError("ID cannot be blank")
 	}
 
 	prefix := storage.NewPrefixBuilder(TweetsNamespace).
@@ -281,7 +281,7 @@ func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]dom
 
 func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error) {
 	if tweet.RetweetedBy == nil {
-		return tweet, errors.New("retweet: by unknown")
+		return tweet, storage.DBError("retweet: by unknown")
 	}
 	retweetCountKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
@@ -331,7 +331,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 
 func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	if tweetId == "" || retweetedByUserID == "" {
-		return errors.New("unretweet: empty tweet ID or user ID")
+		return storage.DBError("unretweet: empty tweet ID or user ID")
 	}
 
 	retweetCountKey := storage.NewPrefixBuilder(TweetsNamespace).
@@ -377,7 +377,7 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 
 func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
-		return 0, errors.New("retweets count: empty tweet id")
+		return 0, storage.DBError("retweets count: empty tweet id")
 	}
 	retweetCountKey := storage.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
@@ -405,7 +405,7 @@ type retweetersIDs = []string
 
 func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string) (_ retweetersIDs, cur string, err error) {
 	if tweetId == "" {
-		return nil, "", errors.New("retweeters: empty tweet id")
+		return nil, "", storage.DBError("retweeters: empty tweet id")
 	}
 
 	retweetersPrefix := storage.NewPrefixBuilder(TweetsNamespace).

@@ -42,8 +42,8 @@ import (
 )
 
 var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrUserNotFound      = storage.DBError("user not found")
+	ErrUserAlreadyExists = storage.DBError("user already exists")
 )
 
 const (
@@ -78,7 +78,7 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 
 func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error) {
 	if user.Id == "" {
-		return user, errors.New("user id is empty")
+		return user, storage.DBError("user id is empty")
 	}
 	if user.CreatedAt.IsZero() {
 		user.CreatedAt = time.Now()
@@ -490,7 +490,7 @@ func (repo *UserRepo) ValidateUserID(ev event.ValidationEvent) error {
 	isOuterNewer := ev.User.CreatedAt.After(innerUser.CreatedAt)
 
 	if isUserAlreadyExists && isOuterNewer && !isSameNode {
-		return errors.New("validator rejected new user")
+		return storage.DBError("validator rejected new user")
 	}
 
 	return nil

@@ -40,7 +40,7 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-var ErrReplyNotFound = errors.New("reply not found")
+var ErrReplyNotFound = storage.DBError("reply not found")
 
 const (
 	RepliesNamespace     = "/REPLY"
@@ -64,19 +64,19 @@ func NewRepliesRepo(db ReplyStorer) *ReplyRepo {
 
 func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	if reply == (domain.Tweet{}) {
-		return reply, errors.New("empty reply")
+		return reply, storage.DBError("empty reply")
 	}
 	if reply.RootId == "" {
-		return reply, errors.New("empty root")
+		return reply, storage.DBError("empty root")
 	}
 	if reply.ParentId == nil {
-		return reply, errors.New("empty parent")
+		return reply, storage.DBError("empty parent")
 	}
 	if reply.Id == "" {
 		reply.Id = ulid.Make().String()
 	}
 	if reply.Id == reply.RootId {
-		return reply, errors.New("this is tweet not reply")
+		return reply, storage.DBError("this is tweet not reply")
 	}
 	if reply.CreatedAt.IsZero() {
 		now := time.Now()
@@ -127,7 +127,7 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 
 func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Tweet, err error) {
 	if rootID == "" || replyId == "" {
-		return tweet, errors.New("rootID and replyId cannot be empty")
+		return tweet, storage.DBError("rootID and replyId cannot be empty")
 	}
 
 	treeKey := storage.NewPrefixBuilder(RepliesNamespace).
@@ -160,7 +160,7 @@ func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Twe
 
 func (repo *ReplyRepo) RepliesCount(tweetId string) (likesNum uint64, err error) {
 	if tweetId == "" {
-		return 0, errors.New("empty tweet id")
+		return 0, storage.DBError("empty tweet id")
 	}
 	replyCountKey := storage.NewPrefixBuilder(RepliesNamespace).
 		AddSubPrefix(repliesCountSubspace).
@@ -180,7 +180,7 @@ func (repo *ReplyRepo) RepliesCount(tweetId string) (likesNum uint64, err error)
 
 func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 	if rootID == "" || parentID == "" || replyID == "" {
-		return errors.New("rootID, parent ID or replyID cannot be empty")
+		return storage.DBError("rootID, parent ID or replyID cannot be empty")
 	}
 
 	treeKey := storage.NewPrefixBuilder(RepliesNamespace).
@@ -219,7 +219,7 @@ func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 
 func (repo *ReplyRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
 	if rootId == "" {
-		return nil, "", errors.New("root ID cannot be blank")
+		return nil, "", storage.DBError("root ID cannot be blank")
 	}
 
 	prefix := storage.NewPrefixBuilder(RepliesNamespace).

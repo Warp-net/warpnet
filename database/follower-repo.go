@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-var ErrAlreadyFollowed = errors.New("already followed")
+var ErrAlreadyFollowed = storage.DBError("already followed")
 
 const (
 	FollowRepoName       = "/FOLLOWINGS"
@@ -64,7 +64,7 @@ func NewFollowRepo(db FollowerStorer) *FollowRepo {
 
 func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Following) error {
 	if fromUserId == "" || toUserId == "" {
-		return errors.New("invalid follow params")
+		return storage.DBError("invalid follow params")
 	}
 
 	data, _ := json.JSON.Marshal(event)
@@ -203,7 +203,7 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 
 func (repo *FollowRepo) GetFollowersCount(userId string) (uint64, error) {
 	if userId == "" {
-		return 0, errors.New("followers count: empty userID")
+		return 0, storage.DBError("followers count: empty userID")
 	}
 	followersCountKey := storage.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerCountSubName).
@@ -227,7 +227,7 @@ func (repo *FollowRepo) GetFollowersCount(userId string) (uint64, error) {
 
 func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
 	if userId == "" {
-		return 0, errors.New("followers count: empty userID")
+		return 0, storage.DBError("followers count: empty userID")
 	}
 	followeesCountKey := storage.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeCountSubName).

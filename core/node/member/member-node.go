@@ -210,7 +210,7 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	if err != nil {
 		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancelF()
-		m.retrier.Try(ctx, func() error {
+		_ = m.retrier.Try(ctx, func() error {
 			bt, err = m.Stream(nodeId, path, data) // TODO dead letters queue
 			return err
 		})

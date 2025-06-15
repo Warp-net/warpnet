@@ -42,8 +42,8 @@ const (
 )
 
 var (
-	ErrMediaNotFound    = errors.New("media not found")
-	ErrMediaRepoNotInit = errors.New("media repo is not initialized")
+	ErrMediaNotFound    = storage.DBError("media not found")
+	ErrMediaRepoNotInit = storage.DBError("media repo is not initialized")
 )
 
 type MediaStorer interface {
@@ -92,7 +92,7 @@ func (repo *MediaRepo) SetImage(userId string, img Base64Image) (_ ImageKey, err
 		return "", ErrMediaRepoNotInit
 	}
 	if len(img) == 0 || len(userId) == 0 {
-		return "", errors.New("no data for image set")
+		return "", storage.DBError("no data for image set")
 	}
 	h := security.ConvertToSHA256([]byte(img))
 	key := hex.EncodeToString(h)
@@ -111,10 +111,10 @@ func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img Base64Imag
 		return ErrMediaRepoNotInit
 	}
 	if len(img) == 0 || len(userId) == 0 {
-		return errors.New("no data for image set provided")
+		return storage.DBError("no data for image set provided")
 	}
 	if key == "" {
-		return errors.New("no key for image set provided")
+		return storage.DBError("no key for image set provided")
 	}
 
 	mediaKey := storage.NewPrefixBuilder(MediaRepoName).

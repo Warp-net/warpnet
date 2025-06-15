@@ -59,7 +59,7 @@ const (
 
 var (
 	_              ds.Batching = (*NodeRepo)(nil)
-	ErrNilNodeRepo             = errors.New("node repo is nil")
+	ErrNilNodeRepo             = storage.DBError("node repo is nil")
 )
 
 type NodeStorer interface {
@@ -321,7 +321,7 @@ func (d *NodeRepo) DiskUsage(ctx context.Context) (uint64, error) {
 	}
 	lsm, vlog := d.db.InnerDB().Size()
 	if (lsm + vlog) < 0 {
-		return 0, errors.New("disk usage: malformed value")
+		return 0, storage.DBError("disk usage: malformed value")
 	}
 	return uint64(lsm + vlog), nil //#nosec
 }
@@ -405,7 +405,7 @@ func (d *NodeRepo) query(tx *storage.Txn, q dsq.Query, implicit bool) (dsq.Resul
 			if closedEarly {
 				select {
 				case qrb.Output <- dsq.Result{
-					Error: errors.New("core repo closed"),
+					Error: storage.DBError("core repo closed"),
 				}:
 				case <-qrb.Process.Closing():
 				}
@@ -692,7 +692,7 @@ func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
 		return ErrNilNodeRepo
 	}
 	if peerId == "" {
-		return errors.New("empty peer ID")
+		return storage.DBError("empty peer ID")
 	}
 	blocklistKey := storage.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
@@ -771,7 +771,7 @@ func (d *NodeRepo) BlocklistRemove(peerId warpnet.WarpPeerID) (err error) {
 		return ErrNilNodeRepo
 	}
 	if peerId == "" {
-		return errors.New("empty peer ID")
+		return storage.DBError("empty peer ID")
 	}
 	blocklistKey := storage.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
@@ -790,7 +790,7 @@ func (d *NodeRepo) AddSelfHash(selfHashHex, version string) error {
 		return ErrNilNodeRepo
 	}
 	if len(selfHashHex) == 0 {
-		return errors.New("empty codebase hash")
+		return storage.DBError("empty codebase hash")
 	}
 	selfHashKey := storage.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(SelfHashSubNamespace).
@@ -834,7 +834,7 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 		return ErrNilNodeRepo
 	}
 	if currentVersion == nil {
-		return errors.New("empty current version value")
+		return storage.DBError("empty current version value")
 	}
 
 	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
@@ -870,7 +870,7 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 	return txn.Commit()
 }
 
-var ErrNotInRecords = errors.New("self hash is not in the consensus records")
+var ErrNotInRecords = storage.DBError("self hash is not in the consensus records")
 
 const SelfHashConsensusKey = "selfhash"
 
@@ -880,7 +880,7 @@ func (d *NodeRepo) ValidateSelfHash(ev event.ValidationEvent) error {
 	}
 
 	if len(ev.SelfHashHex) == 0 {
-		return errors.New("empty codebase hash")
+		return storage.DBError("empty codebase hash")
 	}
 
 	if d.db == nil {

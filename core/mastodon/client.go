@@ -68,7 +68,7 @@ const (
 	MastodonNetwork = "mastodon"
 )
 
-type WarpnetMastodonPseudoNode struct {
+type warpnetMastodonPseudoNode struct {
 	ctx                    context.Context
 	pseudoPeerID           warpnet.WarpPeerID
 	nodeInfo               warpnet.NodeInfo
@@ -79,7 +79,7 @@ type WarpnetMastodonPseudoNode struct {
 func NewWarpnetMastodonPseudoNode(
 	ctx context.Context,
 	version *semver.Version,
-) (*WarpnetMastodonPseudoNode, error) {
+) (*warpnetMastodonPseudoNode, error) {
 	pseudoPeerID := warpnet.FromStringToPeerID(mastodonPseudoPeerID)
 
 	config := &mastodon.Config{
@@ -96,7 +96,7 @@ func NewWarpnetMastodonPseudoNode(
 		return nil, fmt.Errorf("mastodon: failed to get current user: %w", err)
 	}
 
-	n := &WarpnetMastodonPseudoNode{
+	n := &warpnetMastodonPseudoNode{
 		ctx:          ctx,
 		pseudoPeerID: pseudoPeerID,
 		bridge:       c,
@@ -130,35 +130,35 @@ func NewWarpnetMastodonPseudoNode(
 	return n, err
 }
 
-func (m *WarpnetMastodonPseudoNode) ID() warpnet.WarpPeerID {
+func (m *warpnetMastodonPseudoNode) ID() warpnet.WarpPeerID {
 	if m == nil {
 		return ""
 	}
 	return m.pseudoPeerID
 }
 
-func (m *WarpnetMastodonPseudoNode) IsMastodonID(id warpnet.WarpPeerID) bool {
+func (m *warpnetMastodonPseudoNode) IsMastodonID(id warpnet.WarpPeerID) bool {
 	if m == nil {
 		return false
 	}
 	return m.pseudoPeerID == id
 }
 
-func (m *WarpnetMastodonPseudoNode) WarpnetUser() domain.User {
+func (m *warpnetMastodonPseudoNode) WarpnetUser() domain.User {
 	if m == nil {
 		return domain.User{}
 	}
 	return m.proxyUser
 }
 
-func (m *WarpnetMastodonPseudoNode) DefaultUser() domain.User {
+func (m *warpnetMastodonPseudoNode) DefaultUser() domain.User {
 	if m == nil {
 		return domain.User{}
 	}
 	return m.defaultUser
 }
 
-func (m *WarpnetMastodonPseudoNode) Addrs() []warpnet.WarpAddress {
+func (m *warpnetMastodonPseudoNode) Addrs() []warpnet.WarpAddress {
 	if m == nil {
 		return []warpnet.WarpAddress{}
 	}
@@ -170,7 +170,7 @@ func (m *WarpnetMastodonPseudoNode) Addrs() []warpnet.WarpAddress {
 	return []warpnet.WarpAddress{pseudoMaddr}
 }
 
-func (m *WarpnetMastodonPseudoNode) Route(r stream.WarpRoute, data []byte) (_ []byte, err error) {
+func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, data []byte) (_ []byte, err error) {
 	var (
 		getOneEvent event.GetTweetEvent
 		getAllEvent event.GetAllTweetsEvent
@@ -217,11 +217,11 @@ func (m *WarpnetMastodonPseudoNode) Route(r stream.WarpRoute, data []byte) (_ []
 	return json.JSON.Marshal(resp)
 }
 
-func (m *WarpnetMastodonPseudoNode) getInfoHandler() warpnet.NodeInfo {
+func (m *warpnetMastodonPseudoNode) getInfoHandler() warpnet.NodeInfo {
 	return m.nodeInfo
 }
 
-func (m *WarpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, error) {
+func (m *warpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, error) {
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
@@ -260,7 +260,7 @@ func (m *WarpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 	return warpnetUser, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *string) (event.UsersResponse, error) {
+func (m *warpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *string) (event.UsersResponse, error) {
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
@@ -331,7 +331,7 @@ func (m *WarpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *strin
 	return resp, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *string) (event.TweetsResponse, error) {
+func (m *warpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *string) (event.TweetsResponse, error) {
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
@@ -410,7 +410,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 	return resp, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Tweet, error) {
+func (m *warpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Tweet, error) {
 	tweetId = strings.TrimPrefix(tweetId, domain.RetweetPrefix)
 
 	var id mastodon.ID
@@ -465,7 +465,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 	return tweet, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.TweetStatsResponse, error) {
+func (m *warpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.TweetStatsResponse, error) {
 	tweetId = strings.TrimPrefix(tweetId, domain.RetweetPrefix)
 
 	var id mastodon.ID
@@ -492,7 +492,7 @@ func (m *WarpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.
 	return stats, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.RepliesResponse, error) {
+func (m *warpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.RepliesResponse, error) {
 	tweetId = strings.TrimPrefix(tweetId, domain.RetweetPrefix)
 
 	var id mastodon.ID
@@ -550,7 +550,7 @@ func (m *WarpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 	return resp, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getFollowersHandler(userId string, cursor *string) (event.FollowersResponse, error) {
+func (m *warpnetMastodonPseudoNode) getFollowersHandler(userId string, cursor *string) (event.FollowersResponse, error) {
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
@@ -590,7 +590,7 @@ func (m *WarpnetMastodonPseudoNode) getFollowersHandler(userId string, cursor *s
 	return resp, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getFolloweesHandler(userId string, cursor *string) (event.FolloweesResponse, error) {
+func (m *warpnetMastodonPseudoNode) getFolloweesHandler(userId string, cursor *string) (event.FolloweesResponse, error) {
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
@@ -631,12 +631,14 @@ func (m *WarpnetMastodonPseudoNode) getFolloweesHandler(userId string, cursor *s
 	return resp, nil
 }
 
-func (m *WarpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageResponse, error) {
+func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageResponse, error) {
 	resp, err := m.bridge.Get(url)
 	if err != nil {
 		return event.GetImageResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	bt, err := io.ReadAll(resp.Body)
 	if err != nil {

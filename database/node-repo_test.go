@@ -146,7 +146,9 @@ func (s *NodeRepoTestSuite) TestQuerySimple() {
 	s.Require().NoError(err)
 	s.Require().NotNil(results)
 
-	defer results.Close()
+	defer func() {
+		_ = results.Close()
+	}()
 	var found bool
 	for r := range results.Next() {
 		if r.Error != nil {

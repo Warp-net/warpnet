@@ -72,7 +72,7 @@ func NewBootstrapNode(
 	mapStore := datastore.NewMapDatastore()
 
 	closeF := func() error {
-		memoryStore.Close()
+		_ = memoryStore.Close()
 		return mapStore.Close()
 	}
 

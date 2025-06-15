@@ -39,8 +39,8 @@ import (
 )
 
 var (
-	ErrChatNotFound    = errors.New("chat not found")
-	ErrMessageNotFound = errors.New("message not found")
+	ErrChatNotFound    = storage.DBError("chat not found")
+	ErrMessageNotFound = storage.DBError("message not found")
 )
 
 const (
@@ -64,7 +64,7 @@ func NewChatRepo(db ChatStorer) *ChatRepo {
 
 func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (chat domain.Chat, err error) {
 	if ownerId == "" || otherUserId == "" {
-		return domain.Chat{}, errors.New("user ID or other user ID is empty")
+		return domain.Chat{}, storage.DBError("user ID or other user ID is empty")
 	}
 
 	repo.mx.Lock()
@@ -130,7 +130,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 
 func (repo *ChatRepo) DeleteChat(chatId string) error {
 	if chatId == "" {
-		return errors.New("chat ID is empty")
+		return storage.DBError("chat ID is empty")
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -163,7 +163,7 @@ func (repo *ChatRepo) DeleteChat(chatId string) error {
 
 func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 	if chatId == "" {
-		return chat, errors.New("chat ID is empty")
+		return chat, storage.DBError("chat ID is empty")
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -197,7 +197,7 @@ func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 
 func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error) {
 	if userId == "" {
-		return []domain.Chat{}, "", errors.New("ID cannot be blank")
+		return []domain.Chat{}, "", storage.DBError("ID cannot be blank")
 	}
 
 	prefix := storage.NewPrefixBuilder(ChatNamespace).Build()
@@ -236,10 +236,10 @@ func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string)
 
 func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage, error) {
 	if msg == (domain.ChatMessage{}) {
-		return msg, errors.New("empty message")
+		return msg, storage.DBError("empty message")
 	}
 	if msg.ChatId == "" {
-		return msg, errors.New("chat ID is empty")
+		return msg, storage.DBError("chat ID is empty")
 	}
 
 	repo.mx.Lock()
@@ -287,7 +287,7 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 
 func (repo *ChatRepo) ListMessages(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error) {
 	if chatId == "" {
-		return nil, "", errors.New("chat ID cannot be blank")
+		return nil, "", storage.DBError("chat ID cannot be blank")
 	}
 
 	prefix := storage.NewPrefixBuilder(MessageNamespace).
@@ -324,7 +324,7 @@ func (repo *ChatRepo) ListMessages(chatId string, limit *uint64, cursor *string)
 
 func (repo *ChatRepo) GetMessage(chatId, id string) (m domain.ChatMessage, err error) {
 	if chatId == "" || id == "" {
-		return m, errors.New("chatId or id cannot be blank")
+		return m, storage.DBError("chatId or id cannot be blank")
 	}
 	fixedKey := storage.NewPrefixBuilder(MessageNamespace).
 		AddRootID(chatId).

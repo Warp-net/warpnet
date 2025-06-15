@@ -74,16 +74,21 @@ import (
 const discardRatio = 0.5
 
 var (
-	ErrNotRunning    = errors.New("DB is not running")
+	ErrNotRunning    = DBError("DB is not running")
 	ErrKeyNotFound   = badger.ErrKeyNotFound
-	ErrWrongPassword = errors.New("wrong username or password")
-	ErrStopIteration = errors.New("stop iteration")
+	ErrWrongPassword = DBError("wrong username or password")
+	ErrStopIteration = DBError("stop iteration")
 )
 
 type (
-	WarpDB = badger.DB
-	Txn    = badger.Txn
+	WarpDB  = badger.DB
+	Txn     = badger.Txn
+	DBError string
 )
+
+func (e DBError) Error() string {
+	return string(e)
+}
 
 type DB struct {
 	badger   *badger.DB
@@ -156,7 +161,7 @@ func (db *DB) IsFirstRun() bool {
 
 func (db *DB) Run(username, password string) (err error) {
 	if username == "" || password == "" {
-		return errors.New("database: username or password is empty")
+		return DBError("database: username or password is empty")
 	}
 	hashSum := security.ConvertToSHA256([]byte(username + "@" + password))
 	execOpts := db.storedOpts.WithEncryptionKey(hashSum)
@@ -485,7 +490,7 @@ type IterKeysFunc func(key string) error
 
 func (t *WarpTxn) IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 	if strings.Contains(prefix.String(), FixedKey) {
-		return errors.New("cannot iterate thru fixed key")
+		return DBError("cannot iterate thru fixed key")
 	}
 	opts := badger.DefaultIteratorOptions
 	it := t.txn.NewIterator(opts)
@@ -508,7 +513,7 @@ func (t *WarpTxn) IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 
 func (t *WarpTxn) ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 	if strings.Contains(prefix.String(), FixedKey) {
-		return errors.New("cannot iterate thru fixed key")
+		return DBError("cannot iterate thru fixed key")
 	}
 	opts := badger.DefaultIteratorOptions
 	opts.Reverse = true
@@ -572,7 +577,7 @@ func iterateKeysValues(
 	handler iterKeysValuesFunc,
 ) (cursor string, err error) {
 	if strings.Contains(prefix.String(), FixedKey) {
-		return "", errors.New("cannot iterate thru fixed keys")
+		return "", DBError("cannot iterate thru fixed keys")
 	}
 	if startCursor.String() == endCursor {
 		return endCursor, nil

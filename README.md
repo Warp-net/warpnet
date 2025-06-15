@@ -9,11 +9,8 @@
   </a>
 
 <h3 align="center">Warpnet</h3>
-
   <p align="center">
-    <br />
     <a href="https://github.com/Warp-net/docs"><strong>Explore the docs »</strong></a>
-    <br />
     <br />
     &middot;
     <a href="https://github.com/Warp-net/warpnet/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
