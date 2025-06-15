@@ -55,7 +55,9 @@ func (fsm *fsm) AmendValidator(validator ConsensusValidatorFunc) {
 	if fsm == nil || fsm.state == nil {
 		return
 	}
+	fsm.mux.Lock()
 	fsm.validators = append(fsm.validators, validator)
+	fsm.mux.Unlock()
 }
 
 // Apply is invoked by Raft once a log entry is commited. Do not use directly.

@@ -12,4 +12,5 @@ var (
 	errPacketReleased          = errors.New("could not retain packet, already released")
 	errFailedToCastHeaderPool  = errors.New("could not access header pool, failed cast")
 	errFailedToCastPayloadPool = errors.New("could not access payload pool, failed cast")
+	errPaddingOverflow         = errors.New("padding size exceeds payload size")
 )

@@ -73,20 +73,7 @@ func NewRaft(
 	addrInfos []warpnet.WarpAddrInfo,
 	validators ...raft.ConsensusValidatorFunc,
 ) (_ *raftNode, err error) {
-	config := &raft.Config{
-		FSM:                raft.NewFSM(&raft.DefaultCodec{}, validators...),
-		Codec:              &raft.DefaultCodec{},
-		StableStore:        store,
-		LogStore:           nil, // in-mem
-		BootstrapNodes:     addrInfos,
-		IsClusterInitiator: isInitiator,
-		Logger:             raft.DefaultConsensusLogger(),
-		Validators:         validators,
-		LeaderProtocolID:   "/public/post/admin/verifynode/0.0.0",
-		TransportFunc:      raft.NewConsensusTransport,
-	}
-
-	svc, err := raft.NewLibP2pRaft(ctx, config)
+	svc, err := raft.NewLibP2pRaft(ctx, nil)
 	if err != nil {
 		return nil, err
 	}

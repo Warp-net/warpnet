@@ -93,7 +93,7 @@ github.com/fatih/color
 # github.com/filecoin-project/go-clock v0.1.0
 ## explicit; go 1.21
 github.com/filecoin-project/go-clock
-# github.com/filinvadim/libp2p-raft-go v0.6.0
+# github.com/filinvadim/libp2p-raft-go v0.6.1
 ## explicit; go 1.24.2
 github.com/filinvadim/libp2p-raft-go
 # github.com/flynn/noise v1.1.0
@@ -147,7 +147,7 @@ github.com/godbus/dbus/v5
 github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
-# github.com/golang/geo v0.0.0-20250606134707-e8fe6a72b492
+# github.com/golang/geo v0.0.0-20250613135800-9e8e59d779cc
 ## explicit; go 1.21.0
 github.com/golang/geo/r1
 github.com/golang/geo/r2
@@ -438,7 +438,7 @@ github.com/libp2p/go-netroute
 # github.com/libp2p/go-reuseport v0.4.0
 ## explicit; go 1.20
 github.com/libp2p/go-reuseport
-# github.com/libp2p/go-yamux/v5 v5.0.0
+# github.com/libp2p/go-yamux/v5 v5.0.1
 ## explicit; go 1.22
 github.com/libp2p/go-yamux/v5
 # github.com/libp2p/zeroconf/v2 v2.2.0
@@ -635,12 +635,14 @@ github.com/pion/ice/v4/internal/atomic
 github.com/pion/ice/v4/internal/fakenet
 github.com/pion/ice/v4/internal/stun
 github.com/pion/ice/v4/internal/taskloop
-# github.com/pion/interceptor v0.1.38
+# github.com/pion/interceptor v0.1.40
 ## explicit; go 1.20
 github.com/pion/interceptor
 github.com/pion/interceptor/internal/ntp
 github.com/pion/interceptor/internal/rtpbuffer
 github.com/pion/interceptor/internal/sequencenumber
+github.com/pion/interceptor/pkg/flexfec
+github.com/pion/interceptor/pkg/flexfec/util
 github.com/pion/interceptor/pkg/nack
 github.com/pion/interceptor/pkg/report
 github.com/pion/interceptor/pkg/rfc8888
@@ -657,7 +659,7 @@ github.com/pion/randutil
 # github.com/pion/rtcp v1.2.15
 ## explicit; go 1.20
 github.com/pion/rtcp
-# github.com/pion/rtp v1.8.18
+# github.com/pion/rtp v1.8.19
 ## explicit; go 1.20
 github.com/pion/rtp
 github.com/pion/rtp/codecs
@@ -669,7 +671,7 @@ github.com/pion/sctp
 # github.com/pion/sdp/v3 v3.0.13
 ## explicit; go 1.20
 github.com/pion/sdp/v3
-# github.com/pion/srtp/v3 v3.0.5
+# github.com/pion/srtp/v3 v3.0.6
 ## explicit; go 1.20
 github.com/pion/srtp/v3
 # github.com/pion/stun v0.6.1
@@ -708,7 +710,7 @@ github.com/pion/turn/v4/internal/client
 github.com/pion/turn/v4/internal/ipnet
 github.com/pion/turn/v4/internal/proto
 github.com/pion/turn/v4/internal/server
-# github.com/pion/webrtc/v4 v4.1.1
+# github.com/pion/webrtc/v4 v4.1.2
 ## explicit; go 1.20
 github.com/pion/webrtc/v4
 github.com/pion/webrtc/v4/internal/fmtp
@@ -1008,7 +1010,7 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# golang.org/x/time v0.11.0
+# golang.org/x/time v0.12.0
 ## explicit; go 1.23.0
 golang.org/x/time/rate
 # golang.org/x/tools v0.34.0
