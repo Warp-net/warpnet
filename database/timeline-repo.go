@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/domain"
 	"sort"
