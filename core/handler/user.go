@@ -185,7 +185,7 @@ func StreamGetUsersHandler(
 		return event.UsersResponse{
 			Cursor: cursor,
 			Users:  users,
-		}, err
+		}, nil
 	}
 }
 
@@ -252,6 +252,8 @@ func StreamGetWhoToFollowHandler(
 			return nil, err
 		}
 
+		fmt.Printf("WHOTOFOLLOW ?????? %#v\n", users)
+
 		followeesLimit := uint64(80) // TODO limit?
 		followees, _, err := followRepo.GetFollowees(authRepo.GetOwner().UserId, &followeesLimit, nil)
 		if err != nil {
@@ -278,7 +280,7 @@ func StreamGetWhoToFollowHandler(
 		return event.UsersResponse{
 			Cursor: cursor,
 			Users:  whotofollow,
-		}, err
+		}, nil
 	}
 }
 
