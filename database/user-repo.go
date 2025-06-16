@@ -29,7 +29,6 @@ package database
 
 import (
 	"errors"
-	"fmt"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
@@ -382,13 +381,12 @@ func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string
 
 // TODO refactor
 func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error) {
-	profile, _ := repo.Get(profileId)
+	//profile, _ := repo.Get(profileId)
 
 	users, cur, err := repo.List(limit, cursor)
 	if err != nil {
 		return users, "", err
 	}
-	fmt.Println("user repo wtf", users, cur)
 
 	if limit != nil && len(users) < int(*limit) { // too small amount - no need to filter
 		return users, cur, nil
@@ -405,9 +403,9 @@ func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *strin
 		if u.TweetsCount == 0 {
 			continue
 		}
-		if profile.Network != "" && profile.Network != u.Network { // if profile from Warpnet - don't show other network recommendations
-			continue
-		}
+		//if profile.Network != "" && profile.Network != u.Network { // if profile from Warpnet - don't show other network recommendations
+		//	continue
+		//}
 		recommended = append(recommended, u)
 	}
 

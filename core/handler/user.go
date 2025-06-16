@@ -252,8 +252,6 @@ func StreamGetWhoToFollowHandler(
 			return nil, err
 		}
 
-		fmt.Printf("WHOTOFOLLOW ?????? %#v\n", users)
-
 		followeesLimit := uint64(80) // TODO limit?
 		followees, _, err := followRepo.GetFollowees(authRepo.GetOwner().UserId, &followeesLimit, nil)
 		if err != nil {
