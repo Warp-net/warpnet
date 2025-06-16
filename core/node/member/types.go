@@ -83,7 +83,7 @@ type UserProvider interface {
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	GetBatch(userIds ...string) (users []domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
-	WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error)
+	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
 }
 
 type ClientNodeStreamer interface {
