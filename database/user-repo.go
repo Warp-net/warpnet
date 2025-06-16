@@ -379,10 +379,7 @@ func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string
 	return users, cur, nil
 }
 
-// TODO refactor
-func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error) {
-	//profile, _ := repo.Get(profileId)
-
+func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	users, cur, err := repo.List(limit, cursor)
 	if err != nil {
 		return users, "", err
@@ -403,9 +400,7 @@ func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *strin
 		if u.TweetsCount == 0 {
 			continue
 		}
-		//if profile.Network != "" && profile.Network != u.Network { // if profile from Warpnet - don't show other network recommendations
-		//	continue
-		//}
+
 		recommended = append(recommended, u)
 	}
 

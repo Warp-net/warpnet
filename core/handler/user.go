@@ -60,7 +60,7 @@ type UserFetcher interface {
 	Create(user domain.User) (domain.User, error)
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
-	WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error)
+	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 }
@@ -247,7 +247,20 @@ func StreamGetWhoToFollowHandler(
 			return nil, warpnet.WarpError("empty profile id")
 		}
 
-		users, cursor, err := userRepo.WhoToFollow(ev.UserId, ev.Limit, ev.Cursor)
+		owner := authRepo.GetOwner()
+
+		profile, err := userRepo.Get(ev.UserId)
+		if err != nil {
+			log.Errorf("get who to follow handler: get user %v", err)
+			profile = domain.User{
+				Id:       owner.UserId,
+				Username: owner.Username,
+				Network:  warpnet.WarpnetName,
+				NodeId:   owner.NodeId,
+			}
+		}
+
+		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
 		}
@@ -263,10 +276,12 @@ func StreamGetWhoToFollowHandler(
 			followedUsers[follow.Followee] = struct{}{}
 		}
 
-		ownerId := authRepo.GetOwner().UserId
 		whotofollow := make([]domain.User, 0, len(users))
 		for _, user := range users {
-			if user.Id == ownerId {
+			if user.Id == owner.UserId {
+				continue
+			}
+			if profile.Id != owner.UserId && profile.Network != user.Network { // if profile from Warpnet - don't show other network recommendations
 				continue
 			}
 			if _, ok := followedUsers[user.Id]; ok {
