@@ -394,6 +394,10 @@ func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *strin
 		return nil, "", err
 	}
 
+	if limit != nil && len(users) < int(*limit) { // too small amount - no need to filter
+		return users, cur, nil
+	}
+
 	recommended := make([]domain.User, 0, len(users))
 	for _, u := range users {
 		if u.IsOffline {
@@ -411,17 +415,6 @@ func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *strin
 		recommended = append(recommended, u)
 	}
 
-	left := len(users) - len(recommended)
-	if left <= 0 || cur == "end" || cur == *cursor {
-		return recommended, cur, nil
-	}
-
-	left64 := uint64(left)
-	leftUsers, cur, err := repo.WhoToFollow(profileId, &left64, &cur)
-	if err != nil {
-		return nil, "", err
-	}
-	recommended = append(recommended, leftUsers...)
 	return recommended, cur, nil
 }
 

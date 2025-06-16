@@ -231,8 +231,6 @@ func usersRefreshBackground(
 	}
 }
 
-const whoToFollowDefaultLimit uint64 = 8
-
 func StreamGetWhoToFollowHandler(
 	authRepo UserAuthStorer,
 	userRepo UserFetcher,
@@ -249,13 +247,13 @@ func StreamGetWhoToFollowHandler(
 			return nil, warpnet.WarpError("empty profile id")
 		}
 
-		limit := whoToFollowDefaultLimit
-		users, cursor, err := userRepo.WhoToFollow(ev.UserId, &limit, ev.Cursor)
+		users, cursor, err := userRepo.WhoToFollow(ev.UserId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
 		}
 
-		followees, _, err := followRepo.GetFollowees(authRepo.GetOwner().UserId, nil, nil)
+		followeesLimit := uint64(80) // TODO limit?
+		followees, _, err := followRepo.GetFollowees(authRepo.GetOwner().UserId, &followeesLimit, nil)
 		if err != nil {
 			log.Errorf("get who to follow handler: get followers %v", err)
 		}
