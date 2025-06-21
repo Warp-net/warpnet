@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/boxo/files"
 	"github.com/ipfs/boxo/path"
 	"github.com/ipfs/go-cid"
@@ -138,7 +139,12 @@ func NewIPFS(ctx context.Context, privKey ed25519.PrivateKey) (*Client, error) {
 		Routing:   kubop2p.DHTOption,
 		Repo:      repo,
 		Host: func(_ peer.ID, ps peerstore.Peerstore, options ...libp2p.Option) (host.Host, error) {
-			p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
+			// generate deterministic but different key
+			newPrivKey, err := security.GenerateKeyFromSeed(privKey)
+			if err != nil {
+				return nil, err
+			}
+			p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(newPrivKey)
 			if err != nil {
 				return nil, err
 			}
@@ -185,9 +191,6 @@ func (c *Client) PutStream(ctx context.Context, reader io.ReadCloser) (id string
 	if reader == nil {
 		return cid.Undef.String(), fmt.Errorf("nil reader")
 	}
-	defer reader.Close()
-
-	fmt.Println("put stream started!")
 
 	pr, pw := io.Pipe()
 
@@ -210,14 +213,13 @@ func (c *Client) PutStream(ctx context.Context, reader io.ReadCloser) (id string
 		}
 		defer zw.Close()
 
-		written, err := io.Copy(zw, reader)
+		_, err = io.Copy(zw, reader)
 		if err != nil {
-			err := fmt.Errorf("compression error: %w", err)
+			err := fmt.Errorf("compression write: %w", err)
 			log.Error(err)
 			_ = pw.CloseWithError(err)
 			return
 		}
-		log.Infof("written %d bytes", written)
 	}()
 
 	f := files.NewReaderFile(pr)
@@ -233,6 +235,9 @@ func (c *Client) PutStream(ctx context.Context, reader io.ReadCloser) (id string
 	if err != nil {
 		return cid.Undef.String(), fmt.Errorf("failed to add to ipfs: %w", err)
 	}
+
+	size, _ := f.Size()
+	log.Infof("ipfs: put: written %d bytes", size)
 
 	if err := c.api.Pin().Add(ctx, immPath); err != nil {
 		log.Errorf("failed to pin CID %s: %v", immPath.RootCid(), err)
@@ -288,7 +293,7 @@ func (c *Client) GetStream(ctx context.Context, id string) (io.ReadCloser, error
 	}
 
 	size, _ := f.Size()
-	log.Infof("fetched file size: %d bytes", size)
+	log.Infof("ipfs: get: fetched: %d bytes", size)
 
 	decoder, err := zstd.NewReader(f)
 	if err != nil {

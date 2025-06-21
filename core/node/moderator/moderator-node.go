@@ -145,24 +145,23 @@ func ensureModelPresence(store DistributedStorer) (string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("failed to read model path: %v", err)
 	}
-	if f != nil {
-		defer f.Close()
-	}
 
 	fileExists = !os.IsNotExist(err)
 
 	if fileExists {
-		// send to background
+		// send it to background
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
 
-			cid, err := store.PutStream(ctx, f)
+			cid, err = store.PutStream(ctx, f)
 			if err != nil {
 				log.Errorf("failed to put file in IPFS: %v", err)
+				_ = f.Close()
 				return
 			}
-			log.Info("CID:", cid)
+			log.Infof("moderator: LLM model uploaded: CID: %s", cid)
+			_ = f.Close()
 		}()
 
 		return path, nil

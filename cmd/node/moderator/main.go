@@ -27,7 +27,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/moderator"
@@ -36,10 +35,8 @@ import (
 	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
 	_ "go.uber.org/automaxprocs" // DO NOT remove
-	"io"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -102,9 +99,7 @@ func main() {
 		return
 	}
 
-	_ = append([]string{}, codeHashHex, psk.String())
-
-	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex)
+	n, err := moderator.NewModeratorNode(ctx, privKey, psk, ipfsNode, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init moderator node: %v", err)
 	}
