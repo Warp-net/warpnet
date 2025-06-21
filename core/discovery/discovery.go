@@ -59,10 +59,7 @@ type DiscoveryHandler func(warpnet.WarpAddrInfo)
 type DiscoveryInfoStorer interface {
 	NodeInfo() warpnet.NodeInfo
 	Peerstore() warpnet.WarpPeerstore
-	Mux() warpnet.WarpProtocolSwitch
-	Network() warpnet.WarpNetwork
 	SimpleConnect(warpnet.WarpAddrInfo) error
-	Connect(warpnet.WarpAddrInfo) error
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
 

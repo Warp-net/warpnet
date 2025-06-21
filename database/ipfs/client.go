@@ -1,12 +1,37 @@
+/*
+
+Warpnet - Decentralized Social Network
+Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
+<github.com.mecdy@passmail.net>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
+Use at your own risk. The maintainers shall not be liable for any damages or data loss
+resulting from the use or misuse of this software.
+*/
+
+// Copyright 2025 Vadim Filin
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package ipfs
 
 import (
 	"context"
-	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/boxo/files"
 	"github.com/ipfs/boxo/path"
 	"github.com/ipfs/go-cid"
@@ -16,12 +41,9 @@ import (
 	"github.com/ipfs/kubo/plugin/loader"
 	"github.com/klauspost/compress/zstd"
 	"github.com/libp2p/go-libp2p"
-	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
-	"github.com/libp2p/go-libp2p/p2p/security/noise"
-	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multihash"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -42,8 +64,6 @@ const (
 	repoPath = "/tmp/ipfs"
 )
 
-type FileID = cid.Cid
-
 type WarpNodeIdentifier interface {
 	NodeInfo() warpnet.NodeInfo
 	PrivateKey() warpnet.WarpPrivateKey
@@ -54,8 +74,8 @@ type Client struct {
 	node *core.IpfsNode
 }
 
-func NewIPFS(ctx context.Context, privKey ed25519.PrivateKey) (*Client, error) {
-	_ = golog.SetLogLevel("*", "error")
+func NewIPFS(ctx context.Context, n host.Host) (*Client, error) {
+	_ = golog.SetLogLevel("core", "error")
 
 	plugins, err := loader.NewPluginLoader(repoPath)
 	if err != nil {
@@ -82,44 +102,19 @@ func NewIPFS(ctx context.Context, privKey ed25519.PrivateKey) (*Client, error) {
 		return nil, fmt.Errorf("config init failed: %w", err)
 	}
 
-	cfg.Addresses.API = []string{} // turn off local IPFS API
-	cfg.Addresses.Swarm = []string{
-		"/ip4/0.0.0.0/tcp/4701",
-		"/ip6/::/tcp/4701",
-	}
+	// Disable everything that talks to the outside world
+	cfg.Bootstrap = []string{}
+	cfg.Addresses.API = []string{}
 	cfg.Addresses.Gateway = []string{}
-	cfg.Routing.Type = config.NewOptionalString(string(config.RouterTypeDHT))
+	cfg.Addresses.Swarm = []string{}
+	cfg.Routing.Type = config.NewOptionalString("none")
 	cfg.Discovery.MDNS.Enabled = false
 	cfg.Datastore = config.Datastore{
 		StorageMax:         "10GB",
 		StorageGCWatermark: 90,
 		GCPeriod:           "1h",
 		HashOnRead:         false,
-		Spec: map[string]interface{}{
-			"type": "mount",
-			"mounts": []interface{}{
-				map[string]interface{}{
-					"mountpoint": "/blocks",
-					"type":       "measure",
-					"prefix":     "flatfs.datastore",
-					"child": map[string]interface{}{
-						"type":      "flatfs",
-						"path":      "blocks",
-						"sync":      true,
-						"shardFunc": "/repo/flatfs/shard/v1/next-to-last/2",
-					},
-				},
-				map[string]interface{}{
-					"mountpoint": "/",
-					"type":       "measure",
-					"prefix":     "leveldb.datastore",
-					"child": map[string]interface{}{
-						"type": "levelds",
-						"path": "datastore",
-					},
-				},
-			},
-		},
+		Spec:               defaultDatastoreSpec(),
 	}
 
 	if !fsrepo.IsInitialized(repoPath) {
@@ -136,35 +131,10 @@ func NewIPFS(ctx context.Context, privKey ed25519.PrivateKey) (*Client, error) {
 	buildCfg := &core.BuildCfg{
 		Online:    true,
 		Permanent: true,
-		Routing:   kubop2p.DHTOption,
+		Routing:   kubop2p.NilRouterOption,
 		Repo:      repo,
-		Host: func(_ peer.ID, ps peerstore.Peerstore, options ...libp2p.Option) (host.Host, error) {
-			// generate deterministic but different key
-			newPrivKey, err := security.GenerateKeyFromSeed(privKey)
-			if err != nil {
-				return nil, err
-			}
-			p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(newPrivKey)
-			if err != nil {
-				return nil, err
-			}
-
-			var kuboConf libp2p.Config
-			for _, o := range options {
-				_ = o(&kuboConf)
-			}
-			log.Debugf("default kubo config: %+v", kuboConf)
-
-			return libp2p.New(
-				libp2p.Identity(p2pPrivKey),
-				libp2p.Peerstore(ps),
-				libp2p.Transport(tcp.NewTCPTransport),
-				libp2p.UserAgent("warpnet-"+kuboConf.UserAgent),
-				libp2p.DisableRelay(),
-				libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/4701", "/ip6/::/tcp/4701"),
-				libp2p.DisableMetrics(),
-				libp2p.Security(noise.ID, noise.New),
-			)
+		Host: func(_ peer.ID, _ peerstore.Peerstore, _ ...libp2p.Option) (host.Host, error) {
+			return n, nil
 		},
 	}
 	node, err := core.NewNode(ctx, buildCfg)
@@ -181,6 +151,34 @@ func NewIPFS(ctx context.Context, privKey ed25519.PrivateKey) (*Client, error) {
 		api:  api,
 		node: node,
 	}, nil
+}
+
+func defaultDatastoreSpec() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "mount",
+		"mounts": []interface{}{
+			map[string]interface{}{
+				"mountpoint": "/blocks",
+				"type":       "measure",
+				"prefix":     "flatfs.datastore",
+				"child": map[string]interface{}{
+					"type":      "flatfs",
+					"path":      "blocks",
+					"sync":      true,
+					"shardFunc": "/repo/flatfs/shard/v1/next-to-last/2",
+				},
+			},
+			map[string]interface{}{
+				"mountpoint": "/",
+				"type":       "measure",
+				"prefix":     "leveldb.datastore",
+				"child": map[string]interface{}{
+					"type": "levelds",
+					"path": "datastore",
+				},
+			},
+		},
+	}
 }
 
 func (c *Client) ID() string {
@@ -236,9 +234,6 @@ func (c *Client) PutStream(ctx context.Context, reader io.ReadCloser) (id string
 		return cid.Undef.String(), fmt.Errorf("failed to add to ipfs: %w", err)
 	}
 
-	size, _ := f.Size()
-	log.Infof("ipfs: put: written %d bytes", size)
-
 	if err := c.api.Pin().Add(ctx, immPath); err != nil {
 		log.Errorf("failed to pin CID %s: %v", immPath.RootCid(), err)
 		return immPath.RootCid().String(), nil
@@ -291,9 +286,6 @@ func (c *Client) GetStream(ctx context.Context, id string) (io.ReadCloser, error
 	if err := c.api.Pin().Add(ctx, immPath); err != nil {
 		log.Errorf("failed to pin CID %s: %v", immPath.RootCid(), err)
 	}
-
-	size, _ := f.Size()
-	log.Infof("ipfs: get: fetched: %d bytes", size)
 
 	decoder, err := zstd.NewReader(f)
 	if err != nil {

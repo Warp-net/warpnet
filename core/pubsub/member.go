@@ -34,7 +34,6 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
@@ -46,53 +45,6 @@ import (
 	"sync/atomic"
 	"time"
 )
-
-// TODO clean up the mess
-type topicPrefix string
-
-func (t topicPrefix) isIn(s string) bool {
-	return strings.HasPrefix(s, string(t))
-}
-
-const (
-	// full names
-	pubSubDiscoveryTopic = "peer-discovery"
-	pubSubConsensusTopic = "peer-consensus"
-	// prefixes
-	userUpdateTopicPrefix topicPrefix = "user-update"
-)
-
-type PubsubServerNodeConnector interface {
-	Node() warpnet.P2PNode
-	NodeInfo() warpnet.NodeInfo
-}
-
-type PubsubClientNodeStreamer interface {
-	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
-	IsRunning() bool
-}
-
-type PubsubFollowingStorer interface {
-	GetFollowees(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
-}
-
-type warpPubSub struct {
-	ctx        context.Context
-	pubsub     *pubsub.PubSub
-	serverNode PubsubServerNodeConnector
-	clientNode PubsubClientNodeStreamer
-	followRepo PubsubFollowingStorer
-
-	ownerId string
-
-	mx               *sync.RWMutex
-	subs             []*pubsub.Subscription
-	relayCancelFuncs map[string]pubsub.RelayCancelFunc
-	topics           map[string]*pubsub.Topic
-	discoveryHandler discovery.DiscoveryHandler
-
-	isRunning *atomic.Bool
-}
 
 func NewPubSub(
 	ctx context.Context,
@@ -114,13 +66,6 @@ func NewPubSub(
 		ownerId:          ownerId,
 		isRunning:        new(atomic.Bool),
 	}
-}
-
-func NewPubSubBootstrap(
-	ctx context.Context,
-	discoveryHandler discovery.DiscoveryHandler,
-) *warpPubSub {
-	return NewPubSub(ctx, nil, warpnet.BootstrapOwner, discoveryHandler)
 }
 
 func (g *warpPubSub) Run(
@@ -588,8 +533,6 @@ func (g *warpPubSub) handlePubSubDiscovery(msg *pubsub.Message) {
 		}
 	}
 }
-
-const publishPeerInfoLimit = 10
 
 func (g *warpPubSub) publishPeerInfo(topic *pubsub.Topic) error {
 	myInfo := g.serverNode.NodeInfo()

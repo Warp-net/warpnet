@@ -28,8 +28,8 @@ import (
 	"context"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
 	"io"
 )
 
@@ -40,8 +40,7 @@ type DiscoveryHandler interface {
 }
 
 type PubSubProvider interface {
-	Run(m pubsub.PubsubServerNodeConnector, clientNode pubsub.PubsubClientNodeStreamer)
-	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
+	Run(m pubsub.PubsubModeratorConnector)
 	Close() error
 }
 
@@ -52,12 +51,13 @@ type DistributedHashTableCloser interface {
 type DistributedStorer interface {
 	GetStream(ctx context.Context, id string) (io.ReadCloser, error)
 	PutStream(ctx context.Context, reader io.ReadCloser) (id string, _ error)
+	Close() error
 }
 
 type ProviderCloser interface {
 	io.Closer
 }
 
-type ClientNodeStreamer interface {
-	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
+type Streamer interface {
+	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }

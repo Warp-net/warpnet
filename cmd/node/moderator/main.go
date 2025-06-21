@@ -26,11 +26,9 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/moderator"
-	"github.com/Warp-net/warpnet/database/ipfs"
 	"github.com/Warp-net/warpnet/security"
 	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
@@ -75,7 +73,7 @@ func main() {
 
 	seed := []byte(config.Config().Node.Seed)
 	if len(seed) == 0 {
-		seed = []byte(rand.Text())
+		seed = []byte("moderator-node")
 	}
 
 	privKey, err := security.GenerateKeyFromSeed(seed)
@@ -87,19 +85,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ipfsNode, err := ipfs.NewIPFS(ctx, privKey)
-	if err != nil {
-		log.Errorf("failed to init moderator IPFS node: %v", err)
-		return
-	}
-	defer ipfsNode.Close()
-
 	if config.Config().Node.Moderator.Path == "" && config.Config().Node.Moderator.CID == "" {
 		log.Errorln("moderator IPFS node not configured: model path and CID are empty")
 		return
 	}
 
-	n, err := moderator.NewModeratorNode(ctx, privKey, psk, ipfsNode, codeHashHex)
+	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init moderator node: %v", err)
 	}

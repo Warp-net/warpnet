@@ -64,7 +64,7 @@ func NewBootstrapNode(
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
-	pubsubService := pubsub.NewPubSub(ctx, nil, warpnet.BootstrapOwner, discService.DefaultDiscoveryHandler)
+	pubsubService := pubsub.NewPubSubBootstrap(ctx, discService.DefaultDiscoveryHandler)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: fail creating memory peerstore: %w", err)
