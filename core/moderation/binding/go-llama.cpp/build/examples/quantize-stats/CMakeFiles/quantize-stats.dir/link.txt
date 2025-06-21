@@ -1,0 +1,1 @@
+/usr/bin/g++ -O3 -DNDEBUG "CMakeFiles/quantize-stats.dir/quantize-stats.cpp.o" -o ../../bin/quantize-stats  ../../libllama.a 

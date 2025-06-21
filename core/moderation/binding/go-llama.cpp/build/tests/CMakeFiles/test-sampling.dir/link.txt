@@ -1,0 +1,1 @@
+/usr/bin/g++ -O3 -DNDEBUG "CMakeFiles/test-sampling.dir/test-sampling.cpp.o" ../common/CMakeFiles/common.dir/common.cpp.o ../common/CMakeFiles/common.dir/console.cpp.o "../common/CMakeFiles/common.dir/grammar-parser.cpp.o" -o ../bin/test-sampling  ../libllama.a ../libllama.a 

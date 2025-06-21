@@ -1,0 +1,1 @@
+/usr/bin/g++ -O3 -DNDEBUG "CMakeFiles/convert-llama2c-to-ggml.dir/convert-llama2c-to-ggml.cpp.o" ../../common/CMakeFiles/common.dir/common.cpp.o ../../common/CMakeFiles/common.dir/console.cpp.o "../../common/CMakeFiles/common.dir/grammar-parser.cpp.o" -o ../../bin/convert-llama2c-to-ggml  ../../libllama.a 

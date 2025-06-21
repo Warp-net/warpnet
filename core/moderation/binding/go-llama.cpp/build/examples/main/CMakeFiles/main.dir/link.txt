@@ -1,0 +1,1 @@
+/usr/bin/g++ -O3 -DNDEBUG CMakeFiles/main.dir/main.cpp.o ../../common/CMakeFiles/common.dir/common.cpp.o ../../common/CMakeFiles/common.dir/console.cpp.o "../../common/CMakeFiles/common.dir/grammar-parser.cpp.o" -o ../../bin/main  ../../libllama.a 

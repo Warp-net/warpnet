@@ -1,0 +1,1 @@
+/usr/bin/g++ -O3 -DNDEBUG "CMakeFiles/test-c.dir/test-c.c.o" -o ../bin/test-c  ../libllama.a 
