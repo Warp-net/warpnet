@@ -30,7 +30,7 @@ import (
 	_ "embed"
 )
 
-//go:embed *.go */*.go */*/*.go */*/*/*.go */*/*/*/*.go
+//go:embed *.go */*.go */*/*.go */*/*/*.go */*/*/*/*.go */*/*/*/*/*.go
 var codeBaseSingleton embed.FS
 
 func GetCodeBase() embed.FS {

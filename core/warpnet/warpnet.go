@@ -75,6 +75,7 @@ var ErrAllDialsFailed = swarm.ErrAllDialsFailed
 
 const (
 	BootstrapOwner = "bootstrap"
+	ModeratorOwner = "moderator"
 	WarpnetName    = "warpnet"
 	NoiseID        = noise.ID
 
@@ -129,8 +130,8 @@ type (
 	WarpRoutingFunc func(node P2PNode) (WarpPeerRouting, error)
 
 	// aliases
-	WarpReachability = network.Reachability
-
+	WarpReachability   = network.Reachability
+	WarpOption         = libp2p.Option
 	TCPTransport       = tcp.TcpTransport
 	TCPOption          = tcp.Option
 	Swarm              = swarm.Swarm

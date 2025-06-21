@@ -35,7 +35,7 @@ import (
 	"github.com/Warp-net/warpnet/core/node/client"
 	"github.com/Warp-net/warpnet/core/node/member"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
@@ -111,7 +111,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := storage.New(appPath, false, config.Config().Database.DirName)
+	db, err := local.New(appPath, false, config.Config().Database.DirName)
 	if err != nil {
 		log.Fatalf("failed to init db: %v", err)
 	}
@@ -237,7 +237,7 @@ func getAppPath(network, nodeType string) string {
 
 func manualCredsInput(
 	interfaceServer server.PublicServer,
-	db *storage.DB,
+	db *local.DB,
 ) {
 	if interfaceServer == nil {
 		reader := bufio.NewReader(os.Stdin)

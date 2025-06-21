@@ -1,6 +1,6 @@
 package llama
 
-// #cgo CXXFLAGS: -I${SRCDIR}/llama.cpp/common -I${SRCDIR}/llama.cpp
+// #cgo CXXFLAGS: -I${SRCDIR}/llama.cpp/common -I${SRCDIR}/llama.cpp -Wno-format -Wno-delete-incomplete -w -DLOG_DISABLE_LOGS=1 -DLLAMA_NO_TENSOR_LOGS
 // #cgo LDFLAGS: -L${SRCDIR}/ -lbinding -lm -lstdc++
 // #cgo darwin LDFLAGS: -framework Accelerate
 // #cgo darwin CXXFLAGS: -std=c++11

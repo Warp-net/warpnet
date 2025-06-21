@@ -155,7 +155,8 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 			}
 		}
 	}()
-	return s.syncBootstrapDiscovery()
+	//return s.syncBootstrapDiscovery()
+	return nil
 }
 
 func (s *discoveryService) syncBootstrapDiscovery() error {

@@ -67,6 +67,8 @@ func init() {
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env.")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	pflag.String("node.metrics.server", "", "Metrics server address")
+	pflag.String("node.moderator.modelpath", "../llama-2-7b-chat.Q8_0.gguf", "Path to AI model. Unused if 'cid' provided")
+	pflag.String("node.moderator.modelcid", "bafybeid7to3a6zkv5fdh5lw7iyl5wruj46qirvfsc6xbngprjy67ma6slm", "AI model content ID in IPFS. Unused if 'modelpath' provided")
 	pflag.String("logging.level", "info", "Logging level")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -112,6 +114,10 @@ func init() {
 			Metrics: metrics{
 				Server: viper.GetString("node.metrics.server"),
 			},
+			Moderator: moderator{
+				Path: viper.GetString("node.moderator.modelpath"),
+				CID:  viper.GetString("node.moderator.modelcid"),
+			},
 		},
 		Database: database{strings.TrimSpace(viper.GetString("database.dir"))},
 		Server: server{
@@ -141,9 +147,12 @@ type node struct {
 	Port      string
 	Network   string
 	Metrics   metrics
+	Moderator moderator
 	Seed      string
 }
-
+type moderator struct {
+	Path, CID string
+}
 type metrics struct {
 	Server string
 }

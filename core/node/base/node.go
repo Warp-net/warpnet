@@ -70,6 +70,8 @@ type WarpNode struct {
 	mastodonPseudoNode MastodonPseudoStreamer
 	backoff            BackoffEnabler
 
+	privateKey p2pCrypto.PrivKey
+
 	isClosed     *atomic.Bool
 	version      *semver.Version
 	reachability atomic.Int32
@@ -169,6 +171,7 @@ func NewWarpNode(
 		backoff:            backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:          sub,
 		mastodonPseudoNode: mastodonPseudoNode,
+		privateKey:         p2pPrivKey,
 	}
 	if err := wn.validateSupportedProtocols(); err != nil {
 		return nil, err
@@ -386,6 +389,10 @@ func (n *WarpNode) Network() warpnet.WarpNetwork {
 
 func (n *WarpNode) Mux() warpnet.WarpProtocolSwitch {
 	return n.node.Mux()
+}
+
+func (n *WarpNode) PrivateKey() warpnet.WarpPrivateKey {
+	return n.privateKey
 }
 
 const ErrSelfRequest = warpnet.WarpError("self request is not allowed")

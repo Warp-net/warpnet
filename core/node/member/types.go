@@ -29,7 +29,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"io"
@@ -101,16 +101,16 @@ type FollowStorer interface {
 }
 
 type Storer interface {
-	NewTxn() (storage.WarpTransactioner, error)
-	Get(key storage.DatabaseKey) ([]byte, error)
-	GetExpiration(key storage.DatabaseKey) (uint64, error)
-	GetSize(key storage.DatabaseKey) (int64, error)
+	NewTxn() (local.WarpTransactioner, error)
+	Get(key local.DatabaseKey) ([]byte, error)
+	GetExpiration(key local.DatabaseKey) (uint64, error)
+	GetSize(key local.DatabaseKey) (int64, error)
 	Sync() error
 	IsClosed() bool
-	InnerDB() *storage.WarpDB
-	SetWithTTL(key storage.DatabaseKey, value []byte, ttl time.Duration) error
-	Set(key storage.DatabaseKey, value []byte) error
-	Delete(key storage.DatabaseKey) error
+	InnerDB() *local.WarpDB
+	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
+	Set(key local.DatabaseKey, value []byte) error
+	Delete(key local.DatabaseKey) error
 	Path() string
 	Stats() map[string]string
 	IsFirstRun() bool

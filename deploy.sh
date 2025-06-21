@@ -30,4 +30,4 @@ sudo touch /tmp/snapshot || true
 export HOSTNAME=''
 export NODE_HOST=$NODE_HOST
 sudo -E docker compose -f docker-compose-warpnet.yml up -d --build
-sudo docker image prune
+sudo docker image prune -f

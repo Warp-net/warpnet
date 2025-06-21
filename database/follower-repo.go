@@ -30,13 +30,13 @@ package database
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	"time"
 )
 
-var ErrAlreadyFollowed = storage.DBError("already followed")
+var ErrAlreadyFollowed = local.DBError("already followed")
 
 const (
 	FollowRepoName       = "/FOLLOWINGS"
@@ -47,10 +47,10 @@ const (
 )
 
 type FollowerStorer interface {
-	NewTxn() (storage.WarpTransactioner, error)
-	Set(key storage.DatabaseKey, value []byte) error
-	Get(key storage.DatabaseKey) ([]byte, error)
-	Delete(key storage.DatabaseKey) error
+	NewTxn() (local.WarpTransactioner, error)
+	Set(key local.DatabaseKey, value []byte) error
+	Get(key local.DatabaseKey) ([]byte, error)
+	Delete(key local.DatabaseKey) error
 }
 
 // FollowRepo handles reader/writer relationships
@@ -64,22 +64,22 @@ func NewFollowRepo(db FollowerStorer) *FollowRepo {
 
 func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Following) error {
 	if fromUserId == "" || toUserId == "" {
-		return storage.DBError("invalid follow params")
+		return local.DBError("invalid follow params")
 	}
 
 	data, _ := json.JSON.Marshal(event)
 
-	fixedFolloweeKey := storage.NewPrefixBuilder(FollowRepoName).
+	fixedFolloweeKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeSubName).
 		AddRootID(toUserId).
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(fromUserId).
 		Build()
 
-	fixedFollowerKey := storage.NewPrefixBuilder(FollowRepoName).
+	fixedFollowerKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerSubName).
 		AddRootID(fromUserId).
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(toUserId).
 		Build()
 
@@ -94,26 +94,26 @@ func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Followi
 		return ErrAlreadyFollowed
 	}
 
-	sortableFolloweeKey := storage.NewPrefixBuilder(FollowRepoName).
+	sortableFolloweeKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeSubName).
 		AddRootID(toUserId).
 		AddReversedTimestamp(time.Now()).
 		AddParentId(fromUserId).
 		Build()
 
-	sortableFollowerKey := storage.NewPrefixBuilder(FollowRepoName).
+	sortableFollowerKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerSubName).
 		AddRootID(fromUserId).
 		AddReversedTimestamp(time.Now()).
 		AddParentId(toUserId).
 		Build()
 
-	followeesCountKey := storage.NewPrefixBuilder(FollowRepoName).
+	followeesCountKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeCountSubName).
 		AddRootID(toUserId).
 		Build()
 
-	followersCountKey := storage.NewPrefixBuilder(FollowRepoName).
+	followersCountKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerCountSubName).
 		AddRootID(fromUserId).
 		Build()
@@ -140,36 +140,36 @@ func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Followi
 }
 
 func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
-	fixedFolloweeKey := storage.NewPrefixBuilder(FollowRepoName).
+	fixedFolloweeKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeSubName).
 		AddRootID(toUserId).
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(fromUserId).
 		Build()
 
-	fixedFollowerKey := storage.NewPrefixBuilder(FollowRepoName).
+	fixedFollowerKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerSubName).
 		AddRootID(fromUserId).
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(toUserId).
 		Build()
 
-	followeesCountKey := storage.NewPrefixBuilder(FollowRepoName).
+	followeesCountKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeCountSubName).
 		AddRootID(toUserId).
 		Build()
 
-	followersCountKey := storage.NewPrefixBuilder(FollowRepoName).
+	followersCountKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerCountSubName).
 		AddRootID(fromUserId).
 		Build()
 
 	sortableFolloweeKey, err := repo.db.Get(fixedFolloweeKey)
-	if err != nil && !errors.Is(err, storage.ErrKeyNotFound) {
+	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
 		return err
 	}
 	sortableFollowerKey, err := repo.db.Get(fixedFollowerKey)
-	if err != nil && !errors.Is(err, storage.ErrKeyNotFound) {
+	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
 		return err
 	}
 
@@ -182,13 +182,13 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 	if err := txn.Delete(fixedFolloweeKey); err != nil {
 		return err
 	}
-	if err := txn.Delete(storage.DatabaseKey(sortableFolloweeKey)); err != nil {
+	if err := txn.Delete(local.DatabaseKey(sortableFolloweeKey)); err != nil {
 		return err
 	}
 	if err := txn.Delete(fixedFollowerKey); err != nil {
 		return err
 	}
-	if err := txn.Delete(storage.DatabaseKey(sortableFollowerKey)); err != nil {
+	if err := txn.Delete(local.DatabaseKey(sortableFollowerKey)); err != nil {
 		return err
 	}
 	if _, err := txn.Decrement(followeesCountKey); err != nil {
@@ -203,9 +203,9 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 
 func (repo *FollowRepo) GetFollowersCount(userId string) (uint64, error) {
 	if userId == "" {
-		return 0, storage.DBError("followers count: empty userID")
+		return 0, local.DBError("followers count: empty userID")
 	}
-	followersCountKey := storage.NewPrefixBuilder(FollowRepoName).
+	followersCountKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerCountSubName).
 		AddRootID(userId).
 		Build()
@@ -215,7 +215,7 @@ func (repo *FollowRepo) GetFollowersCount(userId string) (uint64, error) {
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(followersCountKey)
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return 0, nil
 	}
 	if err != nil {
@@ -227,9 +227,9 @@ func (repo *FollowRepo) GetFollowersCount(userId string) (uint64, error) {
 
 func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
 	if userId == "" {
-		return 0, storage.DBError("followers count: empty userID")
+		return 0, local.DBError("followers count: empty userID")
 	}
-	followeesCountKey := storage.NewPrefixBuilder(FollowRepoName).
+	followeesCountKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeCountSubName).
 		AddRootID(userId).
 		Build()
@@ -239,7 +239,7 @@ func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(followeesCountKey)
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return 0, nil
 	}
 	if err != nil {
@@ -250,7 +250,7 @@ func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
 }
 
 func (repo *FollowRepo) GetFollowers(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error) {
-	followeePrefix := storage.NewPrefixBuilder(FollowRepoName).
+	followeePrefix := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeSubName).
 		AddRootID(userId).
 		Build()
@@ -285,7 +285,7 @@ func (repo *FollowRepo) GetFollowers(userId string, limit *uint64, cursor *strin
 
 // GetFollowees followee - one who is followed (has his/her posts monitored by another user)
 func (repo *FollowRepo) GetFollowees(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error) {
-	followerPrefix := storage.NewPrefixBuilder(FollowRepoName).
+	followerPrefix := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerSubName).
 		AddRootID(userId).
 		Build()

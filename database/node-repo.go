@@ -33,15 +33,15 @@ import (
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/dgraph-io/badger/v3"
-	"github.com/jbenet/goprocess"
 	log "github.com/sirupsen/logrus"
 	"math"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	ds "github.com/ipfs/go-datastore"
@@ -59,20 +59,20 @@ const (
 
 var (
 	_              ds.Batching = (*NodeRepo)(nil)
-	ErrNilNodeRepo             = storage.DBError("node repo is nil")
+	ErrNilNodeRepo             = local.DBError("node repo is nil")
 )
 
 type NodeStorer interface {
-	NewTxn() (storage.WarpTransactioner, error)
-	Get(key storage.DatabaseKey) ([]byte, error)
-	GetExpiration(key storage.DatabaseKey) (uint64, error)
-	GetSize(key storage.DatabaseKey) (int64, error)
+	NewTxn() (local.WarpTransactioner, error)
+	Get(key local.DatabaseKey) ([]byte, error)
+	GetExpiration(key local.DatabaseKey) (uint64, error)
+	GetSize(key local.DatabaseKey) (int64, error)
 	Sync() error
 	IsClosed() bool
-	InnerDB() *storage.WarpDB
-	SetWithTTL(key storage.DatabaseKey, value []byte, ttl time.Duration) error
-	Set(key storage.DatabaseKey, value []byte) error
-	Delete(key storage.DatabaseKey) error
+	InnerDB() *local.WarpDB
+	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
+	Set(key local.DatabaseKey, value []byte) error
+	Delete(key local.DatabaseKey) error
 }
 
 type NodeRepo struct {
@@ -108,7 +108,7 @@ func (d *NodeRepo) Put(ctx context.Context, key ds.Key, value []byte) error {
 
 	rootKey := buildRootKey(key)
 
-	prefix := storage.NewPrefixBuilder(NodesNamespace).
+	prefix := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 	return d.db.Set(prefix, value)
@@ -134,7 +134,7 @@ func (d *NodeRepo) PutWithTTL(ctx context.Context, key ds.Key, value []byte, ttl
 	}
 	rootKey := buildRootKey(key)
 
-	prefix := storage.NewPrefixBuilder(NodesNamespace).
+	prefix := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 
@@ -151,7 +151,7 @@ func (d *NodeRepo) SetTTL(ctx context.Context, key ds.Key, ttl time.Duration) er
 	}
 
 	if d.db.IsClosed() {
-		return storage.ErrNotRunning
+		return local.ErrNotRunning
 	}
 
 	item, err := d.Get(ctx, key)
@@ -170,14 +170,14 @@ func (d *NodeRepo) GetExpiration(ctx context.Context, key ds.Key) (t time.Time, 
 	}
 
 	if d.db.IsClosed() {
-		return t, storage.ErrNotRunning
+		return t, local.ErrNotRunning
 	}
 
 	expiration := time.Time{}
 
 	rootKey := buildRootKey(key)
 
-	prefix := storage.NewPrefixBuilder(NodesNamespace).
+	prefix := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 
@@ -205,12 +205,12 @@ func (d *NodeRepo) Get(ctx context.Context, key ds.Key) (value []byte, err error
 	}
 
 	if d.db.IsClosed() {
-		return nil, storage.ErrNotRunning
+		return nil, local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
 
-	prefix := storage.NewPrefixBuilder(NodesNamespace).
+	prefix := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 
@@ -234,12 +234,12 @@ func (d *NodeRepo) Has(ctx context.Context, key ds.Key) (_ bool, err error) {
 	}
 
 	if d.db.IsClosed() {
-		return false, storage.ErrNotRunning
+		return false, local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
 
-	prefix := storage.NewPrefixBuilder(NodesNamespace).
+	prefix := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 
@@ -265,12 +265,12 @@ func (d *NodeRepo) GetSize(ctx context.Context, key ds.Key) (_ int, err error) {
 	}
 
 	if d.db.IsClosed() {
-		return size, storage.ErrNotRunning
+		return size, local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
 
-	prefix := storage.NewPrefixBuilder(NodesNamespace).
+	prefix := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 
@@ -294,12 +294,12 @@ func (d *NodeRepo) Delete(ctx context.Context, key ds.Key) error {
 	}
 
 	if d.db.IsClosed() {
-		return storage.ErrNotRunning
+		return local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
 
-	prefix := storage.NewPrefixBuilder(NodesNamespace).
+	prefix := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 
@@ -317,13 +317,66 @@ func (d *NodeRepo) DiskUsage(ctx context.Context) (uint64, error) {
 	}
 
 	if d.db.IsClosed() {
-		return 0, storage.ErrNotRunning
+		return 0, local.ErrNotRunning
 	}
 	lsm, vlog := d.db.InnerDB().Size()
 	if (lsm + vlog) < 0 {
-		return 0, storage.DBError("disk usage: malformed value")
+		return 0, local.DBError("disk usage: malformed value")
 	}
 	return uint64(lsm + vlog), nil //#nosec
+}
+
+type myResults struct {
+	query  dsq.Query
+	output chan dsq.Result
+	done   chan struct{}
+	once   sync.Once
+}
+
+func (r *myResults) Query() dsq.Query {
+	return r.query
+}
+
+func (r *myResults) Next() <-chan dsq.Result {
+	return r.output
+}
+
+func (r *myResults) Done() <-chan struct{} {
+	return r.done
+}
+
+func (r *myResults) Close() error {
+	r.once.Do(func() {
+		close(r.done)
+	})
+	return nil
+}
+
+func (r *myResults) NextSync() (dsq.Result, bool) {
+	select {
+	case res, ok := <-r.output:
+		return res, ok
+	case <-r.done:
+		return dsq.Result{}, false
+	}
+}
+
+func (r *myResults) Rest() ([]dsq.Entry, error) {
+	var entries []dsq.Entry
+	for {
+		select {
+		case res, ok := <-r.output:
+			if !ok {
+				return entries, nil
+			}
+			if res.Error != nil {
+				return nil, res.Error
+			}
+			entries = append(entries, res.Entry)
+		case <-r.done:
+			return entries, nil
+		}
+	}
 }
 
 func (d *NodeRepo) Query(ctx context.Context, q dsq.Query) (res dsq.Results, err error) {
@@ -335,7 +388,7 @@ func (d *NodeRepo) Query(ctx context.Context, q dsq.Query) (res dsq.Results, err
 	}
 
 	if d.db.IsClosed() {
-		return nil, storage.ErrNotRunning
+		return nil, local.ErrNotRunning
 	}
 
 	// We cannot defer txn.Discard() here, as the txn must remain active while the iterator is open.
@@ -345,187 +398,104 @@ func (d *NodeRepo) Query(ctx context.Context, q dsq.Query) (res dsq.Results, err
 	return d.query(tx, q, true)
 }
 
-func (d *NodeRepo) query(tx *storage.Txn, q dsq.Query, implicit bool) (dsq.Results, error) {
+func (d *NodeRepo) query(tx *local.Txn, q dsq.Query, implicit bool) (dsq.Results, error) {
 	opt := badger.DefaultIteratorOptions
 	opt.PrefetchValues = !q.KeysOnly
 
-	key := ds.NewKey(q.Prefix).String()
-	key = strings.TrimPrefix(key, "/")
-
-	prefix := storage.NewPrefixBuilder(NodesNamespace).
-		AddRootID(key).
-		Build().
-		Bytes()
-
+	key := strings.TrimPrefix(ds.NewKey(q.Prefix).String(), "/")
+	prefix := local.NewPrefixBuilder(NodesNamespace).AddRootID(key).Build().Bytes()
 	opt.Prefix = prefix
 
-	// Handle ordering
 	if len(q.Orders) > 0 {
 		switch q.Orders[0].(type) {
 		case dsq.OrderByKey, *dsq.OrderByKey:
-		// We order by key by default.
 		case dsq.OrderByKeyDescending, *dsq.OrderByKeyDescending:
-			// Reverse order by key
 			opt.Reverse = true
 		default:
-			// Ok, we have a weird order we can't handle. Let's
-			// perform the _base_ query (prefix, filter, etc.), then
-			// handle sort/offset/limit later.
+			base := q
+			base.Limit = 0
+			base.Offset = 0
+			base.Orders = nil
 
-			// Skip the stuff we can't apply.
-			baseQuery := q
-			baseQuery.Limit = 0
-			baseQuery.Offset = 0
-			baseQuery.Orders = nil
-
-			// perform the base query.
-			res, err := d.query(tx, baseQuery, implicit)
+			baseResults, err := d.query(tx, base, implicit)
 			if err != nil {
 				return nil, err
 			}
-
-			// fix the query
-			res = dsq.ResultsReplaceQuery(res, q)
-
-			// Remove the parts we've already applied.
-			naiveQuery := q
-			naiveQuery.Prefix = ""
-			naiveQuery.Filters = nil
-
-			// Apply the rest of the query
-			return dsq.NaiveQueryApply(naiveQuery, res), nil
+			return dsq.NaiveQueryApply(q, baseResults), nil
 		}
 	}
 
 	it := tx.NewIterator(opt)
-	qrb := dsq.NewResultBuilder(q)
-	qrb.Process.Go(func(worker goprocess.Process) {
-		closedEarly := false
-		defer func() {
-			if closedEarly {
-				select {
-				case qrb.Output <- dsq.Result{
-					Error: storage.DBError("core repo closed"),
-				}:
-				case <-qrb.Process.Closing():
-				}
-			}
+	output := make(chan dsq.Result, 128)
+	done := make(chan struct{})
 
-		}()
-		if d.db.IsClosed() {
-			closedEarly = true
-			return
-		}
-
-		// this iterator is part of an implicit transaction, so when
-		// we're done we must discard the transaction. It's safe to
-		// discard the txn it because it contains the iterator only.
+	go func() {
+		defer close(output)
+		defer it.Close()
 		if implicit {
 			defer tx.Discard()
 		}
-		defer it.Close()
-		// All iterators must be started by rewinding.
-		it.Rewind()
 
-		// skip to the offset
-		for skipped := 0; skipped < q.Offset && it.Valid(); it.Next() {
-			// On the happy path, we have no filters and we can go
-			// on our way.
-			if len(q.Filters) == 0 {
-				skipped++
-				continue
-			}
-
-			// On the sad path, we need to apply filters before
-			// counting the item as "skipped" as the offset comes
-			// _after_ the filter.
-			item := it.Item()
-
-			matches := true
-			check := func(value []byte) error {
-				e := dsq.Entry{
-					Key:   string(item.Key()),
-					Value: value,
-					Size:  int(item.ValueSize()), // this function is basically free
-				}
-
-				// Only calculate expirations if we need them.
-				if q.ReturnExpirations {
-					e.Expiration = expires(item)
-				}
-				matches = filter(q.Filters, e)
-				return nil
-			}
-
-			// Maybe check with the value, only if we need it.
-			var err error
-			if q.KeysOnly {
-				err = check(nil)
-			} else {
-				err = item.Value(check)
-			}
-
-			if err != nil {
-				select {
-				case qrb.Output <- dsq.Result{Error: err}:
-				case <-d.stopChan:
-					closedEarly = true
-					return
-				case <-worker.Closing(): // client told us to close early
-					return
-				}
-			}
-			if !matches {
-				skipped++
-			}
+		if d.db.IsClosed() {
+			output <- dsq.Result{Error: local.DBError("core repo closed")}
+			return
 		}
 
-		for sent := 0; (q.Limit <= 0 || sent < q.Limit) && it.Valid(); it.Next() {
+		it.Rewind()
+		skipped := 0
+		sent := 0
+		for it.Valid() {
 			item := it.Item()
-			e := dsq.Entry{Key: string(item.Key())}
 
-			// Maybe get the value
-			var result dsq.Result
+			var e dsq.Entry
+			e.Key = string(item.Key())
+			e.Size = int(item.ValueSize())
+
 			if !q.KeysOnly {
-				b, err := item.ValueCopy(nil)
+				val, err := item.ValueCopy(nil)
 				if err != nil {
-					result = dsq.Result{Error: err}
-				} else {
-					e.Value = b
-					e.Size = len(b)
-					result = dsq.Result{Entry: e}
+					output <- dsq.Result{Error: err}
+					it.Next()
+					continue
 				}
-			} else {
-				e.Size = int(item.ValueSize())
-				result = dsq.Result{Entry: e}
+				e.Value = val
 			}
 
 			if q.ReturnExpirations {
-				result.Expiration = expires(item)
+				e.Expiration = expires(item)
 			}
 
-			// Finally, filter it (unless we're dealing with an error).
-			if result.Error == nil && filter(q.Filters, e) {
+			if len(q.Filters) > 0 && !filter(q.Filters, e) {
+				it.Next()
+				continue
+			}
+
+			if skipped < q.Offset {
+				skipped++
+				it.Next()
 				continue
 			}
 
 			select {
-			case qrb.Output <- result:
+			case output <- dsq.Result{Entry: e}:
 				sent++
-			case <-d.stopChan:
-				closedEarly = true
-				return
-			case <-worker.Closing(): // client told us to close early
+			case <-done:
 				return
 			}
-		}
-	})
 
-	go func() {
-		_ = qrb.Process.CloseAfterChildren()
+			it.Next()
+
+			if q.Limit > 0 && sent >= q.Limit {
+				break
+			}
+		}
 	}()
 
-	return qrb.Results(), nil
+	return &myResults{
+		query:  q,
+		output: output,
+		done:   done,
+	}, nil
 }
 
 // filter returns _true_ if we should filter (skip) the entry
@@ -572,7 +542,7 @@ func (d *NodeRepo) Batch(ctx context.Context) (ds.Batch, error) {
 	}
 
 	if d.db.IsClosed() {
-		return nil, storage.ErrNotRunning
+		return nil, local.ErrNotRunning
 	}
 
 	b := &batch{d, d.db.InnerDB().NewWriteBatch()}
@@ -594,7 +564,7 @@ func (b *batch) Put(ctx context.Context, key ds.Key, value []byte) error {
 	}
 
 	if b.ds.db.IsClosed() {
-		return storage.ErrNotRunning
+		return local.ErrNotRunning
 	}
 
 	return b.put(key, value)
@@ -607,7 +577,7 @@ func (b *batch) put(key ds.Key, value []byte) error {
 
 	rootKey := buildRootKey(key)
 
-	batchKey := storage.NewPrefixBuilder(NodesNamespace).
+	batchKey := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.Set(batchKey.Bytes(), value)
@@ -620,7 +590,7 @@ func (b *batch) putWithTTL(key ds.Key, value []byte, ttl time.Duration) error {
 
 	rootKey := buildRootKey(key)
 
-	batchKey := storage.NewPrefixBuilder(NodesNamespace).
+	batchKey := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.SetEntry(badger.NewEntry(batchKey.Bytes(), value).WithTTL(ttl))
@@ -635,12 +605,12 @@ func (b *batch) Delete(ctx context.Context, key ds.Key) error {
 	}
 
 	if b.ds.db.IsClosed() {
-		return storage.ErrNotRunning
+		return local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
 
-	batchKey := storage.NewPrefixBuilder(NodesNamespace).
+	batchKey := local.NewPrefixBuilder(NodesNamespace).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.Delete(batchKey.Bytes())
@@ -651,7 +621,7 @@ func (b *batch) Commit(_ context.Context) error {
 		return ErrNilNodeRepo
 	}
 	if b.ds.db.IsClosed() {
-		return storage.ErrNotRunning
+		return local.ErrNotRunning
 	}
 
 	err := b.writeBatch.Flush()
@@ -669,7 +639,7 @@ func (b *batch) Cancel() error {
 		return ErrNilNodeRepo
 	}
 	if b.ds.db.IsClosed() {
-		return storage.ErrNotRunning
+		return local.ErrNotRunning
 	}
 
 	b.writeBatch.Cancel()
@@ -692,9 +662,9 @@ func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
 		return ErrNilNodeRepo
 	}
 	if peerId == "" {
-		return storage.DBError("empty peer ID")
+		return local.DBError("empty peer ID")
 	}
-	blocklistKey := storage.NewPrefixBuilder(NodesNamespace).
+	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddRootID(peerId.String()).
 		Build()
@@ -751,13 +721,13 @@ func (d *NodeRepo) IsBlocklisted(peerId warpnet.WarpPeerID) (bool, error) {
 	if peerId == "" {
 		return false, nil
 	}
-	blocklistKey := storage.NewPrefixBuilder(NodesNamespace).
+	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddRootID(peerId.String()).
 		Build()
 	_, err := d.db.Get(blocklistKey)
 
-	if errors.Is(err, storage.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {
@@ -771,15 +741,15 @@ func (d *NodeRepo) BlocklistRemove(peerId warpnet.WarpPeerID) (err error) {
 		return ErrNilNodeRepo
 	}
 	if peerId == "" {
-		return storage.DBError("empty peer ID")
+		return local.DBError("empty peer ID")
 	}
-	blocklistKey := storage.NewPrefixBuilder(NodesNamespace).
+	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddRootID(peerId.String()).
 		Build()
 
 	err = d.db.Delete(blocklistKey)
-	if errors.Is(err, storage.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound) {
 		return nil
 	}
 	return err
@@ -790,9 +760,9 @@ func (d *NodeRepo) AddSelfHash(selfHashHex, version string) error {
 		return ErrNilNodeRepo
 	}
 	if len(selfHashHex) == 0 {
-		return storage.DBError("empty codebase hash")
+		return local.DBError("empty codebase hash")
 	}
-	selfHashKey := storage.NewPrefixBuilder(NodesNamespace).
+	selfHashKey := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(SelfHashSubNamespace).
 		AddRootID(version).
 		Build()
@@ -834,10 +804,10 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 		return ErrNilNodeRepo
 	}
 	if currentVersion == nil {
-		return storage.DBError("empty current version value")
+		return local.DBError("empty current version value")
 	}
 
-	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
+	selfHashPrefix := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(SelfHashSubNamespace).Build()
 
 	txn, err := d.db.NewTxn()
@@ -862,7 +832,7 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 		}
 
 		if itemVersion.Major() < currentVersion.Major() {
-			if err := txn.Delete(storage.DatabaseKey(key)); err != nil {
+			if err := txn.Delete(local.DatabaseKey(key)); err != nil {
 				return err
 			}
 		}
@@ -870,7 +840,7 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 	return txn.Commit()
 }
 
-var ErrNotInRecords = storage.DBError("self hash is not in the consensus records")
+var ErrNotInRecords = local.DBError("self hash is not in the consensus records")
 
 const SelfHashConsensusKey = "selfhash"
 
@@ -880,7 +850,7 @@ func (d *NodeRepo) ValidateSelfHash(ev event.ValidationEvent) error {
 	}
 
 	if len(ev.SelfHashHex) == 0 {
-		return storage.DBError("empty codebase hash")
+		return local.DBError("empty codebase hash")
 	}
 
 	if d.db == nil {
@@ -890,7 +860,7 @@ func (d *NodeRepo) ValidateSelfHash(ev event.ValidationEvent) error {
 		return nil
 	}
 
-	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
+	selfHashPrefix := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(SelfHashSubNamespace).Build()
 
 	txn, err := d.db.NewTxn()
@@ -926,7 +896,7 @@ func (d *NodeRepo) GetSelfHashes() (map[string]struct{}, error) {
 		return nil, ErrNilNodeRepo
 	}
 
-	selfHashPrefix := storage.NewPrefixBuilder(NodesNamespace).
+	selfHashPrefix := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(SelfHashSubNamespace).Build()
 
 	txn, err := d.db.NewTxn()

@@ -32,7 +32,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/suite"
@@ -40,13 +40,13 @@ import (
 
 type ReplyRepoTestSuite struct {
 	suite.Suite
-	db   *storage.DB
+	db   *local.DB
 	repo *ReplyRepo
 }
 
 func (s *ReplyRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = storage.New(".", true, "")
+	s.db, err = local.New(".", true, "")
 	s.Require().NoError(err)
 
 	auth := NewAuthRepo(s.db)
