@@ -88,14 +88,15 @@ type RoutingStorer interface {
 }
 
 type distributedHashTable struct {
-	ctx           context.Context
-	db            RoutingStorer
-	boostrapNodes []warpnet.WarpAddrInfo
-	addFuncs      []discovery.DiscoveryHandler
-	removeF       func(warpnet.WarpPeerID)
-	dht           *dht.IpfsDHT
-	stopChan      chan struct{}
-	cancelFunc    context.CancelFunc
+	ctx                 context.Context
+	db                  RoutingStorer
+	boostrapNodes       []warpnet.WarpAddrInfo
+	addFuncs            []discovery.DiscoveryHandler
+	removeF             func(warpnet.WarpPeerID)
+	dht                 *dht.IpfsDHT
+	stopChan            chan struct{}
+	cancelFunc          context.CancelFunc
+	isRendezvousEnabled bool
 }
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
@@ -109,18 +110,20 @@ func defaultNodeAddedCallback(id warpnet.WarpPeerID) {
 func NewDHTable(
 	ctx context.Context,
 	nodeRepo RoutingStorer,
+	isRendezvousEnabled bool,
 	removeF func(warpnet.WarpPeerID),
 	addFuncs ...discovery.DiscoveryHandler,
 ) *distributedHashTable {
 	bootstrapAddrs, _ := config.Config().Node.AddrInfos()
 	log.Infoln("dht: bootstrap addresses:", bootstrapAddrs)
 	return &distributedHashTable{
-		ctx:           ctx,
-		db:            nodeRepo,
-		boostrapNodes: bootstrapAddrs,
-		addFuncs:      addFuncs,
-		removeF:       removeF,
-		stopChan:      make(chan struct{}),
+		ctx:                 ctx,
+		db:                  nodeRepo,
+		boostrapNodes:       bootstrapAddrs,
+		addFuncs:            addFuncs,
+		removeF:             removeF,
+		stopChan:            make(chan struct{}),
+		isRendezvousEnabled: isRendezvousEnabled,
 	}
 }
 
@@ -178,7 +181,8 @@ func (d *distributedHashTable) bootstrapDHT() {
 	}
 	ownID := d.dht.Host().ID()
 
-	// force dht to know its bootstrap nodes, force libp2p node to know its external address (in case of local network)
+	// force dht to know its bootstrap nodes, force libp2p node to know its external address
+	// (in case of local network)
 	for _, info := range d.boostrapNodes {
 		if ownID == info.ID {
 			continue
@@ -195,7 +199,9 @@ func (d *distributedHashTable) bootstrapDHT() {
 	log.Infoln("dht: bootstrap complete")
 	<-d.dht.RefreshRoutingTable()
 
-	go d.runRendezvousDiscovery(ownID)
+	if d.isRendezvousEnabled {
+		go d.runRendezvousDiscovery(ownID)
+	}
 }
 
 func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) {

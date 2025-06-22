@@ -28,6 +28,7 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
@@ -121,4 +122,11 @@ type ConsensusServicer interface {
 	Close()
 	Validate(data []byte, _ warpnet.WarpStream) (any, error)
 	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
+}
+
+type PseudoStreamer interface {
+	ID() warpnet.WarpPeerID
+	IsMastodonID(id warpnet.WarpPeerID) bool
+	Addrs() []warpnet.WarpAddress
+	Route(r stream.WarpRoute, data any) (_ []byte, err error)
 }

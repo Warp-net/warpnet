@@ -30,6 +30,7 @@ import (
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
 	"io"
 )
 
@@ -60,4 +61,11 @@ type ProviderCloser interface {
 
 type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
+}
+
+type ConsensusServicer interface {
+	Start(data event.ValidationEvent) error
+	Close()
+	Validate(data []byte, _ warpnet.WarpStream) (any, error)
+	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
 }

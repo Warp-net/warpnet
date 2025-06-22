@@ -25,10 +25,12 @@ resulting from the use or misuse of this software.
 package base
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/libp2p/go-libp2p"
 	libp2pConfig "github.com/libp2p/go-libp2p/config"
+	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	log "github.com/sirupsen/logrus"
 	"reflect"
@@ -66,6 +68,20 @@ func EmptyOption() func() libp2p.Option {
 		return func(cfg *libp2pConfig.Config) error {
 			return nil
 		}
+	}
+}
+
+func WarpIdentity(privKey ed25519.PrivateKey) libp2p.Option {
+	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
+	if err != nil {
+		panic(err)
+	}
+	return func(cfg *libp2pConfig.Config) error {
+		if cfg.PeerKey != nil {
+			return fmt.Errorf("cannot specify multiple identities")
+		}
+		cfg.PeerKey = p2pPrivKey
+		return nil
 	}
 }
 

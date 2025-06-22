@@ -38,31 +38,22 @@ import (
 	"time"
 )
 
-type MastodonPseudoStreamer interface {
-	ID() warpnet.WarpPeerID
-	IsMastodonID(id warpnet.WarpPeerID) bool
-	Addrs() []warpnet.WarpAddress
-	Route(r WarpRoute, data []byte) (_ []byte, err error)
-}
-
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
 	Network() network.Network
 }
 
 type streamPool struct {
-	ctx                context.Context
-	n                  NodeStreamer
-	clientPeerID       warpnet.WarpPeerID
-	mastodonPseudoNode MastodonPseudoStreamer
+	ctx          context.Context
+	n            NodeStreamer
+	clientPeerID warpnet.WarpPeerID
 }
 
 func NewStreamPool(
 	ctx context.Context,
 	n NodeStreamer,
-	mastodonPseudoNode MastodonPseudoStreamer,
 ) *streamPool {
-	pool := &streamPool{ctx: ctx, n: n, mastodonPseudoNode: mastodonPseudoNode}
+	pool := &streamPool{ctx: ctx, n: n}
 
 	return pool
 }
@@ -75,10 +66,6 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 		return nil, p.ctx.Err()
 	}
 
-	if p.mastodonPseudoNode != nil && p.mastodonPseudoNode.IsMastodonID(peerAddr.ID) {
-		log.Debugf("stream: peer %s is mastodon", peerAddr.ID)
-		return p.mastodonPseudoNode.Route(r, data)
-	}
 	// long-long wait in case of p2p-circuit stream
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()

@@ -41,6 +41,10 @@ import (
 
 func main() {
 	defer closeWriter()
+	if config.Config().Node.Moderator.Path == "" && config.Config().Node.Moderator.CID == "" {
+		log.Errorln("moderator IPFS node not configured: model path and CID are empty")
+		return
+	}
 
 	version := config.Config().Version
 	psk, err := security.GeneratePSK(version)
@@ -78,19 +82,14 @@ func main() {
 
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
-		log.Fatalf("bootstrap: fail generating key: %v", err)
+		log.Fatalf("moderator: fail generating key: %v", err)
 	}
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if config.Config().Node.Moderator.Path == "" && config.Config().Node.Moderator.CID == "" {
-		log.Errorln("moderator IPFS node not configured: model path and CID are empty")
-		return
-	}
-
-	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex)
+	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex, interruptChan)
 	if err != nil {
 		log.Fatalf("failed to init moderator node: %v", err)
 	}
@@ -102,7 +101,7 @@ func main() {
 	}
 
 	<-interruptChan
-	log.Infoln("bootstrap node interrupted...")
+	log.Infoln("moderator node interrupted...")
 }
 
 // TODO temp. Check for https://github.com/libp2p/go-libp2p-kad-dht/issues/1073

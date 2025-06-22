@@ -40,6 +40,7 @@ import (
 	"time"
 )
 
+// TODO consensus validation
 func NewModeratorPubSub(ctx context.Context) *warpModeratorPubSub {
 	return &warpModeratorPubSub{
 		ctx:        ctx,

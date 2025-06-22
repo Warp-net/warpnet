@@ -26,7 +26,6 @@ package base
 
 import (
 	"context"
-	"crypto/ed25519"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
@@ -36,9 +35,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
-	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
@@ -53,24 +50,17 @@ type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
-type MastodonPseudoStreamer interface {
-	stream.MastodonPseudoStreamer
-}
-
 type BackoffEnabler interface {
 	IsBackoffEnabled(id peer.ID) bool
 	Reset(id peer.ID)
 }
 
 type WarpNode struct {
-	ctx                context.Context
-	node               warpnet.P2PNode
-	relay              warpnet.WarpRelayCloser
-	streamer           Streamer
-	mastodonPseudoNode MastodonPseudoStreamer
-	backoff            BackoffEnabler
-
-	privateKey p2pCrypto.PrivKey
+	ctx      context.Context
+	node     warpnet.P2PNode
+	relay    warpnet.WarpRelayCloser
+	streamer Streamer
+	backoff  BackoffEnabler
 
 	isClosed     *atomic.Bool
 	version      *semver.Version
@@ -82,12 +72,7 @@ type WarpNode struct {
 
 func NewWarpNode(
 	ctx context.Context,
-	privKey ed25519.PrivateKey,
-	store warpnet.WarpPeerstore,
-	psk security.PSK,
-	mastodonPseudoNode MastodonPseudoStreamer,
-	listenAddrs []string,
-	routingFn func(node warpnet.P2PNode) (warpnet.WarpPeerRouting, error),
+	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limiter := warpnet.NewAutoScaledLimiter()
 
@@ -101,50 +86,29 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		return nil, err
-	}
-
-	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
-	if err != nil {
-		return nil, err
-	}
-
-	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
-	if err != nil {
-		return nil, err
-	}
-
-	node, err := warpnet.NewP2PNode(
+	defaultOptions := []libp2p.Option{
 		libp2p.WithDialTimeout(DefaultTimeout),
-		libp2p.ListenAddrStrings(
-			listenAddrs...,
-		),
 		libp2p.SwarmOpts(
 			WithDialTimeout(DefaultTimeout),
 			WithDialTimeoutLocal(DefaultTimeout),
 		),
 		libp2p.Transport(warpnet.NewTCPTransport, WithDefaultTCPConnectionTimeout(DefaultTimeout)),
-		libp2p.Identity(p2pPrivKey),
 		libp2p.Ping(true),
 		libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
-		libp2p.Peerstore(store),
 		libp2p.ResourceManager(rm),
-		libp2p.PrivateNetwork(warpnet.PSK(psk)),
 		libp2p.UserAgent(warpnet.WarpnetName),
 		libp2p.ConnectionManager(manager),
-		libp2p.Routing(routingFn),
-
 		libp2p.EnableAutoNATv2(),
 		libp2p.EnableRelay(),
 		libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
 		libp2p.EnableHolePunching(),
 		libp2p.EnableNATService(),
 		libp2p.NATPortMap(),
+	}
 
-		EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
-	)
+	opts = append(defaultOptions, opts...)
+
+	node, err := warpnet.NewP2PNode(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
@@ -161,17 +125,15 @@ func NewWarpNode(
 	version := config.Config().Version
 
 	wn := &WarpNode{
-		ctx:                ctx,
-		node:               node,
-		relay:              relayService,
-		streamer:           stream.NewStreamPool(ctx, node, mastodonPseudoNode),
-		isClosed:           new(atomic.Bool),
-		version:            version,
-		startTime:          time.Now(),
-		backoff:            backoff.NewSimpleBackoff(ctx, time.Minute, 5),
-		eventsSub:          sub,
-		mastodonPseudoNode: mastodonPseudoNode,
-		privateKey:         p2pPrivKey,
+		ctx:       ctx,
+		node:      node,
+		relay:     relayService,
+		streamer:  stream.NewStreamPool(ctx, node),
+		isClosed:  new(atomic.Bool),
+		version:   version,
+		startTime: time.Now(),
+		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		eventsSub: sub,
 	}
 	if err := wn.validateSupportedProtocols(); err != nil {
 		return nil, err
@@ -185,9 +147,6 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	if n == nil || n.node == nil {
 		return nil
 	}
-	if n.mastodonPseudoNode != nil && n.mastodonPseudoNode.IsMastodonID(p.ID) {
-		return nil
-	}
 
 	peerState := n.node.Network().Connectedness(p.ID)
 	isConnected := peerState == warpnet.Connected || peerState == warpnet.Limited
@@ -199,7 +158,7 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	}
 
 	log.Debugf("node: connect attempt to node: %s", p.String())
-	if err := n.SimpleConnect(p); err != nil {
+	if err := n.node.Connect(n.ctx, p); err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
 
@@ -209,18 +168,13 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	return nil
 }
 
-func (n *WarpNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
-	if n.mastodonPseudoNode != nil && n.mastodonPseudoNode.IsMastodonID(info.ID) {
-		return nil
+func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
+	for _, h := range handlers {
+		if !h.IsValid() {
+			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
+		}
+		n.node.SetStreamHandler(h.Path, h.Handler)
 	}
-	return n.node.Connect(n.ctx, info)
-}
-
-func (n *WarpNode) SetStreamHandler(route stream.WarpRoute, handler warpnet.WarpStreamHandler) {
-	if !stream.IsValidRoute(route) {
-		log.Fatalf("node: invalid route: %v", route)
-	}
-	n.node.SetStreamHandler(route.ProtocolID(), handler)
 }
 
 func (n *WarpNode) validateSupportedProtocols() error {
@@ -332,17 +286,12 @@ func (n *WarpNode) trackIncomingEvents() {
 	}
 }
 
-const (
-	relayStatusWaiting = "waiting"
-	relayStatusRunning = "running"
-)
-
 func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 	if n == nil || n.node == nil || n.node.Network() == nil || n.node.Peerstore() == nil {
 		return warpnet.NodeInfo{}
 	}
 
-	relayState := relayStatusWaiting
+	relayState := warpnet.RelayStatusWaiting
 
 	addrs := n.node.Peerstore().Addrs(n.node.ID())
 	addresses := make([]string, 0, len(addrs))
@@ -351,7 +300,7 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 			continue
 		}
 		if warpnet.IsRelayMultiaddress(ma) {
-			relayState = relayStatusRunning
+			relayState = warpnet.RelayStatusRunning
 		}
 		addresses = append(addresses, ma.String())
 	}
@@ -373,28 +322,6 @@ func (n *WarpNode) Node() warpnet.P2PNode {
 	return n.node
 }
 
-func (n *WarpNode) Peerstore() warpnet.WarpPeerstore {
-	if n == nil || n.node == nil {
-		return nil
-	}
-	return n.node.Peerstore()
-}
-
-func (n *WarpNode) Network() warpnet.WarpNetwork {
-	if n == nil || n.node == nil {
-		return nil
-	}
-	return n.node.Network()
-}
-
-func (n *WarpNode) Mux() warpnet.WarpProtocolSwitch {
-	return n.node.Mux()
-}
-
-func (n *WarpNode) PrivateKey() warpnet.WarpPrivateKey {
-	return n.privateKey
-}
-
 const ErrSelfRequest = warpnet.WarpError("self request is not allowed")
 
 func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error) {
@@ -404,17 +331,6 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 
 	if n.node.ID() == nodeId {
 		return nil, ErrSelfRequest
-	}
-
-	var isMastodonID bool
-	if n.mastodonPseudoNode != nil {
-		isMastodonID = n.mastodonPseudoNode.IsMastodonID(nodeId)
-	}
-
-	peerInfo := n.Peerstore().PeerInfo(nodeId)
-	if len(peerInfo.Addrs) == 0 && !isMastodonID {
-		log.Warningf("node %v is offline", nodeId)
-		return nil, warpnet.ErrNodeIsOffline
 	}
 
 	var bt []byte
@@ -428,7 +344,8 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 			}
 		}
 	}
-	return n.streamer.Send(peerInfo, path, bt)
+
+	return n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
 }
 
 func (n *WarpNode) StopNode() {
@@ -455,6 +372,5 @@ func (n *WarpNode) StopNode() {
 	}
 	n.isClosed.Store(true)
 	n.node = nil
-	n.mastodonPseudoNode = nil
 	return
 }

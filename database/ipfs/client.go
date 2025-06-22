@@ -47,6 +47,7 @@ import (
 	"github.com/multiformats/go-multihash"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"strings"
 
 	"os"
 
@@ -61,7 +62,7 @@ import (
 )
 
 const (
-	repoPath = "/tmp/ipfs"
+	repoPath = "/tmp/ipfs" // TODO
 )
 
 type WarpNodeIdentifier interface {
@@ -102,11 +103,18 @@ func NewIPFS(ctx context.Context, n host.Host) (*Client, error) {
 		return nil, fmt.Errorf("config init failed: %w", err)
 	}
 
+	addrs := make([]string, 0, len(n.Addrs()))
+	for _, a := range n.Addrs() {
+		addrs = append(addrs, a.String())
+	}
+	fmt.Println(strings.Join(addrs, ","), "???????????????????")
 	// Disable everything that talks to the outside world
 	cfg.Bootstrap = []string{}
 	cfg.Addresses.API = []string{}
 	cfg.Addresses.Gateway = []string{}
-	cfg.Addresses.Swarm = []string{}
+	cfg.Addresses.Swarm = addrs
+	cfg.AutoTLS.Enabled = config.False
+	cfg.AutoTLS.AutoWSS = config.False
 	cfg.Routing.Type = config.NewOptionalString("none")
 	cfg.Discovery.MDNS.Enabled = false
 	cfg.Datastore = config.Datastore{
@@ -122,10 +130,12 @@ func NewIPFS(ctx context.Context, n host.Host) (*Client, error) {
 			return nil, fmt.Errorf("repo init failed: %w", err)
 		}
 	}
-
 	repo, err := fsrepo.Open(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("repo open failed: %w", err)
+	}
+	if err := repo.SetConfig(cfg); err != nil {
+		return nil, fmt.Errorf("repo init failed: %w", err)
 	}
 
 	buildCfg := &core.BuildCfg{

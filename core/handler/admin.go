@@ -84,9 +84,15 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 }
 
 func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
+	if svc == nil {
+		return nil
+	}
 	return svc.Validate
 }
 
 func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.WarpHandler {
+	if svc == nil {
+		return nil
+	}
 	return svc.ValidationResult
 }

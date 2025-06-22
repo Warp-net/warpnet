@@ -42,12 +42,14 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
+	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
 
 type BootstrapNode struct {
-	*base.WarpNode
+	ctx  context.Context
+	node *base.WarpNode
 
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
@@ -77,28 +79,39 @@ func NewBootstrapNode(
 	}
 
 	dHashTable := dht.NewDHTable(
-		ctx, mapStore,
-		nil, discService.DefaultDiscoveryHandler,
+		ctx, mapStore, true, nil, discService.DefaultDiscoveryHandler,
 	)
+
+	infos, err := config.Config().Node.AddrInfos()
+	if err != nil {
+		return nil, err
+	}
+
+	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		return nil, err
+	}
 
 	node, err := base.NewWarpNode(
 		ctx,
-		privKey,
-		memoryStore,
-		psk,
 		nil,
-		[]string{
+		base.WarpIdentity(privKey),
+		libp2p.Peerstore(memoryStore),
+		libp2p.PrivateNetwork(warpnet.PSK(psk)),
+		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
-		},
-		dHashTable.StartRouting,
+		),
+		libp2p.Routing(dHashTable.StartRouting),
+		base.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: failed to init node: %v", err)
 	}
 
 	bn := &BootstrapNode{
-		WarpNode:          node,
+		ctx:               ctx,
+		node:              node,
 		discService:       discService,
 		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
@@ -109,19 +122,21 @@ func NewBootstrapNode(
 
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
-	bn.SetStreamHandler(
-		event.PUBLIC_GET_INFO,
-		logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
-	)
-	bn.SetStreamHandler(
-		event.PUBLIC_POST_NODE_CHALLENGE,
-		logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
+	bn.node.SetStreamHandlers(
+		warpnet.WarpHandler{
+			event.PUBLIC_GET_INFO,
+			logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
+		},
+		warpnet.WarpHandler{
+			event.PUBLIC_POST_NODE_CHALLENGE,
+			logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
+		},
 	)
 	return bn, nil
 }
 
 func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
-	bi := bn.BaseNodeInfo()
+	bi := bn.node.BaseNodeInfo()
 	bi.OwnerId = warpnet.BootstrapOwner
 	return bi
 }
@@ -151,11 +166,36 @@ func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 		return
 	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
-	bt, err := bn.Stream(nodeId, path, data)
+	bt, err := bn.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		return bt, nil
 	}
 	return bt, err
+}
+
+func (bn *BootstrapNode) Node() warpnet.P2PNode {
+	if bn == nil || bn.node == nil {
+		return nil
+	}
+	return bn.node.Node()
+}
+
+func (bn *BootstrapNode) Peerstore() warpnet.WarpPeerstore {
+	if bn == nil || bn.node == nil {
+		return nil
+	}
+	return bn.node.Node().Peerstore()
+}
+
+func (bn *BootstrapNode) Network() warpnet.WarpNetwork {
+	if bn == nil || bn.node == nil {
+		return nil
+	}
+	return bn.node.Node().Network()
+}
+
+func (bn *BootstrapNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+	return bn.node.Node().Connect(bn.ctx, info)
 }
 
 func (bn *BootstrapNode) Stop() {
@@ -165,22 +205,18 @@ func (bn *BootstrapNode) Stop() {
 	if bn.discService != nil {
 		bn.discService.Close()
 	}
-
 	if bn.pubsubService != nil {
 		if err := bn.pubsubService.Close(); err != nil {
 			log.Errorf("bootstrap: failed to close pubsub: %v", err)
 		}
 	}
-
 	if bn.dHashTable != nil {
 		bn.dHashTable.Close()
 	}
-
 	if bn.memoryStoreCloseF != nil {
 		if err := bn.memoryStoreCloseF(); err != nil {
 			log.Errorf("bootstrap: failed to close memory store: %v", err)
 		}
 	}
-
-	bn.WarpNode.StopNode()
+	bn.node.StopNode()
 }

@@ -170,13 +170,25 @@ func (m *warpnetMastodonPseudoNode) Addrs() []warpnet.WarpAddress {
 	return []warpnet.WarpAddress{pseudoMaddr}
 }
 
-func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, data []byte) (_ []byte, err error) {
+func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []byte, err error) {
 	var (
 		getOneEvent event.GetTweetEvent
 		getAllEvent event.GetAllTweetsEvent
 		getImage    event.GetImageEvent
 		resp        interface{}
 	)
+	var data []byte
+	if payload != nil {
+		var ok bool
+		data, ok = payload.([]byte)
+		if !ok {
+			data, err = json.JSON.Marshal(payload)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	switch r.String() {
 	case event.PUBLIC_GET_INFO:
 		resp = m.getInfoHandler()

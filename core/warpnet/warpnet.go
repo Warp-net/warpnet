@@ -30,6 +30,7 @@ package warpnet
 import (
 	"context"
 	"crypto/ed25519"
+	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/docker/go-units"
 	"github.com/ipfs/go-datastore"
@@ -96,6 +97,14 @@ const (
 	ReachabilityUnknown WarpReachability = network.ReachabilityUnknown
 )
 
+type relayStatus string
+
+const (
+	RelayStatusOff     relayStatus = "off"
+	RelayStatusWaiting relayStatus = "waiting"
+	RelayStatusRunning relayStatus = "running"
+)
+
 var (
 	privateBlocks = []string{
 		"10.0.0.0/8", // VPN
@@ -159,6 +168,32 @@ type (
 )
 
 // structures
+
+type WarpHandler struct {
+	Path    WarpProtocolID
+	Handler WarpStreamHandler
+}
+
+func (wh *WarpHandler) IsValid() bool {
+	if !strings.HasPrefix(string(wh.Path), "/") {
+		return false
+	}
+	if !(strings.Contains(string(wh.Path), "get") ||
+		strings.Contains(string(wh.Path), "delete") ||
+		strings.Contains(string(wh.Path), "post")) {
+		return false
+	}
+	if !(strings.Contains(string(wh.Path), "private") ||
+		strings.Contains(string(wh.Path), "public")) {
+		return false
+	}
+	return true
+}
+
+func (wh *WarpHandler) String() string {
+	return fmt.Sprintf("%s %T", wh.Path, wh.Handler)
+}
+
 type WarpPubInfo struct {
 	ID    WarpPeerID `json:"peer_id"`
 	Addrs []string   `json:"addrs"`
@@ -170,7 +205,7 @@ type NodeInfo struct {
 	Version        *semver.Version  `json:"version"`
 	Addresses      []string         `json:"addresses"`
 	StartTime      time.Time        `json:"start_time"`
-	RelayState     string           `json:"relay_state"`
+	RelayState     relayStatus      `json:"relay_state"`
 	BootstrapPeers []WarpAddrInfo   `json:"bootstrap_peers"`
 	Reachability   WarpReachability `json:"reachability"`
 }
@@ -184,7 +219,7 @@ type NodeStats struct {
 	NodeID          WarpPeerID      `json:"node_id"`
 	Version         *semver.Version `json:"version"`
 	PublicAddresses string          `json:"public_addresses"`
-	RelayState      string          `json:"relay_state"`
+	RelayState      relayStatus     `json:"relay_state"`
 
 	StartTime string `json:"start_time"`
 

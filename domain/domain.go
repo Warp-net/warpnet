@@ -128,18 +128,26 @@ type User struct {
 	AvatarKey string `json:"avatar_key,omitempty"`
 
 	// BackgroundImage mime type + "," + base64
-	BackgroundImageKey string    `json:"background_image_key"`
-	Bio                string    `json:"bio"`
-	Birthdate          string    `json:"birthdate"`
-	CreatedAt          time.Time `json:"created_at"`
-	FolloweesCount     uint64    `json:"followees_count"`
-	FollowersCount     uint64    `json:"followers_count"`
-	Id                 string    `json:"id"`
-	IsOffline          bool      `json:"isOffline"`
-	NodeId             string    `json:"node_id"`
-	Network            string    `json:"network"`
-	Latency            int64     `json:"latency"`
-	TweetsCount        uint64    `json:"tweets_count"`
-	Username           string    `json:"username"`
-	Website            *string   `json:"website,omitempty"`
+	BackgroundImageKey string            `json:"background_image_key"`
+	Bio                string            `json:"bio"`
+	Birthdate          string            `json:"birthdate"`
+	CreatedAt          time.Time         `json:"created_at"`
+	FolloweesCount     uint64            `json:"followees_count"`
+	FollowersCount     uint64            `json:"followers_count"`
+	Id                 string            `json:"id"`
+	IsOffline          bool              `json:"isOffline"`
+	NodeId             string            `json:"node_id"`
+	Network            string            `json:"network"`
+	Latency            int64             `json:"latency"`
+	TweetsCount        uint64            `json:"tweets_count"`
+	Username           string            `json:"username"`
+	Website            *string           `json:"website,omitempty"`
+	Moderation         *UserModeration   `json:"moderation"`
+	Metadata           map[string]string `json:"metadata"`
+}
+
+type UserModeration struct {
+	IsModerated bool      `json:"is_moderated"`
+	Strikes     uint8     `json:"strikes"`
+	TimeAt      time.Time `json:"time_at"`
 }

@@ -430,11 +430,16 @@ func (d *NodeRepo) query(tx *local.Txn, q dsq.Query, implicit bool) (dsq.Results
 	done := make(chan struct{})
 
 	go func() {
-		defer close(output)
-		defer it.Close()
+		defer func() {
+			if r := recover(); r != nil {
+				output <- dsq.Result{Error: local.DBError(fmt.Sprintf("query failed: %v", r))}
+			}
+		}()
 		if implicit {
 			defer tx.Discard()
 		}
+		defer it.Close()
+		defer close(output)
 
 		if d.db.IsClosed() {
 			output <- dsq.Result{Error: local.DBError("core repo closed")}
