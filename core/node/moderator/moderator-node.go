@@ -280,7 +280,7 @@ func ensureModelPresence(store DistributedStorer) (string, error) {
 	}
 	defer reader.Close()
 
-	log.Infoln("moderator: LLM model downloaded: CID: %s", cid)
+	log.Infof("moderator: LLM model downloaded: CID: %s", cid)
 
 	path = "llama-2-7b-chat.Q8_0.gguf.tmp"
 	file, err := os.Create(path)

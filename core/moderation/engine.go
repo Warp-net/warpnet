@@ -2,7 +2,7 @@ package moderation
 
 import (
 	"errors"
-	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama.cpp"
+	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama"
 	"strings"
 )
 
