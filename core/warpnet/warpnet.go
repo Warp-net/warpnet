@@ -37,6 +37,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/providers"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/event"
@@ -139,6 +140,7 @@ type (
 	WarpRoutingFunc func(node P2PNode) (WarpPeerRouting, error)
 
 	// aliases
+	WarpMessage        = pubsub.Message
 	WarpReachability   = network.Reachability
 	WarpOption         = libp2p.Option
 	TCPTransport       = tcp.TcpTransport

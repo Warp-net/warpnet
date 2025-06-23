@@ -31,7 +31,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -50,28 +49,18 @@ type PubsubServerNodeConnector interface {
 }
 
 type memberPubSub struct {
-	ctx              context.Context
-	pubsub           *gossip
-	discoveryHandler discovery.DiscoveryHandler
+	ctx    context.Context
+	pubsub *gossip
 }
 
-func NewPubSub(ctx context.Context, discoveryHandler discovery.DiscoveryHandler) *memberPubSub {
-	if discoveryHandler == nil {
-		return &memberPubSub{
-			ctx:    ctx,
-			pubsub: newGossip(ctx),
-		}
+type DiscoveryHandler func(warpnet.WarpAddrInfo)
+
+func NewPubSub(ctx context.Context, handlers ...TopicHandler) *memberPubSub {
+	mps := &memberPubSub{
+		ctx: ctx,
 	}
 
-	mps := &memberPubSub{
-		ctx:              ctx,
-		discoveryHandler: discoveryHandler,
-	}
-	h := TopicHandler{
-		TopicName: pubSubDiscoveryTopic,
-		Handler:   mps.handlePubSubDiscovery,
-	}
-	mps.pubsub = newGossip(ctx, h)
+	mps.pubsub = newGossip(ctx, handlers...)
 	return mps
 }
 
@@ -95,47 +84,6 @@ func (g *memberPubSub) OwnerID() string {
 
 func (g *memberPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
 	return g.pubsub.topicSubscribers(pubSubConsensusTopic)
-}
-
-func (g *memberPubSub) handlePubSubDiscovery(msg *pubsub.Message) error {
-	var discoveryAddrInfos []warpnet.WarpPubInfo
-
-	outerErr := json.JSON.Unmarshal(msg.Data, &discoveryAddrInfos)
-	if outerErr != nil {
-		var single warpnet.WarpPubInfo
-		if innerErr := json.JSON.Unmarshal(msg.Data, &single); innerErr != nil {
-			return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, msg.Data)
-		}
-		discoveryAddrInfos = []warpnet.WarpPubInfo{single}
-	}
-	if len(discoveryAddrInfos) == 0 {
-		return nil
-	}
-
-	for _, info := range discoveryAddrInfos {
-		if info.ID == "" {
-			log.Errorf("pubsub: discovery: message has no ID: %s", string(msg.Data))
-			continue
-		}
-		if info.ID == g.pubsub.nodeInfo().ID {
-			continue
-		}
-
-		peerInfo := warpnet.WarpAddrInfo{
-			ID:    info.ID,
-			Addrs: make([]warpnet.WarpAddress, 0, len(info.Addrs)),
-		}
-
-		for _, addr := range info.Addrs {
-			ma, _ := warpnet.NewMultiaddr(addr)
-			peerInfo.Addrs = append(peerInfo.Addrs, ma)
-		}
-
-		if g.discoveryHandler != nil {
-			g.discoveryHandler(peerInfo)
-		}
-	}
-	return nil
 }
 
 // SubscribeUserUpdate - follow someone

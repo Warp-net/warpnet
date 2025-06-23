@@ -11,7 +11,7 @@ third-member:
 	go run cmd/node/member/main.go --database.dir storage3 --node.port 4031 --server.port 4032  --node.network testnet
 
 tests:
-	CGO_ENABLED=0 go test -count=1 -short ./...
+	CGO_ENABLED=1 go test -count=1 -short ./...
 
 prune:
 	(pkill -9 main || true) && rm -rf $(HOME)/.badgerdb

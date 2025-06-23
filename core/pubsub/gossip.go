@@ -71,6 +71,13 @@ type TopicHandler struct {
 	Handler   topicHandler
 }
 
+func NewDiscoveryTopicHandler(handler topicHandler) TopicHandler {
+	return TopicHandler{
+		TopicName: pubSubDiscoveryTopic,
+		Handler:   handler,
+	}
+}
+
 func newGossip(
 	ctx context.Context,
 	handlers ...TopicHandler,

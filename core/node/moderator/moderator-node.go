@@ -32,7 +32,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus/gossip"
+	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
@@ -83,7 +83,7 @@ func NewModeratorNode(
 	selfHashHex string,
 	interruptChan chan os.Signal,
 ) (_ *ModeratorNode, err error) {
-	pubsubService := pubsub.NewPubSub(ctx, nil)
+	pubsubService := pubsub.NewPubSub(ctx)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
@@ -159,7 +159,7 @@ func NewModeratorNode(
 		},
 	}
 
-	mn.consensusService = gossip.NewGossipConsensus(
+	mn.consensusService = consensus.NewGossipConsensus(
 		ctx, pubsubService, mn, interruptChan, func(data event.ValidationEvent) error {
 			// TODO
 			return nil

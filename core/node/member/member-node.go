@@ -32,7 +32,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus/gossip"
+	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -101,7 +101,12 @@ func NewMemberNode(
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.HandlePeerFound)
-	pubsubService := pubsub.NewPubSub(ctx, discService.HandlePeerFound)
+	pubsubService := pubsub.NewPubSub(
+		ctx,
+		pubsub.NewDiscoveryTopicHandler(
+			discService.WrapPubSubDiscovery(discService.HandlePeerFound),
+		),
+	)
 
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
@@ -168,7 +173,7 @@ func NewMemberNode(
 		pseudoNode:    mastodonPseudoNode,
 	}
 
-	mn.consensusService = gossip.NewGossipConsensus(
+	mn.consensusService = consensus.NewGossipConsensus(
 		ctx, pubsubService, mn, interruptChan, nodeRepo.ValidateSelfHash, userRepo.ValidateUserID,
 	)
 

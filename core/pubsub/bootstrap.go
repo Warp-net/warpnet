@@ -29,77 +29,20 @@ package pubsub
 
 import (
 	"context"
-	"fmt"
-	"github.com/Warp-net/warpnet/core/discovery"
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/json"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 )
 
 type bootstrapPubSub struct {
-	ctx              context.Context
-	pubsub           *gossip
-	discoveryHandler discovery.DiscoveryHandler
+	ctx    context.Context
+	pubsub *gossip
 }
 
-func NewPubSubBootstrap(ctx context.Context, discoveryHandler discovery.DiscoveryHandler) *bootstrapPubSub {
+func NewPubSubBootstrap(ctx context.Context, handlers ...TopicHandler) *bootstrapPubSub {
 	bps := &bootstrapPubSub{
-		ctx:              ctx,
-		discoveryHandler: discoveryHandler,
+		ctx: ctx,
 	}
-	h := TopicHandler{
-		TopicName: pubSubDiscoveryTopic,
-		Handler:   bps.handlePubSubDiscovery,
-	}
-	bps.pubsub = newGossip(ctx, h)
+	bps.pubsub = newGossip(ctx, handlers...)
 	return bps
-}
-
-func (g *bootstrapPubSub) handlePubSubDiscovery(msg *pubsub.Message) error {
-	if msg == nil {
-		return nil
-	}
-	log.Infof("bootstrap pubsub: received discovery message: %s", msg.ID)
-
-	var discoveryAddrInfos []warpnet.WarpPubInfo
-
-	outerErr := json.JSON.Unmarshal(msg.Data, &discoveryAddrInfos)
-	if outerErr != nil {
-		var single warpnet.WarpPubInfo
-		if innerErr := json.JSON.Unmarshal(msg.Data, &single); innerErr != nil {
-			return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, msg.Data)
-		}
-		discoveryAddrInfos = []warpnet.WarpPubInfo{single}
-	}
-	if len(discoveryAddrInfos) == 0 {
-		return nil
-	}
-
-	for _, info := range discoveryAddrInfos {
-		if info.ID == "" {
-			log.Errorf("pubsub: discovery: message has no ID: %s", string(msg.Data))
-			continue
-		}
-		if info.ID == g.pubsub.nodeInfo().ID {
-			continue
-		}
-
-		peerInfo := warpnet.WarpAddrInfo{
-			ID:    info.ID,
-			Addrs: make([]warpnet.WarpAddress, 0, len(info.Addrs)),
-		}
-
-		for _, addr := range info.Addrs {
-			ma, _ := warpnet.NewMultiaddr(addr)
-			peerInfo.Addrs = append(peerInfo.Addrs, ma)
-		}
-
-		if g.discoveryHandler != nil {
-			g.discoveryHandler(peerInfo)
-		}
-	}
-	return nil
 }
 
 func (g *bootstrapPubSub) Run(node PubsubServerNodeConnector) {
