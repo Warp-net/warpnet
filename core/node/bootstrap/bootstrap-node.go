@@ -78,14 +78,18 @@ func NewBootstrapNode(
 		return mapStore.Close()
 	}
 
-	dHashTable := dht.NewDHTable(
-		ctx, mapStore, true, nil, discService.DefaultDiscoveryHandler,
-	)
-
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
 		return nil, err
 	}
+
+	dHashTable := dht.NewDHTable(
+		ctx,
+		dht.RoutingStore(mapStore),
+		dht.EnableRendezvous(),
+		dht.AddPeerCallbacks(discService.DefaultDiscoveryHandler),
+		dht.BootstrapNodes(infos...),
+	)
 
 	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	if err != nil {
@@ -145,7 +149,7 @@ func (bn *BootstrapNode) Start() error {
 	if bn == nil {
 		return errors.New("bootstrap: nil node")
 	}
-	bn.pubsubService.Run(bn, nil)
+	bn.pubsubService.Run(bn)
 	if err := bn.discService.Run(bn); err != nil {
 		return err
 	}

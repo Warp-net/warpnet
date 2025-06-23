@@ -41,7 +41,7 @@ type DiscoveryHandler interface {
 }
 
 type PubSubProvider interface {
-	Run(m pubsub.PubsubModeratorConnector)
+	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
 }
 

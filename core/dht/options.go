@@ -22,34 +22,44 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package bootstrap
+package dht
 
-import (
-	"github.com/Warp-net/warpnet/core/discovery"
-	"github.com/Warp-net/warpnet/core/pubsub"
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"io"
-)
+import "github.com/Warp-net/warpnet/core/warpnet"
 
-type DiscoveryHandler interface {
-	HandlePeerFound(pi warpnet.WarpAddrInfo)
-	Run(n discovery.DiscoveryInfoStorer) error
-	Close()
+type dhtConfig struct {
+	isRendezvousEnabled           bool
+	store                         RoutingStorer
+	addCallbacks, removeCallbacks []func(info warpnet.WarpAddrInfo)
+	boostrapNodes                 []warpnet.WarpAddrInfo
+}
+type Option func(*dhtConfig)
+
+func EnableRendezvous() Option {
+	return func(c *dhtConfig) {
+		c.isRendezvousEnabled = true
+	}
 }
 
-type PubSubProvider interface {
-	Run(m pubsub.PubsubServerNodeConnector)
-	Close() error
+func RoutingStore(store RoutingStorer) Option {
+	return func(c *dhtConfig) {
+		c.store = store
+	}
 }
 
-type DistributedHashTableCloser interface {
-	Close()
+func RemovePeerCallbacks(cbs ...func(warpnet.WarpAddrInfo)) Option {
+	return func(c *dhtConfig) {
+		c.removeCallbacks = cbs
+	}
 }
 
-type ProviderCloser interface {
-	io.Closer
+func AddPeerCallbacks(cbs ...func(warpnet.WarpAddrInfo)) Option {
+	return func(c *dhtConfig) {
+		c.addCallbacks = cbs
+	}
 }
 
-type ClientNodeStreamer interface {
-	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
+func BootstrapNodes(nodes ...warpnet.WarpAddrInfo) Option {
+	return func(c *dhtConfig) {
+		c.boostrapNodes = nodes
+	}
 }

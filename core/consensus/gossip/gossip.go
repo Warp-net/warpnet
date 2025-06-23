@@ -28,9 +28,8 @@ type ValidatorFunc func(data event.ValidationEvent) error
 type ConsensusHandler func(message *event.Message)
 
 type ConsensusBroadcaster interface {
-	GenericSubscribe(topics ...string) (err error)
 	PublishValidationRequest(msg event.Message) (err error)
-	GetConsensusTopicSubscribers() []warpnet.WarpPeerID
+	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
 	OwnerID() string
 }
 
@@ -190,8 +189,8 @@ func (g *gossipConsensus) runBackgroundValidation(data event.ValidationEvent) {
 	}
 }
 
-func isMeAlone(peers []warpnet.WarpPeerID, ownerId string) bool {
-	return len(peers) == 0 || (len(peers) == 1 && peers[0].String() == ownerId)
+func isMeAlone(peers []warpnet.WarpAddrInfo, ownerId string) bool {
+	return len(peers) == 0 || (len(peers) == 1 && peers[0].ID.String() == ownerId)
 }
 
 func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {

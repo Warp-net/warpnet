@@ -67,6 +67,7 @@ type MemberNode struct {
 	nodeRepo             NodeProvider
 	retrier              retrier.Retrier
 	userRepo             UserFetcher
+	followRepo           FollowStorer
 	ownerId, selfHashHex string
 	pseudoNode           PseudoStreamer
 }
@@ -100,12 +101,19 @@ func NewMemberNode(
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.HandlePeerFound)
-	pubsubService := pubsub.NewPubSub(
-		ctx, followRepo, owner.UserId, discService.HandlePeerFound,
-	)
+	pubsubService := pubsub.NewPubSub(ctx, discService.HandlePeerFound)
+
+	infos, err := config.Config().Node.AddrInfos()
+	if err != nil {
+		return nil, err
+	}
 
 	dHashTable := dht.NewDHTable(
-		ctx, nodeRepo, true, nil, discService.HandlePeerFound,
+		ctx,
+		dht.RoutingStore(nodeRepo),
+		dht.EnableRendezvous(),
+		dht.AddPeerCallbacks(discService.HandlePeerFound),
+		dht.BootstrapNodes(infos...),
 	)
 
 	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
@@ -117,11 +125,6 @@ func NewMemberNode(
 		_, _ = userRepo.Update(mastodonPseudoNode.WarpnetUser().Id, mastodonPseudoNode.WarpnetUser())
 		_, _ = userRepo.Create(mastodonPseudoNode.DefaultUser())
 		_, _ = userRepo.Update(mastodonPseudoNode.DefaultUser().Id, mastodonPseudoNode.DefaultUser())
-	}
-
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		return nil, err
 	}
 
 	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
@@ -159,6 +162,7 @@ func NewMemberNode(
 		nodeRepo:      nodeRepo,
 		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
+		followRepo:    followRepo,
 		ownerId:       owner.UserId,
 		selfHashHex:   selfHashHex,
 		pseudoNode:    mastodonPseudoNode,
@@ -172,11 +176,16 @@ func NewMemberNode(
 	return mn, nil
 }
 
-func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
-	m.pubsubService.Run(m, clientNode)
+func (m *MemberNode) Start() error {
+	m.pubsubService.Run(m)
+	if err := m.presubscribeFollowees(m.followRepo); err != nil {
+		log.Errorf("member: failed to presubscribe followees: %v", err)
+	}
+
 	if err := m.discService.Run(m); err != nil {
 		return err
 	}
+
 	m.mdnsService.Start(m)
 
 	nodeInfo := m.NodeInfo()
@@ -197,6 +206,39 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
+	return nil
+}
+
+func (m *MemberNode) presubscribeFollowees(followRepo FollowStorer) error {
+	if m == nil {
+		return warpnet.WarpError("pubsub: presubscribe: service not initialized properly")
+	}
+	if followRepo == nil {
+		return nil
+	}
+
+	var (
+		nextCursor string
+		limit      = uint64(20)
+	)
+	for {
+		followees, cur, err := followRepo.GetFollowees(m.ownerId, &limit, &nextCursor)
+		if err != nil {
+			return err
+		}
+		for _, f := range followees {
+			if err := m.pubsubService.SubscribeUserUpdate(f.Followee); err != nil {
+				return err
+			}
+
+		}
+		if len(followees) < int(limit) {
+			break
+		}
+		nextCursor = cur
+	}
+
+	log.Infoln("pubsub: followees presubscribed")
 	return nil
 }
 
@@ -366,6 +408,10 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PUBLIC_GET_USERS,
 				logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, m)))),
+			},
+			{
+				event.PUBLIC_GET_WHOTOFOLLOW,
+				logMw(authMw(unwrapMw(handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo)))),
 			},
 			{
 				event.PUBLIC_GET_TWEETS,

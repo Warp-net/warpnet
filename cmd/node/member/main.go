@@ -179,7 +179,7 @@ func main() {
 	}
 	defer serverNode.Stop()
 
-	err = serverNode.Start(clientNode)
+	err = serverNode.Start()
 	if err != nil {
 		log.Fatalf("failed to start member node: %v", err)
 	}

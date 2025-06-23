@@ -32,6 +32,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/consensus/gossip"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
@@ -82,7 +83,7 @@ func NewModeratorNode(
 	selfHashHex string,
 	interruptChan chan os.Signal,
 ) (_ *ModeratorNode, err error) {
-	pubsubService := pubsub.NewModeratorPubSub(ctx)
+	pubsubService := pubsub.NewPubSub(ctx, nil)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
@@ -94,7 +95,16 @@ func NewModeratorNode(
 		return mapStore.Close()
 	}
 
-	dHashTable := dht.NewDHTable(ctx, mapStore, false, nil)
+	infos, err := config.Config().Node.AddrInfos()
+	if err != nil {
+		return nil, err
+	}
+
+	dHashTable := dht.NewDHTable(
+		ctx,
+		dht.RoutingStore(mapStore),
+		dht.BootstrapNodes(infos...),
+	)
 
 	limiter := warpnet.NewAutoScaledLimiter()
 
@@ -104,11 +114,6 @@ func NewModeratorNode(
 	}
 
 	rm, err := warpnet.NewResourceManager(limiter)
-	if err != nil {
-		return nil, err
-	}
-
-	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
 		return nil, err
 	}
@@ -154,12 +159,12 @@ func NewModeratorNode(
 		},
 	}
 
-	//mn.consensusService = gossip.NewGossipConsensus(
-	//	ctx, pubsubService, mn, interruptChan, func(data event.ValidationEvent) error {
-	//		// TODO
-	//		return nil
-	//	},
-	//)
+	mn.consensusService = gossip.NewGossipConsensus(
+		ctx, pubsubService, mn, interruptChan, func(data event.ValidationEvent) error {
+			// TODO
+			return nil
+		},
+	)
 
 	return mn, nil
 }
@@ -302,26 +307,34 @@ func ensureModelPresence(store DistributedStorer) (string, error) {
 	return finalPath, nil
 }
 
-func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
-	if mn == nil || mn.streamer == nil {
-		return nil, warpnet.WarpError("node is not initialized")
-	}
-	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+func (mn *ModeratorNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	peerInfo := mn.node.Peerstore().PeerInfo(mn.node.ID())
+	return mn.stream(peerInfo, path, data)
+}
 
-	if mn.node.ID() == nodeId {
-		return nil, base.ErrSelfRequest
-	}
+func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
+	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 
 	peerInfo := mn.node.Peerstore().PeerInfo(nodeId)
 	if len(peerInfo.Addrs) == 0 {
 		log.Warningf("node %v is offline", nodeId)
 		return nil, warpnet.ErrNodeIsOffline
 	}
-
+	if mn.node.ID() == peerInfo.ID {
+		return nil, base.ErrSelfRequest
+	}
 	return mn.stream(peerInfo, path, data)
 }
 
-func (mn *ModeratorNode) stream(peerInfo warpnet.WarpAddrInfo, path stream.WarpRoute, data any) (_ []byte, err error) {
+func (mn *ModeratorNode) stream(
+	peerInfo warpnet.WarpAddrInfo,
+	path stream.WarpRoute,
+	data any,
+) (_ []byte, err error) {
+	if mn == nil || mn.streamer == nil {
+		return nil, warpnet.WarpError("node is not initialized")
+	}
+
 	var bt []byte
 	if data != nil {
 		var ok bool
