@@ -160,9 +160,14 @@ func NewModeratorNode(
 	}
 
 	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, mn, interruptChan, func(data event.ValidationEvent) error {
-			// TODO
-			return nil
+		ctx, pubsubService, mn, interruptChan, func(ev event.ValidationEvent) error {
+			if len(selfHashHex) == 0 {
+				return errors.New("empty codebase hash")
+			}
+			if selfHashHex == ev.SelfHashHex {
+				return nil
+			}
+			return errors.New("moderator self hash is not valid")
 		},
 	)
 
@@ -308,6 +313,9 @@ func ensureModelPresence(store DistributedStorer) (string, error) {
 }
 
 func (mn *ModeratorNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	if mn == nil || mn.node == nil {
+		return nil, nil
+	}
 	peerInfo := mn.node.Peerstore().PeerInfo(mn.node.ID())
 	return mn.stream(peerInfo, path, data)
 }

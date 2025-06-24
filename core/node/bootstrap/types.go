@@ -28,6 +28,7 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
 	"io"
 )
 
@@ -40,6 +41,9 @@ type DiscoveryHandler interface {
 type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
+	PublishValidationRequest(msg event.Message) (err error)
+	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
+	OwnerID() string
 }
 
 type DistributedHashTableCloser interface {
@@ -52,4 +56,11 @@ type ProviderCloser interface {
 
 type ClientNodeStreamer interface {
 	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
+}
+
+type ConsensusServicer interface {
+	Start(data event.ValidationEvent) error
+	Close()
+	Validate(data []byte, _ warpnet.WarpStream) (any, error)
+	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
 }

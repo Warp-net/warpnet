@@ -87,7 +87,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex, interruptChan)
 	if err != nil {
 		log.Fatalf("failed to init bootstrap node: %v", err)
 	}

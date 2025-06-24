@@ -174,7 +174,9 @@ func NewMemberNode(
 	}
 
 	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, mn, interruptChan, nodeRepo.ValidateSelfHash, userRepo.ValidateUserID,
+		ctx, pubsubService, mn, interruptChan,
+		nodeRepo.ValidateSelfHash,
+		userRepo.ValidateUserID,
 	)
 
 	mn.setupHandlers(authRepo, userRepo, followRepo, db, privKey)
@@ -262,6 +264,13 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi := m.node.BaseNodeInfo()
 	bi.OwnerId = m.ownerId
 	return bi
+}
+
+func (m *MemberNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	if m == nil || m.node == nil {
+		return nil, nil
+	}
+	return m.node.SelfStream(path, data)
 }
 
 type streamNodeID = string

@@ -45,6 +45,7 @@ import (
 type PubsubServerNodeConnector interface {
 	Node() warpnet.P2PNode
 	NodeInfo() warpnet.NodeInfo
+	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
@@ -82,8 +83,19 @@ func (g *memberPubSub) OwnerID() string {
 	return g.pubsub.nodeInfo().OwnerId
 }
 
+func (g *memberPubSub) SubscribeConsensusTopic() error {
+	if g == nil || !g.pubsub.isGossipRunning() {
+		return warpnet.WarpError("member pubsub: service not initialized")
+	}
+
+	return g.pubsub.subscribe(TopicHandler{
+		TopicName: pubSubConsensusTopic,
+		Handler:   g.pubsub.selfStream,
+	})
+}
+
 func (g *memberPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
-	return g.pubsub.topicSubscribers(pubSubConsensusTopic)
+	return g.pubsub.subscribers(pubSubConsensusTopic)
 }
 
 // SubscribeUserUpdate - follow someone
@@ -98,41 +110,9 @@ func (g *memberPubSub) SubscribeUserUpdate(userId string) (err error) {
 
 	handler := TopicHandler{
 		TopicName: fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId),
-		Handler:   g.handleUserUpdate,
+		Handler:   g.pubsub.selfStream,
 	}
 	return g.pubsub.subscribe(handler)
-}
-
-func (g *memberPubSub) handleUserUpdate(msg *pubsub.Message) error {
-	var simulatedStreamMessage event.Message
-	if err := json.JSON.Unmarshal(msg.Data, &simulatedStreamMessage); err != nil {
-		log.Errorf("pubsub: failed to decode user update message: %v %s", err, msg.Data)
-		return err
-	}
-	if simulatedStreamMessage.NodeId == g.pubsub.nodeInfo().ID.String() {
-		log.Warningln("pubsub: handle user update: same node ID")
-		return nil
-	}
-
-	if simulatedStreamMessage.Path == "" {
-		log.Warningln("pubsub: user update message has no destination")
-		return fmt.Errorf("pubsub: user update message has no path: %s", string(msg.Data))
-	}
-	if simulatedStreamMessage.Body == nil {
-		log.Warningln("pubsub: handle user update: same node ID")
-		return nil
-	}
-	if stream.WarpRoute(simulatedStreamMessage.Path).IsGet() { // only store data
-		return nil
-	}
-
-	log.Debugf("pubsub: new user update: %s", *simulatedStreamMessage.Body)
-
-	_, err := g.pubsub.ClientStream( // send it to self
-		simulatedStreamMessage.Path,
-		*simulatedStreamMessage.Body,
-	)
-	return err
 }
 
 // UnsubscribeUserUpdate - unfollow someone
@@ -197,7 +177,7 @@ func (g *memberPubSub) publishPeerInfo() error {
 	}}
 
 	limit := publishPeerInfoLimit
-	for _, pi := range g.pubsub.notSubscribedToTopic(pubSubDiscoveryTopic) {
+	for _, pi := range g.pubsub.notSubscribers(pubSubDiscoveryTopic) {
 		if limit == 0 {
 			break
 		}

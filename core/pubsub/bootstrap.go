@@ -29,6 +29,8 @@ package pubsub
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -54,6 +56,36 @@ func (g *bootstrapPubSub) Run(node PubsubServerNodeConnector) {
 		log.Errorf("pubsub: failed to run: %v", err)
 		return
 	}
+}
+
+func (g *bootstrapPubSub) PublishValidationRequest(msg event.Message) (err error) {
+	if g == nil || !g.pubsub.isGossipRunning() {
+		return warpnet.WarpError("bootstrap pubsub: service not initialized")
+	}
+	return g.pubsub.publish(msg, pubSubConsensusTopic)
+}
+
+func (g *bootstrapPubSub) SubscribeConsensusTopic() error {
+	if g == nil || !g.pubsub.isGossipRunning() {
+		return warpnet.WarpError("bootstrap pubsub: service not initialized")
+	}
+
+	return g.pubsub.subscribe(TopicHandler{
+		TopicName: pubSubConsensusTopic,
+		Handler:   g.pubsub.selfStream,
+	})
+}
+
+func (g *bootstrapPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
+	if g == nil || !g.pubsub.isGossipRunning() {
+		return []warpnet.WarpAddrInfo{}
+	}
+
+	return g.pubsub.subscribers(pubSubConsensusTopic)
+}
+
+func (g *bootstrapPubSub) OwnerID() string {
+	return warpnet.BootstrapOwner
 }
 
 func (g *bootstrapPubSub) Close() (err error) {

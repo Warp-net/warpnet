@@ -31,6 +31,7 @@ import (
 	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -45,6 +46,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
+	"os"
 )
 
 type BootstrapNode struct {
@@ -54,6 +56,7 @@ type BootstrapNode struct {
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
+	consensusService  ConsensusServicer
 	memoryStoreCloseF func() error
 	psk               security.PSK
 	selfHashHex       string
@@ -64,6 +67,7 @@ func NewBootstrapNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	selfHashHex string,
+	interruptChan chan os.Signal,
 ) (_ *BootstrapNode, err error) {
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
 	pubsubService := pubsub.NewPubSubBootstrap(
@@ -129,9 +133,31 @@ func NewBootstrapNode(
 		selfHashHex:       selfHashHex,
 	}
 
+	bn.consensusService = consensus.NewGossipConsensus(
+		ctx, pubsubService, bn, interruptChan, func(ev event.ValidationEvent) error {
+			if len(selfHashHex) == 0 {
+				return errors.New("empty codebase hash")
+			}
+			if selfHashHex == ev.SelfHashHex {
+				return nil
+			}
+			return errors.New("moderator self hash is not valid")
+		},
+	)
+
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
+	unwrapMw := mw.UnwrapStreamMiddleware
+
 	bn.node.SetStreamHandlers(
+		warpnet.WarpHandler{
+			event.PRIVATE_POST_NODE_VALIDATE,
+			logMw(unwrapMw(handler.StreamValidateHandler(bn.consensusService))),
+		},
+		warpnet.WarpHandler{
+			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+			logMw(unwrapMw(handler.StreamValidationResponseHandler(bn.consensusService))),
+		},
 		warpnet.WarpHandler{
 			event.PUBLIC_GET_INFO,
 			logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
@@ -159,6 +185,13 @@ func (bn *BootstrapNode) Start() error {
 		return err
 	}
 
+	if err := bn.consensusService.Start(event.ValidationEvent{
+		ValidatedNodeID: bn.node.BaseNodeInfo().ID.String(),
+		SelfHashHex:     bn.selfHashHex,
+	}); err != nil {
+		return err
+	}
+
 	nodeInfo := bn.NodeInfo()
 
 	println()
@@ -168,6 +201,13 @@ func (bn *BootstrapNode) Start() error {
 	)
 	println()
 	return nil
+}
+
+func (bn *BootstrapNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	if bn == nil || bn.node == nil {
+		return nil, nil
+	}
+	return bn.node.SelfStream(path, data)
 }
 
 func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {

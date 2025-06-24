@@ -322,6 +322,23 @@ func (n *WarpNode) Node() warpnet.P2PNode {
 	return n.node
 }
 
+func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	var bt []byte
+	if data != nil {
+		var ok bool
+		bt, ok = data.([]byte)
+		if !ok {
+			bt, err = json.JSON.Marshal(data)
+			if err != nil {
+				return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
+			}
+		}
+	}
+	peerInfo := n.node.Peerstore().PeerInfo(n.node.ID())
+
+	return n.streamer.Send(peerInfo, path, bt)
+}
+
 const ErrSelfRequest = warpnet.WarpError("self request is not allowed")
 
 func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error) {

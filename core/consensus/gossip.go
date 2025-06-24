@@ -30,6 +30,7 @@ type ConsensusHandler func(message *event.Message)
 type ConsensusBroadcaster interface {
 	PublishValidationRequest(msg event.Message) (err error)
 	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
+	SubscribeConsensusTopic() error
 	OwnerID() string
 }
 
@@ -67,6 +68,9 @@ func (g *gossipConsensus) Start(data event.ValidationEvent) (err error) {
 			err = fmt.Errorf("%v %v", r, debug.Stack())
 		}
 	}()
+	if err := g.broadcaster.SubscribeConsensusTopic(); err != nil {
+		return err
+	}
 	log.Infoln("gossip consensus: started")
 
 	go g.listenResponses()
@@ -131,20 +135,23 @@ func (g *gossipConsensus) listenResponses() {
 			g.isValidated.Store(true)
 			return
 		case <-g.ctx.Done():
+			log.Infoln("gossip consensus: listen: context done")
 			return
 		case resp, ok := <-g.recvChan:
 			if !ok {
 				return
 			}
 			if _, isKnown := knownPeers[resp.ValidatorID]; !isKnown {
+				log.Infof("gossip consensus: node %s is unknown", resp.ValidatorID)
 				continue
 			}
 			if _, isSeen := validResponses[resp.ValidatorID]; isSeen {
+				log.Infof("gossip consensus: node %s is already participated", resp.ValidatorID)
 				continue
 			}
 			if resp.Result == event.Invalid {
 				if resp.Reason != nil {
-					log.Debugf(
+					log.Errorf(
 						"gossip consensus: validator responded with 'invalid node' result: %s", *resp.Reason,
 					)
 				}
@@ -167,21 +174,26 @@ func (g *gossipConsensus) runBackgroundValidation(data event.ValidationEvent) {
 
 	for {
 		if g.isClosed.Load() {
+			log.Infoln("gossip consensus: node is closed - stop background validation")
 			return
 		}
 		if g.isValidated.Load() {
+			log.Infoln("gossip consensus: node is validated - stop background validation")
 			return
 		}
 
 		select {
 		case <-g.ctx.Done():
+			log.Infoln("gossip consensus: background: context done")
 			return
 		case <-t.C:
 			peers := g.broadcaster.GetConsensusTopicSubscribers()
 			if isMeAlone(peers, g.broadcaster.OwnerID()) {
+				log.Infoln("gossip consensus: node is alone")
 				continue
 			}
 			if err := g.AskValidation(data); err != nil {
+				log.Errorf("gossip consensus: ask validation: %v", err)
 				g.interruptChan <- os.Interrupt
 				return
 			}

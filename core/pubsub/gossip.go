@@ -45,10 +45,21 @@ import (
 	"time"
 )
 
+const (
+	pubSubModerationTopic = "moderation-text"
+
+	pubSubDiscoveryTopic = "peer-discovery"
+	pubSubConsensusTopic = "peer-consensus"
+	// prefixes
+	userUpdateTopicPrefix = "user-update"
+
+	publishPeerInfoLimit = 10
+)
+
 type GossipNodeConnector interface {
 	Node() warpnet.P2PNode
 	NodeInfo() warpnet.NodeInfo
-	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
 type topicHandler func(msg *pubsub.Message) error
@@ -168,12 +179,16 @@ func (g *gossip) runListener() error {
 			if msg.Topic == nil {
 				continue
 			}
+			log.Infof("gossip: reseived message for topic %s", *msg.Topic)
 
 			g.mx.RLock()
 			handlerF, ok := g.handlersMap[strings.TrimSpace(*msg.Topic)]
 			g.mx.RUnlock()
 			if !ok {
-				log.Warnf("gossip: unknown topic %q", *msg.Topic)
+				// default behavior
+				if err := g.selfStream(msg); err != nil {
+					log.Errorf("gossip: self stream: %v", err)
+				}
 				continue
 			}
 			if err := handlerF(msg); err != nil {
@@ -281,7 +296,7 @@ func (g *gossip) unsubscribe(topics ...string) (err error) {
 	return err
 }
 
-func (g *gossip) topicSubscribers(topicName string) []warpnet.WarpAddrInfo {
+func (g *gossip) subscribers(topicName string) []warpnet.WarpAddrInfo {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 
@@ -300,7 +315,7 @@ func (g *gossip) topicSubscribers(topicName string) []warpnet.WarpAddrInfo {
 	return infos
 }
 
-func (g *gossip) notSubscribedToTopic(topicName string) []warpnet.WarpAddrInfo {
+func (g *gossip) notSubscribers(topicName string) []warpnet.WarpAddrInfo {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 
@@ -373,11 +388,36 @@ func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
 	return nil
 }
 
-func (g *gossip) ClientStream(path string, data any) (_ []byte, err error) {
-	if g == nil || g.node == nil {
-		return nil, errors.New("gossip: service not initialized")
+func (g *gossip) selfStream(msg *pubsub.Message) error {
+	var simulatedStreamMessage event.Message
+	if err := json.JSON.Unmarshal(msg.Data, &simulatedStreamMessage); err != nil {
+		log.Errorf("pubsub: failed to decode user update message: %v %s", err, msg.Data)
+		return err
 	}
-	return g.node.GenericStream(g.node.NodeInfo().ID.String(), stream.WarpRoute(path), data)
+	if simulatedStreamMessage.NodeId == g.node.NodeInfo().ID.String() {
+		log.Warningln("pubsub: handle user update: same node ID")
+		return nil
+	}
+
+	if simulatedStreamMessage.Path == "" {
+		log.Warningln("pubsub: user update message has no destination")
+		return fmt.Errorf("pubsub: user update message has no path: %s", string(msg.Data))
+	}
+	if simulatedStreamMessage.Body == nil {
+		log.Warningln("pubsub: handle user update: same node ID")
+		return nil
+	}
+	if stream.WarpRoute(simulatedStreamMessage.Path).IsGet() { // only store data
+		return nil
+	}
+
+	log.Debugf("pubsub: new user update: %s", *simulatedStreamMessage.Body)
+
+	_, err := g.node.SelfStream(
+		stream.WarpRoute(simulatedStreamMessage.Path),
+		*simulatedStreamMessage.Body,
+	)
+	return err
 }
 
 func (g *gossip) nodeInfo() warpnet.NodeInfo {

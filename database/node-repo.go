@@ -847,8 +847,6 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 
 var ErrNotInRecords = local.DBError("self hash is not in the consensus records")
 
-const SelfHashConsensusKey = "selfhash"
-
 func (d *NodeRepo) ValidateSelfHash(ev event.ValidationEvent) error {
 	if d == nil {
 		return ErrNilNodeRepo
