@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -229,8 +230,9 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
 
 // Validate is internal call from client node and from PubSub
 func (g *gossipConsensus) Validate(data []byte, s warpnet.WarpStream) (any, error) {
+	fmt.Println("gossip consensus: Validate", string(data))
 	if len(data) == 0 {
-		return nil, nil
+		return nil, errors.New("gossip consensus: empty data")
 	}
 
 	var ev event.ValidationEvent
@@ -268,6 +270,9 @@ func (g *gossipConsensus) Validate(data []byte, s warpnet.WarpStream) (any, erro
 	if err != nil {
 		log.Errorf("gossip consensus: failed to send validation result: %v", err)
 	}
+
+	fmt.Println("gossip consensus: Validate response!!!!!!", string(bt))
+
 	return bt, err
 }
 
@@ -275,10 +280,10 @@ func (g *gossipConsensus) ValidationResult(data []byte, s warpnet.WarpStream) (a
 	log.Infof("gossip consensus: validation result received: %s", data)
 	if g.isClosed.Load() {
 		log.Infoln("gossip consensus: closed")
-		return nil, nil
+		return nil, errors.New("gossip consensus: closed")
 	}
 	if len(data) == 0 {
-		return nil, nil
+		return nil, errors.New("gossip consensus: empty data")
 	}
 
 	var resp event.ValidationEventResponse
@@ -289,11 +294,11 @@ func (g *gossipConsensus) ValidationResult(data []byte, s warpnet.WarpStream) (a
 
 	resp.ValidatorID = s.Conn().RemotePeer().String()
 	if resp.ValidatorID == s.Conn().LocalPeer().String() { // no need to validate self
-		return nil, nil
+		return []byte("noop"), nil
 	}
 
 	g.recvChan <- resp
-	return nil, nil
+	return []byte("noop"), nil
 }
 
 func (g *gossipConsensus) Close() {

@@ -35,10 +35,15 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/cockroachdb/errors"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	log "github.com/sirupsen/logrus"
+	"io"
+	"net"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -68,6 +73,7 @@ type WarpNode struct {
 
 	startTime time.Time
 	eventsSub event.Subscription
+	handlers  map[protocol.ID]network.StreamHandler
 }
 
 func NewWarpNode(
@@ -134,6 +140,7 @@ func NewWarpNode(
 		startTime: time.Now(),
 		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub: sub,
+		handlers:  make(map[protocol.ID]network.StreamHandler),
 	}
 	if err := wn.validateSupportedProtocols(); err != nil {
 		return nil, err
@@ -174,6 +181,7 @@ func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
 		}
 		n.node.SetStreamHandler(h.Path, h.Handler)
+		n.handlers[h.Path] = h.Handler
 	}
 }
 
@@ -323,6 +331,19 @@ func (n *WarpNode) Node() warpnet.P2PNode {
 }
 
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	handler, ok := n.handlers[protocol.ID(path)]
+	if !ok {
+		return nil, errors.Errorf("no handler for path %s", path)
+	}
+
+	log.Infoln("SelfStream called", path)
+
+	c1, c2 := net.Pipe()
+	streamClient := &stream.LoopbackStream{PeerId: n.node.ID(), C: c1, Proto: protocol.ID(path)}
+	defer streamClient.Close()
+
+	go handler(&stream.LoopbackStream{PeerId: n.node.ID(), C: c2, Proto: protocol.ID(path)})
+
 	var bt []byte
 	if data != nil {
 		var ok bool
@@ -334,9 +355,12 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 			}
 		}
 	}
-	peerInfo := n.node.Peerstore().PeerInfo(n.node.ID())
 
-	return n.streamer.Send(peerInfo, path, bt)
+	if _, err := streamClient.Write(bt); err != nil {
+		return nil, err
+	}
+	streamClient.SetReadDeadline(time.Now().Add(10 * time.Second))
+	return io.ReadAll(streamClient)
 }
 
 const ErrSelfRequest = warpnet.WarpError("self request is not allowed")

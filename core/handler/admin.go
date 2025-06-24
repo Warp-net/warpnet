@@ -36,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
+	log "github.com/sirupsen/logrus"
 	"io/fs"
 )
 
@@ -87,6 +88,7 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 	if svc == nil {
 		return nil
 	}
+	log.Infoln("StreamValidateHandler event")
 	return svc.Validate
 }
 
@@ -94,5 +96,7 @@ func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.Warp
 	if svc == nil {
 		return nil
 	}
+	log.Infoln("StreamValidationResponseHandler event")
+
 	return svc.ValidationResult
 }
