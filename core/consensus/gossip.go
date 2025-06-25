@@ -132,7 +132,7 @@ func (g *gossipConsensus) listenResponses() {
 			log.Infoln("gossip consensus: listen: context done")
 			return
 		case resp, ok := <-g.recvChan:
-			log.Infoln("gossip consensus: listener: validation response received")
+			log.Infoln("gossip consensus: listener: validation response received", resp.ValidatorID)
 			if !ok {
 				log.Warningln("gossip consensus: listener: channel closed")
 				return
@@ -154,7 +154,7 @@ func (g *gossipConsensus) listenResponses() {
 				continue
 			}
 			fmt.Println()
-			log.Infoln("gossip consensus: validator responded with 'valid node' result")
+			log.Infoln("gossip consensus: validator responded with 'valid node' result", resp.ValidatorID)
 			fmt.Println()
 			validResponses[resp.ValidatorID] = struct{}{}
 		default:
