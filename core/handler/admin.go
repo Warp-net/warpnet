@@ -92,9 +92,6 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 	}
 
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		log.Infoln("stream validate handler: started")
-		defer log.Infoln("stream validate handler: finished")
-
 		if len(buf) == 0 {
 			return nil, errors.New("gossip consensus: empty data")
 		}
@@ -117,14 +114,6 @@ func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.Warp
 		panic("validation result handler called with nil service")
 	}
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
-		log.Infoln("stream validation result handler: started")
-		defer log.Infoln("stream validation result handler: finished")
-
-		log.Infof(
-			"validation result handler: validation result received: %s, validator: %s",
-			data, s.Conn().RemotePeer().String(),
-		)
-
 		if len(data) == 0 {
 			fmt.Println("ValidationResult empty data")
 			return nil, errors.New("validation result handler: empty data")

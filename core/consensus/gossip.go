@@ -280,9 +280,11 @@ func (g *gossipConsensus) Validate(ev event.ValidationEvent) error {
 
 func (g *gossipConsensus) ValidationResult(ev event.ValidationResultEvent) error {
 	if g.isClosed.Load() {
-		return errors.New("gossip consensus: closed")
+		return nil
 	}
-
+	if g.isValidated.Load() {
+		return nil
+	}
 	g.recvChan <- ev
 	return nil
 }

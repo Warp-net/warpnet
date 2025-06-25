@@ -389,8 +389,6 @@ func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
 }
 
 func (g *gossip) selfStream(data []byte) error {
-	log.Infoln("------> pubsub self stream handler: started")
-	defer log.Infoln("------>  pubsub self stream validate handler: finished")
 	var simulatedStreamMessage event.Message
 	if err := json.JSON.Unmarshal(data, &simulatedStreamMessage); err != nil {
 		log.Errorf("pubsub: failed to decode user update message: %v %s", err, data)
