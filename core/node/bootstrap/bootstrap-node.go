@@ -138,9 +138,9 @@ func NewBootstrapNode(
 			if len(selfHashHex) == 0 {
 				return errors.New("empty codebase hash")
 			}
-			//if selfHashHex != ev.SelfHashHex {
-			//	return errors.New("self hash is not valid") // TODO
-			//}
+			if selfHashHex != ev.SelfHashHex {
+				return errors.New("self hash is not valid")
+			}
 			return nil
 		},
 	)

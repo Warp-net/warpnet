@@ -338,15 +338,10 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		return nil, errors.Errorf("no handler for path %s", path)
 	}
 
-	log.Infoln("self stream called", path)
-
 	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
 	defer streamClient.Close()
 
-	go func() {
-		handler(streamServer) // handler closes server stream by itself
-		log.Infoln("handler called", path)
-	}()
+	go handler(streamServer) // handler closes server stream by itself
 
 	bt, ok := data.([]byte)
 	if !ok {
@@ -363,9 +358,6 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	_ = streamClient.CloseWrite()
 
 	result, err := io.ReadAll(streamClient)
-	if err != nil {
-		log.Errorln("self request: read pipe:", err)
-	}
 	if err != nil && !errors.Is(err, io.EOF) && errors.Is(err, io.ErrClosedPipe) {
 		return result, err
 	}

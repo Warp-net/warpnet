@@ -92,8 +92,8 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 	}
 
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		log.Infoln("++++++> stream validate handler: started")
-		defer log.Infoln("++++++> stream validate handler: finished")
+		log.Infoln("stream validate handler: started")
+		defer log.Infoln("stream validate handler: finished")
 
 		if len(buf) == 0 {
 			return nil, errors.New("gossip consensus: empty data")
@@ -106,7 +106,6 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 		}
 
 		if ev.ValidatedNodeID == s.Conn().LocalPeer().String() { // no need to validate self
-			log.Warningln("validate handler: self validation is not allowed")
 			return event.Accepted, nil
 		}
 		return event.Accepted, svc.Validate(ev)
@@ -118,8 +117,8 @@ func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.Warp
 		panic("validation result handler called with nil service")
 	}
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
-		log.Infoln("======> stream validation result handler: started")
-		defer log.Infoln("======> stream validation result handler: finished")
+		log.Infoln("stream validation result handler: started")
+		defer log.Infoln("stream validation result handler: finished")
 
 		log.Infof(
 			"validation result handler: validation result received: %s, validator: %s",
@@ -134,12 +133,10 @@ func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.Warp
 		var ev event.ValidationResultEvent
 		if err := json.JSON.Unmarshal(data, &ev); err != nil {
 			log.Errorf("validation result handler: failed to decode validation result: %v %s", err, data)
-			fmt.Println("FAILED")
 			return nil, err
 		}
 		ev.ValidatorID = s.Conn().RemotePeer().String()
 		if ev.ValidatorID == s.Conn().LocalPeer().String() { // no need to validate self
-			log.Warningln("validation result handler: SELF VALIDATION NOT NEEDED")
 			return event.Accepted, nil
 		}
 		if err := svc.ValidationResult(ev); err != nil {

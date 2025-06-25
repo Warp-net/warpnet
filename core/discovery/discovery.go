@@ -382,6 +382,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
 		_ = s.nodeRepo.BlocklistExponential(pi.ID)
+		s.node.Peerstore().RemovePeer(pi.ID)
 		return
 	}
 	if err != nil {
