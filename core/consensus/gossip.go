@@ -36,26 +36,25 @@ type ConsensusBroadcaster interface {
 }
 
 type gossipConsensus struct {
-	ctx                   context.Context
-	broadcaster           ConsensusBroadcaster
-	streamer              ConsensusStreamer
-	recvChan              chan event.ValidationResultEvent
-	isClosed, isValidated atomic.Bool
-	interruptChan         chan os.Signal
-	validators            []ValidatorFunc
+	ctx                         context.Context
+	broadcaster                 ConsensusBroadcaster
+	streamer                    ConsensusStreamer
+	recvChan                    chan event.ValidationResultEvent
+	isClosed, isBg, isValidated atomic.Bool
+	interruptChan               chan os.Signal
+	validators                  []ValidatorFunc
 }
 
 func NewGossipConsensus(
 	ctx context.Context,
 	broadcaster ConsensusBroadcaster,
-	streamer ConsensusStreamer,
+
 	interruptChan chan os.Signal,
 	validators ...ValidatorFunc,
 ) *gossipConsensus {
 	gc := &gossipConsensus{
 		ctx:           ctx,
 		broadcaster:   broadcaster,
-		streamer:      streamer,
 		validators:    validators,
 		interruptChan: interruptChan,
 		recvChan:      make(chan event.ValidationResultEvent, len(broadcaster.GetConsensusTopicSubscribers())),
@@ -63,27 +62,21 @@ func NewGossipConsensus(
 	return gc
 }
 
-func (g *gossipConsensus) Start(data event.ValidationEvent) (err error) {
+func (g *gossipConsensus) Start(streamer ConsensusStreamer) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v %v", r, debug.Stack())
 		}
 	}()
+
+	g.streamer = streamer
+
 	if err := g.broadcaster.SubscribeConsensusTopic(); err != nil {
 		return err
 	}
 	log.Infoln("gossip consensus: started")
 
 	go g.listenResponses()
-
-	peers := g.broadcaster.GetConsensusTopicSubscribers()
-	if !isMeAlone(peers, g.broadcaster.OwnerID()) {
-		if err := g.AskValidation(data); err != nil {
-			return err
-		}
-	}
-	log.Infoln("gossip consensus: node is alone - go to background validation")
-	go g.runBackgroundValidation(data)
 	return nil
 }
 
@@ -159,6 +152,7 @@ func (g *gossipConsensus) listenResponses() {
 				}
 				continue
 			}
+			log.Infoln("gossip consensus: validator responded with 'valid node' result")
 			validResponses[resp.ValidatorID] = struct{}{}
 		default:
 			if total != 0 && count == total {
@@ -170,7 +164,9 @@ func (g *gossipConsensus) listenResponses() {
 	}
 }
 
-func (g *gossipConsensus) runBackgroundValidation(data event.ValidationEvent) {
+func (g *gossipConsensus) runBackgroundValidation(msg event.Message) {
+	defer g.isBg.Store(false)
+
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 
@@ -194,7 +190,11 @@ func (g *gossipConsensus) runBackgroundValidation(data event.ValidationEvent) {
 				log.Infoln("gossip consensus: node is alone")
 				continue
 			}
-			if err := g.AskValidation(data); err != nil {
+
+			msg.Timestamp = time.Now()
+			msg.MessageId = uuid.New().String()
+
+			if err := g.broadcaster.PublishValidationRequest(msg); err != nil {
 				log.Errorf("gossip consensus: ask validation: %v", err)
 				g.interruptChan <- os.Interrupt
 				return
@@ -211,6 +211,10 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
 	if g.isValidated.Load() {
 		return nil
 	}
+	if g.isBg.Load() {
+		return errors.New("gossip consensus: ask validation: already in progress")
+	}
+
 	bt, err := json.JSON.Marshal(data)
 	if err != nil {
 		return err
@@ -226,24 +230,20 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
 		MessageId: uuid.New().String(),
 	}
 
-	return g.broadcaster.PublishValidationRequest(msg)
+	peers := g.broadcaster.GetConsensusTopicSubscribers()
+	if !isMeAlone(peers, g.broadcaster.OwnerID()) {
+		if err := g.broadcaster.PublishValidationRequest(msg); err != nil {
+			return err
+		}
+	}
+	log.Infoln("gossip consensus: node is alone - go to background validation")
+	go g.runBackgroundValidation(msg)
+	g.isBg.Store(true)
+	return nil
 }
 
 // Validate is internal call from client node and from PubSub
-func (g *gossipConsensus) Validate(data []byte, s warpnet.WarpStream) (any, error) {
-	fmt.Println("gossip consensus: Validate", string(data))
-	if len(data) == 0 {
-		return nil, errors.New("gossip consensus: empty data")
-	}
-
-	var ev event.ValidationEvent
-	if err := json.JSON.Unmarshal(data, &ev); err != nil {
-		log.Errorf("pubsub: failed to decode user update message: %v %s", err, data)
-		return nil, err
-	}
-	if ev.ValidatedNodeID == s.Conn().LocalPeer().String() { // no need to validate self
-		return nil, nil
-	}
+func (g *gossipConsensus) Validate(ev event.ValidationEvent) (any, error) {
 
 	var (
 		result = event.Valid
@@ -251,7 +251,7 @@ func (g *gossipConsensus) Validate(data []byte, s warpnet.WarpStream) (any, erro
 	)
 	for _, validator := range g.validators {
 		if err := validator(ev); err != nil {
-			log.Errorf("gossip consensus: validation failed: %s", data)
+			log.Errorf("gossip consensus: validation failed: %v", ev)
 
 			result = event.Invalid
 			reason = err.Error()
@@ -277,34 +277,14 @@ func (g *gossipConsensus) Validate(data []byte, s warpnet.WarpStream) (any, erro
 	return bt, nil
 }
 
-func (g *gossipConsensus) ValidationResult(data []byte, s warpnet.WarpStream) (any, error) {
-	log.Infof("gossip consensus: validation result received: %s", data)
+func (g *gossipConsensus) ValidationResult(ev event.ValidationResultEvent) error {
 	if g.isClosed.Load() {
 		log.Infoln("gossip consensus: closed")
-		return nil, errors.New("gossip consensus: closed")
-	}
-	if len(data) == 0 {
-		fmt.Println("ValidationResult empty data")
-
-		return nil, errors.New("gossip consensus: empty data")
-	}
-
-	var ev event.ValidationResultEvent
-	if err := json.JSON.Unmarshal(data, &ev); err != nil {
-		log.Errorf("gossip consensus: failed to decode validation result: %v %s", err, data)
-		fmt.Println("FAILED")
-
-		return nil, err
-	}
-
-	ev.ValidatorID = s.Conn().RemotePeer().String()
-	if ev.ValidatorID == s.Conn().LocalPeer().String() { // no need to validate self
-		fmt.Println("SELF VALIDATION NOT NEEDED")
-		return event.Accepted, nil
+		return errors.New("gossip consensus: closed")
 	}
 
 	g.recvChan <- ev
-	return event.Accepted, nil
+	return nil
 }
 
 func (g *gossipConsensus) Close() {

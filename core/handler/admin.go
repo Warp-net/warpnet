@@ -31,6 +31,8 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -47,8 +49,8 @@ type FileSystem interface {
 }
 
 type AdminConsensusServicer interface {
-	Validate(data []byte, _ warpnet.WarpStream) (any, error)
-	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
+	Validate(ev event.ValidationEvent) (any, error)
+	ValidationResult(ev event.ValidationResultEvent) error
 }
 
 // TODO nonce cache check
@@ -88,8 +90,26 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 	if svc == nil {
 		return nil
 	}
+
 	log.Infoln("StreamValidateHandler event")
-	return svc.Validate
+
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		if len(buf) == 0 {
+			return nil, errors.New("gossip consensus: empty data")
+		}
+
+		var ev event.ValidationEvent
+		if err := json.JSON.Unmarshal(buf, &ev); err != nil {
+			log.Errorf("pubsub: failed to decode user update message: %v %s", err, buf)
+			return nil, err
+		}
+
+		if ev.ValidatedNodeID == s.Conn().LocalPeer().String() { // no need to validate self
+			log.Warningln("validate handler: self validation is not allowed")
+			return event.Accepted, nil
+		}
+		return svc.Validate(ev)
+	}
 }
 
 func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.WarpHandler {
@@ -98,5 +118,28 @@ func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.Warp
 	}
 	log.Infoln("StreamValidationResponseHandler event")
 
-	return svc.ValidationResult
+	return func(data []byte, s warpnet.WarpStream) (any, error) {
+		log.Infof("validation result handler: validation result received: %s", data)
+
+		if len(data) == 0 {
+			fmt.Println("ValidationResult empty data")
+			return nil, errors.New("validation result handler: empty data")
+		}
+
+		var ev event.ValidationResultEvent
+		if err := json.JSON.Unmarshal(data, &ev); err != nil {
+			log.Errorf("validation result handler: failed to decode validation result: %v %s", err, data)
+			fmt.Println("FAILED")
+			return nil, err
+		}
+		ev.ValidatorID = s.Conn().RemotePeer().String()
+		if ev.ValidatorID == s.Conn().LocalPeer().String() { // no need to validate self
+			log.Warningln("validation result handler: SELF VALIDATION NOT NEEDED")
+			return event.Accepted, nil
+		}
+		if err := svc.ValidationResult(ev); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
+	}
 }

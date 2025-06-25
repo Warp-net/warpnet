@@ -26,7 +26,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/bootstrap"
@@ -75,7 +74,7 @@ func main() {
 
 	seed := []byte(config.Config().Node.Seed)
 	if len(seed) == 0 {
-		seed = []byte(rand.Text())
+		seed = []byte("bootstrap-node")
 	}
 
 	privKey, err := security.GenerateKeyFromSeed(seed)

@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 package bootstrap
 
 import (
+	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -54,13 +55,10 @@ type ProviderCloser interface {
 	io.Closer
 }
 
-type ClientNodeStreamer interface {
-	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
-}
-
 type ConsensusServicer interface {
-	Start(data event.ValidationEvent) error
+	Start(streamer consensus.ConsensusStreamer) (err error)
 	Close()
-	Validate(data []byte, _ warpnet.WarpStream) (any, error)
-	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
+	AskValidation(data event.ValidationEvent) error
+	Validate(ev event.ValidationEvent) (any, error)
+	ValidationResult(ev event.ValidationResultEvent) error
 }

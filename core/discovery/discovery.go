@@ -263,19 +263,19 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 	return
 }
 
-func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func(*warpnet.WarpMessage) error {
-	return func(msg *warpnet.WarpMessage) error {
-		if msg == nil {
+func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func([]byte) error {
+	return func(data []byte) error {
+		if len(data) == 0 {
 			return nil
 		}
 
 		var discoveryAddrInfos []warpnet.WarpPubInfo
 
-		outerErr := json.JSON.Unmarshal(msg.Data, &discoveryAddrInfos)
+		outerErr := json.JSON.Unmarshal(data, &discoveryAddrInfos)
 		if outerErr != nil {
 			var single warpnet.WarpPubInfo
-			if innerErr := json.JSON.Unmarshal(msg.Data, &single); innerErr != nil {
-				return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, msg.Data)
+			if innerErr := json.JSON.Unmarshal(data, &single); innerErr != nil {
+				return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, data)
 			}
 			discoveryAddrInfos = []warpnet.WarpPubInfo{single}
 		}
@@ -285,7 +285,7 @@ func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func(*w
 
 		for _, info := range discoveryAddrInfos {
 			if info.ID == "" {
-				log.Errorf("pubsub: discovery: message has no ID: %s", string(msg.Data))
+				log.Errorf("pubsub: discovery: message has no ID: %s", string(data))
 				continue
 			}
 			if info.ID == s.node.NodeInfo().ID {

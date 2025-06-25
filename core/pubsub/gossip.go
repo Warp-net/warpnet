@@ -62,7 +62,7 @@ type GossipNodeConnector interface {
 	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
-type topicHandler func(msg *pubsub.Message) error
+type topicHandler func(data []byte) error
 
 type gossip struct {
 	ctx    context.Context
@@ -176,7 +176,7 @@ func (g *gossip) runListener() error {
 				log.Errorf("gossip: failed to listen subscription to topic: %v", err)
 				continue
 			}
-			if msg.Topic == nil {
+			if msg == nil || msg.Topic == nil {
 				continue
 			}
 			log.Infof("gossip: reseived message for topic %s", *msg.Topic)
@@ -186,12 +186,12 @@ func (g *gossip) runListener() error {
 			g.mx.RUnlock()
 			if !ok {
 				// default behavior
-				if err := g.selfStream(msg); err != nil {
+				if err := g.selfStream(msg.Data); err != nil {
 					log.Errorf("gossip: self stream: %v", err)
 				}
 				continue
 			}
-			if err := handlerF(msg); err != nil {
+			if err := handlerF(msg.Data); err != nil {
 				log.Errorf("gossip: failed to handle message from topic %q: %v", *msg.Topic, err)
 				continue
 			}
@@ -388,10 +388,10 @@ func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
 	return nil
 }
 
-func (g *gossip) selfStream(msg *pubsub.Message) error {
+func (g *gossip) selfStream(data []byte) error {
 	var simulatedStreamMessage event.Message
-	if err := json.JSON.Unmarshal(msg.Data, &simulatedStreamMessage); err != nil {
-		log.Errorf("pubsub: failed to decode user update message: %v %s", err, msg.Data)
+	if err := json.JSON.Unmarshal(data, &simulatedStreamMessage); err != nil {
+		log.Errorf("pubsub: failed to decode user update message: %v %s", err, data)
 		return err
 	}
 	if simulatedStreamMessage.NodeId == g.node.NodeInfo().ID.String() {
@@ -401,7 +401,7 @@ func (g *gossip) selfStream(msg *pubsub.Message) error {
 
 	if simulatedStreamMessage.Path == "" {
 		log.Warningln("pubsub: user update message has no destination")
-		return fmt.Errorf("pubsub: user update message has no path: %s", string(msg.Data))
+		return fmt.Errorf("pubsub: user update message has no path: %s", string(data))
 	}
 	if simulatedStreamMessage.Body == nil {
 		log.Warningln("pubsub: handle user update: same node ID")

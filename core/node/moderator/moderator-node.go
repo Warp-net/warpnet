@@ -160,7 +160,7 @@ func NewModeratorNode(
 	}
 
 	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, mn, interruptChan, func(ev event.ValidationEvent) error {
+		ctx, pubsubService, interruptChan, func(ev event.ValidationEvent) error {
 			if len(selfHashHex) == 0 {
 				return errors.New("empty codebase hash")
 			}
@@ -238,6 +238,18 @@ func (mn *ModeratorNode) Start() (err error) {
 	mn.pubsubService.Run(mn)
 
 	nodeInfo := mn.NodeInfo()
+
+	if err := mn.consensusService.Start(mn); err != nil {
+		return err
+	}
+
+	ev := event.ValidationEvent{
+		ValidatedNodeID: nodeInfo.ID.String(),
+		SelfHashHex:     mn.selfHashHex,
+	}
+	if err := mn.consensusService.AskValidation(ev); err != nil {
+		return err
+	}
 
 	println()
 	fmt.Printf(

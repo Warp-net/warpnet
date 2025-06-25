@@ -174,7 +174,7 @@ func NewMemberNode(
 	}
 
 	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, mn, interruptChan,
+		ctx, pubsubService, interruptChan,
 		nodeRepo.ValidateSelfHash,
 		userRepo.ValidateUserID,
 	)
@@ -199,11 +199,16 @@ func (m *MemberNode) Start() error {
 
 	ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
 
-	if err := m.consensusService.Start(event.ValidationEvent{
+	if err := m.consensusService.Start(m); err != nil {
+		return err
+	}
+
+	ev := event.ValidationEvent{
 		ValidatedNodeID: nodeInfo.ID.String(),
 		SelfHashHex:     m.selfHashHex,
 		User:            &ownerUser,
-	}); err != nil {
+	}
+	if err := m.consensusService.AskValidation(ev); err != nil {
 		return err
 	}
 

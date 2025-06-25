@@ -134,7 +134,7 @@ func NewBootstrapNode(
 	}
 
 	bn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, bn, interruptChan, func(ev event.ValidationEvent) error {
+		ctx, pubsubService, interruptChan, func(ev event.ValidationEvent) error {
 			if len(selfHashHex) == 0 {
 				return errors.New("empty codebase hash")
 			}
@@ -185,15 +185,19 @@ func (bn *BootstrapNode) Start() error {
 		return err
 	}
 
-	if err := bn.consensusService.Start(event.ValidationEvent{
-		ValidatedNodeID: bn.node.BaseNodeInfo().ID.String(),
-		SelfHashHex:     bn.selfHashHex,
-	}); err != nil {
+	nodeInfo := bn.NodeInfo()
+
+	if err := bn.consensusService.Start(bn); err != nil {
 		return err
 	}
 
-	nodeInfo := bn.NodeInfo()
-
+	ev := event.ValidationEvent{
+		ValidatedNodeID: nodeInfo.ID.String(),
+		SelfHashHex:     bn.selfHashHex,
+	}
+	if err := bn.consensusService.AskValidation(ev); err != nil {
+		return err
+	}
 	println()
 	fmt.Printf(
 		"\033[1mBOOTSTRAP NODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",

@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 package member
 
 import (
+	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/pubsub"
@@ -118,10 +119,11 @@ type Storer interface {
 }
 
 type ConsensusServicer interface {
-	Start(data event.ValidationEvent) error
+	Start(streamer consensus.ConsensusStreamer) (err error)
 	Close()
-	Validate(data []byte, _ warpnet.WarpStream) (any, error)
-	ValidationResult(data []byte, s warpnet.WarpStream) (any, error)
+	AskValidation(data event.ValidationEvent) error
+	Validate(ev event.ValidationEvent) (any, error)
+	ValidationResult(ev event.ValidationResultEvent) error
 }
 
 type PseudoStreamer interface {
