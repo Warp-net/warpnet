@@ -243,15 +243,14 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
 }
 
 // Validate is internal call from client node and from PubSub
-func (g *gossipConsensus) Validate(ev event.ValidationEvent) (any, error) {
-
+func (g *gossipConsensus) Validate(ev event.ValidationEvent) error {
 	var (
 		result = event.Valid
 		reason string
 	)
 	for _, validator := range g.validators {
 		if err := validator(ev); err != nil {
-			log.Errorf("gossip consensus: validation failed: %v", ev)
+			log.Errorf("gossip consensus: validator applied: %s", err.Error())
 
 			result = event.Invalid
 			reason = err.Error()
@@ -260,7 +259,7 @@ func (g *gossipConsensus) Validate(ev event.ValidationEvent) (any, error) {
 	}
 
 	log.Infof("gossip consensus: sending validation result to: %s", ev.ValidatedNodeID)
-	bt, err := g.streamer.GenericStream(
+	_, err := g.streamer.GenericStream(
 		ev.ValidatedNodeID,
 		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
 		event.ValidationResultEvent{
@@ -268,13 +267,7 @@ func (g *gossipConsensus) Validate(ev event.ValidationEvent) (any, error) {
 			ValidatedID: ev.ValidatedNodeID,
 			Reason:      &reason,
 		})
-	if err != nil {
-		return bt, fmt.Errorf("gossip consensus: failed to send validation result: %v", err)
-	}
-
-	fmt.Println("gossip consensus: validate response:", string(bt))
-
-	return bt, nil
+	return err
 }
 
 func (g *gossipConsensus) ValidationResult(ev event.ValidationResultEvent) error {

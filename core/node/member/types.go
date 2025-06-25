@@ -122,7 +122,7 @@ type ConsensusServicer interface {
 	Start(streamer consensus.ConsensusStreamer) (err error)
 	Close()
 	AskValidation(data event.ValidationEvent) error
-	Validate(ev event.ValidationEvent) (any, error)
+	Validate(ev event.ValidationEvent) error
 	ValidationResult(ev event.ValidationResultEvent) error
 }
 

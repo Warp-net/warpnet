@@ -43,7 +43,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	log "github.com/sirupsen/logrus"
 	"io"
-	"net"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -331,32 +330,29 @@ func (n *WarpNode) Node() warpnet.P2PNode {
 }
 
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	if data == nil {
+		return nil, errors.New("empty data")
+	}
 	handler, ok := n.handlers[protocol.ID(path)]
 	if !ok {
 		return nil, errors.Errorf("no handler for path %s", path)
 	}
 
-	log.Infoln("SelfStream called", path)
+	log.Infoln("self stream called", path)
 
-	cli, server := net.Pipe()
-	defer func() {
-		server.Close()
-		cli.Close()
+	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
+	defer streamClient.Close()
+
+	go func() {
+		handler(streamServer) // handler closes server stream by itself
+		log.Infoln("handler called", path)
 	}()
 
-	streamClient := &stream.LoopbackStream{C: cli, Proto: protocol.ID(path)}
-
-	go handler(&stream.LoopbackStream{C: server, Proto: protocol.ID(path)})
-
-	var bt []byte
-	if data != nil {
-		var ok bool
-		bt, ok = data.([]byte)
-		if !ok {
-			bt, err = json.JSON.Marshal(data)
-			if err != nil {
-				return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
-			}
+	bt, ok := data.([]byte)
+	if !ok {
+		bt, err = json.JSON.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
 		}
 	}
 
@@ -364,7 +360,16 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		return nil, err
 	}
 
-	return io.ReadAll(streamClient)
+	_ = streamClient.CloseWrite()
+
+	result, err := io.ReadAll(streamClient)
+	if err != nil {
+		log.Errorln("self request: read pipe:", err)
+	}
+	if err != nil && !errors.Is(err, io.EOF) && errors.Is(err, io.ErrClosedPipe) {
+		return result, err
+	}
+	return result, nil
 }
 
 const ErrSelfRequest = warpnet.WarpError("self request is not allowed")

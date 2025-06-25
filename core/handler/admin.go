@@ -49,7 +49,7 @@ type FileSystem interface {
 }
 
 type AdminConsensusServicer interface {
-	Validate(ev event.ValidationEvent) (any, error)
+	Validate(ev event.ValidationEvent) error
 	ValidationResult(ev event.ValidationResultEvent) error
 }
 
@@ -88,12 +88,12 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 
 func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 	if svc == nil {
-		return nil
+		panic("validate handler called with nil service")
 	}
 
-	log.Infoln("StreamValidateHandler event")
-
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		log.Infoln("StreamValidateHandler event", string(buf))
+
 		if len(buf) == 0 {
 			return nil, errors.New("gossip consensus: empty data")
 		}
@@ -108,7 +108,7 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 			log.Warningln("validate handler: self validation is not allowed")
 			return event.Accepted, nil
 		}
-		return svc.Validate(ev)
+		return event.Accepted, svc.Validate(ev)
 	}
 }
 

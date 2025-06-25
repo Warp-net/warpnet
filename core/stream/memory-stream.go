@@ -27,6 +27,7 @@ package stream
 import (
 	"context"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -37,23 +38,26 @@ import (
 )
 
 type LoopbackConn struct {
-	Proto    protocol.ID
-	PeerId   peer.ID
-	C        net.Conn
-	isClosed bool
+	Proto       protocol.ID
+	LocalPeerID warpnet.WarpPeerID
+	WriteConn   net.Conn
+	ReadConn    net.Conn
+	isClosed    bool
 }
 
 func (l *LoopbackConn) Close() error {
+	_ = l.WriteConn.Close()
+	_ = l.ReadConn.Close()
 	l.isClosed = true
 	return nil
 }
 
 func (l *LoopbackConn) LocalPeer() peer.ID {
-	return l.PeerId
+	return l.LocalPeerID
 }
 
 func (l *LoopbackConn) RemotePeer() peer.ID {
-	return l.PeerId
+	return l.LocalPeerID
 }
 
 func (l *LoopbackConn) RemotePublicKey() p2pCrypto.PubKey {
@@ -95,24 +99,30 @@ func (l *LoopbackConn) Scope() network.ConnScope {
 }
 
 func (l *LoopbackConn) CloseWithError(errCode network.ConnErrorCode) error {
+	_ = l.ReadConn.Close()
+	_ = l.WriteConn.Close()
 	return fmt.Errorf("connection closed with %v", errCode)
 }
 
 func (l *LoopbackConn) ID() string {
-	return l.PeerId.String()
+	return l.LocalPeerID.String()
 }
 
 func (l *LoopbackConn) NewStream(_ context.Context) (network.Stream, error) {
 	return &LoopbackStream{
-		C:     l.C,
-		Proto: l.Proto,
+		WriteConn:   l.WriteConn,
+		ReadConn:    l.ReadConn,
+		Proto:       l.Proto,
+		LocalPeerID: l.LocalPeerID,
 	}, nil
 }
 
 func (l *LoopbackConn) GetStreams() []network.Stream {
 	return []network.Stream{&LoopbackStream{
-		C:     l.C,
-		Proto: l.Proto,
+		WriteConn:   l.WriteConn,
+		ReadConn:    l.ReadConn,
+		Proto:       l.Proto,
+		LocalPeerID: l.LocalPeerID,
 	}}
 }
 
@@ -121,8 +131,10 @@ func (l *LoopbackConn) IsClosed() bool {
 }
 
 type LoopbackStream struct {
-	C     net.Conn
-	Proto protocol.ID
+	WriteConn   net.Conn
+	ReadConn    net.Conn
+	Proto       warpnet.WarpProtocolID
+	LocalPeerID warpnet.WarpPeerID
 }
 
 func (s *LoopbackStream) Protocol() protocol.ID           { return s.Proto }
@@ -130,20 +142,41 @@ func (s *LoopbackStream) SetProtocol(p protocol.ID) error { s.Proto = p; return 
 func (s *LoopbackStream) Stat() network.Stats             { return network.Stats{Direction: network.DirInbound} }
 func (s *LoopbackStream) Conn() network.Conn {
 	return &LoopbackConn{
-		C: s.C, Proto: s.Proto,
+		WriteConn: s.WriteConn, ReadConn: s.ReadConn, Proto: s.Proto, LocalPeerID: s.LocalPeerID,
 	}
 }
-func (s *LoopbackStream) CloseRead() error  { return nil }
-func (s *LoopbackStream) CloseWrite() error { return nil }
+func (s *LoopbackStream) CloseRead() error  { return s.ReadConn.Close() }
+func (s *LoopbackStream) CloseWrite() error { return s.WriteConn.Close() }
 func (s *LoopbackStream) Reset() error      { return nil }
 func (s *LoopbackStream) ResetWithError(_ network.StreamErrorCode) error {
 	return nil
 }
-func (s *LoopbackStream) Read(p []byte) (int, error)         { return s.C.Read(p) }
-func (s *LoopbackStream) Write(p []byte) (int, error)        { return s.C.Write(p) }
-func (s *LoopbackStream) Close() error                       { return nil }
-func (s *LoopbackStream) SetDeadline(t time.Time) error      { return s.C.SetDeadline(t) }
-func (s *LoopbackStream) SetReadDeadline(t time.Time) error  { return s.C.SetReadDeadline(t) }
-func (s *LoopbackStream) SetWriteDeadline(t time.Time) error { return s.C.SetWriteDeadline(t) }
+func (s *LoopbackStream) Read(p []byte) (int, error)  { return s.ReadConn.Read(p) }
+func (s *LoopbackStream) Write(p []byte) (int, error) { return s.WriteConn.Write(p) }
+func (s *LoopbackStream) Close() error {
+	_ = s.CloseWrite()
+	_ = s.CloseRead()
+	return nil
+}
+
+func (s *LoopbackStream) SetDeadline(t time.Time) error {
+	_ = s.WriteConn.SetDeadline(t)
+	return s.ReadConn.SetDeadline(t)
+}
+func (s *LoopbackStream) SetReadDeadline(t time.Time) error  { return s.ReadConn.SetReadDeadline(t) }
+func (s *LoopbackStream) SetWriteDeadline(t time.Time) error { return s.WriteConn.SetWriteDeadline(t) }
 func (s *LoopbackStream) ID() string                         { return "loopback" }
 func (s *LoopbackStream) Scope() network.StreamScope         { return nil } // optionally implement your own
+
+func NewLoopbackStream(nodeId warpnet.WarpPeerID, proto warpnet.WarpProtocolID) (r *LoopbackStream, w *LoopbackStream) {
+	reader1, writer2 := net.Pipe()
+	reader2, writer1 := net.Pipe()
+
+	reader := &LoopbackStream{
+		ReadConn: reader1, WriteConn: writer1, LocalPeerID: nodeId, Proto: proto}
+
+	writer := &LoopbackStream{
+		ReadConn: reader2, WriteConn: writer2, LocalPeerID: nodeId, Proto: proto}
+
+	return reader, writer
+}
