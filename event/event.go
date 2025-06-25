@@ -387,7 +387,7 @@ const (
 	Valid   ValidationResult = 1
 )
 
-type ValidationEventResponse struct {
+type ValidationResultEvent struct {
 	Result      ValidationResult `json:"result"`
 	Reason      *string          `json:"reason"`
 	ValidatedID string           `json:"validated_id"`

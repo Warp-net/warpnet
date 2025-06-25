@@ -44,9 +44,8 @@ type LoopbackConn struct {
 }
 
 func (l *LoopbackConn) Close() error {
-	err := l.C.Close()
 	l.isClosed = true
-	return err
+	return nil
 }
 
 func (l *LoopbackConn) LocalPeer() peer.ID {
@@ -105,17 +104,15 @@ func (l *LoopbackConn) ID() string {
 
 func (l *LoopbackConn) NewStream(_ context.Context) (network.Stream, error) {
 	return &LoopbackStream{
-		PeerId: l.PeerId,
-		C:      l.C,
-		Proto:  l.Proto,
+		C:     l.C,
+		Proto: l.Proto,
 	}, nil
 }
 
 func (l *LoopbackConn) GetStreams() []network.Stream {
 	return []network.Stream{&LoopbackStream{
-		PeerId: l.PeerId,
-		C:      l.C,
-		Proto:  l.Proto,
+		C:     l.C,
+		Proto: l.Proto,
 	}}
 }
 
@@ -124,9 +121,8 @@ func (l *LoopbackConn) IsClosed() bool {
 }
 
 type LoopbackStream struct {
-	PeerId peer.ID
-	C      net.Conn
-	Proto  protocol.ID
+	C     net.Conn
+	Proto protocol.ID
 }
 
 func (s *LoopbackStream) Protocol() protocol.ID           { return s.Proto }
@@ -134,20 +130,20 @@ func (s *LoopbackStream) SetProtocol(p protocol.ID) error { s.Proto = p; return 
 func (s *LoopbackStream) Stat() network.Stats             { return network.Stats{Direction: network.DirInbound} }
 func (s *LoopbackStream) Conn() network.Conn {
 	return &LoopbackConn{
-		PeerId: s.PeerId, C: s.C, Proto: s.Proto,
+		C: s.C, Proto: s.Proto,
 	}
 }
-func (s *LoopbackStream) CloseRead() error  { return s.Close() }
-func (s *LoopbackStream) CloseWrite() error { return s.Close() }
-func (s *LoopbackStream) Reset() error      { return s.Close() }
+func (s *LoopbackStream) CloseRead() error  { return nil }
+func (s *LoopbackStream) CloseWrite() error { return nil }
+func (s *LoopbackStream) Reset() error      { return nil }
 func (s *LoopbackStream) ResetWithError(_ network.StreamErrorCode) error {
-	return s.Close()
+	return nil
 }
 func (s *LoopbackStream) Read(p []byte) (int, error)         { return s.C.Read(p) }
 func (s *LoopbackStream) Write(p []byte) (int, error)        { return s.C.Write(p) }
-func (s *LoopbackStream) Close() error                       { return s.C.Close() }
+func (s *LoopbackStream) Close() error                       { return nil }
 func (s *LoopbackStream) SetDeadline(t time.Time) error      { return s.C.SetDeadline(t) }
 func (s *LoopbackStream) SetReadDeadline(t time.Time) error  { return s.C.SetReadDeadline(t) }
 func (s *LoopbackStream) SetWriteDeadline(t time.Time) error { return s.C.SetWriteDeadline(t) }
-func (s *LoopbackStream) ID() string                         { return s.PeerId.String() }
+func (s *LoopbackStream) ID() string                         { return "loopback" }
 func (s *LoopbackStream) Scope() network.StreamScope         { return nil } // optionally implement your own

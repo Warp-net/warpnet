@@ -141,7 +141,7 @@ func NewBootstrapNode(
 			if selfHashHex == ev.SelfHashHex {
 				return nil
 			}
-			return errors.New("moderator self hash is not valid")
+			return errors.New("self hash is not valid")
 		},
 	)
 

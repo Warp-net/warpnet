@@ -338,11 +338,15 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 
 	log.Infoln("SelfStream called", path)
 
-	c1, c2 := net.Pipe()
-	streamClient := &stream.LoopbackStream{PeerId: n.node.ID(), C: c1, Proto: protocol.ID(path)}
-	defer streamClient.Close()
+	cli, server := net.Pipe()
+	defer func() {
+		server.Close()
+		cli.Close()
+	}()
 
-	go handler(&stream.LoopbackStream{PeerId: n.node.ID(), C: c2, Proto: protocol.ID(path)})
+	streamClient := &stream.LoopbackStream{C: cli, Proto: protocol.ID(path)}
+
+	go handler(&stream.LoopbackStream{C: server, Proto: protocol.ID(path)})
 
 	var bt []byte
 	if data != nil {
@@ -359,7 +363,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	if _, err := streamClient.Write(bt); err != nil {
 		return nil, err
 	}
-	streamClient.SetReadDeadline(time.Now().Add(10 * time.Second))
+
 	return io.ReadAll(streamClient)
 }
 

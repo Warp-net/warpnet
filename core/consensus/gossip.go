@@ -39,7 +39,7 @@ type gossipConsensus struct {
 	ctx                   context.Context
 	broadcaster           ConsensusBroadcaster
 	streamer              ConsensusStreamer
-	recvChan              chan event.ValidationEventResponse
+	recvChan              chan event.ValidationResultEvent
 	isClosed, isValidated atomic.Bool
 	interruptChan         chan os.Signal
 	validators            []ValidatorFunc
@@ -58,7 +58,7 @@ func NewGossipConsensus(
 		streamer:      streamer,
 		validators:    validators,
 		interruptChan: interruptChan,
-		recvChan:      make(chan event.ValidationEventResponse, len(broadcaster.GetConsensusTopicSubscribers())),
+		recvChan:      make(chan event.ValidationResultEvent, len(broadcaster.GetConsensusTopicSubscribers())),
 	}
 	return gc
 }
@@ -139,6 +139,7 @@ func (g *gossipConsensus) listenResponses() {
 			log.Infoln("gossip consensus: listen: context done")
 			return
 		case resp, ok := <-g.recvChan:
+			fmt.Println("================ gossip consensus: validation response received")
 			if !ok {
 				return
 			}
@@ -262,18 +263,18 @@ func (g *gossipConsensus) Validate(data []byte, s warpnet.WarpStream) (any, erro
 	bt, err := g.streamer.GenericStream(
 		ev.ValidatedNodeID,
 		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-		event.ValidationEventResponse{
+		event.ValidationResultEvent{
 			Result:      result,
 			ValidatedID: ev.ValidatedNodeID,
 			Reason:      &reason,
 		})
 	if err != nil {
-		log.Errorf("gossip consensus: failed to send validation result: %v", err)
+		return bt, fmt.Errorf("gossip consensus: failed to send validation result: %v", err)
 	}
 
-	fmt.Println("gossip consensus: Validate response!!!!!!", string(bt))
+	fmt.Println("gossip consensus: validate response:", string(bt))
 
-	return bt, err
+	return bt, nil
 }
 
 func (g *gossipConsensus) ValidationResult(data []byte, s warpnet.WarpStream) (any, error) {
@@ -283,22 +284,27 @@ func (g *gossipConsensus) ValidationResult(data []byte, s warpnet.WarpStream) (a
 		return nil, errors.New("gossip consensus: closed")
 	}
 	if len(data) == 0 {
+		fmt.Println("ValidationResult empty data")
+
 		return nil, errors.New("gossip consensus: empty data")
 	}
 
-	var resp event.ValidationEventResponse
-	if err := json.JSON.Unmarshal(data, &resp); err != nil {
+	var ev event.ValidationResultEvent
+	if err := json.JSON.Unmarshal(data, &ev); err != nil {
 		log.Errorf("gossip consensus: failed to decode validation result: %v %s", err, data)
+		fmt.Println("FAILED")
+
 		return nil, err
 	}
 
-	resp.ValidatorID = s.Conn().RemotePeer().String()
-	if resp.ValidatorID == s.Conn().LocalPeer().String() { // no need to validate self
-		return []byte("noop"), nil
+	ev.ValidatorID = s.Conn().RemotePeer().String()
+	if ev.ValidatorID == s.Conn().LocalPeer().String() { // no need to validate self
+		fmt.Println("SELF VALIDATION NOT NEEDED")
+		return event.Accepted, nil
 	}
 
-	g.recvChan <- resp
-	return []byte("noop"), nil
+	g.recvChan <- ev
+	return event.Accepted, nil
 }
 
 func (g *gossipConsensus) Close() {
