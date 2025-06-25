@@ -132,27 +132,30 @@ func (g *gossipConsensus) listenResponses() {
 			log.Infoln("gossip consensus: listen: context done")
 			return
 		case resp, ok := <-g.recvChan:
-			fmt.Println("================ gossip consensus: validation response received")
+			log.Infoln("gossip consensus: listener: validation response received")
 			if !ok {
+				log.Warningln("gossip consensus: listener: channel closed")
 				return
 			}
 			if _, isKnown := knownPeers[resp.ValidatorID]; !isKnown {
-				log.Infof("gossip consensus: node %s is unknown", resp.ValidatorID)
+				log.Infof("gossip consensus: listener: node %s is unknown", resp.ValidatorID)
 				continue
 			}
 			if _, isSeen := validResponses[resp.ValidatorID]; isSeen {
-				log.Infof("gossip consensus: node %s is already participated", resp.ValidatorID)
+				log.Infof("gossip consensus: listener: node %s is already participated", resp.ValidatorID)
 				continue
 			}
 			if resp.Result == event.Invalid {
 				if resp.Reason != nil {
 					log.Errorf(
-						"gossip consensus: validator responded with 'invalid node' result: %s", *resp.Reason,
+						"gossip consensus: listener: validator responded with 'invalid node' result: %s", *resp.Reason,
 					)
 				}
 				continue
 			}
+			fmt.Println()
 			log.Infoln("gossip consensus: validator responded with 'valid node' result")
+			fmt.Println()
 			validResponses[resp.ValidatorID] = struct{}{}
 		default:
 			if total != 0 && count == total {

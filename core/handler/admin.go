@@ -119,7 +119,10 @@ func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.Warp
 	log.Infoln("StreamValidationResponseHandler event")
 
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
-		log.Infof("validation result handler: validation result received: %s", data)
+		log.Infof(
+			"validation result handler: validation result received: %s, validator: %s",
+			data, s.Conn().RemotePeer().String(),
+		)
 
 		if len(data) == 0 {
 			fmt.Println("ValidationResult empty data")
