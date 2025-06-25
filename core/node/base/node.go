@@ -341,6 +341,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
 	defer streamClient.Close()
 
+	_ = streamServer.SetDeadline(time.Now().Add(time.Minute))
 	go handler(streamServer) // handler closes server stream by itself
 
 	bt, ok := data.([]byte)
@@ -350,6 +351,8 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 			return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
 		}
 	}
+
+	_ = streamClient.SetDeadline(time.Now().Add(time.Minute))
 
 	if _, err := streamClient.Write(bt); err != nil {
 		return nil, err
