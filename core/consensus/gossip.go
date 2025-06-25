@@ -57,7 +57,7 @@ func NewGossipConsensus(
 		broadcaster:   broadcaster,
 		validators:    validators,
 		interruptChan: interruptChan,
-		recvChan:      make(chan event.ValidationResultEvent, len(broadcaster.GetConsensusTopicSubscribers())),
+		recvChan:      make(chan event.ValidationResultEvent),
 	}
 	return gc
 }
@@ -74,6 +74,13 @@ func (g *gossipConsensus) Start(streamer ConsensusStreamer) (err error) {
 	if err := g.broadcaster.SubscribeConsensusTopic(); err != nil {
 		return err
 	}
+
+	subsNum := len(g.broadcaster.GetConsensusTopicSubscribers())
+	if subsNum == 0 {
+		subsNum = 1
+	}
+	g.recvChan = make(chan event.ValidationResultEvent, subsNum)
+
 	log.Infoln("gossip consensus: started")
 
 	go g.listenResponses()
@@ -82,7 +89,7 @@ func (g *gossipConsensus) Start(streamer ConsensusStreamer) (err error) {
 
 func (g *gossipConsensus) listenResponses() {
 	var (
-		timeout        = time.Minute * 5
+		timeout        = time.Minute * 50
 		timeoutTicker  = time.NewTicker(timeout)
 		runTicker      = time.NewTicker(time.Minute)
 		knownPeers     = make(map[string]struct{})
@@ -167,6 +174,41 @@ func (g *gossipConsensus) listenResponses() {
 	}
 }
 
+func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
+	if g.isValidated.Load() {
+		return nil
+	}
+	if g.isBg.Load() {
+		return errors.New("gossip consensus: ask validation: already in progress")
+	}
+
+	bt, err := json.JSON.Marshal(data)
+	if err != nil {
+		return err
+	}
+	body := jsoniter.RawMessage(bt)
+
+	msg := event.Message{
+		Body:      &body,
+		Path:      event.PRIVATE_POST_NODE_VALIDATE,
+		NodeId:    g.broadcaster.OwnerID(),
+		Timestamp: time.Now(),
+		Version:   "0.0.0", // TODO manage protocol versions properly
+		MessageId: uuid.New().String(),
+	}
+
+	peers := g.broadcaster.GetConsensusTopicSubscribers()
+	if !isMeAlone(peers, g.broadcaster.OwnerID()) {
+		if err := g.broadcaster.PublishValidationRequest(msg); err != nil {
+			return err
+		}
+	}
+	log.Infoln("gossip consensus: node is alone - go to background validation")
+	go g.runBackgroundValidation(msg)
+	g.isBg.Store(true)
+	return nil
+}
+
 func (g *gossipConsensus) runBackgroundValidation(msg event.Message) {
 	defer g.isBg.Store(false)
 
@@ -208,41 +250,6 @@ func (g *gossipConsensus) runBackgroundValidation(msg event.Message) {
 
 func isMeAlone(peers []warpnet.WarpAddrInfo, ownerId string) bool {
 	return len(peers) == 0 || (len(peers) == 1 && peers[0].ID.String() == ownerId)
-}
-
-func (g *gossipConsensus) AskValidation(data event.ValidationEvent) error {
-	if g.isValidated.Load() {
-		return nil
-	}
-	if g.isBg.Load() {
-		return errors.New("gossip consensus: ask validation: already in progress")
-	}
-
-	bt, err := json.JSON.Marshal(data)
-	if err != nil {
-		return err
-	}
-	body := jsoniter.RawMessage(bt)
-
-	msg := event.Message{
-		Body:      &body,
-		Path:      event.PRIVATE_POST_NODE_VALIDATE,
-		NodeId:    g.broadcaster.OwnerID(),
-		Timestamp: time.Now(),
-		Version:   "0.0.0", // TODO manage protocol versions properly
-		MessageId: uuid.New().String(),
-	}
-
-	peers := g.broadcaster.GetConsensusTopicSubscribers()
-	if !isMeAlone(peers, g.broadcaster.OwnerID()) {
-		if err := g.broadcaster.PublishValidationRequest(msg); err != nil {
-			return err
-		}
-	}
-	log.Infoln("gossip consensus: node is alone - go to background validation")
-	go g.runBackgroundValidation(msg)
-	g.isBg.Store(true)
-	return nil
 }
 
 // Validate is internal call from client node and from PubSub

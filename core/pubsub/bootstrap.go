@@ -78,7 +78,7 @@ func (g *bootstrapPubSub) SubscribeConsensusTopic() error {
 
 func (g *bootstrapPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
 	if g == nil || !g.pubsub.isGossipRunning() {
-		return []warpnet.WarpAddrInfo{}
+		panic("bootstrap pubsub: get consensus subscribers: service not initialized")
 	}
 
 	return g.pubsub.subscribers(pubSubConsensusTopic)
