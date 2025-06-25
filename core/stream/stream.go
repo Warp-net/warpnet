@@ -35,6 +35,7 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"time"
 )
 
@@ -119,18 +120,12 @@ func send(
 	}
 
 	buf := bytes.NewBuffer(nil)
-	num, err := buf.ReadFrom(rw)
-	if err != nil {
+	_, err = buf.ReadFrom(rw)
+	if err != nil && !errors.Is(err, io.EOF) {
 		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
 		return nil, fmt.Errorf("stream: reading response from %s: %w", serverInfo.ID.String(), err)
 	}
 
-	if num == 0 {
-		return nil, fmt.Errorf(
-			"stream: protocol %s, peer ID %s, addresses %v: empty response",
-			r.ProtocolID(), serverInfo.ID.String(), serverInfo.Addrs,
-		)
-	}
 	return buf.Bytes(), nil
 }
 
