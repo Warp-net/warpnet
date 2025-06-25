@@ -115,9 +115,8 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 
 func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 	if svc == nil {
-		return nil
+		panic("validation result handler called with nil service")
 	}
-
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
 		log.Infoln("======> stream validation result handler: started")
 		defer log.Infoln("======> stream validation result handler: finished")

@@ -48,7 +48,6 @@ type gossipConsensus struct {
 func NewGossipConsensus(
 	ctx context.Context,
 	broadcaster ConsensusBroadcaster,
-
 	interruptChan chan os.Signal,
 	validators ...ValidatorFunc,
 ) *gossipConsensus {
@@ -89,10 +88,10 @@ func (g *gossipConsensus) Start(streamer ConsensusStreamer) (err error) {
 
 func (g *gossipConsensus) listenResponses() {
 	var (
-		timeout        = time.Minute * 50
-		timeoutTicker  = time.NewTicker(timeout)
-		runTicker      = time.NewTicker(time.Minute)
-		knownPeers     = make(map[string]struct{})
+		timeout       = time.Minute * 50
+		timeoutTicker = time.NewTicker(timeout)
+		runTicker     = time.NewTicker(time.Minute)
+		//knownPeers     = make(map[string]struct{})
 		validResponses = map[string]struct{}{}
 	)
 	defer timeoutTicker.Stop()
@@ -110,9 +109,9 @@ func (g *gossipConsensus) listenResponses() {
 			timeoutTicker.Reset(timeout)
 			continue
 		}
-		for _, id := range peers {
-			knownPeers[id.String()] = struct{}{}
-		}
+		//for _, id := range peers {
+		//	knownPeers[id.String()] = struct{}{}
+		//}
 		var (
 			total = len(peers)
 			count = len(validResponses)
@@ -144,10 +143,10 @@ func (g *gossipConsensus) listenResponses() {
 				log.Warningln("gossip consensus: listener: channel closed")
 				return
 			}
-			if _, isKnown := knownPeers[resp.ValidatorID]; !isKnown {
-				log.Infof("gossip consensus: listener: node %s is unknown", resp.ValidatorID)
-				continue
-			}
+			//if _, isKnown := knownPeers[resp.ValidatorID]; !isKnown {
+			//	log.Infof("gossip consensus: listener: node %s is unknown", resp.ValidatorID)
+			//	continue
+			//}
 			if _, isSeen := validResponses[resp.ValidatorID]; isSeen {
 				log.Infof("gossip consensus: listener: node %s is already participated", resp.ValidatorID)
 				continue
