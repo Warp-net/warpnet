@@ -65,6 +65,19 @@ func (g *bootstrapPubSub) PublishValidationRequest(msg event.Message) (err error
 	return g.pubsub.publish(msg, pubSubConsensusTopic)
 }
 
+func (g *bootstrapPubSub) SubscribeModerationTopic() error {
+	if g == nil || !g.pubsub.isGossipRunning() {
+		return warpnet.WarpError("moderator pubsub: service not initialized")
+	}
+
+	return g.pubsub.subscribe(TopicHandler{
+		TopicName: pubSubModerationTopic,
+		Handler: func(data []byte) error { // discard
+			return nil
+		},
+	})
+}
+
 func (g *bootstrapPubSub) SubscribeConsensusTopic() error {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("bootstrap pubsub: service not initialized")

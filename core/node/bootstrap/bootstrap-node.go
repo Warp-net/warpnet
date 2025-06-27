@@ -186,6 +186,8 @@ func (bn *BootstrapNode) Start() (err error) {
 	if err := bn.consensusService.AskValidation(ev); err != nil {
 		return err
 	}
+
+	_ = bn.pubsubService.SubscribeModerationTopic()
 	println()
 	fmt.Printf(
 		"\033[1mBOOTSTRAP NODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",
