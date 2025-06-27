@@ -14,7 +14,7 @@ moderator:
 	go run -tags=llama cmd/node/moderator/main.go --node.network testnet
 
 tests:
-	CGO_ENABLED=1 go test -count=1 -short ./...
+	CGO_ENABLED=0 go test -count=1 -short -v ./...
 
 prune:
 	(pkill -9 main || true) && rm -rf $(HOME)/.badgerdb

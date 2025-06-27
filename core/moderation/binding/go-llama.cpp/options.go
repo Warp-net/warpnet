@@ -1,3 +1,6 @@
+//go:build llama
+// +build llama
+
 package llama
 
 type ModelOptions struct {

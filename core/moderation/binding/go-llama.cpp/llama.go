@@ -1,3 +1,6 @@
+//go:build llama
+// +build llama
+
 package llama
 
 // #cgo CXXFLAGS: -I${SRCDIR}/llama.cpp/common -I${SRCDIR}/llama.cpp

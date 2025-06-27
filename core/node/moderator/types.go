@@ -28,7 +28,6 @@ import (
 	"context"
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
-	"github.com/Warp-net/warpnet/core/moderation"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -75,6 +74,6 @@ type ConsensusServicer interface {
 }
 
 type Moderator interface {
-	Moderate(content string) (moderation.ModerationResult, moderation.ModerationReason, error)
+	Moderate(content string) (bool, string, error)
 	Close()
 }
