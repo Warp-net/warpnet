@@ -190,7 +190,7 @@ func main() {
 	readyChan <- serverNodeAuthInfo
 
 	if err := clientNode.Pair(serverNodeAuthInfo); err != nil {
-		log.Fatalf("failed to init client node: %v", err)
+		log.Fatalf("failed to pair client node: %v", err)
 	}
 
 	m := metrics.NewMetricsClient(
