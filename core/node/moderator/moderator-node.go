@@ -322,7 +322,7 @@ func (mn *ModeratorNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, 
 	if mn == nil || mn.node == nil {
 		return nil, nil
 	}
-	return mn.SelfStream(path, data)
+	return mn.node.SelfStream(path, data)
 }
 
 func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
