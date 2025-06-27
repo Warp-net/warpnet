@@ -38,9 +38,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"strings"
@@ -55,8 +52,8 @@ type Streamer interface {
 }
 
 type BackoffEnabler interface {
-	IsBackoffEnabled(id peer.ID) bool
-	Reset(id peer.ID)
+	IsBackoffEnabled(id warpnet.WarpPeerID) bool
+	Reset(id warpnet.WarpPeerID)
 }
 
 type WarpNode struct {
@@ -72,7 +69,7 @@ type WarpNode struct {
 
 	startTime time.Time
 	eventsSub event.Subscription
-	handlers  map[protocol.ID]network.StreamHandler
+	handlers  map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler
 }
 
 func NewWarpNode(
@@ -91,27 +88,12 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	defaultOptions := []libp2p.Option{
-		libp2p.WithDialTimeout(DefaultTimeout),
-		libp2p.SwarmOpts(
-			WithDialTimeout(DefaultTimeout),
-			WithDialTimeoutLocal(DefaultTimeout),
-		),
-		libp2p.Transport(warpnet.NewTCPTransport, WithDefaultTCPConnectionTimeout(DefaultTimeout)),
-		libp2p.Ping(true),
-		libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
+	managersOpts := []libp2p.Option{
 		libp2p.ResourceManager(rm),
-		libp2p.UserAgent(warpnet.WarpnetName),
 		libp2p.ConnectionManager(manager),
-		libp2p.EnableAutoNATv2(),
-		libp2p.EnableRelay(),
-		libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
-		libp2p.EnableHolePunching(),
-		libp2p.EnableNATService(),
-		libp2p.NATPortMap(),
 	}
 
-	opts = append(defaultOptions, opts...)
+	opts = append(opts, managersOpts...)
 
 	node, err := warpnet.NewP2PNode(opts...)
 	if err != nil {
@@ -139,10 +121,7 @@ func NewWarpNode(
 		startTime: time.Now(),
 		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub: sub,
-		handlers:  make(map[protocol.ID]network.StreamHandler),
-	}
-	if err := wn.validateSupportedProtocols(); err != nil {
-		return nil, err
+		handlers:  make(map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler),
 	}
 
 	go wn.trackIncomingEvents()
@@ -182,35 +161,6 @@ func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
 		n.node.SetStreamHandler(h.Path, h.Handler)
 		n.handlers[h.Path] = h.Handler
 	}
-}
-
-func (n *WarpNode) validateSupportedProtocols() error {
-	protocols := n.node.Mux().Protocols()
-	var (
-		isAutoNatBackFound, isAutoNatRequestFound, isRelayHopFound, isRelayStopFound bool
-	)
-
-	for _, proto := range protocols {
-		if strings.Contains(string(proto), "autonat/2/dial-back") {
-			isAutoNatBackFound = true
-		}
-		if strings.Contains(string(proto), "autonat/2/dial-request") {
-			isAutoNatRequestFound = true
-		}
-		if strings.Contains(string(proto), "relay/0.2.0/hop") {
-			isRelayHopFound = true
-		}
-		if strings.Contains(string(proto), "relay/0.2.0/stop") {
-			isRelayStopFound = true
-		}
-	}
-	if isAutoNatBackFound && isAutoNatRequestFound && isRelayHopFound && isRelayStopFound {
-		return nil
-	}
-	return fmt.Errorf(
-		"node: not all supported protocols: autonat/dial-back=%t, autonat/dial-request=%t, relay/hop=%t, relay/stop=%t",
-		isAutoNatBackFound, isAutoNatRequestFound, isRelayHopFound, isRelayStopFound,
-	)
 }
 
 func (n *WarpNode) trackIncomingEvents() {
@@ -333,7 +283,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	if data == nil {
 		return nil, errors.New("empty data")
 	}
-	handler, ok := n.handlers[protocol.ID(path)]
+	handler, ok := n.handlers[warpnet.WarpProtocolID(path)]
 	if !ok {
 		return nil, errors.Errorf("no handler for path %s", path)
 	}
@@ -353,7 +303,6 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	}
 
 	_ = streamClient.SetDeadline(time.Now().Add(time.Minute))
-
 	if _, err := streamClient.Write(bt); err != nil {
 		return nil, err
 	}

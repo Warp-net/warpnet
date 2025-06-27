@@ -1,0 +1,218 @@
+[
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build",
+  "command": "/usr/bin/cc -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu11 -fPIC -Wall -Wextra -Wpedantic -Wcast-qual -Wdouble-promotion -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Wno-unused-function -mf16c -mfma -mavx -mavx2 -o CMakeFiles/ggml.dir/ggml.c.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/ggml.c",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/ggml.c",
+  "output": "CMakeFiles/ggml.dir/ggml.c.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build",
+  "command": "/usr/bin/cc -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu11 -fPIC -Wall -Wextra -Wpedantic -Wcast-qual -Wdouble-promotion -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Wno-unused-function -mf16c -mfma -mavx -mavx2 -o CMakeFiles/ggml.dir/ggml-alloc.c.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/ggml-alloc.c",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/ggml-alloc.c",
+  "output": "CMakeFiles/ggml.dir/ggml-alloc.c.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build",
+  "command": "/usr/bin/cc -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu11 -fPIC -Wall -Wextra -Wpedantic -Wcast-qual -Wdouble-promotion -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Wno-unused-function -mf16c -mfma -mavx -mavx2 -o CMakeFiles/ggml.dir/k_quants.c.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/k_quants.c",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/k_quants.c",
+  "output": "CMakeFiles/ggml.dir/k_quants.c.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIC -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/llama.dir/llama.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/llama.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/llama.cpp",
+  "output": "CMakeFiles/llama.dir/llama.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/common",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIC -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/common.dir/common.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/common.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/common.cpp",
+  "output": "common/CMakeFiles/common.dir/common.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/common",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIC -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/common.dir/console.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/console.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/console.cpp",
+  "output": "common/CMakeFiles/common.dir/console.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/common",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIC -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/common.dir/grammar-parser.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/grammar-parser.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/grammar-parser.cpp",
+  "output": "common/CMakeFiles/common.dir/grammar-parser.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-quantize-fns.dir/test-quantize-fns.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-quantize-fns.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-quantize-fns.cpp",
+  "output": "tests/CMakeFiles/test-quantize-fns.dir/test-quantize-fns.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-quantize-perf.dir/test-quantize-perf.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-quantize-perf.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-quantize-perf.cpp",
+  "output": "tests/CMakeFiles/test-quantize-perf.dir/test-quantize-perf.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-sampling.dir/test-sampling.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-sampling.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-sampling.cpp",
+  "output": "tests/CMakeFiles/test-sampling.dir/test-sampling.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-tokenizer-0-llama.dir/test-tokenizer-0-llama.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-tokenizer-0-llama.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-tokenizer-0-llama.cpp",
+  "output": "tests/CMakeFiles/test-tokenizer-0-llama.dir/test-tokenizer-0-llama.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-tokenizer-0-falcon.dir/test-tokenizer-0-falcon.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-tokenizer-0-falcon.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-tokenizer-0-falcon.cpp",
+  "output": "tests/CMakeFiles/test-tokenizer-0-falcon.dir/test-tokenizer-0-falcon.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-tokenizer-1-llama.dir/test-tokenizer-1-llama.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-tokenizer-1-llama.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-tokenizer-1-llama.cpp",
+  "output": "tests/CMakeFiles/test-tokenizer-1-llama.dir/test-tokenizer-1-llama.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-grammar-parser.dir/test-grammar-parser.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-grammar-parser.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-grammar-parser.cpp",
+  "output": "tests/CMakeFiles/test-grammar-parser.dir/test-grammar-parser.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-llama-grammar.dir/test-llama-grammar.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-llama-grammar.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-llama-grammar.cpp",
+  "output": "tests/CMakeFiles/test-llama-grammar.dir/test-llama-grammar.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-grad0.dir/test-grad0.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-grad0.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-grad0.cpp",
+  "output": "tests/CMakeFiles/test-grad0.dir/test-grad0.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/tests",
+  "command": "/usr/bin/cc -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wdouble-promotion -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Wno-unused-function -mf16c -mfma -mavx -mavx2 -o CMakeFiles/test-c.dir/test-c.c.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-c.c",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/tests/test-c.c",
+  "output": "tests/CMakeFiles/test-c.dir/test-c.c.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/main",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/main.dir/main.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/main/main.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/main/main.cpp",
+  "output": "examples/main/CMakeFiles/main.dir/main.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/quantize",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/quantize/../../common -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/quantize.dir/quantize.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/quantize/quantize.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/quantize/quantize.cpp",
+  "output": "examples/quantize/CMakeFiles/quantize.dir/quantize.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/quantize-stats",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/quantize-stats/../../common -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/quantize-stats.dir/quantize-stats.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/quantize-stats/quantize-stats.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/quantize-stats/quantize-stats.cpp",
+  "output": "examples/quantize-stats/CMakeFiles/quantize-stats.dir/quantize-stats.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/perplexity",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/perplexity.dir/perplexity.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/perplexity/perplexity.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/perplexity/perplexity.cpp",
+  "output": "examples/perplexity/CMakeFiles/perplexity.dir/perplexity.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/embedding",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/embedding.dir/embedding.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/embedding/embedding.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/embedding/embedding.cpp",
+  "output": "examples/embedding/CMakeFiles/embedding.dir/embedding.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/save-load-state",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/save-load-state.dir/save-load-state.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/save-load-state/save-load-state.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/save-load-state/save-load-state.cpp",
+  "output": "examples/save-load-state/CMakeFiles/save-load-state.dir/save-load-state.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/benchmark",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/benchmark/../../common -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/benchmark.dir/benchmark-matmult.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/benchmark/benchmark-matmult.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/benchmark/benchmark-matmult.cpp",
+  "output": "examples/benchmark/CMakeFiles/benchmark.dir/benchmark-matmult.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/baby-llama",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/baby-llama.dir/baby-llama.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/baby-llama/baby-llama.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/baby-llama/baby-llama.cpp",
+  "output": "examples/baby-llama/CMakeFiles/baby-llama.dir/baby-llama.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/train-text-from-scratch",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/train-text-from-scratch.dir/train-text-from-scratch.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/train-text-from-scratch/train-text-from-scratch.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/train-text-from-scratch/train-text-from-scratch.cpp",
+  "output": "examples/train-text-from-scratch/CMakeFiles/train-text-from-scratch.dir/train-text-from-scratch.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/convert-llama2c-to-ggml",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/convert-llama2c-to-ggml.dir/convert-llama2c-to-ggml.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/convert-llama2c-to-ggml/convert-llama2c-to-ggml.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/convert-llama2c-to-ggml/convert-llama2c-to-ggml.cpp",
+  "output": "examples/convert-llama2c-to-ggml/CMakeFiles/convert-llama2c-to-ggml.dir/convert-llama2c-to-ggml.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/simple",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/simple.dir/simple.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/simple/simple.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/simple/simple.cpp",
+  "output": "examples/simple/CMakeFiles/simple.dir/simple.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/speculative",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/speculative.dir/speculative.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/speculative/speculative.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/speculative/speculative.cpp",
+  "output": "examples/speculative/CMakeFiles/speculative.dir/speculative.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/embd-input",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIC -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/embdinput.dir/embd-input-lib.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/embd-input/embd-input-lib.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/embd-input/embd-input-lib.cpp",
+  "output": "examples/embd-input/CMakeFiles/embdinput.dir/embd-input-lib.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/embd-input",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/embd-input-test.dir/embd-input-test.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/embd-input/embd-input-test.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/embd-input/embd-input-test.cpp",
+  "output": "examples/embd-input/CMakeFiles/embd-input-test.dir/embd-input-test.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/llama-bench",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/llama-bench.dir/llama-bench.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/llama-bench/llama-bench.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/llama-bench/llama-bench.cpp",
+  "output": "examples/llama-bench/CMakeFiles/llama-bench.dir/llama-bench.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/beam-search",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/beam-search.dir/beam-search.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/beam-search/beam-search.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/beam-search/beam-search.cpp",
+  "output": "examples/beam-search/CMakeFiles/beam-search.dir/beam-search.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/examples/server",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -DSERVER_VERBOSE=1 -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/server -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/server.dir/server.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/server/server.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/examples/server/server.cpp",
+  "output": "examples/server/CMakeFiles/server.dir/server.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/pocs/vdot",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/pocs -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/vdot.dir/vdot.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/pocs/vdot/vdot.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/pocs/vdot/vdot.cpp",
+  "output": "pocs/vdot/CMakeFiles/vdot.dir/vdot.cpp.o"
+},
+{
+  "directory": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/build/pocs/vdot",
+  "command": "/usr/bin/g++ -DGGML_USE_K_QUANTS -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/pocs -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/common/. -I/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/. -fPIE -O3 -DNDEBUG -std=gnu++11 -fPIE -Wall -Wextra -Wpedantic -Wcast-qual -Wmissing-declarations -Wno-unused-function -Wno-multichar -Wno-format-truncation -Wno-array-bounds -mf16c -mfma -mavx -mavx2 -o CMakeFiles/q8dot.dir/q8dot.cpp.o -c /home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/pocs/vdot/q8dot.cpp",
+  "file": "/home/vadim/go/src/github.com/warpnet/warpnet/core/moderation/binding/go-llama.cpp/llama.cpp/pocs/vdot/q8dot.cpp",
+  "output": "pocs/vdot/CMakeFiles/q8dot.dir/q8dot.cpp.o"
+}
+]

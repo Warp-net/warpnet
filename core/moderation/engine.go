@@ -2,7 +2,8 @@ package moderation
 
 import (
 	"errors"
-	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama"
+	"fmt"
+	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama.cpp"
 	"strings"
 )
 
@@ -11,12 +12,20 @@ type Engine interface {
 	Close()
 }
 
-type LlamaEngine struct {
+type llamaEngine struct {
 	llm  *llama.LLama
 	opts []llama.PredictOption
 }
 
-func NewLlamaEngine(modelPath string, threads int) (*LlamaEngine, error) {
+func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.New(fmt.Sprint(r))
+		}
+	}()
+	if modelPath == "" {
+		return nil, errors.New("model path is required")
+	}
 	llm, err := llama.New(modelPath,
 		llama.SetContext(512),
 		llama.SetMMap(true),
@@ -33,12 +42,23 @@ func NewLlamaEngine(modelPath string, threads int) (*LlamaEngine, error) {
 		llama.SetSeed(42),
 	}
 
-	lle := &LlamaEngine{llm: llm, opts: opts}
-	_, err = lle.llm.Predict("Hello!", lle.opts...) // warm up!
+	lle := &llamaEngine{llm: llm, opts: opts}
+	prompt := generatePrompt("White tea is better than black")
+	_, err = lle.llm.Predict(prompt, lle.opts...) // warm up!
 	return lle, err
 }
 
-func (e *LlamaEngine) Moderate(content string) (bool, string, error) {
+type (
+	ModerationResult bool
+	ModerationReason = string
+)
+
+const (
+	OK      ModerationResult = true
+	FAILURE ModerationResult = false
+)
+
+func (e *llamaEngine) Moderate(content string) (ModerationResult, ModerationReason, error) {
 	prompt := generatePrompt(content)
 
 	resp, err := e.llm.Predict(prompt, e.opts...)
@@ -50,17 +70,17 @@ func (e *LlamaEngine) Moderate(content string) (bool, string, error) {
 
 	switch {
 	case strings.HasPrefix(out, "no"):
-		return true, "", nil
+		return OK, "", nil
 	case strings.HasPrefix(out, "yes"):
 		reason := strings.TrimSpace(strings.TrimPrefix(out, "yes"))
 		reason = strings.Trim(reason, ",.:;- \"\n")
 		reason = strings.ReplaceAll(reason, "\n", "")
-		return false, reason, nil
+		return FAILURE, reason, nil
 	default:
-		return true, "", errors.New("unrecognized LLM output: " + out)
+		return OK, "", errors.New("unrecognized LLM output: " + out)
 	}
 }
 
-func (e *LlamaEngine) Close() {
+func (e *llamaEngine) Close() {
 	e.llm.Free()
 }

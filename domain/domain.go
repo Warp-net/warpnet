@@ -108,9 +108,10 @@ const RetweetPrefix = "RT:"
 
 // Tweet defines model for Tweet.
 type Tweet struct {
-	CreatedAt time.Time `json:"created_at"`
-	Id        string    `json:"id"`
-	ParentId  *string   `json:"parent_id,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	Id        string     `json:"id"`
+	ParentId  *string    `json:"parent_id,omitempty"`
 
 	// RetweetedBy retweeted by user id
 	RetweetedBy *string `json:"retweeted_by,omitempty"`
@@ -132,6 +133,7 @@ type User struct {
 	Bio                string            `json:"bio"`
 	Birthdate          string            `json:"birthdate"`
 	CreatedAt          time.Time         `json:"created_at"`
+	UpdatedAt          *time.Time        `json:"updated_at,omitempty"`
 	FolloweesCount     uint64            `json:"followees_count"`
 	FollowersCount     uint64            `json:"followers_count"`
 	Id                 string            `json:"id"`
@@ -148,6 +150,8 @@ type User struct {
 
 type UserModeration struct {
 	IsModerated bool      `json:"is_moderated"`
+	IsOk        bool      `json:"is_ok"`
+	Reason      *string   `json:"reason"`
 	Strikes     uint8     `json:"strikes"`
 	TimeAt      time.Time `json:"time_at"`
 }

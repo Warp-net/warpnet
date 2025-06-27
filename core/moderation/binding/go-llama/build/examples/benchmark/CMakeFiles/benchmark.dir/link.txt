@@ -1,1 +1,0 @@
-/usr/bin/g++ -O3 -DNDEBUG "CMakeFiles/benchmark.dir/benchmark-matmult.cpp.o" -o ../../bin/benchmark  ../../libllama.a 

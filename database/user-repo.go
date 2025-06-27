@@ -157,7 +157,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	}
 	defer txn.Rollback()
 
-	sortableKeyBytes, err := txn.Get(fixedKey)
+	sortableKeyBytes, err := txn.Get(fixedKey) // GET IS HERE!
 	if err != nil {
 		return existingUser, err
 	}

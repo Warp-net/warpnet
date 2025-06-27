@@ -47,8 +47,6 @@ import (
 	"github.com/multiformats/go-multihash"
 	log "github.com/sirupsen/logrus"
 	"io"
-	"strings"
-
 	"os"
 
 	_ "github.com/ipfs/go-ds-flatfs"
@@ -107,7 +105,7 @@ func NewIPFS(ctx context.Context, n host.Host) (*Client, error) {
 	for _, a := range n.Addrs() {
 		addrs = append(addrs, a.String())
 	}
-	fmt.Println(strings.Join(addrs, ","), "???????????????????")
+
 	// Disable everything that talks to the outside world
 	cfg.Bootstrap = []string{}
 	cfg.Addresses.API = []string{}

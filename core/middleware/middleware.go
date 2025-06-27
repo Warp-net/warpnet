@@ -100,6 +100,8 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 				return
 			}
 		}
+
+		// TODO check if in Peerstore and pub/priv keys
 		next(s)
 	}
 }

@@ -50,14 +50,15 @@ import (
 )
 
 type BootstrapNode struct {
-	ctx  context.Context
-	node *base.WarpNode
-
+	ctx               context.Context
+	node              *base.WarpNode
+	opts              []warpnet.WarpOption
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
 	consensusService  ConsensusServicer
 	memoryStoreCloseF func() error
+	privKey           ed25519.PrivateKey
 	psk               security.PSK
 	selfHashHex       string
 }
@@ -105,9 +106,7 @@ func NewBootstrapNode(
 		return nil, err
 	}
 
-	node, err := base.NewWarpNode(
-		ctx,
-		nil,
+	opts := []warpnet.WarpOption{
 		base.WarpIdentity(privKey),
 		libp2p.Peerstore(memoryStore),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
@@ -117,14 +116,12 @@ func NewBootstrapNode(
 		),
 		libp2p.Routing(dHashTable.StartRouting),
 		base.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: failed to init node: %v", err)
 	}
+	opts = append(opts, base.CommonOptions...)
 
 	bn := &BootstrapNode{
 		ctx:               ctx,
-		node:              node,
+		opts:              opts,
 		discService:       discService,
 		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
@@ -145,28 +142,6 @@ func NewBootstrapNode(
 		},
 	)
 
-	mw := middleware.NewWarpMiddleware()
-	logMw := mw.LoggingMiddleware
-	unwrapMw := mw.UnwrapStreamMiddleware
-
-	bn.node.SetStreamHandlers(
-		warpnet.WarpHandler{
-			event.PRIVATE_POST_NODE_VALIDATE,
-			logMw(unwrapMw(handler.StreamValidateHandler(bn.consensusService))),
-		},
-		warpnet.WarpHandler{
-			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-			logMw(unwrapMw(handler.StreamValidationResponseHandler(bn.consensusService))),
-		},
-		warpnet.WarpHandler{
-			event.PUBLIC_GET_INFO,
-			logMw(handler.StreamGetInfoHandler(bn, discService.DefaultDiscoveryHandler)),
-		},
-		warpnet.WarpHandler{
-			event.PUBLIC_POST_NODE_CHALLENGE,
-			logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
-		},
-	)
 	return bn, nil
 }
 
@@ -176,10 +151,19 @@ func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
 	return bi
 }
 
-func (bn *BootstrapNode) Start() error {
+func (bn *BootstrapNode) Start() (err error) {
 	if bn == nil {
-		return errors.New("bootstrap: nil node")
+		panic("bootstrap: nil node")
 	}
+	bn.node, err = base.NewWarpNode(
+		bn.ctx,
+		bn.opts...,
+	)
+	if err != nil {
+		return fmt.Errorf("bootstrap: failed to init node: %v", err)
+	}
+	bn.setupHandlers()
+
 	bn.pubsubService.Run(bn)
 	if err := bn.discService.Run(bn); err != nil {
 		return err
@@ -205,6 +189,34 @@ func (bn *BootstrapNode) Start() error {
 	)
 	println()
 	return nil
+}
+
+func (bn *BootstrapNode) setupHandlers() {
+	if bn.node == nil {
+		panic("bootstrap: nil inner p2p node")
+	}
+	mw := middleware.NewWarpMiddleware()
+	logMw := mw.LoggingMiddleware
+	unwrapMw := mw.UnwrapStreamMiddleware
+
+	bn.node.SetStreamHandlers(
+		warpnet.WarpHandler{
+			event.PRIVATE_POST_NODE_VALIDATE,
+			logMw(unwrapMw(handler.StreamValidateHandler(bn.consensusService))),
+		},
+		warpnet.WarpHandler{
+			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+			logMw(unwrapMw(handler.StreamValidationResponseHandler(bn.consensusService))),
+		},
+		warpnet.WarpHandler{
+			event.PUBLIC_GET_INFO,
+			logMw(handler.StreamGetInfoHandler(bn, bn.discService.DefaultDiscoveryHandler)),
+		},
+		warpnet.WarpHandler{
+			event.PUBLIC_POST_NODE_CHALLENGE,
+			logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), bn.privKey))),
+		},
+	)
 }
 
 func (bn *BootstrapNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
@@ -271,5 +283,9 @@ func (bn *BootstrapNode) Stop() {
 			log.Errorf("bootstrap: failed to close memory store: %v", err)
 		}
 	}
+	if bn.consensusService != nil {
+		bn.consensusService.Close()
+	}
+
 	bn.node.StopNode()
 }

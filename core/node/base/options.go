@@ -27,6 +27,7 @@ package base
 import (
 	"crypto/ed25519"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/libp2p/go-libp2p"
 	libp2pConfig "github.com/libp2p/go-libp2p/config"
@@ -38,6 +39,23 @@ import (
 	"time"
 	"unsafe"
 )
+
+var CommonOptions = []libp2p.Option{
+	libp2p.WithDialTimeout(DefaultTimeout),
+	libp2p.SwarmOpts(
+		WithDialTimeout(DefaultTimeout),
+		WithDialTimeoutLocal(DefaultTimeout),
+	),
+	libp2p.Transport(warpnet.NewTCPTransport, WithDefaultTCPConnectionTimeout(DefaultTimeout)),
+	libp2p.Ping(true),
+	libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
+	libp2p.EnableAutoNATv2(),
+	libp2p.EnableRelay(),
+	libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
+	libp2p.EnableHolePunching(),
+	libp2p.EnableNATService(),
+	libp2p.NATPortMap(),
+}
 
 func EnableAutoRelayWithStaticRelays(static []warpnet.WarpAddrInfo, currentNodeID warpnet.WarpPeerID) func() libp2p.Option {
 	for i, info := range static {

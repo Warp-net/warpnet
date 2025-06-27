@@ -58,6 +58,7 @@ type MemberNode struct {
 	ctx context.Context
 
 	node *base.WarpNode
+	opts []warpnet.WarpOption
 
 	discService          DiscoveryHandler
 	mdnsService          MDNSStarterCloser
@@ -66,8 +67,11 @@ type MemberNode struct {
 	dHashTable           DistributedHashTableCloser
 	nodeRepo             NodeProvider
 	retrier              retrier.Retrier
-	userRepo             UserFetcher
+	authRepo             AuthProvider
+	userRepo             UserProvider
 	followRepo           FollowStorer
+	db                   Storer
+	privKey              ed25519.PrivateKey
 	ownerId, selfHashHex string
 	pseudoNode           PseudoStreamer
 }
@@ -137,8 +141,7 @@ func NewMemberNode(
 		return nil, err
 	}
 
-	node, err := base.NewWarpNode(
-		ctx,
+	opts := []warpnet.WarpOption{
 		base.WarpIdentity(privKey),
 		libp2p.Peerstore(store),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
@@ -148,18 +151,13 @@ func NewMemberNode(
 		),
 		libp2p.Routing(dHashTable.StartRouting),
 		base.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("member: failed to init node: %v", err)
 	}
 
-	if mastodonPseudoNode != nil {
-		node.Node().Peerstore().AddAddrs(mastodonPseudoNode.ID(), mastodonPseudoNode.Addrs(), time.Hour*24)
-	}
+	opts = append(opts, base.CommonOptions...)
 
 	mn := &MemberNode{
-		node:          node,
 		ctx:           ctx,
+		opts:          opts,
 		discService:   discService,
 		mdnsService:   mdnsService,
 		pubsubService: pubsubService,
@@ -168,6 +166,9 @@ func NewMemberNode(
 		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
+		authRepo:      authRepo,
+		db:            db,
+		privKey:       privKey,
 		ownerId:       owner.UserId,
 		selfHashHex:   selfHashHex,
 		pseudoNode:    mastodonPseudoNode,
@@ -179,11 +180,24 @@ func NewMemberNode(
 		userRepo.ValidateUserID,
 	)
 
-	mn.setupHandlers(authRepo, userRepo, followRepo, db, privKey)
 	return mn, nil
 }
 
-func (m *MemberNode) Start() error {
+func (m *MemberNode) Start() (err error) {
+	m.node, err = base.NewWarpNode(
+		m.ctx,
+		m.opts...,
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to init node: %v", err)
+	}
+
+	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
+
+	if m.pseudoNode != nil {
+		m.node.Node().Peerstore().AddAddrs(m.pseudoNode.ID(), m.pseudoNode.Addrs(), time.Hour*24)
+	}
+
 	m.pubsubService.Run(m)
 	if err := m.presubscribeFollowees(m.followRepo); err != nil {
 		log.Errorf("member: failed to presubscribe followees: %v", err)
@@ -197,20 +211,20 @@ func (m *MemberNode) Start() error {
 
 	nodeInfo := m.NodeInfo()
 
-	ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
+	//ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
 
-	if err := m.consensusService.Start(m); err != nil {
-		return err
-	}
-
-	ev := event.ValidationEvent{
-		ValidatedNodeID: nodeInfo.ID.String(),
-		SelfHashHex:     m.selfHashHex,
-		User:            &ownerUser,
-	}
-	if err := m.consensusService.AskValidation(ev); err != nil {
-		return err
-	}
+	//if err := m.consensusService.Start(m); err != nil {
+	//	return err
+	//}
+	//
+	//ev := event.ValidationEvent{
+	//	ValidatedNodeID: nodeInfo.ID.String(),
+	//	SelfHashHex:     m.selfHashHex,
+	//	User:            &ownerUser,
+	//}
+	//if err := m.consensusService.AskValidation(ev); err != nil {
+	//	return err
+	//}
 
 	println()
 	fmt.Printf(
@@ -519,6 +533,12 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PUBLIC_GET_IMAGE,
 				logMw(authMw(unwrapMw(handler.StreamGetImageHandler(m, mediaRepo, userRepo)))),
+			},
+			{
+				event.PUBLIC_POST_MODERATION_RESULT, // TODO protect this endpoint
+				logMw(mw.UnwrapStreamMiddleware(
+					handler.StreamModerationResultHandler(userRepo, tweetRepo)),
+				),
 			},
 		}...,
 	)

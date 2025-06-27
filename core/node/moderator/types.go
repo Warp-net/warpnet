@@ -28,6 +28,7 @@ import (
 	"context"
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
+	"github.com/Warp-net/warpnet/core/moderation"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -44,6 +45,7 @@ type DiscoveryHandler interface {
 type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
+	SubscribeModerationTopic() error
 }
 
 type DistributedHashTableCloser interface {
@@ -70,4 +72,9 @@ type ConsensusServicer interface {
 	AskValidation(data event.ValidationEvent) error
 	Validate(ev event.ValidationEvent) error
 	ValidationResult(ev event.ValidationResultEvent) error
+}
+
+type Moderator interface {
+	Moderate(content string) (moderation.ModerationResult, moderation.ModerationReason, error)
+	Close()
 }

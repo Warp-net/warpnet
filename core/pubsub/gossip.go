@@ -46,7 +46,7 @@ import (
 )
 
 const (
-	pubSubModerationTopic = "moderation-text"
+	pubSubModerationTopic = "peer-moderation"
 
 	pubSubDiscoveryTopic = "peer-discovery"
 	pubSubConsensusTopic = "peer-consensus"

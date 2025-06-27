@@ -383,13 +383,45 @@ type ValidationEvent struct {
 type ValidationResult int
 
 const (
-	Invalid ValidationResult = 0
-	Valid   ValidationResult = 1
+	Invalid ValidationResult = iota
+	Valid
 )
 
 type ValidationResultEvent struct {
 	Result      ValidationResult `json:"result"`
-	Reason      *string          `json:"reason"`
+	Reason      *string          `json:"reason,omitempty"`
 	ValidatedID string           `json:"validated_id"`
 	ValidatorID string           `json:"validator_id"`
+}
+
+type ModerationObjectType int
+
+const (
+	User ModerationObjectType = iota
+	Tweet
+	Reply
+	Image
+)
+
+type ModerationEvent struct {
+	NodeID   string               `json:"node_id"`
+	UserID   string               `json:"user_id"`
+	Type     ModerationObjectType `json:"type"`
+	ObjectID *string              `json:"object_id,omitempty"`
+}
+
+type ModerationResult bool
+
+const (
+	OK   ModerationResult = true
+	FAIL ModerationResult = false
+)
+
+type ModerationResultEvent struct {
+	Type     ModerationObjectType `json:"type"`
+	Result   ModerationResult     `json:"result"`
+	Reason   *string              `json:"reason,omitempty"`
+	NodeID   string               `json:"node_id"`
+	UserID   string               `json:"user_id"`
+	ObjectID *string              `json:"object_id,omitempty"`
 }

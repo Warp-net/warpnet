@@ -67,7 +67,7 @@ func init() {
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env.")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	pflag.String("node.metrics.server", "", "Metrics server address")
-	pflag.String("node.moderator.modelpath", "llama-2-7b-chat.Q8_0.gguf", "Path to AI model. Unused if 'cid' provided")
+	pflag.String("node.moderator.modelpath", "/tmp/llama-2-7b-chat.Q8_0.gguf", "Absolute path (!) to AI model. Unused if 'cid' provided")
 	pflag.String("node.moderator.modelcid", "bafybeid7to3a6zkv5fdh5lw7iyl5wruj46qirvfsc6xbngprjy67ma6slm", "AI model content ID in IPFS. Unused if 'modelpath' provided")
 	pflag.String("logging.level", "info", "Logging level")
 
@@ -102,6 +102,10 @@ func init() {
 
 	fmt.Printf(noticeTemplate, strings.ToUpper(warpnet.WarpnetName), version, "2025", "Vadim Filin")
 
+	modelPath := viper.GetString("node.moderator.modelpath")
+	if !strings.HasPrefix(modelPath, "/") {
+		panic("model path must be absolute")
+	}
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
 		Node: node{
@@ -115,7 +119,7 @@ func init() {
 				Server: viper.GetString("node.metrics.server"),
 			},
 			Moderator: moderator{
-				Path: viper.GetString("node.moderator.modelpath"),
+				Path: modelPath,
 				CID:  viper.GetString("node.moderator.modelcid"),
 			},
 		},

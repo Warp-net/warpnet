@@ -1,1 +1,0 @@
-/usr/bin/g++ -O3 -DNDEBUG "CMakeFiles/test-tokenizer-1-llama.dir/test-tokenizer-1-llama.cpp.o" ../common/CMakeFiles/common.dir/common.cpp.o ../common/CMakeFiles/common.dir/console.cpp.o "../common/CMakeFiles/common.dir/grammar-parser.cpp.o" -o ../bin/test-tokenizer-1-llama  ../libllama.a ../libllama.a 

@@ -131,6 +131,13 @@ func (g *memberPubSub) PublishValidationRequest(msg event.Message) (err error) {
 	return g.pubsub.publish(msg, pubSubConsensusTopic)
 }
 
+func (g *memberPubSub) PublishModerationRequest(msg event.Message) (err error) {
+	if g == nil || !g.pubsub.isGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	return g.pubsub.publish(msg, pubSubModerationTopic)
+}
+
 // PublishUpdateToFollowers - publish for followers
 func (g *memberPubSub) PublishUpdateToFollowers(ownerId string, msg event.Message) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {

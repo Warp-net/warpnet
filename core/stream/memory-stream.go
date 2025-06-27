@@ -147,7 +147,9 @@ func (s *LoopbackStream) Conn() network.Conn {
 }
 func (s *LoopbackStream) CloseRead() error  { return s.ReadConn.Close() }
 func (s *LoopbackStream) CloseWrite() error { return s.WriteConn.Close() }
-func (s *LoopbackStream) Reset() error      { return nil }
+func (s *LoopbackStream) Reset() error {
+	return nil
+}
 func (s *LoopbackStream) ResetWithError(_ network.StreamErrorCode) error {
 	return nil
 }

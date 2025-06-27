@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const modelPath = "/go/src/github.com/warpnet/warpnet/llama-2-7b-chat.Q8_0.gguf"
+const modelPath = "/tmp/llama-2-7b-chat.Q8_0.gguf"
 
 func TestNewLlamaEngineViolationSuccess(t *testing.T) {
 	if testing.Short() {
@@ -19,15 +19,12 @@ func TestNewLlamaEngineViolationSuccess(t *testing.T) {
 		return
 	}
 
-	home := os.Getenv("HOME")
-	path := home + modelPath
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		t.Skip()
 		return
 	}
 
-	eng, err := NewLlamaEngine(path, runtime.NumCPU())
+	eng, err := NewLlamaEngine(modelPath, runtime.NumCPU())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,15 +53,12 @@ func TestNewLlamaEngineNoViolationSuccess(t *testing.T) {
 		t.Skip()
 		return
 	}
-	home := os.Getenv("HOME")
-	path := home + modelPath
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		t.Skip()
 		return
 	}
 
-	eng, err := NewLlamaEngine(path, runtime.NumCPU())
+	eng, err := NewLlamaEngine(modelPath, runtime.NumCPU())
 	if err != nil {
 		t.Fatal(err)
 	}
