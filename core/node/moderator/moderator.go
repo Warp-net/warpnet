@@ -32,15 +32,18 @@ import (
 	"github.com/Warp-net/warpnet/core/moderation"
 	log "github.com/sirupsen/logrus"
 	"runtime"
+	"time"
 )
 
 func init() {
 	go func() {
-		cond.L.Lock()
-		for !modelReady.Load() {
-			cond.Wait()
+		defer close(readyChan)
+		select {
+		case <-readyChan:
+		case <-time.After(time.Minute * 2):
+			log.Errorln("failed to wait for ready chan")
+			return
 		}
-		cond.L.Unlock()
 
 		var err error
 		moderator, err = moderation.NewLlamaEngine(config.Config().Node.Moderator.Path, runtime.NumCPU())
@@ -48,5 +51,6 @@ func init() {
 			log.Fatalf("moderator node: initializing: %v", err)
 		}
 		log.Infoln("moderator node: initialized")
+
 	}()
 }

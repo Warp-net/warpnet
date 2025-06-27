@@ -51,16 +51,13 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
 // build constrained
 var (
-	moderator  Moderator
-	cond       = sync.NewCond(new(sync.Mutex))
-	modelReady = new(atomic.Bool)
+	moderator Moderator
+	readyChan = make(chan struct{}, 1)
 )
 
 type ModeratorNode struct {
@@ -194,23 +191,18 @@ func (mn *ModeratorNode) Start() (err error) {
 		return err
 	}
 
-	cond.L.Lock()
 	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
 	if err != nil {
-		cond.L.Unlock()
 		return fmt.Errorf("failed to init moderator IPFS node: %v", err)
 	}
 
 	confModelPath := config.Config().Node.Moderator.Path
 	cid := config.Config().Node.Moderator.CID
 	if err = ensureModelPresence(confModelPath, cid, mn.store); err != nil {
-		cond.L.Unlock()
 		return err
 	}
-	
-	cond.L.Unlock()
-	modelReady.Store(true)
-	cond.Signal()
+
+	readyChan <- struct{}{}
 
 	if err := mn.pubsubService.SubscribeModerationTopic(); err != nil {
 		return err
