@@ -30,7 +30,7 @@ package moderator
 import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/moderation"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"runtime"
 )
 
@@ -45,7 +45,8 @@ func init() {
 		var err error
 		moderator, err = moderation.NewLlamaEngine(config.Config().Node.Moderator.Path, runtime.NumCPU())
 		if err != nil {
-			log.Fatalln("moderator node: initializing:", err)
+			log.Fatalf("moderator node: initializing: %v", err)
 		}
+		log.Infoln("moderator node: initialized")
 	}()
 }

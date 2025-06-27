@@ -172,9 +172,6 @@ func (mn *ModeratorNode) Start() (err error) {
 		return errors.New("moderator: nil node")
 	}
 
-	cond.L.Lock()
-	defer cond.L.Unlock()
-
 	mn.node, err = base.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %v", err)
@@ -197,17 +194,21 @@ func (mn *ModeratorNode) Start() (err error) {
 		return err
 	}
 
+	cond.L.Lock()
 	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
 	if err != nil {
+		cond.L.Unlock()
 		return fmt.Errorf("failed to init moderator IPFS node: %v", err)
 	}
 
 	confModelPath := config.Config().Node.Moderator.Path
 	cid := config.Config().Node.Moderator.CID
 	if err = ensureModelPresence(confModelPath, cid, mn.store); err != nil {
+		cond.L.Unlock()
 		return err
 	}
-
+	
+	cond.L.Unlock()
 	modelReady.Store(true)
 	cond.Signal()
 
