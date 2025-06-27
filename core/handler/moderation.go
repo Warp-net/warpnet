@@ -31,7 +31,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/middleware"
-	"github.com/Warp-net/warpnet/core/moderation"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -45,7 +44,7 @@ type ModerationStreamer interface {
 }
 
 type HandlerModerator interface {
-	Moderate(content string) (moderation.ModerationResult, moderation.ModerationReason, error)
+	Moderate(content string) (bool, string, error)
 	Close()
 }
 
@@ -119,14 +118,13 @@ func handleTweet(
 		UserID:   ev.UserID,
 		ObjectID: ev.ObjectID,
 	}
-
-	switch result {
-	case moderation.OK:
+	if result {
 		resp.Result = event.OK
-	case moderation.FAILURE:
+	} else {
 		resp.Result = event.FAIL
 		resp.Reason = &reason
 	}
+
 	return resp, nil
 }
 
@@ -135,6 +133,12 @@ func handleUser(
 	streamer ModerationStreamer,
 	moderator HandlerModerator,
 ) (resp event.ModerationResultEvent, err error) {
+	if moderator == nil {
+		return resp, errors.New("moderation: moderator is not initialized")
+	}
+	if streamer == nil {
+		return resp, errors.New("moderation: streamer is not initialized")
+	}
 	getUserEvent := event.GetUserEvent{
 		UserId: ev.UserID,
 	}
@@ -164,10 +168,9 @@ func handleUser(
 		UserID: ev.UserID,
 	}
 
-	switch result {
-	case moderation.OK:
+	if result {
 		resp.Result = event.OK
-	case moderation.FAILURE:
+	} else {
 		resp.Result = event.FAIL
 		resp.Reason = &reason
 	}

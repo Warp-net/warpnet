@@ -10,6 +10,9 @@ second-member:
 third-member:
 	go run cmd/node/member/main.go --database.dir storage3 --node.port 4031 --server.port 4032  --node.network testnet
 
+moderator:
+	go run -tags=llama cmd/node/moderator/main.go --node.network testnet
+
 tests:
 	CGO_ENABLED=1 go test -count=1 -short ./...
 

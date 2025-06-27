@@ -36,7 +36,6 @@ import (
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
-	"github.com/Warp-net/warpnet/core/moderation"
 	"github.com/Warp-net/warpnet/core/node/base"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -51,7 +50,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -178,13 +176,13 @@ func (mn *ModeratorNode) Start() (err error) {
 		return err
 	}
 
-	//ev := event.ValidationEvent{
-	//	ValidatedNodeID: nodeInfo.ID.String(),
-	//	SelfHashHex:     mn.selfHashHex,
-	//}
-	//if err := mn.consensusService.AskValidation(ev); err != nil {
-	//	return err
-	//}
+	ev := event.ValidationEvent{
+		ValidatedNodeID: nodeInfo.ID.String(),
+		SelfHashHex:     mn.selfHashHex,
+	}
+	if err := mn.consensusService.AskValidation(ev); err != nil {
+		return err
+	}
 
 	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
 	if err != nil {
@@ -200,10 +198,10 @@ func (mn *ModeratorNode) Start() (err error) {
 
 	log.Infof("moderator: LLM model path: %s", modelPath)
 
-	mn.moderator, err = moderation.NewLlamaEngine(modelPath, runtime.NumCPU())
-	if err != nil {
-		return err
-	}
+	//mn.moderator, err = moderation.NewLlamaEngine(modelPath, runtime.NumCPU())
+	//if err != nil {
+	//	return err
+	//}
 
 	if err := mn.pubsubService.SubscribeModerationTopic(); err != nil {
 		return err

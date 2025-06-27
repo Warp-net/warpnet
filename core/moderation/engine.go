@@ -1,3 +1,6 @@
+//go:build llama
+// +build llama
+
 package moderation
 
 import (
@@ -48,17 +51,7 @@ func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
 	return lle, err
 }
 
-type (
-	ModerationResult bool
-	ModerationReason = string
-)
-
-const (
-	OK      ModerationResult = true
-	FAILURE ModerationResult = false
-)
-
-func (e *llamaEngine) Moderate(content string) (ModerationResult, ModerationReason, error) {
+func (e *llamaEngine) Moderate(content string) (bool, string, error) {
 	prompt := generatePrompt(content)
 
 	resp, err := e.llm.Predict(prompt, e.opts...)
@@ -70,14 +63,14 @@ func (e *llamaEngine) Moderate(content string) (ModerationResult, ModerationReas
 
 	switch {
 	case strings.HasPrefix(out, "no"):
-		return OK, "", nil
+		return true, "", nil
 	case strings.HasPrefix(out, "yes"):
 		reason := strings.TrimSpace(strings.TrimPrefix(out, "yes"))
 		reason = strings.Trim(reason, ",.:;- \"\n")
 		reason = strings.ReplaceAll(reason, "\n", "")
-		return FAILURE, reason, nil
+		return false, reason, nil
 	default:
-		return OK, "", errors.New("unrecognized LLM output: " + out)
+		return true, "", errors.New("unrecognized LLM output: " + out)
 	}
 }
 
