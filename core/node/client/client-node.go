@@ -131,7 +131,12 @@ func (n *WarpClientNode) pairNodes(nodeId string, serverInfo domain.AuthNodeInfo
 		log.Errorln("client: must not be nil")
 		return warpnet.WarpError("client: must not be nil")
 	}
-	resp, err := n.ClientStream(nodeId, event.PRIVATE_POST_PAIR, serverInfo)
+
+	var resp []byte
+	err := n.retrier.Try(n.ctx, func() (err error) {
+		resp, err = n.ClientStream(nodeId, event.PRIVATE_POST_PAIR, serverInfo)
+		return err
+	})
 	if err != nil {
 		return err
 	}
