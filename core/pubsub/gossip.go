@@ -89,6 +89,15 @@ func NewDiscoveryTopicHandler(handler topicHandler) TopicHandler {
 	}
 }
 
+func NewTransitModerationHandler() TopicHandler {
+	return TopicHandler{
+		TopicName: pubSubModerationTopic,
+		Handler: func(data []byte) error { // discard, transit only
+			return nil
+		},
+	}
+}
+
 func newGossip(
 	ctx context.Context,
 	handlers ...TopicHandler,

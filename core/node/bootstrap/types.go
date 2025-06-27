@@ -43,7 +43,6 @@ type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
 	PublishValidationRequest(msg event.Message) (err error)
-	SubscribeModerationTopic() error
 	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
 	OwnerID() string
 }

@@ -83,6 +83,18 @@ func (g *memberPubSub) OwnerID() string {
 	return g.pubsub.nodeInfo().OwnerId
 }
 
+func PrefollowUsers(userIds ...string) (handlers []TopicHandler) {
+	for _, userId := range userIds {
+		handler := TopicHandler{
+			TopicName: fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId),
+			Handler:   nil,
+		}
+		handlers = append(handlers, handler)
+	}
+
+	return handlers
+}
+
 func (g *memberPubSub) SubscribeConsensusTopic() error {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("member pubsub: service not initialized")

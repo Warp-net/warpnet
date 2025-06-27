@@ -79,6 +79,7 @@ func NewBootstrapNode(
 		pubsub.NewDiscoveryTopicHandler(
 			discService.WrapPubSubDiscovery(discService.DefaultDiscoveryHandler),
 		),
+		pubsub.NewTransitModerationHandler(),
 	)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
@@ -187,7 +188,6 @@ func (bn *BootstrapNode) Start() (err error) {
 		return err
 	}
 
-	_ = bn.pubsubService.SubscribeModerationTopic()
 	println()
 	fmt.Printf(
 		"\033[1mBOOTSTRAP NODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",

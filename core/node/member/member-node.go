@@ -108,11 +108,19 @@ func NewMemberNode(
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.HandlePeerFound)
+
+	followeeIds, err := fetchFolloweeIds(owner.UserId, followRepo)
+	if err != nil {
+		return nil, err
+	}
+	pubsubHandlers := []pubsub.TopicHandler{
+		pubsub.NewDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
+		pubsub.NewTransitModerationHandler(),
+	}
+	pubsubHandlers = append(pubsubHandlers, pubsub.PrefollowUsers(followeeIds...)...)
 	pubsubService := pubsub.NewPubSub(
 		ctx,
-		pubsub.NewDiscoveryTopicHandler(
-			discService.WrapPubSubDiscovery(discService.HandlePeerFound),
-		),
+		pubsubHandlers...,
 	)
 
 	infos, err := config.Config().Node.AddrInfos()
@@ -202,9 +210,6 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.pubsubService.Run(m)
-	if err := m.presubscribeFollowees(m.followRepo); err != nil {
-		log.Errorf("member: failed to presubscribe followees: %v", err)
-	}
 
 	if err := m.discService.Run(m); err != nil {
 		return err
@@ -238,12 +243,9 @@ func (m *MemberNode) Start() (err error) {
 	return nil
 }
 
-func (m *MemberNode) presubscribeFollowees(followRepo FollowStorer) error {
-	if m == nil {
-		return warpnet.WarpError("pubsub: presubscribe: service not initialized properly")
-	}
+func fetchFolloweeIds(ownerId string, followRepo FollowStorer) (ids []string, err error) {
 	if followRepo == nil {
-		return nil
+		return ids, nil
 	}
 
 	var (
@@ -251,24 +253,22 @@ func (m *MemberNode) presubscribeFollowees(followRepo FollowStorer) error {
 		limit      = uint64(20)
 	)
 	for {
-		followees, cur, err := followRepo.GetFollowees(m.ownerId, &limit, &nextCursor)
+		followees, cur, err := followRepo.GetFollowees(ownerId, &limit, &nextCursor)
 		if err != nil {
-			return err
+			return ids, err
 		}
 		for _, f := range followees {
-			if err := m.pubsubService.SubscribeUserUpdate(f.Followee); err != nil {
-				return err
+			if f.Followee == ownerId {
+				continue
 			}
-
+			ids = append(ids, f.Followee)
 		}
 		if len(followees) < int(limit) {
 			break
 		}
 		nextCursor = cur
 	}
-
-	log.Infoln("pubsub: followees presubscribed")
-	return nil
+	return ids, nil
 }
 
 func (m *MemberNode) Connect(p warpnet.WarpAddrInfo) error {
