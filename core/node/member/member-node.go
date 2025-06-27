@@ -214,20 +214,20 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	//ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
+	ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
 
-	//if err := m.consensusService.Start(m); err != nil {
-	//	return err
-	//}
-	//
-	//ev := event.ValidationEvent{
-	//	ValidatedNodeID: nodeInfo.ID.String(),
-	//	SelfHashHex:     m.selfHashHex,
-	//	User:            &ownerUser,
-	//}
-	//if err := m.consensusService.AskValidation(ev); err != nil {
-	//	return err
-	//}
+	if err := m.consensusService.Start(m); err != nil {
+		return err
+	}
+
+	ev := event.ValidationEvent{
+		ValidatedNodeID: nodeInfo.ID.String(),
+		SelfHashHex:     m.selfHashHex,
+		User:            &ownerUser,
+	}
+	if err := m.consensusService.AskValidation(ev); err != nil {
+		return err
+	}
 
 	println()
 	fmt.Printf(
