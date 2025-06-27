@@ -86,6 +86,9 @@ func NewMemberNode(
 	db Storer,
 	interruptChan chan os.Signal,
 ) (_ *MemberNode, err error) {
+	if len(privKey) == 0 {
+		return nil, errors.New("private key is required")
+	}
 	nodeRepo, err := database.NewNodeRepo(db, version)
 	if err != nil {
 		return nil, err

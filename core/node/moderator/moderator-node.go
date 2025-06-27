@@ -51,7 +51,16 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
+)
+
+// build constrained
+var (
+	moderator  Moderator
+	cond       = sync.NewCond(new(sync.Mutex))
+	modelReady = new(atomic.Bool)
 )
 
 type ModeratorNode struct {
@@ -60,11 +69,12 @@ type ModeratorNode struct {
 	node    *base.WarpNode
 	options []libp2p.Option
 
-	moderator         Moderator
-	streamer          Streamer
-	pubsubService     PubSubProvider
-	dHashTable        DistributedHashTableCloser
-	store             DistributedStorer
+	streamer Streamer
+	store    DistributedStorer
+
+	pubsubService PubSubProvider
+	dHashTable    DistributedHashTableCloser
+
 	consensusService  ConsensusServicer
 	memoryStoreCloseF func() error
 
@@ -162,6 +172,9 @@ func (mn *ModeratorNode) Start() (err error) {
 		return errors.New("moderator: nil node")
 	}
 
+	cond.L.Lock()
+	defer cond.L.Unlock()
+
 	mn.node, err = base.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %v", err)
@@ -189,19 +202,14 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("failed to init moderator IPFS node: %v", err)
 	}
 
-	//modelPath, err := ensureModelPresence(mn.store)
-	//if err != nil {
-	//	return err
-	//}
+	confModelPath := config.Config().Node.Moderator.Path
+	cid := config.Config().Node.Moderator.CID
+	if err = ensureModelPresence(confModelPath, cid, mn.store); err != nil {
+		return err
+	}
 
-	modelPath := "/tmp/llama-2-7b-chat.Q8_0.gguf"
-
-	log.Infof("moderator: LLM model path: %s", modelPath)
-
-	//mn.moderator, err = moderation.NewLlamaEngine(modelPath, runtime.NumCPU())
-	//if err != nil {
-	//	return err
-	//}
+	modelReady.Store(true)
+	cond.Signal()
 
 	if err := mn.pubsubService.SubscribeModerationTopic(); err != nil {
 		return err
@@ -249,21 +257,17 @@ func (mn *ModeratorNode) setupHandlers() {
 		},
 		warpnet.WarpHandler{
 			event.PRIVATE_POST_MODERATE, // TODO protect this endpoint
-			logMw(mw.UnwrapStreamMiddleware(handler.StreamModerateHandler(mn, mn.moderator))),
+			logMw(mw.UnwrapStreamMiddleware(handler.StreamModerateHandler(mn, moderator))),
 		},
 	)
 }
 
-func ensureModelPresence(store DistributedStorer) (string, error) {
-	var (
-		fileExists bool
-		path       = config.Config().Node.Moderator.Path
-		cid        = config.Config().Node.Moderator.CID
-	)
+func ensureModelPresence(path, cid string, store DistributedStorer) error {
+	var fileExists bool
 
 	f, err := os.Open(path)
 	if err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("failed to read model path: %v", err)
+		return fmt.Errorf("failed to read model path: %v", err)
 	}
 
 	fileExists = !os.IsNotExist(err)
@@ -284,7 +288,7 @@ func ensureModelPresence(store DistributedStorer) (string, error) {
 			_ = f.Close()
 		}()
 
-		return path, nil
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -292,7 +296,7 @@ func ensureModelPresence(store DistributedStorer) (string, error) {
 
 	reader, err := store.GetStream(ctx, cid)
 	if err != nil {
-		return "", fmt.Errorf("failed to get stream in IPFS: %v", err)
+		return fmt.Errorf("failed to get stream in IPFS: %v", err)
 	}
 	defer reader.Close()
 
@@ -301,13 +305,13 @@ func ensureModelPresence(store DistributedStorer) (string, error) {
 	path = "llama-2-7b-chat.Q8_0.gguf.tmp"
 	file, err := os.Create(path)
 	if err != nil {
-		return "", fmt.Errorf("creating file: %v", err)
+		return fmt.Errorf("creating file: %v", err)
 	}
 	defer file.Close()
 
 	_, err = io.Copy(file, reader)
 	if err != nil {
-		return "", fmt.Errorf("writing to file: %v", err)
+		return fmt.Errorf("writing to file: %v", err)
 	}
 
 	finalPath := strings.TrimSuffix(path, ".tmp")
@@ -315,7 +319,7 @@ func ensureModelPresence(store DistributedStorer) (string, error) {
 		log.Errorf("renaming file: %v", err)
 	}
 
-	return finalPath, nil
+	return nil
 }
 
 func (mn *ModeratorNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {

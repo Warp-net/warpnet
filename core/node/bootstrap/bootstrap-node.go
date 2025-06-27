@@ -70,6 +70,9 @@ func NewBootstrapNode(
 	selfHashHex string,
 	interruptChan chan os.Signal,
 ) (_ *BootstrapNode, err error) {
+	if len(privKey) == 0 {
+		return nil, errors.New("private key is required")
+	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
 	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
@@ -128,6 +131,7 @@ func NewBootstrapNode(
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		selfHashHex:       selfHashHex,
+		privKey:           privKey,
 	}
 
 	bn.consensusService = consensus.NewGossipConsensus(
