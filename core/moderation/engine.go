@@ -46,9 +46,7 @@ func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
 	}
 
 	lle := &llamaEngine{llm: llm, opts: opts}
-	prompt := generatePrompt("White tea is better than black")
-	_, err = lle.llm.Predict(prompt, lle.opts...) // warm up!
-	return lle, err
+	return lle, nil
 }
 
 func (e *llamaEngine) Moderate(content string) (bool, string, error) {

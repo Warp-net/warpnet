@@ -187,11 +187,10 @@ func main() {
 	serverNodeAuthInfo.Identity.Owner.NodeId = serverNode.NodeInfo().ID.String()
 	serverNodeAuthInfo.NodeInfo = serverNode.NodeInfo()
 
-	readyChan <- serverNodeAuthInfo
-
 	if err := clientNode.Pair(serverNodeAuthInfo); err != nil {
 		log.Fatalf("failed to pair client node: %v", err)
 	}
+	readyChan <- serverNodeAuthInfo
 
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Server, serverNodeAuthInfo.Identity.Owner.NodeId, false,
