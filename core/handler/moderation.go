@@ -203,7 +203,7 @@ func StreamModerationResultHandler(
 			return nil, err
 		}
 
-		log.Infof("moderation: result received, object ID: %s, result: %s", ev.ObjectID, ev.Result.String())
+		log.Infof("moderation: result received, result: %s", ev.Result.String())
 
 		var (
 			updatedAt          = time.Now()
