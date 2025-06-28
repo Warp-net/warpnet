@@ -63,7 +63,7 @@ func NewClientNode(ctx context.Context, psk security.PSK) (_ *WarpClientNode, er
 	n := &WarpClientNode{
 		ctx:            ctx,
 		clientNode:     nil,
-		retrier:        retrier.New(time.Second*5, 10, retrier.ExponentialBackoff),
+		retrier:        retrier.New(time.Second, 5, retrier.FixedBackoff),
 		serverNodeAddr: serverNodeAddrDefault,
 		isRunning:      new(atomic.Bool),
 		psk:            psk,
@@ -91,7 +91,7 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 	if err != nil {
 		return fmt.Errorf("client: creating address info: %s", err)
 	}
-	client, err := libp2p.New(
+	n.clientNode, err = libp2p.New(
 		libp2p.RandomIdentity,
 		libp2p.NoListenAddrs,
 		libp2p.DisableMetrics(),
@@ -106,9 +106,8 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 		return fmt.Errorf("client: init %s", err)
 	}
 
-	n.clientNode = client
-	client.Peerstore().AddAddrs(peerInfo.ID, peerInfo.Addrs, warpnet.PermanentTTL)
-	if len(client.Addrs()) != 0 {
+	n.clientNode.Peerstore().AddAddrs(peerInfo.ID, peerInfo.Addrs, warpnet.PermanentTTL)
+	if len(n.clientNode.Addrs()) != 0 {
 		return warpnet.WarpError("client: must have no addresses")
 	}
 

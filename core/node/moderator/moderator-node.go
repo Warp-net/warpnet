@@ -198,6 +198,9 @@ func (mn *ModeratorNode) Start() (err error) {
 	}
 
 	readyChan <- struct{}{}
+	if moderator == nil {
+		return errors.New("failed to init moderator engine")
+	}
 
 	// wait until moderator set up
 	if err := mn.pubsubService.SubscribeModerationTopic(); err != nil {

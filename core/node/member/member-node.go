@@ -202,9 +202,7 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to init node: %v", err)
 	}
-
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
-
 	if m.pseudoNode != nil {
 		m.node.Node().Peerstore().AddAddrs(m.pseudoNode.ID(), m.pseudoNode.Addrs(), time.Hour*24)
 	}
