@@ -37,9 +37,9 @@ import (
 
 func init() {
 	go func() {
-		defer close(readyChan)
+		defer close(moderatorReadyChan)
 		select {
-		case <-readyChan:
+		case <-moderatorReadyChan:
 		case <-time.After(time.Minute * 2):
 			log.Errorln("failed to wait for ready chan")
 			return
@@ -51,6 +51,5 @@ func init() {
 			log.Fatalf("moderator node: initializing: %v", err)
 		}
 		log.Infoln("moderator node: initialized")
-
 	}()
 }

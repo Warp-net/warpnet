@@ -56,8 +56,8 @@ import (
 
 // build constrained
 var (
-	moderator Moderator
-	readyChan = make(chan struct{}, 1)
+	moderator          Moderator
+	moderatorReadyChan = make(chan struct{}, 1)
 )
 
 type ModeratorNode struct {
@@ -197,7 +197,8 @@ func (mn *ModeratorNode) Start() (err error) {
 		return err
 	}
 
-	readyChan <- struct{}{}
+	moderatorReadyChan <- struct{}{}
+	<-moderatorReadyChan
 	if moderator == nil {
 		return errors.New("failed to init moderator engine")
 	}
