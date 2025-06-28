@@ -56,6 +56,12 @@ func StreamModerateHandler(streamer ModerationStreamer, moderator HandlerModerat
 		if err != nil {
 			return nil, err
 		}
+		if moderator == nil {
+			return nil, errors.New("moderator is not initialized")
+		}
+		if streamer == nil {
+			return nil, errors.New("streamer is not initialized")
+		}
 
 		var (
 			result event.ModerationResultEvent

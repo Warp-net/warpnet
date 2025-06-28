@@ -180,13 +180,7 @@ func (bn *BootstrapNode) Start() (err error) {
 		return err
 	}
 
-	ev := event.ValidationEvent{
-		ValidatedNodeID: nodeInfo.ID.String(),
-		SelfHashHex:     bn.selfHashHex,
-	}
-	if err := bn.consensusService.AskValidation(ev); err != nil {
-		return err
-	}
+	bn.consensusService.AskValidation(event.ValidationEvent{nodeInfo.ID.String(), bn.selfHashHex, nil}) // blocking call
 
 	println()
 	fmt.Printf(

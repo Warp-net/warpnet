@@ -166,7 +166,7 @@ func NewModeratorNode(
 
 func (mn *ModeratorNode) Start() (err error) {
 	if mn == nil {
-		return errors.New("moderator: nil node")
+		panic("moderator: nil node")
 	}
 
 	mn.node, err = base.NewWarpNode(mn.ctx, mn.options...)
@@ -182,28 +182,24 @@ func (mn *ModeratorNode) Start() (err error) {
 	if err := mn.consensusService.Start(mn); err != nil {
 		return err
 	}
-
-	ev := event.ValidationEvent{
-		ValidatedNodeID: nodeInfo.ID.String(),
-		SelfHashHex:     mn.selfHashHex,
-	}
-	if err := mn.consensusService.AskValidation(ev); err != nil {
-		return err
-	}
+	mn.consensusService.AskValidation(event.ValidationEvent{nodeInfo.ID.String(), mn.selfHashHex, nil}) // blocking call
 
 	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
 	if err != nil {
 		return fmt.Errorf("failed to init moderator IPFS node: %v", err)
 	}
 
-	confModelPath := config.Config().Node.Moderator.Path
-	cid := config.Config().Node.Moderator.CID
+	var (
+		confModelPath = config.Config().Node.Moderator.Path
+		cid           = config.Config().Node.Moderator.CID
+	)
 	if err = ensureModelPresence(confModelPath, cid, mn.store); err != nil {
 		return err
 	}
 
 	readyChan <- struct{}{}
 
+	// wait until moderator set up
 	if err := mn.pubsubService.SubscribeModerationTopic(); err != nil {
 		return err
 	}
@@ -367,6 +363,10 @@ func (mn *ModeratorNode) Stop() {
 	}
 	if mn.store != nil {
 		_ = mn.store.Close()
+	}
+
+	if mn.consensusService != nil {
+		mn.consensusService.Close()
 	}
 
 	mn.node.StopNode()

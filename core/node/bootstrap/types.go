@@ -58,7 +58,7 @@ type ProviderCloser interface {
 type ConsensusServicer interface {
 	Start(streamer consensus.ConsensusStreamer) (err error)
 	Close()
-	AskValidation(data event.ValidationEvent) error
+	AskValidation(data event.ValidationEvent)
 	Validate(ev event.ValidationEvent) error
 	ValidationResult(ev event.ValidationResultEvent) error
 }

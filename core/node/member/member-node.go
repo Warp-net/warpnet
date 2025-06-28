@@ -219,7 +219,10 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
+	ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
+	if err != nil {
+		return err
+	}
 
 	if err := m.consensusService.Start(m); err != nil {
 		return err
@@ -230,9 +233,7 @@ func (m *MemberNode) Start() (err error) {
 		SelfHashHex:     m.selfHashHex,
 		User:            &ownerUser,
 	}
-	if err := m.consensusService.AskValidation(ev); err != nil {
-		return err
-	}
+	go m.consensusService.AskValidation(ev)
 
 	println()
 	fmt.Printf(

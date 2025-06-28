@@ -382,6 +382,13 @@ type ValidationEvent struct {
 
 type ValidationResult int
 
+func (vr ValidationResult) String() string {
+	if vr == 0 {
+		return "invalid"
+	}
+	return "valid"
+}
+
 const (
 	Invalid ValidationResult = iota
 	Valid

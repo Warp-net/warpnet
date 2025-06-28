@@ -188,7 +188,6 @@ func (g *gossip) runListener() error {
 			if msg == nil || msg.Topic == nil {
 				continue
 			}
-			log.Infof("gossip: reseived message for topic %s", *msg.Topic)
 
 			g.mx.RLock()
 			handlerF, ok := g.handlersMap[strings.TrimSpace(*msg.Topic)]

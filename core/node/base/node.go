@@ -64,6 +64,7 @@ type WarpNode struct {
 	backoff  BackoffEnabler
 
 	isClosed     *atomic.Bool
+	readyChan    chan struct{}
 	version      *semver.Version
 	reachability atomic.Int32
 
@@ -117,6 +118,7 @@ func NewWarpNode(
 		relay:     relayService,
 		streamer:  stream.NewStreamPool(ctx, node),
 		isClosed:  new(atomic.Bool),
+		readyChan: make(chan struct{}),
 		version:   version,
 		startTime: time.Now(),
 		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
@@ -125,6 +127,7 @@ func NewWarpNode(
 	}
 
 	go wn.trackIncomingEvents()
+	<-wn.readyChan
 	return wn, nil
 }
 
@@ -194,7 +197,7 @@ func (n *WarpNode) trackIncomingEvents() {
 			log.Infof(
 				"node: event: peer ...%s connectedness updated: %s",
 				pid[len(pid)-6:],
-				strings.ToLower(connectednessEvent.Connectedness.String()),
+				connectednessEvent.Connectedness.String(),
 			)
 		case event.EvtPeerIdentificationFailed:
 			identificationEvent := ev.(event.EvtPeerIdentificationFailed)
@@ -218,6 +221,10 @@ func (n *WarpNode) trackIncomingEvents() {
 				strings.ToLower(r.String()),
 			)
 			n.reachability.Store(int32(r))
+			select {
+			case n.readyChan <- struct{}{}:
+			default:
+			}
 		case event.EvtNATDeviceTypeChanged:
 			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
 			log.Infof(
@@ -228,7 +235,6 @@ func (n *WarpNode) trackIncomingEvents() {
 			if len(ev.(event.EvtAutoRelayAddrsUpdated).RelayAddrs) != 0 {
 				log.Infoln("node: event: relay address added")
 			}
-
 		case event.EvtLocalAddressesUpdated:
 			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
 				log.Debugf(
@@ -366,5 +372,6 @@ func (n *WarpNode) StopNode() {
 	}
 	n.isClosed.Store(true)
 	n.node = nil
+	close(n.readyChan)
 	return
 }
