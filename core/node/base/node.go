@@ -127,7 +127,12 @@ func NewWarpNode(
 	}
 
 	go wn.trackIncomingEvents()
-	<-wn.readyChan
+
+	select {
+	case <-wn.readyChan:
+	case <-time.After(time.Minute):
+	}
+
 	return wn, nil
 }
 
