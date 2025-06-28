@@ -424,6 +424,13 @@ const (
 	FAIL ModerationResult = false
 )
 
+func (mr ModerationResult) String() string {
+	if mr {
+		return "OK"
+	}
+	return "FAIL"
+}
+
 type ModerationResultEvent struct {
 	Type     ModerationObjectType `json:"type"`
 	Result   ModerationResult     `json:"result"`

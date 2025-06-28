@@ -273,7 +273,6 @@ func (g *gossipConsensus) Validate(ev event.ValidationEvent) error {
 		}
 	}
 
-	log.Infof("gossip consensus: sending validation result to: %s", ev.ValidatedNodeID)
 	_, err := g.streamer.GenericStream(
 		ev.ValidatedNodeID,
 		event.PUBLIC_POST_NODE_VALIDATION_RESULT,

@@ -36,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 	"time"
 )
 
@@ -63,10 +64,9 @@ func StreamModerateHandler(streamer ModerationStreamer, moderator HandlerModerat
 			return nil, errors.New("streamer is not initialized")
 		}
 
-		var (
-			result event.ModerationResultEvent
-		)
+		log.Infoln("moderation: request received, object ID:", ev.ObjectID)
 
+		var result event.ModerationResultEvent
 		switch ev.Type {
 		case event.Tweet:
 			result, err = handleTweet(ev, streamer, moderator)
@@ -203,22 +203,22 @@ func StreamModerationResultHandler(
 			return nil, err
 		}
 
-		if ev.Result == event.OK {
-			// TODO
-			return event.Accepted, nil
-		}
+		log.Infof("moderation: result received, object ID: %s, result: %s", ev.ObjectID, ev.Result.String())
 
 		var (
-			text               string
 			updatedAt          = time.Now()
 			isModerationPassed = ev.Result == event.OK
 		)
-		if ev.Reason != nil {
-			text = fmt.Sprintf("content didn't pass moderation: %s", *ev.Reason)
-		}
 
 		switch ev.Type {
 		case event.Tweet:
+			tweetModeration := &domain.TweetModeration{
+				IsModerated: true,
+				IsOk:        isModerationPassed,
+				Reason:      ev.Reason,
+				TimeAt:      updatedAt,
+			}
+
 			if ev.ObjectID == nil {
 				return nil, errors.New("moderation: no object id provided")
 			}
@@ -227,18 +227,14 @@ func StreamModerationResultHandler(
 				return nil, err
 			}
 
-			// actual moderation
-			// tweet.Moderation // TODO moderation fields
-			tweet.Text = text
+			tweet.Moderation = tweetModeration
 			tweet.UpdatedAt = &updatedAt
 
 			_, err = tweetRepo.Create(ev.UserID, tweet)
 			return event.Accepted, err
 		case event.User:
 			_, err = userRepo.Update(ev.UserID, domain.User{
-				Bio:       text, // actual moderation
 				UpdatedAt: &updatedAt,
-				Username:  "moderated",
 				Moderation: &domain.UserModeration{
 					IsModerated: true,
 					IsOk:        isModerationPassed,
@@ -246,7 +242,6 @@ func StreamModerationResultHandler(
 					Strikes:     1, // TODO incr
 					TimeAt:      updatedAt,
 				},
-				Metadata: nil,
 			})
 			return event.Accepted, err
 

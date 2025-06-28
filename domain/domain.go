@@ -114,13 +114,21 @@ type Tweet struct {
 	ParentId  *string    `json:"parent_id,omitempty"`
 
 	// RetweetedBy retweeted by user id
-	RetweetedBy *string `json:"retweeted_by,omitempty"`
-	RootId      string  `json:"root_id"`
-	Text        string  `json:"text"`
-	UserId      string  `json:"user_id"`
-	Username    string  `json:"username"`
-	ImageKey    string  `json:"image_key"`
-	Network     string  `json:"network"`
+	RetweetedBy *string          `json:"retweeted_by,omitempty"`
+	RootId      string           `json:"root_id"`
+	Text        string           `json:"text"`
+	UserId      string           `json:"user_id"`
+	Username    string           `json:"username"`
+	ImageKey    string           `json:"image_key"`
+	Network     string           `json:"network"`
+	Moderation  *TweetModeration `json:"moderation,omitempty"`
+}
+
+type TweetModeration struct {
+	IsModerated bool      `json:"is_moderated"`
+	IsOk        bool      `json:"is_ok"`
+	Reason      *string   `json:"reason"`
+	TimeAt      time.Time `json:"time_at"`
 }
 
 // User defines model for User.
