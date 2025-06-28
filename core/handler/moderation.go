@@ -203,11 +203,19 @@ func StreamModerationResultHandler(
 			return nil, err
 		}
 
+		if ev.Result == event.OK {
+			// TODO
+			return event.Accepted, nil
+		}
+
 		var (
-			text               = fmt.Sprintf("content didn't pass moderation: %s", *ev.Reason)
+			text               string
 			updatedAt          = time.Now()
 			isModerationPassed = ev.Result == event.OK
 		)
+		if ev.Reason != nil {
+			text = fmt.Sprintf("content didn't pass moderation: %s", *ev.Reason)
+		}
 
 		switch ev.Type {
 		case event.Tweet:
