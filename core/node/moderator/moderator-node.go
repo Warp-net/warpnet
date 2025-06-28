@@ -168,12 +168,33 @@ func (mn *ModeratorNode) Start() (err error) {
 	if mn == nil {
 		panic("moderator: nil node")
 	}
+	mw := middleware.NewWarpMiddleware()
+	logMw := mw.LoggingMiddleware
+	unwrapMw := mw.UnwrapStreamMiddleware
 
 	mn.node, err = base.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %v", err)
 	}
-	mn.setupHandlers()
+
+	mn.node.SetStreamHandlers(
+		warpnet.WarpHandler{
+			event.PRIVATE_POST_NODE_VALIDATE,
+			logMw(unwrapMw(handler.StreamValidateHandler(mn.consensusService))),
+		},
+		warpnet.WarpHandler{
+			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+			logMw(unwrapMw(handler.StreamValidationResponseHandler(mn.consensusService))),
+		},
+		warpnet.WarpHandler{
+			event.PUBLIC_GET_INFO,
+			logMw(handler.StreamGetInfoHandler(mn, nil)),
+		},
+		warpnet.WarpHandler{
+			event.PUBLIC_POST_NODE_CHALLENGE,
+			logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), mn.privKey))),
+		},
+	)
 
 	mn.pubsubService.Run(mn)
 
@@ -202,6 +223,12 @@ func (mn *ModeratorNode) Start() (err error) {
 	if moderator == nil {
 		return errors.New("failed to init moderator engine")
 	}
+	mn.node.SetStreamHandlers(
+		warpnet.WarpHandler{
+			event.PRIVATE_POST_MODERATE, // TODO protect this endpoint
+			logMw(mw.UnwrapStreamMiddleware(handler.StreamModerateHandler(mn, moderator))),
+		},
+	)
 
 	// wait until moderator set up
 	if err := mn.pubsubService.SubscribeModerationTopic(); err != nil {
@@ -221,38 +248,6 @@ func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	baseInfo := mn.node.BaseNodeInfo()
 	baseInfo.OwnerId = warpnet.ModeratorOwner
 	return baseInfo
-}
-
-func (mn *ModeratorNode) setupHandlers() {
-	if mn.node == nil {
-		panic("bootstrap: nil inner p2p node")
-	}
-	mw := middleware.NewWarpMiddleware()
-	logMw := mw.LoggingMiddleware
-	unwrapMw := mw.UnwrapStreamMiddleware
-
-	mn.node.SetStreamHandlers(
-		warpnet.WarpHandler{
-			event.PRIVATE_POST_NODE_VALIDATE,
-			logMw(unwrapMw(handler.StreamValidateHandler(mn.consensusService))),
-		},
-		warpnet.WarpHandler{
-			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-			logMw(unwrapMw(handler.StreamValidationResponseHandler(mn.consensusService))),
-		},
-		warpnet.WarpHandler{
-			event.PUBLIC_GET_INFO,
-			logMw(handler.StreamGetInfoHandler(mn, nil)),
-		},
-		warpnet.WarpHandler{
-			event.PUBLIC_POST_NODE_CHALLENGE,
-			logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), mn.privKey))),
-		},
-		warpnet.WarpHandler{
-			event.PRIVATE_POST_MODERATE, // TODO protect this endpoint
-			logMw(mw.UnwrapStreamMiddleware(handler.StreamModerateHandler(mn, moderator))),
-		},
-	)
 }
 
 func ensureModelPresence(path, cid string, store DistributedStorer) error {
