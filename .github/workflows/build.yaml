@@ -51,3 +51,12 @@ jobs:
           tags: ghcr.io/warp-net/warpnet-member:latest
           build-args: |
             NODE_TYPE=member
+
+      - name: Build and push Moderator Docker image
+        id: docker_build_moderator
+        uses: docker/build-push-action@v6
+        with:
+          file: Dockerfile.moderator
+          push: true
+          tags: ghcr.io/warp-net/warpnet-moderator:latest
+

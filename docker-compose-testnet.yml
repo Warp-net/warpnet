@@ -37,8 +37,7 @@ services:
 
   warpnet-moderator:
     container_name: warpnet-moderator1
-    build:
-      dockerfile: Dockerfile.moderator
+    image: ghcr.io/warp-net/warpnet-moderator:latest
     network_mode: host
     restart: always
     environment:
