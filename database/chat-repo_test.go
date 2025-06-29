@@ -43,7 +43,7 @@ const testUserID = "01BX5ZZKBKACTAV9WEVGEMTEST"
 
 func setupChatRepo() (*ChatRepo, func(), error) {
 	var err error
-	db, err := local.New(".", true, "")
+	db, err := local.New(".", true)
 	if err != nil {
 		return nil, nil, err
 	}

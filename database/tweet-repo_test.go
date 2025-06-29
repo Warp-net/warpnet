@@ -46,7 +46,7 @@ type TweetRepoTestSuite struct {
 
 func (s *TweetRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", true, "")
+	s.db, err = local.New(".", true)
 	s.Require().NoError(err)
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))

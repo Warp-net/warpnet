@@ -46,7 +46,7 @@ type TimelineRepoTestSuite struct {
 
 func (s *TimelineRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", true, "")
+	s.db, err = local.New(".", true)
 	s.Require().NoError(err)
 
 	auth := NewAuthRepo(s.db)

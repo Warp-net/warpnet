@@ -47,8 +47,7 @@ services:
       - LOGGING_LEVEL=info
       - NODE_SEED=warpnet-moderator1
     volumes:
-      - db:/home/chmo/.warpdata:rw
+      - /home/chmo/.warpdata:/root/.warpdata:rw
 
-volumes:
-  db:
+
 

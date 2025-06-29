@@ -44,7 +44,7 @@ type FollowRepoTestSuite struct {
 
 func (s *FollowRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", true, "")
+	s.db, err = local.New(".", true)
 	s.Require().NoError(err)
 
 	authRepo := NewAuthRepo(s.db)
