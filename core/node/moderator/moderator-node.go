@@ -203,7 +203,9 @@ func (mn *ModeratorNode) Start() (err error) {
 	if err := mn.consensusService.Start(mn); err != nil {
 		return err
 	}
-	mn.consensusService.AskValidation(event.ValidationEvent{nodeInfo.ID.String(), mn.selfHashHex, nil}) // blocking call
+	mn.consensusService.AskValidation(
+		event.ValidationEvent{nodeInfo.ID.String(), mn.selfHashHex, nil},
+	) // blocking call
 
 	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
 	if err != nil {
@@ -250,17 +252,16 @@ func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	return baseInfo
 }
 
+func isModelExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
 func ensureModelPresence(path, cid string, store DistributedStorer) error {
-	var fileExists bool
-
 	f, err := os.Open(path)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to read model path: %v", err)
-	}
 
-	fileExists = !os.IsNotExist(err)
-
-	if fileExists {
+	if isModelExists(path) {
+		log.Infof("LLM file found: %s", path)
 		// send it to background
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -279,7 +280,7 @@ func ensureModelPresence(path, cid string, store DistributedStorer) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
 
 	reader, err := store.GetStream(ctx, cid)

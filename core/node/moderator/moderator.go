@@ -39,7 +39,7 @@ func init() {
 		defer close(moderatorReadyChan)
 		select {
 		case <-moderatorReadyChan:
-		case <-time.After(time.Minute * 6): // more than consensus timeout
+		case <-time.After(time.Hour): // more than consensus timeout
 			log.Errorln("failed to wait for ready chan")
 			return
 		}

@@ -36,7 +36,7 @@ services:
       - NODE_SEED=warpnet3
 
   warpnet-moderator:
-    container_name: warpnet-moderator1
+    container_name: moderator1
     image: ghcr.io/warp-net/warpnet-moderator:latest
     network_mode: host
     restart: always
@@ -46,4 +46,9 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - NODE_SEED=warpnet-moderator1
+    volumes:
+      - db:/home/chmo/.warpdata:rw
+
+volumes:
+  db:
 

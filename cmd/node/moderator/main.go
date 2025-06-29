@@ -47,7 +47,8 @@ func main() {
 	}
 
 	version := config.Config().Version
-	psk, err := security.GeneratePSK(version)
+	network := config.Config().Node.Network
+	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
 		panic(err)
 	}
@@ -76,10 +77,6 @@ func main() {
 	defer cancel()
 
 	seed := []byte(config.Config().Node.Seed)
-	if len(seed) == 0 {
-		seed = []byte("moderator-node")
-	}
-
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
 		log.Fatalf("moderator: fail generating key: %v", err)

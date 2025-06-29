@@ -37,7 +37,6 @@ import (
 	"github.com/docker/go-units"
 	log "github.com/sirupsen/logrus"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -110,12 +109,9 @@ type WarpDBLogger interface {
 }
 
 func New(
-	path string,
+	dbPath string,
 	isInMemory bool,
-	dataFolder string,
 ) (*DB, error) {
-	dbPath := filepath.Join(path, dataFolder)
-
 	opts := badger.
 		DefaultOptions(dbPath).
 		WithSyncWrites(false).

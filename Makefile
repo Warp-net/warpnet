@@ -17,7 +17,7 @@ tests:
 	CGO_ENABLED=0 go test -count=1 -short -v ./...
 
 prune:
-	(pkill -9 main || true) && rm -rf $(HOME)/.badgerdb
+	(pkill -9 main || true) && rm -rf $(HOME)/.warpdata
 
 check-heap:
 	go build -gcflags="-m" main.go

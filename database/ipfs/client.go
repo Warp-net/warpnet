@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	warpConfig "github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/ipfs/boxo/files"
 	"github.com/ipfs/boxo/path"
@@ -59,10 +60,6 @@ import (
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 )
 
-const (
-	repoPath = "/tmp/ipfs" // TODO
-)
-
 type WarpNodeIdentifier interface {
 	NodeInfo() warpnet.NodeInfo
 	PrivateKey() warpnet.WarpPrivateKey
@@ -76,6 +73,7 @@ type Client struct {
 func NewIPFS(ctx context.Context, n host.Host) (*Client, error) {
 	_ = golog.SetLogLevel("core", "error")
 
+	repoPath := warpConfig.Config().Database.Path
 	plugins, err := loader.NewPluginLoader(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("error loading plugins: %s", err)

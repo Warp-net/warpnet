@@ -97,7 +97,17 @@ func (g *gossipConsensus) listenResponses() {
 	)
 	defer timeoutTicker.Stop()
 	defer ticker.Stop()
-	defer g.isValidationDone.Store(true)
+	defer func() {
+		g.isValidationDone.Store(true)
+		log.Infoln("gossip consensus: listener exited")
+	}()
+
+	failNowF := func() {
+		select {
+		case g.interruptChan <- os.Interrupt:
+		default:
+		}
+	}
 
 	for range ticker.C {
 		if g.isClosed.Load() {
@@ -131,12 +141,14 @@ func (g *gossipConsensus) listenResponses() {
 		case <-timeoutTicker.C:
 			if validCount == 0 {
 				log.Errorf("gossip consensus: timeout: no peers responded")
-				g.interruptChan <- os.Interrupt
+				failNowF()
 				return
 			}
-			log.Warnf("gossip consensus: timed out:, %d peers responded, total %d", validCount, total)
-			if float64(validCount)/float64(total) < quorumRatio {
-				g.interruptChan <- os.Interrupt
+
+			ratio := float64(validCount) / float64(total)
+			log.Infof("gossip consensus: timed out: ratio: %f", ratio)
+			if ratio < quorumRatio {
+				failNowF()
 				return
 			}
 			log.Infoln("gossip consensus: consensus successful!")
@@ -169,7 +181,7 @@ func (g *gossipConsensus) listenResponses() {
 			case event.Invalid:
 				if total != 0 && invalidCount == total {
 					log.Infoln("gossip consensus: consensus failed!")
-					g.interruptChan <- os.Interrupt
+					failNowF()
 					return
 				}
 				if _, isSeen := invalidResponses[resp.ValidatorID]; isSeen {
@@ -209,13 +221,16 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) {
 		MessageId: uuid.New().String(),
 	}
 
-	g.runBackgroundValidation(msg)
+	g.runBackgroundPublishing(msg)
 	return
 }
 
-func (g *gossipConsensus) runBackgroundValidation(msg event.Message) {
+func (g *gossipConsensus) runBackgroundPublishing(msg event.Message) {
 	g.isBgRunning.Store(true)
-	defer g.isBgRunning.Store(false)
+	defer func() {
+		g.isBgRunning.Store(false)
+		log.Infoln("gossip consensus: background publishing exited")
+	}()
 
 	t := time.NewTicker(time.Second * 2)
 	defer t.Stop()
@@ -226,7 +241,7 @@ func (g *gossipConsensus) runBackgroundValidation(msg event.Message) {
 			return
 		}
 		if g.isValidationDone.Load() {
-			log.Infoln("gossip consensus: node validation finished - stop background validation")
+			log.Infoln("gossip consensus: node validation finished - stop background publishing")
 			return
 		}
 
@@ -245,8 +260,6 @@ func (g *gossipConsensus) runBackgroundValidation(msg event.Message) {
 
 			if err := g.broadcaster.PublishValidationRequest(msg); err != nil {
 				log.Errorf("gossip consensus: ask validation: %v", err)
-				g.interruptChan <- os.Interrupt
-				return
 			}
 		}
 	}
