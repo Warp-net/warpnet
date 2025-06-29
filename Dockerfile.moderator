@@ -1,20 +1,22 @@
-FROM golang:1.24-ubuntu
+FROM ubuntu:24.04
+
+RUN apt update && apt install -y curl tar build-essential ca-certificates
+
+ENV GO_VERSION=1.24.2
+RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -o go.tar.gz \
+    && tar -C /usr/local -xzf go.tar.gz \
+    && rm go.tar.gz
 
 COPY . /warpnet
 WORKDIR /warpnet
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    clang \
-    cmake \
-    pkg-config \
-    libstdc++-dev \
-    && rm -rf /var/lib/apt/lists/*
-
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOMODCACHE=/go/pkg/mod
+ENV GOPATH=/warpnet
 ENV CGO_ENABLED=1
 ENV GOMEMLIMIT=2750MiB
 ENV GOGC=50
 
-RUN go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
+RUN go version && go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
 
 CMD ["/warpnet/warpnet"]

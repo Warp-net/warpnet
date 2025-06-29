@@ -34,3 +34,17 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - NODE_SEED=warpnet3
+
+  warpnet-moderator:
+    container_name: warpnet-moderator1
+    build:
+      dockerfile: Dockerfile.moderator
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4004
+      - NODE_HOST_V4=88.119.169.156
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - NODE_SEED=warpnet-moderator1
+

@@ -115,6 +115,7 @@ func New(
 	dataFolder string,
 ) (*DB, error) {
 	dbPath := filepath.Join(path, dataFolder)
+
 	opts := badger.
 		DefaultOptions(dbPath).
 		WithSyncWrites(false).
@@ -145,7 +146,8 @@ func New(
 func isDirectoryEmpty(dirPath string) (bool, error) {
 	dirEntries, err := os.ReadDir(dirPath)
 	if err != nil {
-		if strings.Contains(err.Error(), "no such file or directory") {
+		if strings.Contains(err.Error(), "no such file or directory") ||
+			strings.Contains(err.Error(), "cannot find the file specified") {
 			err := os.Mkdir(dirPath, 0750)
 			return true, err
 		}

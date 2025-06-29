@@ -12,7 +12,7 @@ github.com/DataDog/zstd
 # github.com/Jorropo/jsync v1.0.1
 ## explicit; go 1.20
 github.com/Jorropo/jsync
-# github.com/Masterminds/semver/v3 v3.3.1
+# github.com/Masterminds/semver/v3 v3.4.0
 ## explicit; go 1.21
 github.com/Masterminds/semver/v3
 # github.com/Warp-net/warpnet-frontend v0.0.577

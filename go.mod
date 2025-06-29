@@ -5,7 +5,7 @@ go 1.24.2
 replace github.com/armon/go-metrics => github.com/armon/go-metrics v0.4.1
 
 require (
-	github.com/Masterminds/semver/v3 v3.3.1
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Warp-net/warpnet-frontend v0.0.577
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/docker/go-units v0.5.0
@@ -60,7 +60,7 @@ require (
 	github.com/caddyserver/zerossl v0.1.3 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cockroachdb/crlib v0.0.0-20241015224233-894974b3ad94 // indirect
-	github.com/cockroachdb/errors v1.11.3 // indirect
+	github.com/cockroachdb/errors v1.11.3
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/pebble/v2 v2.0.3 // indirect

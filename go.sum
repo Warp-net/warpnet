@@ -34,15 +34,11 @@ github.com/DataDog/zstd v1.5.6-0.20230824185856-869dae002e5e h1:ZIWapoIRN1VqT8GR
 github.com/DataDog/zstd v1.5.6-0.20230824185856-869dae002e5e/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
 github.com/Jorropo/jsync v1.0.1 h1:6HgRolFZnsdfzRUj+ImB9og1JYOxQoReSywkHOGSaUU=
 github.com/Jorropo/jsync v1.0.1/go.mod h1:jCOZj3vrBCri3bSU3ErUYvevKlnbssrXeCivybS5ABQ=
-github.com/Masterminds/semver/v3 v3.3.1 h1:QtNSWtVZ3nBfk8mAOu/B6v7FMJ+NHTIgUPi7rj+4nv4=
-github.com/Masterminds/semver/v3 v3.3.1/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
+github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
+github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/RaveNoX/go-jsoncommentstrip v1.0.0/go.mod h1:78ihd09MekBnJnxpICcwzCMzGrKSKYe4AqU6PDYYpjk=
-github.com/Warp-net/warpnet-frontend v0.0.575 h1:J71ZKOzi9Yd5mR17+U9ZXRcfE8+9kjMLqVw8W0AA73E=
-github.com/Warp-net/warpnet-frontend v0.0.575/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
-github.com/Warp-net/warpnet-frontend v0.0.576 h1:oIHfw3vrEIqUIxCLOntYLvix10rJQYuaCWC8sJyFmEA=
-github.com/Warp-net/warpnet-frontend v0.0.576/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
 github.com/Warp-net/warpnet-frontend v0.0.577 h1:JnikV2xje0mVrRCh9mAWy73VRddib5rCNT9MEkeUyj0=
 github.com/Warp-net/warpnet-frontend v0.0.577/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
 github.com/aclements/go-perfevent v0.0.0-20240301234650-f7843625020f h1:JjxwchlOepwsUWcQwD2mLUAGE9aCp0/ehy6yCHFBOvo=
