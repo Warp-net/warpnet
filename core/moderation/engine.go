@@ -29,9 +29,11 @@ func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
 	if modelPath == "" {
 		return nil, errors.New("model path is required")
 	}
-	llm, err := llama.New(modelPath,
+	llm, err := llama.New(
+		modelPath,
 		llama.SetContext(512),
 		llama.SetMMap(true),
+		llama.EnabelLowVRAM,
 	)
 	if err != nil {
 		return nil, err
@@ -43,6 +45,7 @@ func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
 		llama.SetTopP(0.9),
 		llama.SetTemperature(0.0),
 		llama.SetSeed(42),
+		llama.SetMlock(false),
 	}
 
 	lle := &llamaEngine{llm: llm, opts: opts}

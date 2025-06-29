@@ -3,7 +3,17 @@ FROM golang:1.24-ubuntu
 COPY . /warpnet
 WORKDIR /warpnet
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    clang \
+    cmake \
+    pkg-config \
+    libstdc++-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV CGO_ENABLED=1
+ENV GOMEMLIMIT=2750MiB
+ENV GOGC=50
 
 RUN go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
 
