@@ -113,7 +113,6 @@ func (g *gossipConsensus) listenResponses() {
 		}
 		subscribers := g.broadcaster.GetConsensusTopicSubscribers()
 		if isMeAlone(subscribers, g.broadcaster.OwnerID()) {
-			log.Infoln("gossip consensus: node is still alone")
 			timeoutTicker.Reset(timeout)
 			continue
 		}
@@ -238,7 +237,6 @@ func (g *gossipConsensus) runBackgroundValidation(msg event.Message) {
 		case <-t.C:
 			peers := g.broadcaster.GetConsensusTopicSubscribers()
 			if isMeAlone(peers, g.broadcaster.OwnerID()) {
-				log.Infoln("gossip consensus: node is alone")
 				continue
 			}
 
