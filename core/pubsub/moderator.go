@@ -32,16 +32,20 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
+	"sync"
 )
 
 type moderatorPubSub struct {
 	ctx    context.Context
 	pubsub *gossip
+
+	mx *sync.Mutex
 }
 
 func NewPubSubModerator(ctx context.Context) *moderatorPubSub {
 	bps := &moderatorPubSub{
 		ctx: ctx,
+		mx:  new(sync.Mutex),
 	}
 	bps.pubsub = newGossip(ctx)
 	return bps
@@ -72,7 +76,13 @@ func (g *moderatorPubSub) SubscribeModerationTopic() error {
 
 	return g.pubsub.subscribe(TopicHandler{
 		TopicName: pubSubModerationTopic,
-		Handler:   g.pubsub.selfStream,
+		Handler: func(data []byte) error {
+			if !g.mx.TryLock() {
+				return warpnet.WarpError("moderator pubsub: moderation topic is busy")
+			}
+			g.mx.Unlock()
+			return g.pubsub.selfStream(data)
+		},
 	})
 }
 

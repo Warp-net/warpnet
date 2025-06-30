@@ -168,6 +168,12 @@ func (mn *ModeratorNode) Start() (err error) {
 	if mn == nil {
 		panic("moderator: nil node")
 	}
+	var (
+		confModelPath = config.Config().Node.Moderator.Path
+		cid           = config.Config().Node.Moderator.CID
+	)
+	modelFile, isModelExists := isModelExists(confModelPath)
+
 	mw := middleware.NewWarpMiddleware()
 	logMw := mw.LoggingMiddleware
 	unwrapMw := mw.UnwrapStreamMiddleware
@@ -212,12 +218,10 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("failed to init moderator IPFS node: %v", err)
 	}
 
-	var (
-		confModelPath = config.Config().Node.Moderator.Path
-		cid           = config.Config().Node.Moderator.CID
-	)
-	if err = ensureModelPresence(confModelPath, cid, mn.store); err != nil {
-		return err
+	if !isModelExists {
+		if err = fetchModel(confModelPath, cid, mn.store); err != nil {
+			return err
+		}
 	}
 
 	moderatorReadyChan <- struct{}{}
@@ -237,6 +241,10 @@ func (mn *ModeratorNode) Start() (err error) {
 		return err
 	}
 
+	if isModelExists {
+		go storeModel(modelFile, mn.store)
+	}
+
 	println()
 	fmt.Printf(
 		"\033[1mMODERATOR NODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",
@@ -252,34 +260,30 @@ func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	return baseInfo
 }
 
-func isModelExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+func isModelExists(path string) (*os.File, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false
+	}
+	return f, true
 }
 
-func ensureModelPresence(path, cid string, store DistributedStorer) error {
-	f, err := os.Open(path)
+func storeModel(f *os.File, store DistributedStorer) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
 
-	if isModelExists(path) {
-		log.Infof("LLM file found: %s", path)
-		// send it to background
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-			defer cancel()
-
-			cid, err = store.PutStream(ctx, f)
-			if err != nil {
-				log.Errorf("failed to put file in IPFS: %v", err)
-				_ = f.Close()
-				return
-			}
-			log.Infof("moderator: LLM model uploaded: CID: %s", cid)
-			_ = f.Close()
-		}()
-
-		return nil
+	cid, err := store.PutStream(ctx, f)
+	if err != nil {
+		log.Errorf("failed to put file in IPFS: %v", err)
+		_ = f.Close()
+		return
 	}
+	log.Infof("moderator: LLM model uploaded: CID: %s", cid)
+	_ = f.Close()
+	return
+}
 
+func fetchModel(path, cid string, store DistributedStorer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
 
@@ -291,7 +295,6 @@ func ensureModelPresence(path, cid string, store DistributedStorer) error {
 
 	log.Infof("moderator: LLM model downloaded: CID: %s", cid)
 
-	path = "llama-2-7b-chat.Q8_0.gguf.tmp"
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("creating file: %v", err)

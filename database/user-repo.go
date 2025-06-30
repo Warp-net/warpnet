@@ -199,6 +199,18 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if newUser.Network != "" {
 		existingUser.Network = newUser.Network
 	}
+	if newUser.Moderation != nil {
+		if existingUser.Moderation == nil {
+			existingUser.Moderation = newUser.Moderation
+		} else {
+			existingUser.Moderation.IsModerated = newUser.Moderation.IsModerated
+			existingUser.Moderation.Reason = newUser.Moderation.Reason
+			existingUser.Moderation.IsOk = newUser.Moderation.IsOk
+			existingUser.Moderation.TimeAt = newUser.Moderation.TimeAt
+
+			existingUser.Moderation.Strikes += newUser.Moderation.Strikes
+		}
+	}
 	existingUser.Latency = newUser.Latency
 
 	bt, err := json.JSON.Marshal(existingUser)

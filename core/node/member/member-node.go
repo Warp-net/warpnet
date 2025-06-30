@@ -539,7 +539,7 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PUBLIC_POST_MODERATION_RESULT, // TODO protect this endpoint
 				logMw(mw.UnwrapStreamMiddleware(
-					handler.StreamModerationResultHandler(userRepo, tweetRepo)),
+					handler.StreamModerationResultHandler(m.pubsubService, userRepo, tweetRepo, timelineRepo)),
 				),
 			},
 		}...,

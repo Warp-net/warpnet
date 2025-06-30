@@ -36,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"time"
 )
@@ -47,6 +48,10 @@ type ModerationStreamer interface {
 type HandlerModerator interface {
 	Moderate(content string) (bool, string, error)
 	Close()
+}
+
+type ModerationBroadcaster interface {
+	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
 }
 
 // StreamModerateHandler receive event from pubsub via loopback
@@ -64,7 +69,11 @@ func StreamModerateHandler(streamer ModerationStreamer, moderator HandlerModerat
 			return nil, errors.New("streamer is not initialized")
 		}
 
-		log.Infoln("moderation: request received, object ID:", ev.ObjectID)
+		if ev.ObjectID != nil {
+			log.Infof("moderation: request received, object ID: %s", *ev.ObjectID)
+		} else {
+			log.Infoln("moderation: request received")
+		}
 
 		var result event.ModerationResultEvent
 		switch ev.Type {
@@ -192,9 +201,15 @@ type TweetUpdater interface {
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 }
 
+type TimelineTweetRemover interface {
+	DeleteTweetFromTimeline(userID, tweetID string, createdAt time.Time) error
+}
+
 func StreamModerationResultHandler(
+	broadcaster ModerationBroadcaster,
 	userRepo UserUpdater,
 	tweetRepo TweetUpdater,
+	timelineRepo TimelineTweetRemover,
 ) middleware.WarpHandler {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
@@ -212,6 +227,9 @@ func StreamModerationResultHandler(
 
 		switch ev.Type {
 		case event.Tweet:
+			if ev.ObjectID == nil {
+				return nil, errors.New("moderation: no object id provided")
+			}
 			tweetModeration := &domain.TweetModeration{
 				IsModerated: true,
 				IsOk:        isModerationPassed,
@@ -231,6 +249,29 @@ func StreamModerationResultHandler(
 			tweet.UpdatedAt = &updatedAt
 
 			_, err = tweetRepo.Create(ev.UserID, tweet)
+			if err != nil {
+				return nil, err
+			}
+			if isModerationPassed {
+				return event.Accepted, nil
+			}
+
+			err = timelineRepo.DeleteTweetFromTimeline(ev.UserID, *ev.ObjectID, tweet.CreatedAt)
+
+			deleteEvent := event.DeleteTweetEvent{
+				TweetId: *ev.ObjectID,
+				UserId:  ev.UserID,
+			}
+			bt, _ := json.JSON.Marshal(deleteEvent)
+			msgBody := jsoniter.RawMessage(bt)
+			msg := event.Message{
+				Body:      &msgBody,
+				NodeId:    s.Conn().LocalPeer().String(),
+				Path:      event.PRIVATE_DELETE_TWEET,
+				Timestamp: time.Now(),
+			}
+
+			err = broadcaster.PublishUpdateToFollowers(ev.UserID, msg)
 			return event.Accepted, err
 		case event.User:
 			_, err = userRepo.Update(ev.UserID, domain.User{

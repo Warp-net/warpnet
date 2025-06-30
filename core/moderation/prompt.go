@@ -19,8 +19,8 @@ const moderationPromptTemplate = `
 
 	Respond in English only. 
 
-	If yes, answer: 'Yes' and provide reason (ten words maximum)
-	If no, answer: No
+	If yes, answer: 'Yes' and provide reason (ten words of finished sentence maximum)
+	If no, answer: 'No'
 	No other answer types accepted.
 	
 	Content:
