@@ -44,21 +44,21 @@ import (
 	"github.com/Warp-net/warpnet/server/server"
 	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
+	"net/http"
 	"time"
 
-	//"net/http"
-	//_ "net/http/pprof"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 )
 
-//func init() {
-//	go func() {
-//		http.ListenAndServe("localhost:8080", nil)
-//	}()
-//}
+func init() {
+	go func() {
+		http.ListenAndServe("localhost:8080", nil)
+	}()
+}
 
 type API struct {
 	*handlers.StaticController

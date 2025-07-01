@@ -33,7 +33,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
+	"io"
 	"net"
+	"sync/atomic"
 	"time"
 )
 
@@ -42,7 +44,7 @@ type LoopbackConn struct {
 	LocalPeerID warpnet.WarpPeerID
 	WriteConn   net.Conn
 	ReadConn    net.Conn
-	isClosed    bool
+	isClosed    *atomic.Bool
 }
 
 func (l *LoopbackConn) Close() error {
@@ -50,7 +52,7 @@ func (l *LoopbackConn) Close() error {
 
 	_ = l.WriteConn.Close()
 	_ = l.ReadConn.Close()
-	l.isClosed = true
+	l.isClosed.Store(true)
 	return nil
 }
 
@@ -101,6 +103,9 @@ func (l *LoopbackConn) Scope() network.ConnScope {
 }
 
 func (l *LoopbackConn) CloseWithError(errCode network.ConnErrorCode) error {
+	if l.isClosed.Load() {
+		return nil
+	}
 	fmt.Println("LoopbackConn.CloseWithError", errCode)
 	_ = l.ReadConn.Close()
 	_ = l.WriteConn.Close()
@@ -112,6 +117,9 @@ func (l *LoopbackConn) ID() string {
 }
 
 func (l *LoopbackConn) NewStream(_ context.Context) (network.Stream, error) {
+	if l.isClosed.Load() {
+		return nil, io.ErrClosedPipe
+	}
 	return &LoopbackStream{
 		WriteConn:   l.WriteConn,
 		ReadConn:    l.ReadConn,
@@ -130,14 +138,15 @@ func (l *LoopbackConn) GetStreams() []network.Stream {
 }
 
 func (l *LoopbackConn) IsClosed() bool {
-	return l.isClosed
+	return l.isClosed.Load()
 }
 
 type LoopbackStream struct {
-	WriteConn   net.Conn
-	ReadConn    net.Conn
-	Proto       warpnet.WarpProtocolID
-	LocalPeerID warpnet.WarpPeerID
+	WriteConn                   net.Conn
+	ReadConn                    net.Conn
+	Proto                       warpnet.WarpProtocolID
+	LocalPeerID                 warpnet.WarpPeerID
+	isReadClosed, isWriteClosed *atomic.Bool
 }
 
 func (s *LoopbackStream) Protocol() protocol.ID           { return s.Proto }
@@ -145,15 +154,22 @@ func (s *LoopbackStream) SetProtocol(p protocol.ID) error { s.Proto = p; return 
 func (s *LoopbackStream) Stat() network.Stats             { return network.Stats{Direction: network.DirInbound} }
 func (s *LoopbackStream) Conn() network.Conn {
 	return &LoopbackConn{
-		WriteConn: s.WriteConn, ReadConn: s.ReadConn, Proto: s.Proto, LocalPeerID: s.LocalPeerID,
+		WriteConn: s.WriteConn, ReadConn: s.ReadConn, Proto: s.Proto,
+		LocalPeerID: s.LocalPeerID, isClosed: new(atomic.Bool),
 	}
 }
 func (s *LoopbackStream) CloseRead() error {
+	if s.isReadClosed.Load() {
+		return nil
+	}
 	fmt.Println("LoopbackStream.CloseRead")
 
 	return s.ReadConn.Close()
 }
 func (s *LoopbackStream) CloseWrite() error {
+	if s.isWriteClosed.Load() {
+		return nil
+	}
 	fmt.Println("LoopbackStream.CloseWrite")
 
 	return s.WriteConn.Close()
@@ -164,9 +180,23 @@ func (s *LoopbackStream) Reset() error {
 func (s *LoopbackStream) ResetWithError(_ network.StreamErrorCode) error {
 	return nil
 }
-func (s *LoopbackStream) Read(p []byte) (int, error)  { return s.ReadConn.Read(p) }
-func (s *LoopbackStream) Write(p []byte) (int, error) { return s.WriteConn.Write(p) }
+func (s *LoopbackStream) Read(p []byte) (int, error) {
+	if s.isReadClosed.Load() {
+		return 0, io.ErrClosedPipe
+	}
+	return s.ReadConn.Read(p)
+}
+
+func (s *LoopbackStream) Write(p []byte) (int, error) {
+	if s.isWriteClosed.Load() {
+		return 0, io.ErrClosedPipe
+	}
+	return s.WriteConn.Write(p)
+}
 func (s *LoopbackStream) Close() error {
+	if s.isWriteClosed.Load() && s.isReadClosed.Load() {
+		return nil
+	}
 	fmt.Println("LoopbackStream.Close")
 
 	_ = s.CloseWrite()
@@ -188,10 +218,14 @@ func NewLoopbackStream(nodeId warpnet.WarpPeerID, proto warpnet.WarpProtocolID) 
 	reader2, writer1 := net.Pipe()
 
 	reader := &LoopbackStream{
-		ReadConn: reader1, WriteConn: writer1, LocalPeerID: nodeId, Proto: proto}
+		ReadConn: reader1, WriteConn: writer1, LocalPeerID: nodeId,
+		Proto: proto, isReadClosed: new(atomic.Bool), isWriteClosed: new(atomic.Bool),
+	}
 
 	writer := &LoopbackStream{
-		ReadConn: reader2, WriteConn: writer2, LocalPeerID: nodeId, Proto: proto}
+		ReadConn: reader2, WriteConn: writer2, LocalPeerID: nodeId,
+		Proto: proto, isReadClosed: new(atomic.Bool), isWriteClosed: new(atomic.Bool),
+	}
 
 	return reader, writer
 }
