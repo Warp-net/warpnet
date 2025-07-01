@@ -46,6 +46,8 @@ type LoopbackConn struct {
 }
 
 func (l *LoopbackConn) Close() error {
+	fmt.Println("LoopbackConn.Close")
+
 	_ = l.WriteConn.Close()
 	_ = l.ReadConn.Close()
 	l.isClosed = true
@@ -99,6 +101,7 @@ func (l *LoopbackConn) Scope() network.ConnScope {
 }
 
 func (l *LoopbackConn) CloseWithError(errCode network.ConnErrorCode) error {
+	fmt.Println("LoopbackConn.CloseWithError", errCode)
 	_ = l.ReadConn.Close()
 	_ = l.WriteConn.Close()
 	return fmt.Errorf("connection closed with %v", errCode)
@@ -145,8 +148,16 @@ func (s *LoopbackStream) Conn() network.Conn {
 		WriteConn: s.WriteConn, ReadConn: s.ReadConn, Proto: s.Proto, LocalPeerID: s.LocalPeerID,
 	}
 }
-func (s *LoopbackStream) CloseRead() error  { return s.ReadConn.Close() }
-func (s *LoopbackStream) CloseWrite() error { return s.WriteConn.Close() }
+func (s *LoopbackStream) CloseRead() error {
+	fmt.Println("LoopbackStream.CloseRead")
+
+	return s.ReadConn.Close()
+}
+func (s *LoopbackStream) CloseWrite() error {
+	fmt.Println("LoopbackStream.CloseWrite")
+
+	return s.WriteConn.Close()
+}
 func (s *LoopbackStream) Reset() error {
 	return nil
 }
@@ -156,6 +167,8 @@ func (s *LoopbackStream) ResetWithError(_ network.StreamErrorCode) error {
 func (s *LoopbackStream) Read(p []byte) (int, error)  { return s.ReadConn.Read(p) }
 func (s *LoopbackStream) Write(p []byte) (int, error) { return s.WriteConn.Write(p) }
 func (s *LoopbackStream) Close() error {
+	fmt.Println("LoopbackStream.Close")
+
 	_ = s.CloseWrite()
 	_ = s.CloseRead()
 	return nil
