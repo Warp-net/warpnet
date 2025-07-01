@@ -209,9 +209,11 @@ func (mn *ModeratorNode) Start() (err error) {
 	if err := mn.consensusService.Start(mn); err != nil {
 		return err
 	}
+
+	// blocking call
 	mn.consensusService.AskValidation(
 		event.ValidationEvent{nodeInfo.ID.String(), mn.selfHashHex, nil},
-	) // blocking call
+	)
 
 	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
 	if err != nil {
@@ -225,10 +227,12 @@ func (mn *ModeratorNode) Start() (err error) {
 	}
 
 	moderatorReadyChan <- struct{}{}
+	// wait until moderator set up
 	<-moderatorReadyChan
 	if moderator == nil {
 		return errors.New("failed to init moderator engine")
 	}
+
 	mn.node.SetStreamHandlers(
 		warpnet.WarpHandler{
 			event.PRIVATE_POST_MODERATE, // TODO protect this endpoint
@@ -236,7 +240,6 @@ func (mn *ModeratorNode) Start() (err error) {
 		},
 	)
 
-	// wait until moderator set up
 	if err := mn.pubsubService.SubscribeModerationTopic(); err != nil {
 		return err
 	}
@@ -269,7 +272,7 @@ func isModelExists(path string) (*os.File, bool) {
 }
 
 func storeModel(f *os.File, store DistributedStorer) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*8)
 	defer cancel()
 
 	cid, err := store.PutStream(ctx, f)
@@ -284,7 +287,7 @@ func storeModel(f *os.File, store DistributedStorer) {
 }
 
 func fetchModel(path, cid string, store DistributedStorer) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*8)
 	defer cancel()
 
 	reader, err := store.GetStream(ctx, cid)

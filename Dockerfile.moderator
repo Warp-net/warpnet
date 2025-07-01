@@ -14,7 +14,7 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOMODCACHE=/go/pkg/mod
 ENV GOPATH=/warpnet
 ENV CGO_ENABLED=1
-ENV GOMEMLIMIT=2750MiB
+ENV GOMEMLIMIT=2750MiB 
 ENV GOGC=50
 
 RUN go version && go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go

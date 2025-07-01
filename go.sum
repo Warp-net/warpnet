@@ -39,8 +39,8 @@ github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lpr
 github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/RaveNoX/go-jsoncommentstrip v1.0.0/go.mod h1:78ihd09MekBnJnxpICcwzCMzGrKSKYe4AqU6PDYYpjk=
-github.com/Warp-net/warpnet-frontend v0.0.577 h1:JnikV2xje0mVrRCh9mAWy73VRddib5rCNT9MEkeUyj0=
-github.com/Warp-net/warpnet-frontend v0.0.577/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
+github.com/Warp-net/warpnet-frontend v0.0.578 h1:bN4ZsK9JKrLEDqRZk1QWqhdiLE1Je9Ym0kySKHP7Plw=
+github.com/Warp-net/warpnet-frontend v0.0.578/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
 github.com/aclements/go-perfevent v0.0.0-20240301234650-f7843625020f h1:JjxwchlOepwsUWcQwD2mLUAGE9aCp0/ehy6yCHFBOvo=
 github.com/aclements/go-perfevent v0.0.0-20240301234650-f7843625020f/go.mod h1:tMDTce/yLLN/SK8gMOxQfnyeMeCg8KGzp0D1cbECEeo=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
