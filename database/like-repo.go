@@ -30,7 +30,7 @@ package database
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 )
 
 const (
@@ -39,11 +39,11 @@ const (
 	LikerSubNamespace = "LIKER"
 )
 
-var ErrLikesNotFound = storage.DBError("like not found")
+var ErrLikesNotFound = local.DBError("like not found")
 
 type LikeStorer interface {
-	Get(key storage.DatabaseKey) ([]byte, error)
-	NewTxn() (storage.WarpTransactioner, error)
+	Get(key local.DatabaseKey) ([]byte, error)
+	NewTxn() (local.WarpTransactioner, error)
 }
 
 type LikeRepo struct {
@@ -56,21 +56,21 @@ func NewLikeRepo(db LikeStorer) *LikeRepo {
 
 func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error) {
 	if tweetId == "" {
-		return 0, storage.DBError("empty tweet id")
+		return 0, local.DBError("empty tweet id")
 	}
 	if userId == "" {
-		return 0, storage.DBError("empty user id")
+		return 0, local.DBError("empty user id")
 	}
 
-	likeKey := storage.NewPrefixBuilder(LikeRepoName).
+	likeKey := local.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(IncrSubNamespace).
 		AddRootID(tweetId).
 		Build()
 
-	likerKey := storage.NewPrefixBuilder(LikeRepoName).
+	likerKey := local.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(LikerSubNamespace).
 		AddRootID(tweetId).
-		AddRange(storage.NoneRangeKey).
+		AddRange(local.NoneRangeKey).
 		AddParentId(userId).
 		Build()
 
@@ -81,7 +81,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 	defer txn.Rollback()
 
 	_, err = txn.Get(likerKey)
-	if !errors.Is(err, storage.ErrKeyNotFound) {
+	if !errors.Is(err, local.ErrKeyNotFound) {
 		_ = txn.Commit()
 		return repo.LikesCount(tweetId) // like exists
 	}
@@ -98,21 +98,21 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 
 func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err error) {
 	if tweetId == "" {
-		return 0, storage.DBError("empty tweet id")
+		return 0, local.DBError("empty tweet id")
 	}
 	if userId == "" {
-		return 0, storage.DBError("empty user id")
+		return 0, local.DBError("empty user id")
 	}
 
-	likeKey := storage.NewPrefixBuilder(LikeRepoName).
+	likeKey := local.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(IncrSubNamespace).
 		AddRootID(tweetId).
 		Build()
 
-	likerKey := storage.NewPrefixBuilder(LikeRepoName).
+	likerKey := local.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(LikerSubNamespace).
 		AddRootID(tweetId).
-		AddRange(storage.NoneRangeKey).
+		AddRange(local.NoneRangeKey).
 		AddParentId(userId).
 		Build()
 
@@ -123,7 +123,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 	defer txn.Rollback()
 
 	_, err = txn.Get(likerKey)
-	if errors.Is(err, storage.ErrKeyNotFound) { // already unliked
+	if errors.Is(err, local.ErrKeyNotFound) { // already unliked
 		_ = txn.Commit()
 		return repo.LikesCount(tweetId)
 	}
@@ -131,7 +131,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 		return 0, err
 	}
 	likesCount, err = txn.Decrement(likeKey)
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return 0, txn.Commit()
 	}
 	if err != nil {
@@ -142,15 +142,15 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 
 func (repo *LikeRepo) LikesCount(tweetId string) (likesNum uint64, err error) {
 	if tweetId == "" {
-		return 0, storage.DBError("empty tweet id")
+		return 0, local.DBError("empty tweet id")
 	}
-	likeKey := storage.NewPrefixBuilder(LikeRepoName).
+	likeKey := local.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(IncrSubNamespace).
 		AddRootID(tweetId).
 		Build()
 
 	bt, err := repo.db.Get(likeKey)
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return 0, ErrLikesNotFound
 	}
 	if err != nil {
@@ -163,10 +163,10 @@ type likedUserIDs = []string
 
 func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ likedUserIDs, cur string, err error) {
 	if tweetId == "" {
-		return nil, "", storage.DBError("empty tweet id")
+		return nil, "", local.DBError("empty tweet id")
 	}
 
-	likePrefix := storage.NewPrefixBuilder(LikeRepoName).
+	likePrefix := local.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(LikerSubNamespace).
 		AddRootID(tweetId).
 		Build()
@@ -178,7 +178,7 @@ func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ l
 	defer txn.Rollback()
 
 	items, cur, err := txn.List(likePrefix, limit, cursor)
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return nil, "", ErrLikesNotFound
 	}
 	if err != nil {

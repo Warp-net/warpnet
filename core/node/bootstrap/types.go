@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 package bootstrap
 
 import (
+	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -33,15 +34,17 @@ import (
 )
 
 type DiscoveryHandler interface {
-	HandlePeerFound(pi warpnet.WarpAddrInfo)
+	DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
 	Close()
 }
 
 type PubSubProvider interface {
-	Run(m pubsub.PubsubServerNodeConnector, clientNode pubsub.PubsubClientNodeStreamer)
-	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
+	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
+	PublishValidationRequest(msg event.Message) (err error)
+	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
+	OwnerID() string
 }
 
 type DistributedHashTableCloser interface {
@@ -52,6 +55,10 @@ type ProviderCloser interface {
 	io.Closer
 }
 
-type ClientNodeStreamer interface {
-	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
+type ConsensusServicer interface {
+	Start(streamer consensus.ConsensusStreamer) (err error)
+	Close()
+	AskValidation(data event.ValidationEvent)
+	Validate(ev event.ValidationEvent) error
+	ValidationResult(ev event.ValidationResultEvent) error
 }

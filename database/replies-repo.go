@@ -34,13 +34,13 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/oklog/ulid/v2"
 )
 
-var ErrReplyNotFound = storage.DBError("reply not found")
+var ErrReplyNotFound = local.DBError("reply not found")
 
 const (
 	RepliesNamespace     = "/REPLY"
@@ -48,10 +48,10 @@ const (
 )
 
 type ReplyStorer interface {
-	Set(key storage.DatabaseKey, value []byte) error
-	Get(key storage.DatabaseKey) ([]byte, error)
-	Delete(key storage.DatabaseKey) error
-	NewTxn() (storage.WarpTransactioner, error)
+	Set(key local.DatabaseKey, value []byte) error
+	Get(key local.DatabaseKey) ([]byte, error)
+	Delete(key local.DatabaseKey) error
+	NewTxn() (local.WarpTransactioner, error)
 }
 
 type ReplyRepo struct {
@@ -64,19 +64,19 @@ func NewRepliesRepo(db ReplyStorer) *ReplyRepo {
 
 func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	if reply == (domain.Tweet{}) {
-		return reply, storage.DBError("empty reply")
+		return reply, local.DBError("empty reply")
 	}
 	if reply.RootId == "" {
-		return reply, storage.DBError("empty root")
+		return reply, local.DBError("empty root")
 	}
 	if reply.ParentId == nil {
-		return reply, storage.DBError("empty parent")
+		return reply, local.DBError("empty parent")
 	}
 	if reply.Id == "" {
 		reply.Id = ulid.Make().String()
 	}
 	if reply.Id == reply.RootId {
-		return reply, storage.DBError("this is tweet not reply")
+		return reply, local.DBError("this is tweet not reply")
 	}
 	if reply.CreatedAt.IsZero() {
 		now := time.Now()
@@ -88,20 +88,20 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 		return reply, fmt.Errorf("error marshalling reply meta: %w", err)
 	}
 
-	treeKey := storage.NewPrefixBuilder(RepliesNamespace).
+	treeKey := local.NewPrefixBuilder(RepliesNamespace).
 		AddRootID(reply.RootId).
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(reply.Id).
 		Build()
 
-	parentSortableKey := storage.NewPrefixBuilder(RepliesNamespace).
+	parentSortableKey := local.NewPrefixBuilder(RepliesNamespace).
 		AddRootID(reply.RootId).
 		AddParentId(*reply.ParentId).
 		AddId(reply.Id).
 		AddReversedTimestamp(reply.CreatedAt).
 		Build()
 
-	replyCountKey := storage.NewPrefixBuilder(RepliesNamespace).
+	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
 		AddSubPrefix(repliesCountSubspace).
 		AddRootID(*reply.ParentId).
 		Build()
@@ -127,12 +127,12 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 
 func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Tweet, err error) {
 	if rootID == "" || replyId == "" {
-		return tweet, storage.DBError("rootID and replyId cannot be empty")
+		return tweet, local.DBError("rootID and replyId cannot be empty")
 	}
 
-	treeKey := storage.NewPrefixBuilder(RepliesNamespace).
+	treeKey := local.NewPrefixBuilder(RepliesNamespace).
 		AddRootID(rootID).
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(replyId).
 		Build()
 
@@ -147,7 +147,7 @@ func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Twe
 		return tweet, err
 	}
 
-	data, err := txn.Get(storage.DatabaseKey(sortableKey))
+	data, err := txn.Get(local.DatabaseKey(sortableKey))
 	if err != nil {
 		return tweet, err
 	}
@@ -160,16 +160,16 @@ func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Twe
 
 func (repo *ReplyRepo) RepliesCount(tweetId string) (likesNum uint64, err error) {
 	if tweetId == "" {
-		return 0, storage.DBError("empty tweet id")
+		return 0, local.DBError("empty tweet id")
 	}
-	replyCountKey := storage.NewPrefixBuilder(RepliesNamespace).
+	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
 		AddSubPrefix(repliesCountSubspace).
 		AddRootID(tweetId).
 		Build()
 
 	bt, err := repo.db.Get(replyCountKey)
 
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return 0, ErrReplyNotFound
 	}
 	if err != nil {
@@ -180,16 +180,16 @@ func (repo *ReplyRepo) RepliesCount(tweetId string) (likesNum uint64, err error)
 
 func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 	if rootID == "" || parentID == "" || replyID == "" {
-		return storage.DBError("rootID, parent ID or replyID cannot be empty")
+		return local.DBError("rootID, parent ID or replyID cannot be empty")
 	}
 
-	treeKey := storage.NewPrefixBuilder(RepliesNamespace).
+	treeKey := local.NewPrefixBuilder(RepliesNamespace).
 		AddRootID(rootID).
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(replyID).
 		Build()
 
-	replyCountKey := storage.NewPrefixBuilder(RepliesNamespace).
+	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
 		AddSubPrefix(repliesCountSubspace).
 		AddRootID(parentID).
 		Build()
@@ -207,7 +207,7 @@ func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 	if err := txn.Delete(treeKey); err != nil {
 		return fmt.Errorf("error deleting tree key: %w", err)
 	}
-	if err := txn.Delete(storage.DatabaseKey(sortableKey)); err != nil {
+	if err := txn.Delete(local.DatabaseKey(sortableKey)); err != nil {
 		return fmt.Errorf("error deleting sortable key: %w", err)
 	}
 	if _, err = txn.Decrement(replyCountKey); err != nil {
@@ -219,10 +219,10 @@ func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 
 func (repo *ReplyRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
 	if rootId == "" {
-		return nil, "", storage.DBError("root ID cannot be blank")
+		return nil, "", local.DBError("root ID cannot be blank")
 	}
 
-	prefix := storage.NewPrefixBuilder(RepliesNamespace).
+	prefix := local.NewPrefixBuilder(RepliesNamespace).
 		AddRootID(rootId).
 		AddParentId(parentId).
 		Build()

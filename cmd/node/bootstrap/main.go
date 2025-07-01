@@ -26,7 +26,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/bootstrap"
@@ -45,7 +44,8 @@ func main() {
 	defer closeWriter()
 
 	version := config.Config().Version
-	psk, err := security.GeneratePSK(version)
+	network := config.Config().Node.Network
+	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
 		panic(err)
 	}
@@ -74,9 +74,6 @@ func main() {
 	defer cancel()
 
 	seed := []byte(config.Config().Node.Seed)
-	if len(seed) == 0 {
-		seed = []byte(rand.Text())
-	}
 
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
@@ -87,7 +84,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex, interruptChan)
 	if err != nil {
 		log.Fatalf("failed to init bootstrap node: %v", err)
 	}

@@ -108,18 +108,27 @@ const RetweetPrefix = "RT:"
 
 // Tweet defines model for Tweet.
 type Tweet struct {
-	CreatedAt time.Time `json:"created_at"`
-	Id        string    `json:"id"`
-	ParentId  *string   `json:"parent_id,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	Id        string     `json:"id"`
+	ParentId  *string    `json:"parent_id,omitempty"`
 
 	// RetweetedBy retweeted by user id
-	RetweetedBy *string `json:"retweeted_by,omitempty"`
-	RootId      string  `json:"root_id"`
-	Text        string  `json:"text"`
-	UserId      string  `json:"user_id"`
-	Username    string  `json:"username"`
-	ImageKey    string  `json:"image_key"`
-	Network     string  `json:"network"`
+	RetweetedBy *string          `json:"retweeted_by,omitempty"`
+	RootId      string           `json:"root_id"`
+	Text        string           `json:"text"`
+	UserId      string           `json:"user_id"`
+	Username    string           `json:"username"`
+	ImageKey    string           `json:"image_key"`
+	Network     string           `json:"network"`
+	Moderation  *TweetModeration `json:"moderation,omitempty"`
+}
+
+type TweetModeration struct {
+	IsModerated bool      `json:"is_moderated"`
+	IsOk        bool      `json:"is_ok"`
+	Reason      *string   `json:"reason"`
+	TimeAt      time.Time `json:"time_at"`
 }
 
 // User defines model for User.
@@ -128,18 +137,29 @@ type User struct {
 	AvatarKey string `json:"avatar_key,omitempty"`
 
 	// BackgroundImage mime type + "," + base64
-	BackgroundImageKey string    `json:"background_image_key"`
-	Bio                string    `json:"bio"`
-	Birthdate          string    `json:"birthdate"`
-	CreatedAt          time.Time `json:"created_at"`
-	FolloweesCount     uint64    `json:"followees_count"`
-	FollowersCount     uint64    `json:"followers_count"`
-	Id                 string    `json:"id"`
-	IsOffline          bool      `json:"isOffline"`
-	NodeId             string    `json:"node_id"`
-	Network            string    `json:"network"`
-	Latency            int64     `json:"latency"`
-	TweetsCount        uint64    `json:"tweets_count"`
-	Username           string    `json:"username"`
-	Website            *string   `json:"website,omitempty"`
+	BackgroundImageKey string            `json:"background_image_key"`
+	Bio                string            `json:"bio"`
+	Birthdate          string            `json:"birthdate"`
+	CreatedAt          time.Time         `json:"created_at"`
+	UpdatedAt          *time.Time        `json:"updated_at,omitempty"`
+	FolloweesCount     uint64            `json:"followees_count"`
+	FollowersCount     uint64            `json:"followers_count"`
+	Id                 string            `json:"id"`
+	IsOffline          bool              `json:"isOffline"`
+	NodeId             string            `json:"node_id"`
+	Network            string            `json:"network"`
+	Latency            int64             `json:"latency"`
+	TweetsCount        uint64            `json:"tweets_count"`
+	Username           string            `json:"username"`
+	Website            *string           `json:"website,omitempty"`
+	Moderation         *UserModeration   `json:"moderation"`
+	Metadata           map[string]string `json:"metadata"`
+}
+
+type UserModeration struct {
+	IsModerated bool      `json:"is_moderated"`
+	IsOk        bool      `json:"is_ok"`
+	Reason      *string   `json:"reason"`
+	Strikes     uint8     `json:"strikes"`
+	TimeAt      time.Time `json:"time_at"`
 }

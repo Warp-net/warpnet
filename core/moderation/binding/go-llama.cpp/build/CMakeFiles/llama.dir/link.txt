@@ -1,0 +1,2 @@
+/usr/bin/ar qc libllama.a CMakeFiles/llama.dir/llama.cpp.o CMakeFiles/ggml.dir/ggml.c.o "CMakeFiles/ggml.dir/ggml-alloc.c.o" CMakeFiles/ggml.dir/k_quants.c.o
+/usr/bin/ranlib libllama.a

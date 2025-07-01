@@ -35,7 +35,7 @@ import (
 	"github.com/Warp-net/warpnet/core/node/client"
 	"github.com/Warp-net/warpnet/core/node/member"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
@@ -51,7 +51,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"syscall"
 )
 
@@ -68,10 +67,9 @@ type API struct {
 
 func main() {
 	defer closeWriter()
-	appPath := getAppPath(config.Config().Node.Network, "member")
 	version := config.Config().Version
-
-	psk, err := security.GeneratePSK(version)
+	network := config.Config().Node.Network
+	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -89,7 +87,7 @@ func main() {
 		},
 	})
 	if !config.Config().Node.IsTestnet() {
-		logDir := filepath.Join(appPath, "log")
+		logDir := filepath.Join(config.Config().Database.Path, "log")
 		err := os.MkdirAll(logDir, 0755)
 		if err != nil {
 			log.Fatal(err)
@@ -111,7 +109,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := storage.New(appPath, false, config.Config().Database.DirName)
+	db, err := local.New(config.Config().Database.Path, false)
 	if err != nil {
 		log.Fatalf("failed to init db: %v", err)
 	}
@@ -179,7 +177,7 @@ func main() {
 	}
 	defer serverNode.Stop()
 
-	err = serverNode.Start(clientNode)
+	err = serverNode.Start()
 	if err != nil {
 		log.Fatalf("failed to start member node: %v", err)
 	}
@@ -187,11 +185,10 @@ func main() {
 	serverNodeAuthInfo.Identity.Owner.NodeId = serverNode.NodeInfo().ID.String()
 	serverNodeAuthInfo.NodeInfo = serverNode.NodeInfo()
 
-	readyChan <- serverNodeAuthInfo
-
 	if err := clientNode.Pair(serverNodeAuthInfo); err != nil {
-		log.Fatalf("failed to init client node: %v", err)
+		log.Fatalf("failed to pair client node: %v", err)
 	}
+	readyChan <- serverNodeAuthInfo
 
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Server, serverNodeAuthInfo.Identity.Owner.NodeId, false,
@@ -202,42 +199,9 @@ func main() {
 	log.Infoln("interrupted...")
 }
 
-func getAppPath(network, nodeType string) string {
-	var dbPath string
-
-	switch runtime.GOOS {
-	case "windows":
-		// %LOCALAPPDATA% Windows
-		appData := os.Getenv("LOCALAPPDATA") // C:\Users\{username}\AppData\Local
-		if appData == "" {
-			log.Fatal("failed to get path to LOCALAPPDATA")
-		}
-		dbPath = filepath.Join(appData, "badgerdb")
-
-	case "darwin", "linux", "android":
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			log.Fatal(err)
-		}
-		dbPath = filepath.Join(homeDir, ".badgerdb")
-
-	default:
-		log.Fatal("unsupported OS")
-	}
-
-	dbPath = filepath.Join(dbPath, network, nodeType)
-
-	err := os.MkdirAll(dbPath, 0750)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return dbPath
-}
-
 func manualCredsInput(
 	interfaceServer server.PublicServer,
-	db *storage.DB,
+	db *local.DB,
 ) {
 	if interfaceServer == nil {
 		reader := bufio.NewReader(os.Stdin)

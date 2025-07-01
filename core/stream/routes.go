@@ -50,22 +50,6 @@ func (r WarpRoute) IsGet() bool {
 	return strings.Contains(string(r), "get")
 }
 
-func IsValidRoute(route WarpRoute) bool { // TODO
-	if !strings.HasPrefix(route.String(), "/") {
-		return false
-	}
-	if !(strings.Contains(route.String(), "get") ||
-		strings.Contains(route.String(), "delete") ||
-		strings.Contains(route.String(), "post")) {
-		return false
-	}
-	if !(strings.Contains(route.String(), "private") ||
-		strings.Contains(route.String(), "public")) {
-		return false
-	}
-	return true
-}
-
 type WarpRoutes []WarpRoute
 
 func (rs WarpRoutes) FromRoutesToPrIDs() []warpnet.WarpProtocolID {

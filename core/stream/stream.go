@@ -35,15 +35,9 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"time"
 )
-
-type MastodonPseudoStreamer interface {
-	ID() warpnet.WarpPeerID
-	IsMastodonID(id warpnet.WarpPeerID) bool
-	Addrs() []warpnet.WarpAddress
-	Route(r WarpRoute, data []byte) (_ []byte, err error)
-}
 
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
@@ -51,18 +45,16 @@ type NodeStreamer interface {
 }
 
 type streamPool struct {
-	ctx                context.Context
-	n                  NodeStreamer
-	clientPeerID       warpnet.WarpPeerID
-	mastodonPseudoNode MastodonPseudoStreamer
+	ctx          context.Context
+	n            NodeStreamer
+	clientPeerID warpnet.WarpPeerID
 }
 
 func NewStreamPool(
 	ctx context.Context,
 	n NodeStreamer,
-	mastodonPseudoNode MastodonPseudoStreamer,
 ) *streamPool {
-	pool := &streamPool{ctx: ctx, n: n, mastodonPseudoNode: mastodonPseudoNode}
+	pool := &streamPool{ctx: ctx, n: n}
 
 	return pool
 }
@@ -75,10 +67,6 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 		return nil, p.ctx.Err()
 	}
 
-	if p.mastodonPseudoNode != nil && p.mastodonPseudoNode.IsMastodonID(peerAddr.ID) {
-		log.Debugf("stream: peer %s is mastodon", peerAddr.ID)
-		return p.mastodonPseudoNode.Route(r, data)
-	}
 	// long-long wait in case of p2p-circuit stream
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -132,18 +120,12 @@ func send(
 	}
 
 	buf := bytes.NewBuffer(nil)
-	num, err := buf.ReadFrom(rw)
-	if err != nil {
+	_, err = buf.ReadFrom(rw)
+	if err != nil && !errors.Is(err, io.EOF) {
 		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
 		return nil, fmt.Errorf("stream: reading response from %s: %w", serverInfo.ID.String(), err)
 	}
 
-	if num == 0 {
-		return nil, fmt.Errorf(
-			"stream: protocol %s, peer ID %s, addresses %v: empty response",
-			r.ProtocolID(), serverInfo.ID.String(), serverInfo.Addrs,
-		)
-	}
 	return buf.Bytes(), nil
 }
 

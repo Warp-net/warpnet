@@ -32,7 +32,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
-	"github.com/Warp-net/warpnet/config"
 	"io"
 	"io/fs"
 	"sort"
@@ -119,14 +118,14 @@ func generateAnchoredEntropy() []byte {
 }
 
 // GeneratePSK TODO rotate PSK?
-func GeneratePSK(v *semver.Version) (PSK, error) {
+func GeneratePSK(network string, v *semver.Version) (PSK, error) {
 	if v == nil {
 		return nil, errors.New("psk: codebase or version required")
 	}
 	entropy := generateAnchoredEntropy()
 	majorStr := strconv.FormatInt(int64(v.Major()), 10)
 
-	seed := append([]byte(config.Config().Node.Network), []byte(majorStr)...)
+	seed := append([]byte(network), []byte(majorStr)...)
 	seed = append(seed, entropy...)
 	return ConvertToSHA256(seed), nil
 }

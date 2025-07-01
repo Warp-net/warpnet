@@ -33,16 +33,16 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/json"
 )
 
 const TimelineRepoName = "/TIMELINE"
 
 type TimelineStorer interface {
-	Set(key storage.DatabaseKey, value []byte) error
-	NewTxn() (storage.WarpTransactioner, error)
-	Delete(key storage.DatabaseKey) error
+	Set(key local.DatabaseKey, value []byte) error
+	NewTxn() (local.WarpTransactioner, error)
+	Delete(key local.DatabaseKey) error
 }
 
 type TimelineRepo struct {
@@ -55,7 +55,7 @@ func NewTimelineRepo(db TimelineStorer) *TimelineRepo {
 
 func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) error {
 	if userId == "" {
-		return storage.DBError("userID cannot be blank")
+		return local.DBError("userID cannot be blank")
 	}
 	if tweet.Id == "" {
 		return fmt.Errorf("tweet id should not be nil")
@@ -64,7 +64,7 @@ func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) 
 		return fmt.Errorf("tweet created at should not be zero")
 	}
 
-	key := storage.NewPrefixBuilder(TimelineRepoName).
+	key := local.NewPrefixBuilder(TimelineRepoName).
 		AddRootID(userId).
 		AddReversedTimestamp(tweet.CreatedAt).
 		AddParentId(tweet.Id).
@@ -79,12 +79,12 @@ func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) 
 
 func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string, createdAt time.Time) error {
 	if userID == "" {
-		return storage.DBError("user ID cannot be blank")
+		return local.DBError("user ID cannot be blank")
 	}
 	if createdAt.IsZero() {
 		return fmt.Errorf("created time should not be zero")
 	}
-	key := storage.NewPrefixBuilder(TimelineRepoName).
+	key := local.NewPrefixBuilder(TimelineRepoName).
 		AddRootID(userID).
 		AddReversedTimestamp(createdAt).
 		AddParentId(tweetID).
@@ -95,10 +95,10 @@ func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string, create
 // GetTimeline retrieves a user's timeline sorted from newest to oldest
 func (repo *TimelineRepo) GetTimeline(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if userId == "" {
-		return nil, "", storage.DBError("user ID cannot be blank")
+		return nil, "", local.DBError("user ID cannot be blank")
 	}
 
-	prefix := storage.NewPrefixBuilder(TimelineRepoName).AddRootID(userId).Build()
+	prefix := local.NewPrefixBuilder(TimelineRepoName).AddRootID(userId).Build()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {

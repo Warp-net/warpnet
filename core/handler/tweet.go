@@ -60,6 +60,7 @@ type OwnerTweetStorer interface {
 
 type TweetBroadcaster interface {
 	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
+	PublishModerationRequest(msg event.Message) (err error)
 }
 
 type TweetsStorer interface {
@@ -123,8 +124,25 @@ func StreamNewTweetHandler(
 				Timestamp: time.Now(),
 			}
 			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, msg); err != nil {
-				log.Infoln("broadcaster publish owner tweet update:", err)
+				log.Errorf("broadcaster publish owner tweet update: %v", err)
 			}
+
+			moderationEvent := event.ModerationEvent{
+				NodeID:   owner.NodeId,
+				UserID:   owner.UserId,
+				Type:     event.Tweet,
+				ObjectID: &tweet.Id,
+			}
+			bt, _ = json.JSON.Marshal(moderationEvent)
+			msgBody = jsoniter.RawMessage(bt)
+			msg.Body = &msgBody
+			msg.Path = event.PRIVATE_POST_MODERATE
+			if err := broadcaster.PublishModerationRequest(msg); err != nil {
+				log.Errorf("broadcaster publish tweet moderation request: %v", err)
+			} else {
+				log.Infof("tweet: %s moderation requested", tweet.Id)
+			}
+
 		}
 		return tweet, nil
 	}

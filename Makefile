@@ -10,11 +10,14 @@ second-member:
 third-member:
 	go run cmd/node/member/main.go --database.dir storage3 --node.port 4031 --server.port 4032  --node.network testnet
 
+moderator:
+	go run -tags=llama cmd/node/moderator/main.go --node.network testnet
+
 tests:
-	CGO_ENABLED=0 go test -count=1 -short ./...
+	CGO_ENABLED=0 go test -count=1 -short -v ./...
 
 prune:
-	(pkill -9 main || true) && rm -rf $(HOME)/.badgerdb
+	(pkill -9 main || true) && rm -rf $(HOME)/.warpdata
 
 check-heap:
 	go build -gcflags="-m" main.go
@@ -32,6 +35,3 @@ build-macos:
 	GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet-darwin cmd/node/member/main.go
 	chmod +x warpnet-darwin
 
-reset-consensus:
-	docker volume prune --all
-	rm -rf /tmp/snapshots

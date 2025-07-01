@@ -34,7 +34,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
 )
@@ -43,7 +43,7 @@ const testUserID = "01BX5ZZKBKACTAV9WEVGEMTEST"
 
 func setupChatRepo() (*ChatRepo, func(), error) {
 	var err error
-	db, err := storage.New(".", true, "")
+	db, err := local.New(".", true)
 	if err != nil {
 		return nil, nil, err
 	}

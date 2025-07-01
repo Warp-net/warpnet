@@ -1,0 +1,1 @@
+/usr/bin/g++ -fPIE -O3 -DNDEBUG "CMakeFiles/test-grammar-parser.dir/test-grammar-parser.cpp.o" ../common/CMakeFiles/common.dir/common.cpp.o ../common/CMakeFiles/common.dir/console.cpp.o "../common/CMakeFiles/common.dir/grammar-parser.cpp.o" -o ../bin/test-grammar-parser  ../libllama.a ../libllama.a 

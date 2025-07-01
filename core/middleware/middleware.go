@@ -100,6 +100,8 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 				return
 			}
 		}
+
+		// TODO check if in Peerstore and pub/priv keys
 		next(s)
 	}
 }
@@ -140,6 +142,9 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(fn WarpHandler) warpnet.WarpStre
 			}
 		}
 		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
+		if response == nil {
+			response = event.ErrorResponse{Message: "empty response"}
+		}
 
 		switch response.(type) {
 		case []byte:

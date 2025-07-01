@@ -17,6 +17,7 @@ fi
 sudo docker compose -f docker-compose-warpnet.yml down || true
 echo $GITHUB_TOKEN | sudo docker login ghcr.io -u filinvadim --password-stdin
 sudo docker pull ghcr.io/warp-net/warpnet-bootstrap:latest
+sudo docker pull ghcr.io/warp-net/warpnet-moderator:latest
 #sudo ufw disable
 #sudo systemctl restart systemd-networkd
 #sudo iptables -I DOCKER-USER -j ACCEPT
@@ -30,4 +31,4 @@ sudo touch /tmp/snapshot || true
 export HOSTNAME=''
 export NODE_HOST=$NODE_HOST
 sudo -E docker compose -f docker-compose-warpnet.yml up -d --build
-sudo docker image prune
+sudo docker image prune -f

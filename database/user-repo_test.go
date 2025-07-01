@@ -33,20 +33,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/stretchr/testify/suite"
 )
 
 type UserRepoTestSuite struct {
 	suite.Suite
-	db   *storage.DB
+	db   *local.DB
 	repo *UserRepo
 }
 
 func (s *UserRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = storage.New(".", true, "")
+	s.db, err = local.New(".", true)
 	s.Require().NoError(err)
 
 	authRepo := NewAuthRepo(s.db)

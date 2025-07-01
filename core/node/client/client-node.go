@@ -63,7 +63,7 @@ func NewClientNode(ctx context.Context, psk security.PSK) (_ *WarpClientNode, er
 	n := &WarpClientNode{
 		ctx:            ctx,
 		clientNode:     nil,
-		retrier:        retrier.New(time.Second*5, 10, retrier.ExponentialBackoff),
+		retrier:        retrier.New(time.Second, 5, retrier.FixedBackoff),
 		serverNodeAddr: serverNodeAddrDefault,
 		isRunning:      new(atomic.Bool),
 		psk:            psk,
@@ -91,7 +91,7 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 	if err != nil {
 		return fmt.Errorf("client: creating address info: %s", err)
 	}
-	client, err := libp2p.New(
+	n.clientNode, err = libp2p.New(
 		libp2p.RandomIdentity,
 		libp2p.NoListenAddrs,
 		libp2p.DisableMetrics(),
@@ -106,13 +106,12 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 		return fmt.Errorf("client: init %s", err)
 	}
 
-	n.clientNode = client
-	client.Peerstore().AddAddrs(peerInfo.ID, peerInfo.Addrs, warpnet.PermanentTTL)
-	if len(client.Addrs()) != 0 {
+	n.clientNode.Peerstore().AddAddrs(peerInfo.ID, peerInfo.Addrs, warpnet.PermanentTTL)
+	if len(n.clientNode.Addrs()) != 0 {
 		return warpnet.WarpError("client: must have no addresses")
 	}
 
-	n.streamer = stream.NewStreamPool(n.ctx, n.clientNode, nil)
+	n.streamer = stream.NewStreamPool(n.ctx, n.clientNode)
 
 	err = n.pairNodes(peerInfo.ID.String(), serverInfo)
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -131,7 +130,12 @@ func (n *WarpClientNode) pairNodes(nodeId string, serverInfo domain.AuthNodeInfo
 		log.Errorln("client: must not be nil")
 		return warpnet.WarpError("client: must not be nil")
 	}
-	resp, err := n.ClientStream(nodeId, event.PRIVATE_POST_PAIR, serverInfo)
+
+	var resp []byte
+	err := n.retrier.Try(n.ctx, func() (err error) {
+		resp, err = n.ClientStream(nodeId, event.PRIVATE_POST_PAIR, serverInfo)
+		return err
+	})
 	if err != nil {
 		return err
 	}
