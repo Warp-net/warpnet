@@ -201,7 +201,7 @@ func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 		return
 	}
 
-	defer log.Infoln("dht rendezvous: stopped")
+	defer log.Infoln("dht rendezvous: finished")
 
 	tryouts := 30
 	for len(d.dht.RoutingTable().ListPeers()) == 0 {
@@ -220,7 +220,7 @@ func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 	// run it only for 5 minutes - CPU leaking
 	rndvuCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
-	_, err := routingDiscovery.Advertise(rndvuCtx, namespace, lip2pDisc.TTL(time.Hour*3), lip2pDisc.Limit(5))
+	_, err := routingDiscovery.Advertise(rndvuCtx, namespace, lip2pDisc.TTL(time.Hour*3), lip2pDisc.Limit(10))
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 		log.Errorf("dht rendezvous: advertise: %s", err)
 		return
@@ -242,7 +242,6 @@ func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 		case <-d.stopChan:
 			return
 		case <-rndvuCtx.Done():
-			log.Infoln("dht rendezvous: finished")
 			return
 		case peerInfo := <-peerChan:
 			if peerInfo.ID == ownID {
