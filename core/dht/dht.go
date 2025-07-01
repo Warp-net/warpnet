@@ -87,11 +87,10 @@ type RoutingStorer interface {
 }
 
 type distributedHashTable struct {
-	ctx        context.Context
-	cfg        dhtConfig
-	dht        *dht.IpfsDHT
-	stopChan   chan struct{}
-	cancelFunc context.CancelFunc
+	ctx      context.Context
+	cfg      dhtConfig
+	dht      *dht.IpfsDHT
+	stopChan chan struct{}
 }
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
@@ -214,12 +213,13 @@ func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 		tryouts--
 	}
 
-	rndvuCtx, cancel := context.WithCancel(context.Background())
-	d.cancelFunc = cancel
+	namespace := fmt.Sprintf(warpnetRendezvousPrefix, config.Config().Node.Network)
 
 	routingDiscovery := drouting.NewRoutingDiscovery(d.dht)
 
-	namespace := fmt.Sprintf(warpnetRendezvousPrefix, config.Config().Node.Network)
+	// run it only for 5 minutes - CPU leaking
+	rndvuCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
 	_, err := routingDiscovery.Advertise(rndvuCtx, namespace, lip2pDisc.TTL(time.Hour*3), lip2pDisc.Limit(5))
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 		log.Errorf("dht rendezvous: advertise: %s", err)
@@ -242,6 +242,7 @@ func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 		case <-d.stopChan:
 			return
 		case <-rndvuCtx.Done():
+			log.Infoln("dht rendezvous: finished")
 			return
 		case peerInfo := <-peerChan:
 			if peerInfo.ID == ownID {
@@ -295,9 +296,7 @@ func (d *distributedHashTable) Close() {
 	if d == nil || d.dht == nil {
 		return
 	}
-	if d.cancelFunc != nil {
-		d.cancelFunc()
-	}
+
 	close(d.stopChan)
 
 	log.Infoln("dht rendezvous: closing...")

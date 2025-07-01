@@ -28,6 +28,7 @@ go.work.sum
 var
 *.tmp
 *.gguf
+*.pprof
 *.log
 .idea
 *.pem
