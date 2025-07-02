@@ -146,6 +146,7 @@ type LoopbackStream struct {
 	ReadConn                    net.Conn
 	Proto                       warpnet.WarpProtocolID
 	LocalPeerID                 warpnet.WarpPeerID
+	conn                        network.Conn
 	isReadClosed, isWriteClosed *atomic.Bool
 }
 
@@ -153,17 +154,14 @@ func (s *LoopbackStream) Protocol() protocol.ID           { return s.Proto }
 func (s *LoopbackStream) SetProtocol(p protocol.ID) error { s.Proto = p; return nil }
 func (s *LoopbackStream) Stat() network.Stats             { return network.Stats{Direction: network.DirInbound} }
 func (s *LoopbackStream) Conn() network.Conn {
-	return &LoopbackConn{
-		WriteConn: s.WriteConn, ReadConn: s.ReadConn, Proto: s.Proto,
-		LocalPeerID: s.LocalPeerID, isClosed: new(atomic.Bool),
-	}
+	return s.conn
 }
 func (s *LoopbackStream) CloseRead() error {
 	if s.isReadClosed.Load() {
 		return nil
 	}
 	fmt.Println("LoopbackStream.CloseRead")
-
+	s.isReadClosed.Store(true)
 	return s.ReadConn.Close()
 }
 func (s *LoopbackStream) CloseWrite() error {
@@ -171,7 +169,7 @@ func (s *LoopbackStream) CloseWrite() error {
 		return nil
 	}
 	fmt.Println("LoopbackStream.CloseWrite")
-
+	s.isWriteClosed.Store(true)
 	return s.WriteConn.Close()
 }
 func (s *LoopbackStream) Reset() error {
@@ -220,11 +218,19 @@ func NewLoopbackStream(nodeId warpnet.WarpPeerID, proto warpnet.WarpProtocolID) 
 	reader := &LoopbackStream{
 		ReadConn: reader1, WriteConn: writer1, LocalPeerID: nodeId,
 		Proto: proto, isReadClosed: new(atomic.Bool), isWriteClosed: new(atomic.Bool),
+		conn: &LoopbackConn{
+			WriteConn: writer1, ReadConn: reader1, Proto: proto,
+			LocalPeerID: nodeId, isClosed: new(atomic.Bool),
+		},
 	}
 
 	writer := &LoopbackStream{
 		ReadConn: reader2, WriteConn: writer2, LocalPeerID: nodeId,
 		Proto: proto, isReadClosed: new(atomic.Bool), isWriteClosed: new(atomic.Bool),
+		conn: &LoopbackConn{
+			WriteConn: writer2, ReadConn: reader2, Proto: proto,
+			LocalPeerID: nodeId, isClosed: new(atomic.Bool),
+		},
 	}
 
 	return reader, writer
