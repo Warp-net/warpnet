@@ -41,6 +41,8 @@ import (
 	"time"
 )
 
+const defaultModerationModel = "llama2"
+
 type ModerationStreamer interface {
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
@@ -235,6 +237,7 @@ func StreamModerationResultHandler(
 				IsOk:        isModerationPassed,
 				Reason:      ev.Reason,
 				TimeAt:      updatedAt,
+				Model:       defaultModerationModel,
 			}
 
 			if ev.ObjectID == nil {
@@ -282,6 +285,7 @@ func StreamModerationResultHandler(
 					Reason:      ev.Reason,
 					Strikes:     1, // TODO incr
 					TimeAt:      updatedAt,
+					Model:       defaultModerationModel,
 				},
 			})
 			return event.Accepted, err

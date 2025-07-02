@@ -26,9 +26,16 @@ const moderationPromptTemplate = `
 	Content:
 	"""%s"""
 	
+	Possible Violations:
+	%s
+	
 	Answer:
 `
 
 func generatePrompt(content string) string {
-	return fmt.Sprintf(moderationPromptTemplate, content)
+	return fmt.Sprintf(moderationPromptTemplate, content, "unknown")
+}
+
+func generatePromptWithViolationContext(content, context string) string {
+	return fmt.Sprintf(moderationPromptTemplate, content, context)
 }

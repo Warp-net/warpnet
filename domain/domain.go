@@ -124,8 +124,11 @@ type Tweet struct {
 	Moderation  *TweetModeration `json:"moderation,omitempty"`
 }
 
+type ModelType string
+
 type TweetModeration struct {
 	IsModerated bool      `json:"is_moderated"`
+	Model       ModelType `json:"model"`
 	IsOk        bool      `json:"is_ok"`
 	Reason      *string   `json:"reason"`
 	TimeAt      time.Time `json:"time_at"`
@@ -158,6 +161,7 @@ type User struct {
 
 type UserModeration struct {
 	IsModerated bool      `json:"is_moderated"`
+	Model       ModelType `json:"model"`
 	IsOk        bool      `json:"is_ok"`
 	Reason      *string   `json:"reason"`
 	Strikes     uint8     `json:"strikes"`
