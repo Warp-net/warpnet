@@ -27,7 +27,6 @@ package stream
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -37,6 +36,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -48,7 +48,6 @@ type LoopbackConn struct {
 }
 
 func (c *LoopbackConn) Close() error {
-	fmt.Println("LoopbackConn.Close")
 	return c.stream.Close()
 }
 
@@ -98,8 +97,8 @@ func (c *LoopbackConn) Scope() network.ConnScope {
 	return nil
 }
 
-func (c *LoopbackConn) CloseWithError(errCode network.ConnErrorCode) error {
-	return fmt.Errorf("connection closed with %v: %w", errCode, c.stream.Close())
+func (c *LoopbackConn) CloseWithError(_ network.ConnErrorCode) error {
+	return c.stream.Close()
 }
 
 func (c *LoopbackConn) ID() string {
@@ -126,21 +125,26 @@ type LoopbackStream struct {
 	proto                       warpnet.WarpProtocolID
 	localPeerID                 warpnet.WarpPeerID
 	isReadClosed, isWriteClosed *atomic.Bool
+	writeMx, readMx             *sync.Mutex
 }
 
 func (s *LoopbackStream) CloseRead() error {
+	s.readMx.Lock()
+	defer s.readMx.Unlock()
+
 	if s.isReadClosed.Swap(true) {
 		return nil
 	}
-	fmt.Println("LoopbackStream.CloseRead")
 	return s.readConn.Close()
 }
 
 func (s *LoopbackStream) CloseWrite() error {
+	s.writeMx.Lock()
+	defer s.writeMx.Unlock()
+
 	if s.isWriteClosed.Swap(true) {
 		return nil
 	}
-	fmt.Println("LoopbackStream.CloseWrite")
 	return s.writeConn.Close()
 }
 
@@ -154,6 +158,9 @@ func (s *LoopbackStream) ResetWithError(err network.StreamErrorCode) error {
 }
 
 func (s *LoopbackStream) Read(p []byte) (int, error) {
+	s.readMx.Lock()
+	defer s.readMx.Unlock()
+
 	if s.isReadClosed.Load() {
 		return 0, io.ErrClosedPipe
 	}
@@ -161,6 +168,9 @@ func (s *LoopbackStream) Read(p []byte) (int, error) {
 }
 
 func (s *LoopbackStream) Write(p []byte) (int, error) {
+	s.writeMx.Lock()
+	defer s.writeMx.Unlock()
+
 	if s.isWriteClosed.Load() {
 		return 0, io.ErrClosedPipe
 	}
@@ -168,17 +178,30 @@ func (s *LoopbackStream) Write(p []byte) (int, error) {
 }
 
 func (s *LoopbackStream) Close() error {
+	s.writeMx.Lock()
+	s.readMx.Lock()
+	defer func() {
+		s.writeMx.Unlock()
+		s.readMx.Unlock()
+	}()
+
 	if s.isFullyClosed() {
 		return nil
 	}
-	fmt.Println("LoopbackStream.Close")
 	_ = s.CloseWrite()
 	_ = s.CloseRead()
 	return nil
 }
 
 func (s *LoopbackStream) isFullyClosed() bool {
-	return s.isReadClosed.Load() && s.isWriteClosed.Load()
+	s.writeMx.Lock()
+	s.readMx.Lock()
+	defer func() {
+		s.writeMx.Unlock()
+		s.readMx.Unlock()
+	}()
+	result := s.isReadClosed.Load() && s.isWriteClosed.Load()
+	return result
 }
 
 func (s *LoopbackStream) SetDeadline(t time.Time) error {
@@ -206,11 +229,13 @@ func NewLoopbackStream(
 	reader := &LoopbackStream{
 		readConn: reader1, writeConn: writer1, localPeerID: nodeId,
 		proto: proto, isReadClosed: new(atomic.Bool), isWriteClosed: new(atomic.Bool),
+		writeMx: new(sync.Mutex), readMx: new(sync.Mutex),
 	}
 
 	writer := &LoopbackStream{
 		readConn: reader2, writeConn: writer2, localPeerID: nodeId,
 		proto: proto, isReadClosed: new(atomic.Bool), isWriteClosed: new(atomic.Bool),
+		writeMx: new(sync.Mutex), readMx: new(sync.Mutex),
 	}
 
 	return reader, writer
