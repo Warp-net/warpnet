@@ -1,0 +1,2 @@
+/usr/bin/ar qc libembdinput.a "CMakeFiles/embdinput.dir/embd-input-lib.cpp.o" ../../common/CMakeFiles/common.dir/common.cpp.o ../../common/CMakeFiles/common.dir/console.cpp.o "../../common/CMakeFiles/common.dir/grammar-parser.cpp.o"
+/usr/bin/ranlib libembdinput.a

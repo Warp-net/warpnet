@@ -59,10 +59,7 @@ type DiscoveryHandler func(warpnet.WarpAddrInfo)
 type DiscoveryInfoStorer interface {
 	NodeInfo() warpnet.NodeInfo
 	Peerstore() warpnet.WarpPeerstore
-	Mux() warpnet.WarpProtocolSwitch
-	Network() warpnet.WarpNetwork
 	SimpleConnect(warpnet.WarpAddrInfo) error
-	Connect(warpnet.WarpAddrInfo) error
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
 
@@ -266,6 +263,53 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 	return
 }
 
+func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func([]byte) error {
+	return func(data []byte) error {
+		if len(data) == 0 {
+			return nil
+		}
+
+		var discoveryAddrInfos []warpnet.WarpPubInfo
+
+		outerErr := json.JSON.Unmarshal(data, &discoveryAddrInfos)
+		if outerErr != nil {
+			var single warpnet.WarpPubInfo
+			if innerErr := json.JSON.Unmarshal(data, &single); innerErr != nil {
+				return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, data)
+			}
+			discoveryAddrInfos = []warpnet.WarpPubInfo{single}
+		}
+		if len(discoveryAddrInfos) == 0 {
+			return nil
+		}
+
+		for _, info := range discoveryAddrInfos {
+			if info.ID == "" {
+				log.Errorf("pubsub: discovery: message has no ID: %s", string(data))
+				continue
+			}
+			if info.ID == s.node.NodeInfo().ID {
+				continue
+			}
+
+			peerInfo := warpnet.WarpAddrInfo{
+				ID:    info.ID,
+				Addrs: make([]warpnet.WarpAddress, 0, len(info.Addrs)),
+			}
+
+			for _, addr := range info.Addrs {
+				ma, _ := warpnet.NewMultiaddr(addr)
+				peerInfo.Addrs = append(peerInfo.Addrs, ma)
+			}
+
+			if handler != nil {
+				handler(peerInfo)
+			}
+		}
+		return nil
+	}
+}
+
 const dropMessagesLimit = 5
 
 func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
@@ -338,6 +382,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
 		_ = s.nodeRepo.BlocklistExponential(pi.ID)
+		s.node.Peerstore().RemovePeer(pi.ID)
 		return
 	}
 	if err != nil {

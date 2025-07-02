@@ -26,6 +26,10 @@ go.work.sum
 .env
 
 var
+*.tmp
+*.gguf
+*.pprof
+*.log
 .idea
 *.pem
 *.sig

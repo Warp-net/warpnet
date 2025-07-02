@@ -49,81 +49,6 @@ type Transporter interface {
 	Close() error
 }
 
-type Config struct {
-	// HeartbeatTimeout specifies the time in follower state without contact
-	// from a leader before we attempt an election.
-	// Default: 5 sec
-	HeartbeatTimeout time.Duration
-	// CommitTimeout specifies the time without an Apply operation before the
-	// leader sends an AppendEntry RPC to followers, to ensure a timely commit of
-	// log entries.
-	// Due to random staggering, may be delayed as much as 2x this value.
-	// Default: 1 sec
-	CommitTimeout time.Duration
-	// SnapshotInterval controls how often we check if we should perform a
-	// snapshot. We randomly stagger between this value and 2x this value to avoid
-	// the entire cluster from performing a snapshot at once. The value passed
-	// here is the initial setting used. This can be tuned during operation using
-	// ReloadConfig.
-	// Default: 20 min
-	SnapshotInterval time.Duration
-	// MaxAppendEntries controls the maximum number of append entries
-	// to send at once. We want to strike a balance between efficiency
-	// and avoiding waste if the follower is going to reject because of
-	// an inconsistent log.
-	// Default: 128
-	MaxAppendEntries uint64
-	// TrailingLogs controls how many logs we leave after a snapshot. This is used
-	// so that we can quickly replay logs on a follower instead of being forced to
-	// send an entire snapshot. The value passed here is the initial setting used.
-	// This can be tuned during operation using ReloadConfig.
-	// Default: 256
-	TrailingLogs uint64
-	// SnapshotInterval controls how often we check if we should perform a
-	// snapshot. We randomly stagger between this value and 2x this value to avoid
-	// the entire cluster from performing a snapshot at once. The value passed
-	// here is the initial setting used. This can be tuned during operation using
-	// ReloadConfig.
-	// Default: 8192
-	SnapshotThreshold uint64
-	// FSM (finite state machine) is a crucial component used to maintain a consistent
-	// state across a distributed system of nodes. Raft uses a consensus algorithm to
-	// ensure all nodes in a cluster agree on the same sequence of state transitions,
-	// which is managed by the FSM.
-	// Default: NewFSM.
-	FSM FSMachiner
-	// Custom Marshaller: by default MessagePack (msgpack) is frequently used with Raft,
-	// a consensus algorithm, because of its efficiency as a binary serialization format,
-	// which is crucial for fast and reliable message passing in distributed systems.
-	// Raft nodes exchange messages that represent changes to the system's state, and
-	// MessagePack's compact nature and speed make it well-suited for this purpose
-	// Default: MessagePack V5
-	Codec EncodeDecoder
-	// StableStore is used to provide stable storage
-	// of key configurations to ensure safety.
-	// Default: in-memory store
-	StableStore StableStorer
-	// LogStore is used as db for storing
-	// and retrieving logs in a durable fashion.
-	// Default: in-memory store
-	LogStore LogStore
-	// Cluster predefined nodes
-	// Default: in-memory store
-	BootstrapNodes []peer.AddrInfo
-	// Set node as Raft bootstrap cluster initiator - only a single node can do that
-	// Default: false
-	IsClusterInitiator bool
-	// Logger.
-	// Default: DefaultConsensusLogger
-	Logger Logger
-	// any custom validators. Note that validators don't affect Raft state
-	Validators []ConsensusValidatorFunc
-	// LibP2P endpoint for Raft nodes to be able to transfer incoming state change requests to the cluster leader
-	LeaderProtocolID protocol.ID
-	// Custom transport: by default, it's LibP2P TCP streams
-	TransportFunc NewTransportFunc
-}
-
 type ConsensusService struct {
 	ctx context.Context
 
@@ -150,59 +75,31 @@ type ConsensusService struct {
 	config   *RaftConfig
 }
 
-func NewLibP2pRaft(
-	ctx context.Context,
-	conf *Config,
-) (_ *ConsensusService, err error) {
+func NewLibP2pRaft(ctx context.Context, opts ...Option) (_ *ConsensusService, err error) {
 	var (
 		stableStore   raft.StableStore
 		snapshotStore raft.SnapshotStore
 		logStore      raft.LogStore
 	)
-	if conf.Logger == nil {
-		conf.Logger = DefaultConsensusLogger()
-	}
+	conf := applyOptions(opts)
+
 	if conf.LogStore == nil {
 		logStore = raft.NewInmemStore()
+	} else {
+		logStore = conf.LogStore
 	}
+
 	if conf.StableStore == nil {
-		snapshotStore = raft.NewInmemSnapshotStore()
 		stableStore = raft.NewInmemStore()
+		snapshotStore = raft.NewInmemSnapshotStore()
 	} else {
 		stableStore = conf.StableStore
 		snapshotStore, err = raft.NewFileSnapshotStoreWithLogger(
 			conf.StableStore.SnapshotsFilesPath(), 5, conf.Logger,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("consensus: failed to create snapshot store: %v", err)
+			return nil, fmt.Errorf("consensus: failed to create snapshot store: %w", err)
 		}
-	}
-	if conf.Codec == nil {
-		conf.Codec = &DefaultCodec{}
-	}
-	if conf.FSM == nil {
-		conf.FSM = NewFSM(conf.Codec, conf.Validators...)
-	}
-	if conf.HeartbeatTimeout == 0 {
-		conf.HeartbeatTimeout = 5 * time.Second
-	}
-	if conf.CommitTimeout == 0 {
-		conf.CommitTimeout = time.Second
-	}
-	if conf.SnapshotInterval == 0 {
-		conf.SnapshotInterval = 20 * time.Minute
-	}
-	if conf.TrailingLogs == 0 {
-		conf.TrailingLogs = 256
-	}
-	if conf.MaxAppendEntries == 0 {
-		conf.MaxAppendEntries = 128
-	}
-	if conf.SnapshotThreshold == 0 {
-		conf.SnapshotThreshold = 8192
-	}
-	if conf.TransportFunc == nil {
-		conf.TransportFunc = NewConsensusTransport
 	}
 
 	raftConfig := raft.DefaultConfig()

@@ -1,0 +1,1 @@
+/usr/bin/g++ -fPIE -O3 -DNDEBUG CMakeFiles/quantize.dir/quantize.cpp.o -o ../../bin/quantize  ../../libllama.a 

@@ -37,7 +37,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
 	"github.com/stretchr/testify/suite"
@@ -45,7 +45,7 @@ import (
 
 type NodeRepoTestSuite struct {
 	suite.Suite
-	db   *storage.DB
+	db   *local.DB
 	repo *NodeRepo
 	ctx  context.Context
 }
@@ -54,7 +54,7 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	var err error
 	s.ctx = context.Background()
 
-	s.db, err = storage.New(".", true, "")
+	s.db, err = local.New(".", true)
 	s.Require().NoError(err)
 
 	auth := NewAuthRepo(s.db)
@@ -146,7 +146,9 @@ func (s *NodeRepoTestSuite) TestQuerySimple() {
 	s.Require().NoError(err)
 	s.Require().NotNil(results)
 
-	defer results.Close()
+	defer func() {
+		_ = results.Close()
+	}()
 	var found bool
 	for r := range results.Next() {
 		if r.Error != nil {

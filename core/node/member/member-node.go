@@ -32,7 +32,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus/gossip"
+	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -48,15 +48,18 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"time"
 )
 
 type MemberNode struct {
-	*base.WarpNode
+	ctx context.Context
 
-	ctx                  context.Context
+	node *base.WarpNode
+	opts []warpnet.WarpOption
+
 	discService          DiscoveryHandler
 	mdnsService          MDNSStarterCloser
 	pubsubService        PubSubProvider
@@ -64,8 +67,13 @@ type MemberNode struct {
 	dHashTable           DistributedHashTableCloser
 	nodeRepo             NodeProvider
 	retrier              retrier.Retrier
-	userRepo             UserFetcher
+	authRepo             AuthProvider
+	userRepo             UserProvider
+	followRepo           FollowStorer
+	db                   Storer
+	privKey              ed25519.PrivateKey
 	ownerId, selfHashHex string
+	pseudoNode           PseudoStreamer
 }
 
 func NewMemberNode(
@@ -78,6 +86,9 @@ func NewMemberNode(
 	db Storer,
 	interruptChan chan os.Signal,
 ) (_ *MemberNode, err error) {
+	if len(privKey) == 0 {
+		return nil, errors.New("private key is required")
+	}
 	nodeRepo, err := database.NewNodeRepo(db, version)
 	if err != nil {
 		return nil, err
@@ -97,13 +108,32 @@ func NewMemberNode(
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.HandlePeerFound)
+
+	followeeIds, err := fetchFolloweeIds(owner.UserId, followRepo)
+	if err != nil {
+		return nil, err
+	}
+	pubsubHandlers := []pubsub.TopicHandler{
+		pubsub.NewDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
+		pubsub.NewTransitModerationHandler(),
+	}
+	pubsubHandlers = append(pubsubHandlers, pubsub.PrefollowUsers(followeeIds...)...)
 	pubsubService := pubsub.NewPubSub(
-		ctx, followRepo, owner.UserId, discService.HandlePeerFound,
+		ctx,
+		pubsubHandlers...,
 	)
 
+	infos, err := config.Config().Node.AddrInfos()
+	if err != nil {
+		return nil, err
+	}
+
 	dHashTable := dht.NewDHTable(
-		ctx, nodeRepo,
-		nil, discService.HandlePeerFound,
+		ctx,
+		dht.RoutingStore(nodeRepo),
+		dht.EnableRendezvous(),
+		dht.AddPeerCallbacks(discService.HandlePeerFound),
+		dht.BootstrapNodes(infos...),
 	)
 
 	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
@@ -117,29 +147,28 @@ func NewMemberNode(
 		_, _ = userRepo.Update(mastodonPseudoNode.DefaultUser().Id, mastodonPseudoNode.DefaultUser())
 	}
 
-	node, err := base.NewWarpNode(
-		ctx,
-		privKey,
-		store,
-		psk,
-		mastodonPseudoNode,
-		[]string{
+	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		return nil, err
+	}
+
+	opts := []warpnet.WarpOption{
+		base.WarpIdentity(privKey),
+		libp2p.Peerstore(store),
+		libp2p.PrivateNetwork(warpnet.PSK(psk)),
+		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
-		},
-		dHashTable.StartRouting,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("member: failed to init node: %v", err)
+		),
+		libp2p.Routing(dHashTable.StartRouting),
+		base.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	}
 
-	if mastodonPseudoNode != nil {
-		node.Peerstore().AddAddrs(mastodonPseudoNode.ID(), mastodonPseudoNode.Addrs(), time.Hour*24)
-	}
+	opts = append(opts, base.CommonOptions...)
 
 	mn := &MemberNode{
-		WarpNode:      node,
 		ctx:           ctx,
+		opts:          opts,
 		discService:   discService,
 		mdnsService:   mdnsService,
 		pubsubService: pubsubService,
@@ -147,36 +176,62 @@ func NewMemberNode(
 		nodeRepo:      nodeRepo,
 		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
+		followRepo:    followRepo,
+		authRepo:      authRepo,
+		db:            db,
+		privKey:       privKey,
 		ownerId:       owner.UserId,
 		selfHashHex:   selfHashHex,
+		pseudoNode:    mastodonPseudoNode,
 	}
 
-	mn.consensusService = gossip.NewGossipConsensus(
-		ctx, pubsubService, mn, interruptChan, nodeRepo.ValidateSelfHash, userRepo.ValidateUserID,
+	mn.consensusService = consensus.NewGossipConsensus(
+		ctx, pubsubService, interruptChan,
+		nodeRepo.ValidateSelfHash,
+		userRepo.ValidateUserID,
 	)
 
-	mn.setupHandlers(authRepo, userRepo, followRepo, db, privKey)
 	return mn, nil
 }
 
-func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
-	m.pubsubService.Run(m, clientNode)
+func (m *MemberNode) Start() (err error) {
+	m.node, err = base.NewWarpNode(
+		m.ctx,
+		m.opts...,
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to init node: %v", err)
+	}
+	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
+	if m.pseudoNode != nil {
+		m.node.Node().Peerstore().AddAddrs(m.pseudoNode.ID(), m.pseudoNode.Addrs(), time.Hour*24)
+	}
+
+	m.pubsubService.Run(m)
+
 	if err := m.discService.Run(m); err != nil {
 		return err
 	}
+
 	m.mdnsService.Start(m)
 
 	nodeInfo := m.NodeInfo()
 
-	ownerUser, _ := m.userRepo.Get(nodeInfo.OwnerId)
+	ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
+	if err != nil {
+		return err
+	}
 
-	if err := m.consensusService.Start(event.ValidationEvent{
+	if err := m.consensusService.Start(m); err != nil {
+		return err
+	}
+
+	ev := event.ValidationEvent{
 		ValidatedNodeID: nodeInfo.ID.String(),
 		SelfHashHex:     m.selfHashHex,
 		User:            &ownerUser,
-	}); err != nil {
-		return err
 	}
+	go m.consensusService.AskValidation(ev)
 
 	println()
 	fmt.Printf(
@@ -187,10 +242,56 @@ func (m *MemberNode) Start(clientNode ClientNodeStreamer) error {
 	return nil
 }
 
+func fetchFolloweeIds(ownerId string, followRepo FollowStorer) (ids []string, err error) {
+	if followRepo == nil {
+		return ids, nil
+	}
+
+	var (
+		nextCursor string
+		limit      = uint64(20)
+	)
+	for {
+		followees, cur, err := followRepo.GetFollowees(ownerId, &limit, &nextCursor)
+		if err != nil {
+			return ids, err
+		}
+		for _, f := range followees {
+			if f.Followee == ownerId {
+				continue
+			}
+			ids = append(ids, f.Followee)
+		}
+		if len(followees) < int(limit) {
+			break
+		}
+		nextCursor = cur
+	}
+	return ids, nil
+}
+
+func (m *MemberNode) Connect(p warpnet.WarpAddrInfo) error {
+	if m == nil || m.node == nil {
+		return nil
+	}
+	if m.pseudoNode != nil && m.pseudoNode.IsMastodonID(p.ID) {
+		return nil
+	}
+
+	return m.node.Connect(p)
+}
+
 func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
-	bi := m.BaseNodeInfo()
+	bi := m.node.BaseNodeInfo()
 	bi.OwnerId = m.ownerId
 	return bi
+}
+
+func (m *MemberNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	if m == nil || m.node == nil {
+		return nil, nil
+	}
+	return m.node.SelfStream(path, data)
 }
 
 type streamNodeID = string
@@ -201,7 +302,23 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 
-	bt, err := m.Stream(nodeId, path, data)
+	var isMastodonID bool
+	if m.pseudoNode != nil {
+		isMastodonID = m.pseudoNode.IsMastodonID(nodeId)
+	}
+
+	peerInfo := m.node.Node().Peerstore().PeerInfo(nodeId)
+	if len(peerInfo.Addrs) == 0 && !isMastodonID {
+		log.Warningf("node %v is offline", nodeId)
+		return nil, warpnet.ErrNodeIsOffline
+	}
+
+	if isMastodonID {
+		log.Debugf("stream: peer %s is mastodon", nodeIdStr)
+		return m.pseudoNode.Route(path, data)
+	}
+
+	bt, err := m.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		m.setUserOffline(nodeIdStr)
 		return bt, err
@@ -210,8 +327,8 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	if err != nil {
 		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancelF()
-		m.retrier.Try(ctx, func() error {
-			bt, err = m.Stream(nodeId, path, data) // TODO dead letters queue
+		_ = m.retrier.Try(ctx, func() error {
+			bt, err = m.node.Stream(nodeId, path, data) // TODO dead letters queue
 			return err
 		})
 	}
@@ -264,159 +381,194 @@ func (m *MemberNode) setupHandlers(
 	logMw := mw.LoggingMiddleware
 	authMw := mw.AuthMiddleware
 	unwrapMw := mw.UnwrapStreamMiddleware
-	m.SetStreamHandler(
-		event.PRIVATE_POST_NODE_VALIDATE,
-		logMw(unwrapMw(handler.StreamValidateHandler(m.consensusService))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-		logMw(unwrapMw(handler.StreamValidationResponseHandler(m.consensusService))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_NODE_CHALLENGE,
-		logMw(unwrapMw(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_INFO,
-		logMw(handler.StreamGetInfoHandler(m, m.discService.HandlePeerFound)),
-	)
 
-	m.SetStreamHandler(
-		event.PRIVATE_GET_STATS,
-		logMw(authMw(unwrapMw(handler.StreamGetStatsHandler(m, db)))),
+	m.node.SetStreamHandlers(
+		[]warpnet.WarpHandler{
+			{
+				event.PRIVATE_POST_NODE_VALIDATE,
+				logMw(unwrapMw(handler.StreamValidateHandler(m.consensusService))),
+			},
+			{
+				event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+				logMw(unwrapMw(handler.StreamValidationResponseHandler(m.consensusService))),
+			},
+			{
+				event.PUBLIC_POST_NODE_CHALLENGE,
+				logMw(unwrapMw(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
+			},
+			{
+				event.PUBLIC_GET_INFO,
+				logMw(handler.StreamGetInfoHandler(m, m.discService.HandlePeerFound)),
+			},
+			{
+				event.PRIVATE_GET_STATS,
+				logMw(authMw(unwrapMw(handler.StreamGetStatsHandler(m, db)))),
+			},
+			{
+				event.PRIVATE_POST_PAIR,
+				logMw(authMw(unwrapMw(handler.StreamNodesPairingHandler(authNodeInfo)))),
+			},
+			{
+				event.PRIVATE_GET_TIMELINE,
+				logMw(authMw(unwrapMw(handler.StreamTimelineHandler(timelineRepo)))),
+			},
+			{
+				event.PRIVATE_POST_TWEET,
+				logMw(authMw(unwrapMw(handler.StreamNewTweetHandler(m.pubsubService, authRepo, tweetRepo, timelineRepo)))),
+			},
+			{
+				event.PRIVATE_DELETE_TWEET,
+				logMw(authMw(unwrapMw(handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, tweetRepo, likeRepo)))),
+			},
+			{
+				event.PUBLIC_POST_REPLY,
+				logMw(authMw(unwrapMw(handler.StreamNewReplyHandler(replyRepo, userRepo, m)))),
+			},
+			{
+				event.PUBLIC_DELETE_REPLY,
+				logMw(authMw(unwrapMw(handler.StreamDeleteReplyHandler(tweetRepo, userRepo, replyRepo, m)))),
+			},
+			{
+				event.PUBLIC_POST_FOLLOW,
+				logMw(authMw(unwrapMw(handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m)))),
+			},
+			{
+				event.PUBLIC_POST_UNFOLLOW,
+				logMw(authMw(unwrapMw(handler.StreamUnfollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m)))),
+			},
+			{
+				event.PUBLIC_GET_USER,
+				logMw(authMw(unwrapMw(handler.StreamGetUserHandler(tweetRepo, followRepo, userRepo, authRepo, m)))),
+			},
+			{
+				event.PUBLIC_GET_USERS,
+				logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, m)))),
+			},
+			{
+				event.PUBLIC_GET_WHOTOFOLLOW,
+				logMw(authMw(unwrapMw(handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo)))),
+			},
+			{
+				event.PUBLIC_GET_TWEETS,
+				logMw(authMw(unwrapMw(handler.StreamGetTweetsHandler(tweetRepo, userRepo, m)))),
+			},
+			{
+				event.PUBLIC_GET_TWEET,
+				logMw(authMw(unwrapMw(handler.StreamGetTweetHandler(tweetRepo)))),
+			},
+			{
+				event.PUBLIC_GET_TWEET_STATS,
+				logMw(authMw(unwrapMw(handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m)))),
+			},
+			{
+				event.PUBLIC_GET_REPLY,
+				logMw(authMw(unwrapMw(handler.StreamGetReplyHandler(replyRepo)))),
+			},
+			{
+				event.PUBLIC_GET_REPLIES,
+				logMw(authMw(unwrapMw(handler.StreamGetRepliesHandler(replyRepo, userRepo, m)))),
+			},
+			{
+				event.PUBLIC_GET_FOLLOWERS,
+				logMw(authMw(unwrapMw(handler.StreamGetFollowersHandler(authRepo, userRepo, followRepo, m)))),
+			},
+			{
+				event.PUBLIC_GET_FOLLOWEES,
+				logMw(authMw(unwrapMw(handler.StreamGetFolloweesHandler(authRepo, userRepo, followRepo, m)))),
+			},
+			{
+				event.PUBLIC_POST_LIKE,
+				logMw(authMw(unwrapMw(handler.StreamLikeHandler(likeRepo, userRepo, m)))),
+			},
+			{
+				event.PUBLIC_POST_UNLIKE,
+				logMw(authMw(unwrapMw(handler.StreamUnlikeHandler(likeRepo, userRepo, m)))),
+			},
+			{
+				event.PRIVATE_POST_USER,
+				logMw(authMw(unwrapMw(handler.StreamUpdateProfileHandler(authRepo, userRepo)))),
+			},
+			{
+				event.PUBLIC_POST_RETWEET,
+				logMw(authMw(unwrapMw(handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, m)))),
+			},
+			{
+				event.PUBLIC_POST_UNRETWEET,
+				logMw(authMw(unwrapMw(handler.StreamUnretweetHandler(tweetRepo, userRepo, m)))),
+			},
+			{
+				event.PUBLIC_POST_CHAT,
+				logMw(authMw(unwrapMw(handler.StreamCreateChatHandler(chatRepo, userRepo, m)))),
+			},
+			{
+				event.PRIVATE_DELETE_CHAT,
+				logMw(authMw(unwrapMw(handler.StreamDeleteChatHandler(chatRepo, authRepo)))),
+			},
+			{
+				event.PRIVATE_GET_CHATS,
+				logMw(authMw(unwrapMw(handler.StreamGetUserChatsHandler(chatRepo, authRepo)))),
+			},
+			{
+				event.PUBLIC_POST_MESSAGE,
+				logMw(authMw(unwrapMw(handler.StreamSendMessageHandler(chatRepo, userRepo, m)))),
+			},
+			{
+				event.PRIVATE_DELETE_MESSAGE,
+				logMw(authMw(unwrapMw(handler.StreamDeleteMessageHandler(chatRepo, authRepo)))),
+			},
+			{
+				event.PRIVATE_GET_MESSAGE,
+				logMw(authMw(unwrapMw(handler.StreamGetMessageHandler(chatRepo, authRepo)))),
+			},
+			{
+				event.PRIVATE_GET_MESSAGES,
+				logMw(authMw(unwrapMw(handler.StreamGetMessagesHandler(chatRepo, authRepo)))),
+			},
+			{
+				event.PRIVATE_GET_CHAT,
+				logMw(authMw(unwrapMw(handler.StreamGetUserChatHandler(chatRepo, authRepo)))),
+			},
+			{
+				event.PRIVATE_POST_UPLOAD_IMAGE,
+				logMw(authMw(unwrapMw(handler.StreamUploadImageHandler(m, mediaRepo, userRepo)))),
+			},
+			{
+				event.PUBLIC_GET_IMAGE,
+				logMw(authMw(unwrapMw(handler.StreamGetImageHandler(m, mediaRepo, userRepo)))),
+			},
+			{
+				event.PUBLIC_POST_MODERATION_RESULT, // TODO protect this endpoint
+				logMw(mw.UnwrapStreamMiddleware(
+					handler.StreamModerationResultHandler(m.pubsubService, userRepo, tweetRepo, timelineRepo)),
+				),
+			},
+		}...,
 	)
-	m.SetStreamHandler(
-		event.PRIVATE_POST_PAIR,
-		logMw(authMw(unwrapMw(handler.StreamNodesPairingHandler(authNodeInfo)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_GET_TIMELINE,
-		logMw(authMw(unwrapMw(handler.StreamTimelineHandler(timelineRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_POST_TWEET,
-		logMw(authMw(unwrapMw(handler.StreamNewTweetHandler(m.pubsubService, authRepo, tweetRepo, timelineRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_DELETE_TWEET,
-		logMw(authMw(unwrapMw(handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, tweetRepo, likeRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_REPLY,
-		logMw(authMw(unwrapMw(handler.StreamNewReplyHandler(replyRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_DELETE_REPLY,
-		logMw(authMw(unwrapMw(handler.StreamDeleteReplyHandler(tweetRepo, userRepo, replyRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_FOLLOW,
-		logMw(authMw(unwrapMw(handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_UNFOLLOW,
-		logMw(authMw(unwrapMw(handler.StreamUnfollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_USER,
-		logMw(authMw(unwrapMw(handler.StreamGetUserHandler(tweetRepo, followRepo, userRepo, authRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_USERS,
-		logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_WHOTOFOLLOW,
-		logMw(authMw(unwrapMw(handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_TWEETS,
-		logMw(authMw(unwrapMw(handler.StreamGetTweetsHandler(tweetRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_TWEET,
-		logMw(authMw(unwrapMw(handler.StreamGetTweetHandler(tweetRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_TWEET_STATS,
-		logMw(authMw(unwrapMw(handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_REPLY,
-		logMw(authMw(unwrapMw(handler.StreamGetReplyHandler(replyRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_REPLIES,
-		logMw(authMw(unwrapMw(handler.StreamGetRepliesHandler(replyRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_FOLLOWERS,
-		logMw(authMw(unwrapMw(handler.StreamGetFollowersHandler(authRepo, userRepo, followRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_FOLLOWEES,
-		logMw(authMw(unwrapMw(handler.StreamGetFolloweesHandler(authRepo, userRepo, followRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_LIKE,
-		logMw(authMw(unwrapMw(handler.StreamLikeHandler(likeRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_UNLIKE,
-		logMw(authMw(unwrapMw(handler.StreamUnlikeHandler(likeRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_POST_USER,
-		logMw(authMw(unwrapMw(handler.StreamUpdateProfileHandler(authRepo, userRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_RETWEET,
-		logMw(authMw(unwrapMw(handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_UNRETWEET,
-		logMw(authMw(unwrapMw(handler.StreamUnretweetHandler(tweetRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_CHAT,
-		logMw(authMw(unwrapMw(handler.StreamCreateChatHandler(chatRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_DELETE_CHAT,
-		logMw(authMw(unwrapMw(handler.StreamDeleteChatHandler(chatRepo, authRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_GET_CHATS,
-		logMw(authMw(unwrapMw(handler.StreamGetUserChatsHandler(chatRepo, authRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_POST_MESSAGE,
-		logMw(authMw(unwrapMw(handler.StreamSendMessageHandler(chatRepo, userRepo, m)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_DELETE_MESSAGE,
-		logMw(authMw(unwrapMw(handler.StreamDeleteMessageHandler(chatRepo, authRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_GET_MESSAGE,
-		logMw(authMw(unwrapMw(handler.StreamGetMessageHandler(chatRepo, authRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_GET_MESSAGES,
-		logMw(authMw(unwrapMw(handler.StreamGetMessagesHandler(chatRepo, authRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_GET_CHAT,
-		logMw(authMw(unwrapMw(handler.StreamGetUserChatHandler(chatRepo, authRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PRIVATE_POST_UPLOAD_IMAGE,
-		logMw(authMw(unwrapMw(handler.StreamUploadImageHandler(m, mediaRepo, userRepo)))),
-	)
-	m.SetStreamHandler(
-		event.PUBLIC_GET_IMAGE,
-		logMw(authMw(unwrapMw(handler.StreamGetImageHandler(m, mediaRepo, userRepo)))),
-	)
+}
+
+func (m *MemberNode) Node() warpnet.P2PNode {
+	if m == nil || m.node == nil {
+		return nil
+	}
+	return m.node.Node()
+}
+
+func (m *MemberNode) Peerstore() warpnet.WarpPeerstore {
+	if m == nil || m.node == nil {
+		return nil
+	}
+	return m.node.Node().Peerstore()
+}
+
+func (m *MemberNode) Network() warpnet.WarpNetwork {
+	if m == nil || m.node == nil {
+		return nil
+	}
+	return m.node.Node().Network()
+}
+
+func (m *MemberNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+	return m.node.Node().Connect(m.ctx, info)
 }
 
 func (m *MemberNode) Stop() {
@@ -445,5 +597,5 @@ func (m *MemberNode) Stop() {
 			log.Errorf("member: failed to close node repo: %v", err)
 		}
 	}
-	m.StopNode()
+	m.node.StopNode()
 }

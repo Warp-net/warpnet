@@ -24,8 +24,6 @@ const (
 
 	seqNumMedian = 1 << 15
 	seqNumMax    = 1 << 16
-
-	srtcpIndexSize = 4
 )
 
 // Encrypt/Decrypt state for a single SRTP SSRC.

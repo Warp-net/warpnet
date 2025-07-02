@@ -30,8 +30,12 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -63,10 +67,12 @@ func init() {
 	pflag.String("node.host.v4", "0.0.0.0", "Node host IPv4")
 	pflag.String("node.host.v6", "::", "Node host IPv6")
 	pflag.String("node.port", "4001", "Node port")
-	pflag.String("node.seed", "", "Bootstrap node seed for deterministic ID generation (random string)")
+	pflag.String("node.seed", "", "Node seed for deterministic ID generation")
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env.")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
-	pflag.String("node.metrics.server", "", "Metrics server address")
+	//pflag.String("node.metrics.server", "", "Metrics server address")
+	pflag.String("node.moderator.modelname", "llama-2-7b-chat.Q8_0.gguf", "File name AI model. Unused if 'cid' provided")
+	pflag.String("node.moderator.modelcid", "bafybeid7to3a6zkv5fdh5lw7iyl5wruj46qirvfsc6xbngprjy67ma6slm", "AI model content ID in IPFS. Unused if 'modelpath' provided")
 	pflag.String("logging.level", "info", "Logging level")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -97,23 +103,41 @@ func init() {
 	}
 
 	version := root.GetVersion()
-
 	fmt.Printf(noticeTemplate, strings.ToUpper(warpnet.WarpnetName), version, "2025", "Vadim Filin")
+
+	host := viper.GetString("node.host.v4")
+	port := viper.GetString("node.port")
+	dbDir := viper.GetString("database.dir")
+
+	seed := strings.TrimSpace(viper.GetString("node.seed"))
+	if seed == "" {
+		seed = "seed" + network + dbDir + host + port
+	}
+	appPath := getAppPath()
+
+	modelPath := filepath.Join(appPath, strings.TrimSpace(viper.GetString("node.moderator.modelname")))
+	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
 
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
 		Node: node{
 			Bootstrap: bootstrapAddrList,
-			Seed:      strings.TrimSpace(viper.GetString("node.seed")),
-			HostV4:    viper.GetString("node.host.v4"),
+			Seed:      seed,
+			HostV4:    host,
 			HostV6:    viper.GetString("node.host.v6"),
-			Port:      viper.GetString("node.port"),
+			Port:      port,
 			Network:   network,
 			Metrics: metrics{
 				Server: viper.GetString("node.metrics.server"),
 			},
+			Moderator: moderator{
+				Path: modelPath,
+				CID:  viper.GetString("node.moderator.modelcid"),
+			},
 		},
-		Database: database{strings.TrimSpace(viper.GetString("database.dir"))},
+		Database: database{
+			Path: dbPath,
+		},
 		Server: server{
 			Host: viper.GetString("server.host"),
 			Port: viper.GetString("server.port"),
@@ -141,14 +165,17 @@ type node struct {
 	Port      string
 	Network   string
 	Metrics   metrics
+	Moderator moderator
 	Seed      string
 }
-
+type moderator struct {
+	Path, CID string
+}
 type metrics struct {
 	Server string
 }
 type database struct {
-	DirName string
+	Path string
 }
 type logging struct {
 	Level  string
@@ -176,4 +203,37 @@ func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
 		infos = append(infos, *addrInfo)
 	}
 	return infos, nil
+}
+
+func getAppPath() string {
+	var dbPath string
+
+	switch runtime.GOOS {
+	case "windows":
+		// %LOCALAPPDATA% Windows
+		appData := os.Getenv("LOCALAPPDATA") // C:\Users\{username}\AppData\Local
+		if appData == "" {
+			log.Fatal("failed to get path to LOCALAPPDATA")
+		}
+		dbPath = filepath.Join(appData, "warpdata")
+
+	case "darwin", "linux", "android":
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		dbPath = filepath.Join(homeDir, ".warpdata")
+
+	default:
+		log.Fatal("unsupported OS")
+	}
+
+	dbPath = filepath.Join(dbPath)
+
+	err := os.MkdirAll(dbPath, 0750)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return dbPath
 }

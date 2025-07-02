@@ -37,13 +37,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/storage"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/json"
 )
 
 var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrUserNotFound      = local.DBError("user not found")
+	ErrUserAlreadyExists = local.DBError("user already exists")
 )
 
 const (
@@ -57,10 +57,10 @@ const (
 )
 
 type UserStorer interface {
-	NewTxn() (storage.WarpTransactioner, error)
-	Set(key storage.DatabaseKey, value []byte) error
-	Get(key storage.DatabaseKey) ([]byte, error)
-	Delete(key storage.DatabaseKey) error
+	NewTxn() (local.WarpTransactioner, error)
+	Set(key local.DatabaseKey, value []byte) error
+	Get(key local.DatabaseKey) ([]byte, error)
+	Delete(key local.DatabaseKey) error
 }
 
 type UserRepo struct {
@@ -78,7 +78,7 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 
 func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error) {
 	if user.Id == "" {
-		return user, errors.New("user id is empty")
+		return user, local.DBError("user id is empty")
 	}
 	if user.CreatedAt.IsZero() {
 		user.CreatedAt = time.Now()
@@ -95,21 +95,21 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		user.Network = DefaultWarpnetUserNetwork
 	}
 
-	rttRange := storage.RangePrefix(strconv.FormatInt(user.Latency, 10))
+	rttRange := local.RangePrefix(strconv.FormatInt(user.Latency, 10))
 
-	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
+	fixedKey := local.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(user.Id).
 		Build()
 
 	_, err = repo.db.Get(fixedKey)
-	if !errors.Is(err, storage.ErrKeyNotFound) {
+	if !errors.Is(err, local.ErrKeyNotFound) {
 		return user, ErrUserAlreadyExists
 	}
 
-	sortableKey := storage.NewPrefixBuilder(UsersRepoName).
+	sortableKey := local.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
 		AddRange(rttRange).
@@ -123,7 +123,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 	defer txn.Rollback()
 
 	if user.NodeId != "" {
-		nodeUserKey := storage.NewPrefixBuilder(UsersRepoName).
+		nodeUserKey := local.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(user.NodeId).
 			Build()
@@ -144,10 +144,10 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, error) {
 	var existingUser domain.User
 
-	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
+	fixedKey := local.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(userId).
 		Build()
 
@@ -157,13 +157,13 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	}
 	defer txn.Rollback()
 
-	sortableKeyBytes, err := txn.Get(fixedKey)
+	sortableKeyBytes, err := txn.Get(fixedKey) // GET IS HERE!
 	if err != nil {
 		return existingUser, err
 	}
 
-	data, err := txn.Get(storage.DatabaseKey(sortableKeyBytes))
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	data, err := txn.Get(local.DatabaseKey(sortableKeyBytes))
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return existingUser, ErrUserNotFound
 	}
 	if err != nil {
@@ -199,6 +199,18 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if newUser.Network != "" {
 		existingUser.Network = newUser.Network
 	}
+	if newUser.Moderation != nil {
+		if existingUser.Moderation == nil {
+			existingUser.Moderation = newUser.Moderation
+		} else {
+			existingUser.Moderation.IsModerated = newUser.Moderation.IsModerated
+			existingUser.Moderation.Reason = newUser.Moderation.Reason
+			existingUser.Moderation.IsOk = newUser.Moderation.IsOk
+			existingUser.Moderation.TimeAt = newUser.Moderation.TimeAt
+
+			existingUser.Moderation.Strikes += newUser.Moderation.Strikes
+		}
+	}
 	existingUser.Latency = newUser.Latency
 
 	bt, err := json.JSON.Marshal(existingUser)
@@ -208,12 +220,12 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if err = txn.Set(fixedKey, sortableKeyBytes); err != nil {
 		return existingUser, err
 	}
-	if err = txn.Set(storage.DatabaseKey(sortableKeyBytes), bt); err != nil {
+	if err = txn.Set(local.DatabaseKey(sortableKeyBytes), bt); err != nil {
 		return existingUser, err
 	}
 
 	if newUser.NodeId != "" {
-		nodeUserKey := storage.NewPrefixBuilder(UsersRepoName).
+		nodeUserKey := local.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(newUser.NodeId).
 			Build()
@@ -229,22 +241,22 @@ func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 	if userId == "" {
 		return user, ErrUserNotFound
 	}
-	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
+	fixedKey := local.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(userId).
 		Build()
 	sortableKeyBytes, err := repo.db.Get(fixedKey)
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
 		return user, err
 	}
 
-	data, err := repo.db.Get(storage.DatabaseKey(sortableKeyBytes))
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
@@ -263,21 +275,21 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 	if nodeID == "" {
 		return user, ErrUserNotFound
 	}
-	nodeUserKey := storage.NewPrefixBuilder(UsersRepoName).
+	nodeUserKey := local.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(nodeSubNamespace).
 		AddRootID(nodeID).
 		Build()
 
 	sortableKeyBytes, err := repo.db.Get(nodeUserKey)
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
 		return user, err
 	}
 
-	data, err := repo.db.Get(storage.DatabaseKey(sortableKeyBytes))
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
@@ -294,10 +306,10 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 
 // Delete removes a user by their ID
 func (repo *UserRepo) Delete(userId string) error {
-	fixedKey := storage.NewPrefixBuilder(UsersRepoName).
+	fixedKey := local.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
-		AddRange(storage.FixedRangeKey).
+		AddRange(local.FixedRangeKey).
 		AddParentId(userId).
 		Build()
 
@@ -308,14 +320,14 @@ func (repo *UserRepo) Delete(userId string) error {
 	defer txn.Rollback()
 
 	sortableKeyBytes, err := txn.Get(fixedKey)
-	if errors.Is(err, storage.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 
-	data, err := txn.Get(storage.DatabaseKey(sortableKeyBytes))
+	data, err := txn.Get(local.DatabaseKey(sortableKeyBytes))
 	if err != nil {
 		return err
 	}
@@ -329,11 +341,11 @@ func (repo *UserRepo) Delete(userId string) error {
 	if err = txn.Delete(fixedKey); err != nil {
 		return err
 	}
-	if err = txn.Delete(storage.DatabaseKey(sortableKeyBytes)); err != nil {
+	if err = txn.Delete(local.DatabaseKey(sortableKeyBytes)); err != nil {
 		return err
 	}
 	if u.NodeId != "" {
-		nodeUserKey := storage.NewPrefixBuilder(UsersRepoName).
+		nodeUserKey := local.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(u.NodeId).
 			Build()
@@ -346,7 +358,7 @@ func (repo *UserRepo) Delete(userId string) error {
 }
 
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
-	prefix := storage.NewPrefixBuilder(UsersRepoName).
+	prefix := local.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
 		Build()
@@ -379,19 +391,14 @@ func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string
 	return users, cur, nil
 }
 
-// TODO refactor
-func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *string) ([]domain.User, string, error) {
-	profile, err := repo.Get(profileId)
-	if err != nil {
-		return nil, "", err
-	}
-	if cursor == nil {
-		cursor = new(string)
-	}
-
+func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	users, cur, err := repo.List(limit, cursor)
 	if err != nil {
-		return nil, "", err
+		return users, "", err
+	}
+
+	if limit != nil && len(users) < int(*limit) { // too small amount - no need to filter
+		return users, cur, nil
 	}
 
 	recommended := make([]domain.User, 0, len(users))
@@ -405,23 +412,10 @@ func (repo *UserRepo) WhoToFollow(profileId string, limit *uint64, cursor *strin
 		if u.TweetsCount == 0 {
 			continue
 		}
-		if profile.Network != u.Network { // if profile from Warpnet - don't show other network recommendations
-			continue
-		}
+
 		recommended = append(recommended, u)
 	}
 
-	left := len(users) - len(recommended)
-	if left <= 0 || cur == "end" || cur == *cursor {
-		return recommended, cur, nil
-	}
-
-	left64 := uint64(left)
-	leftUsers, cur, err := repo.WhoToFollow(profileId, &left64, &cur)
-	if err != nil {
-		return nil, "", err
-	}
-	recommended = append(recommended, leftUsers...)
 	return recommended, cur, nil
 }
 
@@ -439,22 +433,22 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 	users = make([]domain.User, 0, len(userIDs))
 
 	for _, userID := range userIDs {
-		fixedKey := storage.NewPrefixBuilder(UsersRepoName).
+		fixedKey := local.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(userSubNamespace).
 			AddRootID("None").
-			AddRange(storage.FixedRangeKey).
+			AddRange(local.FixedRangeKey).
 			AddParentId(userID).
 			Build()
 		sortableKey, err := txn.Get(fixedKey)
-		if errors.Is(err, storage.ErrKeyNotFound) {
+		if errors.Is(err, local.ErrKeyNotFound) {
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		data, err := txn.Get(storage.DatabaseKey(sortableKey))
-		if errors.Is(err, storage.ErrKeyNotFound) {
+		data, err := txn.Get(local.DatabaseKey(sortableKey))
+		if errors.Is(err, local.ErrKeyNotFound) {
 			continue
 		}
 		if err != nil {
@@ -490,7 +484,7 @@ func (repo *UserRepo) ValidateUserID(ev event.ValidationEvent) error {
 	isOuterNewer := ev.User.CreatedAt.After(innerUser.CreatedAt)
 
 	if isUserAlreadyExists && isOuterNewer && !isSameNode {
-		return errors.New("validator rejected new user")
+		return local.DBError("validator rejected new user")
 	}
 
 	return nil

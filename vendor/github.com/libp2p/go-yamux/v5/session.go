@@ -342,7 +342,7 @@ func (s *Session) close(shutdownErr error, sendGoAway bool, errCode uint32) erro
 // GoAway can be used to prevent accepting further
 // connections. It does not close the underlying conn.
 func (s *Session) GoAway() error {
-	return s.sendMsg(s.goAway(goAwayNormal), nil, nil)
+	return s.sendMsg(s.goAway(goAwayNormal), nil, nil, true)
 }
 
 // goAway is used to send a goAway message
@@ -499,7 +499,12 @@ func (s *Session) extendKeepalive() {
 }
 
 // send sends the header and body.
-func (s *Session) sendMsg(hdr header, body []byte, deadline <-chan struct{}) error {
+// If waitForShutDown is true, it will wait for shutdown to complete even if the send loop has exited. This
+// ensures accurate error reporting. waitForShutDown should be true for callers other than the recvLoop.
+// The recvLoop should set waitForShutdown to false to avoid a deadlock.
+// For details see: https://github.com/libp2p/go-yamux/issues/129
+// and the test `TestSessionCloseDeadlock`
+func (s *Session) sendMsg(hdr header, body []byte, deadline <-chan struct{}, waitForShutDown bool) error {
 	select {
 	case <-s.shutdownCh:
 		return s.shutdownErr
@@ -521,6 +526,13 @@ func (s *Session) sendMsg(hdr header, body []byte, deadline <-chan struct{}) err
 	case <-s.shutdownCh:
 		pool.Put(buf)
 		return s.shutdownErr
+	case <-s.sendDoneCh:
+		pool.Put(buf)
+		if waitForShutDown {
+			<-s.shutdownCh
+			return s.shutdownErr
+		}
+		return errSendLoopDone
 	case s.sendCh <- buf:
 		return nil
 	case <-deadline:
@@ -773,7 +785,7 @@ func (s *Session) handleStreamMessage(hdr header) error {
 
 	// Read the new data
 	if err := stream.readData(hdr, flags, s.reader); err != nil {
-		if sendErr := s.sendMsg(s.goAway(goAwayProtoErr), nil, nil); sendErr != nil {
+		if sendErr := s.sendMsg(s.goAway(goAwayProtoErr), nil, nil, false); sendErr != nil && sendErr != errSendLoopDone {
 			s.logger.Printf("[WARN] yamux: failed to send go away: %v", sendErr)
 		}
 		return err
@@ -838,7 +850,7 @@ func (s *Session) incomingStream(id uint32) error {
 	// Reject immediately if we are doing a go away
 	if atomic.LoadInt32(&s.localGoAway) == 1 {
 		hdr := encode(typeWindowUpdate, flagRST, id, 0)
-		return s.sendMsg(hdr, nil, nil)
+		return s.sendMsg(hdr, nil, nil, false)
 	}
 
 	// Allocate a new stream
@@ -857,7 +869,7 @@ func (s *Session) incomingStream(id uint32) error {
 	// Check if stream already exists
 	if _, ok := s.streams[id]; ok {
 		s.logger.Printf("[ERR] yamux: duplicate stream declared")
-		if sendErr := s.sendMsg(s.goAway(goAwayProtoErr), nil, nil); sendErr != nil {
+		if sendErr := s.sendMsg(s.goAway(goAwayProtoErr), nil, nil, false); sendErr != nil && sendErr != errSendLoopDone {
 			s.logger.Printf("[WARN] yamux: failed to send go away: %v", sendErr)
 		}
 		span.Done()
@@ -869,7 +881,7 @@ func (s *Session) incomingStream(id uint32) error {
 		s.logger.Printf("[WARN] yamux: MaxIncomingStreams exceeded, forcing stream reset")
 		defer span.Done()
 		hdr := encode(typeWindowUpdate, flagRST, id, 0)
-		return s.sendMsg(hdr, nil, nil)
+		return s.sendMsg(hdr, nil, nil, false)
 	}
 
 	s.numIncomingStreams++
@@ -886,7 +898,7 @@ func (s *Session) incomingStream(id uint32) error {
 		s.logger.Printf("[WARN] yamux: backlog exceeded, forcing stream reset")
 		s.deleteStream(id)
 		hdr := encode(typeWindowUpdate, flagRST, id, 0)
-		return s.sendMsg(hdr, nil, nil)
+		return s.sendMsg(hdr, nil, nil, false)
 	}
 }
 

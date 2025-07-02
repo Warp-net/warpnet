@@ -43,7 +43,7 @@ func StreamGetInfoHandler(
 	handler discovery.DiscoveryHandler,
 ) warpnet.WarpStreamHandler {
 	return func(s warpnet.WarpStream) {
-		defer func() { s.Close() }() //#nosec
+		defer func() { _ = s.Close() }() //#nosec
 
 		remoteID := s.Conn().RemotePeer()
 		remoteAddr := s.Conn().RemoteMultiaddr()

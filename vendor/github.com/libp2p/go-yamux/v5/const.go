@@ -2,6 +2,7 @@ package yamux
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -128,6 +129,8 @@ var (
 
 	// ErrKeepAliveTimeout is sent if a missed keepalive caused the stream close
 	ErrKeepAliveTimeout = &Error{msg: "keepalive timeout", timeout: true}
+
+	errSendLoopDone = errors.New("send loop done")
 )
 
 const (
