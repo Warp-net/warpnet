@@ -235,7 +235,7 @@ func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) 
 		return
 	}
 
-	log.Infof("dht rendezvous: is running in a namespace %s", namespace)
+	log.Infof("dht rendezvous: is running under a namespace %s", namespace)
 
 	for {
 		select {

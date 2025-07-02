@@ -9,7 +9,7 @@ services:
       - NODE_SEED=warpnet1
       - NODE_NETWORK=warpnet
       - NODE_HOST_V4=207.154.221.44
-      - LOGGING_LEVEL=debug
+      - LOGGING_LEVEL=info
 
   warpnet2:
     container_name: warpnet2
@@ -21,7 +21,7 @@ services:
       - NODE_SEED=warpnet2
       - NODE_NETWORK=warpnet
       - NODE_HOST_V4=207.154.221.44
-      - LOGGING_LEVEL=debug
+      - LOGGING_LEVEL=info
 
   warpnet3:
     container_name: warpnet3
@@ -33,9 +33,18 @@ services:
       - NODE_NETWORK=warpnet
       - NODE_PORT=4003
       - NODE_HOST_V4=207.154.221.44
-      - LOGGING_LEVEL=debug
+      - LOGGING_LEVEL=info
 
-volumes:
-  snapshot1:
-  snapshot2:
-  snapshot3:
+  warpnet-moderator:
+    container_name: moderator1
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4004
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=warpnet
+      - LOGGING_LEVEL=info
+      - NODE_SEED=warpnet-moderator1
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
