@@ -178,13 +178,6 @@ func (s *LoopbackStream) Write(p []byte) (int, error) {
 }
 
 func (s *LoopbackStream) Close() error {
-	s.writeMx.Lock()
-	s.readMx.Lock()
-	defer func() {
-		s.writeMx.Unlock()
-		s.readMx.Unlock()
-	}()
-
 	if s.isFullyClosed() {
 		return nil
 	}
@@ -194,14 +187,7 @@ func (s *LoopbackStream) Close() error {
 }
 
 func (s *LoopbackStream) isFullyClosed() bool {
-	s.writeMx.Lock()
-	s.readMx.Lock()
-	defer func() {
-		s.writeMx.Unlock()
-		s.readMx.Unlock()
-	}()
-	result := s.isReadClosed.Load() && s.isWriteClosed.Load()
-	return result
+	return s.isReadClosed.Load() && s.isWriteClosed.Load()
 }
 
 func (s *LoopbackStream) SetDeadline(t time.Time) error {
