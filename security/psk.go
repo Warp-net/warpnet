@@ -119,8 +119,11 @@ func generateAnchoredEntropy() []byte {
 
 // GeneratePSK TODO rotate PSK?
 func GeneratePSK(network string, v *semver.Version) (PSK, error) {
+	if network == "" {
+		return nil, errors.New("psk: network required")
+	}
 	if v == nil {
-		return nil, errors.New("psk: codebase or version required")
+		return nil, errors.New("psk: version required")
 	}
 	entropy := generateAnchoredEntropy()
 	majorStr := strconv.FormatInt(int64(v.Major()), 10)
