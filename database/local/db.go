@@ -187,12 +187,12 @@ func (db *DB) Run(username, password string) (err error) {
 		return err
 	}
 
-	if !db.storedOpts.InMemory {
-		go db.runEventualGC()
-	}
-
 	if !db.hasFirstRunFlag {
 		db.writeFirstRunFlag()
+	}
+
+	if !db.storedOpts.InMemory {
+		go db.runEventualGC()
 	}
 
 	return nil
