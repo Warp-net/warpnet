@@ -131,28 +131,23 @@ func New(
 		opts = opts.WithInMemory(true)
 	}
 
-	hasFirstRunFlag, err := findFirstRunFlag(dbPath)
-	if err != nil {
-		return nil, err
-	}
-
 	storage := &DB{
 		badger: nil, stopChan: make(chan struct{}), isRunning: new(atomic.Bool),
-		sequence: nil, storedOpts: opts, dbPath: dbPath, hasFirstRunFlag: hasFirstRunFlag,
+		sequence: nil, storedOpts: opts, dbPath: dbPath, hasFirstRunFlag: findFirstRunFlag(dbPath),
 	}
 
 	return storage, nil
 }
 
-func findFirstRunFlag(dirPath string) (found bool, err error) {
-	_, err = os.Stat(filepath.Join(dirPath, firstRunLockFile))
+func findFirstRunFlag(dirPath string) (found bool) {
+	_, err := os.Stat(filepath.Join(dirPath, firstRunLockFile))
 	if err != nil && errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return false
 	}
 	if err != nil {
 		panic(err.Error())
 	}
-	return true, nil
+	return true
 }
 
 func (db *DB) IsFirstRun() bool {
@@ -210,8 +205,8 @@ func (db *DB) runEventualGC() {
 	for {
 		select {
 		case <-dirTicker.C:
-			isNone, err := findFirstRunFlag(db.dbPath)
-			if isNone && err == nil {
+			isFound := findFirstRunFlag(db.dbPath)
+			if !isFound {
 				log.Errorln("database: folder was emptied")
 				os.Exit(1)
 			}
