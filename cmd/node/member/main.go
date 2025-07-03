@@ -87,6 +87,8 @@ func main() {
 	})
 	if !config.Config().Node.IsTestnet() {
 		logDir := filepath.Join(config.Config().Database.Path, "log")
+		fmt.Println("log file path: ", logDir)
+
 		err := os.MkdirAll(logDir, 0755)
 		if err != nil {
 			log.Fatal(err)
@@ -96,9 +98,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer func() {
-			_ = f.Close()
-		}()
+		defer f.Close()
 		log.SetOutput(f)
 	}
 

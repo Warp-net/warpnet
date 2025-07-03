@@ -37,6 +37,7 @@ import (
 	"github.com/docker/go-units"
 	log "github.com/sirupsen/logrus"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -70,7 +71,11 @@ import (
   https://github.com/dgraph-io/badger
 */
 
-const discardRatio = 0.5
+const (
+	discardRatio     = 0.5
+	firstRunLockFile = "run.lock"
+	sequenceKey      = "SEQUENCE"
+)
 
 var (
 	ErrNotRunning    = DBError("DB is not running")
@@ -96,9 +101,9 @@ type DB struct {
 	isRunning *atomic.Bool
 	stopChan  chan struct{}
 
-	storedOpts badger.Options
-	dbPath     string
-	isDirEmpty bool
+	storedOpts      badger.Options
+	dbPath          string
+	hasFirstRunFlag bool
 }
 
 type WarpDBLogger interface {
@@ -126,35 +131,40 @@ func New(
 		opts = opts.WithInMemory(true)
 	}
 
-	isDirEmpty, err := isDirectoryEmpty(dbPath)
+	hasFirstRunFlag, err := findFirstRunFlag(dbPath)
 	if err != nil {
 		return nil, err
 	}
 
 	storage := &DB{
 		badger: nil, stopChan: make(chan struct{}), isRunning: new(atomic.Bool),
-		sequence: nil, storedOpts: opts, dbPath: dbPath, isDirEmpty: isDirEmpty,
+		sequence: nil, storedOpts: opts, dbPath: dbPath, hasFirstRunFlag: hasFirstRunFlag,
 	}
 
 	return storage, nil
 }
 
-func isDirectoryEmpty(dirPath string) (bool, error) {
-	dirEntries, err := os.ReadDir(dirPath)
-	if err != nil {
-		if strings.Contains(err.Error(), "no such file or directory") ||
-			strings.Contains(err.Error(), "cannot find the file specified") {
-			err := os.Mkdir(dirPath, 0750)
-			return true, err
-		}
-		return false, fmt.Errorf("is dir empty: %w", err)
+func findFirstRunFlag(dirPath string) (found bool, err error) {
+	_, err = os.Stat(filepath.Join(dirPath, firstRunLockFile))
+	if err != nil && errors.Is(err, os.ErrNotExist) {
+		return false, nil
 	}
-
-	return len(dirEntries) == 0, nil
+	if err != nil {
+		panic(err.Error())
+	}
+	return true, nil
 }
 
 func (db *DB) IsFirstRun() bool {
-	return db.isDirEmpty
+	return !db.hasFirstRunFlag
+}
+
+func (db *DB) writeFirstRunFlag() {
+	f, _ := os.Create(filepath.Join(db.dbPath, firstRunLockFile))
+	if f != nil {
+		_ = f.Close()
+	}
+	db.hasFirstRunFlag = true
 }
 
 func (db *DB) Run(username, password string) (err error) {
@@ -172,13 +182,17 @@ func (db *DB) Run(username, password string) (err error) {
 		return err
 	}
 	db.isRunning.Store(true)
-	db.sequence, err = db.badger.GetSequence([]byte("SEQUENCE"), 100)
+	db.sequence, err = db.badger.GetSequence([]byte(sequenceKey), 100)
 	if err != nil {
 		return err
 	}
 
 	if !db.storedOpts.InMemory {
 		go db.runEventualGC()
+	}
+
+	if !db.hasFirstRunFlag {
+		db.writeFirstRunFlag()
 	}
 
 	return nil
@@ -196,8 +210,8 @@ func (db *DB) runEventualGC() {
 	for {
 		select {
 		case <-dirTicker.C:
-			isEmpty, err := isDirectoryEmpty(db.dbPath)
-			if isEmpty && err == nil {
+			isNone, err := findFirstRunFlag(db.dbPath)
+			if isNone && err == nil {
 				log.Errorln("database: folder was emptied")
 				os.Exit(1)
 			}
