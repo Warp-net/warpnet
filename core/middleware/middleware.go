@@ -197,29 +197,28 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler WarpHandler) warpnet.War
 		switch s.(type) {
 		case *WarpStreamBody:
 			data = s.(*WarpStreamBody).Body
-		case *stream.LoopbackStream:
+		default:
 			reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
 			data, err = io.ReadAll(reader)
 			if err != nil && err != io.EOF {
 				log.Errorf("middleware: reading from stream: %v", err)
 				response = event.ErrorResponse{Message: ErrStreamReadError.Error()}
 			}
-		default:
-			log.Errorf("middleware: unexpected stream type: %T", s)
-			response = event.ErrorResponse{Message: ErrStreamReadError.Error()}
 		}
 
 		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
-		response, err = handler(data, s)
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-			log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
-			log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
-			if len(data) > 500 {
-				data = data[:500]
+		if response != nil {
+			response, err = handler(data, s)
+			if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+				log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
+				log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
+				if len(data) > 500 {
+					data = data[:500]
+				}
+				log.Errorf("middleware: handling of %s %s message: %s failed: %v\n", s.Protocol(), s.Conn().RemotePeer(), string(data), err)
+				response = event.ErrorResponse{Code: 500, Message: err.Error()} // TODO errors ranking
 			}
-			log.Errorf("middleware: handling of %s %s message: %s failed: %v\n", s.Protocol(), s.Conn().RemotePeer(), string(data), err)
-			response = event.ErrorResponse{Code: 500, Message: err.Error()} // TODO errors ranking
 		}
 
 		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
