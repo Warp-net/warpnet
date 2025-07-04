@@ -83,6 +83,13 @@ func (g *memberPubSub) OwnerID() string {
 	return g.pubsub.nodeInfo().OwnerId
 }
 
+func (g *memberPubSub) NodeID() string {
+	if g == nil || g.pubsub == nil {
+		return ""
+	}
+	return g.pubsub.nodeInfo().ID.String()
+}
+
 func PrefollowUsers(userIds ...string) (handlers []TopicHandler) {
 	for _, userId := range userIds {
 		handler := TopicHandler{
@@ -136,26 +143,56 @@ func (g *memberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
 	return g.pubsub.unsubscribe(topicName)
 }
 
-func (g *memberPubSub) PublishValidationRequest(msg event.Message) (err error) {
+func (g *memberPubSub) PublishValidationRequest(bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	body := jsoniter.RawMessage(bt)
+
+	msg := event.Message{
+		Body:        &body,
+		Destination: event.INTERNAL_POST_NODE_VALIDATE,
+		NodeId:      g.NodeID(),
+		Timestamp:   time.Now(),
+		Version:     "0.0.0", // TODO manage protocol versions properly
+		MessageId:   uuid.New().String(),
 	}
 	return g.pubsub.publish(msg, pubSubConsensusTopic)
 }
 
-func (g *memberPubSub) PublishModerationRequest(msg event.Message) (err error) {
+func (g *memberPubSub) PublishModerationRequest(bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	body := jsoniter.RawMessage(bt)
+
+	msg := event.Message{
+		Body:        &body,
+		Destination: event.INTERNAL_POST_MODERATE,
+		NodeId:      g.NodeID(),
+		Timestamp:   time.Now(),
+		Version:     "0.0.0", // TODO manage protocol versions properly
+		MessageId:   uuid.New().String(),
 	}
 	return g.pubsub.publish(msg, pubSubModerationTopic)
 }
 
 // PublishUpdateToFollowers - publish for followers
-func (g *memberPubSub) PublishUpdateToFollowers(ownerId string, msg event.Message) (err error) {
+func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
+
+	body := jsoniter.RawMessage(bt)
+	msg := event.Message{
+		Body:        &body,
+		NodeId:      g.NodeID(),
+		Destination: dest,
+		Timestamp:   time.Now(),
+		MessageId:   uuid.New().String(),
+		Version:     "0.0.0", // TODO manage protocol versions properly
+	}
 
 	return g.pubsub.publish(msg, topicName)
 }
@@ -217,12 +254,12 @@ func (g *memberPubSub) publishPeerInfo() error {
 	}
 
 	msg := event.Message{
-		Body:      (*jsoniter.RawMessage)(&data),
-		MessageId: uuid.New().String(),
-		NodeId:    g.pubsub.nodeInfo().ID.String(),
-		Path:      "none",
-		Timestamp: time.Now(),
-		Version:   "0.0.0", // TODO
+		Body:        (*jsoniter.RawMessage)(&data),
+		MessageId:   uuid.New().String(),
+		NodeId:      g.pubsub.nodeInfo().ID.String(),
+		Destination: "none",
+		Timestamp:   time.Now(),
+		Version:     "0.0.0", // TODO
 	}
 
 	err = g.pubsub.publish(msg, pubSubDiscoveryTopic)

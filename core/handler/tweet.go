@@ -38,7 +38,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"strings"
@@ -59,8 +58,8 @@ type OwnerTweetStorer interface {
 }
 
 type TweetBroadcaster interface {
-	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
-	PublishModerationRequest(msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
+	PublishModerationRequest(body []byte) (err error)
 }
 
 type TweetsStorer interface {
@@ -116,14 +115,7 @@ func StreamNewTweetHandler(
 				ImageKey:  tweet.ImageKey,
 			}
 			bt, _ := json.JSON.Marshal(respTweetEvent)
-			msgBody := jsoniter.RawMessage(bt)
-			msg := event.Message{
-				Body:      &msgBody,
-				NodeId:    owner.NodeId,
-				Path:      event.PRIVATE_POST_TWEET,
-				Timestamp: time.Now(),
-			}
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, msg); err != nil {
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
 				log.Errorf("broadcaster publish owner tweet update: %v", err)
 			}
 
@@ -134,10 +126,8 @@ func StreamNewTweetHandler(
 				ObjectID: &tweet.Id,
 			}
 			bt, _ = json.JSON.Marshal(moderationEvent)
-			msgBody = jsoniter.RawMessage(bt)
-			msg.Body = &msgBody
-			msg.Path = event.INTERNAL_POST_MODERATE
-			if err := broadcaster.PublishModerationRequest(msg); err != nil {
+
+			if err := broadcaster.PublishModerationRequest(bt); err != nil {
 				log.Errorf("broadcaster publish tweet moderation request: %v", err)
 			} else {
 				log.Infof("tweet: %s moderation requested", tweet.Id)
@@ -294,14 +284,7 @@ func StreamDeleteTweetHandler(
 				TweetId: ev.TweetId,
 			}
 			bt, _ := json.JSON.Marshal(respTweetEvent)
-			msgBody := jsoniter.RawMessage(bt)
-			msg := event.Message{
-				Body:      &msgBody,
-				NodeId:    owner.NodeId,
-				Path:      event.PRIVATE_DELETE_TWEET,
-				Timestamp: time.Now(),
-			}
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, msg); err != nil {
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_DELETE_TWEET, bt); err != nil {
 				log.Infoln("broadcaster publish owner tweet update:", err)
 			}
 		}

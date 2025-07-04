@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	event2 "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/cockroachdb/errors"
 	"github.com/libp2p/go-libp2p"
@@ -100,6 +101,10 @@ func NewWarpNode(
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
+	pool, err := stream.NewStreamPool(ctx, node)
+	if err != nil {
+		return nil, err
+	}
 
 	sub, err := node.EventBus().Subscribe(event.WildcardSubscription)
 	if err != nil {
@@ -116,7 +121,7 @@ func NewWarpNode(
 		ctx:              ctx,
 		node:             node,
 		relay:            relayService,
-		streamer:         stream.NewStreamPool(ctx, node),
+		streamer:         pool,
 		isClosed:         new(atomic.Bool),
 		readyChan:        make(chan struct{}),
 		version:          version,
@@ -163,7 +168,7 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
 	for _, h := range handlers {
-		if strings.HasPrefix(string(h.Path), "/internal") {
+		if strings.HasPrefix(string(h.Path), event2.InternalRoutePrefix) {
 			n.internalHandlers[h.Path] = h.Handler
 			continue
 		}

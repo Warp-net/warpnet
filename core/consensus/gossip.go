@@ -7,8 +7,6 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"runtime/debug"
@@ -29,7 +27,7 @@ type ValidatorFunc func(data event.ValidationEvent) error
 type ConsensusHandler func(message *event.Message)
 
 type ConsensusBroadcaster interface {
-	PublishValidationRequest(msg event.Message) (err error)
+	PublishValidationRequest(body []byte) (err error)
 	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
 	SubscribeConsensusTopic() error
 	OwnerID() string
@@ -210,22 +208,12 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) {
 		g.interruptChan <- os.Interrupt
 		return
 	}
-	body := jsoniter.RawMessage(bt)
 
-	msg := event.Message{
-		Body:      &body,
-		Path:      event.INTERNAL_POST_NODE_VALIDATE,
-		NodeId:    g.broadcaster.OwnerID(),
-		Timestamp: time.Now(),
-		Version:   "0.0.0", // TODO manage protocol versions properly
-		MessageId: uuid.New().String(),
-	}
-
-	g.runBackgroundPublishing(msg)
+	g.runBackgroundPublishing(bt)
 	return
 }
 
-func (g *gossipConsensus) runBackgroundPublishing(msg event.Message) {
+func (g *gossipConsensus) runBackgroundPublishing(body []byte) {
 	g.isBgRunning.Store(true)
 	defer func() {
 		g.isBgRunning.Store(false)
@@ -255,10 +243,7 @@ func (g *gossipConsensus) runBackgroundPublishing(msg event.Message) {
 				continue
 			}
 
-			msg.Timestamp = time.Now()
-			msg.MessageId = uuid.New().String()
-
-			if err := g.broadcaster.PublishValidationRequest(msg); err != nil {
+			if err := g.broadcaster.PublishValidationRequest(body); err != nil {
 				log.Errorf("gossip consensus: ask validation: %v", err)
 			}
 		}

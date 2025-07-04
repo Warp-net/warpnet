@@ -66,8 +66,7 @@ type ModeratorNode struct {
 	node    *base.WarpNode
 	options []libp2p.Option
 
-	streamer Streamer
-	store    DistributedStorer
+	store DistributedStorer
 
 	pubsubService PubSubProvider
 	dHashTable    DistributedHashTableCloser

@@ -44,7 +44,8 @@ import (
 const loopbackStreamName = "loopback"
 
 type LoopbackConn struct {
-	stream *LoopbackStream
+	stream   *LoopbackStream
+	openedAt time.Time
 }
 
 func (c *LoopbackConn) Close() error {
@@ -85,7 +86,7 @@ func (c *LoopbackConn) Stat() network.ConnStats {
 	return network.ConnStats{
 		Stats: network.Stats{
 			Direction: network.DirInbound,
-			Opened:    time.Now(),
+			Opened:    c.openedAt,
 			Limited:   false,
 			Extra:     nil,
 		},
@@ -203,7 +204,7 @@ func (s *LoopbackStream) Protocol() protocol.ID              { return s.proto }
 func (s *LoopbackStream) SetProtocol(p protocol.ID) error    { s.proto = p; return nil }
 func (s *LoopbackStream) Stat() network.Stats                { return network.Stats{Direction: network.DirInbound} }
 func (s *LoopbackStream) Conn() network.Conn {
-	return &LoopbackConn{stream: s}
+	return &LoopbackConn{stream: s, openedAt: time.Now()}
 }
 
 func NewLoopbackStream(

@@ -29,6 +29,8 @@ package pubsub
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -75,6 +77,7 @@ type gossip struct {
 	topics           map[string]*pubsub.Topic
 	handlersMap      map[string]topicHandler
 	isRunning        *atomic.Bool
+	privKey          ed25519.PrivateKey
 }
 
 type TopicHandler struct {
@@ -118,12 +121,17 @@ func newGossip(
 	}
 }
 
-func (g *gossip) run(node GossipNodeConnector) error {
+func (g *gossip) run(node GossipNodeConnector) (err error) {
 	if g.isRunning.Load() {
 		return errors.New("gossip already running")
 	}
 
 	g.node = node
+
+	g.privKey, err = g.node.Node().Peerstore().PrivKey(g.node.Node().ID()).Raw()
+	if err != nil {
+		return err
+	}
 
 	if err := g.runGossip(); err != nil {
 		return fmt.Errorf("gossip: failed to run: %v", err)
@@ -377,6 +385,7 @@ func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
 		if msg.Timestamp.IsZero() {
 			msg.Timestamp = time.Now()
 		}
+		msg.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(g.privKey, *msg.Body))
 
 		data, err := json.JSON.Marshal(msg)
 		if err != nil {
@@ -407,7 +416,7 @@ func (g *gossip) selfStream(data []byte) error {
 		return nil
 	}
 
-	if simulatedStreamMessage.Path == "" {
+	if simulatedStreamMessage.Destination == "" {
 		log.Warningln("pubsub: user update message has no destination")
 		return fmt.Errorf("pubsub: user update message has no path: %s", string(data))
 	}
@@ -415,14 +424,14 @@ func (g *gossip) selfStream(data []byte) error {
 		log.Warningln("pubsub: handle user update: same node ID")
 		return nil
 	}
-	if stream.WarpRoute(simulatedStreamMessage.Path).IsGet() { // only store data
+	if stream.WarpRoute(simulatedStreamMessage.Destination).IsGet() { // only store data
 		return nil
 	}
 
 	log.Debugf("pubsub: new user update: %s", *simulatedStreamMessage.Body)
 
 	_, err := g.node.SelfStream(
-		stream.WarpRoute(simulatedStreamMessage.Path),
+		stream.WarpRoute(simulatedStreamMessage.Destination),
 		*simulatedStreamMessage.Body,
 	)
 	if err != nil {

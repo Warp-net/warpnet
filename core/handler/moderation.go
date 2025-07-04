@@ -36,7 +36,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"time"
 )
@@ -53,7 +52,7 @@ type HandlerModerator interface {
 }
 
 type ModerationBroadcaster interface {
-	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
 }
 
 // StreamModerateHandler receive event from pubsub via loopback
@@ -266,15 +265,7 @@ func StreamModerationResultHandler(
 				UserId:  ev.UserID,
 			}
 			bt, _ := json.JSON.Marshal(deleteEvent)
-			msgBody := jsoniter.RawMessage(bt)
-			msg := event.Message{
-				Body:      &msgBody,
-				NodeId:    s.Conn().LocalPeer().String(),
-				Path:      event.PRIVATE_DELETE_TWEET,
-				Timestamp: time.Now(),
-			}
-
-			err = broadcaster.PublishUpdateToFollowers(ev.UserID, msg)
+			err = broadcaster.PublishUpdateToFollowers(ev.UserID, event.PRIVATE_DELETE_TWEET, bt)
 			return event.Accepted, err
 		case event.User:
 			_, err = userRepo.Update(ev.UserID, domain.User{

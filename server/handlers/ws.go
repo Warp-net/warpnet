@@ -105,7 +105,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 		return nil, fmt.Errorf("websocket: request: missing body")
 	}
 
-	switch wsMsg.Path {
+	switch wsMsg.Destination {
 	case event.PRIVATE_POST_LOGIN:
 		var ev event.LoginEvent
 		err = json.JSON.Unmarshal(*wsMsg.Body, &ev)
@@ -145,7 +145,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 			break
 		}
 
-		if wsMsg.NodeId == "" || wsMsg.Path == "" {
+		if wsMsg.NodeId == "" || wsMsg.Destination == "" {
 			log.Errorf("websocket: missing node id or path: %s\n", string(msg))
 			response = newErrorResp(
 				fmt.Sprintf("missing path or node ID: %s", msg),
@@ -153,8 +153,8 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 			break
 		}
 
-		log.Debugf("WS incoming message: %s %s\n", wsMsg.NodeId, stream.WarpRoute(wsMsg.Path))
-		respData, err := c.clientNode.ClientStream(wsMsg.NodeId, wsMsg.Path, *wsMsg.Body)
+		log.Debugf("WS incoming message: %s %s\n", wsMsg.NodeId, stream.WarpRoute(wsMsg.Destination))
+		respData, err := c.clientNode.ClientStream(wsMsg.NodeId, wsMsg.Destination, *wsMsg.Body)
 		if err != nil {
 			log.Errorf("websocket: send stream: %v", err)
 			response = newErrorResp(err.Error())
@@ -170,7 +170,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 
 	response.MessageId = wsMsg.MessageId
 	response.NodeId = wsMsg.NodeId
-	response.Path = wsMsg.Path
+	response.Destination = wsMsg.Destination
 	response.Timestamp = time.Now()
 	response.Version = config.Config().Version.String()
 

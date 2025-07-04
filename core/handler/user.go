@@ -281,7 +281,8 @@ func StreamGetWhoToFollowHandler(
 			if user.Id == owner.UserId {
 				continue
 			}
-			if profile.Id != owner.UserId && profile.Network != user.Network { // if profile from Warpnet - don't show other network recommendations
+			// if profile from Warpnet - don't show other network recommendations
+			if profile.Id != owner.UserId && profile.Network != user.Network {
 				continue
 			}
 			if _, ok := followedUsers[user.Id]; ok {

@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"errors"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -56,6 +58,11 @@ const (
 	ErrInternalNodeError middlewareError = "internal node error"
 )
 
+type WarpStreamBody struct {
+	warpnet.WarpStream
+	Body []byte
+}
+
 type WarpHandler func(msg []byte, s warpnet.WarpStream) (any, error)
 
 type WarpMiddleware struct {
@@ -68,6 +75,13 @@ func NewWarpMiddleware() *WarpMiddleware {
 
 func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpStreamHandler) warpnet.WarpStreamHandler {
 	return func(s warpnet.WarpStream) {
+		defer func() {
+			_ = s.Close()
+			if r := recover(); r != nil {
+				log.Errorf("middleware: panic: %v %s", r, debug.Stack())
+			}
+		}() //#nosec
+
 		log.Debugf("middleware: server stream opened: %s %s\n", s.Protocol(), s.Conn().RemotePeer())
 		before := time.Now()
 		next(s)
@@ -83,8 +97,10 @@ func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpStreamHandler) warpn
 
 func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.WarpStreamHandler {
 	return func(s warpnet.WarpStream) {
-		if strings.HasPrefix(string(s.Protocol()), "/internal") {
-			log.Errorf("middleware: access to internal route is not allowed: %s", s.Protocol())
+		defer s.Close()
+
+		if strings.HasPrefix(string(s.Protocol()), event.InternalRoutePrefix) {
+			log.Errorf("middleware: auth: access to internal route is not allowed: %s", s.Protocol())
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
@@ -95,58 +111,98 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 		}
 		route := stream.FromPrIDToRoute(s.Protocol())
 		if route.IsPrivate() && p.clientNodeID == "" {
-			log.Errorf("middleware: client peer ID not set, ignoring private route: %s", route)
+			log.Errorf("middleware: auth: client peer ID not set, ignoring private route: %s", route)
 			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
 			return
 		}
 		if route.IsPrivate() && p.clientNodeID != "" { // not private == no auth
 			if !(p.clientNodeID == s.Conn().RemotePeer()) { // only own client node can do private requests
-				log.Errorf("middleware: client peer id mismatch: %s", s.Conn().RemotePeer())
+				log.Errorf("middleware: auth: client peer id mismatch: %s", s.Conn().RemotePeer())
 				_, _ = s.Write(ErrUnknownClientPeer.Bytes())
 				return
 			}
 		}
 
-		// TODO check if in Peerstore and pub/priv keys
-		next(s)
-	}
-}
-
-func (p *WarpMiddleware) UnwrapStreamMiddleware(fn WarpHandler) warpnet.WarpStreamHandler {
-	return func(s warpnet.WarpStream) {
-		defer func() {
-			_ = s.Close()
-			if r := recover(); r != nil {
-				log.Errorf("middleware: unwrap stream middleware panic: %v %s", r, debug.Stack())
-			}
-		}() //#nosec
-
-		var (
-			response any
-			encoder  = json.JSON.NewEncoder(s)
-		)
-
 		reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
 		data, err := io.ReadAll(reader)
 		if err != nil && err != io.EOF {
 			log.Errorf("middleware: reading from stream: %v", err)
-			response = event.ErrorResponse{Message: ErrStreamReadError.Error()}
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
+
+		var msg event.Message
+		if err := json.JSON.Unmarshal(data, &msg); err != nil {
+			log.Errorf("middleware: auth: unmarshaling from stream: %v", err)
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
+
+		if msg.Body == nil {
+			next(&WarpStreamBody{WarpStream: s})
+			return
+		}
+
+		if msg.Signature == "" {
+			log.Errorf("middleware: auth: signature missing")
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
+
+		signature, err := base64.StdEncoding.DecodeString(msg.Signature)
+		if err != nil {
+			log.Errorf("middleware: auth: invalid signature: not base64")
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
+		pubKey, _ := s.Conn().RemotePublicKey().Raw()
+
+		if !ed25519.Verify(pubKey, *msg.Body, signature) {
+			log.Errorln("middleware: auth: signature invalid")
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
+
+		wrapped := &WarpStreamBody{
+			WarpStream: s,
+			Body:       *msg.Body,
+		}
+
+		// TODO check if in Peerstore and pub/priv keys
+		next(wrapped)
+	}
+}
+
+func (p *WarpMiddleware) UnwrapStreamMiddleware(handler WarpHandler) warpnet.WarpStreamHandler {
+	return func(s warpnet.WarpStream) {
+		defer s.Close()
+
+		var (
+			response any
+			err      error
+			encoder  = json.JSON.NewEncoder(s)
+		)
+
+		body, ok := s.(*WarpStreamBody)
+		if !ok {
+			log.Errorf("middleware: expected WarpStreamBody, got %T", s)
+			return
+		}
+		data := body.Body
+
 		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
-		if response == nil {
-			response, err = fn(data, s)
-			if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-				log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
-				log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
-				if len(data) > 500 {
-					data = data[:500]
-				}
-				log.Errorf("middleware: handling of %s %s message: %s failed: %v\n", s.Protocol(), s.Conn().RemotePeer(), string(data), err)
-				response = event.ErrorResponse{Code: 500, Message: err.Error()} // TODO errors ranking
+		response, err = handler(data, s)
+		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+			log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
+			log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
+			if len(data) > 500 {
+				data = data[:500]
 			}
+			log.Errorf("middleware: handling of %s %s message: %s failed: %v\n", s.Protocol(), s.Conn().RemotePeer(), string(data), err)
+			response = event.ErrorResponse{Code: 500, Message: err.Error()} // TODO errors ranking
 		}
+
 		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
 		if response == nil {
 			response = event.ErrorResponse{Message: "empty response"}
@@ -168,6 +224,5 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(fn WarpHandler) warpnet.WarpStre
 				log.Errorf("middleware: failed encoding generic response: %v %v", response, err)
 			}
 		}
-
 	}
 }

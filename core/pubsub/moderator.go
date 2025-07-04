@@ -31,8 +31,11 @@ import (
 	"context"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/google/uuid"
+	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"sync"
+	"time"
 )
 
 type moderatorPubSub struct {
@@ -62,10 +65,21 @@ func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) {
 	}
 }
 
-func (g *moderatorPubSub) PublishValidationRequest(msg event.Message) (err error) {
+func (g *moderatorPubSub) PublishValidationRequest(bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("moderator pubsub: service not initialized")
 	}
+	body := jsoniter.RawMessage(bt)
+
+	msg := event.Message{
+		Body:        &body,
+		Destination: event.INTERNAL_POST_MODERATE,
+		NodeId:      g.OwnerID(),
+		Timestamp:   time.Now(),
+		Version:     "0.0.0", // TODO manage protocol versions properly
+		MessageId:   uuid.New().String(),
+	}
+
 	return g.pubsub.publish(msg, pubSubConsensusTopic)
 }
 
