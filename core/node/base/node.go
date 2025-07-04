@@ -68,9 +68,9 @@ type WarpNode struct {
 	version      *semver.Version
 	reachability atomic.Int32
 
-	startTime time.Time
-	eventsSub event.Subscription
-	handlers  map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler
+	startTime        time.Time
+	eventsSub        event.Subscription
+	internalHandlers map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler
 }
 
 func NewWarpNode(
@@ -113,17 +113,17 @@ func NewWarpNode(
 	version := config.Config().Version
 
 	wn := &WarpNode{
-		ctx:       ctx,
-		node:      node,
-		relay:     relayService,
-		streamer:  stream.NewStreamPool(ctx, node),
-		isClosed:  new(atomic.Bool),
-		readyChan: make(chan struct{}),
-		version:   version,
-		startTime: time.Now(),
-		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
-		eventsSub: sub,
-		handlers:  make(map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler),
+		ctx:              ctx,
+		node:             node,
+		relay:            relayService,
+		streamer:         stream.NewStreamPool(ctx, node),
+		isClosed:         new(atomic.Bool),
+		readyChan:        make(chan struct{}),
+		version:          version,
+		startTime:        time.Now(),
+		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		eventsSub:        sub,
+		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler),
 	}
 
 	go wn.trackIncomingEvents()
@@ -163,11 +163,15 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
 	for _, h := range handlers {
+		if strings.HasPrefix(string(h.Path), "/internal") {
+			n.internalHandlers[h.Path] = h.Handler
+			continue
+		}
+
 		if !h.IsValid() {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
 		}
 		n.node.SetStreamHandler(h.Path, h.Handler)
-		n.handlers[h.Path] = h.Handler
 	}
 }
 
@@ -292,11 +296,11 @@ func (n *WarpNode) Node() warpnet.P2PNode {
 
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
-		return nil, errors.New("empty data")
+		return nil, errors.New("node: selfstream: empty data")
 	}
-	handler, ok := n.handlers[warpnet.WarpProtocolID(path)]
+	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
-		return nil, errors.Errorf("no handler for path %s", path)
+		return nil, errors.Errorf("node: selfstream: no handler for path %s", path)
 	}
 
 	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
@@ -309,7 +313,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	if !ok {
 		bt, err = json.JSON.Marshal(data)
 		if err != nil {
-			return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
+			return nil, fmt.Errorf("node: selfstream: marshal data %v %s", err, data)
 		}
 	}
 

@@ -37,6 +37,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -82,6 +83,11 @@ func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpStreamHandler) warpn
 
 func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.WarpStreamHandler {
 	return func(s warpnet.WarpStream) {
+		if strings.HasPrefix(string(s.Protocol()), "/internal") {
+			log.Errorf("middleware: access to internal route is not allowed: %s", s.Protocol())
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
 		if s.Protocol() == event.PRIVATE_POST_PAIR && p.clientNodeID == "" { // first tether client node
 			p.clientNodeID = s.Conn().RemotePeer()
 			next(s)

@@ -214,7 +214,7 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) {
 
 	msg := event.Message{
 		Body:      &body,
-		Path:      event.PRIVATE_POST_NODE_VALIDATE,
+		Path:      event.INTERNAL_POST_NODE_VALIDATE,
 		NodeId:    g.broadcaster.OwnerID(),
 		Timestamp: time.Now(),
 		Version:   "0.0.0", // TODO manage protocol versions properly

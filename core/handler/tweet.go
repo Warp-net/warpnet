@@ -136,7 +136,7 @@ func StreamNewTweetHandler(
 			bt, _ = json.JSON.Marshal(moderationEvent)
 			msgBody = jsoniter.RawMessage(bt)
 			msg.Body = &msgBody
-			msg.Path = event.PRIVATE_POST_MODERATE
+			msg.Path = event.INTERNAL_POST_MODERATE
 			if err := broadcaster.PublishModerationRequest(msg); err != nil {
 				log.Errorf("broadcaster publish tweet moderation request: %v", err)
 			} else {

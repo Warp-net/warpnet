@@ -201,7 +201,7 @@ func (bn *BootstrapNode) setupHandlers() {
 
 	bn.node.SetStreamHandlers(
 		warpnet.WarpHandler{
-			event.PRIVATE_POST_NODE_VALIDATE,
+			event.INTERNAL_POST_NODE_VALIDATE,
 			logMw(unwrapMw(handler.StreamValidateHandler(bn.consensusService))),
 		},
 		warpnet.WarpHandler{

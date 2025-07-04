@@ -385,7 +385,7 @@ func (m *MemberNode) setupHandlers(
 	m.node.SetStreamHandlers(
 		[]warpnet.WarpHandler{
 			{
-				event.PRIVATE_POST_NODE_VALIDATE,
+				event.INTERNAL_POST_NODE_VALIDATE,
 				logMw(unwrapMw(handler.StreamValidateHandler(m.consensusService))),
 			},
 			{

@@ -33,7 +33,7 @@ import (
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
-	dht "github.com/Warp-net/warpnet/core/dht"
+	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node/base"
@@ -185,7 +185,7 @@ func (mn *ModeratorNode) Start() (err error) {
 
 	mn.node.SetStreamHandlers(
 		warpnet.WarpHandler{
-			event.PRIVATE_POST_NODE_VALIDATE,
+			event.INTERNAL_POST_NODE_VALIDATE,
 			logMw(unwrapMw(handler.StreamValidateHandler(mn.consensusService))),
 		},
 		warpnet.WarpHandler{
@@ -235,7 +235,7 @@ func (mn *ModeratorNode) Start() (err error) {
 
 	mn.node.SetStreamHandlers(
 		warpnet.WarpHandler{
-			event.PRIVATE_POST_MODERATE, // TODO protect this endpoint
+			event.INTERNAL_POST_MODERATE,
 			logMw(mw.UnwrapStreamMiddleware(handler.StreamModerateHandler(mn, moderator))),
 		},
 	)
