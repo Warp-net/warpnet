@@ -191,14 +191,23 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler WarpHandler) warpnet.War
 			response any
 			err      error
 			encoder  = json.JSON.NewEncoder(s)
+			data     []byte
 		)
 
-		body, ok := s.(*WarpStreamBody)
-		if !ok {
-			log.Errorf("middleware: expected WarpStreamBody, got %T", s)
-			return
+		switch s.(type) {
+		case *WarpStreamBody:
+			data = s.(*WarpStreamBody).Body
+		case *stream.LoopbackStream:
+			reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
+			data, err = io.ReadAll(reader)
+			if err != nil && err != io.EOF {
+				log.Errorf("middleware: reading from stream: %v", err)
+				response = event.ErrorResponse{Message: ErrStreamReadError.Error()}
+			}
+		default:
+			log.Errorf("middleware: unexpected stream type: %T", s)
+			response = event.ErrorResponse{Message: ErrStreamReadError.Error()}
 		}
-		data := body.Body
 
 		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
