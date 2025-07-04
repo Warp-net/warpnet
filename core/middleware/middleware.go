@@ -139,6 +139,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 		}
 
 		if msg.Body == nil {
+			log.Warnf("middleware: auth: empty message body")
 			next(&WarpStreamBody{WarpStream: s})
 			return
 		}
