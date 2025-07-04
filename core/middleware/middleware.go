@@ -40,6 +40,7 @@ import (
 	"io"
 	"runtime/debug"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -76,7 +77,6 @@ func NewWarpMiddleware() *WarpMiddleware {
 func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpStreamHandler) warpnet.WarpStreamHandler {
 	return func(s warpnet.WarpStream) {
 		defer func() {
-			_ = s.Close()
 			if r := recover(); r != nil {
 				log.Errorf("middleware: panic: %v %s", r, debug.Stack())
 			}
@@ -97,7 +97,13 @@ func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpStreamHandler) warpn
 
 func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.WarpStreamHandler {
 	return func(s warpnet.WarpStream) {
-		defer s.Close()
+		isAuthSuccess := new(atomic.Bool)
+		defer func() {
+			if isAuthSuccess.Load() {
+				return
+			}
+			_ = s.Close()
+		}()
 
 		if strings.HasPrefix(string(s.Protocol()), event.InternalRoutePrefix) {
 			log.Errorf("middleware: auth: access to internal route is not allowed: %s", s.Protocol())
@@ -139,8 +145,8 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 		}
 
 		if msg.Body == nil {
-			log.Warnf("middleware: auth: empty message body")
-			next(&WarpStreamBody{WarpStream: s})
+			log.Errorf("middleware: auth: empty body")
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
 
@@ -156,6 +162,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
+
 		pubKey, _ := s.Conn().RemotePublicKey().Raw()
 
 		if !ed25519.Verify(pubKey, *msg.Body, signature) {
@@ -168,6 +175,8 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 			WarpStream: s,
 			Body:       *msg.Body,
 		}
+
+		isAuthSuccess.Store(true)
 
 		// TODO check if in Peerstore and pub/priv keys
 		next(wrapped)
