@@ -1,3 +1,17 @@
-core/moderation/binding/go-llama.cpp/** linguist-ignore
-vendor/** linguist-vendored
-docs/** linguist-documentation
+core/moderation/binding/go-llama.cpp/** linguist-language=Ignore
+vendor/** linguist-language=Ignore
+docs/** linguist-language=Ignore
+third_party/** linguist-language=Ignore
+cmake/** linguist-language=Ignore
+
+*.c linguist-language=Ignore
+*.cpp linguist-language=Ignore
+*.h linguist-language=Ignore
+*.hpp linguist-language=Ignore
+*.cc linguist-language=Ignore
+*.cxx linguist-language=Ignore
+*.cu linguist-language=Ignore
+*.cuh linguist-language=Ignore
+*.CMakeLists.txt linguist-language=Ignore
+Makefile linguist-language=Ignore
+CMakeLists.txt linguist-language=Ignore
