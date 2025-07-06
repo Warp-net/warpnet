@@ -166,6 +166,7 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	return nil
 }
 
+// TODO put middleware here
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
 	for _, h := range handlers {
 		if strings.HasPrefix(string(h.Path), event2.InternalRoutePrefix) {

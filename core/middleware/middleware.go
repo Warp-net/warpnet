@@ -115,6 +115,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 			next(s)
 			return
 		}
+
 		route := stream.FromPrIDToRoute(s.Protocol())
 		if route.IsPrivate() && p.clientNodeID == "" {
 			log.Errorf("middleware: auth: client peer ID not set, ignoring private route: %s", route)
