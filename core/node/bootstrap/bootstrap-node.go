@@ -192,7 +192,7 @@ func (bn *BootstrapNode) Start() (err error) {
 
 func (bn *BootstrapNode) setupHandlers() {
 	if bn.node == nil {
-		panic("bootstrap: nil inner p2p node")
+		panic("bootstrap: nil bootstrap node")
 	}
 
 	bn.node.SetStreamHandlers(

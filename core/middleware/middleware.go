@@ -29,7 +29,6 @@ package middleware
 
 import (
 	"errors"
-	"fmt"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -39,7 +38,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"runtime/debug"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -98,11 +96,6 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			_ = s.Close()
 		}()
 
-		if strings.HasPrefix(string(s.Protocol()), event.InternalRoutePrefix) {
-			log.Errorf("middleware: auth: access to internal route is not allowed: %s", s.Protocol())
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
 		if s.Protocol() == event.PRIVATE_POST_PAIR && p.clientNodeID == "" { // first tether client node
 			p.clientNodeID = s.Conn().RemotePeer()
 			next(s)
@@ -130,8 +123,6 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
-
-		fmt.Println("============== middleware auth: message", string(data), "===========================")
 
 		var msg event.Message
 		if err := json.JSON.Unmarshal(data, &msg); err != nil {
