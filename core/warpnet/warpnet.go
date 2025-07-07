@@ -342,6 +342,15 @@ func FromStringToPeerID(s string) WarpPeerID {
 	return peerID
 }
 
+func FromIDToPubKey(id peer.ID) ed25519.PublicKey {
+	pubKey, _ := id.ExtractPublicKey()
+	if pubKey == nil {
+		return []byte{}
+	}
+	rawPubKey, _ := pubKey.Raw()
+	return rawPubKey
+}
+
 func FromBytesToPeerID(b []byte) WarpPeerID {
 	peerID, err := peer.IDFromBytes(b)
 	if err != nil {

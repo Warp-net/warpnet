@@ -416,29 +416,20 @@ func (g *gossip) selfStream(data []byte) error {
 		log.Errorf("pubsub: failed to decode user update message: %v %s", err, data)
 		return err
 	}
-	if simulatedStreamMessage.NodeId == g.node.NodeInfo().ID.String() {
-		log.Warningln("pubsub: handle user update: same node ID")
-		return nil
-	}
 
 	if simulatedStreamMessage.Destination == "" {
 		log.Warningln("pubsub: user update message has no destination")
 		return fmt.Errorf("pubsub: user update message has no path: %s", string(data))
 	}
 
-	if stream.WarpRoute(simulatedStreamMessage.Destination).IsGet() { // only store data
+	route := stream.WarpRoute(simulatedStreamMessage.Destination)
+
+	if route.IsGet() { // only store data
 		return nil
 	}
 
-	_, err := g.node.SelfStream(
-		stream.WarpRoute(simulatedStreamMessage.Destination),
-		simulatedStreamMessage,
-	)
-	if err != nil {
-		log.Errorf("pubsub: self stream error: %v", err)
-		return err
-	}
-	return nil
+	_, err := g.node.SelfStream(route, data)
+	return err
 }
 
 func (g *gossip) nodeInfo() warpnet.NodeInfo {

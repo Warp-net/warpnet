@@ -38,7 +38,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"runtime/debug"
-	"sync/atomic"
 	"time"
 )
 
@@ -88,9 +87,9 @@ func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.S
 
 func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
-		isAuthSuccess := new(atomic.Bool)
+		var isAuthSuccess bool
 		defer func() {
-			if isAuthSuccess.Load() {
+			if isAuthSuccess {
 				return
 			}
 			_ = s.Close()
@@ -144,20 +143,20 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
-		//if s.Conn() == nil || s.Conn().IsClosed() {
-		//	log.Errorf("middleware: auth: connection closed")
-		//	_, _ = s.Write(ErrInternalNodeError.Bytes())
-		//	return
-		//}
+		if s.Conn() == nil || s.Conn().RemotePeer().Size() == 0 {
+			log.Errorf("middleware: auth: connection is not ready")
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
 
-		pubKey, _ := s.Conn().RemotePublicKey().Raw()
+		pubKey := warpnet.FromIDToPubKey(s.Conn().RemotePeer())
 		if err := security.VerifySignature(pubKey, *msg.Body, msg.Signature); err != nil {
 			log.Errorf("middleware: auth: signature invalid: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
 
-		isAuthSuccess.Store(true)
+		isAuthSuccess = true
 
 		next(&warpnet.WarpStreamBody{
 			WarpStream: s,
