@@ -108,9 +108,9 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 	switch wsMsg.Destination {
 	case event.PRIVATE_POST_LOGIN:
 		var ev event.LoginEvent
-		err = json.JSON.Unmarshal(*wsMsg.Body, &ev)
+		err = json.JSON.Unmarshal(wsMsg.Body, &ev)
 		if err != nil {
-			log.Errorf("websocket: message body as login event: %v %s", err, *wsMsg.Body)
+			log.Errorf("websocket: message body as login event: %v %s", err, wsMsg.Body)
 			response = newErrorResp(err.Error())
 			break
 		}
@@ -128,7 +128,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 			break
 		}
 		msgBody := jsoniter.RawMessage(bt)
-		response.Body = &msgBody
+		response.Body = msgBody
 	case event.PRIVATE_POST_LOGOUT:
 		defer c.upgrader.Close()
 		return nil, c.auth.AuthLogout()
@@ -154,14 +154,14 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 		}
 
 		log.Debugf("WS incoming message: %s %s\n", wsMsg.NodeId, stream.WarpRoute(wsMsg.Destination))
-		respData, err := c.clientNode.ClientStream(wsMsg.NodeId, wsMsg.Destination, *wsMsg.Body)
+		respData, err := c.clientNode.ClientStream(wsMsg.NodeId, wsMsg.Destination, wsMsg.Body)
 		if err != nil {
 			log.Errorf("websocket: send stream: %v", err)
 			response = newErrorResp(err.Error())
 			break
 		}
 		msgBody := jsoniter.RawMessage(respData)
-		response.Body = &msgBody
+		response.Body = msgBody
 	}
 	if response.Body == nil {
 		log.Errorf("websocket: response body is empty")
@@ -188,7 +188,7 @@ func newErrorResp(message string) event.Message {
 	bt, _ := json.JSON.Marshal(errResp)
 	msgBody := jsoniter.RawMessage(bt)
 	resp := event.Message{
-		Body: &msgBody,
+		Body: msgBody,
 	}
 	return resp
 }

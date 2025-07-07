@@ -242,13 +242,13 @@ type LogoutEvent struct {
 
 // Message defines model for Message.
 type Message struct {
-	Body        *json.RawMessage `json:"body,omitempty"`
-	MessageId   string           `json:"message_id"`
-	NodeId      string           `json:"node_id"`
-	Destination string           `json:"path"` // TODO change to 'destination'
-	Timestamp   time.Time        `json:"timestamp,omitempty"`
-	Version     string           `json:"version"`
-	Signature   string           `json:"signature"`
+	Body        json.RawMessage `json:"body"`
+	MessageId   string          `json:"message_id"`
+	NodeId      string          `json:"node_id"`
+	Destination string          `json:"path"` // TODO change to 'destination'
+	Timestamp   time.Time       `json:"timestamp,omitempty"`
+	Version     string          `json:"version"`
+	Signature   string          `json:"signature"`
 }
 
 // MessageBody defines model for Message.Body.

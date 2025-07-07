@@ -119,7 +119,7 @@ func (p *streamPool) send(
 
 	body := jsoniter.RawMessage(bodyBytes)
 	msg := event.Message{
-		Body:        &body,
+		Body:        body,
 		MessageId:   uuid.New().String(),
 		NodeId:      p.n.ID().String(),
 		Destination: r.String(),

@@ -65,10 +65,9 @@ func (g *bootstrapPubSub) PublishValidationRequest(bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("bootstrap pubsub: service not initialized")
 	}
-	body := jsoniter.RawMessage(bt)
 
 	msg := event.Message{
-		Body:        &body,
+		Body:        jsoniter.RawMessage(bt),
 		Destination: event.INTERNAL_POST_NODE_VALIDATE,
 		NodeId:      g.OwnerID(),
 		Timestamp:   time.Now(),

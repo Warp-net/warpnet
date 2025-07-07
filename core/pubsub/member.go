@@ -150,7 +150,7 @@ func (g *memberPubSub) PublishValidationRequest(bt []byte) (err error) {
 	body := jsoniter.RawMessage(bt)
 
 	msg := event.Message{
-		Body:        &body,
+		Body:        body,
 		Destination: event.INTERNAL_POST_NODE_VALIDATE,
 		NodeId:      g.NodeID(),
 		Timestamp:   time.Now(),
@@ -167,7 +167,7 @@ func (g *memberPubSub) PublishModerationRequest(bt []byte) (err error) {
 	body := jsoniter.RawMessage(bt)
 
 	msg := event.Message{
-		Body:        &body,
+		Body:        body,
 		Destination: event.INTERNAL_POST_MODERATE,
 		NodeId:      g.NodeID(),
 		Timestamp:   time.Now(),
@@ -186,7 +186,7 @@ func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte)
 
 	body := jsoniter.RawMessage(bt)
 	msg := event.Message{
-		Body:        &body,
+		Body:        body,
 		NodeId:      g.NodeID(),
 		Destination: dest,
 		Timestamp:   time.Now(),
@@ -254,7 +254,7 @@ func (g *memberPubSub) publishPeerInfo() error {
 	}
 
 	msg := event.Message{
-		Body:        (*jsoniter.RawMessage)(&data),
+		Body:        jsoniter.RawMessage(data),
 		MessageId:   uuid.New().String(),
 		NodeId:      g.pubsub.nodeInfo().ID.String(),
 		Destination: "none",

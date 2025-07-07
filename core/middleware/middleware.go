@@ -131,13 +131,13 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		}
 
 		if msg.Body == nil {
-			log.Warningf("middleware: auth: empty body")
+			log.Warningf("middleware: auth: empty body: %s", string(data))
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
 
 		if msg.Signature == "" {
-			log.Errorf("middleware: auth: signature missing")
+			log.Errorf("middleware: auth: signature missing: %s", string(data))
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
@@ -148,7 +148,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		}
 
 		pubKey := warpnet.FromIDToPubKey(s.Conn().RemotePeer())
-		if err := security.VerifySignature(pubKey, *msg.Body, msg.Signature); err != nil {
+		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
 			log.Errorf("middleware: auth: signature invalid: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
@@ -158,7 +158,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 
 		next(&warpnet.WarpStreamBody{
 			WarpStream: s,
-			Body:       *msg.Body,
+			Body:       msg.Body,
 		})
 	}
 }

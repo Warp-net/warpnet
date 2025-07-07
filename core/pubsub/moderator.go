@@ -72,7 +72,7 @@ func (g *moderatorPubSub) PublishValidationRequest(bt []byte) (err error) {
 	body := jsoniter.RawMessage(bt)
 
 	msg := event.Message{
-		Body:        &body,
+		Body:        body,
 		Destination: event.INTERNAL_POST_NODE_VALIDATE,
 		NodeId:      g.OwnerID(),
 		Timestamp:   time.Now(),

@@ -388,7 +388,7 @@ func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
 		if msg.Timestamp.IsZero() {
 			msg.Timestamp = time.Now()
 		}
-		msg.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(g.privKey, *msg.Body))
+		msg.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(g.privKey, msg.Body))
 
 		data, err := json.JSON.Marshal(msg)
 		if err != nil {
