@@ -425,19 +425,14 @@ func (g *gossip) selfStream(data []byte) error {
 		log.Warningln("pubsub: user update message has no destination")
 		return fmt.Errorf("pubsub: user update message has no path: %s", string(data))
 	}
-	if simulatedStreamMessage.Body == nil {
-		log.Warningln("pubsub: handle user update: same node ID")
-		return nil
-	}
+
 	if stream.WarpRoute(simulatedStreamMessage.Destination).IsGet() { // only store data
 		return nil
 	}
 
-	log.Debugf("pubsub: new user update: %s", *simulatedStreamMessage.Body)
-
 	_, err := g.node.SelfStream(
 		stream.WarpRoute(simulatedStreamMessage.Destination),
-		*simulatedStreamMessage.Body,
+		simulatedStreamMessage,
 	)
 	if err != nil {
 		log.Errorf("pubsub: self stream error: %v", err)
