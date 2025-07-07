@@ -29,6 +29,7 @@ package middleware
 
 import (
 	"errors"
+	"fmt"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -136,6 +137,8 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
+
+		fmt.Println("============== middleware auth: message", string(data), "===========================")
 
 		var msg event.Message
 		if err := json.JSON.Unmarshal(data, &msg); err != nil {

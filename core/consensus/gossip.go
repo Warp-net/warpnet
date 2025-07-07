@@ -107,7 +107,7 @@ func (g *gossipConsensus) listenResponses() {
 		}
 	}
 
-	for range ticker.C {
+	for {
 		if g.isClosed.Load() {
 			return
 		}
@@ -120,10 +120,7 @@ func (g *gossipConsensus) listenResponses() {
 			knownPeers[id.String()] = struct{}{}
 		}
 		subscribers := g.broadcaster.GetConsensusTopicSubscribers()
-		if isMeAlone(subscribers, g.broadcaster.OwnerID()) {
-			timeoutTicker.Reset(timeout)
-			continue
-		}
+
 		var (
 			total        = len(subscribers)
 			validCount   = len(validResponses)
@@ -189,6 +186,11 @@ func (g *gossipConsensus) listenResponses() {
 					log.Errorf("gossip consensus: listener: 'invalid node' result: %s", *resp.Reason)
 				}
 				invalidResponses[resp.ValidatorID] = struct{}{}
+			}
+		case <-ticker.C:
+			if isMeAlone(subscribers, g.broadcaster.OwnerID()) {
+				timeoutTicker.Reset(timeout)
+				continue
 			}
 		}
 	}
