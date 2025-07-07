@@ -197,8 +197,6 @@ func (g *gossip) runListener() error {
 				continue
 			}
 
-			fmt.Println("++++++++++++++ pub sub listener:", *msg.Topic, string(msg.Data), "++++++++++++++++")
-
 			g.mx.RLock()
 			handlerF, ok := g.handlersMap[strings.TrimSpace(*msg.Topic)]
 			g.mx.RUnlock()

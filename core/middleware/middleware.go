@@ -123,8 +123,6 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		log.Infoln("middleware: auth message:", string(data))
-
 		var msg event.Message
 		if err := json.JSON.Unmarshal(data, &msg); err != nil || msg.MessageId == "" {
 			log.Errorf("middleware: auth: unmarshaling data: %s %v", data, err)
@@ -155,6 +153,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
+		log.Infoln("middleware: auth successful", pubKey)
 
 		isAuthSuccess = true
 
@@ -188,13 +187,11 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			}
 		}
 
-		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
+		log.Infof(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
-		if response != nil {
+		if response == nil {
 			response, err = handler(data, s)
 			if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-				log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
-				log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
 				if len(data) > 500 {
 					data = data[:500]
 				}
@@ -203,7 +200,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			}
 		}
 
-		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
+		log.Infof("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
 		if response == nil {
 			response = event.ErrorResponse{Message: "empty response"}
 		}
