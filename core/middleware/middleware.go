@@ -127,14 +127,14 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		log.Infoln("middleware: auth message:", string(data))
 
 		var msg event.Message
-		if err := json.JSON.Unmarshal(data, &msg); err != nil {
-			log.Errorf("middleware: auth: unmarshaling from stream: %v", err)
+		if err := json.JSON.Unmarshal(data, &msg); err != nil || msg.MessageId == "" {
+			log.Errorf("middleware: auth: unmarshaling data: %s %v", data, err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
 
 		if msg.Body == nil {
-			log.Errorf("middleware: auth: empty body")
+			log.Warningf("middleware: auth: empty body")
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
@@ -144,11 +144,11 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
-		if s.Conn() == nil || s.Conn().IsClosed() {
-			log.Errorf("middleware: auth: connection closed")
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
+		//if s.Conn() == nil || s.Conn().IsClosed() {
+		//	log.Errorf("middleware: auth: connection closed")
+		//	_, _ = s.Write(ErrInternalNodeError.Bytes())
+		//	return
+		//}
 
 		pubKey, _ := s.Conn().RemotePublicKey().Raw()
 		if err := security.VerifySignature(pubKey, *msg.Body, msg.Signature); err != nil {

@@ -36,6 +36,8 @@ jobs:
           push: true
           tags: ghcr.io/warp-net/warpnet-bootstrap:latest
           build-args: --dns 8.8.8.8
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   build-member:
     runs-on: ubuntu-latest
@@ -71,6 +73,8 @@ jobs:
           tags: ghcr.io/warp-net/warpnet-member:latest
           build-args: |
             NODE_TYPE=member
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   build-moderator:
     runs-on: ubuntu-latest
@@ -101,5 +105,7 @@ jobs:
           file: Dockerfile.moderator
           push: true
           tags: ghcr.io/warp-net/warpnet-moderator:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
 
