@@ -31,12 +31,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -125,7 +125,7 @@ func (p *streamPool) send(
 		Destination: r.String(),
 		Timestamp:   time.Now(),
 		Version:     "0.0.0",
-		Signature:   base64.StdEncoding.EncodeToString(ed25519.Sign(p.privKey, bodyBytes)),
+		Signature:   security.Sign(p.privKey, body),
 	}
 	data, _ := json.JSON.Marshal(msg)
 

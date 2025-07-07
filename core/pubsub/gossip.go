@@ -208,7 +208,10 @@ func (g *gossip) runListener() error {
 				continue
 			}
 			if err := handlerF(msg.Data); err != nil {
-				log.Errorf("gossip: failed to handle message from topic %q: %v", *msg.Topic, err)
+				log.Errorf(
+					"gossip: failed to handle peer %s message from topic %s: %v",
+					msg.ReceivedFrom.String(), *msg.Topic, err,
+				)
 				continue
 			}
 		}

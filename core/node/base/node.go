@@ -308,7 +308,10 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	}
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
-		return nil, errors.Errorf("node: selfstream: no handler for path %s, avaiable %v", path, n.internalHandlers)
+		return nil, errors.Errorf(
+			"node: selfstream: no handler for path %s, avaiable %v",
+			path, n.internalHandlers,
+		)
 	}
 
 	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
