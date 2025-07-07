@@ -73,7 +73,7 @@ func (g *moderatorPubSub) PublishValidationRequest(bt []byte) (err error) {
 
 	msg := event.Message{
 		Body:        &body,
-		Destination: event.INTERNAL_POST_MODERATE,
+		Destination: event.INTERNAL_POST_NODE_VALIDATE,
 		NodeId:      g.OwnerID(),
 		Timestamp:   time.Now(),
 		Version:     "0.0.0", // TODO manage protocol versions properly
