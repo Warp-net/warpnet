@@ -153,7 +153,6 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
-		log.Infoln("middleware: auth successful", pubKey)
 
 		isAuthSuccess = true
 
@@ -187,7 +186,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			}
 		}
 
-		log.Infof(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
+		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
 		if response == nil {
 			response, err = handler(data, s)
@@ -200,7 +199,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			}
 		}
 
-		log.Infof("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
+		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
 		if response == nil {
 			response = event.ErrorResponse{Message: "empty response"}
 		}
