@@ -30,8 +30,6 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -495,21 +493,10 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return errors.New("peer is not an Ed25519 public key")
 	}
 
-	rawPubKey, err := peerstorePubKey.Raw()
-	if err != nil {
-		return err
-	}
-
-	decodedSig, err := base64.StdEncoding.DecodeString(challengeResp.Signature)
-	if err != nil {
-		return fmt.Errorf("invalid signature base64: %v", err)
-	}
-
-	if !ed25519.Verify(rawPubKey, challengeRespDecoded, decodedSig) {
-		log.Errorf("discovery: signature invalid: %s", challengeResp.Signature)
+	rawPubKey, _ := peerstorePubKey.Raw()
+	if err := security.VerifySignature(rawPubKey, challengeRespDecoded, challengeResp.Signature); err != nil {
+		log.Errorf("invalid signature: %v", err)
 		return ErrChallengeSignatureInvalid
-	} else {
-		log.Debugf("discovery: signature verified for peer %s", pi.ID.String())
 	}
 
 	s.cache.SetAsChallenged(pi.ID)

@@ -29,7 +29,6 @@ package handler
 
 import (
 	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -77,11 +76,9 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 			return nil, err
 		}
 
-		sig := ed25519.Sign(privateKey, challenge)
-
 		return event.GetChallengeResponse{
 			Challenge: hex.EncodeToString(challenge),
-			Signature: base64.StdEncoding.EncodeToString(sig),
+			Signature: security.Sign(privateKey, challenge),
 		}, nil
 	}
 }

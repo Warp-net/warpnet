@@ -36,15 +36,12 @@ func Sign(privKey, body []byte) string {
 	return base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, body))
 }
 
-func VerufySignature(signatureBase64 string) error {
-	signature, err := base64.StdEncoding.DecodeString(signatureBase64)
+func VerifySignature(pubKey, body []byte, signatureStr string) error {
+	signature, err := base64.StdEncoding.DecodeString(signatureStr)
 	if err != nil {
 		return err
 	}
-
-	pubKey, _ := s.Conn().RemotePublicKey().Raw()
-
-	if !ed25519.Verify(pubKey, *msg.Body, signature) {
+	if !ed25519.Verify(pubKey, body, signature) {
 		return err
 	}
 	return nil

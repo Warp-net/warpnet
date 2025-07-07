@@ -28,13 +28,12 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"crypto/ed25519"
-	"encoding/base64"
 	"errors"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/docker/go-units"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -156,31 +155,25 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
-
-		signature, err := base64.StdEncoding.DecodeString(msg.Signature)
-		if err != nil {
-			log.Errorf("middleware: auth: invalid signature: not base64")
+		if s.Conn() == nil || s.Conn().IsClosed() {
+			log.Errorf("middleware: auth: connection closed")
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
 
 		pubKey, _ := s.Conn().RemotePublicKey().Raw()
-
-		if !ed25519.Verify(pubKey, *msg.Body, signature) {
-			log.Errorln("middleware: auth: signature invalid")
+		if err := security.VerifySignature(pubKey, *msg.Body, msg.Signature); err != nil {
+			log.Errorf("middleware: auth: signature invalid: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
 
-		wrapped := &WarpStreamBody{
-			WarpStream: s,
-			Body:       *msg.Body,
-		}
-
 		isAuthSuccess.Store(true)
 
-		// TODO check if in Peerstore and pub/priv keys
-		next(wrapped)
+		next(&WarpStreamBody{
+			WarpStream: s,
+			Body:       *msg.Body,
+		})
 	}
 }
 
