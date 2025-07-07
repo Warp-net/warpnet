@@ -33,7 +33,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -95,7 +94,7 @@ func StreamUploadImageHandler(
 	info MediaNodeInformer,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UploadImageEvent
 		if err := json.JSON.Unmarshal(input, &ev); err != nil {
@@ -174,7 +173,7 @@ func StreamGetImageHandler(
 	streamer MediaStreamer,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetImageEvent
 		if err := json.JSON.Unmarshal(input, &ev); err != nil {

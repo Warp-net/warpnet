@@ -29,7 +29,6 @@ package handler
 
 import (
 	"errors"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -67,7 +66,7 @@ func StreamLikeHandler(
 	repo LikesStorer,
 	userRepo LikedUserFetcher,
 	streamer LikeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.LikeEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -124,7 +123,7 @@ func StreamLikeHandler(
 	}
 }
 
-func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer LikeStreamer) middleware.WarpHandler {
+func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer LikeStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UnlikeEvent
 		err := json.JSON.Unmarshal(buf, &ev)

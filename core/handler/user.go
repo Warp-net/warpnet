@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -75,7 +74,7 @@ func StreamGetUserHandler(
 	repo UserFetcher,
 	authRepo UserAuthStorer,
 	streamer UserStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetUserEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -153,7 +152,7 @@ func StreamGetUserHandler(
 func StreamGetUsersHandler(
 	userRepo UserFetcher,
 	streamer UserStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -235,7 +234,7 @@ func StreamGetWhoToFollowHandler(
 	authRepo UserAuthStorer,
 	userRepo UserFetcher,
 	followRepo UserFollowsCounter,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -298,7 +297,7 @@ func StreamGetWhoToFollowHandler(
 	}
 }
 
-func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) middleware.WarpHandler {
+func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewUserEvent
 		err := json.JSON.Unmarshal(buf, &ev)

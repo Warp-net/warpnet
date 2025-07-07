@@ -31,7 +31,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -79,7 +78,7 @@ func StreamNewTweetHandler(
 	authRepo OwnerTweetStorer,
 	tweetRepo TweetsStorer,
 	timelineRepo TimelineUpdater,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -138,7 +137,7 @@ func StreamNewTweetHandler(
 	}
 }
 
-func StreamGetTweetHandler(repo TweetsStorer) middleware.WarpHandler {
+func StreamGetTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -160,7 +159,7 @@ func StreamGetTweetsHandler(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllTweetsEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -255,7 +254,7 @@ func StreamDeleteTweetHandler(
 	authRepo OwnerTweetStorer,
 	repo TweetsStorer,
 	likeRepo LikeTweetStorer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteTweetEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -311,7 +310,7 @@ func StreamGetTweetStatsHandler(
 	replyRepo RepliesTweetCounter, // TODO views
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetStatsEvent
 		err := json.JSON.Unmarshal(buf, &ev)

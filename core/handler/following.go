@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -73,7 +72,7 @@ func StreamFollowHandler(
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
 	streamer FollowNodeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewFollowEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -147,7 +146,7 @@ func StreamUnfollowHandler(
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
 	streamer FollowNodeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewUnfollowEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -223,7 +222,7 @@ func StreamGetFollowersHandler(
 	userRepo FollowingUserStorer,
 	followRepo FollowingStorer,
 	streamer FollowNodeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetFollowersEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -285,7 +284,7 @@ func StreamGetFolloweesHandler(
 	userRepo FollowingUserStorer,
 	followRepo FollowingStorer,
 	streamer FollowNodeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetFolloweesEvent
 		err := json.JSON.Unmarshal(buf, &ev)

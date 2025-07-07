@@ -31,6 +31,7 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	_ "github.com/Warp-net/warpnet/core/logging"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -71,7 +72,8 @@ type WarpNode struct {
 
 	startTime        time.Time
 	eventsSub        event.Subscription
-	internalHandlers map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler
+	mw               *middleware.WarpMiddleware
+	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
 func NewWarpNode(
@@ -128,7 +130,8 @@ func NewWarpNode(
 		startTime:        time.Now(),
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
-		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler),
+		mw:               middleware.NewWarpMiddleware(),
+		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 	}
 
 	go wn.trackIncomingEvents()
@@ -166,20 +169,24 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	return nil
 }
 
-// TODO put middleware here
-func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
+func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
+	logMw := n.mw.LoggingMiddleware
+	authMw := n.mw.AuthMiddleware
+	unwrapMw := n.mw.UnwrapStreamMiddleware
+
 	for _, h := range handlers {
-		fmt.Println("set handler:", h.Path)
+
+		streamHandler := logMw(authMw(unwrapMw(h.Handler)))
+
 		if strings.HasPrefix(string(h.Path), event2.InternalRoutePrefix) {
-			fmt.Println("ITS internal:", h.Path)
-			n.internalHandlers[h.Path] = h.Handler
+			n.internalHandlers[h.Path] = streamHandler
 			continue
 		}
 
 		if !h.IsValid() {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
 		}
-		n.node.SetStreamHandler(h.Path, h.Handler)
+		n.node.SetStreamHandler(h.Path, streamHandler)
 	}
 }
 

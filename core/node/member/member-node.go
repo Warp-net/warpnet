@@ -38,7 +38,6 @@ import (
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node/base"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -377,170 +376,163 @@ func (m *MemberNode) setupHandlers(
 		NodeInfo: m.NodeInfo(),
 	}
 
-	mw := middleware.NewWarpMiddleware()
-	logMw := mw.LoggingMiddleware
-	authMw := mw.AuthMiddleware
-	unwrapMw := mw.UnwrapStreamMiddleware
-
 	m.node.SetStreamHandlers(
-		[]warpnet.WarpHandler{
+		[]warpnet.WarpStreamHandler{
 			{
 				event.INTERNAL_POST_NODE_VALIDATE,
-				logMw(unwrapMw(handler.StreamValidateHandler(m.consensusService))),
+				handler.StreamValidateHandler(m.consensusService),
 			},
 			{
 				event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-				logMw(unwrapMw(handler.StreamValidationResponseHandler(m.consensusService))),
+				handler.StreamValidationResponseHandler(m.consensusService),
 			},
 			{
 				event.PUBLIC_POST_NODE_CHALLENGE,
-				logMw(unwrapMw(handler.StreamChallengeHandler(root.GetCodeBase(), privKey))),
+				handler.StreamChallengeHandler(root.GetCodeBase(), privKey),
 			},
 			{
 				event.PUBLIC_GET_INFO,
-				logMw(handler.StreamGetInfoHandler(m, m.discService.HandlePeerFound)),
+				handler.StreamGetInfoHandler(m, m.discService.HandlePeerFound),
 			},
 			{
 				event.PRIVATE_GET_STATS,
-				logMw(authMw(unwrapMw(handler.StreamGetStatsHandler(m, db)))),
+				handler.StreamGetStatsHandler(m, db),
 			},
 			{
 				event.PRIVATE_POST_PAIR,
-				logMw(authMw(unwrapMw(handler.StreamNodesPairingHandler(authNodeInfo)))),
+				handler.StreamNodesPairingHandler(authNodeInfo),
 			},
 			{
 				event.PRIVATE_GET_TIMELINE,
-				logMw(authMw(unwrapMw(handler.StreamTimelineHandler(timelineRepo)))),
+				handler.StreamTimelineHandler(timelineRepo),
 			},
 			{
 				event.PRIVATE_POST_TWEET,
-				logMw(authMw(unwrapMw(handler.StreamNewTweetHandler(m.pubsubService, authRepo, tweetRepo, timelineRepo)))),
+				handler.StreamNewTweetHandler(m.pubsubService, authRepo, tweetRepo, timelineRepo),
 			},
 			{
 				event.PRIVATE_DELETE_TWEET,
-				logMw(authMw(unwrapMw(handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, tweetRepo, likeRepo)))),
+				handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, tweetRepo, likeRepo),
 			},
 			{
 				event.PUBLIC_POST_REPLY,
-				logMw(authMw(unwrapMw(handler.StreamNewReplyHandler(replyRepo, userRepo, m)))),
+				handler.StreamNewReplyHandler(replyRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_DELETE_REPLY,
-				logMw(authMw(unwrapMw(handler.StreamDeleteReplyHandler(tweetRepo, userRepo, replyRepo, m)))),
+				handler.StreamDeleteReplyHandler(tweetRepo, userRepo, replyRepo, m),
 			},
 			{
 				event.PUBLIC_POST_FOLLOW,
-				logMw(authMw(unwrapMw(handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m)))),
+				handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_POST_UNFOLLOW,
-				logMw(authMw(unwrapMw(handler.StreamUnfollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m)))),
+				handler.StreamUnfollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_USER,
-				logMw(authMw(unwrapMw(handler.StreamGetUserHandler(tweetRepo, followRepo, userRepo, authRepo, m)))),
+				handler.StreamGetUserHandler(tweetRepo, followRepo, userRepo, authRepo, m),
 			},
 			{
 				event.PUBLIC_GET_USERS,
-				logMw(authMw(unwrapMw(handler.StreamGetUsersHandler(userRepo, m)))),
+				handler.StreamGetUsersHandler(userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_WHOTOFOLLOW,
-				logMw(authMw(unwrapMw(handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo)))),
+				handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo),
 			},
 			{
 				event.PUBLIC_GET_TWEETS,
-				logMw(authMw(unwrapMw(handler.StreamGetTweetsHandler(tweetRepo, userRepo, m)))),
+				handler.StreamGetTweetsHandler(tweetRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_TWEET,
-				logMw(authMw(unwrapMw(handler.StreamGetTweetHandler(tweetRepo)))),
+				handler.StreamGetTweetHandler(tweetRepo),
 			},
 			{
 				event.PUBLIC_GET_TWEET_STATS,
-				logMw(authMw(unwrapMw(handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m)))),
+				handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_REPLY,
-				logMw(authMw(unwrapMw(handler.StreamGetReplyHandler(replyRepo)))),
+				handler.StreamGetReplyHandler(replyRepo),
 			},
 			{
 				event.PUBLIC_GET_REPLIES,
-				logMw(authMw(unwrapMw(handler.StreamGetRepliesHandler(replyRepo, userRepo, m)))),
+				handler.StreamGetRepliesHandler(replyRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_FOLLOWERS,
-				logMw(authMw(unwrapMw(handler.StreamGetFollowersHandler(authRepo, userRepo, followRepo, m)))),
+				handler.StreamGetFollowersHandler(authRepo, userRepo, followRepo, m),
 			},
 			{
 				event.PUBLIC_GET_FOLLOWEES,
-				logMw(authMw(unwrapMw(handler.StreamGetFolloweesHandler(authRepo, userRepo, followRepo, m)))),
+				handler.StreamGetFolloweesHandler(authRepo, userRepo, followRepo, m),
 			},
 			{
 				event.PUBLIC_POST_LIKE,
-				logMw(authMw(unwrapMw(handler.StreamLikeHandler(likeRepo, userRepo, m)))),
+				handler.StreamLikeHandler(likeRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_POST_UNLIKE,
-				logMw(authMw(unwrapMw(handler.StreamUnlikeHandler(likeRepo, userRepo, m)))),
+				handler.StreamUnlikeHandler(likeRepo, userRepo, m),
 			},
 			{
 				event.PRIVATE_POST_USER,
-				logMw(authMw(unwrapMw(handler.StreamUpdateProfileHandler(authRepo, userRepo)))),
+				handler.StreamUpdateProfileHandler(authRepo, userRepo),
 			},
 			{
 				event.PUBLIC_POST_RETWEET,
-				logMw(authMw(unwrapMw(handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, m)))),
+				handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, m),
 			},
 			{
 				event.PUBLIC_POST_UNRETWEET,
-				logMw(authMw(unwrapMw(handler.StreamUnretweetHandler(tweetRepo, userRepo, m)))),
+				handler.StreamUnretweetHandler(tweetRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_POST_CHAT,
-				logMw(authMw(unwrapMw(handler.StreamCreateChatHandler(chatRepo, userRepo, m)))),
+				handler.StreamCreateChatHandler(chatRepo, userRepo, m),
 			},
 			{
 				event.PRIVATE_DELETE_CHAT,
-				logMw(authMw(unwrapMw(handler.StreamDeleteChatHandler(chatRepo, authRepo)))),
+				handler.StreamDeleteChatHandler(chatRepo, authRepo),
 			},
 			{
 				event.PRIVATE_GET_CHATS,
-				logMw(authMw(unwrapMw(handler.StreamGetUserChatsHandler(chatRepo, authRepo)))),
+				handler.StreamGetUserChatsHandler(chatRepo, authRepo),
 			},
 			{
 				event.PUBLIC_POST_MESSAGE,
-				logMw(authMw(unwrapMw(handler.StreamSendMessageHandler(chatRepo, userRepo, m)))),
+				handler.StreamSendMessageHandler(chatRepo, userRepo, m),
 			},
 			{
 				event.PRIVATE_DELETE_MESSAGE,
-				logMw(authMw(unwrapMw(handler.StreamDeleteMessageHandler(chatRepo, authRepo)))),
+				handler.StreamDeleteMessageHandler(chatRepo, authRepo),
 			},
 			{
 				event.PRIVATE_GET_MESSAGE,
-				logMw(authMw(unwrapMw(handler.StreamGetMessageHandler(chatRepo, authRepo)))),
+				handler.StreamGetMessageHandler(chatRepo, authRepo),
 			},
 			{
 				event.PRIVATE_GET_MESSAGES,
-				logMw(authMw(unwrapMw(handler.StreamGetMessagesHandler(chatRepo, authRepo)))),
+				handler.StreamGetMessagesHandler(chatRepo, authRepo),
 			},
 			{
 				event.PRIVATE_GET_CHAT,
-				logMw(authMw(unwrapMw(handler.StreamGetUserChatHandler(chatRepo, authRepo)))),
+				handler.StreamGetUserChatHandler(chatRepo, authRepo),
 			},
 			{
 				event.PRIVATE_POST_UPLOAD_IMAGE,
-				logMw(authMw(unwrapMw(handler.StreamUploadImageHandler(m, mediaRepo, userRepo)))),
+				handler.StreamUploadImageHandler(m, mediaRepo, userRepo),
 			},
 			{
 				event.PUBLIC_GET_IMAGE,
-				logMw(authMw(unwrapMw(handler.StreamGetImageHandler(m, mediaRepo, userRepo)))),
+				handler.StreamGetImageHandler(m, mediaRepo, userRepo),
 			},
 			{
 				event.PUBLIC_POST_MODERATION_RESULT, // TODO protect this endpoint
-				logMw(mw.UnwrapStreamMiddleware(
-					handler.StreamModerationResultHandler(m.pubsubService, userRepo, tweetRepo, timelineRepo)),
-				),
+				handler.StreamModerationResultHandler(m.pubsubService, userRepo, tweetRepo, timelineRepo),
 			},
 		}...,
 	)

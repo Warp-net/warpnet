@@ -59,13 +59,6 @@ const (
 	ErrInternalNodeError middlewareError = "internal node error"
 )
 
-type WarpStreamBody struct {
-	warpnet.WarpStream
-	Body []byte
-}
-
-type WarpHandler func(msg []byte, s warpnet.WarpStream) (any, error)
-
 type WarpMiddleware struct {
 	clientNodeID warpnet.WarpPeerID
 }
@@ -74,7 +67,7 @@ func NewWarpMiddleware() *WarpMiddleware {
 	return &WarpMiddleware{""}
 }
 
-func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpStreamHandler) warpnet.WarpStreamHandler {
+func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -95,7 +88,7 @@ func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpStreamHandler) warpn
 	}
 }
 
-func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.WarpStreamHandler {
+func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
 		isAuthSuccess := new(atomic.Bool)
 		defer func() {
@@ -173,14 +166,14 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpStreamHandler) warpnet.
 
 		isAuthSuccess.Store(true)
 
-		next(&WarpStreamBody{
+		next(&warpnet.WarpStreamBody{
 			WarpStream: s,
 			Body:       *msg.Body,
 		})
 	}
 }
 
-func (p *WarpMiddleware) UnwrapStreamMiddleware(handler WarpHandler) warpnet.WarpStreamHandler {
+func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
 		defer s.Close()
 
@@ -192,8 +185,8 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler WarpHandler) warpnet.War
 		)
 
 		switch s.(type) {
-		case *WarpStreamBody:
-			data = s.(*WarpStreamBody).Body
+		case *warpnet.WarpStreamBody:
+			data = s.(*warpnet.WarpStreamBody).Body
 		default:
 			reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
 			data, err = io.ReadAll(reader)

@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -36,7 +35,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) middleware.WarpHandler {
+func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var clientInfo domain.AuthNodeInfo
 		if err := json.JSON.Unmarshal(buf, &clientInfo); err != nil {

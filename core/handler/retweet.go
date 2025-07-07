@@ -29,7 +29,6 @@ package handler
 
 import (
 	"errors"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -69,7 +68,7 @@ func StreamNewReTweetHandler(
 	tweetRepo ReTweetsStorer,
 	timelineRepo RetweetTimelineUpdater,
 	streamer RetweetStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var retweetEvent event.NewRetweetEvent
 		err := json.JSON.Unmarshal(buf, &retweetEvent)
@@ -126,7 +125,7 @@ func StreamUnretweetHandler(
 	tweetRepo ReTweetsStorer,
 	userRepo RetweetedUserFetcher,
 	streamer RetweetStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UnretweetEvent
 		err := json.JSON.Unmarshal(buf, &ev)

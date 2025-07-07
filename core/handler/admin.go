@@ -32,7 +32,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -53,7 +52,7 @@ type AdminConsensusServicer interface {
 }
 
 // TODO nonce cache check
-func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middleware.WarpHandler {
+func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		if fs == nil {
 			panic("challenge handler called with nil file system")
@@ -83,7 +82,7 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 	}
 }
 
-func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
+func StreamValidateHandler(svc AdminConsensusServicer) warpnet.WarpHandlerFunc {
 	if svc == nil {
 		panic("validate handler called with nil service")
 	}
@@ -106,7 +105,7 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 	}
 }
 
-func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.WarpHandler {
+func StreamValidationResponseHandler(svc AdminConsensusServicer) warpnet.WarpHandlerFunc {
 	if svc == nil {
 		panic("validation result handler called with nil service")
 	}

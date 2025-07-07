@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -56,7 +55,7 @@ type ModerationBroadcaster interface {
 }
 
 // StreamModerateHandler receive event from pubsub via loopback
-func StreamModerateHandler(streamer ModerationStreamer, moderator HandlerModerator) middleware.WarpHandler {
+func StreamModerateHandler(streamer ModerationStreamer, moderator HandlerModerator) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -211,7 +210,7 @@ func StreamModerationResultHandler(
 	userRepo UserUpdater,
 	tweetRepo TweetUpdater,
 	timelineRepo TimelineTweetRemover,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
 		err := json.JSON.Unmarshal(buf, &ev)

@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -64,7 +63,7 @@ func StreamNewReplyHandler(
 	replyRepo ReplyStorer,
 	userRepo ReplyUserFetcher,
 	streamer ReplyStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewReplyEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -130,7 +129,7 @@ func StreamNewReplyHandler(
 	}
 }
 
-func StreamGetReplyHandler(repo ReplyStorer) middleware.WarpHandler {
+func StreamGetReplyHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetReplyEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -153,7 +152,7 @@ func StreamDeleteReplyHandler(
 	userRepo ReplyUserFetcher,
 	replyRepo ReplyStorer,
 	streamer ReplyStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteReplyEvent
 		err := json.JSON.Unmarshal(buf, &ev)
@@ -223,7 +222,7 @@ func StreamGetRepliesHandler(
 	repo ReplyStorer,
 	userRepo ReplyUserFetcher,
 	streamer ReplyStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllRepliesEvent
 		err := json.JSON.Unmarshal(buf, &ev)

@@ -150,7 +150,7 @@ type (
 	PSK                = pnet.PSK
 	WarpProtocolID     = protocol.ID
 	WarpStream         = network.Stream
-	WarpStreamHandler  = network.StreamHandler
+	StreamHandler      = network.StreamHandler
 	WarpBatching       = datastore.Batching
 	WarpProviderStore  = providers.ProviderStore
 	WarpAddrInfo       = peer.AddrInfo
@@ -169,13 +169,20 @@ type (
 	P2PNode            = host.Host
 )
 
-// structures
-type WarpHandler struct {
-	Path    WarpProtocolID
-	Handler WarpStreamHandler
+type WarpStreamBody struct {
+	WarpStream
+	Body []byte
 }
 
-func (wh *WarpHandler) IsValid() bool {
+type WarpHandlerFunc func(msg []byte, s WarpStream) (any, error)
+
+// structures
+type WarpStreamHandler struct {
+	Path    WarpProtocolID
+	Handler WarpHandlerFunc
+}
+
+func (wh *WarpStreamHandler) IsValid() bool {
 	if !strings.HasPrefix(string(wh.Path), "/") {
 		return false
 	}
@@ -192,7 +199,7 @@ func (wh *WarpHandler) IsValid() bool {
 	return true
 }
 
-func (wh *WarpHandler) String() string {
+func (wh *WarpStreamHandler) String() string {
 	return fmt.Sprintf("%s %T", wh.Path, wh.Handler)
 }
 
