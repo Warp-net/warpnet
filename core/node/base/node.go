@@ -169,7 +169,9 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 // TODO put middleware here
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
 	for _, h := range handlers {
+		fmt.Println("set handler:", h.Path)
 		if strings.HasPrefix(string(h.Path), event2.InternalRoutePrefix) {
+			fmt.Println("ITS internal:", h.Path)
 			n.internalHandlers[h.Path] = h.Handler
 			continue
 		}
@@ -306,7 +308,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	}
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
-		return nil, errors.Errorf("node: selfstream: no handler for path %s", path)
+		return nil, errors.Errorf("node: selfstream: no handler for path %s, avaiable %v", path, n.internalHandlers)
 	}
 
 	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))

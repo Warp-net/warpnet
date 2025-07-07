@@ -146,6 +146,9 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 			log.Infof("dht: peer added: %s", id)
 			info := peer.AddrInfo{ID: id}
 			for _, addF := range d.cfg.addCallbacks {
+				if addF == nil {
+					continue
+				}
 				addF(info)
 			}
 		}
@@ -156,6 +159,9 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 			log.Infof("dht: peer removed: %s", id)
 			info := peer.AddrInfo{ID: id}
 			for _, removeF := range d.cfg.removeCallbacks {
+				if removeF == nil {
+					continue
+				}
 				removeF(info)
 			}
 		}

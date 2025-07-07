@@ -170,7 +170,6 @@ type (
 )
 
 // structures
-
 type WarpHandler struct {
 	Path    WarpProtocolID
 	Handler WarpStreamHandler
@@ -186,6 +185,7 @@ func (wh *WarpHandler) IsValid() bool {
 		return false
 	}
 	if !(strings.Contains(string(wh.Path), "private") ||
+		strings.Contains(string(wh.Path), "internal") ||
 		strings.Contains(string(wh.Path), "public")) {
 		return false
 	}

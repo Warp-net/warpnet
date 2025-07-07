@@ -218,7 +218,7 @@ func (s *discoveryService) Close() {
 }
 
 func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo) {
-	if s == nil {
+	if s == nil || s.node == nil {
 		return
 	}
 	defer func() { recover() }()
