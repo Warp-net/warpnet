@@ -124,6 +124,8 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
+		log.Infoln("middleware: auth message:", string(data))
+
 		var msg event.Message
 		if err := json.JSON.Unmarshal(data, &msg); err != nil {
 			log.Errorf("middleware: auth: unmarshaling from stream: %v", err)

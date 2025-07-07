@@ -7,12 +7,41 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-bootstrap:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24
+          cache-dependency-path: godep/go.sum
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Bootstrap Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/warp-net/warpnet-bootstrap:latest
+          build-args: --dns 8.8.8.8
+
+  build-member:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,15 +62,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Bootstrap Docker image
-        id: docker_build_bootstrap
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/warp-net/warpnet-bootstrap:latest
-          build-args: --dns 8.8.8.8
-
       - name: Build and push Member Docker image
         id: docker_build_member
         uses: docker/build-push-action@v6
@@ -52,6 +72,28 @@ jobs:
           build-args: |
             NODE_TYPE=member
 
+  build-moderator:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24
+          cache-dependency-path: godep/go.sum
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push Moderator Docker image
         id: docker_build_moderator
         uses: docker/build-push-action@v6
@@ -59,4 +101,5 @@ jobs:
           file: Dockerfile.moderator
           push: true
           tags: ghcr.io/warp-net/warpnet-moderator:latest
+
 
