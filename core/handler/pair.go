@@ -38,13 +38,16 @@ import (
 func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var clientInfo domain.AuthNodeInfo
-		if err := json.JSON.Unmarshal(buf, &clientInfo); err != nil {
-			log.Errorf("pair: unmarshaling from stream: %v", err)
+		if err := json.JSON.Unmarshal(buf, &clientInfo); err != nil || clientInfo.Identity.Token == "" {
+			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)
 			return nil, err
 		}
 		tokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
 		if !tokenMatch {
-			log.Errorf("pair: token does not match server identity")
+			log.Errorf(
+				"pair: token does not match server identity: %s != %s",
+				serverAuthInfo.Identity.Token, clientInfo.Identity.Token,
+			)
 			return nil, warpnet.WarpError("token mismatch")
 		}
 		return event.Accepted, nil

@@ -94,25 +94,23 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			}
 			_ = s.Close()
 		}()
+		var (
+			route      = stream.FromPrIDToRoute(s.Protocol())
+			remotePeer = s.Conn().RemotePeer()
+		)
 
-		if s.Protocol() == event.PRIVATE_POST_PAIR && p.clientNodeID == "" { // first tether client node
-			p.clientNodeID = s.Conn().RemotePeer()
-			next(s)
-			return
-		}
-
-		route := stream.FromPrIDToRoute(s.Protocol())
-		if route.IsPrivate() && p.clientNodeID == "" {
+		switch {
+		case s.Protocol() == event.PRIVATE_POST_PAIR && p.clientNodeID == "":
+			p.clientNodeID = remotePeer
+		case route.IsPrivate() && p.clientNodeID == "":
 			log.Errorf("middleware: auth: client peer ID not set, ignoring private route: %s", route)
 			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
 			return
-		}
-		if route.IsPrivate() && p.clientNodeID != "" { // not private == no auth
-			if !(p.clientNodeID == s.Conn().RemotePeer()) { // only own client node can do private requests
-				log.Errorf("middleware: auth: client peer id mismatch: %s", s.Conn().RemotePeer())
-				_, _ = s.Write(ErrUnknownClientPeer.Bytes())
-				return
-			}
+		case route.IsPrivate() && p.clientNodeID != "" && p.clientNodeID != remotePeer:
+			log.Errorf("middleware: auth: client peer id mismatch: %s", remotePeer)
+			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
+			return
+
 		}
 
 		reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
@@ -141,7 +139,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		pubKey := warpnet.FromIDToPubKey(s.Conn().RemotePeer())
+		pubKey := warpnet.FromIDToPubKey(remotePeer)
 		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
 			log.Errorf("middleware: auth: signature invalid: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
