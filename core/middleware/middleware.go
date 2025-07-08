@@ -130,12 +130,6 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		if msg.Body == nil {
-			log.Warningf("middleware: auth: empty body: %s", string(data))
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
-
 		if msg.Signature == "" {
 			log.Errorf("middleware: auth: signature missing: %s", string(data))
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
