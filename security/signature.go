@@ -25,31 +25,24 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package handler
+package security
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/json"
-	log "github.com/sirupsen/logrus"
+	"crypto/ed25519"
+	"encoding/base64"
 )
 
-func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var clientInfo domain.AuthNodeInfo
-		if err := json.Unmarshal(buf, &clientInfo); err != nil || clientInfo.Identity.Token == "" {
-			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)
-			return nil, err
-		}
-		tokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
-		if !tokenMatch {
-			log.Errorf(
-				"pair: token does not match server identity: %s != %s",
-				serverAuthInfo.Identity.Token, clientInfo.Identity.Token,
-			)
-			return nil, warpnet.WarpError("token mismatch")
-		}
-		return event.Accepted, nil
+func Sign(privKey, body []byte) string {
+	return base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, body))
+}
+
+func VerifySignature(pubKey, body []byte, signatureStr string) error {
+	signature, err := base64.StdEncoding.DecodeString(signatureStr)
+	if err != nil {
+		return err
 	}
+	if !ed25519.Verify(pubKey, body, signature) {
+		return err
+	}
+	return nil
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/pubsub"
-	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"io"
@@ -59,10 +58,6 @@ type DistributedStorer interface {
 
 type ProviderCloser interface {
 	io.Closer
-}
-
-type Streamer interface {
-	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
 type ConsensusServicer interface {

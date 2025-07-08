@@ -31,7 +31,10 @@ import (
 	"context"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type bootstrapPubSub struct {
@@ -58,10 +61,20 @@ func (g *bootstrapPubSub) Run(node PubsubServerNodeConnector) {
 	}
 }
 
-func (g *bootstrapPubSub) PublishValidationRequest(msg event.Message) (err error) {
+func (g *bootstrapPubSub) PublishValidationRequest(bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("bootstrap pubsub: service not initialized")
 	}
+
+	msg := event.Message{
+		Body:        json.RawMessage(bt),
+		Destination: event.INTERNAL_POST_NODE_VALIDATE,
+		NodeId:      g.OwnerID(),
+		Timestamp:   time.Now(),
+		Version:     "0.0.0", // TODO manage protocol versions properly
+		MessageId:   uuid.New().String(),
+	}
+
 	return g.pubsub.publish(msg, pubSubConsensusTopic)
 }
 

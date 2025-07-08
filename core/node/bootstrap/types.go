@@ -42,7 +42,7 @@ type DiscoveryHandler interface {
 type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
-	PublishValidationRequest(msg event.Message) (err error)
+	PublishValidationRequest(bt []byte) (err error)
 	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
 	OwnerID() string
 }

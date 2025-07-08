@@ -142,7 +142,7 @@ func (repo *AuthRepo) GetOwner() domain.Owner {
 	}
 
 	var owner domain.Owner
-	err = json.JSON.Unmarshal(data, &owner)
+	err = json.Unmarshal(data, &owner)
 	if err != nil {
 		panic(err)
 	}
@@ -158,7 +158,7 @@ func (repo *AuthRepo) SetOwner(o domain.Owner) (_ domain.Owner, err error) {
 	if o.CreatedAt.IsZero() {
 		o.CreatedAt = time.Now()
 	}
-	data, err := json.JSON.Marshal(o)
+	data, err := json.Marshal(o)
 	if err != nil {
 		return o, err
 	}

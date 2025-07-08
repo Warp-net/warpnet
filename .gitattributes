@@ -1,0 +1,11 @@
+core/moderation/binding/go-llama.cpp/** linguist-detectable=false
+vendor/** linguist-detectable=false
+docs/** linguist-detectable=false
+
+*.c linguist-detectable=false
+*.cpp linguist-detectable=false
+*.h linguist-detectable=false
+*.cu linguist-detectable=false
+*.cuh linguist-detectable=false
+Makefile linguist-detectable=false
+CMakeLists.txt linguist-detectable=false

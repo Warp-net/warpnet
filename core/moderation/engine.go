@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama.cpp"
+	log "github.com/sirupsen/logrus"
 	"strings"
+	"time"
 )
 
 type Engine interface {
@@ -55,10 +57,13 @@ func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
 func (e *llamaEngine) Moderate(content string) (bool, string, error) {
 	prompt := generatePrompt(content)
 
+	now := time.Now()
 	resp, err := e.llm.Predict(prompt, e.opts...)
 	if err != nil {
 		return true, "", err
 	}
+	elapsed := time.Since(now)
+	log.Infof("moderation: elapsed %s", elapsed.String())
 
 	out := strings.ToLower(strings.TrimSpace(resp))
 

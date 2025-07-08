@@ -30,9 +30,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
+	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -42,21 +47,26 @@ import (
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
 	Network() network.Network
+	ID() warpnet.WarpPeerID
 }
 
 type streamPool struct {
 	ctx          context.Context
 	n            NodeStreamer
+	privKey      ed25519.PrivateKey
 	clientPeerID warpnet.WarpPeerID
 }
 
 func NewStreamPool(
 	ctx context.Context,
 	n NodeStreamer,
-) *streamPool {
-	pool := &streamPool{ctx: ctx, n: n}
+) (*streamPool, error) {
+	privKey, err := n.Network().Peerstore().PrivKey(n.ID()).Raw()
+	if err != nil {
+		return nil, err
+	}
 
-	return pool
+	return &streamPool{ctx: ctx, n: n, privKey: privKey}, nil
 }
 
 func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
@@ -78,14 +88,13 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 		ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
 	default:
 	}
-	return send(ctx, p.n, peerAddr, r, data)
+	return p.send(ctx, peerAddr, r, data)
 }
 
-func send(
-	ctx context.Context, n NodeStreamer,
-	serverInfo warpnet.WarpAddrInfo, r WarpRoute, data []byte,
+func (p *streamPool) send(
+	ctx context.Context, serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte,
 ) ([]byte, error) {
-	if n == nil || serverInfo.String() == "" || r == "" {
+	if p.n == nil || serverInfo.String() == "" || r == "" {
 		return nil, warpnet.WarpError("stream: parameters improperly configured")
 	}
 
@@ -97,7 +106,7 @@ func send(
 		return nil, err
 	}
 
-	stream, err := n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
+	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
 	if err != nil {
 		log.Debugf("stream: new: failed to create stream: %v", err)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
@@ -106,6 +115,18 @@ func send(
 		return nil, fmt.Errorf("stream: new: %v", err)
 	}
 	defer closeStream(stream)
+
+	body := json.RawMessage(bodyBytes)
+	msg := event.Message{
+		Body:        body,
+		MessageId:   uuid.New().String(),
+		NodeId:      p.n.ID().String(),
+		Destination: r.String(),
+		Timestamp:   time.Now(),
+		Version:     "0.0.0", // TODO event message version
+		Signature:   security.Sign(p.privKey, body),
+	}
+	data, _ := json.Marshal(msg)
 
 	var rw = bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	if data != nil {

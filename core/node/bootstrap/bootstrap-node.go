@@ -35,7 +35,6 @@ import (
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node/base"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -193,28 +192,25 @@ func (bn *BootstrapNode) Start() (err error) {
 
 func (bn *BootstrapNode) setupHandlers() {
 	if bn.node == nil {
-		panic("bootstrap: nil inner p2p node")
+		panic("bootstrap: nil bootstrap node")
 	}
-	mw := middleware.NewWarpMiddleware()
-	logMw := mw.LoggingMiddleware
-	unwrapMw := mw.UnwrapStreamMiddleware
 
 	bn.node.SetStreamHandlers(
-		warpnet.WarpHandler{
-			event.PRIVATE_POST_NODE_VALIDATE,
-			logMw(unwrapMw(handler.StreamValidateHandler(bn.consensusService))),
+		warpnet.WarpStreamHandler{
+			event.INTERNAL_POST_NODE_VALIDATE,
+			handler.StreamValidateHandler(bn.consensusService),
 		},
-		warpnet.WarpHandler{
+		warpnet.WarpStreamHandler{
 			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-			logMw(unwrapMw(handler.StreamValidationResponseHandler(bn.consensusService))),
+			handler.StreamValidationResponseHandler(bn.consensusService),
 		},
-		warpnet.WarpHandler{
+		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
-			logMw(handler.StreamGetInfoHandler(bn, bn.discService.DefaultDiscoveryHandler)),
+			handler.StreamGetInfoHandler(bn, bn.discService.DefaultDiscoveryHandler),
 		},
-		warpnet.WarpHandler{
+		warpnet.WarpStreamHandler{
 			event.PUBLIC_POST_NODE_CHALLENGE,
-			logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), bn.privKey))),
+			handler.StreamChallengeHandler(root.GetCodeBase(), bn.privKey),
 		},
 	)
 }

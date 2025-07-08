@@ -34,7 +34,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
-	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -44,7 +43,8 @@ import (
 const loopbackStreamName = "loopback"
 
 type LoopbackConn struct {
-	stream *LoopbackStream
+	stream   *LoopbackStream
+	openedAt time.Time
 }
 
 func (c *LoopbackConn) Close() error {
@@ -85,7 +85,7 @@ func (c *LoopbackConn) Stat() network.ConnStats {
 	return network.ConnStats{
 		Stats: network.Stats{
 			Direction: network.DirInbound,
-			Opened:    time.Now(),
+			Opened:    c.openedAt,
 			Limited:   false,
 			Extra:     nil,
 		},
@@ -162,7 +162,7 @@ func (s *LoopbackStream) Read(p []byte) (int, error) {
 	defer s.readMx.Unlock()
 
 	if s.isReadClosed.Load() {
-		return 0, io.ErrClosedPipe
+		return 0, nil
 	}
 	return s.readConn.Read(p)
 }
@@ -172,7 +172,7 @@ func (s *LoopbackStream) Write(p []byte) (int, error) {
 	defer s.writeMx.Unlock()
 
 	if s.isWriteClosed.Load() {
-		return 0, io.ErrClosedPipe
+		return 0, nil
 	}
 	return s.writeConn.Write(p)
 }
@@ -203,7 +203,7 @@ func (s *LoopbackStream) Protocol() protocol.ID              { return s.proto }
 func (s *LoopbackStream) SetProtocol(p protocol.ID) error    { s.proto = p; return nil }
 func (s *LoopbackStream) Stat() network.Stats                { return network.Stats{Direction: network.DirInbound} }
 func (s *LoopbackStream) Conn() network.Conn {
-	return &LoopbackConn{stream: s}
+	return &LoopbackConn{stream: s, openedAt: time.Now()}
 }
 
 func NewLoopbackStream(

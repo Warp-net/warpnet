@@ -98,7 +98,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 		return chat, err
 	}
 	if err == nil {
-		if err = json.JSON.Unmarshal(bt, &chat); err != nil {
+		if err = json.Unmarshal(bt, &chat); err != nil {
 			return chat, err
 		}
 		return chat, txn.Commit()
@@ -113,7 +113,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 		OwnerId:     ownerId,
 	}
 
-	bt, err = json.JSON.Marshal(chat)
+	bt, err = json.Marshal(chat)
 	if err != nil {
 		return chat, err
 	}
@@ -189,7 +189,7 @@ func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 		return chat, err
 	}
 
-	if err = json.JSON.Unmarshal(bt, &chat); err != nil {
+	if err = json.Unmarshal(bt, &chat); err != nil {
 		return chat, err
 	}
 	return chat, txn.Commit()
@@ -220,7 +220,7 @@ func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string)
 	chats := make([]domain.Chat, 0, len(items))
 	for _, item := range items {
 		var chat domain.Chat
-		err = json.JSON.Unmarshal(item.Value, &chat)
+		err = json.Unmarshal(item.Value, &chat)
 		if err != nil {
 			err = fmt.Errorf(
 				"failed to unmarshal chat: key: %s, value: %s, message: %w",
@@ -264,7 +264,7 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 		AddParentId(msg.Id).
 		Build()
 
-	data, err := json.JSON.Marshal(msg)
+	data, err := json.Marshal(msg)
 	if err != nil {
 		return msg, fmt.Errorf("message: marshal: %w", err)
 	}
@@ -312,7 +312,7 @@ func (repo *ChatRepo) ListMessages(chatId string, limit *uint64, cursor *string)
 	chatsMsgs := make([]domain.ChatMessage, 0, len(items))
 	for _, item := range items {
 		var chatMsg domain.ChatMessage
-		err = json.JSON.Unmarshal(item.Value, &chatMsg)
+		err = json.Unmarshal(item.Value, &chatMsg)
 		if err != nil {
 			return nil, "", err
 		}
@@ -355,7 +355,7 @@ func (repo *ChatRepo) GetMessage(chatId, id string) (m domain.ChatMessage, err e
 		return m, err
 	}
 
-	err = json.JSON.Unmarshal(data, &m)
+	err = json.Unmarshal(data, &m)
 	if err != nil {
 		return m, err
 	}

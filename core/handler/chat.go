@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node/base"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -72,10 +71,10 @@ func StreamCreateChatHandler(
 	repo ChatStorer,
 	userRepo ChatUserFetcher,
 	streamer ChatStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewChatEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +120,7 @@ func StreamCreateChatHandler(
 		}
 
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(otherChatData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(otherChatData, &possibleError); possibleError.Message != "" {
 			_ = repo.DeleteChat(ownerChat.Id)
 			return nil, fmt.Errorf("unmarshal other chat error response: %s", possibleError.Message)
 		}
@@ -130,10 +129,10 @@ func StreamCreateChatHandler(
 	}
 }
 
-func StreamGetUserChatHandler(repo ChatStorer, authRepo ChatAuthStorer) middleware.WarpHandler {
+func StreamGetUserChatHandler(repo ChatStorer, authRepo ChatAuthStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetChatEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -154,10 +153,10 @@ func StreamGetUserChatHandler(repo ChatStorer, authRepo ChatAuthStorer) middlewa
 	}
 }
 
-func StreamDeleteChatHandler(repo ChatStorer, authRepo ChatAuthStorer) middleware.WarpHandler {
+func StreamDeleteChatHandler(repo ChatStorer, authRepo ChatAuthStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteChatEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -182,10 +181,10 @@ type OwnerChatsStorer interface {
 	GetOwner() domain.Owner
 }
 
-func StreamGetUserChatsHandler(repo ChatStorer, authRepo OwnerChatsStorer) middleware.WarpHandler {
+func StreamGetUserChatsHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllChatsEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, fmt.Errorf("get chats: unmarshal: %w", err)
 		}
@@ -218,10 +217,10 @@ func StreamGetUserChatsHandler(repo ChatStorer, authRepo OwnerChatsStorer) middl
 }
 
 // Handler for sending a new message
-func StreamSendMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer ChatStreamer) middleware.WarpHandler {
+func StreamSendMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer ChatStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewMessageEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -301,7 +300,7 @@ func StreamSendMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streame
 		}
 
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(otherMsgData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(otherMsgData, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other message error response: %s", possibleError.Message)
 			msg.Status = "undelivered"
 		}
@@ -311,10 +310,10 @@ func StreamSendMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streame
 }
 
 // Handler for deleting a message
-func StreamDeleteMessageHandler(repo ChatStorer, authRepo OwnerChatsStorer) middleware.WarpHandler {
+func StreamDeleteMessageHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteMessageEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -335,10 +334,10 @@ func StreamDeleteMessageHandler(repo ChatStorer, authRepo OwnerChatsStorer) midd
 }
 
 // Handler for getting messages in a chat
-func StreamGetMessagesHandler(repo ChatStorer, authRepo OwnerChatsStorer) middleware.WarpHandler {
+func StreamGetMessagesHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllMessagesEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -378,10 +377,10 @@ func StreamGetMessagesHandler(repo ChatStorer, authRepo OwnerChatsStorer) middle
 }
 
 // StreamGetMessageHandler for retrieving a specific message
-func StreamGetMessageHandler(repo ChatStorer, authRepo OwnerChatsStorer) middleware.WarpHandler {
+func StreamGetMessageHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetMessageEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}

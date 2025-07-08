@@ -51,10 +51,10 @@ type MDNSStarterCloser interface {
 
 type PubSubProvider interface {
 	SubscribeUserUpdate(userId string) (err error)
-	PublishModerationRequest(msg event.Message) (err error)
+	PublishModerationRequest(bt []byte) (err error)
 	UnsubscribeUserUpdate(userId string) (err error)
 	Run(m pubsub.PubsubServerNodeConnector)
-	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
 	Close() error
 }
 

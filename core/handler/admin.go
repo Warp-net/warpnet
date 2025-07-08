@@ -29,11 +29,9 @@ package handler
 
 import (
 	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -54,13 +52,13 @@ type AdminConsensusServicer interface {
 }
 
 // TODO nonce cache check
-func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middleware.WarpHandler {
+func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		if fs == nil {
 			panic("challenge handler called with nil file system")
 		}
 		var req event.GetChallengeEvent
-		err := json.JSON.Unmarshal(buf, &req)
+		err := json.Unmarshal(buf, &req)
 		if err != nil {
 			return nil, err
 		}
@@ -77,16 +75,14 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) middle
 			return nil, err
 		}
 
-		sig := ed25519.Sign(privateKey, challenge)
-
 		return event.GetChallengeResponse{
 			Challenge: hex.EncodeToString(challenge),
-			Signature: base64.StdEncoding.EncodeToString(sig),
+			Signature: security.Sign(privateKey, challenge),
 		}, nil
 	}
 }
 
-func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
+func StreamValidateHandler(svc AdminConsensusServicer) warpnet.WarpHandlerFunc {
 	if svc == nil {
 		panic("validate handler called with nil service")
 	}
@@ -97,7 +93,7 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 		}
 
 		var ev event.ValidationEvent
-		if err := json.JSON.Unmarshal(buf, &ev); err != nil {
+		if err := json.Unmarshal(buf, &ev); err != nil {
 			log.Errorf("pubsub: failed to decode user update message: %v %s", err, buf)
 			return nil, err
 		}
@@ -109,7 +105,7 @@ func StreamValidateHandler(svc AdminConsensusServicer) middleware.WarpHandler {
 	}
 }
 
-func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.WarpHandler {
+func StreamValidationResponseHandler(svc AdminConsensusServicer) warpnet.WarpHandlerFunc {
 	if svc == nil {
 		panic("validation result handler called with nil service")
 	}
@@ -120,7 +116,7 @@ func StreamValidationResponseHandler(svc AdminConsensusServicer) middleware.Warp
 		}
 
 		var ev event.ValidationResultEvent
-		if err := json.JSON.Unmarshal(data, &ev); err != nil {
+		if err := json.Unmarshal(data, &ev); err != nil {
 			log.Errorf("validation result handler: failed to decode validation result: %v %s", err, data)
 			return nil, err
 		}

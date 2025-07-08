@@ -28,15 +28,12 @@ resulting from the use or misuse of this software.
 package event
 
 const (
-
 	// admin
-	PRIVATE_POST_NODE_VALIDATE         = "/private/post/admin/validate/0.0.0"
 	PUBLIC_POST_NODE_VALIDATION_RESULT = "/public/post/admin/validate/result/0.0.0"
 	PUBLIC_POST_NODE_CHALLENGE         = "/public/post/admin/challenge/0.0.0"
 	PRIVATE_POST_PAIR                  = "/private/post/admin/pair/0.0.0"
 	PRIVATE_GET_STATS                  = "/private/get/admin/stats/0.0.0"
 	// moderation
-	PRIVATE_POST_MODERATE         = "/private/post/moderate/0.0.0"
 	PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
 	// application
 	PRIVATE_DELETE_CHAT       = "/private/delete/chat/0.0.0"
@@ -74,4 +71,10 @@ const (
 	PUBLIC_POST_UNRETWEET     = "/public/post/unretweet/0.0.0"
 	PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 	PUBLIC_GET_IMAGE          = "/public/get/image/0.0.0"
+)
+
+// internal handlers
+const (
+	INTERNAL_POST_NODE_VALIDATE = "/internal/post/admin/validate/0.0.0"
+	INTERNAL_POST_MODERATE      = "/internal/post/moderate/0.0.0"
 )

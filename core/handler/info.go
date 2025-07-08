@@ -30,7 +30,6 @@ package handler
 import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -41,10 +40,8 @@ type NodeInformer interface {
 func StreamGetInfoHandler(
 	i NodeInformer,
 	handler discovery.DiscoveryHandler,
-) warpnet.WarpStreamHandler {
-	return func(s warpnet.WarpStream) {
-		defer func() { _ = s.Close() }() //#nosec
-
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		remoteID := s.Conn().RemotePeer()
 		remoteAddr := s.Conn().RemoteMultiaddr()
 
@@ -59,10 +56,6 @@ func StreamGetInfoHandler(
 			handler(info)
 		}
 
-		if err := json.JSON.NewEncoder(s).Encode(i.NodeInfo()); err != nil {
-			log.Errorf("fail encoding generic response: %v", err)
-		}
-
-		return
+		return i.NodeInfo(), nil
 	}
 }

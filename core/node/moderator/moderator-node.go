@@ -33,9 +33,8 @@ import (
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/consensus"
-	dht "github.com/Warp-net/warpnet/core/dht"
+	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node/base"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -66,8 +65,7 @@ type ModeratorNode struct {
 	node    *base.WarpNode
 	options []libp2p.Option
 
-	streamer Streamer
-	store    DistributedStorer
+	store DistributedStorer
 
 	pubsubService PubSubProvider
 	dHashTable    DistributedHashTableCloser
@@ -174,31 +172,27 @@ func (mn *ModeratorNode) Start() (err error) {
 	)
 	modelFile, isModelExists := isModelExists(confModelPath)
 
-	mw := middleware.NewWarpMiddleware()
-	logMw := mw.LoggingMiddleware
-	unwrapMw := mw.UnwrapStreamMiddleware
-
 	mn.node, err = base.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %v", err)
 	}
 
 	mn.node.SetStreamHandlers(
-		warpnet.WarpHandler{
-			event.PRIVATE_POST_NODE_VALIDATE,
-			logMw(unwrapMw(handler.StreamValidateHandler(mn.consensusService))),
+		warpnet.WarpStreamHandler{
+			event.INTERNAL_POST_NODE_VALIDATE,
+			handler.StreamValidateHandler(mn.consensusService),
 		},
-		warpnet.WarpHandler{
+		warpnet.WarpStreamHandler{
 			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-			logMw(unwrapMw(handler.StreamValidationResponseHandler(mn.consensusService))),
+			handler.StreamValidationResponseHandler(mn.consensusService),
 		},
-		warpnet.WarpHandler{
+		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
-			logMw(handler.StreamGetInfoHandler(mn, nil)),
+			handler.StreamGetInfoHandler(mn, nil),
 		},
-		warpnet.WarpHandler{
+		warpnet.WarpStreamHandler{
 			event.PUBLIC_POST_NODE_CHALLENGE,
-			logMw(mw.UnwrapStreamMiddleware(handler.StreamChallengeHandler(root.GetCodeBase(), mn.privKey))),
+			handler.StreamChallengeHandler(root.GetCodeBase(), mn.privKey),
 		},
 	)
 
@@ -234,9 +228,9 @@ func (mn *ModeratorNode) Start() (err error) {
 	}
 
 	mn.node.SetStreamHandlers(
-		warpnet.WarpHandler{
-			event.PRIVATE_POST_MODERATE, // TODO protect this endpoint
-			logMw(mw.UnwrapStreamMiddleware(handler.StreamModerateHandler(mn, moderator))),
+		warpnet.WarpStreamHandler{
+			event.INTERNAL_POST_MODERATE,
+			handler.StreamModerateHandler(mn, moderator),
 		},
 	)
 

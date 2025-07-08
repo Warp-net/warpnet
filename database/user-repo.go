@@ -83,7 +83,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 	if user.CreatedAt.IsZero() {
 		user.CreatedAt = time.Now()
 	}
-	data, err := json.JSON.Marshal(user)
+	data, err := json.Marshal(user)
 	if err != nil {
 		return user, err
 	}
@@ -170,7 +170,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		return existingUser, err
 	}
 
-	err = json.JSON.Unmarshal(data, &existingUser)
+	err = json.Unmarshal(data, &existingUser)
 	if err != nil {
 		return existingUser, err
 	}
@@ -213,7 +213,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	}
 	existingUser.Latency = newUser.Latency
 
-	bt, err := json.JSON.Marshal(existingUser)
+	bt, err := json.Marshal(existingUser)
 	if err != nil {
 		return existingUser, err
 	}
@@ -263,7 +263,7 @@ func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 		return user, err
 	}
 
-	err = json.JSON.Unmarshal(data, &user)
+	err = json.Unmarshal(data, &user)
 	if err != nil {
 		return user, err
 	}
@@ -296,7 +296,7 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 		return user, err
 	}
 
-	err = json.JSON.Unmarshal(data, &user)
+	err = json.Unmarshal(data, &user)
 	if err != nil {
 		return user, err
 	}
@@ -333,7 +333,7 @@ func (repo *UserRepo) Delete(userId string) error {
 	}
 
 	var u domain.User
-	err = json.JSON.Unmarshal(data, &u)
+	err = json.Unmarshal(data, &u)
 	if err != nil {
 		return err
 	}
@@ -381,7 +381,7 @@ func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string
 	users := make([]domain.User, 0, len(items))
 	for _, item := range items {
 		var u domain.User
-		err = json.JSON.Unmarshal(item.Value, &u)
+		err = json.Unmarshal(item.Value, &u)
 		if err != nil {
 			return nil, "", err
 		}
@@ -456,7 +456,7 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 		}
 
 		var u domain.User
-		err = json.JSON.Unmarshal(data, &u)
+		err = json.Unmarshal(data, &u)
 		if err != nil {
 			log.Errorln("cannot unmarshal batch user data:", string(data))
 			return nil, err

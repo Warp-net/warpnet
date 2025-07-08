@@ -67,7 +67,7 @@ func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Followi
 		return local.DBError("invalid follow params")
 	}
 
-	data, _ := json.JSON.Marshal(event)
+	data, _ := json.Marshal(event)
 
 	fixedFolloweeKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followeeSubName).
@@ -273,7 +273,7 @@ func (repo *FollowRepo) GetFollowers(userId string, limit *uint64, cursor *strin
 	followings := make([]domain.Following, 0, len(items))
 	for _, item := range items {
 		var f domain.Following
-		err = json.JSON.Unmarshal(item.Value, &f)
+		err = json.Unmarshal(item.Value, &f)
 		if err != nil {
 			return nil, "", err
 		}
@@ -308,7 +308,7 @@ func (repo *FollowRepo) GetFollowees(userId string, limit *uint64, cursor *strin
 	followings := make([]domain.Following, 0, len(items))
 	for _, item := range items {
 		var f domain.Following
-		err = json.JSON.Unmarshal(item.Value, &f)
+		err = json.Unmarshal(item.Value, &f)
 		if err != nil {
 			return nil, "", err
 		}

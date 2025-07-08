@@ -30,13 +30,11 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"time"
 )
@@ -53,14 +51,14 @@ type HandlerModerator interface {
 }
 
 type ModerationBroadcaster interface {
-	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
 }
 
 // StreamModerateHandler receive event from pubsub via loopback
-func StreamModerateHandler(streamer ModerationStreamer, moderator HandlerModerator) middleware.WarpHandler {
+func StreamModerateHandler(streamer ModerationStreamer, moderator HandlerModerator) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +119,7 @@ func handleTweet(
 	}
 
 	var tweet domain.Tweet
-	if err := json.JSON.Unmarshal(bt, &tweet); err != nil {
+	if err := json.Unmarshal(bt, &tweet); err != nil {
 		return resp, err
 	}
 
@@ -170,7 +168,7 @@ func handleUser(
 	}
 
 	var user domain.User
-	if err := json.JSON.Unmarshal(bt, &user); err != nil {
+	if err := json.Unmarshal(bt, &user); err != nil {
 		return resp, err
 	}
 
@@ -179,6 +177,8 @@ func handleUser(
 	if err != nil {
 		return resp, err
 	}
+
+	log.Infof("moderation: request received, object ID: %s", *ev.ObjectID)
 
 	resp = event.ModerationResultEvent{
 		NodeID: ev.NodeID,
@@ -212,10 +212,10 @@ func StreamModerationResultHandler(
 	userRepo UserUpdater,
 	tweetRepo TweetUpdater,
 	timelineRepo TimelineTweetRemover,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -265,16 +265,8 @@ func StreamModerationResultHandler(
 				TweetId: *ev.ObjectID,
 				UserId:  ev.UserID,
 			}
-			bt, _ := json.JSON.Marshal(deleteEvent)
-			msgBody := jsoniter.RawMessage(bt)
-			msg := event.Message{
-				Body:      &msgBody,
-				NodeId:    s.Conn().LocalPeer().String(),
-				Path:      event.PRIVATE_DELETE_TWEET,
-				Timestamp: time.Now(),
-			}
-
-			err = broadcaster.PublishUpdateToFollowers(ev.UserID, msg)
+			bt, _ := json.Marshal(deleteEvent)
+			err = broadcaster.PublishUpdateToFollowers(ev.UserID, event.PRIVATE_DELETE_TWEET, bt)
 			return event.Accepted, err
 		case event.User:
 			_, err = userRepo.Update(ev.UserID, domain.User{

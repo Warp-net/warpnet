@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -75,10 +74,10 @@ func StreamGetUserHandler(
 	repo UserFetcher,
 	authRepo UserAuthStorer,
 	streamer UserStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetUserEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, fmt.Errorf("get user: event unmarshal: %v %s", err, buf)
 		}
@@ -138,11 +137,11 @@ func StreamGetUserHandler(
 		}
 
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
 			return nil, fmt.Errorf("unmarshal other user error response: %s", possibleError.Message)
 		}
 
-		if err = json.JSON.Unmarshal(otherUserData, &u); err != nil {
+		if err = json.Unmarshal(otherUserData, &u); err != nil {
 			return nil, fmt.Errorf("get other user: response unmarshal: %v %s", err, otherUserData)
 		}
 		_, err = repo.Update(u.Id, u)
@@ -153,10 +152,10 @@ func StreamGetUserHandler(
 func StreamGetUsersHandler(
 	userRepo UserFetcher,
 	streamer UserStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -214,13 +213,13 @@ func usersRefreshBackground(
 	}
 
 	var possibleError event.ErrorResponse
-	if _ = json.JSON.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
+	if _ = json.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
 		log.Errorf("unmarshal other users error response: %s", possibleError.Message)
 		return
 	}
 
 	var usersResp event.UsersResponse
-	if err := json.JSON.Unmarshal(usersDataResp, &usersResp); err != nil {
+	if err := json.Unmarshal(usersDataResp, &usersResp); err != nil {
 		log.Errorf("ummarshal users response:%v %s", err, usersDataResp)
 		return
 	}
@@ -235,10 +234,10 @@ func StreamGetWhoToFollowHandler(
 	authRepo UserAuthStorer,
 	userRepo UserFetcher,
 	followRepo UserFollowsCounter,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +280,8 @@ func StreamGetWhoToFollowHandler(
 			if user.Id == owner.UserId {
 				continue
 			}
-			if profile.Id != owner.UserId && profile.Network != user.Network { // if profile from Warpnet - don't show other network recommendations
+			// if profile from Warpnet - don't show other network recommendations
+			if profile.Id != owner.UserId && profile.Network != user.Network {
 				continue
 			}
 			if _, ok := followedUsers[user.Id]; ok {
@@ -297,10 +297,10 @@ func StreamGetWhoToFollowHandler(
 	}
 }
 
-func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) middleware.WarpHandler {
+func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewUserEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}

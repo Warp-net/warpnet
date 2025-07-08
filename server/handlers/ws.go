@@ -36,7 +36,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/server/websocket"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo/v4"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -93,7 +92,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 		wsMsg    event.Message
 		response event.Message
 	)
-	if err := json.JSON.Unmarshal(msg, &wsMsg); err != nil {
+	if err := json.Unmarshal(msg, &wsMsg); err != nil {
 		return nil, err
 	}
 	if wsMsg.MessageId == "" {
@@ -105,12 +104,12 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 		return nil, fmt.Errorf("websocket: request: missing body")
 	}
 
-	switch wsMsg.Path {
+	switch wsMsg.Destination {
 	case event.PRIVATE_POST_LOGIN:
 		var ev event.LoginEvent
-		err = json.JSON.Unmarshal(*wsMsg.Body, &ev)
+		err = json.Unmarshal(wsMsg.Body, &ev)
 		if err != nil {
-			log.Errorf("websocket: message body as login event: %v %s", err, *wsMsg.Body)
+			log.Errorf("websocket: message body as login event: %v %s", err, wsMsg.Body)
 			response = newErrorResp(err.Error())
 			break
 		}
@@ -122,13 +121,13 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 		}
 		c.upgrader.SetNewSalt(loginResp.Identity.Token) // make conn more secure after successful auth
 
-		bt, err := json.JSON.Marshal(loginResp)
+		bt, err := json.Marshal(loginResp)
 		if err != nil {
 			log.Errorf("websocket: login FromLoginResponse: %v", err)
 			break
 		}
-		msgBody := jsoniter.RawMessage(bt)
-		response.Body = &msgBody
+		msgBody := json.RawMessage(bt)
+		response.Body = msgBody
 	case event.PRIVATE_POST_LOGOUT:
 		defer c.upgrader.Close()
 		return nil, c.auth.AuthLogout()
@@ -145,7 +144,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 			break
 		}
 
-		if wsMsg.NodeId == "" || wsMsg.Path == "" {
+		if wsMsg.NodeId == "" || wsMsg.Destination == "" {
 			log.Errorf("websocket: missing node id or path: %s\n", string(msg))
 			response = newErrorResp(
 				fmt.Sprintf("missing path or node ID: %s", msg),
@@ -153,15 +152,15 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 			break
 		}
 
-		log.Debugf("WS incoming message: %s %s\n", wsMsg.NodeId, stream.WarpRoute(wsMsg.Path))
-		respData, err := c.clientNode.ClientStream(wsMsg.NodeId, wsMsg.Path, *wsMsg.Body)
+		log.Debugf("WS incoming message: %s %s\n", wsMsg.NodeId, stream.WarpRoute(wsMsg.Destination))
+		respData, err := c.clientNode.ClientStream(wsMsg.NodeId, wsMsg.Destination, wsMsg.Body)
 		if err != nil {
 			log.Errorf("websocket: send stream: %v", err)
 			response = newErrorResp(err.Error())
 			break
 		}
-		msgBody := jsoniter.RawMessage(respData)
-		response.Body = &msgBody
+		msgBody := json.RawMessage(respData)
+		response.Body = msgBody
 	}
 	if response.Body == nil {
 		log.Errorf("websocket: response body is empty")
@@ -170,12 +169,12 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 
 	response.MessageId = wsMsg.MessageId
 	response.NodeId = wsMsg.NodeId
-	response.Path = wsMsg.Path
+	response.Destination = wsMsg.Destination
 	response.Timestamp = time.Now()
 	response.Version = config.Config().Version.String()
 
 	var buffer bytes.Buffer
-	err = json.JSON.NewEncoder(&buffer).Encode(response)
+	err = json.NewEncoder(&buffer).Encode(response)
 	return buffer.Bytes(), nil
 }
 
@@ -185,10 +184,10 @@ func newErrorResp(message string) event.Message {
 		Message: message,
 	}
 
-	bt, _ := json.JSON.Marshal(errResp)
-	msgBody := jsoniter.RawMessage(bt)
+	bt, _ := json.Marshal(errResp)
+	msgBody := json.RawMessage(bt)
 	resp := event.Message{
-		Body: &msgBody,
+		Body: msgBody,
 	}
 	return resp
 }

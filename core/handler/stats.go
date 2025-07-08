@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"strings"
 	"time"
@@ -47,7 +46,7 @@ type StatsProvider interface {
 func StreamGetStatsHandler(
 	i StatsNodeInformer,
 	db StatsProvider,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(_ []byte, s warpnet.WarpStream) (any, error) {
 		sent, recv := warpnet.GetNetworkIO()
 

@@ -30,8 +30,6 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -218,7 +216,7 @@ func (s *discoveryService) Close() {
 }
 
 func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo) {
-	if s == nil {
+	if s == nil || s.node == nil {
 		return
 	}
 	defer func() { recover() }()
@@ -271,10 +269,10 @@ func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func([]
 
 		var discoveryAddrInfos []warpnet.WarpPubInfo
 
-		outerErr := json.JSON.Unmarshal(data, &discoveryAddrInfos)
+		outerErr := json.Unmarshal(data, &discoveryAddrInfos)
 		if outerErr != nil {
 			var single warpnet.WarpPubInfo
-			if innerErr := json.JSON.Unmarshal(data, &single); innerErr != nil {
+			if innerErr := json.Unmarshal(data, &single); innerErr != nil {
 				return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, data)
 			}
 			discoveryAddrInfos = []warpnet.WarpPubInfo{single}
@@ -470,7 +468,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 	}
 
 	var challengeResp event.GetChallengeResponse
-	err = json.JSON.Unmarshal(resp, &challengeResp)
+	err = json.Unmarshal(resp, &challengeResp)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal challenge from new peer: %s %v", resp, err)
 	}
@@ -495,21 +493,10 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return errors.New("peer is not an Ed25519 public key")
 	}
 
-	rawPubKey, err := peerstorePubKey.Raw()
-	if err != nil {
-		return err
-	}
-
-	decodedSig, err := base64.StdEncoding.DecodeString(challengeResp.Signature)
-	if err != nil {
-		return fmt.Errorf("invalid signature base64: %v", err)
-	}
-
-	if !ed25519.Verify(rawPubKey, challengeRespDecoded, decodedSig) {
-		log.Errorf("discovery: signature invalid: %s", challengeResp.Signature)
+	rawPubKey, _ := peerstorePubKey.Raw()
+	if err := security.VerifySignature(rawPubKey, challengeRespDecoded, challengeResp.Signature); err != nil {
+		log.Errorf("invalid signature: %v", err)
 		return ErrChallengeSignatureInvalid
-	} else {
-		log.Debugf("discovery: signature verified for peer %s", pi.ID.String())
 	}
 
 	s.cache.SetAsChallenged(pi.ID)
@@ -530,7 +517,7 @@ func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpne
 		return info, fmt.Errorf("no info response from new peer %s", pi.ID.String())
 	}
 
-	err = json.JSON.Unmarshal(infoResp, &info)
+	err = json.Unmarshal(infoResp, &info)
 	if err != nil {
 		return info, fmt.Errorf("failed to unmarshal info from new peer: %s %v", infoResp, err)
 	}
@@ -556,7 +543,7 @@ func (s *discoveryService) requestNodeUser(pi warpnet.WarpAddrInfo, userId strin
 		return user, fmt.Errorf("no user response from new peer %s", pi.String())
 	}
 
-	err = json.JSON.Unmarshal(userResp, &user)
+	err = json.Unmarshal(userResp, &user)
 	if err != nil {
 		return user, fmt.Errorf("failed to unmarshal user from new peer: %v", err)
 	}

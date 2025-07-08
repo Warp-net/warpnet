@@ -31,9 +31,11 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	_ "github.com/Warp-net/warpnet/core/logging"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	event2 "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/cockroachdb/errors"
 	"github.com/libp2p/go-libp2p"
@@ -68,9 +70,10 @@ type WarpNode struct {
 	version      *semver.Version
 	reachability atomic.Int32
 
-	startTime time.Time
-	eventsSub event.Subscription
-	handlers  map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler
+	startTime        time.Time
+	eventsSub        event.Subscription
+	mw               *middleware.WarpMiddleware
+	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
 func NewWarpNode(
@@ -100,6 +103,10 @@ func NewWarpNode(
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
+	pool, err := stream.NewStreamPool(ctx, node)
+	if err != nil {
+		return nil, err
+	}
 
 	sub, err := node.EventBus().Subscribe(event.WildcardSubscription)
 	if err != nil {
@@ -113,17 +120,18 @@ func NewWarpNode(
 	version := config.Config().Version
 
 	wn := &WarpNode{
-		ctx:       ctx,
-		node:      node,
-		relay:     relayService,
-		streamer:  stream.NewStreamPool(ctx, node),
-		isClosed:  new(atomic.Bool),
-		readyChan: make(chan struct{}),
-		version:   version,
-		startTime: time.Now(),
-		backoff:   backoff.NewSimpleBackoff(ctx, time.Minute, 5),
-		eventsSub: sub,
-		handlers:  make(map[warpnet.WarpProtocolID]warpnet.WarpStreamHandler),
+		ctx:              ctx,
+		node:             node,
+		relay:            relayService,
+		streamer:         pool,
+		isClosed:         new(atomic.Bool),
+		readyChan:        make(chan struct{}),
+		version:          version,
+		startTime:        time.Now(),
+		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		eventsSub:        sub,
+		mw:               middleware.NewWarpMiddleware(),
+		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 	}
 
 	go wn.trackIncomingEvents()
@@ -161,13 +169,24 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	return nil
 }
 
-func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpHandler) {
+func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
+	logMw := n.mw.LoggingMiddleware
+	authMw := n.mw.AuthMiddleware
+	unwrapMw := n.mw.UnwrapStreamMiddleware
+
 	for _, h := range handlers {
+
+		streamHandler := logMw(authMw(unwrapMw(h.Handler)))
+
+		if strings.HasPrefix(string(h.Path), event2.InternalRoutePrefix) {
+			n.internalHandlers[h.Path] = streamHandler
+			continue
+		}
+
 		if !h.IsValid() {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
 		}
-		n.node.SetStreamHandler(h.Path, h.Handler)
-		n.handlers[h.Path] = h.Handler
+		n.node.SetStreamHandler(h.Path, streamHandler)
 	}
 }
 
@@ -248,7 +267,7 @@ func (n *WarpNode) trackIncomingEvents() {
 				)
 			}
 		default:
-			bt, _ := json.JSON.Marshal(ev)
+			bt, _ := json.Marshal(ev)
 			log.Infof("node: event: %T %s", ev, bt)
 		}
 	}
@@ -292,11 +311,14 @@ func (n *WarpNode) Node() warpnet.P2PNode {
 
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
-		return nil, errors.New("empty data")
+		return nil, errors.New("node: selfstream: empty data")
 	}
-	handler, ok := n.handlers[warpnet.WarpProtocolID(path)]
+	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
-		return nil, errors.Errorf("no handler for path %s", path)
+		return nil, errors.Errorf(
+			"node: selfstream: no handler for path %s, avaiable %v",
+			path, n.internalHandlers,
+		)
 	}
 
 	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
@@ -307,9 +329,9 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 
 	bt, ok := data.([]byte)
 	if !ok {
-		bt, err = json.JSON.Marshal(data)
+		bt, err = json.Marshal(data)
 		if err != nil {
-			return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
+			return nil, fmt.Errorf("node: selfstream: marshal data %v %s", err, data)
 		}
 	}
 
@@ -343,7 +365,7 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		var ok bool
 		bt, ok = data.([]byte)
 		if !ok {
-			bt, err = json.JSON.Marshal(data)
+			bt, err = json.Marshal(data)
 			if err != nil {
 				return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
 			}

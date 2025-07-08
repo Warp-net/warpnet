@@ -111,7 +111,10 @@ func (n *WarpClientNode) Pair(serverInfo domain.AuthNodeInfo) error {
 		return warpnet.WarpError("client: must have no addresses")
 	}
 
-	n.streamer = stream.NewStreamPool(n.ctx, n.clientNode)
+	n.streamer, err = stream.NewStreamPool(n.ctx, n.clientNode)
+	if err != nil {
+		return fmt.Errorf("client: create stream pool: %s", err)
+	}
 
 	err = n.pairNodes(peerInfo.ID.String(), serverInfo)
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -141,7 +144,7 @@ func (n *WarpClientNode) pairNodes(nodeId string, serverInfo domain.AuthNodeInfo
 	}
 
 	var errResp event.ErrorResponse
-	if _ = json.JSON.Unmarshal(resp, &errResp); errResp.Message != "" {
+	if _ = json.Unmarshal(resp, &errResp); errResp.Message != "" {
 		return errResp
 	}
 
@@ -164,7 +167,7 @@ func (n *WarpClientNode) ClientStream(nodeId string, path string, data any) (_ [
 		var ok bool
 		bt, ok = data.([]byte)
 		if !ok {
-			bt, err = json.JSON.Marshal(data)
+			bt, err = json.Marshal(data)
 			if err != nil {
 				return nil, err
 			}

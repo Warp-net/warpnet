@@ -33,7 +33,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -95,10 +94,10 @@ func StreamUploadImageHandler(
 	info MediaNodeInformer,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UploadImageEvent
-		if err := json.JSON.Unmarshal(input, &ev); err != nil {
+		if err := json.Unmarshal(input, &ev); err != nil {
 			return nil, err
 		}
 
@@ -139,7 +138,7 @@ func StreamUploadImageHandler(
 		metaData := map[string]any{
 			nodeMetaKey: nodeInfo, userMetaKey: ownerUser, macMetaKey: warpnet.GetMacAddr(),
 		}
-		metaBytes, err := json.JSON.Marshal(metaData)
+		metaBytes, err := json.Marshal(metaData)
 		if err != nil {
 			return nil, fmt.Errorf("upload: marshalling meta data: %w", err)
 		}
@@ -174,10 +173,10 @@ func StreamGetImageHandler(
 	streamer MediaStreamer,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetImageEvent
-		if err := json.JSON.Unmarshal(input, &ev); err != nil {
+		if err := json.Unmarshal(input, &ev); err != nil {
 			return nil, fmt.Errorf("get image: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
@@ -211,7 +210,7 @@ func StreamGetImageHandler(
 		}
 
 		var imgResp event.GetImageResponse
-		if err := json.JSON.Unmarshal(resp, &imgResp); err != nil {
+		if err := json.Unmarshal(resp, &imgResp); err != nil {
 			return nil, fmt.Errorf("get image: unmarshalling response: %w", err)
 		}
 

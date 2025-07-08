@@ -124,7 +124,7 @@ func storeTweet(
 		AddRootID(userId).
 		Build()
 
-	data, err := json.JSON.Marshal(tweet)
+	data, err := json.Marshal(tweet)
 	if err != nil {
 		return tweet, fmt.Errorf("tweet marshal: %w", err)
 	}
@@ -164,7 +164,7 @@ func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err erro
 		return tweet, err
 	}
 
-	err = json.JSON.Unmarshal(data, &tweet)
+	err = json.Unmarshal(data, &tweet)
 	if err != nil {
 		return tweet, err
 	}
@@ -265,7 +265,7 @@ func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]dom
 	tweets := make([]domain.Tweet, 0, len(items))
 	for _, item := range items {
 		var t domain.Tweet
-		err = json.JSON.Unmarshal(item.Value, &t)
+		err = json.Unmarshal(item.Value, &t)
 		if err != nil {
 			return nil, "", err
 		}

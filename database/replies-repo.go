@@ -83,7 +83,7 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 		reply.CreatedAt = now
 	}
 
-	data, err := json.JSON.Marshal(reply)
+	data, err := json.Marshal(reply)
 	if err != nil {
 		return reply, fmt.Errorf("error marshalling reply meta: %w", err)
 	}
@@ -152,7 +152,7 @@ func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Twe
 		return tweet, err
 	}
 
-	if err = json.JSON.Unmarshal(data, &tweet); err != nil {
+	if err = json.Unmarshal(data, &tweet); err != nil {
 		return tweet, fmt.Errorf("error unmarshalling reply: %w", err)
 	}
 	return tweet, txn.Commit()
@@ -245,7 +245,7 @@ func (repo *ReplyRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cu
 	replies := make([]domain.Tweet, 0, len(items))
 	for _, item := range items {
 		var t domain.Tweet
-		if err = json.JSON.Unmarshal(item.Value, &t); err != nil {
+		if err = json.Unmarshal(item.Value, &t); err != nil {
 			return nil, "", fmt.Errorf("error unmarshalling reply: %w", err)
 		}
 		replies = append(replies, t)

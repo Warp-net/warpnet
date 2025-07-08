@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -39,10 +38,10 @@ type TimelineFetcher interface {
 	GetTimeline(string, *uint64, *string) ([]domain.Tweet, string, error)
 }
 
-func StreamTimelineHandler(repo TimelineFetcher) middleware.WarpHandler {
+func StreamTimelineHandler(repo TimelineFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTimelineEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}

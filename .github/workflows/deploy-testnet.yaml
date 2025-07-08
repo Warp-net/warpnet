@@ -1,4 +1,4 @@
-name: Deploy Testnet Bootstrap Node
+name: Deploy Testnet Nodes
 
 on:
   workflow_dispatch:

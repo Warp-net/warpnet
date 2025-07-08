@@ -1,4 +1,4 @@
-name: Deploy Warpnet Bootstrap Node
+name: Deploy Warpnet Nodes
 
 on:
   workflow_dispatch:

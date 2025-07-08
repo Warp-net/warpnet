@@ -7,8 +7,6 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"runtime/debug"
@@ -29,7 +27,7 @@ type ValidatorFunc func(data event.ValidationEvent) error
 type ConsensusHandler func(message *event.Message)
 
 type ConsensusBroadcaster interface {
-	PublishValidationRequest(msg event.Message) (err error)
+	PublishValidationRequest(body []byte) (err error)
 	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
 	SubscribeConsensusTopic() error
 	OwnerID() string
@@ -94,10 +92,14 @@ func (g *gossipConsensus) listenResponses() {
 		knownPeers       = map[string]struct{}{}
 		validResponses   = map[string]struct{}{}
 		invalidResponses = map[string]struct{}{}
+
+		total        int
+		validCount   int
+		invalidCount int
 	)
-	defer timeoutTicker.Stop()
-	defer ticker.Stop()
 	defer func() {
+		timeoutTicker.Stop()
+		ticker.Stop()
 		g.isValidationDone.Store(true)
 		log.Infoln("gossip consensus: listener exited")
 	}()
@@ -109,7 +111,7 @@ func (g *gossipConsensus) listenResponses() {
 		}
 	}
 
-	for range ticker.C {
+	for {
 		if g.isClosed.Load() {
 			return
 		}
@@ -122,15 +124,10 @@ func (g *gossipConsensus) listenResponses() {
 			knownPeers[id.String()] = struct{}{}
 		}
 		subscribers := g.broadcaster.GetConsensusTopicSubscribers()
-		if isMeAlone(subscribers, g.broadcaster.OwnerID()) {
-			timeoutTicker.Reset(timeout)
-			continue
-		}
-		var (
-			total        = len(subscribers)
-			validCount   = len(validResponses)
-			invalidCount = len(invalidResponses)
-		)
+
+		total = len(subscribers)
+		validCount = len(validResponses)
+		invalidCount = len(invalidResponses)
 
 		log.Infof(
 			"gossip consensus: validation in progess: valid [%d], invalid [%d], total [%d]",
@@ -192,6 +189,11 @@ func (g *gossipConsensus) listenResponses() {
 				}
 				invalidResponses[resp.ValidatorID] = struct{}{}
 			}
+		case <-ticker.C:
+			if isMeAlone(subscribers, g.broadcaster.OwnerID()) {
+				timeoutTicker.Reset(timeout)
+				continue
+			}
 		}
 	}
 }
@@ -204,28 +206,18 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) {
 		return
 	}
 
-	bt, err := json.JSON.Marshal(data)
+	bt, err := json.Marshal(data)
 	if err != nil {
 		log.Errorf("gossip consensus: failed to marshal validation event: %s", err)
 		g.interruptChan <- os.Interrupt
 		return
 	}
-	body := jsoniter.RawMessage(bt)
 
-	msg := event.Message{
-		Body:      &body,
-		Path:      event.PRIVATE_POST_NODE_VALIDATE,
-		NodeId:    g.broadcaster.OwnerID(),
-		Timestamp: time.Now(),
-		Version:   "0.0.0", // TODO manage protocol versions properly
-		MessageId: uuid.New().String(),
-	}
-
-	g.runBackgroundPublishing(msg)
+	g.runBackgroundPublishing(bt)
 	return
 }
 
-func (g *gossipConsensus) runBackgroundPublishing(msg event.Message) {
+func (g *gossipConsensus) runBackgroundPublishing(body []byte) {
 	g.isBgRunning.Store(true)
 	defer func() {
 		g.isBgRunning.Store(false)
@@ -255,10 +247,7 @@ func (g *gossipConsensus) runBackgroundPublishing(msg event.Message) {
 				continue
 			}
 
-			msg.Timestamp = time.Now()
-			msg.MessageId = uuid.New().String()
-
-			if err := g.broadcaster.PublishValidationRequest(msg); err != nil {
+			if err := g.broadcaster.PublishValidationRequest(body); err != nil {
 				log.Errorf("gossip consensus: ask validation: %v", err)
 			}
 		}

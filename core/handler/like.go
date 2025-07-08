@@ -29,7 +29,6 @@ package handler
 
 import (
 	"errors"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -67,10 +66,10 @@ func StreamLikeHandler(
 	repo LikesStorer,
 	userRepo LikedUserFetcher,
 	streamer LikeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.LikeEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +115,7 @@ func StreamLikeHandler(
 		}
 
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(likeDataResp, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(likeDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other like error response: %s", possibleError.Message)
 		}
 
@@ -124,10 +123,10 @@ func StreamLikeHandler(
 	}
 }
 
-func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer LikeStreamer) middleware.WarpHandler {
+func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer LikeStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UnlikeEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +170,7 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 		}
 
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(unlikeDataResp, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(unlikeDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
 		}
 

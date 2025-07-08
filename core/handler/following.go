@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -73,10 +72,10 @@ func StreamFollowHandler(
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
 	streamer FollowNodeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewFollowEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -147,10 +146,10 @@ func StreamUnfollowHandler(
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
 	streamer FollowNodeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewUnfollowEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -208,7 +207,7 @@ func validateResponse(resp []byte) error {
 	}
 
 	var errorResp event.ErrorResponse
-	err := json.JSON.Unmarshal(resp, &errorResp)
+	err := json.Unmarshal(resp, &errorResp)
 	if err != nil {
 		return fmt.Errorf("followings: validate: unmarshal: %w", err)
 	}
@@ -223,10 +222,10 @@ func StreamGetFollowersHandler(
 	userRepo FollowingUserStorer,
 	followRepo FollowingStorer,
 	streamer FollowNodeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetFollowersEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -268,12 +267,12 @@ func StreamGetFollowersHandler(
 			return nil, err
 		}
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(followersData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(followersData, &possibleError); possibleError.Message != "" {
 			return nil, fmt.Errorf("unmarshal other followers error response: %s", possibleError.Message)
 		}
 
 		var followersResp event.FollowersResponse
-		if err := json.JSON.Unmarshal(followersData, &followersResp); err != nil {
+		if err := json.Unmarshal(followersData, &followersResp); err != nil {
 			return nil, err
 		}
 		return followersResp, nil
@@ -285,10 +284,10 @@ func StreamGetFolloweesHandler(
 	userRepo FollowingUserStorer,
 	followRepo FollowingStorer,
 	streamer FollowNodeStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetFolloweesEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -330,12 +329,12 @@ func StreamGetFolloweesHandler(
 			return nil, err
 		}
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(followeesData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(followeesData, &possibleError); possibleError.Message != "" {
 			return nil, fmt.Errorf("unmarshal other followees error response: %s", possibleError.Message)
 		}
 
 		var followeesResp event.FolloweesResponse
-		if err := json.JSON.Unmarshal(followeesData, &followeesResp); err != nil {
+		if err := json.Unmarshal(followeesData, &followeesResp); err != nil {
 			return nil, err
 		}
 		return followeesResp, nil

@@ -31,14 +31,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"strings"
@@ -59,8 +57,8 @@ type OwnerTweetStorer interface {
 }
 
 type TweetBroadcaster interface {
-	PublishUpdateToFollowers(ownerId string, msg event.Message) (err error)
-	PublishModerationRequest(msg event.Message) (err error)
+	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
+	PublishModerationRequest(body []byte) (err error)
 }
 
 type TweetsStorer interface {
@@ -80,10 +78,10 @@ func StreamNewTweetHandler(
 	authRepo OwnerTweetStorer,
 	tweetRepo TweetsStorer,
 	timelineRepo TimelineUpdater,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -115,15 +113,8 @@ func StreamNewTweetHandler(
 				Username:  tweet.Username,
 				ImageKey:  tweet.ImageKey,
 			}
-			bt, _ := json.JSON.Marshal(respTweetEvent)
-			msgBody := jsoniter.RawMessage(bt)
-			msg := event.Message{
-				Body:      &msgBody,
-				NodeId:    owner.NodeId,
-				Path:      event.PRIVATE_POST_TWEET,
-				Timestamp: time.Now(),
-			}
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, msg); err != nil {
+			bt, _ := json.Marshal(respTweetEvent)
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
 				log.Errorf("broadcaster publish owner tweet update: %v", err)
 			}
 
@@ -133,11 +124,9 @@ func StreamNewTweetHandler(
 				Type:     event.Tweet,
 				ObjectID: &tweet.Id,
 			}
-			bt, _ = json.JSON.Marshal(moderationEvent)
-			msgBody = jsoniter.RawMessage(bt)
-			msg.Body = &msgBody
-			msg.Path = event.PRIVATE_POST_MODERATE
-			if err := broadcaster.PublishModerationRequest(msg); err != nil {
+			bt, _ = json.Marshal(moderationEvent)
+
+			if err := broadcaster.PublishModerationRequest(bt); err != nil {
 				log.Errorf("broadcaster publish tweet moderation request: %v", err)
 			} else {
 				log.Infof("tweet: %s moderation requested", tweet.Id)
@@ -148,10 +137,10 @@ func StreamNewTweetHandler(
 	}
 }
 
-func StreamGetTweetHandler(repo TweetsStorer) middleware.WarpHandler {
+func StreamGetTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -170,10 +159,10 @@ func StreamGetTweetsHandler(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllTweetsEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -237,13 +226,13 @@ func tweetsRefreshBackground(
 	}
 
 	var possibleError event.ErrorResponse
-	if _ = json.JSON.Unmarshal(tweetsDataResp, &possibleError); possibleError.Message != "" {
+	if _ = json.Unmarshal(tweetsDataResp, &possibleError); possibleError.Message != "" {
 		log.Errorf("get tweets handler: unmarshal other tweets error response: %s", possibleError.Message)
 		return
 	}
 
 	var tweetsResp event.TweetsResponse
-	if err := json.JSON.Unmarshal(tweetsDataResp, &tweetsResp); err != nil {
+	if err := json.Unmarshal(tweetsDataResp, &tweetsResp); err != nil {
 		log.Errorf("get tweets handler: unmarshalresponse: %s", tweetsDataResp)
 		return
 	}
@@ -265,10 +254,10 @@ func StreamDeleteTweetHandler(
 	authRepo OwnerTweetStorer,
 	repo TweetsStorer,
 	likeRepo LikeTweetStorer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteTweetEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -293,15 +282,8 @@ func StreamDeleteTweetHandler(
 				UserId:  ev.UserId,
 				TweetId: ev.TweetId,
 			}
-			bt, _ := json.JSON.Marshal(respTweetEvent)
-			msgBody := jsoniter.RawMessage(bt)
-			msg := event.Message{
-				Body:      &msgBody,
-				NodeId:    owner.NodeId,
-				Path:      event.PRIVATE_DELETE_TWEET,
-				Timestamp: time.Now(),
-			}
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, msg); err != nil {
+			bt, _ := json.Marshal(respTweetEvent)
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_DELETE_TWEET, bt); err != nil {
 				log.Infoln("broadcaster publish owner tweet update:", err)
 			}
 		}
@@ -328,10 +310,10 @@ func StreamGetTweetStatsHandler(
 	replyRepo RepliesTweetCounter, // TODO views
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
-) middleware.WarpHandler {
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetStatsEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -358,12 +340,12 @@ func StreamGetTweetStatsHandler(
 			}
 
 			var possibleError event.ErrorResponse
-			if _ = json.JSON.Unmarshal(statsResp, &possibleError); possibleError.Message != "" {
+			if _ = json.Unmarshal(statsResp, &possibleError); possibleError.Message != "" {
 				return nil, fmt.Errorf("unmarshal other reply response: %s", possibleError.Message)
 			}
 
 			var stats event.TweetStatsResponse
-			if err := json.JSON.Unmarshal(statsResp, &stats); err != nil {
+			if err := json.Unmarshal(statsResp, &stats); err != nil {
 				return nil, fmt.Errorf("fetching tweet stats response: %v", err)
 			}
 			return stats, nil
