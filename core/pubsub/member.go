@@ -36,7 +36,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 	"time"
@@ -147,7 +146,7 @@ func (g *memberPubSub) PublishValidationRequest(bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
-	body := jsoniter.RawMessage(bt)
+	body := json.RawMessage(bt)
 
 	msg := event.Message{
 		Body:        body,
@@ -164,7 +163,7 @@ func (g *memberPubSub) PublishModerationRequest(bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
-	body := jsoniter.RawMessage(bt)
+	body := json.RawMessage(bt)
 
 	msg := event.Message{
 		Body:        body,
@@ -184,7 +183,7 @@ func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte)
 	}
 	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
 
-	body := jsoniter.RawMessage(bt)
+	body := json.RawMessage(bt)
 	msg := event.Message{
 		Body:        body,
 		NodeId:      g.NodeID(),
@@ -248,13 +247,13 @@ func (g *memberPubSub) publishPeerInfo() error {
 		limit--
 	}
 
-	data, err := json.JSON.Marshal(addrInfosMessage)
+	data, err := json.Marshal(addrInfosMessage)
 	if err != nil {
 		return fmt.Errorf("failed to marshal peer info message: %v", err)
 	}
 
 	msg := event.Message{
-		Body:        jsoniter.RawMessage(data),
+		Body:        json.RawMessage(data),
 		MessageId:   uuid.New().String(),
 		NodeId:      g.pubsub.nodeInfo().ID.String(),
 		Destination: "none",

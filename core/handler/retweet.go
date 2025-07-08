@@ -71,7 +71,7 @@ func StreamNewReTweetHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var retweetEvent event.NewRetweetEvent
-		err := json.JSON.Unmarshal(buf, &retweetEvent)
+		err := json.Unmarshal(buf, &retweetEvent)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +113,7 @@ func StreamNewReTweetHandler(
 			return nil, err
 		}
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(retweetDataResp, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(retweetDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other retweet error response: %s", possibleError.Message)
 		}
 
@@ -128,7 +128,7 @@ func StreamUnretweetHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UnretweetEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +171,7 @@ func StreamUnretweetHandler(
 			return nil, err
 		}
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(unretweetDataResp, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(unretweetDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other unretweet error response: %s", possibleError.Message)
 		}
 

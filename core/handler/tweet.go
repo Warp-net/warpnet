@@ -81,7 +81,7 @@ func StreamNewTweetHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +113,7 @@ func StreamNewTweetHandler(
 				Username:  tweet.Username,
 				ImageKey:  tweet.ImageKey,
 			}
-			bt, _ := json.JSON.Marshal(respTweetEvent)
+			bt, _ := json.Marshal(respTweetEvent)
 			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
 				log.Errorf("broadcaster publish owner tweet update: %v", err)
 			}
@@ -124,7 +124,7 @@ func StreamNewTweetHandler(
 				Type:     event.Tweet,
 				ObjectID: &tweet.Id,
 			}
-			bt, _ = json.JSON.Marshal(moderationEvent)
+			bt, _ = json.Marshal(moderationEvent)
 
 			if err := broadcaster.PublishModerationRequest(bt); err != nil {
 				log.Errorf("broadcaster publish tweet moderation request: %v", err)
@@ -140,7 +140,7 @@ func StreamNewTweetHandler(
 func StreamGetTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +162,7 @@ func StreamGetTweetsHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllTweetsEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -226,13 +226,13 @@ func tweetsRefreshBackground(
 	}
 
 	var possibleError event.ErrorResponse
-	if _ = json.JSON.Unmarshal(tweetsDataResp, &possibleError); possibleError.Message != "" {
+	if _ = json.Unmarshal(tweetsDataResp, &possibleError); possibleError.Message != "" {
 		log.Errorf("get tweets handler: unmarshal other tweets error response: %s", possibleError.Message)
 		return
 	}
 
 	var tweetsResp event.TweetsResponse
-	if err := json.JSON.Unmarshal(tweetsDataResp, &tweetsResp); err != nil {
+	if err := json.Unmarshal(tweetsDataResp, &tweetsResp); err != nil {
 		log.Errorf("get tweets handler: unmarshalresponse: %s", tweetsDataResp)
 		return
 	}
@@ -257,7 +257,7 @@ func StreamDeleteTweetHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteTweetEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -282,7 +282,7 @@ func StreamDeleteTweetHandler(
 				UserId:  ev.UserId,
 				TweetId: ev.TweetId,
 			}
-			bt, _ := json.JSON.Marshal(respTweetEvent)
+			bt, _ := json.Marshal(respTweetEvent)
 			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_DELETE_TWEET, bt); err != nil {
 				log.Infoln("broadcaster publish owner tweet update:", err)
 			}
@@ -313,7 +313,7 @@ func StreamGetTweetStatsHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetStatsEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -340,12 +340,12 @@ func StreamGetTweetStatsHandler(
 			}
 
 			var possibleError event.ErrorResponse
-			if _ = json.JSON.Unmarshal(statsResp, &possibleError); possibleError.Message != "" {
+			if _ = json.Unmarshal(statsResp, &possibleError); possibleError.Message != "" {
 				return nil, fmt.Errorf("unmarshal other reply response: %s", possibleError.Message)
 			}
 
 			var stats event.TweetStatsResponse
-			if err := json.JSON.Unmarshal(statsResp, &stats); err != nil {
+			if err := json.Unmarshal(statsResp, &stats); err != nil {
 				return nil, fmt.Errorf("fetching tweet stats response: %v", err)
 			}
 			return stats, nil

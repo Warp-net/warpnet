@@ -34,7 +34,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
-	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -163,7 +162,7 @@ func (s *LoopbackStream) Read(p []byte) (int, error) {
 	defer s.readMx.Unlock()
 
 	if s.isReadClosed.Load() {
-		return 0, io.ErrClosedPipe
+		return 0, nil
 	}
 	return s.readConn.Read(p)
 }
@@ -173,7 +172,7 @@ func (s *LoopbackStream) Write(p []byte) (int, error) {
 	defer s.writeMx.Unlock()
 
 	if s.isWriteClosed.Load() {
-		return 0, io.ErrClosedPipe
+		return 0, nil
 	}
 	return s.writeConn.Write(p)
 }

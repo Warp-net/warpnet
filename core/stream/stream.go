@@ -38,7 +38,6 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -117,17 +116,17 @@ func (p *streamPool) send(
 	}
 	defer closeStream(stream)
 
-	body := jsoniter.RawMessage(bodyBytes)
+	body := json.RawMessage(bodyBytes)
 	msg := event.Message{
 		Body:        body,
 		MessageId:   uuid.New().String(),
 		NodeId:      p.n.ID().String(),
 		Destination: r.String(),
 		Timestamp:   time.Now(),
-		Version:     "0.0.0",
+		Version:     "0.0.0", // TODO event message version
 		Signature:   security.Sign(p.privKey, body),
 	}
-	data, _ := json.JSON.Marshal(msg)
+	data, _ := json.Marshal(msg)
 
 	var rw = bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	if data != nil {

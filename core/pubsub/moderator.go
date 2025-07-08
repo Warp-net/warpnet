@@ -31,8 +31,8 @@ import (
 	"context"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"sync"
 	"time"
@@ -69,7 +69,7 @@ func (g *moderatorPubSub) PublishValidationRequest(bt []byte) (err error) {
 	if g == nil || !g.pubsub.isGossipRunning() {
 		return warpnet.WarpError("moderator pubsub: service not initialized")
 	}
-	body := jsoniter.RawMessage(bt)
+	body := json.RawMessage(bt)
 
 	msg := event.Message{
 		Body:        body,

@@ -58,7 +58,7 @@ type ModerationBroadcaster interface {
 func StreamModerateHandler(streamer ModerationStreamer, moderator HandlerModerator) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +119,7 @@ func handleTweet(
 	}
 
 	var tweet domain.Tweet
-	if err := json.JSON.Unmarshal(bt, &tweet); err != nil {
+	if err := json.Unmarshal(bt, &tweet); err != nil {
 		return resp, err
 	}
 
@@ -168,7 +168,7 @@ func handleUser(
 	}
 
 	var user domain.User
-	if err := json.JSON.Unmarshal(bt, &user); err != nil {
+	if err := json.Unmarshal(bt, &user); err != nil {
 		return resp, err
 	}
 
@@ -177,6 +177,8 @@ func handleUser(
 	if err != nil {
 		return resp, err
 	}
+
+	log.Infof("moderation: request received, object ID: %s", *ev.ObjectID)
 
 	resp = event.ModerationResultEvent{
 		NodeID: ev.NodeID,
@@ -213,7 +215,7 @@ func StreamModerationResultHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +265,7 @@ func StreamModerationResultHandler(
 				TweetId: *ev.ObjectID,
 				UserId:  ev.UserID,
 			}
-			bt, _ := json.JSON.Marshal(deleteEvent)
+			bt, _ := json.Marshal(deleteEvent)
 			err = broadcaster.PublishUpdateToFollowers(ev.UserID, event.PRIVATE_DELETE_TWEET, bt)
 			return event.Accepted, err
 		case event.User:

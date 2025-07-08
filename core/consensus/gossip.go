@@ -92,10 +92,14 @@ func (g *gossipConsensus) listenResponses() {
 		knownPeers       = map[string]struct{}{}
 		validResponses   = map[string]struct{}{}
 		invalidResponses = map[string]struct{}{}
+
+		total        int
+		validCount   int
+		invalidCount int
 	)
-	defer timeoutTicker.Stop()
-	defer ticker.Stop()
 	defer func() {
+		timeoutTicker.Stop()
+		ticker.Stop()
 		g.isValidationDone.Store(true)
 		log.Infoln("gossip consensus: listener exited")
 	}()
@@ -121,11 +125,9 @@ func (g *gossipConsensus) listenResponses() {
 		}
 		subscribers := g.broadcaster.GetConsensusTopicSubscribers()
 
-		var (
-			total        = len(subscribers)
-			validCount   = len(validResponses)
-			invalidCount = len(invalidResponses)
-		)
+		total = len(subscribers)
+		validCount = len(validResponses)
+		invalidCount = len(invalidResponses)
 
 		log.Infof(
 			"gossip consensus: validation in progess: valid [%d], invalid [%d], total [%d]",
@@ -204,7 +206,7 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) {
 		return
 	}
 
-	bt, err := json.JSON.Marshal(data)
+	bt, err := json.Marshal(data)
 	if err != nil {
 		log.Errorf("gossip consensus: failed to marshal validation event: %s", err)
 		g.interruptChan <- os.Interrupt

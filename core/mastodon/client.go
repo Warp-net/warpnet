@@ -182,7 +182,7 @@ func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []
 		var ok bool
 		data, ok = payload.([]byte)
 		if !ok {
-			data, err = json.JSON.Marshal(payload)
+			data, err = json.Marshal(payload)
 			if err != nil {
 				return nil, err
 			}
@@ -193,31 +193,31 @@ func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []
 	case event.PUBLIC_GET_INFO:
 		resp = m.getInfoHandler()
 	case event.PUBLIC_GET_USER:
-		_ = json.JSON.Unmarshal(data, &getOneEvent)
+		_ = json.Unmarshal(data, &getOneEvent)
 		resp, err = m.getUserHandler(getOneEvent.UserId)
 	case event.PUBLIC_GET_USERS:
-		_ = json.JSON.Unmarshal(data, &getAllEvent)
+		_ = json.Unmarshal(data, &getAllEvent)
 		resp, err = m.getUsersHandler(getAllEvent.UserId, getAllEvent.Cursor)
 	case event.PUBLIC_GET_TWEETS:
-		_ = json.JSON.Unmarshal(data, &getAllEvent)
+		_ = json.Unmarshal(data, &getAllEvent)
 		resp, err = m.getTweetsHandler(getAllEvent.UserId, getAllEvent.Cursor)
 	case event.PUBLIC_GET_TWEET:
-		_ = json.JSON.Unmarshal(data, &getOneEvent)
+		_ = json.Unmarshal(data, &getOneEvent)
 		resp, err = m.getTweetHandler(getOneEvent.TweetId)
 	case event.PUBLIC_GET_TWEET_STATS:
-		_ = json.JSON.Unmarshal(data, &getOneEvent)
+		_ = json.Unmarshal(data, &getOneEvent)
 		resp, err = m.getTweetStatsHandler(getOneEvent.TweetId)
 	case event.PUBLIC_GET_REPLIES:
-		_ = json.JSON.Unmarshal(data, &getOneEvent)
+		_ = json.Unmarshal(data, &getOneEvent)
 		resp, err = m.getRepliesHandler(getOneEvent.TweetId)
 	case event.PUBLIC_GET_FOLLOWERS:
-		_ = json.JSON.Unmarshal(data, &getAllEvent)
+		_ = json.Unmarshal(data, &getAllEvent)
 		resp, err = m.getFollowersHandler(getAllEvent.UserId, getAllEvent.Cursor)
 	case event.PUBLIC_GET_FOLLOWEES:
-		_ = json.JSON.Unmarshal(data, &getAllEvent)
+		_ = json.Unmarshal(data, &getAllEvent)
 		resp, err = m.getFolloweesHandler(getAllEvent.UserId, getAllEvent.Cursor)
 	case event.PUBLIC_GET_IMAGE:
-		_ = json.JSON.Unmarshal(data, &getImage)
+		_ = json.Unmarshal(data, &getImage)
 		resp, err = m.getImageHandler(getImage.Key)
 	default:
 		return nil, warpnet.WarpError("unknown route")
@@ -226,7 +226,7 @@ func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []
 		return nil, fmt.Errorf("mastodon: failed to handle request, route: %s, message: %w", r.String(), err)
 	}
 
-	return json.JSON.Marshal(resp)
+	return json.Marshal(resp)
 }
 
 func (m *warpnetMastodonPseudoNode) getInfoHandler() warpnet.NodeInfo {

@@ -66,7 +66,7 @@ func StreamNewReplyHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewReplyEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +121,7 @@ func StreamNewReplyHandler(
 		}
 
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other reply error response: %s", possibleError.Message)
 		}
 
@@ -132,7 +132,7 @@ func StreamNewReplyHandler(
 func StreamGetReplyHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetReplyEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -155,7 +155,7 @@ func StreamDeleteReplyHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteReplyEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +210,7 @@ func StreamDeleteReplyHandler(
 		}
 
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other delete reply error response: %s", possibleError.Message)
 		}
 
@@ -225,7 +225,7 @@ func StreamGetRepliesHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllRepliesEvent
-		err := json.JSON.Unmarshal(buf, &ev)
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
@@ -267,12 +267,12 @@ func StreamGetRepliesHandler(
 		}
 
 		var possibleError event.ErrorResponse
-		if _ = json.JSON.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
 			return nil, fmt.Errorf("unmarshal other delete reply error response: %s", possibleError.Message)
 		}
 
 		var repliesResp event.RepliesResponse
-		if err := json.JSON.Unmarshal(replyDataResp, &repliesResp); err != nil {
+		if err := json.Unmarshal(replyDataResp, &repliesResp); err != nil {
 			return nil, err
 		}
 		for _, reply := range repliesResp.Replies {

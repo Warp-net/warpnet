@@ -70,7 +70,7 @@ func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) 
 		AddParentId(tweet.Id).
 		Build()
 
-	data, err := json.JSON.Marshal(tweet)
+	data, err := json.Marshal(tweet)
 	if err != nil {
 		return fmt.Errorf("timeline marshal: %w", err)
 	}
@@ -118,7 +118,7 @@ func (repo *TimelineRepo) GetTimeline(userId string, limit *uint64, cursor *stri
 	tweets := make([]domain.Tweet, 0, len(items))
 	for _, item := range items {
 		var t domain.Tweet
-		err = json.JSON.Unmarshal(item.Value, &t)
+		err = json.Unmarshal(item.Value, &t)
 		if err != nil {
 			return nil, "", err
 		}

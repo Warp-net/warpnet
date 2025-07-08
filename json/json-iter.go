@@ -27,6 +27,25 @@ resulting from the use or misuse of this software.
 
 package json
 
-import jsoniter "github.com/json-iterator/go"
+import (
+	jsoniter "github.com/json-iterator/go"
+	"io"
+)
 
-var JSON = jsoniter.ConfigCompatibleWithStandardLibrary
+type RawMessage = jsoniter.RawMessage
+
+func Unmarshal(data []byte, v interface{}) error {
+	return jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(data, v)
+}
+
+func Marshal(v interface{}) ([]byte, error) {
+	return jsoniter.ConfigCompatibleWithStandardLibrary.Marshal(v)
+}
+
+func NewEncoder(w io.Writer) *jsoniter.Encoder {
+	return jsoniter.ConfigCompatibleWithStandardLibrary.NewEncoder(w)
+}
+
+func NewDecoder(r io.Reader) *jsoniter.Decoder {
+	return jsoniter.ConfigCompatibleWithStandardLibrary.NewDecoder(r)
+}

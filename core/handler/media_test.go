@@ -52,7 +52,7 @@ func TestUploadImage_Success(t *testing.T) {
 	ev := event.UploadImageEvent{
 		File: testImagePNG,
 	}
-	bt, err := json.JSON.Marshal(ev)
+	bt, err := json.Marshal(ev)
 	assert.NoError(t, err)
 
 	_, err = StreamUploadImageHandler(n{}, m{}, u{})(bt, s{})

@@ -31,8 +31,8 @@ import (
 	"context"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"time"
 )
@@ -67,7 +67,7 @@ func (g *bootstrapPubSub) PublishValidationRequest(bt []byte) (err error) {
 	}
 
 	msg := event.Message{
-		Body:        jsoniter.RawMessage(bt),
+		Body:        json.RawMessage(bt),
 		Destination: event.INTERNAL_POST_NODE_VALIDATE,
 		NodeId:      g.OwnerID(),
 		Timestamp:   time.Now(),

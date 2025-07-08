@@ -58,7 +58,7 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpne
 			panic("challenge handler called with nil file system")
 		}
 		var req event.GetChallengeEvent
-		err := json.JSON.Unmarshal(buf, &req)
+		err := json.Unmarshal(buf, &req)
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +93,7 @@ func StreamValidateHandler(svc AdminConsensusServicer) warpnet.WarpHandlerFunc {
 		}
 
 		var ev event.ValidationEvent
-		if err := json.JSON.Unmarshal(buf, &ev); err != nil {
+		if err := json.Unmarshal(buf, &ev); err != nil {
 			log.Errorf("pubsub: failed to decode user update message: %v %s", err, buf)
 			return nil, err
 		}
@@ -116,7 +116,7 @@ func StreamValidationResponseHandler(svc AdminConsensusServicer) warpnet.WarpHan
 		}
 
 		var ev event.ValidationResultEvent
-		if err := json.JSON.Unmarshal(data, &ev); err != nil {
+		if err := json.Unmarshal(data, &ev); err != nil {
 			log.Errorf("validation result handler: failed to decode validation result: %v %s", err, data)
 			return nil, err
 		}

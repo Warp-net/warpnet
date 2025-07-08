@@ -687,7 +687,7 @@ func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
 
 	var item BlocklistedItem
 	if len(bt) != 0 {
-		if err := json.JSON.Unmarshal(bt, &item); err != nil {
+		if err := json.Unmarshal(bt, &item); err != nil {
 			return err
 		}
 	}
@@ -707,7 +707,7 @@ func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
 		*item.Duration = ForeverBlockDuration
 	}
 
-	bt, err = json.JSON.Marshal(item)
+	bt, err = json.Marshal(item)
 	if err != nil {
 		return err
 	}
@@ -785,14 +785,14 @@ func (d *NodeRepo) AddSelfHash(selfHashHex, version string) error {
 
 	var item = make(map[string]struct{})
 	if len(bt) != 0 {
-		if err := json.JSON.Unmarshal(bt, &item); err != nil {
+		if err := json.Unmarshal(bt, &item); err != nil {
 			return err
 		}
 	}
 
 	item[selfHashHex] = struct{}{}
 
-	bt, err = json.JSON.Marshal(item)
+	bt, err = json.Marshal(item)
 	if err != nil {
 		return err
 	}
@@ -880,7 +880,7 @@ func (d *NodeRepo) ValidateSelfHash(ev event.ValidationEvent) error {
 
 	itemsHashes := make(map[string]struct{})
 	for _, item := range items {
-		if err := json.JSON.Unmarshal(item.Value, &itemsHashes); err != nil {
+		if err := json.Unmarshal(item.Value, &itemsHashes); err != nil {
 			return err
 		}
 	}
@@ -916,7 +916,7 @@ func (d *NodeRepo) GetSelfHashes() (map[string]struct{}, error) {
 
 	allVersionsHashes := make(map[string]struct{})
 	for _, item := range items {
-		if err := json.JSON.Unmarshal(item.Value, &allVersionsHashes); err != nil {
+		if err := json.Unmarshal(item.Value, &allVersionsHashes); err != nil {
 			return nil, err
 		}
 	}

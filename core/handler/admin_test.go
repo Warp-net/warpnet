@@ -35,7 +35,7 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		Nonce:     nonce,
 	}
 
-	bt, err := json.JSON.Marshal(ev)
+	bt, err := json.Marshal(ev)
 	if err != nil {
 		t.Fatalf("failed to marshal challenge: %v", err)
 	}

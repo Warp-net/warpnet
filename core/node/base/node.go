@@ -267,7 +267,7 @@ func (n *WarpNode) trackIncomingEvents() {
 				)
 			}
 		default:
-			bt, _ := json.JSON.Marshal(ev)
+			bt, _ := json.Marshal(ev)
 			log.Infof("node: event: %T %s", ev, bt)
 		}
 	}
@@ -329,7 +329,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 
 	bt, ok := data.([]byte)
 	if !ok {
-		bt, err = json.JSON.Marshal(data)
+		bt, err = json.Marshal(data)
 		if err != nil {
 			return nil, fmt.Errorf("node: selfstream: marshal data %v %s", err, data)
 		}
@@ -365,7 +365,7 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		var ok bool
 		bt, ok = data.([]byte)
 		if !ok {
-			bt, err = json.JSON.Marshal(data)
+			bt, err = json.Marshal(data)
 			if err != nil {
 				return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
 			}

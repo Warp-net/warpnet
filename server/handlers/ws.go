@@ -36,7 +36,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/server/websocket"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo/v4"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -93,7 +92,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 		wsMsg    event.Message
 		response event.Message
 	)
-	if err := json.JSON.Unmarshal(msg, &wsMsg); err != nil {
+	if err := json.Unmarshal(msg, &wsMsg); err != nil {
 		return nil, err
 	}
 	if wsMsg.MessageId == "" {
@@ -108,7 +107,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 	switch wsMsg.Destination {
 	case event.PRIVATE_POST_LOGIN:
 		var ev event.LoginEvent
-		err = json.JSON.Unmarshal(wsMsg.Body, &ev)
+		err = json.Unmarshal(wsMsg.Body, &ev)
 		if err != nil {
 			log.Errorf("websocket: message body as login event: %v %s", err, wsMsg.Body)
 			response = newErrorResp(err.Error())
@@ -122,12 +121,12 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 		}
 		c.upgrader.SetNewSalt(loginResp.Identity.Token) // make conn more secure after successful auth
 
-		bt, err := json.JSON.Marshal(loginResp)
+		bt, err := json.Marshal(loginResp)
 		if err != nil {
 			log.Errorf("websocket: login FromLoginResponse: %v", err)
 			break
 		}
-		msgBody := jsoniter.RawMessage(bt)
+		msgBody := json.RawMessage(bt)
 		response.Body = msgBody
 	case event.PRIVATE_POST_LOGOUT:
 		defer c.upgrader.Close()
@@ -160,7 +159,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 			response = newErrorResp(err.Error())
 			break
 		}
-		msgBody := jsoniter.RawMessage(respData)
+		msgBody := json.RawMessage(respData)
 		response.Body = msgBody
 	}
 	if response.Body == nil {
@@ -175,7 +174,7 @@ func (c *WSController) handle(msg []byte) (_ []byte, err error) {
 	response.Version = config.Config().Version.String()
 
 	var buffer bytes.Buffer
-	err = json.JSON.NewEncoder(&buffer).Encode(response)
+	err = json.NewEncoder(&buffer).Encode(response)
 	return buffer.Bytes(), nil
 }
 
@@ -185,8 +184,8 @@ func newErrorResp(message string) event.Message {
 		Message: message,
 	}
 
-	bt, _ := json.JSON.Marshal(errResp)
-	msgBody := jsoniter.RawMessage(bt)
+	bt, _ := json.Marshal(errResp)
+	msgBody := json.RawMessage(bt)
 	resp := event.Message{
 		Body: msgBody,
 	}

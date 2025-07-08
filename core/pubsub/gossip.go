@@ -390,7 +390,7 @@ func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
 		}
 		msg.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(g.privKey, msg.Body))
 
-		data, err := json.JSON.Marshal(msg)
+		data, err := json.Marshal(msg)
 		if err != nil {
 			log.Errorf("gossip: failed to marshal owner update message: %v", err)
 			return err
@@ -410,7 +410,7 @@ func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
 
 func (g *gossip) selfStream(data []byte) error {
 	var simulatedStreamMessage event.Message
-	if err := json.JSON.Unmarshal(data, &simulatedStreamMessage); err != nil {
+	if err := json.Unmarshal(data, &simulatedStreamMessage); err != nil {
 		log.Errorf("pubsub: failed to decode user update message: %v %s", err, data)
 		return err
 	}
