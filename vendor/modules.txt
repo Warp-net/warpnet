@@ -15,7 +15,7 @@ github.com/Jorropo/jsync
 # github.com/Masterminds/semver/v3 v3.4.0
 ## explicit; go 1.21
 github.com/Masterminds/semver/v3
-# github.com/Warp-net/warpnet-frontend v0.0.578
+# github.com/Warp-net/warpnet-frontend v0.0.587
 ## explicit; go 1.24.0
 github.com/Warp-net/warpnet-frontend
 # github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b
@@ -36,6 +36,9 @@ github.com/benbjohnson/clock
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
+# github.com/bep/debounce v1.2.1
+## explicit
+github.com/bep/debounce
 # github.com/blang/semver/v4 v4.0.0
 ## explicit; go 1.14
 github.com/blang/semver/v4
@@ -680,6 +683,14 @@ github.com/jbenet/go-temp-err-catcher
 # github.com/jbenet/goprocess v0.1.4
 ## explicit; go 1.12
 github.com/jbenet/goprocess
+# github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e
+## explicit; go 1.14
+github.com/jchv/go-winloader
+github.com/jchv/go-winloader/internal/loader
+github.com/jchv/go-winloader/internal/memloader
+github.com/jchv/go-winloader/internal/pe
+github.com/jchv/go-winloader/internal/vmem
+github.com/jchv/go-winloader/internal/winloader
 # github.com/josharian/intern v1.0.0
 ## explicit; go 1.5
 github.com/josharian/intern
@@ -719,6 +730,19 @@ github.com/labstack/echo/v4/middleware
 github.com/labstack/gommon/bytes
 github.com/labstack/gommon/color
 github.com/labstack/gommon/log
+# github.com/leaanthony/go-ansi-parser v1.6.1
+## explicit; go 1.16
+github.com/leaanthony/go-ansi-parser
+# github.com/leaanthony/gosod v1.0.4
+## explicit; go 1.18
+github.com/leaanthony/gosod
+github.com/leaanthony/gosod/internal/templatedir
+# github.com/leaanthony/slicer v1.6.0
+## explicit; go 1.13
+github.com/leaanthony/slicer
+# github.com/leaanthony/u v1.1.1
+## explicit; go 1.21
+github.com/leaanthony/u
 # github.com/libdns/libdns v0.2.2
 ## explicit; go 1.18
 github.com/libdns/libdns
@@ -1238,17 +1262,21 @@ github.com/quic-go/webtransport-go
 # github.com/raulk/go-watchdog v1.3.0
 ## explicit; go 1.15
 github.com/raulk/go-watchdog
+# github.com/rivo/uniseg v0.4.7
+## explicit; go 1.18
+github.com/rivo/uniseg
 # github.com/rogpeppe/go-internal v1.13.1
 ## explicit; go 1.22
 github.com/rogpeppe/go-internal/fmtsort
 # github.com/sagikazarmark/locafero v0.9.0
 ## explicit; go 1.23.0
 github.com/sagikazarmark/locafero
-# github.com/samber/lo v1.47.0
+# github.com/samber/lo v1.49.1
 ## explicit; go 1.18
 github.com/samber/lo
 github.com/samber/lo/internal/constraints
 github.com/samber/lo/internal/rand
+github.com/samber/lo/mutable
 # github.com/shirou/gopsutil/v3 v3.24.5
 ## explicit; go 1.18
 github.com/shirou/gopsutil/v3/common
@@ -1319,6 +1347,9 @@ github.com/tklauser/go-sysconf
 # github.com/tklauser/numcpus v0.10.0
 ## explicit; go 1.23.0
 github.com/tklauser/numcpus
+# github.com/tkrajina/go-reflector v0.5.8
+## explicit; go 1.17
+github.com/tkrajina/go-reflector/reflector
 # github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80
 ## explicit
 github.com/tomnomnom/linkheader
@@ -1342,6 +1373,59 @@ github.com/vmihailenco/msgpack/v5/msgpcode
 github.com/vmihailenco/tagparser/v2
 github.com/vmihailenco/tagparser/v2/internal
 github.com/vmihailenco/tagparser/v2/internal/parser
+# github.com/wailsapp/go-webview2 v1.0.19
+## explicit; go 1.20
+github.com/wailsapp/go-webview2/internal/w32
+github.com/wailsapp/go-webview2/pkg/combridge
+github.com/wailsapp/go-webview2/pkg/edge
+github.com/wailsapp/go-webview2/webviewloader
+# github.com/wailsapp/mimetype v1.4.1
+## explicit; go 1.12
+github.com/wailsapp/mimetype
+github.com/wailsapp/mimetype/internal/charset
+github.com/wailsapp/mimetype/internal/json
+github.com/wailsapp/mimetype/internal/magic
+# github.com/wailsapp/wails/v2 v2.10.2
+## explicit; go 1.22.0
+github.com/wailsapp/wails/v2
+github.com/wailsapp/wails/v2/internal/app
+github.com/wailsapp/wails/v2/internal/binding
+github.com/wailsapp/wails/v2/internal/frontend
+github.com/wailsapp/wails/v2/internal/frontend/desktop
+github.com/wailsapp/wails/v2/internal/frontend/desktop/darwin
+github.com/wailsapp/wails/v2/internal/frontend/desktop/linux
+github.com/wailsapp/wails/v2/internal/frontend/desktop/windows
+github.com/wailsapp/wails/v2/internal/frontend/desktop/windows/win32
+github.com/wailsapp/wails/v2/internal/frontend/desktop/windows/winc
+github.com/wailsapp/wails/v2/internal/frontend/desktop/windows/winc/w32
+github.com/wailsapp/wails/v2/internal/frontend/devserver
+github.com/wailsapp/wails/v2/internal/frontend/dispatcher
+github.com/wailsapp/wails/v2/internal/frontend/runtime
+github.com/wailsapp/wails/v2/internal/frontend/runtime/wrapper
+github.com/wailsapp/wails/v2/internal/fs
+github.com/wailsapp/wails/v2/internal/go-common-file-dialog/cfd
+github.com/wailsapp/wails/v2/internal/goversion
+github.com/wailsapp/wails/v2/internal/logger
+github.com/wailsapp/wails/v2/internal/menumanager
+github.com/wailsapp/wails/v2/internal/project
+github.com/wailsapp/wails/v2/internal/shell
+github.com/wailsapp/wails/v2/internal/signal
+github.com/wailsapp/wails/v2/internal/system/operatingsystem
+github.com/wailsapp/wails/v2/internal/typescriptify
+github.com/wailsapp/wails/v2/internal/webview2runtime
+github.com/wailsapp/wails/v2/internal/wv2installer
+github.com/wailsapp/wails/v2/pkg/application
+github.com/wailsapp/wails/v2/pkg/assetserver
+github.com/wailsapp/wails/v2/pkg/assetserver/webview
+github.com/wailsapp/wails/v2/pkg/logger
+github.com/wailsapp/wails/v2/pkg/menu
+github.com/wailsapp/wails/v2/pkg/menu/keys
+github.com/wailsapp/wails/v2/pkg/options
+github.com/wailsapp/wails/v2/pkg/options/assetserver
+github.com/wailsapp/wails/v2/pkg/options/linux
+github.com/wailsapp/wails/v2/pkg/options/mac
+github.com/wailsapp/wails/v2/pkg/options/windows
+github.com/wailsapp/wails/v2/pkg/runtime
 # github.com/whyrusleeping/base32 v0.0.0-20170828182744-c30ac30633cc
 ## explicit
 github.com/whyrusleeping/base32

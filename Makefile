@@ -35,3 +35,5 @@ build-macos:
 	GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet-darwin cmd/node/member/main.go
 	chmod +x warpnet-darwin
 
+gui:
+	go run -tags="wails production desktop webkit2_41" cmd/wails/main.go

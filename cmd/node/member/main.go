@@ -30,7 +30,6 @@ import (
 	"errors"
 	"fmt"
 	root "github.com/Warp-net/warpnet"
-	frontend "github.com/Warp-net/warpnet-frontend"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/node/client"
 	"github.com/Warp-net/warpnet/core/node/member"
@@ -137,10 +136,9 @@ func main() {
 
 	authService := auth.NewAuthService(authRepo, userRepo, interruptChan, readyChan)
 	wsCtrl := handlers.NewWSController(authService, clientNode)
-	staticCtrl := handlers.NewStaticController(db.IsFirstRun(), frontend.GetStaticEmbedded())
 
 	interfaceServer.RegisterHandlers(&API{
-		staticCtrl,
+		nil,
 		wsCtrl,
 	})
 	defer interfaceServer.Shutdown(ctx)
