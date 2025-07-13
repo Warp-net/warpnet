@@ -24,7 +24,7 @@ go.work.sum
 
 # env file
 .env
-
+cmd/node/member/build/bin/**
 var
 *.tmp
 *.gguf

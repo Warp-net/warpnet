@@ -31,7 +31,7 @@ func main() {
 	app := NewApp()
 
 	err = wails.Run(&options.App{
-		Title:  "Warpnet",
+		Title:  "warpnet",
 		Width:  1280,
 		Height: 1024,
 		AssetServer: &assetserver.Options{
@@ -39,6 +39,7 @@ func main() {
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
+		OnShutdown:       app.close,
 		Bind: []interface{}{
 			app,
 		},

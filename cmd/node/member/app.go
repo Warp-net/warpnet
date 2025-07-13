@@ -76,7 +76,7 @@ func (a *App) startup(ctx context.Context) {
 
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
-		fmt.Printf("failed to get codebase hash: %v", err)
+		fmt.Printf("failed to get codebase hash: %v \n", err)
 		os.Exit(1)
 		return
 	}
@@ -84,7 +84,7 @@ func (a *App) startup(ctx context.Context) {
 
 	db, err := local.New(config.Config().Database.Path, false)
 	if err != nil {
-		fmt.Printf("failed to init db: %v", err)
+		fmt.Printf("failed to init db: %v \n", err)
 		os.Exit(1)
 		return
 	}
@@ -133,19 +133,19 @@ func (a *App) runNode(psk security.PSK) {
 	)
 	if err != nil {
 		a.mx.Unlock()
-		fmt.Printf("failed to init node: %v", err)
+		fmt.Printf("failed to init node: %v \n", err)
 		return
 	}
 	a.mx.Unlock()
 
 	if err != nil {
-		fmt.Printf("failed to init node: %v", err)
+		fmt.Printf("failed to init node: %v \n", err)
 		return
 	}
 
 	err = a.node.Start()
 	if err != nil {
-		fmt.Printf("failed to start member node: %v", err)
+		fmt.Printf("failed to start member node: %v \n", err)
 		return
 	}
 
@@ -167,11 +167,11 @@ type AppMessage struct {
 func (a *App) Call(request AppMessage) (response AppMessage) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("method Call crashed: %v", r)
+			fmt.Printf("method Call crashed: %v \n", r)
 		}
 	}()
 	if a == nil || a.auth == nil {
-		fmt.Printf("app not initialized")
+		fmt.Println("app not initialized")
 		response.Body = newErrorResp("internal app not ready")
 		return response
 	}
@@ -182,12 +182,12 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 	response.Version = "0.0.0"
 
 	if request.MessageId == "" {
-		fmt.Printf("message id is empty")
+		fmt.Println("message id is empty")
 		response.Body = newErrorResp("message id is empty")
 		return response
 	}
 	if request.Body == nil {
-		fmt.Printf("message body is empty")
+		fmt.Println("message body is empty")
 		response.Body = newErrorResp("message body is empty")
 		return response
 
@@ -198,7 +198,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		var ev event.LoginEvent
 		err := json.Unmarshal(request.Body, &ev)
 		if err != nil {
-			fmt.Printf("message body as login event: %v %s", err, request.Body)
+			fmt.Printf("message body as login event: %v %s \n", err, request.Body)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
@@ -206,20 +206,20 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		var loginResp event.LoginResponse
 		loginResp, err = a.auth.AuthLogin(ev)
 		if err != nil {
-			fmt.Printf("auth: %v", err)
+			fmt.Printf("auth: %v \n", err)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
 
 		bt, err := json.Marshal(loginResp)
 		if err != nil {
-			fmt.Printf("login resp marshal: %v", err)
+			fmt.Printf("login resp marshal: %v \n", err)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.close()
+		a.close(a.ctx)
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	default:
@@ -234,7 +234,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		a.mx.RUnlock()
 
 		if request.Path == "" {
-			fmt.Printf("message destination is empty")
+			fmt.Println("message destination is empty")
 			response.Body = newErrorResp("response destination is empty")
 			return response
 		}
@@ -244,14 +244,14 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 
 		respData, err := a.node.SelfStream(stream.WarpRoute(request.Path), request.Body)
 		if err != nil {
-			fmt.Printf("send stream: %v", err)
+			fmt.Printf("send stream: %v \n", err)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
 		response.Body = respData
 	}
 	if response.Body == nil {
-		fmt.Printf("response body is empty")
+		fmt.Println("response body is empty")
 		response.Body = newErrorResp("response body is empty")
 		return response
 	}
@@ -268,7 +268,7 @@ func newErrorResp(msg string) stdjson.RawMessage {
 	return bt
 }
 
-func (a *App) close() {
+func (a *App) close(_ context.Context) {
 	defer func() { recover() }()
 
 	a.db.Close()
