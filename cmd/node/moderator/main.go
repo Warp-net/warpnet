@@ -86,7 +86,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex, interruptChan)
+	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init moderator node: %v", err)
 	}

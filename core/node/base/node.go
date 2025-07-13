@@ -35,7 +35,6 @@ import (
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	event2 "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/cockroachdb/errors"
 	"github.com/libp2p/go-libp2p"
@@ -175,13 +174,7 @@ func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 	unwrapMw := n.mw.UnwrapStreamMiddleware
 
 	for _, h := range handlers {
-
 		streamHandler := logMw(authMw(unwrapMw(h.Handler)))
-
-		if strings.HasPrefix(string(h.Path), event2.InternalRoutePrefix) {
-			n.internalHandlers[h.Path] = streamHandler
-			continue
-		}
 
 		if !h.IsValid() {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
@@ -316,7 +309,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
 		return nil, errors.Errorf(
-			"node: selfstream: no handler for path %s, avaiable %v",
+			"node: selfstream: no handler for path %s, avaiable %v \n",
 			path, n.internalHandlers,
 		)
 	}

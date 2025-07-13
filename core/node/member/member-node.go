@@ -49,7 +49,6 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
-	"os"
 	"time"
 )
 
@@ -83,7 +82,6 @@ func NewMemberNode(
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
-	interruptChan chan os.Signal,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
 		return nil, errors.New("private key is required")
@@ -185,7 +183,7 @@ func NewMemberNode(
 	}
 
 	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, interruptChan,
+		ctx, pubsubService,
 		nodeRepo.ValidateSelfHash,
 		userRepo.ValidateUserID,
 	)

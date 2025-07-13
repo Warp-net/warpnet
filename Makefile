@@ -2,7 +2,7 @@ kill:
 	pkill -9 main
 
 run-member:
-	go run cmd/node/member/main.go --node.network testnet
+	 cd cmd/node/member && wails build -tags webkit2_41 && ./build/bin/Warpnet --node.network testnet
 
 second-member:
 	go run cmd/node/member/main.go --database.dir storage2 --node.port 4021 --server.port 4022 --node.network testnet

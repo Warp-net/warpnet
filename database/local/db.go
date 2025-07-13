@@ -755,7 +755,6 @@ func (db *DB) Close() {
 		return
 	}
 	log.Infoln("closing database...")
-	close(db.stopChan)
 	if db.sequence != nil {
 		_ = db.sequence.Release()
 	}
@@ -765,6 +764,7 @@ func (db *DB) Close() {
 	if !db.isRunning.Load() {
 		return
 	}
+	close(db.stopChan)
 
 	_ = db.Sync()
 	if err := db.badger.Close(); err != nil {
