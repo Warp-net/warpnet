@@ -33,7 +33,7 @@ builds:
     hooks:
       pre: |
         go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
-        wails build -platform $GOOS/$GOARCH -clean
+        wails build -platform darwin/{{ .Arch }} -clean
 
   # Windows
   - id: member-windows
