@@ -180,6 +180,7 @@ func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
 		}
 		n.node.SetStreamHandler(h.Path, streamHandler)
+		n.internalHandlers[h.Path] = streamHandler
 	}
 }
 
