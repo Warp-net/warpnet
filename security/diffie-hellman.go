@@ -50,6 +50,7 @@ type DiffieHellmanEncrypter struct {
 	group      *dhkx.DHGroup
 }
 
+// NewDiffieHellmanEncrypter deprecated
 func NewDiffieHellmanEncrypter() (*DiffieHellmanEncrypter, error) {
 	group, err := dhkx.GetGroup(0) // Default group (2048 bits)
 	if err != nil {
