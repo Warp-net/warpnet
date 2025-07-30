@@ -45,7 +45,6 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
-	"os"
 )
 
 type BootstrapNode struct {
@@ -67,7 +66,6 @@ func NewBootstrapNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	selfHashHex string,
-	interruptChan chan os.Signal,
 ) (_ *BootstrapNode, err error) {
 	if len(privKey) == 0 {
 		return nil, errors.New("private key is required")
@@ -135,7 +133,7 @@ func NewBootstrapNode(
 	}
 
 	bn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, interruptChan, func(ev event.ValidationEvent) error {
+		ctx, pubsubService, func(ev event.ValidationEvent) error {
 			if len(selfHashHex) == 0 {
 				return errors.New("empty codebase hash")
 			}
