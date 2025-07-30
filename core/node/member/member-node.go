@@ -43,7 +43,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
@@ -369,11 +368,6 @@ func (m *MemberNode) setupHandlers(
 	chatRepo := database.NewChatRepo(db)
 	mediaRepo := database.NewMediaRepo(db)
 
-	authNodeInfo := domain.AuthNodeInfo{
-		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
-		NodeInfo: m.NodeInfo(),
-	}
-
 	m.node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
 			{
@@ -395,10 +389,6 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PRIVATE_GET_STATS,
 				handler.StreamGetStatsHandler(m, db),
-			},
-			{
-				event.PRIVATE_POST_PAIR,
-				handler.StreamNodesPairingHandler(authNodeInfo),
 			},
 			{
 				event.PRIVATE_GET_TIMELINE,

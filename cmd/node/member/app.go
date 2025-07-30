@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
-	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/auth"
@@ -17,6 +16,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 	"sync"
@@ -76,7 +76,7 @@ func (a *App) startup(ctx context.Context) {
 
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
-		fmt.Printf("failed to get codebase hash: %v \n", err)
+		log.Errorf("failed to get codebase hash: %v \n", err)
 		os.Exit(1)
 		return
 	}
@@ -84,7 +84,7 @@ func (a *App) startup(ctx context.Context) {
 
 	db, err := local.New(config.Config().Database.Path, false)
 	if err != nil {
-		fmt.Printf("failed to init db: %v \n", err)
+		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)
 		return
 	}
@@ -99,7 +99,7 @@ func (a *App) startup(ctx context.Context) {
 	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
-		fmt.Println("failed:", err)
+		log.Errorf("failed:", err)
 		return
 	}
 
@@ -115,10 +115,10 @@ func (a *App) runNode(psk security.PSK) {
 	// wait DB auth
 	select {
 	case <-a.ctx.Done():
-		fmt.Println("interrupted...")
+		log.Infoln("interrupted...")
 		return
 	case serverNodeAuthInfo = <-a.readyChan:
-		fmt.Println("database authentication passes")
+		log.Infoln("database authentication passed")
 	}
 
 	a.mx.Lock()
@@ -133,19 +133,19 @@ func (a *App) runNode(psk security.PSK) {
 	)
 	if err != nil {
 		a.mx.Unlock()
-		fmt.Printf("failed to init node: %v \n", err)
+		log.Errorf("failed to init node: %v \n", err)
 		return
 	}
 	a.mx.Unlock()
 
 	if err != nil {
-		fmt.Printf("failed to init node: %v \n", err)
+		log.Errorf("failed to init node: %v \n", err)
 		return
 	}
 
 	err = a.node.Start()
 	if err != nil {
-		fmt.Printf("failed to start member node: %v \n", err)
+		log.Errorf("failed to start member node: %v \n", err)
 		return
 	}
 
@@ -167,11 +167,11 @@ type AppMessage struct {
 func (a *App) Call(request AppMessage) (response AppMessage) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("method Call crashed: %v \n", r)
+			log.Errorf("method Call crashed: %v \n", r)
 		}
 	}()
 	if a == nil || a.auth == nil {
-		fmt.Println("app not initialized")
+		log.Errorln("app not initialized")
 		response.Body = newErrorResp("internal app not ready")
 		return response
 	}
@@ -182,12 +182,12 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 	response.Version = "0.0.0"
 
 	if request.MessageId == "" {
-		fmt.Println("message id is empty")
+		log.Errorln("message id is empty")
 		response.Body = newErrorResp("message id is empty")
 		return response
 	}
 	if request.Body == nil {
-		fmt.Println("message body is empty")
+		log.Errorln("message body is empty")
 		response.Body = newErrorResp("message body is empty")
 		return response
 
@@ -198,7 +198,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		var ev event.LoginEvent
 		err := json.Unmarshal(request.Body, &ev)
 		if err != nil {
-			fmt.Printf("message body as login event: %v %s \n", err, request.Body)
+			log.Errorf("message body as login event: %v %s \n", err, request.Body)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
@@ -206,14 +206,14 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		var loginResp event.LoginResponse
 		loginResp, err = a.auth.AuthLogin(ev)
 		if err != nil {
-			fmt.Printf("auth: %v \n", err)
+			log.Errorf("auth: %v \n", err)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
 
 		bt, err := json.Marshal(loginResp)
 		if err != nil {
-			fmt.Printf("login resp marshal: %v \n", err)
+			log.Errorf("login resp marshal: %v \n", err)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
@@ -226,15 +226,14 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		a.mx.RLock()
 		if a.node == nil {
 			a.mx.RUnlock()
-			err := fmt.Errorf("not attached to server node")
-			fmt.Println(err)
-			response.Body = newErrorResp(err.Error())
+			log.Errorln("not attached server node")
+			response.Body = newErrorResp("not attached server node")
 			return response
 		}
 		a.mx.RUnlock()
 
 		if request.Path == "" {
-			fmt.Println("message destination is empty")
+			log.Errorln("message destination is empty")
 			response.Body = newErrorResp("response destination is empty")
 			return response
 		}
@@ -244,14 +243,14 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 
 		respData, err := a.node.SelfStream(stream.WarpRoute(request.Path), request.Body)
 		if err != nil {
-			fmt.Printf("send stream: %v \n", err)
+			log.Errorf("send stream: %v \n", err)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
 		response.Body = respData
 	}
 	if response.Body == nil {
-		fmt.Println("response body is empty")
+		log.Errorln("response body is empty")
 		response.Body = newErrorResp("response body is empty")
 		return response
 	}

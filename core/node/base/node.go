@@ -129,7 +129,7 @@ func NewWarpNode(
 		startTime:        time.Now(),
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
-		mw:               middleware.NewWarpMiddleware(),
+		mw:               middleware.NewWarpMiddleware(node.ID()),
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 	}
 
