@@ -16,6 +16,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
@@ -240,8 +241,20 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 
 		nodeId := a.node.NodeInfo().ID.String()
 		response.NodeId = nodeId
+		ts, _ := time.Parse(time.RFC3339, request.Timestamp)
 
-		respData, err := a.node.SelfStream(stream.WarpRoute(request.Path), request.Body)
+		respData, err := a.node.SelfStream(
+			stream.WarpRoute(request.Path),
+			event.Message{
+				Body:        jsoniter.RawMessage(request.Body),
+				MessageId:   request.MessageId,
+				NodeId:      request.NodeId,
+				Destination: request.Path,
+				Timestamp:   ts,
+				Version:     request.Version,
+				Signature:   request.Signature,
+			},
+		)
 		if err != nil {
 			log.Errorf("send stream: %v \n", err)
 			response.Body = newErrorResp(err.Error())

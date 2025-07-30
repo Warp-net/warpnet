@@ -121,7 +121,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 
 		var msg event.Message
 		if err := json.Unmarshal(data, &msg); err != nil || msg.MessageId == "" {
-			log.Errorf("middleware: auth: unmarshaling data: %s %v", data, err)
+			log.Errorf("middleware: auth: unmarshaling data: %s %s %v", route, data, err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
