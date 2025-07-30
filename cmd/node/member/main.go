@@ -4,6 +4,7 @@ import (
 	"fmt"
 	frontend "github.com/Warp-net/warpnet-frontend"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/google/uuid"
 	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
 	"github.com/wailsapp/wails/v2"
@@ -31,15 +32,22 @@ func main() {
 	app := NewApp()
 
 	err = wails.Run(&options.App{
-		Title:  "warpnet",
-		Width:  1280,
-		Height: 1024,
+		Title:            "warpnet",
+		Width:            1024,
+		Height:           1024,
+		WindowStartState: options.Maximised,
 		AssetServer: &assetserver.Options{
 			Assets: frontend.GetStaticEmbedded(),
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
 		OnShutdown:       app.close,
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: uuid.New().String(),
+			OnSecondInstanceLaunch: func(_ options.SecondInstanceData) {
+				panic("second instance launched")
+			},
+		},
 		Bind: []interface{}{
 			app,
 		},
