@@ -100,7 +100,7 @@ func (a *App) startup(ctx context.Context) {
 	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
-		log.Errorf("failed:", err)
+		log.Errorf("failed: %v", err)
 		return
 	}
 
@@ -284,6 +284,8 @@ func newErrorResp(msg string) stdjson.RawMessage {
 
 func (a *App) close(_ context.Context) {
 	defer func() { recover() }()
+
+	log.Infoln("closing app...")
 
 	a.db.Close()
 	a.node.Stop()

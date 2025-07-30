@@ -6,7 +6,7 @@ replace github.com/armon/go-metrics => github.com/armon/go-metrics v0.4.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/Warp-net/warpnet-frontend v0.0.598
+	github.com/Warp-net/warpnet-frontend v0.0.599
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
