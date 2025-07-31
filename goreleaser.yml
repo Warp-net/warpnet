@@ -10,7 +10,6 @@ builds:
     goos: [linux]
     goarch: [ amd64 ]
     flags:
-#      - -mod=vendor
       - -tags=webkit2_41
     ldflags:
       - -s -w
@@ -19,34 +18,30 @@ builds:
         sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -platform linux/amd64 -clean'
 
   # macOS
-  - id: member-macos
-    main: ./cmd/node/member/
-    binary: member
-    env: [ CGO_ENABLED=1, GOPROXY=off, GOSUMDB=off ]
-    goos: [darwin]
-    goarch: [amd64, arm64]
-    flags:
-#      - -mod=vendor
-    ldflags:
-      - -s -w
-    hooks:
-      pre: |
-        (cd cmd/node/member && wails build -platform darwin/{{ .Arch }} -clean)
+#  - id: member-macos
+#    main: ./cmd/node/member/
+#    binary: member
+#    env: [ CGO_ENABLED=1, GOPROXY=off, GOSUMDB=off ]
+#    goos: [darwin]
+#    goarch: [amd64, arm64]
+#    ldflags:
+#      - -s -w
+#    hooks:
+#      pre: |
+#        (cd cmd/node/member && wails build -platform darwin/{{ .Arch }} -clean)
 
   # Windows
-  - id: member-windows
-    main: ./cmd/node/member/
-    binary: member
-    env: [ CGO_ENABLED=1, GOPROXY=off, GOSUMDB=off ]
-    goos: [windows]
-    goarch: [amd64]
-    flags:
-#      - -mod=vendor
-    ldflags:
-      - -s -w
-    hooks:
-      pre: |
-        (cd cmd/node/member && wails build -platform windows/amd64 -clean)
+#  - id: member-windows
+#    main: ./cmd/node/member/
+#    binary: member
+#    env: [ CGO_ENABLED=1, GOPROXY=off, GOSUMDB=off ]
+#    goos: [windows]
+#    goarch: [amd64]
+#    ldflags:
+#      - -s -w
+#    hooks:
+#      pre: |
+#        (cd cmd/node/member && wails build -platform windows/amd64 -clean)
 
 release:
   github:
