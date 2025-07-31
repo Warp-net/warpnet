@@ -6,11 +6,11 @@ builds:
   - id: member-linux
     main: ./cmd/node/member/
     binary: member
-    env: [ CGO_ENABLED=1, GOPROXY=off, GOSUMDB=off ]
+    env: [ CGO_ENABLED=1 ]
     goos: [linux]
     goarch: [ amd64 ]
     flags:
-#      - -mod=vendor
+      - -mod=vendor
       - -tags=webkit2_41
     ldflags:
       - -s -w
