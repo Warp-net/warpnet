@@ -16,7 +16,7 @@ builds:
       - -s -w
     hooks:
       pre: |
-        (cd cmd/node/member && wails build -tags webkit2_41 -platform linux/amd64 -clean)
+        sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -platform linux/amd64 -clean'
 
   # macOS
   - id: member-macos
