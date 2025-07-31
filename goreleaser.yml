@@ -16,7 +16,7 @@ builds:
       - -s -w
     hooks:
       pre: |
-        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        go install github.com/wailsapp/wails/v2/cmd/wails &&
         wails build -tags webkit2_41 -platform linux/amd64 -clean
 
   # macOS
@@ -32,7 +32,7 @@ builds:
       - -s -w
     hooks:
       pre: |
-        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        go install github.com/wailsapp/wails/v2/cmd/wails &&
         wails build -platform darwin/{{ .Arch }} -clean
 
   # Windows
@@ -49,7 +49,7 @@ builds:
     hooks:
 
       pre: |
-        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        go install github.com/wailsapp/wails/v2/cmd/wails &&
         wails build -platform windows/amd64 -clean
 
 
