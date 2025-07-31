@@ -14,7 +14,7 @@ builds:
       - -s -w
     hooks:
       pre: |
-        sh -c 'cd cmd/node/member && wails build -platform windows/amd64 -clean -webview2 embed'
+        sh -c 'cd cmd/node/member && wails build -platform windows/amd64 -clean -webview2 download'
 
 release:
   github:
