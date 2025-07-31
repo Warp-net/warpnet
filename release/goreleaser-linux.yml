@@ -2,7 +2,6 @@ project_name: warpnet
 version: 2
 
 builds:
-  # Linux
   - id: member-linux
     main: ./cmd/node/member/
     binary: member
@@ -18,19 +17,6 @@ builds:
       pre: |
         sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -platform linux/amd64 -clean'
 
-  # macOS
-#  - id: member-macos
-#    main: ./cmd/node/member/
-#    binary: member
-#    env: [ CGO_ENABLED=1 ]
-#    goos: [darwin]
-#    goarch: [amd64, arm64]
-#    ldflags:
-#      - -mod=vendor
-#      - -s -w
-#    hooks:
-#      pre: |
-#        (cd cmd/node/member && wails build -platform darwin/{{ .Arch }} -clean)
 
   # Windows
 #  - id: member-windows

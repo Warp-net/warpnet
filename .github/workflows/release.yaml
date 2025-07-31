@@ -41,39 +41,39 @@ jobs:
         with:
           distribution: goreleaser
           version: "latest"
-          args: release --clean
+          args: release --clean --config release/goreleaser-linux.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-#  macos:
-#    runs-on: macos-14
-#    permissions:
-#      packages: write
-#      contents: write
-#      pull-requests: write
-#      repository-projects: write
-#    steps:
-#      - uses: actions/checkout@v4
-#        with:
-#          fetch-depth: 0
-#          fetch-tags: true
-#
-#      - uses: actions/setup-go@v5
-#        with:
-#          go-version: ${{ env.GO_VERSION }}
-#
-#      - run: brew install gtk+3 webkit2gtk pkg-config
-#      - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
-#      - run: echo "$HOME/go/bin" >> $GITHUB_PATH
-#
-#      - uses: goreleaser/goreleaser-action@v6
-#        with:
-#          distribution: goreleaser
-#          version: "latest"
-#          args: release --clean --id=member-macos --single-target
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#
+  macos:
+    runs-on: macos-14
+    permissions:
+      packages: write
+      contents: write
+      pull-requests: write
+      repository-projects: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - run: brew install gtk+3 webkit2gtk pkg-config
+      - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+      - run: echo "$HOME/go/bin" >> $GITHUB_PATH
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "latest"
+          args: release --clean --config release/goreleaser-darwin.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 #  windows:
 #    runs-on: windows-2022
 #    permissions:

@@ -1,0 +1,23 @@
+project_name: warpnet
+version: 2
+
+builds:
+  - id: member-macos
+    main: ./cmd/node/member/
+    binary: member
+    env: [ CGO_ENABLED=1 ]
+    goos: [ darwin ]
+    goarch: [ amd64, arm64]
+    ldflags:
+      - -mod=vendor
+      - -s -w
+    hooks:
+      pre: |
+        sh -c 'cd cmd/node/member && wails build -platform darwin/{{ .Arch }} -clean'
+
+
+release:
+  github:
+    owner: Warp-net
+    name: warpnet
+
