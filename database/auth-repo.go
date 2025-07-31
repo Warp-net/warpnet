@@ -152,6 +152,10 @@ func (repo *AuthRepo) GetOwner() domain.Owner {
 	if err != nil {
 		panic(err)
 	}
+
+	if owner.RedundantUserID == "" {
+		owner.RedundantUserID = owner.UserId
+	}
 	return owner
 
 }

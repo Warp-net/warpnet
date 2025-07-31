@@ -122,9 +122,10 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		id := ulid.Make().String()
 		log.Infoln("creating new owner:", id)
 		owner, err = as.authPersistence.SetOwner(domain.Owner{
-			CreatedAt: time.Now(),
-			Username:  message.Username,
-			UserId:    id,
+			CreatedAt:       time.Now(),
+			Username:        message.Username,
+			UserId:          id,
+			RedundantUserID: id,
 		})
 		if err != nil {
 			log.Errorf("new owner creation failed: %v", err)
