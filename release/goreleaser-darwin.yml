@@ -16,7 +16,6 @@ builds:
       pre: |
         sh -c 'cd cmd/node/member && wails build -platform darwin/{{ .Arch }} -clean'
 
-
 release:
   github:
     owner: Warp-net
