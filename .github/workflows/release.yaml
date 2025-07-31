@@ -95,19 +95,6 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 
-      - name: Download and extract GTK runtime
-        shell: powershell
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/wailsapp/wails/releases/download/v2.6.0/gtk-runtime-windows.zip" -OutFile "gtk.zip"
-          Expand-Archive -Path "gtk.zip" -DestinationPath "gtk-runtime"
-          echo "GTK_BASEPATH=${{ github.workspace }}\\gtk-runtime" >> $env:GITHUB_ENV
-          echo "${{ github.workspace }}\\gtk-runtime\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
-
-      - name: Set GTK env
-        run: |
-          echo "GTK_BASEPATH=${{ github.workspace }}\\gtk" >> $env:GITHUB_ENV
-          echo "${{ github.workspace }}\\gtk\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
-
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
