@@ -6,10 +6,11 @@ builds:
   - id: member-linux
     main: ./cmd/node/member/
     binary: member
-    env: [ CGO_ENABLED=1, GOPROXY=off, GOSUMDB=off ]
+    env: [ CGO_ENABLED=1 ]
     goos: [linux]
     goarch: [ amd64 ]
     flags:
+      - -mod=vendor
       - -tags=webkit2_41
     ldflags:
       - -s -w
@@ -21,10 +22,11 @@ builds:
 #  - id: member-macos
 #    main: ./cmd/node/member/
 #    binary: member
-#    env: [ CGO_ENABLED=1, GOPROXY=off, GOSUMDB=off ]
+#    env: [ CGO_ENABLED=1 ]
 #    goos: [darwin]
 #    goarch: [amd64, arm64]
 #    ldflags:
+#      - -mod=vendor
 #      - -s -w
 #    hooks:
 #      pre: |
@@ -34,10 +36,11 @@ builds:
 #  - id: member-windows
 #    main: ./cmd/node/member/
 #    binary: member
-#    env: [ CGO_ENABLED=1, GOPROXY=off, GOSUMDB=off ]
+#    env: [ CGO_ENABLED=1 ]
 #    goos: [windows]
 #    goarch: [amd64]
 #    ldflags:
+#      - -mod=vendor
 #      - -s -w
 #    hooks:
 #      pre: |

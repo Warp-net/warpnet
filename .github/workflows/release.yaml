@@ -41,7 +41,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "latest"
-          args: release --clean
+          args: release --clean --id=member-linux --single-target
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -70,7 +70,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "latest"
-          args: release --clean
+          args: release --clean --id=member-macos --single-target
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -111,6 +111,6 @@ jobs:
         with:
           distribution: goreleaser
           version: "latest"
-          args: release --clean
+          args: release --clean --id=member-windows --single-target
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
