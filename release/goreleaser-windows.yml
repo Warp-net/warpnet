@@ -8,8 +8,6 @@ builds:
     env: [ CGO_ENABLED=1 ]
     goos: [ windows ]
     goarch: [ amd64 ]
-    flags:
-      - -mod=vendor
     ldflags:
       - -s -w
     hooks:
