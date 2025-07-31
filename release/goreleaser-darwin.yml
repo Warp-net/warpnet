@@ -8,8 +8,9 @@ builds:
     env: [ CGO_ENABLED=1 ]
     goos: [ darwin ]
     goarch: [ amd64, arm64]
-    ldflags:
+    flags:
       - -mod=vendor
+    ldflags:
       - -s -w
     hooks:
       pre: |
