@@ -16,6 +16,7 @@ builds:
       - -s -w
     hooks:
       pre: |
+        cd cmd/node/member &&
         wails build -tags webkit2_41 -platform linux/amd64 -clean
 
   # macOS
@@ -31,6 +32,7 @@ builds:
       - -s -w
     hooks:
       pre: |
+        cd cmd/node/member &&
         wails build -platform darwin/{{ .Arch }} -clean
 
   # Windows
@@ -45,8 +47,8 @@ builds:
     ldflags:
       - -s -w
     hooks:
-
       pre: |
+        cd cmd/node/member &&
         wails build -platform windows/amd64 -clean
 
 
