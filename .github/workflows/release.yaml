@@ -62,7 +62,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - run: brew install gtk+3 webkit2gtk pkg-config
       - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
       - run: echo "$HOME/go/bin" >> $GITHUB_PATH
 
