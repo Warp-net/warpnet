@@ -34,7 +34,7 @@ jobs:
             libasound2-dev libatk1.0-dev libcups2-dev libdbus-1-dev libdrm-dev \
             libxext-dev libxfixes-dev libxkbcommon-dev libxrender-dev libxcb1-dev libxtst-dev
 
-      - run: go install github.com/wailsapp/wails/v2/cmd/wails
+      - run: GOPROXY=off GOSUMDB=off go install github.com/wailsapp/wails/v2/cmd/wails
       - run: echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - uses: goreleaser/goreleaser-action@v6
