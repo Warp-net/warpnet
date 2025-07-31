@@ -285,7 +285,7 @@ func newErrorResp(msg string) stdjson.RawMessage {
 func (a *App) close(_ context.Context) {
 	defer func() { recover() }()
 
-	log.Infoln("closing...")
+	log.Infoln("app: closing...")
 
 	a.db.Close()
 	a.node.Stop()
