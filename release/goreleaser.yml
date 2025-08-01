@@ -1,23 +1,21 @@
 project_name: warpnet
 version: 2
+
 release:
   github:
     owner: Warp-net
     name: warpnet
 
-builds: [ ]  # built already
+builds: []
 
 archives:
-  - id: member
-    files:
+  - files:
       - dist/**
 
 checksum:
   name_template: '{{ .ProjectName }}_checksums.txt'
   algorithm: sha256
-  files:
-    - dist/**
 
+# Если хочешь полностью отключить changelog:
 changelog:
-  skip: true
-
+  disable: "true"
