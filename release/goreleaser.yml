@@ -19,9 +19,10 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
-    files:
-      - dist/**/warpnet*
+  - format: binary
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    ids:
+      - warpnet
 
 checksum:
   name_template: '{{ .ProjectName }}_checksums.txt'
