@@ -130,6 +130,11 @@ jobs:
 
   release:
     runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+      contents: write
+      pull-requests: write
+      repository-projects: write
     needs: [ build-linux, build-macos, build-windows ]
     steps:
       - uses: actions/checkout@v4
