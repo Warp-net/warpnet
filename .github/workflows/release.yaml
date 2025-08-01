@@ -8,7 +8,7 @@ env:
   GOFLAGS: -tags=webkit2_41
 
 jobs:
-  linux:
+  build-linux:
     runs-on: ubuntu-22.04
     permissions:
       packages: write
@@ -37,15 +37,19 @@ jobs:
       - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
       - run: echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "latest"
-          args: release --clean --config release/goreleaser-linux.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Wails app
+        run: |
+          cd cmd/node/member
+          wails build -platform linux/amd64 -clean
+          tar -czf member-linux-amd64.tar.gz dist/
 
-  macos:
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: member-linux
+          path: cmd/node/member/member-linux-amd64.tar.gz
+
+  build-macos:
     runs-on: macos-14
     permissions:
       packages: write
@@ -65,15 +69,34 @@ jobs:
       - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
       - run: echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "latest"
-          args: release --clean --config release/goreleaser-darwin.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Wails app for amd64
+        run: |
+          cd cmd/node/member
+          wails build -platform darwin/amd64 -clean
+          mv dist dist-amd64
+          tar -czf member-macos-amd64.tar.gz dist-amd64
 
-  windows:
+      - name: Build Wails app for arm64
+        run: |
+          cd cmd/node/member
+          wails build -platform darwin/arm64 -clean
+          mv dist dist-arm64
+          tar -czf member-macos-arm64.tar.gz dist-arm64
+
+      - name: Upload macOS amd64
+        uses: actions/upload-artifact@v4
+        with:
+          name: member-macos-amd64
+          path: cmd/node/member/member-macos-amd64.tar.gz
+
+      - name: Upload macOS arm64
+        uses: actions/upload-artifact@v4
+        with:
+          name: member-macos-arm64
+          path: cmd/node/member/member-macos-arm64.tar.gz
+
+
+  build-windows:
     runs-on: windows-2022
     permissions:
       packages: write
@@ -95,10 +118,53 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 
-      - uses: goreleaser/goreleaser-action@v6
+      - name: Build Wails app
+        run: |
+          cd cmd\node\member
+          wails build -platform windows/amd64 -clean
+          Compress-Archive -Path dist\* -DestinationPath member-windows-amd64.zip
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: member-windows
+          path: cmd/node/member/member-windows-amd64.zip
+
+  release:
+    runs-on: ubuntu-24.04
+    needs: [ build-linux, build-macos, build-windows ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: member-linux
+          path: dist/
+
+      - name: Download macOS artifact arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: member-macos-arm64
+          path: dist/
+
+      - name: Download macOS artifact amd64
+        uses: actions/download-artifact@v4
+        with:
+          name: member-macos-amd64
+          path: dist/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: member-windows
+          path: dist/
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: "latest"
-          args: release --clean --config release/goreleaser-windows.yml
+          version: latest
+          args: release --clean --skip-build --config release/goreleaser.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
