@@ -41,7 +41,7 @@ jobs:
         run: |
           cd cmd/node/member
           wails build -platform linux/amd64 -clean
-          tar -czf member-linux-amd64.tar.gz dist/
+          tar -czf member-linux-amd64.tar.gz -C build/bin warpnet
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
@@ -73,15 +73,13 @@ jobs:
         run: |
           cd cmd/node/member
           wails build -platform darwin/amd64 -clean
-          mv dist dist-amd64
-          tar -czf member-macos-amd64.tar.gz dist-amd64
+          tar -czf member-macos-amd64.tar.gz -C build/bin warpnet
 
       - name: Build Wails app for arm64
         run: |
           cd cmd/node/member
           wails build -platform darwin/arm64 -clean
-          mv dist dist-arm64
-          tar -czf member-macos-arm64.tar.gz dist-arm64
+          tar -czf member-macos-arm64.tar.gz -C build/bin warpnet
 
       - name: Upload macOS amd64
         uses: actions/upload-artifact@v4
@@ -94,7 +92,6 @@ jobs:
         with:
           name: member-macos-arm64
           path: cmd/node/member/member-macos-arm64.tar.gz
-
 
   build-windows:
     runs-on: windows-2022
@@ -122,7 +119,7 @@ jobs:
         run: |
           cd cmd\node\member
           wails build -platform windows/amd64 -clean
-          Compress-Archive -Path dist\* -DestinationPath member-windows-amd64.zip
+          Compress-Archive -Path build\bin\* -DestinationPath member-windows-amd64.zip
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
