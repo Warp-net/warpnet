@@ -6,7 +6,8 @@ release:
     owner: Warp-net
     name: warpnet
 
-builds: []
+builds:
+  - skip: true
 
 archives:
   - files:
@@ -16,6 +17,5 @@ checksum:
   name_template: '{{ .ProjectName }}_checksums.txt'
   algorithm: sha256
 
-# Если хочешь полностью отключить changelog:
 changelog:
   disable: "true"
