@@ -7,7 +7,16 @@ release:
     name: warpnet
 
 builds:
-  - skip: true
+  - id: warpnet
+    skip: true
+    binary: warpnet
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
 
 archives:
   - format: tar.gz
