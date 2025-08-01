@@ -1177,9 +1177,6 @@ github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
-# github.com/monnand/dhkx v0.0.0-20180522003156-9e5b033f1ac4
-## explicit
-github.com/monnand/dhkx
 # github.com/mr-tron/base58 v1.2.0
 ## explicit; go 1.12
 github.com/mr-tron/base58/base58

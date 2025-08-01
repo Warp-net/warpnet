@@ -30,7 +30,6 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.33.1
 	github.com/libp2p/go-libp2p-pubsub v0.14.0
 	github.com/mattn/go-mastodon v0.0.9
-	github.com/monnand/dhkx v0.0.0-20180522003156-9e5b033f1ac4
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/oklog/ulid/v2 v2.1.1
@@ -43,7 +42,6 @@ require (
 	github.com/wailsapp/wails/v2 v2.10.2
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.39.0
 	golang.org/x/sync v0.15.0
 	golang.org/x/sys v0.33.0
 )
@@ -361,6 +359,7 @@ require (
 	go.uber.org/mock v0.5.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
+	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476 // indirect
 	golang.org/x/image v0.25.0 // indirect
 	golang.org/x/mod v0.25.0 // indirect
