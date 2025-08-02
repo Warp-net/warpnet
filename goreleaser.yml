@@ -13,8 +13,8 @@ builds:
       - -mod=vendor
     hooks:
       pre: |
-        sudo apt update &&
-        sudo apt install -y libwebkit2gtk-4.1-dev &&
+        sudo apt-get update &&
+        sudo apt-get install -y libwebkit2gtk-4.1-dev &&
         go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
         cd cmd/node/member && wails build -tags webkit2_41 -platform linux/amd64 -clean
 
