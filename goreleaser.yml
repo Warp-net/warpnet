@@ -13,7 +13,7 @@ builds:
       - -mod=vendor
     hooks:
       pre:
-        cd cmd/node/member && wails build -tags webkit2_41 -clean
+        sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -clean'
 
 release:
   github:
