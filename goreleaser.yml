@@ -28,7 +28,10 @@ builds:
   - id: member-macos
     main: ./cmd/node/member/
     binary: member
-    env: [ CGO_ENABLED=1 ]
+    env:
+      - CGO_ENABLED=1
+      - CGO_CFLAGS=-arch {{ .Arch }}
+      - CGO_LDFLAGS=-arch {{ .Arch }}
     goos: [ darwin ]
     goarch: [ amd64, arm64 ]
     flags:
