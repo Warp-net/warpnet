@@ -15,15 +15,15 @@ builds:
       - -s -w
     hooks:
       pre: |
-        sudo apt update &&
-        sudo apt install -y \
-          libgtk-3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libglib2.0-dev pkg-config \
-          libnss3 libx11-xcb-dev libxcomposite-dev libxdamage-dev libxrandr-dev \
-          libasound2-dev libatk1.0-dev libcups2-dev libdbus-1-dev libdrm-dev \
-          libxext-dev libxfixes-dev libxkbcommon-dev libxrender-dev libxcb1-dev libxtst-dev &&
-        echo "$HOME/go/bin" >> $GITHUB_PATH &&
-        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-        wails build -tags webkit2_41 -platform linux/amd64 -clean
+        sh -c 'sudo apt update &&
+          sudo apt install -y \
+            libgtk-3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libglib2.0-dev pkg-config \
+            libnss3 libx11-xcb-dev libxcomposite-dev libxdamage-dev libxrandr-dev \
+            libasound2-dev libatk1.0-dev libcups2-dev libdbus-1-dev libdrm-dev \
+            libxext-dev libxfixes-dev libxkbcommon-dev libxrender-dev libxcb1-dev libxtst-dev &&
+          echo "$HOME/go/bin" >> $GITHUB_PATH &&
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+          wails build -tags webkit2_41 -platform linux/amd64 -clean'
 
   - id: member-macos
     main: ./cmd/node/member/
@@ -38,8 +38,10 @@ builds:
       - -s -w
     hooks:
       pre: |
-        CGO_CFLAGS="-arch {{ .Arch }}" CGO_LDFLAGS="-arch {{ .Arch }}" go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-        CGO_CFLAGS="-arch {{ .Arch }}" CGO_LDFLAGS="-arch {{ .Arch }}" wails build -platform darwin/{{ .Arch }} -clean
+        sh -c 'export CGO_CFLAGS="-arch {{ .Arch }}" &&
+          export CGO_LDFLAGS="-arch {{ .Arch }}" &&
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+          wails build -platform darwin/{{ .Arch }} -clean'
 
   - id: member-windows
     main: ./cmd/node/member/
@@ -54,8 +56,10 @@ builds:
       - -s -w
     hooks:
       pre: |
-        CGO_CFLAGS="-arch {{ .Arch }}" CGO_LDFLAGS="-arch {{ .Arch }}" go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-        CGO_CFLAGS="-arch {{ .Arch }}" CGO_LDFLAGS="-arch {{ .Arch }}" wails build -platform windows/amd64 -clean
+        sh -c 'export CGO_CFLAGS="-arch {{ .Arch }}" &&
+          export CGO_LDFLAGS="-arch {{ .Arch }}" &&
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+          wails build -platform windows/amd64 -clean'
 
 release:
   github:
