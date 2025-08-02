@@ -55,7 +55,6 @@ builds:
         go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
         wails build -platform windows/amd64 -clean
 
-
 release:
   github:
     owner: Warp-net
