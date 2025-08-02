@@ -39,7 +39,8 @@ builds:
       - -s -w
     hooks:
       pre: |
-        sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        sh -c 'export GOARCH=amd64 &&
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
           cd cmd/node/member &&
           wails build -platform darwin/amd64 -clean'
 
@@ -56,7 +57,8 @@ builds:
       - -s -w
     hooks:
       pre: |
-        sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        sh -c 'export GOARCH=arm64 &&
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
           cd cmd/node/member &&
           wails build -platform darwin/arm64 -clean'
 
