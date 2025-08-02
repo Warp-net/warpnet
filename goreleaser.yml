@@ -2,13 +2,13 @@ project_name: warpnet
 version: 2
 
 builds:
-  - id: member-linux
+  - id: member-release
     main: ./cmd/node/member/
     binary: member
     env:
       - CGO_ENABLED=1
-    goos: [ linux ]
-    goarch: [ amd64 ]
+    goos: [ linux, windows, darwin ]
+    goarch: [ amd64, arm64 ]
     flags:
       - -mod=vendor
     hooks:
@@ -17,65 +17,6 @@ builds:
         sudo apt install -y libwebkit2gtk-4.1-dev &&
         go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
         cd cmd/node/member && wails build -tags webkit2_41 -platform linux/amd64 -clean
-
-
-  - id: member-windows
-    main: ./cmd/node/member/
-    binary: member
-    env:
-      - CGO_ENABLED=1
-    goos: [ windows ]
-    goarch: [ amd64 ]
-    flags:
-      - -mod=vendor
-    hooks:
-      pre: |
-        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-        cd cmd/node/member && wails build -platform windows/amd64 -clean
-
-  - id: member-macos-amd64
-    main: ./cmd/node/member/
-    binary: member
-    env:
-      - CGO_ENABLED=1
-      - CGO_CFLAGS=
-      - CGO_LDFLAGS=
-    goos: [ darwin ]
-    goarch: [ amd64 ]
-    flags:
-      - -mod=vendor
-    hooks:
-      pre: |
-        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-        cd cmd/node/member &&
-        GOARCH=amd64 wails build -platform darwin/amd64 -clean
-
-#  - id: member-macos-arm64
-#    main: ./cmd/node/member/
-#    binary: member
-#    env:
-#      - CGO_ENABLED=1
-#      - CC=clang
-#      - CXX=clang++
-#      - CGO_CFLAGS=--target=arm64-apple-macos11
-#      - CGO_LDFLAGS=--target=arm64-apple-macos11
-#    goos: [ darwin ]
-#    goarch: [ arm64 ]
-#    flags:
-#      - -mod=vendor
-#    ldflags:
-#      - -s -w
-#    hooks:
-#      pre: |
-#        sh -c '
-#          export SDKROOT=$(xcrun --sdk macosx --show-sdk-path) &&
-#          export CGO_CFLAGS="--target=arm64-apple-macos11 -isysroot $SDKROOT" &&
-#          export CGO_LDFLAGS="--target=arm64-apple-macos11 -isysroot $SDKROOT" &&
-#          export GOARCH=arm64 &&
-#          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-#          cd cmd/node/member &&
-#          wails build -platform darwin/arm64 -clean'
-
 
 release:
   github:
