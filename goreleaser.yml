@@ -30,8 +30,6 @@ builds:
     binary: member
     env:
       - CGO_ENABLED=1
-      - CGO_CFLAGS=-arch {{ .Arch }}
-      - CGO_LDFLAGS=-arch {{ .Arch }}
     goos: [ darwin ]
     goarch: [ amd64, arm64 ]
     flags:
@@ -40,6 +38,8 @@ builds:
       - -s -w
     hooks:
       pre: |
+        export CGO_CFLAGS="-arch {{ .Arch }}" &&
+        export CGO_LDFLAGS="-arch {{ .Arch }}" &&
         go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
         wails build -platform darwin/{{ .Arch }} -clean
 
@@ -48,8 +48,6 @@ builds:
     binary: member
     env:
       - CGO_ENABLED=1
-      - CGO_CFLAGS=
-      - CGO_LDFLAGS=
     goos: [ windows ]
     goarch: [ amd64 ]
     flags:
@@ -58,6 +56,8 @@ builds:
       - -s -w
     hooks:
       pre: |
+        export CGO_CFLAGS="-arch {{ .Arch }}" &&
+        export CGO_LDFLAGS="-arch {{ .Arch }}" &&
         go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
         wails build -platform windows/amd64 -clean
 
