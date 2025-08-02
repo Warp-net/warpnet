@@ -38,6 +38,8 @@ builds:
     binary: member
     env:
       - CGO_ENABLED=1
+      - CGO_CFLAGS=
+      - CGO_LDFLAGS=
     goos: [ darwin ]
     goarch: [ amd64 ]
     flags:
@@ -46,7 +48,7 @@ builds:
       pre: |
         go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
         cd cmd/node/member &&
-        wails build -platform darwin/amd64 -clean
+        GOARCH=amd64 wails build -platform darwin/amd64 -clean
 
 #  - id: member-macos-arm64
 #    main: ./cmd/node/member/
