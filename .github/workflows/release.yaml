@@ -24,6 +24,12 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Install system dependencies
+        run: |
+          sudo apt update &&
+          sudo apt install -y libwebkit2gtk-4.1-dev &&
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
