@@ -15,7 +15,7 @@ builds:
       - -s -w
     hooks:
       pre: |
-        sudo apt update
+        sudo apt update &&
         sudo apt install -y \
           libgtk-3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libglib2.0-dev pkg-config \
           libnss3 libx11-xcb-dev libxcomposite-dev libxdamage-dev libxrandr-dev \
