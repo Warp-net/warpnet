@@ -49,6 +49,10 @@ builds:
     binary: member
     env:
       - CGO_ENABLED=1
+      - CC=clang
+      - CXX=clang++
+      - CGO_CFLAGS=--target=arm64-apple-macos11
+      - CGO_LDFLAGS=--target=arm64-apple-macos11
     goos: [ darwin ]
     goarch: [ arm64 ]
     flags:
