@@ -39,7 +39,8 @@ builds:
       - -s -w
     hooks:
       pre: |
-        sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        sh -c 'go env &&
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
           cd cmd/node/member &&
           wails build -platform darwin/{{ .Arch }} -clean'
 
