@@ -38,9 +38,7 @@ builds:
       - -s -w
     hooks:
       pre: |
-        sh -c 'export CGO_CFLAGS="-arch {{ .Arch }}" &&
-          export CGO_LDFLAGS="-arch {{ .Arch }}" &&
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
           wails build -platform darwin/{{ .Arch }} -clean'
 
   - id: member-windows
@@ -56,9 +54,7 @@ builds:
       - -s -w
     hooks:
       pre: |
-        sh -c 'export CGO_CFLAGS="-arch {{ .Arch }}" &&
-          export CGO_LDFLAGS="-arch {{ .Arch }}" &&
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
           wails build -platform windows/amd64 -clean'
 
 release:
