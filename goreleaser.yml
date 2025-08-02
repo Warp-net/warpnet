@@ -38,10 +38,8 @@ builds:
       - -s -w
     hooks:
       pre: |
-        export CGO_CFLAGS="-arch {{ .Arch }}" &&
-        export CGO_LDFLAGS="-arch {{ .Arch }}" &&
-        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-        wails build -platform darwin/{{ .Arch }} -clean
+        CGO_CFLAGS="-arch {{ .Arch }}" CGO_LDFLAGS="-arch {{ .Arch }}" go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        CGO_CFLAGS="-arch {{ .Arch }}" CGO_LDFLAGS="-arch {{ .Arch }}" wails build -platform darwin/{{ .Arch }} -clean
 
   - id: member-windows
     main: ./cmd/node/member/
@@ -56,10 +54,8 @@ builds:
       - -s -w
     hooks:
       pre: |
-        export CGO_CFLAGS="-arch {{ .Arch }}" &&
-        export CGO_LDFLAGS="-arch {{ .Arch }}" &&
-        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-        wails build -platform windows/amd64 -clean
+        CGO_CFLAGS="-arch {{ .Arch }}" CGO_LDFLAGS="-arch {{ .Arch }}" go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        CGO_CFLAGS="-arch {{ .Arch }}" CGO_LDFLAGS="-arch {{ .Arch }}" wails build -platform windows/amd64 -clean
 
 release:
   github:
