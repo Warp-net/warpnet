@@ -1,32 +1,63 @@
 project_name: warpnet
 version: 2
 
+builds:
+  - id: member-linux
+    main: ./cmd/node/member/
+    binary: member
+    env: [ CGO_ENABLED=1 ]
+    goos: [ linux ]
+    goarch: [ amd64 ]
+    flags:
+      - -mod=vendor
+      - -tags=webkit2_41
+    ldflags:
+      - -s -w
+    hooks:
+      pre: |
+        sudo apt update
+        sudo apt install -y \
+          libgtk-3-dev libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libglib2.0-dev pkg-config \
+          libnss3 libx11-xcb-dev libxcomposite-dev libxdamage-dev libxrandr-dev \
+          libasound2-dev libatk1.0-dev libcups2-dev libdbus-1-dev libdrm-dev \
+          libxext-dev libxfixes-dev libxkbcommon-dev libxrender-dev libxcb1-dev libxtst-dev &&
+        echo "$HOME/go/bin" >> $GITHUB_PATH &&
+        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        wails build -tags webkit2_41 -platform linux/amd64 -clean
+
+  - id: member-macos
+    main: ./cmd/node/member/
+    binary: member
+    env: [ CGO_ENABLED=1 ]
+    goos: [ darwin ]
+    goarch: [ amd64, arm64 ]
+    flags:
+      - -mod=vendor
+    ldflags:
+      - -s -w
+    hooks:
+      pre: |
+        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        wails build -platform darwin/{{ .Arch }} -clean
+
+  - id: member-windows
+    main: ./cmd/node/member/
+    binary: member
+    env: [ CGO_ENABLED=1 ]
+    goos: [ windows ]
+    goarch: [ amd64 ]
+    flags:
+      - -mod=vendor
+    ldflags:
+      - -s -w
+    hooks:
+      pre: |
+        go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        wails build -platform windows/amd64 -clean
+
+
 release:
   github:
     owner: Warp-net
     name: warpnet
 
-builds:
-  - id: warpnet
-    skip: true
-    binary: warpnet
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-
-archives:
-  - format: binary
-    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
-    ids:
-      - warpnet
-
-checksum:
-  name_template: '{{ .ProjectName }}_checksums.txt'
-  algorithm: sha256
-
-changelog:
-  disable: "true"
