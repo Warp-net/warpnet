@@ -26,23 +26,39 @@ builds:
           cd cmd/node/member &&
           wails build -tags webkit2_41 -platform linux/amd64 -clean '
 
-  - id: member-macos
+  - id: member-macos-amd64
     main: ./cmd/node/member/
     binary: member
     env:
       - CGO_ENABLED=1
     goos: [ darwin ]
-    goarch: [ amd64, arm64 ]
+    goarch: [ amd64 ]
     flags:
       - -mod=vendor
     ldflags:
       - -s -w
     hooks:
       pre: |
-        sh -c 'go env &&
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+        sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
           cd cmd/node/member &&
-          wails build -platform darwin/{{ .Arch }} -clean'
+          wails build -platform darwin/amd64 -clean'
+
+  - id: member-macos-arm64
+    main: ./cmd/node/member/
+    binary: member
+    env:
+      - CGO_ENABLED=1
+    goos: [ darwin ]
+    goarch: [ arm64 ]
+    flags:
+      - -mod=vendor
+    ldflags:
+      - -s -w
+    hooks:
+      pre: |
+        sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
+          cd cmd/node/member &&
+          wails build -platform darwin/arm64 -clean'
 
   - id: member-windows
     main: ./cmd/node/member/
