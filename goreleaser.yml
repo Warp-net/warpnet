@@ -46,7 +46,10 @@ builds:
   - id: member-windows
     main: ./cmd/node/member/
     binary: member
-    env: [ CGO_ENABLED=1 ]
+    env:
+      - CGO_ENABLED=1
+      - CGO_CFLAGS=
+      - CGO_LDFLAGS=
     goos: [ windows ]
     goarch: [ amd64 ]
     flags:
