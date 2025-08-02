@@ -23,7 +23,7 @@ builds:
             libxext-dev libxfixes-dev libxkbcommon-dev libxrender-dev libxcb1-dev libxtst-dev &&
           echo "$HOME/go/bin" >> $GITHUB_PATH &&
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-          wails build -tags webkit2_41 -platform linux/amd64 -clean'
+          wails build -tags webkit2_41 -platform linux/amd64 -clean -config cmd/node/member/wails.json'
 
   - id: member-macos
     main: ./cmd/node/member/
@@ -39,7 +39,7 @@ builds:
     hooks:
       pre: |
         sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-          wails build -platform darwin/{{ .Arch }} -clean'
+          wails build -platform darwin/{{ .Arch }} -clean -config cmd/node/member/wails.json'
 
   - id: member-windows
     main: ./cmd/node/member/
@@ -55,7 +55,7 @@ builds:
     hooks:
       pre: |
         sh -c 'go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 &&
-          wails build -platform windows/amd64 -clean'
+          wails build -platform windows/amd64 -clean -config cmd/node/member/wails.json'
 
 release:
   github:
