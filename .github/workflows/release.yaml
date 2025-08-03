@@ -21,7 +21,13 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     permissions:
+      packages: write
       contents: write
+      pull-requests: write
+      repository-projects: write
+
+    env:
+      CGO_ENABLED: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +48,7 @@ jobs:
 
       - name: Build (Wails)
         working-directory: cmd/node/member
-        run: CGO_ENABLED=1 wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
+        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
 
       - name: Package + checksum (Linux)
         if: ${{ matrix.os == 'ubuntu-latest' }}
