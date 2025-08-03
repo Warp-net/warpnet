@@ -76,6 +76,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           name: ${{ env.RELEASE_TAG }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           files: |
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
