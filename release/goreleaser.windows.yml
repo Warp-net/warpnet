@@ -8,8 +8,6 @@ builds:
     goos: [ windows ]
     goarch: [ amd64 ]
     env:
-      - GOOS=windows
-      - GOARCH=amd64
       - CGO_ENABLED=1
     flags: [ -mod=vendor ]
     hooks:
