@@ -6,13 +6,13 @@ builds:
     main: ./cmd/node/member/
     binary: member
     goos: [ darwin ]
-    goarch: [ amd64, arm64 ]
+    goarch: [ amd64 ]
     env:
       - CGO_ENABLED=1
     flags: [ -mod=vendor ]
     hooks:
       pre:
-        - sh -c 'cd cmd/node/member && wails build -platform windows/amd64 -clean'
+        - sh -c 'cd cmd/node/member && wails build -platform darwin/amd64 -clean'
 
   - id: member-macos-arm64
     main: ./cmd/node/member/
@@ -24,7 +24,7 @@ builds:
     flags: [ -mod=vendor ]
     hooks:
       pre:
-        - sh -c 'cd cmd/node/member && wails build -platform windows/arm64 -clean'
+        - sh -c 'cd cmd/node/member && wails build -platform darwin/arm64 -clean'
 
 release:
   github:
@@ -32,4 +32,4 @@ release:
     name: warpnet
 
 checksum:
-  name_template: "{{ .ProjectName }}_darwin_checksums.txt"
+  name_template: "{{ .ProjectName }}_darwin_{{ .Runtime.Goarch }}_checksums.txt"
