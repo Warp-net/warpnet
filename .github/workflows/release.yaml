@@ -6,7 +6,7 @@ on:
 
 env:
   GO_VERSION: '1.24'
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ github.event.inputs.tag }}
 
 jobs:
   release:
