@@ -12,7 +12,7 @@ builds:
     flags: [ -mod=vendor ]
     hooks:
       pre:
-        - cmd: wails build -clean -platform linux/amd64
+        - cmd: wails build -clean -platform linux/amd64 -tags webkit2_41
           dir: ./cmd/node/member
 
 release:
