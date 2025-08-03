@@ -8,11 +8,14 @@ builds:
     goos: [ windows ]
     goarch: [ amd64 ]
     env:
+      - GOOS=windows
+      - GOARCH=amd64
       - CGO_ENABLED=1
     flags: [ -mod=vendor ]
     hooks:
       pre:
-        sh -c 'cd cmd/node/member && wails build -platform windows/amd64 -clean'
+        - cmd: wails build -clean -platform windows/amd64
+          dir: ./cmd/node/member
 
 release:
   github:
