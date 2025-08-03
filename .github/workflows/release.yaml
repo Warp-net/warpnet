@@ -2,20 +2,11 @@ name: Member Node Release
 
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Git tag (e.g. v0.4.131)"
-        required: true
-        type: string
-      title:
-        description: "Release title (optional)"
-        required: false
-        type: string
+
 
 env:
   GO_VERSION: '1.24'
-  RELEASE_TAG: ${{ github.event.inputs.tag }}
-  RELEASE_TITLE: ${{ github.event.inputs.title }}
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   release:
@@ -24,16 +15,10 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux/amd64
-            pkgext: tar.gz
-            tags: webkit2_41
           - os: macos-latest
             platform: darwin/arm64
-            pkgext: tar.gz
-            tags: webkit2_41
           - os: windows-latest
             platform: windows/amd64
-            pkgext: zip
-            tags: webkit2_41
 
     runs-on: ${{ matrix.os }}
     permissions:
@@ -58,7 +43,7 @@ jobs:
 
       - name: Build (Wails)
         working-directory: cmd/node/member
-        run: CGO_ENABLED=1 wails build -clean -platform ${{ matrix.platform }} -tags ${{ matrix.tags }}
+        run: CGO_ENABLED=1 wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
 
       - name: Package + checksum (Linux)
         if: ${{ matrix.os == 'ubuntu-latest' }}
