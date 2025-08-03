@@ -5,7 +5,7 @@ on:
 
 env:
   GO_VERSION: '1.24'
-  RELEASE_TAG:
+  RELEASE_TAG: test
   CGO_ENABLED: '1'
 
 jobs:
@@ -34,18 +34,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-
-      - name: Resolve tag
-        run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            echo "RELEASE_TAG=$GITHUB_REF_NAME" >> $GITHUB_ENV
-          elif [ -n "${{ github.event.inputs.tag }}" ]; then
-            echo "RELEASE_TAG=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
-          else
-            tag="$(git tag --points-at HEAD | head -n1)"
-            [ -n "$tag" ] || { echo 'no tag'; exit 1; }
-            echo "RELEASE_TAG=$tag" >> $GITHUB_ENV
-
 
       - name: Linux deps
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -90,7 +78,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ env.RELEASE_TAG || test }}
           name: ${{ env.RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
