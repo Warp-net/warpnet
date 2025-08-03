@@ -44,7 +44,8 @@ jobs:
         with: { fetch-depth: 0, fetch-tags: true }
 
       - uses: actions/setup-go@v5
-        with: { go-version: ${{ env.GO_VERSION }} }
+        with:
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Linux deps
         if: ${{ matrix.os == 'ubuntu-latest' }}
