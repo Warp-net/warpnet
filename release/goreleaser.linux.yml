@@ -20,3 +20,5 @@ release:
     owner: Warp-net
     name: warpnet
 
+checksum:
+  name_template: "{{ .ProjectName }}_linux_checksums.txt"
