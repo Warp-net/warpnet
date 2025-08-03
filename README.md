@@ -43,12 +43,11 @@
 6. Only one WarpNet member node may run on a single machine, but it may have multiple aliases.
 7. WarpNet member nodes must be governed solely by network consensus.
 8. WarpNet business nodes may allow centralized management.
-9. WarpNet business nodes must responsibly run at least one bootstrap node.
+9. WarpNet business nodes must responsibly run at least one bootstrap node and one moderator node.
 10. A WarpNet node must store private data only on the local host machine.
-11. WarpNet member nodes must not be developed or controlled by a single individual.
-12. Content on WarpNet must be moderated automatically, without human intervention.
-13. Hosting a WarpNet bootstrap node must be incentivized with rewards.
-14. Node owners bear full personal responsibility for any content they upload to WarpNet.
+11. WarpNet nodes network must not be developed or controlled by a single individual.
+12. Content on WarpNet must be moderated automatically, without human intervention, moderator nodes must be protected from unauthorized modification.
+13. Node owners bear full personal responsibility for any content they upload to WarpNet.
 
 ## HOW TO HELP 
 
@@ -109,5 +108,3 @@ https://codeberg.org/Warpnet/warpnet
 Warpnet is free software licensed under the GNU Affero General Public License v3.0 or later.
 
 See the [LICENSE](LICENSE.md) file for details.
-
-
