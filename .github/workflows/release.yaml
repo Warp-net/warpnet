@@ -5,7 +5,8 @@ on:
 
 env:
   GO_VERSION: '1.24'
-  RELEASE_TAG: 'test'
+#  RELEASE_TAG: 'test'
+  RELEASE_TAG: ${{ github.event.inputs.tag }}
   CGO_ENABLED: '1'
 
 jobs:
@@ -78,7 +79,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.RELEASE_TAG || 'test' }}
+          tag_name: ${{ env.RELEASE_TAG || 'no_tag' }}
           name: ${{ env.RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
