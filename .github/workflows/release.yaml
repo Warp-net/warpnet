@@ -3,7 +3,6 @@ name: Member Node Release
 on:
   workflow_dispatch:
 
-
 env:
   GO_VERSION: '1.24'
   RELEASE_TAG: ${{ github.event.inputs.tag }}
@@ -73,7 +72,7 @@ jobs:
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ github.event.inputs.tag }}
           name: ${{ env.RELEASE_TITLE || env.RELEASE_TAG }}
           files: |
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz
