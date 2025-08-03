@@ -71,9 +71,11 @@ jobs:
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.event.inputs.tag }}
-          name: ${{ env.RELEASE_TITLE || env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
           files: |
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
@@ -81,4 +83,6 @@ jobs:
             warpnet_${{ env.RELEASE_TAG }}_darwin_arm64_checksums.txt
             warpnet_${{ env.RELEASE_TAG }}_windows_amd64.zip
             warpnet_${{ env.RELEASE_TAG }}_windows_amd64_checksums.txt
+        
+          
 
