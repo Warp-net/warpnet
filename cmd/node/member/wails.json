@@ -6,8 +6,6 @@
   "skipfrontend": true,
   "frontend:dir": "../../../vendor/github.com/Warp-net/warpnet-frontend",
   "frontend:dev:serverUrl": "auto",
-  "go:build:ldflags": "-s -w",
-  "go:build:gcflags": "all=-l",
   "go:build:mod": "vendor",
   "author": {
     "name": "vadim",
