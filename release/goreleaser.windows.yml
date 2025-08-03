@@ -13,11 +13,6 @@ builds:
     hooks:
       pre:
         sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -clean'
-    overrides:
-      - goos: windows
-        goarch: amd64
-        env:
-          - CGO_ENABLED=1
 
 release:
   github:

@@ -12,15 +12,9 @@ builds:
     flags: [ -mod=vendor ]
     hooks:
       pre:
-        sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -clean'
-    overrides:
-      - goos: darwin
-        goarch: [ amd64, arm64 ]
-        env:
-          - CGO_ENABLED=1
+        - sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -clean'
 
 release:
   github:
     owner: Warp-net
     name: warpnet
-
