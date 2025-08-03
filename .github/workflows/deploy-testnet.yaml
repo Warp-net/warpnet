@@ -22,6 +22,6 @@ jobs:
 
       - name: Deploy to Testnet Droplet
         run: |
-          scp ./deploy.sh chmo@88.119.169.156:/home/chmo
-          scp ./docker-compose-testnet.yml chmo@88.119.169.156:/home/chmo/docker-compose-warpnet.yml
+          scp ./deploy/deploy.sh chmo@88.119.169.156:/home/chmo
+          scp ./deploy/docker-compose-testnet.yml chmo@88.119.169.156:/home/chmo/docker-compose-warpnet.yml
           ssh chmo@88.119.169.156 'GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} bash /home/chmo/deploy.sh'

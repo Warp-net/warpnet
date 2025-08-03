@@ -84,7 +84,6 @@ func NewModeratorNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	selfHashHex string,
-	interruptChan chan os.Signal,
 ) (_ *ModeratorNode, err error) {
 	pubsubService := pubsub.NewPubSubModerator(ctx)
 	memoryStore, err := pstoremem.NewPeerstore()
@@ -148,7 +147,7 @@ func NewModeratorNode(
 	}
 
 	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, interruptChan, func(ev event.ValidationEvent) error {
+		ctx, pubsubService, func(ev event.ValidationEvent) error {
 			if len(selfHashHex) == 0 {
 				return errors.New("empty codebase hash")
 			}

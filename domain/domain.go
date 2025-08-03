@@ -92,10 +92,11 @@ type Like struct {
 
 // Owner defines model for Owner.
 type Owner struct {
-	CreatedAt time.Time `json:"created_at"`
-	NodeId    string    `json:"node_id"`
-	UserId    string    `json:"user_id"`
-	Username  string    `json:"username"`
+	CreatedAt       time.Time `json:"created_at"`
+	NodeId          string    `json:"node_id"`
+	UserId          string    `json:"user_id"`
+	RedundantUserID string    `json:"id"`
+	Username        string    `json:"username"`
 }
 
 // ReplyNode defines model for ReplyNode.

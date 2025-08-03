@@ -32,20 +32,20 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"fmt"
-	pseudoRand "math/rand"
+	pseudoRand "math/rand" // #nosec
 	"strconv"
 	"strings"
 	"time"
 )
 
-const salt = "cec27db4" // intentionally
+const salt = "cec27db4" // #nosec intentionally
 
 func generateWeakKey(salt []byte) []byte {
 	ts := time.Now().Unix()
 
 	b := []byte(strconv.FormatInt(ts, 10))
 
-	pseudoRand.Shuffle(len(b), func(i, j int) {
+	pseudoRand.Shuffle(len(b), func(i, j int) { // #nosec
 		b[i], b[j] = b[j], b[i]
 	})
 

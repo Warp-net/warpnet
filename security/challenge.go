@@ -16,6 +16,24 @@ type SampleLocation struct {
 	FileStack []int // file index, line index, left line border, right line border
 }
 
+func ResolveChallenge(codebase FileSystem, location SampleLocation, nonce int64) ([]byte, error) {
+	sample, err := findSample(codebase, location)
+	if err != nil {
+		return nil, err
+	}
+	challengeResult := ConvertToSHA256([]byte(sample + strconv.FormatInt(nonce, 10)))
+	return challengeResult, nil
+}
+
+func GenerateChallenge(codebase FileSystem, nonce int64) ([]byte, SampleLocation, error) {
+	sample, location, err := generateSample(codebase, ".", []int{})
+	if err != nil {
+		return nil, SampleLocation{}, err
+	}
+	challengeResult := ConvertToSHA256([]byte(sample + strconv.FormatInt(nonce, 10)))
+	return challengeResult, location, nil
+}
+
 func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, result SampleLocation, err error) {
 	entries, err := fs.ReadDir(codebase, dir)
 	if err != nil {
@@ -106,15 +124,6 @@ func getRandomLine(codebase FileSystem, path string) (string, int, error) {
 
 	index := rand.IntN(len(lines))
 	return lines[index], index, nil
-}
-
-func GenerateChallenge(codebase FileSystem, nonce int64) ([]byte, SampleLocation, error) {
-	sample, location, err := generateSample(codebase, ".", []int{})
-	if err != nil {
-		return nil, SampleLocation{}, err
-	}
-	challengeResult := ConvertToSHA256([]byte(sample + strconv.FormatInt(nonce, 10)))
-	return challengeResult, location, nil
 }
 
 func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
@@ -211,13 +220,4 @@ func readLines(codebase FileSystem, path string) ([]string, error) {
 	_ = f.Close()
 
 	return lines, scanner.Err()
-}
-
-func ResolveChallenge(codebase FileSystem, location SampleLocation, nonce int64) ([]byte, error) {
-	sample, err := findSample(codebase, location)
-	if err != nil {
-		return nil, err
-	}
-	challengeResult := ConvertToSHA256([]byte(sample + strconv.FormatInt(nonce, 10)))
-	return challengeResult, nil
 }

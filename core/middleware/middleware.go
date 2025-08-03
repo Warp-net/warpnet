@@ -51,17 +51,17 @@ func (e middlewareError) Bytes() []byte {
 }
 
 const (
-	ErrUnknownClientPeer middlewareError = "auth failed: unknown client peer"
-	ErrStreamReadError   middlewareError = "stream reading failed"
-	ErrInternalNodeError middlewareError = "internal node error"
+	ErrUnknownClientPeer middlewareError = `["middleware: auth: unknown client peer"]`
+	ErrStreamReadError   middlewareError = `["middleware: stream: reading failed"]`
+	ErrInternalNodeError middlewareError = `["middleware: internal node error"]`
 )
 
 type WarpMiddleware struct {
-	clientNodeID warpnet.WarpPeerID
+	ownNodeID warpnet.WarpPeerID
 }
 
-func NewWarpMiddleware() *WarpMiddleware {
-	return &WarpMiddleware{""}
+func NewWarpMiddleware(ownNodeID warpnet.WarpPeerID) *WarpMiddleware {
+	return &WarpMiddleware{ownNodeID}
 }
 
 func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
@@ -100,13 +100,11 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		)
 
 		switch {
-		case s.Protocol() == event.PRIVATE_POST_PAIR && p.clientNodeID == "":
-			p.clientNodeID = remotePeer
-		case route.IsPrivate() && p.clientNodeID == "":
+		case route.IsPrivate() && p.ownNodeID == "":
 			log.Errorf("middleware: auth: client peer ID not set, ignoring private route: %s", route)
 			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
 			return
-		case route.IsPrivate() && p.clientNodeID != "" && p.clientNodeID != remotePeer:
+		case route.IsPrivate() && p.ownNodeID != "" && p.ownNodeID != remotePeer:
 			log.Errorf("middleware: auth: client peer id mismatch: %s", remotePeer)
 			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
 			return
@@ -123,7 +121,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 
 		var msg event.Message
 		if err := json.Unmarshal(data, &msg); err != nil || msg.MessageId == "" {
-			log.Errorf("middleware: auth: unmarshaling data: %s %v", data, err)
+			log.Errorf("middleware: auth: unmarshaling data: %s %s %v", route, data, err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}

@@ -847,6 +847,7 @@ func (d *NodeRepo) PruneOldSelfHashes(currentVersion *semver.Version) error {
 
 var ErrNotInRecords = local.DBError("self hash is not in the consensus records")
 
+// ValidateSelfHash to past, not to future
 func (d *NodeRepo) ValidateSelfHash(ev event.ValidationEvent) error {
 	if d == nil {
 		return ErrNilNodeRepo
@@ -857,6 +858,7 @@ func (d *NodeRepo) ValidateSelfHash(ev event.ValidationEvent) error {
 	}
 
 	if d.db == nil {
+		// making ValidateSelfHash safe in case of absense of DB
 		if d.BootstrapSelfHashHex != ev.SelfHashHex {
 			return ErrNotInRecords
 		}

@@ -39,22 +39,19 @@ type gossipConsensus struct {
 	streamer                                ConsensusStreamer
 	recvChan                                chan event.ValidationResultEvent
 	isClosed, isBgRunning, isValidationDone atomic.Bool
-	interruptChan                           chan os.Signal
 	validators                              []ValidatorFunc
 }
 
 func NewGossipConsensus(
 	ctx context.Context,
 	broadcaster ConsensusBroadcaster,
-	interruptChan chan os.Signal,
 	validators ...ValidatorFunc,
 ) *gossipConsensus {
 	gc := &gossipConsensus{
-		ctx:           ctx,
-		broadcaster:   broadcaster,
-		validators:    validators,
-		interruptChan: interruptChan,
-		recvChan:      make(chan event.ValidationResultEvent),
+		ctx:         ctx,
+		broadcaster: broadcaster,
+		validators:  validators,
+		recvChan:    make(chan event.ValidationResultEvent),
 	}
 	return gc
 }
@@ -104,13 +101,6 @@ func (g *gossipConsensus) listenResponses() {
 		log.Infoln("gossip consensus: listener exited")
 	}()
 
-	failNowF := func() {
-		select {
-		case g.interruptChan <- os.Interrupt:
-		default:
-		}
-	}
-
 	for {
 		if g.isClosed.Load() {
 			return
@@ -138,14 +128,14 @@ func (g *gossipConsensus) listenResponses() {
 		case <-timeoutTicker.C:
 			if validCount == 0 {
 				log.Errorf("gossip consensus: timeout: no peers responded")
-				failNowF()
+				os.Exit(1)
 				return
 			}
 
 			ratio := float64(validCount) / float64(total)
 			log.Infof("gossip consensus: timed out: ratio: %f", ratio)
 			if ratio < quorumRatio {
-				failNowF()
+				os.Exit(1) // TODO graceful
 				return
 			}
 			log.Infoln("gossip consensus: consensus successful!")
@@ -178,7 +168,7 @@ func (g *gossipConsensus) listenResponses() {
 			case event.Invalid:
 				if total != 0 && invalidCount == total {
 					log.Infoln("gossip consensus: consensus failed!")
-					failNowF()
+					os.Exit(1) // TODO graceful
 					return
 				}
 				if _, isSeen := invalidResponses[resp.ValidatorID]; isSeen {
@@ -209,7 +199,7 @@ func (g *gossipConsensus) AskValidation(data event.ValidationEvent) {
 	bt, err := json.Marshal(data)
 	if err != nil {
 		log.Errorf("gossip consensus: failed to marshal validation event: %s", err)
-		g.interruptChan <- os.Interrupt
+		os.Exit(1)
 		return
 	}
 

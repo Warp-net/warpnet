@@ -55,6 +55,7 @@ type AuthStorer interface {
 	Set(key local.DatabaseKey, value []byte) error
 	Get(key local.DatabaseKey) ([]byte, error)
 	NewTxn() (local.WarpTransactioner, error)
+	Close()
 }
 
 type AuthRepo struct {
@@ -69,6 +70,11 @@ func NewAuthRepo(db AuthStorer) *AuthRepo {
 }
 
 func (repo *AuthRepo) Authenticate(username, password string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("panic:", r)
+		}
+	}()
 	if repo == nil {
 		return ErrNilAuthRepo
 	}
@@ -146,6 +152,10 @@ func (repo *AuthRepo) GetOwner() domain.Owner {
 	if err != nil {
 		panic(err)
 	}
+
+	if owner.RedundantUserID == "" {
+		owner.RedundantUserID = owner.UserId
+	}
 	return owner
 
 }
@@ -168,4 +178,8 @@ func (repo *AuthRepo) SetOwner(o domain.Owner) (_ domain.Owner, err error) {
 	}
 	repo.owner = o
 	return o, nil
+}
+
+func (repo *AuthRepo) Logout() {
+	repo.db.Close()
 }

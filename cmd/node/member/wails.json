@@ -1,0 +1,14 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "warpnet",
+  "outputfilename": "warpnet",
+  "icon": "appicon.png",
+  "skipfrontend": true,
+  "frontend:dir": "../../../vendor/github.com/Warp-net/warpnet-frontend",
+  "frontend:dev:serverUrl": "auto",
+  "go:build:mod": "vendor",
+  "author": {
+    "name": "vadim",
+    "email": "test@test.com"
+  }
+}

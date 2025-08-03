@@ -43,13 +43,11 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
-	"os"
 	"time"
 )
 
@@ -83,7 +81,6 @@ func NewMemberNode(
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
-	interruptChan chan os.Signal,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
 		return nil, errors.New("private key is required")
@@ -185,7 +182,7 @@ func NewMemberNode(
 	}
 
 	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, interruptChan,
+		ctx, pubsubService,
 		nodeRepo.ValidateSelfHash,
 		userRepo.ValidateUserID,
 	)
@@ -371,11 +368,6 @@ func (m *MemberNode) setupHandlers(
 	chatRepo := database.NewChatRepo(db)
 	mediaRepo := database.NewMediaRepo(db)
 
-	authNodeInfo := domain.AuthNodeInfo{
-		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
-		NodeInfo: m.NodeInfo(),
-	}
-
 	m.node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
 			{
@@ -397,10 +389,6 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PRIVATE_GET_STATS,
 				handler.StreamGetStatsHandler(m, db),
-			},
-			{
-				event.PRIVATE_POST_PAIR,
-				handler.StreamNodesPairingHandler(authNodeInfo),
 			},
 			{
 				event.PRIVATE_GET_TIMELINE,
