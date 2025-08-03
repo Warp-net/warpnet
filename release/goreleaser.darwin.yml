@@ -1,0 +1,26 @@
+project_name: warpnet
+version: 2
+
+builds:
+  - id: member-macos
+    main: ./cmd/node/member/
+    binary: member
+    goos: [ darwin ]
+    goarch: [ amd64, arm64 ]
+    env:
+      - CGO_ENABLED=1
+    flags: [ -mod=vendor ]
+    hooks:
+      pre:
+        sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -clean'
+    overrides:
+      - goos: darwin
+        goarch: [ amd64, arm64 ]
+        env:
+          - CGO_ENABLED=1
+
+release:
+  github:
+    owner: Warp-net
+    name: warpnet
+

@@ -2,19 +2,22 @@ project_name: warpnet
 version: 2
 
 builds:
-  - id: member-release
+  - id: member-windows
     main: ./cmd/node/member/
     binary: member
+    goos: [ windows ]
+    goarch: [ amd64 ]
     env:
       - CGO_ENABLED=1
-      - CGO_CFLAGS=-Wno-unused-command-line-argument
-    goos: [ linux, windows, darwin ]
-    goarch: [ amd64 ]
-    flags:
-      - -mod=vendor
+    flags: [ -mod=vendor ]
     hooks:
       pre:
         sh -c 'cd cmd/node/member && wails build -tags webkit2_41 -clean'
+    overrides:
+      - goos: windows
+        goarch: amd64
+        env:
+          - CGO_ENABLED=1
 
 release:
   github:
