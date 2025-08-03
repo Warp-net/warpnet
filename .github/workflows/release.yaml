@@ -2,10 +2,14 @@ name: Member Node Release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Specify a Git tag to process (e.g., v1.0.0)'
+        required: true
+        type: string
 
 env:
   GO_VERSION: '1.24'
-#  RELEASE_TAG: 'test'
   RELEASE_TAG: ${{ github.event.inputs.tag }}
   CGO_ENABLED: '1'
 
