@@ -32,7 +32,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/node"
@@ -146,7 +145,7 @@ func NewModeratorNode(
 		},
 	}
 
-	mn.consensusService = consensus.NewGossipConsensus(ctx, pubsubService, nil)
+	//mn.consensusService = consensus.NewGossipConsensus(ctx, pubsubService, nil)
 
 	return mn, nil
 }
@@ -189,9 +188,9 @@ func (mn *ModeratorNode) Start() (err error) {
 
 	nodeInfo := mn.NodeInfo()
 
-	if err := mn.consensusService.Start(mn); err != nil {
-		return err
-	}
+	//if err := mn.consensusService.Start(mn); err != nil {
+	//	return err
+	//}
 
 	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
 	if err != nil {

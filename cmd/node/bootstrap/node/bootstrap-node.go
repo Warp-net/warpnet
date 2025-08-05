@@ -31,7 +31,6 @@ import (
 	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus"
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -133,7 +132,7 @@ func NewBootstrapNode(
 		privKey:           privKey,
 	}
 
-	bn.consensusService = consensus.NewGossipConsensus(ctx, pubsubService, nil)
+	//bn.consensusService = consensus.NewGossipConsensus(ctx, pubsubService, nil)
 
 	return bn, nil
 }
@@ -164,9 +163,9 @@ func (bn *BootstrapNode) Start() (err error) {
 
 	nodeInfo := bn.NodeInfo()
 
-	if err := bn.consensusService.Start(bn); err != nil {
-		return err
-	}
+	//if err := bn.consensusService.Start(bn); err != nil {
+	//	return err
+	//}
 
 	println()
 	fmt.Printf(

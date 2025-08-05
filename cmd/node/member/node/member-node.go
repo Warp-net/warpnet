@@ -32,7 +32,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -182,10 +181,9 @@ func NewMemberNode(
 		pseudoNode:    mastodonPseudoNode,
 	}
 
-	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService,
-		userRepo.ValidateUserID,
-	)
+	//mn.consensusService = consensus.NewGossipConsensus(
+	//	ctx, pubsubService,
+	//)
 
 	return mn, nil
 }
@@ -218,9 +216,9 @@ func (m *MemberNode) Start() (err error) {
 		return err
 	}
 
-	if err := m.consensusService.Start(m); err != nil {
-		return err
-	}
+	//if err := m.consensusService.Start(m); err != nil {
+	//	return err
+	//}
 
 	ev := event.ValidationEvent{
 		ValidatedNodeID: nodeInfo.ID.String(),
