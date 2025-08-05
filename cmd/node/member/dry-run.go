@@ -67,13 +67,12 @@ func main() {
 		os.Exit(1)
 		return
 	}
+	readyChan := make(chan domain.AuthNodeInfo, 10)
 
 	authRepo := database.NewAuthRepo(db)
 	userRepo := database.NewUserRepo(db)
-
-	readyChan := make(chan domain.AuthNodeInfo, 10)
-
 	authService := auth.NewAuthService(authRepo, userRepo, readyChan)
+
 	go func() {
 		username, pass := manualCredsInput()
 
@@ -81,11 +80,10 @@ func main() {
 			Username: username,
 			Password: pass,
 		})
+		if err != nil {
+			log.Fatalf("failed to login: %v", err)
+		}
 	}()
-
-	if err != nil {
-		log.Fatalf("failed to login: %v", err)
-	}
 
 	authInfo := <-readyChan
 
