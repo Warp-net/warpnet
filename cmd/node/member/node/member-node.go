@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
+	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -113,8 +114,8 @@ func NewMemberNode(
 		pubsub.NewDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
 		pubsub.NewTransitModerationHandler(),
 	}
-	pubsubHandlers = append(pubsubHandlers, pubsub.PrefollowUsers(followeeIds...)...)
-	pubsubService := pubsub.NewPubSub(
+	pubsubHandlers = append(pubsubHandlers, memberPubSub.PrefollowUsers(followeeIds...)...)
+	pubsubService := memberPubSub.NewPubSub(
 		ctx,
 		pubsubHandlers...,
 	)
@@ -211,20 +212,20 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
-	if err != nil {
-		return err
-	}
+	//ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
+	//if err != nil {
+	//	return err
+	//}
 
 	//if err := m.consensusService.Start(m); err != nil {
 	//	return err
 	//}
 
-	ev := event.ValidationEvent{
-		ValidatedNodeID: nodeInfo.ID.String(),
-		User:            &ownerUser,
-	}
-	go m.consensusService.AskValidation(ev)
+	//ev := event.ValidationEvent{
+	//	ValidatedNodeID: nodeInfo.ID.String(),
+	//	User:            &ownerUser,
+	//}
+	//go m.consensusService.AskValidation(ev)
 
 	println()
 	fmt.Printf(

@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	root "github.com/Warp-net/warpnet"
+	bootstrapPubSub "github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -71,7 +72,7 @@ func NewBootstrapNode(
 		return nil, errors.New("private key is required")
 	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
-	pubsubService := pubsub.NewPubSubBootstrap(
+	pubsubService := bootstrapPubSub.NewPubSubBootstrap(
 		ctx,
 		pubsub.NewDiscoveryTopicHandler(
 			discService.WrapPubSubDiscovery(discService.DefaultDiscoveryHandler),

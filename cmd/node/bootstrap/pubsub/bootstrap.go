@@ -29,6 +29,8 @@ package pubsub
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -37,32 +39,39 @@ import (
 	"time"
 )
 
-type bootstrapPubSub struct {
-	ctx    context.Context
-	pubsub *gossip
+type PubsubServerNodeConnector interface {
+	Node() warpnet.P2PNode
+	NodeInfo() warpnet.NodeInfo
+	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
+	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
-func NewPubSubBootstrap(ctx context.Context, handlers ...TopicHandler) *bootstrapPubSub {
+type bootstrapPubSub struct {
+	ctx    context.Context
+	pubsub *pubsub.Gossip
+}
+
+func NewPubSubBootstrap(ctx context.Context, handlers ...pubsub.TopicHandler) *bootstrapPubSub {
 	bps := &bootstrapPubSub{
 		ctx: ctx,
 	}
-	bps.pubsub = newGossip(ctx, handlers...)
+	bps.pubsub = pubsub.NewGossip(ctx, handlers...)
 	return bps
 }
 
 func (g *bootstrapPubSub) Run(node PubsubServerNodeConnector) {
-	if g.pubsub.isGossipRunning() {
+	if g.pubsub.IsGossipRunning() {
 		return
 	}
 
-	if err := g.pubsub.run(node); err != nil {
+	if err := g.pubsub.Run(node); err != nil {
 		log.Errorf("pubsub: failed to run: %v", err)
 		return
 	}
 }
 
 func (g *bootstrapPubSub) PublishValidationRequest(bt []byte) (err error) {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("bootstrap pubsub: service not initialized")
 	}
 
@@ -75,26 +84,26 @@ func (g *bootstrapPubSub) PublishValidationRequest(bt []byte) (err error) {
 		MessageId:   uuid.New().String(),
 	}
 
-	return g.pubsub.publish(msg, pubSubConsensusTopic)
+	return g.pubsub.Publish(msg, pubsub.PubSubConsensusTopic)
 }
 
 func (g *bootstrapPubSub) SubscribeConsensusTopic() error {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("bootstrap pubsub: service not initialized")
 	}
 
-	return g.pubsub.subscribe(TopicHandler{
-		TopicName: pubSubConsensusTopic,
-		Handler:   g.pubsub.selfStream,
+	return g.pubsub.Subscribe(pubsub.TopicHandler{
+		TopicName: pubsub.PubSubConsensusTopic,
+		Handler:   g.pubsub.SelfPublish,
 	})
 }
 
 func (g *bootstrapPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		panic("bootstrap pubsub: get consensus subscribers: service not initialized")
 	}
 
-	return g.pubsub.subscribers(pubSubConsensusTopic)
+	return g.pubsub.Subscribers(pubsub.PubSubConsensusTopic)
 }
 
 func (g *bootstrapPubSub) OwnerID() string {
@@ -102,5 +111,5 @@ func (g *bootstrapPubSub) OwnerID() string {
 }
 
 func (g *bootstrapPubSub) Close() (err error) {
-	return g.pubsub.close()
+	return g.pubsub.Close()
 }

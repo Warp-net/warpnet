@@ -31,11 +31,11 @@ import (
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
+	moderatorPubSub "github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/node"
-	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/ipfs"
@@ -84,7 +84,7 @@ func NewModeratorNode(
 	psk security.PSK,
 	selfHashHex string,
 ) (_ *ModeratorNode, err error) {
-	pubsubService := pubsub.NewPubSubModerator(ctx)
+	pubsubService := moderatorPubSub.NewPubSubModerator(ctx)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)

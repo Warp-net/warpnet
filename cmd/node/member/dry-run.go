@@ -1,5 +1,5 @@
-////go:build dryrun
-//// +build dryrun
+//go:build dryrun
+// +build dryrun
 
 /*
 
@@ -31,7 +31,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	root "github.com/Warp-net/warpnet"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/auth"
@@ -47,10 +46,9 @@ import (
 	"syscall"
 )
 
+// run node without GUI
 func main() {
-	version := config.Config().Version
-	network := "testnet"
-	psk, err := security.GeneratePSK(network, version)
+	psk, err := security.GeneratePSK("testnet", config.Config().Version)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -62,13 +60,6 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
-	if err != nil {
-		log.Errorf("failed to get codebase hash: %v \n", err)
-		os.Exit(1)
-		return
-	}
 
 	db, err := local.New(config.Config().Database.Path, false)
 	if err != nil {
@@ -96,14 +87,14 @@ func main() {
 		log.Fatalf("failed to login: %v", err)
 	}
 
-	<-readyChan
+	authInfo := <-readyChan
 
 	dryRunNode, err := member.NewMemberNode(
 		ctx,
 		authRepo.PrivateKey(),
 		psk,
-		codeHashHex,
-		version,
+		"dry-run",
+		config.Config().Version,
 		authRepo,
 		db,
 	)
@@ -116,6 +107,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to start member node: %v", err)
 	}
+
+	readyChan <- domain.AuthNodeInfo{Identity: authInfo.Identity, NodeInfo: dryRunNode.NodeInfo()}
 	log.Infoln("WARPNET STARTED")
 	<-interruptChan
 	log.Infoln("interrupted...")

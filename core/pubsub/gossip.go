@@ -48,15 +48,13 @@ import (
 )
 
 const (
-	pubSubModerationTopic = "peer-moderation"
+	PubSubModerationTopic = "peer-moderation"
+	PubSubConsensusTopic  = "peer-consensus"
 
-	pubSubDiscoveryTopic = "peer-discovery"
-	pubSubConsensusTopic = "peer-consensus"
-	// prefixes
-	userUpdateTopicPrefix = "user-update"
-
-	publishPeerInfoLimit = 10
+	PubSubDiscoveryTopic = "peer-discovery"
 )
+
+var ErrTopicClosed = pubsub.ErrTopicClosed
 
 type GossipNodeConnector interface {
 	Node() warpnet.P2PNode
@@ -66,7 +64,7 @@ type GossipNodeConnector interface {
 
 type topicHandler func(data []byte) error
 
-type gossip struct {
+type Gossip struct {
 	ctx    context.Context
 	pubsub *pubsub.PubSub
 	node   GossipNodeConnector
@@ -87,30 +85,30 @@ type TopicHandler struct {
 
 func NewDiscoveryTopicHandler(handler topicHandler) TopicHandler {
 	return TopicHandler{
-		TopicName: pubSubDiscoveryTopic,
+		TopicName: PubSubDiscoveryTopic,
 		Handler:   handler,
 	}
 }
 
 func NewTransitModerationHandler() TopicHandler {
 	return TopicHandler{
-		TopicName: pubSubModerationTopic,
+		TopicName: PubSubModerationTopic,
 		Handler: func(data []byte) error { // discard, transit only
 			return nil
 		},
 	}
 }
 
-func newGossip(
+func NewGossip(
 	ctx context.Context,
 	handlers ...TopicHandler,
-) *gossip {
+) *Gossip {
 	handlersMap := make(map[string]topicHandler)
 	for _, h := range handlers {
 		handlersMap[h.TopicName] = h.Handler
 	}
 
-	return &gossip{
+	return &Gossip{
 		ctx:              ctx,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
@@ -121,9 +119,9 @@ func newGossip(
 	}
 }
 
-func (g *gossip) run(node GossipNodeConnector) (err error) {
+func (g *Gossip) Run(node GossipNodeConnector) (err error) {
 	if g.isRunning.Load() {
-		return errors.New("gossip already running")
+		return errors.New("gossip: already running")
 	}
 
 	g.node = node
@@ -145,7 +143,7 @@ func (g *gossip) run(node GossipNodeConnector) (err error) {
 		})
 	}
 
-	if err := g.subscribe(handlers...); err != nil {
+	if err := g.Subscribe(handlers...); err != nil {
 		return fmt.Errorf("gossip: presubscribe: %v", err)
 	}
 
@@ -160,7 +158,7 @@ func (g *gossip) run(node GossipNodeConnector) (err error) {
 	return nil
 }
 
-func (g *gossip) runListener() error {
+func (g *Gossip) runListener() error {
 	if g == nil {
 		return warpnet.WarpError("gossip: run listener: service not initialized properly")
 	}
@@ -202,7 +200,7 @@ func (g *gossip) runListener() error {
 			g.mx.RUnlock()
 			if !ok {
 				// default behavior
-				if err := g.selfStream(msg.Data); err != nil {
+				if err := g.SelfPublish(msg.Data); err != nil {
 					log.Errorf("gossip: self stream: %v", err)
 				}
 				continue
@@ -218,14 +216,14 @@ func (g *gossip) runListener() error {
 	}
 }
 
-func (g *gossip) runGossip() (err error) {
+func (g *Gossip) runGossip() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("gossip: recovered from panic: %v", r)
+			err = fmt.Errorf("Gossip: recovered from panic: %v", r)
 		}
 	}()
 	if g == nil || g.node == nil {
-		return warpnet.WarpError("gossip: service not initialized properly")
+		return warpnet.WarpError("Gossip: service not initialized properly")
 	}
 
 	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node())
@@ -234,14 +232,14 @@ func (g *gossip) runGossip() (err error) {
 	}
 	g.isRunning.Store(true)
 
-	log.Infoln("gossip: started")
+	log.Infoln("Gossip: started")
 
 	return nil
 }
 
-func (g *gossip) subscribe(handlers ...TopicHandler) (err error) {
+func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {
 	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("gossip: service not initialized")
+		return warpnet.WarpError("Gossip: service not initialized")
 	}
 	g.mx.Lock()
 	defer g.mx.Unlock()
@@ -279,7 +277,7 @@ func (g *gossip) subscribe(handlers ...TopicHandler) (err error) {
 	return nil
 }
 
-func (g *gossip) unsubscribe(topics ...string) (err error) {
+func (g *Gossip) Unsubscribe(topics ...string) (err error) {
 	if g == nil || !g.isRunning.Load() {
 		return warpnet.WarpError("gossip: service not initialized")
 	}
@@ -315,7 +313,7 @@ func (g *gossip) unsubscribe(topics ...string) (err error) {
 	return err
 }
 
-func (g *gossip) subscribers(topicName string) []warpnet.WarpAddrInfo {
+func (g *Gossip) Subscribers(topicName string) []warpnet.WarpAddrInfo {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 
@@ -334,7 +332,7 @@ func (g *gossip) subscribers(topicName string) []warpnet.WarpAddrInfo {
 	return infos
 }
 
-func (g *gossip) notSubscribers(topicName string) []warpnet.WarpAddrInfo {
+func (g *Gossip) NotSubscribers(topicName string) []warpnet.WarpAddrInfo {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 
@@ -358,9 +356,9 @@ func (g *gossip) notSubscribers(topicName string) []warpnet.WarpAddrInfo {
 	return infos
 }
 
-func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
+func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("gossip: service not initialized")
+		return warpnet.WarpError("Gossip: service not initialized")
 	}
 
 	g.mx.Lock()
@@ -408,16 +406,16 @@ func (g *gossip) publish(msg event.Message, topics ...string) (err error) {
 	return nil
 }
 
-func (g *gossip) selfStream(data []byte) error {
+func (g *Gossip) SelfPublish(data []byte) error {
 	var simulatedStreamMessage event.Message
 	if err := json.Unmarshal(data, &simulatedStreamMessage); err != nil {
-		log.Errorf("pubsub: failed to decode user update message: %v %s", err, data)
+		log.Errorf("gossip: failed to decode user update message: %v %s", err, data)
 		return err
 	}
 
 	if simulatedStreamMessage.Destination == "" {
-		log.Warningln("pubsub: user update message has no destination")
-		return fmt.Errorf("pubsub: user update message has no path: %s", string(data))
+		log.Warningln("gossip: user update message has no destination")
+		return fmt.Errorf("gossip: user update message has no path: %s", string(data))
 	}
 
 	route := stream.WarpRoute(simulatedStreamMessage.Destination)
@@ -430,18 +428,18 @@ func (g *gossip) selfStream(data []byte) error {
 	return err
 }
 
-func (g *gossip) nodeInfo() warpnet.NodeInfo {
+func (g *Gossip) NodeInfo() warpnet.NodeInfo {
 	if g == nil || g.node == nil {
 		return warpnet.NodeInfo{}
 	}
 	return g.node.NodeInfo()
 }
 
-func (g *gossip) isGossipRunning() bool {
+func (g *Gossip) IsGossipRunning() bool {
 	return g.isRunning.Load()
 }
 
-func (g *gossip) close() (err error) {
+func (g *Gossip) Close() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)
@@ -472,6 +470,6 @@ func (g *gossip) close() (err error) {
 	g.relayCancelFuncs = nil
 	g.topics = nil
 	g.subs = nil
-	log.Infoln("gossip: closed")
+	log.Infoln("Gossip: closed")
 	return
 }
