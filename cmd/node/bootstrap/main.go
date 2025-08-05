@@ -27,8 +27,8 @@ package main
 import (
 	"context"
 	root "github.com/Warp-net/warpnet"
+	bootstrap "github.com/Warp-net/warpnet/cmd/node/bootstrap/node"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/node/bootstrap"
 	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	writer "github.com/ipfs/go-log/writer"

@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"github.com/Warp-net/warpnet/event"
 	"go.uber.org/goleak"
 	"testing"
 	"time"
@@ -143,29 +142,6 @@ func (s *UserRepoTestSuite) TestListAndGetBatch() {
 	usersBatch, err := s.repo.GetBatch("list1", "list2")
 	s.Require().NoError(err)
 	s.Len(usersBatch, 2)
-}
-
-func (s *UserRepoTestSuite) TestValidateUser() {
-	nodeId := "node123"
-	user := domain.User{Id: "uniqueUser", CreatedAt: time.Now(), NodeId: nodeId}
-	_, err := s.repo.Create(user)
-	s.Require().NoError(err)
-
-	err = s.repo.ValidateUserID(event.ValidationEvent{
-		ValidatedNodeID: nodeId,
-		SelfHashHex:     "",
-		User:            &user,
-	})
-	s.NoError(err) // FIXME!
-
-	user.Id = "nonexistent"
-
-	err = s.repo.ValidateUserID(event.ValidationEvent{
-		ValidatedNodeID: nodeId,
-		SelfHashHex:     "",
-		User:            &user,
-	})
-	s.NoError(err)
 }
 
 func TestUserRepoTestSuite(t *testing.T) {

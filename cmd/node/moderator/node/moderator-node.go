@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package moderator
+package node
 
 import (
 	"context"
@@ -31,12 +31,11 @@ import (
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
+	moderatorPubSub "github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
-	"github.com/Warp-net/warpnet/core/node/base"
-	"github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/ipfs"
@@ -62,7 +61,7 @@ var (
 type ModeratorNode struct {
 	ctx context.Context
 
-	node    *base.WarpNode
+	node    *node.WarpNode
 	options []libp2p.Option
 
 	store DistributedStorer
@@ -85,7 +84,7 @@ func NewModeratorNode(
 	psk security.PSK,
 	selfHashHex string,
 ) (_ *ModeratorNode, err error) {
-	pubsubService := pubsub.NewPubSubModerator(ctx)
+	pubsubService := moderatorPubSub.NewPubSubModerator(ctx)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
@@ -142,21 +141,11 @@ func NewModeratorNode(
 			libp2p.PrivateNetwork(warpnet.PSK(psk)),
 			libp2p.UserAgent(warpnet.WarpnetName + "-moderator"),
 			libp2p.Routing(dHashTable.StartRouting),
-			base.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
+			node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 		},
 	}
 
-	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, func(ev event.ValidationEvent) error {
-			if len(selfHashHex) == 0 {
-				return errors.New("empty codebase hash")
-			}
-			if selfHashHex == ev.SelfHashHex {
-				return nil
-			}
-			return errors.New("self hash is not valid")
-		},
-	)
+	//mn.consensusService = consensus.NewGossipConsensus(ctx, pubsubService, nil)
 
 	return mn, nil
 }
@@ -171,20 +160,20 @@ func (mn *ModeratorNode) Start() (err error) {
 	)
 	modelFile, isModelExists := isModelExists(confModelPath)
 
-	mn.node, err = base.NewWarpNode(mn.ctx, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %v", err)
 	}
 
 	mn.node.SetStreamHandlers(
-		warpnet.WarpStreamHandler{
-			event.INTERNAL_POST_NODE_VALIDATE,
-			handler.StreamValidateHandler(mn.consensusService),
-		},
-		warpnet.WarpStreamHandler{
-			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-			handler.StreamValidationResponseHandler(mn.consensusService),
-		},
+		//warpnet.WarpStreamHandler{
+		//	event.INTERNAL_POST_NODE_VALIDATE,
+		//	handler.StreamValidateHandler(mn.consensusService),
+		//},
+		//warpnet.WarpStreamHandler{
+		//	event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+		//	handler.StreamValidationResponseHandler(mn.consensusService),
+		//},
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(mn, nil),
@@ -199,14 +188,9 @@ func (mn *ModeratorNode) Start() (err error) {
 
 	nodeInfo := mn.NodeInfo()
 
-	if err := mn.consensusService.Start(mn); err != nil {
-		return err
-	}
-
-	// blocking call
-	mn.consensusService.AskValidation(
-		event.ValidationEvent{nodeInfo.ID.String(), mn.selfHashHex, nil},
-	)
+	//if err := mn.consensusService.Start(mn); err != nil {
+	//	return err
+	//}
 
 	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
 	if err != nil {

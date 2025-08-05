@@ -22,12 +22,12 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package bootstrap
+package node
 
 import (
+	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
-	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"io"
@@ -58,7 +58,6 @@ type ProviderCloser interface {
 type ConsensusServicer interface {
 	Start(streamer consensus.ConsensusStreamer) (err error)
 	Close()
-	AskValidation(data event.ValidationEvent)
 	Validate(ev event.ValidationEvent) error
 	ValidationResult(ev event.ValidationResultEvent) error
 }

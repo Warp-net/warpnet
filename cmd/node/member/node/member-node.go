@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package member
+package node
 
 import (
 	"context"
@@ -31,18 +31,19 @@ import (
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
+	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
-	"github.com/Warp-net/warpnet/core/node/base"
+	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
@@ -54,7 +55,7 @@ import (
 type MemberNode struct {
 	ctx context.Context
 
-	node *base.WarpNode
+	node *node.WarpNode
 	opts []warpnet.WarpOption
 
 	discService          DiscoveryHandler
@@ -113,8 +114,8 @@ func NewMemberNode(
 		pubsub.NewDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
 		pubsub.NewTransitModerationHandler(),
 	}
-	pubsubHandlers = append(pubsubHandlers, pubsub.PrefollowUsers(followeeIds...)...)
-	pubsubService := pubsub.NewPubSub(
+	pubsubHandlers = append(pubsubHandlers, memberPubSub.PrefollowUsers(followeeIds...)...)
+	pubsubService := memberPubSub.NewPubSub(
 		ctx,
 		pubsubHandlers...,
 	)
@@ -149,7 +150,7 @@ func NewMemberNode(
 	}
 
 	opts := []warpnet.WarpOption{
-		base.WarpIdentity(privKey),
+		node.WarpIdentity(privKey),
 		libp2p.Peerstore(store),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
 		libp2p.ListenAddrStrings(
@@ -157,10 +158,10 @@ func NewMemberNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		base.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
+		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	}
 
-	opts = append(opts, base.CommonOptions...)
+	opts = append(opts, node.CommonOptions...)
 
 	mn := &MemberNode{
 		ctx:           ctx,
@@ -181,17 +182,15 @@ func NewMemberNode(
 		pseudoNode:    mastodonPseudoNode,
 	}
 
-	mn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService,
-		nodeRepo.ValidateSelfHash,
-		userRepo.ValidateUserID,
-	)
+	//mn.consensusService = consensus.NewGossipConsensus(
+	//	ctx, pubsubService,
+	//)
 
 	return mn, nil
 }
 
 func (m *MemberNode) Start() (err error) {
-	m.node, err = base.NewWarpNode(
+	m.node, err = node.NewWarpNode(
 		m.ctx,
 		m.opts...,
 	)
@@ -213,21 +212,20 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
-	if err != nil {
-		return err
-	}
+	//ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
+	//if err != nil {
+	//	return err
+	//}
 
-	if err := m.consensusService.Start(m); err != nil {
-		return err
-	}
+	//if err := m.consensusService.Start(m); err != nil {
+	//	return err
+	//}
 
-	ev := event.ValidationEvent{
-		ValidatedNodeID: nodeInfo.ID.String(),
-		SelfHashHex:     m.selfHashHex,
-		User:            &ownerUser,
-	}
-	go m.consensusService.AskValidation(ev)
+	//ev := event.ValidationEvent{
+	//	ValidatedNodeID: nodeInfo.ID.String(),
+	//	User:            &ownerUser,
+	//}
+	//go m.consensusService.AskValidation(ev)
 
 	println()
 	fmt.Printf(
@@ -368,16 +366,25 @@ func (m *MemberNode) setupHandlers(
 	chatRepo := database.NewChatRepo(db)
 	mediaRepo := database.NewMediaRepo(db)
 
+	authNodeInfo := domain.AuthNodeInfo{
+		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
+		NodeInfo: m.NodeInfo(),
+	}
+
 	m.node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
 			{
-				event.INTERNAL_POST_NODE_VALIDATE,
-				handler.StreamValidateHandler(m.consensusService),
+				event.PRIVATE_POST_PAIR,
+				handler.StreamNodesPairingHandler(authNodeInfo),
 			},
-			{
-				event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-				handler.StreamValidationResponseHandler(m.consensusService),
-			},
+			//{
+			//	event.INTERNAL_POST_NODE_VALIDATE,
+			//	handler.StreamValidateHandler(m.consensusService),
+			//},
+			//{
+			//	event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+			//	handler.StreamValidationResponseHandler(m.consensusService),
+			//},
 			{
 				event.PUBLIC_POST_NODE_CHALLENGE,
 				handler.StreamChallengeHandler(root.GetCodeBase(), privKey),

@@ -1,6 +1,3 @@
-//go:build llama
-// +build llama
-
 /*
 
 Warpnet - Decentralized Social Network
@@ -25,31 +22,34 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package moderator
+// Copyright 2025 Vadim Filin
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package handler
 
 import (
-	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/moderation"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
-	"runtime"
-	"time"
 )
 
-func init() {
-	go func() {
-		defer close(moderatorReadyChan)
-		select {
-		case <-moderatorReadyChan:
-		case <-time.After(time.Hour): // more than consensus timeout
-			log.Errorln("failed to wait for ready chan")
-			return
+func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var clientInfo domain.AuthNodeInfo
+		if err := json.Unmarshal(buf, &clientInfo); err != nil || clientInfo.Identity.Token == "" {
+			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)
+			return nil, err
 		}
-
-		var err error
-		moderator, err = moderation.NewLlamaEngine(config.Config().Node.Moderator.Path, runtime.NumCPU())
-		if err != nil {
-			log.Fatalf("moderator node: initializing: %v", err)
+		tokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
+		if !tokenMatch {
+			log.Errorf(
+				"pair: token does not match server identity: %s != %s",
+				serverAuthInfo.Identity.Token, clientInfo.Identity.Token,
+			)
+			return nil, warpnet.WarpError("token mismatch")
 		}
-		log.Infoln("moderator node: initialized")
-	}()
+		return event.Accepted, nil
+	}
 }

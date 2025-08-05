@@ -29,6 +29,8 @@ package pubsub
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -38,9 +40,16 @@ import (
 	"time"
 )
 
+type PubsubServerNodeConnector interface {
+	Node() warpnet.P2PNode
+	NodeInfo() warpnet.NodeInfo
+	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
+	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
+}
+
 type moderatorPubSub struct {
 	ctx    context.Context
-	pubsub *gossip
+	pubsub *pubsub.Gossip
 
 	mx *sync.Mutex
 }
@@ -50,23 +59,23 @@ func NewPubSubModerator(ctx context.Context) *moderatorPubSub {
 		ctx: ctx,
 		mx:  new(sync.Mutex),
 	}
-	bps.pubsub = newGossip(ctx)
+	bps.pubsub = pubsub.NewGossip(ctx)
 	return bps
 }
 
 func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) {
-	if g.pubsub.isGossipRunning() {
+	if g.pubsub.IsGossipRunning() {
 		return
 	}
 
-	if err := g.pubsub.run(node); err != nil {
+	if err := g.pubsub.Run(node); err != nil {
 		log.Errorf("moderator pubsub: failed to run: %v", err)
 		return
 	}
 }
 
 func (g *moderatorPubSub) PublishValidationRequest(bt []byte) (err error) {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("moderator pubsub: service not initialized")
 	}
 	body := json.RawMessage(bt)
@@ -80,43 +89,43 @@ func (g *moderatorPubSub) PublishValidationRequest(bt []byte) (err error) {
 		MessageId:   uuid.New().String(),
 	}
 
-	return g.pubsub.publish(msg, pubSubConsensusTopic)
+	return g.pubsub.Publish(msg, pubsub.PubSubConsensusTopic)
 }
 
 func (g *moderatorPubSub) SubscribeModerationTopic() error {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("moderator pubsub: service not initialized")
 	}
 
-	return g.pubsub.subscribe(TopicHandler{
-		TopicName: pubSubModerationTopic,
+	return g.pubsub.Subscribe(pubsub.TopicHandler{
+		TopicName: pubsub.PubSubModerationTopic,
 		Handler: func(data []byte) error {
 			if !g.mx.TryLock() {
 				return warpnet.WarpError("moderator pubsub: moderation topic is busy")
 			}
 			g.mx.Unlock()
-			return g.pubsub.selfStream(data)
+			return g.pubsub.SelfPublish(data)
 		},
 	})
 }
 
 func (g *moderatorPubSub) SubscribeConsensusTopic() error {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("moderator pubsub: service not initialized")
 	}
 
-	return g.pubsub.subscribe(TopicHandler{
-		TopicName: pubSubConsensusTopic,
-		Handler:   g.pubsub.selfStream,
+	return g.pubsub.Subscribe(pubsub.TopicHandler{
+		TopicName: pubsub.PubSubConsensusTopic,
+		Handler:   g.pubsub.SelfPublish,
 	})
 }
 
 func (g *moderatorPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		panic("moderator pubsub: get consensus subscribers: service not initialized")
 	}
 
-	return g.pubsub.subscribers(pubSubConsensusTopic)
+	return g.pubsub.Subscribers(pubsub.PubSubConsensusTopic)
 }
 
 func (g *moderatorPubSub) OwnerID() string {
@@ -124,5 +133,5 @@ func (g *moderatorPubSub) OwnerID() string {
 }
 
 func (g *moderatorPubSub) Close() (err error) {
-	return g.pubsub.close()
+	return g.pubsub.Close()
 }

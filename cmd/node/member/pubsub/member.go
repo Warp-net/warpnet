@@ -5,7 +5,7 @@ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published by
+it under the terms of the GNU Affero General Public License as Published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
@@ -31,14 +31,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 	"time"
+)
+
+const (
+	// prefixes
+	userUpdateTopicPrefix = "user-update"
 )
 
 type PubsubServerNodeConnector interface {
@@ -50,26 +55,26 @@ type PubsubServerNodeConnector interface {
 
 type memberPubSub struct {
 	ctx    context.Context
-	pubsub *gossip
+	pubsub *pubsub.Gossip
 }
 
 type DiscoveryHandler func(warpnet.WarpAddrInfo)
 
-func NewPubSub(ctx context.Context, handlers ...TopicHandler) *memberPubSub {
+func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *memberPubSub {
 	mps := &memberPubSub{
 		ctx: ctx,
 	}
 
-	mps.pubsub = newGossip(ctx, handlers...)
+	mps.pubsub = pubsub.NewGossip(ctx, handlers...)
 	return mps
 }
 
 func (g *memberPubSub) Run(node PubsubServerNodeConnector) {
-	if g.pubsub.isGossipRunning() {
+	if g.pubsub.IsGossipRunning() {
 		return
 	}
 
-	if err := g.pubsub.run(node); err != nil {
+	if err := g.pubsub.Run(node); err != nil {
 		log.Errorf("pubsub: failed to run: %v", err)
 		return
 	}
@@ -79,19 +84,19 @@ func (g *memberPubSub) OwnerID() string {
 	if g == nil || g.pubsub == nil {
 		return ""
 	}
-	return g.pubsub.nodeInfo().OwnerId
+	return g.pubsub.NodeInfo().OwnerId
 }
 
 func (g *memberPubSub) NodeID() string {
 	if g == nil || g.pubsub == nil {
 		return ""
 	}
-	return g.pubsub.nodeInfo().ID.String()
+	return g.pubsub.NodeInfo().ID.String()
 }
 
-func PrefollowUsers(userIds ...string) (handlers []TopicHandler) {
+func PrefollowUsers(userIds ...string) (handlers []pubsub.TopicHandler) {
 	for _, userId := range userIds {
-		handler := TopicHandler{
+		handler := pubsub.TopicHandler{
 			TopicName: fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId),
 			Handler:   nil,
 		}
@@ -102,48 +107,48 @@ func PrefollowUsers(userIds ...string) (handlers []TopicHandler) {
 }
 
 func (g *memberPubSub) SubscribeConsensusTopic() error {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("member pubsub: service not initialized")
 	}
 
-	return g.pubsub.subscribe(TopicHandler{
-		TopicName: pubSubConsensusTopic,
-		Handler:   g.pubsub.selfStream,
+	return g.pubsub.Subscribe(pubsub.TopicHandler{
+		TopicName: pubsub.PubSubConsensusTopic,
+		Handler:   g.pubsub.SelfPublish,
 	})
 }
 
 func (g *memberPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
-	return g.pubsub.subscribers(pubSubConsensusTopic)
+	return g.pubsub.Subscribers(pubsub.PubSubConsensusTopic)
 }
 
 // SubscribeUserUpdate - follow someone
 func (g *memberPubSub) SubscribeUserUpdate(userId string) (err error) {
-	if g == nil || g.pubsub == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || g.pubsub == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
-	ownerId := g.pubsub.nodeInfo().ID.String()
+	ownerId := g.pubsub.NodeInfo().ID.String()
 	if ownerId == userId {
-		return warpnet.WarpError("pubsub: can't subscribe to own user")
+		return warpnet.WarpError("pubsub: can't Subscribe to own user")
 	}
 
-	handler := TopicHandler{
+	handler := pubsub.TopicHandler{
 		TopicName: fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId),
-		Handler:   g.pubsub.selfStream,
+		Handler:   g.pubsub.SelfPublish,
 	}
-	return g.pubsub.subscribe(handler)
+	return g.pubsub.Subscribe(handler)
 }
 
 // UnsubscribeUserUpdate - unfollow someone
 func (g *memberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
-	return g.pubsub.unsubscribe(topicName)
+	return g.pubsub.Unsubscribe(topicName)
 }
 
 func (g *memberPubSub) PublishValidationRequest(bt []byte) (err error) {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 	body := json.RawMessage(bt)
@@ -156,11 +161,11 @@ func (g *memberPubSub) PublishValidationRequest(bt []byte) (err error) {
 		Version:     "0.0.0", // TODO manage protocol versions properly
 		MessageId:   uuid.New().String(),
 	}
-	return g.pubsub.publish(msg, pubSubConsensusTopic)
+	return g.pubsub.Publish(msg, pubsub.PubSubConsensusTopic)
 }
 
 func (g *memberPubSub) PublishModerationRequest(bt []byte) (err error) {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 	body := json.RawMessage(bt)
@@ -173,12 +178,12 @@ func (g *memberPubSub) PublishModerationRequest(bt []byte) (err error) {
 		Version:     "0.0.0", // TODO manage protocol versions properly
 		MessageId:   uuid.New().String(),
 	}
-	return g.pubsub.publish(msg, pubSubModerationTopic)
+	return g.pubsub.Publish(msg, pubsub.PubSubModerationTopic)
 }
 
-// PublishUpdateToFollowers - publish for followers
+// PublishUpdateToFollowers - Publish for followers
 func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error) {
-	if g == nil || !g.pubsub.isGossipRunning() {
+	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
@@ -193,22 +198,22 @@ func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte)
 		Version:     "0.0.0", // TODO manage protocol versions properly
 	}
 
-	return g.pubsub.publish(msg, topicName)
+	return g.pubsub.Publish(msg, topicName)
 }
 
 func (g *memberPubSub) runPeerInfoPublishing() {
 	ticker := time.NewTicker(time.Minute * 5)
 	defer ticker.Stop()
 
-	log.Infoln("pubsub: publisher started")
-	defer log.Infoln("pubsub: publisher stopped")
+	log.Infoln("pubsub: Publisher started")
+	defer log.Infoln("pubsub: Publisher stopped")
 
-	if err := g.publishPeerInfo(); err != nil { // initial publishing
-		log.Errorf("pubsub: failed to publish peer info: %v", err)
+	if err := g.PublishPeerInfo(); err != nil { // initial Publishing
+		log.Errorf("pubsub: failed to Publish peer info: %v", err)
 	}
 
 	for {
-		if !g.pubsub.isGossipRunning() {
+		if !g.pubsub.IsGossipRunning() {
 			return
 		}
 
@@ -216,23 +221,25 @@ func (g *memberPubSub) runPeerInfoPublishing() {
 		case <-g.ctx.Done():
 			return
 		case <-ticker.C:
-			if err := g.publishPeerInfo(); err != nil {
-				log.Errorf("pubsub: failed to publish peer info: %v", err)
+			if err := g.PublishPeerInfo(); err != nil {
+				log.Errorf("pubsub: failed to Publish peer info: %v", err)
 				continue
 			}
 		}
 	}
 }
 
-func (g *memberPubSub) publishPeerInfo() error {
-	myInfo := g.pubsub.nodeInfo()
+const publishPeerInfoLimit = 10
+
+func (g *memberPubSub) PublishPeerInfo() error {
+	myInfo := g.pubsub.NodeInfo()
 	addrInfosMessage := []warpnet.WarpPubInfo{{
 		ID:    myInfo.ID,
 		Addrs: myInfo.Addresses,
 	}}
 
 	limit := publishPeerInfoLimit
-	for _, pi := range g.pubsub.notSubscribers(pubSubDiscoveryTopic) {
+	for _, pi := range g.pubsub.NotSubscribers(pubsub.PubSubModerationTopic) {
 		if limit == 0 {
 			break
 		}
@@ -255,13 +262,13 @@ func (g *memberPubSub) publishPeerInfo() error {
 	msg := event.Message{
 		Body:        json.RawMessage(data),
 		MessageId:   uuid.New().String(),
-		NodeId:      g.pubsub.nodeInfo().ID.String(),
+		NodeId:      g.pubsub.NodeInfo().ID.String(),
 		Destination: "none",
 		Timestamp:   time.Now(),
 		Version:     "0.0.0", // TODO
 	}
 
-	err = g.pubsub.publish(msg, pubSubDiscoveryTopic)
+	err = g.pubsub.Publish(msg, pubsub.PubSubModerationTopic)
 	if errors.Is(err, pubsub.ErrTopicClosed) {
 		return nil
 	}
@@ -269,5 +276,5 @@ func (g *memberPubSub) publishPeerInfo() error {
 }
 
 func (g *memberPubSub) Close() (err error) {
-	return g.pubsub.close()
+	return g.pubsub.Close()
 }

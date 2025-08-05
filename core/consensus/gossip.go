@@ -77,8 +77,27 @@ func (g *gossipConsensus) Start(streamer ConsensusStreamer) (err error) {
 
 	log.Infoln("gossip consensus: started")
 
-	go g.listenResponses()
 	return nil
+}
+
+func (g *gossipConsensus) AskValidation(data event.ValidationEvent) {
+	if g.isValidationDone.Load() {
+		return
+	}
+	if g.isBgRunning.Load() {
+		return
+	}
+
+	bt, err := json.Marshal(data)
+	if err != nil {
+		log.Errorf("gossip consensus: failed to marshal validation event: %s", err)
+		os.Exit(1)
+		return
+	}
+
+	go g.listenResponses()
+	g.runBackgroundPublishing(bt)
+	return
 }
 
 func (g *gossipConsensus) listenResponses() {
@@ -186,25 +205,6 @@ func (g *gossipConsensus) listenResponses() {
 			}
 		}
 	}
-}
-
-func (g *gossipConsensus) AskValidation(data event.ValidationEvent) {
-	if g.isValidationDone.Load() {
-		return
-	}
-	if g.isBgRunning.Load() {
-		return
-	}
-
-	bt, err := json.Marshal(data)
-	if err != nil {
-		log.Errorf("gossip consensus: failed to marshal validation event: %s", err)
-		os.Exit(1)
-		return
-	}
-
-	g.runBackgroundPublishing(bt)
-	return
 }
 
 func (g *gossipConsensus) runBackgroundPublishing(body []byte) {

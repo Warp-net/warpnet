@@ -29,6 +29,7 @@ package event
 
 const (
 	// admin
+	PRIVATE_POST_PAIR                  = "/private/post/admin/pair/0.0.0"
 	PUBLIC_POST_NODE_VALIDATION_RESULT = "/public/post/admin/validate/result/0.0.0"
 	PUBLIC_POST_NODE_CHALLENGE         = "/public/post/admin/challenge/0.0.0"
 	PRIVATE_GET_STATS                  = "/private/get/admin/stats/0.0.0"
