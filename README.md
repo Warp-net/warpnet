@@ -10,7 +10,7 @@
 
 <h3 align="center">Warpnet</h3>
   <p align="center">
-    <a href="https://github.com/Warp-net/docs"><strong>Explore the docs »</strong></a>
+    <a href="warp-net.github.io"><strong>Explore the docs »</strong></a>
     <br />
     &middot;
     <a href="https://github.com/Warp-net/warpnet/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
@@ -50,19 +50,19 @@
 13. Hosting a WarpNet bootstrap node must be incentivized with rewards.
 14. Node owners bear full personal responsibility for any content they upload to WarpNet.
 
-## HOW TO HELP 
+## HOW TO HELP
 
 [Answer](HOW-TO-HELP.md)
 
 ## Getting Started
 
 List of software needed and how to install them.
-* [Golang](https://go.dev/doc/install)
+* [Golang v1.24](https://go.dev/doc/install)
+* [Wails v2.10.2](https://github.com/wailsapp/wails)
 
 ## TODO
 - [ ] Set up a website
-  - [ ] Add docs to website
-  - [ ] Run URL shortener server
+- [v] Add docs to website
 - [ ] Create DMG package
 - [ ] Create Snap package
 - [ ] Set up bootstrap nodes on each continent
@@ -93,7 +93,8 @@ Remember to give the project a star! Thanks again!
 
 ## Contact
 
-### Maintainer 
+### Maintainer
+
 * Vadim Filin - github.com.mecdy@passmail.net
 
 ### Developers group in Telegram

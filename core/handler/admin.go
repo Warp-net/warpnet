@@ -57,7 +57,7 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpne
 		if fs == nil {
 			panic("challenge handler called with nil file system")
 		}
-		var req event.GetChallengeEvent
+		var req event.ChallengeEvent
 		err := json.Unmarshal(buf, &req)
 		if err != nil {
 			return nil, err
@@ -75,7 +75,7 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpne
 			return nil, err
 		}
 
-		return event.GetChallengeResponse{
+		return event.ChallengeResponse{
 			Challenge: hex.EncodeToString(challenge),
 			Signature: security.Sign(privateKey, challenge),
 		}, nil

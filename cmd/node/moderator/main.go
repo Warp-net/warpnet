@@ -27,8 +27,8 @@ package main
 import (
 	"context"
 	root "github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/node/moderator"
 	"github.com/Warp-net/warpnet/security"
 	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
@@ -86,7 +86,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex)
+	n, err := node.NewModeratorNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init moderator node: %v", err)
 	}
