@@ -102,6 +102,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 			},
 		}, nil
 	}
+
 	log.Infof("authenticating user %s", message.Username)
 
 	message.Password = strings.TrimSpace(message.Password)

@@ -265,9 +265,9 @@ func (bn *BootstrapNode) Stop() {
 			log.Errorf("bootstrap: failed to close memory store: %v", err)
 		}
 	}
-	if bn.consensusService != nil {
-		bn.consensusService.Close()
-	}
+	//if bn.consensusService != nil {
+	//	bn.consensusService.Close()
+	//}
 
 	bn.node.StopNode()
 }
