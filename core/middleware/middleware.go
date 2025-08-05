@@ -78,12 +78,11 @@ func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.S
 		log.Debugf("middleware: server stream opened: %s %s\n", s.Protocol(), s.Conn().RemotePeer())
 		before := time.Now()
 		next(s)
-		after := time.Now()
 		log.Debugf(
 			"middleware: server stream closed: %s %s, elapsed: %s\n",
 			s.Protocol(),
 			s.Conn().RemotePeer(),
-			after.Sub(before).String(),
+			time.Since(before).String(),
 		)
 	}
 }
