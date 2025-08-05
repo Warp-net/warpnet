@@ -365,21 +365,22 @@ type GetImageResponse struct {
 	File string `json:"file"`
 }
 
-type GetChallengeEvent struct {
+type ChallengeEvent struct {
 	DirStack  []int `json:"dir_stack"` // every index is level and value is dir num
 	FileStack []int `json:"file_stack"`
 	Nonce     int64 `json:"nonce"`
 }
 
-type GetChallengeResponse struct {
+type ChallengeResponse struct {
 	Challenge string `json:"challenge"`
 	Signature string `json:"signature"`
 }
 
 type ValidationEvent struct {
-	ValidatedNodeID string       `json:"validated_node_id"`
-	SelfHashHex     string       `json:"self_hash_hex"`
-	User            *domain.User `json:"user"`
+	ValidatedNodeID string         `json:"validated_node_id"`
+	SelfHashHex     string         `json:"self_hash_hex"`
+	Challenge       ChallengeEvent `json:"challenge"`
+	User            *domain.User   `json:"user"`
 }
 
 type ValidationResult int

@@ -30,7 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/node/base"
+	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -114,7 +114,7 @@ func StreamCreateChatHandler(
 				OwnerId:     ownerChat.OwnerId,
 			},
 		)
-		if err != nil && !errors.Is(err, base.ErrSelfRequest) {
+		if err != nil && !errors.Is(err, node.ErrSelfRequest) {
 			_ = repo.DeleteChat(ownerChat.Id)
 			return nil, err
 		}

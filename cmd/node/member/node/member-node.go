@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package member
+package node
 
 import (
 	"context"
@@ -38,11 +38,12 @@ import (
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
-	"github.com/Warp-net/warpnet/core/node/base"
+	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
@@ -54,7 +55,7 @@ import (
 type MemberNode struct {
 	ctx context.Context
 
-	node *base.WarpNode
+	node *node.WarpNode
 	opts []warpnet.WarpOption
 
 	discService          DiscoveryHandler
@@ -149,7 +150,7 @@ func NewMemberNode(
 	}
 
 	opts := []warpnet.WarpOption{
-		base.WarpIdentity(privKey),
+		node.WarpIdentity(privKey),
 		libp2p.Peerstore(store),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
 		libp2p.ListenAddrStrings(
@@ -157,10 +158,10 @@ func NewMemberNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		base.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
+		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	}
 
-	opts = append(opts, base.CommonOptions...)
+	opts = append(opts, node.CommonOptions...)
 
 	mn := &MemberNode{
 		ctx:           ctx,
@@ -183,7 +184,6 @@ func NewMemberNode(
 
 	mn.consensusService = consensus.NewGossipConsensus(
 		ctx, pubsubService,
-		nodeRepo.ValidateSelfHash,
 		userRepo.ValidateUserID,
 	)
 
@@ -191,7 +191,7 @@ func NewMemberNode(
 }
 
 func (m *MemberNode) Start() (err error) {
-	m.node, err = base.NewWarpNode(
+	m.node, err = node.NewWarpNode(
 		m.ctx,
 		m.opts...,
 	)
@@ -224,7 +224,6 @@ func (m *MemberNode) Start() (err error) {
 
 	ev := event.ValidationEvent{
 		ValidatedNodeID: nodeInfo.ID.String(),
-		SelfHashHex:     m.selfHashHex,
 		User:            &ownerUser,
 	}
 	go m.consensusService.AskValidation(ev)
@@ -368,8 +367,17 @@ func (m *MemberNode) setupHandlers(
 	chatRepo := database.NewChatRepo(db)
 	mediaRepo := database.NewMediaRepo(db)
 
+	authNodeInfo := domain.AuthNodeInfo{
+		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
+		NodeInfo: m.NodeInfo(),
+	}
+
 	m.node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
+			{
+				event.PRIVATE_POST_PAIR,
+				handler.StreamNodesPairingHandler(authNodeInfo),
+			},
 			{
 				event.INTERNAL_POST_NODE_VALIDATE,
 				handler.StreamValidateHandler(m.consensusService),

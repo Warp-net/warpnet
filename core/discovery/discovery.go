@@ -453,7 +453,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 	resp, err := s.node.GenericStream(
 		pi.ID.String(),
 		event.PUBLIC_POST_NODE_CHALLENGE,
-		event.GetChallengeEvent{
+		event.ChallengeEvent{
 			DirStack:  location.DirStack,
 			FileStack: location.FileStack,
 			Nonce:     nonce,
@@ -467,7 +467,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return fmt.Errorf("no challenge response from new peer %s", pi.ID.String())
 	}
 
-	var challengeResp event.GetChallengeResponse
+	var challengeResp event.ChallengeResponse
 	err = json.Unmarshal(resp, &challengeResp)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal challenge from new peer: %s %v", resp, err)

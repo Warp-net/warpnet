@@ -29,7 +29,7 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to generate challenge: %v", err)
 	}
 
-	ev := event.GetChallengeEvent{
+	ev := event.ChallengeEvent{
 		DirStack:  location.DirStack,
 		FileStack: location.FileStack,
 		Nonce:     nonce,
@@ -45,7 +45,7 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("challenge handler: %v", err)
 	}
 
-	challengeResp, ok := resp.(event.GetChallengeResponse)
+	challengeResp, ok := resp.(event.ChallengeResponse)
 	if !ok {
 		t.Fatalf("challenge handler returned unexpected response")
 	}

@@ -38,6 +38,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"runtime/debug"
+	"sync"
 	"time"
 )
 
@@ -57,11 +58,13 @@ const (
 )
 
 type WarpMiddleware struct {
-	ownNodeID warpnet.WarpPeerID
+	pairedAliases *sync.Map
 }
 
-func NewWarpMiddleware(ownNodeID warpnet.WarpPeerID) *WarpMiddleware {
-	return &WarpMiddleware{ownNodeID}
+func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
+	wm := &WarpMiddleware{new(sync.Map)}
+	wm.pairedAliases.Store(ownNodeId, "")
+	return wm
 }
 
 func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
@@ -94,27 +97,26 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			}
 			_ = s.Close()
 		}()
+		if s.Conn() == nil {
+			log.Errorf("middleware: auth: connection is not ready")
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
 		var (
 			route      = stream.FromPrIDToRoute(s.Protocol())
 			remotePeer = s.Conn().RemotePeer()
 		)
 
-		switch {
-		case route.IsPrivate() && p.ownNodeID == "":
-			log.Errorf("middleware: auth: client peer ID not set, ignoring private route: %s", route)
+		if _, aliasExists := p.pairedAliases.Load(remotePeer); route.IsPrivate() && !aliasExists {
+			log.Errorf("middleware: auth: alias device peer ID not found, ignoring private route: %s", route)
 			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
 			return
-		case route.IsPrivate() && p.ownNodeID != "" && p.ownNodeID != remotePeer:
-			log.Errorf("middleware: auth: client peer id mismatch: %s", remotePeer)
-			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
-			return
-
 		}
 
 		reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
 		data, err := io.ReadAll(reader)
 		if err != nil && err != io.EOF {
-			log.Errorf("middleware: reading from stream: %v", err)
+			log.Errorf("middleware: auth: reading from stream: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
@@ -131,7 +133,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}
-		if s.Conn() == nil || s.Conn().RemotePeer().Size() == 0 {
+		if remotePeer.Size() == 0 {
 			log.Errorf("middleware: auth: connection is not ready")
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
@@ -150,6 +152,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			WarpStream: s,
 			Body:       msg.Body,
 		})
+
 	}
 }
 
@@ -173,20 +176,29 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			if err != nil && err != io.EOF {
 				log.Errorf("middleware: reading from stream: %v", err)
 				response = event.ErrorResponse{Message: ErrStreamReadError.Error()}
+				_ = encoder.Encode(response)
+				return
 			}
 		}
 
 		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
-		if response == nil {
+		switch {
+		case s.Protocol() == event.PRIVATE_POST_PAIR:
 			response, err = handler(data, s)
-			if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-				if len(data) > 500 {
-					data = data[:500]
-				}
-				log.Errorf("middleware: handling of %s %s message: %s failed: %v\n", s.Protocol(), s.Conn().RemotePeer(), string(data), err)
-				response = event.ErrorResponse{Code: 500, Message: err.Error()} // TODO errors ranking
+			if err == nil {
+				p.pairedAliases.Store(s.Conn().RemotePeer(), "")
+				log.Debugf("middleware: paired alias: %s", s.Conn().RemotePeer())
 			}
+		default:
+			response, err = handler(data, s)
+		}
+		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+			if len(data) > 500 {
+				data = data[:500]
+			}
+			log.Errorf("middleware: handling of %s %s message: %s failed: %v\n", s.Protocol(), s.Conn().RemotePeer(), string(data), err)
+			response = event.ErrorResponse{Code: 500, Message: err.Error()} // TODO errors ranking
 		}
 
 		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)

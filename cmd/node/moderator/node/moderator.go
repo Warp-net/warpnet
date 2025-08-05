@@ -1,3 +1,6 @@
+//go:build llama
+// +build llama
+
 /*
 
 Warpnet - Decentralized Social Network
@@ -22,29 +25,31 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package security
+package node
 
 import (
-	root "github.com/Warp-net/warpnet"
-	"testing"
+	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/moderation"
+	log "github.com/sirupsen/logrus"
+	"runtime"
+	"time"
 )
 
-func TestChallengeResolve_Success(t *testing.T) {
-	codebase := root.GetCodeBase()
-	nonce := int64(1)
-
-	for i := 0; i < 10; i++ {
-		sampleOrigin, location, err := GenerateChallenge(codebase, nonce)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sampleFound, err := ResolveChallenge(codebase, location, nonce)
-		if err != nil {
-			t.Fatal(err)
+func init() {
+	go func() {
+		defer close(moderatorReadyChan)
+		select {
+		case <-moderatorReadyChan:
+		case <-time.After(time.Hour): // more than consensus timeout
+			log.Errorln("failed to wait for ready chan")
+			return
 		}
 
-		if string(sampleFound) != string(sampleOrigin) {
-			t.Fatalf("samples are not equal: \n %s %s", sampleOrigin, sampleFound)
+		var err error
+		moderator, err = moderation.NewLlamaEngine(config.Config().Node.Moderator.Path, runtime.NumCPU())
+		if err != nil {
+			log.Fatalf("moderator node: initializing: %v", err)
 		}
-	}
+		log.Infoln("moderator node: initialized")
+	}()
 }

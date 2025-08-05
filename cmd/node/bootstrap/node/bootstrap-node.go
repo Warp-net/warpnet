@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package bootstrap
+package node
 
 import (
 	"context"
@@ -35,7 +35,7 @@ import (
 	dht "github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
-	"github.com/Warp-net/warpnet/core/node/base"
+	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -49,7 +49,7 @@ import (
 
 type BootstrapNode struct {
 	ctx               context.Context
-	node              *base.WarpNode
+	node              *node.WarpNode
 	opts              []warpnet.WarpOption
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
@@ -58,7 +58,8 @@ type BootstrapNode struct {
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
-	selfHashHex       string
+	// validation block
+	selfHashHex string
 }
 
 func NewBootstrapNode(
@@ -108,7 +109,7 @@ func NewBootstrapNode(
 	}
 
 	opts := []warpnet.WarpOption{
-		base.WarpIdentity(privKey),
+		node.WarpIdentity(privKey),
 		libp2p.Peerstore(memoryStore),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
 		libp2p.ListenAddrStrings(
@@ -116,9 +117,9 @@ func NewBootstrapNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		base.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
+		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	}
-	opts = append(opts, base.CommonOptions...)
+	opts = append(opts, node.CommonOptions...)
 
 	bn := &BootstrapNode{
 		ctx:               ctx,
@@ -132,17 +133,7 @@ func NewBootstrapNode(
 		privKey:           privKey,
 	}
 
-	bn.consensusService = consensus.NewGossipConsensus(
-		ctx, pubsubService, func(ev event.ValidationEvent) error {
-			if len(selfHashHex) == 0 {
-				return errors.New("empty codebase hash")
-			}
-			if selfHashHex != ev.SelfHashHex {
-				return errors.New("self hash is not valid")
-			}
-			return nil
-		},
-	)
+	bn.consensusService = consensus.NewGossipConsensus(ctx, pubsubService, nil)
 
 	return bn, nil
 }
@@ -157,7 +148,7 @@ func (bn *BootstrapNode) Start() (err error) {
 	if bn == nil {
 		panic("bootstrap: nil node")
 	}
-	bn.node, err = base.NewWarpNode(
+	bn.node, err = node.NewWarpNode(
 		bn.ctx,
 		bn.opts...,
 	)
@@ -176,8 +167,6 @@ func (bn *BootstrapNode) Start() (err error) {
 	if err := bn.consensusService.Start(bn); err != nil {
 		return err
 	}
-
-	bn.consensusService.AskValidation(event.ValidationEvent{nodeInfo.ID.String(), bn.selfHashHex, nil}) // blocking call
 
 	println()
 	fmt.Printf(

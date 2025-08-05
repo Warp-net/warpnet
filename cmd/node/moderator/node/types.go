@@ -22,9 +22,10 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package bootstrap
+package node
 
 import (
+	"context"
 	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/pubsub"
@@ -34,7 +35,7 @@ import (
 )
 
 type DiscoveryHandler interface {
-	DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo)
+	HandlePeerFound(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
 	Close()
 }
@@ -42,13 +43,17 @@ type DiscoveryHandler interface {
 type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
-	PublishValidationRequest(bt []byte) (err error)
-	GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo
-	OwnerID() string
+	SubscribeModerationTopic() error
 }
 
 type DistributedHashTableCloser interface {
 	Close()
+}
+
+type DistributedStorer interface {
+	GetStream(ctx context.Context, id string) (io.ReadCloser, error)
+	PutStream(ctx context.Context, reader io.ReadCloser) (id string, _ error)
+	Close() error
 }
 
 type ProviderCloser interface {
@@ -58,7 +63,11 @@ type ProviderCloser interface {
 type ConsensusServicer interface {
 	Start(streamer consensus.ConsensusStreamer) (err error)
 	Close()
-	AskValidation(data event.ValidationEvent)
 	Validate(ev event.ValidationEvent) error
 	ValidationResult(ev event.ValidationResultEvent) error
+}
+
+type Moderator interface {
+	Moderate(content string) (bool, string, error)
+	Close()
 }
