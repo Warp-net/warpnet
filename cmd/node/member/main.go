@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	frontend "github.com/Warp-net/warpnet-frontend"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/google/uuid"
@@ -15,6 +14,11 @@ import (
 )
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("panic: %v", r)
+		}
+	}()
 	defer closeWriter()
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
 	if err != nil {
@@ -27,7 +31,7 @@ func main() {
 	})
 	log.SetOutput(os.Stdout)
 
-	fmt.Println("network: ", config.Config().Node.Network)
+	log.Infof("network: %s", config.Config().Node.Network)
 
 	app := NewApp()
 
@@ -53,7 +57,8 @@ func main() {
 		},
 	})
 	if err != nil {
-		panic(fmt.Sprintf("failed to start application: %s", err))
+		log.Errorf("failed to start application: %s", err)
+		os.Exit(1)
 	}
 }
 

@@ -31,7 +31,7 @@ import (
 	"fmt"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
-	dht "github.com/Warp-net/warpnet/core/dht"
+	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/node"
@@ -182,14 +182,14 @@ func (bn *BootstrapNode) setupHandlers() {
 	}
 
 	bn.node.SetStreamHandlers(
-		warpnet.WarpStreamHandler{
-			event.INTERNAL_POST_NODE_VALIDATE,
-			handler.StreamValidateHandler(bn.consensusService),
-		},
-		warpnet.WarpStreamHandler{
-			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-			handler.StreamValidationResponseHandler(bn.consensusService),
-		},
+		//warpnet.WarpStreamHandler{
+		//	event.INTERNAL_POST_NODE_VALIDATE,
+		//	handler.StreamValidateHandler(bn.consensusService),
+		//},
+		//warpnet.WarpStreamHandler{
+		//	event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+		//	handler.StreamValidationResponseHandler(bn.consensusService),
+		//},
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(bn, bn.discService.DefaultDiscoveryHandler),

@@ -166,14 +166,14 @@ func (mn *ModeratorNode) Start() (err error) {
 	}
 
 	mn.node.SetStreamHandlers(
-		warpnet.WarpStreamHandler{
-			event.INTERNAL_POST_NODE_VALIDATE,
-			handler.StreamValidateHandler(mn.consensusService),
-		},
-		warpnet.WarpStreamHandler{
-			event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-			handler.StreamValidationResponseHandler(mn.consensusService),
-		},
+		//warpnet.WarpStreamHandler{
+		//	event.INTERNAL_POST_NODE_VALIDATE,
+		//	handler.StreamValidateHandler(mn.consensusService),
+		//},
+		//warpnet.WarpStreamHandler{
+		//	event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+		//	handler.StreamValidationResponseHandler(mn.consensusService),
+		//},
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(mn, nil),

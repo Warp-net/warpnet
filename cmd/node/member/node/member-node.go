@@ -376,14 +376,14 @@ func (m *MemberNode) setupHandlers(
 				event.PRIVATE_POST_PAIR,
 				handler.StreamNodesPairingHandler(authNodeInfo),
 			},
-			{
-				event.INTERNAL_POST_NODE_VALIDATE,
-				handler.StreamValidateHandler(m.consensusService),
-			},
-			{
-				event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-				handler.StreamValidationResponseHandler(m.consensusService),
-			},
+			//{
+			//	event.INTERNAL_POST_NODE_VALIDATE,
+			//	handler.StreamValidateHandler(m.consensusService),
+			//},
+			//{
+			//	event.PUBLIC_POST_NODE_VALIDATION_RESULT,
+			//	handler.StreamValidationResponseHandler(m.consensusService),
+			//},
 			{
 				event.PUBLIC_POST_NODE_CHALLENGE,
 				handler.StreamChallengeHandler(root.GetCodeBase(), privKey),
