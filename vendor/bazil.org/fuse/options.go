@@ -1,7 +1,6 @@
 package fuse
 
 import (
-	"errors"
 	"strings"
 )
 
@@ -12,10 +11,11 @@ func dummyOption(conf *mountConfig) error {
 // mountConfig holds the configuration for a mount operation.
 // Use it by passing MountOption values to Mount.
 type mountConfig struct {
-	options          map[string]string
-	maxReadahead     uint32
-	initFlags        InitFlags
-	osxfuseLocations []OSXFUSEPaths
+	options             map[string]string
+	maxReadahead        uint32
+	initFlags           InitFlags
+	maxBackground       uint16
+	congestionThreshold uint16
 }
 
 func escapeComma(s string) string {
@@ -59,7 +59,6 @@ func FSName(name string) MountOption {
 // `fuse`. The type in a list of mounted file systems will look like
 // `fuse.foo`.
 //
-// OS X ignores this option.
 // FreeBSD ignores this option.
 func Subtype(fstype string) MountOption {
 	return func(conf *mountConfig) error {
@@ -68,82 +67,10 @@ func Subtype(fstype string) MountOption {
 	}
 }
 
-// LocalVolume sets the volume to be local (instead of network),
-// changing the behavior of Finder, Spotlight, and such.
-//
-// OS X only. Others ignore this option.
-func LocalVolume() MountOption {
-	return localVolume
-}
-
-// VolumeName sets the volume name shown in Finder.
-//
-// OS X only. Others ignore this option.
-func VolumeName(name string) MountOption {
-	return volumeName(name)
-}
-
-// NoAppleDouble makes OSXFUSE disallow files with names used by OS X
-// to store extended attributes on file systems that do not support
-// them natively.
-//
-// Such file names are:
-//
-//     ._*
-//     .DS_Store
-//
-// OS X only.  Others ignore this option.
-func NoAppleDouble() MountOption {
-	return noAppleDouble
-}
-
-// NoAppleXattr makes OSXFUSE disallow extended attributes with the
-// prefix "com.apple.". This disables persistent Finder state and
-// other such information.
-//
-// OS X only.  Others ignore this option.
-func NoAppleXattr() MountOption {
-	return noAppleXattr
-}
-
-// NoBrowse makes OSXFUSE mark the volume as non-browsable, so that
-// Finder won't automatically browse it.
-//
-// OS X only.  Others ignore this option.
-func NoBrowse() MountOption {
-	return noBrowse
-}
-
-// ExclCreate causes O_EXCL flag to be set for only "truly" exclusive creates,
-// i.e. create calls for which the initiator explicitly set the O_EXCL flag.
-//
-// OSXFUSE expects all create calls to return EEXIST in case the file
-// already exists, regardless of whether O_EXCL was specified or not.
-// To ensure this behavior, it normally sets OpenExclusive for all
-// Create calls, regardless of whether the original call had it set.
-// For distributed filesystems, that may force every file create to be
-// a distributed consensus action, causing undesirable delays.
-//
-// This option makes the FUSE filesystem see the original flag value,
-// and better decide when to ensure global consensus.
-//
-// Note that returning EEXIST on existing file create is still
-// expected with OSXFUSE, regardless of the presence of the
-// OpenExclusive flag.
-//
-// For more information, see
-// https://github.com/osxfuse/osxfuse/issues/209
-//
-// OS X only. Others ignore this options.
-// Requires OSXFUSE 3.4.1 or newer.
-func ExclCreate() MountOption {
-	return exclCreate
-}
-
 // DaemonTimeout sets the time in seconds between a request and a reply before
 // the FUSE mount is declared dead.
 //
-// OS X and FreeBSD only. Others ignore this option.
+// FreeBSD only. Others ignore this option.
 func DaemonTimeout(name string) MountOption {
 	return daemonTimeout(name)
 }
@@ -231,54 +158,19 @@ func WritebackCache() MountOption {
 	}
 }
 
-// OSXFUSEPaths describes the paths used by an installed OSXFUSE
-// version. See OSXFUSELocationV3 for typical values.
-type OSXFUSEPaths struct {
-	// Prefix for the device file. At mount time, an incrementing
-	// number is suffixed until a free FUSE device is found.
-	DevicePrefix string
-	// Path of the load helper, used to load the kernel extension if
-	// no device files are found.
-	Load string
-	// Path of the mount helper, used for the actual mount operation.
-	Mount string
-	// Environment variable used to pass the path to the executable
-	// calling the mount helper.
-	DaemonVar string
+// CacheSymlinks enables the kernel to cache symlink contents.
+func CacheSymlinks() MountOption {
+	return func(conf *mountConfig) error {
+		conf.initFlags |= InitCacheSymlinks
+		return nil
+	}
 }
 
-// Default paths for OSXFUSE. See OSXFUSELocations.
-var (
-	OSXFUSELocationV3 = OSXFUSEPaths{
-		DevicePrefix: "/dev/osxfuse",
-		Load:         "/Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse",
-		Mount:        "/Library/Filesystems/osxfuse.fs/Contents/Resources/mount_osxfuse",
-		DaemonVar:    "MOUNT_OSXFUSE_DAEMON_PATH",
-	}
-	OSXFUSELocationV2 = OSXFUSEPaths{
-		DevicePrefix: "/dev/osxfuse",
-		Load:         "/Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs",
-		Mount:        "/Library/Filesystems/osxfusefs.fs/Support/mount_osxfusefs",
-		DaemonVar:    "MOUNT_FUSEFS_DAEMON_PATH",
-	}
-)
-
-// OSXFUSELocations sets where to look for OSXFUSE files. The
-// arguments are all the possible locations. The previous locations
-// are replaced.
-//
-// Without this option, OSXFUSELocationV3 and OSXFUSELocationV2 are
-// used.
-//
-// OS X only. Others ignore this option.
-func OSXFUSELocations(paths ...OSXFUSEPaths) MountOption {
+// ExplicitInvalidateData stops the kernel from invalidating cached file data automatically.
+// Use e.g. `InvalidateNodeData` to invalidate cached data as needed.
+func ExplicitInvalidateData() MountOption {
 	return func(conf *mountConfig) error {
-		if len(paths) == 0 {
-			return errors.New("must specify at least one location for OSXFUSELocations")
-		}
-		// replace previous values, but make a copy so there's no
-		// worries about caller mutating their slice
-		conf.osxfuseLocations = append(conf.osxfuseLocations[:0], paths...)
+		conf.initFlags |= InitExplicitInvalidateData
 		return nil
 	}
 }
@@ -291,6 +183,67 @@ func OSXFUSELocations(paths ...OSXFUSEPaths) MountOption {
 func AllowNonEmptyMount() MountOption {
 	return func(conf *mountConfig) error {
 		conf.options["nonempty"] = ""
+		return nil
+	}
+}
+
+// MaxBackground sets the maximum number of FUSE requests the kernel
+// will submit in the background. Background requests are used when an
+// immediate answer is not needed. This may help with request latency.
+//
+// On Linux, this can be adjusted on the fly with
+// /sys/fs/fuse/connections/CONN/max_background
+func MaxBackground(n uint16) MountOption {
+	return func(conf *mountConfig) error {
+		conf.maxBackground = n
+		return nil
+	}
+}
+
+// CongestionThreshold sets the number of outstanding background FUSE
+// requests beyond which the kernel considers the filesystem
+// congested. This may help with request latency.
+//
+// On Linux, this can be adjusted on the fly with
+// /sys/fs/fuse/connections/CONN/congestion_threshold
+func CongestionThreshold(n uint16) MountOption {
+	// TODO to test this, we'd have to figure out our connection id
+	// and read /sys
+	return func(conf *mountConfig) error {
+		conf.congestionThreshold = n
+		return nil
+	}
+}
+
+// LockingFlock enables flock-based (BSD) locking. This is mostly
+// useful for distributed filesystems with global locking. Without
+// this, kernel manages local locking automatically.
+func LockingFlock() MountOption {
+	return func(conf *mountConfig) error {
+		conf.initFlags |= InitFlockLocks
+		return nil
+	}
+}
+
+// LockingPOSIX enables flock-based (BSD) locking. This is mostly
+// useful for distributed filesystems with global locking. Without
+// this, kernel manages local locking automatically.
+//
+// Beware POSIX locks are a broken API with unintuitive behavior for
+// callers.
+func LockingPOSIX() MountOption {
+	return func(conf *mountConfig) error {
+		conf.initFlags |= InitPOSIXLocks
+		return nil
+	}
+}
+
+// HandleKillPriv enables SUID/SGID/cap management in the FUSE server.
+//
+// This is the newer `InitHandleKillPrivV2` interface from FUSE protocol 7.33, not the deprecated one from 7.26.
+func HandleKillPriv() MountOption {
+	return func(conf *mountConfig) error {
+		conf.initFlags |= InitHandleKillPrivV2
 		return nil
 	}
 }

@@ -2,6 +2,7 @@ package chanqueue
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/gammazero/deque"
 )
@@ -15,6 +16,7 @@ type ChanQueue[T any] struct {
 	baseCap   int
 	capacity  int
 	closeOnce sync.Once
+	stop      atomic.Bool
 }
 
 type Option[T any] func(*ChanQueue[T])
@@ -192,6 +194,19 @@ func (cq *ChanQueue[T]) Shutdown() {
 	}
 }
 
+// Stop stops the internal buffering goroutine without closing the input
+// channel. The output channel is closed and no more output is available, even
+// if there were queued items. Returns true if stopped, false if already
+// stopped.
+//
+// Use the Stop function when the input channel cannot be closed.
+func (cq *ChanQueue[T]) Stop() bool {
+	already := cq.stop.Swap(true)
+	for range cq.length {
+	}
+	return !already
+}
+
 func (cq *ChanQueue[T]) limitBaseCapToCapacity() {
 	if cq.capacity > 0 && cq.baseCap > cq.capacity {
 		cq.baseCap = cq.capacity
@@ -210,6 +225,7 @@ func (cq *ChanQueue[T]) bufferData() {
 	cq.limitBaseCapToCapacity()
 	buffer.SetBaseCap(cq.baseCap)
 
+bufLoop:
 	for input != nil || output != nil {
 		select {
 		case elem, open := <-input:
@@ -225,6 +241,10 @@ func (cq *ChanQueue[T]) bufferData() {
 			// Wrote buffered data to output chan. Remove item from buffer.
 			buffer.PopFront()
 		case cq.length <- buffer.Len():
+			// Check if Stop called. Do this here to avoid check in main loop.
+			if cq.stop.Load() {
+				break bufLoop
+			}
 		}
 
 		if buffer.Len() == 0 {
@@ -263,6 +283,7 @@ func (cq *ChanQueue[T]) ringBufferData() {
 	cq.limitBaseCapToCapacity()
 	buffer.SetBaseCap(cq.baseCap)
 
+bufLoop:
 	for input != nil || output != nil {
 		select {
 		case elem, open := <-input:
@@ -280,6 +301,10 @@ func (cq *ChanQueue[T]) ringBufferData() {
 			// Wrote buffered data to output chan. Remove item from buffer.
 			buffer.PopFront()
 		case cq.length <- buffer.Len():
+			// Check if Stop called. Do this here to avoid check in main loop.
+			if cq.stop.Load() {
+				break bufLoop
+			}
 		}
 
 		if buffer.Len() == 0 {
@@ -304,6 +329,7 @@ func (cq *ChanQueue[T]) oneBufferData() {
 	var next, zero T
 	input := cq.input
 
+bufLoop:
 	for input != nil || output != nil {
 		select {
 		case elem, open := <-input:
@@ -324,6 +350,10 @@ func (cq *ChanQueue[T]) oneBufferData() {
 			// No buffered data; do not select output chan.
 			output = nil
 		case cq.length <- bufLen:
+			// Check if Stop called. Do this here to avoid check in main loop.
+			if cq.stop.Load() {
+				break bufLoop
+			}
 		}
 	}
 

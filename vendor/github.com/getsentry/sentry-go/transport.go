@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -15,8 +16,10 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
-const defaultBufferSize = 30
-const defaultTimeout = time.Second * 30
+const (
+	defaultBufferSize = 1000
+	defaultTimeout    = time.Second * 30
+)
 
 // maxDrainResponseBytes is the maximum number of bytes that transport
 // implementations will read from response bodies when draining them.
@@ -32,8 +35,10 @@ const maxDrainResponseBytes = 16 << 10
 // Transport is used by the Client to deliver events to remote server.
 type Transport interface {
 	Flush(timeout time.Duration) bool
+	FlushWithContext(ctx context.Context) bool
 	Configure(options ClientOptions)
 	SendEvent(event *Event)
+	Close()
 }
 
 func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
@@ -82,14 +87,14 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	}
 	body, err = json.Marshal(event)
 	if err == nil {
-		Logger.Println(msg)
+		DebugLogger.Println(msg)
 		return body
 	}
 
 	// This should _only_ happen when Event.Exception[0].Stacktrace.Frames[0].Vars is unserializable
 	// Which won't ever happen, as we don't use it now (although it's the part of public interface accepted by Sentry)
 	// Juuust in case something, somehow goes utterly wrong.
-	Logger.Println("Event couldn't be marshaled, even with stripped contextual data. Skipping delivery. " +
+	DebugLogger.Println("Event couldn't be marshaled, even with stripped contextual data. Skipping delivery. " +
 		"Please notify the SDK owners with possibly broken payload.")
 	return nil
 }
@@ -142,6 +147,23 @@ func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage
 	return err
 }
 
+func encodeEnvelopeLogs(enc *json.Encoder, itemsLength int, body json.RawMessage) error {
+	err := enc.Encode(
+		struct {
+			Type        string `json:"type"`
+			ItemCount   int    `json:"item_count"`
+			ContentType string `json:"content_type"`
+		}{
+			Type:        logEvent.Type,
+			ItemCount:   itemsLength,
+			ContentType: logEvent.ContentType,
+		})
+	if err == nil {
+		err = enc.Encode(body)
+	}
+	return err
+}
+
 func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -175,11 +197,15 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		return nil, err
 	}
 
-	if event.Type == transactionType || event.Type == checkInType {
+	switch event.Type {
+	case transactionType, checkInType:
 		err = encodeEnvelopeItem(enc, event.Type, body)
-	} else {
+	case logEvent.Type:
+		err = encodeEnvelopeLogs(enc, len(event.Logs), body)
+	default:
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -191,22 +217,10 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		}
 	}
 
-	// Profile data
-	if event.sdkMetaData.transactionProfile != nil {
-		body, err = json.Marshal(event.sdkMetaData.transactionProfile)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeEnvelopeItem(enc, profileType, body)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return &b, nil
 }
 
-func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
+func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
 			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
@@ -225,15 +239,23 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 			r.Header.Set("X-Sentry-Auth", auth)
 		}
 	}()
+
 	body := getRequestBodyFromEvent(event)
 	if body == nil {
 		return nil, errors.New("event could not be marshaled")
 	}
+
 	envelope, err := envelopeFromBody(event, dsn, time.Now(), body)
 	if err != nil {
 		return nil, err
 	}
-	return http.NewRequest(
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return http.NewRequestWithContext(
+		ctx,
 		http.MethodPost,
 		dsn.GetAPIURL().String(),
 		envelope,
@@ -281,7 +303,8 @@ type HTTPTransport struct {
 	// current in-flight items and starts a new batch for subsequent events.
 	buffer chan batch
 
-	start sync.Once
+	startOnce sync.Once
+	closeOnce sync.Once
 
 	// Size of the transport buffer. Defaults to 30.
 	BufferSize int
@@ -290,6 +313,9 @@ type HTTPTransport struct {
 
 	mu     sync.RWMutex
 	limits ratelimit.Map
+
+	// receiving signal will terminate worker.
+	done chan struct{}
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
@@ -297,7 +323,7 @@ func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
 		BufferSize: defaultBufferSize,
 		Timeout:    defaultTimeout,
-		limits:     make(ratelimit.Map),
+		done:       make(chan struct{}),
 	}
 	return &transport
 }
@@ -306,7 +332,7 @@ func NewHTTPTransport() *HTTPTransport {
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
-		Logger.Printf("%v\n", err)
+		DebugLogger.Printf("%v\n", err)
 		return
 	}
 	t.dsn = dsn
@@ -339,13 +365,18 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		}
 	}
 
-	t.start.Do(func() {
+	t.startOnce.Do(func() {
 		go t.worker()
 	})
 }
 
-// SendEvent assembles a new packet out of Event and sends it to remote server.
+// SendEvent assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
+	t.SendEventWithContext(context.Background(), event)
+}
+
+// SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
+func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
 		return
 	}
@@ -356,7 +387,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		return
 	}
 
-	request, err := getRequestFromEvent(event, t.dsn)
+	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
 		return
 	}
@@ -385,7 +416,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		} else {
 			eventType = fmt.Sprintf("%s event", event.Level)
 		}
-		Logger.Printf(
+		DebugLogger.Printf(
 			"Sending %s [%s] to %s project: %s",
 			eventType,
 			event.EventID,
@@ -393,7 +424,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 			t.dsn.projectID,
 		)
 	default:
-		Logger.Println("Event dropped due to transport buffer being full.")
+		DebugLogger.Println("Event dropped due to transport buffer being full.")
 	}
 
 	t.buffer <- b
@@ -410,8 +441,19 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 // have the SDK send events over the network synchronously, configure it to use
 // the HTTPSyncTransport in the call to Init.
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
-	toolate := time.After(timeout)
+	timeoutCh := make(chan struct{})
+	time.AfterFunc(timeout, func() {
+		close(timeoutCh)
+	})
+	return t.flushInternal(timeoutCh)
+}
 
+// FlushWithContext works like Flush, but it accepts a context.Context instead of a timeout.
+func (t *HTTPTransport) FlushWithContext(ctx context.Context) bool {
+	return t.flushInternal(ctx.Done())
+}
+
+func (t *HTTPTransport) flushInternal(timeout <-chan struct{}) bool {
 	// Wait until processing the current batch has started or the timeout.
 	//
 	// We must wait until the worker has seen the current batch, because it is
@@ -419,6 +461,7 @@ func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	// possible execution flow in which b.done is never closed, and the only way
 	// out of Flush would be waiting for the timeout, which is undesired.
 	var b batch
+
 	for {
 		select {
 		case b = <-t.buffer:
@@ -428,7 +471,7 @@ func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 			default:
 				t.buffer <- b
 			}
-		case <-toolate:
+		case <-timeout:
 			goto fail
 		}
 	}
@@ -447,15 +490,26 @@ started:
 	// Wait until the current batch is done or the timeout.
 	select {
 	case <-b.done:
-		Logger.Println("Buffer flushed successfully.")
+		DebugLogger.Println("Buffer flushed successfully.")
 		return true
-	case <-toolate:
+	case <-timeout:
 		goto fail
 	}
 
 fail:
-	Logger.Println("Buffer flushing reached the timeout.")
+	DebugLogger.Println("Buffer flushing was canceled or timed out.")
 	return false
+}
+
+// Close will terminate events sending loop.
+// It useful to prevent goroutines leak in case of multiple HTTPTransport instances initiated.
+//
+// Close should be called after Flush and before terminating the program
+// otherwise some events may be lost.
+func (t *HTTPTransport) Close() {
+	t.closeOnce.Do(func() {
+		close(t.done)
+	})
 }
 
 func (t *HTTPTransport) worker() {
@@ -468,23 +522,44 @@ func (t *HTTPTransport) worker() {
 		t.buffer <- b
 
 		// Process all batch items.
-		for item := range b.items {
-			if t.disabled(item.category) {
-				continue
-			}
+	loop:
+		for {
+			select {
+			case <-t.done:
+				return
+			case item, open := <-b.items:
+				if !open {
+					break loop
+				}
+				if t.disabled(item.category) {
+					continue
+				}
 
-			response, err := t.client.Do(item.request)
-			if err != nil {
-				Logger.Printf("There was an issue with sending an event: %v", err)
-				continue
+				response, err := t.client.Do(item.request)
+				if err != nil {
+					DebugLogger.Printf("There was an issue with sending an event: %v", err)
+					continue
+				}
+				if response.StatusCode >= 400 && response.StatusCode <= 599 {
+					b, err := io.ReadAll(response.Body)
+					if err != nil {
+						DebugLogger.Printf("Error while reading response code: %v", err)
+					}
+					DebugLogger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+				}
+
+				t.mu.Lock()
+				if t.limits == nil {
+					t.limits = make(ratelimit.Map)
+				}
+				t.limits.Merge(ratelimit.FromResponse(response))
+				t.mu.Unlock()
+
+				// Drain body up to a limit and close it, allowing the
+				// transport to reuse TCP connections.
+				_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
+				response.Body.Close()
 			}
-			t.mu.Lock()
-			t.limits.Merge(ratelimit.FromResponse(response))
-			t.mu.Unlock()
-			// Drain body up to a limit and close it, allowing the
-			// transport to reuse TCP connections.
-			_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
-			response.Body.Close()
 		}
 
 		// Signal that processing of the batch is done.
@@ -497,7 +572,7 @@ func (t *HTTPTransport) disabled(c ratelimit.Category) bool {
 	defer t.mu.RUnlock()
 	disabled := t.limits.IsRateLimited(c)
 	if disabled {
-		Logger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
+		DebugLogger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
 	}
 	return disabled
 }
@@ -543,7 +618,7 @@ func NewHTTPSyncTransport() *HTTPSyncTransport {
 func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
-		Logger.Printf("%v\n", err)
+		DebugLogger.Printf("%v\n", err)
 		return
 	}
 	t.dsn = dsn
@@ -567,8 +642,15 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	}
 }
 
-// SendEvent assembles a new packet out of Event and sends it to remote server.
+// SendEvent assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPSyncTransport) SendEvent(event *Event) {
+	t.SendEventWithContext(context.Background(), event)
+}
+
+func (t *HTTPSyncTransport) Close() {}
+
+// SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
+func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
 		return
 	}
@@ -577,20 +659,23 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 
-	request, err := getRequestFromEvent(event, t.dsn)
+	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
 		return
 	}
 
-	var eventType string
-	if event.Type == transactionType {
-		eventType = "transaction"
-	} else {
-		eventType = fmt.Sprintf("%s event", event.Level)
+	var eventIdentifier string
+	switch event.Type {
+	case transactionType:
+		eventIdentifier = "transaction"
+	case logEvent.Type:
+		eventIdentifier = fmt.Sprintf("%v log events", len(event.Logs))
+	default:
+		eventIdentifier = fmt.Sprintf("%s event", event.Level)
 	}
-	Logger.Printf(
+	DebugLogger.Printf(
 		"Sending %s [%s] to %s project: %s",
-		eventType,
+		eventIdentifier,
 		event.EventID,
 		t.dsn.host,
 		t.dsn.projectID,
@@ -598,10 +683,22 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 
 	response, err := t.client.Do(request)
 	if err != nil {
-		Logger.Printf("There was an issue with sending an event: %v", err)
+		DebugLogger.Printf("There was an issue with sending an event: %v", err)
 		return
 	}
+	if response.StatusCode >= 400 && response.StatusCode <= 599 {
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			DebugLogger.Printf("Error while reading response code: %v", err)
+		}
+		DebugLogger.Printf("Sending %s failed with the following error: %s", eventIdentifier, string(b))
+	}
+
 	t.mu.Lock()
+	if t.limits == nil {
+		t.limits = make(ratelimit.Map)
+	}
+
 	t.limits.Merge(ratelimit.FromResponse(response))
 	t.mu.Unlock()
 
@@ -616,12 +713,17 @@ func (t *HTTPSyncTransport) Flush(_ time.Duration) bool {
 	return true
 }
 
+// FlushWithContext is a no-op for HTTPSyncTransport. It always returns true immediately.
+func (t *HTTPSyncTransport) FlushWithContext(_ context.Context) bool {
+	return true
+}
+
 func (t *HTTPSyncTransport) disabled(c ratelimit.Category) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	disabled := t.limits.IsRateLimited(c)
 	if disabled {
-		Logger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
+		DebugLogger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
 	}
 	return disabled
 }
@@ -637,13 +739,19 @@ type noopTransport struct{}
 var _ Transport = noopTransport{}
 
 func (noopTransport) Configure(ClientOptions) {
-	Logger.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
+	DebugLogger.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
 }
 
 func (noopTransport) SendEvent(*Event) {
-	Logger.Println("Event dropped due to noopTransport usage.")
+	DebugLogger.Println("Event dropped due to noopTransport usage.")
 }
 
 func (noopTransport) Flush(time.Duration) bool {
 	return true
 }
+
+func (noopTransport) FlushWithContext(context.Context) bool {
+	return true
+}
+
+func (noopTransport) Close() {}

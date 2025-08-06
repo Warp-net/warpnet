@@ -10,8 +10,8 @@ import (
 // A BaseBlock struct implements the Node interface partialliy.
 type BaseBlock struct {
 	BaseNode
+	lines              textm.Segments
 	blankPreviousLines bool
-	lines              *textm.Segments
 }
 
 // Type implements Node.Type.
@@ -36,15 +36,12 @@ func (b *BaseBlock) SetBlankPreviousLines(v bool) {
 
 // Lines implements Node.Lines.
 func (b *BaseBlock) Lines() *textm.Segments {
-	if b.lines == nil {
-		b.lines = textm.NewSegments()
-	}
-	return b.lines
+	return &b.lines
 }
 
 // SetLines implements Node.SetLines.
 func (b *BaseBlock) SetLines(v *textm.Segments) {
-	b.lines = v
+	b.lines = *v
 }
 
 // A Document struct is a root node of Markdown text.
@@ -130,6 +127,13 @@ func (n *TextBlock) Kind() NodeKind {
 	return KindTextBlock
 }
 
+// Text implements Node.Text.
+//
+// Deprecated: Use other properties of the node to get the text value(i.e. TextBlock.Lines).
+func (n *TextBlock) Text(source []byte) []byte {
+	return n.Lines().Value(source)
+}
+
 // NewTextBlock returns a new TextBlock node.
 func NewTextBlock() *TextBlock {
 	return &TextBlock{
@@ -153,6 +157,13 @@ var KindParagraph = NewNodeKind("Paragraph")
 // Kind implements Node.Kind.
 func (n *Paragraph) Kind() NodeKind {
 	return KindParagraph
+}
+
+// Text implements Node.Text.
+//
+// Deprecated: Use other properties of the node to get the text value(i.e. Paragraph.Lines).
+func (n *Paragraph) Text(source []byte) []byte {
+	return n.Lines().Value(source)
 }
 
 // NewParagraph returns a new Paragraph node.
@@ -249,6 +260,13 @@ func (n *CodeBlock) Kind() NodeKind {
 	return KindCodeBlock
 }
 
+// Text implements Node.Text.
+//
+// Deprecated: Use other properties of the node to get the text value(i.e. CodeBlock.Lines).
+func (n *CodeBlock) Text(source []byte) []byte {
+	return n.Lines().Value(source)
+}
+
 // NewCodeBlock returns a new CodeBlock node.
 func NewCodeBlock() *CodeBlock {
 	return &CodeBlock{
@@ -302,6 +320,13 @@ var KindFencedCodeBlock = NewNodeKind("FencedCodeBlock")
 // Kind implements Node.Kind.
 func (n *FencedCodeBlock) Kind() NodeKind {
 	return KindFencedCodeBlock
+}
+
+// Text implements Node.Text.
+//
+// Deprecated: Use other properties of the node to get the text value(i.e. FencedCodeBlock.Lines).
+func (n *FencedCodeBlock) Text(source []byte) []byte {
+	return n.Lines().Value(source)
 }
 
 // NewFencedCodeBlock return a new FencedCodeBlock node.
@@ -487,6 +512,7 @@ func (n *HTMLBlock) Dump(source []byte, level int) {
 		cl := n.ClosureLine
 		fmt.Printf("%sClosure: \"%s\"\n", indent2, string(cl.Value(source)))
 	}
+	fmt.Printf("%sHasBlankPreviousLines: %v\n", indent2, n.HasBlankPreviousLines())
 	fmt.Printf("%s}\n", indent)
 }
 
@@ -496,6 +522,17 @@ var KindHTMLBlock = NewNodeKind("HTMLBlock")
 // Kind implements Node.Kind.
 func (n *HTMLBlock) Kind() NodeKind {
 	return KindHTMLBlock
+}
+
+// Text implements Node.Text.
+//
+// Deprecated: Use other properties of the node to get the text value(i.e. HTMLBlock.Lines).
+func (n *HTMLBlock) Text(source []byte) []byte {
+	ret := n.Lines().Value(source)
+	if n.HasClosure() {
+		ret = append(ret, n.ClosureLine.Value(source)...)
+	}
+	return ret
 }
 
 // NewHTMLBlock returns a new HTMLBlock node.

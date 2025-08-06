@@ -2,11 +2,14 @@ package ansi
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 	"text/template"
 
 	"github.com/muesli/termenv"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // BaseElement renders a styled primitive element.
@@ -25,7 +28,7 @@ func formatToken(format string, token string) (string, error) {
 
 	tmpl, err := template.New(format).Funcs(TemplateFuncMap).Parse(format)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("glamour: error parsing template: %w", err)
 	}
 
 	err = tmpl.Execute(&b, v)
@@ -39,13 +42,13 @@ func renderText(w io.Writer, p termenv.Profile, rules StylePrimitive, s string) 
 
 	out := termenv.String(s)
 	if rules.Upper != nil && *rules.Upper {
-		out = termenv.String(strings.ToUpper(s))
+		out = termenv.String(cases.Upper(language.English).String(s))
 	}
 	if rules.Lower != nil && *rules.Lower {
-		out = termenv.String(strings.ToLower(s))
+		out = termenv.String(cases.Lower(language.English).String(s))
 	}
 	if rules.Title != nil && *rules.Title {
-		out = termenv.String(strings.Title(s))
+		out = termenv.String(cases.Title(language.English).String(s))
 	}
 	if rules.Color != nil {
 		out = out.Foreground(p.Color(*rules.Color))
@@ -78,6 +81,7 @@ func renderText(w io.Writer, p termenv.Profile, rules StylePrimitive, s string) 
 	_, _ = io.WriteString(w, out.String())
 }
 
+// StyleOverrideRender renders a BaseElement with an overridden style.
 func (e *BaseElement) StyleOverrideRender(w io.Writer, ctx RenderContext, style StylePrimitive) error {
 	bs := ctx.blockStack
 	st1 := cascadeStylePrimitives(bs.Current().Style.StylePrimitive, style)
@@ -86,6 +90,7 @@ func (e *BaseElement) StyleOverrideRender(w io.Writer, ctx RenderContext, style 
 	return e.doRender(w, ctx.options.ColorProfile, st1, st2)
 }
 
+// Render renders a BaseElement.
 func (e *BaseElement) Render(w io.Writer, ctx RenderContext) error {
 	bs := ctx.blockStack
 	st1 := bs.Current().Style.StylePrimitive

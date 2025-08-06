@@ -46,6 +46,18 @@ func (p *pp) SafeRune(r i.SafeRune) {
 	p.buf.WriteRune(rune(r))
 }
 
+// SafeByte implements SafePrinter.
+func (p *pp) SafeByte(r i.SafeByte) {
+	defer p.startSafeOverride().restore()
+	p.buf.WriteByte(byte(r))
+}
+
+// SafeBytes implements SafePrinter.
+func (p *pp) SafeBytes(r i.SafeBytes) {
+	defer p.startSafeOverride().restore()
+	p.buf.Write(r)
+}
+
 func (p *pp) Print(args ...interface{}) {
 	defer p.buf.SetMode(p.buf.GetMode())
 	np := newPrinter()

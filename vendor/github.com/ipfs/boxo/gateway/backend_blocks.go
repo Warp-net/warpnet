@@ -29,7 +29,6 @@ import (
 	"github.com/ipld/go-car/v2/storage"
 	dagpb "github.com/ipld/go-codec-dagpb"
 	"github.com/ipld/go-ipld-prime"
-
 	// Ensure basic codecs are registered.
 	_ "github.com/ipld/go-ipld-prime/codec/cbor"
 	_ "github.com/ipld/go-ipld-prime/codec/dagcbor"
@@ -141,7 +140,7 @@ func (bb *BlocksBackend) Get(ctx context.Context, path path.ImmutablePath, range
 		}
 
 		if rootCodec == uint64(mc.Raw) {
-			if err := seekToRangeStart(f, ra); err != nil {
+			if err := seekToRangeStart(f, ra, fileSize); err != nil {
 				return ContentPathMetadata{}, nil, err
 			}
 		}
@@ -182,7 +181,7 @@ func (bb *BlocksBackend) Get(ctx context.Context, path path.ImmutablePath, range
 			return ContentPathMetadata{}, nil, err
 		}
 
-		if err := seekToRangeStart(file, ra); err != nil {
+		if err := seekToRangeStart(file, ra, fileSize); err != nil {
 			return ContentPathMetadata{}, nil, err
 		}
 
@@ -504,10 +503,7 @@ func walkGatewaySimpleSelector(ctx context.Context, lastCid cid.Cid, terminalBlk
 				if err != nil {
 					return err
 				}
-				from = fileLength + entityRange.From
-				if from < 0 {
-					from = 0
-				}
+				from = max(fileLength+entityRange.From, 0)
 				foundFileLength = true
 			}
 

@@ -130,6 +130,16 @@ func (b *StringBuilder) SafeRune(s i.SafeRune) {
 	_ = b.Buffer.WriteRune(rune(s))
 }
 
+func (b *StringBuilder) SafeByte(s i.SafeByte) {
+	b.SetMode(ib.SafeEscaped)
+	_ = b.Buffer.WriteByte(byte(s))
+}
+
+func (b *StringBuilder) SafeBytes(s i.SafeBytes) {
+	b.SetMode(ib.SafeEscaped)
+	_, _ = b.Buffer.Write([]byte(s))
+}
+
 // UnsafeString is part of the SafeWriter interface.
 func (b *StringBuilder) UnsafeString(s string) {
 	b.SetMode(ib.UnsafeEscaped)

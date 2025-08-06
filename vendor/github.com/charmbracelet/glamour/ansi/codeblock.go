@@ -1,6 +1,7 @@
 package ansi
 
 import (
+	"fmt"
 	"io"
 	"sync"
 
@@ -14,6 +15,9 @@ import (
 const (
 	// The chroma style theme name used for rendering.
 	chromaStyleTheme = "charm"
+
+	// The chroma formatter name used for rendering.
+	chromaFormatter = "terminal256"
 )
 
 // mutex for synchronizing access to the chroma style registry.
@@ -60,17 +64,22 @@ func chromaStyle(style StylePrimitive) string {
 	return s
 }
 
+// Render renders a CodeBlockElement.
 func (e *CodeBlockElement) Render(w io.Writer, ctx RenderContext) error {
 	bs := ctx.blockStack
 
 	var indentation uint
 	var margin uint
+	formatter := chromaFormatter
 	rules := ctx.options.Styles.CodeBlock
 	if rules.Indent != nil {
 		indentation = *rules.Indent
 	}
 	if rules.Margin != nil {
 		margin = *rules.Margin
+	}
+	if len(ctx.options.ChromaFormatter) > 0 {
+		formatter = ctx.options.ChromaFormatter
 	}
 	theme := rules.Theme
 
@@ -118,16 +127,16 @@ func (e *CodeBlockElement) Render(w io.Writer, ctx RenderContext) error {
 		mutex.Unlock()
 	}
 
-	iw := indent.NewWriterPipe(w, indentation+margin, func(wr io.Writer) {
+	iw := indent.NewWriterPipe(w, indentation+margin, func(_ io.Writer) {
 		renderText(w, ctx.options.ColorProfile, bs.Current().Style.StylePrimitive, " ")
 	})
 
 	if len(theme) > 0 {
 		renderText(iw, ctx.options.ColorProfile, bs.Current().Style.StylePrimitive, rules.BlockPrefix)
 
-		err := quick.Highlight(iw, e.Code, e.Language, "terminal256", theme)
+		err := quick.Highlight(iw, e.Code, e.Language, formatter, theme)
 		if err != nil {
-			return err
+			return fmt.Errorf("glamour: error highlighting code: %w", err)
 		}
 		renderText(iw, ctx.options.ColorProfile, bs.Current().Style.StylePrimitive, rules.BlockSuffix)
 		return nil

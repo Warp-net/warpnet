@@ -2,9 +2,9 @@ package ansi
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
-	"github.com/muesli/reflow/indent"
 	"github.com/muesli/reflow/wordwrap"
 )
 
@@ -23,6 +23,7 @@ const (
 	h6
 )
 
+// Render renders a HeadingElement.
 func (e *HeadingElement) Render(w io.Writer, ctx RenderContext) error {
 	bs := ctx.blockStack
 	rules := ctx.options.Styles.Heading
@@ -57,31 +58,22 @@ func (e *HeadingElement) Render(w io.Writer, ctx RenderContext) error {
 	return nil
 }
 
+// Finish finishes rendering a HeadingElement.
 func (e *HeadingElement) Finish(w io.Writer, ctx RenderContext) error {
 	bs := ctx.blockStack
 	rules := bs.Current().Style
+	mw := NewMarginWriter(ctx, w, rules)
 
-	var indentation uint
-	var margin uint
-	if rules.Indent != nil {
-		indentation = *rules.Indent
-	}
-	if rules.Margin != nil {
-		margin = *rules.Margin
-	}
-
-	iw := indent.NewWriterPipe(w, indentation+margin, func(wr io.Writer) {
-		renderText(w, ctx.options.ColorProfile, bs.Parent().Style.StylePrimitive, " ")
-	})
-
-	flow := wordwrap.NewWriter(int(bs.Width(ctx) - indentation - margin*2))
+	flow := wordwrap.NewWriter(int(bs.Width(ctx))) //nolint: gosec
 	_, err := flow.Write(bs.Current().Block.Bytes())
 	if err != nil {
-		return err
+		return fmt.Errorf("glamour: error writing bytes: %w", err)
 	}
-	flow.Close()
+	if err := flow.Close(); err != nil {
+		return fmt.Errorf("glamour: error closing flow: %w", err)
+	}
 
-	_, err = iw.Write(flow.Bytes())
+	_, err = mw.Write(flow.Bytes())
 	if err != nil {
 		return err
 	}

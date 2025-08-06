@@ -48,7 +48,9 @@ type ACMEIssuer struct {
 	// TestCA is the endpoint of the directory for
 	// an ACME CA to use to test domain validation,
 	// but any certs obtained from this CA are
-	// discarded
+	// discarded; it should perform real and valid
+	// ACME verifications, but probably should not
+	// issue real, publicly-trusted certificates
 	TestCA string
 
 	// The email address to use when creating or
@@ -68,6 +70,15 @@ type ACMEIssuer struct {
 	// An optional external account to associate
 	// with this ACME account
 	ExternalAccount *acme.EAB
+
+	// Optionally select an ACME profile offered
+	// by the ACME server. The list of supported
+	// profile names can be obtained from the ACME
+	// server's directory endpoint. For details:
+	// https://datatracker.ietf.org/doc/draft-aaron-acme-profiles/
+	//
+	// (EXPERIMENTAL: Subject to change.)
+	Profile string
 
 	// Optionally specify the validity period of
 	// the certificate(s) here as offsets from the
@@ -329,7 +340,7 @@ func (iss *ACMEIssuer) isAgreed() bool {
 // IP certificates via ACME are defined in RFC 8738.
 func (am *ACMEIssuer) PreCheck(ctx context.Context, names []string, interactive bool) error {
 	publicCAsAndIPCerts := map[string]bool{ // map of public CAs to whether they support IP certificates (last updated: Q1 2024)
-		"api.letsencrypt.org": false, // https://community.letsencrypt.org/t/certificate-for-static-ip/84/2?u=mholt
+		"api.letsencrypt.org": true, // https://letsencrypt.org/2025/07/01/issuing-our-first-ip-address-certificate/
 		"acme.zerossl.com":    false, // only supported via their API, not ACME endpoint
 		"api.pki.goog":        true,  // https://pki.goog/faq/#faq-IPCerts
 		"api.buypass.com":     false, // https://community.buypass.com/t/h7hm76w/buypass-support-for-rfc-8738
@@ -450,6 +461,7 @@ func (am *ACMEIssuer) doIssue(ctx context.Context, csr *x509.CertificateRequest,
 	if am.NotAfter != 0 {
 		params.NotAfter = time.Now().Add(am.NotAfter)
 	}
+	params.Profile = am.Profile
 
 	// Notify the ACME server we are replacing a certificate (if the caller says we are),
 	// only if the following conditions are met:

@@ -257,7 +257,7 @@ func (t *Topic) AddToBatch(ctx context.Context, batch *MessageBatch, data []byte
 		}
 		return err
 	}
-	batch.messages = append(batch.messages, msg)
+	batch.add(msg)
 	return nil
 }
 
@@ -349,7 +349,9 @@ func (t *Topic) validate(ctx context.Context, data []byte, opts ...PubOpt) (*Mes
 	}
 
 	msg := &Message{m, "", t.p.host.ID(), pub.validatorData, pub.local}
-	t.p.rt.Preprocess(t.p.host.ID(), []*Message{msg})
+	t.p.eval <- func() {
+		t.p.rt.Preprocess(t.p.host.ID(), []*Message{msg})
+	}
 	err := t.p.val.ValidateLocal(msg)
 	if err != nil {
 		return nil, err

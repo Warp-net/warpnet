@@ -60,8 +60,8 @@ func cCompressBound(srcSize int) int {
 // decompressSizeHint tries to give a hint on how much of the output buffer size we should have
 // based on zstd frame descriptors. To prevent DOS from maliciously-created payloads, limit the size
 func decompressSizeHint(src []byte) int {
-	// 1 MB or 10x input size
-	upperBound := 10 * len(src)
+	// 1 MB or 50x input size
+	upperBound := 50 * len(src)
 	if upperBound < decompressSizeBufferLimit {
 		upperBound = decompressSizeBufferLimit
 	}

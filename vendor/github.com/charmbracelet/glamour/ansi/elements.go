@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charmbracelet/glamour/internal/autolink"
 	east "github.com/yuin/goldmark-emoji/ast"
 	"github.com/yuin/goldmark/ast"
 	astext "github.com/yuin/goldmark/extension/ast"
@@ -17,6 +18,7 @@ type ElementRenderer interface {
 	Render(w io.Writer, ctx RenderContext) error
 }
 
+// StyleOverriderElementRenderer is called when entering a markdown node with a specific style.
 type StyleOverriderElementRenderer interface {
 	StyleOverrideRender(w io.Writer, ctx RenderContext, style StylePrimitive) error
 }
@@ -134,7 +136,7 @@ func (tr *ANSIRenderer) NewElement(node ast.Node, source []byte) Element {
 		if node.Parent().(*ast.List).IsOrdered() {
 			e = l
 			if node.Parent().(*ast.List).Start != 1 {
-				e += uint(node.Parent().(*ast.List).Start) - 1
+				e += uint(node.Parent().(*ast.List).Start) - 1 //nolint: gosec
 			}
 		}
 
@@ -197,7 +199,7 @@ func (tr *ANSIRenderer) NewElement(node ast.Node, source []byte) Element {
 
 	case astext.KindStrikethrough:
 		n := node.(*astext.Strikethrough)
-		s := string(n.Text(source))
+		s := string(n.Text(source)) //nolint: staticcheck
 		style := ctx.options.Styles.Strikethrough
 
 		return Element{
@@ -219,22 +221,41 @@ func (tr *ANSIRenderer) NewElement(node ast.Node, source []byte) Element {
 	// Links
 	case ast.KindLink:
 		n := node.(*ast.Link)
+		isFooterLinks := !ctx.options.InlineTableLinks && isInsideTable(node)
+
 		var children []ElementRenderer
-		nn := n.FirstChild()
-		for nn != nil {
-			children = append(children, tr.NewElement(nn, source).Renderer)
-			nn = nn.NextSibling()
+		content, err := nodeContent(node, source)
+
+		if isFooterLinks && err == nil {
+			text := string(content)
+			tl := tableLink{
+				content:  text,
+				href:     string(n.Destination),
+				title:    string(n.Title),
+				linkType: linkTypeRegular,
+			}
+			text = linkWithSuffix(tl, ctx.table.tableLinks)
+			children = []ElementRenderer{&BaseElement{Token: text}}
+		} else {
+			nn := n.FirstChild()
+			for nn != nil {
+				children = append(children, tr.NewElement(nn, source).Renderer)
+				nn = nn.NextSibling()
+			}
 		}
+
 		return Element{
 			Renderer: &LinkElement{
 				BaseURL:  ctx.options.BaseURL,
 				URL:      string(n.Destination),
 				Children: children,
+				SkipHref: isFooterLinks,
 			},
 		}
 	case ast.KindAutoLink:
 		n := node.(*ast.AutoLink)
 		u := string(n.URL(source))
+		isFooterLinks := !ctx.options.InlineTableLinks && isInsideTable(node)
 
 		var children []ElementRenderer
 		nn := n.FirstChild()
@@ -244,32 +265,65 @@ func (tr *ANSIRenderer) NewElement(node ast.Node, source []byte) Element {
 		}
 
 		if len(children) == 0 {
-			children = append(children, &BaseElement{
-				Token: u,
-			})
+			children = append(children, &BaseElement{Token: u})
 		}
 
 		if n.AutoLinkType == ast.AutoLinkEmail && !strings.HasPrefix(strings.ToLower(u), "mailto:") {
 			u = "mailto:" + u
 		}
 
-		return Element{
-			Renderer: &LinkElement{
-				Children: children,
-				BaseURL:  ctx.options.BaseURL,
+		var renderer ElementRenderer
+		if isFooterLinks {
+			domain := linkDomain(u)
+			tl := tableLink{
+				content:  domain,
+				href:     u,
+				linkType: linkTypeAuto,
+			}
+			if shortned, ok := autolink.Detect(u); ok {
+				tl.content = shortned
+			}
+			text := linkWithSuffix(tl, ctx.table.tableLinks)
+
+			renderer = &LinkElement{
+				Children: []ElementRenderer{&BaseElement{Token: text}},
 				URL:      u,
-			},
+				SkipHref: true,
+			}
+		} else {
+			renderer = &LinkElement{
+				Children: children,
+				URL:      u,
+				SkipText: n.AutoLinkType != ast.AutoLinkEmail,
+			}
 		}
+		return Element{Renderer: renderer}
 
 	// Images
 	case ast.KindImage:
 		n := node.(*ast.Image)
-		text := string(n.Text(source))
+		text := string(n.Text(source)) //nolint: staticcheck
+		isFooterLinks := !ctx.options.InlineTableLinks && isInsideTable(node)
+
+		if isFooterLinks {
+			if text == "" {
+				text = linkDomain(string(n.Destination))
+			}
+			tl := tableLink{
+				title:    string(n.Title),
+				content:  text,
+				href:     string(n.Destination),
+				linkType: linkTypeImage,
+			}
+			text = linkWithSuffix(tl, ctx.table.tableImages)
+		}
+
 		return Element{
 			Renderer: &ImageElement{
-				Text:    text,
-				BaseURL: ctx.options.BaseURL,
-				URL:     string(n.Destination),
+				Text:     text,
+				BaseURL:  ctx.options.BaseURL,
+				URL:      string(n.Destination),
+				TextOnly: isFooterLinks,
 			},
 		}
 
@@ -307,7 +361,7 @@ func (tr *ANSIRenderer) NewElement(node ast.Node, source []byte) Element {
 
 	case ast.KindCodeSpan:
 		n := node.(*ast.CodeSpan)
-		s := string(n.Text(source))
+		s := string(n.Text(source)) //nolint: staticcheck
 		return Element{
 			Renderer: &CodeSpanElement{
 				Text:  html.UnescapeString(s),
@@ -319,7 +373,8 @@ func (tr *ANSIRenderer) NewElement(node ast.Node, source []byte) Element {
 	case astext.KindTable:
 		table := node.(*astext.Table)
 		te := &TableElement{
-			table: table,
+			table:  table,
+			source: source,
 		}
 		return Element{
 			Entering: "\n",
@@ -359,7 +414,7 @@ func (tr *ANSIRenderer) NewElement(node ast.Node, source []byte) Element {
 		n := node.(*ast.HTMLBlock)
 		return Element{
 			Renderer: &BaseElement{
-				Token: ctx.SanitizeHTML(string(n.Text(source)), true),
+				Token: ctx.SanitizeHTML(string(n.Text(source)), true), //nolint: staticcheck
 				Style: ctx.options.Styles.HTMLBlock.StylePrimitive,
 			},
 		}
@@ -367,7 +422,7 @@ func (tr *ANSIRenderer) NewElement(node ast.Node, source []byte) Element {
 		n := node.(*ast.RawHTML)
 		return Element{
 			Renderer: &BaseElement{
-				Token: ctx.SanitizeHTML(string(n.Text(source)), true),
+				Token: ctx.SanitizeHTML(string(n.Text(source)), true), //nolint: staticcheck
 				Style: ctx.options.Styles.HTMLSpan.StylePrimitive,
 			},
 		}
