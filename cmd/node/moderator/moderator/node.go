@@ -269,6 +269,7 @@ func (mn *ModeratorNode) lurkTweets() {
 				continue
 			}
 			if info.IsModerator() || info.IsBootstrap() {
+				mn.cache.SetAsModerated(peer, CacheEntry{})
 				continue
 			}
 			if info.OwnerId == "" {
