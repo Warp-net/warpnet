@@ -268,6 +268,9 @@ func (mn *ModeratorNode) lurkTweets() {
 				log.Errorf("moderator: failed to unmarshal info from new peer: %s %v", infoResp, err)
 				continue
 			}
+			if info.IsModerator() || info.IsBootstrap() {
+				continue
+			}
 			if info.OwnerId == "" {
 				log.Errorf("moderator: node info %s has no owner", peer.String())
 				continue
