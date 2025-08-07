@@ -27,6 +27,11 @@ package node
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
@@ -40,10 +45,6 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
 	log "github.com/sirupsen/logrus"
-	"io"
-	"strings"
-	"sync/atomic"
-	"time"
 )
 
 const DefaultTimeout = 60 * time.Second
@@ -293,6 +294,7 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 		StartTime:    n.startTime,
 		RelayState:   relayState,
 		Reachability: warpnet.WarpReachability(n.reachability.Load()),
+		Protocols:    n.node.Mux().Protocols(),
 	}
 }
 

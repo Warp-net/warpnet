@@ -29,6 +29,8 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
@@ -49,7 +51,6 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 type MemberNode struct {
@@ -61,7 +62,6 @@ type MemberNode struct {
 	discService          DiscoveryHandler
 	mdnsService          MDNSStarterCloser
 	pubsubService        PubSubProvider
-	consensusService     ConsensusServicer
 	dHashTable           DistributedHashTableCloser
 	nodeRepo             NodeProvider
 	retrier              retrier.Retrier
@@ -112,7 +112,6 @@ func NewMemberNode(
 	}
 	pubsubHandlers := []pubsub.TopicHandler{
 		pubsub.NewDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
-		pubsub.NewTransitModerationHandler(),
 	}
 	pubsubHandlers = append(pubsubHandlers, memberPubSub.PrefollowUsers(followeeIds...)...)
 	pubsubService := memberPubSub.NewPubSub(
@@ -182,10 +181,6 @@ func NewMemberNode(
 		pseudoNode:    mastodonPseudoNode,
 	}
 
-	//mn.consensusService = consensus.NewGossipConsensus(
-	//	ctx, pubsubService,
-	//)
-
 	return mn, nil
 }
 
@@ -197,7 +192,9 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to init node: %v", err)
 	}
+
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
+
 	if m.pseudoNode != nil {
 		m.node.Node().Peerstore().AddAddrs(m.pseudoNode.ID(), m.pseudoNode.Addrs(), time.Hour*24)
 	}
@@ -211,21 +208,6 @@ func (m *MemberNode) Start() (err error) {
 	m.mdnsService.Start(m)
 
 	nodeInfo := m.NodeInfo()
-
-	//ownerUser, err := m.userRepo.Get(nodeInfo.OwnerId)
-	//if err != nil {
-	//	return err
-	//}
-
-	//if err := m.consensusService.Start(m); err != nil {
-	//	return err
-	//}
-
-	//ev := event.ValidationEvent{
-	//	ValidatedNodeID: nodeInfo.ID.String(),
-	//	User:            &ownerUser,
-	//}
-	//go m.consensusService.AskValidation(ev)
 
 	println()
 	fmt.Printf(
@@ -377,14 +359,6 @@ func (m *MemberNode) setupHandlers(
 				event.PRIVATE_POST_PAIR,
 				handler.StreamNodesPairingHandler(authNodeInfo),
 			},
-			//{
-			//	event.INTERNAL_POST_NODE_VALIDATE,
-			//	handler.StreamValidateHandler(m.consensusService),
-			//},
-			//{
-			//	event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-			//	handler.StreamValidationResponseHandler(m.consensusService),
-			//},
 			{
 				event.PUBLIC_POST_NODE_CHALLENGE,
 				handler.StreamChallengeHandler(root.GetCodeBase(), privKey),
@@ -526,7 +500,7 @@ func (m *MemberNode) setupHandlers(
 				handler.StreamGetImageHandler(m, mediaRepo, userRepo),
 			},
 			{
-				event.PUBLIC_POST_MODERATION_RESULT, // TODO protect this endpoint
+				event.PUBLIC_POST_MODERATION_RESULT,
 				handler.StreamModerationResultHandler(m.pubsubService, userRepo, tweetRepo, timelineRepo),
 			},
 		}...,
@@ -576,9 +550,7 @@ func (m *MemberNode) Stop() {
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
 	}
-	if m.consensusService != nil {
-		m.consensusService.Close()
-	}
+
 	if m.nodeRepo != nil {
 		if err := m.nodeRepo.Close(); err != nil {
 			log.Errorf("member: failed to close node repo: %v", err)

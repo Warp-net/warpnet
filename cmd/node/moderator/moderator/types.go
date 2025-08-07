@@ -22,32 +22,38 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package node
+package moderator
 
 import (
+	"context"
 	"io"
 
-	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
 type DiscoveryHandler interface {
-	DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo)
+	HandlePeerFound(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
 	Close()
 }
 
-type PubSubProvider interface {
-	Run(m pubsub.PubsubServerNodeConnector)
-	Close() error
-	OwnerID() string
+type DistributedHashTableCloser interface {
+	ClosestPeers() ([]warpnet.WarpPeerID, error)
+	Close()
 }
 
-type DistributedHashTableCloser interface {
-	Close()
+type DistributedStorer interface {
+	GetStream(ctx context.Context, id string) (io.ReadCloser, error)
+	PutStream(ctx context.Context, reader io.ReadCloser) (id string, _ error)
+	Close() error
 }
 
 type ProviderCloser interface {
 	io.Closer
+}
+
+type Moderator interface {
+	Moderate(content string) (bool, string, error)
+	Close()
 }

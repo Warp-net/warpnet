@@ -28,9 +28,10 @@ resulting from the use or misuse of this software.
 package event
 
 import (
+	"time"
+
 	"github.com/Warp-net/warpnet/domain"
 	json "github.com/json-iterator/go"
-	"time"
 )
 
 const (

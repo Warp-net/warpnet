@@ -41,7 +41,7 @@
 4. A WarpNet node must be distributed as a single executable file.
 5. WarpNet must be a cross-platform solution.
 6. Only one WarpNet member node may run on a single machine, but it may have multiple aliases.
-7. WarpNet member nodes must be governed solely by network consensus.
+7. WarpNet member nodes must be governed solely by nodes network.
 8. WarpNet business nodes may allow centralized management.
 9. WarpNet business nodes must responsibly run at least one bootstrap node and one moderator node.
 10. A WarpNet node must store private data only on the local host machine.

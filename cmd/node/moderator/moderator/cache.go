@@ -1,5 +1,4 @@
 /*
-
 Warpnet - Decentralized Social Network
 Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
@@ -21,36 +20,62 @@ WarpNet is provided “as is” without warranty of any kind, either expressed o
 Use at your own risk. The maintainers shall not be liable for any damages or data loss
 resulting from the use or misuse of this software.
 */
-
-// Copyright 2025 Vadim Filin
-// SPDX-License-Identifier: AGPL-3.0-or-later
-
-package handler
+package moderator
 
 import (
+	"math/rand/v2"
+	"sync"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/json"
-	log "github.com/sirupsen/logrus"
 )
 
-func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		// TODO: add devices storage
-		var clientInfo domain.AuthNodeInfo
-		if err := json.Unmarshal(buf, &clientInfo); err != nil || clientInfo.Identity.Token == "" {
-			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)
-			return nil, err
-		}
-		tokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
-		if !tokenMatch {
-			log.Errorf(
-				"pair: token does not match server identity: %s != %s",
-				serverAuthInfo.Identity.Token, clientInfo.Identity.Token,
-			)
-			return nil, warpnet.WarpError("token mismatch")
-		}
-		return event.Accepted, nil
+const maxLiveTime = 8 * time.Hour
+
+type CacheEntry struct {
+	Result         event.ModerationResultEvent
+	nextModeration time.Time
+}
+
+type moderationCache struct {
+	mx    *sync.RWMutex
+	peers map[warpnet.WarpPeerID]CacheEntry
+}
+
+func newModerationCache() *moderationCache {
+	return &moderationCache{
+		peers: make(map[warpnet.WarpPeerID]CacheEntry),
+		mx:    new(sync.RWMutex),
 	}
+}
+
+func (dc *moderationCache) IsModeratedAlready(id warpnet.WarpPeerID) bool {
+	dc.mx.RLock()
+	defer dc.mx.RUnlock()
+
+	entry, ok := dc.peers[id]
+	if !ok {
+		return false
+	}
+
+	return time.Now().Before(entry.nextModeration)
+}
+
+func (dc *moderationCache) SetAsModerated(peerId warpnet.WarpPeerID, entry CacheEntry) {
+	dc.mx.Lock()
+	defer dc.mx.Unlock()
+
+	waitPeriod := time.Minute * time.Duration(rand.IntN(8))
+	entry.nextModeration = time.Now().Add(waitPeriod)
+	dc.peers[peerId] = entry
+
+	for id, e := range dc.peers {
+		if !e.nextModeration.IsZero() && time.Since(e.nextModeration) < maxLiveTime {
+			continue
+		}
+
+		delete(dc.peers, id)
+	}
+	return
 }

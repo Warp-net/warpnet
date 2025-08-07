@@ -33,6 +33,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/rand/v2"
+	"sync/atomic"
+	"time"
+
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
@@ -47,9 +51,6 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	log "github.com/sirupsen/logrus"
-	"math/rand/v2"
-	"sync/atomic"
-	"time"
 )
 
 type DiscoveryHandler func(warpnet.WarpAddrInfo)
@@ -394,7 +395,14 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	if info.IsBootstrap() {
+	if info.IsBootstrap() || info.IsModerator() {
+		return
+	}
+
+	if err := s.validateProtocols(info); err != nil {
+		log.Errorf("discovery: protocol validation: %v", err)
+		_ = s.nodeRepo.BlocklistExponential(pi.ID)
+		s.node.Peerstore().RemovePeer(pi.ID)
 		return
 	}
 
@@ -435,6 +443,18 @@ const (
 	ErrChallengeSignatureInvalid warpnet.WarpError = "invalid challenge signature"
 )
 
+func (s *discoveryService) validateProtocols(info warpnet.NodeInfo) error {
+	for _, p := range info.Protocols {
+		if event.PUBLIC_POST_MODERATION_RESULT == p {
+			_, err := s.node.GenericStream(
+				info.ID.String(), event.PUBLIC_POST_MODERATION_RESULT, nil,
+			)
+
+			return err
+		}
+	}
+	return errors.New("no public moderation protocol found")
+}
 func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 	if s == nil {
 		return errors.New("nil discovery service")

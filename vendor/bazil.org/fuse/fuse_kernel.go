@@ -39,60 +39,19 @@ import (
 	"fmt"
 	"syscall"
 	"unsafe"
-
-	"golang.org/x/sys/unix"
 )
 
 // The FUSE version implemented by the package.
 const (
 	protoVersionMinMajor = 7
-	protoVersionMinMinor = 17
+	protoVersionMinMinor = 8
 	protoVersionMaxMajor = 7
-	protoVersionMaxMinor = 33
+	protoVersionMaxMinor = 12
 )
 
 const (
 	rootID = 1
 )
-
-// AttrFlags are bit flags that can be seen in Attr.Flags.
-type AttrFlags uint32
-
-const (
-	// Node is a submount root.
-	//
-	// Don't use unless `Conn.Features` includes `InitSubMounts`.
-	//
-	// This doesn't seem to be usable outside of `virtio_fs``.
-	attrSubMount AttrFlags = 1 << 0
-)
-
-var attrFlagsNames = []flagName{
-	{uint32(attrSubMount), "AttrSubMount"},
-}
-
-func (fl AttrFlags) String() string {
-	return flagString(uint32(fl), attrFlagsNames)
-}
-
-type attr struct {
-	Ino       uint64
-	Size      uint64
-	Blocks    uint64
-	Atime     uint64
-	Mtime     uint64
-	Ctime     uint64
-	AtimeNsec uint32
-	MtimeNsec uint32
-	CtimeNsec uint32
-	Mode      uint32
-	Nlink     uint32
-	Uid       uint32
-	Gid       uint32
-	Rdev      uint32
-	Blksize   uint32
-	Flags     uint32
-}
 
 type kstatfs struct {
 	Blocks  uint64
@@ -105,6 +64,13 @@ type kstatfs struct {
 	Frsize  uint32
 	_       uint32
 	Spare   [6]uint32
+}
+
+type fileLock struct {
+	Start uint64
+	End   uint64
+	Type  uint32
+	Pid   uint32
 }
 
 // GetattrFlags are bit flags that can be seen in GetattrRequest.
@@ -128,32 +94,40 @@ func (fl GetattrFlags) String() string {
 type SetattrValid uint32
 
 const (
-	SetattrMode        SetattrValid = 1 << 0
-	SetattrUid         SetattrValid = 1 << 1
-	SetattrGid         SetattrValid = 1 << 2
-	SetattrSize        SetattrValid = 1 << 3
-	SetattrAtime       SetattrValid = 1 << 4
-	SetattrMtime       SetattrValid = 1 << 5
-	SetattrHandle      SetattrValid = 1 << 6
-	SetattrAtimeNow    SetattrValid = 1 << 7
-	SetattrMtimeNow    SetattrValid = 1 << 8
-	SetattrLockOwner   SetattrValid = 1 << 9 // http://www.mail-archive.com/git-commits-head@vger.kernel.org/msg27852.html
-	SetattrCTime       SetattrValid = 1 << 10
-	SetattrKillSUIDGID SetattrValid = 1 << 11
+	SetattrMode   SetattrValid = 1 << 0
+	SetattrUid    SetattrValid = 1 << 1
+	SetattrGid    SetattrValid = 1 << 2
+	SetattrSize   SetattrValid = 1 << 3
+	SetattrAtime  SetattrValid = 1 << 4
+	SetattrMtime  SetattrValid = 1 << 5
+	SetattrHandle SetattrValid = 1 << 6
+
+	// Linux only(?)
+	SetattrAtimeNow  SetattrValid = 1 << 7
+	SetattrMtimeNow  SetattrValid = 1 << 8
+	SetattrLockOwner SetattrValid = 1 << 9 // http://www.mail-archive.com/git-commits-head@vger.kernel.org/msg27852.html
+
+	// OS X only
+	SetattrCrtime   SetattrValid = 1 << 28
+	SetattrChgtime  SetattrValid = 1 << 29
+	SetattrBkuptime SetattrValid = 1 << 30
+	SetattrFlags    SetattrValid = 1 << 31
 )
 
-func (fl SetattrValid) Mode() bool               { return fl&SetattrMode != 0 }
-func (fl SetattrValid) Uid() bool                { return fl&SetattrUid != 0 }
-func (fl SetattrValid) Gid() bool                { return fl&SetattrGid != 0 }
-func (fl SetattrValid) Size() bool               { return fl&SetattrSize != 0 }
-func (fl SetattrValid) Atime() bool              { return fl&SetattrAtime != 0 }
-func (fl SetattrValid) Mtime() bool              { return fl&SetattrMtime != 0 }
-func (fl SetattrValid) Handle() bool             { return fl&SetattrHandle != 0 }
-func (fl SetattrValid) AtimeNow() bool           { return fl&SetattrAtimeNow != 0 }
-func (fl SetattrValid) MtimeNow() bool           { return fl&SetattrMtimeNow != 0 }
-func (fl SetattrValid) LockOwner() bool          { return fl&SetattrLockOwner != 0 }
-func (fl SetattrValid) SetattrCTime() bool       { return fl&SetattrCTime != 0 }
-func (fl SetattrValid) SetattrKillSUIDGID() bool { return fl&SetattrKillSUIDGID != 0 }
+func (fl SetattrValid) Mode() bool      { return fl&SetattrMode != 0 }
+func (fl SetattrValid) Uid() bool       { return fl&SetattrUid != 0 }
+func (fl SetattrValid) Gid() bool       { return fl&SetattrGid != 0 }
+func (fl SetattrValid) Size() bool      { return fl&SetattrSize != 0 }
+func (fl SetattrValid) Atime() bool     { return fl&SetattrAtime != 0 }
+func (fl SetattrValid) Mtime() bool     { return fl&SetattrMtime != 0 }
+func (fl SetattrValid) Handle() bool    { return fl&SetattrHandle != 0 }
+func (fl SetattrValid) AtimeNow() bool  { return fl&SetattrAtimeNow != 0 }
+func (fl SetattrValid) MtimeNow() bool  { return fl&SetattrMtimeNow != 0 }
+func (fl SetattrValid) LockOwner() bool { return fl&SetattrLockOwner != 0 }
+func (fl SetattrValid) Crtime() bool    { return fl&SetattrCrtime != 0 }
+func (fl SetattrValid) Chgtime() bool   { return fl&SetattrChgtime != 0 }
+func (fl SetattrValid) Bkuptime() bool  { return fl&SetattrBkuptime != 0 }
+func (fl SetattrValid) Flags() bool     { return fl&SetattrFlags != 0 }
 
 func (fl SetattrValid) String() string {
 	return flagString(uint32(fl), setattrValidNames)
@@ -170,8 +144,10 @@ var setattrValidNames = []flagName{
 	{uint32(SetattrAtimeNow), "SetattrAtimeNow"},
 	{uint32(SetattrMtimeNow), "SetattrMtimeNow"},
 	{uint32(SetattrLockOwner), "SetattrLockOwner"},
-	{uint32(SetattrCTime), "SetattrCTime"},
-	{uint32(SetattrKillSUIDGID), "SetattrKillSUIDGID"},
+	{uint32(SetattrCrtime), "SetattrCrtime"},
+	{uint32(SetattrChgtime), "SetattrChgtime"},
+	{uint32(SetattrBkuptime), "SetattrBkuptime"},
+	{uint32(SetattrFlags), "SetattrFlags"},
 }
 
 // Flags that can be seen in OpenRequest.Flags.
@@ -184,7 +160,7 @@ const (
 	OpenReadWrite OpenFlags = syscall.O_RDWR
 
 	// File was opened in append-only mode, all writes will go to end
-	// of file. FreeBSD does not provide this information.
+	// of file. OS X does not provide this information.
 	OpenAppend    OpenFlags = syscall.O_APPEND
 	OpenCreate    OpenFlags = syscall.O_CREAT
 	OpenDirectory OpenFlags = syscall.O_DIRECTORY
@@ -250,29 +226,16 @@ var openFlagNames = []flagName{
 	{uint32(OpenTruncate), "OpenTruncate"},
 }
 
-// OpenRequestFlags are the FUSE-specific flags in an OpenRequest (as opposed to the flags from filesystem client `open(2)` flags argument).
-type OpenRequestFlags uint32
-
-const (
-	OpenKillSUIDGID OpenRequestFlags = 1 << 0
-)
-
-func (fl OpenRequestFlags) String() string {
-	return flagString(uint32(fl), openRequestFlagNames)
-}
-
-var openRequestFlagNames = []flagName{
-	{uint32(OpenKillSUIDGID), "OpenKillSUIDGID"},
-}
-
 // The OpenResponseFlags are returned in the OpenResponse.
 type OpenResponseFlags uint32
 
 const (
 	OpenDirectIO    OpenResponseFlags = 1 << 0 // bypass page cache for this open file
 	OpenKeepCache   OpenResponseFlags = 1 << 1 // don't invalidate the data cache on open
-	OpenNonSeekable OpenResponseFlags = 1 << 2 // mark the file as non-seekable (not supported on FreeBSD)
-	OpenCacheDir    OpenResponseFlags = 1 << 3 // allow caching directory contents
+	OpenNonSeekable OpenResponseFlags = 1 << 2 // mark the file as non-seekable (not supported on OS X or FreeBSD)
+
+	OpenPurgeAttr OpenResponseFlags = 1 << 30 // OS X
+	OpenPurgeUBC  OpenResponseFlags = 1 << 31 // OS X
 )
 
 func (fl OpenResponseFlags) String() string {
@@ -283,7 +246,8 @@ var openResponseFlagNames = []flagName{
 	{uint32(OpenDirectIO), "OpenDirectIO"},
 	{uint32(OpenKeepCache), "OpenKeepCache"},
 	{uint32(OpenNonSeekable), "OpenNonSeekable"},
-	{uint32(OpenCacheDir), "OpenCacheDir"},
+	{uint32(OpenPurgeAttr), "OpenPurgeAttr"},
+	{uint32(OpenPurgeUBC), "OpenPurgeUBC"},
 }
 
 // The InitFlags are used in the Init exchange.
@@ -291,12 +255,12 @@ type InitFlags uint32
 
 const (
 	InitAsyncRead     InitFlags = 1 << 0
-	InitPOSIXLocks    InitFlags = 1 << 1
+	InitPosixLocks    InitFlags = 1 << 1
 	InitFileOps       InitFlags = 1 << 2
 	InitAtomicTrunc   InitFlags = 1 << 3
 	InitExportSupport InitFlags = 1 << 4
 	InitBigWrites     InitFlags = 1 << 5
-	// Do not mask file access modes with umask.
+	// Do not mask file access modes with umask. Not supported on OS X.
 	InitDontMask        InitFlags = 1 << 6
 	InitSpliceWrite     InitFlags = 1 << 7
 	InitSpliceMove      InitFlags = 1 << 8
@@ -309,22 +273,10 @@ const (
 	InitAsyncDIO        InitFlags = 1 << 15
 	InitWritebackCache  InitFlags = 1 << 16
 	InitNoOpenSupport   InitFlags = 1 << 17
-	InitParallelDirOps  InitFlags = 1 << 18
-	// Deprecated: Use `InitHandleKillPriv2`.
-	InitHandleKillPriv InitFlags = 1 << 19
-	InitPosixACL       InitFlags = 1 << 20
-	InitAbortError     InitFlags = 1 << 21
-	InitMaxPages       InitFlags = 1 << 22
-	InitCacheSymlinks  InitFlags = 1 << 23
-	// Kernel supports zero-message OpenDir.
-	InitNoOpenDirSupport InitFlags = 1 << 24
-	// Only invalidate cached pages on explicit request, instead of e.g. at every file size change.
-	InitExplicitInvalidateData InitFlags = 1 << 25
-	InitMapAlignment           InitFlags = 1 << 26
-	InitSubMounts              InitFlags = 1 << 27
-	// Filesystem promises to remove SUID/SGID/cap on writes and `chown`.
-	InitHandleKillPrivV2 InitFlags = 1 << 28
-	InitSetxattrExt      InitFlags = 1 << 29
+
+	InitCaseSensitive InitFlags = 1 << 29 // OS X only
+	InitVolRename     InitFlags = 1 << 30 // OS X only
+	InitXtimes        InitFlags = 1 << 31 // OS X only
 )
 
 type flagName struct {
@@ -334,7 +286,7 @@ type flagName struct {
 
 var initFlagNames = []flagName{
 	{uint32(InitAsyncRead), "InitAsyncRead"},
-	{uint32(InitPOSIXLocks), "InitPOSIXLocks"},
+	{uint32(InitPosixLocks), "InitPosixLocks"},
 	{uint32(InitFileOps), "InitFileOps"},
 	{uint32(InitAtomicTrunc), "InitAtomicTrunc"},
 	{uint32(InitExportSupport), "InitExportSupport"},
@@ -351,18 +303,10 @@ var initFlagNames = []flagName{
 	{uint32(InitAsyncDIO), "InitAsyncDIO"},
 	{uint32(InitWritebackCache), "InitWritebackCache"},
 	{uint32(InitNoOpenSupport), "InitNoOpenSupport"},
-	{uint32(InitParallelDirOps), "InitParallelDirOps"},
-	{uint32(InitHandleKillPriv), "InitHandleKillPriv"},
-	{uint32(InitPosixACL), "InitPosixACL"},
-	{uint32(InitAbortError), "InitAbortError"},
-	{uint32(InitMaxPages), "InitMaxPages"},
-	{uint32(InitCacheSymlinks), "InitCacheSymlinks"},
-	{uint32(InitNoOpenDirSupport), "InitNoOpenDirSupport"},
-	{uint32(InitExplicitInvalidateData), "InitExplicitInvalidateData"},
-	{uint32(InitMapAlignment), "InitMapAlignment"},
-	{uint32(InitSubMounts), "InitSubMounts"},
-	{uint32(InitHandleKillPrivV2), "InitHandleKillPrivV2"},
-	{uint32(InitSetxattrExt), "InitSetxattrExt"},
+
+	{uint32(InitCaseSensitive), "InitCaseSensitive"},
+	{uint32(InitVolRename), "InitVolRename"},
+	{uint32(InitXtimes), "InitXtimes"},
 }
 
 func (fl InitFlags) String() string {
@@ -392,8 +336,7 @@ func flagString(f uint32, names []flagName) string {
 type ReleaseFlags uint32
 
 const (
-	ReleaseFlush       ReleaseFlags = 1 << 0
-	ReleaseFlockUnlock ReleaseFlags = 1 << 1
+	ReleaseFlush ReleaseFlags = 1 << 0
 )
 
 func (fl ReleaseFlags) String() string {
@@ -402,58 +345,53 @@ func (fl ReleaseFlags) String() string {
 
 var releaseFlagNames = []flagName{
 	{uint32(ReleaseFlush), "ReleaseFlush"},
-	{uint32(ReleaseFlockUnlock), "ReleaseFlockUnlock"},
 }
 
 // Opcodes
 const (
-	opLookup        = 1
-	opForget        = 2 // no reply
-	opGetattr       = 3
-	opSetattr       = 4
-	opReadlink      = 5
-	opSymlink       = 6
-	opMknod         = 8
-	opMkdir         = 9
-	opUnlink        = 10
-	opRmdir         = 11
-	opRename        = 12
-	opLink          = 13
-	opOpen          = 14
-	opRead          = 15
-	opWrite         = 16
-	opStatfs        = 17
-	opRelease       = 18
-	opFsync         = 20
-	opSetxattr      = 21
-	opGetxattr      = 22
-	opListxattr     = 23
-	opRemovexattr   = 24
-	opFlush         = 25
-	opInit          = 26
-	opOpendir       = 27
-	opReaddir       = 28
-	opReleasedir    = 29
-	opFsyncdir      = 30
-	opGetlk         = 31
-	opSetlk         = 32
-	opSetlkw        = 33
-	opAccess        = 34
-	opCreate        = 35
-	opInterrupt     = 36
-	opBmap          = 37
-	opDestroy       = 38
-	opIoctl         = 39
-	opPoll          = 40
-	opNotifyReply   = 41
-	opBatchForget   = 42
-	opFAllocate     = 43
-	opReadDirPlus   = 44
-	opRename2       = 45
-	opLSeek         = 46
-	opCopyFileRange = 47
-	opSetupMapping  = 48
-	opRemoveMapping = 49
+	opLookup      = 1
+	opForget      = 2 // no reply
+	opGetattr     = 3
+	opSetattr     = 4
+	opReadlink    = 5
+	opSymlink     = 6
+	opMknod       = 8
+	opMkdir       = 9
+	opUnlink      = 10
+	opRmdir       = 11
+	opRename      = 12
+	opLink        = 13
+	opOpen        = 14
+	opRead        = 15
+	opWrite       = 16
+	opStatfs      = 17
+	opRelease     = 18
+	opFsync       = 20
+	opSetxattr    = 21
+	opGetxattr    = 22
+	opListxattr   = 23
+	opRemovexattr = 24
+	opFlush       = 25
+	opInit        = 26
+	opOpendir     = 27
+	opReaddir     = 28
+	opReleasedir  = 29
+	opFsyncdir    = 30
+	opGetlk       = 31
+	opSetlk       = 32
+	opSetlkw      = 33
+	opAccess      = 34
+	opCreate      = 35
+	opInterrupt   = 36
+	opBmap        = 37
+	opDestroy     = 38
+	opIoctl       = 39 // Linux?
+	opPoll        = 40 // Linux?
+
+	// OS X
+	opSetvolname = 61
+	opGetxtimes  = 62
+	opExchange   = 63
 )
 
 type entryOut struct {
@@ -479,16 +417,6 @@ type forgetIn struct {
 	Nlookup uint64
 }
 
-type forgetOne struct {
-	NodeID  uint64
-	Nlookup uint64
-}
-
-type batchForgetIn struct {
-	Count uint32
-	_     uint32
-}
-
 type getattrIn struct {
 	GetattrFlags uint32
 	_            uint32
@@ -509,6 +437,14 @@ func attrOutSize(p Protocol) uintptr {
 	default:
 		return unsafe.Sizeof(attrOut{})
 	}
+}
+
+// OS X
+type getxtimesOut struct {
+	Bkuptime     uint64
+	Crtime       uint64
+	BkuptimeNsec uint32
+	CrtimeNsec   uint32
 }
 
 type mknodIn struct {
@@ -548,22 +484,30 @@ type renameIn struct {
 	// "oldname\x00newname\x00" follows
 }
 
+// OS X
+type exchangeIn struct {
+	Olddir  uint64
+	Newdir  uint64
+	Options uint64
+	// "oldname\x00newname\x00" follows
+}
+
 type linkIn struct {
 	Oldnodeid uint64
 }
 
-type setattrIn struct {
+type setattrInCommon struct {
 	Valid     uint32
 	_         uint32
 	Fh        uint64
 	Size      uint64
-	LockOwner uint64
+	LockOwner uint64 // unused on OS X?
 	Atime     uint64
 	Mtime     uint64
-	Ctime     uint64
+	Unused2   uint64
 	AtimeNsec uint32
 	MtimeNsec uint32
-	CtimeNsec uint32
+	Unused3   uint32
 	Mode      uint32
 	Unused4   uint32
 	Uid       uint32
@@ -572,8 +516,8 @@ type setattrIn struct {
 }
 
 type openIn struct {
-	Flags     uint32
-	OpenFlags uint32
+	Flags  uint32
+	Unused uint32
 }
 
 type openOut struct {
@@ -602,14 +546,14 @@ type releaseIn struct {
 	Fh           uint64
 	Flags        uint32
 	ReleaseFlags uint32
-	LockOwner    uint64
+	LockOwner    uint32
 }
 
 type flushIn struct {
-	Fh        uint64
-	_         uint32
-	_         uint32
-	LockOwner uint64
+	Fh         uint64
+	FlushFlags uint32
+	_          uint32
+	LockOwner  uint64
 }
 
 type readIn struct {
@@ -678,14 +622,11 @@ const (
 	WriteCache WriteFlags = 1 << 0
 	// LockOwner field is valid.
 	WriteLockOwner WriteFlags = 1 << 1
-	// Remove SUID and GID bits.
-	WriteKillSUIDGID WriteFlags = 1 << 2
 )
 
 var writeFlagNames = []flagName{
 	{uint32(WriteCache), "WriteCache"},
 	{uint32(WriteLockOwner), "WriteLockOwner"},
-	{uint32(WriteKillSUIDGID), "WriteKillSUIDGID"},
 }
 
 func (fl WriteFlags) String() string {
@@ -702,92 +643,27 @@ type fsyncIn struct {
 	_          uint32
 }
 
-// SetxattrFlags re passed in SetxattrRequest.SetxattrFlags.
-type SetxattrFlags uint32
-
-const (
-	SetxattrACLKillSGID SetxattrFlags = 1 << 0
-)
-
-var setxattrFlagNames = []flagName{
-	{uint32(SetxattrACLKillSGID), "SetxattrACLKillSGID"},
+type setxattrInCommon struct {
+	Size  uint32
+	Flags uint32
 }
 
-func (fl SetxattrFlags) String() string {
-	return flagString(uint32(fl), setxattrFlagNames)
+func (setxattrInCommon) position() uint32 {
+	return 0
 }
 
-type setxattrIn struct {
-	Size          uint32
-	Flags         uint32
-	SetxattrFlags SetxattrFlags
-	_             uint32
-}
-
-func setxattrInSize(fl InitFlags) uintptr {
-	if fl&InitSetxattrExt == 0 {
-		return unsafe.Offsetof(setxattrIn{}.SetxattrFlags)
-	}
-	return unsafe.Sizeof(setxattrIn{})
-}
-
-type getxattrIn struct {
+type getxattrInCommon struct {
 	Size uint32
 	_    uint32
+}
+
+func (getxattrInCommon) position() uint32 {
+	return 0
 }
 
 type getxattrOut struct {
 	Size uint32
 	_    uint32
-}
-
-// The LockFlags are passed in LockRequest or LockWaitRequest.
-type LockFlags uint32
-
-const (
-	// BSD-style flock lock (not POSIX lock)
-	LockFlock LockFlags = 1 << 0
-)
-
-var lockFlagNames = []flagName{
-	{uint32(LockFlock), "LockFlock"},
-}
-
-func (fl LockFlags) String() string {
-	return flagString(uint32(fl), lockFlagNames)
-}
-
-type LockType uint32
-
-const (
-	// It seems FreeBSD FUSE passes these through using its local
-	// values, not whatever Linux enshrined into the protocol. It's
-	// unclear what the intended behavior is.
-
-	LockRead   LockType = unix.F_RDLCK
-	LockWrite  LockType = unix.F_WRLCK
-	LockUnlock LockType = unix.F_UNLCK
-)
-
-var lockTypeNames = map[LockType]string{
-	LockRead:   "LockRead",
-	LockWrite:  "LockWrite",
-	LockUnlock: "LockUnlock",
-}
-
-func (l LockType) String() string {
-	s, ok := lockTypeNames[l]
-	if ok {
-		return s
-	}
-	return fmt.Sprintf("LockType(%d)", l)
-}
-
-type fileLock struct {
-	Start uint64
-	End   uint64
-	Type  uint32
-	PID   uint32
 }
 
 type lkIn struct {
@@ -796,6 +672,15 @@ type lkIn struct {
 	Lk      fileLock
 	LkFlags uint32
 	_       uint32
+}
+
+func lkInSize(p Protocol) uintptr {
+	switch {
+	case p.LT(Protocol{7, 9}):
+		return unsafe.Offsetof(lkIn{}.LkFlags)
+	default:
+		return unsafe.Sizeof(lkIn{})
+	}
 }
 
 type lkOut struct {
@@ -817,24 +702,12 @@ type initIn struct {
 const initInSize = int(unsafe.Sizeof(initIn{}))
 
 type initOut struct {
-	Major               uint32
-	Minor               uint32
-	MaxReadahead        uint32
-	Flags               uint32
-	MaxBackground       uint16
-	CongestionThreshold uint16
-	MaxWrite            uint32
-
-	// end of protocol 7.22 fields
-
-	// Granularity of timestamps, in nanoseconds.
-	// Maximum value 1e9 (one second).
-	TimeGran uint32
-	// Maximum number of pages of data in one read or write request.
-	// Set initOut.Flags.InitMaxPages when valid.
-	MaxPages     uint16
-	MapAlignment uint16
-	_            [8]uint32
+	Major        uint32
+	Minor        uint32
+	MaxReadahead uint32
+	Flags        uint32
+	Unused       uint32
+	MaxWrite     uint32
 }
 
 type interruptIn struct {
@@ -875,6 +748,7 @@ type dirent struct {
 	Off     uint64
 	Namelen uint32
 	Type    uint32
+	Name    [0]byte
 }
 
 const direntSize = 8 + 8 + 4 + 4
@@ -883,9 +757,6 @@ const (
 	notifyCodePoll       int32 = 1
 	notifyCodeInvalInode int32 = 2
 	notifyCodeInvalEntry int32 = 3
-	notifyCodeStore      int32 = 4
-	notifyCodeRetrieve   int32 = 5
-	notifyCodeDelete     int32 = 6
 )
 
 type notifyInvalInodeOut struct {
@@ -898,149 +769,4 @@ type notifyInvalEntryOut struct {
 	Parent  uint64
 	Namelen uint32
 	_       uint32
-}
-
-type notifyDeleteOut struct {
-	Parent  uint64
-	Child   uint64
-	Namelen uint32
-	_       uint32
-}
-
-type notifyStoreOut struct {
-	Nodeid uint64
-	Offset uint64
-	Size   uint32
-	_      uint32
-}
-
-type notifyRetrieveOut struct {
-	NotifyUnique uint64
-	Nodeid       uint64
-	Offset       uint64
-	Size         uint32
-	_            uint32
-}
-
-type notifyRetrieveIn struct {
-	// matches writeIn
-
-	_      uint64
-	Offset uint64
-	Size   uint32
-	_      uint32
-	_      uint64
-	_      uint64
-}
-
-// PollFlags are passed in PollRequest.Flags
-type PollFlags uint32
-
-const (
-	// PollScheduleNotify requests that a poll notification is done
-	// once the node is ready.
-	PollScheduleNotify PollFlags = 1 << 0
-)
-
-var pollFlagNames = []flagName{
-	{uint32(PollScheduleNotify), "PollScheduleNotify"},
-}
-
-func (fl PollFlags) String() string {
-	return flagString(uint32(fl), pollFlagNames)
-}
-
-type PollEvents uint32
-
-const (
-	PollIn       PollEvents = 0x0000_0001
-	PollPriority PollEvents = 0x0000_0002
-	PollOut      PollEvents = 0x0000_0004
-	PollError    PollEvents = 0x0000_0008
-	PollHangup   PollEvents = 0x0000_0010
-	// PollInvalid doesn't seem to be used in the FUSE protocol.
-	PollInvalid        PollEvents = 0x0000_0020
-	PollReadNormal     PollEvents = 0x0000_0040
-	PollReadOutOfBand  PollEvents = 0x0000_0080
-	PollWriteNormal    PollEvents = 0x0000_0100
-	PollWriteOutOfBand PollEvents = 0x0000_0200
-	PollMessage        PollEvents = 0x0000_0400
-	PollReadHangup     PollEvents = 0x0000_2000
-
-	DefaultPollMask = PollIn | PollOut | PollReadNormal | PollWriteNormal
-)
-
-var pollEventNames = []flagName{
-	{uint32(PollIn), "PollIn"},
-	{uint32(PollPriority), "PollPriority"},
-	{uint32(PollOut), "PollOut"},
-	{uint32(PollError), "PollError"},
-	{uint32(PollHangup), "PollHangup"},
-	{uint32(PollInvalid), "PollInvalid"},
-	{uint32(PollReadNormal), "PollReadNormal"},
-	{uint32(PollReadOutOfBand), "PollReadOutOfBand"},
-	{uint32(PollWriteNormal), "PollWriteNormal"},
-	{uint32(PollWriteOutOfBand), "PollWriteOutOfBand"},
-	{uint32(PollMessage), "PollMessage"},
-	{uint32(PollReadHangup), "PollReadHangup"},
-}
-
-func (fl PollEvents) String() string {
-	return flagString(uint32(fl), pollEventNames)
-}
-
-type pollIn struct {
-	Fh     uint64
-	Kh     uint64
-	Flags  uint32
-	Events uint32
-}
-
-type pollOut struct {
-	REvents uint32
-	_       uint32
-}
-
-type notifyPollWakeupOut struct {
-	Kh uint64
-}
-
-type FAllocateFlags uint32
-
-const (
-	FAllocateKeepSize  FAllocateFlags = unix.FALLOC_FL_KEEP_SIZE
-	FAllocatePunchHole FAllocateFlags = unix.FALLOC_FL_PUNCH_HOLE
-
-	// Only including constants supported by FUSE kernel implementation.
-	//
-	// FAllocateCollapseRange FAllocateFlags = unix.FALLOC_FL_COLLAPSE_RANGE
-	// FAllocateInsertRange   FAllocateFlags = unix.FALLOC_FL_INSERT_RANGE
-	// FAllocateNoHideStale   FAllocateFlags = unix.FALLOC_FL_NO_HIDE_STALE
-	// FAllocateUnshareRange  FAllocateFlags = unix.FALLOC_FL_UNSHARE_RANGE
-	// FAllocateZeroRange     FAllocateFlags = unix.FALLOC_FL_ZERO_RANGE
-)
-
-var fAllocateFlagsNames = []flagName{
-	{uint32(FAllocatePunchHole), "FAllocatePunchHole"},
-	{uint32(FAllocateKeepSize), "FAllocateKeepSize"},
-
-	// Only including constants supported by FUSE kernel implementation.
-	//
-	// {uint32(FAllocateCollapseRange), "FAllocateCollapseRange"},
-	// {uint32(FAllocateInsertRange), "FAllocateInsertRange"},
-	// {uint32(FAllocateNoHideStale), "FAllocateNoHideStale"},
-	// {uint32(FAllocateUnshareRange), "FAllocateUnshareRange"},
-	// {uint32(FAllocateZeroRange), "FAllocateZeroRange"},
-}
-
-func (fl FAllocateFlags) String() string {
-	return flagString(uint32(fl), fAllocateFlagsNames)
-}
-
-type fAllocateIn struct {
-	Fh     uint64
-	Offset uint64
-	Length uint64
-	Mode   uint32
-	_      uint32
 }

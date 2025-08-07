@@ -31,17 +31,18 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/security"
-	"github.com/dgraph-io/badger/v3"
-	"github.com/dgraph-io/badger/v3/options"
-	"github.com/docker/go-units"
-	log "github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Warp-net/warpnet/security"
+	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v3/options"
+	"github.com/docker/go-units"
+	log "github.com/sirupsen/logrus"
 )
 
 /*

@@ -31,6 +31,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -38,7 +40,6 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 const (
@@ -106,21 +107,6 @@ func PrefollowUsers(userIds ...string) (handlers []pubsub.TopicHandler) {
 	return handlers
 }
 
-func (g *memberPubSub) SubscribeConsensusTopic() error {
-	if g == nil || !g.pubsub.IsGossipRunning() {
-		return warpnet.WarpError("member pubsub: service not initialized")
-	}
-
-	return g.pubsub.Subscribe(pubsub.TopicHandler{
-		TopicName: pubsub.PubSubConsensusTopic,
-		Handler:   g.pubsub.SelfPublish,
-	})
-}
-
-func (g *memberPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
-	return g.pubsub.Subscribers(pubsub.PubSubConsensusTopic)
-}
-
 // SubscribeUserUpdate - follow someone
 func (g *memberPubSub) SubscribeUserUpdate(userId string) (err error) {
 	if g == nil || g.pubsub == nil || !g.pubsub.IsGossipRunning() {
@@ -145,40 +131,6 @@ func (g *memberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
 	}
 	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
 	return g.pubsub.Unsubscribe(topicName)
-}
-
-func (g *memberPubSub) PublishValidationRequest(bt []byte) (err error) {
-	if g == nil || !g.pubsub.IsGossipRunning() {
-		return warpnet.WarpError("pubsub: service not initialized")
-	}
-	body := json.RawMessage(bt)
-
-	msg := event.Message{
-		Body:        body,
-		Destination: event.INTERNAL_POST_NODE_VALIDATE,
-		NodeId:      g.NodeID(),
-		Timestamp:   time.Now(),
-		Version:     "0.0.0", // TODO manage protocol versions properly
-		MessageId:   uuid.New().String(),
-	}
-	return g.pubsub.Publish(msg, pubsub.PubSubConsensusTopic)
-}
-
-func (g *memberPubSub) PublishModerationRequest(bt []byte) (err error) {
-	if g == nil || !g.pubsub.IsGossipRunning() {
-		return warpnet.WarpError("pubsub: service not initialized")
-	}
-	body := json.RawMessage(bt)
-
-	msg := event.Message{
-		Body:        body,
-		Destination: event.INTERNAL_POST_MODERATE,
-		NodeId:      g.NodeID(),
-		Timestamp:   time.Now(),
-		Version:     "0.0.0", // TODO manage protocol versions properly
-		MessageId:   uuid.New().String(),
-	}
-	return g.pubsub.Publish(msg, pubsub.PubSubModerationTopic)
 }
 
 // PublishUpdateToFollowers - Publish for followers
@@ -239,7 +191,7 @@ func (g *memberPubSub) PublishPeerInfo() error {
 	}}
 
 	limit := publishPeerInfoLimit
-	for _, pi := range g.pubsub.NotSubscribers(pubsub.PubSubModerationTopic) {
+	for _, pi := range g.pubsub.Subscribers(pubsub.PubSubDiscoveryTopic) {
 		if limit == 0 {
 			break
 		}
@@ -268,7 +220,7 @@ func (g *memberPubSub) PublishPeerInfo() error {
 		Version:     "0.0.0", // TODO
 	}
 
-	err = g.pubsub.Publish(msg, pubsub.PubSubModerationTopic)
+	err = g.pubsub.Publish(msg, pubsub.PubSubDiscoveryTopic)
 	if errors.Is(err, pubsub.ErrTopicClosed) {
 		return nil
 	}

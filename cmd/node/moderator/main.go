@@ -26,17 +26,18 @@ package main
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	root "github.com/Warp-net/warpnet"
-	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/moderator"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/security"
 	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
 	_ "go.uber.org/automaxprocs" // DO NOT remove
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func main() {
@@ -86,7 +87,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	n, err := node.NewModeratorNode(ctx, privKey, psk, codeHashHex)
+	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init moderator node: %v", err)
 	}

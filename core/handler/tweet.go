@@ -31,6 +31,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -39,8 +42,6 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-	"strings"
-	"time"
 )
 
 type TweetUserFetcher interface {
@@ -58,7 +59,6 @@ type OwnerTweetStorer interface {
 
 type TweetBroadcaster interface {
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
-	PublishModerationRequest(body []byte) (err error)
 }
 
 type TweetsStorer interface {
@@ -117,21 +117,6 @@ func StreamNewTweetHandler(
 			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
 				log.Errorf("broadcaster publish owner tweet update: %v", err)
 			}
-
-			moderationEvent := event.ModerationEvent{
-				NodeID:   owner.NodeId,
-				UserID:   owner.UserId,
-				Type:     event.Tweet,
-				ObjectID: &tweet.Id,
-			}
-			bt, _ = json.Marshal(moderationEvent)
-
-			if err := broadcaster.PublishModerationRequest(bt); err != nil {
-				log.Errorf("broadcaster publish tweet moderation request: %v", err)
-			} else {
-				log.Infof("tweet: %s moderation requested", tweet.Id)
-			}
-
 		}
 		return tweet, nil
 	}

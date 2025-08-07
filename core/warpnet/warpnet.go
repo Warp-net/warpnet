@@ -31,6 +31,12 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
+	gonet "net"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/docker/go-units"
 	"github.com/ipfs/go-datastore"
@@ -66,11 +72,6 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
 	log "github.com/sirupsen/logrus"
-	gonet "net"
-	"runtime"
-	"strconv"
-	"strings"
-	"time"
 )
 
 var ErrAllDialsFailed = swarm.ErrAllDialsFailed
@@ -217,10 +218,14 @@ type NodeInfo struct {
 	RelayState     relayStatus      `json:"relay_state"`
 	BootstrapPeers []WarpAddrInfo   `json:"bootstrap_peers"`
 	Reachability   WarpReachability `json:"reachability"`
+	Protocols      []WarpProtocolID `json:"protocols"`
 }
 
 func (ni NodeInfo) IsBootstrap() bool {
 	return ni.OwnerId == BootstrapOwner
+}
+func (ni NodeInfo) IsModerator() bool {
+	return ni.OwnerId == ModeratorOwner
 }
 
 type NodeStats struct {
@@ -234,10 +239,9 @@ type NodeStats struct {
 
 	NetworkState string `json:"network_state"`
 
-	DatabaseStats  map[string]string `json:"database_stats"`
-	ConsensusStats map[string]string `json:"consensus_stats"`
-	MemoryStats    map[string]string `json:"memory_stats"`
-	CPUStats       map[string]string `json:"cpu_stats"`
+	DatabaseStats map[string]string `json:"database_stats"`
+	MemoryStats   map[string]string `json:"memory_stats"`
+	CPUStats      map[string]string `json:"cpu_stats"`
 
 	BytesSent     int64 `json:"bytes_sent"`
 	BytesReceived int64 `json:"bytes_received"`
