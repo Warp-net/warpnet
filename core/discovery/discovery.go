@@ -399,12 +399,12 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	if err := s.validateProtocols(info); err != nil {
-		log.Errorf("discovery: protocol validation: %v", err)
-		_ = s.nodeRepo.BlocklistExponential(pi.ID)
-		s.node.Peerstore().RemovePeer(pi.ID)
-		return
-	}
+	//if err := s.validateProtocols(info); err != nil {
+	//	log.Errorf("discovery: protocol validation: %v", err)
+	//	_ = s.nodeRepo.BlocklistExponential(pi.ID)
+	//	s.node.Peerstore().RemovePeer(pi.ID)
+	//	return
+	//}
 
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {

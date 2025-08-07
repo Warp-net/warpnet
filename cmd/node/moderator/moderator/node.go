@@ -33,6 +33,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -79,6 +80,8 @@ type ModeratorNode struct {
 	psk         security.PSK
 	privKey     ed25519.PrivateKey
 	selfHashHex string
+
+	isClosed *atomic.Bool
 }
 
 func NewModeratorNode(
@@ -145,6 +148,7 @@ func NewModeratorNode(
 			libp2p.Routing(dHashTable.StartRouting),
 			node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 		},
+		isClosed: new(atomic.Bool),
 	}
 
 	return mn, nil
@@ -227,13 +231,23 @@ func (mn *ModeratorNode) lurkTweets() {
 	if mn.dHashTable == nil {
 		log.Fatalf("moderator: nil DHT")
 	}
-	for {
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if mn.isClosed.Load() {
+			return
+		}
 		peers, err := mn.dHashTable.ClosestPeers()
 		if err != nil {
 			log.Errorf("moderator: failed to get closest peers: %v", err)
 			continue
 		}
 		for _, peer := range peers {
+			if mn.isClosed.Load() {
+				return
+			}
 			if ok := mn.cache.IsModeratedAlready(peer); ok {
 				continue
 			}
@@ -406,9 +420,11 @@ func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 }
 
 func (mn *ModeratorNode) Stop() {
+	defer func() { recover() }()
 	if mn == nil {
 		return
 	}
+	mn.isClosed.Store(true)
 
 	if mn.dHashTable != nil {
 		mn.dHashTable.Close()
