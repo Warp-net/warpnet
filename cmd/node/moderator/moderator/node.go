@@ -294,16 +294,17 @@ func (mn *ModeratorNode) lurkTweets() {
 				UserID: info.OwnerId,
 			}
 
-			err = mn.moderateTweet(peer, info.OwnerId)
+			objectID, err := mn.moderateTweet(peer, info.OwnerId)
+			result.ObjectID = &objectID
+
 			if err != nil && !errors.As(err, &errModerationFailure{}) {
 				log.Errorf("moderator: moderation engine failure %s: %v", peer.String(), err)
 				continue
 
 			}
 			if err != nil {
-				var failure = err.(errModerationFailure)
-				result.ObjectID = failure.ObjectID
-				result.Reason = &failure.Reason
+				reason := err.Error()
+				result.Reason = &reason
 				result.Result = event.FAIL
 			}
 
@@ -329,16 +330,14 @@ func (mn *ModeratorNode) lurkTweets() {
 }
 
 type errModerationFailure struct {
-	UserID   string
-	ObjectID *string
-	Reason   string
+	Reason string
 }
 
 func (e errModerationFailure) Error() string {
-	return fmt.Sprintf("%+v", e)
+	return e.Reason
 }
 
-func (mn *ModeratorNode) moderateTweet(peerID warpnet.WarpPeerID, userID string) error {
+func (mn *ModeratorNode) moderateTweet(peerID warpnet.WarpPeerID, userID string) (objectID string, err error) {
 	limit := uint64(20)
 
 	tweetsResp, err := mn.GenericStream(
@@ -350,39 +349,37 @@ func (mn *ModeratorNode) moderateTweet(peerID warpnet.WarpPeerID, userID string)
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("moderator: get tweets: %v", err)
+		return "", fmt.Errorf("moderator: get tweets: %v", err)
 	}
 
 	var tweetsEvent event.TweetsResponse
 	if err := json.Unmarshal(tweetsResp, &tweetsEvent); err != nil {
-		return fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %v", tweetsResp, err)
+		return "", fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %v", tweetsResp, err)
 	}
 	if len(tweetsEvent.Tweets) == 0 {
-		return nil
+		return "", nil
 	}
 
 	randomTweet := tweetsEvent.Tweets[rand.Intn(len(tweetsEvent.Tweets))]
 	if randomTweet.Moderation != nil && randomTweet.Moderation.IsOk {
-		return nil
+		return randomTweet.Id, nil
 	}
 	if randomTweet.Text == "" {
-		return nil
+		return randomTweet.Id, nil
 	}
 
 	result, reason, err := moderator.Moderate(randomTweet.Text)
 	if err != nil {
-		return err
+		return randomTweet.Id, err
 	}
 
 	if event.ModerationResult(result) == event.FAIL {
-		return errModerationFailure{
-			UserID:   userID,
-			ObjectID: &randomTweet.Id,
-			Reason:   reason,
+		return randomTweet.Id, errModerationFailure{
+			Reason: reason,
 		}
 	}
 
-	return nil
+	return randomTweet.Id, nil
 }
 
 func (mn *ModeratorNode) lurkUserDescriptions() {
@@ -415,9 +412,8 @@ func (mn *ModeratorNode) moderateUser(peerID warpnet.WarpPeerID, userID string) 
 
 		if event.ModerationResult(result) == event.FAIL {
 			return errModerationFailure{
-				UserID:   userID,
-				ObjectID: nil,
-				Reason:   reason,
+
+				Reason: reason,
 			}
 		}
 
