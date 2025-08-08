@@ -258,6 +258,9 @@ func (mn *ModeratorNode) lurkTweets() {
 
 			infoResp, err := mn.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
 			if err != nil {
+				if strings.Contains(err.Error(), "protocols not supported") {
+					continue
+				}
 				log.Errorf("moderator: get info: %v", err)
 				continue
 			}
@@ -298,9 +301,7 @@ func (mn *ModeratorNode) lurkTweets() {
 
 			}
 			if err != nil {
-				var failure errModerationFailure
-				errors.As(err, &failure)
-
+				var failure = err.(errModerationFailure)
 				result.ObjectID = failure.ObjectID
 				result.Reason = &failure.Reason
 				result.Result = event.FAIL
@@ -327,11 +328,6 @@ func (mn *ModeratorNode) lurkTweets() {
 	}
 }
 
-func (mn *ModeratorNode) lurkUserDescriptions() {
-
-	// TODO
-}
-
 type errModerationFailure struct {
 	UserID   string
 	ObjectID *string
@@ -340,41 +336,6 @@ type errModerationFailure struct {
 
 func (e errModerationFailure) Error() string {
 	return fmt.Sprintf("%+v", e)
-}
-
-// TODO
-func (mn *ModeratorNode) moderateUser(peerID warpnet.WarpPeerID, userID string) func() error {
-	return func() error {
-		bt, err := mn.GenericStream(
-			peerID.String(),
-			event.PUBLIC_GET_USER,
-			event.GetUserEvent{UserId: userID},
-		)
-		if err != nil {
-			return err
-		}
-
-		var user domain.User
-		if err := json.Unmarshal(bt, &user); err != nil {
-			return err
-		}
-
-		text := fmt.Sprintf("%s: %s", user.Username, user.Bio)
-		result, reason, err := moderator.Moderate(text)
-		if err != nil {
-			return err
-		}
-
-		if event.ModerationResult(result) == event.FAIL {
-			return errModerationFailure{
-				UserID:   userID,
-				ObjectID: nil,
-				Reason:   reason,
-			}
-		}
-
-		return nil
-	}
 }
 
 func (mn *ModeratorNode) moderateTweet(peerID warpnet.WarpPeerID, userID string) error {
@@ -422,6 +383,46 @@ func (mn *ModeratorNode) moderateTweet(peerID warpnet.WarpPeerID, userID string)
 	}
 
 	return nil
+}
+
+func (mn *ModeratorNode) lurkUserDescriptions() {
+
+	// TODO
+}
+
+// TODO
+func (mn *ModeratorNode) moderateUser(peerID warpnet.WarpPeerID, userID string) func() error {
+	return func() error {
+		bt, err := mn.GenericStream(
+			peerID.String(),
+			event.PUBLIC_GET_USER,
+			event.GetUserEvent{UserId: userID},
+		)
+		if err != nil {
+			return err
+		}
+
+		var user domain.User
+		if err := json.Unmarshal(bt, &user); err != nil {
+			return err
+		}
+
+		text := fmt.Sprintf("%s: %s", user.Username, user.Bio)
+		result, reason, err := moderator.Moderate(text)
+		if err != nil {
+			return err
+		}
+
+		if event.ModerationResult(result) == event.FAIL {
+			return errModerationFailure{
+				UserID:   userID,
+				ObjectID: nil,
+				Reason:   reason,
+			}
+		}
+
+		return nil
+	}
 }
 
 func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
