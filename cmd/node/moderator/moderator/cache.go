@@ -35,7 +35,7 @@ const maxLiveTime = 8 * time.Hour
 
 type CacheEntry struct {
 	Result         event.ModerationResultEvent
-	nextModeration time.Time
+	expirationTime time.Time
 }
 
 type moderationCache struct {
@@ -59,7 +59,12 @@ func (dc *moderationCache) IsModeratedAlready(id warpnet.WarpPeerID) bool {
 		return false
 	}
 
-	return time.Now().Before(entry.nextModeration)
+	isExpired := time.Now().After(entry.expirationTime)
+	if isExpired {
+		delete(dc.peers, id)
+		return false
+	}
+	return true
 }
 
 func (dc *moderationCache) SetAsModerated(peerId warpnet.WarpPeerID, entry CacheEntry) {
@@ -67,11 +72,11 @@ func (dc *moderationCache) SetAsModerated(peerId warpnet.WarpPeerID, entry Cache
 	defer dc.mx.Unlock()
 
 	waitPeriod := time.Minute * time.Duration(rand.IntN(8))
-	entry.nextModeration = time.Now().Add(waitPeriod)
+	entry.expirationTime = time.Now().Add(waitPeriod)
 	dc.peers[peerId] = entry
 
 	for id, e := range dc.peers {
-		if !e.nextModeration.IsZero() && time.Since(e.nextModeration) < maxLiveTime {
+		if !e.expirationTime.IsZero() && time.Since(e.expirationTime) < maxLiveTime {
 			continue
 		}
 

@@ -256,8 +256,6 @@ func (mn *ModeratorNode) lurkTweets() {
 				continue
 			}
 
-			log.Infof("moderator: checking peer %s", peer.String())
-
 			infoResp, err := mn.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
 			if err != nil {
 				log.Errorf("moderator: get info: %v", err)
@@ -278,6 +276,9 @@ func (mn *ModeratorNode) lurkTweets() {
 				mn.cache.SetAsModerated(peer, CacheEntry{})
 				continue
 			}
+
+			log.Infof("moderator: checking peer: %s, owner: %s", peer.String(), info.OwnerId)
+
 			if info.OwnerId == "" {
 				log.Errorf("moderator: node info %s has no owner", peer.String())
 				continue
@@ -303,6 +304,11 @@ func (mn *ModeratorNode) lurkTweets() {
 				result.ObjectID = failure.ObjectID
 				result.Reason = &failure.Reason
 				result.Result = event.FAIL
+			}
+
+			log.Infof("moderator: checking object: %v, result: %s", result.ObjectID, result.Result)
+			if result.Reason != nil {
+				log.Infof("reason: %s", *result.Reason)
 			}
 
 			item := CacheEntry{Result: result}
