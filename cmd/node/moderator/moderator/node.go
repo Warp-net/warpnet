@@ -244,6 +244,10 @@ func (mn *ModeratorNode) lurkTweets() {
 			log.Errorf("moderator: failed to get closest peers: %v", err)
 			continue
 		}
+		if len(peers) == 0 {
+			log.Warnf("moderator: no peers found")
+			continue
+		}
 		for _, peer := range peers {
 			if mn.isClosed.Load() {
 				return
@@ -251,6 +255,8 @@ func (mn *ModeratorNode) lurkTweets() {
 			if ok := mn.cache.IsModeratedAlready(peer); ok {
 				continue
 			}
+
+			log.Infof("moderator: checking peer %s", peer.String())
 
 			infoResp, err := mn.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
 			if err != nil {
@@ -291,7 +297,7 @@ func (mn *ModeratorNode) lurkTweets() {
 
 			}
 			if err != nil {
-				var failure *errModerationFailure
+				var failure errModerationFailure
 				errors.As(err, &failure)
 
 				result.ObjectID = failure.ObjectID
