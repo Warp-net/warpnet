@@ -90,6 +90,13 @@ Remember to give the project a star! Thanks again!
   <img src="https://contrib.rocks/image?repo=Warp-net/warpnet" alt="contrib.rocks image" />
 </a>
 
+### Support
+
+BTC `bc1quwwnec87tukn9j93spr4de7mctvexpftpwu09d`
+USDT (Tron) `THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143`
+SOL `A3vhW7tnUwa3u3xzfrgyVLphHCrbPqC6XmSmcVjhY191`
+Wrapped TON `0xDdFc51Fa8a6c10Bb48c9960DC5A0092D7ECBF355`
+
 ## Contact
 
 ### Maintainer
