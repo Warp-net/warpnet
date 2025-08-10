@@ -253,6 +253,7 @@ func (mn *ModeratorNode) lurkTweets() {
 				return
 			}
 			if ok := mn.cache.IsModeratedAlready(peer); ok {
+				log.Warnf("moderator: moderated already: %s", peer.String())
 				continue
 			}
 

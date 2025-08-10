@@ -28,8 +28,9 @@ resulting from the use or misuse of this software.
 package domain
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
 // AuthNodeInfo defines model for AuthNodeInfo.
@@ -129,6 +130,7 @@ type ModelType string
 
 type TweetModeration struct {
 	IsModerated bool      `json:"is_moderated"`
+	ModeratorID string    `json:"moderator_id"`
 	Model       ModelType `json:"model"`
 	IsOk        bool      `json:"is_ok"`
 	Reason      *string   `json:"reason"`

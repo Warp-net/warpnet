@@ -80,7 +80,7 @@ func NewWarpNode(
 	ctx context.Context,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
-	limiter := warpnet.NewAutoScaledLimiter()
+	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
 
 	manager, err := warpnet.NewConnManager(limiter)
 	if err != nil {

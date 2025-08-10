@@ -27,6 +27,11 @@ package node
 import (
 	"crypto/ed25519"
 	"fmt"
+	"reflect"
+	"slices"
+	"time"
+	"unsafe"
+
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/libp2p/go-libp2p"
@@ -34,10 +39,6 @@ import (
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	log "github.com/sirupsen/logrus"
-	"reflect"
-	"slices"
-	"time"
-	"unsafe"
 )
 
 var CommonOptions = []libp2p.Option{

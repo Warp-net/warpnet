@@ -6,10 +6,11 @@ package moderation
 import (
 	"errors"
 	"fmt"
-	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama.cpp"
-	log "github.com/sirupsen/logrus"
 	"strings"
 	"time"
+
+	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama.cpp"
+	log "github.com/sirupsen/logrus"
 )
 
 type Engine interface {
@@ -57,6 +58,7 @@ func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
 func (e *llamaEngine) Moderate(content string) (bool, string, error) {
 	prompt := generatePrompt(content)
 
+	log.Infof("moderation engine: new content")
 	now := time.Now()
 	resp, err := e.llm.Predict(prompt, e.opts...)
 	if err != nil {

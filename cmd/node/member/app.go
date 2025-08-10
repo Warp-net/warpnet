@@ -4,10 +4,15 @@ import (
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
+	"net/http"
+	"os"
+	"sync"
+	"time"
+
 	root "github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/auth"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -18,10 +23,6 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
-	"net/http"
-	"os"
-	"sync"
-	"time"
 )
 
 type AppStorer interface {

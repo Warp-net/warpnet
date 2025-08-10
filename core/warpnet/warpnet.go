@@ -31,6 +31,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
+	"io"
 	gonet "net"
 	"runtime"
 	"strconv"
@@ -144,6 +145,7 @@ type (
 	WarpMessage        = pubsub.Message
 	WarpReachability   = network.Reachability
 	WarpOption         = libp2p.Option
+	WarpLimiterConfig  = rcmgr.PartialLimitConfig
 	TCPTransport       = tcp.TcpTransport
 	TCPOption          = tcp.Option
 	Swarm              = swarm.Swarm
@@ -274,9 +276,17 @@ func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) 
 	return rcmgr.NewResourceManager(limiter)
 }
 
-func NewAutoScaledLimiter() rcmgr.Limiter {
-	defaultLimits := rcmgr.DefaultLimits.AutoScale()
-	return rcmgr.NewFixedLimiter(defaultLimits)
+func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
+	defaults := rcmgr.DefaultLimits.AutoScale()
+	if input == nil {
+		return rcmgr.NewFixedLimiter(defaults)
+	}
+	limiter, err := rcmgr.NewLimiterFromJSON(input, defaults)
+	if err != nil {
+		log.Error("could not parse limiter config", err)
+		return rcmgr.NewFixedLimiter(defaults)
+	}
+	return limiter
 }
 
 func GetMacAddr() string {
