@@ -29,6 +29,7 @@ package node
 
 import (
 	golog "github.com/ipfs/go-log/v2"
+	"github.com/labstack/gommon/log"
 	"github.com/sirupsen/logrus"
 )
 
@@ -84,6 +85,8 @@ var subsystems = []string{
 
 func init() {
 	level := logrus.StandardLogger().Level.String()
+
+	log.Infof("node log level: %s", level)
 
 	_ = golog.SetLogLevel("autonatv2", level)
 	_ = golog.SetLogLevel("autonat", level)

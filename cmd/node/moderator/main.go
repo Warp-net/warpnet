@@ -60,10 +60,10 @@ func main() {
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
 	if err != nil {
 		log.Errorf(
-			"failed to parse log level %s: %v, defaulting to INFO level...",
+			"failed to parse log level %s: %v, defaulting to ERROR level...",
 			config.Config().Logging.Level, err,
 		)
-		lvl = log.InfoLevel
+		lvl = log.ErrorLevel
 	}
 	log.SetLevel(lvl)
 	log.SetFormatter(&log.TextFormatter{
