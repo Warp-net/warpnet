@@ -13,8 +13,8 @@ moderator:
 tests:
 	CGO_ENABLED=0 go test -count=1 -short -v ./...
 
-prune:
-	(pkill -9 main || true) && rm -rf $(HOME)/.warpdata
+prune-testnet:
+	(pkill -9 main || true) && rm -rf $(HOME)/.warpdata/testnet/storage
 
 check-heap:
 	go build -gcflags="-m" main.go

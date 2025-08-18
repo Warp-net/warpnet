@@ -122,7 +122,7 @@ func New(
 		DefaultOptions(dbPath).
 		WithSyncWrites(false).
 		WithIndexCacheSize(256 << 20).
-		WithCompression(options.Snappy).
+		WithCompression(options.ZSTD).
 		WithNumCompactors(2).
 		WithLoggingLevel(badger.ERROR).
 		WithBlockCacheSize(512 << 20)
