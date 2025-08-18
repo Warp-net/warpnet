@@ -8,7 +8,7 @@ services:
       - NODE_PORT=4001
       - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=info
+      - LOGGING_LEVEL=error
       - NODE_SEED=warpnet1
 
   warpnet2:
@@ -20,7 +20,7 @@ services:
       - NODE_PORT=4002
       - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=info
+      - LOGGING_LEVEL=error
       - NODE_SEED=warpnet2
 
   warpnet3:
@@ -32,7 +32,7 @@ services:
       - NODE_PORT=4003
       - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=info
+      - LOGGING_LEVEL=error
       - NODE_SEED=warpnet3
 
   warpnet-moderator:
@@ -44,7 +44,7 @@ services:
       - NODE_PORT=4004
       - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=info
+      - LOGGING_LEVEL=error
       - NODE_SEED=warpnet-moderator1
     volumes:
       - /home/chmo/.warpdata:/root/.warpdata:rw
