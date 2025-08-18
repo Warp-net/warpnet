@@ -27,16 +27,17 @@ package config
 import (
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 )
 
 const (
@@ -115,7 +116,7 @@ func init() {
 	}
 	appPath := getAppPath()
 
-	modelPath := filepath.Join(appPath, strings.TrimSpace(viper.GetString("node.moderator.modelname")))
+	modelPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(viper.GetString("node.moderator.modelname")))
 	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
 
 	configSingleton = config{

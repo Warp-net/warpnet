@@ -22,10 +22,9 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package moderator
+package node
 
 import (
-	"context"
 	"io"
 
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -43,17 +42,6 @@ type DistributedHashTableCloser interface {
 	Close()
 }
 
-type DistributedStorer interface {
-	GetStream(ctx context.Context, id string) (io.ReadCloser, error)
-	PutStream(ctx context.Context, reader io.ReadCloser) (id string, _ error)
-	Close() error
-}
-
 type ProviderCloser interface {
 	io.Closer
-}
-
-type Moderator interface {
-	Moderate(content string) (bool, string, error)
-	Close()
 }

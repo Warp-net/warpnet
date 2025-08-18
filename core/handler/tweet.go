@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -62,6 +63,8 @@ type TweetBroadcaster interface {
 }
 
 type TweetsStorer interface {
+	AddModerated(string, *domain.TweetModeration) error
+	GetModerated(tweetId string) (*domain.TweetModeration, error)
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
@@ -85,6 +88,11 @@ func StreamNewTweetHandler(
 		if err != nil {
 			return nil, err
 		}
+
+		if ev.Moderation != nil && !ev.Moderation.IsOk {
+			return nil, tweetRepo.AddModerated(ev.Id, ev.Moderation)
+		}
+
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
 		}
@@ -128,6 +136,13 @@ func StreamGetTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
+		}
+
+		_, err = repo.GetModerated(ev.TweetId)
+		if err != nil {
+			return nil, warpnet.WarpError("tweet is moderated")
+		}
+		if !errors.Is(err, database.ErrTweetNotFound) {
 		}
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
@@ -176,6 +191,13 @@ func StreamGetTweetsHandler(
 		tweets, cursor, _ = repo.List(
 			ev.UserId, ev.Limit, ev.Cursor,
 		)
+
+		for i, tweet := range tweets {
+			_, err = repo.GetModerated(tweet.Id)
+			if err != nil {
+				slices.Delete(tweets, i, i+1) // TODO test
+			}
+		}
 
 		return event.TweetsResponse{
 			Cursor: cursor,

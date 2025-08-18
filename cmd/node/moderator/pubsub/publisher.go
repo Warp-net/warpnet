@@ -38,7 +38,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -53,40 +52,36 @@ type PubsubServerNodeConnector interface {
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
-type memberPubSub struct {
+type moderatorPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
-func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *memberPubSub {
-	mps := &memberPubSub{}
+func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *moderatorPubSub {
+	mps := &moderatorPubSub{}
 
 	mps.pubsub = pubsub.NewGossip(ctx, handlers...)
 	return mps
 }
 
-func (g *memberPubSub) Run(node PubsubServerNodeConnector) {
+func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) error {
 	if g.pubsub.IsGossipRunning() {
-		return
+		return nil
 	}
 
-	if err := g.pubsub.Run(node); err != nil {
-		log.Errorf("pubsub: failed to run: %v", err)
-		return
-	}
+	return g.pubsub.Run(node)
 }
 
-// PublishUserUpdate - Publish for followers
-func (g *memberPubSub) PublishUserUpdate(userId string, data []byte) (err error) {
+func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error) {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
-	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
+	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
 
-	body := json.RawMessage(data)
+	body := json.RawMessage(bt)
 	msg := event.Message{
 		Body:        body,
 		NodeId:      g.pubsub.NodeInfo().ID.String(),
-		Destination: "",
+		Destination: dest,
 		Timestamp:   time.Now(),
 		MessageId:   uuid.New().String(),
 		Version:     "0.0.0", // TODO manage protocol versions properly
@@ -95,6 +90,6 @@ func (g *memberPubSub) PublishUserUpdate(userId string, data []byte) (err error)
 	return g.pubsub.Publish(msg, topicName)
 }
 
-func (g *memberPubSub) Close() (err error) {
+func (g *moderatorPubSub) Close() (err error) {
 	return g.pubsub.Close()
 }

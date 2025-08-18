@@ -33,7 +33,10 @@ import (
 
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/moderator"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/database/ipfs"
 	"github.com/Warp-net/warpnet/security"
 	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
@@ -87,16 +90,36 @@ func main() {
 		log.Fatal(err)
 	}
 
-	n, err := moderator.NewModeratorNode(ctx, privKey, psk, codeHashHex)
+	n, err := node.NewModeratorNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
 		log.Fatalf("failed to init moderator node: %v", err)
 	}
+
+	if err = n.Start(); err != nil {
+		log.Fatalf("failed to start moderator node: %v", err)
+	}
 	defer n.Stop()
 
-	if err := n.Start(); err != nil {
-		log.Errorf("failed to start moderator node: %v", err)
-		return
+	store, err := ipfs.NewIPFS(ctx, n.Node())
+	if err != nil {
+		log.Fatalf("failed to init moderator IPFS node: %v", err)
 	}
+	defer store.Close()
+
+	publisher := pubsub.NewPubSub(ctx)
+	if err := publisher.Run(n); err != nil {
+		log.Fatalf("failed to start moderator pubsub: %v", err)
+	}
+	defer publisher.Close()
+
+	moder, err := moderator.NewModerator(ctx, n, store, publisher)
+	if err != nil {
+		log.Fatalf("failed to init moderator: %v", err)
+	}
+	if err := moder.Start(); err != nil {
+		log.Fatalf("failed to start moderator: %v", err)
+	}
+	defer moder.Close()
 
 	<-interruptChan
 	log.Infoln("moderator node interrupted...")

@@ -501,7 +501,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_MODERATION_RESULT,
-				handler.StreamModerationResultHandler(m.pubsubService, userRepo, tweetRepo, timelineRepo),
+				handler.StreamModerationResultHandler(),
 			},
 		}...,
 	)

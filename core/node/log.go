@@ -25,9 +25,12 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package logging
+package node
 
-import golog "github.com/ipfs/go-log/v2"
+import (
+	golog "github.com/ipfs/go-log/v2"
+	"github.com/sirupsen/logrus"
+)
 
 var subsystems = []string{
 	"autonat",
@@ -80,20 +83,18 @@ var subsystems = []string{
 }
 
 func init() {
-	level := "error"
-	_ = golog.SetLogLevel("raftlib", level)
-	_ = golog.SetLogLevel("raft", level)
-	_ = golog.SetLogLevel("libp2p-raft", level)
+	level := logrus.StandardLogger().Level.String()
 
-	_ = golog.SetLogLevel("autonatv2", "debug")
-	_ = golog.SetLogLevel("autonat", "debug")
-	_ = golog.SetLogLevel("p2p-holepunch", "debug")
-	_ = golog.SetLogLevel("relay", "debug")
-	_ = golog.SetLogLevel("nat", "debug")
-	_ = golog.SetLogLevel("p2p-circuit", "debug")
+	_ = golog.SetLogLevel("autonatv2", level)
+	_ = golog.SetLogLevel("autonat", level)
+	_ = golog.SetLogLevel("p2p-holepunch", level)
+	_ = golog.SetLogLevel("relay", level)
+	_ = golog.SetLogLevel("nat", level)
+	_ = golog.SetLogLevel("p2p-circuit", level)
 	_ = golog.SetLogLevel("basichost", level)
 	_ = golog.SetLogLevel("swarm2", level)
-	_ = golog.SetLogLevel("autorelay", "debug")
+	_ = golog.SetLogLevel("autorelay", level)
+	_ = golog.SetLogLevel("websocket-transport", level)
 	_ = golog.SetLogLevel("net/identify", level)
 	_ = golog.SetLogLevel("tcp-tpt", level)
 }

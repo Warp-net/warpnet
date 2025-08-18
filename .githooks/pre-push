@@ -34,6 +34,7 @@ done
 if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
     echo "Pushing tag v$CURRENT_VERSION ..."
     git push origin "v$CURRENT_VERSION"
+    git push codeberg "v$CURRENT_VERSION" || true
     exit 0
 else
     echo "Tag v$CURRENT_VERSION does not exist locally. Skipping."

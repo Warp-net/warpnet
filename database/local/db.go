@@ -140,8 +140,8 @@ func New(
 	return storage, nil
 }
 
-func findFirstRunFlag(dirPath string) (found bool) {
-	_, err := os.Stat(filepath.Join(dirPath, firstRunLockFile))
+func findFirstRunFlag(dbPath string) (found bool) {
+	_, err := os.Stat(filepath.Join(dbPath, firstRunLockFile))
 	if err != nil && errors.Is(err, os.ErrNotExist) {
 		return false
 	}
@@ -156,7 +156,9 @@ func (db *DB) IsFirstRun() bool {
 }
 
 func (db *DB) writeFirstRunFlag() {
-	f, _ := os.Create(filepath.Join(db.dbPath, firstRunLockFile))
+	path := filepath.Join(db.dbPath, firstRunLockFile)
+	log.Infof("database: lock file created: %s", path)
+	f, _ := os.Create(path)
 	if f != nil {
 		_ = f.Close()
 	}

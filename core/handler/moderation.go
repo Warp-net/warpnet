@@ -57,12 +57,7 @@ type TimelineTweetRemover interface {
 	DeleteTweetFromTimeline(userID, tweetID string, createdAt time.Time) error
 }
 
-func StreamModerationResultHandler(
-	broadcaster ModerationBroadcaster,
-	userRepo UserUpdater,
-	tweetRepo TweetUpdater,
-	timelineRepo TimelineTweetRemover,
-) warpnet.WarpHandlerFunc {
+func StreamModerationResultHandler() warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
 		err := json.Unmarshal(buf, &ev)
@@ -72,64 +67,15 @@ func StreamModerationResultHandler(
 
 		log.Infof("moderation: result received, result: %s", ev.Result.String())
 
-		var (
-			updatedAt          = time.Now()
-			isModerationPassed = ev.Result == event.OK
-		)
-
 		switch ev.Type {
 		case event.Tweet:
 			if ev.ObjectID == nil {
 				return nil, errors.New("moderation: no object id provided")
 			}
-			tweetModeration := &domain.TweetModeration{
-				IsModerated: true,
-				IsOk:        isModerationPassed,
-				Reason:      ev.Reason,
-				TimeAt:      updatedAt,
-				Model:       defaultModerationModel,
-			}
 
-			if ev.ObjectID == nil {
-				return nil, errors.New("moderation: no object id provided")
-			}
-			tweet, err := tweetRepo.Get(ev.UserID, *ev.ObjectID)
-			if err != nil {
-				return nil, err
-			}
-
-			tweet.Moderation = tweetModeration
-			tweet.UpdatedAt = &updatedAt
-
-			_, err = tweetRepo.Create(ev.UserID, tweet)
-			if err != nil {
-				return nil, err
-			}
-			if isModerationPassed {
-				return event.Accepted, nil
-			}
-
-			err = timelineRepo.DeleteTweetFromTimeline(ev.UserID, *ev.ObjectID, tweet.CreatedAt)
-
-			deleteEvent := event.DeleteTweetEvent{
-				TweetId: *ev.ObjectID,
-				UserId:  ev.UserID,
-			}
-			bt, _ := json.Marshal(deleteEvent)
-			err = broadcaster.PublishUpdateToFollowers(ev.UserID, event.PRIVATE_DELETE_TWEET, bt)
 			return event.Accepted, err
 		case event.User:
-			_, err = userRepo.Update(ev.UserID, domain.User{
-				UpdatedAt: &updatedAt,
-				Moderation: &domain.UserModeration{
-					IsModerated: true,
-					IsOk:        isModerationPassed,
-					Reason:      ev.Reason,
-					Strikes:     1, // TODO incr
-					TimeAt:      updatedAt,
-					Model:       defaultModerationModel,
-				},
-			})
+
 			return event.Accepted, err
 
 		default:

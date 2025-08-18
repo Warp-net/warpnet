@@ -65,6 +65,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcpreuse"
+	"github.com/libp2p/go-libp2p/p2p/transport/websocket"
 
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
@@ -262,6 +263,15 @@ func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*no
 
 func NewTCPTransport(u transport.Upgrader, r network.ResourceManager, s *tcpreuse.ConnMgr, o ...tcp.Option) (*tcp.TcpTransport, error) {
 	return tcp.NewTCPTransport(u, r, s, o...)
+}
+
+func NewWebsocketTransport(
+	u transport.Upgrader,
+	r network.ResourceManager,
+	s *tcpreuse.ConnMgr,
+	o ...websocket.Option,
+) (*websocket.WebsocketTransport, error) {
+	return websocket.New(u, r, s, o...)
 }
 
 func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {

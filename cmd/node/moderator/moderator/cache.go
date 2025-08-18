@@ -28,14 +28,13 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
 )
 
 const maxLiveTime = 8 * time.Hour
 
 type CacheEntry struct {
-	Result         event.ModerationResultEvent
 	expirationTime time.Time
+	// TODO
 }
 
 type moderationCache struct {
