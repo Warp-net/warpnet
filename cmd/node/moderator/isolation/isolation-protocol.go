@@ -33,9 +33,9 @@ func (ip *IsolationProtocol) IsolateTweet(nodeId warpnet.WarpPeerID, tweet domai
 		log.Errorf("broadcaster publish owner tweet update: %v", err)
 	}
 
-	var resultType = event.FAIL
-	if tweet.Moderation.IsOk {
-		resultType = event.OK
+	var resultType = event.OK
+	if tweet.Moderation != nil && tweet.Moderation.IsOk {
+		resultType = event.FAIL
 	}
 
 	result := event.ModerationResultEvent{

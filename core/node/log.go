@@ -107,7 +107,7 @@ func (h *hook) Fire(_ *logrus.Entry) error {
 	_ = golog.SetLogLevel("relay", level)
 	_ = golog.SetLogLevel("nat", level)
 	_ = golog.SetLogLevel("p2p-circuit", level)
-	_ = golog.SetLogLevel("basichost", level)
+	_ = golog.SetLogLevel("basichost", "error")
 	_ = golog.SetLogLevel("swarm2", level)
 	_ = golog.SetLogLevel("autorelay", level)
 	_ = golog.SetLogLevel("websocket-transport", level)

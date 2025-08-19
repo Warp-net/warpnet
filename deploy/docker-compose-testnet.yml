@@ -44,7 +44,7 @@ services:
       - NODE_PORT=4004
       - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=error
+      - LOGGING_LEVEL=info
       - NODE_SEED=warpnet-moderator1
     volumes:
       - /home/chmo/.warpdata:/root/.warpdata:rw
