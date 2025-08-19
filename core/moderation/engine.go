@@ -58,7 +58,6 @@ func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
 func (e *llamaEngine) Moderate(content string) (bool, string, error) {
 	prompt := generatePrompt(content)
 
-	log.Infof("moderation engine: new content")
 	now := time.Now()
 	resp, err := e.llm.Predict(prompt, e.opts...)
 	if err != nil {

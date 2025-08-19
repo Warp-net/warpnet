@@ -162,7 +162,7 @@ func (m *Moderator) lurkTweets() {
 			if m.isClosed.Load() {
 				return
 			}
-			if ok := m.cache.IsModeratedAlready(peer); ok {
+			if m.cache.IsModeratedAlready(peer) {
 				continue
 			}
 
@@ -202,10 +202,12 @@ func (m *Moderator) lurkTweets() {
 				log.Errorf("moderator: moderation engine failure %s: %v", peer.String(), err)
 				continue
 			}
-
-			m.isolation.IsolateTweet(info.ID, moderatedTweet)
+			log.Infoln("moderator: isolate tweet protocol started")
+			m.isolation.IsolateTweet(peer, moderatedTweet)
 
 			m.cache.SetAsModerated(peer, CacheEntry{})
+			log.Infoln("moderator: set as moderated", m.cache.IsModeratedAlready(peer))
+
 		}
 	}
 }
