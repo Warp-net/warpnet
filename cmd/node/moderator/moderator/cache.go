@@ -53,33 +53,22 @@ func (dc *moderationCache) IsModeratedAlready(id warpnet.WarpPeerID) bool {
 	dc.mx.RLock()
 	defer dc.mx.RUnlock()
 
-	entry, ok := dc.peers[id]
-	if !ok {
-		return false
-	}
-
-	isExpired := time.Now().After(entry.expirationTime)
-	if isExpired {
-		delete(dc.peers, id)
-		return false
-	}
-	return true
+	_, ok := dc.peers[id]
+	return ok
 }
 
 func (dc *moderationCache) SetAsModerated(peerId warpnet.WarpPeerID, entry CacheEntry) {
 	dc.mx.Lock()
 	defer dc.mx.Unlock()
 
-	waitPeriod := time.Minute * time.Duration(rand.IntN(8))
-	entry.expirationTime = time.Now().Add(waitPeriod)
+	ttl := maxLiveTime + time.Minute*time.Duration(rand.IntN(8))
+	entry.expirationTime = time.Now().Add(ttl)
 	dc.peers[peerId] = entry
 
 	for id, e := range dc.peers {
-		if !e.expirationTime.IsZero() && time.Since(e.expirationTime) < maxLiveTime {
-			continue
+		if time.Now().After(e.expirationTime) {
+			delete(dc.peers, id)
 		}
-
-		delete(dc.peers, id)
 	}
 	return
 }
