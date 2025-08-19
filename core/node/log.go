@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package node
 
 import (
+	"strings"
+
 	golog "github.com/ipfs/go-log/v2"
 	"github.com/labstack/gommon/log"
 	"github.com/sirupsen/logrus"
@@ -83,10 +85,21 @@ var subsystems = []string{
 	"webrtc-udpmux",
 }
 
-func init() {
-	level := logrus.GetLevel().String()
+type hook struct {
+	level string
+}
 
-	log.Infof("node log level: %s", level)
+func (h *hook) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+func (h *hook) Fire(_ *logrus.Entry) error {
+	level := strings.ToLower(logrus.GetLevel().String())
+	if level == h.level {
+		return nil
+	}
+	h.level = level
+	log.Infof("node: new log level: %s", level)
 
 	_ = golog.SetLogLevel("autonatv2", level)
 	_ = golog.SetLogLevel("autonat", level)
@@ -100,4 +113,9 @@ func init() {
 	_ = golog.SetLogLevel("websocket-transport", level)
 	_ = golog.SetLogLevel("net/identify", level)
 	_ = golog.SetLogLevel("tcp-tpt", level)
+	return nil
+}
+
+func init() {
+	logrus.AddHook(&hook{})
 }

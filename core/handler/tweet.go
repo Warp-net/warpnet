@@ -45,6 +45,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const tweetCharLimit = 280
+
 type TweetUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 }
@@ -95,6 +97,12 @@ func StreamNewTweetHandler(
 
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
+		}
+		if ev.Text == "" {
+			return nil, warpnet.WarpError("empty tweet text")
+		}
+		if len(ev.Text) > tweetCharLimit {
+			return nil, warpnet.WarpError("tweet text is too long")
 		}
 
 		owner := authRepo.GetOwner()
