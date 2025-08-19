@@ -84,7 +84,7 @@ var subsystems = []string{
 }
 
 func init() {
-	level := logrus.StandardLogger().Level.String()
+	level := logrus.GetLevel().String()
 
 	log.Infof("node log level: %s", level)
 

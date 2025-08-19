@@ -26,6 +26,12 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	root "github.com/Warp-net/warpnet"
 	bootstrap "github.com/Warp-net/warpnet/cmd/node/bootstrap/node"
 	"github.com/Warp-net/warpnet/config"
@@ -34,10 +40,6 @@ import (
 	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
 	_ "go.uber.org/automaxprocs" // DO NOT remove
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func main() {
@@ -49,6 +51,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println("config log level:", config.Config().Logging.Level)
 
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
 	if err != nil {
