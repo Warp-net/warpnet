@@ -256,7 +256,7 @@ func (m *Moderator) moderateRandomUserTweet(peerID warpnet.WarpPeerID, userID st
 		IsModerated: true,
 		ModeratorID: m.node.ID().String(),
 		Model:       "llama2",
-		IsOk:        event.ModerationResult(result) != event.FAIL,
+		IsOk:        domain.ModerationResult(result) != domain.FAIL,
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	}
