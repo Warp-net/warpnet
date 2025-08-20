@@ -40,6 +40,7 @@ const (
 	PRIVATE_DELETE_TWEET      = "/private/delete/tweet/0.0.0"
 	PRIVATE_GET_CHAT          = "/private/get/chat/0.0.0"
 	PRIVATE_GET_CHATS         = "/private/get/chats/0.0.0"
+	PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 	PRIVATE_GET_MESSAGE       = "/private/get/message/0.0.0"
 	PRIVATE_GET_MESSAGES      = "/private/get/messages/0.0.0"
 	PRIVATE_GET_TIMELINE      = "/private/get/timeline/0.0.0"

@@ -98,6 +98,8 @@ func NewWarpNode(
 
 	opts = append(opts, managersOpts...)
 
+	initLogging()
+
 	node, err := warpnet.NewP2PNode(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)

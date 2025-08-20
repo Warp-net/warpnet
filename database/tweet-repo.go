@@ -77,34 +77,35 @@ func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, 
 	return repo.CreateWithTTL(userId, tweet, math.MaxInt64)
 }
 
-func (repo *TweetRepo) AddModerated(tweetId string, tweetModeration *domain.TweetModeration) error {
+func (repo *TweetRepo) Blocklist(tweetId string) error {
+	if tweetId == "" {
+		return nil
+	}
 	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(tweetsModeratedSubspace).
 		AddRootID(tweetId).
 		AddRange(local.FixedRangeKey).
 		Build()
 
-	if tweetModeration == nil {
-		return repo.db.Set(fixedKey, []byte(""))
-	}
-	bt, _ := json.Marshal(tweetModeration)
-	return repo.db.Set(fixedKey, bt)
+	return repo.db.Set(fixedKey, []byte(""))
 }
 
-func (repo *TweetRepo) GetModerated(tweetId string) (*domain.TweetModeration, error) {
-	var tweetModeration domain.TweetModeration
+func (repo *TweetRepo) IsBlocklisted(tweetId string) bool {
+	if tweetId == "" {
+		return false
+	}
 
 	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(tweetsModeratedSubspace).
 		AddRootID(tweetId).
 		AddRange(local.FixedRangeKey).
 		Build()
-	bt, err := repo.db.Get(fixedKey)
-	if err != nil {
-		return &tweetModeration, err
+	_, err := repo.db.Get(fixedKey)
+	if errors.Is(err, local.ErrKeyNotFound) {
+		return false
 	}
 
-	return &tweetModeration, json.Unmarshal(bt, &tweetModeration)
+	return true
 }
 
 func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {

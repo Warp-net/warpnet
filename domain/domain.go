@@ -128,6 +128,8 @@ type Tweet struct {
 
 type ModelType string
 
+const LLAMA2 ModelType = "llama2"
+
 type TweetModeration struct {
 	IsModerated bool      `json:"is_moderated"`
 	ModeratorID string    `json:"moderator_id"`
@@ -170,3 +172,50 @@ type UserModeration struct {
 	Strikes     uint8     `json:"strikes"`
 	TimeAt      time.Time `json:"time_at"`
 }
+
+type NotificationType string
+
+func (n NotificationType) String() string {
+	return string(n)
+}
+
+const (
+	NotificationModerationType NotificationType = "moderation"
+	NotificationRetweetType    NotificationType = "retweet"
+	NotificationFollowType     NotificationType = "follow"
+	NotificationLikeType       NotificationType = "like"
+	NotificationMentionType    NotificationType = "mention"
+	NotificationReplyType      NotificationType = "reply"
+)
+
+type Notification struct {
+	Type      NotificationType `json:"type"`
+	Id        string           `json:"id"`
+	Text      string           `json:"text"`
+	UserId    string           `json:"user_id"`
+	IsRead    bool             `json:"is_read"`
+	CreatedAt time.Time        `json:"created_at"`
+}
+
+type ModerationResult bool
+
+const (
+	OK   ModerationResult = true
+	FAIL ModerationResult = false
+)
+
+func (mr ModerationResult) String() string {
+	if mr {
+		return "OK"
+	}
+	return "FAIL"
+}
+
+type ModerationObjectType int
+
+const (
+	ModerationUserType ModerationObjectType = iota
+	ModerationTweetType
+	ModerationReplyType
+	ModerationImageType
+)

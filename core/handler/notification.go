@@ -1,3 +1,14 @@
+package handler
+
+import (
+	"sort"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+)
+
 /*
 
 Warpnet - Decentralized Social Network
@@ -25,47 +36,39 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package handler
-
-import (
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/json"
-	log "github.com/sirupsen/logrus"
-)
-
-type ModerationNotifier interface {
-	Add(not domain.Notification) error
+type NotifierFetcher interface {
+	List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
 }
 
-func StreamModerationResultHandler(repo ModerationNotifier) warpnet.WarpHandlerFunc {
+func StreamGetNotificationsHandler(repo NotifierFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.ModerationResultEvent
+		var ev event.GetNotificationsEvent
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
 
-		if ev.Result == domain.OK {
-			return event.Accepted, nil
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("empty user id")
 		}
 
-		notificationText := "moderation result: "
-		if ev.ObjectID != nil {
-			notificationText += *ev.ObjectID + ": "
-		}
-		if ev.Reason != nil {
-			notificationText += *ev.Reason
+		notifications, cur, err := repo.List(ev.UserId, ev.Limit, ev.Cursor)
+		if err != nil {
+			return nil, err
 		}
 
-		// TODO: handle notification
-		log.Infof("moderation: result received: %s", notificationText)
-		return event.Accepted, repo.Add(domain.Notification{
-			Type:   domain.NotificationModerationType,
-			Text:   notificationText,
-			UserId: ev.UserID,
-			IsRead: false,
+		var unreadCount uint64
+		sort.SliceStable(notifications, func(i, j int) bool {
+			if !notifications[i].IsRead {
+				unreadCount++
+			}
+			return notifications[i].IsRead
 		})
+		return event.GetNotificationsResponse{
+			Cursor:        cur,
+			UserID:        ev.UserId,
+			UnreadCount:   unreadCount,
+			Notifications: notifications,
+		}, nil
 	}
 }

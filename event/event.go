@@ -405,41 +405,28 @@ type ValidationResultEvent struct {
 	ValidatorID string           `json:"validator_id"`
 }
 
-type ModerationObjectType int
-
-const (
-	User ModerationObjectType = iota
-	Tweet
-	Reply
-	Image
-)
-
 type ModerationEvent struct {
-	NodeID   string               `json:"node_id"`
-	UserID   string               `json:"user_id"`
-	Type     ModerationObjectType `json:"type"`
-	ObjectID *string              `json:"object_id,omitempty"`
-}
-
-type ModerationResult bool
-
-const (
-	OK   ModerationResult = true
-	FAIL ModerationResult = false
-)
-
-func (mr ModerationResult) String() string {
-	if mr {
-		return "OK"
-	}
-	return "FAIL"
+	NodeID   string                      `json:"node_id"`
+	UserID   string                      `json:"user_id"`
+	Type     domain.ModerationObjectType `json:"type"`
+	ObjectID *string                     `json:"object_id,omitempty"`
 }
 
 type ModerationResultEvent struct {
-	Type     ModerationObjectType `json:"type"`
-	Result   ModerationResult     `json:"result"`
-	Reason   *string              `json:"reason,omitempty"`
-	NodeID   string               `json:"node_id"`
-	UserID   string               `json:"user_id"`
-	ObjectID *string              `json:"object_id,omitempty"`
+	Type     domain.ModerationObjectType `json:"type"`
+	Result   domain.ModerationResult     `json:"result"`
+	Reason   *string                     `json:"reason,omitempty"`
+	NodeID   string                      `json:"node_id"`
+	UserID   string                      `json:"user_id"`
+	ObjectID *string                     `json:"object_id,omitempty"`
 }
+
+type (
+	GetNotificationsEvent    = GetAllTweetsEvent
+	GetNotificationsResponse struct {
+		Cursor        string                `json:"cursor"`
+		UserID        string                `json:"user_id"`
+		UnreadCount   uint64                `json:"unread_count"`
+		Notifications []domain.Notification `json:"notifications"`
+	}
+)

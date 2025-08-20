@@ -85,20 +85,9 @@ var subsystems = []string{
 	"webrtc-udpmux",
 }
 
-type hook struct {
-	level string
-}
-
-func (h *hook) Levels() []logrus.Level {
-	return logrus.AllLevels
-}
-
-func (h *hook) Fire(_ *logrus.Entry) error {
+func initLogging() {
 	level := strings.ToLower(logrus.GetLevel().String())
-	if level == h.level {
-		return nil
-	}
-	h.level = level
+
 	log.Infof("node: new log level: %s", level)
 
 	_ = golog.SetLogLevel("autonatv2", level)
@@ -107,15 +96,10 @@ func (h *hook) Fire(_ *logrus.Entry) error {
 	_ = golog.SetLogLevel("relay", level)
 	_ = golog.SetLogLevel("nat", level)
 	_ = golog.SetLogLevel("p2p-circuit", level)
-	_ = golog.SetLogLevel("basichost", "error")
+	_ = golog.SetLogLevel("basichost", level)
 	_ = golog.SetLogLevel("swarm2", level)
 	_ = golog.SetLogLevel("autorelay", level)
 	_ = golog.SetLogLevel("websocket-transport", level)
 	_ = golog.SetLogLevel("net/identify", level)
 	_ = golog.SetLogLevel("tcp-tpt", level)
-	return nil
-}
-
-func init() {
-	logrus.AddHook(&hook{})
 }

@@ -31,7 +31,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -65,8 +64,8 @@ type TweetBroadcaster interface {
 }
 
 type TweetsStorer interface {
-	AddModerated(string, *domain.TweetModeration) error
-	GetModerated(tweetId string) (*domain.TweetModeration, error)
+	IsBlocklisted(tweetId string) bool
+	Blocklist(tweetId string) error
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
@@ -91,8 +90,9 @@ func StreamNewTweetHandler(
 			return nil, err
 		}
 
+		// check any incoming tweets
 		if ev.Moderation != nil && !ev.Moderation.IsOk {
-			return nil, tweetRepo.AddModerated(ev.Id, ev.Moderation)
+			return nil, tweetRepo.Blocklist(ev.Id)
 		}
 
 		if ev.UserId == "" {
@@ -146,17 +146,15 @@ func StreamGetTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 			return nil, err
 		}
 
-		_, err = repo.GetModerated(ev.TweetId)
-		if err != nil {
-			return nil, warpnet.WarpError("tweet is moderated")
-		}
-		if !errors.Is(err, database.ErrTweetNotFound) {
-		}
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
 		}
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("empty tweet id")
+		}
+
+		if repo.IsBlocklisted(ev.TweetId) {
+			return nil, warpnet.WarpError("tweet is moderated")
 		}
 
 		return repo.Get(ev.UserId, ev.TweetId)
@@ -199,13 +197,6 @@ func StreamGetTweetsHandler(
 		tweets, cursor, _ = repo.List(
 			ev.UserId, ev.Limit, ev.Cursor,
 		)
-
-		for i, tweet := range tweets {
-			_, err = repo.GetModerated(tweet.Id)
-			if err != nil {
-				slices.Delete(tweets, i, i+1) // TODO test
-			}
-		}
 
 		return event.TweetsResponse{
 			Cursor: cursor,
@@ -253,6 +244,9 @@ func tweetsRefreshBackground(
 	}
 
 	for _, tweet := range tweetsResp.Tweets {
+		if repo.IsBlocklisted(tweet.Id) {
+			continue
+		}
 		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24)
 	}
 }
