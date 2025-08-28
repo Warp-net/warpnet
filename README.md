@@ -59,6 +59,14 @@ List of software needed and how to install them.
 * [Golang v1.24](https://go.dev/doc/install)
 * [Wails v2.10.2](https://github.com/wailsapp/wails)
 
+## Run As Developer
+
+```bash
+cd cmd/node/member # pick the member node dir
+wails build -devtools -tags webkit2_41 # compile a binary
+./build/bin/warpnet --node.network testnet # run binary on a testnet
+```
+
 ## TODO
 - [ ] Set up a website
 - [v] Add docs to website
