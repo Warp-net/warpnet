@@ -69,7 +69,7 @@ wails build -devtools -tags webkit2_41 # compile a binary
 
 ## TODO
 - [ ] Set up a website
-- [v] Add docs to website
+- [v] Add docs 
 - [ ] Create DMG package
 - [ ] Create Snap package
 - [ ] Set up bootstrap nodes on each continent
