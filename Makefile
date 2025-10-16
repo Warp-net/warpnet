@@ -27,3 +27,8 @@ setup-hooks:
 
 ssh-do:
 	ssh root@207.154.221.44
+
+snap-purge:
+	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/ *.snap
+
+

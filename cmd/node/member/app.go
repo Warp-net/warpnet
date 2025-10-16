@@ -304,13 +304,17 @@ const linuxDesktopTemplate = `
 	Exec=%s
 	Icon=warpnet
 	Type=Application
-	Categories=Network;Utility;
+	Categories=Network;Social;
 `
 
 func setLinuxDesktopIcon(iconData []byte) {
 	if runtime.GOOS != "linux" {
 		return
 	}
+	if os.Getenv("SNAP") != "" { // snap package
+		return
+	}
+
 	currentUser, err := user.Current()
 	if err != nil {
 		panic(err)

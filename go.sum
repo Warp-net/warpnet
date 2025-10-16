@@ -65,8 +65,6 @@ github.com/ProtonMail/go-crypto v1.3.0 h1:ILq8+Sf5If5DCpHQp4PbZdS1J7HDFRXz/+xKBi
 github.com/ProtonMail/go-crypto v1.3.0/go.mod h1:9whxjD8Rbs29b4XWbB8irEcE8KHMqaR2e7GWU1R+/PE=
 github.com/StackExchange/wmi v1.2.1 h1:VIkavFPXSjcnS+O8yTq7NI32k0R5Aj+v39y29VYDOSA=
 github.com/StackExchange/wmi v1.2.1/go.mod h1:rcmrprowKIVzvc+NUiLncP2uuArMWLCbu9SBzvHz7e8=
-github.com/Warp-net/warpnet-frontend v0.0.604 h1:tFQST6yMG5/7Tnc3pe74k1fByNA3edlzGXMOmjM/gYg=
-github.com/Warp-net/warpnet-frontend v0.0.604/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
 github.com/Warp-net/warpnet-frontend v0.0.605 h1:mWr9cOSBDKxrNrtFVgxc6y7xu/Br3o4D5Guz3lv39To=
 github.com/Warp-net/warpnet-frontend v0.0.605/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d h1:licZJFw2RwpHMqeKTCYkitsPqHNxTmd4SNR5r94FGM8=
