@@ -10,9 +10,6 @@ if [ -z "$GITHUB_TOKEN" ]; then
   exit 1
 fi
 
-#sudo docker stop $(sudo docker ps -aq) || true
-#sudo docker container prune -f
-sudo docker compose -f docker-compose-warpnet.yml down || true
 echo $GITHUB_TOKEN | sudo docker login ghcr.io -u filinvadim --password-stdin
 sudo docker pull ghcr.io/warp-net/warpnet-bootstrap:latest
 sudo docker pull ghcr.io/warp-net/warpnet-moderator:latest
@@ -30,9 +27,11 @@ export HOSTNAME=''
 
 if [ "$MAINNET" = "true" ]; then
     echo "Mainnet is enabled"
+    sudo docker compose -f docker-compose-warpnet.yml down || true
     sudo -E docker compose -f docker-compose-warpnet.yml up -d --build
 else
     echo "Mainnet is disabled"
+    sudo docker compose -f docker-compose-testnet.yml down || true
     sudo -E docker compose -f docker-compose-testnet.yml up -d --build
 fi
 sudo docker image prune -f
