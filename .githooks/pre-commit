@@ -28,7 +28,7 @@ PATCH=$((PATCH + 1))
 NEW_VERSION="$MAJOR.$MINOR.$PATCH"
 
 sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
-sed -i "s/version: ${CURRENT_VERSION}/version: ${NEW_VERSION}/" "$SNAPCRAFT"
+sed -i -E "s/^(version:[[:space:]]*)${CURRENT_VERSION}/\1${NEW_VERSION}/" "$SNAPCRAFT"
 
 git add "$CONFIG" "$SNAPCRAFT"
 
