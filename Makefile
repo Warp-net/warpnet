@@ -28,7 +28,11 @@ setup-hooks:
 ssh-do:
 	ssh root@207.154.221.44
 
-snap-purge:
+snapcraft:
 	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/ *.snap
+	sudo snapcraft pack --destructive-mode
+	sudo snapcraft clean
+	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/
+
 
 

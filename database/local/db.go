@@ -33,7 +33,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -771,9 +770,6 @@ func (db *DB) Close() {
 	close(db.stopChan)
 
 	_ = db.Sync()
-	runtime.SetFinalizer(db.badger, func() {
-		log.Infoln("database: memory collected")
-	})
 	if err := db.badger.Close(); err != nil {
 		log.Infof("database: close: %v", err)
 		return
