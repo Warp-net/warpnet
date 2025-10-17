@@ -1,6 +1,9 @@
 name: Deploy Testnet Nodes
 
 on:
+  push:
+    branches:
+      - snap
   workflow_dispatch:
 
 jobs:
