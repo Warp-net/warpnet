@@ -6,10 +6,11 @@ package moderation
 import (
 	"errors"
 	"fmt"
-	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama.cpp"
-	log "github.com/sirupsen/logrus"
 	"strings"
 	"time"
+
+	llama "github.com/Warp-net/warpnet/core/moderation/binding/go-llama.cpp"
+	log "github.com/sirupsen/logrus"
 )
 
 type Engine interface {

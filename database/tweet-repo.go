@@ -31,13 +31,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
+	"sort"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/dgraph-io/badger/v3"
 	log "github.com/sirupsen/logrus"
-	"math"
-	"sort"
-	"time"
 
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/json"
@@ -47,10 +48,11 @@ import (
 var ErrTweetNotFound = local.DBError("tweet not found")
 
 const (
-	TweetsNamespace       = "/TWEETS"
-	tweetsCountSubspace   = "TWEETSCOUNT"
-	reTweetsCountSubspace = "RETWEETSCOUNT"
-	reTweetersSubspace    = "RETWEETERS"
+	TweetsNamespace         = "/TWEETS"
+	tweetsCountSubspace     = "TWEETSCOUNT"
+	tweetsModeratedSubspace = "TWEETSMODERATED"
+	reTweetsCountSubspace   = "RETWEETSCOUNT"
+	reTweetersSubspace      = "RETWEETERS"
 
 	DefaultWarpnetTweetNetwork = "warpnet"
 )
@@ -73,6 +75,37 @@ func NewTweetRepo(db TweetsStorer) *TweetRepo {
 // Create adds a new tweet to the database
 func (repo *TweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, error) {
 	return repo.CreateWithTTL(userId, tweet, math.MaxInt64)
+}
+
+func (repo *TweetRepo) Blocklist(tweetId string) error {
+	if tweetId == "" {
+		return nil
+	}
+	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsModeratedSubspace).
+		AddRootID(tweetId).
+		AddRange(local.FixedRangeKey).
+		Build()
+
+	return repo.db.Set(fixedKey, []byte(""))
+}
+
+func (repo *TweetRepo) IsBlocklisted(tweetId string) bool {
+	if tweetId == "" {
+		return false
+	}
+
+	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsModeratedSubspace).
+		AddRootID(tweetId).
+		AddRange(local.FixedRangeKey).
+		Build()
+	_, err := repo.db.Get(fixedKey)
+	if errors.Is(err, local.ErrKeyNotFound) {
+		return false
+	}
+
+	return true
 }
 
 func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {

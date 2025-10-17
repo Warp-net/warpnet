@@ -26,10 +26,44 @@ type Buffer struct {
 }
 
 // SingleTagBuffer returns a Buffer with a single tag.
-func SingleTagBuffer(key string, value interface{}) *Buffer {
+func SingleTagBuffer(key string, value any) *Buffer {
 	b := &Buffer{}
 	b.init(1, 1)
 	b.tags[0] = Tag{key: key, value: value}
+	return b
+}
+
+// BuildBuffer is used to build a *Buffer that contains an arbitrary number
+// of tags. Sample usage:
+//
+//	bld := BuildBuffer()
+//	bld.Add("a", 1)
+//	bld.Add("b", 2)
+//	buf := bld.Finish()
+//
+// It is equivalent to using SingleTagBuffer() followed by Buffer.Add() calls,
+// but avoids allocating each intermediate buffer.
+func BuildBuffer() BufferBuilder {
+	bld := BufferBuilder{b: &Buffer{}}
+	bld.b.init(0, 0)
+	return bld
+}
+
+// BufferBuilder is returned by BuildBuffer.
+type BufferBuilder struct {
+	b *Buffer
+}
+
+// Add a log tag to the buffer. If the key was added already, the value is
+// replaced.
+func (bld *BufferBuilder) Add(key string, value any) {
+	bld.b.addOrReplace(key, value)
+}
+
+// Finish returns the buffer with the tags that were added to the builder.
+func (bld *BufferBuilder) Finish() *Buffer {
+	b := bld.b
+	bld.b = nil
 	return b
 }
 
@@ -55,7 +89,7 @@ func (b *Buffer) GetTag(key string) (Tag, bool) {
 // Add returns a new buffer with one more tag. If the tag has the same key as an
 // earlier tag, that tag is overwritten.
 // The receiver can be nil.
-func (b *Buffer) Add(key string, value interface{}) *Buffer {
+func (b *Buffer) Add(key string, value any) *Buffer {
 	if b == nil {
 		return SingleTagBuffer(key, value)
 	}
@@ -191,7 +225,7 @@ func (b *Buffer) init(length, capacityHint int) {
 	}
 }
 
-func (b *Buffer) addOrReplace(key string, value interface{}) {
+func (b *Buffer) addOrReplace(key string, value any) {
 	for i := range b.tags {
 		if b.tags[i].key == key {
 			b.tags[i].value = value

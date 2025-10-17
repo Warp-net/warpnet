@@ -31,6 +31,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -39,9 +42,9 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-	"strings"
-	"time"
 )
+
+const tweetCharLimit = 280
 
 type TweetUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
@@ -58,10 +61,11 @@ type OwnerTweetStorer interface {
 
 type TweetBroadcaster interface {
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
-	PublishModerationRequest(body []byte) (err error)
 }
 
 type TweetsStorer interface {
+	IsBlocklisted(tweetId string) bool
+	Blocklist(tweetId string) error
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
@@ -85,8 +89,20 @@ func StreamNewTweetHandler(
 		if err != nil {
 			return nil, err
 		}
+
+		// check any incoming tweets
+		if ev.Moderation != nil && !ev.Moderation.IsOk {
+			return nil, tweetRepo.Blocklist(ev.Id)
+		}
+
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
+		}
+		if ev.Text == "" {
+			return nil, warpnet.WarpError("empty tweet text")
+		}
+		if len(ev.Text) > tweetCharLimit {
+			return nil, warpnet.WarpError("tweet text is too long")
 		}
 
 		owner := authRepo.GetOwner()
@@ -117,21 +133,6 @@ func StreamNewTweetHandler(
 			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
 				log.Errorf("broadcaster publish owner tweet update: %v", err)
 			}
-
-			moderationEvent := event.ModerationEvent{
-				NodeID:   owner.NodeId,
-				UserID:   owner.UserId,
-				Type:     event.Tweet,
-				ObjectID: &tweet.Id,
-			}
-			bt, _ = json.Marshal(moderationEvent)
-
-			if err := broadcaster.PublishModerationRequest(bt); err != nil {
-				log.Errorf("broadcaster publish tweet moderation request: %v", err)
-			} else {
-				log.Infof("tweet: %s moderation requested", tweet.Id)
-			}
-
 		}
 		return tweet, nil
 	}
@@ -144,11 +145,16 @@ func StreamGetTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 		if err != nil {
 			return nil, err
 		}
+
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
 		}
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("empty tweet id")
+		}
+
+		if repo.IsBlocklisted(ev.TweetId) {
+			return nil, warpnet.WarpError("tweet is moderated")
 		}
 
 		return repo.Get(ev.UserId, ev.TweetId)
@@ -238,6 +244,9 @@ func tweetsRefreshBackground(
 	}
 
 	for _, tweet := range tweetsResp.Tweets {
+		if repo.IsBlocklisted(tweet.Id) {
+			continue
+		}
 		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24)
 	}
 }

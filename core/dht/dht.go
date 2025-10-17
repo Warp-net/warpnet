@@ -31,6 +31,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/Warp-net/warpnet/config"
 	"github.com/libp2p/go-libp2p-kad-dht/providers"
 	lip2pDisc "github.com/libp2p/go-libp2p/core/discovery"
@@ -43,7 +45,6 @@ import (
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-	"time"
 )
 
 /*
@@ -296,6 +297,10 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 	}
 }
 
+func (d *distributedHashTable) ClosestPeers() ([]warpnet.WarpPeerID, error) {
+	return d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
+
+}
 func (d *distributedHashTable) Close() {
 	defer func() { recover() }()
 	if d == nil || d.dht == nil {

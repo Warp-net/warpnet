@@ -31,19 +31,20 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+
+	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/auth"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
 )
 
 // run node without GUI
@@ -67,13 +68,12 @@ func main() {
 		os.Exit(1)
 		return
 	}
+	readyChan := make(chan domain.AuthNodeInfo, 10)
 
 	authRepo := database.NewAuthRepo(db)
 	userRepo := database.NewUserRepo(db)
-
-	readyChan := make(chan domain.AuthNodeInfo, 10)
-
 	authService := auth.NewAuthService(authRepo, userRepo, readyChan)
+
 	go func() {
 		username, pass := manualCredsInput()
 
@@ -81,11 +81,10 @@ func main() {
 			Username: username,
 			Password: pass,
 		})
+		if err != nil {
+			log.Fatalf("failed to login: %v", err)
+		}
 	}()
-
-	if err != nil {
-		log.Fatalf("failed to login: %v", err)
-	}
 
 	authInfo := <-readyChan
 

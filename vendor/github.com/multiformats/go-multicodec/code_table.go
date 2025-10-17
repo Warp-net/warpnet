@@ -453,6 +453,9 @@ const (
 	// TransportIpfsGatewayHttp is a draft code tagged "transport" and described by: HTTP IPFS Gateway trustless datatransfer.
 	TransportIpfsGatewayHttp Code = 0x0920 // transport-ipfs-gateway-http
 
+	// TransportFilecoinPieceHttp is a draft code tagged "transport" and described by: HTTP piece retrieval from Filecoin storage provider; https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0066.md.
+	TransportFilecoinPieceHttp Code = 0x0930 // transport-filecoin-piece-http
+
 	// Multidid is a draft code tagged "multiformat" and described by: Compact encoding for Decentralized Identifers.
 	Multidid Code = 0x0d1d // multidid
 
@@ -1644,6 +1647,9 @@ const (
 	// JsonJcs is a draft code tagged "ipld" and described by: The result of canonicalizing an input according to JCS - JSON Canonicalisation Scheme (RFC 8785).
 	JsonJcs Code = 0xb601 // json-jcs
 
+	// BittorrentPiecesRoot is a draft code tagged "multihash" and described by: BitTorrent v2 pieces root hash..
+	BittorrentPiecesRoot Code = 0xb702 // bittorrent-pieces-root
+
 	// Iscc is a draft code tagged "softhash" and described by: ISCC (International Standard Content Code) - similarity preserving hash.
 	Iscc Code = 0xcc01 // iscc
 
@@ -1673,6 +1679,9 @@ const (
 
 	// Jwk_jcsPub is a draft code tagged "key" and described by: JSON object containing only the required members of a JWK (RFC 7518 and RFC 7517) representing the public key. Serialisation based on JCS (RFC 8785).
 	Jwk_jcsPub Code = 0xeb51 // jwk_jcs-pub
+
+	// Ed2k is a draft code tagged "multihash" and described by: eDonkey2000 hash..
+	Ed2k Code = 0xed20 // ed2k
 
 	// FilCommitmentUnsealed is a permanent code tagged "filecoin" and described by: Filecoin piece or sector data commitment merkle node/root (CommP & CommD).
 	FilCommitmentUnsealed Code = 0xf101 // fil-commitment-unsealed
@@ -1931,6 +1940,7 @@ var knownCodes = []Code{
 	TransportBitswap,
 	TransportGraphsyncFilecoinv1,
 	TransportIpfsGatewayHttp,
+	TransportFilecoinPieceHttp,
 	Multidid,
 	Fr32Sha256Trunc254Padbintree,
 	Sha2_256Trunc254Padded,
@@ -2328,6 +2338,7 @@ var knownCodes = []Code{
 	SszSha2_256Bmt,
 	Sha2_256Chunked,
 	JsonJcs,
+	BittorrentPiecesRoot,
 	Iscc,
 	ZeroxcertImprint256,
 	NonstandardSig,
@@ -2338,6 +2349,7 @@ var knownCodes = []Code{
 	Eddsa,
 	Eip191,
 	Jwk_jcsPub,
+	Ed2k,
 	FilCommitmentUnsealed,
 	FilCommitmentSealed,
 	ShelterContractManifest,
@@ -2922,7 +2934,9 @@ func (c Code) Tag() string {
 		PoseidonBls12_381A2Fc1Sc,
 		SszSha2_256Bmt,
 		Sha2_256Chunked,
-		BcryptPbkdf:
+		BittorrentPiecesRoot,
+		BcryptPbkdf,
+		Ed2k:
 		return "multihash"
 
 	case Chacha20Poly1305:
@@ -2992,7 +3006,8 @@ func (c Code) Tag() string {
 
 	case TransportBitswap,
 		TransportGraphsyncFilecoinv1,
-		TransportIpfsGatewayHttp:
+		TransportIpfsGatewayHttp,
+		TransportFilecoinPieceHttp:
 		return "transport"
 
 	case NonstandardSig,

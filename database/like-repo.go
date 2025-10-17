@@ -30,11 +30,12 @@ package database
 import (
 	"encoding/binary"
 	"errors"
+
 	"github.com/Warp-net/warpnet/database/local"
 )
 
 const (
-	LikeRepoName      = "/LIKE"
+	LikeRepoName      = "/LIKES"
 	IncrSubNamespace  = "INCR"
 	LikerSubNamespace = "LIKER"
 )

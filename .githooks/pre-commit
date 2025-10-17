@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
     exit 0
 fi
@@ -7,9 +9,15 @@ fi
 echo "Pre-commit hook started..."
 
 CONFIG="version"
+SNAPCRAFT="snap/snapcraft.yaml"
 
 if [ ! -f "$CONFIG" ]; then
     echo "Config file not found!"
+    exit 1
+fi
+
+if [ ! -f "$SNAPCRAFT" ]; then
+    echo "Snapcraft file not found: $SNAPCRAFT"
     exit 1
 fi
 
@@ -20,7 +28,8 @@ PATCH=$((PATCH + 1))
 NEW_VERSION="$MAJOR.$MINOR.$PATCH"
 
 sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
+sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VERSION}/" "$SNAPCRAFT"
 
-git add "$CONFIG"
+git add "$CONFIG" "$SNAPCRAFT"
 
 

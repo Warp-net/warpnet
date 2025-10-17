@@ -1,0 +1,41 @@
+name: Snap
+
+on:
+  push:
+    branches:
+      - snap
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.24'
+  CGO_ENABLED: '1'
+
+permissions: write-all
+
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SNAPCRAFT_BUILD_ENVIRONMENT: lxd
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup LXD
+        uses: canonical/setup-lxd@main
+        with:
+          channel: latest/stable
+      - name: Install snapcraft
+        run: |
+          sudo snap install snapcraft --classic
+      - name: Build snap
+        run: |
+          snapcraft pack --use-lxd
+      - name: List snaps
+        run: ls -lh *.snap
+      - name: Publish
+        run: |
+          snapcraft upload ./*.snap --release beta

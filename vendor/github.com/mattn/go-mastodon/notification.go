@@ -3,7 +3,6 @@ package mastodon
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -37,8 +36,19 @@ type PushAlerts struct {
 
 // GetNotifications returns notifications.
 func (c *Client) GetNotifications(ctx context.Context, pg *Pagination) ([]*Notification, error) {
+	return c.GetNotificationsExclude(ctx, nil, pg)
+}
+
+// GetNotificationsExclude returns notifications with excluded notifications
+func (c *Client) GetNotificationsExclude(ctx context.Context, exclude *[]string, pg *Pagination) ([]*Notification, error) {
 	var notifications []*Notification
-	err := c.doAPI(ctx, http.MethodGet, "/api/v1/notifications", nil, &notifications, pg)
+	params := url.Values{}
+	if exclude != nil {
+		for _, ex := range *exclude {
+			params.Add("exclude_types[]", ex)
+		}
+	}
+	err := c.doAPI(ctx, http.MethodGet, "/api/v1/notifications", params, &notifications, pg)
 	if err != nil {
 		return nil, err
 	}
@@ -68,10 +78,13 @@ func (c *Client) ClearNotifications(ctx context.Context) error {
 // AddPushSubscription adds a new push subscription.
 func (c *Client) AddPushSubscription(ctx context.Context, endpoint string, public ecdsa.PublicKey, shared []byte, alerts PushAlerts) (*PushSubscription, error) {
 	var subscription PushSubscription
-	pk := elliptic.Marshal(public.Curve, public.X, public.Y)
+	pk, err := public.ECDH()
+	if err != nil {
+		return nil, fmt.Errorf("could not retrieve ecdh public key: %w", err)
+	}
 	params := url.Values{}
 	params.Add("subscription[endpoint]", endpoint)
-	params.Add("subscription[keys][p256dh]", base64.RawURLEncoding.EncodeToString(pk))
+	params.Add("subscription[keys][p256dh]", base64.RawURLEncoding.EncodeToString(pk.Bytes()))
 	params.Add("subscription[keys][auth]", base64.RawURLEncoding.EncodeToString(shared))
 	if alerts.Follow != nil {
 		params.Add("data[alerts][follow]", strconv.FormatBool(bool(*alerts.Follow)))
@@ -85,7 +98,7 @@ func (c *Client) AddPushSubscription(ctx context.Context, endpoint string, publi
 	if alerts.Mention != nil {
 		params.Add("data[alerts][mention]", strconv.FormatBool(bool(*alerts.Mention)))
 	}
-	err := c.doAPI(ctx, http.MethodPost, "/api/v1/push/subscription", params, &subscription, nil)
+	err = c.doAPI(ctx, http.MethodPost, "/api/v1/push/subscription", params, &subscription, nil)
 	if err != nil {
 		return nil, err
 	}

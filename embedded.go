@@ -43,3 +43,10 @@ var versionSingleton []byte
 func GetVersion() []byte {
 	return versionSingleton
 }
+
+//go:embed cmd/node/member/icon.png
+var logo []byte
+
+func GetLogo() []byte {
+	return logo
+}

@@ -176,6 +176,27 @@ func (tb *TokenBucket) Exhausted() time.Duration {
 	return time.Duration(tb.exhaustedMicros+ongoingExhaustionMicros) * time.Microsecond
 }
 
+// EnsureLowerBound ensures that the current number of tokens is at least
+// minTokens. The value of minTokens can be negative. This is useful in
+// scenarios where the use of Adjust can be used to subtract a large amount of
+// tokens, resulting in a token bucket with a very low negative number of
+// tokens which would take a long time to recover to zero. In such scenarios,
+// a periodic call to EnsureLowerBound is useful to reset to a better state.
+func (tb *TokenBucket) EnsureLowerBound(minTokens Tokens) {
+	tb.Update()
+	if tb.current >= minTokens {
+		return
+	}
+	// tb.current < minTokens.
+	tb.current = minTokens
+	if tb.current > tb.burst {
+		tb.current = tb.burst
+	}
+	if tb.current > 0 {
+		tb.updateExhaustedMicros()
+	}
+}
+
 // Available returns the currently available tokens (can be -ve). Exported only
 // for metrics.
 func (tb *TokenBucket) Available() Tokens {

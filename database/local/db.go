@@ -31,17 +31,18 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/security"
-	"github.com/dgraph-io/badger/v3"
-	"github.com/dgraph-io/badger/v3/options"
-	"github.com/docker/go-units"
-	log "github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Warp-net/warpnet/security"
+	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v3/options"
+	"github.com/docker/go-units"
+	log "github.com/sirupsen/logrus"
 )
 
 /*
@@ -121,7 +122,7 @@ func New(
 		DefaultOptions(dbPath).
 		WithSyncWrites(false).
 		WithIndexCacheSize(256 << 20).
-		WithCompression(options.Snappy).
+		WithCompression(options.ZSTD).
 		WithNumCompactors(2).
 		WithLoggingLevel(badger.ERROR).
 		WithBlockCacheSize(512 << 20)
@@ -139,8 +140,8 @@ func New(
 	return storage, nil
 }
 
-func findFirstRunFlag(dirPath string) (found bool) {
-	_, err := os.Stat(filepath.Join(dirPath, firstRunLockFile))
+func findFirstRunFlag(dbPath string) (found bool) {
+	_, err := os.Stat(filepath.Join(dbPath, firstRunLockFile))
 	if err != nil && errors.Is(err, os.ErrNotExist) {
 		return false
 	}
@@ -155,7 +156,9 @@ func (db *DB) IsFirstRun() bool {
 }
 
 func (db *DB) writeFirstRunFlag() {
-	f, _ := os.Create(filepath.Join(db.dbPath, firstRunLockFile))
+	path := filepath.Join(db.dbPath, firstRunLockFile)
+	log.Infof("database: lock file created: %s", path)
+	f, _ := os.Create(path)
 	if f != nil {
 		_ = f.Close()
 	}
@@ -768,7 +771,7 @@ func (db *DB) Close() {
 
 	_ = db.Sync()
 	if err := db.badger.Close(); err != nil {
-		log.Infoln("database: close: ", err)
+		log.Infof("database: close: %v", err)
 		return
 	}
 	db.isRunning.Store(false)

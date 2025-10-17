@@ -25,13 +25,10 @@ resulting from the use or misuse of this software.
 package node
 
 import (
-	"context"
-	"github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
-	"github.com/Warp-net/warpnet/core/consensus"
+	"io"
+
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
-	"io"
 )
 
 type DiscoveryHandler interface {
@@ -40,34 +37,11 @@ type DiscoveryHandler interface {
 	Close()
 }
 
-type PubSubProvider interface {
-	Run(m pubsub.PubsubServerNodeConnector)
-	Close() error
-	SubscribeModerationTopic() error
-}
-
 type DistributedHashTableCloser interface {
+	ClosestPeers() ([]warpnet.WarpPeerID, error)
 	Close()
-}
-
-type DistributedStorer interface {
-	GetStream(ctx context.Context, id string) (io.ReadCloser, error)
-	PutStream(ctx context.Context, reader io.ReadCloser) (id string, _ error)
-	Close() error
 }
 
 type ProviderCloser interface {
 	io.Closer
-}
-
-type ConsensusServicer interface {
-	Start(streamer consensus.ConsensusStreamer) (err error)
-	Close()
-	Validate(ev event.ValidationEvent) error
-	ValidationResult(ev event.ValidationResultEvent) error
-}
-
-type Moderator interface {
-	Moderate(content string) (bool, string, error)
-	Close()
 }

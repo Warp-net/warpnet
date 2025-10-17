@@ -27,10 +27,14 @@ package node
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
-	_ "github.com/Warp-net/warpnet/core/logging"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -40,10 +44,6 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
 	log "github.com/sirupsen/logrus"
-	"io"
-	"strings"
-	"sync/atomic"
-	"time"
 )
 
 const DefaultTimeout = 60 * time.Second
@@ -79,7 +79,7 @@ func NewWarpNode(
 	ctx context.Context,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
-	limiter := warpnet.NewAutoScaledLimiter()
+	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
 
 	manager, err := warpnet.NewConnManager(limiter)
 	if err != nil {
@@ -97,6 +97,8 @@ func NewWarpNode(
 	}
 
 	opts = append(opts, managersOpts...)
+
+	initLogging()
 
 	node, err := warpnet.NewP2PNode(opts...)
 	if err != nil {
@@ -250,8 +252,9 @@ func (n *WarpNode) trackIncomingEvents() {
 				natDeviceTypeChangedEvent.NatDeviceType.String(), natDeviceTypeChangedEvent.TransportProtocol.String(),
 			)
 		case event.EvtAutoRelayAddrsUpdated:
-			if len(ev.(event.EvtAutoRelayAddrsUpdated).RelayAddrs) != 0 {
-				log.Infoln("node: event: relay address added")
+			newAddrsEvent := ev.(event.EvtAutoRelayAddrsUpdated)
+			if len(newAddrsEvent.RelayAddrs) != 0 {
+				log.Infof("node: event: relay address added: %s", newAddrsEvent.RelayAddrs[0].String())
 			}
 		case event.EvtLocalAddressesUpdated:
 			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
@@ -293,6 +296,7 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 		StartTime:    n.startTime,
 		RelayState:   relayState,
 		Reachability: warpnet.WarpReachability(n.reachability.Load()),
+		Protocols:    n.node.Mux().Protocols(),
 	}
 }
 

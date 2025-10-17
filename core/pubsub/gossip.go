@@ -33,6 +33,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -40,17 +46,9 @@ import (
 	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
-	"slices"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
-	PubSubModerationTopic = "peer-moderation"
-	PubSubConsensusTopic  = "peer-consensus"
-
 	PubSubDiscoveryTopic = "peer-discovery"
 )
 
@@ -87,15 +85,6 @@ func NewDiscoveryTopicHandler(handler topicHandler) TopicHandler {
 	return TopicHandler{
 		TopicName: PubSubDiscoveryTopic,
 		Handler:   handler,
-	}
-}
-
-func NewTransitModerationHandler() TopicHandler {
-	return TopicHandler{
-		TopicName: PubSubModerationTopic,
-		Handler: func(data []byte) error { // discard, transit only
-			return nil
-		},
 	}
 }
 
@@ -219,11 +208,11 @@ func (g *Gossip) runListener() error {
 func (g *Gossip) runGossip() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("Gossip: recovered from panic: %v", r)
+			err = fmt.Errorf("gossip: recovered from panic: %v", r)
 		}
 	}()
 	if g == nil || g.node == nil {
-		return warpnet.WarpError("Gossip: service not initialized properly")
+		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
 	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node())
@@ -232,14 +221,14 @@ func (g *Gossip) runGossip() (err error) {
 	}
 	g.isRunning.Store(true)
 
-	log.Infoln("Gossip: started")
+	log.Infoln("gossip: started")
 
 	return nil
 }
 
 func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {
 	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("Gossip: service not initialized")
+		return warpnet.WarpError("gossip: service not initialized")
 	}
 	g.mx.Lock()
 	defer g.mx.Unlock()

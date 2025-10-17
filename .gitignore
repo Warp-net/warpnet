@@ -31,3 +31,11 @@ var
 *.pem
 *.sig
 licensor.yml
+
+# snapcraft dirs
+prime
+stage
+parts
+overlay
+.craft
+*.snap

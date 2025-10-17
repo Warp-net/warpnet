@@ -59,10 +59,9 @@ type server struct {
 	allowPrivateAddrs bool
 }
 
-func newServer(host, dialer host.Host, s *autoNATSettings) *server {
+func newServer(dialer host.Host, s *autoNATSettings) *server {
 	return &server{
 		dialerHost:                           dialer,
-		host:                                 host,
 		dialDataRequestPolicy:                s.dataRequestPolicy,
 		amplificatonAttackPreventionDialWait: s.amplificatonAttackPreventionDialWait,
 		allowPrivateAddrs:                    s.allowPrivateAddrs,
@@ -79,7 +78,8 @@ func newServer(host, dialer host.Host, s *autoNATSettings) *server {
 }
 
 // Enable attaches the stream handler to the host.
-func (as *server) Start() {
+func (as *server) Start(h host.Host) {
+	as.host = h
 	as.host.SetStreamHandler(DialProtocol, as.handleDialRequest)
 }
 
@@ -213,7 +213,7 @@ func (as *server) serveDialRequest(s network.Stream) EventDialRequestCompleted {
 	nonce := msg.GetDialRequest().Nonce
 
 	isDialDataRequired := as.dialDataRequestPolicy(s.Conn().RemoteMultiaddr(), dialAddr)
-	if isDialDataRequired && !as.limiter.AcceptDialDataRequest(p) {
+	if isDialDataRequired && !as.limiter.AcceptDialDataRequest() {
 		msg = pb.Message{
 			Msg: &pb.Message_DialResponse{
 				DialResponse: &pb.DialResponse{
@@ -442,7 +442,7 @@ func (r *rateLimiter) Accept(p peer.ID) bool {
 	return true
 }
 
-func (r *rateLimiter) AcceptDialDataRequest(p peer.ID) bool {
+func (r *rateLimiter) AcceptDialDataRequest() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
@@ -522,6 +522,9 @@ func amplificationAttackPrevention(observedAddr, dialAddr ma.Multiaddr) bool {
 	if err != nil {
 		return true
 	}
-	dialIP, _ := manet.ToIP(dialAddr) // must be an IP multiaddr
+	dialIP, err := manet.ToIP(dialAddr) // can be dns addr
+	if err != nil {
+		return true
+	}
 	return !observedIP.Equal(dialIP)
 }

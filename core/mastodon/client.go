@@ -32,6 +32,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -39,11 +45,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
-	"io"
-	"math"
-	"net/http"
-	"strings"
-	"time"
 
 	stripper "github.com/grokify/html-strip-tags-go"
 	"github.com/mattn/go-mastodon"
@@ -171,6 +172,11 @@ func (m *warpnetMastodonPseudoNode) Addrs() []warpnet.WarpAddress {
 }
 
 func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = warpnet.WarpError(fmt.Sprintf("mastodon: panic: %v", r))
+		}
+	}()
 	var (
 		getOneEvent event.GetTweetEvent
 		getAllEvent event.GetAllTweetsEvent

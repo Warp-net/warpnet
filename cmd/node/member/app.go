@@ -4,10 +4,19 @@ import (
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"os/user"
+	"path/filepath"
+	"runtime"
+	"sync"
+	"time"
+
 	root "github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/auth"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -18,10 +27,6 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
-	"net/http"
-	"os"
-	"sync"
-	"time"
 )
 
 type AppStorer interface {
@@ -227,7 +232,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		a.mx.RLock()
 		if a.node == nil {
 			a.mx.RUnlock()
-			log.Errorln("not attached server node")
+			log.Errorf("app: node is not attached, event: %s %s", request.Path, string(request.Body))
 			response.Body = newErrorResp("not attached server node")
 			return response
 		}
@@ -291,4 +296,50 @@ func (a *App) close(_ context.Context) {
 	a.node.Stop()
 
 	close(a.readyChan)
+}
+
+const linuxDesktopTemplate = `
+	[Desktop Entry]
+	Name=warpnet
+	Exec=%s
+	Icon=warpnet
+	Type=Application
+	Categories=Network;Social;
+`
+
+func setLinuxDesktopIcon(iconData []byte) {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	if os.Getenv("SNAP") != "" { // snap package
+		return
+	}
+
+	currentUser, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	homeDir := currentUser.HomeDir
+
+	desktopDir := filepath.Join(homeDir, ".local", "share", "applications")
+	iconDir := filepath.Join(homeDir, ".local", "share", "icons", "hicolor", "512x512", "apps")
+
+	_ = os.MkdirAll(desktopDir, 0755)
+	_ = os.MkdirAll(iconDir, 0755)
+
+	execPath, err := os.Executable()
+	if err != nil {
+		log.Fatalf("setting icon: unable to determine executable path: %v", err)
+	}
+
+	desktopFile := filepath.Join(desktopDir, "warpnet.desktop")
+	content := fmt.Sprintf(linuxDesktopTemplate, execPath)
+	if err := os.WriteFile(desktopFile, []byte(content), 0644); err != nil {
+		log.Fatalf("setting icon: write .desktop file fail: %v", err)
+	}
+
+	iconPath := filepath.Join(iconDir, "warpnet.png")
+	if err := os.WriteFile(iconPath, iconData, 0644); err != nil {
+		log.Fatalf("setting icon: write icon file fail: %v", err)
+	}
 }

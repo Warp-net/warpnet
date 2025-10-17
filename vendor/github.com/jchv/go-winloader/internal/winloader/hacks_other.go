@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package winloader
@@ -12,5 +13,5 @@ func MakePEBEntryForModule() error {
 
 // GetProcessHInstance gets the HINSTANCE for the current process.
 func GetProcessHInstance() (uintptr, error) {
-	return errors.New("platform not supported")
+	return 0, errors.New("platform not supported")
 }

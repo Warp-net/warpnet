@@ -27,16 +27,17 @@ package config
 import (
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 )
 
 const (
@@ -53,9 +54,9 @@ var warpnetBootstrapNodes = []string{
 }
 
 var testnetBootstrapNodes = []string{
-	"/ip4/88.119.169.156/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
-	"/ip4/88.119.169.156/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
-	"/ip4/88.119.169.156/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
+	"/ip4/207.154.221.44/tcp/4011/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
+	"/ip4/207.154.221.44/tcp/4022/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
+	"/ip4/207.154.221.44/tcp/4033/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
 }
 
 var configSingleton config
@@ -115,7 +116,7 @@ func init() {
 	}
 	appPath := getAppPath()
 
-	modelPath := filepath.Join(appPath, strings.TrimSpace(viper.GetString("node.moderator.modelname")))
+	modelPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(viper.GetString("node.moderator.modelname")))
 	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
 
 	configSingleton = config{

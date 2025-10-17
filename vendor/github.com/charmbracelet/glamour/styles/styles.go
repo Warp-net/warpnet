@@ -1,3 +1,4 @@
+// Package styles provides default styles for the glamour package.
 package styles
 
 //go:generate go run ../internal/generate-style-json
@@ -14,7 +15,7 @@ const (
 
 // Default styles.
 const (
-	AsciiStyle      = "ascii"
+	AsciiStyle      = "ascii" //nolint: revive
 	AutoStyle       = "auto"
 	DarkStyle       = "dark"
 	DraculaStyle    = "dracula"
@@ -122,7 +123,11 @@ var (
 				Margin: uintPtr(defaultMargin),
 			},
 		},
-		Table: ansi.StyleTable{},
+		Table: ansi.StyleTable{
+			CenterSeparator: stringPtr("|"),
+			ColumnSeparator: stringPtr("|"),
+			RowSeparator:    stringPtr("-"),
+		},
 		DefinitionDescription: ansi.StylePrimitive{
 			BlockPrefix: "\n* ",
 		},

@@ -28,9 +28,10 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"strings"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
 type StatsNodeInformer interface {
@@ -73,7 +74,6 @@ func StreamGetStatsHandler(
 			NetworkState:    networkState,
 			RelayState:      nodeInfo.RelayState,
 			DatabaseStats:   db.Stats(),
-			ConsensusStats:  nil,
 			MemoryStats:     warpnet.GetMemoryStats(),
 			CPUStats:        warpnet.GetCPUStats(),
 			BytesSent:       sent,

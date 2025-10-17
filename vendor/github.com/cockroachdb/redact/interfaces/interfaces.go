@@ -65,6 +65,12 @@ type SafeWriter interface {
 	// SafeRune emits a safe rune.
 	SafeRune(SafeRune)
 
+	// SafeByte emits a safe byte.
+	SafeByte(SafeByte)
+
+	// SafeBytes emits a safe byte slice.
+	SafeBytes(SafeBytes)
+
 	// Print emits its arguments separated by spaces.
 	// For each argument it dynamically checks for the SafeFormatter or
 	// SafeValue interface and either use that, or mark the argument
@@ -118,6 +124,18 @@ type SafeRune rune
 
 // SafeValue makes SafeRune a SafeValue.
 func (SafeRune) SafeValue() {}
+
+// SafeByte represents a byte that is not a sensitive value.
+type SafeByte byte
+
+// SafeValue makes SafeByte a SafeValue.
+func (SafeByte) SafeValue() {}
+
+// SafeBytes represents a byte slice that is not a sensitive value.
+type SafeBytes []byte
+
+// SafeValue makes SafeBytes a SafeValue.
+func (SafeBytes) SafeValue() {}
 
 // SafeValue is a marker interface to be implemented by types that
 // alias base Go types and whose natural representation via Printf is

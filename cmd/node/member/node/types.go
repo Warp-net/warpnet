@@ -25,17 +25,16 @@ resulting from the use or misuse of this software.
 package node
 
 import (
+	"io"
+	"time"
+
 	"github.com/Warp-net/warpnet/cmd/node/member/pubsub"
-	"github.com/Warp-net/warpnet/core/consensus"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
-	"io"
-	"time"
 )
 
 type DiscoveryHandler interface {
@@ -51,7 +50,6 @@ type MDNSStarterCloser interface {
 
 type PubSubProvider interface {
 	SubscribeUserUpdate(userId string) (err error)
-	PublishModerationRequest(bt []byte) (err error)
 	UnsubscribeUserUpdate(userId string) (err error)
 	Run(m pubsub.PubsubServerNodeConnector)
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
@@ -117,14 +115,6 @@ type Storer interface {
 	Path() string
 	Stats() map[string]string
 	IsFirstRun() bool
-}
-
-type ConsensusServicer interface {
-	Start(streamer consensus.ConsensusStreamer) (err error)
-	Close()
-	AskValidation(data event.ValidationEvent)
-	Validate(ev event.ValidationEvent) error
-	ValidationResult(ev event.ValidationResultEvent) error
 }
 
 type PseudoStreamer interface {
