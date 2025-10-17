@@ -36,6 +36,6 @@ jobs:
           snapcraft pack --use-lxd
       - name: List snaps
         run: ls -lh *.snap
-#      - name: Publish
-#        run: |
-#          snapcraft upload ./*.snap --release beta
+      - name: Publish
+        run: |
+          snapcraft upload ./*.snap --release beta
