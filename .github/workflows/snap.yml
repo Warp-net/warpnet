@@ -5,7 +5,6 @@ on:
 
 env:
   GO_VERSION: '1.24'
-  RELEASE_TAG: ${{ github.event.inputs.tag }}
   CGO_ENABLED: '1'
 
 permissions: write-all
