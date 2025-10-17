@@ -5,7 +5,7 @@ dry-run:
 	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet
 
 run-member:
-	 cd cmd/node/member && wails build -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
+	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
 
 moderator:
 	go run -tags=llama cmd/node/moderator/main.go --node.network testnet

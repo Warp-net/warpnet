@@ -17,12 +17,12 @@ services:
     container_name: warpnet-testnet-2
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
     ports:
-      - "4022:4002"
+      - "4022:4001"
     networks:
       - testnet
     restart: always
     environment:
-      - NODE_PORT=4002
+      - NODE_PORT=4001
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=error
       - NODE_SEED=warpnet2
@@ -31,12 +31,12 @@ services:
     container_name: warpnet-testnet-3
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
     ports:
-      - "4033:4003"
+      - "4033:4001"
     networks:
       - testnet
     restart: always
     environment:
-      - NODE_PORT=4003
+      - NODE_PORT=4001
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=error
       - NODE_SEED=warpnet3
@@ -45,12 +45,12 @@ services:
     container_name: moderator-testnet
     image: ghcr.io/warp-net/warpnet-moderator:latest
     ports:
-      - "4044:4004"
+      - "4044:4001"
     networks:
       - testnet
     restart: always
     environment:
-      - NODE_PORT=4004
+      - NODE_PORT=4001
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - NODE_SEED=warpnet-moderator1

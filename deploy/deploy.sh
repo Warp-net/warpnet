@@ -1,16 +1,16 @@
 #!/bin/bash
 
-#sudo ufw disable
-#sudo systemctl restart systemd-networkd
-#sudo iptables -I DOCKER-USER -j ACCEPT
-#sudo iptables -A INPUT -p tcp --match multiport --dports 4001:4003 -j ACCEPT
-#sudo iptables -A FORWARD -i docker0 -o docker0 -j ACCEPT
-#sudo iptables -A FORWARD -i br-6383b19e4979 -o br-6383b19e4979 -j ACCEPT
-#sudo iptables -P FORWARD ACCEPT
-#sudo iptables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-#sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-#echo "nameserver 8.8.8.8" > /etc/resolv.conf
-#echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+ufw disable
+systemctl restart systemd-networkd
+iptables -I DOCKER-USER -j ACCEPT
+iptables -A INPUT -p tcp --match multiport --dports 4001:4099 -j ACCEPT
+iptables -A FORWARD -i docker0 -o docker0 -j ACCEPT
+iptables -A FORWARD -i br-6383b19e4979 -o br-6383b19e4979 -j ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 echo "Run deploy script"
 

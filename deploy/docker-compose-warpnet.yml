@@ -17,12 +17,12 @@ services:
     container_name: warpnet-mainnet-2
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
     ports:
-      - "4002:4002"
+      - "4002:4001"
     networks:
       - mainnet
     restart: always
     environment:
-      - NODE_PORT=4002
+      - NODE_PORT=4001
       - NODE_SEED=warpnet2
       - NODE_NETWORK=warpnet
       - LOGGING_LEVEL=info
@@ -31,14 +31,14 @@ services:
     container_name: warpnet-mainnet-3
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
     ports:
-      - "4003:4003"
+      - "4003:4001"
     networks:
       - mainnet
     restart: always
     environment:
       - NODE_SEED=warpnet3
       - NODE_NETWORK=warpnet
-      - NODE_PORT=4003
+      - NODE_PORT=4001
       - LOGGING_LEVEL=info
 
 #  warpnet-moderator:
