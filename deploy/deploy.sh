@@ -4,14 +4,12 @@ echo "Run deploy script"
 #sudo echo "nameserver 8.8.8.8" > /etc/resolv.conf
 #sudo echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 echo "GITHUB_TOKEN: ${GITHUB_TOKEN:0:4}... (truncated for security)"
-echo "NODE_HOST: ${NODE_HOST}"
+
 if [ -z "$GITHUB_TOKEN" ]; then
   echo "Error: GITHUB_TOKEN is not set"
   exit 1
 fi
-if [ -z "${NODE_HOST}" ]; then
-  echo "Error: NODE_HOST is not set"
-fi
+
 #sudo docker stop $(sudo docker ps -aq) || true
 #sudo docker container prune -f
 sudo docker compose -f docker-compose-warpnet.yml down || true
@@ -29,6 +27,12 @@ sudo docker pull ghcr.io/warp-net/warpnet-moderator:latest
 #sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 sudo touch /tmp/snapshot || true
 export HOSTNAME=''
-export NODE_HOST=$NODE_HOST
-sudo -E docker compose -f docker-compose-warpnet.yml up -d --build
+
+if [ "$MAINNET" = "true" ]; then
+    echo "Mainnet is enabled"
+    sudo -E docker compose -f docker-compose-warpnet.yml up -d --build
+else
+    echo "Mainnet is disabled"
+    sudo -E docker compose -f docker-compose-testnet.yml up -d --build
+fi
 sudo docker image prune -f

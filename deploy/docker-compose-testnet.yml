@@ -2,11 +2,13 @@ services:
   warpnet1:
     container_name: warpnet1
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
-    network_mode: host
+    ports:
+      - "4011:4001"
+    networks:
+      - testnet
     restart: always
     environment:
       - NODE_PORT=4001
-      - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=error
       - NODE_SEED=warpnet1
@@ -14,11 +16,13 @@ services:
   warpnet2:
     container_name: warpnet2
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
-    network_mode: host
+    ports:
+      - "4022:4002"
+    networks:
+      - testnet
     restart: always
     environment:
       - NODE_PORT=4002
-      - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=error
       - NODE_SEED=warpnet2
@@ -26,11 +30,13 @@ services:
   warpnet3:
     container_name: warpnet3
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
-    network_mode: host
+    ports:
+      - "4033:4003"
+    networks:
+      - testnet
     restart: always
     environment:
       - NODE_PORT=4003
-      - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=error
       - NODE_SEED=warpnet3
@@ -38,16 +44,19 @@ services:
   warpnet-moderator:
     container_name: moderator1
     image: ghcr.io/warp-net/warpnet-moderator:latest
-    network_mode: host
+    ports:
+      - "4044:4004"
+    networks:
+      - testnet
     restart: always
     environment:
       - NODE_PORT=4004
-      - NODE_HOST_V4=88.119.169.156
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - NODE_SEED=warpnet-moderator1
     volumes:
-      - /home/chmo/.warpdata:/root/.warpdata:rw
+      - /root/.warpdata2:/root/.warpdata2:rw
 
 
-
+networks:
+  testnet:
