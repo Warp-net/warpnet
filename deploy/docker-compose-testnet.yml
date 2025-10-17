@@ -1,6 +1,6 @@
 services:
-  warpnet11:
-    container_name: warpnet1
+  warpnet1:
+    container_name: warpnet-testnet-1
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
     ports:
       - "4011:4001"
@@ -13,8 +13,8 @@ services:
       - LOGGING_LEVEL=error
       - NODE_SEED=warpnet1
 
-  warpnet22:
-    container_name: warpnet2
+  warpnet2:
+    container_name: warpnet-testnet-2
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
     ports:
       - "4022:4002"
@@ -27,8 +27,8 @@ services:
       - LOGGING_LEVEL=error
       - NODE_SEED=warpnet2
 
-  warpnet33:
-    container_name: warpnet3
+  warpnet3:
+    container_name: warpnet-testnet-3
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
     ports:
       - "4033:4003"
