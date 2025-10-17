@@ -5,7 +5,7 @@ dry-run:
 	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet
 
 run-member:
-	 cd cmd/node/member && wails build -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
+	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
 
 moderator:
 	go run -tags=llama cmd/node/moderator/main.go --node.network testnet
@@ -27,3 +27,13 @@ setup-hooks:
 
 ssh-do:
 	ssh root@207.154.221.44
+
+snapcraft:
+	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/ *.snap
+	sudo snapcraft pack --destructive-mode
+	sudo snapcraft clean
+	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/
+
+status:
+	snapcraft status warpnet
+

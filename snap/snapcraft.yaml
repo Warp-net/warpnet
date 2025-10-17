@@ -1,0 +1,84 @@
+name: warpnet
+title: Warpnet
+base: core24
+version: 0.5.61
+epoch: 1
+license: AGPL-3.0-or-later
+summary: Decentralized, peer-to-peer social network
+type: app
+description: |
+  WarpNet is a decentralized, peer-to-peer social network inspired by Twitter, built with Go. 
+  It runs without central servers, using Noise protocol for inter-node communication and built-in local storage. 
+  WarpNet is censorship-resistant, scalable, and fully open-source.
+grade: stable # must be 'stable' to release into candidate/stable channels
+confinement: strict # use 'strict' once you have the right plugs and slots
+source-code:
+  - https://github.com/Warp-net/warpnet
+contact:
+  - https://t.me/warpnetdev
+website:
+  - https://warp-net.github.io
+issues:
+  - https://github.com/Warp-net/warpnet/issues
+donation:
+  - https://boosty.to/warpnet
+compression: lzo
+icon: cmd/node/member/icon.png
+platforms:
+  amd64:
+    build-on:
+      - amd64
+    build-for:
+      - amd64
+  arm64:
+    build-on:
+      - arm64
+    build-for:
+      - arm64
+
+apps:
+  warpnet:
+    command: bin/warpnet
+    extensions: [gnome]
+    plugs:
+      - system-observe
+      - network
+
+layout:
+  /usr/lib/x86_64-linux-gnu/webkit2gtk-4.1:
+    bind: $SNAP/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1
+  /usr/lib/i386-linux-gnu/gbm:
+    bind: $SNAP/usr/lib/i386-linux-gnu/gbm
+
+parts:
+  warpnet:
+    plugin: nil
+    source: .
+    build-packages:
+      - build-essential
+      - libgtk-3-dev
+      - libwebkit2gtk-4.1-dev
+      - curl
+      - ca-certificates
+      - tar
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+    build-environment:
+      - CGO_ENABLED: "1"
+      - PATH: "/usr/local/go/bin:/root/go/bin:${PATH}"
+    override-build: |
+      set -eux
+      
+      craftctl default
+      
+      GO_VERSION=1.24.2
+      curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o go.tar.gz
+      tar -C /usr/local -xzf go.tar.gz
+      rm go.tar.gz
+
+      /usr/local/go/bin/go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+
+      cd cmd/node/member
+      /root/go/bin/wails build -v 2 -tags webkit2_41
+
+      install -D -m0755 build/bin/warpnet "$SNAPCRAFT_PART_INSTALL/bin/warpnet"
