@@ -1,7 +1,7 @@
 name: warpnet
 title: Warpnet
 base: core24
-version: 0.5.60
+version: 0.5.61
 epoch: 1
 license: AGPL-3.0-or-later
 summary: Decentralized, peer-to-peer social network
@@ -15,7 +15,7 @@ confinement: strict # use 'strict' once you have the right plugs and slots
 source-code:
   - https://github.com/Warp-net/warpnet
 contact:
-  - github.com.mecdy@passmail.net
+  - https://t.me/warpnetdev
 website:
   - https://warp-net.github.io
 issues:

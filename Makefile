@@ -34,5 +34,6 @@ snapcraft:
 	sudo snapcraft clean
 	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/
 
-
+status:
+	snapcraft status warpnet
 
