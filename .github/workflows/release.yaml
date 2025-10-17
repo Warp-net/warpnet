@@ -18,9 +18,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: linux-amd64
+          - os: ubuntu-latest
             platform: linux/amd64
-          - os: linux-arm64
+          - os: ubuntu-latest
             platform: linux/arm64
           - os: macos-latest
             platform: darwin/arm64
@@ -56,7 +56,7 @@ jobs:
         run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
 
       - name: Package + checksum (Linux AMD64)
-        if: ${{ matrix.os == 'linux-amd64' }}
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.platform == 'linux/amd64' }}
         run: |
           mkdir -p out/linux_amd64
           mv cmd/node/member/build/bin/* out/linux_amd64/warpnet
@@ -64,11 +64,11 @@ jobs:
           shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz > warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
 
       - name: Package + checksum (Linux ARM64)
-        if: ${{ matrix.os == 'linux-arm64' }}
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.platform == 'linux/arm64' }}
         run: |
           mkdir -p out/linux_arm64
           mv cmd/node/member/build/bin/* out/linux_arm64/warpnet
-          tar -C out/linux_amd64 -czf warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz .
+          tar -C out/linux_arm64 -czf warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz .
           shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz > warpnet_${{ env.RELEASE_TAG }}_linux_arm64_checksums.txt
 
       - name: Package + checksum (macOS)
