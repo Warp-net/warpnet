@@ -10,7 +10,7 @@ services:
     environment:
       - NODE_PORT=4001
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=error
+      - LOGGING_LEVEL=info
       - NODE_SEED=warpnet1
 
   warpnet22:
@@ -24,7 +24,7 @@ services:
     environment:
       - NODE_PORT=4001
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=error
+      - LOGGING_LEVEL=info
       - NODE_SEED=warpnet2
 
   warpnet33:
@@ -38,7 +38,7 @@ services:
     environment:
       - NODE_PORT=4001
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=error
+      - LOGGING_LEVEL=info
       - NODE_SEED=warpnet3
 
   warpnet-moderator-test:
