@@ -1,9 +1,6 @@
 name: Snap
 
 on:
-  push:
-    branches:
-      - snap
   workflow_dispatch:
 
 env:
