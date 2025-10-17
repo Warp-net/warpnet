@@ -53,7 +53,7 @@ jobs:
 
       - name: Build (Wails)
         working-directory: cmd/node/member
-        run: wails build -m -nosyncgomod -clean -platform ${{ matrix.platform }} -tags webkit2_41
+        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
 
       - name: Package + checksum (Linux AMD64)
         if: ${{ matrix.os == 'linux-amd64' }}
