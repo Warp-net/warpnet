@@ -142,6 +142,7 @@ func New(
 	initialSearchDelay time.Duration,
 	periodicSearchDelay delay.D,
 	self peer.ID,
+	havesReceivedGauge bspm.Gauge,
 ) *Session {
 	ctx, cancel := context.WithCancel(ctx)
 	s := &Session{
@@ -163,7 +164,7 @@ func New(
 		periodicSearchDelay: periodicSearchDelay,
 		self:                self,
 	}
-	s.sws = newSessionWantSender(id, pm, sprm, sm, bpm, s.onWantsSent, s.onPeersExhausted)
+	s.sws = newSessionWantSender(id, pm, sprm, sm, bpm, s.onWantsSent, s.onPeersExhausted, havesReceivedGauge)
 
 	go s.run(ctx)
 
@@ -405,6 +406,7 @@ func (s *Session) findMorePeers(ctx context.Context, c cid.Cid) {
 		for p := range s.providerFinder.FindProvidersAsync(ctx, k, 0) {
 			// When a provider indicates that it has a cid, it's equivalent to
 			// the providing peer sending a HAVE
+			log.Infow("Found peer for CID", "peer", p, "cid", k)
 			span.AddEvent("FoundPeer")
 			s.sws.Update(p.ID, nil, []cid.Cid{c}, nil)
 		}

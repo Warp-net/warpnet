@@ -26,17 +26,21 @@ package main
 
 import (
 	"context"
-	root "github.com/Warp-net/warpnet"
-	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
-	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/security"
-	writer "github.com/ipfs/go-log/writer"
-	log "github.com/sirupsen/logrus"
-	_ "go.uber.org/automaxprocs" // DO NOT remove
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	root "github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/moderator"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
+	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/database/ipfs"
+	"github.com/Warp-net/warpnet/security"
+	writer "github.com/ipfs/go-log/writer"
+	log "github.com/sirupsen/logrus"
+	_ "go.uber.org/automaxprocs" // DO NOT remove
 )
 
 func main() {
@@ -56,18 +60,15 @@ func main() {
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
 	if err != nil {
 		log.Errorf(
-			"failed to parse log level %s: %v, defaulting to INFO level...",
+			"failed to parse log level %s: %v, defaulting to ERROR level...",
 			config.Config().Logging.Level, err,
 		)
-		lvl = log.InfoLevel
+		lvl = log.ErrorLevel
 	}
 	log.SetLevel(lvl)
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: time.DateTime,
-		FieldMap: log.FieldMap{
-			"network": config.Config().Node.Network,
-		},
 	})
 
 	var interruptChan = make(chan os.Signal, 1)
@@ -90,12 +91,32 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to init moderator node: %v", err)
 	}
+
+	if err = n.Start(); err != nil {
+		log.Fatalf("failed to start moderator node: %v", err)
+	}
 	defer n.Stop()
 
-	if err := n.Start(); err != nil {
-		log.Errorf("failed to start moderator node: %v", err)
-		return
+	store, err := ipfs.NewIPFS(ctx, n.Node())
+	if err != nil {
+		log.Fatalf("failed to init moderator IPFS node: %v", err)
 	}
+	defer store.Close()
+
+	publisher := pubsub.NewPubSub(ctx)
+	if err := publisher.Run(n); err != nil {
+		log.Fatalf("failed to start moderator pubsub: %v", err)
+	}
+	defer publisher.Close()
+
+	moder, err := moderator.NewModerator(ctx, n, store, publisher)
+	if err != nil {
+		log.Fatalf("failed to init moderator: %v", err)
+	}
+	if err := moder.Start(); err != nil {
+		log.Fatalf("failed to start moderator: %v", err)
+	}
+	defer moder.Close()
 
 	<-interruptChan
 	log.Infoln("moderator node interrupted...")

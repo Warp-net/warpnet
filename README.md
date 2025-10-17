@@ -2,10 +2,11 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE.md)
 [![Build](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml)
 [![Telegram Chat](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)
+[![warpnet](https://snapcraft.io/warpnet/badge.svg)](https://snapcraft.io/warpnet)
 <br />
 <div align="center">
   <a href="https://github.com/Warp-net/warpnet">
-    <img src="docs/logo.png" alt="Logo" width="80" height="80">
+    <img src="https://github.com/Warp-net/.github/blob/main/docs/logo.png" alt="Logo" width="80" height="80">
   </a>
 
 <h3 align="center">Warpnet</h3>
@@ -31,28 +32,6 @@
     <li><a href="#License">License</a></li>
 </ol>
 
-![Screenshot](docs/warpscreen.jpg)
-
-## General Principles of the Warp Network
-
-1. WarpNet cannot be owned by anyone.
-2. WarpNet must operate independently of any third-party services.
-3. WarpNet must not rely on any proprietary or third-party technologies.
-4. A WarpNet node must be distributed as a single executable file.
-5. WarpNet must be a cross-platform solution.
-6. Only one WarpNet member node may run on a single machine, but it may have multiple aliases.
-7. WarpNet member nodes must be governed solely by network consensus.
-8. WarpNet business nodes may allow centralized management.
-9. WarpNet business nodes must responsibly run at least one bootstrap node and one moderator node.
-10. A WarpNet node must store private data only on the local host machine.
-11. WarpNet nodes network must not be developed or controlled by a single individual.
-12. Content on WarpNet must be moderated automatically, without human intervention, moderator nodes must be protected from unauthorized modification.
-13. Node owners bear full personal responsibility for any content they upload to WarpNet.
-
-## HOW TO HELP
-
-[Answer](HOW-TO-HELP.md)
-
 ## Getting Started
 
 List of software needed and how to install them.
@@ -66,16 +45,6 @@ cd cmd/node/member # pick the member node dir
 wails build -devtools -tags webkit2_41 # compile a binary
 ./build/bin/warpnet --node.network testnet # run binary on a testnet
 ```
-
-## TODO
-- [ ] Set up a website
-- [v] Add docs 
-- [ ] Create DMG package
-- [ ] Create Snap package
-- [ ] Set up bootstrap nodes on each continent
-- [ ] ...
-
-See the [open issues](https://github.com/Warp-net/warpnet/issues) for a full list of proposed features (and known issues).
 
 ## Contributing
 

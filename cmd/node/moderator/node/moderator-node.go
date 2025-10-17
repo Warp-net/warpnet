@@ -29,16 +29,16 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"sync/atomic"
+
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
-	moderatorPubSub "github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database/ipfs"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
@@ -46,16 +46,6 @@ import (
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
-	"io"
-	"os"
-	"strings"
-	"time"
-)
-
-// build constrained
-var (
-	moderator          Moderator
-	moderatorReadyChan = make(chan struct{}, 1)
 )
 
 type ModeratorNode struct {
@@ -64,18 +54,16 @@ type ModeratorNode struct {
 	node    *node.WarpNode
 	options []libp2p.Option
 
-	store DistributedStorer
+	dHashTable DistributedHashTableCloser
 
-	pubsubService PubSubProvider
-	dHashTable    DistributedHashTableCloser
-
-	consensusService  ConsensusServicer
 	memoryStoreCloseF func() error
 
 	version     *semver.Version
 	psk         security.PSK
 	privKey     ed25519.PrivateKey
 	selfHashHex string
+
+	isClosed *atomic.Bool
 }
 
 func NewModeratorNode(
@@ -84,7 +72,6 @@ func NewModeratorNode(
 	psk security.PSK,
 	selfHashHex string,
 ) (_ *ModeratorNode, err error) {
-	pubsubService := moderatorPubSub.NewPubSubModerator(ctx)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
@@ -119,7 +106,6 @@ func NewModeratorNode(
 
 	mn := &ModeratorNode{
 		ctx:               ctx,
-		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
@@ -143,9 +129,8 @@ func NewModeratorNode(
 			libp2p.Routing(dHashTable.StartRouting),
 			node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 		},
+		isClosed: new(atomic.Bool),
 	}
-
-	//mn.consensusService = consensus.NewGossipConsensus(ctx, pubsubService, nil)
 
 	return mn, nil
 }
@@ -154,11 +139,6 @@ func (mn *ModeratorNode) Start() (err error) {
 	if mn == nil {
 		panic("moderator: nil node")
 	}
-	var (
-		confModelPath = config.Config().Node.Moderator.Path
-		cid           = config.Config().Node.Moderator.CID
-	)
-	modelFile, isModelExists := isModelExists(confModelPath)
 
 	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
@@ -166,14 +146,6 @@ func (mn *ModeratorNode) Start() (err error) {
 	}
 
 	mn.node.SetStreamHandlers(
-		//warpnet.WarpStreamHandler{
-		//	event.INTERNAL_POST_NODE_VALIDATE,
-		//	handler.StreamValidateHandler(mn.consensusService),
-		//},
-		//warpnet.WarpStreamHandler{
-		//	event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-		//	handler.StreamValidationResponseHandler(mn.consensusService),
-		//},
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(mn, nil),
@@ -184,46 +156,7 @@ func (mn *ModeratorNode) Start() (err error) {
 		},
 	)
 
-	mn.pubsubService.Run(mn)
-
 	nodeInfo := mn.NodeInfo()
-
-	//if err := mn.consensusService.Start(mn); err != nil {
-	//	return err
-	//}
-
-	mn.store, err = ipfs.NewIPFS(mn.ctx, mn.node.Node())
-	if err != nil {
-		return fmt.Errorf("failed to init moderator IPFS node: %v", err)
-	}
-
-	if !isModelExists {
-		if err = fetchModel(confModelPath, cid, mn.store); err != nil {
-			return err
-		}
-	}
-
-	moderatorReadyChan <- struct{}{}
-	// wait until moderator set up
-	<-moderatorReadyChan
-	if moderator == nil {
-		return errors.New("failed to init moderator engine")
-	}
-
-	mn.node.SetStreamHandlers(
-		warpnet.WarpStreamHandler{
-			event.INTERNAL_POST_MODERATE,
-			handler.StreamModerateHandler(mn, moderator),
-		},
-	)
-
-	if err := mn.pubsubService.SubscribeModerationTopic(); err != nil {
-		return err
-	}
-
-	if isModelExists {
-		go storeModel(modelFile, mn.store)
-	}
 
 	println()
 	fmt.Printf(
@@ -234,71 +167,22 @@ func (mn *ModeratorNode) Start() (err error) {
 	return nil
 }
 
+func (mn *ModeratorNode) ID() warpnet.WarpPeerID {
+	return mn.node.Node().ID()
+}
+
+func (mn *ModeratorNode) ClosestPeers() ([]warpnet.WarpPeerID, error) {
+	return mn.dHashTable.ClosestPeers()
+}
+
+func (mn *ModeratorNode) Node() warpnet.P2PNode {
+	return mn.node.Node()
+}
+
 func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	baseInfo := mn.node.BaseNodeInfo()
 	baseInfo.OwnerId = warpnet.ModeratorOwner
 	return baseInfo
-}
-
-func isModelExists(path string) (*os.File, bool) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, false
-	}
-	return f, true
-}
-
-func storeModel(f *os.File, store DistributedStorer) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*8)
-	defer cancel()
-
-	cid, err := store.PutStream(ctx, f)
-	if err != nil {
-		log.Errorf("failed to put file in IPFS: %v", err)
-		_ = f.Close()
-		return
-	}
-	log.Infof("moderator: LLM model uploaded: CID: %s", cid)
-	_ = f.Close()
-	return
-}
-
-func fetchModel(path, cid string, store DistributedStorer) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*8)
-	defer cancel()
-
-	reader, err := store.GetStream(ctx, cid)
-	if err != nil {
-		return fmt.Errorf("failed to get stream in IPFS: %v", err)
-	}
-	defer reader.Close()
-
-	log.Infof("moderator: LLM model downloaded: CID: %s", cid)
-
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("creating file: %v", err)
-	}
-	defer file.Close()
-
-	_, err = io.Copy(file, reader)
-	if err != nil {
-		return fmt.Errorf("writing to file: %v", err)
-	}
-
-	finalPath := strings.TrimSuffix(path, ".tmp")
-	if err = os.Rename(path, finalPath); err != nil {
-		log.Errorf("renaming file: %v", err)
-	}
-
-	return nil
-}
-
-func (mn *ModeratorNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
-	if mn == nil || mn.node == nil {
-		return nil, nil
-	}
-	return mn.node.SelfStream(path, data)
 }
 
 func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
@@ -306,34 +190,16 @@ func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 	return mn.node.Stream(nodeId, path, data)
 }
 
-func (mn *ModeratorNode) SimpleConnect(pi warpnet.WarpAddrInfo) error {
-	return mn.node.Connect(pi)
-}
-
-func (mn *ModeratorNode) Peerstore() warpnet.WarpPeerstore {
-	if mn == nil || mn.node == nil {
-		return nil
-	}
-	return mn.node.Node().Peerstore()
-}
-
-func (mn *ModeratorNode) Node() warpnet.P2PNode {
-	if mn == nil || mn.node == nil {
-		return nil
-	}
-	return mn.node.Node()
+func (mn *ModeratorNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	return nil, errors.New("not implemented")
 }
 
 func (mn *ModeratorNode) Stop() {
+	defer func() { recover() }()
 	if mn == nil {
 		return
 	}
-
-	if mn.pubsubService != nil {
-		if err := mn.pubsubService.Close(); err != nil {
-			log.Errorf("moderator: failed to close pubsub: %v", err)
-		}
-	}
+	mn.isClosed.Store(true)
 
 	if mn.dHashTable != nil {
 		mn.dHashTable.Close()
@@ -343,13 +209,6 @@ func (mn *ModeratorNode) Stop() {
 		if err := mn.memoryStoreCloseF(); err != nil {
 			log.Errorf("moderator: failed to close memory store: %v", err)
 		}
-	}
-	if mn.store != nil {
-		_ = mn.store.Close()
-	}
-
-	if mn.consensusService != nil {
-		mn.consensusService.Close()
 	}
 
 	mn.node.StopNode()

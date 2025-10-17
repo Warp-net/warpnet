@@ -226,7 +226,7 @@ func (l *Loader) LoadMem(data []byte) (loader.Module, error) {
 			binary.Read(mem, binary.LittleEndian, &dir32)
 			dir = dir32.To64()
 		}
-		mem.Seek(int64(dir.AddressOfCallBacks), io.SeekStart)
+		mem.Seek(int64(dir.AddressOfCallBacks-realBase), io.SeekStart)
 		if dir.AddressOfCallBacks != 0 {
 			for {
 				mem.Read(b[:psize])
@@ -234,7 +234,7 @@ func (l *Loader) LoadMem(data []byte) (loader.Module, error) {
 				if addr == 0 {
 					break
 				}
-				cb := l.machine.MemProc(realBase + addr)
+				cb := l.machine.MemProc(addr)
 				cb.Call(hinstance, 1, 0)
 			}
 		}

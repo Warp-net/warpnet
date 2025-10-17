@@ -14,7 +14,6 @@ import (
 	"github.com/ipfs/boxo/gateway/assets"
 	"github.com/ipfs/boxo/path"
 	"github.com/ipfs/go-cid"
-
 	// Ensure basic codecs are registered.
 	_ "github.com/ipld/go-ipld-prime/codec/cbor"
 	_ "github.com/ipld/go-ipld-prime/codec/dagcbor"
@@ -243,7 +242,7 @@ func (i *handler) serveCodecRaw(ctx context.Context, w http.ResponseWriter, r *h
 	// ServeContent will take care of
 	// If-None-Match+Etag, Content-Length and setting range request headers after we've already seeked to the start of
 	// the first range
-	if !i.seekToStartOfFirstRange(w, r, blockData) {
+	if !i.seekToStartOfFirstRange(w, r, blockData, blockSize) {
 		return false
 	}
 	_, dataSent, _ := serveContent(w, r, modtime, blockSize, blockData)

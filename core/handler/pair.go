@@ -37,6 +37,7 @@ import (
 
 func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		// TODO: add devices storage
 		var clientInfo domain.AuthNodeInfo
 		if err := json.Unmarshal(buf, &clientInfo); err != nil || clientInfo.Identity.Token == "" {
 			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)

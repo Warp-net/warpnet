@@ -107,6 +107,8 @@ type MessageQueue struct {
 	events chan<- messageEvent
 
 	perPeerDelay time.Duration
+
+	BcastInc func()
 }
 
 // recallWantlist keeps a list of pending wants and a list of sent wants
@@ -424,6 +426,13 @@ func (mq *MessageQueue) AddCancels(cancelKs []cid.Cid) {
 	}
 }
 
+func (mq *MessageQueue) HasMessage() bool {
+	mq.wllock.Lock()
+	defer mq.wllock.Unlock()
+
+	return mq.bcstWants.pending.Len() != 0 || mq.peerWants.pending.Len() != 0 || mq.cancels.Len() != 0
+}
+
 // ResponseReceived is called when a message is received from the network.
 // ks is the set of blocks, HAVEs and DONT_HAVEs in the message
 // Note that this is just used to calculate latency.
@@ -553,7 +562,7 @@ func (mq *MessageQueue) sendMessage() {
 		// If we fail to initialize the sender, the networking layer will
 		// emit a Disconnect event and the MessageQueue will get cleaned up
 		log.Infof("Could not open message sender to peer %s: %s", mq.p, err)
-		mq.Shutdown()
+		// do not shudown the queue here, wait for Disconnect to arrive.
 		return
 	}
 
@@ -584,7 +593,7 @@ func (mq *MessageQueue) sendMessage() {
 			// If the message couldn't be sent, the networking layer will
 			// emit a Disconnect event and the MessageQueue will get cleaned up
 			log.Infof("Could not send message to peer %s: %s", mq.p, err)
-			mq.Shutdown()
+			// do not shudown the queue here, wait for Disconnect to arrive.
 			return
 		}
 
@@ -862,6 +871,9 @@ FINISH:
 		for _, e := range bcstEntries[:sentBcstEntries] {
 			if e.Cid.Defined() { // Check if want was canceled in the interim
 				mq.bcstWants.setSentAt(e.Cid, now)
+				if mq.BcastInc != nil {
+					mq.BcastInc()
+				}
 			}
 		}
 

@@ -21,6 +21,9 @@ type contextLogTagsKey struct{}
 // FromContext returns the tags stored in the context (by WithTags, AddTag, or
 // AddTags).
 func FromContext(ctx context.Context) *Buffer {
+	if fromContextFn != nil {
+		return fromContextFn(ctx)
+	}
 	val := ctx.Value(contextLogTagsKey{})
 	if val == nil {
 		return nil
@@ -31,6 +34,9 @@ func FromContext(ctx context.Context) *Buffer {
 // WithTags returns a context with the given tags. Any existing tags are
 // ignored.
 func WithTags(ctx context.Context, tags *Buffer) context.Context {
+	if withTagsFn != nil {
+		return withTagsFn(ctx, tags)
+	}
 	return context.WithValue(ctx, contextLogTagsKey{}, tags)
 }
 
@@ -63,3 +69,19 @@ func AddTags(ctx context.Context, tags *Buffer) context.Context {
 	}
 	return WithTags(ctx, newB)
 }
+
+// OverrideContextFuncs can be used to override the implementation of
+// FromContext and WithTags. This is useful if we have a more efficient
+// implementation of context-associated values.
+//
+// Must be called before WithTags or FromContext are called.
+func OverrideContextFuncs(
+	fromContext func(ctx context.Context) *Buffer,
+	withTags func(ctx context.Context, tags *Buffer) context.Context,
+) {
+	fromContextFn = fromContext
+	withTagsFn = withTags
+}
+
+var fromContextFn func(ctx context.Context) *Buffer
+var withTagsFn func(ctx context.Context, tags *Buffer) context.Context

@@ -31,6 +31,13 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
+	"io"
+	gonet "net"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/docker/go-units"
 	"github.com/ipfs/go-datastore"
@@ -58,6 +65,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcpreuse"
+	"github.com/libp2p/go-libp2p/p2p/transport/websocket"
 
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
@@ -66,11 +74,6 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
 	log "github.com/sirupsen/logrus"
-	gonet "net"
-	"runtime"
-	"strconv"
-	"strings"
-	"time"
 )
 
 var ErrAllDialsFailed = swarm.ErrAllDialsFailed
@@ -143,6 +146,7 @@ type (
 	WarpMessage        = pubsub.Message
 	WarpReachability   = network.Reachability
 	WarpOption         = libp2p.Option
+	WarpLimiterConfig  = rcmgr.PartialLimitConfig
 	TCPTransport       = tcp.TcpTransport
 	TCPOption          = tcp.Option
 	Swarm              = swarm.Swarm
@@ -217,10 +221,14 @@ type NodeInfo struct {
 	RelayState     relayStatus      `json:"relay_state"`
 	BootstrapPeers []WarpAddrInfo   `json:"bootstrap_peers"`
 	Reachability   WarpReachability `json:"reachability"`
+	Protocols      []WarpProtocolID `json:"protocols"`
 }
 
 func (ni NodeInfo) IsBootstrap() bool {
 	return ni.OwnerId == BootstrapOwner
+}
+func (ni NodeInfo) IsModerator() bool {
+	return ni.OwnerId == ModeratorOwner
 }
 
 type NodeStats struct {
@@ -234,10 +242,9 @@ type NodeStats struct {
 
 	NetworkState string `json:"network_state"`
 
-	DatabaseStats  map[string]string `json:"database_stats"`
-	ConsensusStats map[string]string `json:"consensus_stats"`
-	MemoryStats    map[string]string `json:"memory_stats"`
-	CPUStats       map[string]string `json:"cpu_stats"`
+	DatabaseStats map[string]string `json:"database_stats"`
+	MemoryStats   map[string]string `json:"memory_stats"`
+	CPUStats      map[string]string `json:"cpu_stats"`
 
 	BytesSent     int64 `json:"bytes_sent"`
 	BytesReceived int64 `json:"bytes_received"`
@@ -258,6 +265,15 @@ func NewTCPTransport(u transport.Upgrader, r network.ResourceManager, s *tcpreus
 	return tcp.NewTCPTransport(u, r, s, o...)
 }
 
+func NewWebsocketTransport(
+	u transport.Upgrader,
+	r network.ResourceManager,
+	s *tcpreuse.ConnMgr,
+	o ...websocket.Option,
+) (*websocket.WebsocketTransport, error) {
+	return websocket.New(u, r, s, o...)
+}
+
 func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {
 	return connmgr.NewConnManager(
 		100,
@@ -270,9 +286,17 @@ func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) 
 	return rcmgr.NewResourceManager(limiter)
 }
 
-func NewAutoScaledLimiter() rcmgr.Limiter {
-	defaultLimits := rcmgr.DefaultLimits.AutoScale()
-	return rcmgr.NewFixedLimiter(defaultLimits)
+func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
+	defaults := rcmgr.DefaultLimits.AutoScale()
+	if input == nil {
+		return rcmgr.NewFixedLimiter(defaults)
+	}
+	limiter, err := rcmgr.NewLimiterFromJSON(input, defaults)
+	if err != nil {
+		log.Error("could not parse limiter config", err)
+		return rcmgr.NewFixedLimiter(defaults)
+	}
+	return limiter
 }
 
 func GetMacAddr() string {

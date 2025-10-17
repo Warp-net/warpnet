@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+
 	root "github.com/Warp-net/warpnet"
 	bootstrapPubSub "github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -54,7 +55,6 @@ type BootstrapNode struct {
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
-	consensusService  ConsensusServicer
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
@@ -77,7 +77,6 @@ func NewBootstrapNode(
 		pubsub.NewDiscoveryTopicHandler(
 			discService.WrapPubSubDiscovery(discService.DefaultDiscoveryHandler),
 		),
-		pubsub.NewTransitModerationHandler(),
 	)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
@@ -108,15 +107,18 @@ func NewBootstrapNode(
 		return nil, err
 	}
 
+	// WebRTC and QUIC don't support private networks yet
 	opts := []warpnet.WarpOption{
 		node.WarpIdentity(privKey),
 		libp2p.Peerstore(memoryStore),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
 		libp2p.ListenAddrStrings(
+			fmt.Sprintf("/ip4/%s/tcp/4443/ws", config.Config().Node.HostV4),
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
+		libp2p.Transport(warpnet.NewWebsocketTransport),
 		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	}
 	opts = append(opts, node.CommonOptions...)
@@ -132,8 +134,6 @@ func NewBootstrapNode(
 		selfHashHex:       selfHashHex,
 		privKey:           privKey,
 	}
-
-	//bn.consensusService = consensus.NewGossipConsensus(ctx, pubsubService, nil)
 
 	return bn, nil
 }
@@ -163,11 +163,6 @@ func (bn *BootstrapNode) Start() (err error) {
 	}
 
 	nodeInfo := bn.NodeInfo()
-
-	//if err := bn.consensusService.Start(bn); err != nil {
-	//	return err
-	//}
-
 	println()
 	fmt.Printf(
 		"\033[1mBOOTSTRAP NODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",
@@ -183,14 +178,6 @@ func (bn *BootstrapNode) setupHandlers() {
 	}
 
 	bn.node.SetStreamHandlers(
-		//warpnet.WarpStreamHandler{
-		//	event.INTERNAL_POST_NODE_VALIDATE,
-		//	handler.StreamValidateHandler(bn.consensusService),
-		//},
-		//warpnet.WarpStreamHandler{
-		//	event.PUBLIC_POST_NODE_VALIDATION_RESULT,
-		//	handler.StreamValidationResponseHandler(bn.consensusService),
-		//},
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(bn, bn.discService.DefaultDiscoveryHandler),
@@ -266,9 +253,6 @@ func (bn *BootstrapNode) Stop() {
 			log.Errorf("bootstrap: failed to close memory store: %v", err)
 		}
 	}
-	//if bn.consensusService != nil {
-	//	bn.consensusService.Close()
-	//}
 
 	bn.node.StopNode()
 }

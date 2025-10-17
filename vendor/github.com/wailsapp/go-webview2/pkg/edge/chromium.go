@@ -227,16 +227,16 @@ func (e *Chromium) SetPadding(padding Rect) {
 }
 
 func (e *Chromium) ResizeWithBounds(bounds *Rect) {
-    if e.hwnd == 0 {
-        return
-    }
+	if e.hwnd == 0 {
+		return
+	}
 
-    bounds.Top += e.padding.Top
-    bounds.Bottom -= e.padding.Bottom
-    bounds.Left += e.padding.Left
-    bounds.Right -= e.padding.Right
+	bounds.Top += e.padding.Top
+	bounds.Bottom -= e.padding.Bottom
+	bounds.Left += e.padding.Left
+	bounds.Right -= e.padding.Right
 
-    e.SetSize(*bounds)
+	e.SetSize(*bounds)
 }
 
 func (e *Chromium) Resize() {
@@ -346,11 +346,6 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 
 		// Disable monitor scale changes since we're using raw pixels
 		if err := controller3.PutShouldDetectMonitorScaleChanges(false); err != nil {
-			e.errorCallback(err)
-		}
-
-		// Set a fixed rasterization scale for better performance
-		if err := controller3.PutRasterizationScale(1.0); err != nil {
 			e.errorCallback(err)
 		}
 	}

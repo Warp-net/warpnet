@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -125,16 +124,6 @@ func WithTaskComparator(comparator decision.TaskComparator) Option {
 // Configures the engine to use the given score decision logic.
 func WithScoreLedger(scoreLedger decision.ScoreLedger) Option {
 	o := decision.WithScoreLedger(scoreLedger)
-	return func(bs *Server) {
-		bs.engineOptions = append(bs.engineOptions, o)
-	}
-}
-
-// WithPeerLedger configures the engine with a custom [decision.PeerLedger].
-//
-// Deprecated: This is no longer needed and will be removed.
-func WithPeerLedger(peerLedger decision.PeerLedger) Option {
-	o := decision.WithPeerLedger(peerLedger)
 	return func(bs *Server) {
 		bs.engineOptions = append(bs.engineOptions, o)
 	}
@@ -395,7 +384,7 @@ func (bs *Server) Stat() (Stat, error) {
 func (bs *Server) NotifyNewBlocks(ctx context.Context, blks ...blocks.Block) error {
 	select {
 	case <-bs.closing:
-		return errors.New("bitswap is closed")
+		return nil
 	default:
 	}
 

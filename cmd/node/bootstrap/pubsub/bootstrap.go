@@ -29,14 +29,11 @@ package pubsub
 
 import (
 	"context"
+
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/json"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 type PubsubServerNodeConnector interface {
@@ -68,42 +65,6 @@ func (g *bootstrapPubSub) Run(node PubsubServerNodeConnector) {
 		log.Errorf("pubsub: failed to run: %v", err)
 		return
 	}
-}
-
-func (g *bootstrapPubSub) PublishValidationRequest(bt []byte) (err error) {
-	if g == nil || !g.pubsub.IsGossipRunning() {
-		return warpnet.WarpError("bootstrap pubsub: service not initialized")
-	}
-
-	msg := event.Message{
-		Body:        json.RawMessage(bt),
-		Destination: event.INTERNAL_POST_NODE_VALIDATE,
-		NodeId:      g.OwnerID(),
-		Timestamp:   time.Now(),
-		Version:     "0.0.0", // TODO manage protocol versions properly
-		MessageId:   uuid.New().String(),
-	}
-
-	return g.pubsub.Publish(msg, pubsub.PubSubConsensusTopic)
-}
-
-func (g *bootstrapPubSub) SubscribeConsensusTopic() error {
-	if g == nil || !g.pubsub.IsGossipRunning() {
-		return warpnet.WarpError("bootstrap pubsub: service not initialized")
-	}
-
-	return g.pubsub.Subscribe(pubsub.TopicHandler{
-		TopicName: pubsub.PubSubConsensusTopic,
-		Handler:   g.pubsub.SelfPublish,
-	})
-}
-
-func (g *bootstrapPubSub) GetConsensusTopicSubscribers() []warpnet.WarpAddrInfo {
-	if g == nil || !g.pubsub.IsGossipRunning() {
-		panic("bootstrap pubsub: get consensus subscribers: service not initialized")
-	}
-
-	return g.pubsub.Subscribers(pubsub.PubSubConsensusTopic)
 }
 
 func (g *bootstrapPubSub) OwnerID() string {

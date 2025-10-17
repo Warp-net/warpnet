@@ -45,6 +45,7 @@ type Status struct {
 	Language           string          `json:"language"`
 	Pinned             interface{}     `json:"pinned"`
 	ScheduledParams    ScheduledParams `json:"params"`
+	Filtered           []FilterResult  `json:"filtered"`
 }
 
 // StatusHistory is a struct to hold status history data.
@@ -115,6 +116,12 @@ type Media struct {
 	Thumbnail   io.Reader
 	Description string
 	Focus       string
+}
+
+type TagData struct {
+	Any  []string
+	All  []string
+	None []string
 }
 
 func (m *Media) bodyAndContentType() (io.Reader, string, error) {
@@ -334,6 +341,16 @@ func (c *Client) GetTimelineHome(ctx context.Context, pg *Pagination) ([]*Status
 	return statuses, nil
 }
 
+// GetTrendingStatuses return statuses from explore timeline.
+func (c *Client) GetTrendingStatuses(ctx context.Context, pg *Pagination) ([]*Status, error) {
+	var statuses []*Status
+	err := c.doAPI(ctx, http.MethodGet, "/api/v1/trends/statuses", nil, &statuses, pg)
+	if err != nil {
+		return nil, err
+	}
+	return statuses, nil
+}
+
 // GetTimelinePublic return statuses from public timeline.
 func (c *Client) GetTimelinePublic(ctx context.Context, isLocal bool, pg *Pagination) ([]*Status, error) {
 	params := url.Values{}
@@ -354,6 +371,32 @@ func (c *Client) GetTimelineHashtag(ctx context.Context, tag string, isLocal boo
 	params := url.Values{}
 	if isLocal {
 		params.Set("local", "t")
+	}
+
+	var statuses []*Status
+	err := c.doAPI(ctx, http.MethodGet, fmt.Sprintf("/api/v1/timelines/tag/%s", url.PathEscape(tag)), params, &statuses, pg)
+	if err != nil {
+		return nil, err
+	}
+	return statuses, nil
+}
+
+// GetTimelineHashtagMultiple return statuses from tagged timeline.
+func (c *Client) GetTimelineHashtagMultiple(ctx context.Context, tag string, isLocal bool, td *TagData, pg *Pagination) ([]*Status, error) {
+	params := url.Values{}
+	if isLocal {
+		params.Set("local", "t")
+	}
+	if td != nil {
+		for _, v := range td.Any {
+			params.Add("any[]", v)
+		}
+		for _, v := range td.All {
+			params.Add("all[]", v)
+		}
+		for _, v := range td.None {
+			params.Add("none[]", v)
+		}
 	}
 
 	var statuses []*Status
@@ -496,7 +539,8 @@ func (c *Client) UploadMediaFromReader(ctx context.Context, reader io.Reader) (*
 // UploadMediaFromMedia uploads a media attachment from a Media struct.
 func (c *Client) UploadMediaFromMedia(ctx context.Context, media *Media) (*Attachment, error) {
 	var attachment Attachment
-	if err := c.doAPI(ctx, http.MethodPost, "/api/v1/media", media, &attachment, nil); err != nil {
+	// "/api/v2/media" USING V2 TODO: IMPORTANT
+	if err := c.doAPI(ctx, http.MethodPost, "/api/v2/media", media, &attachment, nil); err != nil {
 		return nil, err
 	}
 	return &attachment, nil

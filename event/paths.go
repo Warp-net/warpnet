@@ -29,10 +29,9 @@ package event
 
 const (
 	// admin
-	PRIVATE_POST_PAIR                  = "/private/post/admin/pair/0.0.0"
-	PUBLIC_POST_NODE_VALIDATION_RESULT = "/public/post/admin/validate/result/0.0.0"
-	PUBLIC_POST_NODE_CHALLENGE         = "/public/post/admin/challenge/0.0.0"
-	PRIVATE_GET_STATS                  = "/private/get/admin/stats/0.0.0"
+	PRIVATE_POST_PAIR          = "/private/post/admin/pair/0.0.0"
+	PUBLIC_POST_NODE_CHALLENGE = "/public/post/admin/challenge/0.0.0"
+	PRIVATE_GET_STATS          = "/private/get/admin/stats/0.0.0"
 	// moderation
 	PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
 	// application
@@ -41,6 +40,7 @@ const (
 	PRIVATE_DELETE_TWEET      = "/private/delete/tweet/0.0.0"
 	PRIVATE_GET_CHAT          = "/private/get/chat/0.0.0"
 	PRIVATE_GET_CHATS         = "/private/get/chats/0.0.0"
+	PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 	PRIVATE_GET_MESSAGE       = "/private/get/message/0.0.0"
 	PRIVATE_GET_MESSAGES      = "/private/get/messages/0.0.0"
 	PRIVATE_GET_TIMELINE      = "/private/get/timeline/0.0.0"
@@ -71,10 +71,4 @@ const (
 	PUBLIC_POST_UNRETWEET     = "/public/post/unretweet/0.0.0"
 	PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 	PUBLIC_GET_IMAGE          = "/public/get/image/0.0.0"
-)
-
-// internal handlers
-const (
-	INTERNAL_POST_NODE_VALIDATE = "/internal/post/admin/validate/0.0.0"
-	INTERNAL_POST_MODERATE      = "/internal/post/moderate/0.0.0"
 )

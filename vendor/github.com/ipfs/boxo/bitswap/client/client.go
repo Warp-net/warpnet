@@ -4,7 +4,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -101,6 +100,16 @@ func WithTracer(tap tracer.Tracer) Option {
 	}
 }
 
+// WithTraceBlock, if enabled is true, configures the client's GetBLock and
+// GetBlocks functions to returns a
+// [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable
+// [blocks.Block].
+func WithTraceBlock(enable bool) Option {
+	return func(bs *Client) {
+		bs.traceBlock = enable
+	}
+}
+
 func WithBlockReceivedNotifier(brn BlockReceivedNotifier) Option {
 	return func(bs *Client) {
 		bs.blockReceivedNotifier = brn
@@ -137,6 +146,69 @@ func WithDefaultProviderQueryManager(defaultProviderQueryManager bool) Option {
 	}
 }
 
+// BroadcastControlEnable enables or disables broadcast reduction logic.
+// Setting this to false restores the previous broadcast behavior of sending
+// broadcasts to all peers, and ignores all other BroadcastControl options.
+// Default is false (disabled).
+func BroadcastControlEnable(enable bool) Option {
+	return func(bs *Client) {
+		bs.bcastControl.Enable = enable
+	}
+}
+
+// BroadcastControlMaxPeers sets a hard limit on the number of peers to send
+// broadcasts to. A value of 0 means no broadcasts are sent. A value of -1
+// means there is no limit. Default is -1 (unlimited).
+func BroadcastControlMaxPeers(limit int) Option {
+	return func(bs *Client) {
+		bs.bcastControl.MaxPeers = limit
+	}
+}
+
+// BroadcastControlLocalPeers enables or disables broadcast control for peers
+// on the local network. If false, than always broadcast to peers on the local
+// network. If true, apply broadcast control to local peers. Default is false
+// (always broadcast to local peers).
+func BroadcastControlLocalPeers(enable bool) Option {
+	return func(bs *Client) {
+		bs.bcastControl.LocalPeers = enable
+	}
+}
+
+// BroadcastControlPeeredPeers enables or disables broadcast control for peers
+// configured for peering. If false, than always broadcast to peers configured
+// for peering. If true, apply broadcast control to peered peers. Default is
+// false (always broadcast to peered peers).
+func BroadcastControlPeeredPeers(enable bool) Option {
+	return func(bs *Client) {
+		bs.bcastControl.PeeredPeers = enable
+	}
+}
+
+// BroadcastControlMaxRandomPeers sets the number of peers to broadcast to
+// anyway, even though broadcast control logic has determined that they are
+// not broadcast targets. Setting this to a non-zero value ensures at least
+// this number of random peers receives a broadcast. This may be helpful in
+// cases where peers that are not receiving broadcasts may have wanted blocks.
+// Default is 0 (no random broadcasts).
+func BroadcastControlMaxRandomPeers(n int) Option {
+	return func(bs *Client) {
+		bs.bcastControl.MaxRandomPeers = n
+	}
+}
+
+// BroadcastControlSendToPendingPeers, enables or disables sending broadcasts
+// to any peers to which there is a pending message to send. When enabled, this
+// sends broadcasts to many more peers, but does so in a way that does not
+// increase the number of separate broadcast messages. There is still the
+// increased cost of the recipients having to process and respond to the
+// broadcasts. Default is false.
+func BroadcastControlSendToPendingPeers(enable bool) Option {
+	return func(bs *Client) {
+		bs.bcastControl.SendToPendingPeers = enable
+	}
+}
+
 type BlockReceivedNotifier interface {
 	// ReceivedBlocks notifies the decision engine that a peer is well-behaving
 	// and gave us useful data, potentially increasing its score and making us
@@ -166,15 +238,28 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, providerFinder ro
 		counters:                    new(counters),
 		dupMetric:                   bmetrics.DupHist(ctx),
 		allMetric:                   bmetrics.AllHist(ctx),
+		havesReceivedGauge:          bmetrics.HavesReceivedGauge(ctx),
+		blocksReceivedGauge:         bmetrics.BlocksReceivedGauge(ctx),
 		provSearchDelay:             defaults.ProvSearchDelay,
 		rebroadcastDelay:            delay.Fixed(defaults.RebroadcastDelay),
 		simulateDontHavesOnTimeout:  true,
 		defaultProviderQueryManager: true,
+
+		bcastControl: bspm.BroadcastControl{
+			MaxPeers: -1,
+		},
 	}
 
 	// apply functional options before starting and running bitswap
 	for _, option := range options {
 		option(bs)
+	}
+
+	if bs.bcastControl.Enable {
+		if bs.bcastControl.NeedHost() {
+			bs.bcastControl.Host = network.Host()
+		}
+		bs.bcastControl.SkipGauge = bmetrics.BroadcastSkipGauge(ctx)
 	}
 
 	// onDontHaveTimeout is called when a want-block is sent to a peer that
@@ -201,7 +286,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, providerFinder ro
 
 	sim := bssim.New()
 	bpm := bsbpm.New()
-	pm := bspm.New(ctx, peerQueueFactory)
+	pm := bspm.New(ctx, peerQueueFactory, bs.bcastControl)
 
 	if bs.providerFinder != nil && bs.defaultProviderQueryManager {
 		// network can do dialing.
@@ -237,12 +322,12 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, providerFinder ro
 		} else if providerFinder != nil {
 			sessionProvFinder = providerFinder
 		}
-		return bssession.New(sessctx, sessmgr, id, spm, sessionProvFinder, sim, pm, bpm, notif, provSearchDelay, rebroadcastDelay, self)
+		return bssession.New(sessctx, sessmgr, id, spm, sessionProvFinder, sim, pm, bpm, notif, provSearchDelay, rebroadcastDelay, self, bs.havesReceivedGauge)
 	}
 	sessionPeerManagerFactory := func(ctx context.Context, id uint64) bssession.SessionPeerManager {
 		return bsspm.New(id, network)
 	}
-	notif := notifications.New()
+	notif := notifications.New(bs.traceBlock)
 	sm = bssm.New(ctx, sessionFactory, sim, sessionPeerManagerFactory, bpm, pm, notif, network.Self())
 
 	bs.sm = sm
@@ -285,8 +370,16 @@ type Client struct {
 	dupMetric metrics.Histogram
 	allMetric metrics.Histogram
 
+	havesReceivedGauge  bspm.Gauge
+	blocksReceivedGauge bspm.Gauge
+
 	// External statistics interface
 	tracer tracer.Tracer
+
+	// Enable GetBLock to return
+	// [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable
+	// [blocks.Block].
+	traceBlock bool
 
 	// the SessionManager routes requests to interested sessions
 	sm *bssm.SessionManager
@@ -311,6 +404,9 @@ type Client struct {
 	skipDuplicatedBlocksStats bool
 
 	perPeerSendDelay time.Duration
+
+	// Broadcast control configuration.
+	bcastControl bspm.BroadcastControl
 }
 
 type counters struct {
@@ -323,7 +419,10 @@ type counters struct {
 
 // GetBlock attempts to retrieve a particular block from peers within the
 // deadline enforced by the context.
-// It returns a [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable [blocks.Block].
+//
+// If [WithTraceBlock] option is set true, then returns a
+// [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable
+// [blocks.Block].
 func (bs *Client) GetBlock(ctx context.Context, k cid.Cid) (blocks.Block, error) {
 	ctx, span := internal.StartSpan(ctx, "GetBlock", trace.WithAttributes(attribute.String("Key", k.String())))
 	defer span.End()
@@ -333,7 +432,10 @@ func (bs *Client) GetBlock(ctx context.Context, k cid.Cid) (blocks.Block, error)
 // GetBlocks returns a channel where the caller may receive blocks that
 // correspond to the provided |keys|. Returns an error if BitSwap is unable to
 // begin this request within the deadline enforced by the context.
-// It returns a [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable [blocks.Block].
+//
+// If [WithTraceBlock] option is set true, then returns a channel of
+// [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable
+// [blocks.Block].
 //
 // NB: Your request remains open until the context expires. To conserve
 // resources, provide a context with a reasonably short deadline (ie. not one
@@ -354,7 +456,7 @@ func (bs *Client) NotifyNewBlocks(ctx context.Context, blks ...blocks.Block) err
 
 	select {
 	case <-bs.closing:
-		return errors.New("bitswap is closed")
+		return nil
 	default:
 	}
 
@@ -377,11 +479,15 @@ func (bs *Client) NotifyNewBlocks(ctx context.Context, blks ...blocks.Block) err
 }
 
 // receiveBlocksFrom processes blocks received from the network
-func (bs *Client) receiveBlocksFrom(ctx context.Context, from peer.ID, blks []blocks.Block, haves []cid.Cid, dontHaves []cid.Cid) error {
+func (bs *Client) receiveBlocksFrom(ctx context.Context, from peer.ID, blks []blocks.Block, haves []cid.Cid, dontHaves []cid.Cid) {
 	select {
 	case <-bs.closing:
-		return errors.New("bitswap is closed")
+		return
 	default:
+	}
+
+	if len(blks) != 0 || len(haves) != 0 {
+		bs.pm.MarkBroadcastTarget(from)
 	}
 
 	wanted, notWanted := bs.sim.SplitWantedUnwanted(blks)
@@ -413,11 +519,7 @@ func (bs *Client) receiveBlocksFrom(ctx context.Context, from peer.ID, blks []bl
 	// Publish the block to any Bitswap clients that had requested blocks.
 	// (the sessions use this pubsub mechanism to inform clients of incoming
 	// blocks)
-	for _, b := range wanted {
-		bs.notif.Publish(from, b)
-	}
-
-	return nil
+	bs.notif.Publish(from, wanted...)
 }
 
 // ReceiveMessage is called by the network interface when a new message is
@@ -446,11 +548,7 @@ func (bs *Client) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg.
 	dontHaves := incoming.DontHaves()
 	if len(iblocks) > 0 || len(haves) > 0 || len(dontHaves) > 0 {
 		// Process blocks
-		err := bs.receiveBlocksFrom(ctx, p, iblocks, haves, dontHaves)
-		if err != nil {
-			log.Warnf("ReceiveMessage recvBlockFrom error: %s", err)
-			return
-		}
+		bs.receiveBlocksFrom(ctx, p, iblocks, haves, dontHaves)
 	}
 }
 
@@ -484,6 +582,7 @@ func (bs *Client) updateReceiveCounters(blocks []blocks.Block) {
 			c.dupBlocksRecvd++
 			c.dupDataRecvd += uint64(blkLen)
 		}
+		bs.blocksReceivedGauge.Inc()
 	}
 }
 

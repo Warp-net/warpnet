@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"strings"
@@ -24,7 +25,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/mholt/acmez/v3"
 	"github.com/mholt/acmez/v3/acme"
-	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/multiformats/go-multibase"
 )
@@ -47,22 +48,31 @@ type P2PForgeCertMgr struct {
 	certCheckMx sync.RWMutex
 }
 
-func isRelayAddr(a multiaddr.Multiaddr) bool {
-	found := false
-	multiaddr.ForEach(a, func(c multiaddr.Component) bool {
-		found = c.Protocol().Code == multiaddr.P_CIRCUIT
-		return !found
-	})
-	return found
+func isRelayAddr(a ma.Multiaddr) bool {
+	for _, p := range a {
+		if p.Protocol().Code == ma.P_CIRCUIT {
+			return true
+		}
+	}
+	return false
+}
+
+func isTCPAddr(a ma.Multiaddr) bool {
+	for _, p := range a {
+		if p.Protocol().Code == ma.P_TCP {
+			return true
+		}
+	}
+	return false
 }
 
 // isPublicAddr follows the logic of manet.IsPublicAddr, except it uses
 // a stricter definition of "public" for ipv6 by excluding nat64 addresses
 // and /p2p-circuit ones
-func isPublicAddr(a multiaddr.Multiaddr) bool {
+func isPublicAddr(a ma.Multiaddr) bool {
 	// skip p2p-circuit ones
 	for _, p := range a.Protocols() {
-		if p.Code == multiaddr.P_CIRCUIT {
+		if p.Code == ma.P_CIRCUIT {
 			return false
 		}
 	}
@@ -469,27 +479,71 @@ func (m *P2PForgeCertMgr) Start() error {
 // ready to use TLS cert.
 func withHostConnectivity(ctx context.Context, log *zap.SugaredLogger, h host.Host, callback func()) {
 	log.Infof("waiting until libp2p reports event network.ReachabilityPublic")
-	sub, err := h.EventBus().Subscribe(new(event.EvtLocalReachabilityChanged))
+	localReachabilitySub, err := h.EventBus().Subscribe(new(event.EvtLocalReachabilityChanged))
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	defer sub.Close()
-	select {
-	case e := <-sub.Out():
-		evt := e.(event.EvtLocalReachabilityChanged) // guaranteed safe
-		log.Infof("libp2p reachability status changed to %s", evt.Reachability)
-		if evt.Reachability == network.ReachabilityPublic {
-			callback()
-			return
-		} else if evt.Reachability == network.ReachabilityPrivate {
-			log.Infof("certificate will not be requested while libp2p reachability status is %s", evt.Reachability)
-		}
-	case <-ctx.Done():
-		if ctx.Err() != context.Canceled {
-			log.Error(fmt.Errorf("aborted while waiting for libp2p reachability status discovery: %w", ctx.Err()))
-		}
+	defer localReachabilitySub.Close()
+
+	addrsReachabilitySub, err := h.EventBus().Subscribe(new(event.EvtHostReachableAddrsChanged))
+	if err != nil {
+		log.Error(err)
 		return
+	}
+	defer addrsReachabilitySub.Close()
+
+	// We handle both autonatv1 and autonatv2 events.
+	// In case we get an autonatv1 public event we wait till we actually have a public addr
+	// before returning.
+	// In a future release, we'll remove the dependence on v1 event completely and only use
+	// the autonatv2 event.
+	timer := time.NewTimer(math.MaxInt64)
+	defer timer.Stop()
+	currDelay := time.Second
+	minDelay := 5 * time.Second
+	maxDelay := time.Minute
+	for {
+		select {
+		case e := <-localReachabilitySub.Out():
+			evt := e.(event.EvtLocalReachabilityChanged) // guaranteed safe
+			log.Infof("libp2p reachability status changed to %s", evt.Reachability)
+			if evt.Reachability == network.ReachabilityPublic {
+				timer.Reset(-1 * time.Second)
+				currDelay = -1 * time.Second
+			} else {
+				log.Infof("certificate will not be requested while libp2p reachability status is not public")
+				timer.Reset(math.MaxInt64)
+			}
+		case <-timer.C:
+			addrs := h.Addrs()
+			for _, a := range addrs {
+				if !isRelayAddr(a) && isTCPAddr(a) && isPublicAddr(a) {
+					callback()
+					return
+				}
+			}
+			log.Infof("certificate will not be requested as we don't have any public addrs")
+			currDelay *= 2
+			currDelay = min(currDelay, maxDelay)
+			currDelay = max(currDelay, minDelay)
+			timer.Reset(currDelay)
+		case e := <-addrsReachabilitySub.Out():
+			evt := e.(event.EvtHostReachableAddrsChanged)
+			log.Infof("libp2p reachable addrs changed to %s", evt.Reachable)
+			for _, a := range evt.Reachable {
+				if !isRelayAddr(a) && isTCPAddr(a) { // guaranteed to be public
+					callback()
+					return
+				}
+			}
+			log.Infof("certificate will not be requested if we don't have any reachable tcp addrs")
+		case <-ctx.Done():
+			if ctx.Err() != context.Canceled {
+				log.Error(fmt.Errorf("aborted while waiting for libp2p reachability status discovery: %w", ctx.Err()))
+			}
+			return
+		}
 	}
 }
 
@@ -539,9 +593,9 @@ func certName(id peer.ID, suffixDomain string) string {
 }
 
 func (m *P2PForgeCertMgr) createAddrsFactory(allowPrivateForgeAddrs bool, produceShortAddrs bool) config.AddrsFactory {
-	p2pForgeWssComponent := multiaddr.StringCast(fmt.Sprintf("/tls/sni/*.%s/ws", m.forgeDomain))
+	p2pForgeWssComponent := ma.StringCast(fmt.Sprintf("/tls/sni/*.%s/ws", m.forgeDomain))
 
-	return func(multiaddrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+	return func(multiaddrs []ma.Multiaddr) []ma.Multiaddr {
 		var skipForgeAddrs bool
 		if !m.hasHost() {
 			skipForgeAddrs = true
@@ -552,7 +606,16 @@ func (m *P2PForgeCertMgr) createAddrsFactory(allowPrivateForgeAddrs bool, produc
 		}
 		m.certCheckMx.RUnlock()
 
-		return addrFactoryFn(skipForgeAddrs, func() peer.ID { return m.hostFn().ID() }, m.forgeDomain, allowPrivateForgeAddrs, produceShortAddrs, p2pForgeWssComponent, multiaddrs, m.log)
+		return addrFactoryFn(
+			skipForgeAddrs,
+			m.hostFn,
+			m.forgeDomain,
+			allowPrivateForgeAddrs,
+			produceShortAddrs,
+			p2pForgeWssComponent,
+			multiaddrs,
+			m.log,
+		)
 	}
 }
 
@@ -619,10 +682,10 @@ func (d *dns01P2PForgeSolver) Present(ctx context.Context, challenge acme.Challe
 	h := d.hostFn()
 	addrs := h.Addrs()
 
-	var advertisedAddrs []multiaddr.Multiaddr
+	var advertisedAddrs []ma.Multiaddr
 
 	if !d.allowPrivateForgeAddresses {
-		var publicAddrs []multiaddr.Multiaddr
+		var publicAddrs []ma.Multiaddr
 		for _, addr := range addrs {
 			if isPublicAddr(addr) {
 				publicAddrs = append(publicAddrs, addr)
@@ -665,8 +728,23 @@ var (
 	_ acmez.Waiter = (*dns01P2PForgeSolver)(nil)
 )
 
-func addrFactoryFn(skipForgeAddrs bool, peerIDFn func() peer.ID, forgeDomain string, allowPrivateForgeAddrs bool, produceShortAddrs bool, p2pForgeWssComponent multiaddr.Multiaddr, multiaddrs []multiaddr.Multiaddr, log *zap.SugaredLogger) []multiaddr.Multiaddr {
-	retAddrs := make([]multiaddr.Multiaddr, 0, len(multiaddrs))
+func addrFactoryFn(skipForgeAddrs bool, hostFn func() host.Host, forgeDomain string, allowPrivateForgeAddrs bool, produceShortAddrs bool, p2pForgeWssComponent ma.Multiaddr, multiaddrs []ma.Multiaddr, log *zap.SugaredLogger) []ma.Multiaddr {
+	retAddrs := make([]ma.Multiaddr, 0, len(multiaddrs))
+	var unreachableAddrs []ma.Multiaddr
+	var peerID peer.ID
+	if !skipForgeAddrs {
+		// This is pretty ugly. We want the host for determining unreachable addrs. The host wants the address
+		// factory to set the signed peer record.
+		// Ideally, it'll be fixed with: https://github.com/libp2p/go-libp2p/issues/3300
+		h := hostFn()
+		if h, ok := h.(interface {
+			ConfirmedAddrs() ([]ma.Multiaddr, []ma.Multiaddr, []ma.Multiaddr)
+		}); ok {
+			_, unreachableAddrs, _ = h.ConfirmedAddrs()
+		}
+		peerID = h.ID()
+	}
+OUTER:
 	for _, a := range multiaddrs {
 		if isRelayAddr(a) {
 			retAddrs = append(retAddrs, a)
@@ -686,16 +764,16 @@ func addrFactoryFn(skipForgeAddrs bool, peerIDFn func() peer.ID, forgeDomain str
 		var ipVersion string
 		var ipMaStr string
 		var tcpPortStr string
-		multiaddr.ForEach(withoutForgeWSS, func(c multiaddr.Component) bool {
+		ma.ForEach(withoutForgeWSS, func(c ma.Component) bool {
 			switch index {
 			case 0:
 				switch c.Protocol().Code {
-				case multiaddr.P_IP4:
+				case ma.P_IP4:
 					ipVersion = "4"
 					ipMaStr = c.String()
 					ipAddr := c.Value()
 					escapedIPStr = strings.ReplaceAll(ipAddr, ".", "-")
-				case multiaddr.P_IP6:
+				case ma.P_IP6:
 					ipVersion = "6"
 					ipMaStr = c.String()
 					ipAddr := c.Value()
@@ -710,7 +788,7 @@ func addrFactoryFn(skipForgeAddrs bool, peerIDFn func() peer.ID, forgeDomain str
 					return false
 				}
 			case 1:
-				if c.Protocol().Code != multiaddr.P_TCP {
+				if c.Protocol().Code != ma.P_TCP {
 					return false
 				}
 				tcpPortStr = c.Value()
@@ -736,7 +814,14 @@ func addrFactoryFn(skipForgeAddrs bool, peerIDFn func() peer.ID, forgeDomain str
 			continue
 		}
 
-		b36PidStr := peer.ToCid(peerIDFn()).Encode(multibase.MustNewEncoder(multibase.Base36))
+		for _, ua := range unreachableAddrs {
+			// if the tcp component is unreachable, skip processing this entire multiaddr (continue to next multiaddr in outer loop)
+			if ua.Equal(withoutForgeWSS) {
+				continue OUTER
+			}
+		}
+
+		b36PidStr := peer.ToCid(peerID).Encode(multibase.MustNewEncoder(multibase.Base36))
 
 		var newMaStr string
 		if produceShortAddrs {
@@ -744,7 +829,7 @@ func addrFactoryFn(skipForgeAddrs bool, peerIDFn func() peer.ID, forgeDomain str
 		} else {
 			newMaStr = fmt.Sprintf("%s/tcp/%s/tls/sni/%s.%s.%s/ws", ipMaStr, tcpPortStr, escapedIPStr, b36PidStr, forgeDomain)
 		}
-		newMA, err := multiaddr.NewMultiaddr(newMaStr)
+		newMA, err := ma.NewMultiaddr(newMaStr)
 		if err != nil {
 			log.Errorf("error creating new multiaddr from %q: %s", newMaStr, err.Error())
 			retAddrs = append(retAddrs, a)
