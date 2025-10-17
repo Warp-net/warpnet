@@ -60,3 +60,4 @@ services:
 
 networks:
   testnet:
+    name: warpnet_testnet_net

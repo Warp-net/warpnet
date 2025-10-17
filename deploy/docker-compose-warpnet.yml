@@ -57,3 +57,4 @@ services:
 
 networks:
   mainnet:
+    name: warpnet_mainnet_net
