@@ -30,10 +30,10 @@ export HOSTNAME=''
 
 if [ "$MAINNET" = "true" ]; then
     echo "Mainnet is enabled"
-    docker compose -f docker-compose-warpnet.yml down --remove-orphans || true
-    docker compose -f docker-compose-warpnet.yml up -d --build
+    docker compose -p warpnet-mainnet -f docker-compose-warpnet.yml down --remove-orphans || true
+    docker compose -p warpnet-mainnet -f docker-compose-warpnet.yml up -d --build
 else
     echo "Mainnet is disabled"
-    docker compose -f docker-compose-testnet.yml down --remove-orphans || true
-    docker compose -f docker-compose-testnet.yml up -d --build
+    docker compose -p warpnet-testnet -f docker-compose-testnet.yml down --remove-orphans || true
+    docker compose -p warpnet-testnet -f docker-compose-testnet.yml up -d --build
 fi
