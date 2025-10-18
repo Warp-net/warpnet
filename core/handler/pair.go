@@ -43,8 +43,8 @@ func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpH
 			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)
 			return nil, err
 		}
-		tokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
-		if !tokenMatch {
+		isTokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
+		if !isTokenMatch {
 			log.Errorf(
 				"pair: token does not match server identity: %s != %s",
 				serverAuthInfo.Identity.Token, clientInfo.Identity.Token,

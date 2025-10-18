@@ -34,15 +34,10 @@ type AppStorer interface {
 	Get(key local.DatabaseKey) ([]byte, error)
 	GetExpiration(key local.DatabaseKey) (uint64, error)
 	GetSize(key local.DatabaseKey) (int64, error)
-	Sync() error
-	IsClosed() bool
-	InnerDB() *local.WarpDB
 	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
 	Set(key local.DatabaseKey, value []byte) error
 	Delete(key local.DatabaseKey) error
-	Path() string
 	Stats() map[string]string
-	IsFirstRun() bool
 	Close()
 }
 
@@ -88,7 +83,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.codeHashHex = codeHashHex
 
-	db, err := local.New(config.Config().Database.Path, false)
+	db, err := local.New(config.Config().Database.Path)
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)

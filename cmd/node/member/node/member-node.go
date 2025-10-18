@@ -63,7 +63,6 @@ type MemberNode struct {
 	mdnsService          MDNSStarterCloser
 	pubsubService        PubSubProvider
 	dHashTable           DistributedHashTableCloser
-	nodeRepo             NodeProvider
 	retrier              retrier.Retrier
 	authRepo             AuthProvider
 	userRepo             UserProvider
@@ -86,19 +85,13 @@ func NewMemberNode(
 	if len(privKey) == 0 {
 		return nil, errors.New("private key is required")
 	}
-	nodeRepo, err := database.NewNodeRepo(db, version)
-	if err != nil {
-		return nil, err
-	}
-	if err := nodeRepo.AddSelfHash(selfHashHex, version.String()); err != nil {
-		return nil, err
-	}
 
-	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
+	store, err := warpnet.NewPeerstore(ctx, db)
 	if err != nil {
 		return nil, err
 	}
 
+	nodeRepo := database.NewNodeRepo(db)
 	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
@@ -126,7 +119,7 @@ func NewMemberNode(
 
 	dHashTable := dht.NewDHTable(
 		ctx,
-		dht.RoutingStore(nodeRepo),
+		dht.RoutingStore(db),
 		dht.EnableRendezvous(),
 		dht.AddPeerCallbacks(discService.HandlePeerFound),
 		dht.BootstrapNodes(infos...),
@@ -169,7 +162,6 @@ func NewMemberNode(
 		mdnsService:   mdnsService,
 		pubsubService: pubsubService,
 		dHashTable:    dHashTable,
-		nodeRepo:      nodeRepo,
 		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
@@ -556,10 +548,5 @@ func (m *MemberNode) Stop() {
 		m.dHashTable.Close()
 	}
 
-	if m.nodeRepo != nil {
-		if err := m.nodeRepo.Close(); err != nil {
-			log.Errorf("member: failed to close node repo: %v", err)
-		}
-	}
 	m.node.StopNode()
 }

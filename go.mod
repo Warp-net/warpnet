@@ -1,6 +1,6 @@
 module github.com/Warp-net/warpnet
 
-go 1.24.2
+go 1.25
 
 tool github.com/wailsapp/wails/v2/cmd/wails
 
@@ -15,6 +15,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Warp-net/warpnet-frontend v0.0.605
 	github.com/dgraph-io/badger/v3 v3.2103.5
+	github.com/dgraph-io/badger/v4 v4.5.1
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
 	github.com/dsoprea/go-jpeg-image-structure/v2 v2.0.0-20221012074422-4f3f7e934102
@@ -24,6 +25,7 @@ require (
 	github.com/ipfs/boxo v0.33.1
 	github.com/ipfs/go-cid v0.5.0
 	github.com/ipfs/go-datastore v0.8.2
+	github.com/ipfs/go-ds-crdt v0.6.7
 	github.com/ipfs/go-ds-flatfs v0.5.5
 	github.com/ipfs/go-log v1.0.5
 	github.com/ipfs/go-log/v2 v2.8.0
@@ -34,7 +36,7 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.33.1
 	github.com/libp2p/go-libp2p-pubsub v0.14.2
 	github.com/mattn/go-mastodon v0.0.10
-	github.com/multiformats/go-multiaddr v0.16.0
+	github.com/multiformats/go-multiaddr v0.16.1
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/client_golang v1.23.0
@@ -49,6 +51,8 @@ require (
 	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.34.0
 )
+
+require github.com/dgraph-io/ristretto/v2 v2.1.0 // indirect
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
@@ -343,7 +347,7 @@ require (
 	go.uber.org/fx v1.24.0 // indirect
 	go.uber.org/mock v0.5.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
+	go.uber.org/zap v1.27.0
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/crypto v0.40.0 // indirect

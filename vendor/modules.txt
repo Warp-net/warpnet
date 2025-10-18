@@ -305,11 +305,26 @@ github.com/dgraph-io/badger/v3/skl
 github.com/dgraph-io/badger/v3/table
 github.com/dgraph-io/badger/v3/trie
 github.com/dgraph-io/badger/v3/y
+# github.com/dgraph-io/badger/v4 v4.5.1
+## explicit; go 1.21
+github.com/dgraph-io/badger/v4
+github.com/dgraph-io/badger/v4/fb
+github.com/dgraph-io/badger/v4/options
+github.com/dgraph-io/badger/v4/pb
+github.com/dgraph-io/badger/v4/skl
+github.com/dgraph-io/badger/v4/table
+github.com/dgraph-io/badger/v4/trie
+github.com/dgraph-io/badger/v4/y
 # github.com/dgraph-io/ristretto v0.2.0
 ## explicit; go 1.19
 github.com/dgraph-io/ristretto
 github.com/dgraph-io/ristretto/z
 github.com/dgraph-io/ristretto/z/simd
+# github.com/dgraph-io/ristretto/v2 v2.1.0
+## explicit; go 1.21
+github.com/dgraph-io/ristretto/v2
+github.com/dgraph-io/ristretto/v2/z
+github.com/dgraph-io/ristretto/v2/z/simd
 # github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
 ## explicit
 # github.com/dlclark/regexp2 v1.11.5
@@ -683,6 +698,10 @@ github.com/ipfs/go-datastore/sync
 # github.com/ipfs/go-ds-badger v0.3.4
 ## explicit; go 1.23
 github.com/ipfs/go-ds-badger
+# github.com/ipfs/go-ds-crdt v0.6.7
+## explicit; go 1.25
+github.com/ipfs/go-ds-crdt
+github.com/ipfs/go-ds-crdt/pb
 # github.com/ipfs/go-ds-flatfs v0.5.5
 ## explicit; go 1.23
 github.com/ipfs/go-ds-flatfs
@@ -891,7 +910,10 @@ github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
 github.com/klauspost/compress/internal/cpuinfo
 github.com/klauspost/compress/internal/le
+github.com/klauspost/compress/internal/race
 github.com/klauspost/compress/internal/snapref
+github.com/klauspost/compress/s2
+github.com/klauspost/compress/snappy
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
 # github.com/klauspost/cpuid/v2 v2.3.0
@@ -1171,7 +1193,7 @@ github.com/multiformats/go-base32
 # github.com/multiformats/go-base36 v0.2.0
 ## explicit; go 1.18
 github.com/multiformats/go-base36
-# github.com/multiformats/go-multiaddr v0.16.0
+# github.com/multiformats/go-multiaddr v0.16.1
 ## explicit; go 1.23
 github.com/multiformats/go-multiaddr
 github.com/multiformats/go-multiaddr/net

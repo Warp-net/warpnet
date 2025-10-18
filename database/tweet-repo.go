@@ -37,7 +37,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/dgraph-io/badger/v3"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/Warp-net/warpnet/database/local"
@@ -182,7 +181,7 @@ func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err erro
 		AddParentId(tweetID).
 		Build()
 	sortableKeyBytes, err := repo.db.Get(fixedKey)
-	if errors.Is(err, badger.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return tweet, ErrTweetNotFound
 	}
 	if err != nil {
@@ -190,7 +189,7 @@ func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err erro
 	}
 
 	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
-	if errors.Is(err, badger.ErrKeyNotFound) {
+	if errors.Is(err, local.ErrKeyNotFound) {
 		return tweet, ErrTweetNotFound
 	}
 	if err != nil {

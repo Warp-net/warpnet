@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package node
 
 import (
-	"io"
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/pubsub"
@@ -66,11 +65,6 @@ type DistributedHashTableCloser interface {
 	Close()
 }
 
-type NodeProvider interface {
-	io.Closer
-	GetSelfHashes() (map[string]struct{}, error)
-}
-
 type AuthProvider interface {
 	GetOwner() domain.Owner
 	SessionToken() string
@@ -106,15 +100,10 @@ type Storer interface {
 	Get(key local.DatabaseKey) ([]byte, error)
 	GetExpiration(key local.DatabaseKey) (uint64, error)
 	GetSize(key local.DatabaseKey) (int64, error)
-	Sync() error
-	IsClosed() bool
-	InnerDB() *local.WarpDB
 	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
 	Set(key local.DatabaseKey, value []byte) error
 	Delete(key local.DatabaseKey) error
-	Path() string
 	Stats() map[string]string
-	IsFirstRun() bool
 }
 
 type PseudoStreamer interface {
