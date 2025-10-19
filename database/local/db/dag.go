@@ -30,6 +30,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/ipfs/boxo/ipld/merkledag"
@@ -51,6 +52,7 @@ func (d *dagStore) Add(ctx context.Context, node format.Node) error {
 	}
 
 	id := node.Cid().String()
+	fmt.Println("DAG Add", id)
 	data := node.RawData()
 	return d.ds.Put(ctx, NewKey(id), data)
 }
@@ -61,12 +63,16 @@ func (d *dagStore) Get(ctx context.Context, cid cid.Cid) (format.Node, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+	fmt.Println("DAG Get", cid.String())
 
 	data, err := d.ds.Get(ctx, NewKey(cid.String()))
 	if errors.Is(err, badger.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound) {
+		fmt.Println("DAG Get not found", cid.String())
 		return nil, format.ErrNotFound{Cid: cid}
 	}
 	if err != nil {
+		fmt.Println("DAG Get error", cid.String(), err.Error())
+
 		return nil, err
 	}
 

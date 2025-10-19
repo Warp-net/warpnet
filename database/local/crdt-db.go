@@ -38,6 +38,13 @@ import (
 	localDB "github.com/Warp-net/warpnet/database/local/db"
 	crdt "github.com/ipfs/go-ds-crdt"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/connmgr"
+	"github.com/libp2p/go-libp2p/core/event"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -71,7 +78,30 @@ type PubSubProvider interface {
 	Close() error
 }
 
-func (db *DB) EnableCRDT(ns string, ps *pubsub.PubSub) (err error) {
+type Transporter interface {
+	ID() peer.ID
+	Peerstore() peerstore.Peerstore
+	Addrs() []multiaddr.Multiaddr
+	Network() network.Network
+	Mux() protocol.Switch
+	Connect(ctx context.Context, pi peer.AddrInfo) error
+	SetStreamHandler(pid protocol.ID, handler network.StreamHandler)
+	SetStreamHandlerMatch(protocol.ID, func(protocol.ID) bool, network.StreamHandler)
+	RemoveStreamHandler(pid protocol.ID)
+	NewStream(ctx context.Context, p peer.ID, pids ...protocol.ID) (network.Stream, error)
+	Close() error
+	ConnManager() connmgr.ConnManager
+	EventBus() event.Bus
+}
+
+const (
+	crdtProtocolV1_0_0 = protocol.ID("/crdt/1.0.0")
+)
+
+func (db *DB) EnableCRDT(ns string, t Transporter) (err error) {
+	if db.isCRDTEnabled.Load() {
+		return nil
+	}
 	opts := crdt.DefaultOptions()
 	opts.Logger = log.StandardLogger()
 	opts.RebroadcastInterval = 55 * time.Second
@@ -84,7 +114,20 @@ func (db *DB) EnableCRDT(ns string, ps *pubsub.PubSub) (err error) {
 		return err
 	}
 
-	broadcaster, err := crdt.NewPubSubBroadcaster(db.ctx, ps, "crdt")
+	protos := []protocol.ID{crdtProtocolV1_0_0}
+	ps, err := pubsub.NewGossipSub(
+		db.ctx,
+		t,
+		pubsub.WithGossipSubProtocols(protos, nil),
+		pubsub.WithFloodPublish(true),
+		pubsub.WithMessageAuthor(t.ID()),
+	)
+	if err != nil {
+		return err
+	}
+
+	crdtTopic := fmt.Sprintf("crdt-%s", ns)
+	broadcaster, err := crdt.NewPubSubBroadcaster(db.ctx, ps, crdtTopic)
 	if err != nil {
 		return err
 	}

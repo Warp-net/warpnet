@@ -105,7 +105,7 @@ type Storer interface {
 	Delete(key local.DatabaseKey) error
 	Stats() map[string]string
 	LocalStore() local.LocalStore
-	EnableCRDT(ns string, b *pubsub.PubSub) (err error)
+	EnableCRDT(ns string, t local.Transporter) (err error)
 }
 
 type PseudoStreamer interface {

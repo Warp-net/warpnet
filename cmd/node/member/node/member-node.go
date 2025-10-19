@@ -195,7 +195,7 @@ func (m *MemberNode) Start() (err error) {
 
 	m.pubsubService.Run(m)
 
-	if err := m.db.EnableCRDT(config.Config().Node.Network, m.pubsubService.PubSub()); err != nil {
+	if err := m.db.EnableCRDT(config.Config().Node.Network, m.Node()); err != nil {
 		return fmt.Errorf("crdt: enable: %w", err)
 	}
 
