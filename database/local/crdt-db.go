@@ -37,6 +37,7 @@ import (
 
 	localDB "github.com/Warp-net/warpnet/database/local/db"
 	crdt "github.com/ipfs/go-ds-crdt"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -70,16 +71,12 @@ type PubSubProvider interface {
 	Close() error
 }
 
-func (db *DB) EnableCRDT(ns string, b Broadcaster) (err error) {
+func (db *DB) EnableCRDT(ns string, ps *pubsub.PubSub) (err error) {
 	opts := crdt.DefaultOptions()
 	opts.Logger = log.StandardLogger()
-	opts.RebroadcastInterval = 5 * time.Second
+	opts.RebroadcastInterval = 55 * time.Second
 	opts.PutHook = func(k localDB.DatastoreKey, v []byte) {
 		fmt.Printf("Added: [%s] -> %s\n", k, string(v))
-
-	}
-	opts.DeleteHook = func(k localDB.DatastoreKey) {
-		fmt.Printf("Removed: [%s]\n", k)
 	}
 
 	dag, err := db.localstore.NewDagStore(db.ctx)
@@ -87,7 +84,12 @@ func (db *DB) EnableCRDT(ns string, b Broadcaster) (err error) {
 		return err
 	}
 
-	db.crdtStore, err = crdt.New(db.localstore, localDB.NewKey(ns), dag, b, opts)
+	broadcaster, err := crdt.NewPubSubBroadcaster(db.ctx, ps, "crdt")
+	if err != nil {
+		return err
+	}
+
+	db.crdtStore, err = crdt.New(db.localstore, localDB.NewKey(ns), dag, broadcaster, opts)
 	if err != nil {
 		return err
 	}

@@ -52,7 +52,7 @@ type PubSubProvider interface {
 	UnsubscribeUserUpdate(userId string) (err error)
 	Run(m pubsub.PubsubServerNodeConnector)
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
-	Broadcaster(topic string) (*pubsub.CRDTBroadcaster, error)
+	PubSub() *pubsub.PubSub
 	Close() error
 }
 
@@ -105,7 +105,7 @@ type Storer interface {
 	Delete(key local.DatabaseKey) error
 	Stats() map[string]string
 	LocalStore() local.LocalStore
-	EnableCRDT(ns string, b local.Broadcaster) (err error)
+	EnableCRDT(ns string, b *pubsub.PubSub) (err error)
 }
 
 type PseudoStreamer interface {

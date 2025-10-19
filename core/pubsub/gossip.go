@@ -231,33 +231,6 @@ func (g *Gossip) runGossip() (err error) {
 	return nil
 }
 
-// SubscribeStandalone TODO refactor
-func (g *Gossip) SubscribeExplicit(topicName string) (_ *pubsub.Topic, _ *pubsub.Subscription, err error) {
-	topic, ok := g.topics[topicName]
-	if !ok {
-		topic, err = g.pubsub.Join(topicName)
-		if err != nil {
-			return nil, nil, err
-		}
-		g.topics[topicName] = topic
-	}
-	if topic == nil {
-		return nil, nil, errors.New("gossip: topic not found")
-	}
-
-	relayCancel, err := topic.Relay()
-	if err != nil {
-		return nil, nil, err
-	}
-	g.relayCancelFuncs[topicName] = relayCancel
-
-	sub, err := topic.Subscribe()
-	if err != nil {
-		return nil, nil, err
-	}
-	return topic, sub, nil
-}
-
 func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {
 	if g == nil || !g.isRunning.Load() {
 		return warpnet.WarpError("gossip: service not initialized")
@@ -458,6 +431,12 @@ func (g *Gossip) NodeInfo() warpnet.NodeInfo {
 
 func (g *Gossip) IsGossipRunning() bool {
 	return g.isRunning.Load()
+}
+
+type PubSub = pubsub.PubSub
+
+func (g *Gossip) PubSub() *pubsub.PubSub {
+	return g.pubsub
 }
 
 func (g *Gossip) Close() (err error) {

@@ -195,11 +195,7 @@ func (m *MemberNode) Start() (err error) {
 
 	m.pubsubService.Run(m)
 
-	broadcaster, err := m.pubsubService.Broadcaster("crdt")
-	if err != nil {
-		return fmt.Errorf("pubsub: broadcaster: %w", err)
-	}
-	if err := m.db.EnableCRDT(config.Config().Node.Network, broadcaster); err != nil {
+	if err := m.db.EnableCRDT(config.Config().Node.Network, m.pubsubService.PubSub()); err != nil {
 		return fmt.Errorf("crdt: enable: %w", err)
 	}
 

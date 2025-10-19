@@ -17,6 +17,7 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -38,7 +39,7 @@ type AppStorer interface {
 	Delete(key local.DatabaseKey) error
 	Stats() map[string]string
 	LocalStore() local.LocalStore
-	EnableCRDT(ns string, b local.Broadcaster) (err error)
+	EnableCRDT(ns string, b *pubsub.PubSub) (err error)
 	Close()
 }
 
