@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -74,29 +75,29 @@ BadgerDB is especially useful for systems where high write speed, low overhead, 
 https://github.com/dgraph-io/badger
 */
 
+type DBError string
+
+func (e DBError) Error() string { return string(e) }
+
 const (
 	defaultDiscardRatioGC = 0.5
 	defaultIntervalGC     = time.Hour
 	defaultSleepGC        = time.Second
 	firstRunLockFile      = "run.lock"
 	sequenceKey           = "SEQUENCE"
-)
 
-type (
-	DBError string
-
-	DatastoreKey = ds.Key
-	Datastore    = ds.Datastore
-	TTLDatastore = ds.TTLDatastore
-	Batching     = ds.Batching
-)
-
-func (e DBError) Error() string { return string(e) }
-
-var (
 	ErrNotRunning    = DBError("DB is not running")
 	ErrWrongPassword = DBError("wrong username or password")
-	ErrKeyNotFound   = DBError(badger.ErrKeyNotFound.Error())
+
+	PermanentTTL = math.MaxInt64
+)
+
+var DefaultIteratorOptions = badger.DefaultIteratorOptions
+
+type (
+	DatastoreKey = ds.Key
+	Datastore    = ds.Datastore
+	Batching     = ds.Batching
 )
 
 type Options struct {
@@ -139,7 +140,7 @@ func NewKey(s string) DatastoreKey {
 	return ds.NewKey(s)
 }
 
-type DistributedDatastore struct {
+type LocalDatastore struct {
 	badger   *badger.DB
 	sequence *badger.Sequence
 
@@ -155,7 +156,7 @@ type DistributedDatastore struct {
 	stopChan chan struct{}
 }
 
-func NewDistributedDatastore(dbPath string, o *Options) (*DistributedDatastore, error) {
+func NewLocalDatastore(dbPath string, o *Options) (*LocalDatastore, error) {
 	badgerOpts := badger.
 		DefaultOptions(dbPath).
 		WithSyncWrites(false).
@@ -180,7 +181,7 @@ func NewDistributedDatastore(dbPath string, o *Options) (*DistributedDatastore, 
 		o.sleepGC = defaultSleepGC
 	}
 
-	storage := &DistributedDatastore{
+	storage := &LocalDatastore{
 		badger: nil, stopChan: make(chan struct{}), isRunning: new(atomic.Bool),
 		sequence: nil, badgerOpts: badgerOpts, dbPath: dbPath, hasFirstRunFlag: findFirstRunFlag(dbPath),
 		discardRatioGC: o.discardRatioGC, intervalGC: o.intervalGC, sleepGC: o.sleepGC,
@@ -200,11 +201,11 @@ func findFirstRunFlag(dbPath string) (found bool) {
 	return true
 }
 
-func (d *DistributedDatastore) IsFirstRun() bool {
+func (d *LocalDatastore) IsFirstRun() bool {
 	return !d.hasFirstRunFlag
 }
 
-func (d *DistributedDatastore) writeFirstRunFlag() {
+func (d *LocalDatastore) writeFirstRunFlag() {
 	path := filepath.Join(d.dbPath, firstRunLockFile)
 	log.Infof("database: lock file created: %s", path)
 	f, _ := os.Create(path)
@@ -214,7 +215,7 @@ func (d *DistributedDatastore) writeFirstRunFlag() {
 	d.hasFirstRunFlag = true
 }
 
-func (d *DistributedDatastore) Run(username, password string) (err error) {
+func (d *LocalDatastore) Run(username, password string) (err error) {
 	if username == "" || password == "" {
 		return DBError("database: username or password is empty")
 	}
@@ -245,7 +246,7 @@ func (d *DistributedDatastore) Run(username, password string) (err error) {
 	return nil
 }
 
-func (d *DistributedDatastore) runEventualGC() {
+func (d *LocalDatastore) runEventualGC() {
 	log.Infoln("database: garbage collection started")
 	gcTicker := time.NewTicker(d.intervalGC)
 	defer gcTicker.Stop()
@@ -278,7 +279,7 @@ func (d *DistributedDatastore) runEventualGC() {
 	}
 }
 
-func (d *DistributedDatastore) Stats() map[string]string {
+func (d *LocalDatastore) Stats() map[string]string {
 	lsm, vlog := d.badger.Size()
 	size := lsm + vlog
 
@@ -293,14 +294,7 @@ func (d *DistributedDatastore) Stats() map[string]string {
 	}
 }
 
-var _ ds.Datastore = (*DistributedDatastore)(nil)
-var _ ds.PersistentDatastore = (*DistributedDatastore)(nil)
-var _ ds.TxnDatastore = (*DistributedDatastore)(nil)
-var _ ds.Txn = (*txn)(nil)
-var _ ds.TTLDatastore = (*DistributedDatastore)(nil)
-var _ ds.Batching = (*DistributedDatastore)(nil)
-
-func (d *DistributedDatastore) NewTransaction(ctx context.Context, readOnly bool) (ds.Txn, error) {
+func (d *LocalDatastore) NewTransaction(ctx context.Context, readOnly bool) (ds.Txn, error) {
 	if !d.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
@@ -311,11 +305,11 @@ func (d *DistributedDatastore) NewTransaction(ctx context.Context, readOnly bool
 	return &txn{d, d.badger.NewTransaction(!readOnly), false}, nil
 }
 
-func (d *DistributedDatastore) newImplicitTransaction(readOnly bool) *txn {
+func (d *LocalDatastore) newImplicitTransaction(readOnly bool) *txn {
 	return &txn{d, d.badger.NewTransaction(!readOnly), true}
 }
 
-func (d *DistributedDatastore) Put(ctx context.Context, key DatastoreKey, value []byte) error {
+func (d *LocalDatastore) Put(ctx context.Context, key DatastoreKey, value []byte) error {
 	if !d.isRunning.Load() {
 		return ErrNotRunning
 	}
@@ -333,7 +327,7 @@ func (d *DistributedDatastore) Put(ctx context.Context, key DatastoreKey, value 
 	return txn.Commit(ctx)
 }
 
-func (d *DistributedDatastore) Sync(ctx context.Context, _ DatastoreKey) error {
+func (d *LocalDatastore) Sync(ctx context.Context, _ DatastoreKey) error {
 	if !d.isRunning.Load() {
 		return ErrNotRunning
 	}
@@ -344,7 +338,7 @@ func (d *DistributedDatastore) Sync(ctx context.Context, _ DatastoreKey) error {
 	return d.badger.Sync()
 }
 
-func (d *DistributedDatastore) PutWithTTL(ctx context.Context, key DatastoreKey, value []byte, ttl time.Duration) error {
+func (d *LocalDatastore) PutWithTTL(ctx context.Context, key DatastoreKey, value []byte, ttl time.Duration) error {
 	if !d.isRunning.Load() {
 		return ErrNotRunning
 	}
@@ -362,26 +356,7 @@ func (d *DistributedDatastore) PutWithTTL(ctx context.Context, key DatastoreKey,
 	return txn.Commit(ctx)
 }
 
-// stub
-func (d *DistributedDatastore) SetTTL(ctx context.Context, key DatastoreKey, ttl time.Duration) error {
-	return nil
-}
-
-func (d *DistributedDatastore) GetExpiration(ctx context.Context, key DatastoreKey) (time.Time, error) {
-	if !d.isRunning.Load() {
-		return time.Time{}, ErrNotRunning
-	}
-	if ctx.Err() != nil {
-		return time.Time{}, ctx.Err()
-	}
-
-	txn := d.newImplicitTransaction(false)
-	defer txn.Discard(ctx)
-
-	return txn.GetExpiration(ctx, key)
-}
-
-func (d *DistributedDatastore) Get(ctx context.Context, key DatastoreKey) (value []byte, err error) {
+func (d *LocalDatastore) Get(ctx context.Context, key DatastoreKey) (value []byte, err error) {
 	if !d.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
@@ -395,7 +370,7 @@ func (d *DistributedDatastore) Get(ctx context.Context, key DatastoreKey) (value
 	return txn.Get(ctx, key)
 }
 
-func (d *DistributedDatastore) Has(ctx context.Context, key DatastoreKey) (bool, error) {
+func (d *LocalDatastore) Has(ctx context.Context, key DatastoreKey) (bool, error) {
 	if !d.isRunning.Load() {
 		return false, ErrNotRunning
 	}
@@ -409,7 +384,7 @@ func (d *DistributedDatastore) Has(ctx context.Context, key DatastoreKey) (bool,
 	return txn.Has(ctx, key)
 }
 
-func (d *DistributedDatastore) GetSize(ctx context.Context, key DatastoreKey) (size int, err error) {
+func (d *LocalDatastore) GetSize(ctx context.Context, key DatastoreKey) (size int, err error) {
 	if !d.isRunning.Load() {
 		return 0, ErrNotRunning
 	}
@@ -423,7 +398,7 @@ func (d *DistributedDatastore) GetSize(ctx context.Context, key DatastoreKey) (s
 	return txn.GetSize(ctx, key)
 }
 
-func (d *DistributedDatastore) Delete(ctx context.Context, key DatastoreKey) error {
+func (d *LocalDatastore) Delete(ctx context.Context, key DatastoreKey) error {
 	if !d.isRunning.Load() {
 		return ErrNotRunning
 	}
@@ -442,7 +417,7 @@ func (d *DistributedDatastore) Delete(ctx context.Context, key DatastoreKey) err
 	return txn.Commit(ctx)
 }
 
-func (d *DistributedDatastore) Query(ctx context.Context, q dsq.Query) (dsq.Results, error) {
+func (d *LocalDatastore) Query(ctx context.Context, q dsq.Query) (dsq.Results, error) {
 	if !d.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
@@ -457,7 +432,7 @@ func (d *DistributedDatastore) Query(ctx context.Context, q dsq.Query) (dsq.Resu
 	return txn.query(q)
 }
 
-func (d *DistributedDatastore) DiskUsage(ctx context.Context) (uint64, error) {
+func (d *LocalDatastore) DiskUsage(ctx context.Context) (uint64, error) {
 	if !d.isRunning.Load() {
 		return 0, ErrNotRunning
 	}
@@ -469,7 +444,49 @@ func (d *DistributedDatastore) DiskUsage(ctx context.Context) (uint64, error) {
 	return uint64(lsm + vlog), nil
 }
 
-func (d *DistributedDatastore) Close() error {
+func (d *LocalDatastore) Batch(ctx context.Context) (Batch, error) {
+	if !d.isRunning.Load() {
+		return nil, ErrNotRunning
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	b := &batch{d, d.badger.NewWriteBatch()}
+	// Ensure that incomplete transaction resources are cleaned up in case
+	// batch is abandoned.
+	runtime.SetFinalizer(b, func(b *batch) {
+		_ = b.Cancel()
+		log.Error("batch not committed or canceled")
+	})
+
+	return b, nil
+}
+
+func (d *LocalDatastore) NewCustomTransaction(ctx context.Context, readOnly bool) (CustomTransaction, error) {
+	if !d.isRunning.Load() {
+		return nil, ErrNotRunning
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	tx := d.badger.NewTransaction(!readOnly)
+	return &txn{d, tx, false}, nil
+}
+
+func (d *LocalDatastore) NewDagStore(ctx context.Context) (*dagStore, error) {
+	if !d.isRunning.Load() {
+		return nil, ErrNotRunning
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	return &dagStore{d}, nil
+}
+
+func (d *LocalDatastore) Close() error {
 	if d == nil {
 		return nil
 	}
@@ -494,33 +511,15 @@ func (d *DistributedDatastore) Close() error {
 	return nil
 }
 
-func (d *DistributedDatastore) Batch(ctx context.Context) (Batch, error) {
-	if !d.isRunning.Load() {
-		return nil, ErrNotRunning
+func IsNotFoundError(err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, badger.ErrKeyNotFound):
+		return true
+	case errors.Is(err, ds.ErrNotFound):
+		return true
+	default:
+		return false
 	}
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-
-	b := &batch{d, d.badger.NewWriteBatch()}
-	// Ensure that incomplete transaction resources are cleaned up in case
-	// batch is abandoned.
-	runtime.SetFinalizer(b, func(b *batch) {
-		_ = b.Cancel()
-		log.Error("batch not committed or canceled")
-	})
-
-	return b, nil
-}
-
-func (d *DistributedDatastore) NewCustomTransaction(ctx context.Context, readOnly bool) (CustomTransaction, error) {
-	if !d.isRunning.Load() {
-		return nil, ErrNotRunning
-	}
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-
-	tx := d.badger.NewTransaction(!readOnly)
-	return &txn{d, tx, false}, nil
 }

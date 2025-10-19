@@ -38,9 +38,6 @@ import (
 	dsq "github.com/ipfs/go-datastore/query"
 )
 
-var _ Datastore = (*txn)(nil)
-var _ TTLDatastore = (*txn)(nil)
-
 type CustomTransaction interface {
 	ds.Txn
 	NewIterator(opt IteratorOptions) (*Iterator, error)
@@ -50,7 +47,7 @@ type CustomTransaction interface {
 }
 
 type txn struct {
-	ds       *DistributedDatastore
+	ds       *LocalDatastore
 	txn      *badger.Txn
 	implicit bool
 }
@@ -66,14 +63,7 @@ func (t *txn) Put(ctx context.Context, key DatastoreKey, value []byte) error {
 	return t.txn.Set(key.Bytes(), value)
 }
 
-func (t *txn) Sync(ctx context.Context, _ DatastoreKey) error {
-	if !t.ds.isRunning.Load() {
-		return ErrNotRunning
-	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
+func (t *txn) Sync(_ context.Context, _ DatastoreKey) error {
 	return nil
 }
 
@@ -96,8 +86,8 @@ func (t *txn) GetExpiration(ctx context.Context, key DatastoreKey) (time.Time, e
 	}
 
 	item, err := t.txn.Get(key.Bytes())
-	if errors.Is(err, badger.ErrKeyNotFound) {
-		return time.Time{}, ErrKeyNotFound
+	if errors.Is(err, badger.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound) {
+		return time.Time{}, ds.ErrNotFound
 	} else if err != nil {
 		return time.Time{}, err
 	}
@@ -131,7 +121,7 @@ func (t *txn) Get(ctx context.Context, key DatastoreKey) ([]byte, error) {
 
 	item, err := t.txn.Get(key.Bytes())
 	if errors.Is(err, badger.ErrKeyNotFound) {
-		return nil, ErrKeyNotFound
+		return nil, ds.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -150,7 +140,7 @@ func (t *txn) Has(ctx context.Context, key DatastoreKey) (bool, error) {
 
 	_, err := t.txn.Get(key.Bytes())
 	switch {
-	case errors.Is(err, badger.ErrKeyNotFound):
+	case errors.Is(err, badger.ErrKeyNotFound) || errors.Is(err, ds.ErrNotFound):
 		return false, nil
 	case err == nil:
 		return true, nil
@@ -172,6 +162,8 @@ func (t *txn) GetSize(ctx context.Context, key DatastoreKey) (int, error) {
 	case err == nil:
 		return int(item.ValueSize()), nil
 	case errors.Is(err, badger.ErrKeyNotFound):
+		return -1, ds.ErrNotFound
+	case errors.Is(err, ds.ErrNotFound):
 		return -1, ds.ErrNotFound
 	default:
 		return -1, err

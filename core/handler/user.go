@@ -30,13 +30,14 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 type UserStreamer interface {

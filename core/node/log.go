@@ -31,7 +31,6 @@ import (
 	"strings"
 
 	golog "github.com/ipfs/go-log/v2"
-	"github.com/labstack/gommon/log"
 	"github.com/sirupsen/logrus"
 )
 
@@ -88,7 +87,7 @@ var subsystems = []string{
 func initLogging() {
 	level := strings.ToLower(logrus.GetLevel().String())
 
-	log.Infof("node: new log level: %s", level)
+	logrus.Infof("node: new log level: %s", level)
 
 	_ = golog.SetLogLevel("autonatv2", level)
 	_ = golog.SetLogLevel("autonat", level)

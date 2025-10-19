@@ -38,7 +38,7 @@ import (
 type Batch = ds.Batch
 
 type batch struct {
-	ds         *DistributedDatastore
+	ds         *LocalDatastore
 	writeBatch *badger.WriteBatch
 }
 

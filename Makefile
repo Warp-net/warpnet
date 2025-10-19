@@ -2,7 +2,7 @@ kill:
 	pkill -9 main
 
 dry-run:
-	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet
+	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet --node.port 4002 --node.seed dryrun1 --database.dir dryrun1
 
 run-member:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet

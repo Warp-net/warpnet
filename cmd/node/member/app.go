@@ -32,12 +32,13 @@ import (
 type AppStorer interface {
 	NewTxn() (local.WarpTransactioner, error)
 	Get(key local.DatabaseKey) ([]byte, error)
-	GetExpiration(key local.DatabaseKey) (uint64, error)
 	GetSize(key local.DatabaseKey) (int64, error)
 	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
 	Set(key local.DatabaseKey, value []byte) error
 	Delete(key local.DatabaseKey) error
 	Stats() map[string]string
+	LocalStore() local.LocalStore
+	EnableCRDT(ns string, b local.Broadcaster) (err error)
 	Close()
 }
 

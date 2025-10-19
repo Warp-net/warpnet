@@ -86,9 +86,11 @@ func NewMemberNode(
 		return nil, errors.New("private key is required")
 	}
 
-	store, err := warpnet.NewPeerstore(ctx, db)
+	localStore := db.LocalStore()
+
+	store, err := warpnet.NewPeerstore(ctx, localStore)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("node: new peerstore: %w", err)
 	}
 
 	nodeRepo := database.NewNodeRepo(db)
@@ -101,7 +103,7 @@ func NewMemberNode(
 
 	followeeIds, err := fetchFolloweeIds(owner.UserId, followRepo)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("node: fetch followees: %w", err)
 	}
 	pubsubHandlers := []pubsub.TopicHandler{
 		pubsub.NewDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
@@ -114,12 +116,12 @@ func NewMemberNode(
 
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("node: fetch address infos: %w", err)
 	}
 
 	dHashTable := dht.NewDHTable(
 		ctx,
-		dht.RoutingStore(db),
+		dht.RoutingStore(localStore),
 		dht.EnableRendezvous(),
 		dht.AddPeerCallbacks(discService.HandlePeerFound),
 		dht.BootstrapNodes(infos...),
@@ -138,7 +140,7 @@ func NewMemberNode(
 
 	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("node: fetch current node ID: %w", err)
 	}
 
 	opts := []warpnet.WarpOption{
@@ -182,7 +184,7 @@ func (m *MemberNode) Start() (err error) {
 		m.opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("member: failed to init node: %v", err)
+		return fmt.Errorf("member: failed to start node: %v", err)
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
@@ -192,6 +194,14 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.pubsubService.Run(m)
+
+	broadcaster, err := m.pubsubService.Broadcaster("crdt")
+	if err != nil {
+		return fmt.Errorf("pubsub: broadcaster: %w", err)
+	}
+	if err := m.db.EnableCRDT(config.Config().Node.Network, broadcaster); err != nil {
+		return fmt.Errorf("crdt: enable: %w", err)
+	}
 
 	if err := m.discService.Run(m); err != nil {
 		return err

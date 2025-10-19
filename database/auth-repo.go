@@ -33,13 +33,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math/big"
+	"strings"
+	"time"
+
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
-	"math/big"
-	"strings"
-	"time"
 )
 
 const (
@@ -79,7 +80,7 @@ func (repo *AuthRepo) Authenticate(username, password string) (err error) {
 		return ErrNilAuthRepo
 	}
 	if repo.db == nil {
-		return local.ErrNotRunning
+		return local.DBError("auth repo is nil")
 	}
 
 	err = repo.db.Run(username, password)

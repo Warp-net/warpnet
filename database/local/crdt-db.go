@@ -32,37 +32,45 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	localDB "github.com/Warp-net/warpnet/database/local/db"
-	"github.com/dgraph-io/badger/v4"
 	crdt "github.com/ipfs/go-ds-crdt"
-	format "github.com/ipfs/go-ipld-format"
 	log "github.com/sirupsen/logrus"
 )
 
 type DBError = localDB.DBError
 
-var ErrKeyNotFound = localDB.ErrKeyNotFound
+const ErrKeyNotFound = DBError("warp db: key not found")
 
 type DB struct {
-	localstore *localDB.DistributedDatastore
-	crdtStore  *crdt.Datastore
-}
+	ctx        context.Context
+	localstore *localDB.LocalDatastore
 
-type Options = localDB.Options
+	isCRDTEnabled *atomic.Bool
+	crdtStore     *crdt.Datastore
+}
 
 func New(dbPath string) (*DB, error) {
-	store, err := localDB.NewDistributedDatastore(dbPath, localDB.DefaultOptions())
-	return &DB{localstore: store}, err
+	store, err := localDB.NewLocalDatastore(dbPath, localDB.DefaultOptions())
+	return &DB{ctx: context.Background(), localstore: store, isCRDTEnabled: new(atomic.Bool)}, err
 }
 
-type (
-	Syncer      = format.DAGService
-	Broadcaster = crdt.Broadcaster
-)
+func (db *DB) Run(username, password string) (err error) {
+	return db.localstore.Run(username, password)
+}
 
-func (db *DB) EnableCRDT(ns string, s Syncer, b Broadcaster) (err error) {
+type Broadcaster = crdt.Broadcaster
+
+type PubSubProvider interface {
+	SubscribeUserUpdate(userId string) (err error)
+	UnsubscribeUserUpdate(userId string) (err error)
+	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
+	Close() error
+}
+
+func (db *DB) EnableCRDT(ns string, b Broadcaster) (err error) {
 	opts := crdt.DefaultOptions()
 	opts.Logger = log.StandardLogger()
 	opts.RebroadcastInterval = 5 * time.Second
@@ -74,90 +82,153 @@ func (db *DB) EnableCRDT(ns string, s Syncer, b Broadcaster) (err error) {
 		fmt.Printf("Removed: [%s]\n", k)
 	}
 
-	db.crdtStore, err = crdt.New(db.localstore, localDB.NewKey(ns), s, b, opts)
-	return
+	dag, err := db.localstore.NewDagStore(db.ctx)
+	if err != nil {
+		return err
+	}
+
+	db.crdtStore, err = crdt.New(db.localstore, localDB.NewKey(ns), dag, b, opts)
+	if err != nil {
+		return err
+	}
+
+	db.isCRDTEnabled.Store(true)
+	return nil
 }
 
 func (db *DB) IsFirstRun() bool {
 	return db.localstore.IsFirstRun()
 }
 
-func (db *DB) Run(username, password string) (err error) {
-	return db.localstore.Run(username, password)
+type LocalStore interface {
+	localDB.Datastore
+	localDB.Batching
+}
+
+func (db *DB) LocalStore() LocalStore {
+	return db.localstore
 }
 
 func (db *DB) Stats() map[string]string {
-	storeStats := db.localstore.Stats()
-	crdtStats := db.crdtStore.InternalStats(context.TODO())
+	ctx, cancelF := context.WithTimeout(db.ctx, 5*time.Second)
+	defer cancelF()
 
-	storeStats["crdt"] = fmt.Sprintf("%#v", crdtStats)
+	storeStats := db.localstore.Stats()
+	if db.isCRDTEnabled.Load() {
+		storeStats["crdt"] = fmt.Sprintf("%#v", db.crdtStore.InternalStats(ctx))
+	}
 	return storeStats
 }
 
-func (db *DB) Set(key DatabaseKey, value []byte) error {
-	if db.crdtStore == nil {
-		return db.localstore.Put(context.TODO(), localDB.NewKey(key.String()), value)
+func (db *DB) Set(key DatabaseKey, value []byte) (err error) {
+	ctx, cancelF := context.WithTimeout(db.ctx, 5*time.Second)
+	defer cancelF()
+
+	localKey := localDB.NewKey(key.String())
+	if db.isCRDTEnabled.Load() {
+		err = db.crdtStore.Put(ctx, localKey, value)
+	} else {
+		err = db.localstore.Put(ctx, localKey, value)
 	}
-	return db.crdtStore.Put(context.TODO(), localDB.NewKey(key.String()), value)
+	return err
 }
 
 func (db *DB) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error {
-	return db.localstore.PutWithTTL(context.TODO(), localDB.NewKey(key.String()), value, ttl)
-}
+	ctx, cancelF := context.WithTimeout(db.ctx, 5*time.Second)
+	defer cancelF()
 
-func (db *DB) Get(key DatabaseKey) ([]byte, error) {
-	if db.crdtStore == nil {
-		return db.localstore.Get(context.TODO(), localDB.NewKey(key.String()))
-	}
-	return db.crdtStore.Get(context.TODO(), localDB.NewKey(key.String()))
-}
-
-func (db *DB) Delete(key DatabaseKey) error {
-	if db.crdtStore == nil {
-		return db.localstore.Delete(context.TODO(), localDB.NewKey(key.String()))
-	}
-	return db.crdtStore.Delete(context.TODO(), localDB.NewKey(key.String()))
-}
-
-func (db *DB) Sync() error {
-	if db.crdtStore == nil {
-		return db.localstore.Sync(context.TODO(), localDB.DatastoreKey{})
-	}
-	return db.crdtStore.Sync(context.TODO(), localDB.DatastoreKey{})
-}
-
-func (db *DB) GetExpiration(key DatabaseKey) (uint64, error) {
-	exp, err := db.localstore.GetExpiration(context.TODO(), localDB.NewKey(key.String()))
+	localKey := localDB.NewKey(key.String())
+	err := db.localstore.PutWithTTL(ctx, localKey, value, ttl)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return uint64(exp.UnixMilli()), nil
+	if ttl != localDB.PermanentTTL {
+		return nil
+	}
+	err = db.crdtStore.Put(ctx, localKey, value)
+	if err != nil {
+		log.Error("crdt: tx set with ttl", "key", key, "msg", err)
+	}
+	return nil
 }
 
-func (db *DB) GetSize(key DatabaseKey) (int64, error) {
-	if db.crdtStore == nil {
-		size, err := db.localstore.GetSize(context.TODO(), localDB.NewKey(key.String()))
-		return int64(size), err
+func (db *DB) Get(key DatabaseKey) (data []byte, err error) {
+	ctx, cancelF := context.WithTimeout(db.ctx, 5*time.Second)
+	defer cancelF()
+
+	localKey := localDB.NewKey(key.String())
+	if db.isCRDTEnabled.Load() {
+		data, err = db.crdtStore.Get(ctx, localKey)
+	} else {
+		data, err = db.localstore.Get(ctx, localKey)
 	}
-	size, err := db.crdtStore.GetSize(context.TODO(), localDB.NewKey(key.String()))
+	if localDB.IsNotFoundError(err) {
+		return nil, ErrKeyNotFound
+	}
+	return data, err
+}
+
+func (db *DB) Delete(key DatabaseKey) (err error) {
+	ctx, cancelF := context.WithTimeout(db.ctx, 5*time.Second)
+	defer cancelF()
+
+	localKey := localDB.NewKey(key.String())
+
+	if db.isCRDTEnabled.Load() {
+		err = db.crdtStore.Delete(ctx, localKey)
+	} else {
+		err = db.localstore.Delete(ctx, localKey)
+	}
+	return err
+}
+
+func (db *DB) Sync() (err error) {
+	ctx, cancelF := context.WithTimeout(db.ctx, 5*time.Second)
+	defer cancelF()
+
+	if !db.isCRDTEnabled.Load() {
+		return
+	}
+
+	blankPrefix := localDB.DatastoreKey{}
+	if db.isCRDTEnabled.Load() {
+		err = db.crdtStore.Sync(ctx, blankPrefix)
+	} else {
+		err = db.localstore.Sync(ctx, blankPrefix)
+	}
+	return err
+}
+
+func (db *DB) GetSize(key DatabaseKey) (_ int64, err error) {
+	ctx, cancelF := context.WithTimeout(db.ctx, 5*time.Second)
+	defer cancelF()
+
+	localKey := localDB.NewKey(key.String())
+
+	var size int
+	if db.isCRDTEnabled.Load() {
+		size, err = db.crdtStore.GetSize(ctx, localKey)
+	} else {
+		size, err = db.localstore.GetSize(ctx, localKey)
+	}
+	if localDB.IsNotFoundError(err) {
+		return -1, ErrKeyNotFound
+	}
 	return int64(size), err
 }
 
 func (db *DB) BatchSet(data []ListItem) (err error) {
-	ctx := context.TODO()
+	ctx, cancelF := context.WithTimeout(db.ctx, 5*time.Second)
+	defer cancelF()
 
 	var b localDB.Batch
-
-	if db.crdtStore != nil {
+	if db.isCRDTEnabled.Load() {
 		b, err = db.crdtStore.Batch(ctx)
-		if err != nil {
-			return err
-		}
 	} else {
 		b, err = db.localstore.Batch(ctx)
-		if err != nil {
-			return err
-		}
+	}
+	if err != nil {
+		return err
 	}
 
 	for _, item := range data {
@@ -181,7 +252,10 @@ func (db *DB) BatchGet(keys ...DatabaseKey) ([]ListItem, error) {
 
 	for _, key := range keys {
 		val, err := tx.Get(key)
-		if errors.Is(err, badger.ErrKeyNotFound) {
+		if localDB.IsNotFoundError(err) {
+			continue
+		}
+		if errors.Is(err, ErrKeyNotFound) {
 			continue
 		}
 		if err != nil {
@@ -221,26 +295,45 @@ type WarpTransactioner interface {
 }
 
 type WarpTxn struct {
-	txn   localDB.CustomTransaction
-	batch localDB.Batch
+	ctx           context.Context
+	txn           localDB.CustomTransaction
+	isCRDTEnabled bool
+	batch         localDB.Batch
 }
 
 func (db *DB) NewTxn() (WarpTransactioner, error) {
-	ctx := context.TODO()
-	tx, err := db.localstore.NewCustomTransaction(ctx, false)
+	tx, err := db.localstore.NewCustomTransaction(db.ctx, false)
 	if err != nil {
 		return nil, err
 	}
-	b, err := db.crdtStore.Batch(ctx)
-	return &WarpTxn{txn: tx, batch: b}, err
+
+	warpTx := &WarpTxn{ctx: db.ctx, txn: tx, isCRDTEnabled: db.isCRDTEnabled.Load()}
+
+	if db.isCRDTEnabled.Load() {
+		b, err := db.crdtStore.Batch(db.ctx)
+		if err != nil {
+			return nil, err
+		}
+		warpTx.batch = b
+	}
+
+	return warpTx, nil
 }
 
 func (t *WarpTxn) Increment(key DatabaseKey) (uint64, error) {
-	num, err := t.txn.Increment(localDB.NewKey(key.String()))
+	ctx, cancelF := context.WithTimeout(t.ctx, 5*time.Second)
+	defer cancelF()
+
+	localKey := localDB.NewKey(key.String())
+	num, err := t.txn.Increment(localKey)
 	if err != nil {
 		return 0, err
 	}
-	err = t.batch.Put(context.TODO(), localDB.NewKey(key.String()), localDB.EncodeInt64(int64(num)))
+	if !t.isCRDTEnabled {
+		return num, nil
+	}
+
+	err = t.batch.Put(ctx, localKey, localDB.EncodeInt64(int64(num)))
 	if err != nil {
 		log.Error("crdt: tx increment", "key", key, "value", num, "msg", err)
 	}
@@ -249,11 +342,18 @@ func (t *WarpTxn) Increment(key DatabaseKey) (uint64, error) {
 }
 
 func (t *WarpTxn) Decrement(key DatabaseKey) (uint64, error) {
-	num, err := t.txn.Decrement(localDB.NewKey(key.String()))
+	ctx, cancelF := context.WithTimeout(t.ctx, 5*time.Second)
+	defer cancelF()
+
+	localKey := localDB.NewKey(key.String())
+	num, err := t.txn.Decrement(localKey)
 	if err != nil {
 		return 0, err
 	}
-	err = t.batch.Put(context.TODO(), localDB.NewKey(key.String()), localDB.EncodeInt64(int64(num)))
+	if !t.isCRDTEnabled {
+		return num, nil
+	}
+	err = t.batch.Put(ctx, localKey, localDB.EncodeInt64(int64(num)))
 	if err != nil {
 		log.Error("crdt: tx decrement", "key", key, "value", num, "msg", err)
 	}
@@ -262,59 +362,101 @@ func (t *WarpTxn) Decrement(key DatabaseKey) (uint64, error) {
 }
 
 func (t *WarpTxn) Set(key DatabaseKey, value []byte) error {
-	err := t.txn.Put(context.TODO(), localDB.NewKey(key.String()), value)
+	ctx, cancelF := context.WithTimeout(t.ctx, 5*time.Second)
+	defer cancelF()
+
+	localKey := localDB.NewKey(key.String())
+	err := t.txn.Put(ctx, localKey, value)
 	if err != nil {
 		return err
 	}
-	err = t.batch.Put(context.TODO(), localDB.NewKey(key.String()), value)
+	if !t.isCRDTEnabled {
+		return nil
+	}
+	err = t.batch.Put(ctx, localKey, value)
 	if err != nil {
-		log.Error("crdt: tx set", "key", key, "msg", err)
+		log.Error("crdt: tx put", "key", key, "msg", err)
 	}
 	return nil
 }
 
 func (t *WarpTxn) Get(key DatabaseKey) ([]byte, error) {
-	return t.txn.Get(context.TODO(), localDB.NewKey(key.String()))
+	ctx, cancelF := context.WithTimeout(t.ctx, 5*time.Second)
+	defer cancelF()
+
+	data, err := t.txn.Get(ctx, localDB.NewKey(key.String()))
+	if localDB.IsNotFoundError(err) {
+		return nil, ErrKeyNotFound
+	}
+	return data, err
 }
 
 func (t *WarpTxn) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error {
-	return t.txn.PutWithTTL(context.TODO(), localDB.NewKey(key.String()), value, ttl)
-}
+	ctx, cancelF := context.WithTimeout(t.ctx, 5*time.Second)
+	defer cancelF()
 
-func (t *WarpTxn) Discard(ctx context.Context) {
-	t.txn.Discard(ctx)
-	t.batch = nil
-}
-
-func (t *WarpTxn) Commit() error {
-	err := t.txn.Commit(context.TODO())
+	localKey := localDB.NewKey(key.String())
+	err := t.txn.PutWithTTL(ctx, localKey, value, ttl)
 	if err != nil {
 		return err
 	}
-	if t.batch != nil {
-		if err := t.batch.Commit(context.Background()); err != nil {
-			log.Error("crdt: tx commit", "msg", err)
-		}
+	if !t.isCRDTEnabled {
+		return nil
+	}
+	if ttl != localDB.PermanentTTL {
+		return nil
+	}
+	err = t.batch.Put(ctx, localKey, value)
+	if err != nil {
+		log.Error("crdt: tx set with ttl", "key", key, "msg", err)
+	}
+	return nil
+
+}
+
+func (t *WarpTxn) Commit() error {
+	ctx, cancelF := context.WithTimeout(t.ctx, 5*time.Second)
+	defer cancelF()
+
+	err := t.txn.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	if !t.isCRDTEnabled {
+		return nil
+	}
+	if err := t.batch.Commit(ctx); err != nil {
+		log.Error("crdt: tx commit", "msg", err)
+	}
+
+	return nil
+}
+
+func (t *WarpTxn) Delete(key DatabaseKey) error {
+	ctx, cancelF := context.WithTimeout(t.ctx, 5*time.Second)
+	defer cancelF()
+
+	localKey := localDB.NewKey(key.String())
+	err := t.txn.Delete(ctx, localKey)
+	if err != nil {
+		return err
+	}
+	if !t.isCRDTEnabled {
+		return nil
+	}
+	if err := t.batch.Delete(ctx, localKey); err != nil {
+		log.Error("crdt: tx delete", "key", key, "msg", err)
 	}
 	return nil
 }
 
 // Rollback is back compatible with Badger V3
 func (t *WarpTxn) Rollback() {
-	t.txn.Discard(context.TODO())
+	ctx, cancelF := context.WithTimeout(t.ctx, 5*time.Second)
+	defer cancelF()
+
+	t.txn.Discard(ctx)
 	t.batch = nil
-}
-
-func (t *WarpTxn) Delete(key DatabaseKey) error {
-	err := t.txn.Delete(context.TODO(), localDB.NewKey(key.String()))
-	if err != nil {
-		return err
-	}
-
-	if err := t.batch.Delete(context.TODO(), localDB.NewKey(key.String())); err != nil {
-		log.Error("crdt: tx delete", "key", key, "msg", err)
-	}
-	return nil
 }
 
 const endCursor = "end"
@@ -325,15 +467,19 @@ func (t *WarpTxn) IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 	if strings.Contains(prefix.String(), FixedKey) {
 		return DBError("cannot iterate thru fixed key")
 	}
-	opts := badger.DefaultIteratorOptions
+	opts := localDB.DefaultIteratorOptions
 	it, err := t.txn.NewIterator(opts)
 	if err != nil {
 		return err
 	}
 	defer it.Close()
+
 	p := []byte(prefix)
 
 	for it.Seek(p); it.ValidForPrefix(p); it.Next() {
+		if t.ctx.Err() != nil {
+			return t.ctx.Err()
+		}
 		item := it.Item()
 		key := string(item.KeyCopy(nil))
 		if strings.Contains(key, FixedKey) {
@@ -351,16 +497,20 @@ func (t *WarpTxn) ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) e
 	if strings.Contains(prefix.String(), FixedKey) {
 		return DBError("cannot iterate thru fixed key")
 	}
-	opts := badger.DefaultIteratorOptions
+	opts := localDB.DefaultIteratorOptions
 	opts.Reverse = true
 	it, err := t.txn.NewIterator(opts)
 	if err != nil {
 		return err
 	}
 	defer it.Close()
+
 	p := []byte(prefix)
 
 	for it.Seek(p); it.ValidForPrefix(p); it.Next() {
+		if t.ctx.Err() != nil {
+			return t.ctx.Err()
+		}
 		item := it.Item()
 		key := string(item.KeyCopy(nil))
 		if strings.Contains(key, FixedKey) {
@@ -393,7 +543,7 @@ func (t *WarpTxn) List(prefix DatabaseKey, limit *uint64, cursor *string) ([]Lis
 		limit = &defaultLimit
 	}
 
-	items := make([]ListItem, 0, *limit) //
+	items := make([]ListItem, 0, *limit)
 	cur, err := iterateKeysValues(
 		t.txn, prefix, startCursor, limit,
 		func(key string, value []byte) error {
@@ -421,7 +571,7 @@ func iterateKeysValues(
 	if startCursor.String() == endCursor {
 		return endCursor, nil
 	}
-	opts := badger.DefaultIteratorOptions
+	opts := localDB.DefaultIteratorOptions
 	opts.PrefetchValues = true
 	opts.PrefetchSize = 20
 
@@ -444,7 +594,6 @@ func iterateKeysValues(
 	for it.Seek(p); it.ValidForPrefix(p); it.Next() {
 		item := it.Item()
 		key := string(item.Key())
-
 		if strings.Contains(key, FixedKey) {
 			continue
 		}
@@ -462,7 +611,6 @@ func iterateKeysValues(
 			return "", err
 		}
 		iterNum++
-
 	}
 
 	if iterNum < *limit {

@@ -60,7 +60,12 @@ type GossipNodeConnector interface {
 	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
-type topicHandler func(data []byte) error
+type (
+	topicHandler func(data []byte) error
+
+	Topic        = pubsub.Topic
+	Subscription = pubsub.Subscription
+)
 
 type Gossip struct {
 	ctx    context.Context
@@ -224,6 +229,33 @@ func (g *Gossip) runGossip() (err error) {
 	log.Infoln("gossip: started")
 
 	return nil
+}
+
+// SubscribeStandalone TODO refactor
+func (g *Gossip) SubscribeExplicit(topicName string) (_ *pubsub.Topic, _ *pubsub.Subscription, err error) {
+	topic, ok := g.topics[topicName]
+	if !ok {
+		topic, err = g.pubsub.Join(topicName)
+		if err != nil {
+			return nil, nil, err
+		}
+		g.topics[topicName] = topic
+	}
+	if topic == nil {
+		return nil, nil, errors.New("gossip: topic not found")
+	}
+
+	relayCancel, err := topic.Relay()
+	if err != nil {
+		return nil, nil, err
+	}
+	g.relayCancelFuncs[topicName] = relayCancel
+
+	sub, err := topic.Subscribe()
+	if err != nil {
+		return nil, nil, err
+	}
+	return topic, sub, nil
 }
 
 func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {
@@ -459,6 +491,6 @@ func (g *Gossip) Close() (err error) {
 	g.relayCancelFuncs = nil
 	g.topics = nil
 	g.subs = nil
-	log.Infoln("Gossip: closed")
+	log.Infoln("gossip: closed")
 	return
 }

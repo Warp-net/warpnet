@@ -52,6 +52,7 @@ type PubSubProvider interface {
 	UnsubscribeUserUpdate(userId string) (err error)
 	Run(m pubsub.PubsubServerNodeConnector)
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
+	Broadcaster(topic string) (*pubsub.CRDTBroadcaster, error)
 	Close() error
 }
 
@@ -98,12 +99,13 @@ type FollowStorer interface {
 type Storer interface {
 	NewTxn() (local.WarpTransactioner, error)
 	Get(key local.DatabaseKey) ([]byte, error)
-	GetExpiration(key local.DatabaseKey) (uint64, error)
 	GetSize(key local.DatabaseKey) (int64, error)
 	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
 	Set(key local.DatabaseKey, value []byte) error
 	Delete(key local.DatabaseKey) error
 	Stats() map[string]string
+	LocalStore() local.LocalStore
+	EnableCRDT(ns string, b local.Broadcaster) (err error)
 }
 
 type PseudoStreamer interface {

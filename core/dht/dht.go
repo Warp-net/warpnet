@@ -299,8 +299,8 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 
 func (d *distributedHashTable) ClosestPeers() ([]warpnet.WarpPeerID, error) {
 	return d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
-
 }
+
 func (d *distributedHashTable) Close() {
 	defer func() { recover() }()
 	if d == nil || d.dht == nil {

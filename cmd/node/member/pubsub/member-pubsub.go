@@ -59,8 +59,6 @@ type memberPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
-type DiscoveryHandler func(warpnet.WarpAddrInfo)
-
 func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *memberPubSub {
 	mps := &memberPubSub{
 		ctx: ctx,
@@ -105,6 +103,31 @@ func PrefollowUsers(userIds ...string) (handlers []pubsub.TopicHandler) {
 	}
 
 	return handlers
+}
+
+type CRDTBroadcaster struct {
+	topic *pubsub.Topic
+	sub   *pubsub.Subscription
+}
+
+func (g *memberPubSub) Broadcaster(topicName string) (*CRDTBroadcaster, error) {
+	t, s, err := g.pubsub.SubscribeExplicit(topicName)
+	if err != nil {
+		return nil, err
+	}
+	return &CRDTBroadcaster{t, s}, nil
+}
+
+func (b *CRDTBroadcaster) Broadcast(ctx context.Context, bytes []byte) error {
+	return b.topic.Publish(ctx, bytes)
+}
+
+func (b *CRDTBroadcaster) Next(ctx context.Context) ([]byte, error) {
+	msg, err := b.sub.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return msg.GetData(), nil
 }
 
 // SubscribeUserUpdate - follow someone
