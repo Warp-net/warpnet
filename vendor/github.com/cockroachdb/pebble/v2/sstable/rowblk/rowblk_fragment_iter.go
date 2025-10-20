@@ -64,8 +64,9 @@ var _ keyspan.FragmentIterator = (*fragmentIter)(nil)
 var fragmentBlockIterPool = sync.Pool{
 	New: func() interface{} {
 		i := &fragmentIter{}
-		// Note: this is a no-op if invariants are disabled or race is enabled.
-		invariants.SetFinalizer(i, checkFragmentBlockIterator)
+		if invariants.UseFinalizers {
+			invariants.SetFinalizer(i, checkFragmentBlockIterator)
+		}
 		return i
 	},
 }
@@ -269,7 +270,9 @@ func (i *fragmentIter) gatherBackward(kv *base.InternalKV) (*keyspan.Span, error
 	// Apply a consistent ordering.
 	keyspan.SortKeysByTrailer(i.span.Keys)
 
-	i.applySpanTransforms()
+	if err := i.applySpanTransforms(); err != nil {
+		return nil, err
+	}
 	return &i.span, nil
 }
 
@@ -278,7 +281,7 @@ func (i *fragmentIter) SetContext(ctx context.Context) {}
 
 // Close implements (keyspan.FragmentIterator).Close.
 func (i *fragmentIter) Close() {
-	i.blockIter.Close()
+	_ = i.blockIter.Close()
 	i.closeCheck.Close()
 
 	if invariants.Sometimes(25) {

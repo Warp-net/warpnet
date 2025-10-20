@@ -227,7 +227,7 @@ type downloadSpanTask struct {
 
 	// Testing hooks.
 	testing struct {
-		launchDownloadCompaction func(f *fileMetadata) (chan error, bool)
+		launchDownloadCompaction func(f *manifest.TableMetadata) (chan error, bool)
 	}
 }
 
@@ -242,19 +242,22 @@ type downloadBookmark struct {
 	downloadDoneCh chan error
 }
 
-func (d *DB) newDownloadSpanTask(vers *version, sp DownloadSpan) (_ *downloadSpanTask, ok bool) {
+func (d *DB) newDownloadSpanTask(
+	vers *manifest.Version, sp DownloadSpan,
+) (_ *downloadSpanTask, ok bool) {
 	bounds := base.UserKeyBoundsEndExclusive(sp.StartKey, sp.EndKey)
 	// We are interested in all external sstables that *overlap* with
 	// [sp.StartKey, sp.EndKey). Expand the bounds to the left so that we
 	// include the start keys of any external sstables that overlap with
 	// sp.StartKey.
-	vers.IterAllLevelsAndSublevels(func(iter manifest.LevelIterator, level manifest.Layer) {
+	for _, ls := range vers.AllLevelsAndSublevels() {
+		iter := ls.Iter()
 		if f := iter.SeekGE(d.cmp, sp.StartKey); f != nil &&
-			objstorage.IsExternalTable(d.objProvider, f.FileBacking.DiskFileNum) &&
-			d.cmp(f.Smallest.UserKey, bounds.Start) < 0 {
-			bounds.Start = f.Smallest.UserKey
+			objstorage.IsExternalTable(d.objProvider, f.TableBacking.DiskFileNum) &&
+			d.cmp(f.Smallest().UserKey, bounds.Start) < 0 {
+			bounds.Start = f.Smallest().UserKey
 		}
-	})
+	}
 	startCursor := downloadCursor{
 		level:  0,
 		key:    bounds.Start,
@@ -309,25 +312,27 @@ func (c downloadCursor) String() string {
 // makeCursorAtFile returns a downloadCursor that is immediately before the
 // given file. Calling nextExternalFile on the resulting cursor (using the same
 // version) should return f.
-func makeCursorAtFile(f *fileMetadata, level int) downloadCursor {
+func makeCursorAtFile(f *manifest.TableMetadata, level int) downloadCursor {
 	return downloadCursor{
 		level:  level,
-		key:    f.Smallest.UserKey,
+		key:    f.Smallest().UserKey,
 		seqNum: f.LargestSeqNum,
 	}
 }
 
 // makeCursorAfterFile returns a downloadCursor that is immediately
 // after the given file.
-func makeCursorAfterFile(f *fileMetadata, level int) downloadCursor {
+func makeCursorAfterFile(f *manifest.TableMetadata, level int) downloadCursor {
 	return downloadCursor{
 		level:  level,
-		key:    f.Smallest.UserKey,
+		key:    f.Smallest().UserKey,
 		seqNum: f.LargestSeqNum + 1,
 	}
 }
 
-func (c downloadCursor) FileIsAfterCursor(cmp base.Compare, f *fileMetadata, level int) bool {
+func (c downloadCursor) FileIsAfterCursor(
+	cmp base.Compare, f *manifest.TableMetadata, level int,
+) bool {
 	return c.Compare(cmp, makeCursorAfterFile(f, level)) < 0
 }
 
@@ -344,8 +349,8 @@ func (c downloadCursor) Compare(keyCmp base.Compare, other downloadCursor) int {
 // NextExternalFile returns the first file after the cursor, returning the file
 // and the level. If no such file exists, returns nil fileMetadata.
 func (c downloadCursor) NextExternalFile(
-	cmp base.Compare, objProvider objstorage.Provider, bounds base.UserKeyBounds, v *version,
-) (_ *fileMetadata, level int) {
+	cmp base.Compare, objProvider objstorage.Provider, bounds base.UserKeyBounds, v *manifest.Version,
+) (_ *manifest.TableMetadata, level int) {
 	for !c.AtEnd() {
 		if f := c.NextExternalFileOnLevel(cmp, objProvider, bounds.End, v); f != nil {
 			return f, c.level
@@ -361,14 +366,17 @@ func (c downloadCursor) NextExternalFile(
 // NextExternalFileOnLevel returns the first external file on c.level which is
 // after c and with Smallest.UserKey within the end bound.
 func (c downloadCursor) NextExternalFileOnLevel(
-	cmp base.Compare, objProvider objstorage.Provider, endBound base.UserKeyBoundary, v *version,
-) *fileMetadata {
+	cmp base.Compare,
+	objProvider objstorage.Provider,
+	endBound base.UserKeyBoundary,
+	v *manifest.Version,
+) *manifest.TableMetadata {
 	if c.level > 0 {
 		it := v.Levels[c.level].Iter()
 		return firstExternalFileInLevelIter(cmp, objProvider, c, it, endBound)
 	}
 	// For L0, we look at all sublevel iterators and take the first file.
-	var first *fileMetadata
+	var first *manifest.TableMetadata
 	var firstCursor downloadCursor
 	for _, sublevel := range v.L0SublevelFiles {
 		f := firstExternalFileInLevelIter(cmp, objProvider, c, sublevel.Iter(), endBound)
@@ -379,7 +387,7 @@ func (c downloadCursor) NextExternalFileOnLevel(
 				firstCursor = c
 			}
 			// Trim the end bound as an optimization.
-			endBound = base.UserKeyInclusive(f.Smallest.UserKey)
+			endBound = base.UserKeyInclusive(f.Smallest().UserKey)
 		}
 	}
 	return first
@@ -394,15 +402,15 @@ func firstExternalFileInLevelIter(
 	cursor downloadCursor,
 	it manifest.LevelIterator,
 	endBound base.UserKeyBoundary,
-) *fileMetadata {
+) *manifest.TableMetadata {
 	f := it.SeekGE(cmp, cursor.key)
 	// Skip the file if it starts before cursor.key or is at that same key with lower
 	// sequence number.
 	for f != nil && !cursor.FileIsAfterCursor(cmp, f, cursor.level) {
 		f = it.Next()
 	}
-	for ; f != nil && endBound.IsUpperBoundFor(cmp, f.Smallest.UserKey); f = it.Next() {
-		if f.Virtual && objstorage.IsExternalTable(objProvider, f.FileBacking.DiskFileNum) {
+	for ; f != nil && endBound.IsUpperBoundFor(cmp, f.Smallest().UserKey); f = it.Next() {
+		if f.Virtual && objstorage.IsExternalTable(objProvider, f.TableBacking.DiskFileNum) {
 			return f
 		}
 	}
@@ -413,7 +421,12 @@ func firstExternalFileInLevelIter(
 // given file. Returns true on success, or false if the file is already
 // involved in a compaction.
 func (d *DB) tryLaunchDownloadForFile(
-	vers *version, env compactionEnv, download *downloadSpanTask, level int, f *fileMetadata,
+	vers *manifest.Version,
+	l0Organizer *manifest.L0Organizer,
+	env compactionEnv,
+	download *downloadSpanTask,
+	level int,
+	f *manifest.TableMetadata,
 ) (doneCh chan error, ok bool) {
 	if f.IsCompacting() {
 		return nil, false
@@ -425,7 +438,7 @@ func (d *DB) tryLaunchDownloadForFile(
 	if download.downloadSpan.ViaBackingFileDownload {
 		kind = compactionKindCopy
 	}
-	pc := pickDownloadCompaction(vers, d.opts, env, d.mu.versions.picker.getBaseLevel(), kind, level, f)
+	pc := pickDownloadCompaction(vers, l0Organizer, d.opts, env, d.mu.versions.picker.getBaseLevel(), kind, level, f)
 	if pc == nil {
 		// We are not able to run this download compaction at this time.
 		return nil, false
@@ -433,10 +446,10 @@ func (d *DB) tryLaunchDownloadForFile(
 
 	download.numLaunchedDownloads++
 	doneCh = make(chan error, 1)
-	c := newCompaction(pc, d.opts, d.timeNow(), d.objProvider)
+	c := newCompaction(pc, d.opts, d.timeNow(), d.objProvider, noopGrantHandle{}, d.TableFormat(), d.determineCompactionValueSeparation)
 	c.isDownload = true
 	d.mu.compact.downloadingCount++
-	d.addInProgressCompaction(c)
+	c.AddInProgressLocked(d)
 	go d.compact(c, doneCh)
 	return doneCh, true
 }
@@ -450,7 +463,11 @@ const (
 )
 
 func (d *DB) tryLaunchDownloadCompaction(
-	download *downloadSpanTask, vers *manifest.Version, env compactionEnv, maxConcurrentDownloads int,
+	download *downloadSpanTask,
+	vers *manifest.Version,
+	l0Organizer *manifest.L0Organizer,
+	env compactionEnv,
+	maxConcurrentDownloads int,
 ) launchDownloadResult {
 	// First, check the bookmarks.
 	for i := 0; i < len(download.bookmarks); i++ {
@@ -497,7 +514,7 @@ func (d *DB) tryLaunchDownloadCompaction(
 
 		// Move up the bookmark position to point at this file.
 		b.start = makeCursorAtFile(f, b.start.level)
-		doneCh, ok := d.tryLaunchDownloadForFile(vers, env, download, b.start.level, f)
+		doneCh, ok := d.tryLaunchDownloadForFile(vers, l0Organizer, env, download, b.start.level, f)
 		if ok {
 			b.downloadDoneCh = doneCh
 			return launchedCompaction
@@ -522,9 +539,9 @@ func (d *DB) tryLaunchDownloadCompaction(
 
 		download.bookmarks = append(download.bookmarks, downloadBookmark{
 			start:    makeCursorAtFile(f, level),
-			endBound: base.UserKeyInclusive(f.Largest.UserKey),
+			endBound: base.UserKeyInclusive(f.Largest().UserKey),
 		})
-		doneCh, ok := d.tryLaunchDownloadForFile(vers, env, download, level, f)
+		doneCh, ok := d.tryLaunchDownloadForFile(vers, l0Organizer, env, download, level, f)
 		if ok {
 			// We launched a download for this file.
 			download.bookmarks[len(download.bookmarks)-1].downloadDoneCh = doneCh

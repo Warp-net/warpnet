@@ -11,6 +11,7 @@ import (
 const (
 	DefaultAcceleratedDHTClient      = false
 	DefaultLoopbackAddressesOnLanDHT = false
+	DefaultRoutingType               = "auto"
 	CidContactRoutingURL             = "https://cid.contact"
 	PublicGoodDelegatedRoutingURL    = "https://delegated-ipfs.dev" // cid.contact + amino dht (incl. IPNS PUTs)
 	EnvHTTPRouters                   = "IPFS_HTTP_ROUTERS"
@@ -18,11 +19,6 @@ const (
 )
 
 var (
-	// Default HTTP routers used in parallel to DHT when Routing.Type = "auto"
-	DefaultHTTPRouters = getEnvOrDefault(EnvHTTPRouters, []string{
-		CidContactRoutingURL, // https://github.com/ipfs/kubo/issues/9422#issuecomment-1338142084
-	})
-
 	// Default filter-protocols to pass along with delegated routing requests (as defined in IPIP-484)
 	// and also filter out locally
 	DefaultHTTPRoutersFilterProtocols = getEnvOrDefault(EnvHTTPRoutersFilterProtocols, []string{
@@ -37,8 +33,9 @@ var (
 type Routing struct {
 	// Type sets default daemon routing mode.
 	//
-	// Can be one of "auto", "autoclient", "dht", "dhtclient", "dhtserver", "none", or "custom".
+	// Can be one of "auto", "autoclient", "dht", "dhtclient", "dhtserver", "none", "delegated", or "custom".
 	// When unset or set to "auto", DHT and implicit routers are used.
+	// When "delegated" is set, only HTTP delegated routers and IPNS publishers are used (no DHT).
 	// When "custom" is set, user-provided Routing.Routers is used.
 	Type *OptionalString `json:",omitempty"`
 
@@ -49,7 +46,7 @@ type Routing struct {
 	IgnoreProviders []string `json:",omitempty"`
 
 	// Simplified configuration used by default when Routing.Type=auto|autoclient
-	DelegatedRouters []string `json:",omitempty"`
+	DelegatedRouters []string
 
 	// Advanced configuration used when Routing.Type=custom
 	Routers Routers `json:",omitempty"`
@@ -216,4 +213,58 @@ func getEnvOrDefault(key string, defaultValue []string) []string {
 		return strings.FieldsFunc(value, splitFunc)
 	}
 	return defaultValue
+}
+
+// HasHTTPProviderConfigured checks if the node is configured to use HTTP routers
+// for providing content announcements. This is used when determining if the node
+// can provide content even when not connected to libp2p peers.
+//
+// Note: Right now we only support delegated HTTP content providing if Routing.Type=custom
+// and Routing.Routers are configured according to:
+// https://github.com/ipfs/kubo/blob/master/docs/delegated-routing.md#configuration-file-example
+//
+// This uses the `ProvideBitswap` request type that is not documented anywhere,
+// because we hoped something like IPIP-378 (https://github.com/ipfs/specs/pull/378)
+// would get finalized and we'd switch to that. It never happened due to politics,
+// and now we are stuck with ProvideBitswap being the only API that works.
+// Some people have reverse engineered it (example:
+// https://discuss.ipfs.tech/t/only-peers-found-from-dht-seem-to-be-getting-used-as-relays-so-cant-use-http-routers/19545/9)
+// and use it, so what we do here is the bare minimum to ensure their use case works
+// using this old API until something better is available.
+func (c *Config) HasHTTPProviderConfigured() bool {
+	if len(c.Routing.Routers) == 0 {
+		// No "custom" routers
+		return false
+	}
+	method, ok := c.Routing.Methods[MethodNameProvide]
+	if !ok {
+		// No provide method configured
+		return false
+	}
+	return c.routerSupportsHTTPProviding(method.RouterName)
+}
+
+// routerSupportsHTTPProviding checks if the supplied custom router is or
+// includes an HTTP-based router.
+func (c *Config) routerSupportsHTTPProviding(routerName string) bool {
+	rp, ok := c.Routing.Routers[routerName]
+	if !ok {
+		// Router configured for providing doesn't exist
+		return false
+	}
+
+	switch rp.Type {
+	case RouterTypeHTTP:
+		return true
+	case RouterTypeParallel, RouterTypeSequential:
+		// Check if any child router supports HTTP
+		if children, ok := rp.Parameters.(*ComposableRouterParams); ok {
+			for _, childRouter := range children.Routers {
+				if c.routerSupportsHTTPProviding(childRouter.RouterName) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

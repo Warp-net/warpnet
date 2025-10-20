@@ -1,7 +1,10 @@
 kill:
 	pkill -9 main
 
-dry-run:
+dry-run-main:
+	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet
+
+dry-run-second:
 	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet --node.port 4002 --node.seed dryrun1 --database.dir dryrun1
 
 run-member:

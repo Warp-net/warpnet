@@ -13,8 +13,9 @@ import (
 
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/invariants"
+	"github.com/cockroachdb/pebble/v2/internal/manifest"
 	"github.com/cockroachdb/pebble/v2/rangekey"
-	"github.com/cockroachdb/pebble/v2/sstable"
+	"github.com/cockroachdb/pebble/v2/sstable/block"
 )
 
 // Snapshot provides a read-only point-in-time view of the DB state.
@@ -75,7 +76,7 @@ func (s *Snapshot) NewIterWithContext(ctx context.Context, o *IterOptions) (*Ite
 // point keys deleted by range dels and keys masked by range keys.
 func (s *Snapshot) ScanInternal(
 	ctx context.Context,
-	categoryAndQoS sstable.CategoryAndQoS,
+	category block.Category,
 	lower, upper []byte,
 	visitPointKey func(key *InternalKey, value LazyValue, iterInfo IteratorLevel) error,
 	visitRangeDel func(start, end []byte, seqNum base.SeqNum) error,
@@ -87,7 +88,7 @@ func (s *Snapshot) ScanInternal(
 		panic(ErrClosed)
 	}
 	scanInternalOpts := &scanInternalOptions{
-		CategoryAndQoS:    categoryAndQoS,
+		category:          category,
 		visitPointKey:     visitPointKey,
 		visitRangeDel:     visitRangeDel,
 		visitRangeKey:     visitRangeKey,
@@ -117,7 +118,8 @@ func (s *Snapshot) closeLocked() error {
 	// If s was the previous earliest snapshot, we might be able to reclaim
 	// disk space by dropping obsolete records that were pinned by s.
 	if e := s.db.mu.snapshots.earliest(); e > s.seqNum {
-		s.db.maybeScheduleCompactionPicker(pickElisionOnly)
+		// NB: maybeScheduleCompaction also picks elision-only compactions.
+		s.db.maybeScheduleCompaction()
 	}
 	s.db = nil
 	return nil
@@ -243,7 +245,7 @@ type EventuallyFileOnlySnapshot struct {
 		// The wrapped regular snapshot, if not a file-only snapshot yet.
 		snap *Snapshot
 		// The wrapped version reference, if a file-only snapshot.
-		vers *version
+		vers *manifest.Version
 	}
 
 	// Key ranges to watch for an excise on.
@@ -298,7 +300,7 @@ func (d *DB) makeEventuallyFileOnlySnapshot(keyRanges []KeyRange) *EventuallyFil
 // call.
 //
 // d.mu must be held when calling this method.
-func (es *EventuallyFileOnlySnapshot) transitionToFileOnlySnapshot(vers *version) error {
+func (es *EventuallyFileOnlySnapshot) transitionToFileOnlySnapshot(vers *manifest.Version) error {
 	es.mu.Lock()
 	select {
 	case <-es.closed:
@@ -473,7 +475,7 @@ func (es *EventuallyFileOnlySnapshot) NewIterWithContext(
 // point keys deleted by range dels and keys masked by range keys.
 func (es *EventuallyFileOnlySnapshot) ScanInternal(
 	ctx context.Context,
-	categoryAndQoS sstable.CategoryAndQoS,
+	category block.Category,
 	lower, upper []byte,
 	visitPointKey func(key *InternalKey, value LazyValue, iterInfo IteratorLevel) error,
 	visitRangeDel func(start, end []byte, seqNum base.SeqNum) error,
@@ -486,7 +488,7 @@ func (es *EventuallyFileOnlySnapshot) ScanInternal(
 	}
 	var sOpts snapshotIterOpts
 	opts := &scanInternalOptions{
-		CategoryAndQoS: categoryAndQoS,
+		category: category,
 		IterOptions: IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: lower,

@@ -39,6 +39,9 @@ type InternalKeyTrailer = base.InternalKeyTrailer
 // InternalKey exports the base.InternalKey type.
 type InternalKey = base.InternalKey
 
+// KeyRange exports the base.KeyRange type.
+type KeyRange = base.KeyRange
+
 // MakeInternalKey constructs an internal key from a specified user key,
 // sequence number and kind.
 func MakeInternalKey(userKey []byte, seqNum SeqNum, kind InternalKeyKind) InternalKey {
@@ -55,8 +58,15 @@ type internalIterator = base.InternalIterator
 
 type topLevelIterator = base.TopLevelIterator
 
+// IsCorruptionError returns true if the given error indicates database
+// corruption.
+func IsCorruptionError(err error) bool {
+	return base.IsCorruptionError(err)
+}
+
 // ErrCorruption is a marker to indicate that data in a file (WAL, MANIFEST,
 // sstable) isn't in the expected format.
+// DEPRECATED: should use IsCorruptionError() instead.
 var ErrCorruption = base.ErrCorruption
 
 // AttributeAndLen exports the base.AttributeAndLen type.

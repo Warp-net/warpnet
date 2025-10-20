@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/invariants"
 	"github.com/cockroachdb/pebble/v2/objstorage"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
+	"github.com/cockroachdb/pebble/v2/sstable/block/blockkind"
 )
 
 // RewriteKeySuffixesAndReturnFormat copies the content of the passed SSTable
@@ -76,36 +77,41 @@ func RewriteKeySuffixesAndReturnFormat(
 	if err != nil {
 		return nil, TableFormatUnspecified, err
 	}
-	defer r.Close()
-	return rewriteKeySuffixesInBlocks(r, out, o, from, to, concurrency)
+	defer func() { _ = r.Close() }()
+	return rewriteKeySuffixesInBlocks(r, sst, out, o, from, to, concurrency)
 }
 
 func rewriteKeySuffixesInBlocks(
-	r *Reader, out objstorage.Writable, o WriterOptions, from, to []byte, concurrency int,
+	r *Reader, sst []byte, out objstorage.Writable, o WriterOptions, from, to []byte, concurrency int,
 ) (*WriterMetadata, TableFormat, error) {
 	o = o.ensureDefaults()
+	props, err := r.ReadPropertiesBlock(context.TODO(), nil /* buffer pool */)
+	if err != nil {
+		return nil, TableFormatUnspecified, err
+	}
+
 	switch {
 	case concurrency < 1:
 		return nil, TableFormatUnspecified, errors.New("concurrency must be >= 1")
-	case r.Properties.NumValueBlocks > 0 || r.Properties.NumValuesInValueBlocks > 0:
+	case r.Attributes.Has(AttributeValueBlocks):
 		return nil, TableFormatUnspecified,
 			errors.New("sstable with a single suffix should not have value blocks")
-	case r.Properties.ComparerName != o.Comparer.Name:
+	case props.ComparerName != o.Comparer.Name:
 		return nil, TableFormatUnspecified, errors.Errorf("mismatched Comparer %s vs %s, replacement requires same splitter to copy filters",
-			r.Properties.ComparerName, o.Comparer.Name)
-	case o.FilterPolicy != nil && r.Properties.FilterPolicyName != o.FilterPolicy.Name():
-		return nil, TableFormatUnspecified, errors.New("mismatched filters")
+			props.ComparerName, o.Comparer.Name)
+	case o.FilterPolicy != base.NoFilterPolicy && props.FilterPolicyName != o.FilterPolicy.Name():
+		return nil, TableFormatUnspecified, errors.Errorf("mismatched filters %q vs %q", props.FilterPolicyName, o.FilterPolicy.Name())
 	}
 
 	o.TableFormat = r.tableFormat
 	w := NewRawWriter(out, o)
 	defer func() {
 		if w != nil {
-			w.Close()
+			_ = w.Close()
 		}
 	}()
 
-	if err := w.rewriteSuffixes(r, o, from, to, concurrency); err != nil {
+	if err := w.rewriteSuffixes(r, sst, o, from, to, concurrency); err != nil {
 		return nil, TableFormatUnspecified, err
 	}
 
@@ -133,17 +139,21 @@ type blockRewriter interface {
 
 func rewriteDataBlocksInParallel(
 	r *Reader,
+	sstBytes []byte,
 	opts WriterOptions,
 	input []block.HandleWithProperties,
 	from, to []byte,
 	concurrency int,
+	compressionStats *block.CompressionStats,
 	newDataBlockRewriter func() blockRewriter,
 ) ([]blockWithSpan, error) {
-	if r.Properties.NumEntries == 0 {
+	if !r.Attributes.Has(AttributePointKeys) {
 		// No point keys.
 		return nil, nil
 	}
 	output := make([]blockWithSpan, len(input))
+
+	var compressionStatsMu sync.Mutex
 
 	g := &sync.WaitGroup{}
 	g.Add(concurrency)
@@ -161,13 +171,15 @@ func rewriteDataBlocksInParallel(
 			var compressedBuf []byte
 			var inputBlock, inputBlockBuf []byte
 			checksummer := block.Checksummer{Type: opts.Checksum}
+			compressor := block.MakeCompressor(opts.Compression)
+			defer compressor.Close()
 			// We'll assume all blocks are _roughly_ equal so round-robin static partition
 			// of each worker doing every ith block is probably enough.
 			err := func() error {
 				for i := worker; i < len(input); i += concurrency {
 					bh := input[i]
 					var err error
-					inputBlock, inputBlockBuf, err = readBlockBuf(r, bh.Handle, inputBlockBuf)
+					inputBlock, inputBlockBuf, err = readBlockBuf(sstBytes, bh.Handle, r.blockReader.ChecksumType(), inputBlockBuf)
 					if err != nil {
 						return err
 					}
@@ -177,8 +189,14 @@ func rewriteDataBlocksInParallel(
 					if err != nil {
 						return err
 					}
+					if err := r.Comparer.ValidateKey.Validate(output[i].start.UserKey); err != nil {
+						return err
+					}
+					if err := r.Comparer.ValidateKey.Validate(output[i].end.UserKey); err != nil {
+						return err
+					}
 					compressedBuf = compressedBuf[:cap(compressedBuf)]
-					finished := block.CompressAndChecksum(&compressedBuf, outputBlock, opts.Compression, &checksummer)
+					finished := block.CompressAndChecksum(&compressedBuf, outputBlock, blockkind.SSTableData, &compressor, &checksummer)
 					output[i].physical = finished.CloneWithByteAlloc(&blockAlloc)
 				}
 				return nil
@@ -186,6 +204,9 @@ func rewriteDataBlocksInParallel(
 			if err != nil {
 				errCh <- workerErr{worker: worker, err: err}
 			}
+			compressionStatsMu.Lock()
+			compressionStats.MergeWith(compressor.Stats())
+			defer compressionStatsMu.Unlock()
 		}()
 	}
 	g.Wait()
@@ -203,7 +224,7 @@ func rewriteDataBlocksInParallel(
 }
 
 func rewriteRangeKeyBlockToWriter(r *Reader, w RawWriter, from, to []byte) error {
-	iter, err := r.NewRawRangeKeyIter(context.TODO(), NoFragmentTransforms)
+	iter, err := r.NewRawRangeKeyIter(context.TODO(), NoFragmentTransforms, NoReadEnv)
 	if err != nil {
 		return err
 	}
@@ -217,6 +238,12 @@ func rewriteRangeKeyBlockToWriter(r *Reader, w RawWriter, from, to []byte) error
 	for ; s != nil; s, err = iter.Next() {
 		if !s.Valid() {
 			break
+		}
+		if err := r.Comparer.ValidateKey.Validate(s.Start); err != nil {
+			return err
+		}
+		if err := r.Comparer.ValidateKey.Validate(s.End); err != nil {
+			return err
 		}
 		for i := range s.Keys {
 			if s.Keys[i].Kind() != base.InternalKeyKindRangeKeySet {
@@ -257,7 +284,7 @@ func getShortIDs(
 		shortIDs[i] = invalidShortID
 	}
 	for i, p := range collectors {
-		prop, ok := r.Properties.UserProperties[p.Name()]
+		prop, ok := r.UserProperties[p.Name()]
 		if !ok {
 			return nil, 0, errors.Errorf("sstable does not contain property %s", p.Name())
 		}
@@ -295,19 +322,22 @@ func RewriteKeySuffixesViaWriter(
 	if o.Comparer == nil || o.Comparer.Split == nil {
 		return nil, errors.New("a valid splitter is required to rewrite suffixes")
 	}
+	if r.Attributes.Has(AttributeBlobValues) {
+		return nil, errors.New("cannot rewrite suffixes of sstable with blob values")
+	}
 
 	o.IsStrictObsolete = false
 	w := NewRawWriter(out, o)
 	defer func() {
 		if w != nil {
-			w.Close()
+			_ = w.Close()
 		}
 	}()
-	i, err := r.NewIter(NoTransforms, nil, nil)
+	i, err := r.NewIter(NoTransforms, nil, nil, AssertNoBlobHandles)
 	if err != nil {
 		return nil, err
 	}
-	defer i.Close()
+	defer func() { _ = i.Close() }()
 
 	kv := i.First()
 	var scratch InternalKey
@@ -315,7 +345,7 @@ func RewriteKeySuffixesViaWriter(
 		if kv.Kind() != InternalKeyKindSet {
 			return nil, errors.New("invalid key type")
 		}
-		oldSuffix := kv.K.UserKey[r.Split(kv.K.UserKey):]
+		oldSuffix := kv.K.UserKey[r.Comparer.Split(kv.K.UserKey):]
 		if !bytes.Equal(oldSuffix, from) {
 			return nil, errors.Errorf("key has suffix %q, expected %q", oldSuffix, from)
 		}
@@ -323,11 +353,15 @@ func RewriteKeySuffixesViaWriter(
 		scratch.UserKey = append(scratch.UserKey, to...)
 		scratch.Trailer = kv.K.Trailer
 
+		if invariants.Enabled && invariants.Sometimes(10) {
+			r.Comparer.ValidateKey.MustValidate(scratch.UserKey)
+		}
+
 		val, _, err := kv.Value(nil)
 		if err != nil {
 			return nil, err
 		}
-		if err := w.AddWithForceObsolete(scratch, val, false); err != nil {
+		if err := w.Add(scratch, val, false); err != nil {
 			return nil, err
 		}
 		kv = i.Next()
@@ -350,9 +384,15 @@ func NewMemReader(sst []byte, o ReaderOptions) (*Reader, error) {
 	return NewReader(context.Background(), newMemReader(sst), o)
 }
 
-func readBlockBuf(r *Reader, bh block.Handle, buf []byte) ([]byte, []byte, error) {
-	raw := r.readable.(*memReader).b[bh.Offset : bh.Offset+bh.Length+block.TrailerLen]
-	if err := checkChecksum(r.checksumType, raw, bh, 0); err != nil {
+// readBlockBuf may return a byte slice that points directly into sstBytes. If
+// the caller is going to expect that sstBytes remain stable, it should copy the
+// returned slice before writing it out to a objstorage.Writable which may
+// mangle it.
+func readBlockBuf(
+	sstBytes []byte, bh block.Handle, checksumType block.ChecksumType, buf []byte,
+) ([]byte, []byte, error) {
+	raw := sstBytes[bh.Offset : bh.Offset+bh.Length+block.TrailerLen]
+	if err := block.ValidateChecksum(checksumType, raw, bh); err != nil {
 		return nil, buf, err
 	}
 	algo := block.CompressionIndicator(raw[bh.Length])
@@ -365,7 +405,7 @@ func readBlockBuf(r *Reader, bh block.Handle, buf []byte) ([]byte, []byte, error
 		}
 	}
 
-	decompressedLen, prefix, err := block.DecompressedLen(algo, raw)
+	decompressedLen, err := block.DecompressedLen(algo, raw)
 	if err != nil {
 		return nil, buf, err
 	}
@@ -377,7 +417,7 @@ func readBlockBuf(r *Reader, bh block.Handle, buf []byte) ([]byte, []byte, error
 		}
 	}
 	dst := buf[:decompressedLen]
-	err = block.DecompressInto(algo, raw[prefix:], dst)
+	err = block.DecompressInto(algo, raw, dst)
 	return dst, buf, err
 }
 

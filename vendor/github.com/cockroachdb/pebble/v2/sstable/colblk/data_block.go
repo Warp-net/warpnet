@@ -476,7 +476,7 @@ type DataBlockEncoder struct {
 	// identical point key or range deletion with a higher sequence number).
 	isObsolete BitmapBuilder
 
-	enc              blockEncoder
+	enc              BlockEncoder
 	rows             int
 	maximumKeyLength int
 	valuePrefixTmp   [1]byte
@@ -511,7 +511,7 @@ func (w *DataBlockEncoder) Init(schema *KeySchema) {
 	w.rows = 0
 	w.maximumKeyLength = 0
 	w.lastUserKeyTmp = w.lastUserKeyTmp[:0]
-	w.enc.reset()
+	w.enc.Reset()
 }
 
 // Reset resets the data block writer to its initial state, retaining buffers.
@@ -525,7 +525,7 @@ func (w *DataBlockEncoder) Reset() {
 	w.rows = 0
 	w.maximumKeyLength = 0
 	w.lastUserKeyTmp = w.lastUserKeyTmp[:0]
-	w.enc.reset()
+	w.enc.Reset()
 }
 
 // String outputs a human-readable summary of internal DataBlockEncoder state.
@@ -581,7 +581,7 @@ func (w *DataBlockEncoder) Add(
 		w.isObsolete.Set(w.rows)
 	}
 	w.trailers.Set(w.rows, uint64(ikey.Trailer))
-	if valuePrefix.IsValueHandle() {
+	if !valuePrefix.IsInPlaceValue() {
 		w.isValueExternal.Set(w.rows)
 		// Write the value with the value prefix byte preceding the value.
 		w.valuePrefixTmp[0] = byte(valuePrefix)
@@ -604,7 +604,7 @@ func (w *DataBlockEncoder) Rows() int {
 
 // Size returns the size of the current pending data block.
 func (w *DataBlockEncoder) Size() int {
-	off := blockHeaderSize(len(w.Schema.ColumnTypes)+dataBlockColumnMax, dataBlockCustomHeaderSize+w.Schema.HeaderSize)
+	off := HeaderSize(len(w.Schema.ColumnTypes)+dataBlockColumnMax, dataBlockCustomHeaderSize+w.Schema.HeaderSize)
 	off = w.KeyWriter.Size(w.rows, off)
 	off = w.trailers.Size(w.rows, off)
 	off = w.prefixSame.InvertedSize(w.rows, off)
@@ -645,19 +645,19 @@ func (w *DataBlockEncoder) Finish(rows, size int) (finished []byte, lastKey base
 	// to represent when the prefix changes.
 	w.prefixSame.Invert(rows)
 
-	w.enc.init(size, h, dataBlockCustomHeaderSize+w.Schema.HeaderSize)
+	w.enc.Init(size, h, dataBlockCustomHeaderSize+w.Schema.HeaderSize)
 
 	// Write the key schema custom header.
-	w.KeyWriter.FinishHeader(w.enc.data()[:w.Schema.HeaderSize])
+	w.KeyWriter.FinishHeader(w.enc.Data()[:w.Schema.HeaderSize])
 	// Write the max key length in the data block custom header.
-	binary.LittleEndian.PutUint32(w.enc.data()[w.Schema.HeaderSize:w.Schema.HeaderSize+dataBlockCustomHeaderSize], uint32(w.maximumKeyLength))
-	w.enc.encode(rows, w.KeyWriter)
-	w.enc.encode(rows, &w.trailers)
-	w.enc.encode(rows, &w.prefixSame)
-	w.enc.encode(rows, &w.values)
-	w.enc.encode(rows, &w.isValueExternal)
-	w.enc.encode(rows, &w.isObsolete)
-	finished = w.enc.finish()
+	binary.LittleEndian.PutUint32(w.enc.Data()[w.Schema.HeaderSize:w.Schema.HeaderSize+dataBlockCustomHeaderSize], uint32(w.maximumKeyLength))
+	w.enc.Encode(rows, w.KeyWriter)
+	w.enc.Encode(rows, &w.trailers)
+	w.enc.Encode(rows, &w.prefixSame)
+	w.enc.Encode(rows, &w.values)
+	w.enc.Encode(rows, &w.isValueExternal)
+	w.enc.Encode(rows, &w.isObsolete)
+	finished = w.enc.Finish()
 
 	w.lastUserKeyTmp = w.lastUserKeyTmp[:0]
 	w.lastUserKeyTmp = w.KeyWriter.MaterializeKey(w.lastUserKeyTmp[:0], rows-1)
@@ -694,9 +694,11 @@ func NewDataBlockRewriter(keySchema *KeySchema, comparer *base.Comparer) *DataBl
 
 type assertNoExternalValues struct{}
 
-var _ block.GetLazyValueForPrefixAndValueHandler = assertNoExternalValues{}
+var _ block.GetInternalValueForPrefixAndValueHandler = assertNoExternalValues{}
 
-func (assertNoExternalValues) GetLazyValueForPrefixAndValueHandle(value []byte) base.LazyValue {
+func (assertNoExternalValues) GetInternalValueForPrefixAndValueHandle(
+	value []byte,
+) base.InternalValue {
 	panic(errors.AssertionFailedf("pebble: sstable contains values in value blocks"))
 }
 
@@ -762,12 +764,12 @@ func (rw *DataBlockRewriter) RewriteSuffixes(
 
 	// Rewrite each key-value pair one-by-one.
 	for i, kv := 0, rw.iter.First(); kv != nil; i, kv = i+1, rw.iter.Next() {
-		value := kv.V.ValueOrHandle
+		value := kv.V.LazyValue().ValueOrHandle
 		valuePrefix := block.InPlaceValuePrefix(false /* setHasSamePrefix (unused) */)
 		isValueExternal := rw.decoder.isValueExternal.At(i)
 		if isValueExternal {
-			valuePrefix = block.ValuePrefix(kv.V.ValueOrHandle[0])
-			value = kv.V.ValueOrHandle[1:]
+			valuePrefix = block.ValuePrefix(value[0])
+			value = value[1:]
 		}
 		kcmp := rw.encoder.KeyWriter.ComparePrev(kv.K.UserKey)
 		if !bytes.Equal(kv.K.UserKey[kcmp.PrefixLen:], from) {
@@ -800,10 +802,13 @@ const _ uint = block.MetadataSize - uint(dataBlockDecoderSize) - KeySeekerMetada
 
 // InitDataBlockMetadata initializes the metadata for a data block.
 func InitDataBlockMetadata(schema *KeySchema, md *block.Metadata, data []byte) (err error) {
-	if uintptr(unsafe.Pointer(md))%8 != 0 {
-		return errors.AssertionFailedf("metadata is not 8-byte aligned")
+	type blockDecoderAndKeySeekerMetadata struct {
+		d DataBlockDecoder
+		// Pad to ensure KeySeekerMetadata is 8-byte aligned.
+		_             [dataBlockDecoderSize - unsafe.Sizeof(DataBlockDecoder{})]byte
+		keySchemaMeta KeySeekerMetadata
 	}
-	d := (*DataBlockDecoder)(unsafe.Pointer(md))
+	metadatas := block.CastMetadataZero[blockDecoderAndKeySeekerMetadata](md)
 	// Initialization can panic; convert panics to corruption errors (so higher
 	// layers can add file number and offset information).
 	defer func() {
@@ -811,9 +816,8 @@ func InitDataBlockMetadata(schema *KeySchema, md *block.Metadata, data []byte) (
 			err = base.CorruptionErrorf("error initializing data block metadata: %v", r)
 		}
 	}()
-	d.Init(schema, data)
-	keySchemaMeta := (*KeySeekerMetadata)(unsafe.Pointer(&md[dataBlockDecoderSize]))
-	schema.InitKeySeekerMetadata(keySchemaMeta, d)
+	metadatas.d.Init(schema, data)
+	schema.InitKeySeekerMetadata(&metadatas.keySchemaMeta, &metadatas.d)
 	return nil
 }
 
@@ -822,10 +826,7 @@ const _ uint = block.MetadataSize - uint(unsafe.Sizeof(IndexBlockDecoder{}))
 
 // InitIndexBlockMetadata initializes the metadata for an index block.
 func InitIndexBlockMetadata(md *block.Metadata, data []byte) (err error) {
-	if uintptr(unsafe.Pointer(md))%8 != 0 {
-		return errors.AssertionFailedf("metadata is not 8-byte aligned")
-	}
-	d := (*IndexBlockDecoder)(unsafe.Pointer(md))
+	d := block.CastMetadataZero[IndexBlockDecoder](md)
 	// Initialization can panic; convert panics to corruption errors (so higher
 	// layers can add file number and offset information).
 	defer func() {
@@ -842,10 +843,7 @@ const _ uint = block.MetadataSize - uint(unsafe.Sizeof(KeyspanDecoder{}))
 
 // InitKeyspanBlockMetadata initializes the metadata for a rangedel or range key block.
 func InitKeyspanBlockMetadata(md *block.Metadata, data []byte) (err error) {
-	if uintptr(unsafe.Pointer(md))%8 != 0 {
-		return errors.AssertionFailedf("metadata is not 8-byte aligned")
-	}
-	d := (*KeyspanDecoder)(unsafe.Pointer(md))
+	d := block.CastMetadataZero[KeyspanDecoder](md)
 	// Initialization can panic; convert panics to corruption errors (so higher
 	// layers can add file number and offset information).
 	defer func() {
@@ -934,30 +932,44 @@ func (d *DataBlockDecoder) Describe(f *binfmt.Formatter, tp treeprinter.Node) {
 		f.HexBytesln(keySchemaHeaderSize, "key schema header")
 	}
 	f.HexBytesln(4, "maximum key length: %d", d.maximumKeyLength)
-	d.d.headerToBinFormatter(f, n)
+	d.d.HeaderToBinFormatter(f, n)
 	for i := 0; i < int(d.d.header.Columns); i++ {
-		d.d.columnToBinFormatter(f, n, i, int(d.d.header.Rows))
+		d.d.ColumnToBinFormatter(f, n, i, int(d.d.header.Rows))
 	}
 	f.HexBytesln(1, "block padding byte")
 	f.ToTreePrinter(n)
 }
 
-// Validate validates invariants that should hold across all data blocks.
-func (d *DataBlockDecoder) Validate(comparer *base.Comparer, keySchema *KeySchema) error {
-	// TODO(jackson): Consider avoiding these allocations, even if this is only
-	// called in invariants builds.
-	n := d.d.header.Rows
-	meta := &KeySeekerMetadata{}
-	keySchema.InitKeySeekerMetadata(meta, d)
-	keySeeker := keySchema.KeySeeker(meta)
-	prevKey := base.InternalKey{UserKey: make([]byte, 0, d.maximumKeyLength+1)}
-	var curKey PrefixBytesIter
-	curKey.Init(int(d.maximumKeyLength), nil)
+// A DataBlockValidator validates invariants that should hold across all data
+// blocks. It may be used multiple times and will reuse allocations across
+// Validate invocations when possible.
+type DataBlockValidator struct {
+	dec            DataBlockDecoder
+	keySeekerMeta  KeySeekerMetadata
+	curKeyIter     PrefixBytesIter
+	prevUserKeyBuf []byte
+}
+
+// Validate validates the provided block. It returns an error if the block is
+// invalid.
+func (v *DataBlockValidator) Validate(
+	data []byte, comparer *base.Comparer, keySchema *KeySchema,
+) error {
+	v.dec.Init(keySchema, data)
+	n := v.dec.d.header.Rows
+	keySchema.InitKeySeekerMetadata(&v.keySeekerMeta, &v.dec)
+	keySeeker := keySchema.KeySeeker(&v.keySeekerMeta)
+
+	if cap(v.prevUserKeyBuf) < int(v.dec.maximumKeyLength)+1 {
+		v.prevUserKeyBuf = make([]byte, 0, v.dec.maximumKeyLength+1)
+	}
+	prevKey := base.InternalKey{UserKey: v.prevUserKeyBuf[:0]}
+	v.curKeyIter.Init(int(v.dec.maximumKeyLength), nil)
 
 	for i := 0; i < int(n); i++ {
 		k := base.InternalKey{
-			UserKey: keySeeker.MaterializeUserKey(&curKey, i-1, i),
-			Trailer: base.InternalKeyTrailer(d.trailers.At(i)),
+			UserKey: keySeeker.MaterializeUserKey(&v.curKeyIter, i-1, i),
+			Trailer: base.InternalKeyTrailer(v.dec.trailers.At(i)),
 		}
 		// Ensure the keys are ordered.
 		ucmp := comparer.Compare(k.UserKey, prevKey.UserKey)
@@ -969,7 +981,7 @@ func (d *DataBlockDecoder) Validate(comparer *base.Comparer, keySchema *KeySchem
 		// Not all sources of obsolescence are evident with only a data block
 		// available (range deletions or point keys in previous blocks may cause
 		// a key to be obsolete).
-		if ucmp == 0 && prevKey.Kind() != base.InternalKeyKindMerge && !d.isObsolete.At(i) {
+		if ucmp == 0 && prevKey.Kind() != base.InternalKeyKindMerge && !v.dec.isObsolete.At(i) {
 			return errors.AssertionFailedf("key %s (row %d) is shadowed by previous key %s but is not marked as obsolete",
 				k, i, prevKey)
 		}
@@ -978,9 +990,9 @@ func (d *DataBlockDecoder) Validate(comparer *base.Comparer, keySchema *KeySchem
 			currPrefix := comparer.Split.Prefix(k.UserKey)
 			prevPrefix := comparer.Split.Prefix(prevKey.UserKey)
 			prefixChanged := !bytes.Equal(prevPrefix, currPrefix)
-			if prefixChanged != d.prefixChanged.At(i) {
+			if prefixChanged != v.dec.prefixChanged.At(i) {
 				return errors.AssertionFailedf("prefix changed bit for key %q (row %d) is %t, expected %t [prev key was %q]",
-					k.UserKey, i, d.prefixChanged.At(i), prefixChanged, prevKey.UserKey)
+					k.UserKey, i, v.dec.prefixChanged.At(i), prefixChanged, prevKey.UserKey)
 			}
 		}
 
@@ -1005,7 +1017,7 @@ type DataBlockIter struct {
 	split     base.Split
 	// getLazyValuer configures the DataBlockIterConfig to initialize the
 	// DataBlockIter to use the provided handler for retrieving lazy values.
-	getLazyValuer block.GetLazyValueForPrefixAndValueHandler
+	getLazyValuer block.GetInternalValueForPrefixAndValueHandler
 
 	// -- Fields that are initialized for each block --
 	// For any changes to these fields, InitHandle should be updated.
@@ -1038,7 +1050,7 @@ type DataBlockIter struct {
 func (i *DataBlockIter) InitOnce(
 	keySchema *KeySchema,
 	comparer *base.Comparer,
-	getLazyValuer block.GetLazyValueForPrefixAndValueHandler,
+	getLazyValuer block.GetInternalValueForPrefixAndValueHandler,
 ) {
 	i.keySchema = keySchema
 	i.suffixCmp = comparer.ComparePointSuffixes
@@ -1320,10 +1332,11 @@ func (i *DataBlockIter) Next() *base.InternalKV {
 			i.kv.K.SetSeqNum(base.SeqNum(n))
 		}
 	}
+	invariants.CheckBounds(i.row, i.d.values.slices)
 	// Inline i.d.values.At(row).
-	v := i.d.values.slice(i.d.values.offsets.At2(i.row))
+	v := i.d.values.Slice(i.d.values.offsets.At2(i.row))
 	if i.d.isValueExternal.At(i.row) {
-		i.kv.V = i.getLazyValuer.GetLazyValueForPrefixAndValueHandle(v)
+		i.kv.V = i.getLazyValuer.GetInternalValueForPrefixAndValueHandle(v)
 	} else {
 		i.kv.V = base.MakeInPlaceValue(v)
 	}
@@ -1488,11 +1501,12 @@ func (i *DataBlockIter) decodeRow() *base.InternalKV {
 				i.kv.K.SetSeqNum(base.SeqNum(n))
 			}
 		}
+		invariants.CheckBounds(i.row, i.d.values.slices)
 		// Inline i.d.values.At(row).
-		startOffset := i.d.values.offsets.At(i.row)
-		v := unsafe.Slice((*byte)(i.d.values.ptr(startOffset)), i.d.values.offsets.At(i.row+1)-startOffset)
+		v := i.d.values.Slice(i.d.values.offsets.At2(i.row))
+		invariants.CheckBounds(i.row, i.d.values.slices)
 		if i.d.isValueExternal.At(i.row) {
-			i.kv.V = i.getLazyValuer.GetLazyValueForPrefixAndValueHandle(v)
+			i.kv.V = i.getLazyValuer.GetInternalValueForPrefixAndValueHandle(v)
 		} else {
 			i.kv.V = base.MakeInPlaceValue(v)
 		}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2/internal/manifest"
+	"github.com/cockroachdb/pebble/v2/objstorage/remote"
 	"github.com/cockroachdb/pebble/v2/sstable"
 	"github.com/cockroachdb/pebble/v2/vfs"
 	"github.com/cockroachdb/pebble/v2/vfs/atomicfs"
@@ -197,6 +198,42 @@ const (
 	// block.
 	FormatColumnarBlocks
 
+	// FormatWALSyncChunks is a format major version enabling the writing of
+	// WAL sync chunks. These new chunks are used to disambiguate between corruption
+	// and logical EOF during WAL replay. This is implemented by adding a new
+	// chunk wire format that encodes an additional "Synced Offset" field which acts
+	// as a commitment that the WAL should have been synced up until the offset.
+	FormatWALSyncChunks
+
+	// FormatTableFormatV6 is a format major version enabling the sstable table
+	// format TableFormatPebblev6.
+	//
+	// The TableFormatPebblev6 sstable format introduces a checksum within the
+	// sstable footer, allows inclusion of blob handle references within the
+	// value column of a sstable block, and supports columnar meta index +
+	// properties blocks.
+	//
+	// This format major version does not yet enable use of value separation.
+	FormatTableFormatV6
+
+	// formatDeprecatedExperimentalValueSeparation was used to enable an
+	// experimental version of value separation, separating values into external
+	// blob files that do not participate in every compaction.
+	//
+	// Value separation now depends on TableFormatPebblev7 which this format
+	// major version precedes. This format major version is deprecated and
+	// unexported, and value separation now requires FormatValueSeparation.
+	formatDeprecatedExperimentalValueSeparation
+
+	// formatFooterAttributes is a format major version that adds support for
+	// writing sstable.Attributes in the footer of sstables.
+	formatFooterAttributes
+
+	// FormatValueSeparation is a format major version that adds support for
+	// value separation, separating values into external blob files that do not
+	// participate in every compaction.
+	FormatValueSeparation
+
 	// -- Add new versions here --
 
 	// FormatNewest is the most recent format major version.
@@ -235,8 +272,12 @@ func (v FormatMajorVersion) MaxTableFormat() sstable.TableFormat {
 	case FormatDeleteSizedAndObsolete, FormatVirtualSSTables, FormatSyntheticPrefixSuffix,
 		FormatFlushableIngestExcises:
 		return sstable.TableFormatPebblev4
-	case FormatColumnarBlocks:
+	case FormatColumnarBlocks, FormatWALSyncChunks:
 		return sstable.TableFormatPebblev5
+	case FormatTableFormatV6, formatDeprecatedExperimentalValueSeparation:
+		return sstable.TableFormatPebblev6
+	case formatFooterAttributes, FormatValueSeparation:
+		return sstable.TableFormatPebblev7
 	default:
 		panic(fmt.Sprintf("pebble: unsupported format major version: %s", v))
 	}
@@ -248,7 +289,9 @@ func (v FormatMajorVersion) MinTableFormat() sstable.TableFormat {
 	switch v {
 	case FormatDefault, FormatFlushableIngest, FormatPrePebblev1MarkedCompacted,
 		FormatDeleteSizedAndObsolete, FormatVirtualSSTables, FormatSyntheticPrefixSuffix,
-		FormatFlushableIngestExcises, FormatColumnarBlocks:
+		FormatFlushableIngestExcises, FormatColumnarBlocks, FormatWALSyncChunks,
+		FormatTableFormatV6, formatDeprecatedExperimentalValueSeparation, formatFooterAttributes,
+		FormatValueSeparation:
 		return sstable.TableFormatPebblev1
 	default:
 		panic(fmt.Sprintf("pebble: unsupported format major version: %s", v))
@@ -290,6 +333,21 @@ var formatMajorVersionMigrations = map[FormatMajorVersion]func(*DB) error{
 	},
 	FormatColumnarBlocks: func(d *DB) error {
 		return d.finalizeFormatVersUpgrade(FormatColumnarBlocks)
+	},
+	FormatWALSyncChunks: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(FormatWALSyncChunks)
+	},
+	FormatTableFormatV6: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(FormatTableFormatV6)
+	},
+	formatDeprecatedExperimentalValueSeparation: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(formatDeprecatedExperimentalValueSeparation)
+	},
+	formatFooterAttributes: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(formatFooterAttributes)
+	},
+	FormatValueSeparation: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(FormatValueSeparation)
 	},
 }
 
@@ -353,12 +411,20 @@ func (d *DB) TableFormat() sstable.TableFormat {
 		if d.opts.Experimental.EnableValueBlocks == nil || !d.opts.Experimental.EnableValueBlocks() {
 			f = sstable.TableFormatPebblev2
 		}
-	case sstable.TableFormatPebblev5:
-		if d.opts.Experimental.EnableColumnarBlocks == nil || !d.opts.Experimental.EnableColumnarBlocks() {
+	default:
+		if f.BlockColumnar() && (d.opts.Experimental.EnableColumnarBlocks == nil ||
+			!d.opts.Experimental.EnableColumnarBlocks()) {
 			f = sstable.TableFormatPebblev4
 		}
 	}
 	return f
+}
+
+// shouldCreateShared returns true if the database should use shared objects
+// when creating new objects on the given level.
+func (d *DB) shouldCreateShared(targetLevel int) bool {
+	return remote.ShouldCreateShared(d.opts.Experimental.CreateOnShared, targetLevel) &&
+		d.FormatMajorVersion() >= FormatMinForSharedObjects
 }
 
 // RatchetFormatMajorVersion ratchets the opened database's format major
@@ -444,19 +510,23 @@ func (d *DB) writeFormatVersionMarker(formatVers FormatMajorVersion) error {
 // waiting for compactions to complete (or for slots to free up).
 func (d *DB) compactMarkedFilesLocked() error {
 	curr := d.mu.versions.currentVersion()
+	if curr.Stats.MarkedForCompaction == 0 {
+		return nil
+	}
+	// Attempt to schedule a compaction to rewrite a file marked for compaction.
+	// We simply call maybeScheduleCompaction since it also picks rewrite
+	// compactions. Note that we don't need to call this repeatedly in the for
+	// loop below since the completion of a compaction either starts a new one
+	// or ensures a compaction is queued for scheduling. By calling
+	// maybeScheduleCompaction here we are simply kicking off this behavior.
+	d.maybeScheduleCompaction()
+
+	// The above attempt might succeed and schedule a rewrite compaction. Or
+	// there might not be available compaction concurrency to schedule the
+	// compaction.  Or compaction of the file might have already been in
+	// progress. In any scenario, wait until there's some change in the
+	// state of active compactions.
 	for curr.Stats.MarkedForCompaction > 0 {
-		// Attempt to schedule a compaction to rewrite a file marked for
-		// compaction.
-		d.maybeScheduleCompactionPicker(func(picker compactionPicker, env compactionEnv) *pickedCompaction {
-			return picker.pickRewriteCompaction(env)
-		})
-
-		// The above attempt might succeed and schedule a rewrite compaction. Or
-		// there might not be available compaction concurrency to schedule the
-		// compaction.  Or compaction of the file might have already been in
-		// progress. In any scenario, wait until there's some change in the
-		// state of active compactions.
-
 		// Before waiting, check that the database hasn't been closed. Trying to
 		// schedule the compaction may have dropped d.mu while waiting for a
 		// manifest write to complete. In that dropped interim, the database may
@@ -473,9 +543,10 @@ func (d *DB) compactMarkedFilesLocked() error {
 		// Only wait on compactions if there are files still marked for compaction.
 		// NB: Waiting on this condition variable drops d.mu while blocked.
 		if curr.Stats.MarkedForCompaction > 0 {
-			if d.mu.compact.compactingCount == 0 {
-				panic("expected a compaction of marked files in progress")
-			}
+			// NB: we cannot assert that d.mu.compact.compactingCount > 0, since
+			// with a CompactionScheduler a DB may not have even one ongoing
+			// compaction (if other competing activities are being preferred by the
+			// scheduler).
 			d.mu.compact.cond.Wait()
 			// Refresh the current version again.
 			curr = d.mu.versions.currentVersion()
@@ -487,7 +558,7 @@ func (d *DB) compactMarkedFilesLocked() error {
 // findFilesFunc scans the LSM for files, returning true if at least one
 // file was found. The returned array contains the matched files, if any, per
 // level.
-type findFilesFunc func(v *version) (found bool, files [numLevels][]*fileMetadata, _ error)
+type findFilesFunc func(v *manifest.Version) (found bool, files [numLevels][]*manifest.TableMetadata, _ error)
 
 // This method is not used currently, but it will be useful the next time we need
 // to mark files for compaction.
@@ -505,7 +576,7 @@ func (d *DB) markFilesLocked(findFn findFilesFunc) error {
 	rs := d.loadReadState()
 	var (
 		found bool
-		files [numLevels][]*fileMetadata
+		files [numLevels][]*manifest.TableMetadata
 		err   error
 	)
 	func() {
@@ -535,47 +606,45 @@ func (d *DB) markFilesLocked(findFn findFilesFunc) error {
 
 	// Lock the manifest for a coherent view of the LSM. The database lock has
 	// been re-acquired by the defer within the above anonymous function.
-	d.mu.versions.logLock()
-	vers := d.mu.versions.currentVersion()
-	for l, filesToMark := range files {
-		if len(filesToMark) == 0 {
-			continue
-		}
-		for _, f := range filesToMark {
-			// Ignore files to be marked that have already been compacted or marked.
-			if f.CompactionState == manifest.CompactionStateCompacted ||
-				f.MarkedForCompaction {
+	return d.mu.versions.UpdateVersionLocked(func() (versionUpdate, error) {
+		vers := d.mu.versions.currentVersion()
+		for l, filesToMark := range files {
+			if len(filesToMark) == 0 {
 				continue
 			}
-			// Else, mark the file for compaction in this version.
-			vers.Stats.MarkedForCompaction++
-			f.MarkedForCompaction = true
+			for _, f := range filesToMark {
+				// Ignore files to be marked that have already been compacted or marked.
+				if f.CompactionState == manifest.CompactionStateCompacted ||
+					f.MarkedForCompaction {
+					continue
+				}
+				// Else, mark the file for compaction in this version.
+				vers.Stats.MarkedForCompaction++
+				f.MarkedForCompaction = true
+			}
+			// The compaction picker uses the markedForCompactionAnnotator to
+			// quickly find files marked for compaction, or to quickly determine
+			// that there are no such files marked for compaction within a level.
+			// A b-tree node may be annotated with an annotation recording that
+			// there are no files marked for compaction within the node's subtree,
+			// based on the assumption that it's static.
+			//
+			// Since we're marking files for compaction, these b-tree nodes'
+			// annotations will be out of date. Clear the compaction-picking
+			// annotation, so that it's recomputed the next time the compaction
+			// picker looks for a file marked for compaction.
+			markedForCompactionAnnotator.InvalidateLevelAnnotation(vers.Levels[l])
 		}
-		// The compaction picker uses the markedForCompactionAnnotator to
-		// quickly find files marked for compaction, or to quickly determine
-		// that there are no such files marked for compaction within a level.
-		// A b-tree node may be annotated with an annotation recording that
-		// there are no files marked for compaction within the node's subtree,
-		// based on the assumption that it's static.
-		//
-		// Since we're marking files for compaction, these b-tree nodes'
-		// annotations will be out of date. Clear the compaction-picking
-		// annotation, so that it's recomputed the next time the compaction
-		// picker looks for a file marked for compaction.
-		markedForCompactionAnnotator.InvalidateLevelAnnotation(vers.Levels[l])
-	}
-
-	// The 'marked-for-compaction' bit is persisted in the MANIFEST file
-	// metadata. We've already modified the in-memory file metadata, but the
-	// manifest hasn't been updated. Force rotation to a new MANIFEST file,
-	// which will write every file metadata to the new manifest file and ensure
-	// that the now marked-for-compaction file metadata are persisted as marked.
-	// NB: This call to logAndApply will unlockthe MANIFEST, which we locked up
-	// above before obtaining `vers`.
-	return d.mu.versions.logAndApply(
-		jobID,
-		&manifest.VersionEdit{},
-		map[int]*LevelMetrics{},
-		true, /* forceRotation */
-		func() []compactionInfo { return d.getInProgressCompactionInfoLocked(nil) })
+		// The 'marked-for-compaction' bit is persisted in the MANIFEST file
+		// metadata. We've already modified the in-memory table metadata, but the
+		// manifest hasn't been updated. Force rotation to a new MANIFEST file,
+		// which will write every table metadata to the new manifest file and ensure
+		// that the now marked-for-compaction table metadata are persisted as marked.
+		return versionUpdate{
+			VE:                      &manifest.VersionEdit{},
+			JobID:                   jobID,
+			ForceManifestRotation:   true,
+			InProgressCompactionsFn: func() []compactionInfo { return d.getInProgressCompactionInfoLocked(nil) },
+		}, nil
+	})
 }

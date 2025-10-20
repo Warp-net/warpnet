@@ -18,12 +18,16 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/binfmt"
 	"github.com/cockroachdb/pebble/v2/internal/bytealloc"
+	"github.com/cockroachdb/pebble/v2/internal/crc"
 	"github.com/cockroachdb/pebble/v2/internal/sstableinternal"
 	"github.com/cockroachdb/pebble/v2/internal/treeprinter"
 	"github.com/cockroachdb/pebble/v2/objstorage"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
+	"github.com/cockroachdb/pebble/v2/sstable/block/blockkind"
 	"github.com/cockroachdb/pebble/v2/sstable/colblk"
 	"github.com/cockroachdb/pebble/v2/sstable/rowblk"
+	"github.com/cockroachdb/pebble/v2/sstable/valblk"
 )
 
 // Layout describes the block organization of an sstable.
@@ -32,18 +36,19 @@ type Layout struct {
 	// ValidateBlockChecksums, which validates a static list of BlockHandles
 	// referenced in this struct.
 
-	Data       []block.HandleWithProperties
-	Index      []block.Handle
-	TopIndex   block.Handle
-	Filter     []NamedBlockHandle
-	RangeDel   block.Handle
-	RangeKey   block.Handle
-	ValueBlock []block.Handle
-	ValueIndex block.Handle
-	Properties block.Handle
-	MetaIndex  block.Handle
-	Footer     block.Handle
-	Format     TableFormat
+	Data               []block.HandleWithProperties
+	Index              []block.Handle
+	TopIndex           block.Handle
+	Filter             []NamedBlockHandle
+	RangeDel           block.Handle
+	RangeKey           block.Handle
+	ValueBlock         []block.Handle
+	ValueIndex         block.Handle
+	Properties         block.Handle
+	MetaIndex          block.Handle
+	BlobReferenceIndex block.Handle
+	Footer             block.Handle
+	Format             TableFormat
 }
 
 // NamedBlockHandle holds a block.Handle and corresponding name.
@@ -94,6 +99,9 @@ func (l *Layout) orderedBlocks() []NamedBlockHandle {
 	if l.MetaIndex.Length != 0 {
 		blocks = append(blocks, NamedBlockHandle{l.MetaIndex, "meta-index"})
 	}
+	if l.BlobReferenceIndex.Length != 0 {
+		blocks = append(blocks, NamedBlockHandle{l.BlobReferenceIndex, "blob-reference-index"})
+	}
 	if l.Footer.Length != 0 {
 		if l.Footer.Length == levelDBFooterLen {
 			blocks = append(blocks, NamedBlockHandle{l.Footer, "leveldb-footer"})
@@ -137,7 +145,34 @@ func (l *Layout) Describe(
 
 		if b.Name == "footer" || b.Name == "leveldb-footer" {
 			trailer, offset := make([]byte, b.Length), 0
-			_ = r.readable.ReadAt(ctx, trailer, int64(b.Offset))
+			_ = r.blockReader.Readable().ReadAt(ctx, trailer, int64(b.Offset))
+
+			// In all cases, we know the version is right before the magic.
+			version := binary.LittleEndian.Uint32(trailer[len(trailer)-magicLen-versionLen:])
+			magicNumber := trailer[len(trailer)-magicLen:]
+			format, err := parseTableFormat(magicNumber, version)
+			if err != nil {
+				panic("Error parsing table format.")
+			}
+
+			var attributes Attributes
+			if format >= TableFormatPebblev7 {
+				attributes = Attributes(binary.LittleEndian.Uint32(trailer[pebbleDBV7FooterAttributesOffset:]))
+			}
+
+			var computedChecksum uint32
+			var encodedChecksum uint32
+			if format >= TableFormatPebblev6 {
+				checksumOffset := checkedPebbleDBChecksumOffset
+				if format >= TableFormatPebblev7 {
+					checksumOffset = pebbleDBv7FooterChecksumOffset
+				}
+				computedChecksum = crc.CRC(0).
+					Update(trailer[:checksumOffset]).
+					Update(trailer[checksumOffset+checksumLen:]).
+					Value()
+				encodedChecksum = binary.LittleEndian.Uint32(trailer[checksumOffset:])
+			}
 
 			if b.Name == "footer" {
 				checksumType := block.ChecksumType(trailer[0])
@@ -155,26 +190,35 @@ func (l *Layout) Describe(
 			tpNode.Childf("%03d  index: offset=%d, length=%d", offset, indexHandle, indexLen)
 			trailer, offset = trailer[n+m:], offset+n+m
 
-			trailing := 12
-			if b.Name == "leveldb-footer" {
-				trailing = 8
+			// Set the offset to the start of footer's remaining trailing fields.
+			trailing := magicLen
+			if b.Name != "leveldb-footer" {
+				trailing += versionLen
 			}
-
+			if format >= TableFormatPebblev6 {
+				trailing += checksumLen
+			}
 			offset += len(trailer) - trailing
-			trailer = trailer[len(trailer)-trailing:]
 
-			if b.Name == "footer" {
-				version := trailer[:4]
-				tpNode.Childf("%03d  version: %d", offset, binary.LittleEndian.Uint32(version))
-				trailer, offset = trailer[4:], offset+4
+			if format >= TableFormatPebblev7 {
+				// Attributes should be just prior to the checksum.
+				tpNode.Childf("%03d  attributes: %s", offset-attributesLen, attributes.String())
 			}
 
-			magicNumber := trailer
-			tpNode.Childf("%03d  magic number: 0x%x", offset, magicNumber)
+			if format >= TableFormatPebblev6 {
+				if computedChecksum == encodedChecksum {
+					tpNode.Childf("%03d  footer checksum: 0x%04x", offset, encodedChecksum)
+				} else {
+					tpNode.Childf("%03d  invalid footer checksum: 0x%04x, expected: 0x%04x", offset, encodedChecksum, computedChecksum)
+				}
+				offset += checksumLen
+			}
 
+			tpNode.Childf("%03d  version: %d", offset, version)
+			offset = offset + 4
+			tpNode.Childf("%03d  magic number: 0x%x", offset, magicNumber)
 			continue
 		}
-
 		// Read the block and format it. Returns an error if we couldn't read the
 		// block.
 		err := func() error {
@@ -185,17 +229,17 @@ func (l *Layout) Describe(
 
 			switch b.Name {
 			case "data":
-				h, err = r.readDataBlock(ctx, noEnv, noReadHandle, b.Handle)
+				h, err = r.readDataBlock(ctx, block.NoReadEnv, noReadHandle, b.Handle)
 				if err != nil {
 					return err
 				}
 				if fmtKV == nil {
-					formatting.formatDataBlock(tpNode, r, *b, h.BlockData(), nil)
+					err = formatting.formatDataBlock(tpNode, r, *b, h.BlockData(), nil)
 				} else {
 					var lastKey InternalKey
-					formatting.formatDataBlock(tpNode, r, *b, h.BlockData(), func(key *base.InternalKey, value []byte) string {
+					err = formatting.formatDataBlock(tpNode, r, *b, h.BlockData(), func(key *base.InternalKey, value []byte) string {
 						v := fmtKV(key, value)
-						if base.InternalCompare(r.Compare, lastKey, *key) >= 0 {
+						if base.InternalCompare(r.Comparer.Compare, lastKey, *key) >= 0 {
 							v += " WARNING: OUT OF ORDER KEYS!"
 						}
 						lastKey.Trailer = key.Trailer
@@ -205,73 +249,118 @@ func (l *Layout) Describe(
 				}
 
 			case "range-del":
-				h, err = r.readRangeDelBlock(ctx, noEnv, noReadHandle, b.Handle)
+				h, err = r.readRangeDelBlock(ctx, block.NoReadEnv, noReadHandle, b.Handle)
 				if err != nil {
 					return err
 				}
 				// TODO(jackson): colblk ignores fmtKV, because it doesn't
 				// make sense in the context.
-				formatting.formatKeyspanBlock(tpNode, r, *b, h.BlockData(), fmtKV)
+				err = formatting.formatKeyspanBlock(tpNode, r, *b, h.BlockData(), fmtKV)
 
 			case "range-key":
-				h, err = r.readRangeKeyBlock(ctx, noEnv, noReadHandle, b.Handle)
+				h, err = r.readRangeKeyBlock(ctx, block.NoReadEnv, noReadHandle, b.Handle)
 				if err != nil {
 					return err
 				}
 				// TODO(jackson): colblk ignores fmtKV, because it doesn't
 				// make sense in the context.
-				formatting.formatKeyspanBlock(tpNode, r, *b, h.BlockData(), fmtKV)
+				err = formatting.formatKeyspanBlock(tpNode, r, *b, h.BlockData(), fmtKV)
 
 			case "index", "top-index":
-				h, err = r.readIndexBlock(ctx, noEnv, noReadHandle, b.Handle)
+				h, err = r.readIndexBlock(ctx, block.NoReadEnv, noReadHandle, b.Handle)
 				if err != nil {
 					return err
 				}
-				formatting.formatIndexBlock(tpNode, r, *b, h.BlockData())
+				err = formatting.formatIndexBlock(tpNode, r, *b, h.BlockData())
 
 			case "properties":
-				h, err = r.readBlockInternal(ctx, noEnv, noReadHandle, b.Handle, noInitBlockMetadataFn)
+				h, err = r.blockReader.Read(ctx, block.NoReadEnv, noReadHandle, b.Handle, blockkind.Metadata, noInitBlockMetadataFn)
 				if err != nil {
 					return err
 				}
-				iter, _ := rowblk.NewRawIter(r.Compare, h.BlockData())
-				iter.Describe(tpNode, func(w io.Writer, key *base.InternalKey, value []byte, enc rowblk.KVEncoding) {
-					fmt.Fprintf(w, "%05d    %s (%d)", enc.Offset, key.UserKey, enc.Length)
-				})
+				if r.tableFormat >= TableFormatPebblev7 {
+					var decoder colblk.KeyValueBlockDecoder
+					decoder.Init(h.BlockData())
+					offset := 0
+					for i := 0; i < decoder.BlockDecoder().Rows(); i++ {
+						key := decoder.KeyAt(i)
+						value := decoder.ValueAt(i)
+						length := len(key) + len(value)
+						tpNode.Childf("%05d    %s (%d)", offset, key, length)
+						offset += length
+					}
+				} else {
+					iter, _ := rowblk.NewRawIter(r.Comparer.Compare, h.BlockData())
+					iter.Describe(tpNode, func(w io.Writer, key *base.InternalKey, value []byte, enc rowblk.KVEncoding) {
+						fmt.Fprintf(w, "%05d    %s (%d)", enc.Offset, key.UserKey, enc.Length)
+					})
+				}
 
 			case "meta-index":
 				if b.Handle != r.metaindexBH {
 					return base.AssertionFailedf("range-del block handle does not match rangeDelBH")
 				}
-				h, err = r.readMetaindexBlock(ctx, noEnv, noReadHandle)
+				h, err = r.readMetaindexBlock(ctx, block.NoReadEnv, noReadHandle)
 				if err != nil {
 					return err
 				}
-				iter, _ := rowblk.NewRawIter(r.Compare, h.BlockData())
-				iter.Describe(tpNode, func(w io.Writer, key *base.InternalKey, value []byte, enc rowblk.KVEncoding) {
-					var bh block.Handle
-					var n int
-					var vbih valueBlocksIndexHandle
-					isValueBlocksIndexHandle := false
-					if bytes.Equal(iter.Key().UserKey, []byte(metaValueIndexName)) {
-						vbih, n, err = decodeValueBlocksIndexHandle(value)
-						bh = vbih.h
-						isValueBlocksIndexHandle = true
-					} else {
-						bh, n = block.DecodeHandle(value)
+
+				if r.tableFormat >= TableFormatPebblev6 {
+					var decoder colblk.KeyValueBlockDecoder
+					decoder.Init(h.BlockData())
+					for i := 0; i < decoder.BlockDecoder().Rows(); i++ {
+						key := decoder.KeyAt(i)
+						value := decoder.ValueAt(i)
+						var bh block.Handle
+						var n int
+						var vbih valblk.IndexHandle
+						isValueBlocksIndexHandle := false
+						if bytes.Equal(key, []byte(metaValueIndexName)) {
+							vbih, n, err = valblk.DecodeIndexHandle(value)
+							bh = vbih.Handle
+							isValueBlocksIndexHandle = true
+						} else {
+							bh, n = block.DecodeHandle(value)
+						}
+						if n == 0 || n != len(value) {
+							tpNode.Childf("%04d    [err: %s]\n", i, err)
+							continue
+						}
+						var vbihStr string
+						if isValueBlocksIndexHandle {
+							vbihStr = fmt.Sprintf(" value-blocks-index-lengths: %d(num), %d(offset), %d(length)",
+								vbih.BlockNumByteLength, vbih.BlockOffsetByteLength, vbih.BlockLengthByteLength)
+						}
+						tpNode.Childf("%04d    %s block:%d/%d%s\n",
+							i, key, bh.Offset, bh.Length, vbihStr)
 					}
-					if n == 0 || n != len(value) {
-						fmt.Fprintf(w, "%04d    [err: %s]\n", enc.Offset, err)
-						return
-					}
-					var vbihStr string
-					if isValueBlocksIndexHandle {
-						vbihStr = fmt.Sprintf(" value-blocks-index-lengths: %d(num), %d(offset), %d(length)",
-							vbih.blockNumByteLength, vbih.blockOffsetByteLength, vbih.blockLengthByteLength)
-					}
-					fmt.Fprintf(w, "%04d    %s block:%d/%d%s",
-						uint64(enc.Offset), iter.Key().UserKey, bh.Offset, bh.Length, vbihStr)
-				})
+				} else {
+					iter, _ := rowblk.NewRawIter(r.Comparer.Compare, h.BlockData())
+					iter.Describe(tpNode, func(w io.Writer, key *base.InternalKey, value []byte, enc rowblk.KVEncoding) {
+						var bh block.Handle
+						var n int
+						var vbih valblk.IndexHandle
+						isValueBlocksIndexHandle := false
+						if bytes.Equal(iter.Key().UserKey, []byte(metaValueIndexName)) {
+							vbih, n, err = valblk.DecodeIndexHandle(value)
+							bh = vbih.Handle
+							isValueBlocksIndexHandle = true
+						} else {
+							bh, n = block.DecodeHandle(value)
+						}
+						if n == 0 || n != len(value) {
+							fmt.Fprintf(w, "%04d    [err: %s]\n", enc.Offset, err)
+							return
+						}
+						var vbihStr string
+						if isValueBlocksIndexHandle {
+							vbihStr = fmt.Sprintf(" value-blocks-index-lengths: %d(num), %d(offset), %d(length)",
+								vbih.BlockNumByteLength, vbih.BlockOffsetByteLength, vbih.BlockLengthByteLength)
+						}
+						fmt.Fprintf(w, "%04d    %s block:%d/%d%s",
+							uint64(enc.Offset), iter.Key().UserKey, bh.Offset, bh.Length, vbihStr)
+					})
+				}
 
 			case "value-block":
 				// We don't peer into the value-block since it can't be interpreted
@@ -279,11 +368,30 @@ func (l *Layout) Describe(
 			case "value-index":
 				// We have already read the value-index to construct the list of
 				// value-blocks, so no need to do it again.
+			case "blob-reference-index":
+				h, err = r.readBlobRefIndexBlock(ctx, block.NoReadEnv, noReadHandle)
+				if err != nil {
+					return err
+				}
+				var decoder colblk.ReferenceLivenessBlockDecoder
+				decoder.Init(h.BlockData())
+				offset := 0
+				for i := range decoder.BlockDecoder().Rows() {
+					value := decoder.LivenessAtReference(i)
+					encs := DecodeBlobRefLivenessEncoding(value)
+					length := len(value)
+					parent := tpNode.Childf("%05d (%d)", offset, length)
+					for _, enc := range encs {
+						parent.Childf("block: %d, values size: %d, bitmap size: %d byte(s), bitmap: %08b",
+							enc.BlockID, enc.ValuesSize, enc.BitmapSize, enc.Bitmap)
+					}
+					offset += length
+				}
 			}
 
 			// Format the trailer.
 			trailer := make([]byte, block.TrailerLen)
-			_ = r.readable.ReadAt(ctx, trailer, int64(b.Offset+b.Length))
+			_ = r.blockReader.Readable().ReadAt(ctx, trailer, int64(b.Offset+b.Length))
 			algo := block.CompressionIndicator(trailer[0])
 			checksum := binary.LittleEndian.Uint32(trailer[1:])
 			tpNode.Childf("trailer [compression=%s checksum=0x%04x]", algo, checksum)
@@ -325,7 +433,7 @@ func formatColblkIndexBlock(tp treeprinter.Node, r *Reader, b NamedBlockHandle, 
 	if err := iter.Init(r.Comparer, data, NoTransforms); err != nil {
 		return err
 	}
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 	i := 0
 	for v := iter.First(); v; v = iter.Next() {
 		bh, err := iter.BlockHandleWithProperties()
@@ -356,27 +464,43 @@ func formatColblkDataBlock(
 		if err := iter.Init(&decoder, block.IterTransforms{}); err != nil {
 			return err
 		}
-		defer iter.Close()
+		defer func() { _ = iter.Close() }()
 		for kv := iter.First(); kv != nil; kv = iter.Next() {
-			tp.Child(fmtKV(&kv.K, kv.V.ValueOrHandle))
+			tp.Child(fmtKV(&kv.K, kv.V.LazyValue().ValueOrHandle))
 		}
 	}
 	return nil
 }
 
-// describingLazyValueHandler is a block.GetLazyValueForPrefixAndValueHandler
+// describingLazyValueHandler is a block.GetInternalValueForPrefixAndValueHandler
 // that replaces a value handle with an in-place value describing the handle.
 type describingLazyValueHandler struct{}
 
 // Assert that debugLazyValueHandler implements the
-// block.GetLazyValueForPrefixAndValueHandler interface.
-var _ block.GetLazyValueForPrefixAndValueHandler = describingLazyValueHandler{}
+// block.GetInternalValueForPrefixAndValueHandler interface.
+var _ block.GetInternalValueForPrefixAndValueHandler = describingLazyValueHandler{}
 
-func (describingLazyValueHandler) GetLazyValueForPrefixAndValueHandle(
+func (describingLazyValueHandler) GetInternalValueForPrefixAndValueHandle(
 	handle []byte,
-) base.LazyValue {
-	vh := decodeValueHandle(handle[1:])
-	return base.LazyValue{ValueOrHandle: []byte(fmt.Sprintf("value handle %+v", vh))}
+) base.InternalValue {
+	vp := block.ValuePrefix(handle[0])
+	var result string
+	switch {
+	case vp.IsValueBlockHandle():
+		vh := valblk.DecodeHandle(handle[1:])
+		result = fmt.Sprintf("value handle %+v", vh)
+	case vp.IsBlobValueHandle():
+		handlePreface, remainder := blob.DecodeInlineHandlePreface(handle[1:])
+		handleSuffix := blob.DecodeHandleSuffix(remainder)
+		ih := blob.InlineHandle{
+			InlineHandlePreface: handlePreface,
+			HandleSuffix:        handleSuffix,
+		}
+		result = fmt.Sprintf("blob handle %+v", ih)
+	default:
+		result = "unknown value type"
+	}
+	return base.MakeInPlaceValue([]byte(result))
 }
 
 func formatColblkKeyspanBlock(
@@ -394,7 +518,7 @@ func formatColblkKeyspanBlock(
 }
 
 func formatRowblkIndexBlock(tp treeprinter.Node, r *Reader, b NamedBlockHandle, data []byte) error {
-	iter, err := rowblk.NewIter(r.Compare, r.Comparer.ComparePointSuffixes, r.Split, data, NoTransforms)
+	iter, err := rowblk.NewIter(r.Comparer.Compare, r.Comparer.ComparePointSuffixes, r.Comparer.Split, data, NoTransforms)
 	if err != nil {
 		return err
 	}
@@ -419,7 +543,7 @@ func formatRowblkDataBlock(
 	data []byte,
 	fmtRecord func(key *base.InternalKey, value []byte) string,
 ) error {
-	iter, err := rowblk.NewIter(r.Compare, r.Comparer.ComparePointSuffixes, r.Split, data, NoTransforms)
+	iter, err := rowblk.NewIter(r.Comparer.Compare, r.Comparer.ComparePointSuffixes, r.Comparer.Split, data, NoTransforms)
 	if err != nil {
 		return err
 	}
@@ -443,18 +567,23 @@ func formatRowblkDataBlock(
 		if fmtRecord != nil {
 			if r.tableFormat < TableFormatPebblev3 || key.Kind() != InternalKeyKindSet {
 				fmt.Fprintf(w, "\n         %s", fmtRecord(key, value))
-			} else if !block.ValuePrefix(value[0]).IsValueHandle() {
+				return
+			}
+			vp := block.ValuePrefix(value[0])
+			if vp.IsInPlaceValue() {
 				fmt.Fprintf(w, "\n         %s", fmtRecord(key, value[1:]))
-			} else {
-				vh := decodeValueHandle(value[1:])
+			} else if vp.IsValueBlockHandle() {
+				vh := valblk.DecodeHandle(value[1:])
 				fmt.Fprintf(w, "\n         %s", fmtRecord(key, []byte(fmt.Sprintf("value handle %+v", vh))))
+			} else {
+				panic(fmt.Sprintf("unknown value prefix: %d", value[0]))
 			}
 		}
 	})
 	return nil
 }
 
-func decodeLayout(comparer *base.Comparer, data []byte) (Layout, error) {
+func decodeLayout(comparer *base.Comparer, data []byte, tableFormat TableFormat) (Layout, error) {
 	foot, err := parseFooter(data, 0, int64(len(data)))
 	if err != nil {
 		return Layout{}, err
@@ -463,7 +592,13 @@ func decodeLayout(comparer *base.Comparer, data []byte) (Layout, error) {
 	if err != nil {
 		return Layout{}, errors.Wrap(err, "decompressing metaindex")
 	}
-	meta, vbih, err := decodeMetaindex(decompressedMeta)
+	var meta map[string]block.Handle
+	var vbih valblk.IndexHandle
+	if tableFormat >= TableFormatPebblev6 {
+		meta, vbih, err = decodeColumnarMetaIndex(decompressedMeta)
+	} else {
+		meta, vbih, err = decodeMetaindex(decompressedMeta)
+	}
 	if err != nil {
 		return Layout{}, err
 	}
@@ -472,16 +607,16 @@ func decodeLayout(comparer *base.Comparer, data []byte) (Layout, error) {
 		Properties: meta[metaPropertiesName],
 		RangeDel:   meta[metaRangeDelV2Name],
 		RangeKey:   meta[metaRangeKeyName],
-		ValueIndex: vbih.h,
+		ValueIndex: vbih.Handle,
 		Footer:     foot.footerBH,
 		Format:     foot.format,
 	}
-	var props Properties
 	decompressedProps, err := decompressInMemory(data, layout.Properties)
 	if err != nil {
 		return Layout{}, errors.Wrap(err, "decompressing properties")
 	}
-	if err := props.load(decompressedProps, map[string]struct{}{}); err != nil {
+	props, err := decodePropertiesBlock(tableFormat, decompressedProps)
+	if err != nil {
 		return Layout{}, err
 	}
 
@@ -526,7 +661,7 @@ func decodeLayout(comparer *base.Comparer, data []byte) (Layout, error) {
 		if err != nil {
 			return Layout{}, errors.Wrap(err, "decompressing value index")
 		}
-		layout.ValueBlock, err = decodeValueBlockIndex(vbiBlock, vbih)
+		layout.ValueBlock, err = valblk.DecodeIndex(vbiBlock, vbih)
 		if err != nil {
 			return Layout{}, err
 		}
@@ -542,12 +677,12 @@ func decompressInMemory(data []byte, bh block.Handle) ([]byte, error) {
 		return data[bh.Offset : bh.Offset+bh.Length], nil
 	}
 	// Decode the length of the decompressed value.
-	decodedLen, prefixLen, err := block.DecompressedLen(typ, data[bh.Offset:bh.Offset+bh.Length])
+	decodedLen, err := block.DecompressedLen(typ, data[bh.Offset:bh.Offset+bh.Length])
 	if err != nil {
 		return nil, err
 	}
 	decompressed = make([]byte, decodedLen)
-	if err := block.DecompressInto(typ, data[int(bh.Offset)+prefixLen:bh.Offset+bh.Length], decompressed); err != nil {
+	if err := block.DecompressInto(typ, data[int(bh.Offset):bh.Offset+bh.Length], decompressed); err != nil {
 		return nil, err
 	}
 	return decompressed, nil
@@ -584,70 +719,88 @@ func forEachIndexEntry(
 	return indexIter.Close()
 }
 
+// decodeMetaindex decodes a row-based meta index block. The returned map owns
+// all its memory and can outlive the provided data slice.
 func decodeMetaindex(
 	data []byte,
-) (meta map[string]block.Handle, vbih valueBlocksIndexHandle, err error) {
+) (meta map[string]block.Handle, vbih valblk.IndexHandle, err error) {
 	i, err := rowblk.NewRawIter(bytes.Compare, data)
 	if err != nil {
-		return nil, valueBlocksIndexHandle{}, err
+		return nil, valblk.IndexHandle{}, err
 	}
 	defer func() { err = firstError(err, i.Close()) }()
 
+	var keysAlloc bytealloc.A
 	meta = map[string]block.Handle{}
 	for valid := i.First(); valid; valid = i.Next() {
 		value := i.Value()
+		var bh block.Handle
 		if bytes.Equal(i.Key().UserKey, []byte(metaValueIndexName)) {
 			var n int
-			vbih, n, err = decodeValueBlocksIndexHandle(i.Value())
+			vbih, n, err = valblk.DecodeIndexHandle(i.Value())
 			if err != nil {
 				return nil, vbih, err
 			}
 			if n == 0 || n != len(value) {
 				return nil, vbih, base.CorruptionErrorf("pebble/table: invalid table (bad value blocks index handle)")
 			}
+			bh = vbih.Handle
 		} else {
-			bh, n := block.DecodeHandle(value)
+			var n int
+			bh, n = block.DecodeHandle(value)
 			if n == 0 || n != len(value) {
 				return nil, vbih, base.CorruptionErrorf("pebble/table: invalid table (bad block handle)")
 			}
-			meta[string(i.Key().UserKey)] = bh
 		}
+		var key []byte
+		keysAlloc, key = keysAlloc.Copy(i.Key().UserKey)
+		keyStr := unsafe.String(unsafe.SliceData(key), len(key))
+		meta[keyStr] = bh
 	}
 	return meta, vbih, nil
 }
 
-func decodeValueBlockIndex(data []byte, vbih valueBlocksIndexHandle) ([]block.Handle, error) {
-	var valueBlocks []block.Handle
-	indexEntryLen := int(vbih.blockNumByteLength + vbih.blockOffsetByteLength +
-		vbih.blockLengthByteLength)
-	i := 0
-	for len(data) != 0 {
-		if len(data) < indexEntryLen {
-			return nil, errors.Errorf(
-				"remaining value index block %d does not contain a full entry of length %d",
-				len(data), indexEntryLen)
+// decodeColumnarMetaIndex decodes a columnar meta index block. The returned map
+// owns all its memory and can outlive the provided data slice.
+func decodeColumnarMetaIndex(
+	data []byte,
+) (meta map[string]block.Handle, vbih valblk.IndexHandle, err error) {
+	var decoder colblk.KeyValueBlockDecoder
+	decoder.Init(data)
+	var keysAlloc bytealloc.A
+	meta = map[string]block.Handle{}
+	for i := 0; i < decoder.BlockDecoder().Rows(); i++ {
+		key := decoder.KeyAt(i)
+		value := decoder.ValueAt(i)
+
+		var bh block.Handle
+		if bytes.Equal(key, []byte(metaValueIndexName)) {
+			var n int
+			vbih, n, err = valblk.DecodeIndexHandle(value)
+			if err != nil {
+				return nil, vbih, err
+			}
+			if n == 0 || n != len(value) {
+				return nil, vbih, base.CorruptionErrorf("pebble/table: invalid table (bad value blocks index handle)")
+			}
+			bh = vbih.Handle
+		} else {
+			var n int
+			bh, n = block.DecodeHandle(value)
+			if n == 0 || n != len(value) {
+				return nil, vbih, base.CorruptionErrorf("pebble/table: invalid table (bad block handle)")
+			}
 		}
-		n := int(vbih.blockNumByteLength)
-		bn := int(littleEndianGet(data, n))
-		if bn != i {
-			return nil, errors.Errorf("unexpected block num %d, expected %d",
-				bn, i)
-		}
-		i++
-		data = data[n:]
-		n = int(vbih.blockOffsetByteLength)
-		blockOffset := littleEndianGet(data, n)
-		data = data[n:]
-		n = int(vbih.blockLengthByteLength)
-		blockLen := littleEndianGet(data, n)
-		data = data[n:]
-		valueBlocks = append(valueBlocks, block.Handle{Offset: blockOffset, Length: blockLen})
+		var keyCopy []byte
+		keysAlloc, keyCopy = keysAlloc.Copy(key)
+		keyStr := unsafe.String(unsafe.SliceData(keyCopy), len(keyCopy))
+		meta[keyStr] = bh
 	}
-	return valueBlocks, nil
+	return meta, vbih, nil
 }
 
 // layoutWriter writes the structure of an sstable to durable storage. It
-// accepts serialized blocks, writes them to storage and returns a block handle
+// accepts serialized blocks, writes them to storage, and returns a block handle
 // describing the offset and length of the block.
 type layoutWriter struct {
 	writable objstorage.Writable
@@ -658,8 +811,12 @@ type layoutWriter struct {
 
 	// options copied from WriterOptions
 	tableFormat  TableFormat
-	compression  block.Compression
+	compressor   block.Compressor
 	checksumType block.ChecksumType
+
+	// Attribute bitset of the sstable, derived from sstable Properties at the time
+	// of writing.
+	attributes Attributes
 
 	// offset tracks the current write offset within the writable.
 	offset uint64
@@ -680,7 +837,7 @@ func makeLayoutWriter(w objstorage.Writable, opts WriterOptions) layoutWriter {
 		writable:     w,
 		cacheOpts:    opts.internal.CacheOpts,
 		tableFormat:  opts.TableFormat,
-		compression:  opts.Compression,
+		compressor:   block.MakeCompressor(opts.Compression),
 		checksumType: opts.Checksum,
 		buf: blockBuf{
 			checksummer: block.Checksummer{Type: opts.Checksum},
@@ -699,17 +856,19 @@ func (w *layoutWriter) Abort() {
 	if w.writable != nil {
 		w.writable.Abort()
 		w.writable = nil
+		w.compressor.Close()
 	}
 }
 
 // WriteDataBlock constructs a trailer for the provided data block and writes
 // the block and trailer to the writer. It returns the block's handle.
 func (w *layoutWriter) WriteDataBlock(b []byte, buf *blockBuf) (block.Handle, error) {
-	return w.writeBlock(b, w.compression, buf)
+	return w.writeBlock(b, blockkind.SSTableData, buf)
 }
 
 // WritePrecompressedDataBlock writes a pre-compressed data block and its
-// pre-computed trailer to the writer, returning it's block handle.
+// pre-computed trailer to the writer, returning its block handle. It can mangle
+// the block data.
 func (w *layoutWriter) WritePrecompressedDataBlock(blk block.PhysicalBlock) (block.Handle, error) {
 	return w.writePrecompressedBlock(blk)
 }
@@ -719,14 +878,14 @@ func (w *layoutWriter) WritePrecompressedDataBlock(blk block.PhysicalBlock) (blo
 // the last-written index block's handle and adds it to the file's meta index
 // when the writer is finished.
 func (w *layoutWriter) WriteIndexBlock(b []byte) (block.Handle, error) {
-	h, err := w.writeBlock(b, w.compression, &w.buf)
+	h, err := w.writeBlock(b, blockkind.SSTableIndex, &w.buf)
 	if err == nil {
 		w.lastIndexBlockHandle = h
 	}
 	return h, err
 }
 
-// WriteFilterBlock finishes the provided filter, constructs a trailer and
+// WriteFilterBlock finishes the provided filter, constructs a trailer, and
 // writes the block and trailer to the writer. It automatically adds the filter
 // block to the file's meta index when the writer is finished.
 func (w *layoutWriter) WriteFilterBlock(f filterWriter) (bh block.Handle, err error) {
@@ -734,21 +893,41 @@ func (w *layoutWriter) WriteFilterBlock(f filterWriter) (bh block.Handle, err er
 	if err != nil {
 		return block.Handle{}, err
 	}
-	return w.writeNamedBlock(b, f.metaName())
+	return w.writeNamedBlockUncompressed(b, blockkind.Filter, f.metaName())
 }
 
 // WritePropertiesBlock constructs a trailer for the provided properties block
 // and writes the block and trailer to the writer. It automatically adds the
 // properties block to the file's meta index when the writer is finished.
-func (w *layoutWriter) WritePropertiesBlock(b []byte) (block.Handle, error) {
-	return w.writeNamedBlock(b, metaPropertiesName)
+func (w *layoutWriter) WritePropertiesBlock(b []byte) (bh block.Handle, err error) {
+	// In v6 and earlier, we use a row oriented block with an infinite restart
+	// interval, which provides very good prefix compression. Since v7, we use the
+	// columnar format without prefix compression for this block; we enable block
+	// compression to compensate.
+	if w.tableFormat < TableFormatPebblev7 {
+		bh, err = w.writeBlockUncompressed(b, blockkind.Metadata, &w.buf)
+	} else {
+		bh, err = w.writeBlock(b, blockkind.Metadata, &w.buf)
+	}
+	if err == nil {
+		w.recordToMetaindex(metaPropertiesName, bh)
+	}
+	return bh, err
 }
 
 // WriteRangeKeyBlock constructs a trailer for the provided range key block and
 // writes the block and trailer to the writer. It automatically adds the range
 // key block to the file's meta index when the writer is finished.
 func (w *layoutWriter) WriteRangeKeyBlock(b []byte) (block.Handle, error) {
-	return w.writeNamedBlock(b, metaRangeKeyName)
+	return w.writeNamedBlockUncompressed(b, blockkind.RangeKey, metaRangeKeyName)
+}
+
+// WriteBlobRefIndexBlock constructs a trailer for the provided blob reference
+// index block and writes the block and trailer to the writer. It automatically
+// adds the blob reference index block to the file's meta index when the writer
+// is finished.
+func (w *layoutWriter) WriteBlobRefIndexBlock(b []byte) (block.Handle, error) {
+	return w.writeNamedBlockUncompressed(b, blockkind.BlobReferenceValueLivenessIndex, metaBlobRefIndexName)
 }
 
 // WriteRangeDeletionBlock constructs a trailer for the provided range deletion
@@ -756,11 +935,14 @@ func (w *layoutWriter) WriteRangeKeyBlock(b []byte) (block.Handle, error) {
 // the range deletion block to the file's meta index when the writer is
 // finished.
 func (w *layoutWriter) WriteRangeDeletionBlock(b []byte) (block.Handle, error) {
-	return w.writeNamedBlock(b, metaRangeDelV2Name)
+	return w.writeNamedBlockUncompressed(b, blockkind.RangeDel, metaRangeDelV2Name)
 }
 
-func (w *layoutWriter) writeNamedBlock(b []byte, name string) (bh block.Handle, err error) {
-	bh, err = w.writeBlock(b, block.NoCompression, &w.buf)
+// writeNamedBlockUncompressed writes a block without compressing it and adds it to the metaindex.
+func (w *layoutWriter) writeNamedBlockUncompressed(
+	b []byte, kind block.Kind, name string,
+) (bh block.Handle, err error) {
+	bh, err = w.writeBlockUncompressed(b, kind, &w.buf)
 	if err == nil {
 		w.recordToMetaindex(name, bh)
 	}
@@ -768,42 +950,45 @@ func (w *layoutWriter) writeNamedBlock(b []byte, name string) (bh block.Handle, 
 }
 
 // WriteValueBlock writes a pre-finished value block (with the trailer) to the
-// writer.
+// writer. It can mangle the block data.
 func (w *layoutWriter) WriteValueBlock(blk block.PhysicalBlock) (block.Handle, error) {
 	return w.writePrecompressedBlock(blk)
 }
 
+// WriteValueIndexBlock writes a value index block and adds it to the meta
+// index. It can mangle the block data.
 func (w *layoutWriter) WriteValueIndexBlock(
-	blk []byte, vbih valueBlocksIndexHandle,
+	blk block.PhysicalBlock, vbih valblk.IndexHandle,
 ) (block.Handle, error) {
-	// NB: value index blocks are already finished and contain the block
-	// trailer.
-	// TODO(jackson): can this be refactored to make value blocks less
-	// of a snowflake?
-	off := w.offset
-	w.clearFromCache(off)
-	// Write the bytes to the file.
-	if err := w.writable.Write(blk); err != nil {
+	h, err := w.writePrecompressedBlock(blk)
+	if err != nil {
 		return block.Handle{}, err
 	}
-	l := uint64(len(blk))
-	w.offset += l
-
-	n := encodeValueBlocksIndexHandle(w.tmp[:], vbih)
+	n := valblk.EncodeIndexHandle(w.tmp[:], vbih)
 	w.recordToMetaindexRaw(metaValueIndexName, w.tmp[:n])
-
-	return block.Handle{Offset: off, Length: l}, nil
+	return h, nil
 }
 
-func (w *layoutWriter) writeBlock(
-	b []byte, compression block.Compression, buf *blockBuf,
+// writeBlock checksums, compresses, and writes out a block.
+func (w *layoutWriter) writeBlock(b []byte, kind block.Kind, buf *blockBuf) (block.Handle, error) {
+	pb := block.CompressAndChecksum(&buf.dataBuf, b, kind, &w.compressor, &buf.checksummer)
+	h, err := w.writePrecompressedBlock(pb)
+	return h, err
+}
+
+// writeBlock checksums and writes out a block.
+func (w *layoutWriter) writeBlockUncompressed(
+	b []byte, kind block.Kind, buf *blockBuf,
 ) (block.Handle, error) {
-	return w.writePrecompressedBlock(block.CompressAndChecksum(
-		&buf.compressedBuf, b, compression, &buf.checksummer))
+	pb := block.CopyAndChecksum(&buf.dataBuf, b, kind, &w.compressor, &buf.checksummer)
+	h, err := w.writePrecompressedBlock(pb)
+	return h, err
 }
 
 // writePrecompressedBlock writes a pre-compressed block and its
-// pre-computed trailer to the writer, returning it's block handle.
+// pre-computed trailer to the writer, returning its block handle.
+//
+// writePrecompressedBlock might mangle the block data.
 func (w *layoutWriter) writePrecompressedBlock(blk block.PhysicalBlock) (block.Handle, error) {
 	w.clearFromCache(w.offset)
 	// Write the bytes to the file.
@@ -816,13 +1001,14 @@ func (w *layoutWriter) writePrecompressedBlock(blk block.PhysicalBlock) (block.H
 	return bh, nil
 }
 
-// Write implements io.Writer. This is analogous to writePrecompressedBlock for
-// blocks that already incorporate the trailer, and don't need the callee to
-// return a BlockHandle.
+// Write implements io.Writer (with the caveat that it can mangle the block
+// data). This is analogous to writePrecompressedBlock for blocks that already
+// incorporate the trailer, and don't need the callee to return a BlockHandle.
 func (w *layoutWriter) Write(blockWithTrailer []byte) (n int, err error) {
 	offset := w.offset
 	w.clearFromCache(offset)
 	w.offset += uint64(len(blockWithTrailer))
+	// This call can mangle blockWithTrailer.
 	if err := w.writable.Write(blockWithTrailer); err != nil {
 		return 0, err
 	}
@@ -832,10 +1018,10 @@ func (w *layoutWriter) Write(blockWithTrailer []byte) (n int, err error) {
 // clearFromCache removes the block at the provided offset from the cache. This provides defense in
 // depth against bugs which cause cache collisions.
 func (w *layoutWriter) clearFromCache(offset uint64) {
-	if w.cacheOpts.Cache != nil {
+	if w.cacheOpts.CacheHandle != nil {
 		// TODO(peter): Alternatively, we could add the uncompressed value to the
 		// cache.
-		w.cacheOpts.Cache.Delete(w.cacheOpts.CacheID, w.cacheOpts.FileNum, offset)
+		w.cacheOpts.CacheHandle.Delete(w.cacheOpts.FileNum, offset)
 	}
 }
 
@@ -855,17 +1041,30 @@ func (w *layoutWriter) IsFinished() bool { return w.writable == nil }
 
 // Finish serializes the sstable, writing out the meta index block and sstable
 // footer and closing the file. It returns the total size of the resulting
-// ssatable.
+// sstable.
 func (w *layoutWriter) Finish() (size uint64, err error) {
 	// Sort the meta index handles by key and write the meta index block.
 	slices.SortFunc(w.handles, func(a, b metaIndexHandle) int {
 		return cmp.Compare(a.key, b.key)
 	})
-	bw := rowblk.Writer{RestartInterval: 1}
-	for _, h := range w.handles {
-		bw.AddRaw(unsafe.Slice(unsafe.StringData(h.key), len(h.key)), h.encodedBlockHandle)
+	var b []byte
+	if w.tableFormat >= TableFormatPebblev6 {
+		var cw colblk.KeyValueBlockWriter
+		cw.Init()
+		for _, h := range w.handles {
+			cw.AddKV(unsafe.Slice(unsafe.StringData(h.key), len(h.key)), h.encodedBlockHandle)
+		}
+		b = cw.Finish(cw.Rows())
+	} else {
+		bw := rowblk.Writer{RestartInterval: 1}
+		for _, h := range w.handles {
+			if err := bw.AddRaw(unsafe.Slice(unsafe.StringData(h.key), len(h.key)), h.encodedBlockHandle); err != nil {
+				return 0, err
+			}
+		}
+		b = bw.Finish()
 	}
-	metaIndexHandle, err := w.writeBlock(bw.Finish(), block.NoCompression, &w.buf)
+	metaIndexHandle, err := w.writeBlockUncompressed(b, blockkind.Metadata, &w.buf)
 	if err != nil {
 		return 0, err
 	}
@@ -876,6 +1075,7 @@ func (w *layoutWriter) Finish() (size uint64, err error) {
 		checksum:    w.checksumType,
 		metaindexBH: metaIndexHandle,
 		indexBH:     w.lastIndexBlockHandle,
+		attributes:  w.attributes,
 	}
 	encodedFooter := footer.encode(w.tmp[:])
 	if err := w.writable.Write(encodedFooter); err != nil {
@@ -885,5 +1085,6 @@ func (w *layoutWriter) Finish() (size uint64, err error) {
 
 	err = w.writable.Finish()
 	w.writable = nil
+	w.compressor.Close()
 	return w.offset, err
 }

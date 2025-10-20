@@ -110,16 +110,34 @@ func DetermineUintEncoding(minValue, maxValue uint64, numRows int) UintEncoding 
 	return makeUintEncoding(b, isDelta)
 }
 
+// DetermineUintEncodingNoDelta is a more efficient variant of
+// DetermineUintEncoding when minValue is zero (or we don't need a delta
+// encoding).
+func DetermineUintEncodingNoDelta(maxValue uint64) UintEncoding {
+	return makeUintEncoding(byteWidth(maxValue), false /* isDelta */)
+}
+
+// byteWidthTable maps a number’s bit‐length to the number of bytes needed.
+var byteWidthTable = [65]uint8{
+	// 0 bits => 0 bytes
+	0,
+	// 1..8 bits => 1 byte
+	1, 1, 1, 1, 1, 1, 1, 1,
+	// 9..16 bits => 2 bytes
+	2, 2, 2, 2, 2, 2, 2, 2,
+	// 17..32 bits => 4 bytes
+	4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+	// 33..64 bits => 8 bytes
+	8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+	8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+}
+
 // byteWidth returns the number of bytes necessary to represent the given value,
 // either 0, 1, 2, 4, or 8.
 func byteWidth(maxValue uint64) uint8 {
-	// b the number of bytes necessary to represent maxValue.
-	b := (uint8(bits.Len64(maxValue)) + 7) >> 3
-	// Round up to the nearest power of 2 by subtracting one and filling out all bits.
-	b--
-	b |= b >> 1
-	b |= b >> 2
-	return b + 1
+	// bits.Len64 returns 0 for 0, 1..64 for others.
+	// We then simply return the precomputed result.
+	return byteWidthTable[bits.Len64(maxValue)]
 }
 
 func makeUintEncoding(width uint8, isDelta bool) UintEncoding {
@@ -139,16 +157,8 @@ type UintBuilder struct {
 	// configuration fixed on Init; preserved across Reset
 	useDefault bool
 
-	// array holds the underlying heap-allocated array in which values are
-	// stored.
-	array struct {
-		// n is the size of the array (in count of T elements; not bytes). n is
-		// NOT the number of elements that have been populated by the user.
-		n int
-		// elems provides access to elements without bounds checking. elems is
-		// grown automatically in Set.
-		elems UnsafeRawSlice[uint64]
-	}
+	elems []uint64
+
 	// stats holds state for the purpose of tracking which UintEncoding would
 	// be used if the caller Finished the column including all elements Set so
 	// far. The stats state is used by Size (and Finish) to cheaply determine
@@ -215,15 +225,15 @@ func (b *UintBuilder) Reset() {
 		// will include at least one default value.
 		b.stats.minimum = 0
 		b.stats.maximum = 0
-		clear(b.array.elems.Slice(b.array.n))
+		clear(b.elems)
 	} else {
 		b.stats.minimum = math.MaxUint64
 		b.stats.maximum = 0
 		// We could reset all values as a precaution, but it has a visible cost
 		// in benchmarks.
-		if invariants.Sometimes(50) {
-			for i := 0; i < b.array.n; i++ {
-				b.array.elems.set(i, math.MaxUint64)
+		if invariants.Enabled && invariants.Sometimes(50) {
+			for i := range b.elems {
+				b.elems[i] = math.MaxUint64
 			}
 		}
 	}
@@ -236,32 +246,29 @@ func (b *UintBuilder) Reset() {
 func (b *UintBuilder) Get(row int) uint64 {
 	// If the UintBuilder is configured to use a zero value for unset rows, it's
 	// possible that the array has not been grown to a size that includes [row].
-	if b.array.n <= row {
+	if len(b.elems) <= row {
 		if invariants.Enabled && !b.useDefault {
-			panic(errors.AssertionFailedf("Get(%d) on UintBuilder with array of size %d", row, b.array.n))
+			panic(errors.AssertionFailedf("Get(%d) on UintBuilder with array of size %d", row, len(b.elems)))
 		}
 		return 0
 	}
-	return b.array.elems.At(row)
+	return b.elems[row]
 }
 
 // Set sets the value of the provided row index to v.
 func (b *UintBuilder) Set(row int, v uint64) {
-	if b.array.n <= row {
+	if len(b.elems) <= row {
 		// Double the size of the allocated array, or initialize it to at least 32
 		// values (256 bytes) if this is the first allocation. Then double until
 		// there's sufficient space.
-		n2 := max(b.array.n<<1, 32)
+		n2 := max(len(b.elems)<<1, 32)
 		for n2 <= row {
-			n2 <<= 1 /* double the size */
+			n2 <<= 1 // double the size
 		}
 		// NB: Go guarantees the allocated array will be 64-bit aligned.
-		newDataTyped := make([]uint64, n2)
-		copy(newDataTyped, b.array.elems.Slice(b.array.n))
-		newElems := makeUnsafeRawSlice[uint64](unsafe.Pointer(&newDataTyped[0]))
-		b.array.n = n2
-		b.array.elems = newElems
-
+		newElems := make([]uint64, n2)
+		copy(newElems, b.elems)
+		b.elems = newElems
 	}
 	// Maintain the running minimum and maximum for the purpose of maintaining
 	// knowledge of the delta encoding that would be used.
@@ -275,7 +282,7 @@ func (b *UintBuilder) Set(row int, v uint64) {
 			b.stats.encodingRow = row
 		}
 	}
-	b.array.elems.set(row, v)
+	b.elems[row] = v
 }
 
 // Size implements ColumnWriter and returns the size of the column if its first
@@ -302,7 +309,7 @@ func (b *UintBuilder) determineEncoding(rows int) (_ UintEncoding, deltaBase uin
 		// Note that b.stats.minimum includes all rows set so far so it might be
 		// strictly smaller than all values up to [rows]; but it is still a suitable
 		// base for b.stats.encoding.
-		if invariants.Sometimes(1) && rows > 0 {
+		if invariants.Enabled && invariants.Sometimes(1) && rows > 0 {
 			if enc, _ := b.recalculateEncoding(rows); enc != b.stats.encoding {
 				panic(fmt.Sprintf("fast and slow paths don't agree: %s vs %s", b.stats.encoding, enc))
 			}
@@ -314,7 +321,7 @@ func (b *UintBuilder) determineEncoding(rows int) (_ UintEncoding, deltaBase uin
 
 func (b *UintBuilder) recalculateEncoding(rows int) (_ UintEncoding, deltaBase uint64) {
 	// We have to recalculate the minimum and maximum.
-	minimum, maximum := computeMinMax(b.array.elems.Slice(min(rows, b.array.n)))
+	minimum, maximum := computeMinMax(b.elems[:min(rows, len(b.elems))])
 	if b.useDefault {
 		// Mirror the pessimism of the fast path so that the result is consistent.
 		// Otherwise, adding a row can result in a different encoding even when not
@@ -353,17 +360,8 @@ func (b *UintBuilder) Finish(col, rows int, offset uint32, buf []byte) uint32 {
 
 	e, minimum := b.determineEncoding(rows)
 
-	// NB: In some circumstances, it's possible for b.array.elems.ptr to be nil.
-	// Specifically, if the builder is initialized using InitWithDefault and no
-	// non-default values exist, no array will have been allocated (we lazily
-	// allocate b.array.elems.ptr). It's illegal to try to construct an unsafe
-	// slice from a nil ptr with non-zero rows. Only attempt to construct the
-	// values slice if there's actually a non-nil ptr.
-	var valuesSlice []uint64
-	if b.array.elems.ptr != nil {
-		valuesSlice = b.array.elems.Slice(min(rows, b.array.n))
-	}
-	return uintColumnFinish(rows, minimum, valuesSlice, e, offset, buf)
+	values := b.elems[:min(rows, len(b.elems))]
+	return uintColumnFinish(rows, minimum, values, e, offset, buf)
 }
 
 // uintColumnFinish finishes the column of unsigned integers of type T, applying
@@ -388,25 +386,40 @@ func uintColumnFinish(
 	// Align the offset appropriately.
 	offset = alignWithZeroes(buf, offset, width)
 
+	if invariants.Enabled && len(buf) < int(offset)+rows*e.Width() {
+		panic("buffer too small")
+	}
 	switch e.Width() {
 	case 1:
-		dest := makeUnsafeRawSlice[uint8](unsafe.Pointer(&buf[offset])).Slice(rows)
+		dest := buf[offset : offset+uint32(rows)]
 		reduceUints(deltaBase, values, dest)
 
 	case 2:
-		dest := makeUnsafeRawSlice[uint16](unsafe.Pointer(&buf[offset])).Slice(rows)
+		dest := unsafe.Slice((*uint16)(unsafe.Pointer(&buf[offset])), rows)
 		reduceUints(deltaBase, values, dest)
+		if BigEndian {
+			ReverseBytes16(dest)
+		}
 
 	case 4:
-		dest := makeUnsafeRawSlice[uint32](unsafe.Pointer(&buf[offset])).Slice(rows)
+		dest := unsafe.Slice((*uint32)(unsafe.Pointer(&buf[offset])), rows)
 		reduceUints(deltaBase, values, dest)
+		if BigEndian {
+			ReverseBytes32(dest)
+		}
 
 	case 8:
 		if deltaBase != 0 {
 			panic("unreachable")
 		}
-		dest := makeUnsafeRawSlice[uint64](unsafe.Pointer(&buf[offset])).Slice(rows)
+		dest := unsafe.Slice((*uint64)(unsafe.Pointer(&buf[offset])), rows)
 		copy(dest, values)
+		for i := len(values); i < len(dest); i++ {
+			dest[i] = 0
+		}
+		if BigEndian {
+			ReverseBytes64(dest)
+		}
 
 	default:
 		panic("unreachable")
@@ -429,6 +442,7 @@ func (b *UintBuilder) WriteDebug(w io.Writer, rows int) {
 // The values slice can be smaller than dst; in that case, the values between
 // len(values) and len(dst) are assumed to be 0.
 func reduceUints[N constraints.Integer](minimum uint64, values []uint64, dst []N) {
+	_ = dst[len(values)-1]
 	for i, v := range values {
 		if invariants.Enabled {
 			if v < minimum {
@@ -438,12 +452,11 @@ func reduceUints[N constraints.Integer](minimum uint64, values []uint64, dst []N
 				panic("incorrect target width")
 			}
 		}
+		//gcassert:bce
 		dst[i] = N(v - minimum)
 	}
-	if invariants.Enabled && len(values) < len(dst) {
-		if minimum != 0 {
-			panic("incorrect minimum value")
-		}
+	if invariants.Enabled && len(values) < len(dst) && minimum != 0 {
+		panic("incorrect minimum value")
 	}
 	for i := len(values); i < len(dst); i++ {
 		dst[i] = 0

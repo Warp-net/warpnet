@@ -217,8 +217,8 @@ const (
 
 // OpenOptions contains optional arguments for OpenForReading.
 type OpenOptions struct {
-	// MustExist triggers a fatal error if the file does not exist. The fatal
-	// error message contains extra information helpful for debugging.
+	// MustExist converts a not-exist error into a corruption error, and adds
+	// extra information helpful for debugging.
 	MustExist bool
 }
 
@@ -338,7 +338,7 @@ type Provider interface {
 	// CheckpointState saves any saved state on local disk to the specified
 	// directory on the specified VFS. A new Pebble instance instantiated at that
 	// path should be able to resolve references to the specified files.
-	CheckpointState(fs vfs.FS, dir string, fileType base.FileType, fileNums []base.DiskFileNum) error
+	CheckpointState(fs vfs.FS, dir string, fileNums []base.DiskFileNum) error
 
 	// Metrics returns metrics about objstorage. Currently, it only returns metrics
 	// about the shared cache.
@@ -393,6 +393,13 @@ func Copy(ctx context.Context, r ReadHandle, out Writable, offset, length uint64
 		}
 	}
 	return nil
+}
+
+// IsLocalBlobFile returns true if a blob file with the given fileNum exists and is
+// local.
+func IsLocalBlobFile(provider Provider, fileNum base.DiskFileNum) bool {
+	meta, err := provider.Lookup(base.FileTypeBlob, fileNum)
+	return err == nil && !meta.IsRemote()
 }
 
 // IsLocalTable returns true if a table with the given fileNum exists and is

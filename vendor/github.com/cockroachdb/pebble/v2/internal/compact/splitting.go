@@ -151,7 +151,7 @@ func NewOutputSplitter(
 	}
 	// Find the first grandparent that starts at or after startKey.
 	grandparent := s.grandparentLevel.SeekGE(cmp, startKey)
-	if grandparent != nil && cmp(grandparent.Smallest.UserKey, startKey) <= 0 {
+	if grandparent != nil && cmp(grandparent.Smallest().UserKey, startKey) <= 0 {
 		grandparent = s.grandparentLevel.Next()
 	}
 	s.setNextBoundary(grandparent)
@@ -179,10 +179,10 @@ func (s *OutputSplitter) boundaryReached(key []byte) (nextBoundary []byte) {
 	return s.nextBoundary.key
 }
 
-func (s *OutputSplitter) setNextBoundary(nextGrandparent *manifest.FileMetadata) {
-	if nextGrandparent != nil && (s.limit == nil || s.cmp(nextGrandparent.Smallest.UserKey, s.limit) < 0) {
+func (s *OutputSplitter) setNextBoundary(nextGrandparent *manifest.TableMetadata) {
+	if nextGrandparent != nil && (s.limit == nil || s.cmp(nextGrandparent.Smallest().UserKey, s.limit) < 0) {
 		s.nextBoundary = splitterBoundary{
-			key:           nextGrandparent.Smallest.UserKey,
+			key:           nextGrandparent.Smallest().UserKey,
 			isGrandparent: true,
 		}
 	} else {

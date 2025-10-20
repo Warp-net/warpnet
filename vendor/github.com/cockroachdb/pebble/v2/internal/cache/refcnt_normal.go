@@ -3,7 +3,6 @@
 // the LICENSE file.
 
 //go:build !tracing
-// +build !tracing
 
 package cache
 
@@ -37,6 +36,8 @@ func (v *refcnt) acquire() {
 	}
 }
 
+// release decrements the reference count and returns true when the reference
+// count becomes 0.
 func (v *refcnt) release() bool {
 	switch v := v.val.Add(-1); {
 	case v < 0:

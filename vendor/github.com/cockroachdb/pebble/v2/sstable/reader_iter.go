@@ -49,7 +49,10 @@ type Iterator interface {
 	// NextPrefix implements (base.InternalIterator).NextPrefix.
 	NextPrefix(succKey []byte) *base.InternalKV
 
-	SetCloseHook(fn func(i Iterator) error)
+	// SetCloseHook sets a function that will be called when the iterator is
+	// closed. This is used by the file cache to release the reference count on
+	// the open sstable.Reader when the iterator is closed.
+	SetCloseHook(func())
 }
 
 // Iterator positioning optimizations and singleLevelIterator and
@@ -155,16 +158,18 @@ func init() {
 	singleLevelIterRowBlockPool = sync.Pool{
 		New: func() interface{} {
 			i := &singleLevelIteratorRowBlocks{pool: &singleLevelIterRowBlockPool}
-			// Note: this is a no-op if invariants are disabled or race is enabled.
-			invariants.SetFinalizer(i, checkSingleLevelIterator[rowblk.IndexIter, *rowblk.IndexIter, rowblk.Iter, *rowblk.Iter])
+			if invariants.UseFinalizers {
+				invariants.SetFinalizer(i, checkSingleLevelIterator[rowblk.IndexIter, *rowblk.IndexIter, rowblk.Iter, *rowblk.Iter])
+			}
 			return i
 		},
 	}
 	twoLevelIterRowBlockPool = sync.Pool{
 		New: func() interface{} {
 			i := &twoLevelIteratorRowBlocks{pool: &twoLevelIterRowBlockPool}
-			// Note: this is a no-op if invariants are disabled or race is enabled.
-			invariants.SetFinalizer(i, checkTwoLevelIterator[rowblk.IndexIter, *rowblk.IndexIter, rowblk.Iter, *rowblk.Iter])
+			if invariants.UseFinalizers {
+				invariants.SetFinalizer(i, checkTwoLevelIterator[rowblk.IndexIter, *rowblk.IndexIter, rowblk.Iter, *rowblk.Iter])
+			}
 			return i
 		},
 	}
@@ -173,8 +178,9 @@ func init() {
 			i := &singleLevelIteratorColumnBlocks{
 				pool: &singleLevelIterColumnBlockPool,
 			}
-			// Note: this is a no-op if invariants are disabled or race is enabled.
-			invariants.SetFinalizer(i, checkSingleLevelIterator[colblk.IndexIter, *colblk.IndexIter, colblk.DataBlockIter, *colblk.DataBlockIter])
+			if invariants.UseFinalizers {
+				invariants.SetFinalizer(i, checkSingleLevelIterator[colblk.IndexIter, *colblk.IndexIter, colblk.DataBlockIter, *colblk.DataBlockIter])
+			}
 			return i
 		},
 	}
@@ -183,8 +189,9 @@ func init() {
 			i := &twoLevelIteratorColumnBlocks{
 				pool: &twoLevelIterColumnBlockPool,
 			}
-			// Note: this is a no-op if invariants are disabled or race is enabled.
-			invariants.SetFinalizer(i, checkTwoLevelIterator[colblk.IndexIter, *colblk.IndexIter, colblk.DataBlockIter, *colblk.DataBlockIter])
+			if invariants.UseFinalizers {
+				invariants.SetFinalizer(i, checkTwoLevelIterator[colblk.IndexIter, *colblk.IndexIter, colblk.DataBlockIter, *colblk.DataBlockIter])
+			}
 			return i
 		},
 	}

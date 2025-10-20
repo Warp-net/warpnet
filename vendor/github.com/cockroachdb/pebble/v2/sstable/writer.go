@@ -11,16 +11,29 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/keyspan"
 	"github.com/cockroachdb/pebble/v2/objstorage"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
 )
 
 // NewRawWriter returns a new table writer for the file. Closing the writer will
 // close the file.
 func NewRawWriter(writable objstorage.Writable, o WriterOptions) RawWriter {
+	return NewRawWriterWithCPUMeasurer(writable, o, base.NoopCPUMeasurer{})
+}
+
+// NewRawWriterWithCPUMeasurer is like NewRawWriter, but additionally allows
+// the caller to specify a CPUMeasurer. Only
+// CPUMeasurer.MeasureCPU(CompactionGoroutineSSTableSecondary) is used by the
+// writer.
+func NewRawWriterWithCPUMeasurer(
+	writable objstorage.Writable, o WriterOptions, cpuMeasurer base.CPUMeasurer,
+) RawWriter {
 	if o.TableFormat <= TableFormatPebblev4 {
+		// Don't bother plumbing the cpuMeasurer to the row writer since it is not
+		// the default and will be removed.
 		return newRowWriter(writable, o)
 	}
-	return newColumnarWriter(writable, o)
+	return newColumnarWriter(writable, o, cpuMeasurer)
 }
 
 // Writer is a table writer.
@@ -82,7 +95,9 @@ func (w *Writer) encodeFragmentedRangeKeySpan(s keyspan.Span) {
 	// to depend on this ordering for colblk-encoded sstables.
 	keyspan.SortKeysByTrailerAndSuffix(w.comparer.CompareRangeSuffixes, s.Keys)
 	if w.Error() == nil {
-		w.rw.EncodeSpan(s)
+		if err := w.rw.EncodeSpan(s); err != nil {
+			w.err = err
+		}
 	}
 }
 
@@ -109,7 +124,7 @@ func (w *Writer) Set(key, value []byte) error {
 	}
 	// forceObsolete is false based on the assumption that no RANGEDELs in the
 	// sstable delete the added points.
-	return w.rw.AddWithForceObsolete(base.MakeInternalKey(key, 0, InternalKeyKindSet), value, false)
+	return w.rw.Add(base.MakeInternalKey(key, 0, InternalKeyKindSet), value, false)
 }
 
 // Delete deletes the value for the given key. The sequence number is set to
@@ -126,7 +141,7 @@ func (w *Writer) Delete(key []byte) error {
 	}
 	// forceObsolete is false based on the assumption that no RANGEDELs in the
 	// sstable delete the added points.
-	return w.rw.AddWithForceObsolete(base.MakeInternalKey(key, 0, InternalKeyKindDelete), nil, false)
+	return w.rw.Add(base.MakeInternalKey(key, 0, InternalKeyKindDelete), nil, false)
 }
 
 // DeleteRange deletes all of the keys (and values) in the range [start,end)
@@ -167,7 +182,7 @@ func (w *Writer) Merge(key, value []byte) error {
 	// forceObsolete is false based on the assumption that no RANGEDELs in the
 	// sstable that delete the added points. If the user configured this writer
 	// to be strict-obsolete, addPoint will reject the addition of this MERGE.
-	return w.rw.AddWithForceObsolete(base.MakeInternalKey(key, 0, InternalKeyKindMerge), value, false)
+	return w.rw.Add(base.MakeInternalKey(key, 0, InternalKeyKindMerge), value, false)
 }
 
 // RangeKeySet sets a range between start (inclusive) and end (exclusive) with
@@ -297,7 +312,7 @@ func (w *Writer) Close() (err error) {
 type RawWriter interface {
 	// Error returns the current accumulated error if any.
 	Error() error
-	// AddWithForceObsolete must be used when writing a strict-obsolete sstable.
+	// Add adds a key-value pair to the sstable.
 	//
 	// forceObsolete indicates whether the caller has determined that this key is
 	// obsolete even though it may be the latest point key for this userkey. This
@@ -308,9 +323,11 @@ type RawWriter interface {
 	// that strict-obsolete ssts must satisfy. S2, due to RANGEDELs, is solely the
 	// responsibility of the caller. S1 is solely the responsibility of the
 	// callee.
-	AddWithForceObsolete(
-		key InternalKey, value []byte, forceObsolete bool,
-	) error
+	Add(key InternalKey, value []byte, forceObsolete bool) error
+	// AddWithBlobHandle adds a key to the sstable, but encoding a blob value
+	// handle instead of an in-place value. See Add for more details. The caller
+	// must provide the already-extracted ShortAttribute for the value.
+	AddWithBlobHandle(key InternalKey, h blob.InlineHandle, attr base.ShortAttribute, forceObsolete bool) error
 	// EncodeSpan encodes the keys in the given span. The span can contain
 	// either only RANGEDEL keys or only range keys.
 	//
@@ -342,7 +359,7 @@ type RawWriter interface {
 	// provided suffix. It's specifically used for the implementation of
 	// RewriteKeySuffixesAndReturnFormat. See that function's documentation for
 	// more details.
-	rewriteSuffixes(r *Reader, wo WriterOptions, from, to []byte, concurrency int) error
+	rewriteSuffixes(r *Reader, sst []byte, wo WriterOptions, from, to []byte, concurrency int) error
 
 	// copyDataBlocks copies data blocks to the table from the specified ReadHandle.
 	// It's specifically used by the sstable copier that can copy parts of an sstable
@@ -354,10 +371,10 @@ type RawWriter interface {
 	// using CopySpan().
 	addDataBlock(b, sep []byte, bhp block.HandleWithProperties) error
 
-	// copyFilter copies the specified filter to the table. It's specifically used
-	// by the sstable copier that can copy parts of an sstable to a new sstable,
-	// using CopySpan().
-	copyFilter(filter []byte, filterName string) error
+	// setFilter sets the filter to the specified filterWriter. It's
+	// specifically used by the sstable copier that can copy parts of an sstable
+	// to a new sstable, using CopySpan().
+	setFilter(filterWriter)
 
 	// copyProperties copies properties from the specified props, and resets others
 	// to prepare for copying data blocks from another sstable. It's specifically

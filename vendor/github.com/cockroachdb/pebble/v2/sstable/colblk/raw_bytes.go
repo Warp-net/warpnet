@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/pebble/v2/internal/binfmt"
+	"github.com/cockroachdb/pebble/v2/internal/invariants"
 	"github.com/cockroachdb/pebble/v2/internal/treeprinter"
 )
 
@@ -106,18 +107,26 @@ func rawBytesToBinFormatter(
 	f.ToTreePrinter(n)
 }
 
+//gcassert:inline
 func (b *RawBytes) ptr(offset uint32) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(b.data) + uintptr(offset))
 }
 
 //gcassert:inline
-func (b *RawBytes) slice(start, end uint32) []byte {
+func (b *RawBytes) Slice(start, end uint32) []byte {
 	return unsafe.Slice((*byte)(b.ptr(start)), end-start)
+}
+
+//gcassert:inline
+func (b *RawBytes) Offsets(i int) (start, end uint32) {
+	invariants.CheckBounds(i, b.slices)
+	return b.offsets.At2(i)
 }
 
 // At returns the []byte at index i. The returned slice should not be mutated.
 func (b RawBytes) At(i int) []byte {
-	return b.slice(b.offsets.At2(i))
+	invariants.CheckBounds(i, b.slices)
+	return b.Slice(b.offsets.At2(i))
 }
 
 // Slices returns the number of []byte slices encoded within the RawBytes.
@@ -183,7 +192,9 @@ func (b *RawBytesBuilder) UnsafeGet(i int) []byte {
 	if b.rows == 0 {
 		return nil
 	}
-	return b.data[b.offsets.array.elems.At(i):b.offsets.array.elems.At(i+1)]
+	start := unsafeGetUint64(b.offsets.elems, i)
+	end := unsafeGetUint64(b.offsets.elems, i+1)
+	return b.data[start:end]
 }
 
 // Finish writes the serialized byte slices to buf starting at offset. The buf

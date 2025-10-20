@@ -66,7 +66,7 @@ type memTable struct {
 	cmp         Compare
 	formatKey   base.FormatKey
 	equal       Equal
-	arenaBuf    []byte
+	arenaBuf    manual.Buf
 	skl         arenaskl.Skiplist
 	rangeDelSkl arenaskl.Skiplist
 	rangeKeySkl arenaskl.Skiplist
@@ -93,7 +93,7 @@ func (m *memTable) free() {
 	if m != nil {
 		m.releaseAccountingReservation()
 		manual.Free(manual.MemTable, m.arenaBuf)
-		m.arenaBuf = nil
+		m.arenaBuf = manual.Buf{}
 	}
 }
 
@@ -102,7 +102,7 @@ func (m *memTable) free() {
 // which is used by tests.
 type memTableOptions struct {
 	*Options
-	arenaBuf                     []byte
+	arenaBuf                     manual.Buf
 	size                         int
 	logSeqNum                    base.SeqNum
 	releaseAccountingReservation func()
@@ -110,8 +110,8 @@ type memTableOptions struct {
 
 func checkMemTable(obj interface{}) {
 	m := obj.(*memTable)
-	if m.arenaBuf != nil {
-		fmt.Fprintf(os.Stderr, "%p: memTable buffer was not freed\n", m.arenaBuf)
+	if m.arenaBuf.Data() != nil {
+		fmt.Fprintf(os.Stderr, "%v: memTable buffer was not freed\n", m.arenaBuf)
 		os.Exit(1)
 	}
 }
@@ -119,7 +119,10 @@ func checkMemTable(obj interface{}) {
 // newMemTable returns a new MemTable of the specified size. If size is zero,
 // Options.MemTableSize is used instead.
 func newMemTable(opts memTableOptions) *memTable {
-	opts.Options = opts.Options.EnsureDefaults()
+	if opts.Options == nil {
+		opts.Options = &Options{}
+	}
+	opts.Options.EnsureDefaults()
 	m := new(memTable)
 	m.init(opts)
 	return m
@@ -151,11 +154,11 @@ func (m *memTable) init(opts memTableOptions) {
 		constructSpan: rangekey.Decode,
 	}
 
-	if m.arenaBuf == nil {
-		m.arenaBuf = make([]byte, opts.size)
+	if m.arenaBuf.Data() == nil {
+		m.arenaBuf = manual.New(manual.MemTable, uintptr(opts.size))
 	}
 
-	arena := arenaskl.NewArena(m.arenaBuf)
+	arena := arenaskl.NewArena(m.arenaBuf.Slice())
 	m.skl.Reset(arena, m.cmp)
 	m.rangeDelSkl.Reset(arena, m.cmp)
 	m.rangeKeySkl.Reset(arena, m.cmp)

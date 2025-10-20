@@ -12,6 +12,7 @@ import (
 	dag "github.com/ipfs/boxo/ipld/merkledag"
 	ft "github.com/ipfs/boxo/ipld/unixfs"
 	uio "github.com/ipfs/boxo/ipld/unixfs/io"
+	"github.com/ipfs/boxo/provider"
 	cid "github.com/ipfs/go-cid"
 	ipld "github.com/ipfs/go-ipld-format"
 )
@@ -40,16 +41,35 @@ type Directory struct {
 	// UnixFS directory implementation used for creating,
 	// reading and editing directories.
 	unixfsDir uio.Directory
+
+	prov provider.MultihashProvider
 }
 
 // NewDirectory constructs a new MFS directory.
 //
 // You probably don't want to call this directly. Instead, construct a new root
 // using NewRoot.
-func NewDirectory(ctx context.Context, name string, node ipld.Node, parent parent, dserv ipld.DAGService) (*Directory, error) {
+func NewDirectory(ctx context.Context, name string, node ipld.Node, parent parent, dserv ipld.DAGService, prov provider.MultihashProvider) (*Directory, error) {
 	db, err := uio.NewDirectoryFromNode(dserv, node)
 	if err != nil {
 		return nil, err
+	}
+
+	nd, err := db.GetNode()
+	if err != nil {
+		return nil, err
+	}
+
+	err = dserv.Add(ctx, nd)
+	if err != nil {
+		return nil, err
+	}
+
+	if prov != nil {
+		log.Debugf("mfs: provide: %s", nd.Cid())
+		if err := prov.StartProviding(false, nd.Cid().Hash()); err != nil {
+			log.Warnf("mfs: error while providing %s: %s", nd.Cid(), err)
+		}
 	}
 
 	return &Directory{
@@ -60,6 +80,7 @@ func NewDirectory(ctx context.Context, name string, node ipld.Node, parent paren
 		},
 		ctx:          ctx,
 		unixfsDir:    db,
+		prov:         prov,
 		entriesCache: make(map[string]FSNode),
 	}, nil
 }
@@ -67,7 +88,7 @@ func NewDirectory(ctx context.Context, name string, node ipld.Node, parent paren
 // NewEmptyDirectory creates an empty MFS directory with the given options.
 // The directory is added to the DAGService. To create a new MFS
 // root use NewEmptyRootFolder instead.
-func NewEmptyDirectory(ctx context.Context, name string, parent parent, dserv ipld.DAGService, opts MkdirOpts) (*Directory, error) {
+func NewEmptyDirectory(ctx context.Context, name string, parent parent, dserv ipld.DAGService, prov provider.MultihashProvider, opts MkdirOpts) (*Directory, error) {
 	db, err := uio.NewDirectory(dserv,
 		uio.WithMaxLinks(opts.MaxLinks),
 		uio.WithMaxHAMTFanout(opts.MaxHAMTFanout),
@@ -88,6 +109,8 @@ func NewEmptyDirectory(ctx context.Context, name string, parent parent, dserv ip
 		return nil, err
 	}
 
+	// note: we don't provide the empty unixfs dir as it is always local.
+
 	return &Directory{
 		inode: inode{
 			name:       name,
@@ -96,6 +119,7 @@ func NewEmptyDirectory(ctx context.Context, name string, parent parent, dserv ip
 		},
 		ctx:          ctx,
 		unixfsDir:    db,
+		prov:         prov,
 		entriesCache: make(map[string]FSNode),
 	}, nil
 }
@@ -157,6 +181,13 @@ func (d *Directory) localUpdate(c child) (*dag.ProtoNode, error) {
 		return nil, err
 	}
 
+	if d.prov != nil {
+		log.Debugf("mfs: provide: %s", nd.Cid())
+		if err := d.prov.StartProviding(false, nd.Cid().Hash()); err != nil {
+			log.Warnf("mfs: error while providing %s: %s", nd.Cid(), err)
+		}
+	}
+
 	return pbnd.Copy().(*dag.ProtoNode), nil
 	// TODO: Why do we need a copy?
 }
@@ -176,7 +207,7 @@ func (d *Directory) cacheNode(name string, nd ipld.Node) (FSNode, error) {
 
 		switch fsn.Type() {
 		case ft.TDirectory, ft.THAMTShard:
-			ndir, err := NewDirectory(d.ctx, name, nd, d, d.dagService)
+			ndir, err := NewDirectory(d.ctx, name, nd, d, d.dagService, d.prov)
 			if err != nil {
 				return nil, err
 			}
@@ -185,11 +216,10 @@ func (d *Directory) cacheNode(name string, nd ipld.Node) (FSNode, error) {
 			// inherited from the parent.
 			ndir.unixfsDir.SetMaxLinks(d.unixfsDir.GetMaxLinks())
 			ndir.unixfsDir.SetMaxHAMTFanout(d.unixfsDir.GetMaxHAMTFanout())
-
 			d.entriesCache[name] = ndir
 			return ndir, nil
 		case ft.TFile, ft.TRaw, ft.TSymlink:
-			nfi, err := NewFile(name, nd, d, d.dagService)
+			nfi, err := NewFile(name, nd, d, d.dagService, d.prov)
 			if err != nil {
 				return nil, err
 			}
@@ -201,7 +231,7 @@ func (d *Directory) cacheNode(name string, nd ipld.Node) (FSNode, error) {
 			return nil, ErrInvalidChild
 		}
 	case *dag.RawNode:
-		nfi, err := NewFile(name, nd, d, d.dagService)
+		nfi, err := NewFile(name, nd, d, d.dagService, d.prov)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +368,7 @@ func (d *Directory) MkdirWithOpts(name string, opts MkdirOpts) (*Directory, erro
 	// keep backwards compatibility. CidBuilder from the options is
 	// manually set in `Mkdir` (ops.go) though.
 	opts.CidBuilder = d.GetCidBuilder()
-	dirobj, err := NewEmptyDirectory(d.ctx, name, d, d.dagService, opts)
+	dirobj, err := NewEmptyDirectory(d.ctx, name, d, d.dagService, d.prov, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -388,6 +418,13 @@ func (d *Directory) AddChild(name string, nd ipld.Node) error {
 	err = d.dagService.Add(d.ctx, nd)
 	if err != nil {
 		return err
+	}
+
+	if d.prov != nil {
+		log.Debugf("mfs: provide: %s", nd.Cid())
+		if err := d.prov.StartProviding(false, nd.Cid().Hash()); err != nil {
+			log.Warnf("mfs: error while providing %s: %s", nd.Cid(), err)
+		}
 	}
 
 	return d.unixfsDir.AddChild(d.ctx, name, nd)
@@ -451,6 +488,13 @@ func (d *Directory) getNode(cacheClean bool) (ipld.Node, error) {
 		return nil, err
 	}
 
+	if d.prov != nil {
+		log.Debugf("mfs: provide: %s", nd.Cid())
+		if err := d.prov.StartProviding(false, nd.Cid().Hash()); err != nil {
+			log.Warnf("mfs: error while providing %s: %s", nd.Cid(), err)
+		}
+	}
+
 	return nd.Copy(), err
 }
 
@@ -512,6 +556,13 @@ func (d *Directory) setNodeData(data []byte, links []*ipld.Link) error {
 	err := d.dagService.Add(d.ctx, nd)
 	if err != nil {
 		return err
+	}
+
+	if d.prov != nil {
+		log.Debugf("mfs: provide: %s", nd.Cid())
+		if err := d.prov.StartProviding(false, nd.Cid().Hash()); err != nil {
+			log.Warnf("mfs: error while providing %s: %s", nd.Cid(), err)
+		}
 	}
 
 	err = d.parent.updateChildEntry(child{d.name, nd})

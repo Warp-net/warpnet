@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/crc"
@@ -472,6 +473,17 @@ type LogWriter struct {
 	pendingSyncsBackingIndex pendingSyncsWithHighestSyncIndex
 
 	pendingSyncForSyncQueueBacking pendingSyncForSyncQueue
+
+	// syncedOffset is the offset in the log that is durably synced after a
+	// flush. This member is used to write the WAL Sync chunk format's "Offset"
+	// field in the header.
+	syncedOffset atomic.Uint64
+
+	// emitFragment is set at runtime depending on which FormatMajorVersion
+	// is used. emitFragment will be set to writing WAL Sync chunk formats
+	// if the FormatMajorVersion is greater than or equal to FormatWALSyncChunks,
+	// otherwise it will write the recyclable chunk format.
+	emitFragment func(n int, p []byte) (remainingP []byte)
 }
 
 // LogWriterConfig is a struct used for configuring new LogWriters
@@ -496,6 +508,11 @@ type LogWriterConfig struct {
 	// package) precede the lower layer locks (in the record package). These
 	// callbacks are serialized since they are invoked from the flushLoop.
 	ExternalSyncQueueCallback ExternalSyncQueueCallback
+
+	// WriteWALSyncOffsets determines whether to write WAL sync chunk offsets.
+	// The format major version can change (ratchet) at runtime, so this must be
+	// a function rather than a static bool to ensure we use the latest format version.
+	WriteWALSyncOffsets func() bool
 }
 
 // ExternalSyncQueueCallback is to be run when a PendingSync has been
@@ -536,6 +553,13 @@ func NewLogWriter(
 			return time.AfterFunc(d, f)
 		},
 	}
+
+	if logWriterConfig.WriteWALSyncOffsets() {
+		r.emitFragment = r.emitFragmentSyncOffsets
+	} else {
+		r.emitFragment = r.emitFragmentRecyclable
+	}
+
 	m := &LogWriterMetrics{}
 	if logWriterConfig.ExternalSyncQueueCallback != nil {
 		r.pendingSyncsBackingIndex.init(logWriterConfig.ExternalSyncQueueCallback)
@@ -570,18 +594,23 @@ func (w *LogWriter) flushLoop(context.Context) {
 	f.Lock()
 
 	// Initialize idleStartTime to when the loop starts.
-	idleStartTime := time.Now()
+	idleStartTime := crtime.NowMono()
 	var syncTimer syncTimer
 	defer func() {
 		// Capture the idle duration between the last piece of work and when the
 		// loop terminated.
-		f.metrics.WriteThroughput.IdleDuration += time.Since(idleStartTime)
+		f.metrics.WriteThroughput.IdleDuration += idleStartTime.Elapsed()
 		if syncTimer != nil {
 			syncTimer.Stop()
 		}
 		close(f.closed)
 		f.Unlock()
 	}()
+
+	// writtenOffset is the amount of data that has been written
+	// but not necessarily synced. This is used to update logWriter's
+	// syncedOffset after a sync.
+	var writtenOffset uint64 = 0
 
 	// The flush loop performs flushing of full and partial data blocks to the
 	// underlying writer (LogWriter.w), syncing of the writer, and notification
@@ -657,7 +686,7 @@ func (w *LogWriter) flushLoop(context.Context) {
 		// 2. add block to pending
 		// 3. add to syncQ
 		//                         4. read syncQ
-		workStartTime := time.Now()
+		workStartTime := crtime.NowMono()
 		idleDuration := workStartTime.Sub(idleStartTime)
 		pending = append(pending[:0], f.pending...)
 		f.pending = f.pending[:0]
@@ -685,17 +714,19 @@ func (w *LogWriter) flushLoop(context.Context) {
 		if fErr != nil {
 			// NB: pop may invoke ExternalSyncQueueCallback, which is why we have
 			// called f.Unlock() above. We will acquire the lock again below.
-			f.pendingSyncs.pop(snap, fErr)
+			_ = f.pendingSyncs.pop(snap, fErr)
 			// Update the idleStartTime if work could not be done, so that we don't
 			// include the duration we tried to do work as idle. We don't bother
 			// with the rest of the accounting, which means we will undercount.
-			idleStartTime = time.Now()
+			idleStartTime = crtime.NowMono()
 			f.Lock()
 			continue
 		}
+		writtenOffset += uint64(len(data))
 		synced, syncLatency, bytesWritten, err := w.flushPending(data, pending, snap)
 		f.Lock()
 		if synced && f.fsyncLatency != nil {
+			w.syncedOffset.Store(writtenOffset)
 			f.fsyncLatency.Observe(float64(syncLatency))
 		}
 		f.err = err
@@ -704,7 +735,7 @@ func (w *LogWriter) flushLoop(context.Context) {
 			// Update the idleStartTime if work could not be done, so that we don't
 			// include the duration we tried to do work as idle. We don't bother
 			// with the rest of the accounting, which means we will undercount.
-			idleStartTime = time.Now()
+			idleStartTime = crtime.NowMono()
 			continue
 		}
 
@@ -724,7 +755,7 @@ func (w *LogWriter) flushLoop(context.Context) {
 			}
 		}
 		// Finished work, and started idling.
-		idleStartTime = time.Now()
+		idleStartTime = crtime.NowMono()
 		workDuration := idleStartTime.Sub(workStartTime)
 		f.metrics.WriteThroughput.Bytes += bytesWritten
 		f.metrics.WriteThroughput.WorkDuration += workDuration
@@ -773,9 +804,9 @@ func (w *LogWriter) flushPending(
 }
 
 func (w *LogWriter) syncWithLatency() (time.Duration, error) {
-	start := time.Now()
+	start := crtime.NowMono()
 	err := w.s.Sync()
-	syncLatency := time.Since(start)
+	syncLatency := start.Elapsed()
 	return syncLatency, err
 }
 
@@ -953,6 +984,11 @@ func (w *LogWriter) Size() int64 {
 	return w.blockNum*blockSize + int64(w.block.written.Load())
 }
 
+// emitEOFTrailer writes a special recyclable chunk header to signal EOF.
+// The reason why this function writes the recyclable chunk header instead
+// of having a function for writing recyclable and WAL sync chunks as
+// emitFragment does it because there is no reason to add 8 additional
+// bytes to the EOFTrailer for the SyncedOffset as it will be zeroed out anyway.
 func (w *LogWriter) emitEOFTrailer() {
 	// Write a recyclable chunk header with a different log number.  Readers
 	// will treat the header as EOF when the log number does not match.
@@ -960,12 +996,12 @@ func (w *LogWriter) emitEOFTrailer() {
 	i := b.written.Load()
 	binary.LittleEndian.PutUint32(b.buf[i+0:i+4], 0) // CRC
 	binary.LittleEndian.PutUint16(b.buf[i+4:i+6], 0) // Size
-	b.buf[i+6] = recyclableFullChunkType
+	b.buf[i+6] = recyclableFullChunkEncoding
 	binary.LittleEndian.PutUint32(b.buf[i+7:i+11], w.logNum+1) // Log number
 	b.written.Store(i + int32(recyclableHeaderSize))
 }
 
-func (w *LogWriter) emitFragment(n int, p []byte) (remainingP []byte) {
+func (w *LogWriter) emitFragmentRecyclable(n int, p []byte) (remainingP []byte) {
 	b := w.block
 	i := b.written.Load()
 	first := n == 0
@@ -973,15 +1009,15 @@ func (w *LogWriter) emitFragment(n int, p []byte) (remainingP []byte) {
 
 	if last {
 		if first {
-			b.buf[i+6] = recyclableFullChunkType
+			b.buf[i+6] = recyclableFullChunkEncoding
 		} else {
-			b.buf[i+6] = recyclableLastChunkType
+			b.buf[i+6] = recyclableLastChunkEncoding
 		}
 	} else {
 		if first {
-			b.buf[i+6] = recyclableFirstChunkType
+			b.buf[i+6] = recyclableFirstChunkEncoding
 		} else {
-			b.buf[i+6] = recyclableMiddleChunkType
+			b.buf[i+6] = recyclableMiddleChunkEncoding
 		}
 	}
 
@@ -994,6 +1030,44 @@ func (w *LogWriter) emitFragment(n int, p []byte) (remainingP []byte) {
 	b.written.Store(j)
 
 	if blockSize-b.written.Load() < recyclableHeaderSize {
+		// There is no room for another fragment in the block, so fill the
+		// remaining bytes with zeros and queue the block for flushing.
+		clear(b.buf[b.written.Load():])
+		w.queueBlock()
+	}
+	return p[r:]
+}
+
+func (w *LogWriter) emitFragmentSyncOffsets(n int, p []byte) (remainingP []byte) {
+	b := w.block
+	i := b.written.Load()
+	first := n == 0
+	last := blockSize-i-walSyncHeaderSize >= int32(len(p))
+
+	if last {
+		if first {
+			b.buf[i+6] = walSyncFullChunkEncoding
+		} else {
+			b.buf[i+6] = walSyncLastChunkEncoding
+		}
+	} else {
+		if first {
+			b.buf[i+6] = walSyncFirstChunkEncoding
+		} else {
+			b.buf[i+6] = walSyncMiddleChunkEncoding
+		}
+	}
+
+	binary.LittleEndian.PutUint32(b.buf[i+7:i+11], w.logNum)
+	binary.LittleEndian.PutUint64(b.buf[i+11:i+19], w.syncedOffset.Load())
+
+	r := copy(b.buf[i+walSyncHeaderSize:], p)
+	j := i + int32(walSyncHeaderSize+r)
+	binary.LittleEndian.PutUint32(b.buf[i+0:i+4], crc.New(b.buf[i+6:j]).Value())
+	binary.LittleEndian.PutUint16(b.buf[i+4:i+6], uint16(r))
+	b.written.Store(j)
+
+	if blockSize-b.written.Load() < walSyncHeaderSize {
 		// There is no room for another fragment in the block, so fill the
 		// remaining bytes with zeros and queue the block for flushing.
 		clear(b.buf[b.written.Load():])

@@ -239,7 +239,7 @@ func (b PrefixBytes) At(i int) []byte {
 // UnsafeFirstSlice returns first slice in the PrefixBytes. The returned slice
 // points directly into the PrefixBytes buffer and must not be mutated.
 func (b *PrefixBytes) UnsafeFirstSlice() []byte {
-	return b.rawBytes.slice(0, b.rawBytes.offsets.At(2))
+	return b.rawBytes.Slice(0, b.rawBytes.offsets.At(2))
 }
 
 // PrefixBytesIter is an iterator and associated buffers for PrefixBytes. It
@@ -282,6 +282,7 @@ func (i *PrefixBytesIter) Init(maxKeyLength int, syntheticPrefix block.Synthetic
 func (b *PrefixBytes) SetAt(it *PrefixBytesIter, i int) {
 	// Determine the offset and length of the bundle prefix.
 	bundleOffsetIndex := b.bundleOffsetIndexForRow(i)
+	invariants.CheckBounds(bundleOffsetIndex, b.rawBytes.slices)
 	bundleOffsetStart, bundleOffsetEnd := b.rawBytes.offsets.At2(bundleOffsetIndex)
 	bundlePrefixLen := bundleOffsetEnd - bundleOffsetStart
 
@@ -298,18 +299,18 @@ func (b *PrefixBytes) SetAt(it *PrefixBytesIter, i int) {
 	it.Buf = it.Buf[:it.sharedAndBundlePrefixLen+rowSuffixLen]
 
 	ptr := unsafe.Pointer(unsafe.SliceData(it.Buf))
-	ptr = unsafe.Pointer(uintptr(ptr) + uintptr(it.syntheticPrefixLen))
+	ptr = unsafe.Add(ptr, it.syntheticPrefixLen)
 	// Copy the shared key prefix.
 	memmove(ptr, b.rawBytes.data, uintptr(b.sharedPrefixLen))
 	// Copy the bundle prefix.
-	ptr = unsafe.Pointer(uintptr(ptr) + uintptr(b.sharedPrefixLen))
+	ptr = unsafe.Add(ptr, b.sharedPrefixLen)
 	memmove(
 		ptr,
 		unsafe.Pointer(uintptr(b.rawBytes.data)+uintptr(bundleOffsetStart)),
 		uintptr(bundlePrefixLen))
 
 	// Copy the per-row suffix.
-	ptr = unsafe.Pointer(uintptr(ptr) + uintptr(bundlePrefixLen))
+	ptr = unsafe.Add(ptr, bundlePrefixLen)
 	memmove(
 		ptr,
 		unsafe.Pointer(uintptr(b.rawBytes.data)+uintptr(rowSuffixStart)),
@@ -329,6 +330,7 @@ func (b *PrefixBytes) SetNext(it *PrefixBytesIter) {
 	// If the next row is in the same bundle, we can take a fast path of only
 	// updating the per-row suffix.
 	if it.offsetIndex < it.nextBundleOffsetIndex {
+		invariants.CheckBounds(it.offsetIndex, b.rawBytes.slices)
 		rowSuffixStart, rowSuffixEnd := b.rawBytes.offsets.At2(it.offsetIndex)
 		rowSuffixLen := rowSuffixEnd - rowSuffixStart
 		if rowSuffixLen == 0 {
@@ -341,7 +343,7 @@ func (b *PrefixBytes) SetNext(it *PrefixBytesIter) {
 		// Copy in the per-row suffix.
 		ptr := unsafe.Pointer(unsafe.SliceData(it.Buf))
 		memmove(
-			unsafe.Pointer(uintptr(ptr)+uintptr(it.sharedAndBundlePrefixLen)),
+			unsafe.Add(ptr, it.sharedAndBundlePrefixLen),
 			unsafe.Pointer(uintptr(b.rawBytes.data)+uintptr(rowSuffixStart)),
 			uintptr(rowSuffixLen))
 		return
@@ -351,6 +353,7 @@ func (b *PrefixBytes) SetNext(it *PrefixBytesIter) {
 	// The offsetIndex is currently pointing to the start of the new bundle
 	// prefix. Increment it to point at the start of the new row suffix.
 	it.offsetIndex++
+	invariants.CheckBounds(it.offsetIndex, b.rawBytes.slices)
 	rowSuffixStart, rowSuffixEnd := b.rawBytes.offsets.At2(it.offsetIndex)
 	rowSuffixLen := rowSuffixEnd - rowSuffixStart
 
@@ -364,13 +367,14 @@ func (b *PrefixBytes) SetNext(it *PrefixBytesIter) {
 	it.Buf = it.Buf[:it.sharedAndBundlePrefixLen+rowSuffixLen]
 	// Copy in the new bundle suffix.
 	ptr := unsafe.Pointer(unsafe.SliceData(it.Buf))
-	ptr = unsafe.Pointer(uintptr(ptr) + uintptr(it.syntheticPrefixLen) + uintptr(b.sharedPrefixLen))
+	ptr = unsafe.Add(ptr, it.syntheticPrefixLen)
+	ptr = unsafe.Add(ptr, b.sharedPrefixLen)
 	memmove(
 		ptr,
 		unsafe.Pointer(uintptr(b.rawBytes.data)+uintptr(bundlePrefixStart)),
 		uintptr(bundlePrefixLen))
 	// Copy in the per-row suffix.
-	ptr = unsafe.Pointer(uintptr(ptr) + uintptr(bundlePrefixLen))
+	ptr = unsafe.Add(ptr, bundlePrefixLen)
 	memmove(
 		ptr,
 		unsafe.Pointer(uintptr(b.rawBytes.data)+uintptr(rowSuffixStart)),
@@ -382,7 +386,7 @@ func (b *PrefixBytes) SetNext(it *PrefixBytesIter) {
 // mutated.
 func (b *PrefixBytes) SharedPrefix() []byte {
 	// The very first slice is the prefix for the entire column.
-	return b.rawBytes.slice(0, b.rawBytes.offsets.At(0))
+	return b.rawBytes.Slice(0, b.rawBytes.offsets.At(0))
 }
 
 // RowBundlePrefix takes a row index and returns a []byte of the prefix shared
@@ -390,7 +394,8 @@ func (b *PrefixBytes) SharedPrefix() []byte {
 // prefix for the column. The returned slice should not be mutated.
 func (b *PrefixBytes) RowBundlePrefix(row int) []byte {
 	i := b.bundleOffsetIndexForRow(row)
-	return b.rawBytes.slice(b.rawBytes.offsets.At(i), b.rawBytes.offsets.At(i+1))
+	invariants.CheckBounds(i, b.rawBytes.slices)
+	return b.rawBytes.Slice(b.rawBytes.offsets.At2(i))
 }
 
 // BundlePrefix returns the prefix of the i-th bundle in the column. The
@@ -398,7 +403,8 @@ func (b *PrefixBytes) RowBundlePrefix(row int) []byte {
 // not be mutated.
 func (b *PrefixBytes) BundlePrefix(i int) []byte {
 	j := b.offsetIndexByBundleIndex(i)
-	return b.rawBytes.slice(b.rawBytes.offsets.At(j), b.rawBytes.offsets.At(j+1))
+	invariants.CheckBounds(j, b.rawBytes.slices)
+	return b.rawBytes.Slice(b.rawBytes.offsets.At2(j))
 }
 
 // RowSuffix returns a []byte of the suffix unique to the row. A row's full key
@@ -407,13 +413,14 @@ func (b *PrefixBytes) BundlePrefix(i int) []byte {
 //
 // The returned slice should not be mutated.
 func (b *PrefixBytes) RowSuffix(row int) []byte {
-	return b.rawBytes.slice(b.rowSuffixOffsets(row, b.rowSuffixIndex(row)))
+	return b.rawBytes.Slice(b.rowSuffixOffsets(row, b.rowSuffixIndex(row)))
 }
 
 // rowSuffixOffsets finds the start and end offsets of the row's suffix slice,
 // accounting for duplicate keys. It takes the index of the row, and the value
 // of rowSuffixIndex(row).
 func (b *PrefixBytes) rowSuffixOffsets(row, i int) (low uint32, high uint32) {
+	invariants.CheckBounds(i, b.rawBytes.slices)
 	// Retrieve the low and high offsets indicating the start and end of the
 	// row's suffix slice.
 	low, high = b.rawBytes.offsets.At2(i)
@@ -492,7 +499,8 @@ func (b *PrefixBytes) Search(k []byte) (rowIndex int, isEqual bool) {
 		//     offset(j)             offset(j+1)                       offset(j+2)
 		//
 		j := b.offsetIndexByBundleIndex(h)
-		bundleFirstKey := b.rawBytes.slice(b.rawBytes.offsets.At(j), b.rawBytes.offsets.At(j+2))
+		invariants.CheckBounds(j+1, b.rawBytes.slices)
+		bundleFirstKey := b.rawBytes.Slice(b.rawBytes.offsets.At(j), b.rawBytes.offsets.At(j+2))
 		c = bytes.Compare(k, bundleFirstKey)
 		switch {
 		case c > 0:
@@ -515,7 +523,8 @@ func (b *PrefixBytes) Search(k []byte) (rowIndex int, isEqual bool) {
 	// among them, but if the seek key doesn't share the previous bundle's
 	// prefix there's no need.
 	j := b.offsetIndexByBundleIndex(bi - 1)
-	bundlePrefix := b.rawBytes.slice(b.rawBytes.offsets.At(j), b.rawBytes.offsets.At(j+1))
+	invariants.CheckBounds(j, b.rawBytes.slices)
+	bundlePrefix := b.rawBytes.Slice(b.rawBytes.offsets.At2(j))
 
 	// The row we are looking for might still be in the previous bundle even
 	// though the seek key is greater than the first key. This is possible only
@@ -552,6 +561,7 @@ func (b *PrefixBytes) Search(k []byte) (rowIndex int, isEqual bool) {
 		// The beginning of the zero-indexed i-th key of the bundle is at
 		// offset(j+i+1).
 		//
+		invariants.CheckBounds(j+h+1, b.rawBytes.slices)
 		hStart, hEnd := b.rawBytes.offsets.At2(j + h + 1)
 		// There's a complication with duplicate keys. When keys are repeated,
 		// the PrefixBytes encoding avoids re-encoding the duplicate key,
@@ -578,7 +588,7 @@ func (b *PrefixBytes) Search(k []byte) (rowIndex int, isEqual bool) {
 				continue
 			}
 		}
-		rem := b.rawBytes.slice(hStart, hEnd)
+		rem := b.rawBytes.Slice(hStart, hEnd)
 		c = bytes.Compare(k, rem)
 		switch {
 		case c > 0:
@@ -622,7 +632,7 @@ func prefixBytesToBinFormatter(
 	// The first offset encodes the length of the block prefix.
 	blockPrefixLen := pb.rawBytes.offsets.At(0)
 	f.HexBytesln(int(blockPrefixLen), "data[00]: %s (block prefix)",
-		sliceFormatter(pb.rawBytes.slice(0, blockPrefixLen)))
+		sliceFormatter(pb.rawBytes.Slice(0, blockPrefixLen)))
 
 	k := 2 + (count-1)>>pb.bundleShift + count
 	startOff := blockPrefixLen
@@ -662,21 +672,19 @@ type PrefixBytesBuilder struct {
 	// may remain very small while the physical in-memory size of the
 	// in-progress data slice may grow very large. This may pose memory usage
 	// problems during block building.
-	data       []byte // The raw, concatenated keys w/o any prefix compression
-	nKeys      int    // The number of keys added to the builder
-	bundleSize int    // The number of keys per bundle
+	data               []byte // The raw, concatenated keys w/o any prefix compression
+	nKeys              int    // The number of keys added to the builder
+	bundleSize         int    // The number of keys per bundle
+	completedBundleLen int    // The encoded size of completed bundles
 	// sizings maintains metadata about the size of the accumulated data at both
 	// nKeys and nKeys-1. Information for the state after the most recently
 	// added key is stored at (b.nKeys+1)%2.
 	sizings [2]prefixBytesSizing
 	offsets struct {
 		count int // The number of offsets in the builder
-		// elemsSize is the size of the array (in count of uint32 elements; not
-		// bytes)
-		elemsSize int
 		// elems provides access to elements without bounds checking. elems is
 		// grown automatically in addOffset.
-		elems UnsafeRawSlice[uint32]
+		elems []uint32
 	}
 	maxShared uint16
 }
@@ -754,7 +762,6 @@ type prefixBytesSizing struct {
 	// INVARIANT: currentBundlePrefixLen >= blockPrefixLen
 	currentBundlePrefixLen    int          // the length of the "current" bundle's prefix
 	currentBundlePrefixOffset int          // the index of the offset of the "current" bundle's prefix
-	completedBundleLen        int          // the encoded size of completed bundles
 	compressedDataLen         int          // the compressed, encoded size of data
 	offsetEncoding            UintEncoding // the encoding necessary to encode the offsets
 }
@@ -763,10 +770,10 @@ func (sz *prefixBytesSizing) String() string {
 	return fmt.Sprintf("lastKeyOff:%d offsetCount:%d blockPrefixLen:%d\n"+
 		"currentBundleDistinct{Len,Keys}: (%d,%d)\n"+
 		"currentBundlePrefix{Len,Offset}: (%d,%d)\n"+
-		"completedBundleLen:%d compressedDataLen:%d offsetEncoding:%s",
+		"compressedDataLen:%d offsetEncoding:%s",
 		sz.lastKeyOff, sz.offsetCount, sz.blockPrefixLen, sz.currentBundleDistinctLen,
 		sz.currentBundleDistinctKeys, sz.currentBundlePrefixLen, sz.currentBundlePrefixOffset,
-		sz.completedBundleLen, sz.compressedDataLen, sz.offsetEncoding)
+		sz.compressedDataLen, sz.offsetEncoding)
 }
 
 // Put adds the provided key to the column. The provided key must be
@@ -781,7 +788,7 @@ func (sz *prefixBytesSizing) String() string {
 func (b *PrefixBytesBuilder) Put(key []byte, bytesSharedWithPrev int) {
 	currIdx := b.nKeys & 1 // %2
 	curr := &b.sizings[currIdx]
-	prev := &b.sizings[1-currIdx]
+	prev := &b.sizings[currIdx^1]
 
 	if invariants.Enabled {
 		if len(key) == 0 {
@@ -801,38 +808,41 @@ func (b *PrefixBytesBuilder) Put(key []byte, bytesSharedWithPrev int) {
 		}
 	}
 
-	switch {
-	case b.nKeys == 0:
-		// We're adding the first key to the block.
-		// Set a placeholder offset for the block prefix length.
-		b.addOffset(0)
-		// Set a placeholder offset for the bundle prefix length.
-		b.addOffset(0)
-		b.nKeys++
-		b.data = append(b.data, key...)
-		b.addOffset(uint32(len(b.data)))
-		*curr = prefixBytesSizing{
-			lastKeyOff:                0,
-			offsetCount:               b.offsets.count,
-			blockPrefixLen:            min(len(key), int(b.maxShared)),
-			currentBundleDistinctLen:  len(key),
-			currentBundleDistinctKeys: 1,
-			currentBundlePrefixLen:    min(len(key), int(b.maxShared)),
-			currentBundlePrefixOffset: 1,
-			completedBundleLen:        0,
-			compressedDataLen:         len(key),
-			offsetEncoding:            DetermineUintEncoding(0, uint64(len(key)), UintEncodingRowThreshold),
+	// Check if this is the first key in a bundle.
+	if b.nKeys&(b.bundleSize-1) == 0 {
+		if b.nKeys == 0 {
+			// We're adding the first key to the block.
+			// Set a placeholder offset for the block prefix length.
+			b.addOffset(0)
+			// Set a placeholder offset for the bundle prefix length.
+			b.addOffset(0)
+			b.nKeys++
+			b.data = append(b.data, key...)
+			b.addOffset(uint32(len(b.data)))
+			*curr = prefixBytesSizing{
+				lastKeyOff:                0,
+				offsetCount:               b.offsets.count,
+				blockPrefixLen:            min(len(key), int(b.maxShared)),
+				currentBundleDistinctLen:  len(key),
+				currentBundleDistinctKeys: 1,
+				currentBundlePrefixLen:    min(len(key), int(b.maxShared)),
+				currentBundlePrefixOffset: 1,
+				compressedDataLen:         len(key),
+				offsetEncoding:            DetermineUintEncodingNoDelta(uint64(len(key))),
+			}
+			return
 		}
-	case b.nKeys&(b.bundleSize-1) == 0:
 		// We're starting a new bundle.
 
 		// Set the bundle prefix length of the previous bundle.
-		b.offsets.elems.set(prev.currentBundlePrefixOffset,
-			b.offsets.elems.At(prev.currentBundlePrefixOffset-1)+uint32(prev.currentBundlePrefixLen))
+		unsafeSetUint32(
+			b.offsets.elems, prev.currentBundlePrefixOffset,
+			unsafeGetUint32(b.offsets.elems, prev.currentBundlePrefixOffset-1)+uint32(prev.currentBundlePrefixLen),
+		)
 
 		// Finalize the encoded size of the previous bundle.
 		bundleSizeJustCompleted := prev.currentBundleDistinctLen - (prev.currentBundleDistinctKeys-1)*prev.currentBundlePrefixLen
-		completedBundleSize := prev.completedBundleLen + bundleSizeJustCompleted
+		b.completedBundleLen += bundleSizeJustCompleted
 
 		// Update the block prefix length if necessary. The caller tells us how
 		// many bytes of prefix this key shares with the previous key. The block
@@ -842,64 +852,62 @@ func (b *PrefixBytesBuilder) Put(key []byte, bytesSharedWithPrev int) {
 		blockPrefixLen := min(prev.blockPrefixLen, bytesSharedWithPrev)
 		b.nKeys++
 		*curr = prefixBytesSizing{
-			lastKeyOff:         len(b.data),
-			offsetCount:        b.offsets.count + 2,
-			blockPrefixLen:     blockPrefixLen,
-			completedBundleLen: completedBundleSize,
+			lastKeyOff:     len(b.data),
+			offsetCount:    b.offsets.count + 2,
+			blockPrefixLen: blockPrefixLen,
 			// We're adding the first key to the current bundle. Initialize
 			// the current bundle prefix.
 			currentBundlePrefixOffset: b.offsets.count,
 			currentBundlePrefixLen:    min(len(key), int(b.maxShared)),
 			currentBundleDistinctLen:  len(key),
 			currentBundleDistinctKeys: 1,
-			compressedDataLen:         completedBundleSize + len(key) - (b.bundleCount(b.nKeys)-1)*blockPrefixLen,
+			compressedDataLen:         b.completedBundleLen + len(key) - (b.bundleCount(b.nKeys)-1)*blockPrefixLen,
 		}
-		curr.offsetEncoding = DetermineUintEncoding(0, uint64(curr.compressedDataLen), UintEncodingRowThreshold)
+		curr.offsetEncoding = DetermineUintEncodingNoDelta(uint64(curr.compressedDataLen))
 		b.data = append(b.data, key...)
 		b.addOffset(0) // Placeholder for bundle prefix.
 		b.addOffset(uint32(len(b.data)))
-	default:
-		// Adding a new key to an existing bundle.
-		b.nKeys++
-
-		if bytesSharedWithPrev == len(key) {
-			// Duplicate key; don't add it to the data slice and don't adjust
-			// currentBundleDistinct{Len,Keys}.
-			*curr = *prev
-			curr.offsetCount++
-			b.addOffset(b.offsets.elems.At(b.offsets.count - 1))
-			return
-		}
-
-		// Update the bundle prefix length. Note that the shared prefix length
-		// can only shrink as new values are added. During construction, the
-		// bundle prefix value is stored contiguously in the data array so even
-		// if the bundle prefix length changes no adjustment is needed to that
-		// value or to the first key in the bundle.
-		*curr = prefixBytesSizing{
-			lastKeyOff:                len(b.data),
-			offsetCount:               prev.offsetCount + 1,
-			blockPrefixLen:            min(prev.blockPrefixLen, bytesSharedWithPrev),
-			currentBundleDistinctLen:  prev.currentBundleDistinctLen + len(key),
-			currentBundleDistinctKeys: prev.currentBundleDistinctKeys + 1,
-			currentBundlePrefixLen:    min(prev.currentBundlePrefixLen, bytesSharedWithPrev),
-			currentBundlePrefixOffset: prev.currentBundlePrefixOffset,
-			completedBundleLen:        prev.completedBundleLen,
-		}
-		// Compute the correct compressedDataLen.
-		curr.compressedDataLen = curr.completedBundleLen +
-			curr.currentBundleDistinctLen -
-			(curr.currentBundleDistinctKeys-1)*curr.currentBundlePrefixLen
-		// Currently compressedDataLen is correct, except that it includes the block
-		// prefix length for all bundle prefixes. Adjust the length to account for
-		// the block prefix being stripped from every bundle except the first one.
-		curr.compressedDataLen -= (b.bundleCount(b.nKeys) - 1) * curr.blockPrefixLen
-		// The compressedDataLen is the largest offset we'll need to encode in the
-		// offset table.
-		curr.offsetEncoding = DetermineUintEncoding(0, uint64(curr.compressedDataLen), UintEncodingRowThreshold)
-		b.data = append(b.data, key...)
-		b.addOffset(uint32(len(b.data)))
+		return
 	}
+	// We're adding a new key to an existing bundle.
+	b.nKeys++
+
+	if bytesSharedWithPrev == len(key) {
+		// Duplicate key; don't add it to the data slice and don't adjust
+		// currentBundleDistinct{Len,Keys}.
+		*curr = *prev
+		curr.offsetCount++
+		b.addOffset(unsafeGetUint32(b.offsets.elems, b.offsets.count-1))
+		return
+	}
+
+	// Update the bundle prefix length. Note that the shared prefix length
+	// can only shrink as new values are added. During construction, the
+	// bundle prefix value is stored contiguously in the data array so even
+	// if the bundle prefix length changes no adjustment is needed to that
+	// value or to the first key in the bundle.
+	*curr = prefixBytesSizing{
+		lastKeyOff:                len(b.data),
+		offsetCount:               prev.offsetCount + 1,
+		blockPrefixLen:            min(prev.blockPrefixLen, bytesSharedWithPrev),
+		currentBundleDistinctLen:  prev.currentBundleDistinctLen + len(key),
+		currentBundleDistinctKeys: prev.currentBundleDistinctKeys + 1,
+		currentBundlePrefixLen:    min(prev.currentBundlePrefixLen, bytesSharedWithPrev),
+		currentBundlePrefixOffset: prev.currentBundlePrefixOffset,
+	}
+	// Compute the correct compressedDataLen.
+	curr.compressedDataLen = b.completedBundleLen +
+		curr.currentBundleDistinctLen -
+		(curr.currentBundleDistinctKeys-1)*curr.currentBundlePrefixLen
+	// Currently compressedDataLen is correct, except that it includes the block
+	// prefix length for all bundle prefixes. Adjust the length to account for
+	// the block prefix being stripped from every bundle except the first one.
+	curr.compressedDataLen -= (b.bundleCount(b.nKeys) - 1) * curr.blockPrefixLen
+	// The compressedDataLen is the largest offset we'll need to encode in the
+	// offset table.
+	curr.offsetEncoding = DetermineUintEncodingNoDelta(uint64(curr.compressedDataLen))
+	b.data = append(b.data, key...)
+	b.addOffset(uint32(len(b.data)))
 }
 
 // UnsafeGet returns the zero-indexed i'th key added to the builder through Put.
@@ -913,7 +921,7 @@ func (b *PrefixBytesBuilder) UnsafeGet(i int) []byte {
 		lastKeyOff := b.sizings[i&1].lastKeyOff
 		return b.data[lastKeyOff:]
 	case b.nKeys - 2:
-		lastKeyOff := b.sizings[(i+1)&1].lastKeyOff
+		lastKeyOff := b.sizings[(i^1)&1].lastKeyOff
 		secondLastKeyOff := b.sizings[i&1].lastKeyOff
 		if secondLastKeyOff == lastKeyOff {
 			// The last key is a duplicate of the second-to-last key.
@@ -928,16 +936,15 @@ func (b *PrefixBytesBuilder) UnsafeGet(i int) []byte {
 // addOffset adds an offset to the offsets table. If necessary, addOffset will
 // grow the offset table to accommodate the new offset.
 func (b *PrefixBytesBuilder) addOffset(offset uint32) {
-	if b.offsets.count == b.offsets.elemsSize {
+	if b.offsets.count == len(b.offsets.elems) {
 		// Double the size of the allocated array, or initialize it to at least
 		// 64 rows if this is the first allocation.
-		n2 := max(b.offsets.elemsSize<<1, 64)
-		newDataTyped := make([]uint32, n2)
-		copy(newDataTyped, b.offsets.elems.Slice(b.offsets.elemsSize))
-		b.offsets.elems = makeUnsafeRawSlice[uint32](unsafe.Pointer(&newDataTyped[0]))
-		b.offsets.elemsSize = n2
+		n2 := max(len(b.offsets.elems)<<1, 64)
+		newSlice := make([]uint32, n2)
+		copy(newSlice, b.offsets.elems)
+		b.offsets.elems = newSlice
 	}
-	b.offsets.elems.set(b.offsets.count, offset)
+	unsafeSetUint32(b.offsets.elems, b.offsets.count, offset)
 	b.offsets.count++
 }
 
@@ -965,29 +972,29 @@ func (b *PrefixBytesBuilder) addOffset(offset uint32) {
 //	| ...                                 |
 //	+-------------------------------------+
 func writePrefixCompressed[T Uint](
-	b *PrefixBytesBuilder,
-	rows int,
-	sz *prefixBytesSizing,
-	offsetDeltas UnsafeRawSlice[T],
-	buf []byte,
+	b *PrefixBytesBuilder, rows int, sz *prefixBytesSizing, offsetDeltas uintsEncoder[T], buf []byte,
 ) {
-	if rows == 0 {
-		return
-	} else if rows == 1 {
-		// If there's just 1 row, no prefix compression is necessary and we can
-		// just encode the first key as the entire block prefix and first bundle
-		// prefix.
-		e := b.offsets.elems.At(2)
-		offsetDeltas.set(0, T(e))
-		offsetDeltas.set(1, T(e))
-		offsetDeltas.set(2, T(e))
-		copy(buf, b.data[:e])
+	if invariants.Enabled && offsetDeltas.Len() != sz.offsetCount {
+		panic("incorrect offsetDeltas length")
+	}
+	if rows <= 1 {
+		if rows == 1 {
+			// If there's just 1 row, no prefix compression is necessary and we can
+			// just encode the first key as the entire block prefix and first bundle
+			// prefix.
+			e := b.offsets.elems[2]
+			offsetDeltas.UnsafeSet(0, T(e))
+			offsetDeltas.UnsafeSet(1, T(e))
+			offsetDeltas.UnsafeSet(2, T(e))
+			copy(buf[:e], b.data[:e])
+		}
 		return
 	}
 
 	// The offset at index 0 is the block prefix length.
-	offsetDeltas.set(0, T(sz.blockPrefixLen))
-	destOffset := T(copy(buf, b.data[:sz.blockPrefixLen]))
+	copy(buf[:sz.blockPrefixLen], b.data[:sz.blockPrefixLen])
+	destOffset := T(sz.blockPrefixLen)
+	offsetDeltas.UnsafeSet(0, destOffset)
 	var lastRowOffset uint32
 	var shared int
 
@@ -996,7 +1003,7 @@ func writePrefixCompressed[T Uint](
 	// block prefix. Otherwise, carve off the suffix that excludes the block
 	// prefix + bundle prefix.
 	for i := 1; i < sz.offsetCount; i++ {
-		off := b.offsets.elems.At(i)
+		off := unsafeGetUint32(b.offsets.elems, i)
 		var suffix []byte
 		if (i-1)%(b.bundleSize+1) == 0 {
 			// This is a bundle prefix.
@@ -1013,18 +1020,23 @@ func writePrefixCompressed[T Uint](
 			// previous key, then the key is a duplicate. All we need to do is
 			// set the same offset in the destination.
 			if off == lastRowOffset {
-				offsetDeltas.set(i, offsetDeltas.At(i-1))
+				offsetDeltas.UnsafeSet(i, destOffset)
 				continue
 			}
 			suffix = b.data[lastRowOffset+uint32(shared) : off]
 			// Update lastRowOffset for the next iteration of this loop.
 			lastRowOffset = off
 		}
-		if invariants.Enabled && len(buf[destOffset:]) < len(suffix) {
+		if invariants.Enabled && len(buf) < int(destOffset)+len(suffix) {
 			panic(errors.AssertionFailedf("buf is too small: %d < %d", len(buf[destOffset:]), len(suffix)))
 		}
-		destOffset += T(copy(buf[destOffset:], suffix))
-		offsetDeltas.set(i, destOffset)
+		memmove(
+			unsafe.Add(unsafe.Pointer(unsafe.SliceData(buf)), destOffset),
+			unsafe.Pointer(unsafe.SliceData(suffix)),
+			uintptr(len(suffix)),
+		)
+		destOffset += T(len(suffix))
+		offsetDeltas.UnsafeSet(i, destOffset)
 	}
 	if destOffset != T(sz.compressedDataLen) {
 		panic(errors.AssertionFailedf("wrote %d, expected %d", destOffset, sz.compressedDataLen))
@@ -1050,7 +1062,7 @@ func (b *PrefixBytesBuilder) Finish(
 	buf[offset] = byte(b.bundleShift)
 	offset++
 
-	sz := &b.sizings[(rows+1)%2]
+	sz := &b.sizings[rows&1^1]
 	stringDataOffset := uintColumnSize(uint32(sz.offsetCount), offset, sz.offsetEncoding)
 	if sz.offsetEncoding.IsDelta() {
 		panic(errors.AssertionFailedf("offsets never need delta encoding"))
@@ -1062,14 +1074,17 @@ func (b *PrefixBytesBuilder) Finish(
 	offset = alignWithZeroes(buf, offset, width)
 	switch width {
 	case 1:
-		offsetDest := makeUnsafeRawSlice[uint8](unsafe.Pointer(&buf[offset]))
+		offsetDest := makeUintsEncoder[uint8](buf[offset:], sz.offsetCount)
 		writePrefixCompressed[uint8](b, rows, sz, offsetDest, buf[stringDataOffset:])
+		offsetDest.Finish()
 	case align16:
-		offsetDest := makeUnsafeRawSlice[uint16](unsafe.Pointer(&buf[offset]))
+		offsetDest := makeUintsEncoder[uint16](buf[offset:], sz.offsetCount)
 		writePrefixCompressed[uint16](b, rows, sz, offsetDest, buf[stringDataOffset:])
+		offsetDest.Finish()
 	case align32:
-		offsetDest := makeUnsafeRawSlice[uint32](unsafe.Pointer(&buf[offset]))
+		offsetDest := makeUintsEncoder[uint32](buf[offset:], sz.offsetCount)
 		writePrefixCompressed[uint32](b, rows, sz, offsetDest, buf[stringDataOffset:])
+		offsetDest.Finish()
 	default:
 		panic("unreachable")
 	}
@@ -1087,7 +1102,7 @@ func (b *PrefixBytesBuilder) Size(rows int, offset uint32) uint32 {
 	} else if rows != b.nKeys && rows != b.nKeys-1 {
 		panic(errors.AssertionFailedf("PrefixBytes has accumulated %d keys, asked to Size %d", b.nKeys, rows))
 	}
-	sz := &b.sizings[(rows+1)%2]
+	sz := &b.sizings[rows&1^1]
 	// The 1-byte bundleSize.
 	offset++
 	// Compute the size of the offsets table.

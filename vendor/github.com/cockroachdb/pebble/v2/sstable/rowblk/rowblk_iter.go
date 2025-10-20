@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"iter"
 	"slices"
 	"sort"
 	"unsafe"
@@ -16,7 +17,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/invariants"
-	"github.com/cockroachdb/pebble/v2/internal/manual"
 	"github.com/cockroachdb/pebble/v2/internal/treeprinter"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
 )
@@ -189,7 +189,7 @@ type Iter struct {
 	// for block iteration for already loaded blocks.
 	firstUserKey      []byte
 	lazyValueHandling struct {
-		getValue       block.GetLazyValueForPrefixAndValueHandler
+		getValue       block.GetInternalValueForPrefixAndValueHandler
 		hasValuePrefix bool
 	}
 	synthSuffixBuf            []byte
@@ -301,7 +301,7 @@ func (i *Iter) SetHasValuePrefix(hasValuePrefix bool) {
 
 // SetGetLazyValuer sets the value block reader the iterator should use to get
 // lazy values when the value encodes a value prefix.
-func (i *Iter) SetGetLazyValuer(g block.GetLazyValueForPrefixAndValueHandler) {
+func (i *Iter) SetGetLazyValuer(g block.GetInternalValueForPrefixAndValueHandler) {
 	i.lazyValueHandling.getValue = g
 
 }
@@ -344,61 +344,61 @@ func (i *Iter) readEntry() {
 	var shared uint32
 	if a := *((*uint8)(ptr)); a < 128 {
 		shared = uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 1)
-	} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+		ptr = unsafe.Add(ptr, 1)
+	} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 		shared = uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 2)
-	} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+		ptr = unsafe.Add(ptr, 2)
+	} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 		shared = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 3)
-	} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+		ptr = unsafe.Add(ptr, 3)
+	} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 		shared = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 4)
+		ptr = unsafe.Add(ptr, 4)
 	} else {
-		d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+		d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 		shared = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 5)
+		ptr = unsafe.Add(ptr, 5)
 	}
 
 	var unshared uint32
 	if a := *((*uint8)(ptr)); a < 128 {
 		unshared = uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 1)
-	} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+		ptr = unsafe.Add(ptr, 1)
+	} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 		unshared = uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 2)
-	} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+		ptr = unsafe.Add(ptr, 2)
+	} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 		unshared = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 3)
-	} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+		ptr = unsafe.Add(ptr, 3)
+	} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 		unshared = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 4)
+		ptr = unsafe.Add(ptr, 4)
 	} else {
-		d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+		d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 		unshared = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 5)
+		ptr = unsafe.Add(ptr, 5)
 	}
 
 	var value uint32
 	if a := *((*uint8)(ptr)); a < 128 {
 		value = uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 1)
-	} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+		ptr = unsafe.Add(ptr, 1)
+	} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 		value = uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 2)
-	} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+		ptr = unsafe.Add(ptr, 2)
+	} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 		value = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 3)
-	} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+		ptr = unsafe.Add(ptr, 3)
+	} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 		value = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 4)
+		ptr = unsafe.Add(ptr, 4)
 	} else {
-		d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+		d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 		value = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 5)
+		ptr = unsafe.Add(ptr, 5)
 	}
 	shared += i.transforms.SyntheticPrefixAndSuffix.PrefixLen()
-	unsharedKey := getBytes(ptr, int(unshared))
+	unsharedKey := unsafe.Slice((*byte)(ptr), int(unshared))
 	// TODO(sumeer): move this into the else block below.
 	i.fullKey = append(i.fullKey[:shared], unsharedKey...)
 	if shared == 0 {
@@ -410,8 +410,8 @@ func (i *Iter) readEntry() {
 	} else {
 		i.key = i.fullKey
 	}
-	ptr = unsafe.Pointer(uintptr(ptr) + uintptr(unshared))
-	i.val = getBytes(ptr, int(value))
+	ptr = unsafe.Add(ptr, unshared)
+	i.val = unsafe.Slice((*byte)(ptr), int(value))
 	i.nextOffset = offsetInBlock(uintptr(ptr)-uintptr(i.ptr)) + offsetInBlock(value)
 }
 
@@ -427,7 +427,7 @@ func (i *Iter) readFirstKey() error {
 	// TODO(peter): remove this hack if go:inline is ever supported.
 
 	if shared := *((*uint8)(ptr)); shared == 0 {
-		ptr = unsafe.Pointer(uintptr(ptr) + 1)
+		ptr = unsafe.Add(ptr, 1)
 	} else {
 		// The shared length is != 0, which is invalid.
 		panic("first key in block must have zero shared length")
@@ -436,36 +436,36 @@ func (i *Iter) readFirstKey() error {
 	var unshared uint32
 	if a := *((*uint8)(ptr)); a < 128 {
 		unshared = uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 1)
-	} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+		ptr = unsafe.Add(ptr, 1)
+	} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 		unshared = uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 2)
-	} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+		ptr = unsafe.Add(ptr, 2)
+	} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 		unshared = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 3)
-	} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+		ptr = unsafe.Add(ptr, 3)
+	} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 		unshared = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 4)
+		ptr = unsafe.Add(ptr, 4)
 	} else {
-		d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+		d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 		unshared = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-		ptr = unsafe.Pointer(uintptr(ptr) + 5)
+		ptr = unsafe.Add(ptr, 5)
 	}
 
 	// Skip the value length.
 	if a := *((*uint8)(ptr)); a < 128 {
-		ptr = unsafe.Pointer(uintptr(ptr) + 1)
-	} else if a := *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); a < 128 {
-		ptr = unsafe.Pointer(uintptr(ptr) + 2)
-	} else if a := *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); a < 128 {
-		ptr = unsafe.Pointer(uintptr(ptr) + 3)
-	} else if a := *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); a < 128 {
-		ptr = unsafe.Pointer(uintptr(ptr) + 4)
+		ptr = unsafe.Add(ptr, 1)
+	} else if a := *((*uint8)(unsafe.Add(ptr, 1))); a < 128 {
+		ptr = unsafe.Add(ptr, 2)
+	} else if a := *((*uint8)(unsafe.Add(ptr, 2))); a < 128 {
+		ptr = unsafe.Add(ptr, 3)
+	} else if a := *((*uint8)(unsafe.Add(ptr, 3))); a < 128 {
+		ptr = unsafe.Add(ptr, 4)
 	} else {
-		ptr = unsafe.Pointer(uintptr(ptr) + 5)
+		ptr = unsafe.Add(ptr, 5)
 	}
 
-	firstKey := getBytes(ptr, int(unshared))
+	firstKey := unsafe.Slice((*byte)(ptr), int(unshared))
 	// Manually inlining base.DecodeInternalKey provides a 5-10% speedup on
 	// BlockIter benchmarks.
 	if n := len(firstKey) - 8; n >= 0 {
@@ -598,37 +598,37 @@ func (i *Iter) SeekGE(key []byte, flags base.SeekGEFlags) *base.InternalKV {
 			var v1 uint32
 			if a := *((*uint8)(ptr)); a < 128 {
 				v1 = uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 1)
-			} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+				ptr = unsafe.Add(ptr, 1)
+			} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 				v1 = uint32(b)<<7 | uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 2)
-			} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+				ptr = unsafe.Add(ptr, 2)
+			} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 				v1 = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 3)
-			} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+				ptr = unsafe.Add(ptr, 3)
+			} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 				v1 = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 4)
+				ptr = unsafe.Add(ptr, 4)
 			} else {
-				d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+				d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 				v1 = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 5)
+				ptr = unsafe.Add(ptr, 5)
 			}
 
 			if *((*uint8)(ptr)) < 128 {
-				ptr = unsafe.Pointer(uintptr(ptr) + 1)
-			} else if *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))) < 128 {
-				ptr = unsafe.Pointer(uintptr(ptr) + 2)
-			} else if *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))) < 128 {
-				ptr = unsafe.Pointer(uintptr(ptr) + 3)
-			} else if *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))) < 128 {
-				ptr = unsafe.Pointer(uintptr(ptr) + 4)
+				ptr = unsafe.Add(ptr, 1)
+			} else if *((*uint8)(unsafe.Add(ptr, 1))) < 128 {
+				ptr = unsafe.Add(ptr, 2)
+			} else if *((*uint8)(unsafe.Add(ptr, 2))) < 128 {
+				ptr = unsafe.Add(ptr, 3)
+			} else if *((*uint8)(unsafe.Add(ptr, 3))) < 128 {
+				ptr = unsafe.Add(ptr, 4)
 			} else {
-				ptr = unsafe.Pointer(uintptr(ptr) + 5)
+				ptr = unsafe.Add(ptr, 5)
 			}
 
 			// Manually inlining part of base.DecodeInternalKey provides a 5-10%
 			// speedup on BlockIter benchmarks.
-			s := getBytes(ptr, int(v1))
+			s := unsafe.Slice((*byte)(ptr), int(v1))
 			var k []byte
 			if n := len(s) - 8; n >= 0 {
 				k = s[:n:n]
@@ -704,10 +704,10 @@ func (i *Iter) SeekGE(key []byte, flags base.SeekGEFlags) *base.InternalKV {
 		if !i.lazyValueHandling.hasValuePrefix ||
 			i.ikv.K.Kind() != base.InternalKeyKindSet {
 			i.ikv.V = base.MakeInPlaceValue(i.val)
-		} else if i.lazyValueHandling.getValue == nil || !block.ValuePrefix(i.val[0]).IsValueHandle() {
+		} else if i.lazyValueHandling.getValue == nil || block.ValuePrefix(i.val[0]).IsInPlaceValue() {
 			i.ikv.V = base.MakeInPlaceValue(i.val[1:])
 		} else {
-			i.ikv.V = i.lazyValueHandling.getValue.GetLazyValueForPrefixAndValueHandle(i.val)
+			i.ikv.V = i.lazyValueHandling.getValue.GetInternalValueForPrefixAndValueHandle(i.val)
 		}
 		return &i.ikv
 	}
@@ -781,37 +781,37 @@ func (i *Iter) SeekLT(key []byte, flags base.SeekLTFlags) *base.InternalKV {
 			var v1 uint32
 			if a := *((*uint8)(ptr)); a < 128 {
 				v1 = uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 1)
-			} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+				ptr = unsafe.Add(ptr, 1)
+			} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 				v1 = uint32(b)<<7 | uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 2)
-			} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+				ptr = unsafe.Add(ptr, 2)
+			} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 				v1 = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 3)
-			} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+				ptr = unsafe.Add(ptr, 3)
+			} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 				v1 = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 4)
+				ptr = unsafe.Add(ptr, 4)
 			} else {
-				d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+				d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 				v1 = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-				ptr = unsafe.Pointer(uintptr(ptr) + 5)
+				ptr = unsafe.Add(ptr, 5)
 			}
 
 			if *((*uint8)(ptr)) < 128 {
-				ptr = unsafe.Pointer(uintptr(ptr) + 1)
-			} else if *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))) < 128 {
-				ptr = unsafe.Pointer(uintptr(ptr) + 2)
-			} else if *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))) < 128 {
-				ptr = unsafe.Pointer(uintptr(ptr) + 3)
-			} else if *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))) < 128 {
-				ptr = unsafe.Pointer(uintptr(ptr) + 4)
+				ptr = unsafe.Add(ptr, 1)
+			} else if *((*uint8)(unsafe.Add(ptr, 1))) < 128 {
+				ptr = unsafe.Add(ptr, 2)
+			} else if *((*uint8)(unsafe.Add(ptr, 2))) < 128 {
+				ptr = unsafe.Add(ptr, 3)
+			} else if *((*uint8)(unsafe.Add(ptr, 3))) < 128 {
+				ptr = unsafe.Add(ptr, 4)
 			} else {
-				ptr = unsafe.Pointer(uintptr(ptr) + 5)
+				ptr = unsafe.Add(ptr, 5)
 			}
 
 			// Manually inlining part of base.DecodeInternalKey provides a 5-10%
 			// speedup on BlockIter benchmarks.
-			s := getBytes(ptr, int(v1))
+			s := unsafe.Slice((*byte)(ptr), int(v1))
 			var k []byte
 			if n := len(s) - 8; n >= 0 {
 				k = s[:n:n]
@@ -990,10 +990,10 @@ func (i *Iter) SeekLT(key []byte, flags base.SeekLTFlags) *base.InternalKV {
 	if !i.lazyValueHandling.hasValuePrefix ||
 		i.ikv.K.Kind() != base.InternalKeyKindSet {
 		i.ikv.V = base.MakeInPlaceValue(i.val)
-	} else if i.lazyValueHandling.getValue == nil || !block.ValuePrefix(i.val[0]).IsValueHandle() {
+	} else if i.lazyValueHandling.getValue == nil || block.ValuePrefix(i.val[0]).IsInPlaceValue() {
 		i.ikv.V = base.MakeInPlaceValue(i.val[1:])
 	} else {
-		i.ikv.V = i.lazyValueHandling.getValue.GetLazyValueForPrefixAndValueHandle(i.val)
+		i.ikv.V = i.lazyValueHandling.getValue.GetInternalValueForPrefixAndValueHandle(i.val)
 	}
 	return &i.ikv
 }
@@ -1019,10 +1019,10 @@ func (i *Iter) First() *base.InternalKV {
 	if !i.lazyValueHandling.hasValuePrefix ||
 		i.ikv.K.Kind() != base.InternalKeyKindSet {
 		i.ikv.V = base.MakeInPlaceValue(i.val)
-	} else if i.lazyValueHandling.getValue == nil || !block.ValuePrefix(i.val[0]).IsValueHandle() {
+	} else if i.lazyValueHandling.getValue == nil || block.ValuePrefix(i.val[0]).IsInPlaceValue() {
 		i.ikv.V = base.MakeInPlaceValue(i.val[1:])
 	} else {
-		i.ikv.V = i.lazyValueHandling.getValue.GetLazyValueForPrefixAndValueHandle(i.val)
+		i.ikv.V = i.lazyValueHandling.getValue.GetInternalValueForPrefixAndValueHandle(i.val)
 	}
 	return &i.ikv
 }
@@ -1065,10 +1065,10 @@ func (i *Iter) Last() *base.InternalKV {
 	if !i.lazyValueHandling.hasValuePrefix ||
 		i.ikv.K.Kind() != base.InternalKeyKindSet {
 		i.ikv.V = base.MakeInPlaceValue(i.val)
-	} else if i.lazyValueHandling.getValue == nil || !block.ValuePrefix(i.val[0]).IsValueHandle() {
+	} else if i.lazyValueHandling.getValue == nil || block.ValuePrefix(i.val[0]).IsInPlaceValue() {
 		i.ikv.V = base.MakeInPlaceValue(i.val[1:])
 	} else {
-		i.ikv.V = i.lazyValueHandling.getValue.GetLazyValueForPrefixAndValueHandle(i.val)
+		i.ikv.V = i.lazyValueHandling.getValue.GetInternalValueForPrefixAndValueHandle(i.val)
 	}
 	return &i.ikv
 }
@@ -1124,10 +1124,10 @@ start:
 	if !i.lazyValueHandling.hasValuePrefix ||
 		i.ikv.K.Kind() != base.InternalKeyKindSet {
 		i.ikv.V = base.MakeInPlaceValue(i.val)
-	} else if i.lazyValueHandling.getValue == nil || !block.ValuePrefix(i.val[0]).IsValueHandle() {
+	} else if i.lazyValueHandling.getValue == nil || block.ValuePrefix(i.val[0]).IsInPlaceValue() {
 		i.ikv.V = base.MakeInPlaceValue(i.val[1:])
 	} else {
-		i.ikv.V = i.lazyValueHandling.getValue.GetLazyValueForPrefixAndValueHandle(i.val)
+		i.ikv.V = i.lazyValueHandling.getValue.GetInternalValueForPrefixAndValueHandle(i.val)
 	}
 	return &i.ikv
 }
@@ -1193,62 +1193,62 @@ func (i *Iter) nextPrefixV3(succKey []byte) *base.InternalKV {
 		var shared uint32
 		if a := *((*uint8)(ptr)); a < 128 {
 			shared = uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 1)
-		} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+			ptr = unsafe.Add(ptr, 1)
+		} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 			shared = uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 2)
-		} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+			ptr = unsafe.Add(ptr, 2)
+		} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 			shared = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 3)
-		} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+			ptr = unsafe.Add(ptr, 3)
+		} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 			shared = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 4)
+			ptr = unsafe.Add(ptr, 4)
 		} else {
-			d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+			d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 			shared = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 5)
+			ptr = unsafe.Add(ptr, 5)
 		}
 		// Decode the unshared key length integer.
 		var unshared uint32
 		if a := *((*uint8)(ptr)); a < 128 {
 			unshared = uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 1)
-		} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+			ptr = unsafe.Add(ptr, 1)
+		} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 			unshared = uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 2)
-		} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+			ptr = unsafe.Add(ptr, 2)
+		} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 			unshared = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 3)
-		} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+			ptr = unsafe.Add(ptr, 3)
+		} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 			unshared = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 4)
+			ptr = unsafe.Add(ptr, 4)
 		} else {
-			d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+			d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 			unshared = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 5)
+			ptr = unsafe.Add(ptr, 5)
 		}
 		// Decode the value length integer.
 		var value uint32
 		if a := *((*uint8)(ptr)); a < 128 {
 			value = uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 1)
-		} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+			ptr = unsafe.Add(ptr, 1)
+		} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 			value = uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 2)
-		} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+			ptr = unsafe.Add(ptr, 2)
+		} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 			value = uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 3)
-		} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+			ptr = unsafe.Add(ptr, 3)
+		} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 			value = uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 4)
+			ptr = unsafe.Add(ptr, 4)
 		} else {
-			d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+			d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 			value = uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a)
-			ptr = unsafe.Pointer(uintptr(ptr) + 5)
+			ptr = unsafe.Add(ptr, 5)
 		}
 		shared += i.transforms.SyntheticPrefixAndSuffix.PrefixLen()
 		// The starting position of the value.
-		valuePtr := unsafe.Pointer(uintptr(ptr) + uintptr(unshared))
+		valuePtr := unsafe.Add(ptr, unshared)
 		i.nextOffset = offsetInBlock(uintptr(valuePtr)-uintptr(i.ptr)) + offsetInBlock(value)
 		if invariants.Enabled && unshared < 8 {
 			// This should not happen since only the key prefix is shared, so even
@@ -1258,7 +1258,7 @@ func (i *Iter) nextPrefixV3(succKey []byte) *base.InternalKV {
 		}
 		// The trailer is written in little endian, so the key kind is the first
 		// byte in the trailer that is encoded in the slice [unshared-8:unshared].
-		keyKind := base.InternalKeyKind((*[manual.MaxArrayLen]byte)(ptr)[unshared-8])
+		keyKind := base.InternalKeyKind(*(*byte)(unsafe.Add(ptr, unshared-8)))
 		keyKind = keyKind & base.InternalKeyKindSSTableInternalObsoleteMask
 		prefixChanged := false
 		if keyKind == base.InternalKeyKindSet {
@@ -1353,7 +1353,7 @@ func (i *Iter) nextPrefixV3(succKey []byte) *base.InternalKV {
 		// - (Unlikely) The prefix has not changed.
 		// We assemble the key etc. under the assumption that it is the likely
 		// case.
-		unsharedKey := getBytes(ptr, int(unshared))
+		unsharedKey := unsafe.Slice((*byte)(ptr), int(unshared))
 		// TODO(sumeer): move this into the else block below. This is a bit tricky
 		// since the current logic assumes we have always copied the latest key
 		// into fullKey, which is why when we get to the next key we can (a)
@@ -1365,7 +1365,7 @@ func (i *Iter) nextPrefixV3(succKey []byte) *base.InternalKV {
 		// too. This same comment applies to the other place where we can do this
 		// optimization, in readEntry().
 		i.fullKey = append(i.fullKey[:shared], unsharedKey...)
-		i.val = getBytes(valuePtr, int(value))
+		i.val = unsafe.Slice((*byte)(valuePtr), int(value))
 		if shared == 0 {
 			// Provide stability for the key across positioning calls if the key
 			// doesn't share a prefix with the previous key. This removes requiring the
@@ -1414,10 +1414,10 @@ func (i *Iter) nextPrefixV3(succKey []byte) *base.InternalKV {
 			}
 			if i.ikv.K.Kind() != base.InternalKeyKindSet {
 				i.ikv.V = base.MakeInPlaceValue(i.val)
-			} else if i.lazyValueHandling.getValue == nil || !block.ValuePrefix(i.val[0]).IsValueHandle() {
+			} else if i.lazyValueHandling.getValue == nil || block.ValuePrefix(i.val[0]).IsInPlaceValue() {
 				i.ikv.V = base.MakeInPlaceValue(i.val[1:])
 			} else {
-				i.ikv.V = i.lazyValueHandling.getValue.GetLazyValueForPrefixAndValueHandle(i.val)
+				i.ikv.V = i.lazyValueHandling.getValue.GetInternalValueForPrefixAndValueHandle(i.val)
 			}
 			return &i.ikv
 		}
@@ -1438,7 +1438,7 @@ start:
 		i.nextOffset = i.offset
 		e := &i.cached[n]
 		i.offset = e.offset
-		i.val = getBytes(unsafe.Pointer(uintptr(i.ptr)+uintptr(e.valStart)), int(e.valSize))
+		i.val = unsafe.Slice((*byte)(unsafe.Add(i.ptr, e.valStart)), int(e.valSize))
 		// Manually inlined version of i.decodeInternalKey(i.key).
 		i.key = i.cachedBuf[e.keyStart:e.keyEnd]
 		if n := len(i.key) - 8; n >= 0 {
@@ -1472,10 +1472,10 @@ start:
 		if !i.lazyValueHandling.hasValuePrefix ||
 			i.ikv.K.Kind() != base.InternalKeyKindSet {
 			i.ikv.V = base.MakeInPlaceValue(i.val)
-		} else if i.lazyValueHandling.getValue == nil || !block.ValuePrefix(i.val[0]).IsValueHandle() {
+		} else if i.lazyValueHandling.getValue == nil || block.ValuePrefix(i.val[0]).IsInPlaceValue() {
 			i.ikv.V = base.MakeInPlaceValue(i.val[1:])
 		} else {
-			i.ikv.V = i.lazyValueHandling.getValue.GetLazyValueForPrefixAndValueHandle(i.val)
+			i.ikv.V = i.lazyValueHandling.getValue.GetInternalValueForPrefixAndValueHandle(i.val)
 		}
 		return &i.ikv
 	}
@@ -1554,27 +1554,17 @@ start:
 	if !i.lazyValueHandling.hasValuePrefix ||
 		i.ikv.K.Kind() != base.InternalKeyKindSet {
 		i.ikv.V = base.MakeInPlaceValue(i.val)
-	} else if i.lazyValueHandling.getValue == nil || !block.ValuePrefix(i.val[0]).IsValueHandle() {
+	} else if i.lazyValueHandling.getValue == nil || block.ValuePrefix(i.val[0]).IsInPlaceValue() {
 		i.ikv.V = base.MakeInPlaceValue(i.val[1:])
 	} else {
-		i.ikv.V = i.lazyValueHandling.getValue.GetLazyValueForPrefixAndValueHandle(i.val)
+		i.ikv.V = i.lazyValueHandling.getValue.GetInternalValueForPrefixAndValueHandle(i.val)
 	}
 	return &i.ikv
-}
-
-// Key returns the internal key at the current iterator position.
-func (i *Iter) Key() *base.InternalKey {
-	return &i.ikv.K
 }
 
 // KV returns the internal KV at the current iterator position.
 func (i *Iter) KV() *base.InternalKV {
 	return &i.ikv
-}
-
-// Value returns the value at the current iterator position.
-func (i *Iter) Value() base.LazyValue {
-	return i.ikv.V
 }
 
 // Error implements internalIterator.Error, as documented in the pebble
@@ -1664,12 +1654,13 @@ func (i *Iter) Describe(tp treeprinter.Node, fmtKV DescribeKV) {
 			Offset:    i.offset,
 			Length:    int32(i.nextOffset - i.offset),
 		}
-		ptr := unsafe.Pointer(uintptr(i.ptr) + uintptr(i.offset))
+		ptr := unsafe.Add(i.ptr, i.offset)
 		enc.KeyShared, ptr = decodeVarint(ptr)
 		enc.KeyUnshared, ptr = decodeVarint(ptr)
 		enc.ValueLen, _ = decodeVarint(ptr)
 		buf.Reset()
-		fmtKV(&buf, &kv.K, kv.V.ValueOrHandle, enc)
+		lv := kv.V.LazyValue()
+		fmtKV(&buf, &kv.K, lv.ValueOrHandle, enc)
 		tp.Child(buf.String())
 	}
 	// Format the restart points.
@@ -1733,10 +1724,10 @@ func (i *RawIter) readEntry() {
 	shared, ptr := decodeVarint(ptr)
 	unshared, ptr := decodeVarint(ptr)
 	value, ptr := decodeVarint(ptr)
-	i.key = append(i.key[:shared], getBytes(ptr, int(unshared))...)
+	i.key = append(i.key[:shared], unsafe.Slice((*byte)(ptr), int(unshared))...)
 	i.key = i.key[:len(i.key):len(i.key)]
-	ptr = unsafe.Pointer(uintptr(ptr) + uintptr(unshared))
-	i.val = getBytes(ptr, int(value))
+	ptr = unsafe.Add(ptr, unshared)
+	i.val = unsafe.Slice((*byte)(ptr), int(value))
 	i.nextOffset = offsetInBlock(uintptr(ptr)-uintptr(i.ptr)) + offsetInBlock(value)
 }
 
@@ -1767,8 +1758,8 @@ func (i *RawIter) cacheEntry() {
 	i.cachedBuf = append(i.cachedBuf, i.key...)
 }
 
-// SeekGE implements internalIterator.SeekGE, as documented in the pebble
-// package.
+// SeekGE repositions the iterator to point to the first KV with a user key
+// greater than or equal to key. It returns whether the iterator is valid.
 func (i *RawIter) SeekGE(key []byte) bool {
 	// Find the index of the smallest restart point whose key is > the key
 	// sought; index will be numRestarts if there is no such restart point.
@@ -1777,11 +1768,11 @@ func (i *RawIter) SeekGE(key []byte) bool {
 		offset := int32(binary.LittleEndian.Uint32(i.data[int(i.restarts)+4*j:]))
 		// For a restart point, there are 0 bytes shared with the previous key.
 		// The varint encoding of 0 occupies 1 byte.
-		ptr := unsafe.Pointer(uintptr(i.ptr) + uintptr(offset+1))
+		ptr := unsafe.Add(i.ptr, offset+1)
 		// Decode the key at that restart point, and compare it to the key sought.
 		v1, ptr := decodeVarint(ptr)
 		_, ptr = decodeVarint(ptr)
-		s := getBytes(ptr, int(v1))
+		s := unsafe.Slice((*byte)(ptr), int(v1))
 		return i.cmp(key, s) < 0
 	})
 
@@ -1803,15 +1794,16 @@ func (i *RawIter) SeekGE(key []byte) bool {
 	return i.Valid()
 }
 
-// First implements internalIterator.First, as documented in the pebble
-// package.
+// First repositions the iterator so that it is pointing to the first key in the
+// block, returning whether or not the iterator is still valid.
 func (i *RawIter) First() bool {
 	i.offset = 0
 	i.loadEntry()
 	return i.Valid()
 }
 
-// Last implements internalIterator.Last, as documented in the pebble package.
+// Last repositions the iterator so that it is pointing to the last key in the
+// block, returning whether or not the iterator is still valid.
 func (i *RawIter) Last() bool {
 	// Seek forward from the last restart point.
 	i.offset = offsetInBlock(binary.LittleEndian.Uint32(i.data[i.restarts+4*offsetInBlock(i.numRestarts-1):]))
@@ -1830,8 +1822,8 @@ func (i *RawIter) Last() bool {
 	return i.Valid()
 }
 
-// Next implements internalIterator.Next, as documented in the pebble
-// package.
+// Next repositions the iterator one step forward, returning whether or not the
+// iterator is still valid.
 func (i *RawIter) Next() bool {
 	i.offset = i.nextOffset
 	if !i.Valid() {
@@ -1841,14 +1833,14 @@ func (i *RawIter) Next() bool {
 	return true
 }
 
-// Prev implements internalIterator.Prev, as documented in the pebble
-// package.
+// Prev repositions the iterator one step backwards, returning whether or not
+// the iterator is still valid.
 func (i *RawIter) Prev() bool {
 	if n := len(i.cached) - 1; n > 0 && i.cached[n].offset == i.offset {
 		i.nextOffset = i.offset
 		e := &i.cached[n-1]
 		i.offset = e.offset
-		i.val = getBytes(unsafe.Pointer(uintptr(i.ptr)+uintptr(e.valStart)), int(e.valSize))
+		i.val = unsafe.Slice((*byte)(unsafe.Add(i.ptr, e.valStart)), int(e.valSize))
 		i.ikey.UserKey = i.cachedBuf[e.keyStart:e.keyEnd]
 		i.cached = i.cached[:n]
 		return true
@@ -1884,31 +1876,24 @@ func (i *RawIter) Prev() bool {
 	return true
 }
 
-// Key implements internalIterator.Key, as documented in the pebble package.
+// Key returns the key at the current iterator position. The iterator must be
+// Valid().
 func (i *RawIter) Key() base.InternalKey {
 	return i.ikey
 }
 
-// Value implements internalIterator.Value, as documented in the pebble
-// package.
+// Value returns the value at the current iterator position. The iterator must
+// be Valid().
 func (i *RawIter) Value() []byte {
 	return i.val
 }
 
-// Valid implements internalIterator.Valid, as documented in the pebble
-// package.
+// Valid returns true if the iterator is currently positioned at a valid KV.
 func (i *RawIter) Valid() bool {
 	return i.offset >= 0 && i.offset < i.restarts
 }
 
-// Error implements internalIterator.Error, as documented in the pebble
-// package.
-func (i *RawIter) Error() error {
-	return nil
-}
-
-// Close implements internalIterator.Close, as documented in the pebble
-// package.
+// Close implements closes the iterator.
 func (i *RawIter) Close() error {
 	i.val = nil
 	return nil
@@ -1940,7 +1925,7 @@ func (i *RawIter) Describe(tp treeprinter.Node, fmtKV DescribeKV) {
 			Offset:    i.offset,
 			Length:    int32(i.nextOffset - i.offset),
 		}
-		ptr := unsafe.Pointer(uintptr(i.ptr) + uintptr(i.offset))
+		ptr := unsafe.Add(i.ptr, i.offset)
 		enc.KeyShared, ptr = decodeVarint(ptr)
 		enc.KeyUnshared, ptr = decodeVarint(ptr)
 		enc.ValueLen, _ = decodeVarint(ptr)
@@ -1959,26 +1944,33 @@ func (i *RawIter) Describe(tp treeprinter.Node, fmtKV DescribeKV) {
 	}
 }
 
-func getBytes(ptr unsafe.Pointer, length int) []byte {
-	return (*[manual.MaxArrayLen]byte)(ptr)[:length:length]
+// All returns an iterator that ranges over all key-value pairs in the block.
+func (i *RawIter) All() iter.Seq2[[]byte, []byte] {
+	return func(yield func([]byte, []byte) bool) {
+		for valid := i.First(); valid; valid = i.Next() {
+			if !yield(i.Key().UserKey, i.Value()) {
+				return
+			}
+		}
+	}
 }
 
 func decodeVarint(ptr unsafe.Pointer) (uint32, unsafe.Pointer) {
 	if a := *((*uint8)(ptr)); a < 128 {
 		return uint32(a),
-			unsafe.Pointer(uintptr(ptr) + 1)
-	} else if a, b := a&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 1))); b < 128 {
+			unsafe.Add(ptr, 1)
+	} else if a, b := a&0x7f, *((*uint8)(unsafe.Add(ptr, 1))); b < 128 {
 		return uint32(b)<<7 | uint32(a),
-			unsafe.Pointer(uintptr(ptr) + 2)
-	} else if b, c := b&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 2))); c < 128 {
+			unsafe.Add(ptr, 2)
+	} else if b, c := b&0x7f, *((*uint8)(unsafe.Add(ptr, 2))); c < 128 {
 		return uint32(c)<<14 | uint32(b)<<7 | uint32(a),
-			unsafe.Pointer(uintptr(ptr) + 3)
-	} else if c, d := c&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 3))); d < 128 {
+			unsafe.Add(ptr, 3)
+	} else if c, d := c&0x7f, *((*uint8)(unsafe.Add(ptr, 3))); d < 128 {
 		return uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a),
-			unsafe.Pointer(uintptr(ptr) + 4)
+			unsafe.Add(ptr, 4)
 	} else {
-		d, e := d&0x7f, *((*uint8)(unsafe.Pointer(uintptr(ptr) + 4)))
+		d, e := d&0x7f, *((*uint8)(unsafe.Add(ptr, 4)))
 		return uint32(e)<<28 | uint32(d)<<21 | uint32(c)<<14 | uint32(b)<<7 | uint32(a),
-			unsafe.Pointer(uintptr(ptr) + 5)
+			unsafe.Add(ptr, 5)
 	}
 }

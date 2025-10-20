@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/record"
 	"github.com/cockroachdb/pebble/v2/vfs"
+	"github.com/cockroachdb/redact"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -145,6 +146,12 @@ type Options struct {
 	// FailoverWriteAndSyncLatency is only populated when WAL failover is
 	// configured.
 	FailoverWriteAndSyncLatency prometheus.Histogram
+
+	// WriteWALSyncOffsets determines whether to write WAL sync chunk offsets.
+	// The format major version can change (ratchet) at runtime, so this must be
+	// a function rather than a static bool to ensure we use the latest format version.
+	// It is plumbed down from wal.Options to record.newLogWriter.
+	WriteWALSyncOffsets func() bool
 }
 
 // Init constructs and initializes a WAL manager from the provided options and
@@ -322,8 +329,9 @@ type Manager interface {
 	// init initializes the Manager. init is called during DB initialization.
 	init(o Options, initial Logs) error
 
-	// List returns the virtual WALs in ascending order.
-	List() (Logs, error)
+	// List returns the virtual WALs in ascending order. List must not perform
+	// I/O.
+	List() Logs
 	// Obsolete informs the manager that all virtual WALs less than
 	// minUnflushedNum are obsolete. The callee can choose to recycle some
 	// underlying log files, if !noRecycle. The log files that are not recycled,
@@ -341,6 +349,15 @@ type Manager interface {
 	// ElevateWriteStallThresholdForFailover returns true if the caller should
 	// use a high write stall threshold because the WALs are being written to
 	// the secondary dir.
+	//
+	// In practice, if this value is true, we give an unlimited memory budget
+	// for memtables. This is simpler than trying to configure an explicit
+	// value, given that memory resources can vary. When using WAL failover in
+	// CockroachDB, an OOM risk is worth tolerating for workloads that have a
+	// strict latency SLO. Also, an unlimited budget here does not mean that the
+	// disk stall in the primary will go unnoticed until the OOM -- CockroachDB
+	// is monitoring disk stalls, and we expect it to fail the node after ~60s
+	// if the primary is stalled.
 	ElevateWriteStallThresholdForFailover() bool
 	// Stats returns the latest Stats.
 	Stats() Stats
@@ -434,8 +451,15 @@ type Offset struct {
 // String implements fmt.Stringer, returning a string representation of the
 // offset.
 func (o Offset) String() string {
+	return redact.StringWithoutMarkers(o)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (o Offset) SafeFormat(w redact.SafePrinter, _ rune) {
 	if o.PreviousFilesBytes > 0 {
-		return fmt.Sprintf("(%s: %d), %d from previous files", o.PhysicalFile, o.Physical, o.PreviousFilesBytes)
+		w.Printf("(%s: %d), %d from previous files", o.PhysicalFile, o.Physical, o.PreviousFilesBytes)
+		return
 	}
-	return fmt.Sprintf("(%s: %d)", o.PhysicalFile, o.Physical)
+	w.Printf("(%s: %d)", o.PhysicalFile, o.Physical)
+
 }

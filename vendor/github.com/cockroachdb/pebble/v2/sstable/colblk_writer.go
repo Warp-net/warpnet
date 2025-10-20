@@ -19,9 +19,12 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/invariants"
 	"github.com/cockroachdb/pebble/v2/internal/keyspan"
 	"github.com/cockroachdb/pebble/v2/objstorage"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
+	"github.com/cockroachdb/pebble/v2/sstable/block/blockkind"
 	"github.com/cockroachdb/pebble/v2/sstable/colblk"
 	"github.com/cockroachdb/pebble/v2/sstable/rowblk"
+	"github.com/cockroachdb/pebble/v2/sstable/valblk"
 )
 
 // RawColumnWriter is a sstable RawWriter that writes sstables with
@@ -51,11 +54,12 @@ type RawColumnWriter struct {
 		// tombstone-dense for the purposes of compaction.
 		deletionSize int
 	}
-	indexBlock         colblk.IndexBlockWriter
-	topLevelIndexBlock colblk.IndexBlockWriter
-	rangeDelBlock      colblk.KeyspanBlockWriter
-	rangeKeyBlock      colblk.KeyspanBlockWriter
-	valueBlock         *valueBlockWriter // nil iff WriterOptions.DisableValueBlocks=true
+	indexBlock                colblk.IndexBlockWriter
+	topLevelIndexBlock        colblk.IndexBlockWriter
+	rangeDelBlock             colblk.KeyspanBlockWriter
+	rangeKeyBlock             colblk.KeyspanBlockWriter
+	valueBlock                *valblk.Writer // nil iff WriterOptions.DisableValueBlocks=true
+	blobRefLivenessIndexBlock blobRefValueLivenessWriter
 	// filter accumulates the filter block. If populated, the filter ingests
 	// either the output of w.split (i.e. a prefix extractor) if w.split is not
 	// nil, or the full keys otherwise.
@@ -77,8 +81,14 @@ type RawColumnWriter struct {
 	// flushed in order after all the data blocks, and the top-level index block
 	// is constructed to point to all the individual index blocks.
 	indexBuffering struct {
-		// partitions holds all the completed index blocks.
+		// partitions holds all the completed, uncompressed index blocks.
+		//
+		// TODO(jackson): We should consider compressing these index blocks now,
+		// while buffering, to reduce the memory usage of the writer.
 		partitions []bufferedIndexBlock
+		// partitionSizeSum is the sum of the sizes of all the completed index
+		// blocks (in `partitions`).
+		partitionSizeSum uint64
 		// blockAlloc is used to bulk-allocate byte slices used to store index
 		// blocks in partitions. These live until the sstable is finished.
 		blockAlloc []byte
@@ -94,16 +104,23 @@ type RawColumnWriter struct {
 	}
 	layout layoutWriter
 
+	lastKeyBuf            []byte
 	separatorBuf          []byte
 	tmp                   [blockHandleLikelyMaxLen]byte
 	previousUserKey       invariants.Value[[]byte]
+	validator             invariants.Value[*colblk.DataBlockValidator]
 	disableKeyOrderChecks bool
+	cpuMeasurer           base.CPUMeasurer
 }
 
 // Assert that *RawColumnWriter implements RawWriter.
 var _ RawWriter = (*RawColumnWriter)(nil)
 
-func newColumnarWriter(writable objstorage.Writable, o WriterOptions) *RawColumnWriter {
+// cpuMeasurer, if non-nil, is only used for calling
+// cpuMeasurer.MeasureCPUSSTableSecondary.
+func newColumnarWriter(
+	writable objstorage.Writable, o WriterOptions, cpuMeasurer base.CPUMeasurer,
+) *RawColumnWriter {
 	if writable == nil {
 		panic("pebble: nil writable")
 	}
@@ -128,11 +145,11 @@ func newColumnarWriter(writable objstorage.Writable, o WriterOptions) *RawColumn
 	w.rangeDelBlock.Init(w.comparer.Equal)
 	w.rangeKeyBlock.Init(w.comparer.Equal)
 	if !o.DisableValueBlocks {
-		w.valueBlock = newValueBlockWriter(
+		w.valueBlock = valblk.NewWriter(
 			block.MakeFlushGovernor(o.BlockSize, o.BlockSizeThreshold, o.SizeClassAwareThreshold, o.AllocatorSizeClasses),
-			w.opts.Compression, w.opts.Checksum, func(compressedSize int) {})
+			&w.layout.compressor, w.opts.Checksum, func(compressedSize int) {})
 	}
-	if o.FilterPolicy != nil {
+	if o.FilterPolicy != base.NoFilterPolicy {
 		switch o.FilterType {
 		case TableFilter:
 			w.filterBlock = newTableFilterWriter(o.FilterPolicy)
@@ -167,13 +184,15 @@ func newColumnarWriter(writable objstorage.Writable, o WriterOptions) *RawColumn
 	w.props.PropertyCollectorNames = buf.String()
 
 	w.props.ComparerName = o.Comparer.Name
-	w.props.CompressionName = o.Compression.String()
+	w.props.CompressionName = o.Compression.Name
 	w.props.KeySchemaName = o.KeySchema.Name
 	w.props.MergerName = o.MergerName
 
 	w.writeQueue.ch = make(chan *compressedBlock)
 	w.writeQueue.wg.Add(1)
+	w.cpuMeasurer = cpuMeasurer
 	go w.drainWriteQueue()
+
 	return w
 }
 
@@ -185,30 +204,38 @@ func (w *RawColumnWriter) Error() error {
 // EstimatedSize returns the estimated size of the sstable being written if
 // a call to Close() was made without adding additional keys.
 func (w *RawColumnWriter) EstimatedSize() uint64 {
-	sz := rocksDBFooterLen + w.queuedDataSize
-	// TODO(jackson): Avoid iterating over partitions by incrementally
-	// maintaining the size contribution of all buffered partitions.
-	for _, bib := range w.indexBuffering.partitions {
-		// We include the separator user key to account for its bytes in the
-		// top-level index block.
-		//
-		// TODO(jackson): We could incrementally build the top-level index block
-		// and produce an exact calculation of the current top-level index
-		// block's size.
-		sz += uint64(len(bib.block) + block.TrailerLen + len(bib.sep.UserKey))
+	// Start with the size of the footer, which is fixed, and the size of all
+	// the finished data blocks. The size of the finished data blocks is all
+	// post-compression and the footer is not compressed, so this initial
+	// quantity is exact.
+	sz := uint64(w.opts.TableFormat.FooterSize()) + w.queuedDataSize
+
+	// Add the size of value blocks. If any value blocks have already been
+	// finished, these blocks will contribute post-compression size. If there is
+	// currently an unfinished value block, it will contribute its pre-compression
+	// size.
+	if w.valueBlock != nil {
+		sz += w.valueBlock.Size()
 	}
+
+	// Add the size of the completed but unflushed index partitions, the
+	// unfinished data block, the unfinished index block, the unfinished range
+	// deletion block, and the unfinished range key block.
+	//
+	// All of these sizes are uncompressed sizes. It's okay to be pessimistic
+	// here and use the uncompressed size because all this memory is buffered
+	// until the sstable is finished.  Including the uncompressed size bounds
+	// the memory usage used by the writer to the physical size limit.
+	sz += w.indexBuffering.partitionSizeSum
+	sz += uint64(w.dataBlock.Size())
+	sz += uint64(w.indexBlockSize)
 	if w.rangeDelBlock.KeyCount() > 0 {
 		sz += uint64(w.rangeDelBlock.Size())
 	}
 	if w.rangeKeyBlock.KeyCount() > 0 {
 		sz += uint64(w.rangeKeyBlock.Size())
 	}
-	if w.valueBlock != nil {
-		sz += w.valueBlock.totalBlockBytes
-		if w.valueBlock.buf != nil {
-			sz += uint64(len(w.valueBlock.buf.b))
-		}
-	}
+
 	// TODO(jackson): Include an estimate of the properties, filter and meta
 	// index blocks sizes.
 	return sz
@@ -317,7 +344,7 @@ func (w *RawColumnWriter) EncodeSpan(span keyspan.Span) error {
 	return nil
 }
 
-// AddWithForceObsolete adds a point key/value pair when writing a
+// Add adds a point key/value pair when writing a
 // strict-obsolete sstable. For a given Writer, the keys passed to Add must be
 // in increasing order. Span keys (range deletions, range keys) must be added
 // through EncodeSpan.
@@ -331,9 +358,7 @@ func (w *RawColumnWriter) EncodeSpan(span keyspan.Span) error {
 // that strict-obsolete ssts must satisfy. S2, due to RANGEDELs, is solely the
 // responsibility of the caller. S1 is solely the responsibility of the
 // callee.
-func (w *RawColumnWriter) AddWithForceObsolete(
-	key InternalKey, value []byte, forceObsolete bool,
-) error {
+func (w *RawColumnWriter) Add(key InternalKey, value []byte, forceObsolete bool) error {
 	switch key.Kind() {
 	case base.InternalKeyKindRangeDelete, base.InternalKeyKindRangeKeySet,
 		base.InternalKeyKindRangeKeyUnset, base.InternalKeyKindRangeKeyDelete:
@@ -355,11 +380,11 @@ func (w *RawColumnWriter) AddWithForceObsolete(
 	var valuePrefix block.ValuePrefix
 	var valueStoredWithKey []byte
 	if eval.writeToValueBlock {
-		vh, err := w.valueBlock.addValue(value)
+		vh, err := w.valueBlock.AddValue(value)
 		if err != nil {
 			return err
 		}
-		n := encodeValueHandle(w.tmp[:], vh)
+		n := valblk.EncodeHandle(w.tmp[:], vh)
 		valueStoredWithKey = w.tmp[:n]
 		var attribute base.ShortAttribute
 		if w.opts.ShortAttributeExtractor != nil {
@@ -372,14 +397,62 @@ func (w *RawColumnWriter) AddWithForceObsolete(
 				return err
 			}
 		}
-		valuePrefix = block.ValueHandlePrefix(eval.kcmp.PrefixEqual(), attribute)
+		valuePrefix = block.ValueBlockHandlePrefix(eval.kcmp.PrefixEqual(), attribute)
 	} else {
 		valueStoredWithKey = value
 		if len(value) > 0 {
 			valuePrefix = block.InPlaceValuePrefix(eval.kcmp.PrefixEqual())
 		}
 	}
+	return w.add(key, len(value), valueStoredWithKey, valuePrefix, eval)
+}
 
+// AddWithBlobHandle implements the RawWriter interface.
+func (w *RawColumnWriter) AddWithBlobHandle(
+	key InternalKey, h blob.InlineHandle, attr base.ShortAttribute, forceObsolete bool,
+) error {
+	// Blob value handles require at least TableFormatPebblev6.
+	if w.opts.TableFormat <= TableFormatPebblev5 {
+		w.err = errors.Newf("pebble: blob value handles are not supported in %s", w.opts.TableFormat.String())
+		return w.err
+	}
+	switch key.Kind() {
+	case base.InternalKeyKindRangeDelete, base.InternalKeyKindRangeKeySet,
+		base.InternalKeyKindRangeKeyUnset, base.InternalKeyKindRangeKeyDelete:
+		return errors.Newf("%s must be added through EncodeSpan", key.Kind())
+	case base.InternalKeyKindMerge:
+		return errors.Errorf("MERGE does not support blob value handles")
+	}
+
+	eval, err := w.evaluatePoint(key, int(h.ValueLen))
+	if err != nil {
+		return err
+	}
+	eval.isObsolete = eval.isObsolete || forceObsolete
+	w.prevPointKey.trailer = key.Trailer
+	w.prevPointKey.isObsolete = eval.isObsolete
+
+	n := h.Encode(w.tmp[:])
+	valueStoredWithKey := w.tmp[:n]
+	valuePrefix := block.BlobValueHandlePrefix(eval.kcmp.PrefixEqual(), attr)
+	err = w.add(key, int(h.ValueLen), valueStoredWithKey, valuePrefix, eval)
+	if err != nil {
+		return err
+	}
+	w.props.NumValuesInBlobFiles++
+	if err := w.blobRefLivenessIndexBlock.addLiveValue(h.ReferenceID, h.BlockID, h.ValueID, uint64(h.ValueLen)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *RawColumnWriter) add(
+	key InternalKey,
+	valueLen int,
+	valueStoredWithKey []byte,
+	valuePrefix block.ValuePrefix,
+	eval pointKeyEvaluation,
+) error {
 	// Append the key to the data block. We have NOT yet committed to
 	// including the key in the block. The data block writer permits us to
 	// finish the block excluding the last-appended KV.
@@ -392,7 +465,10 @@ func (w *RawColumnWriter) AddWithForceObsolete(
 	size := w.dataBlock.Size()
 	if shouldFlushWithoutLatestKV(size, w.pendingDataBlockSize, entriesWithoutKV, &w.dataFlush) {
 		// Flush the data block excluding the key we just added.
-		w.flushDataBlockWithoutNextKey(key.UserKey)
+		if err := w.flushDataBlockWithoutNextKey(key.UserKey); err != nil {
+			w.err = err
+			return err
+		}
 		// flushDataBlockWithoutNextKey reset the data block builder, and we can
 		// add the key to this next block now.
 		w.dataBlock.Add(key, valueStoredWithKey, valuePrefix, eval.kcmp, eval.isObsolete)
@@ -405,12 +481,12 @@ func (w *RawColumnWriter) AddWithForceObsolete(
 	}
 
 	for i := range w.blockPropCollectors {
-		v := value
-		if key.Kind() == base.InternalKeyKindSet {
-			// Values for SET are not required to be in-place, and in the future
-			// may not even be read by the compaction, so pass nil values. Block
-			// property collectors in such Pebble DB's must not look at the
-			// value.
+		v := valueStoredWithKey
+		if key.Kind() == base.InternalKeyKindSet || key.Kind() == base.InternalKeyKindSetWithDelete || !valuePrefix.IsInPlaceValue() {
+			// Values for SET, SETWITHDEL keys are not required to be in-place,
+			// and may not even be read by the compaction, so pass nil values.
+			// Block property collectors in such Pebble DB's must not look at
+			// the value.
 			v = nil
 		}
 		if err := w.blockPropCollectors[i].AddPointKey(key, v); err != nil {
@@ -436,12 +512,12 @@ func (w *RawColumnWriter) AddWithForceObsolete(
 		w.dataBlock.deletionSize += len(key.UserKey)
 	case InternalKeyKindDeleteSized:
 		var size uint64
-		if len(value) > 0 {
+		if len(valueStoredWithKey) > 0 {
 			var n int
-			size, n = binary.Uvarint(value)
+			size, n = binary.Uvarint(valueStoredWithKey)
 			if n <= 0 {
 				return errors.Newf("%s key's value (%x) does not parse as uvarint",
-					errors.Safe(key.Kind().String()), value)
+					errors.Safe(key.Kind().String()), valueStoredWithKey)
 			}
 		}
 		w.props.NumDeletions++
@@ -454,7 +530,7 @@ func (w *RawColumnWriter) AddWithForceObsolete(
 		w.props.NumMergeOperands++
 	}
 	w.props.RawKeySize += uint64(key.Size())
-	w.props.RawValueSize += uint64(len(value))
+	w.props.RawValueSize += uint64(valueLen)
 	return nil
 }
 
@@ -475,7 +551,7 @@ func (w *RawColumnWriter) evaluatePoint(
 	// When invariants are enabled, validate kcmp.
 	if invariants.Enabled {
 		colblk.AssertKeyCompare(w.comparer, key.UserKey, w.previousUserKey.Get(), eval.kcmp)
-		w.previousUserKey.Store(append(w.previousUserKey.Get()[:0], key.UserKey...))
+		w.previousUserKey.Set(append(w.previousUserKey.Get()[:0], key.UserKey...))
 	}
 
 	if !w.meta.HasPointKeys {
@@ -574,19 +650,6 @@ func (w *RawColumnWriter) evaluatePoint(
 	// NB: it is possible that eval.kcmp.UserKeyComparison == 0, i.e., these two
 	// SETs have identical user keys (because of an open snapshot). This should
 	// be the rare case.
-
-	// If there are bounds requiring some keys' values to be in-place, compare
-	// the prefix against the bounds.
-	if !w.opts.RequiredInPlaceValueBound.IsEmpty() {
-		if w.comparer.Compare(w.opts.RequiredInPlaceValueBound.Upper, key.UserKey[:eval.kcmp.PrefixLen]) <= 0 {
-			// Common case for CockroachDB. Make it empty since all future keys
-			// will be >= this key.
-			w.opts.RequiredInPlaceValueBound = UserKeyPrefixBound{}
-		} else if w.comparer.Compare(key.UserKey[:eval.kcmp.PrefixLen], w.opts.RequiredInPlaceValueBound.Lower) >= 0 {
-			// Don't write to value block if the key is within the bounds.
-			return eval, nil
-		}
-	}
 	eval.writeToValueBlock = true
 	return eval, nil
 }
@@ -602,16 +665,19 @@ type compressedBlock struct {
 	blockBuf blockBuf
 }
 
-func (w *RawColumnWriter) flushDataBlockWithoutNextKey(nextKey []byte) {
+func (w *RawColumnWriter) flushDataBlockWithoutNextKey(nextKey []byte) error {
 	serializedBlock, lastKey := w.dataBlock.Finish(w.dataBlock.Rows()-1, w.pendingDataBlockSize)
 	w.maybeIncrementTombstoneDenseBlocks(len(serializedBlock))
 	// Compute the separator that will be written to the index block alongside
 	// this data block's end offset. It is the separator between the last key in
 	// the finished block and the [nextKey] that was excluded from the block.
 	w.separatorBuf = w.comparer.Separator(w.separatorBuf[:0], lastKey.UserKey, nextKey)
-	w.enqueueDataBlock(serializedBlock, lastKey, w.separatorBuf)
+	if err := w.enqueueDataBlock(serializedBlock, lastKey, w.separatorBuf); err != nil {
+		return err
+	}
 	w.dataBlock.Reset()
 	w.pendingDataBlockSize = 0
+	return nil
 }
 
 // maybeIncrementTombstoneDenseBlocks increments the number of tombstone dense
@@ -635,15 +701,19 @@ func (w *RawColumnWriter) maybeIncrementTombstoneDenseBlocks(uncompressedLen int
 func (w *RawColumnWriter) enqueueDataBlock(
 	serializedBlock []byte, lastKey base.InternalKey, separator []byte,
 ) error {
-	// TODO(jackson): Avoid allocating the largest point user key every time we
-	// set the largest point key. This is what the rowblk writer does too, but
-	// it's unnecessary.
-	w.meta.SetLargestPointKey(lastKey.Clone())
+	w.lastKeyBuf = append(w.lastKeyBuf[:0], lastKey.UserKey...)
+	w.meta.SetLargestPointKey(base.InternalKey{
+		UserKey: w.lastKeyBuf,
+		Trailer: lastKey.Trailer,
+	})
 
 	if invariants.Enabled {
-		var dec colblk.DataBlockDecoder
-		dec.Init(w.opts.KeySchema, serializedBlock)
-		if err := dec.Validate(w.comparer, w.opts.KeySchema); err != nil {
+		v := w.validator.Get()
+		if v == nil {
+			v = &colblk.DataBlockValidator{}
+			w.validator.Set(v)
+		}
+		if err := v.Validate(serializedBlock, w.comparer, w.opts.KeySchema); err != nil {
 			panic(err)
 		}
 	}
@@ -652,19 +722,12 @@ func (w *RawColumnWriter) enqueueDataBlock(
 	cb := compressedBlockPool.Get().(*compressedBlock)
 	cb.blockBuf.checksummer.Type = w.opts.Checksum
 	cb.physical = block.CompressAndChecksum(
-		&cb.blockBuf.compressedBuf,
+		&cb.blockBuf.dataBuf,
 		serializedBlock,
-		w.opts.Compression,
+		blockkind.SSTableData,
+		&w.layout.compressor,
 		&cb.blockBuf.checksummer,
 	)
-	if !cb.physical.IsCompressed() {
-		// If the block isn't compressed, cb.physical's underlying data points
-		// directly into a buffer owned by w.dataBlock. Clone it before passing
-		// it to the write queue to be asynchronously written to disk.
-		// TODO(jackson): Should we try to avoid this clone by tracking the
-		// lifetime of the DataBlockWriters?
-		cb.physical = cb.physical.Clone()
-	}
 	return w.enqueuePhysicalBlock(cb, separator)
 }
 
@@ -746,16 +809,23 @@ func (w *RawColumnWriter) finishIndexBlock(rows int) error {
 		w.indexBlock.UnsafeSeparator(rows - 1))
 
 	// Finish the index block and copy it so that w.indexBlock may be reused.
-	block := w.indexBlock.Finish(rows)
-	if len(w.indexBuffering.blockAlloc) < len(block) {
+	blk := w.indexBlock.Finish(rows)
+	if len(w.indexBuffering.blockAlloc) < len(blk) {
 		// Allocate enough bytes for approximately 16 index blocks.
-		w.indexBuffering.blockAlloc = make([]byte, len(block)*16)
+		w.indexBuffering.blockAlloc = make([]byte, len(blk)*16)
 	}
-	n := copy(w.indexBuffering.blockAlloc, block)
+	n := copy(w.indexBuffering.blockAlloc, blk)
 	bib.block = w.indexBuffering.blockAlloc[:n:n]
 	w.indexBuffering.blockAlloc = w.indexBuffering.blockAlloc[n:]
 
 	w.indexBuffering.partitions = append(w.indexBuffering.partitions, bib)
+	// We include the separator user key to account for its bytes in the
+	// top-level index block.
+	//
+	// TODO(jackson): We could incrementally build the top-level index block
+	// and produce an exact calculation of the current top-level index
+	// block's size.
+	w.indexBuffering.partitionSizeSum += uint64(len(blk) + block.TrailerLen + len(bib.sep.UserKey))
 	return nil
 }
 
@@ -766,7 +836,9 @@ func (w *RawColumnWriter) finishIndexBlock(rows int) error {
 func (w *RawColumnWriter) flushBufferedIndexBlocks() (rootIndex block.Handle, err error) {
 	// If there's a currently-pending index block, finish it.
 	if w.indexBlock.Rows() > 0 || len(w.indexBuffering.partitions) == 0 {
-		w.finishIndexBlock(w.indexBlock.Rows())
+		if err := w.finishIndexBlock(w.indexBlock.Rows()); err != nil {
+			return block.Handle{}, err
+		}
 	}
 	// We've buffered all the index blocks. Typically there's just one index
 	// block, in which case we're writing a "single-level" index. If we're
@@ -786,7 +858,7 @@ func (w *RawColumnWriter) flushBufferedIndexBlocks() (rootIndex block.Handle, er
 		if err != nil {
 			return rootIndex, err
 		}
-		w.props.IndexSize = rootIndex.Length + block.TrailerLen
+		w.props.IndexSize = uint64(len(w.indexBuffering.partitions[0].block))
 		w.props.NumDataBlocks = uint64(w.indexBuffering.partitions[0].nEntries)
 		w.props.IndexType = binarySearchIndex
 	default:
@@ -796,15 +868,17 @@ func (w *RawColumnWriter) flushBufferedIndexBlocks() (rootIndex block.Handle, er
 			if err != nil {
 				return block.Handle{}, err
 			}
-			w.props.IndexSize += bh.Length + block.TrailerLen
-			w.props.NumDataBlocks += uint64(w.indexBuffering.partitions[0].nEntries)
+			w.props.IndexSize += uint64(len(part.block))
+			w.props.NumDataBlocks += uint64(part.nEntries)
 			w.topLevelIndexBlock.AddBlockHandle(part.sep.UserKey, bh, part.properties)
 		}
-		rootIndex, err = w.layout.WriteIndexBlock(w.topLevelIndexBlock.Finish(w.topLevelIndexBlock.Rows()))
+		topLevelIndex := w.topLevelIndexBlock.Finish(w.topLevelIndexBlock.Rows())
+		rootIndex, err = w.layout.WriteIndexBlock(topLevelIndex)
 		if err != nil {
 			return block.Handle{}, err
 		}
-		w.props.IndexSize += rootIndex.Length + block.TrailerLen
+		w.props.TopLevelIndexSize = uint64(len(topLevelIndex))
+		w.props.IndexSize += uint64(len(topLevelIndex))
 		w.props.IndexType = twoLevelIndex
 		w.props.IndexPartitions = uint64(len(w.indexBuffering.partitions))
 	}
@@ -817,10 +891,15 @@ func (w *RawColumnWriter) flushBufferedIndexBlocks() (rootIndex block.Handle, er
 // Other blocks are written directly by the client goroutine. See Close.
 func (w *RawColumnWriter) drainWriteQueue() {
 	defer w.writeQueue.wg.Done()
+	// Call once to initialize the CPU measurer.
+	w.cpuMeasurer.MeasureCPU(base.CompactionGoroutineSSTableSecondary)
 	for cb := range w.writeQueue.ch {
 		if _, err := w.layout.WritePrecompressedDataBlock(cb.physical); err != nil {
 			w.writeQueue.err = err
 		}
+		// Report to the CPU measurer immediately after writing (note that there
+		// may be a time lag until the next block is available to write).
+		w.cpuMeasurer.MeasureCPU(base.CompactionGoroutineSSTableSecondary)
 		cb.blockBuf.clear()
 		cb.physical = block.PhysicalBlock{}
 		compressedBlockPool.Put(cb)
@@ -830,7 +909,7 @@ func (w *RawColumnWriter) drainWriteQueue() {
 func (w *RawColumnWriter) Close() (err error) {
 	defer func() {
 		if w.valueBlock != nil {
-			releaseValueBlockWriter(w.valueBlock)
+			w.valueBlock.Release()
 			// Defensive code in case Close gets called again. We don't want to put
 			// the same object to a sync.Pool.
 			w.valueBlock = nil
@@ -914,13 +993,25 @@ func (w *RawColumnWriter) Close() (err error) {
 
 	// Write out the value block.
 	if w.valueBlock != nil {
-		_, vbStats, err := w.valueBlock.finish(&w.layout, w.layout.offset)
+		_, vbStats, err := w.valueBlock.Finish(&w.layout, w.layout.offset)
 		if err != nil {
 			return err
 		}
-		w.props.NumValueBlocks = vbStats.numValueBlocks
-		w.props.NumValuesInValueBlocks = vbStats.numValuesInValueBlocks
-		w.props.ValueBlocksSize = vbStats.valueBlocksAndIndexSize
+		w.props.NumValueBlocks = vbStats.NumValueBlocks
+		w.props.NumValuesInValueBlocks = vbStats.NumValuesInValueBlocks
+		w.props.ValueBlocksSize = vbStats.ValueBlocksAndIndexSize
+	}
+
+	// Write the blob reference index block if non-empty.
+	if w.blobRefLivenessIndexBlock.numReferences() > 0 {
+		var encoder colblk.ReferenceLivenessBlockEncoder
+		encoder.Init()
+		for refID, buf := range w.blobRefLivenessIndexBlock.finish() {
+			encoder.AddReferenceLiveness(int(refID), buf)
+		}
+		if _, err := w.layout.WriteBlobRefIndexBlock(encoder.Finish()); err != nil {
+			return err
+		}
 	}
 
 	// Write the properties block.
@@ -952,16 +1043,32 @@ func (w *RawColumnWriter) Close() (err error) {
 			}
 		}
 
-		var raw rowblk.Writer
-		// The restart interval is set to infinity because the properties block
-		// is always read sequentially and cached in a heap located object. This
-		// reduces table size without a significant impact on performance.
-		raw.RestartInterval = propertiesBlockRestartInterval
+		w.props.CompressionStats = w.layout.compressor.Stats().String()
+		var toWrite []byte
 		w.props.CompressionOptions = rocksDBCompressionOptions
-		w.props.save(w.opts.TableFormat, &raw)
-		if _, err := w.layout.WritePropertiesBlock(raw.Finish()); err != nil {
+		if w.opts.TableFormat >= TableFormatPebblev7 {
+			var cw colblk.KeyValueBlockWriter
+			cw.Init()
+			w.props.saveToColWriter(w.opts.TableFormat, &cw)
+			toWrite = cw.Finish(cw.Rows())
+		} else {
+			var raw rowblk.Writer
+			// The restart interval is set to infinity because the properties block
+			// is always read sequentially and cached in a heap located object. This
+			// reduces table size without a significant impact on performance.
+			raw.RestartInterval = propertiesBlockRestartInterval
+			if err = w.props.saveToRowWriter(w.opts.TableFormat, &raw); err != nil {
+				return err
+			}
+			toWrite = raw.Finish()
+		}
+		if _, err = w.layout.WritePropertiesBlock(toWrite); err != nil {
 			return err
 		}
+	}
+
+	if w.opts.TableFormat >= TableFormatPebblev7 {
+		w.layout.attributes = w.props.toAttributes()
 	}
 
 	// Write the table footer.
@@ -971,15 +1078,13 @@ func (w *RawColumnWriter) Close() (err error) {
 	}
 	w.meta.Properties = w.props
 	// Release any held memory and make any future calls error.
-	// TODO(jackson): Ensure other calls error appropriately if the writer is
-	// cleared.
-	*w = RawColumnWriter{meta: w.meta}
+	*w = RawColumnWriter{meta: w.meta, err: errWriterClosed}
 	return nil
 }
 
 // rewriteSuffixes implements RawWriter.
 func (w *RawColumnWriter) rewriteSuffixes(
-	r *Reader, wo WriterOptions, from, to []byte, concurrency int,
+	r *Reader, sstBytes []byte, wo WriterOptions, from, to []byte, concurrency int,
 ) error {
 	for _, c := range w.blockPropCollectors {
 		if !c.SupportsSuffixReplacement() {
@@ -991,7 +1096,7 @@ func (w *RawColumnWriter) rewriteSuffixes(
 		return errors.Wrap(err, "reading layout")
 	}
 	// Copy data blocks in parallel, rewriting suffixes as we go.
-	blocks, err := rewriteDataBlocksInParallel(r, wo, l.Data, from, to, concurrency, func() blockRewriter {
+	blocks, err := rewriteDataBlocksInParallel(r, sstBytes, wo, l.Data, from, to, concurrency, w.layout.compressor.Stats(), func() blockRewriter {
 		return colblk.NewDataBlockRewriter(wo.KeySchema, w.comparer)
 	})
 	if err != nil {
@@ -1036,14 +1141,20 @@ func (w *RawColumnWriter) rewriteSuffixes(
 			w.separatorBuf = w.comparer.Successor(w.separatorBuf[:0], blocks[i].end.UserKey)
 			separator = w.separatorBuf
 		}
-		w.enqueuePhysicalBlock(cb, separator)
+		if err := w.enqueuePhysicalBlock(cb, separator); err != nil {
+			return err
+		}
 	}
 
 	if len(blocks) > 0 {
+		props, err := r.ReadPropertiesBlock(context.TODO(), nil /* buffer pool */)
+		if err != nil {
+			return errors.Wrap(err, "reading properties block")
+		}
 		w.meta.updateSeqNum(blocks[0].start.SeqNum())
-		w.props.NumEntries = r.Properties.NumEntries
-		w.props.RawKeySize = r.Properties.RawKeySize
-		w.props.RawValueSize = r.Properties.RawValueSize
+		w.props.NumEntries = props.NumEntries
+		w.props.RawKeySize = props.RawKeySize
+		w.props.RawValueSize = props.RawValueSize
 		w.meta.SetSmallestPointKey(blocks[0].start)
 		w.meta.SetLargestPointKey(blocks[len(blocks)-1].end)
 	}
@@ -1055,14 +1166,16 @@ func (w *RawColumnWriter) rewriteSuffixes(
 	// Copy over the filter block if it exists.
 	if w.filterBlock != nil {
 		if filterBlockBH, ok := l.FilterByName(w.filterBlock.metaName()); ok {
-			filterBlock, _, err := readBlockBuf(r, filterBlockBH, nil)
+			filterBlock, _, err := readBlockBuf(sstBytes, filterBlockBH, r.blockReader.ChecksumType(), nil)
 			if err != nil {
 				return errors.Wrap(err, "reading filter")
 			}
 			w.filterBlock = copyFilterWriter{
 				origPolicyName: w.filterBlock.policyName(),
 				origMetaName:   w.filterBlock.metaName(),
-				data:           filterBlock,
+				// Clone the filter block, because readBlockBuf allows the
+				// returned byte slice to point directly into sst.
+				data: slices.Clone(filterBlock),
 			}
 		}
 	}
@@ -1149,36 +1262,23 @@ func (w *RawColumnWriter) addDataBlock(b, sep []byte, bhp block.HandleWithProper
 	cb := compressedBlockPool.Get().(*compressedBlock)
 	cb.blockBuf.checksummer.Type = w.opts.Checksum
 	cb.physical = block.CompressAndChecksum(
-		&cb.blockBuf.compressedBuf,
+		&cb.blockBuf.dataBuf,
 		b,
-		w.opts.Compression,
+		blockkind.SSTableData,
+		&w.layout.compressor,
 		&cb.blockBuf.checksummer,
 	)
-	if !cb.physical.IsCompressed() {
-		// If the block isn't compressed, cb.physical's underlying data points
-		// directly into a buffer owned by w.dataBlock. Clone it before passing
-		// it to the write queue to be asynchronously written to disk.
-		// TODO(jackson): Should we try to avoid this clone by tracking the
-		// lifetime of the DataBlockWriters?
-		cb.physical = cb.physical.Clone()
-	}
 	if err := w.enqueuePhysicalBlock(cb, sep); err != nil {
 		return err
 	}
 	return nil
 }
 
-// copyFilter copies the specified filter to the table. It's specifically used
+// setFilter sets the filter to the specified filterWriter. It's specifically used
 // by the sstable copier that can copy parts of an sstable to a new sstable,
 // using CopySpan().
-func (w *RawColumnWriter) copyFilter(filter []byte, filterName string) error {
-	if w.filterBlock != nil && filterName != w.filterBlock.policyName() {
-		return errors.New("mismatched filters")
-	}
-	w.filterBlock = copyFilterWriter{
-		origPolicyName: w.filterBlock.policyName(), origMetaName: w.filterBlock.metaName(), data: filter,
-	}
-	return nil
+func (w *RawColumnWriter) setFilter(fw filterWriter) {
+	w.filterBlock = fw
 }
 
 // copyProperties copies properties from the specified props, and resets others

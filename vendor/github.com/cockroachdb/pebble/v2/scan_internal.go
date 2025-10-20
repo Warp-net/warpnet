@@ -18,7 +18,8 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/treeprinter"
 	"github.com/cockroachdb/pebble/v2/objstorage"
 	"github.com/cockroachdb/pebble/v2/objstorage/remote"
-	"github.com/cockroachdb/pebble/v2/sstable"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
+	"github.com/cockroachdb/pebble/v2/sstable/block"
 )
 
 const (
@@ -46,7 +47,7 @@ var ErrInvalidSkipSharedIteration = errors.New("pebble: cannot use skip-shared i
 // by another pebble instance. This struct must contain all fields that are
 // required for a Pebble instance to ingest a foreign sstable on shared storage,
 // including constructing any relevant objstorage.Provider / remoteobjcat.Catalog
-// data structures, as well as creating virtual FileMetadatas.
+// data structures, as well as creating virtual TableMetadatas.
 //
 // Note that the Pebble instance creating and returning a SharedSSTMeta might
 // not be the one that created the underlying sstable on shared storage to begin
@@ -84,21 +85,23 @@ type SharedSSTMeta struct {
 	// Size contains an estimate of the size of this sstable.
 	Size uint64
 
-	// fileNum at time of creation in the creator instance. Only used for
+	// tableNum at time of creation in the creator instance. Only used for
 	// debugging/tests.
-	fileNum base.FileNum
+	tableNum base.TableNum
 }
 
-func (s *SharedSSTMeta) cloneFromFileMeta(f *fileMetadata) {
+func (s *SharedSSTMeta) cloneFromFileMeta(f *manifest.TableMetadata) {
 	*s = SharedSSTMeta{
-		Smallest:         f.Smallest.Clone(),
-		Largest:          f.Largest.Clone(),
-		SmallestRangeKey: f.SmallestRangeKey.Clone(),
-		LargestRangeKey:  f.LargestRangeKey.Clone(),
-		SmallestPointKey: f.SmallestPointKey.Clone(),
-		LargestPointKey:  f.LargestPointKey.Clone(),
+		Smallest:         f.Smallest().Clone(),
+		Largest:          f.Largest().Clone(),
+		SmallestPointKey: f.PointKeyBounds.Smallest().Clone(),
+		LargestPointKey:  f.PointKeyBounds.Largest().Clone(),
 		Size:             f.Size,
-		fileNum:          f.FileNum,
+		tableNum:         f.TableNum,
+	}
+	if f.HasRangeKeys {
+		s.SmallestRangeKey = f.RangeKeyBounds.Smallest().Clone()
+		s.LargestRangeKey = f.RangeKeyBounds.Largest().Clone()
 	}
 }
 
@@ -416,23 +419,24 @@ type IteratorLevel struct {
 // *must* return the range delete as well as the range key unset/delete that did
 // the shadowing.
 type scanInternalIterator struct {
-	ctx             context.Context
-	db              *DB
-	opts            scanInternalOptions
-	comparer        *base.Comparer
-	merge           Merge
-	iter            internalIterator
-	readState       *readState
-	version         *version
-	rangeKey        *iteratorRangeKeyState
-	pointKeyIter    internalIterator
-	iterKV          *base.InternalKV
-	alloc           *iterAlloc
-	newIters        tableNewIters
-	newIterRangeKey keyspanimpl.TableNewSpanIter
-	seqNum          base.SeqNum
-	iterLevels      []IteratorLevel
-	mergingIter     *mergingIter
+	ctx              context.Context
+	db               *DB
+	opts             scanInternalOptions
+	comparer         *base.Comparer
+	merge            Merge
+	iter             internalIterator
+	readState        *readState
+	version          *manifest.Version
+	rangeKey         *iteratorRangeKeyState
+	pointKeyIter     internalIterator
+	iterKV           *base.InternalKV
+	alloc            *iterAlloc
+	newIters         tableNewIters
+	newIterRangeKey  keyspanimpl.TableNewSpanIter
+	seqNum           base.SeqNum
+	iterLevels       []IteratorLevel
+	mergingIter      *mergingIter
+	blobValueFetcher blob.ValueFetcher
 
 	// boundsBuf holds two buffers used to store the lower and upper bounds.
 	// Whenever the InternalIterator's bounds change, the new bounds are copied
@@ -459,7 +463,7 @@ func (d *DB) truncateExternalFile(
 	ctx context.Context,
 	lower, upper []byte,
 	level int,
-	file *fileMetadata,
+	file *manifest.TableMetadata,
 	objMeta objstorage.ObjectMetadata,
 ) (*ExternalFile, error) {
 	cmp := d.cmp
@@ -474,21 +478,21 @@ func (d *DB) truncateExternalFile(
 		SyntheticSuffix: slices.Clone(file.SyntheticPrefixAndSuffix.Suffix()),
 	}
 
-	needsLowerTruncate := cmp(lower, file.Smallest.UserKey) > 0
+	needsLowerTruncate := cmp(lower, file.Smallest().UserKey) > 0
 	if needsLowerTruncate {
 		sst.StartKey = slices.Clone(lower)
 	} else {
-		sst.StartKey = slices.Clone(file.Smallest.UserKey)
+		sst.StartKey = slices.Clone(file.Smallest().UserKey)
 	}
 
-	cmpUpper := cmp(upper, file.Largest.UserKey)
+	cmpUpper := cmp(upper, file.Largest().UserKey)
 	needsUpperTruncate := cmpUpper < 0
 	if needsUpperTruncate {
 		sst.EndKey = slices.Clone(upper)
 		sst.EndKeyIsInclusive = false
 	} else {
-		sst.EndKey = slices.Clone(file.Largest.UserKey)
-		sst.EndKeyIsInclusive = !file.Largest.IsExclusiveSentinel()
+		sst.EndKey = slices.Clone(file.Largest().UserKey)
+		sst.EndKeyIsInclusive = !file.Largest().IsExclusiveSentinel()
 	}
 
 	if cmp(sst.StartKey, sst.EndKey) > 0 {
@@ -514,7 +518,7 @@ func (d *DB) truncateSharedFile(
 	ctx context.Context,
 	lower, upper []byte,
 	level int,
-	file *fileMetadata,
+	file *manifest.TableMetadata,
 	objMeta objstorage.ObjectMetadata,
 ) (sst *SharedSSTMeta, shouldSkip bool, err error) {
 	cmp := d.cmp
@@ -525,8 +529,8 @@ func (d *DB) truncateSharedFile(
 	if err != nil {
 		return nil, false, err
 	}
-	needsLowerTruncate := cmp(lower, file.Smallest.UserKey) > 0
-	needsUpperTruncate := cmp(upper, file.Largest.UserKey) < 0 || (cmp(upper, file.Largest.UserKey) == 0 && !file.Largest.IsExclusiveSentinel())
+	needsLowerTruncate := cmp(lower, file.Smallest().UserKey) > 0
+	needsUpperTruncate := cmp(upper, file.Largest().UserKey) < 0 || (cmp(upper, file.Largest().UserKey) == 0 && !file.Largest().IsExclusiveSentinel())
 	// Fast path: file is entirely within [lower, upper).
 	if !needsLowerTruncate && !needsUpperTruncate {
 		return sst, false, nil
@@ -542,7 +546,7 @@ func (d *DB) truncateSharedFile(
 	if err != nil {
 		return nil, false, err
 	}
-	defer iters.CloseAll()
+	defer func() { _ = iters.CloseAll() }()
 	iter := iters.point
 	rangeDelIter := iters.rangeDeletion
 	rangeKeyIter := iters.rangeKey
@@ -658,7 +662,7 @@ func (d *DB) truncateSharedFile(
 	if len(sst.Smallest.UserKey) == 0 {
 		return nil, true, nil
 	}
-	sst.Size, err = d.tableCache.estimateSize(file, sst.Smallest.UserKey, sst.Largest.UserKey)
+	sst.Size, err = d.fileCache.estimateSize(file, sst.Smallest.UserKey, sst.Largest.UserKey)
 	if err != nil {
 		return nil, false, err
 	}
@@ -702,14 +706,14 @@ func scanInternalImpl(
 		firstLevelWithRemote := opts.skipLevelForOpts()
 		for level := firstLevelWithRemote; level < numLevels; level++ {
 			files := current.Levels[level].Iter()
-			for f := files.SeekGE(cmp, lower); f != nil && cmp(f.Smallest.UserKey, upper) < 0; f = files.Next() {
-				if cmp(lower, f.Largest.UserKey) == 0 && f.Largest.IsExclusiveSentinel() {
+			for f := files.SeekGE(cmp, lower); f != nil && cmp(f.Smallest().UserKey, upper) < 0; f = files.Next() {
+				if cmp(lower, f.Largest().UserKey) == 0 && f.Largest().IsExclusiveSentinel() {
 					continue
 				}
 
 				var objMeta objstorage.ObjectMetadata
 				var err error
-				objMeta, err = provider.Lookup(fileTypeTable, f.FileBacking.DiskFileNum)
+				objMeta, err = provider.Lookup(base.FileTypeTable, f.TableBacking.DiskFileNum)
 				if err != nil {
 					return err
 				}
@@ -830,7 +834,7 @@ func (opts *scanInternalOptions) skipLevelForOpts() int {
 
 // constructPointIter constructs a merging iterator and sets i.iter to it.
 func (i *scanInternalIterator) constructPointIter(
-	categoryAndQoS sstable.CategoryAndQoS, memtables flushableList, buf *iterAlloc,
+	category block.Category, memtables flushableList, buf *iterAlloc,
 ) error {
 	// Merging levels and levels from iterAlloc.
 	mlevels := buf.mlevels[:0]
@@ -897,14 +901,17 @@ func (i *scanInternalIterator) constructPointIter(
 	levels = levels[:numLevelIters]
 	rangeDelLevels = rangeDelLevels[:numLevelIters]
 	i.opts.IterOptions.snapshotForHideObsoletePoints = i.seqNum
-	i.opts.IterOptions.CategoryAndQoS = categoryAndQoS
+	i.opts.IterOptions.Category = category
+
+	internalOpts := internalIterOpts{
+		blobValueFetcher: &i.blobValueFetcher,
+	}
+
 	addLevelIterForFiles := func(files manifest.LevelIterator, level manifest.Layer) {
 		li := &levels[levelsIndex]
 		rli := &rangeDelLevels[levelsIndex]
 
-		li.init(
-			i.ctx, i.opts.IterOptions, i.comparer, i.newIters, files, level,
-			internalIterOpts{})
+		li.init(i.ctx, i.opts.IterOptions, i.comparer, i.newIters, files, level, internalOpts)
 		mlevels[mlevelsIndex].iter = li
 		rli.Init(i.ctx, keyspan.SpanIterOptions{RangeKeyFilters: i.opts.RangeKeyFilters},
 			i.comparer.Compare, tableNewRangeDelIter(i.newIters), files, level,
@@ -935,9 +942,9 @@ func (i *scanInternalIterator) constructPointIter(
 		i.iterLevels[mlevelsIndex] = IteratorLevel{Kind: IteratorLevelLSM, Level: level}
 		levIter := current.Levels[level].Iter()
 		if level == skipStart {
-			nonRemoteFiles := make([]*manifest.FileMetadata, 0)
+			nonRemoteFiles := make([]*manifest.TableMetadata, 0)
 			for f := levIter.First(); f != nil; f = levIter.Next() {
-				meta, err := i.db.objProvider.Lookup(fileTypeTable, f.FileBacking.DiskFileNum)
+				meta, err := i.db.objProvider.Lookup(base.FileTypeTable, f.TableBacking.DiskFileNum)
 				if err != nil {
 					return err
 				}
@@ -1047,9 +1054,9 @@ func (i *scanInternalIterator) constructRangeKeyIter() error {
 		spanIterOpts := i.opts.SpanIterOptions()
 		levIter := current.RangeKeyLevels[level].Iter()
 		if level == skipStart {
-			nonRemoteFiles := make([]*manifest.FileMetadata, 0)
+			nonRemoteFiles := make([]*manifest.TableMetadata, 0)
 			for f := levIter.First(); f != nil; f = levIter.Next() {
-				meta, err := i.db.objProvider.Lookup(fileTypeTable, f.FileBacking.DiskFileNum)
+				meta, err := i.db.objProvider.Lookup(base.FileTypeTable, f.TableBacking.DiskFileNum)
 				if err != nil {
 					return err
 				}
@@ -1087,7 +1094,7 @@ func (i *scanInternalIterator) unsafeKey() *InternalKey {
 // position. Behaviour undefined if unsafeKey() returns a Range key or Rangedel
 // kind key.
 func (i *scanInternalIterator) lazyValue() LazyValue {
-	return i.iterKV.V
+	return i.iterKV.LazyValue()
 }
 
 // unsafeRangeDel returns a range key span. Behaviour undefined if UnsafeKey returns
@@ -1118,10 +1125,9 @@ func (i *scanInternalIterator) error() error {
 }
 
 // close closes this iterator, and releases any pooled objects.
-func (i *scanInternalIterator) close() error {
-	if err := i.iter.Close(); err != nil {
-		return err
-	}
+func (i *scanInternalIterator) close() {
+	_ = i.iter.Close()
+	_ = i.blobValueFetcher.Close()
 	if i.readState != nil {
 		i.readState.unref()
 	}
@@ -1152,7 +1158,6 @@ func (i *scanInternalIterator) close() error {
 		iterAllocPool.Put(alloc)
 		i.alloc = nil
 	}
-	return nil
 }
 
 func (i *scanInternalIterator) initializeBoundBufs(lower, upper []byte) {

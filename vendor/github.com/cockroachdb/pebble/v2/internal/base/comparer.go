@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/crlib/crbytes"
 	"github.com/cockroachdb/errors"
 )
 
@@ -124,11 +125,18 @@ type FormatValue func(key, value []byte) fmt.Formatter
 //
 // For example, if a and b are the []byte equivalents of the strings "black" and
 // "blue", then the function may append "blb" to dst.
+//
+// Callers must guarantee that len(a) > 0 and len(b) > 0.
 type Separator func(dst, a, b []byte) []byte
 
 // Successor appends to dst a shortened key k given a key a such that
 // Compare(a, k) <= 0. A simple implementation may return a unchanged.
 // The appended key k must be valid to pass to Compare.
+//
+// The parameter a may be an empty slice even if an empty slice was never
+// committed to Pebble and is not a valid key representation. If a is the empty
+// slice, Successor must return a valid key but otherwise has no other
+// constraints.
 type Successor func(dst, a []byte) []byte
 
 // ImmediateSuccessor is invoked with a prefix key ([Split(a) == len(a)]) and
@@ -187,6 +195,13 @@ func (s Split) Prefix(k []byte) []byte {
 	return k[:i:i]
 }
 
+// HasSuffix returns true if the key k has a suffix remaining after
+// Split is called on it. For keys where the entirety of the key is
+// returned by Split, HasSuffix will return false.
+func (s Split) HasSuffix(k []byte) bool {
+	return s(k) < len(k)
+}
+
 // DefaultSplit is a trivial implementation of Split which always returns the
 // full key.
 var DefaultSplit Split = func(key []byte) int { return len(key) }
@@ -221,6 +236,10 @@ type Comparer struct {
 
 	// FormatValue is optional.
 	FormatValue FormatValue
+
+	// ValidateKey is an optional function that determines whether a key is
+	// valid according to this Comparer's key encoding.
+	ValidateKey ValidateKey
 
 	// Name is the name of the comparer.
 	//
@@ -301,14 +320,15 @@ var DefaultComparer = &Comparer{
 	FormatKey: DefaultFormatter,
 
 	Separator: func(dst, a, b []byte) []byte {
-		i, n := SharedPrefixLen(a, b), len(dst)
+		if len(a) == 0 || len(b) == 0 {
+			panic(errors.AssertionFailedf("empty keys"))
+		}
+
+		i := crbytes.CommonPrefix(a, b)
+		n := len(dst)
 		dst = append(dst, a...)
 
-		min := len(a)
-		if min > len(b) {
-			min = len(b)
-		}
-		if i >= min {
+		if i == len(a) || i == len(b) {
 			// Do not shorten if one string is a prefix of the other.
 			return dst
 		}
@@ -353,25 +373,6 @@ var DefaultComparer = &Comparer{
 	// This name is part of the C++ Level-DB implementation's default file
 	// format, and should not be changed.
 	Name: "leveldb.BytewiseComparator",
-}
-
-// SharedPrefixLen returns the largest i such that a[:i] equals b[:i].
-// This function can be useful in implementing the Comparer interface.
-func SharedPrefixLen(a, b []byte) int {
-	i, n := 0, len(a)
-	if n > len(b) {
-		n = len(b)
-	}
-	asUint64 := func(c []byte, i int) uint64 {
-		return binary.LittleEndian.Uint64(c[i:])
-	}
-	for i < n-7 && asUint64(a, i) == asUint64(b, i) {
-		i += 8
-	}
-	for i < n && a[i] == b[i] {
-		i++
-	}
-	return i
 }
 
 // MinUserKey returns the smaller of two user keys. If one of the keys is nil,
@@ -432,13 +433,54 @@ func MakeAssertComparer(c Comparer) Comparer {
 		ComparePointSuffixes: c.ComparePointSuffixes,
 		CompareRangeSuffixes: c.CompareRangeSuffixes,
 		AbbreviatedKey:       c.AbbreviatedKey,
-		Separator:            c.Separator,
-		Successor:            c.Successor,
-		ImmediateSuccessor:   c.ImmediateSuccessor,
-		FormatKey:            c.FormatKey,
-		Split:                c.Split,
-		FormatValue:          c.FormatValue,
-		Name:                 c.Name,
+		Separator: func(dst, a, b []byte) []byte {
+			if len(a) == 0 || len(b) == 0 {
+				panic(errors.AssertionFailedf("empty keys"))
+			}
+			ret := c.Separator(dst, a, b)
+			// The Separator func must return a valid key.
+			c.ValidateKey.MustValidate(ret)
+			return ret
+		},
+		Successor: func(dst, a []byte) []byte {
+			ret := c.Successor(dst, a)
+			// The Successor func must return a valid key.
+			c.ValidateKey.MustValidate(ret)
+			return ret
+		},
+		ImmediateSuccessor: func(dst, a []byte) []byte {
+			ret := c.ImmediateSuccessor(dst, a)
+			// The ImmediateSuccessor func must return a valid key.
+			c.ValidateKey.MustValidate(ret)
+			return ret
+		},
+		FormatKey:   c.FormatKey,
+		Split:       c.Split,
+		FormatValue: c.FormatValue,
+		ValidateKey: c.ValidateKey,
+		Name:        c.Name,
+	}
+}
+
+// ValidateKey is a func that determines whether a key is valid according to a
+// particular key encoding. Returns nil if the provided key is a valid, full
+// user key. Implementations must be careful to not mutate the provided key.
+type ValidateKey func([]byte) error
+
+// Validate validates the provided user key. If the func is nil, Validate
+// returns nil.
+func (v ValidateKey) Validate(key []byte) error {
+	if v == nil {
+		return nil
+	}
+	return v(key)
+}
+
+// MustValidate validates the provided user key, panicking if the key is
+// invalid.
+func (v ValidateKey) MustValidate(key []byte) {
+	if err := v.Validate(key); err != nil {
+		panic(err)
 	}
 }
 
@@ -482,6 +524,13 @@ func CheckComparer(c *Comparer, prefixes [][]byte, suffixes [][]byte) error {
 		for i := 1; i < len(suffixes); i++ {
 			a := slices.Concat(p, suffixes[i-1])
 			b := slices.Concat(p, suffixes[i])
+			if err := c.ValidateKey.Validate(a); err != nil {
+				return err
+			}
+			if err := c.ValidateKey.Validate(b); err != nil {
+				return err
+			}
+
 			// Make sure the Compare function agrees with ComparePointSuffixes.
 			if cmp := c.Compare(a, b); cmp > 0 {
 				return errors.Errorf("Compare(%s, %s)=%d, expected <= 0", c.FormatKey(a), c.FormatKey(b), cmp)
@@ -493,9 +542,15 @@ func CheckComparer(c *Comparer, prefixes [][]byte, suffixes [][]byte) error {
 	for _, ap := range prefixes {
 		for _, as := range suffixes {
 			a := slices.Concat(ap, as)
+			if err := c.ValidateKey.Validate(a); err != nil {
+				return err
+			}
 			for _, bp := range prefixes {
 				for _, bs := range suffixes {
 					b := slices.Concat(bp, bs)
+					if err := c.ValidateKey.Validate(b); err != nil {
+						return err
+					}
 					result := c.Compare(a, b)
 					if (result == 0) != c.Equal(a, b) {
 						return errors.Errorf("Equal(%s, %s) doesn't agree with Compare", c.FormatKey(a), c.FormatKey(b))

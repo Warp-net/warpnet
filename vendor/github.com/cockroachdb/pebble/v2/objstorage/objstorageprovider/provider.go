@@ -294,7 +294,7 @@ func (p *provider) OpenForReading(
 	meta, err := p.Lookup(fileType, fileNum)
 	if err != nil {
 		if opts.MustExist {
-			p.st.Logger.Fatalf("%v", err)
+			err = base.MarkCorruptionError(err)
 		}
 		return nil, err
 	}
@@ -307,6 +307,7 @@ func (p *provider) OpenForReading(
 		if err != nil && p.isNotExistError(meta, err) {
 			// Wrap the error so that IsNotExistError functions properly.
 			err = errors.Mark(err, os.ErrNotExist)
+			err = base.MarkCorruptionError(err)
 		}
 	}
 	if err != nil {
@@ -488,13 +489,13 @@ func (p *provider) Lookup(
 	if !ok {
 		return objstorage.ObjectMetadata{}, errors.Wrapf(
 			os.ErrNotExist,
-			"file %s (type %d) unknown to the objstorage provider",
-			fileNum, errors.Safe(fileType),
+			"file %s (type %s) unknown to the objstorage provider",
+			fileNum, fileType,
 		)
 	}
 	if meta.FileType != fileType {
 		return objstorage.ObjectMetadata{}, base.AssertionFailedf(
-			"file %s type mismatch (known type %d, expected type %d)",
+			"file %s type mismatch (known type %s, expected type %s)",
 			fileNum, errors.Safe(meta.FileType), errors.Safe(fileType),
 		)
 	}
@@ -540,17 +541,15 @@ func (p *provider) Metrics() sharedcache.Metrics {
 }
 
 // CheckpointState is part of the objstorage.Provider interface.
-func (p *provider) CheckpointState(
-	fs vfs.FS, dir string, fileType base.FileType, fileNums []base.DiskFileNum,
-) error {
+func (p *provider) CheckpointState(fs vfs.FS, dir string, fileNums []base.DiskFileNum) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for i := range fileNums {
 		if _, ok := p.mu.knownObjects[fileNums[i]]; !ok {
 			return errors.Wrapf(
 				os.ErrNotExist,
-				"file %s (type %d) unknown to the objstorage provider",
-				fileNums[i], errors.Safe(fileType),
+				"file %s unknown to the objstorage provider",
+				fileNums[i],
 			)
 		}
 		// Prevent this object from deletion, at least for the life of this instance.

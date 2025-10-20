@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -413,7 +414,7 @@ func (m *failoverMonitor) monitorLoop(shouldQuiesce <-chan struct{}) {
 					m.mu.lastFailBackTime = now
 				}
 				if m.mu.writer != nil {
-					m.mu.writer.switchToNewDir(dir)
+					_ = m.mu.writer.switchToNewDir(dir)
 				}
 				m.mu.Unlock()
 			}
@@ -533,7 +534,7 @@ func (wm *failoverManager) init(o Options, initial Logs) error {
 }
 
 // List implements Manager.
-func (wm *failoverManager) List() (Logs, error) {
+func (wm *failoverManager) List() Logs {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 	n := len(wm.mu.closedWALs)
@@ -557,7 +558,7 @@ func (wm *failoverManager) List() (Logs, error) {
 	if wm.mu.ww != nil {
 		setLogicalLog(n-1, wm.mu.ww.getLog())
 	}
-	return wals, nil
+	return wals
 }
 
 // Obsolete implements Manager.
@@ -567,9 +568,15 @@ func (wm *failoverManager) Obsolete(
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
-	// If this is the first call to Obsolete after Open, we may have deletable
-	// logs outside the queue.
-	toDelete, wm.initialObsolete = wm.initialObsolete, nil
+	// If the DB was recently opened, we may have deletable logs outside the
+	// queue.
+	wm.initialObsolete = slices.DeleteFunc(wm.initialObsolete, func(dl DeletableLog) bool {
+		if dl.NumWAL >= minUnflushedNum {
+			return false
+		}
+		toDelete = append(toDelete, dl)
+		return true
+	})
 
 	i := 0
 	for ; i < len(wm.mu.closedWALs); i++ {
@@ -631,6 +638,7 @@ func (wm *failoverManager) Create(wn NumWAL, jobID int) (Writer, error) {
 		failoverWriteAndSyncLatency: wm.opts.FailoverWriteAndSyncLatency,
 		writerClosed:                wm.writerClosed,
 		writerCreatedForTest:        wm.opts.logWriterCreatedForTesting,
+		writeWALSyncOffsets:         wm.opts.WriteWALSyncOffsets,
 	}
 	var err error
 	var ww *failoverWriter

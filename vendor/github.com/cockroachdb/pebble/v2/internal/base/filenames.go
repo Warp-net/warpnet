@@ -10,33 +10,53 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/v2/vfs"
 	"github.com/cockroachdb/redact"
 )
 
-// FileNum is an internal DB identifier for a table. Tables can be physical (in
-// which case the FileNum also identifies the backing object) or virtual.
-type FileNum uint64
+// TableNum is an internal DB identifier for a table. Tables can be physical (in
+// which case the numeric TableNum value coincides with the DiskFileNum of the
+// backing object) or virtual.
+type TableNum uint64
+
+// FileNum is a deprecated alias for TableNum.
+type FileNum = TableNum
 
 // String returns a string representation of the file number.
-func (fn FileNum) String() string { return fmt.Sprintf("%06d", fn) }
+func (tn TableNum) String() string { return fmt.Sprintf("%06d", tn) }
 
 // SafeFormat implements redact.SafeFormatter.
-func (fn FileNum) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%06d", redact.SafeUint(fn))
+func (tn TableNum) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%06d", redact.SafeUint(tn))
 }
 
-// PhysicalTableDiskFileNum converts the FileNum of a physical table to the
+// PhysicalTableDiskFileNum converts the TableNum of a physical table to the
 // backing DiskFileNum. The underlying numbers always match for physical tables.
-func PhysicalTableDiskFileNum(n FileNum) DiskFileNum {
+func PhysicalTableDiskFileNum(n TableNum) DiskFileNum {
 	return DiskFileNum(n)
 }
 
 // PhysicalTableFileNum converts the DiskFileNum backing a physical table into
-// the table's FileNum. The underlying numbers always match for physical tables.
-func PhysicalTableFileNum(f DiskFileNum) FileNum {
-	return FileNum(f)
+// the table's TableNum. The underlying numbers always match for physical tables.
+func PhysicalTableFileNum(f DiskFileNum) TableNum {
+	return TableNum(f)
+}
+
+// BlobFileID is an internal identifier for a blob file.
+//
+// Initially there exists a physical blob file with a DiskFileNum that equals
+// the value of the BlobFileID. However, if the blob file is replaced, the
+// manifest.Version may re-map the BlobFileID to a new DiskFileNum.
+type BlobFileID uint64
+
+// String returns a string representation of the blob file ID.
+func (id BlobFileID) String() string { return fmt.Sprintf("B%06d", id) }
+
+// SafeFormat implements redact.SafeFormatter.
+func (id BlobFileID) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("B%06d", redact.SafeUint(id))
 }
 
 // A DiskFileNum identifies a file or object with exists on disk.
@@ -61,7 +81,43 @@ const (
 	FileTypeOptions
 	FileTypeOldTemp
 	FileTypeTemp
+	FileTypeBlob
 )
+
+var fileTypeStrings = [...]string{
+	FileTypeLog:      "log",
+	FileTypeLock:     "lock",
+	FileTypeTable:    "sstable",
+	FileTypeManifest: "manifest",
+	FileTypeOptions:  "options",
+	FileTypeOldTemp:  "old-temp",
+	FileTypeTemp:     "temp",
+	FileTypeBlob:     "blob",
+}
+
+// FileTypeFromName parses a FileType from its string representation.
+func FileTypeFromName(name string) FileType {
+	for i, s := range fileTypeStrings {
+		if s == name {
+			return FileType(i)
+		}
+	}
+	panic(fmt.Sprintf("unknown file type: %q", name))
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (ft FileType) SafeFormat(w redact.SafePrinter, _ rune) {
+	if ft < 0 || int(ft) >= len(fileTypeStrings) {
+		w.Print(redact.SafeString("unknown"))
+		return
+	}
+	w.Print(redact.SafeString(fileTypeStrings[ft]))
+}
+
+// String implements fmt.Stringer.
+func (ft FileType) String() string {
+	return redact.StringWithoutMarkers(ft)
+}
 
 // MakeFilename builds a filename from components.
 func MakeFilename(fileType FileType, dfn DiskFileNum) string {
@@ -80,6 +136,8 @@ func MakeFilename(fileType FileType, dfn DiskFileNum) string {
 		return fmt.Sprintf("CURRENT.%s.dbtmp", dfn)
 	case FileTypeTemp:
 		return fmt.Sprintf("temporary.%s.dbtmp", dfn)
+	case FileTypeBlob:
+		return fmt.Sprintf("%s.blob", dfn)
 	}
 	panic("unreachable")
 }
@@ -130,10 +188,11 @@ func ParseFilename(fs vfs.FS, filename string) (fileType FileType, dfn DiskFileN
 		if !ok {
 			break
 		}
-		// TODO(sumeer): stop handling FileTypeLog in this function.
 		switch filename[i+1:] {
 		case "sst":
 			return FileTypeTable, dfn, true
+		case "blob":
+			return FileTypeBlob, dfn, true
 		}
 	}
 	return 0, dfn, false
@@ -161,14 +220,20 @@ func MustExist(fs vfs.FS, filename string, fataler Fataler, err error) {
 	if err == nil || !oserror.IsNotExist(err) {
 		return
 	}
+	err = AddDetailsToNotExistError(fs, filename, err)
+	fataler.Fatalf("%+v", err)
+}
 
+// AddDetailsToNotExistError annotates an unexpected not-exist error with
+// information about the directory contents.
+func AddDetailsToNotExistError(fs vfs.FS, filename string, err error) error {
 	ls, lsErr := fs.List(fs.PathDir(filename))
 	if lsErr != nil {
 		// TODO(jackson): if oserror.IsNotExist(lsErr), the data directory
 		// doesn't exist anymore. Another process likely deleted it before
 		// killing the process. We want to fatal the process, but without
 		// triggering error reporting like Sentry.
-		fataler.Fatalf("%s:\norig err: %s\nlist err: %s", redact.Safe(fs.PathBase(filename)), err, lsErr)
+		return errors.WithDetailf(err, "list err: %+v", lsErr)
 	}
 	var total, unknown, tables, logs, manifests int
 	total = len(ls)
@@ -195,8 +260,8 @@ func MustExist(fs vfs.FS, filename string, fataler Fataler, err error) {
 		}
 	}
 
-	fataler.Fatalf("%s:\n%s\ndirectory contains %d files, %d unknown, %d tables, %d logs, %d manifests",
-		fs.PathBase(filename), err, total, unknown, tables, logs, manifests)
+	return errors.WithDetailf(err, "filename: %s; directory contains %d files, %d unknown, %d tables, %d logs, %d manifests",
+		filename, total, unknown, tables, logs, manifests)
 }
 
 // FileInfo provides some rudimentary information about a file.

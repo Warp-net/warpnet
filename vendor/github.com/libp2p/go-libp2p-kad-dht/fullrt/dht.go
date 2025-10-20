@@ -41,7 +41,7 @@ import (
 	internalConfig "github.com/libp2p/go-libp2p-kad-dht/internal/config"
 	"github.com/libp2p/go-libp2p-kad-dht/internal/net"
 	dht_pb "github.com/libp2p/go-libp2p-kad-dht/pb"
-	"github.com/libp2p/go-libp2p-kad-dht/providers"
+	"github.com/libp2p/go-libp2p-kad-dht/records"
 	kb "github.com/libp2p/go-libp2p-kbucket"
 
 	record "github.com/libp2p/go-libp2p-record"
@@ -82,7 +82,7 @@ type FullRT struct {
 
 	enableValues, enableProviders bool
 	Validator                     record.Validator
-	ProviderManager               *providers.ProviderManager
+	ProviderManager               *records.ProviderManager
 	datastore                     ds.Datastore
 	h                             host.Host
 
@@ -150,6 +150,7 @@ func NewFullRT(h host.Host, protocolPrefix protocol.ID, options ...Option) (*Ful
 		EnableProviders:  true,
 		EnableValues:     true,
 		ProtocolPrefix:   protocolPrefix,
+		MsgSenderBuilder: net.NewMessageSenderImpl,
 	}
 
 	if err := dhtcfg.Apply(fullrtcfg.dhtOpts...); err != nil {
@@ -163,7 +164,7 @@ func NewFullRT(h host.Host, protocolPrefix protocol.ID, options ...Option) (*Ful
 		return nil, err
 	}
 
-	ms := net.NewMessageSenderImpl(h, amino.Protocols)
+	ms := dhtcfg.MsgSenderBuilder(h, amino.Protocols)
 	protoMessenger, err := dht_pb.NewProtocolMessenger(ms)
 	if err != nil {
 		return nil, err
@@ -184,7 +185,7 @@ func NewFullRT(h host.Host, protocolPrefix protocol.ID, options ...Option) (*Ful
 	ctx, cancel := context.WithCancel(context.Background())
 
 	self := h.ID()
-	pm, err := providers.NewProviderManager(ctx, self, h.Peerstore(), dhtcfg.Datastore, fullrtcfg.pmOpts...)
+	pm, err := records.NewProviderManager(ctx, self, h.Peerstore(), dhtcfg.Datastore, fullrtcfg.pmOpts...)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -301,6 +302,10 @@ func (dht *FullRT) Ready() bool {
 
 func (dht *FullRT) Host() host.Host {
 	return dht.h
+}
+
+func (dht *FullRT) MessageSender() dht_pb.MessageSender {
+	return dht.messageSender
 }
 
 func (dht *FullRT) runCrawler(ctx context.Context) {
@@ -503,7 +508,7 @@ func (dht *FullRT) GetClosestPeers(ctx context.Context, key string) ([]peer.ID, 
 			// Recover the peer ID from the key
 			p, ok := dht.keyToPeerMap[string(k)]
 			if !ok {
-				logger.Errorf("key not found in map")
+				logger.Warnf("key not found in map")
 				continue
 			}
 

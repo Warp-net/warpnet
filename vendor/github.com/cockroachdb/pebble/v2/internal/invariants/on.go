@@ -3,16 +3,28 @@
 // the LICENSE file.
 
 //go:build invariants || race
-// +build invariants race
 
 package invariants
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand/v2"
+	"slices"
+)
 
-// Enabled is true if we were built with the "invariants" or "race" build tags.
-const Enabled = true
+// Sometimes returns true percent% of the time if invariants are Enabled (i.e.
+// we were built with the "invariants" or "race" build tags). Otherwise, always
+// returns false.
+func Sometimes(percent int) bool {
+	return rand.Uint32N(100) < uint32(percent)
+}
 
-// CloseChecker is used to check that objects are closed exactly once.
+// CloseChecker is used to check that objects are closed exactly once. It is
+// empty and does nothing in non-invariant builds.
+//
+// Note that in non-invariant builds, the struct is zero-sized but it can still
+// increase the size of a parent struct if it is the last field (because Go must
+// allow getting a valid pointer address of the field).
 type CloseChecker struct {
 	closed bool
 }
@@ -47,18 +59,51 @@ func (d *CloseChecker) AssertNotClosed() {
 // builds. In non-invariant builds, storing a value is a no-op, retrieving a
 // value returns the type parameter's zero value, and the Value struct takes up
 // no space.
+//
+// Note that in non-invariant builds, the struct is zero-sized but it can still
+// increase the size of a parent struct if it is the last field (because Go must
+// allow getting a valid pointer address of the field).
 type Value[V any] struct {
 	v V
 }
 
-// Get returns the current value, or the zero-value if invariants are disabled.
+// Get the current value, or the zero-value if invariants are disabled.
 func (v *Value[V]) Get() V {
 	return v.v
 }
 
-// Store stores the value.
-func (v *Value[V]) Store(inner V) {
+// BufMangler is a utility that can be used to test that the caller doesn't use
+type BufMangler struct {
+	lastReturnedBuf []byte
+}
+
+// MaybeMangleLater returns either the given buffer or a copy of it which will
+// be mangled the next time this function is called.
+func (bm *BufMangler) MaybeMangleLater(buf []byte) []byte {
+	if bm.lastReturnedBuf != nil {
+		for i := range bm.lastReturnedBuf {
+			bm.lastReturnedBuf[i] = 0xCC
+		}
+		bm.lastReturnedBuf = nil
+	}
+	if rand.Uint32N(2) == 0 {
+		bm.lastReturnedBuf = slices.Clone(buf)
+		return bm.lastReturnedBuf
+	}
+	return buf
+}
+
+// Set the value; no-op in non-invariant builds.
+func (v *Value[V]) Set(inner V) {
 	v.v = inner
+}
+
+// CheckBounds panics if the index is not in the range [0, n). No-op in
+// non-invariant builds.
+func CheckBounds[T Integer](i T, n T) {
+	if i < 0 || i >= n {
+		panic(fmt.Sprintf("index %d out of bounds [0, %d)", i, n))
+	}
 }
 
 // SafeSub returns a - b. If a < b, it panics in invariant builds and returns 0

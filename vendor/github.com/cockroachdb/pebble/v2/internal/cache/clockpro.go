@@ -22,7 +22,6 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -30,15 +29,40 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/invariants"
 )
 
-type fileKey struct {
+// key is associated with a specific block.
+type key struct {
 	// id is the namespace for fileNums.
-	id      ID
+	id      handleID
 	fileNum base.DiskFileNum
+	offset  uint64
 }
 
-type key struct {
-	fileKey
-	offset uint64
+func makeKey(id handleID, fileNum base.DiskFileNum, offset uint64) key {
+	return key{
+		id:      id,
+		fileNum: fileNum,
+		offset:  offset,
+	}
+}
+
+// shardIdx determines the shard index for the given key.
+func (k *key) shardIdx(numShards int) int {
+	if k.id == 0 {
+		panic("pebble: 0 cache handleID is invalid")
+	}
+	// Same as fibonacciHash() but without the cast to uintptr.
+	const m = 11400714819323198485
+	h := uint64(k.id) * m
+	h ^= uint64(k.fileNum) * m
+	h ^= k.offset * m
+
+	// We need a 32-bit value below; we use the upper bits as per
+	// https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+	h >>= 32
+
+	// This is a better alternative to (h % numShards); see
+	// https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
+	return int(h * uint64(numShards) >> 32)
 }
 
 // file returns the "file key" for the receiver. This is the key used for the
@@ -50,33 +74,6 @@ func (k key) file() key {
 
 func (k key) String() string {
 	return fmt.Sprintf("%d/%d/%d", k.id, k.fileNum, k.offset)
-}
-
-// Handle provides a strong reference to a value in the cache. The reference
-// does not pin the value in the cache, but it does prevent the underlying byte
-// slice from being reused.
-type Handle struct {
-	value *Value
-}
-
-// Valid returns true if the handle holds a value.
-func (h Handle) Valid() bool {
-	return h.value != nil
-}
-
-// RawBuffer returns the value buffer. Note that this buffer holds the block
-// metadata and the data and should be used through a block.BufferHandle.
-//
-// RawBuffer can only be called if the handle is Valid().
-func (h Handle) RawBuffer() []byte {
-	// NB: We don't increment shard.hits in this code path because we only want
-	// to record a hit when the handle is retrieved from the cache.
-	return h.value.buf
-}
-
-// Release releases the reference to the cache entry.
-func (h Handle) Release() {
-	h.value.release()
 }
 
 type shard struct {
@@ -114,27 +111,54 @@ type shard struct {
 	countHot  int64
 	countCold int64
 	countTest int64
+
+	// Some fields in readShard are protected by mu. See comments in declaration
+	// of readShard.
+	readShard readShard
 }
 
-func (c *shard) Get(id ID, fileNum base.DiskFileNum, offset uint64) Handle {
+func (c *shard) init(maxSize int64) {
+	*c = shard{
+		maxSize:    maxSize,
+		coldTarget: maxSize,
+	}
+	if entriesGoAllocated {
+		c.entries = make(map[*entry]struct{})
+	}
+	c.blocks.Init(16)
+	c.files.Init(16)
+	c.readShard.Init(c)
+}
+
+// getWithMaybeReadEntry is the internal helper for implementing
+// Cache.{Get,GetWithReadHandle}. When desireReadEntry is true, and the block
+// is not in the cache (nil Value), a non-nil readEntry is returned (in which
+// case the caller is responsible to dereference the entry, via one of
+// unrefAndTryRemoveFromMap(), setReadValue(), setReadError()).
+func (c *shard) getWithMaybeReadEntry(k key, desireReadEntry bool) (*Value, *readEntry) {
 	c.mu.RLock()
 	var value *Value
-	if e, _ := c.blocks.Get(key{fileKey{id, fileNum}, offset}); e != nil {
+	if e, _ := c.blocks.Get(k); e != nil {
 		value = e.acquireValue()
-		if value != nil {
+		// Note: we Load first to avoid an atomic XCHG when not necessary.
+		if value != nil && !e.referenced.Load() {
 			e.referenced.Store(true)
 		}
+	}
+	var re *readEntry
+	if value == nil && desireReadEntry {
+		re = c.readShard.acquireReadEntry(k)
 	}
 	c.mu.RUnlock()
 	if value == nil {
 		c.misses.Add(1)
-		return Handle{}
+	} else {
+		c.hits.Add(1)
 	}
-	c.hits.Add(1)
-	return Handle{value: value}
+	return value, re
 }
 
-func (c *shard) Set(id ID, fileNum base.DiskFileNum, offset uint64, value *Value) Handle {
+func (c *shard) set(k key, value *Value) {
 	if n := value.refs(); n != 1 {
 		panic(fmt.Sprintf("pebble: Value has already been added to the cache: refs=%d", n))
 	}
@@ -142,7 +166,6 @@ func (c *shard) Set(id ID, fileNum base.DiskFileNum, offset uint64, value *Value
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	k := key{fileKey{id, fileNum}, offset}
 	e, _ := c.blocks.Get(k)
 
 	switch {
@@ -160,7 +183,7 @@ func (c *shard) Set(id ID, fileNum base.DiskFileNum, offset uint64, value *Value
 			e = nil
 		}
 
-	case e.peekValue() != nil:
+	case e.val != nil:
 		// cache entry was a hot or cold page
 		e.setValue(value)
 		e.referenced.Store(true)
@@ -170,6 +193,11 @@ func (c *shard) Set(id ID, fileNum base.DiskFileNum, offset uint64, value *Value
 			value.ref.trace("add-hot")
 			c.sizeHot += delta
 		} else {
+			// TODO(sumeer): unclear why we don't set e.ptype to etHot on this path.
+			// In the default case below, where the state is etTest we set it to
+			// etHot. But etTest is "colder" than etCold, since the only transition
+			// into etTest is etCold => etTest, so since etTest transitions to
+			// etHot, then etCold should also transition.
 			value.ref.trace("add-cold")
 			c.sizeCold += delta
 		}
@@ -179,7 +207,10 @@ func (c *shard) Set(id ID, fileNum base.DiskFileNum, offset uint64, value *Value
 		// cache entry was a test page
 		c.sizeTest -= e.size
 		c.countTest--
-		c.metaDel(e).release()
+		v := c.metaDel(e)
+		if invariants.Enabled && v != nil {
+			panic("value should be nil")
+		}
 		c.metaCheck(e)
 
 		e.size = int64(len(value.buf))
@@ -203,10 +234,6 @@ func (c *shard) Set(id ID, fileNum base.DiskFileNum, offset uint64, value *Value
 	}
 
 	c.checkConsistency()
-
-	// Values are initialized with a reference count of 1. That reference count
-	// is being transferred to the returned Handle.
-	return Handle{value: value}
 }
 
 func (c *shard) checkConsistency() {
@@ -225,10 +252,9 @@ func (c *shard) checkConsistency() {
 }
 
 // Delete deletes the cached value for the specified file and offset.
-func (c *shard) Delete(id ID, fileNum base.DiskFileNum, offset uint64) {
+func (c *shard) delete(k key) {
 	// The common case is there is nothing to delete, so do a quick check with
 	// shared lock.
-	k := key{fileKey{id, fileNum}, offset}
 	c.mu.RLock()
 	_, exists := c.blocks.Get(k)
 	c.mu.RUnlock()
@@ -250,12 +276,12 @@ func (c *shard) Delete(id ID, fileNum base.DiskFileNum, offset uint64) {
 	}()
 	// Now that the mutex has been dropped, release the reference which will
 	// potentially free the memory associated with the previous cached value.
-	deletedValue.release()
+	deletedValue.Release()
 }
 
 // EvictFile evicts all of the cache values for the specified file.
-func (c *shard) EvictFile(id ID, fileNum base.DiskFileNum) {
-	fkey := key{fileKey{id, fileNum}, 0}
+func (c *shard) evictFile(id handleID, fileNum base.DiskFileNum) {
+	fkey := makeKey(id, fileNum, 0)
 	for c.evictFileRun(fkey) {
 		// Sched switch to give another goroutine an opportunity to acquire the
 		// shard mutex.
@@ -281,7 +307,7 @@ func (c *shard) evictFileRun(fkey key) (moreRemaining bool) {
 	defer func() {
 		c.mu.Unlock()
 		for _, v := range obsoleteValues {
-			v.release()
+			v.Release()
 		}
 	}()
 
@@ -315,7 +341,7 @@ func (c *shard) Free() {
 	// metaCheck call when the "invariants" build tag is specified.
 	for c.handHot != nil {
 		e := c.handHot
-		c.metaDel(c.handHot).release()
+		c.metaDel(c.handHot).Release()
 		e.free()
 	}
 
@@ -402,7 +428,7 @@ func (c *shard) metaAdd(key key, e *entry) bool {
 // the files map, and ensures that hand{Hot,Cold,Test} are not pointing at the
 // entry. Returns the deleted value that must be released, if any.
 func (c *shard) metaDel(e *entry) (deletedValue *Value) {
-	if value := e.peekValue(); value != nil {
+	if value := e.val; value != nil {
 		value.ref.trace("metaDel")
 	}
 	// Remove the pointer to the value.
@@ -444,7 +470,7 @@ func (c *shard) metaDel(e *entry) (deletedValue *Value) {
 
 // Check that the specified entry is not referenced by the cache.
 func (c *shard) metaCheck(e *entry) {
-	if invariants.Enabled {
+	if invariants.Enabled && invariants.Sometimes(1) {
 		if _, ok := c.entries[e]; ok {
 			fmt.Fprintf(os.Stderr, "%p: %s unexpectedly found in entries map\n%s",
 				e, e.key, debug.Stack())
@@ -609,316 +635,10 @@ func (c *shard) runHandTest() {
 		if c.coldTarget < 0 {
 			c.coldTarget = 0
 		}
-		c.metaDel(e).release()
+		c.metaDel(e).Release()
 		c.metaCheck(e)
 		e.free()
 	}
 
 	c.handTest = c.handTest.next()
-}
-
-// Metrics holds metrics for the cache.
-type Metrics struct {
-	// The number of bytes inuse by the cache.
-	Size int64
-	// The count of objects (blocks or tables) in the cache.
-	Count int64
-	// The number of cache hits.
-	Hits int64
-	// The number of cache misses.
-	Misses int64
-}
-
-// Cache implements Pebble's sharded block cache. The Clock-PRO algorithm is
-// used for page replacement
-// (http://static.usenix.org/event/usenix05/tech/general/full_papers/jiang/jiang_html/html.html). In
-// order to provide better concurrency, 4 x NumCPUs shards are created, with
-// each shard being given 1/n of the target cache size. The Clock-PRO algorithm
-// is run independently on each shard.
-//
-// Blocks are keyed by an (id, fileNum, offset) triple. The ID is a namespace
-// for file numbers and allows a single Cache to be shared between multiple
-// Pebble instances. The fileNum and offset refer to an sstable file number and
-// the offset of the block within the file. Because sstables are immutable and
-// file numbers are never reused, (fileNum,offset) are unique for the lifetime
-// of a Pebble instance.
-//
-// In addition to maintaining a map from (fileNum,offset) to data, each shard
-// maintains a map of the cached blocks for a particular fileNum. This allows
-// efficient eviction of all of the blocks for a file which is used when an
-// sstable is deleted from disk.
-//
-// # Memory Management
-//
-// A normal implementation of the block cache would result in GC having to read
-// through all the structures and keep track of the liveness of many objects.
-// This was found to cause significant overhead in CRDB when compared to the
-// earlier use of RocksDB.
-//
-// In order to reduce pressure on the Go GC, manual memory management is
-// performed for the data stored in the cache. Manual memory management is
-// performed by calling into C.{malloc,free} to allocate memory; this memory is
-// outside the purview of the GC. Cache.Values are reference counted and the
-// memory backing a manual value is freed when the reference count drops to 0.
-//
-// Manual memory management brings the possibility of memory leaks. It is
-// imperative that every Handle returned by Cache.{Get,Set} is eventually
-// released. The "invariants" build tag enables a leak detection facility that
-// places a GC finalizer on cache.Value. When the cache.Value finalizer is run,
-// if the underlying buffer is still present a leak has occurred. The "tracing"
-// build tag enables tracing of cache.Value reference count manipulation and
-// eases finding where a leak has occurred. These two facilities are usually
-// used in combination by specifying `-tags invariants,tracing`. Note that
-// "tracing" produces a significant slowdown, while "invariants" does not.
-type Cache struct {
-	refs    atomic.Int64
-	maxSize int64
-	idAlloc atomic.Uint64
-	shards  []shard
-
-	// Traces recorded by Cache.trace. Used for debugging.
-	tr struct {
-		sync.Mutex
-		msgs []string
-	}
-}
-
-// ID is a namespace for file numbers. It allows a single Cache to be shared
-// among multiple Pebble instances. NewID can be used to generate a new ID that
-// is unique in the context of this cache.
-type ID uint64
-
-// New creates a new cache of the specified size. Memory for the cache is
-// allocated on demand, not during initialization. The cache is created with a
-// reference count of 1. Each DB it is associated with adds a reference, so the
-// creator of the cache should usually release their reference after the DB is
-// created.
-//
-//	c := cache.New(...)
-//	defer c.Unref()
-//	d, err := pebble.Open(pebble.Options{Cache: c})
-func New(size int64) *Cache {
-	// How many cache shards should we create?
-	//
-	// Note that the probability two processors will try to access the same
-	// shard at the same time increases superlinearly with the number of
-	// processors (Eg, consider the brithday problem where each CPU is a person,
-	// and each shard is a possible birthday).
-	//
-	// We could consider growing the number of shards superlinearly, but
-	// increasing the shard count may reduce the effectiveness of the caching
-	// algorithm if frequently-accessed blocks are insufficiently distributed
-	// across shards. If a shard's size is smaller than a single frequently
-	// scanned sstable, then the shard will be unable to hold the entire
-	// frequently-scanned table in memory despite other shards still holding
-	// infrequently accessed blocks.
-	//
-	// Experimentally, we've observed contention contributing to tail latencies
-	// at 2 shards per processor. For now we use 4 shards per processor,
-	// recognizing this may not be final word.
-	m := 4 * runtime.GOMAXPROCS(0)
-
-	// In tests we can use large CPU machines with small cache sizes and have
-	// many caches in existence at a time. If sharding into m shards would
-	// produce too small shards, constrain the number of shards to 4.
-	const minimumShardSize = 4 << 20 // 4 MiB
-	if m > 4 && int(size)/m < minimumShardSize {
-		m = 4
-	}
-	return newShards(size, m)
-}
-
-func newShards(size int64, shards int) *Cache {
-	c := &Cache{
-		maxSize: size,
-		shards:  make([]shard, shards),
-	}
-	c.refs.Store(1)
-	c.idAlloc.Store(1)
-	c.trace("alloc", c.refs.Load())
-	for i := range c.shards {
-		c.shards[i] = shard{
-			maxSize:    size / int64(len(c.shards)),
-			coldTarget: size / int64(len(c.shards)),
-		}
-		if entriesGoAllocated {
-			c.shards[i].entries = make(map[*entry]struct{})
-		}
-		c.shards[i].blocks.Init(16)
-		c.shards[i].files.Init(16)
-	}
-
-	// Note: this is a no-op if invariants are disabled or race is enabled.
-	invariants.SetFinalizer(c, func(obj interface{}) {
-		c := obj.(*Cache)
-		if v := c.refs.Load(); v != 0 {
-			c.tr.Lock()
-			fmt.Fprintf(os.Stderr,
-				"pebble: cache (%p) has non-zero reference count: %d\n", c, v)
-			if len(c.tr.msgs) > 0 {
-				fmt.Fprintf(os.Stderr, "%s\n", strings.Join(c.tr.msgs, "\n"))
-			}
-			c.tr.Unlock()
-			os.Exit(1)
-		}
-	})
-	return c
-}
-
-func (c *Cache) getShard(id ID, fileNum base.DiskFileNum, offset uint64) *shard {
-	if id == 0 {
-		panic("pebble: 0 cache ID is invalid")
-	}
-
-	// Inlined version of fnv.New64 + Write.
-	const offset64 = 14695981039346656037
-	const prime64 = 1099511628211
-
-	h := uint64(offset64)
-	for i := 0; i < 8; i++ {
-		h *= prime64
-		h ^= uint64(id & 0xff)
-		id >>= 8
-	}
-	fileNumVal := uint64(fileNum)
-	for i := 0; i < 8; i++ {
-		h *= prime64
-		h ^= uint64(fileNumVal) & 0xff
-		fileNumVal >>= 8
-	}
-	for i := 0; i < 8; i++ {
-		h *= prime64
-		h ^= uint64(offset & 0xff)
-		offset >>= 8
-	}
-
-	return &c.shards[h%uint64(len(c.shards))]
-}
-
-// Ref adds a reference to the cache. The cache only remains valid as long a
-// reference is maintained to it.
-func (c *Cache) Ref() {
-	v := c.refs.Add(1)
-	if v <= 1 {
-		panic(fmt.Sprintf("pebble: inconsistent reference count: %d", v))
-	}
-	c.trace("ref", v)
-}
-
-// Unref releases a reference on the cache.
-func (c *Cache) Unref() {
-	v := c.refs.Add(-1)
-	c.trace("unref", v)
-	switch {
-	case v < 0:
-		panic(fmt.Sprintf("pebble: inconsistent reference count: %d", v))
-	case v == 0:
-		for i := range c.shards {
-			c.shards[i].Free()
-		}
-	}
-}
-
-// Get retrieves the cache value for the specified file and offset, returning
-// nil if no value is present.
-func (c *Cache) Get(id ID, fileNum base.DiskFileNum, offset uint64) Handle {
-	return c.getShard(id, fileNum, offset).Get(id, fileNum, offset)
-}
-
-// Set sets the cache value for the specified file and offset, overwriting an
-// existing value if present. A Handle is returned which provides faster
-// retrieval of the cached value than Get (lock-free and avoidance of the map
-// lookup). The value must have been allocated by Cache.Alloc.
-func (c *Cache) Set(id ID, fileNum base.DiskFileNum, offset uint64, value *Value) Handle {
-	return c.getShard(id, fileNum, offset).Set(id, fileNum, offset, value)
-}
-
-// Delete deletes the cached value for the specified file and offset.
-func (c *Cache) Delete(id ID, fileNum base.DiskFileNum, offset uint64) {
-	c.getShard(id, fileNum, offset).Delete(id, fileNum, offset)
-}
-
-// EvictFile evicts all of the cache values for the specified file.
-func (c *Cache) EvictFile(id ID, fileNum base.DiskFileNum) {
-	if id == 0 {
-		panic("pebble: 0 cache ID is invalid")
-	}
-	for i := range c.shards {
-		c.shards[i].EvictFile(id, fileNum)
-	}
-}
-
-// MaxSize returns the max size of the cache.
-func (c *Cache) MaxSize() int64 {
-	return c.maxSize
-}
-
-// Size returns the current space used by the cache.
-func (c *Cache) Size() int64 {
-	var size int64
-	for i := range c.shards {
-		size += c.shards[i].Size()
-	}
-	return size
-}
-
-// Alloc allocates a byte slice of the specified size, possibly reusing
-// previously allocated but unused memory. The memory backing the value is
-// manually managed. The caller MUST either add the value to the cache (via
-// Cache.Set), or release the value (via Cache.Free). Failure to do so will
-// result in a memory leak.
-func Alloc(n int) *Value {
-	return newValue(n)
-}
-
-// Free frees the specified value. The buffer associated with the value will
-// possibly be reused, making it invalid to use the buffer after calling
-// Free. Do not call Free on a value that has been added to the cache.
-func Free(v *Value) {
-	if n := v.refs(); n > 1 {
-		panic(fmt.Sprintf("pebble: Value has been added to the cache: refs=%d", n))
-	}
-	v.release()
-}
-
-// Reserve N bytes in the cache. This effectively shrinks the size of the cache
-// by N bytes, without actually consuming any memory. The returned closure
-// should be invoked to release the reservation.
-func (c *Cache) Reserve(n int) func() {
-	// Round-up the per-shard reservation. Most reservations should be large, so
-	// this probably doesn't matter in practice.
-	shardN := (n + len(c.shards) - 1) / len(c.shards)
-	for i := range c.shards {
-		c.shards[i].Reserve(shardN)
-	}
-	return func() {
-		if shardN == -1 {
-			panic("pebble: cache reservation already released")
-		}
-		for i := range c.shards {
-			c.shards[i].Reserve(-shardN)
-		}
-		shardN = -1
-	}
-}
-
-// Metrics returns the metrics for the cache.
-func (c *Cache) Metrics() Metrics {
-	var m Metrics
-	for i := range c.shards {
-		s := &c.shards[i]
-		s.mu.RLock()
-		m.Count += int64(s.blocks.Len())
-		m.Size += s.sizeHot + s.sizeCold
-		s.mu.RUnlock()
-		m.Hits += s.hits.Load()
-		m.Misses += s.misses.Load()
-	}
-	return m
-}
-
-// NewID returns a new ID to be used as a namespace for cached file
-// blocks.
-func (c *Cache) NewID() ID {
-	return ID(c.idAlloc.Add(1))
 }

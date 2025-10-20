@@ -15,6 +15,7 @@ import (
 )
 
 func fibonacciHash(k *key, seed uintptr) uintptr {
+	// See https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
 	const m = 11400714819323198485
 	h := uint64(seed)
 	h ^= uint64(k.id) * m
@@ -27,13 +28,13 @@ type blockMapAllocator struct{}
 
 func (blockMapAllocator) Alloc(n int) []swiss.Group[key, *entry] {
 	size := uintptr(n) * unsafe.Sizeof(swiss.Group[key, *entry]{})
-	buf := manual.New(manual.BlockCacheMap, int(size))
-	return unsafe.Slice((*swiss.Group[key, *entry])(unsafe.Pointer(unsafe.SliceData(buf))), n)
+	buf := manual.New(manual.BlockCacheMap, size)
+	return unsafe.Slice((*swiss.Group[key, *entry])(buf.Data()), n)
 }
 
 func (blockMapAllocator) Free(v []swiss.Group[key, *entry]) {
 	size := uintptr(len(v)) * unsafe.Sizeof(swiss.Group[key, *entry]{})
-	buf := unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), size)
+	buf := manual.MakeBufUnsafe(unsafe.Pointer(unsafe.SliceData(v)), size)
 	manual.Free(manual.BlockCacheMap, buf)
 }
 

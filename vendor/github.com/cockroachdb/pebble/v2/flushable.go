@@ -54,7 +54,7 @@ type bounded interface {
 	UserKeyBounds() base.UserKeyBounds
 }
 
-var _ bounded = (*fileMetadata)(nil)
+var _ bounded = (*manifest.TableMetadata)(nil)
 var _ bounded = KeyRange{}
 
 func sliceAsBounded[B bounded](s []B) []bounded {
@@ -99,11 +99,11 @@ type flushableEntry struct {
 	releaseMemAccounting func()
 	// unrefFiles, if not nil, should be invoked to decrease the ref count of
 	// files which are backing the flushable.
-	unrefFiles func() []*fileBacking
+	unrefFiles func(*manifest.ObsoleteFiles)
 	// deleteFnLocked should be called if the caller is holding DB.mu.
-	deleteFnLocked func(obsolete []*fileBacking)
+	deleteFnLocked func(manifest.ObsoleteFiles)
 	// deleteFn should be called if the caller is not holding DB.mu.
-	deleteFn func(obsolete []*fileBacking)
+	deleteFn func(manifest.ObsoleteFiles)
 }
 
 func (e *flushableEntry) readerRef() {
@@ -124,7 +124,7 @@ func (e *flushableEntry) readerUnrefLocked(deleteFiles bool) {
 }
 
 func (e *flushableEntry) readerUnrefHelper(
-	deleteFiles bool, deleteFn func(obsolete []*fileBacking),
+	deleteFiles bool, deleteFn func(manifest.ObsoleteFiles),
 ) {
 	switch v := e.readerRefs.Add(-1); {
 	case v < 0:
@@ -136,7 +136,8 @@ func (e *flushableEntry) readerUnrefHelper(
 		e.releaseMemAccounting()
 		e.releaseMemAccounting = nil
 		if e.unrefFiles != nil {
-			obsolete := e.unrefFiles()
+			var obsolete manifest.ObsoleteFiles
+			e.unrefFiles(&obsolete)
 			e.unrefFiles = nil
 			if deleteFiles {
 				deleteFn(obsolete)
@@ -151,7 +152,7 @@ type flushableList []*flushableEntry
 // ingesting sstables which are added to the flushable list.
 type ingestedFlushable struct {
 	// files are non-overlapping and ordered (according to their bounds).
-	files            []physicalMeta
+	files            []*manifest.TableMetadata
 	comparer         *Comparer
 	newIters         tableNewIters
 	newRangeKeyIters keyspanimpl.TableNewSpanIter
@@ -168,7 +169,7 @@ type ingestedFlushable struct {
 }
 
 func newIngestedFlushable(
-	files []*fileMetadata,
+	files []*manifest.TableMetadata,
 	comparer *Comparer,
 	newIters tableNewIters,
 	newRangeKeyIters keyspanimpl.TableNewSpanIter,
@@ -184,7 +185,7 @@ func newIngestedFlushable(
 			}
 		}
 	}
-	var physicalFiles []physicalMeta
+	var physicalFiles []*manifest.TableMetadata
 	var hasRangeKeys bool
 	for _, f := range files {
 		if f.HasRangeKeys {
@@ -232,7 +233,7 @@ func (s *ingestedFlushable) newFlushIter(*IterOptions) internalIterator {
 }
 
 func (s *ingestedFlushable) constructRangeDelIter(
-	ctx context.Context, file *manifest.FileMetadata, _ keyspan.SpanIterOptions,
+	ctx context.Context, file *manifest.TableMetadata, _ keyspan.SpanIterOptions,
 ) (keyspan.FragmentIterator, error) {
 	iters, err := s.newIters(ctx, file, nil, internalIterOpts{}, iterRangeDeletions)
 	if err != nil {

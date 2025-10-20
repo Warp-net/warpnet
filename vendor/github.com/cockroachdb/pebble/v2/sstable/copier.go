@@ -6,6 +6,8 @@ package sstable
 
 import (
 	"context"
+	"slices"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2/internal/base"
@@ -49,16 +51,16 @@ func CopySpan(
 	o WriterOptions,
 	start, end InternalKey,
 ) (size uint64, _ error) {
-	defer input.Close()
+	defer func() { _ = input.Close() }()
 
-	if r.Properties.NumValueBlocks > 0 || r.Properties.NumRangeKeys() > 0 || r.Properties.NumRangeDeletions > 0 {
+	const unsupportedCopyFeatures = AttributeValueBlocks | AttributeRangeKeySets | AttributeRangeKeyUnsets | AttributeRangeKeyDels | AttributeRangeDels
+	if r.Attributes.Intersects(unsupportedCopyFeatures) {
 		return copyWholeFileBecauseOfUnsupportedFeature(ctx, input, output) // Finishes/Aborts output.
 	}
 
-	// If our input has not filters, our output cannot have filters either.
-	if r.tableFilter == nil {
-		o.FilterPolicy = nil
-	}
+	// Don't initialize the writer with a filter policy. We'll copy whatever
+	// filter exists within the sstable verbatim regardless.
+	o.FilterPolicy = base.NoFilterPolicy
 	o.TableFormat = r.tableFormat
 	// We don't want the writer to attempt to write out block property data in
 	// index blocks. This data won't be valid since we're not passing the actual
@@ -73,49 +75,78 @@ func CopySpan(
 
 	defer func() {
 		if w != nil {
-			w.Close()
+			_ = w.Close()
 		}
 	}()
-
-	if r.Properties.NumValueBlocks > 0 || r.Properties.NumRangeKeys() > 0 || r.Properties.NumRangeDeletions > 0 {
-		// We just checked for these conditions above.
-		return 0, base.AssertionFailedf("cannot CopySpan sstables with value blocks or range keys")
-	}
 
 	var preallocRH objstorageprovider.PreallocatedReadHandle
 	// ReadBeforeForIndexAndFilter attempts to read the top-level index, filter
 	// and lower-level index blocks with one read.
-	rh := objstorageprovider.UsePreallocatedReadHandle(
-		r.readable, objstorage.ReadBeforeForIndexAndFilter, &preallocRH)
-	defer rh.Close()
+	rh := r.blockReader.UsePreallocatedReadHandle(
+		objstorage.ReadBeforeForIndexAndFilter, &preallocRH)
+	defer func() { _ = rh.Close() }()
 	rh.SetupForCompaction()
-	indexH, err := r.readTopLevelIndexBlock(ctx, noEnv, rh)
+
+	bufferPool := metaBufferPools.Get().(*block.BufferPool)
+	defer metaBufferPools.Put(bufferPool)
+	defer bufferPool.Release()
+
+	metaIndex, _, err := r.readAndDecodeMetaindex(ctx, bufferPool, rh)
+	if err != nil {
+		return 0, errors.Wrap(err, "reading metaindex")
+	}
+	props, err := r.readPropertiesBlockInternal(ctx, bufferPool, rh)
+	if err != nil {
+		return 0, errors.Wrap(err, "reading properties")
+	}
+
+	// Copy the filter block if it exists. We iterate over the metaindex to find
+	// the appropriate filter block so that we copy the filter block even if the
+	// reader wasn't configured with the same filter policy.
+	var filterBlockHandle block.Handle
+	var filterBlockName string
+	for name, bh := range metaIndex {
+		if !strings.HasPrefix(name, "fullfilter.") {
+			continue
+		}
+		filterBlockHandle = bh
+		filterBlockName = name
+		break
+	}
+	if filterBlockName != "" {
+		err = func() error {
+			filterBlock, err := r.readFilterBlock(ctx, block.NoReadEnv, rh, filterBlockHandle)
+			if err != nil {
+				return errors.Wrap(err, "reading filter")
+			}
+			defer filterBlock.Release()
+
+			w.setFilter(copyFilterWriter{
+				origMetaName:   filterBlockName,
+				origPolicyName: props.FilterPolicyName,
+				data:           slices.Clone(filterBlock.BlockData()),
+			})
+			return nil
+		}()
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	indexH, err := r.readTopLevelIndexBlock(ctx, block.NoReadEnv, rh)
 	if err != nil {
 		return 0, err
 	}
 	defer indexH.Release()
 
-	// Set the filter block to be copied over if it exists. It will return false
-	// positives for keys in blocks of the original file that we don't copy, but
-	// filters can always have false positives, so this is fine.
-	if r.tableFilter != nil {
-		filterBlock, err := r.readFilterBlock(ctx, noEnv, rh, r.filterBH)
-		if err != nil {
-			return 0, errors.Wrap(err, "reading filter")
-		}
-		filterBytes := append([]byte{}, filterBlock.BlockData()...)
-		filterBlock.Release()
-		w.copyFilter(filterBytes, r.Properties.FilterPolicyName)
-	}
-
 	// Copy all the props from the source file; we can't compute our own for many
 	// that depend on seeing every key, such as total count or size so we copy the
 	// original props instead. This will result in over-counts but that is safer
 	// than under-counts.
-	w.copyProperties(r.Properties)
+	w.copyProperties(props)
 
 	// Find the blocks that intersect our span.
-	blocks, err := intersectingIndexEntries(ctx, r, rh, indexH, start, end)
+	blocks, err := intersectingIndexEntries(ctx, r, rh, indexH, start, end, props.NumDataBlocks)
 	if err != nil {
 		return 0, err
 	}
@@ -131,8 +162,8 @@ func CopySpan(
 	var blocksNotInCache []indexEntry
 
 	for i := range blocks {
-		h := r.cacheOpts.Cache.Get(r.cacheOpts.CacheID, r.cacheOpts.FileNum, blocks[i].bh.Offset)
-		if !h.Valid() {
+		cv := r.blockReader.GetFromCache(blocks[i].bh.Handle)
+		if cv == nil {
 			// Cache miss. Add this block to the list of blocks that are not in cache.
 			blocksNotInCache = blocks[i-len(blocksNotInCache) : i+1]
 			continue
@@ -144,14 +175,14 @@ func CopySpan(
 			// We have some blocks that were not in cache preceding this block.
 			// Copy them using objstorage.Copy.
 			if err := w.copyDataBlocks(ctx, blocksNotInCache, rh); err != nil {
-				h.Release()
+				cv.Release()
 				return 0, err
 			}
 			blocksNotInCache = nil
 		}
 
-		err := w.addDataBlock(block.CacheBufferHandle(h).BlockData(), blocks[i].sep, blocks[i].bh)
-		h.Release()
+		err := w.addDataBlock(block.CacheBufferHandle(cv).BlockData(), blocks[i].sep, blocks[i].bh)
+		cv.Release()
 		if err != nil {
 			return 0, err
 		}
@@ -207,52 +238,59 @@ func intersectingIndexEntries(
 	rh objstorage.ReadHandle,
 	indexH block.BufferHandle,
 	start, end InternalKey,
+	numDataBlocks uint64,
 ) ([]indexEntry, error) {
 	top := r.tableFormat.newIndexIter()
 	err := top.Init(r.Comparer, indexH.BlockData(), NoTransforms)
 	if err != nil {
 		return nil, err
 	}
-	defer top.Close()
+	defer func() { _ = top.Close() }()
 
 	var alloc bytealloc.A
-	res := make([]indexEntry, 0, r.Properties.NumDataBlocks)
+	res := make([]indexEntry, 0, numDataBlocks)
 	for valid := top.SeekGE(start.UserKey); valid; valid = top.Next() {
 		bh, err := top.BlockHandleWithProperties()
 		if err != nil {
 			return nil, err
 		}
-		if r.Properties.IndexType != twoLevelIndex {
+		if !r.Attributes.Has(AttributeTwoLevelIndex) {
 			entry := indexEntry{bh: bh, sep: top.Separator()}
 			alloc, entry.bh.Props = alloc.Copy(entry.bh.Props)
 			alloc, entry.sep = alloc.Copy(entry.sep)
 			res = append(res, entry)
 		} else {
-			subBlk, err := r.readIndexBlock(ctx, noEnv, rh, bh.Handle)
-			if err != nil {
-				return nil, err
-			}
-			defer subBlk.Release() // in-loop, but it is a short loop.
-
-			sub := r.tableFormat.newIndexIter()
-			err = sub.Init(r.Comparer, subBlk.BlockData(), NoTransforms)
-			if err != nil {
-				return nil, err
-			}
-			defer sub.Close() // in-loop, but it is a short loop.
-
-			for valid := sub.SeekGE(start.UserKey); valid; valid = sub.Next() {
-				bh, err := sub.BlockHandleWithProperties()
+			err := func() error {
+				subBlk, err := r.readIndexBlock(ctx, block.NoReadEnv, rh, bh.Handle)
 				if err != nil {
-					return nil, err
+					return err
 				}
-				entry := indexEntry{bh: bh, sep: sub.Separator()}
-				alloc, entry.bh.Props = alloc.Copy(entry.bh.Props)
-				alloc, entry.sep = alloc.Copy(entry.sep)
-				res = append(res, entry)
-				if r.Compare(end.UserKey, entry.sep) <= 0 {
-					break
+				defer subBlk.Release()
+
+				sub := r.tableFormat.newIndexIter()
+				err = sub.Init(r.Comparer, subBlk.BlockData(), NoTransforms)
+				if err != nil {
+					return err
 				}
+				defer func() { _ = sub.Close() }()
+
+				for valid := sub.SeekGE(start.UserKey); valid; valid = sub.Next() {
+					bh, err := sub.BlockHandleWithProperties()
+					if err != nil {
+						return err
+					}
+					entry := indexEntry{bh: bh, sep: sub.Separator()}
+					alloc, entry.bh.Props = alloc.Copy(entry.bh.Props)
+					alloc, entry.sep = alloc.Copy(entry.sep)
+					res = append(res, entry)
+					if r.Comparer.Compare(end.UserKey, entry.sep) <= 0 {
+						break
+					}
+				}
+				return nil
+			}()
+			if err != nil {
+				return nil, err
 			}
 		}
 		if top.SeparatorGT(end.UserKey, true /* inclusively */) {

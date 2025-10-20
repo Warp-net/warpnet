@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/record"
@@ -19,16 +20,16 @@ import (
 
 // recordQueueEntry is an entry in recordQueue.
 type recordQueueEntry struct {
-	p                   []byte
-	opts                SyncOptions
-	refCount            RefCount
-	writeStartUnixNanos int64
+	p          []byte
+	opts       SyncOptions
+	refCount   RefCount
+	writeStart crtime.Mono
 }
 
 type poppedEntry struct {
-	opts                SyncOptions
-	refCount            RefCount
-	writeStartUnixNanos int64
+	opts       SyncOptions
+	refCount   RefCount
+	writeStart crtime.Mono
 }
 
 const initialBufferLen = 8192
@@ -152,7 +153,7 @@ func (q *recordQueue) push(
 	p []byte,
 	opts SyncOptions,
 	refCount RefCount,
-	writeStartUnixNanos int64,
+	writeStart crtime.Mono,
 	latestLogSizeInWriteRecord int64,
 	latestWriterInWriteRecord *record.LogWriter,
 ) (index uint32, writer *record.LogWriter, lastLogSize int64) {
@@ -173,10 +174,10 @@ func (q *recordQueue) push(
 	}
 	q.mu.RLock()
 	q.buffer[int(h)%m] = recordQueueEntry{
-		p:                   p,
-		opts:                opts,
-		refCount:            refCount,
-		writeStartUnixNanos: writeStartUnixNanos,
+		p:          p,
+		opts:       opts,
+		refCount:   refCount,
+		writeStart: writeStart,
 	}
 	// Reclaim memory for consumed entries. We couldn't do that in pop since
 	// multiple consumers are popping using CAS and that immediately transfers
@@ -223,7 +224,7 @@ func (q *recordQueue) popAll(err error) (numRecords int, numSyncsPopped int) {
 // pop. This would avoid the CAS below, but it seems better to reduce the
 // amount of queued work regardless of who has successfully written it.
 func (q *recordQueue) pop(index uint32, err error) (numSyncsPopped int) {
-	nowUnixNanos := time.Now().UnixNano()
+	now := crtime.NowMono()
 	var buf [512]poppedEntry
 	tailEntriesToPop := func() (t uint32, numEntriesToPop int) {
 		ht := q.headTail.Load()
@@ -254,9 +255,9 @@ func (q *recordQueue) pop(index uint32, err error) (numSyncsPopped int) {
 		// release those buffer slots to the producer.
 		idx := (i + int(tail)) % n
 		b[i] = poppedEntry{
-			opts:                q.buffer[idx].opts,
-			refCount:            q.buffer[idx].refCount,
-			writeStartUnixNanos: q.buffer[idx].writeStartUnixNanos,
+			opts:       q.buffer[idx].opts,
+			refCount:   q.buffer[idx].refCount,
+			writeStart: q.buffer[idx].writeStart,
 		}
 	}
 	// Since tail cannot change, we don't need to do a compare-and-swap.
@@ -264,7 +265,7 @@ func (q *recordQueue) pop(index uint32, err error) (numSyncsPopped int) {
 	q.mu.RUnlock()
 	q.consumerMu.Unlock()
 	addLatencySample := false
-	var maxLatencyNanos int64
+	var maxLatency time.Duration
 	for i := 0; i < numEntriesToPop; i++ {
 		// Now that we've synced the entry, we can unref it to signal that we
 		// will not read the written byte slice again.
@@ -277,20 +278,20 @@ func (q *recordQueue) pop(index uint32, err error) (numSyncsPopped int) {
 				*b[i].opts.Err = err
 			}
 			b[i].opts.Done.Done()
-			latency := nowUnixNanos - b[i].writeStartUnixNanos
+			latency := now.Sub(b[i].writeStart)
 			if !addLatencySample {
 				addLatencySample = true
-				maxLatencyNanos = latency
-			} else if maxLatencyNanos < latency {
-				maxLatencyNanos = latency
+				maxLatency = latency
+			} else if maxLatency < latency {
+				maxLatency = latency
 			}
 		}
 	}
 	if addLatencySample {
-		if maxLatencyNanos < 0 {
-			maxLatencyNanos = 0
+		if maxLatency < 0 {
+			maxLatency = 0
 		}
-		q.failoverWriteAndSyncLatency.Observe(float64(maxLatencyNanos))
+		q.failoverWriteAndSyncLatency.Observe(float64(maxLatency))
 	}
 	return numSyncsPopped
 }
@@ -462,6 +463,11 @@ type failoverWriterOpts struct {
 	writerClosed                func(logicalLogWithSizesEtc)
 
 	writerCreatedForTest chan<- struct{}
+
+	// writeWALSyncOffsets determines whether to write WAL sync chunk offsets.
+	// The format major version can change (ratchet) at runtime, so this must be
+	// a function rather than a static bool to ensure we use the latest format version.
+	writeWALSyncOffsets func() bool
 }
 
 func simpleLogCreator(
@@ -504,15 +510,15 @@ func (ww *failoverWriter) WriteRecord(
 	if ref != nil {
 		ref.Ref()
 	}
-	var writeStartUnixNanos int64
+	var writeStart crtime.Mono
 	if opts.Done != nil {
-		writeStartUnixNanos = time.Now().UnixNano()
+		writeStart = crtime.NowMono()
 	}
 	recordIndex, writer, lastLogSize := ww.q.push(
 		p,
 		opts,
 		ref,
-		writeStartUnixNanos,
+		writeStart,
 		ww.logicalOffset.latestLogSizeInWriteRecord,
 		ww.logicalOffset.latestWriterInWriteRecord,
 	)
@@ -632,6 +638,7 @@ func (ww *failoverWriter) switchToNewDir(dir dirAndFileHandle) error {
 				WALFsyncLatency:           ww.opts.fsyncLatency,
 				QueueSemChan:              ww.opts.queueSemChan,
 				ExternalSyncQueueCallback: ww.doneSyncCallback,
+				WriteWALSyncOffsets:       ww.opts.writeWALSyncOffsets,
 			})
 		closeWriter := func() bool {
 			ww.mu.Lock()

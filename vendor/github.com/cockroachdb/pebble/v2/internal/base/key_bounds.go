@@ -6,9 +6,51 @@ package base
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/cockroachdb/pebble/v2/internal/invariants"
 )
+
+// KeyRange encodes a key range in user key space. A KeyRange's Start is
+// inclusive while its End is exclusive.
+//
+// KeyRange is equivalent to UserKeyBounds with exclusive end.
+type KeyRange struct {
+	Start, End []byte
+}
+
+// Valid returns true if the KeyRange is defined.
+func (k *KeyRange) Valid() bool {
+	return k.Start != nil && k.End != nil
+}
+
+// Contains returns whether the specified key exists in the KeyRange.
+func (k *KeyRange) Contains(cmp Compare, key InternalKey) bool {
+	v := cmp(key.UserKey, k.End)
+	return (v < 0 || (v == 0 && key.IsExclusiveSentinel())) && cmp(k.Start, key.UserKey) <= 0
+}
+
+// UserKeyBounds returns the KeyRange as UserKeyBounds. Also implements the internal `bounded` interface.
+func (k KeyRange) UserKeyBounds() UserKeyBounds {
+	return UserKeyBoundsEndExclusive(k.Start, k.End)
+}
+
+// OverlapsInternalKeyRange checks if the specified internal key range has an
+// overlap with the KeyRange. Note that we aren't checking for full containment
+// of smallest-largest within k, rather just that there's some intersection
+// between the two ranges.
+func (k *KeyRange) OverlapsInternalKeyRange(cmp Compare, smallest, largest InternalKey) bool {
+	ukb := k.UserKeyBounds()
+	b := UserKeyBoundsFromInternal(smallest, largest)
+	return ukb.Overlaps(cmp, &b)
+}
+
+// OverlapsKeyRange checks if this span overlaps with the provided KeyRange.
+// Note that we aren't checking for full containment of either span in the other,
+// just that there's a key x that is in both key ranges.
+func (k *KeyRange) OverlapsKeyRange(cmp Compare, span KeyRange) bool {
+	return cmp(k.Start, span.End) < 0 && cmp(k.End, span.Start) > 0
+}
 
 // BoundaryKind indicates if a boundary is exclusive or inclusive.
 type BoundaryKind uint8
@@ -164,6 +206,14 @@ func (b *UserKeyBounds) ContainsInternalKey(cmp Compare, key InternalKey) bool {
 		b.End.IsUpperBoundForInternalKey(cmp, key)
 }
 
+// Clone returns a copy of the bounds.
+func (b UserKeyBounds) Clone() UserKeyBounds {
+	return UserKeyBounds{
+		Start: slices.Clone(b.Start),
+		End:   UserKeyBoundary{Key: slices.Clone(b.End.Key), Kind: b.End.Kind},
+	}
+}
+
 func (b UserKeyBounds) String() string {
 	return b.Format(DefaultFormatter)
 }
@@ -176,4 +226,22 @@ func (b UserKeyBounds) Format(fmtKey FormatKey) string {
 		endC = ')'
 	}
 	return fmt.Sprintf("[%s, %s%c", fmtKey(b.Start), fmtKey(b.End.Key), endC)
+}
+
+// Union returns bounds that encompass both the receiver and the provided
+// bounds.
+//
+// If the receiver has nil bounds, the other bounds are returned.
+func (b *UserKeyBounds) Union(cmp Compare, other UserKeyBounds) UserKeyBounds {
+	if b.Start == nil && b.End.Key == nil {
+		return other
+	}
+	union := *b
+	if cmp(union.Start, other.Start) > 0 {
+		union.Start = other.Start
+	}
+	if union.End.CompareUpperBounds(cmp, other.End) < 0 {
+		union.End = other.End
+	}
+	return union
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/pebble/v2/objstorage"
 	"github.com/cockroachdb/pebble/v2/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
+	"github.com/cockroachdb/pebble/v2/sstable/valblk"
 )
 
 // singleLevelIterator iterates over an entire table of data. To seek for a given
@@ -50,9 +51,6 @@ type singleLevelIterator[I any, PI indexBlockIterator[I], D any, PD dataBlockIte
 	blockLower []byte
 	blockUpper []byte
 	reader     *Reader
-	// vState will be set iff the iterator is constructed for virtual sstable
-	// iteration.
-	vState *virtualState
 	// endKeyInclusive is set to force the iterator to treat the upper field as
 	// inclusive while iterating instead of exclusive.
 	endKeyInclusive       bool
@@ -63,17 +61,16 @@ type singleLevelIterator[I any, PI indexBlockIterator[I], D any, PD dataBlockIte
 	// dataBH refers to the last data block that the iterator considered
 	// loading. It may not actually have loaded the block, due to an error or
 	// because it was considered irrelevant.
-	dataBH   block.Handle
-	vbReader *valueBlockReader
+	dataBH                   block.Handle
+	internalValueConstructor defaultInternalValueConstructor
 	// vbRH is the read handle for value blocks, which are in a different
 	// part of the sstable than data blocks.
 	vbRH         objstorage.ReadHandle
 	vbRHPrealloc objstorageprovider.PreallocatedReadHandle
 	err          error
-	closeHook    func(i Iterator) error
+	closeHook    func()
 
-	iterStats    iterStatsAccumulator
-	readBlockEnv readBlockEnv
+	readEnv ReadEnv
 
 	// boundsCmp and positionedUsingLatestBounds are for optimizing iteration
 	// that uses multiple adjacent bounds. The seek after setting a new bound
@@ -202,17 +199,7 @@ var _ base.InternalIterator = (*singleLevelIteratorRowBlocks)(nil)
 // sstable bounds. If the virtualState passed in is not nil, then virtual
 // sstable bounds will be enforced.
 func newColumnBlockSingleLevelIterator(
-	ctx context.Context,
-	r *Reader,
-	v *virtualState,
-	transforms IterTransforms,
-	lower, upper []byte,
-	filterer *BlockPropertiesFilterer,
-	filterBlockSizeLimit FilterBlockSizeLimit,
-	stats *base.InternalIteratorStats,
-	statsAccum IterStatsAccumulator,
-	rp ReaderProvider,
-	bufferPool *block.BufferPool,
+	ctx context.Context, r *Reader, opts IterOptions,
 ) (*singleLevelIteratorColumnBlocks, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -221,35 +208,15 @@ func newColumnBlockSingleLevelIterator(
 		panic(errors.AssertionFailedf("table format %d should not use columnar block format", r.tableFormat))
 	}
 	i := singleLevelIterColumnBlockPool.Get().(*singleLevelIteratorColumnBlocks)
-	useFilterBlock := shouldUseFilterBlock(r, filterBlockSizeLimit)
-	i.init(
-		ctx, r, v, transforms, lower, upper, filterer, useFilterBlock,
-		stats, statsAccum, bufferPool,
-	)
-	var getLazyValuer block.GetLazyValueForPrefixAndValueHandler
-	if r.Properties.NumValueBlocks > 0 {
-		// NB: we cannot avoid this ~248 byte allocation, since valueBlockReader
-		// can outlive the singleLevelIterator due to be being embedded in a
-		// LazyValue. This consumes ~2% in microbenchmark CPU profiles, but we
-		// should only optimize this if it shows up as significant in end-to-end
-		// CockroachDB benchmarks, since it is tricky to do so. One possibility
-		// is that if many sstable iterators only get positioned at latest
-		// versions of keys, and therefore never expose a LazyValue that is
-		// separated to their callers, they can put this valueBlockReader into a
-		// sync.Pool.
-		i.vbReader = &valueBlockReader{
-			bpOpen: i,
-			rp:     rp,
-			vbih:   r.valueBIH,
-			stats:  stats,
-		}
-		getLazyValuer = i.vbReader
-		i.vbRH = objstorageprovider.UsePreallocatedReadHandle(r.readable, objstorage.NoReadBefore, &i.vbRHPrealloc)
+	i.init(ctx, r, opts)
+	if r.Attributes.Has(AttributeValueBlocks) {
+		i.internalValueConstructor.vbReader = valblk.MakeReader(i, opts.ReaderProvider, r.valueBIH, opts.Env.Block.Stats)
+		i.vbRH = r.blockReader.UsePreallocatedReadHandle(objstorage.NoReadBefore, &i.vbRHPrealloc)
 	}
-	i.data.InitOnce(r.keySchema, r.Comparer, getLazyValuer)
-	indexH, err := r.readTopLevelIndexBlock(ctx, i.readBlockEnv, i.indexFilterRH)
+	i.data.InitOnce(r.keySchema, r.Comparer, &i.internalValueConstructor)
+	indexH, err := r.readTopLevelIndexBlock(ctx, i.readEnv.Block, i.indexFilterRH)
 	if err == nil {
-		err = i.index.InitHandle(r.Comparer, indexH, transforms)
+		err = i.index.InitHandle(r.Comparer, indexH, opts.Transforms)
 	}
 	if err != nil {
 		_ = i.Close()
@@ -266,17 +233,7 @@ func newColumnBlockSingleLevelIterator(
 // sstable bounds. If the virtualState passed in is not nil, then virtual
 // sstable bounds will be enforced.
 func newRowBlockSingleLevelIterator(
-	ctx context.Context,
-	r *Reader,
-	v *virtualState,
-	transforms IterTransforms,
-	lower, upper []byte,
-	filterer *BlockPropertiesFilterer,
-	filterBlockSizeLimit FilterBlockSizeLimit,
-	stats *base.InternalIteratorStats,
-	statsAccum IterStatsAccumulator,
-	rp ReaderProvider,
-	bufferPool *block.BufferPool,
+	ctx context.Context, r *Reader, opts IterOptions,
 ) (*singleLevelIteratorRowBlocks, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -285,37 +242,21 @@ func newRowBlockSingleLevelIterator(
 		panic(errors.AssertionFailedf("table format %s uses block columnar format", r.tableFormat))
 	}
 	i := singleLevelIterRowBlockPool.Get().(*singleLevelIteratorRowBlocks)
-	useFilterBlock := shouldUseFilterBlock(r, filterBlockSizeLimit)
-	i.init(
-		ctx, r, v, transforms, lower, upper, filterer, useFilterBlock,
-		stats, statsAccum, bufferPool,
-	)
+	i.init(ctx, r, opts)
 	if r.tableFormat >= TableFormatPebblev3 {
-		if r.Properties.NumValueBlocks > 0 {
-			// NB: we cannot avoid this ~248 byte allocation, since valueBlockReader
-			// can outlive the singleLevelIterator due to be being embedded in a
-			// LazyValue. This consumes ~2% in microbenchmark CPU profiles, but we
-			// should only optimize this if it shows up as significant in end-to-end
-			// CockroachDB benchmarks, since it is tricky to do so. One possibility
-			// is that if many sstable iterators only get positioned at latest
-			// versions of keys, and therefore never expose a LazyValue that is
-			// separated to their callers, they can put this valueBlockReader into a
-			// sync.Pool.
-			i.vbReader = &valueBlockReader{
-				bpOpen: i,
-				rp:     rp,
-				vbih:   r.valueBIH,
-				stats:  stats,
-			}
-			(&i.data).SetGetLazyValuer(i.vbReader)
-			i.vbRH = objstorageprovider.UsePreallocatedReadHandle(r.readable, objstorage.NoReadBefore, &i.vbRHPrealloc)
+		if r.Attributes.Has(AttributeValueBlocks) {
+			i.internalValueConstructor.vbReader = valblk.MakeReader(i, opts.ReaderProvider, r.valueBIH, opts.Env.Block.Stats)
+			// We can set the GetLazyValuer directly to the vbReader because
+			// rowblk sstables never contain blob value handles.
+			(&i.data).SetGetLazyValuer(&i.internalValueConstructor.vbReader)
+			i.vbRH = r.blockReader.UsePreallocatedReadHandle(objstorage.NoReadBefore, &i.vbRHPrealloc)
 		}
 		i.data.SetHasValuePrefix(true)
 	}
 
-	indexH, err := r.readTopLevelIndexBlock(ctx, i.readBlockEnv, i.indexFilterRH)
+	indexH, err := r.readTopLevelIndexBlock(ctx, i.readEnv.Block, i.indexFilterRH)
 	if err == nil {
-		err = i.index.InitHandle(r.Comparer, indexH, transforms)
+		err = i.index.InitHandle(r.Comparer, indexH, opts.Transforms)
 	}
 	if err != nil {
 		_ = i.Close()
@@ -325,53 +266,38 @@ func newRowBlockSingleLevelIterator(
 }
 
 // init initializes the singleLevelIterator struct. It does not read the index.
-func (i *singleLevelIterator[I, PI, D, PD]) init(
-	ctx context.Context,
-	r *Reader,
-	v *virtualState,
-	transforms IterTransforms,
-	lower, upper []byte,
-	filterer *BlockPropertiesFilterer,
-	useFilterBlock bool,
-	stats *base.InternalIteratorStats,
-	statsAccum IterStatsAccumulator,
-	bufferPool *block.BufferPool,
-) {
+func (i *singleLevelIterator[I, PI, D, PD]) init(ctx context.Context, r *Reader, opts IterOptions) {
 	i.inPool = false
 	i.ctx = ctx
-	i.lower = lower
-	i.upper = upper
-	i.bpfs = filterer
-	i.useFilterBlock = useFilterBlock
+	i.lower = opts.Lower
+	i.upper = opts.Upper
+	i.bpfs = opts.Filterer
+	i.useFilterBlock = shouldUseFilterBlock(r, opts.FilterBlockSizeLimit)
 	i.reader = r
-	i.cmp = r.Compare
-	i.transforms = transforms
-	if v != nil {
-		i.vState = v
-		i.endKeyInclusive, i.lower, i.upper = v.constrainBounds(lower, upper, false /* endInclusive */)
-	}
-	i.iterStats.init(statsAccum)
-	i.readBlockEnv = readBlockEnv{
-		Stats:      stats,
-		IterStats:  &i.iterStats,
-		BufferPool: bufferPool,
+	i.cmp = r.Comparer.Compare
+	i.transforms = opts.Transforms
+	i.readEnv = opts.Env
+	i.internalValueConstructor.blobContext = opts.BlobContext
+	i.internalValueConstructor.env = &i.readEnv.Block
+	if opts.Env.Virtual != nil {
+		i.endKeyInclusive, i.lower, i.upper = opts.Env.Virtual.ConstrainBounds(opts.Lower, opts.Upper, false /* endInclusive */, r.Comparer.Compare)
 	}
 
-	i.indexFilterRH = objstorageprovider.UsePreallocatedReadHandle(
-		r.readable, objstorage.ReadBeforeForIndexAndFilter, &i.indexFilterRHPrealloc)
-	i.dataRH = objstorageprovider.UsePreallocatedReadHandle(
-		r.readable, objstorage.NoReadBefore, &i.dataRHPrealloc)
+	i.indexFilterRH = r.blockReader.UsePreallocatedReadHandle(
+		objstorage.ReadBeforeForIndexAndFilter, &i.indexFilterRHPrealloc)
+	i.dataRH = r.blockReader.UsePreallocatedReadHandle(
+		objstorage.NoReadBefore, &i.dataRHPrealloc)
 }
 
 // Helper function to check if keys returned from iterator are within virtual bounds.
 func (i *singleLevelIterator[I, PI, D, PD]) maybeVerifyKey(kv *base.InternalKV) *base.InternalKV {
-	if invariants.Enabled && kv != nil && i.vState != nil {
+	if invariants.Enabled && kv != nil && i.readEnv.Virtual != nil {
 		key := kv.K.UserKey
-		v := i.vState
-		lc := i.cmp(key, v.lower.UserKey)
-		uc := i.cmp(key, v.upper.UserKey)
-		if lc < 0 || uc > 0 || (uc == 0 && v.upper.IsExclusiveSentinel()) {
-			panic(fmt.Sprintf("key %q out of singleLeveliterator virtual bounds %s %s", key, v.lower.UserKey, v.upper.UserKey))
+		v := i.readEnv.Virtual
+		lc := i.cmp(key, v.Lower.UserKey)
+		uc := i.cmp(key, v.Upper.UserKey)
+		if lc < 0 || uc > 0 || (uc == 0 && v.Upper.IsExclusiveSentinel()) {
+			panic(fmt.Sprintf("key %q out of singleLeveliterator virtual bounds %s %s", key, v.Lower.UserKey, v.Upper.UserKey))
 		}
 	}
 	return kv
@@ -475,20 +401,20 @@ var ensureBoundsOptDeterminism bool
 // this iterator knows bounds will be passed to vState, it can signal that it
 // they should be passed without being rewritten to skip converting to and fro.
 func (i singleLevelIterator[I, PI, P, PD]) SetBoundsWithSyntheticPrefix() bool {
-	return i.vState != nil
+	return i.readEnv.Virtual != nil
 }
 
 // SetBounds implements internalIterator.SetBounds, as documented in the pebble
 // package. Note that the upper field is exclusive.
 func (i *singleLevelIterator[I, PI, P, PD]) SetBounds(lower, upper []byte) {
 	i.boundsCmp = 0
-	if i.vState != nil {
+	if i.readEnv.Virtual != nil {
 		// If the reader is constructed for a virtual sstable, then we must
 		// constrain the bounds of the reader. For physical sstables, the bounds
 		// can be wider than the actual sstable's bounds because we won't
 		// accidentally expose additional keys as there are no additional keys.
-		i.endKeyInclusive, lower, upper = i.vState.constrainBounds(
-			lower, upper, false,
+		i.endKeyInclusive, lower, upper = i.readEnv.Virtual.ConstrainBounds(
+			lower, upper, false, i.reader.Comparer.Compare,
 		)
 	} else {
 		// TODO(bananabrick): Figure out the logic here to enable the boundsCmp
@@ -564,7 +490,7 @@ func (i *singleLevelIterator[I, PI, P, PD]) loadDataBlock(dir int8) loadBlockRes
 		}
 		// blockIntersects
 	}
-	block, err := i.reader.readDataBlock(i.ctx, i.readBlockEnv, i.dataRH, i.dataBH)
+	block, err := i.reader.readDataBlock(i.ctx, i.readEnv.Block, i.dataRH, i.dataBH)
 	if err != nil {
 		i.err = err
 		return loadBlockFailed
@@ -579,12 +505,12 @@ func (i *singleLevelIterator[I, PI, P, PD]) loadDataBlock(dir int8) loadBlockRes
 	return loadBlockOK
 }
 
-// readBlockForVBR implements the blockProviderWhenOpen interface for use by
-// the valueBlockReader.
-func (i *singleLevelIterator[I, PI, D, PD]) readBlockForVBR(
+// ReadValueBlock implements the valblk.BlockProviderWhenOpen interface for use
+// by the valblk.Reader.
+func (i *singleLevelIterator[I, PI, D, PD]) ReadValueBlock(
 	bh block.Handle, stats *base.InternalIteratorStats,
 ) (block.BufferHandle, error) {
-	env := i.readBlockEnv
+	env := i.readEnv.Block
 	env.Stats = stats
 	return i.reader.readValueBlock(i.ctx, env, i.vbRH, bh)
 }
@@ -713,7 +639,7 @@ func (i *singleLevelIterator[I, PI, D, PD]) trySeekLTUsingPrevWithinBlock(
 func (i *singleLevelIterator[I, PI, D, PD]) SeekGE(
 	key []byte, flags base.SeekGEFlags,
 ) *base.InternalKV {
-	if i.vState != nil {
+	if i.readEnv.Virtual != nil {
 		// Callers of SeekGE don't know about virtual sstable bounds, so we may
 		// have to internally restrict the bounds.
 		//
@@ -864,7 +790,7 @@ func (i *singleLevelIterator[I, PI, D, PD]) seekGEHelper(
 func (i *singleLevelIterator[I, PI, D, PD]) SeekPrefixGE(
 	prefix, key []byte, flags base.SeekGEFlags,
 ) *base.InternalKV {
-	if i.vState != nil {
+	if i.readEnv.Virtual != nil {
 		// Callers of SeekPrefixGE aren't aware of virtual sstable bounds, so
 		// we may have to internally restrict the bounds.
 		//
@@ -953,7 +879,7 @@ func (i *singleLevelIterator[I, PI, D, PD]) bloomFilterMayContain(prefix []byte)
 		}
 	}
 
-	dataH, err := i.reader.readFilterBlock(i.ctx, i.readBlockEnv, i.indexFilterRH, i.reader.filterBH)
+	dataH, err := i.reader.readFilterBlock(i.ctx, i.readEnv.Block, i.indexFilterRH, i.reader.filterBH)
 	if err != nil {
 		return false, err
 	}
@@ -961,9 +887,9 @@ func (i *singleLevelIterator[I, PI, D, PD]) bloomFilterMayContain(prefix []byte)
 	return i.reader.tableFilter.mayContain(dataH.BlockData(), prefixToCheck), nil
 }
 
-// virtualLast should only be called if i.vReader != nil.
+// virtualLast should only be called if i.readBlockEnv.Virtual != nil
 func (i *singleLevelIterator[I, PI, D, PD]) virtualLast() *base.InternalKV {
-	if i.vState == nil {
+	if i.readEnv.Virtual == nil {
 		panic("pebble: invalid call to virtualLast")
 	}
 
@@ -1067,7 +993,7 @@ func (i *singleLevelIterator[I, PI, D, PD]) virtualLastSeekLE() *base.InternalKV
 func (i *singleLevelIterator[I, PI, D, PD]) SeekLT(
 	key []byte, flags base.SeekLTFlags,
 ) *base.InternalKV {
-	if i.vState != nil {
+	if i.readEnv.Virtual != nil {
 		// Might have to fix upper bound since virtual sstable bounds are not
 		// known to callers of SeekLT.
 		//
@@ -1238,7 +1164,7 @@ func (i *singleLevelIterator[I, PI, D, PD]) firstInternal() *base.InternalKV {
 // to ensure that key is less than the upper bound (e.g. via a call to
 // SeekLT(upper))
 func (i *singleLevelIterator[I, PI, D, PD]) Last() *base.InternalKV {
-	if i.vState != nil {
+	if i.readEnv.Virtual != nil {
 		return i.maybeVerifyKey(i.virtualLast())
 	}
 
@@ -1475,7 +1401,7 @@ func (i *singleLevelIterator[I, PI, D, PD]) skipForward() *base.InternalKV {
 		// Note that this is only a problem with virtual tables; we make no
 		// guarantees wrt an iterator lower bound when we iterate forward. But we
 		// must never return keys that are not inside the virtual table.
-		if i.vState != nil && i.blockLower != nil {
+		if i.readEnv.Virtual != nil && i.blockLower != nil {
 			kv = PD(&i.data).SeekGE(i.lower, base.SeekGEFlagsNone)
 		} else {
 			kv = PD(&i.data).First()
@@ -1552,9 +1478,10 @@ func (i *singleLevelIterator[I, PI, D, PD]) Error() error {
 	return i.err
 }
 
-// SetCloseHook sets a function that will be called when the iterator is
-// closed.
-func (i *singleLevelIterator[I, PI, D, PD]) SetCloseHook(fn func(i Iterator) error) {
+// SetCloseHook sets a function that will be called when the iterator is closed.
+// This is used by the file cache to release the reference count on the open
+// sstable.Reader when the iterator is closed.
+func (i *singleLevelIterator[I, PI, D, PD]) SetCloseHook(fn func()) {
 	i.closeHook = fn
 }
 
@@ -1581,11 +1508,11 @@ func (i *singleLevelIterator[I, PI, D, PD]) closeInternal() error {
 	if invariants.Enabled && i.inPool {
 		panic("Close called on interator in pool")
 	}
-	i.iterStats.close()
-	var err error
+
 	if i.closeHook != nil {
-		err = firstError(err, i.closeHook(i))
+		i.closeHook()
 	}
+	var err error
 	err = firstError(err, PD(&i.data).Close())
 	err = firstError(err, PI(&i.index).Close())
 	if i.indexFilterRH != nil {
@@ -1600,9 +1527,7 @@ func (i *singleLevelIterator[I, PI, D, PD]) closeInternal() error {
 	if i.bpfs != nil {
 		releaseBlockPropertiesFilterer(i.bpfs)
 	}
-	if i.vbReader != nil {
-		i.vbReader.close()
-	}
+	i.internalValueConstructor.vbReader.Close()
 	if i.vbRH != nil {
 		err = firstError(err, i.vbRH.Close())
 		i.vbRH = nil
@@ -1611,10 +1536,10 @@ func (i *singleLevelIterator[I, PI, D, PD]) closeInternal() error {
 }
 
 func (i *singleLevelIterator[I, PI, D, PD]) String() string {
-	if i.vState != nil {
-		return i.vState.fileNum.String()
+	if i.readEnv.Virtual != nil {
+		return i.readEnv.Virtual.FileNum.String()
 	}
-	return i.reader.cacheOpts.FileNum.String()
+	return i.reader.blockReader.FileNum().String()
 }
 
 // DebugTree is part of the InternalIterator interface.

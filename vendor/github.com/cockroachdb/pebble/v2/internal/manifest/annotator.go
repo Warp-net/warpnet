@@ -24,17 +24,17 @@ import (
 // on the node, ensuring that future queries for the annotation will recompute
 // the value.
 
-// An Annotator defines a computation over a level's FileMetadata. If the
-// computation is stable and uses inputs that are fixed for the lifetime of
-// a FileMetadata, the LevelMetadata's internal data structures are annotated
+// An Annotator defines a computation over a level's TableMetadata. If the
+// computation is stable and uses inputs that are fixed for the lifetime of a
+// TableMetadata, the LevelMetadata's internal data structures are annotated
 // with the intermediary computations. This allows the computation to be
 // computed incrementally as edits are applied to a level.
 type Annotator[T any] struct {
 	Aggregator AnnotationAggregator[T]
 }
 
-// An AnnotationAggregator defines how an annotation should be accumulated
-// from a single FileMetadata and merged with other annotated values.
+// An AnnotationAggregator defines how an annotation should be accumulated from
+// a single TableMetadata and merged with other annotated values.
 type AnnotationAggregator[T any] interface {
 	// Zero returns the zero value of an annotation. This value is returned
 	// when a LevelMetadata is empty. The dst argument, if non-nil, is an
@@ -49,7 +49,7 @@ type AnnotationAggregator[T any] interface {
 	// the annotator must return false.
 	//
 	// Implementations may modify dst and return it to avoid an allocation.
-	Accumulate(f *FileMetadata, dst *T) (v *T, cacheOK bool)
+	Accumulate(f *TableMetadata, dst *T) (v *T, cacheOK bool)
 
 	// Merge combines two values src and dst, returning the result.
 	// Implementations may modify dst and return it to avoid an allocation.
@@ -61,7 +61,7 @@ type AnnotationAggregator[T any] interface {
 // partially overlap with the range.
 type PartialOverlapAnnotationAggregator[T any] interface {
 	AnnotationAggregator[T]
-	AccumulatePartialOverlap(f *FileMetadata, dst *T, bounds base.UserKeyBounds) *T
+	AccumulatePartialOverlap(f *TableMetadata, dst *T, bounds base.UserKeyBounds) *T
 }
 
 type annotation struct {
@@ -79,7 +79,7 @@ type annotation struct {
 	valid atomic.Bool
 }
 
-func (a *Annotator[T]) findExistingAnnotation(n *node) *annotation {
+func (a *Annotator[T]) findExistingAnnotation(n *node[*TableMetadata]) *annotation {
 	n.annotMu.RLock()
 	defer n.annotMu.RUnlock()
 	for i := range n.annot {
@@ -92,7 +92,7 @@ func (a *Annotator[T]) findExistingAnnotation(n *node) *annotation {
 
 // findAnnotation finds this Annotator's annotation on a node, creating
 // one if it doesn't already exist.
-func (a *Annotator[T]) findAnnotation(n *node) *annotation {
+func (a *Annotator[T]) findAnnotation(n *node[*TableMetadata]) *annotation {
 	if a := a.findExistingAnnotation(n); a != nil {
 		return a
 	}
@@ -111,7 +111,7 @@ func (a *Annotator[T]) findAnnotation(n *node) *annotation {
 // nodeAnnotation computes this annotator's annotation of this node across all
 // files in the node's subtree. The second return value indicates whether the
 // annotation is stable and thus cacheable.
-func (a *Annotator[T]) nodeAnnotation(n *node) (t *T, cacheOK bool) {
+func (a *Annotator[T]) nodeAnnotation(n *node[*TableMetadata]) (t *T, cacheOK bool) {
 	annot := a.findAnnotation(n)
 	// If the annotation is already marked as valid, we can return it without
 	// recomputing anything.
@@ -153,7 +153,7 @@ func (a *Annotator[T]) nodeAnnotation(n *node) (t *T, cacheOK bool) {
 // files in the node's subtree which overlap with the range defined by bounds.
 // The computed annotation is accumulated into a.scratch.
 func (a *Annotator[T]) accumulateRangeAnnotation(
-	n *node,
+	n *node[*TableMetadata],
 	cmp base.Compare,
 	bounds base.UserKeyBounds,
 	// fullyWithinLowerBound and fullyWithinUpperBound indicate whether this
@@ -176,14 +176,14 @@ func (a *Annotator[T]) accumulateRangeAnnotation(
 	if !fullyWithinLowerBound {
 		// leftItem is the index of the first item that overlaps the lower bound.
 		leftItem = sort.Search(int(n.count), func(i int) bool {
-			return cmp(bounds.Start, n.items[i].Largest.UserKey) <= 0
+			return cmp(bounds.Start, n.items[i].Largest().UserKey) <= 0
 		})
 	}
 	if !fullyWithinUpperBound {
 		// rightItem is the index of the first item that does not overlap the
 		// upper bound.
 		rightItem = sort.Search(int(n.count), func(i int) bool {
-			return !bounds.End.IsUpperBoundFor(cmp, n.items[i].Smallest.UserKey)
+			return !bounds.End.IsUpperBoundFor(cmp, n.items[i].Smallest().UserKey)
 		})
 	}
 
@@ -208,12 +208,12 @@ func (a *Annotator[T]) accumulateRangeAnnotation(
 		leftChild, rightChild := leftItem, rightItem
 		// If the lower bound overlaps with the child at leftItem, there is no
 		// need to accumulate annotations from the child to its left.
-		if leftItem < int(n.count) && cmp(bounds.Start, n.items[leftItem].Smallest.UserKey) >= 0 {
+		if leftItem < int(n.count) && cmp(bounds.Start, n.items[leftItem].Smallest().UserKey) >= 0 {
 			leftChild++
 		}
 		// If the upper bound spans beyond the child at rightItem, we must also
 		// accumulate annotations from the child to its right.
-		if rightItem < int(n.count) && bounds.End.IsUpperBoundFor(cmp, n.items[rightItem].Largest.UserKey) {
+		if rightItem < int(n.count) && bounds.End.IsUpperBoundFor(cmp, n.items[rightItem].Largest().UserKey) {
 			rightChild++
 		}
 
@@ -237,7 +237,7 @@ func (a *Annotator[T]) accumulateRangeAnnotation(
 
 // InvalidateAnnotation removes any existing cached annotations from this
 // annotator from a node's subtree.
-func (a *Annotator[T]) invalidateNodeAnnotation(n *node) {
+func (a *Annotator[T]) invalidateNodeAnnotation(n *node[*TableMetadata]) {
 	annot := a.findAnnotation(n)
 	annot.valid.Store(false)
 	if !n.leaf {
@@ -280,14 +280,16 @@ func (a *Annotator[T]) MultiLevelAnnotation(lms []LevelMetadata) *T {
 // [lowerBound, upperBound). A pointer to the Annotator is used as the key for
 // pre-calculated values, so the same Annotator must be used to avoid duplicate
 // computation.
-func (a *Annotator[T]) LevelRangeAnnotation(lm LevelMetadata, bounds base.UserKeyBounds) *T {
+func (a *Annotator[T]) LevelRangeAnnotation(
+	cmp base.Compare, lm LevelMetadata, bounds base.UserKeyBounds,
+) *T {
 	if lm.Empty() {
 		return a.Aggregator.Zero(nil)
 	}
 
 	var dst *T
 	dst = a.Aggregator.Zero(dst)
-	dst = a.accumulateRangeAnnotation(lm.tree.root, lm.tree.cmp, bounds, false, false, dst)
+	dst = a.accumulateRangeAnnotation(lm.tree.root, cmp, bounds, false, false, dst)
 	return dst
 }
 
@@ -312,13 +314,13 @@ func (a *Annotator[T]) VersionRangeAnnotation(v *Version, bounds base.UserKeyBou
 	return dst
 }
 
-// InvalidateAnnotation clears any cached annotations defined by Annotator. A
-// pointer to the Annotator is used as the key for pre-calculated values, so
+// InvalidateLevelAnnotation clears any cached annotations defined by Annotator.
+// A pointer to the Annotator is used as the key for pre-calculated values, so
 // the same Annotator must be used to clear the appropriate cached annotation.
 // Calls to InvalidateLevelAnnotation are *not* concurrent-safe with any other
-// calls to Annotator methods for the same Annotator (concurrent calls from other
-// annotators are fine). Any calls to this function must have some externally-guaranteed
-// mutual exclusion.
+// calls to Annotator methods for the same Annotator (concurrent calls from
+// other annotators are fine). Any calls to this function must have some
+// externally-guaranteed mutual exclusion.
 func (a *Annotator[T]) InvalidateLevelAnnotation(lm LevelMetadata) {
 	if lm.Empty() {
 		return
@@ -329,8 +331,8 @@ func (a *Annotator[T]) InvalidateLevelAnnotation(lm LevelMetadata) {
 // SumAggregator defines an Aggregator which sums together a uint64 value
 // across files.
 type SumAggregator struct {
-	AccumulateFunc               func(f *FileMetadata) (v uint64, cacheOK bool)
-	AccumulatePartialOverlapFunc func(f *FileMetadata, bounds base.UserKeyBounds) uint64
+	AccumulateFunc               func(f *TableMetadata) (v uint64, cacheOK bool)
+	AccumulatePartialOverlapFunc func(f *TableMetadata, bounds base.UserKeyBounds) uint64
 }
 
 // Zero implements AnnotationAggregator.Zero, returning a new uint64 set to 0.
@@ -344,7 +346,7 @@ func (sa SumAggregator) Zero(dst *uint64) *uint64 {
 
 // Accumulate implements AnnotationAggregator.Accumulate, accumulating a single
 // file's uint64 value.
-func (sa SumAggregator) Accumulate(f *FileMetadata, dst *uint64) (v *uint64, cacheOK bool) {
+func (sa SumAggregator) Accumulate(f *TableMetadata, dst *uint64) (v *uint64, cacheOK bool) {
 	accumulated, ok := sa.AccumulateFunc(f)
 	*dst += accumulated
 	return dst, ok
@@ -355,7 +357,7 @@ func (sa SumAggregator) Accumulate(f *FileMetadata, dst *uint64) (v *uint64, cac
 // single file's uint64 value for a file which only partially overlaps with the
 // range defined by bounds.
 func (sa SumAggregator) AccumulatePartialOverlap(
-	f *FileMetadata, dst *uint64, bounds base.UserKeyBounds,
+	f *TableMetadata, dst *uint64, bounds base.UserKeyBounds,
 ) *uint64 {
 	if sa.AccumulatePartialOverlapFunc == nil {
 		v, _ := sa.Accumulate(f, dst)
@@ -372,9 +374,9 @@ func (sa SumAggregator) Merge(src *uint64, dst *uint64) *uint64 {
 }
 
 // SumAnnotator takes a function that computes a uint64 value from a single
-// FileMetadata and returns an Annotator that sums together the values across
+// TableMetadata and returns an Annotator that sums together the values across
 // files.
-func SumAnnotator(accumulate func(f *FileMetadata) (v uint64, cacheOK bool)) *Annotator[uint64] {
+func SumAnnotator(accumulate func(f *TableMetadata) (v uint64, cacheOK bool)) *Annotator[uint64] {
 	return &Annotator[uint64]{
 		Aggregator: SumAggregator{
 			AccumulateFunc: accumulate,
@@ -386,29 +388,31 @@ func SumAnnotator(accumulate func(f *FileMetadata) (v uint64, cacheOK bool)) *An
 // equal to the number of files included in the annotation. Particularly, it
 // can be used to efficiently calculate the number of files in a given key
 // range using range annotations.
-var NumFilesAnnotator = SumAnnotator(func(f *FileMetadata) (uint64, bool) {
+var NumFilesAnnotator = SumAnnotator(func(f *TableMetadata) (uint64, bool) {
 	return 1, true
 })
 
 // PickFileAggregator implements the AnnotationAggregator interface. It defines
 // an aggregator that picks a single file from a set of eligible files.
 type PickFileAggregator struct {
-	// Filter takes a FileMetadata and returns whether it is eligible to be
+	// Filter takes a TableMetadata and returns whether it is eligible to be
 	// picked by this PickFileAggregator. The second return value indicates
 	// whether this eligibility is stable and thus cacheable.
-	Filter func(f *FileMetadata) (eligible bool, cacheOK bool)
-	// Compare compares two instances of FileMetadata and returns true if
-	// the first one should be picked over the second one. It may assume
-	// that both arguments are non-nil.
-	Compare func(f1 *FileMetadata, f2 *FileMetadata) bool
+	Filter func(f *TableMetadata) (eligible bool, cacheOK bool)
+	// Compare compares two instances of TableMetadata and returns true if the
+	// first one should be picked over the second one. It may assume that both
+	// arguments are non-nil.
+	Compare func(f1 *TableMetadata, f2 *TableMetadata) bool
 }
 
 // Zero implements AnnotationAggregator.Zero, returning nil as the zero value.
-func (fa PickFileAggregator) Zero(dst *FileMetadata) *FileMetadata {
+func (fa PickFileAggregator) Zero(dst *TableMetadata) *TableMetadata {
 	return nil
 }
 
-func (fa PickFileAggregator) mergePickedFiles(src *FileMetadata, dst *FileMetadata) *FileMetadata {
+func (fa PickFileAggregator) mergePickedFiles(
+	src *TableMetadata, dst *TableMetadata,
+) *TableMetadata {
 	switch {
 	case src == nil:
 		return dst
@@ -424,8 +428,8 @@ func (fa PickFileAggregator) mergePickedFiles(src *FileMetadata, dst *FileMetada
 // Accumulate implements AnnotationAggregator.Accumulate, accumulating a single
 // file as long as it is eligible to be picked.
 func (fa PickFileAggregator) Accumulate(
-	f *FileMetadata, dst *FileMetadata,
-) (v *FileMetadata, cacheOK bool) {
+	f *TableMetadata, dst *TableMetadata,
+) (v *TableMetadata, cacheOK bool) {
 	eligible, ok := fa.Filter(f)
 	if eligible {
 		return fa.mergePickedFiles(f, dst), ok
@@ -435,6 +439,6 @@ func (fa PickFileAggregator) Accumulate(
 
 // Merge implements AnnotationAggregator.Merge by picking a single file based
 // on the output of PickFileAggregator.Compare.
-func (fa PickFileAggregator) Merge(src *FileMetadata, dst *FileMetadata) *FileMetadata {
+func (fa PickFileAggregator) Merge(src *TableMetadata, dst *TableMetadata) *TableMetadata {
 	return fa.mergePickedFiles(src, dst)
 }

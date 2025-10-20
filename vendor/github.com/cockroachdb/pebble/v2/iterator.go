@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/manifest"
 	"github.com/cockroachdb/pebble/v2/internal/rangekeystack"
 	"github.com/cockroachdb/pebble/v2/internal/treeprinter"
-	"github.com/cockroachdb/pebble/v2/sstable"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
 	"github.com/cockroachdb/redact"
 )
 
@@ -203,7 +203,7 @@ type Iterator struct {
 	pointIter topLevelIterator
 	// Either readState or version is set, but not both.
 	readState *readState
-	version   *version
+	version   *manifest.Version
 	// rangeKey holds iteration state specific to iteration over range keys.
 	// The range key field may be nil if the Iterator has never been configured
 	// to iterate over range keys. Its non-nilness cannot be used to determine
@@ -218,13 +218,16 @@ type Iterator struct {
 	// is backed by keyBuf.
 	key    []byte
 	keyBuf []byte
-	value  LazyValue
+	value  base.InternalValue
 	// For use in LazyValue.Clone.
 	valueBuf []byte
 	fetcher  base.LazyFetcher
 	// For use in LazyValue.Value.
 	lazyValueBuf []byte
 	valueCloser  io.Closer
+	// blobValueFetcher is the ValueFetcher to use when retrieving values stored
+	// externally in blob files.
+	blobValueFetcher blob.ValueFetcher
 	// boundsBuf holds two buffers used to store the lower and upper bounds.
 	// Whenever the Iterator's bounds change, the new bounds are copied into
 	// boundsBuf[boundsBufIdx]. The two bounds share a slice to reduce
@@ -239,13 +242,12 @@ type Iterator struct {
 	prefixOrFullSeekKey []byte
 	readSampling        readSampling
 	stats               IteratorStats
-	externalReaders     [][]*sstable.Reader
-
+	externalIter        *externalIterState
 	// Following fields used when constructing an iterator stack, eg, in Clone
 	// and SetOptions or when re-fragmenting a batch's range keys/range dels.
 	// Non-nil if this Iterator includes a Batch.
 	batch            *Batch
-	tc               *tableCacheContainer
+	fc               *fileCacheHandle
 	newIters         tableNewIters
 	newIterRangeKey  keyspanimpl.TableNewSpanIter
 	lazyCombinedIter lazyCombinedIter
@@ -334,9 +336,6 @@ func (i *Iterator) equal(a, b []byte) bool {
 
 // iteratorRangeKeyState holds an iterator's range key iteration state.
 type iteratorRangeKeyState struct {
-	opts  *IterOptions
-	cmp   base.Compare
-	split base.Split
 	// rangeKeyIter holds the range key iterator stack that iterates over the
 	// merged spans across the entirety of the LSM.
 	rangeKeyIter keyspan.FragmentIterator
@@ -413,12 +412,6 @@ func (b *rangeKeyBuffers) PrepareForReuse() {
 		b.buf = b.buf[:0]
 	}
 	b.internal.PrepareForReuse()
-}
-
-func (i *iteratorRangeKeyState) init(cmp base.Compare, split base.Split, opts *IterOptions) {
-	i.cmp = cmp
-	i.split = split
-	i.opts = opts
 }
 
 var iterRangeKeyStateAllocPool = sync.Pool{
@@ -578,7 +571,7 @@ func (i *Iterator) findNextEntry(limit []byte) {
 			// Save the current key.
 			i.keyBuf = append(i.keyBuf[:0], key.UserKey...)
 			i.key = i.keyBuf
-			i.value = LazyValue{}
+			i.value = base.InternalValue{}
 			// There may also be a live point key at this userkey that we have
 			// not yet read. We need to find the next entry with this user key
 			// to find it. Save the range key so we don't lose it when we Next
@@ -830,7 +823,7 @@ func (i *Iterator) maybeSampleRead() {
 }
 
 func (i *Iterator) sampleRead() {
-	var topFile *manifest.FileMetadata
+	var topFile *manifest.TableMetadata
 	topLevel, numOverlappingLevels := numLevels, 0
 	mi := i.merging
 	if mi == nil {
@@ -846,10 +839,10 @@ func (i *Iterator) sampleRead() {
 				var containsKey bool
 				if i.pos == iterPosNext || i.pos == iterPosCurForward ||
 					i.pos == iterPosCurForwardPaused {
-					containsKey = i.cmp(f.SmallestPointKey.UserKey, i.key) <= 0
+					containsKey = i.cmp(f.PointKeyBounds.SmallestUserKey(), i.key) <= 0
 				} else if i.pos == iterPosPrev || i.pos == iterPosCurReverse ||
 					i.pos == iterPosCurReversePaused {
-					containsKey = i.cmp(f.LargestPointKey.UserKey, i.key) >= 0
+					containsKey = i.cmp(f.PointKeyBounds.LargestUserKey(), i.key) >= 0
 				}
 				// Do nothing if the current key is not contained in f's
 				// bounds. We could seek the LevelIterator at this level
@@ -885,10 +878,10 @@ func (i *Iterator) sampleRead() {
 			topFile.AllowedSeeks.Add(topFile.InitAllowedSeeks)
 
 			read := readCompaction{
-				start:   topFile.SmallestPointKey.UserKey,
-				end:     topFile.LargestPointKey.UserKey,
-				level:   topLevel,
-				fileNum: topFile.FileNum,
+				start:    topFile.PointKeyBounds.SmallestUserKey(),
+				end:      topFile.PointKeyBounds.LargestUserKey(),
+				level:    topLevel,
+				tableNum: topFile.TableNum,
 			}
 			i.readSampling.pendingCompactions.add(&read, i.cmp)
 		}
@@ -948,7 +941,7 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 						// a range key boundary at this key, we still want to
 						// return. Otherwise, we need to continue looking for
 						// a live key.
-						i.value = LazyValue{}
+						i.value = base.InternalValue{}
 						if rangeKeyBoundary {
 							i.rangeKey.rangeKeyOnly = true
 						} else {
@@ -1000,6 +993,10 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 			// must've already iterated over it.
 			// This is the final entry at this user key, so we may return
 			i.rangeKey.rangeKeyOnly = i.iterValidityState != IterValid
+			if i.rangeKey.rangeKeyOnly {
+				// The point iterator is now invalid, so clear the point value.
+				i.value = base.InternalValue{}
+			}
 			i.keyBuf = append(i.keyBuf[:0], key.UserKey...)
 			i.key = i.keyBuf
 			i.iterValidityState = IterValid
@@ -1022,7 +1019,7 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 			rangeKeyBoundary = true
 
 		case InternalKeyKindDelete, InternalKeyKindSingleDelete, InternalKeyKindDeleteSized:
-			i.value = LazyValue{}
+			i.value = base.InternalValue{}
 			i.iterValidityState = IterExhausted
 			valueMerger = nil
 			i.stats.ReverseStepCount[InternalIterCall]++
@@ -1141,7 +1138,7 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 			i.value = base.MakeInPlaceValue(value)
 			if i.err == nil && needDelete {
 				i.key = nil
-				i.value = LazyValue{}
+				i.value = base.InternalValue{}
 				i.iterValidityState = IterExhausted
 			}
 		}
@@ -2294,7 +2291,7 @@ func (i *Iterator) ValueAndErr() ([]byte, error) {
 // LazyValue returns the LazyValue. Only for advanced use cases.
 // REQUIRES: i.Error()==nil and HasPointAndRange() returns true for hasPoint.
 func (i *Iterator) LazyValue() LazyValue {
-	return i.value
+	return i.value.LazyValue()
 }
 
 // RangeKeys returns the range key values and their suffixes covering the
@@ -2359,6 +2356,7 @@ func (i *Iterator) Close() error {
 		if i.rangeKey != nil && i.rangeKey.rangeKeyIter != nil {
 			i.rangeKey.rangeKeyIter.Close()
 		}
+		i.err = firstError(i.err, i.blobValueFetcher.Close())
 	}
 	err := i.err
 
@@ -2387,11 +2385,8 @@ func (i *Iterator) Close() error {
 	if i.version != nil {
 		i.version.Unref()
 	}
-
-	for _, readers := range i.externalReaders {
-		for _, r := range readers {
-			err = firstError(err, r.Close())
-		}
+	if i.externalIter != nil {
+		err = firstError(err, i.externalIter.Close())
 	}
 
 	// Close the closer for the current value if one was open.
@@ -2401,7 +2396,6 @@ func (i *Iterator) Close() error {
 	}
 
 	if i.rangeKey != nil {
-
 		i.rangeKey.rangeKeyBuffers.PrepareForReuse()
 		*i.rangeKey = iteratorRangeKeyState{
 			rangeKeyBuffers: i.rangeKey.rangeKeyBuffers,
@@ -2414,7 +2408,7 @@ func (i *Iterator) Close() error {
 			keyBuf               []byte
 			boundsBuf            [2][]byte
 			prefixOrFullSeekKey  []byte
-			mergingIterHeapItems []*mergingIterLevel
+			mergingIterHeapItems []mergingIterHeapItem
 		)
 
 		// Avoid caching the key buf if it is overly large. The constant is fairly
@@ -2431,14 +2425,29 @@ func (i *Iterator) Close() error {
 			}
 		}
 		mergingIterHeapItems = alloc.merging.heap.items
-		*alloc = iterAlloc{
-			keyBuf:              keyBuf,
-			boundsBuf:           boundsBuf,
-			prefixOrFullSeekKey: prefixOrFullSeekKey,
-			merging: mergingIter{
-				heap: mergingIterHeap{items: mergingIterHeapItems},
-			},
-		}
+
+		// Reset the alloc struct, re-assign the fields that are being recycled, and
+		// then return it to the pool. Splitting the first two steps performs better
+		// than doing them in a single step (e.g. *alloc = iterAlloc{...}) because
+		// the compiler can avoid the use of a stack allocated autotmp iterAlloc
+		// variable (~12KB, as of Dec 2024), which must first be zeroed out, then
+		// assigned into, then copied over into the heap-allocated alloc. Instead,
+		// the two-step process allows the compiler to quickly zero out the heap
+		// allocated object and then assign the few fields we want to preserve.
+		//
+		// TODO(nvanbenschoten): even with this optimization, zeroing out the alloc
+		// struct still shows up in profiles because it is such a large struct. Can
+		// we do something better here? We are hanging 22 separated iterators off of
+		// the alloc struct (or more, depending on how you count), many of which are
+		// only used in a few cases. Can those iterators be responsible for zeroing
+		// out their own memory on Close, allowing us to assume that most of the
+		// alloc struct is already zeroed out by this point?
+		*alloc = iterAlloc{}
+		alloc.keyBuf = keyBuf
+		alloc.boundsBuf = boundsBuf
+		alloc.prefixOrFullSeekKey = prefixOrFullSeekKey
+		alloc.merging.heap.items = mergingIterHeapItems
+
 		iterAllocPool.Put(alloc)
 	} else if alloc := i.getIterAlloc; alloc != nil {
 		if cap(i.keyBuf) >= maxKeyBufCacheSize {
@@ -2566,7 +2575,7 @@ func (i *Iterator) processBounds(lower, upper []byte) {
 //
 // If only lower and upper bounds need to be modified, prefer SetBounds.
 func (i *Iterator) SetOptions(o *IterOptions) {
-	if i.externalReaders != nil {
+	if i.externalIter != nil {
 		if err := validateExternalIterOpts(o); err != nil {
 			panic(err)
 		}
@@ -2738,8 +2747,8 @@ func (i *Iterator) SetOptions(o *IterOptions) {
 
 	// Iterators created through NewExternalIter have a different iterator
 	// initialization process.
-	if i.externalReaders != nil {
-		finishInitializingExternal(i.ctx, i)
+	if i.externalIter != nil {
+		_ = finishInitializingExternal(i.ctx, i)
 		return
 	}
 	finishInitializingIter(i.ctx, i.alloc)
@@ -2867,7 +2876,7 @@ func (i *Iterator) CloneWithContext(ctx context.Context, opts CloneOptions) (*It
 		boundsBuf:           buf.boundsBuf,
 		batch:               i.batch,
 		batchSeqNum:         i.batchSeqNum,
-		tc:                  i.tc,
+		fc:                  i.fc,
 		newIters:            i.newIters,
 		newIterRangeKey:     i.newIterRangeKey,
 		seqNum:              i.seqNum,

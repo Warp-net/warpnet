@@ -314,7 +314,7 @@ func (m *mergingIter) init(
 	m.split = split
 	m.stats = stats
 	if cap(m.heap.items) < len(levels) {
-		m.heap.items = make([]*mergingIterLevel, 0, len(levels))
+		m.heap.items = make([]mergingIterHeapItem, 0, len(levels))
 	} else {
 		m.heap.items = m.heap.items[:0]
 	}
@@ -327,7 +327,7 @@ func (m *mergingIter) initHeap() {
 	m.heap.items = m.heap.items[:0]
 	for i := range m.levels {
 		if l := &m.levels[i]; l.iterKV != nil {
-			m.heap.items = append(m.heap.items, l)
+			m.heap.items = append(m.heap.items, mergingIterHeapItem{mergingIterLevel: l})
 		}
 	}
 	m.heap.init()
@@ -419,7 +419,7 @@ func (m *mergingIter) switchToMinHeap() error {
 	// iteration, we want to return a key that is greater than a:2.
 
 	key := m.heap.items[0].iterKV.K
-	cur := m.heap.items[0]
+	cur := m.heap.items[0].mergingIterLevel
 
 	for i := range m.levels {
 		l := &m.levels[i]
@@ -471,7 +471,7 @@ func (m *mergingIter) switchToMaxHeap() error {
 	// The current key is b:2 and i2 is pointing at b:1. When we switch to
 	// reverse iteration, we want to return a key that is less than b:2.
 	key := m.heap.items[0].iterKV.K
-	cur := m.heap.items[0]
+	cur := m.heap.items[0].mergingIterLevel
 
 	for i := range m.levels {
 		l := &m.levels[i]
@@ -555,7 +555,7 @@ func (m *mergingIter) nextEntry(l *mergingIterLevel, succKey []byte) error {
 			l.iterKV = nil
 			m.heap.pop()
 		} else if m.heap.len() > 1 {
-			m.heap.fix(0)
+			m.heap.fixTop()
 		}
 		if l.rangeDelIterGeneration != oldRangeDelIterGeneration {
 			// The rangeDelIter changed which indicates that the l.iter moved to the
@@ -697,7 +697,7 @@ func (m *mergingIter) isNextEntryDeleted(item *mergingIterLevel) (bool, error) {
 // returns a nil internal key.
 func (m *mergingIter) findNextEntry() *base.InternalKV {
 	for m.heap.len() > 0 && m.err == nil {
-		item := m.heap.items[0]
+		item := m.heap.items[0].mergingIterLevel
 
 		// The levelIter internal iterator will interleave exclusive sentinel
 		// keys to keep files open until their range deletions are no longer
@@ -760,7 +760,7 @@ func (m *mergingIter) prevEntry(l *mergingIterLevel) error {
 	oldRangeDelIterGeneration := l.rangeDelIterGeneration
 	if l.iterKV = l.iter.Prev(); l.iterKV != nil {
 		if m.heap.len() > 1 {
-			m.heap.fix(0)
+			m.heap.fixTop()
 		}
 		if l.rangeDelIterGeneration != oldRangeDelIterGeneration && l.rangeDelIter != nil {
 			// The rangeDelIter changed which indicates that the l.iter moved to the
@@ -861,7 +861,7 @@ func (m *mergingIter) isPrevEntryDeleted(item *mergingIterLevel) (bool, error) {
 // returns a nil internal key.
 func (m *mergingIter) findPrevEntry() *base.InternalKV {
 	for m.heap.len() > 0 && m.err == nil {
-		item := m.heap.items[0]
+		item := m.heap.items[0].mergingIterLevel
 
 		// The levelIter internal iterator will interleave exclusive sentinel
 		// keys to keep files open until their range deletions are no longer
@@ -1186,7 +1186,7 @@ func (m *mergingIter) Next() *base.InternalKV {
 	// mode. During prefix iteration mode, we rely on the caller to not call
 	// Next if the iterator has already advanced beyond the iteration prefix.
 	// See the comment above the base.InternalIterator interface.
-	if m.err = m.nextEntry(m.heap.items[0], nil /* succKey */); m.err != nil {
+	if m.err = m.nextEntry(m.heap.items[0].mergingIterLevel, nil /* succKey */); m.err != nil {
 		return nil
 	}
 
@@ -1216,7 +1216,7 @@ func (m *mergingIter) NextPrefix(succKey []byte) *base.InternalKV {
 
 	// The heap root necessarily must be positioned at a key < succKey, because
 	// NextPrefix was invoked.
-	root := m.heap.items[0]
+	root := m.heap.items[0].mergingIterLevel
 	if invariants.Enabled && m.heap.cmp((*root).iterKV.K.UserKey, succKey) >= 0 {
 		m.logger.Fatalf("pebble: invariant violation: NextPrefix(%q) called on merging iterator already positioned at %q",
 			succKey, (*root).iterKV)
@@ -1234,7 +1234,7 @@ func (m *mergingIter) NextPrefix(succKey []byte) *base.InternalKV {
 	m.levelsPositioned[root.index] = root.iterKV == nil || !root.iterKV.K.IsExclusiveSentinel()
 
 	for m.heap.len() > 0 {
-		root := m.heap.items[0]
+		root := m.heap.items[0].mergingIterLevel
 		if m.levelsPositioned[root.index] {
 			// A level we've previously positioned is at the top of the heap, so
 			// there are no other levels positioned at keys < succKey. We've
@@ -1288,7 +1288,7 @@ func (m *mergingIter) Prev() *base.InternalKV {
 	if m.heap.len() == 0 {
 		return nil
 	}
-	if m.err = m.prevEntry(m.heap.items[0]); m.err != nil {
+	if m.err = m.prevEntry(m.heap.items[0].mergingIterLevel); m.err != nil {
 		return nil
 	}
 	return m.findPrevEntry()
@@ -1373,7 +1373,7 @@ func (m *mergingIter) ForEachLevelIter(fn func(li *levelIter) bool) {
 func (m *mergingIter) addItemStats(l *mergingIterLevel) {
 	m.stats.PointCount++
 	m.stats.KeyBytes += uint64(len(l.iterKV.K.UserKey))
-	m.stats.ValueBytes += uint64(len(l.iterKV.V.ValueOrHandle))
+	m.stats.ValueBytes += uint64(l.iterKV.V.InternalLen())
 }
 
 var _ internalIterator = &mergingIter{}

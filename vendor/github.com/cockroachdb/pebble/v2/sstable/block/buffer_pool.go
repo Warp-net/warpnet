@@ -35,7 +35,7 @@ func (b Value) getInternalBuf() []byte {
 	if b.buf.Valid() {
 		return b.buf.p.pool[b.buf.i].b
 	}
-	return b.v.Buf()
+	return b.v.RawBuffer()
 }
 
 // BlockData returns the byte slice for the block data.
@@ -43,21 +43,26 @@ func (b Value) BlockData() []byte {
 	return b.getInternalBuf()[MetadataSize:]
 }
 
-// GetMetadata returns the block metadata.
+// BlockMetadata returns the block metadata.
 func (b Value) BlockMetadata() *Metadata {
 	return (*Metadata)(b.getInternalBuf())
 }
 
-// MakeHandle constructs a BufferHandle from the Value. If the Value is not
-// backed by a buffer pool, MakeHandle inserts the value into the block cache,
-// returning a handle to the now resident value.
-func (b Value) MakeHandle(
-	c *cache.Cache, cacheID cache.ID, fileNum base.DiskFileNum, offset uint64,
-) BufferHandle {
+// MakeHandle constructs a BufferHandle from the Value.
+func (b Value) MakeHandle() BufferHandle {
 	if b.buf.Valid() {
 		return BufferHandle{b: b.buf}
 	}
-	return BufferHandle{h: c.Set(cacheID, fileNum, offset, b.v)}
+	return BufferHandle{cv: b.v}
+}
+
+func (b *Value) SetInCacheForTesting(h *cache.Handle, fileNum base.DiskFileNum, offset uint64) {
+	if b.buf.Valid() {
+		panic("block value must be backed by a cache.Value")
+	}
+	h.Set(fileNum, offset, b.v)
+	b.v.Release()
+	b.v = nil
 }
 
 // Release releases the handle.
@@ -80,26 +85,26 @@ func (b Value) Truncate(n int) {
 }
 
 // A BufferHandle is a handle to manually-managed memory. The handle may point
-// to a block in the block cache (h.Get() != nil), or a buffer that exists
-// outside the block cache allocated from a BufferPool (b.Valid()).
+// to a block in the block cache (h.cv != nil), or a buffer that exists outside
+// the block cache allocated from a BufferPool (b.Valid()).
 type BufferHandle struct {
-	h cache.Handle
-	b Buf
+	cv *cache.Value
+	b  Buf
 }
 
 // CacheBufferHandle constructs a BufferHandle from a block cache Handle.
-func CacheBufferHandle(h cache.Handle) BufferHandle {
-	return BufferHandle{h: h}
+func CacheBufferHandle(cv *cache.Value) BufferHandle {
+	return BufferHandle{cv: cv}
 }
 
 // Valid returns true if the BufferHandle holds a value.
 func (bh BufferHandle) Valid() bool {
-	return bh.h.Valid() || bh.b.Valid()
+	return bh.cv != nil || bh.b.Valid()
 }
 
 func (bh BufferHandle) rawBuffer() []byte {
-	if bh.h.Valid() {
-		return bh.h.RawBuffer()
+	if bh.cv != nil {
+		return bh.cv.RawBuffer()
 	}
 	return bh.b.p.pool[bh.b.i].b
 }
@@ -117,7 +122,7 @@ func (bh BufferHandle) BlockData() []byte {
 // Release releases the buffer, either back to the block cache or BufferPool. It
 // is okay to call Release on a zero-value BufferHandle (to no effect).
 func (bh BufferHandle) Release() {
-	bh.h.Release()
+	bh.cv.Release()
 	bh.b.Release()
 }
 
@@ -140,10 +145,10 @@ type BufferPool struct {
 type AllocedBuffer struct {
 	v *cache.Value
 	// b holds the current byte slice. It's backed by v, but may be a subslice
-	// of v's memory while the buffer is in-use [ len(b) ≤ len(v.Buf()) ].
+	// of v's memory while the buffer is in-use [ len(b) ≤ len(v.RawBuffer()) ].
 	//
 	// If the buffer is not currently in-use, b is nil. When being recycled, the
-	// BufferPool.Alloc will reset b to be a subslice of v.Buf().
+	// BufferPool.Alloc will reset b to be a subslice of v.RawBuffer().
 	b []byte
 }
 
@@ -171,9 +176,11 @@ func (p *BufferPool) Release() {
 		if p.pool[i].b != nil {
 			panic(errors.AssertionFailedf("Release called on a BufferPool with in-use buffers"))
 		}
-		cache.Free(p.pool[i].v)
+		v := p.pool[i].v
+		p.pool[i].v = nil
+		cache.Free(v)
 	}
-	*p = BufferPool{}
+	p.pool = p.pool[:0]
 }
 
 // Alloc allocates a new buffer of size n. If the pool already holds a buffer at
@@ -185,8 +192,8 @@ func (p *BufferPool) Alloc(n int) Buf {
 	unusableBufferIdx := -1
 	for i := 0; i < len(p.pool); i++ {
 		if p.pool[i].b == nil {
-			if len(p.pool[i].v.Buf()) >= n {
-				p.pool[i].b = p.pool[i].v.Buf()[:n]
+			if len(p.pool[i].v.RawBuffer()) >= n {
+				p.pool[i].b = p.pool[i].v.RawBuffer()[:n]
 				return Buf{p: p, i: i}
 			}
 			unusableBufferIdx = i
@@ -200,13 +207,13 @@ func (p *BufferPool) Alloc(n int) Buf {
 		i := unusableBufferIdx
 		cache.Free(p.pool[i].v)
 		p.pool[i].v = cache.Alloc(n)
-		p.pool[i].b = p.pool[i].v.Buf()
+		p.pool[i].b = p.pool[i].v.RawBuffer()
 		return Buf{p: p, i: i}
 	}
 
 	// Allocate a new buffer.
 	v := cache.Alloc(n)
-	p.pool = append(p.pool, AllocedBuffer{v: v, b: v.Buf()[:n]})
+	p.pool = append(p.pool, AllocedBuffer{v: v, b: v.RawBuffer()[:n]})
 	return Buf{p: p, i: len(p.pool) - 1}
 }
 

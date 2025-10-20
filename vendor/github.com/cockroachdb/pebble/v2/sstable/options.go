@@ -7,7 +7,6 @@ package sstable
 import (
 	"fmt"
 
-	"github.com/cockroachdb/fifo"
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/sstableinternal"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
@@ -16,8 +15,10 @@ import (
 )
 
 const (
-	// MaximumBlockSize is the maximum permissible size of a block.
-	MaximumBlockSize = rowblk.MaximumSize
+	// MaximumRestartOffset is the maximum permissible value for a restart
+	// offset within a block. That is, the maximum block size that allows adding
+	// an additional restart point.
+	MaximumRestartOffset = rowblk.MaximumRestartOffset
 	// DefaultNumDeletionsThreshold defines the minimum number of point
 	// tombstones that must be present in a data block for it to be
 	// considered tombstone-dense.
@@ -81,13 +82,7 @@ func MakeKeySchemas(keySchemas ...*colblk.KeySchema) KeySchemas {
 
 // ReaderOptions holds the parameters needed for reading an sstable.
 type ReaderOptions struct {
-	// LoadBlockSema, if set, is used to limit the number of blocks that can be
-	// loaded (i.e. read from the filesystem) in parallel. Each load acquires one
-	// unit from the semaphore for the duration of the read.
-	LoadBlockSema *fifo.Semaphore
-
-	// User properties specified in this map will not be added to sst.Properties.UserProperties.
-	DeniedUserProperties map[string]struct{}
+	block.ReaderOptions
 
 	// Comparer defines a total ordering over the space of []byte keys: a 'less
 	// than' relationship. The same comparison algorithm must be used for reads
@@ -110,28 +105,8 @@ type ReaderOptions struct {
 	// policies that are not in this map will be ignored.
 	Filters map[string]FilterPolicy
 
-	// Logger is an optional logger and tracer.
-	LoggerAndTracer base.LoggerAndTracer
-
 	// FilterMetricsTracker is optionally used to track filter metrics.
 	FilterMetricsTracker *FilterMetricsTracker
-
-	// internal options can only be used from within the pebble package.
-	internal sstableinternal.ReaderOptions
-}
-
-// SetInternal sets the internal reader options. Note that even though this
-// method is public, a caller outside the pebble package can't construct a value
-// to pass to it.
-func (o *ReaderOptions) SetInternal(internalOpts sstableinternal.ReaderOptions) {
-	o.internal = internalOpts
-}
-
-// SetInternalCacheOpts sets the internal cache options. Note that even though
-// this method is public, a caller outside the pebble package can't construct a
-// value to pass to it.
-func (o *ReaderOptions) SetInternalCacheOpts(cacheOpts sstableinternal.CacheOptions) {
-	o.internal.CacheOpts = cacheOpts
 }
 
 func (o ReaderOptions) ensureDefaults() ReaderOptions {
@@ -144,9 +119,6 @@ func (o ReaderOptions) ensureDefaults() ReaderOptions {
 	if o.LoggerAndTracer == nil {
 		o.LoggerAndTracer = base.NoopLoggerAndTracer{}
 	}
-	if o.DeniedUserProperties == nil {
-		o.DeniedUserProperties = ignoredInternalProperties
-	}
 	if o.KeySchemas == nil {
 		o.KeySchemas = defaultKeySchemas
 	}
@@ -155,6 +127,23 @@ func (o ReaderOptions) ensureDefaults() ReaderOptions {
 
 var defaultKeySchema = colblk.DefaultKeySchema(base.DefaultComparer, 16)
 var defaultKeySchemas = MakeKeySchemas(&defaultKeySchema)
+
+type CompressionProfile = block.CompressionProfile
+
+// Exported CompressionProfile constants.
+var (
+	DefaultCompression = block.DefaultCompression
+	NoCompression      = block.NoCompression
+	SnappyCompression  = block.SnappyCompression
+	ZstdCompression    = block.ZstdCompression
+	// MinLZCompression is only supported with table formats v6+. Older formats
+	// fall back to snappy.
+	MinLZCompression    = block.MinLZCompression
+	FastestCompression  = block.FastestCompression
+	FastCompression     = block.FastCompression
+	BalancedCompression = block.BalancedCompression
+	GoodCompression     = block.GoodCompression
+)
 
 // WriterOptions holds the parameters used to control building an sstable.
 type WriterOptions struct {
@@ -193,8 +182,8 @@ type WriterOptions struct {
 
 	// Compression defines the per-block compression to use.
 	//
-	// The default value (DefaultCompression) uses snappy compression.
-	Compression block.Compression
+	// The default value uses snappy compression.
+	Compression *CompressionProfile
 
 	// FilterPolicy defines a filter algorithm (such as a Bloom filter) that can
 	// reduce disk reads for Get calls.
@@ -202,7 +191,7 @@ type WriterOptions struct {
 	// One such implementation is bloom.FilterPolicy(10) from the pebble/bloom
 	// package.
 	//
-	// The default value means to use no filter.
+	// The default value is NoFilterPolicy.
 	FilterPolicy FilterPolicy
 
 	// FilterType defines whether an existing filter policy is applied at a
@@ -256,18 +245,9 @@ type WriterOptions struct {
 	// Checksum specifies which checksum to use.
 	Checksum block.ChecksumType
 
-	// Parallelism is used to indicate that the sstable Writer is allowed to
-	// compress data blocks and write datablocks to disk in parallel with the
-	// Writer client goroutine.
-	Parallelism bool
-
 	// ShortAttributeExtractor mirrors
 	// Options.Experimental.ShortAttributeExtractor.
 	ShortAttributeExtractor base.ShortAttributeExtractor
-
-	// RequiredInPlaceValueBound mirrors
-	// Options.Experimental.RequiredInPlaceValueBound.
-	RequiredInPlaceValueBound UserKeyPrefixBound
 
 	// DisableValueBlocks is only used for TableFormat >= TableFormatPebblev3,
 	// and if set to true, does not write any values to value blocks. This is
@@ -299,6 +279,21 @@ type WriterOptions struct {
 	// disableObsoleteCollector is used to disable the obsolete key block property
 	// collector automatically added by sstable block writers.
 	disableObsoleteCollector bool
+}
+
+// UserKeyPrefixBound represents a [Lower,Upper) bound of user key prefixes.
+// If both are nil, there is no bound specified. Else, Compare(Lower,Upper)
+// must be < 0.
+type UserKeyPrefixBound struct {
+	// Lower is a lower bound user key prefix.
+	Lower []byte
+	// Upper is an upper bound user key prefix.
+	Upper []byte
+}
+
+// IsEmpty returns true iff the bound is empty.
+func (ukb *UserKeyPrefixBound) IsEmpty() bool {
+	return len(ukb.Lower) == 0 && len(ukb.Upper) == 0
 }
 
 // JemallocSizeClasses are a subset of available size classes in jemalloc[1],
@@ -342,9 +337,6 @@ func (o WriterOptions) ensureDefaults() WriterOptions {
 	if o.Comparer == nil {
 		o.Comparer = base.DefaultComparer
 	}
-	if o.Compression <= block.DefaultCompression || o.Compression >= block.NCompression {
-		o.Compression = block.SnappyCompression
-	}
 	if o.IndexBlockSize <= 0 {
 		o.IndexBlockSize = o.BlockSize
 	}
@@ -369,5 +361,19 @@ func (o WriterOptions) ensureDefaults() WriterOptions {
 		s := colblk.DefaultKeySchema(o.Comparer, 16 /* bundle size */)
 		o.KeySchema = &s
 	}
+	if o.Compression == nil || !tableFormatSupportsCompressionProfile(o.TableFormat, o.Compression) {
+		o.Compression = block.SnappyCompression
+	}
+	if o.FilterPolicy == nil {
+		o.FilterPolicy = base.NoFilterPolicy
+	}
 	return o
+}
+
+func tableFormatSupportsCompressionProfile(tf TableFormat, profile *CompressionProfile) bool {
+	// MinLZ is only supported in TableFormatPebblev6 and higher.
+	if tf < TableFormatPebblev6 && profile.UsesMinLZ() {
+		return false
+	}
+	return true
 }

@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"sync"
 
 	"github.com/cockroachdb/pebble/v2/internal/invariants"
@@ -49,12 +50,15 @@ func newFileReadable(
 		fs:              fs,
 		readaheadConfig: readaheadConfig,
 	}
-	invariants.SetFinalizer(r, func(obj interface{}) {
-		if obj.(*fileReadable).file != nil {
-			fmt.Fprintf(os.Stderr, "Readable was not closed")
-			os.Exit(1)
-		}
-	})
+	if invariants.UseFinalizers {
+		stack := debug.Stack()
+		invariants.SetFinalizer(r, func(obj interface{}) {
+			if obj.(*fileReadable).file != nil {
+				fmt.Fprintf(os.Stderr, "Readable %s was not closed\n%s", filename, stack)
+				os.Exit(1)
+			}
+		})
+	}
 	return r, nil
 }
 
@@ -104,13 +108,14 @@ var _ objstorage.ReadHandle = (*vfsReadHandle)(nil)
 var readHandlePool = sync.Pool{
 	New: func() interface{} {
 		i := &vfsReadHandle{}
-		// Note: this is a no-op if invariants are disabled or race is enabled.
-		invariants.SetFinalizer(i, func(obj interface{}) {
-			if obj.(*vfsReadHandle).r != nil {
-				fmt.Fprintf(os.Stderr, "ReadHandle was not closed")
-				os.Exit(1)
-			}
-		})
+		if invariants.UseFinalizers {
+			invariants.SetFinalizer(i, func(obj interface{}) {
+				if obj.(*vfsReadHandle).r != nil {
+					fmt.Fprintf(os.Stderr, "ReadHandle was not closed")
+					os.Exit(1)
+				}
+			})
+		}
 		return i
 	},
 }
@@ -193,6 +198,14 @@ func (rh *vfsReadHandle) RecordCacheHit(_ context.Context, offset, size int64) {
 		return
 	}
 	rh.rs.recordCacheHit(offset, size)
+}
+
+// NewFileReadable returns a new objstorage.Readable that reads from the given
+// file. It should not be used directly, except in tools or tests.
+func NewFileReadable(
+	file vfs.File, fs vfs.FS, readaheadConfig *ReadaheadConfig, filename string,
+) (objstorage.Readable, error) {
+	return newFileReadable(file, fs, readaheadConfig, filename)
 }
 
 // TestingCheckMaxReadahead returns true if the ReadHandle has switched to

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -25,51 +26,6 @@ const handshakeTimeout = 10 * time.Second
 
 type connKey struct{}
 
-// negotiatingConn is a wrapper around a quic.Connection that lets us wrap it in
-// our own context for the duration of the upgrade process. Upgrading a quic
-// connection to an h3 connection to a webtransport session.
-type negotiatingConn struct {
-	quic.Connection
-	ctx    context.Context
-	cancel context.CancelFunc
-	// stopClose is a function that stops the connection from being closed when
-	// the context is done. Returns true if the connection close function was
-	// not called.
-	stopClose func() bool
-	err       error
-}
-
-func (c *negotiatingConn) Unwrap() (quic.Connection, error) {
-	defer c.cancel()
-	if c.stopClose != nil {
-		// unwrap the first time
-		if !c.stopClose() {
-			c.err = errTimeout
-		}
-		c.stopClose = nil
-	}
-	if c.err != nil {
-		return nil, c.err
-	}
-	return c.Connection, nil
-}
-
-func wrapConn(ctx context.Context, c quic.Connection, handshakeTimeout time.Duration) *negotiatingConn {
-	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
-	stopClose := context.AfterFunc(ctx, func() {
-		log.Debugf("failed to handshake on conn: %s", c.RemoteAddr())
-		c.CloseWithError(1, "")
-	})
-	return &negotiatingConn{
-		Connection: c,
-		ctx:        ctx,
-		cancel:     cancel,
-		stopClose:  stopClose,
-	}
-}
-
-var errTimeout = errors.New("timeout")
-
 type listener struct {
 	transport       *transport
 	isStaticTLSConf bool
@@ -86,6 +42,9 @@ type listener struct {
 	multiaddr ma.Multiaddr
 
 	queue chan tpt.CapableConn
+
+	mx           sync.Mutex
+	pendingConns map[*quic.Conn]*negotiatingConn
 }
 
 var _ tpt.Listener = &listener{}
@@ -106,12 +65,13 @@ func newListener(reuseListener quicreuse.Listener, t *transport, isStaticTLSConf
 		multiaddr:       localMultiaddr,
 		server: webtransport.Server{
 			H3: http3.Server{
-				ConnContext: func(ctx context.Context, c quic.Connection) context.Context {
+				ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
 					return context.WithValue(ctx, connKey{}, c)
 				},
 			},
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
+		pendingConns: make(map[*quic.Conn]*negotiatingConn),
 	}
 	ln.ctx, ln.ctxCancel = context.WithCancel(context.Background())
 	mux := http.NewServeMux()
@@ -122,15 +82,73 @@ func newListener(reuseListener quicreuse.Listener, t *transport, isStaticTLSConf
 		for {
 			conn, err := ln.reuseListener.Accept(context.Background())
 			if err != nil {
-				log.Debugw("serving failed", "addr", ln.Addr(), "error", err)
+				log.Debug("serving failed", "addr", ln.Addr(), "error", err)
 				return
 			}
-			wrapped := wrapConn(ln.ctx, conn, t.handshakeTimeout)
-			go ln.server.ServeQUICConn(wrapped)
+			err = ln.startHandshake(conn)
+			if err != nil {
+				log.Debug("failed to start handshake", "error", err)
+				continue
+			}
+			go ln.server.ServeQUICConn(conn)
 		}
 	}()
 	return ln, nil
 }
+
+func (l *listener) startHandshake(conn *quic.Conn) error {
+	ctx, cancel := context.WithTimeout(l.ctx, handshakeTimeout)
+	stopHandshakeTimeout := context.AfterFunc(ctx, func() {
+		log.Debug("failed to handshake on conn", "remote_addr", conn.RemoteAddr())
+		conn.CloseWithError(1, "")
+		l.mx.Lock()
+		delete(l.pendingConns, conn)
+		l.mx.Unlock()
+	})
+	l.mx.Lock()
+	defer l.mx.Unlock()
+	// don't add to map if the context is already cancelled
+	if ctx.Err() != nil {
+		cancel()
+		return ctx.Err()
+	}
+	l.pendingConns[conn] = &negotiatingConn{
+		Conn:                 conn,
+		ctx:                  ctx,
+		cancel:               cancel,
+		stopHandshakeTimeout: stopHandshakeTimeout,
+	}
+	return nil
+}
+
+// negotiatingConn is a wrapper around a *quic.Conn that lets us wrap it in
+// our own context for the duration of the upgrade process. Upgrading a quic
+// connection to an h3 connection to a webtransport session.
+type negotiatingConn struct {
+	*quic.Conn
+	ctx    context.Context
+	cancel context.CancelFunc
+	// stopHandshakeTimeout is a function that stops triggering the handshake timeout. Returns true if the handshake timeout was not triggered.
+	stopHandshakeTimeout func() bool
+	err                  error
+}
+
+func (c *negotiatingConn) StopHandshakeTimeout() error {
+	defer c.cancel()
+	if c.stopHandshakeTimeout != nil {
+		// cancel the handshake timeout function
+		if !c.stopHandshakeTimeout() {
+			c.err = errTimeout
+		}
+		c.stopHandshakeTimeout = nil
+	}
+	if c.err != nil {
+		return c.err
+	}
+	return nil
+}
+
+var errTimeout = errors.New("timeout")
 
 func (l *listener) httpHandler(w http.ResponseWriter, r *http.Request) {
 	typ, ok := r.URL.Query()["type"]
@@ -141,7 +159,7 @@ func (l *listener) httpHandler(w http.ResponseWriter, r *http.Request) {
 	remoteMultiaddr, err := stringToWebtransportMultiaddr(r.RemoteAddr)
 	if err != nil {
 		// This should never happen.
-		log.Errorw("converting remote address failed", "remote", r.RemoteAddr, "error", err)
+		log.Error("converting remote address failed", "remote", r.RemoteAddr, "error", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -160,7 +178,7 @@ func (l *listener) httpHandler(w http.ResponseWriter, r *http.Request) {
 	if connScope == nil {
 		connScope, err = l.transport.rcmgr.OpenConnection(network.DirInbound, false, remoteMultiaddr)
 		if err != nil {
-			log.Debugw("resource manager blocked incoming connection", "addr", r.RemoteAddr, "error", err)
+			log.Debug("resource manager blocked incoming connection", "addr", r.RemoteAddr, "error", err)
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -174,7 +192,7 @@ func (l *listener) httpHandler(w http.ResponseWriter, r *http.Request) {
 func (l *listener) httpHandlerWithConnScope(w http.ResponseWriter, r *http.Request, connScope network.ConnManagementScope) error {
 	sess, err := l.server.Upgrade(w, r)
 	if err != nil {
-		log.Debugw("upgrade failed", "error", err)
+		log.Debug("upgrade failed", "error", err)
 		// TODO: think about the status code to use here
 		w.WriteHeader(500)
 		return err
@@ -183,7 +201,7 @@ func (l *listener) httpHandlerWithConnScope(w http.ResponseWriter, r *http.Reque
 	sconn, err := l.handshake(ctx, sess)
 	if err != nil {
 		cancel()
-		log.Debugw("handshake failed", "error", err)
+		log.Debug("handshake failed", "error", err)
 		sess.CloseWithError(1, "")
 		return err
 	}
@@ -196,26 +214,30 @@ func (l *listener) httpHandlerWithConnScope(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := connScope.SetPeer(sconn.RemotePeer()); err != nil {
-		log.Debugw("resource manager blocked incoming connection for peer", "peer", sconn.RemotePeer(), "addr", r.RemoteAddr, "error", err)
+		log.Debug("resource manager blocked incoming connection for peer", "peer", sconn.RemotePeer(), "addr", r.RemoteAddr, "error", err)
 		sess.CloseWithError(1, "")
 		return err
 	}
 
 	connVal := r.Context().Value(connKey{})
 	if connVal == nil {
-		log.Errorf("missing conn from context")
+		log.Error("missing conn from context")
 		sess.CloseWithError(1, "")
 		return errors.New("invalid context")
 	}
-	nconn, ok := connVal.(*negotiatingConn)
+	qconn := connVal.(*quic.Conn)
+
+	l.mx.Lock()
+	nconn, ok := l.pendingConns[qconn]
+	delete(l.pendingConns, qconn)
+	l.mx.Unlock()
 	if !ok {
-		log.Errorf("unexpected connection in context. invalid conn type: %T", nconn)
+		log.Debug("handshake timed out", "remote_addr", r.RemoteAddr)
 		sess.CloseWithError(1, "")
-		return errors.New("invalid context")
+		return errTimeout
 	}
-	qconn, err := nconn.Unwrap()
-	if err != nil {
-		log.Debugf("handshake timed out: %s", r.RemoteAddr)
+	if err := nconn.StopHandshakeTimeout(); err != nil {
+		log.Debug("handshake timed out", "remote_addr", r.RemoteAddr)
 		sess.CloseWithError(1, "")
 		return err
 	}
@@ -225,7 +247,7 @@ func (l *listener) httpHandlerWithConnScope(w http.ResponseWriter, r *http.Reque
 	select {
 	case l.queue <- conn:
 	default:
-		log.Debugw("accept queue full, dropping incoming connection", "peer", sconn.RemotePeer(), "addr", r.RemoteAddr, "error", err)
+		log.Debug("accept queue full, dropping incoming connection", "peer", sconn.RemotePeer(), "addr", r.RemoteAddr, "error", err)
 		conn.Close()
 		return errors.New("accept queue full")
 	}
@@ -268,7 +290,7 @@ func (l *listener) handshake(ctx context.Context, sess *webtransport.Session) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Noise session: %w", err)
 	}
-	c, err := n.SecureInbound(ctx, &webtransportStream{Stream: str, wsess: sess}, "")
+	c, err := n.SecureInbound(ctx, webtransportStream{Stream: str, wsess: sess}, "")
 	if err != nil {
 		return nil, err
 	}

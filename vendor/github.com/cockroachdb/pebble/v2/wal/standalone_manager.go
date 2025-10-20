@@ -6,6 +6,7 @@ package wal
 
 import (
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/cockroachdb/pebble/v2/internal/base"
@@ -78,7 +79,7 @@ func (m *StandaloneManager) init(o Options, initial Logs) error {
 }
 
 // List implements Manager.
-func (m *StandaloneManager) List() (Logs, error) {
+func (m *StandaloneManager) List() Logs {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	wals := make(Logs, len(m.mu.queue))
@@ -88,7 +89,7 @@ func (m *StandaloneManager) List() (Logs, error) {
 			segments: []segment{{dir: m.o.Primary}},
 		}
 	}
-	return wals, nil
+	return wals
 }
 
 // Obsolete implements Manager.
@@ -98,9 +99,15 @@ func (m *StandaloneManager) Obsolete(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// If this is the first call to Obsolete after Open, we may have deletable
-	// logs outside the queue.
-	toDelete, m.initialObsolete = m.initialObsolete, nil
+	// If the DB was recently opened, we may have deletable logs outside the
+	// queue.
+	m.initialObsolete = slices.DeleteFunc(m.initialObsolete, func(dl DeletableLog) bool {
+		if dl.NumWAL >= minUnflushedNum {
+			return false
+		}
+		toDelete = append(toDelete, dl)
+		return true
+	})
 
 	i := 0
 	for ; i < len(m.mu.queue); i++ {
@@ -194,9 +201,10 @@ func (m *StandaloneManager) Create(wn NumWAL, jobID int) (Writer, error) {
 		PreallocateSize: m.o.PreallocateSize(),
 	})
 	w := record.NewLogWriter(newLogFile, newLogNum, record.LogWriterConfig{
-		WALFsyncLatency:    m.o.FsyncLatency,
-		WALMinSyncInterval: m.o.MinSyncInterval,
-		QueueSemChan:       m.o.QueueSemChan,
+		WALFsyncLatency:     m.o.FsyncLatency,
+		WALMinSyncInterval:  m.o.MinSyncInterval,
+		QueueSemChan:        m.o.QueueSemChan,
+		WriteWALSyncOffsets: m.o.WriteWALSyncOffsets,
 	})
 	m.w = &standaloneWriter{
 		m: m,

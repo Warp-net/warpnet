@@ -5,48 +5,10 @@
 package sstable
 
 import (
-	"context"
 	"math"
 
-	"github.com/cockroachdb/pebble/v2/internal/base"
-	"github.com/cockroachdb/pebble/v2/internal/keyspan"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
 )
-
-// CommonReader abstracts functionality over a Reader or a VirtualReader. This
-// can be used by code which doesn't care to distinguish between a reader and a
-// virtual reader.
-type CommonReader interface {
-	NewRawRangeKeyIter(
-		ctx context.Context, transforms FragmentIterTransforms,
-	) (keyspan.FragmentIterator, error)
-
-	NewRawRangeDelIter(
-		ctx context.Context, transforms FragmentIterTransforms,
-	) (keyspan.FragmentIterator, error)
-
-	NewPointIter(
-		ctx context.Context,
-		transforms IterTransforms,
-		lower, upper []byte,
-		filterer *BlockPropertiesFilterer,
-		filterBlockSizeLimit FilterBlockSizeLimit,
-		stats *base.InternalIteratorStats,
-		statsAccum IterStatsAccumulator,
-		rp ReaderProvider,
-	) (Iterator, error)
-
-	NewCompactionIter(
-		transforms IterTransforms,
-		statsAccum IterStatsAccumulator,
-		rp ReaderProvider,
-		bufferPool *block.BufferPool,
-	) (Iterator, error)
-
-	EstimateDiskUsage(start, end []byte) (uint64, error)
-
-	CommonProperties() *CommonProperties
-}
 
 // FilterBlockSizeLimit is a size limit for bloom filter blocks - if a bloom
 // filter is present, it is used only when it is at most this size.

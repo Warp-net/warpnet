@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/manifest"
 	"github.com/cockroachdb/pebble/v2/objstorage"
 	"github.com/cockroachdb/pebble/v2/sstable"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
 )
 
 // Result stores the result of a compaction - more specifically, the "data" part
@@ -24,6 +25,7 @@ type Result struct {
 	// tables created so far (and which need to be cleaned up).
 	Err    error
 	Tables []OutputTable
+	Blobs  []OutputBlob
 	Stats  Stats
 }
 
@@ -32,6 +34,7 @@ func (r Result) WithError(err error) Result {
 	return Result{
 		Err:    errors.CombineErrors(r.Err, err),
 		Tables: r.Tables,
+		Blobs:  r.Blobs,
 		Stats:  r.Stats,
 	}
 }
@@ -44,13 +47,36 @@ type OutputTable struct {
 	// WriterMeta is populated once the table is fully written. On compaction
 	// failure (see Result), WriterMeta might not be set.
 	WriterMeta sstable.WriterMetadata
+	// BlobReferences is the list of blob references for the table.
+	BlobReferences manifest.BlobReferences
+	// BlobReferenceDepth is the depth of the blob references for the table.
+	BlobReferenceDepth manifest.BlobReferenceDepth
+}
+
+// OutputBlob contains metadata about a blob file that was created during a
+// compaction.
+type OutputBlob struct {
+	Stats blob.FileWriterStats
+	// ObjMeta is metadata for the object backing the blob file.
+	ObjMeta objstorage.ObjectMetadata
+	// Metadata is metadata for the blob file.
+	Metadata *manifest.PhysicalBlobFile
 }
 
 // Stats describes stats collected during the compaction.
 type Stats struct {
 	CumulativePinnedKeys uint64
 	CumulativePinnedSize uint64
-	CountMissizedDels    uint64
+	// CumulativeWrittenSize is the total size of all data written to output
+	// objects.
+	CumulativeWrittenSize uint64
+	// CumulativeBlobReferenceSize is the total size of all blob references
+	// written to output objects.
+	CumulativeBlobReferenceSize uint64
+	// CumulativeBlobFileSize is the total size of all data written to blob
+	// output objects specifically.
+	CumulativeBlobFileSize uint64
+	CountMissizedDels      uint64
 }
 
 // RunnerConfig contains the parameters needed for the Runner.
@@ -78,6 +104,43 @@ type RunnerConfig struct {
 	// during compaction. In practice, the sizes can vary between 50%-200% of this
 	// value.
 	TargetOutputFileSize uint64
+
+	// GrantHandle is used to perform accounting of resource consumption by the
+	// CompactionScheduler.
+	GrantHandle base.CompactionGrantHandle
+}
+
+// ValueSeparation defines an interface for writing some values to separate blob
+// files.
+type ValueSeparation interface {
+	// EstimatedFileSize returns an estimate of the disk space consumed by the
+	// current, pending blob file if it were closed now. If no blob file has
+	// been created, it returns 0.
+	EstimatedFileSize() uint64
+	// EstimatedReferenceSize returns an estimate of the disk space consumed by
+	// the current output sstable's blob references so far.
+	EstimatedReferenceSize() uint64
+	// Add adds the provided key-value pair to the provided sstable writer,
+	// possibly separating the value into a blob file.
+	Add(tw sstable.RawWriter, kv *base.InternalKV, forceObsolete bool) error
+	// FinishOutput is called when a compaction is finishing an output sstable.
+	// It returns the table's blob references, which will be added to the
+	// table's TableMetadata, and stats and metadata describing a newly
+	// constructed blob file if any.
+	FinishOutput() (ValueSeparationMetadata, error)
+}
+
+// ValueSeparationMetadata describes metadata about a table's blob references,
+// and optionally a newly constructed blob file.
+type ValueSeparationMetadata struct {
+	BlobReferences     manifest.BlobReferences
+	BlobReferenceSize  uint64
+	BlobReferenceDepth manifest.BlobReferenceDepth
+
+	// The below fields are only populated if a new blob file was created.
+	BlobFileStats    blob.FileWriterStats
+	BlobFileObject   objstorage.ObjectMetadata
+	BlobFileMetadata *manifest.PhysicalBlobFile
 }
 
 // Runner is a helper for running the "data" part of a compaction (where we use
@@ -97,11 +160,11 @@ type Runner struct {
 	iter *Iter
 
 	tables []OutputTable
+	blobs  []OutputBlob
 	// Stores any error encountered.
 	err error
 	// Last key/value returned by the compaction iterator.
-	key   *base.InternalKey
-	value []byte
+	kv *base.InternalKV
 	// Last RANGEDEL span (or portion of it) that was not yet written to a table.
 	lastRangeDelSpan keyspan.Span
 	// Last range key span (or portion of it) that was not yet written to a table.
@@ -116,7 +179,7 @@ func NewRunner(cfg RunnerConfig, iter *Iter) *Runner {
 		cfg:  cfg,
 		iter: iter,
 	}
-	r.key, r.value = r.iter.First()
+	r.kv = r.iter.First()
 	return r
 }
 
@@ -125,14 +188,37 @@ func (r *Runner) MoreDataToWrite() bool {
 	if r.err != nil {
 		return false
 	}
-	return r.key != nil || !r.lastRangeDelSpan.Empty() || !r.lastRangeKeySpan.Empty()
+	return r.kv != nil || !r.lastRangeDelSpan.Empty() || !r.lastRangeKeySpan.Empty()
+}
+
+// FirstKey returns the first key that will be written; this can be a point key
+// or the beginning of a range del or range key span.
+//
+// FirstKey can only be called right after MoreDataToWrite() was called and
+// returned true.
+func (r *Runner) FirstKey() []byte {
+	firstKey := base.MinUserKey(r.cmp, spanStartOrNil(&r.lastRangeDelSpan), spanStartOrNil(&r.lastRangeKeySpan))
+	// Note: if there was a r.lastRangeDelSpan or r.lastRangeKeySpan, it
+	// necessarily starts before the first point key.
+	if r.kv != nil && firstKey == nil {
+		firstKey = r.kv.K.UserKey
+	}
+	return firstKey
 }
 
 // WriteTable writes a new output table. This table will be part of
 // Result.Tables. Should only be called if MoreDataToWrite() returned true.
 //
+// limitKey (if non-empty) forces the sstable to be finished before reaching
+// this key.
+//
 // WriteTable always closes the Writer.
-func (r *Runner) WriteTable(objMeta objstorage.ObjectMetadata, tw sstable.RawWriter) {
+func (r *Runner) WriteTable(
+	objMeta objstorage.ObjectMetadata,
+	tw sstable.RawWriter,
+	limitKey []byte,
+	valueSeparation ValueSeparation,
+) {
 	if r.err != nil {
 		panic("error already encountered")
 	}
@@ -140,11 +226,28 @@ func (r *Runner) WriteTable(objMeta objstorage.ObjectMetadata, tw sstable.RawWri
 		CreationTime: time.Now(),
 		ObjMeta:      objMeta,
 	})
-	splitKey, err := r.writeKeysToTable(tw)
+	splitKey, err := r.writeKeysToTable(tw, limitKey, valueSeparation)
+
+	// Inform the value separation policy that the table is finished.
+	valSepMeta, valSepErr := valueSeparation.FinishOutput()
+	if valSepErr != nil {
+		r.err = errors.CombineErrors(r.err, valSepErr)
+	} else {
+		r.tables[len(r.tables)-1].BlobReferences = valSepMeta.BlobReferences
+		r.tables[len(r.tables)-1].BlobReferenceDepth = valSepMeta.BlobReferenceDepth
+		if valSepMeta.BlobFileObject.DiskFileNum != 0 {
+			r.blobs = append(r.blobs, OutputBlob{
+				Stats:    valSepMeta.BlobFileStats,
+				ObjMeta:  valSepMeta.BlobFileObject,
+				Metadata: valSepMeta.BlobFileMetadata,
+			})
+		}
+	}
+
 	err = errors.CombineErrors(err, tw.Close())
 	if err != nil {
 		r.err = err
-		r.key, r.value = nil, nil
+		r.kv = nil
 		return
 	}
 	writerMeta, err := tw.Metadata()
@@ -157,31 +260,46 @@ func (r *Runner) WriteTable(objMeta objstorage.ObjectMetadata, tw sstable.RawWri
 		return
 	}
 	r.tables[len(r.tables)-1].WriterMeta = *writerMeta
+	r.stats.CumulativeWrittenSize += writerMeta.Size + valSepMeta.BlobFileStats.FileLen
+	r.stats.CumulativeBlobReferenceSize += valSepMeta.BlobReferenceSize
+	r.stats.CumulativeBlobFileSize += valSepMeta.BlobFileStats.FileLen
 }
 
-func (r *Runner) writeKeysToTable(tw sstable.RawWriter) (splitKey []byte, _ error) {
-	firstKey := base.MinUserKey(r.cmp, spanStartOrNil(&r.lastRangeDelSpan), spanStartOrNil(&r.lastRangeKeySpan))
-	if r.key != nil && firstKey == nil {
-		firstKey = r.key.UserKey
-	}
+func (r *Runner) writeKeysToTable(
+	tw sstable.RawWriter, limitKey []byte, valueSeparation ValueSeparation,
+) (splitKey []byte, _ error) {
+	const updateGrantHandleEveryNKeys = 128
+	firstKey := r.FirstKey()
 	if firstKey == nil {
 		return nil, base.AssertionFailedf("no data to write")
 	}
+	limitKey = base.MinUserKey(r.cmp, limitKey, r.TableSplitLimit(firstKey))
 	splitter := NewOutputSplitter(
-		r.cmp, firstKey, r.TableSplitLimit(firstKey),
+		r.cmp, firstKey, limitKey,
 		r.cfg.TargetOutputFileSize, r.cfg.Grandparents.Iter(), r.iter.Frontiers(),
 	)
 	equalPrev := func(k []byte) bool {
 		return tw.ComparePrev(k) == 0
 	}
 	var pinnedKeySize, pinnedValueSize, pinnedCount uint64
-	key, value := r.key, r.value
-	for ; key != nil; key, value = r.iter.Next() {
-		if splitter.ShouldSplitBefore(key.UserKey, tw.EstimatedSize(), equalPrev) {
+	var iteratedKeys uint64
+	kv := r.kv
+	for ; kv != nil; kv = r.iter.Next() {
+		iteratedKeys++
+		if iteratedKeys%updateGrantHandleEveryNKeys == 0 {
+			r.cfg.GrantHandle.CumulativeStats(base.CompactionGrantHandleStats{
+				CumWriteBytes: r.stats.CumulativeWrittenSize + tw.EstimatedSize() +
+					valueSeparation.EstimatedFileSize(),
+			})
+			r.cfg.GrantHandle.MeasureCPU(base.CompactionGoroutinePrimary)
+		}
+		outputSize := tw.EstimatedSize()
+		outputSize += valueSeparation.EstimatedReferenceSize()
+		if splitter.ShouldSplitBefore(kv.K.UserKey, outputSize, equalPrev) {
 			break
 		}
 
-		switch key.Kind() {
+		switch kv.K.Kind() {
 		case base.InternalKeyKindRangeDelete:
 			// The previous span (if any) must end at or before this key, since the
 			// spans we receive are non-overlapping.
@@ -200,7 +318,12 @@ func (r *Runner) writeKeysToTable(tw sstable.RawWriter) (splitKey []byte, _ erro
 			r.lastRangeKeySpan.CopyFrom(r.iter.Span())
 			continue
 		}
-		if err := tw.AddWithForceObsolete(*key, value, r.iter.ForceObsoleteDueToRangeDel()); err != nil {
+
+		valueLen := kv.V.Len()
+		// Add the value to the sstable, possibly separating its value into a
+		// blob file. The ValueSeparation implementation is responsible for
+		// writing the KV to the sstable.
+		if err := valueSeparation.Add(tw, kv, r.iter.ForceObsoleteDueToRangeDel()); err != nil {
 			return nil, err
 		}
 		if r.iter.SnapshotPinned() {
@@ -208,11 +331,11 @@ func (r *Runner) writeKeysToTable(tw sstable.RawWriter) (splitKey []byte, _ erro
 			// the compaction iterator because an open snapshot prevented
 			// its elision. Increment the stats.
 			pinnedCount++
-			pinnedKeySize += uint64(len(key.UserKey)) + base.InternalTrailerLen
-			pinnedValueSize += uint64(len(value))
+			pinnedKeySize += uint64(len(kv.K.UserKey)) + base.InternalTrailerLen
+			pinnedValueSize += uint64(valueLen)
 		}
 	}
-	r.key, r.value = key, value
+	r.kv = kv
 	splitKey = splitter.SplitKey()
 	if err := SplitAndEncodeSpan(r.cmp, &r.lastRangeDelSpan, splitKey, tw); err != nil {
 		return nil, err
@@ -224,6 +347,18 @@ func (r *Runner) writeKeysToTable(tw sstable.RawWriter) (splitKey []byte, _ erro
 	tw.SetSnapshotPinnedProperties(pinnedCount, pinnedKeySize, pinnedValueSize)
 	r.stats.CumulativePinnedKeys += pinnedCount
 	r.stats.CumulativePinnedSize += pinnedKeySize + pinnedValueSize
+
+	// TODO(jackson): CumulativeStats may block if the compaction scheduler
+	// wants to pace the compaction. We should thread through knowledge of
+	// whether or not this is the final sstable of the compaction, in which case
+	// all work has been completed and pacing would only needlessly delay the
+	// installation of the version edit.
+	r.cfg.GrantHandle.CumulativeStats(base.CompactionGrantHandleStats{
+		CumWriteBytes: r.stats.CumulativeWrittenSize +
+			tw.EstimatedSize() +
+			valueSeparation.EstimatedFileSize(),
+	})
+	r.cfg.GrantHandle.MeasureCPU(base.CompactionGoroutinePrimary)
 	return splitKey, nil
 }
 
@@ -237,6 +372,7 @@ func (r *Runner) Finish() Result {
 	return Result{
 		Err:    r.err,
 		Tables: r.tables,
+		Blobs:  r.blobs,
 		Stats:  r.stats,
 	}
 }
@@ -262,14 +398,14 @@ func (r *Runner) TableSplitLimit(startKey []byte) []byte {
 	var overlappedBytes uint64
 	f := iter.SeekGE(r.cmp, startKey)
 	// Handle an overlapping table.
-	if f != nil && r.cmp(f.Smallest.UserKey, startKey) <= 0 {
+	if f != nil && r.cmp(f.Smallest().UserKey, startKey) <= 0 {
 		overlappedBytes += f.Size
 		f = iter.Next()
 	}
 	for ; f != nil; f = iter.Next() {
 		overlappedBytes += f.Size
 		if overlappedBytes > r.cfg.MaxGrandparentOverlapBytes {
-			limitKey = f.Smallest.UserKey
+			limitKey = f.Smallest().UserKey
 			break
 		}
 	}
@@ -329,4 +465,34 @@ func spanStartOrNil(s *keyspan.Span) []byte {
 		return nil
 	}
 	return s.Start
+}
+
+// NeverSeparateValues is a ValueSeparation implementation that never separates
+// values into external blob files. It is the default value if no
+// ValueSeparation implementation is explicitly provided.
+type NeverSeparateValues struct{}
+
+// Assert that NeverSeparateValues implements the ValueSeparation interface.
+var _ ValueSeparation = NeverSeparateValues{}
+
+// EstimatedFileSize implements the ValueSeparation interface.
+func (NeverSeparateValues) EstimatedFileSize() uint64 { return 0 }
+
+// EstimatedReferenceSize implements the ValueSeparation interface.
+func (NeverSeparateValues) EstimatedReferenceSize() uint64 { return 0 }
+
+// Add implements the ValueSeparation interface.
+func (NeverSeparateValues) Add(
+	tw sstable.RawWriter, kv *base.InternalKV, forceObsolete bool,
+) error {
+	v, _, err := kv.Value(nil)
+	if err != nil {
+		return err
+	}
+	return tw.Add(kv.K, v, forceObsolete)
+}
+
+// FinishOutput implements the ValueSeparation interface.
+func (NeverSeparateValues) FinishOutput() (ValueSeparationMetadata, error) {
+	return ValueSeparationMetadata{}, nil
 }

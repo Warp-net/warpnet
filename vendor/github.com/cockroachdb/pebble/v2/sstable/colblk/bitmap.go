@@ -10,7 +10,6 @@ import (
 	"math"
 	"math/bits"
 	"strings"
-	"unsafe"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2/internal/binfmt"
@@ -30,7 +29,7 @@ import (
 type Bitmap struct {
 	// data contains the bitmap data, according to defaultBitmapEncoding, or it
 	// is nil if the bitmap is all zeros.
-	data     UnsafeRawSlice[uint64]
+	data     unsafeUint64Decoder
 	bitCount int
 }
 
@@ -54,7 +53,7 @@ func DecodeBitmap(b []byte, off uint32, bitCount int) (bitmap Bitmap, endOffset 
 			bitCount, bitmapRequiredSize(bitCount), len(b[off:])))
 	}
 	return Bitmap{
-		data:     makeUnsafeRawSlice[uint64](unsafe.Pointer(&b[off])),
+		data:     makeUnsafeUint64Decoder(b[off:], sz>>align64Shift),
 		bitCount: bitCount,
 	}, off + uint32(sz)
 }
@@ -70,10 +69,8 @@ func (b Bitmap) At(i int) bool {
 		// zero bitmap case.
 		return false
 	}
-	// Inline b.data.At(i/64).
-	// The offset of the correct word is i / 64 * 8 = (i >> 3) &^ 0b111
-	const mask = ^uintptr(0b111)
-	val := *(*uint64)(unsafe.Pointer(uintptr(b.data.ptr) + (uintptr(i)>>3)&mask))
+	invariants.CheckBounds(i, b.bitCount)
+	val := b.data.At(int(uint(i) >> 6)) // aka At(i/64)
 	return val&(1<<(uint(i)&63)) != 0
 }
 
@@ -100,6 +97,10 @@ func (b Bitmap) SeekSetBitGE(i int) int {
 	// on the summary word to get the index of which word has a set bit, if any.
 	summaryTableOffset, summaryTableEnd := b.summaryTableBounds()
 	summaryWordIdx := summaryTableOffset + wordIdx>>6
+	if invariants.Enabled {
+		sz := bitmapRequiredSize(b.bitCount)
+		invariants.CheckBounds(summaryTableEnd-1, sz)
+	}
 	summaryNext := nextBitInWord(b.data.At(summaryWordIdx), uint(wordIdx%64)+1)
 	// If [summaryNext] == 64, then there are no set bits in any of the earlier
 	// words represented by the summary word at [summaryWordIdx]. In that case,
@@ -175,11 +176,11 @@ func (b Bitmap) SeekSetBitLE(i int) int {
 // in the bitmap. The i parameter must be in [0, bitCount). Returns the number
 // of bits represented by the bitmap if no next bit is unset.
 func (b Bitmap) SeekUnsetBitGE(i int) int {
+	invariants.CheckBounds(i, b.bitCount)
 	if b.data.ptr == nil {
 		// Zero bitmap case.
 		return i
 	}
-
 	wordIdx := i >> 6 // i/64
 	// If the there's a bit ≥ i unset in the same word, return it.
 	if next := nextBitInWord(^b.data.At(wordIdx), uint(i)&63); next < 64 {
@@ -203,6 +204,7 @@ func (b Bitmap) SeekUnsetBitGE(i int) int {
 // bitmap. The i parameter must be in [0, bitCount). Returns -1 if no previous
 // bit is unset.
 func (b Bitmap) SeekUnsetBitLE(i int) int {
+	invariants.CheckBounds(i, b.bitCount)
 	if b.data.ptr == nil {
 		// Zero bitmap case.
 		return i
@@ -373,7 +375,6 @@ func (b *BitmapBuilder) Finish(col, nRows int, offset uint32, buf []byte) uint32
 	buf[offset] = byte(defaultBitmapEncoding)
 	offset++
 	offset = alignWithZeroes(buf, offset, align64)
-	dest := makeUnsafeRawSlice[uint64](unsafe.Pointer(&buf[offset]))
 
 	nBitmapWords := (nRows + 63) >> 6
 	// Truncate the bitmap to the number of words required to represent nRows.
@@ -390,19 +391,21 @@ func (b *BitmapBuilder) Finish(col, nRows int, offset uint32, buf []byte) uint32
 		b.words[nBitmapWords-1] &= (1 << i) - 1
 	}
 
+	nSummaryWords := (nBitmapWords + 63) >> 6
+	dest := makeUintsEncoder[uint64](buf[offset:], nBitmapWords+nSummaryWords)
 	// Copy all the words of the bitmap into the destination buffer.
-	offset += uint32(copy(dest.Slice(len(b.words)), b.words)) << align64Shift
+	dest.CopyFrom(0, b.words)
+	offset += uint32(len(b.words)) << align64Shift
 
 	// The caller may have written fewer than nRows rows if the tail is all
 	// zeroes, relying on these bits being implicitly zero. If the tail of b is
 	// sparse, fill in zeroes.
 	for i := len(b.words); i < nBitmapWords; i++ {
-		dest.set(i, 0)
+		dest.UnsafeSet(i, 0)
 		offset += align64
 	}
 
 	// Add the summary bitmap.
-	nSummaryWords := (nBitmapWords + 63) >> 6
 	for i := 0; i < nSummaryWords; i++ {
 		wordsOff := (i << 6) // i*64
 		nWords := min(64, len(b.words)-wordsOff)
@@ -412,8 +415,9 @@ func (b *BitmapBuilder) Finish(col, nRows int, offset uint32, buf []byte) uint32
 				summaryWord |= 1 << j
 			}
 		}
-		dest.set(nBitmapWords+i, summaryWord)
+		dest.UnsafeSet(nBitmapWords+i, summaryWord)
 	}
+	dest.Finish()
 	return offset + uint32(nSummaryWords)<<align64Shift
 }
 

@@ -10,7 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"runtime"
+	"slices"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -21,8 +21,11 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/rangedel"
 	"github.com/cockroachdb/pebble/v2/internal/rangekey"
 	"github.com/cockroachdb/pebble/v2/objstorage"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
+	"github.com/cockroachdb/pebble/v2/sstable/block/blockkind"
 	"github.com/cockroachdb/pebble/v2/sstable/rowblk"
+	"github.com/cockroachdb/pebble/v2/sstable/valblk"
 )
 
 // encodedBHPEstimatedSize estimates the size of the encoded BlockHandleWithProperties.
@@ -46,9 +49,9 @@ type RawRowWriter struct {
 	pointSuffixCmp       base.ComparePointSuffixes
 	split                Split
 	formatKey            base.FormatKey
-	compression          block.Compression
 	separator            Separator
 	successor            Successor
+	validateKey          base.ValidateKey
 	tableFormat          TableFormat
 	isStrictObsolete     bool
 	writingToLowestLevel bool
@@ -87,6 +90,9 @@ type RawRowWriter struct {
 	// nil, or the full keys otherwise.
 	filter          filterWriter
 	indexPartitions []bufferedIndexBlock
+	// indexPartitionsSizeSum is the sum of the sizes of all index blocks in
+	// indexPartitions.
+	indexPartitionsSizeSum uint64
 
 	// indexBlockAlloc is used to bulk-allocate byte slices used to store index
 	// blocks in indexPartitions. These live until the index finishes.
@@ -110,11 +116,10 @@ type RawRowWriter struct {
 	lastPointKeyInfo pointKeyInfo
 
 	// For value blocks.
-	shortAttributeExtractor   base.ShortAttributeExtractor
-	requiredInPlaceValueBound UserKeyPrefixBound
+	shortAttributeExtractor base.ShortAttributeExtractor
 	// When w.tableFormat >= TableFormatPebblev3, valueBlockWriter is nil iff
 	// WriterOptions.DisableValueBlocks was true.
-	valueBlockWriter *valueBlockWriter
+	valueBlockWriter *valblk.Writer
 
 	allocatorSizeClasses []int
 
@@ -134,8 +139,6 @@ type pointKeyInfo struct {
 }
 
 type coordinationState struct {
-	parallelismEnabled bool
-
 	// writeQueue is used to write data blocks to disk. The writeQueue is primarily
 	// used to maintain the order in which data blocks must be written to disk. For
 	// this reason, every single data block write must be done through the writeQueue.
@@ -144,21 +147,11 @@ type coordinationState struct {
 	sizeEstimate dataBlockEstimates
 }
 
-func (c *coordinationState) init(parallelismEnabled bool, writer *RawRowWriter) {
-	c.parallelismEnabled = parallelismEnabled
-	// useMutex is false regardless of parallelismEnabled, because we do not do
-	// parallel compression yet.
-	c.sizeEstimate.useMutex = false
-
-	// writeQueueSize determines the size of the write queue, or the number
-	// of items which can be added to the queue without blocking. By default, we
-	// use a writeQueue size of 0, since we won't be doing any block writes in
-	// parallel.
-	writeQueueSize := 0
-	if parallelismEnabled {
-		writeQueueSize = runtime.GOMAXPROCS(0)
-	}
-	c.writeQueue = newWriteQueue(writeQueueSize, writer)
+func (c *coordinationState) init(writer *RawRowWriter) {
+	// writeQueueSize determines the size of the write queue, or the number of
+	// items which can be added to the queue without blocking. We always use a
+	// writeQueue size of 0.
+	c.writeQueue = newWriteQueue(0 /* size */, writer)
 }
 
 // sizeEstimate is a general purpose helper for estimating two kinds of sizes:
@@ -297,8 +290,6 @@ type indexBlockBuf struct {
 	block rowblk.Writer
 
 	size struct {
-		useMutex bool
-		mu       sync.Mutex
 		estimate sizeEstimate
 	}
 
@@ -309,10 +300,6 @@ type indexBlockBuf struct {
 
 func (i *indexBlockBuf) clear() {
 	i.block.Reset()
-	if i.size.useMutex {
-		i.size.mu.Lock()
-		defer i.size.mu.Unlock()
-	}
 	i.size.estimate.clear()
 	i.restartInterval = 0
 }
@@ -325,9 +312,8 @@ var indexBlockBufPool = sync.Pool{
 
 const indexBlockRestartInterval = 1
 
-func newIndexBlockBuf(useMutex bool) *indexBlockBuf {
+func newIndexBlockBuf() *indexBlockBuf {
 	i := indexBlockBufPool.Get().(*indexBlockBuf)
-	i.size.useMutex = useMutex
 	i.restartInterval = indexBlockRestartInterval
 	i.block.RestartInterval = indexBlockRestartInterval
 	i.size.estimate.init(rowblk.EmptySize)
@@ -337,25 +323,19 @@ func newIndexBlockBuf(useMutex bool) *indexBlockBuf {
 func (i *indexBlockBuf) shouldFlush(
 	sep InternalKey, valueLen int, flushGovernor *block.FlushGovernor,
 ) bool {
-	if i.size.useMutex {
-		i.size.mu.Lock()
-		defer i.size.mu.Unlock()
-	}
-
 	nEntries := i.size.estimate.numTotalEntries()
 	return shouldFlush(
 		sep.Size(), valueLen, i.restartInterval, int(i.size.estimate.size()),
 		int(nEntries), flushGovernor)
 }
 
-func (i *indexBlockBuf) add(key InternalKey, value []byte, inflightSize int) {
-	i.block.Add(key, value)
-	size := i.block.EstimatedSize()
-	if i.size.useMutex {
-		i.size.mu.Lock()
-		defer i.size.mu.Unlock()
+func (i *indexBlockBuf) add(key InternalKey, value []byte, inflightSize int) error {
+	if err := i.block.Add(key, value); err != nil {
+		return err
 	}
+	size := i.block.EstimatedSize()
 	i.size.estimate.writtenWithTotal(uint64(size), inflightSize)
+	return nil
 }
 
 func (i *indexBlockBuf) finish() []byte {
@@ -364,31 +344,17 @@ func (i *indexBlockBuf) finish() []byte {
 }
 
 func (i *indexBlockBuf) addInflight(inflightSize int) {
-	if i.size.useMutex {
-		i.size.mu.Lock()
-		defer i.size.mu.Unlock()
-	}
 	i.size.estimate.addInflight(inflightSize)
 }
 
 func (i *indexBlockBuf) estimatedSize() uint64 {
-	if i.size.useMutex {
-		i.size.mu.Lock()
-		defer i.size.mu.Unlock()
-	}
-
-	// Make sure that the size estimation works as expected when parallelism
-	// is disabled.
-	if invariants.Enabled && !i.size.useMutex {
+	// Make sure that the size estimation works as expected.
+	if invariants.Enabled {
 		if i.size.estimate.inflightSize != 0 {
 			panic("unexpected inflight entry in index block size estimation")
 		}
-
-		// NB: The i.block should only be accessed from the writeQueue goroutine,
-		// when parallelism is enabled. We break that invariant here, but that's
-		// okay since parallelism is disabled.
 		if i.size.estimate.size() != uint64(i.block.EstimatedSize()) {
-			panic("index block size estimation sans parallelism is incorrect")
+			panic("index block size estimation is incorrect")
 		}
 	}
 	return i.size.estimate.size()
@@ -399,11 +365,6 @@ func (i *indexBlockBuf) estimatedSize() uint64 {
 // should only be read/updated through the functions defined on the
 // *sizeEstimate type.
 type dataBlockEstimates struct {
-	// If we don't do block compression in parallel, then we don't need to take
-	// the performance hit of synchronizing using this mutex.
-	useMutex bool
-	mu       sync.Mutex
-
 	estimate sizeEstimate
 }
 
@@ -412,21 +373,12 @@ type dataBlockEstimates struct {
 // has not been called, this must be set to 0. compressedSize is the
 // compressed size of the block.
 func (d *dataBlockEstimates) dataBlockCompressed(compressedSize int, inflightSize int) {
-	if d.useMutex {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-	}
 	d.estimate.writtenWithDelta(compressedSize+block.TrailerLen, inflightSize)
 }
 
 // size is an estimated size of datablock data which has been written to disk.
 func (d *dataBlockEstimates) size() uint64 {
-	if d.useMutex {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-	}
-	// If there is no parallel compression, there should not be any inflight bytes.
-	if invariants.Enabled && !d.useMutex {
+	if invariants.Enabled {
 		if d.estimate.inflightSize != 0 {
 			panic("unexpected inflight entry in data block size estimation")
 		}
@@ -439,11 +391,6 @@ var _ = (&dataBlockEstimates{}).addInflightDataBlock
 
 // NB: unused since no parallel compression.
 func (d *dataBlockEstimates) addInflightDataBlock(size int) {
-	if d.useMutex {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-	}
-
 	d.estimate.addInflight(size)
 }
 
@@ -460,19 +407,17 @@ type blockBuf struct {
 	// blockTrailerLen bytes, (5 * binary.MaxVarintLen64) bytes, and most
 	// likely large enough for a block handle with properties.
 	tmp [blockHandleLikelyMaxLen]byte
-	// compressedBuf is the destination buffer for compression. It is re-used over the
-	// lifetime of the blockBuf, avoiding the allocation of a temporary buffer for each block.
-	compressedBuf []byte
-	checksummer   block.Checksummer
+	// dataBuf is the destination buffer for compression, or (in some cases where
+	// compression is not used) for storing a copy of the data. It is re-used over
+	// the lifetime of the blockBuf, avoiding the allocation of a temporary buffer
+	// for each block.
+	dataBuf     []byte
+	checksummer block.Checksummer
 }
 
 func (b *blockBuf) clear() {
-	// We can't assign b.compressedBuf[:0] to compressedBuf because snappy relies
-	// on the length of the buffer, and not the capacity to determine if it needs
-	// to make an allocation.
-	*b = blockBuf{
-		compressedBuf: b.compressedBuf, checksummer: b.checksummer,
-	}
+	b.tmp = [blockHandleLikelyMaxLen]byte{}
+	b.dataBuf = b.dataBuf[:0]
 }
 
 // A dataBlockBuf holds all the state required to compress and write a data block to disk.
@@ -543,8 +488,8 @@ func (d *dataBlockBuf) finish() {
 	d.uncompressed = d.dataBlock.Finish()
 }
 
-func (d *dataBlockBuf) compressAndChecksum(c block.Compression) {
-	d.physical = block.CompressAndChecksum(&d.compressedBuf, d.uncompressed, c, &d.checksummer)
+func (d *dataBlockBuf) compressAndChecksum(compressor *block.Compressor) {
+	d.physical = block.CompressAndChecksum(&d.dataBuf, d.uncompressed, blockkind.SSTableData, compressor, &d.checksummer)
 }
 
 func (d *dataBlockBuf) shouldFlush(
@@ -564,7 +509,7 @@ type bufferedIndexBlock struct {
 	block []byte
 }
 
-// AddWithForceObsolete must be used when writing a strict-obsolete sstable.
+// Add must be used when writing a strict-obsolete sstable.
 //
 // forceObsolete indicates whether the caller has determined that this key is
 // obsolete even though it may be the latest point key for this userkey. This
@@ -575,9 +520,7 @@ type bufferedIndexBlock struct {
 // that strict-obsolete ssts must satisfy. S2, due to RANGEDELs, is solely the
 // responsibility of the caller. S1 is solely the responsibility of the
 // callee.
-func (w *RawRowWriter) AddWithForceObsolete(
-	key InternalKey, value []byte, forceObsolete bool,
-) error {
+func (w *RawRowWriter) Add(key InternalKey, value []byte, forceObsolete bool) error {
 	if w.err != nil {
 		return w.err
 	}
@@ -593,6 +536,15 @@ func (w *RawRowWriter) AddWithForceObsolete(
 		return w.err
 	}
 	return w.addPoint(key, value, forceObsolete)
+}
+
+// AddWithBlobHandle implements the RawWriter interface. This implementation
+// does not support writing blob value handles.
+func (w *RawRowWriter) AddWithBlobHandle(
+	key InternalKey, h blob.InlineHandle, attr base.ShortAttribute, forceObsolete bool,
+) error {
+	w.err = errors.Newf("pebble: blob value handles are not supported in %s", w.tableFormat.String())
+	return w.err
 }
 
 func (w *RawRowWriter) makeAddPointDecisionV2(key InternalKey) error {
@@ -640,18 +592,6 @@ func (w *RawRowWriter) makeAddPointDecisionV3(
 	prevKeyKind := prevPointKeyInfo.trailer.Kind()
 	considerWriteToValueBlock := prevKeyKind == InternalKeyKindSet &&
 		keyKind == InternalKeyKindSet
-	if considerWriteToValueBlock && !w.requiredInPlaceValueBound.IsEmpty() {
-		keyPrefix := key.UserKey[:w.lastPointKeyInfo.prefixLen]
-		cmpUpper := w.compare(
-			w.requiredInPlaceValueBound.Upper, keyPrefix)
-		if cmpUpper <= 0 {
-			// Common case for CockroachDB. Make it empty since all future keys in
-			// this sstable will also have cmpUpper <= 0.
-			w.requiredInPlaceValueBound = UserKeyPrefixBound{}
-		} else if w.compare(keyPrefix, w.requiredInPlaceValueBound.Lower) >= 0 {
-			considerWriteToValueBlock = false
-		}
-	}
 	// cmpPrefix is initialized iff considerWriteToValueBlock.
 	var cmpPrefix int
 	var cmpUser int
@@ -767,11 +707,11 @@ func (w *RawRowWriter) addPoint(key InternalKey, value []byte, forceObsolete boo
 	var prefix block.ValuePrefix
 	var valueStoredWithKeyLen int
 	if writeToValueBlock {
-		vh, err := w.valueBlockWriter.addValue(value)
+		vh, err := w.valueBlockWriter.AddValue(value)
 		if err != nil {
 			return err
 		}
-		n := encodeValueHandle(w.blockBuf.tmp[:], vh)
+		n := valblk.EncodeHandle(w.blockBuf.tmp[:], vh)
 		valueStoredWithKey = w.blockBuf.tmp[:n]
 		valueStoredWithKeyLen = len(valueStoredWithKey) + 1
 		var attribute base.ShortAttribute
@@ -785,7 +725,7 @@ func (w *RawRowWriter) addPoint(key InternalKey, value []byte, forceObsolete boo
 				return err
 			}
 		}
-		prefix = block.ValueHandlePrefix(setHasSameKeyPrefix, attribute)
+		prefix = block.ValueBlockHandlePrefix(setHasSameKeyPrefix, attribute)
 	} else {
 		valueStoredWithKey = value
 		valueStoredWithKeyLen = len(value)
@@ -817,9 +757,11 @@ func (w *RawRowWriter) addPoint(key InternalKey, value []byte, forceObsolete boo
 	}
 
 	w.maybeAddToFilter(key.UserKey)
-	w.dataBlockBuf.dataBlock.AddWithOptionalValuePrefix(
+	if err := w.dataBlockBuf.dataBlock.AddWithOptionalValuePrefix(
 		key, isObsolete, valueStoredWithKey, maxSharedKeyLen, addPrefixToValueStoredWithKey, prefix,
-		setHasSameKeyPrefix)
+		setHasSameKeyPrefix); err != nil {
+		return err
+	}
 
 	w.meta.updateSeqNum(key.SeqNum())
 
@@ -930,8 +872,7 @@ func (w *RawRowWriter) addTombstone(key InternalKey, value []byte) error {
 	w.props.NumRangeDeletions++
 	w.props.RawKeySize += uint64(key.Size())
 	w.props.RawValueSize += uint64(len(value))
-	w.rangeDelBlock.Add(key, value)
-	return nil
+	return w.rangeDelBlock.Add(key, value)
 }
 
 // addRangeKey adds a range key set, unset, or delete key/value pair to the
@@ -1021,8 +962,7 @@ func (w *RawRowWriter) addRangeKey(key InternalKey, value []byte) error {
 	}
 
 	// Add the key to the block.
-	w.rangeKeyBlock.Add(key, value)
-	return nil
+	return w.rangeKeyBlock.Add(key, value)
 }
 
 func (w *RawRowWriter) maybeAddToFilter(key []byte) {
@@ -1054,7 +994,7 @@ func (w *RawRowWriter) flush(key InternalKey) error {
 	}
 	w.dataBlockBuf.finish()
 	w.maybeIncrementTombstoneDenseBlocks()
-	w.dataBlockBuf.compressAndChecksum(w.compression)
+	w.dataBlockBuf.compressAndChecksum(&w.layout.compressor)
 	// Since dataBlockEstimates.addInflightDataBlock was never called, the
 	// inflightSize is set to 0.
 	w.coordination.sizeEstimate.dataBlockCompressed(w.dataBlockBuf.physical.LengthWithoutTrailer(), 0)
@@ -1081,7 +1021,7 @@ func (w *RawRowWriter) flush(key InternalKey) error {
 	var flushableIndexBlock *indexBlockBuf
 	if shouldFlushIndexBlock {
 		flushableIndexBlock = w.indexBlock
-		w.indexBlock = newIndexBlockBuf(w.coordination.parallelismEnabled)
+		w.indexBlock = newIndexBlockBuf()
 		// Call BlockPropertyCollector.FinishIndexBlock, since we've decided to
 		// flush the index block.
 		indexProps, err = w.finishIndexBlockProps()
@@ -1112,11 +1052,7 @@ func (w *RawRowWriter) flush(key InternalKey) error {
 	w.indexBlock.addInflight(writeTask.indexInflightSize)
 
 	w.dataBlockBuf = nil
-	if w.coordination.parallelismEnabled {
-		w.coordination.writeQueue.add(writeTask)
-	} else {
-		err = w.coordination.writeQueue.addSync(writeTask)
-	}
+	err = w.coordination.writeQueue.addSync(writeTask)
 	w.dataBlockBuf = newDataBlockBuf(w.restartInterval, w.checksumType)
 
 	return err
@@ -1186,6 +1122,12 @@ func (w *RawRowWriter) indexEntrySep(
 	} else {
 		sep = prevKey.Separator(w.compare, w.separator, dataBlockBuf.sepScratch[:0], key)
 	}
+	if invariants.Enabled && invariants.Sometimes(25) {
+		if w.compare(prevKey.UserKey, sep.UserKey) > 0 {
+			panic(errors.AssertionFailedf("prevKey.UserKey > sep.UserKey: %s > %s",
+				prevKey.UserKey, sep.UserKey))
+		}
+	}
 	return sep
 }
 
@@ -1214,6 +1156,11 @@ func (w *RawRowWriter) addIndexEntry(
 		// In particular, it must have a non-zero length.
 		return nil
 	}
+	if invariants.Enabled {
+		if err := w.validateKey.Validate(sep.UserKey); err != nil {
+			return err
+		}
+	}
 
 	encoded := bhp.EncodeVarints(tmp)
 	if flushIndexBuf != nil {
@@ -1226,9 +1173,7 @@ func (w *RawRowWriter) addIndexEntry(
 			return err
 		}
 	}
-
-	writeTo.add(sep, encoded, inflightSize)
-	return nil
+	return writeTo.add(sep, encoded, inflightSize)
 }
 
 func (w *RawRowWriter) addPrevDataBlockToIndexBlockProps() {
@@ -1264,7 +1209,7 @@ func (w *RawRowWriter) addIndexEntrySep(
 	var err error
 	if shouldFlush {
 		flushableIndexBlock = w.indexBlock
-		w.indexBlock = newIndexBlockBuf(w.coordination.parallelismEnabled)
+		w.indexBlock = newIndexBlockBuf()
 		w.twoLevelIndex = true
 		// Call BlockPropertyCollector.FinishIndexBlock, since we've decided to
 		// flush the index block.
@@ -1363,6 +1308,7 @@ func (w *RawRowWriter) finishIndexBlock(indexBuf *indexBlockBuf, props []byte) e
 	part.block = w.indexBlockAlloc[:n:n]
 	w.indexBlockAlloc = w.indexBlockAlloc[n:]
 	w.indexPartitions = append(w.indexPartitions, part)
+	w.indexPartitionsSizeSum += uint64(len(bk))
 	return nil
 }
 
@@ -1386,10 +1332,13 @@ func (w *RawRowWriter) writeTwoLevelIndex() (block.Handle, error) {
 		if err != nil {
 			return block.Handle{}, err
 		}
-		w.topLevelIndexBlock.Add(b.sep, block.HandleWithProperties{
+		err = w.topLevelIndexBlock.Add(b.sep, block.HandleWithProperties{
 			Handle: bh,
 			Props:  b.properties,
 		}.EncodeVarints(w.blockBuf.tmp[:]))
+		if err != nil {
+			return block.Handle{}, err
+		}
 	}
 
 	// NB: RocksDB includes the block trailer length in the index size
@@ -1481,7 +1430,7 @@ func (w *RawRowWriter) Error() error {
 func (w *RawRowWriter) Close() (err error) {
 	defer func() {
 		if w.valueBlockWriter != nil {
-			releaseValueBlockWriter(w.valueBlockWriter)
+			w.valueBlockWriter.Release()
 			// Defensive code in case Close gets called again. We don't want to put
 			// the same object to a sync.Pool.
 			w.valueBlockWriter = nil
@@ -1532,6 +1481,8 @@ func (w *RawRowWriter) Close() (err error) {
 			return err
 		}
 		prevKey := w.dataBlockBuf.dataBlock.CurKey()
+		// NB: prevKey.UserKey may be nil if there are no keys and we're forcing
+		// the creation of an empty data block.
 		if err := w.addIndexEntrySync(prevKey, InternalKey{}, bhp, w.dataBlockBuf.tmp[:]); err != nil {
 			return err
 		}
@@ -1601,13 +1552,13 @@ func (w *RawRowWriter) Close() (err error) {
 	}
 
 	if w.valueBlockWriter != nil {
-		_, vbStats, err := w.valueBlockWriter.finish(&w.layout, w.layout.offset)
+		_, vbStats, err := w.valueBlockWriter.Finish(&w.layout, w.layout.offset)
 		if err != nil {
 			return err
 		}
-		w.props.NumValueBlocks = vbStats.numValueBlocks
-		w.props.NumValuesInValueBlocks = vbStats.numValuesInValueBlocks
-		w.props.ValueBlocksSize = vbStats.valueBlocksAndIndexSize
+		w.props.NumValueBlocks = vbStats.NumValueBlocks
+		w.props.NumValuesInValueBlocks = vbStats.NumValuesInValueBlocks
+		w.props.ValueBlocksSize = vbStats.ValueBlocksAndIndexSize
 	}
 
 	{
@@ -1645,7 +1596,9 @@ func (w *RawRowWriter) Close() (err error) {
 		// reduces table size without a significant impact on performance.
 		raw.RestartInterval = propertiesBlockRestartInterval
 		w.props.CompressionOptions = rocksDBCompressionOptions
-		w.props.save(w.tableFormat, &raw)
+		if err := w.props.saveToRowWriter(w.tableFormat, &raw); err != nil {
+			return err
+		}
 		if _, err := w.layout.WritePropertiesBlock(raw.Finish()); err != nil {
 			return err
 		}
@@ -1682,9 +1635,33 @@ func (w *RawRowWriter) EstimatedSize() uint64 {
 	if w == nil {
 		return 0
 	}
-	return w.coordination.sizeEstimate.size() +
-		uint64(w.dataBlockBuf.dataBlock.EstimatedSize()) +
-		w.indexBlock.estimatedSize()
+
+	// Begin with the estimated size of the data blocks that have already been
+	// flushed to the file.
+	size := w.coordination.sizeEstimate.size()
+	// Add the size of value blocks. If any value blocks have already been
+	// finished, these blocks will contribute post-compression size. If there is
+	// currently an unfinished value block, it will contribute its pre-compression
+	// size.
+	if w.valueBlockWriter != nil {
+		size += w.valueBlockWriter.Size()
+	}
+
+	// Add the size of the completed but unflushed index partitions, the
+	// unfinished data block, the unfinished index block, the unfinished range
+	// deletion block, and the unfinished range key block.
+	//
+	// All of these sizes are uncompressed sizes. It's okay to be pessimistic
+	// here and use the uncompressed size because all this memory is buffered
+	// until the sstable is finished.  Including the uncompressed size bounds
+	// the memory usage used by the writer to the physical size limit.
+	size += w.indexPartitionsSizeSum
+	size += uint64(w.dataBlockBuf.dataBlock.EstimatedSize())
+	size += w.indexBlock.estimatedSize()
+	size += uint64(w.rangeDelBlock.EstimatedSize())
+	size += uint64(w.rangeKeyBlock.EstimatedSize())
+	// TODO(jackson): Account for the size of the filter block.
+	return size
 }
 
 // Metadata returns the metadata for the finished sstable. Only valid to call
@@ -1710,16 +1687,16 @@ func newRowWriter(writable objstorage.Writable, o WriterOptions) *RawRowWriter {
 		pointSuffixCmp:             o.Comparer.ComparePointSuffixes,
 		split:                      o.Comparer.Split,
 		formatKey:                  o.Comparer.FormatKey,
-		compression:                o.Compression,
 		separator:                  o.Comparer.Separator,
 		successor:                  o.Comparer.Successor,
+		validateKey:                o.Comparer.ValidateKey,
 		tableFormat:                o.TableFormat,
 		isStrictObsolete:           o.IsStrictObsolete,
 		writingToLowestLevel:       o.WritingToLowestLevel,
 		restartInterval:            o.BlockRestartInterval,
 		checksumType:               o.Checksum,
 		disableKeyOrderChecks:      o.internal.DisableKeyOrderChecks,
-		indexBlock:                 newIndexBlockBuf(o.Parallelism),
+		indexBlock:                 newIndexBlockBuf(),
 		rangeDelBlock:              rowblk.Writer{RestartInterval: 1},
 		rangeKeyBlock:              rowblk.Writer{RestartInterval: 1},
 		topLevelIndexBlock:         rowblk.Writer{RestartInterval: 1},
@@ -1731,11 +1708,10 @@ func newRowWriter(writable objstorage.Writable, o WriterOptions) *RawRowWriter {
 	w.indexFlush = block.MakeFlushGovernor(o.IndexBlockSize, o.BlockSizeThreshold, o.SizeClassAwareThreshold, o.AllocatorSizeClasses)
 	if w.tableFormat >= TableFormatPebblev3 {
 		w.shortAttributeExtractor = o.ShortAttributeExtractor
-		w.requiredInPlaceValueBound = o.RequiredInPlaceValueBound
 		if !o.DisableValueBlocks {
-			w.valueBlockWriter = newValueBlockWriter(
+			w.valueBlockWriter = valblk.NewWriter(
 				block.MakeFlushGovernor(o.BlockSize, o.BlockSizeThreshold, o.SizeClassAwareThreshold, o.AllocatorSizeClasses),
-				w.compression, w.checksumType, func(compressedSize int) {
+				&w.layout.compressor, w.checksumType, func(compressedSize int) {
 					w.coordination.sizeEstimate.dataBlockCompressed(compressedSize, 0)
 				},
 			)
@@ -1748,7 +1724,7 @@ func newRowWriter(writable objstorage.Writable, o WriterOptions) *RawRowWriter {
 		checksummer: block.Checksummer{Type: o.Checksum},
 	}
 
-	w.coordination.init(o.Parallelism, w)
+	w.coordination.init(w)
 	defer func() {
 		if r := recover(); r != nil {
 			// Don't leak a goroutine if we hit a panic.
@@ -1762,7 +1738,7 @@ func newRowWriter(writable objstorage.Writable, o WriterOptions) *RawRowWriter {
 		return w
 	}
 
-	if o.FilterPolicy != nil {
+	if o.FilterPolicy != base.NoFilterPolicy {
 		switch o.FilterType {
 		case TableFilter:
 			w.filter = newTableFilterWriter(o.FilterPolicy)
@@ -1772,7 +1748,7 @@ func newRowWriter(writable objstorage.Writable, o WriterOptions) *RawRowWriter {
 	}
 
 	w.props.ComparerName = o.Comparer.Name
-	w.props.CompressionName = o.Compression.String()
+	w.props.CompressionName = o.Compression.Name
 	w.props.MergerName = o.MergerName
 	w.props.PropertyCollectorNames = "[]"
 
@@ -1814,7 +1790,7 @@ func newRowWriter(writable objstorage.Writable, o WriterOptions) *RawRowWriter {
 
 // rewriteSuffixes implements RawWriter.
 func (w *RawRowWriter) rewriteSuffixes(
-	r *Reader, wo WriterOptions, from, to []byte, concurrency int,
+	r *Reader, sst []byte, wo WriterOptions, from, to []byte, concurrency int,
 ) error {
 	for _, c := range w.blockPropCollectors {
 		if !c.SupportsSuffixReplacement() {
@@ -1827,7 +1803,7 @@ func (w *RawRowWriter) rewriteSuffixes(
 	}
 
 	// Copy data blocks in parallel, rewriting suffixes as we go.
-	blocks, err := rewriteDataBlocksInParallel(r, wo, l.Data, from, to, concurrency, func() blockRewriter {
+	blocks, err := rewriteDataBlocksInParallel(r, sst, wo, l.Data, from, to, concurrency, w.layout.compressor.Stats(), func() blockRewriter {
 		return rowblk.NewRewriter(r.Comparer, wo.BlockRestartInterval)
 	})
 	if err != nil {
@@ -1882,11 +1858,16 @@ func (w *RawRowWriter) rewriteSuffixes(
 		}
 	}
 	if len(blocks) > 0 {
+		props, err := r.ReadPropertiesBlock(context.TODO(), nil /* buffer pool */)
+		if err != nil {
+			return errors.Wrap(err, "reading properties block")
+		}
+
 		w.meta.Size = w.layout.offset
 		w.meta.updateSeqNum(blocks[0].start.SeqNum())
-		w.props.NumEntries = r.Properties.NumEntries
-		w.props.RawKeySize = r.Properties.RawKeySize
-		w.props.RawValueSize = r.Properties.RawValueSize
+		w.props.NumEntries = props.NumEntries
+		w.props.RawKeySize = props.RawKeySize
+		w.props.RawValueSize = props.RawValueSize
 		w.meta.SetSmallestPointKey(blocks[0].start)
 		w.meta.SetLargestPointKey(blocks[len(blocks)-1].end)
 	}
@@ -1899,12 +1880,16 @@ func (w *RawRowWriter) rewriteSuffixes(
 	// already have ensured this is valid if it exists).
 	if w.filter != nil {
 		if filterBlockBH, ok := l.FilterByName(w.filter.metaName()); ok {
-			filterBlock, _, err := readBlockBuf(r, filterBlockBH, nil)
+			filterBlock, _, err := readBlockBuf(sst, filterBlockBH, r.blockReader.ChecksumType(), nil)
 			if err != nil {
 				return errors.Wrap(err, "reading filter")
 			}
 			w.filter = copyFilterWriter{
-				origPolicyName: w.filter.policyName(), origMetaName: w.filter.metaName(), data: filterBlock,
+				origPolicyName: w.filter.policyName(),
+				origMetaName:   w.filter.metaName(),
+				// Clone the filter block, because readBlockBuf allows the
+				// returned byte slice to point directly into sst.
+				data: slices.Clone(filterBlock),
 			}
 		}
 	}
@@ -1942,8 +1927,14 @@ func (w *RawRowWriter) copyDataBlocks(
 
 // addDataBlock implements RawWriter.
 func (w *RawRowWriter) addDataBlock(b, sep []byte, bhp block.HandleWithProperties) error {
+	blockBuf := &w.dataBlockBuf.blockBuf
+	pb := block.CompressAndChecksum(
+		&blockBuf.dataBuf, b, blockkind.SSTableData, &w.layout.compressor, &blockBuf.checksummer,
+	)
+
 	// layout.WriteDataBlock keeps layout.offset up-to-date for us.
-	bh, err := w.layout.WriteDataBlock(b, &w.dataBlockBuf.blockBuf)
+	// Note that this can mangle the pb data.
+	bh, err := w.layout.writePrecompressedBlock(pb)
 	if err != nil {
 		return err
 	}
@@ -1970,15 +1961,9 @@ func (w *RawRowWriter) copyProperties(props Properties) {
 	w.props.IndexType = 0
 }
 
-// copyFilter implements RawWriter.
-func (w *RawRowWriter) copyFilter(filter []byte, filterName string) error {
-	if w.filter != nil && filterName != w.filter.policyName() {
-		return errors.New("mismatched filters")
-	}
-	w.filter = copyFilterWriter{
-		origPolicyName: w.filter.policyName(), origMetaName: w.filter.metaName(), data: filter,
-	}
-	return nil
+// setFilter implements RawWriter.
+func (w *RawRowWriter) setFilter(fw filterWriter) {
+	w.filter = fw
 }
 
 // SetSnapshotPinnedProperties sets the properties for pinned keys. Should only

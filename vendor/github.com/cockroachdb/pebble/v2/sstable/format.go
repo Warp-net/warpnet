@@ -24,11 +24,38 @@ const (
 	TableFormatUnspecified TableFormat = iota
 	TableFormatLevelDB
 	TableFormatRocksDBv2
-	TableFormatPebblev1 // Block properties.
-	TableFormatPebblev2 // Range keys.
-	TableFormatPebblev3 // Value blocks.
-	TableFormatPebblev4 // DELSIZED tombstones.
+
+	// TableFormatPebblev1 adds block properties.
+	TableFormatPebblev1
+
+	// TableFormatPebblev2 adds range keys
+	TableFormatPebblev2
+
+	// TableFormatPebblev3 adds value blocks.
+	TableFormatPebblev3
+
+	// TableFormatPebblev4 adds DELSIZED tombstones.
+	TableFormatPebblev4
+
+	// TableFormatPebblev5 adds columnar blocks.
 	TableFormatPebblev5 // Columnar blocks.
+
+	// TableFormatPebblev6 adds:
+	//  - checksum for footer;
+	//  - blob value handles;
+	//  - columnar metaindex;
+	//  - MinLZ compression support.
+	//
+	// Supported by CockroachDB v25.2 and later.
+	TableFormatPebblev6
+
+	// TableFormatPebblev7 adds:
+	//  - columnar + compressed properties block;
+	//  - footer attributes.
+	//
+	// Supported by CockroachDB v25.3 and later.
+	TableFormatPebblev7
+
 	NumTableFormats
 
 	TableFormatMax = NumTableFormats - 1
@@ -38,6 +65,18 @@ const (
 	// (CockroachDB uses it to read data from backups that could be old).
 	TableFormatMinSupported = TableFormatPebblev1
 )
+
+var footerSizes [NumTableFormats]int = [NumTableFormats]int{
+	TableFormatLevelDB:   levelDBFooterLen,
+	TableFormatRocksDBv2: rocksDBFooterLen,
+	TableFormatPebblev1:  rocksDBFooterLen,
+	TableFormatPebblev2:  rocksDBFooterLen,
+	TableFormatPebblev3:  rocksDBFooterLen,
+	TableFormatPebblev4:  rocksDBFooterLen,
+	TableFormatPebblev5:  rocksDBFooterLen,
+	TableFormatPebblev6:  checkedPebbleDBFooterLen,
+	TableFormatPebblev7:  pebbleDBv7FooterLen,
+}
 
 // TableFormatPebblev4, in addition to DELSIZED, introduces the use of
 // InternalKeyKindSSTableInternalObsoleteBit.
@@ -236,6 +275,10 @@ func parseTableFormat(magic []byte, version uint32) (TableFormat, error) {
 			return TableFormatPebblev4, nil
 		case 5:
 			return TableFormatPebblev5, nil
+		case 6:
+			return TableFormatPebblev6, nil
+		case 7:
+			return TableFormatPebblev7, nil
 		default:
 			return TableFormatUnspecified, base.CorruptionErrorf(
 				"(unsupported pebble format version %d)", errors.Safe(version))
@@ -250,6 +293,11 @@ func parseTableFormat(magic []byte, version uint32) (TableFormat, error) {
 // data, index and keyspan blocks.
 func (f TableFormat) BlockColumnar() bool {
 	return f >= TableFormatPebblev5
+}
+
+// FooterSize returns the maximum size of the footer for the table format.
+func (f TableFormat) FooterSize() int {
+	return footerSizes[f]
 }
 
 func (f TableFormat) newIndexIter() block.IndexBlockIterator {
@@ -276,6 +324,10 @@ func (f TableFormat) AsTuple() (string, uint32) {
 		return pebbleDBMagic, 4
 	case TableFormatPebblev5:
 		return pebbleDBMagic, 5
+	case TableFormatPebblev6:
+		return pebbleDBMagic, 6
+	case TableFormatPebblev7:
+		return pebbleDBMagic, 7
 	default:
 		panic("sstable: unknown table format version tuple")
 	}
@@ -300,6 +352,10 @@ func (f TableFormat) String() string {
 		return "(Pebble,v4)"
 	case TableFormatPebblev5:
 		return "(Pebble,v5)"
+	case TableFormatPebblev6:
+		return "(Pebble,v6)"
+	case TableFormatPebblev7:
+		return "(Pebble,v7)"
 	default:
 		panic("sstable: unknown table format version tuple")
 	}

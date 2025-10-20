@@ -26,8 +26,9 @@ func (p *provider) vfsOpenForReading(
 	filename := p.vfsPath(fileType, fileNum)
 	file, err := p.st.FS.Open(filename, vfs.RandomReadsOption)
 	if err != nil {
-		if opts.MustExist {
-			base.MustExist(p.st.FS, filename, p.st.Logger, err)
+		if opts.MustExist && p.IsNotExistError(err) {
+			err = base.AddDetailsToNotExistError(p.st.FS, filename, err)
+			err = base.MarkCorruptionError(err)
 		}
 		return nil, err
 	}
@@ -73,12 +74,15 @@ func (p *provider) vfsInit() error {
 
 	for _, filename := range listing {
 		fileType, fileNum, ok := base.ParseFilename(p.st.FS, filename)
-		if ok && fileType == base.FileTypeTable {
-			o := objstorage.ObjectMetadata{
-				FileType:    fileType,
-				DiskFileNum: fileNum,
+		if ok {
+			switch fileType {
+			case base.FileTypeTable, base.FileTypeBlob:
+				o := objstorage.ObjectMetadata{
+					FileType:    fileType,
+					DiskFileNum: fileNum,
+				}
+				p.mu.knownObjects[o.DiskFileNum] = o
 			}
-			p.mu.knownObjects[o.DiskFileNum] = o
 		}
 	}
 	return nil

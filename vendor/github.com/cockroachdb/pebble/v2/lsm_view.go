@@ -13,12 +13,13 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/humanize"
 	"github.com/cockroachdb/pebble/v2/internal/lsmview"
+	"github.com/cockroachdb/pebble/v2/internal/manifest"
 	"github.com/cockroachdb/pebble/v2/objstorage"
 )
 
 // LSMViewURL returns an URL which shows a diagram of the LSM.
 func (d *DB) LSMViewURL() string {
-	v := func() *version {
+	v := func() *manifest.Version {
 		d.mu.Lock()
 		defer d.mu.Unlock()
 
@@ -50,7 +51,7 @@ type lsmViewBuilder struct {
 	fmtKey base.FormatKey
 
 	levelNames []string
-	levels     [][]*fileMetadata
+	levels     [][]*manifest.TableMetadata
 
 	// The keys that appear as Smallest/Largest, sorted and formatted.
 	sortedKeys []string
@@ -64,14 +65,14 @@ type lsmViewBuilder struct {
 
 // InitLevels gets the metadata for the tables in the LSM and populates
 // levelNames and levels.
-func (b *lsmViewBuilder) InitLevels(v *version) {
+func (b *lsmViewBuilder) InitLevels(v *manifest.Version) {
 	var levelNames []string
-	var levels [][]*fileMetadata
+	var levels [][]*manifest.TableMetadata
 	for sublevel := len(v.L0SublevelFiles) - 1; sublevel >= 0; sublevel-- {
-		var files []*fileMetadata
-		v.L0SublevelFiles[sublevel].Each(func(f *fileMetadata) {
+		var files []*manifest.TableMetadata
+		for f := range v.L0SublevelFiles[sublevel].All() {
 			files = append(files, f)
-		})
+		}
 
 		levelNames = append(levelNames, fmt.Sprintf("L0.%d", sublevel))
 		levels = append(levels, files)
@@ -81,10 +82,10 @@ func (b *lsmViewBuilder) InitLevels(v *version) {
 		levels = append(levels, nil)
 	}
 	for level := 1; level < len(v.Levels); level++ {
-		var files []*fileMetadata
-		v.Levels[level].Slice().Each(func(f *fileMetadata) {
+		var files []*manifest.TableMetadata
+		for f := range v.Levels[level].All() {
 			files = append(files, f)
-		})
+		}
 		levelNames = append(levelNames, fmt.Sprintf("L%d", level))
 		levels = append(levels, files)
 	}
@@ -98,8 +99,8 @@ func (b *lsmViewBuilder) PopulateKeys() {
 	keys := make(map[string]int)
 	for _, l := range b.levels {
 		for _, f := range l {
-			keys[string(f.Smallest.UserKey)] = -1
-			keys[string(f.Largest.UserKey)] = -1
+			keys[string(f.Smallest().UserKey)] = -1
+			keys[string(f.Largest().UserKey)] = -1
 		}
 	}
 
@@ -143,14 +144,14 @@ func (b *lsmViewBuilder) Build(
 		for j, f := range files {
 			t := &l.Tables[j]
 			if !f.Virtual {
-				t.Label = fmt.Sprintf("%d", f.FileNum)
+				t.Label = fmt.Sprintf("%d", f.TableNum)
 			} else {
-				t.Label = fmt.Sprintf("%d (%d)", f.FileNum, f.FileBacking.DiskFileNum)
+				t.Label = fmt.Sprintf("%d (%d)", f.TableNum, f.TableBacking.DiskFileNum)
 			}
 
 			t.Size = f.Size
-			t.SmallestKey = b.keys[string(f.Smallest.UserKey)]
-			t.LargestKey = b.keys[string(f.Largest.UserKey)]
+			t.SmallestKey = b.keys[string(f.Smallest().UserKey)]
+			t.LargestKey = b.keys[string(f.Largest().UserKey)]
 			t.Details = b.tableDetails(f, objProvider, newIters)
 		}
 	}
@@ -158,17 +159,17 @@ func (b *lsmViewBuilder) Build(
 }
 
 func (b *lsmViewBuilder) tableDetails(
-	m *fileMetadata, objProvider objstorage.Provider, newIters tableNewIters,
+	m *manifest.TableMetadata, objProvider objstorage.Provider, newIters tableNewIters,
 ) []string {
 	res := make([]string, 0, 10)
 	outf := func(format string, args ...any) {
 		res = append(res, fmt.Sprintf(format, args...))
 	}
 
-	outf("%s: %s - %s", m.FileNum, m.Smallest.Pretty(b.fmtKey), m.Largest.Pretty(b.fmtKey))
+	outf("%s: %s - %s", m.TableNum, m.Smallest().Pretty(b.fmtKey), m.Largest().Pretty(b.fmtKey))
 	outf("size: %s", humanize.Bytes.Uint64(m.Size))
 	if m.Virtual {
-		meta, err := objProvider.Lookup(base.FileTypeTable, m.FileBacking.DiskFileNum)
+		meta, err := objProvider.Lookup(base.FileTypeTable, m.TableBacking.DiskFileNum)
 		var backingInfo string
 		switch {
 		case err != nil:
@@ -178,7 +179,7 @@ func (b *lsmViewBuilder) tableDetails(
 		case meta.IsExternal():
 			backingInfo = "external; "
 		}
-		outf("virtual; backed by %s (%ssize: %s)", m.FileBacking.DiskFileNum, backingInfo, humanize.Bytes.Uint64(m.FileBacking.Size))
+		outf("virtual; backed by %s (%ssize: %s)", m.TableBacking.DiskFileNum, backingInfo, humanize.Bytes.Uint64(m.TableBacking.Size))
 	}
 	outf("seqnums: %d - %d", m.SmallestSeqNum, m.LargestSeqNum)
 	if m.SyntheticPrefixAndSuffix.HasPrefix() {
@@ -196,14 +197,14 @@ func (b *lsmViewBuilder) tableDetails(
 		if err != nil {
 			outf("error opening table: %v", err)
 		} else {
-			defer iters.CloseAll()
+			defer func() { _ = iters.CloseAll() }()
 		}
 	}
 	const maxPoints = 14
 	const maxRangeDels = 10
 	const maxRangeKeys = 10
 	if m.HasPointKeys {
-		outf("points: %s - %s", m.SmallestPointKey.Pretty(b.fmtKey), m.LargestPointKey.Pretty(b.fmtKey))
+		outf("points: %s - %s", m.PointKeyBounds.Smallest().Pretty(b.fmtKey), m.PointKeyBounds.Largest().Pretty(b.fmtKey))
 		if b.scanTables {
 			n := 0
 			if it := iters.point; it != nil {
@@ -248,7 +249,7 @@ func (b *lsmViewBuilder) tableDetails(
 		}
 	}
 	if m.HasRangeKeys {
-		outf("range keys: %s - %s", m.SmallestRangeKey.Pretty(b.fmtKey), m.LargestRangeKey.Pretty(b.fmtKey))
+		outf("range keys: %s - %s", m.RangeKeyBounds.Smallest().Pretty(b.fmtKey), m.RangeKeyBounds.Largest().Pretty(b.fmtKey))
 		n := 0
 		if it := iters.rangeKey; it != nil {
 			span, err := it.First()

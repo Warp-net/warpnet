@@ -23,6 +23,7 @@ type getIter struct {
 	newIters tableNewIters
 	snapshot base.SeqNum
 	iterOpts IterOptions
+	iiopts   internalIterOpts
 	key      []byte
 	prefix   []byte
 	iter     internalIterator
@@ -30,7 +31,7 @@ type getIter struct {
 	batch    *Batch
 	mem      flushableList
 	l0       []manifest.LevelSlice
-	version  *version
+	version  *manifest.Version
 	iterKV   *base.InternalKV
 	// tombstoned and tombstonedSeqNum track whether the key has been deleted by
 	// a range delete tombstone. The first visible (at getIter.snapshot) range
@@ -266,12 +267,12 @@ func (g *getIter) getSSTableIterators(
 	}
 	// m is now positioned at the file containing the first point key ≥ `g.key`.
 	// Does it exist and possibly contain point keys with the user key 'g.key'?
-	if m == nil || !m.HasPointKeys || g.comparer.Compare(m.SmallestPointKey.UserKey, g.key) > 0 {
+	if m == nil || !m.HasPointKeys || g.comparer.Compare(m.PointKeyBounds.SmallestUserKey(), g.key) > 0 {
 		return emptyIter, nil, nil
 	}
 	// m may possibly contain point (or range deletion) keys relevant to g.key.
 	g.iterOpts.layer = level
-	iters, err := g.newIters(context.Background(), m, &g.iterOpts, internalIterOpts{}, iterPointKeys|iterRangeDeletions)
+	iters, err := g.newIters(context.Background(), m, &g.iterOpts, g.iiopts, iterPointKeys|iterRangeDeletions)
 	if err != nil {
 		return emptyIter, nil, err
 	}

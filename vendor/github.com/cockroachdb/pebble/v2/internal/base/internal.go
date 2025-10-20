@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/v2/internal/invariants"
 	"github.com/cockroachdb/redact"
 )
 
@@ -245,6 +247,12 @@ func (t InternalKeyTrailer) Kind() InternalKeyKind {
 	return InternalKeyKind(t & 0xff)
 }
 
+// IsExclusiveSentinel returns true if the trailer is a sentinel for an
+// exclusive boundary.
+func (t InternalKeyTrailer) IsExclusiveSentinel() bool {
+	return t.SeqNum() == SeqNumMax
+}
+
 // InternalKey is a key used for the in-memory and on-disk partial DBs that
 // make up a pebble DB.
 //
@@ -398,6 +406,9 @@ func (k InternalKey) EncodeTrailer() [8]byte {
 func (k InternalKey) Separator(
 	cmp Compare, sep Separator, buf []byte, other InternalKey,
 ) InternalKey {
+	if invariants.Enabled && (len(k.UserKey) == 0 || len(other.UserKey) == 0) {
+		panic(errors.AssertionFailedf("empty keys passed to Separator: %s, %s", k, other))
+	}
 	buf = sep(buf, k.UserKey, other.UserKey)
 	if len(buf) <= len(k.UserKey) && cmp(k.UserKey, buf) < 0 {
 		// The separator user key is physically shorter than k.UserKey (if it is
@@ -416,7 +427,7 @@ func (k InternalKey) Separator(
 // InternalKey.UserKey, though it is valid to pass a nil.
 func (k InternalKey) Successor(cmp Compare, succ Successor, buf []byte) InternalKey {
 	buf = succ(buf, k.UserKey)
-	if len(buf) <= len(k.UserKey) && cmp(k.UserKey, buf) < 0 {
+	if (len(k.UserKey) == 0 || len(buf) <= len(k.UserKey)) && cmp(k.UserKey, buf) < 0 {
 		// The successor user key is physically shorter that k.UserKey (if it is
 		// longer, we'll continue to use "k"), but logically after. Tack on the max
 		// sequence number to the shortened user key. Note that we could tack on
@@ -605,7 +616,7 @@ func MakeInternalKV(k InternalKey, v []byte) InternalKV {
 // InternalKV represents a single internal key-value pair.
 type InternalKV struct {
 	K InternalKey
-	V LazyValue
+	V InternalValue
 }
 
 // Kind returns the KV's internal key kind.
@@ -623,7 +634,12 @@ func (kv *InternalKV) InPlaceValue() []byte {
 	return kv.V.InPlaceValue()
 }
 
-// Value return's the KV's underlying value.
+// LazyValue returns a LazyValue containing the KV's value.
+func (kv *InternalKV) LazyValue() LazyValue {
+	return kv.V.LazyValue()
+}
+
+// Value returns the KV's underlying value.
 func (kv *InternalKV) Value(buf []byte) (val []byte, callerOwned bool, err error) {
 	return kv.V.Value(buf)
 }

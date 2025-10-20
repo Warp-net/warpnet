@@ -13,9 +13,10 @@ type ValuePrefix byte
 
 const (
 	// 2 most-significant bits of valuePrefix encodes the value-kind.
-	valueKindMask           ValuePrefix = 0xC0
-	valueKindIsValueHandle  ValuePrefix = 0x80
-	valueKindIsInPlaceValue ValuePrefix = 0x00
+	valueKindMask               ValuePrefix = 0xC0
+	valueKindIsValueBlockHandle ValuePrefix = 0x80
+	valueKindIsBlobHandle       ValuePrefix = 0x40
+	valueKindIsInPlaceValue     ValuePrefix = 0x00
 
 	// 1 bit indicates SET has same key prefix as immediately preceding key that
 	// is also a SET. If the immediately preceding key in the same block is a
@@ -32,9 +33,19 @@ const (
 	userDefinedShortAttributeMask ValuePrefix = 0x07
 )
 
-// IsValueHandle returns true if the ValuePrefix is for a valueHandle.
-func (vp ValuePrefix) IsValueHandle() bool {
-	return vp&valueKindMask == valueKindIsValueHandle
+// IsInPlaceValue returns true if the ValuePrefix is for an in-place value.
+func (vp ValuePrefix) IsInPlaceValue() bool {
+	return vp&valueKindMask == valueKindIsInPlaceValue
+}
+
+// IsValueBlockHandle returns true if the ValuePrefix is for a valblk.Handle.
+func (vp ValuePrefix) IsValueBlockHandle() bool {
+	return vp&valueKindMask == valueKindIsValueBlockHandle
+}
+
+// IsBlobValueHandle returns true if the ValuePrefix is for a blob.
+func (vp ValuePrefix) IsBlobValueHandle() bool {
+	return vp&valueKindMask == valueKindIsBlobHandle
 }
 
 // SetHasSamePrefix returns true if the ValuePrefix encodes that the key is a
@@ -46,14 +57,14 @@ func (vp ValuePrefix) SetHasSamePrefix() bool {
 // ShortAttribute returns the user-defined base.ShortAttribute encoded in the
 // ValuePrefix.
 //
-// REQUIRES: IsValueHandle()
+// REQUIRES: !IsInPlaceValue()
 func (vp ValuePrefix) ShortAttribute() base.ShortAttribute {
 	return base.ShortAttribute(vp & userDefinedShortAttributeMask)
 }
 
-// ValueHandlePrefix returns the ValuePrefix for a valueHandle.
-func ValueHandlePrefix(setHasSameKeyPrefix bool, attribute base.ShortAttribute) ValuePrefix {
-	prefix := valueKindIsValueHandle | ValuePrefix(attribute)
+// ValueBlockHandlePrefix returns the ValuePrefix for a valblk.Handle.
+func ValueBlockHandlePrefix(setHasSameKeyPrefix bool, attribute base.ShortAttribute) ValuePrefix {
+	prefix := valueKindIsValueBlockHandle | ValuePrefix(attribute)
 	if setHasSameKeyPrefix {
 		prefix = prefix | setHasSameKeyPrefixMask
 	}
@@ -69,8 +80,24 @@ func InPlaceValuePrefix(setHasSameKeyPrefix bool) ValuePrefix {
 	return prefix
 }
 
-// GetLazyValueForPrefixAndValueHandler is an interface for getting a LazyValue
-// from a value prefix and value.
-type GetLazyValueForPrefixAndValueHandler interface {
-	GetLazyValueForPrefixAndValueHandle(handle []byte) base.LazyValue
+// BlobValueHandlePrefix returns the ValuePrefix for a blob.
+func BlobValueHandlePrefix(setHasSameKeyPrefix bool, attr base.ShortAttribute) ValuePrefix {
+	prefix := valueKindIsBlobHandle | ValuePrefix(attr)
+	if setHasSameKeyPrefix {
+		prefix = prefix | setHasSameKeyPrefixMask
+	}
+	return prefix
+}
+
+// GetInternalValueForPrefixAndValueHandler is an interface for getting an
+// InternalValue from a value prefix and value.
+type GetInternalValueForPrefixAndValueHandler interface {
+	// GetInternalValueForPrefixAndValueHandle returns a InternalValue for the
+	// given value prefix and value.
+	//
+	// The result is only valid until the next call to
+	// GetInternalValueForPrefixAndValueHandle. Use InternalValue.Clone if the
+	// lifetime of the InternalValue needs to be extended. For more details, see
+	// the "memory management" comment where LazyValue is declared.
+	GetInternalValueForPrefixAndValueHandle(handle []byte) base.InternalValue
 }

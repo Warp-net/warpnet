@@ -24,7 +24,7 @@ type WithLevel struct {
 	Result Kind
 	// SplitFile can be set only when result is OnlyBoundary. If it is set, this
 	// file can be split to free up the range of interest.
-	SplitFile *manifest.FileMetadata
+	SplitFile *manifest.TableMetadata
 }
 
 // Kind indicates the kind of overlap detected between a key range and a level.
@@ -59,9 +59,9 @@ type Checker struct {
 // IteratorFactory is an interface that is used by the Checker to create
 // iterators for a given table. All methods can return nil as an empty iterator.
 type IteratorFactory interface {
-	Points(ctx context.Context, m *manifest.FileMetadata) (base.InternalIterator, error)
-	RangeDels(ctx context.Context, m *manifest.FileMetadata) (keyspan.FragmentIterator, error)
-	RangeKeys(ctx context.Context, m *manifest.FileMetadata) (keyspan.FragmentIterator, error)
+	Points(ctx context.Context, m *manifest.TableMetadata) (base.InternalIterator, error)
+	RangeDels(ctx context.Context, m *manifest.TableMetadata) (keyspan.FragmentIterator, error)
+	RangeKeys(ctx context.Context, m *manifest.TableMetadata) (keyspan.FragmentIterator, error)
 }
 
 // MakeChecker initializes a new Checker.
@@ -78,8 +78,8 @@ func (c *Checker) LSMOverlap(
 ) (WithLSM, error) {
 	var result WithLSM
 	result[0].Result = None
-	for sublevel := 0; sublevel < len(v.L0Sublevels.Levels); sublevel++ {
-		res, err := c.LevelOverlap(ctx, region, v.L0Sublevels.Levels[sublevel])
+	for sublevel := 0; sublevel < len(v.L0SublevelFiles); sublevel++ {
+		res, err := c.LevelOverlap(ctx, region, v.L0SublevelFiles[sublevel])
 		if err != nil {
 			return WithLSM{}, err
 		}
@@ -151,7 +151,7 @@ func (c *Checker) LevelOverlap(
 // EmptyRegion returns true if the given region doesn't overlap with any keys or
 // ranges in the given table.
 func (c *Checker) EmptyRegion(
-	ctx context.Context, region base.UserKeyBounds, m *manifest.FileMetadata,
+	ctx context.Context, region base.UserKeyBounds, m *manifest.TableMetadata,
 ) (bool, error) {
 	empty, err := c.emptyRegionPointsAndRangeDels(ctx, region, m)
 	if err != nil || !empty {
@@ -163,7 +163,7 @@ func (c *Checker) EmptyRegion(
 // emptyRegionPointsAndRangeDels returns true if the file doesn't contain any
 // point keys or range del spans that overlap with region.
 func (c *Checker) emptyRegionPointsAndRangeDels(
-	ctx context.Context, region base.UserKeyBounds, m *manifest.FileMetadata,
+	ctx context.Context, region base.UserKeyBounds, m *manifest.TableMetadata,
 ) (bool, error) {
 	if !m.HasPointKeys {
 		return true, nil
@@ -177,7 +177,7 @@ func (c *Checker) emptyRegionPointsAndRangeDels(
 		return false, err
 	}
 	if points != nil {
-		defer points.Close()
+		defer func() { _ = points.Close() }()
 		var kv *base.InternalKV
 		if c.cmp(region.Start, pointBounds.Start) <= 0 {
 			kv = points.First()
@@ -210,7 +210,7 @@ func (c *Checker) emptyRegionPointsAndRangeDels(
 // emptyRegionRangeKeys returns true if the file doesn't contain any range key
 // spans that overlap with region.
 func (c *Checker) emptyRegionRangeKeys(
-	ctx context.Context, region base.UserKeyBounds, m *manifest.FileMetadata,
+	ctx context.Context, region base.UserKeyBounds, m *manifest.TableMetadata,
 ) (bool, error) {
 	if !m.HasRangeKeys {
 		return true, nil

@@ -15,19 +15,7 @@ import (
 	"github.com/cockroachdb/pebble/v2/internal/keyspan"
 	"github.com/cockroachdb/pebble/v2/internal/manifest"
 	"github.com/cockroachdb/pebble/v2/internal/treeprinter"
-	"github.com/cockroachdb/pebble/v2/sstable"
 )
-
-type internalIterOpts struct {
-	// if compaction is set, sstable-level iterators will be created using
-	// NewCompactionIter; these iterators have a more constrained interface
-	// and are optimized for the sequential scan of a compaction.
-	compaction           bool
-	bufferPool           *sstable.BufferPool
-	stats                *base.InternalIteratorStats
-	iterStatsAccumulator sstable.IterStatsAccumulator
-	boundLimitedFilter   sstable.BoundLimitedBlockPropertyFilter
-}
 
 // levelIter provides a merged view of the sstables in a level.
 //
@@ -81,7 +69,7 @@ type levelIter struct {
 	//   be relevant to the iteration.
 	iter internalIterator
 	// iterFile holds the current file. It is always equal to l.files.Current().
-	iterFile *fileMetadata
+	iterFile *manifest.TableMetadata
 	newIters tableNewIters
 	files    manifest.LevelIterator
 	err      error
@@ -169,7 +157,7 @@ func (l *levelIter) init(
 		l.tableOpts.PointKeyFilters = l.filtersBuf[:0:1]
 	}
 	l.tableOpts.UseL6Filters = opts.UseL6Filters
-	l.tableOpts.CategoryAndQoS = opts.CategoryAndQoS
+	l.tableOpts.Category = opts.Category
 	l.tableOpts.layer = l.layer
 	l.tableOpts.snapshotForHideObsoletePoints = opts.snapshotForHideObsoletePoints
 	l.comparer = comparer
@@ -196,7 +184,7 @@ func (l *levelIter) initCombinedIterState(state *combinedIterState) {
 	l.combinedIterState = state
 }
 
-func (l *levelIter) maybeTriggerCombinedIteration(file *fileMetadata, dir int) {
+func (l *levelIter) maybeTriggerCombinedIteration(file *manifest.TableMetadata, dir int) {
 	// If we encounter a file that contains range keys, we may need to
 	// trigger a switch to combined range-key and point-key iteration,
 	// if the *pebble.Iterator is configured for it. This switch is done
@@ -216,8 +204,8 @@ func (l *levelIter) maybeTriggerCombinedIteration(file *fileMetadata, dir int) {
 	// tell us whether the file has any RangeKeySets. Otherwise, we must
 	// fallback to assuming it does if HasRangeKeys=true.
 	if file != nil && file.HasRangeKeys && l.combinedIterState != nil && !l.combinedIterState.initialized &&
-		(l.upper == nil || l.cmp(file.SmallestRangeKey.UserKey, l.upper) < 0) &&
-		(l.lower == nil || l.cmp(file.LargestRangeKey.UserKey, l.lower) > 0) &&
+		(l.upper == nil || l.cmp(file.RangeKeyBounds.SmallestUserKey(), l.upper) < 0) &&
+		(l.lower == nil || l.cmp(file.RangeKeyBounds.LargestUserKey(), l.lower) > 0) &&
 		(!file.StatsValid() || file.Stats.NumRangeKeySets > 0) {
 		// The file contains range keys, and we're not using combined iteration yet.
 		// Trigger a switch to combined iteration. It's possible that a switch has
@@ -235,22 +223,22 @@ func (l *levelIter) maybeTriggerCombinedIteration(file *fileMetadata, dir int) {
 		case +1:
 			if !l.combinedIterState.triggered {
 				l.combinedIterState.triggered = true
-				l.combinedIterState.key = file.SmallestRangeKey.UserKey
-			} else if l.cmp(l.combinedIterState.key, file.SmallestRangeKey.UserKey) > 0 {
-				l.combinedIterState.key = file.SmallestRangeKey.UserKey
+				l.combinedIterState.key = file.RangeKeyBounds.SmallestUserKey()
+			} else if l.cmp(l.combinedIterState.key, file.RangeKeyBounds.SmallestUserKey()) > 0 {
+				l.combinedIterState.key = file.RangeKeyBounds.SmallestUserKey()
 			}
 		case -1:
 			if !l.combinedIterState.triggered {
 				l.combinedIterState.triggered = true
-				l.combinedIterState.key = file.LargestRangeKey.UserKey
-			} else if l.cmp(l.combinedIterState.key, file.LargestRangeKey.UserKey) < 0 {
-				l.combinedIterState.key = file.LargestRangeKey.UserKey
+				l.combinedIterState.key = file.RangeKeyBounds.LargestUserKey()
+			} else if l.cmp(l.combinedIterState.key, file.RangeKeyBounds.LargestUserKey()) < 0 {
+				l.combinedIterState.key = file.RangeKeyBounds.LargestUserKey()
 			}
 		}
 	}
 }
 
-func (l *levelIter) findFileGE(key []byte, flags base.SeekGEFlags) *fileMetadata {
+func (l *levelIter) findFileGE(key []byte, flags base.SeekGEFlags) *manifest.TableMetadata {
 	// Find the earliest file whose largest key is >= key.
 
 	// NB: if flags.TrySeekUsingNext()=true, the levelIter must respect it. If
@@ -266,7 +254,7 @@ func (l *levelIter) findFileGE(key []byte, flags base.SeekGEFlags) *fileMetadata
 	//      much later the seek key is, so it's possible there are many sstables
 	//      between the current position and the seek key. However in most real-
 	//      world use cases, the seek key is likely to be nearby. Rather than
-	//      performing a log(N) seek through the file metadata, we next a few
+	//      performing a log(N) seek through the table metadata, we next a few
 	//      times from our existing location. If we don't find a file whose
 	//      largest is >= key within a few nexts, we fall back to seeking.
 	//
@@ -310,7 +298,7 @@ func (l *levelIter) findFileGE(key []byte, flags base.SeekGEFlags) *fileMetadata
 		nextsUntilSeek = -1
 	}
 
-	var m *fileMetadata
+	var m *manifest.TableMetadata
 	if nextInsteadOfSeek {
 		m = l.iterFile
 	} else {
@@ -347,7 +335,7 @@ func (l *levelIter) findFileGE(key []byte, flags base.SeekGEFlags) *fileMetadata
 		//
 		// If the file does not contain point keys ≥ `key`, next to continue
 		// looking for a file that does.
-		if (m.HasRangeKeys || nextInsteadOfSeek) && l.cmp(m.LargestPointKey.UserKey, key) < 0 {
+		if (m.HasRangeKeys || nextInsteadOfSeek) && l.cmp(m.PointKeyBounds.LargestUserKey(), key) < 0 {
 			// If nextInsteadOfSeek is set and nextsUntilSeek is non-negative,
 			// the iterator has been nexting hoping to discover the relevant
 			// file without seeking. It's exhausted the allotted nextsUntilSeek
@@ -373,7 +361,7 @@ func (l *levelIter) findFileGE(key []byte, flags base.SeekGEFlags) *fileMetadata
 		// a table which can't possibly contain the target key and is required
 		// for correctness by mergingIter.SeekGE (see the comment in that
 		// function).
-		if m.LargestPointKey.IsExclusiveSentinel() && l.cmp(m.LargestPointKey.UserKey, key) == 0 {
+		if m.PointKeyBounds.Largest().IsExclusiveSentinel() && l.cmp(m.PointKeyBounds.LargestUserKey(), key) == 0 {
 			m = l.files.Next()
 			continue
 		}
@@ -384,7 +372,7 @@ func (l *levelIter) findFileGE(key []byte, flags base.SeekGEFlags) *fileMetadata
 	return m
 }
 
-func (l *levelIter) findFileLT(key []byte, flags base.SeekLTFlags) *fileMetadata {
+func (l *levelIter) findFileLT(key []byte, flags base.SeekLTFlags) *manifest.TableMetadata {
 	// Find the last file whose smallest key is < ikey.
 
 	// Ordinarily we seek the LevelIterator using SeekLT.
@@ -401,7 +389,7 @@ func (l *levelIter) findFileLT(key []byte, flags base.SeekLTFlags) *fileMetadata
 	// one file at a time, checking each for range keys.
 	prevInsteadOfSeek := flags.RelativeSeek() && l.combinedIterState != nil && !l.combinedIterState.initialized
 
-	var m *fileMetadata
+	var m *manifest.TableMetadata
 	if prevInsteadOfSeek {
 		m = l.iterFile
 	} else {
@@ -438,7 +426,7 @@ func (l *levelIter) findFileLT(key []byte, flags base.SeekLTFlags) *fileMetadata
 		//
 		// If the file does not contain point keys < `key`, prev to continue
 		// looking for a file that does.
-		if (m.HasRangeKeys || prevInsteadOfSeek) && l.cmp(m.SmallestPointKey.UserKey, key) >= 0 {
+		if (m.HasRangeKeys || prevInsteadOfSeek) && l.cmp(m.PointKeyBounds.SmallestUserKey(), key) >= 0 {
 			m = l.files.Prev()
 			continue
 		}
@@ -452,14 +440,14 @@ func (l *levelIter) findFileLT(key []byte, flags base.SeekLTFlags) *fileMetadata
 // Init the iteration bounds for the current table. Returns -1 if the table
 // lies fully before the lower bound, +1 if the table lies fully after the
 // upper bound, and 0 if the table overlaps the iteration bounds.
-func (l *levelIter) initTableBounds(f *fileMetadata) int {
+func (l *levelIter) initTableBounds(f *manifest.TableMetadata) int {
 	l.tableOpts.LowerBound = l.lower
 	if l.tableOpts.LowerBound != nil {
-		if l.cmp(f.LargestPointKey.UserKey, l.tableOpts.LowerBound) < 0 {
+		if l.cmp(f.PointKeyBounds.LargestUserKey(), l.tableOpts.LowerBound) < 0 {
 			// The largest key in the sstable is smaller than the lower bound.
 			return -1
 		}
-		if l.cmp(l.tableOpts.LowerBound, f.SmallestPointKey.UserKey) <= 0 {
+		if l.cmp(l.tableOpts.LowerBound, f.PointKeyBounds.SmallestUserKey()) <= 0 {
 			// The lower bound is smaller or equal to the smallest key in the
 			// table. Iteration within the table does not need to check the lower
 			// bound.
@@ -468,15 +456,15 @@ func (l *levelIter) initTableBounds(f *fileMetadata) int {
 	}
 	l.tableOpts.UpperBound = l.upper
 	if l.tableOpts.UpperBound != nil {
-		if l.cmp(f.SmallestPointKey.UserKey, l.tableOpts.UpperBound) >= 0 {
+		if l.cmp(f.PointKeyBounds.SmallestUserKey(), l.tableOpts.UpperBound) >= 0 {
 			// The smallest key in the sstable is greater than or equal to the upper
 			// bound.
 			return 1
 		}
-		if l.cmp(l.tableOpts.UpperBound, f.LargestPointKey.UserKey) > 0 {
+		if l.cmp(l.tableOpts.UpperBound, f.PointKeyBounds.LargestUserKey()) > 0 {
 			// The upper bound is greater than the largest key in the
 			// table. Iteration within the table does not need to check the upper
-			// bound. NB: tableOpts.UpperBound is exclusive and f.LargestPointKey is
+			// bound. NB: tableOpts.UpperBound is exclusive and f.PointKeyBounds.Largest() is
 			// inclusive.
 			l.tableOpts.UpperBound = nil
 		}
@@ -492,7 +480,7 @@ const (
 	newFileLoaded
 )
 
-func (l *levelIter) loadFile(file *fileMetadata, dir int) loadFileReturnIndicator {
+func (l *levelIter) loadFile(file *manifest.TableMetadata, dir int) loadFileReturnIndicator {
 	if l.iterFile == file {
 		if l.err != nil {
 			return noFileLoaded
@@ -563,7 +551,7 @@ func (l *levelIter) loadFile(file *fileMetadata, dir int) loadFileReturnIndicato
 		// any keys within the iteration prefix. Loading the next file is
 		// unnecessary. This has been observed in practice on slow shared
 		// storage. See #3575.
-		if l.prefix != nil && l.cmp(l.split.Prefix(file.SmallestPointKey.UserKey), l.prefix) > 0 {
+		if l.prefix != nil && l.cmp(l.split.Prefix(file.PointKeyBounds.SmallestUserKey()), l.prefix) > 0 {
 			// Note that because l.iter is nil, a subsequent call to
 			// SeekPrefixGE with TrySeekUsingNext()=true will load the file
 			// (returning newFileLoaded) and disable TrySeekUsingNext before
@@ -852,7 +840,7 @@ func (l *levelIter) skipEmptyFileForward() *base.InternalKV {
 		// subsequent SeekPrefixGE with TrySeekUsingNext could mistakenly skip
 		// the file's relevant keys.
 		if l.prefix != nil {
-			if l.cmp(l.split.Prefix(l.iterFile.LargestPointKey.UserKey), l.prefix) > 0 {
+			if l.cmp(l.split.Prefix(l.iterFile.PointKeyBounds.LargestUserKey()), l.prefix) > 0 {
 				l.exhaustedForward()
 				return nil
 			}
@@ -962,7 +950,7 @@ func (l *levelIter) DebugTree(tp treeprinter.Node) {
 
 func (l *levelIter) String() string {
 	if l.iterFile != nil {
-		return fmt.Sprintf("%s: fileNum=%s", l.layer, l.iterFile.FileNum.String())
+		return fmt.Sprintf("%s: fileNum=%s", l.layer, l.iterFile.TableNum.String())
 	}
 	return fmt.Sprintf("%s: fileNum=<nil>", l.layer)
 }

@@ -5,15 +5,21 @@
 package pebble
 
 import (
+	stdcmp "cmp"
 	"context"
 	"fmt"
 	"io"
+	"iter"
+	"slices"
 	"sort"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/keyspan"
 	"github.com/cockroachdb/pebble/v2/internal/manifest"
+	"github.com/cockroachdb/pebble/v2/sstable"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
+	"github.com/cockroachdb/pebble/v2/sstable/block"
 )
 
 // This file implements DB.CheckLevels() which checks that every entry in the
@@ -99,9 +105,9 @@ func (m *simpleMergingIter) init(
 		if l.iterKV != nil {
 			item := simpleMergingIterItem{
 				index: i,
-				value: l.iterKV.V,
+				kv:    *l.iterKV,
 			}
-			item.key = l.iterKV.K.Clone()
+			item.kv.K = l.iterKV.K.Clone()
 			m.heap.items = append(m.heap.items, item)
 		}
 	}
@@ -122,7 +128,7 @@ func (m *simpleMergingIter) positionRangeDels() {
 		if l.rangeDelIter == nil {
 			continue
 		}
-		t, err := l.rangeDelIter.SeekGE(item.key.UserKey)
+		t, err := l.rangeDelIter.SeekGE(item.kv.K.UserKey)
 		m.err = firstError(m.err, err)
 		l.tombstone = t
 	}
@@ -136,7 +142,7 @@ func (m *simpleMergingIter) step() bool {
 	item := &m.heap.items[0]
 	l := &m.levels[item.index]
 	// Sentinels are not relevant for this point checking.
-	if !item.key.IsExclusiveSentinel() && item.key.Visible(m.snapshot, base.SeqNumMax) {
+	if !item.kv.K.IsExclusiveSentinel() && item.kv.K.Visible(m.snapshot, base.SeqNumMax) {
 		// This is a visible point key.
 		if !m.handleVisiblePoint(item, l) {
 			return false
@@ -160,16 +166,14 @@ func (m *simpleMergingIter) step() bool {
 		// L1 and higher levels are ordered. This happens when levelIter moves to the
 		// next sstable in the level, in which case item.key is previous sstable's
 		// last point key.
-		if !l.iterKV.K.IsExclusiveSentinel() && base.InternalCompare(m.heap.cmp, item.key, l.iterKV.K) >= 0 {
+		if !l.iterKV.K.IsExclusiveSentinel() && base.InternalCompare(m.heap.cmp, item.kv.K, l.iterKV.K) >= 0 {
 			m.err = errors.Errorf("out of order keys %s >= %s in %s",
-				item.key.Pretty(m.formatKey), l.iterKV.K.Pretty(m.formatKey), l.iter)
+				item.kv.K.Pretty(m.formatKey), l.iterKV.K.Pretty(m.formatKey), l.iter)
 			return false
 		}
-		item.key = base.InternalKey{
-			Trailer: l.iterKV.K.Trailer,
-			UserKey: append(item.key.UserKey[:0], l.iterKV.K.UserKey...),
-		}
-		item.value = l.iterKV.V
+		userKeyBuf := item.kv.K.UserKey[:0]
+		item.kv = *l.iterKV
+		item.kv.K.UserKey = append(userKeyBuf, l.iterKV.K.UserKey...)
 		if m.heap.len() > 1 {
 			m.heap.fix(0)
 		}
@@ -189,7 +193,7 @@ func (m *simpleMergingIter) step() bool {
 			if err != nil {
 				m.err = errors.CombineErrors(m.err,
 					errors.Wrapf(err, "merge processing error on key %s in %s",
-						item.key.Pretty(m.formatKey), m.lastIterMsg))
+						item.kv.K.Pretty(m.formatKey), m.lastIterMsg))
 			}
 			m.valueMerger = nil
 		}
@@ -205,21 +209,21 @@ func (m *simpleMergingIter) handleVisiblePoint(
 	item *simpleMergingIterItem, l *simpleMergingIterLevel,
 ) (ok bool) {
 	m.numPoints++
-	keyChanged := m.heap.cmp(item.key.UserKey, m.lastKey.UserKey) != 0
+	keyChanged := m.heap.cmp(item.kv.K.UserKey, m.lastKey.UserKey) != 0
 	if !keyChanged {
 		// At the same user key. We will see them in decreasing seqnum
 		// order so the lastLevel must not be lower.
 		if m.lastLevel > item.index {
 			m.err = errors.Errorf("found InternalKey %s in %s and InternalKey %s in %s",
-				item.key.Pretty(m.formatKey), l.iter, m.lastKey.Pretty(m.formatKey),
+				item.kv.K.Pretty(m.formatKey), l.iter, m.lastKey.Pretty(m.formatKey),
 				m.lastIterMsg)
 			return false
 		}
 		m.lastLevel = item.index
 	} else {
 		// The user key has changed.
-		m.lastKey.Trailer = item.key.Trailer
-		m.lastKey.UserKey = append(m.lastKey.UserKey[:0], item.key.UserKey...)
+		m.lastKey.Trailer = item.kv.K.Trailer
+		m.lastKey.UserKey = append(m.lastKey.UserKey[:0], item.kv.K.UserKey...)
 		m.lastLevel = item.index
 	}
 	// Ongoing series of MERGE records ends with a MERGE record.
@@ -231,14 +235,14 @@ func (m *simpleMergingIter) handleVisiblePoint(
 		}
 		m.valueMerger = nil
 	}
-	itemValue, _, err := item.value.Value(nil)
+	itemValue, _, err := item.kv.Value(nil)
 	if err != nil {
 		m.err = err
 		return false
 	}
 	if m.valueMerger != nil {
 		// Ongoing series of MERGE records.
-		switch item.key.Kind() {
+		switch item.kv.K.Kind() {
 		case InternalKeyKindSingleDelete, InternalKeyKindDelete, InternalKeyKindDeleteSized:
 			var closer io.Closer
 			_, closer, m.err = m.valueMerger.Finish(true /* includesBase */)
@@ -260,17 +264,17 @@ func (m *simpleMergingIter) handleVisiblePoint(
 			m.err = m.valueMerger.MergeOlder(itemValue)
 		default:
 			m.err = errors.Errorf("pebble: invalid internal key kind %s in %s",
-				item.key.Pretty(m.formatKey),
+				item.kv.K.Pretty(m.formatKey),
 				l.iter)
 			return false
 		}
-	} else if item.key.Kind() == InternalKeyKindMerge && m.err == nil {
+	} else if item.kv.K.Kind() == InternalKeyKindMerge && m.err == nil {
 		// New series of MERGE records.
-		m.valueMerger, m.err = m.merge(item.key.UserKey, itemValue)
+		m.valueMerger, m.err = m.merge(item.kv.K.UserKey, itemValue)
 	}
 	if m.err != nil {
 		m.err = errors.Wrapf(m.err, "merge processing error on key %s in %s",
-			item.key.Pretty(m.formatKey), l.iter)
+			item.kv.K.Pretty(m.formatKey), l.iter)
 		return false
 	}
 	// Is this point covered by a tombstone at a lower level? Note that all these
@@ -280,9 +284,9 @@ func (m *simpleMergingIter) handleVisiblePoint(
 		if lvl.rangeDelIter == nil || lvl.tombstone.Empty() {
 			continue
 		}
-		if lvl.tombstone.Contains(m.heap.cmp, item.key.UserKey) && lvl.tombstone.CoversAt(m.snapshot, item.key.SeqNum()) {
+		if lvl.tombstone.Contains(m.heap.cmp, item.kv.K.UserKey) && lvl.tombstone.CoversAt(m.snapshot, item.kv.K.SeqNum()) {
 			m.err = errors.Errorf("tombstone %s in %s deletes key %s in %s",
-				lvl.tombstone.Pretty(m.formatKey), lvl.iter, item.key.Pretty(m.formatKey),
+				lvl.tombstone.Pretty(m.formatKey), lvl.iter, item.kv.K.Pretty(m.formatKey),
 				l.iter)
 			return false
 		}
@@ -299,9 +303,9 @@ func (m *simpleMergingIter) handleVisiblePoint(
 // - Collect the start and end user keys from all these tombstones
 //   (collectAllUserKey()) and use them to fragment all the tombstones
 //   (fragmentUsingUserKey()).
-// - Sort tombstones by start key and decreasing seqnum
-//   (tombstonesByStartKeyAndSeqnum) - all tombstones that have the same start
-//   key will have the same end key because they have been fragmented.
+// - Sort tombstones by start key and decreasing seqnum (all tombstones that
+//   have the same start key will have the same end key because they have been
+//   fragmented)
 // - Iterate and check (iterateAndCheckTombstones()).
 //
 // Note that this simple approach requires holding all the tombstones across all
@@ -314,36 +318,18 @@ type tombstoneWithLevel struct {
 	level int
 	// The level in LSM. A -1 means it's a memtable.
 	lsmLevel int
-	fileNum  FileNum
-}
-
-// For sorting tombstoneWithLevels in increasing order of start UserKey and
-// for the same start UserKey in decreasing order of seqnum.
-type tombstonesByStartKeyAndSeqnum struct {
-	cmp Compare
-	buf []tombstoneWithLevel
-}
-
-func (v *tombstonesByStartKeyAndSeqnum) Len() int { return len(v.buf) }
-func (v *tombstonesByStartKeyAndSeqnum) Less(i, j int) bool {
-	less := v.cmp(v.buf[i].Start, v.buf[j].Start)
-	if less == 0 {
-		return v.buf[i].LargestSeqNum() > v.buf[j].LargestSeqNum()
-	}
-	return less < 0
-}
-func (v *tombstonesByStartKeyAndSeqnum) Swap(i, j int) {
-	v.buf[i], v.buf[j] = v.buf[j], v.buf[i]
+	tableNum base.TableNum
 }
 
 func iterateAndCheckTombstones(
 	cmp Compare, formatKey base.FormatKey, tombstones []tombstoneWithLevel,
 ) error {
-	sortBuf := tombstonesByStartKeyAndSeqnum{
-		cmp: cmp,
-		buf: tombstones,
-	}
-	sort.Sort(&sortBuf)
+	slices.SortFunc(tombstones, func(a, b tombstoneWithLevel) int {
+		if v := cmp(a.Start, b.Start); v != 0 {
+			return v
+		}
+		return stdcmp.Compare(b.LargestSeqNum(), a.LargestSeqNum())
+	})
 
 	// For a sequence of tombstones that share the same start UserKey, we will
 	// encounter them in non-increasing seqnum order and so should encounter them
@@ -353,8 +339,8 @@ func iterateAndCheckTombstones(
 		if cmp(lastTombstone.Start, t.Start) == 0 && lastTombstone.level > t.level {
 			return errors.Errorf("encountered tombstone %s in %s"+
 				" that has a lower seqnum than the same tombstone in %s",
-				t.Span.Pretty(formatKey), levelOrMemtable(t.lsmLevel, t.fileNum),
-				levelOrMemtable(lastTombstone.lsmLevel, lastTombstone.fileNum))
+				t.Span.Pretty(formatKey), levelOrMemtable(t.lsmLevel, t.tableNum),
+				levelOrMemtable(lastTombstone.lsmLevel, lastTombstone.tableNum))
 		}
 		lastTombstone = t
 	}
@@ -370,6 +356,10 @@ type checkConfig struct {
 	stats     *CheckLevelsStats
 	merge     Merge
 	formatKey base.FormatKey
+	readEnv   block.ReadEnv
+	// blobValueFetcher is the ValueFetcher to use when retrieving values stored
+	// externally in blob files.
+	blobValueFetcher blob.ValueFetcher
 }
 
 // cmp is shorthand for comparer.Compare.
@@ -397,18 +387,17 @@ func checkRangeTombstones(c *checkConfig) error {
 	}
 
 	current := c.readState.current
-	addTombstonesFromLevel := func(files manifest.LevelIterator, lsmLevel int) error {
-		for f := files.First(); f != nil; f = files.Next() {
-			lf := files.Take()
+	addTombstonesFromLevel := func(files iter.Seq[*manifest.TableMetadata], lsmLevel int) error {
+		for f := range files {
 			iters, err := c.newIters(
-				context.Background(), lf.FileMetadata, &IterOptions{layer: manifest.Level(lsmLevel)},
+				context.Background(), f, &IterOptions{layer: manifest.Level(lsmLevel)},
 				internalIterOpts{}, iterRangeDeletions)
 			if err != nil {
 				return err
 			}
-			tombstones, err = addTombstonesFromIter(iters.RangeDeletion(), level, lsmLevel, f.FileNum,
+			tombstones, err = addTombstonesFromIter(iters.RangeDeletion(), level, lsmLevel, f.TableNum,
 				tombstones, c.seqNum, c.cmp, c.formatKey)
-			iters.CloseAll()
+			_ = iters.CloseAll()
 
 			if err != nil {
 				return err
@@ -421,14 +410,14 @@ func checkRangeTombstones(c *checkConfig) error {
 		if current.L0SublevelFiles[i].Empty() {
 			continue
 		}
-		err := addTombstonesFromLevel(current.L0SublevelFiles[i].Iter(), 0)
+		err := addTombstonesFromLevel(current.L0SublevelFiles[i].All(), 0)
 		if err != nil {
 			return err
 		}
 		level++
 	}
 	for i := 1; i < len(current.Levels); i++ {
-		if err := addTombstonesFromLevel(current.Levels[i].Iter(), i); err != nil {
+		if err := addTombstonesFromLevel(current.Levels[i].All(), i); err != nil {
 			return err
 		}
 		level++
@@ -443,18 +432,18 @@ func checkRangeTombstones(c *checkConfig) error {
 	return iterateAndCheckTombstones(c.cmp, c.formatKey, tombstones)
 }
 
-func levelOrMemtable(lsmLevel int, fileNum FileNum) string {
+func levelOrMemtable(lsmLevel int, tableNum base.TableNum) string {
 	if lsmLevel == -1 {
 		return "memtable"
 	}
-	return fmt.Sprintf("L%d: fileNum=%s", lsmLevel, fileNum)
+	return fmt.Sprintf("L%d: fileNum=%s", lsmLevel, tableNum)
 }
 
 func addTombstonesFromIter(
 	iter keyspan.FragmentIterator,
 	level int,
 	lsmLevel int,
-	fileNum FileNum,
+	tableNum base.TableNum,
 	tombstones []tombstoneWithLevel,
 	seqNum base.SeqNum,
 	cmp Compare,
@@ -473,7 +462,7 @@ func addTombstonesFromIter(
 		// rangeDelV1 as well.
 		if cmp(prevTombstone.End, t.Start) > 0 {
 			return nil, errors.Errorf("unordered or unfragmented range delete tombstones %s, %s in %s",
-				prevTombstone.Pretty(formatKey), t.Pretty(formatKey), levelOrMemtable(lsmLevel, fileNum))
+				prevTombstone.Pretty(formatKey), t.Pretty(formatKey), levelOrMemtable(lsmLevel, tableNum))
 		}
 		prevTombstone = t
 
@@ -482,7 +471,7 @@ func addTombstonesFromIter(
 				Span:     t,
 				level:    level,
 				lsmLevel: lsmLevel,
-				fileNum:  fileNum,
+				tableNum: tableNum,
 			})
 		}
 	}
@@ -492,38 +481,15 @@ func addTombstonesFromIter(
 	return tombstones, nil
 }
 
-type userKeysSort struct {
-	cmp Compare
-	buf [][]byte
-}
-
-func (v *userKeysSort) Len() int { return len(v.buf) }
-func (v *userKeysSort) Less(i, j int) bool {
-	return v.cmp(v.buf[i], v.buf[j]) < 0
-}
-func (v *userKeysSort) Swap(i, j int) {
-	v.buf[i], v.buf[j] = v.buf[j], v.buf[i]
-}
 func collectAllUserKeys(cmp Compare, tombstones []tombstoneWithLevel) [][]byte {
 	keys := make([][]byte, 0, len(tombstones)*2)
 	for _, t := range tombstones {
-		keys = append(keys, t.Start)
-		keys = append(keys, t.End)
+		keys = append(keys, t.Start, t.End)
 	}
-	sorter := userKeysSort{
-		cmp: cmp,
-		buf: keys,
-	}
-	sort.Sort(&sorter)
-	var last, curr int
-	for last, curr = -1, 0; curr < len(keys); curr++ {
-		if last < 0 || cmp(keys[last], keys[curr]) != 0 {
-			last++
-			keys[last] = keys[curr]
-		}
-	}
-	keys = keys[:last+1]
-	return keys
+	slices.SortFunc(keys, cmp)
+	return slices.CompactFunc(keys, func(a, b []byte) bool {
+		return cmp(a, b) == 0
+	})
 }
 
 func fragmentUsingUserKeys(
@@ -579,11 +545,21 @@ func (d *DB) CheckLevels(stats *CheckLevelsStats) error {
 		stats:     stats,
 		merge:     d.merge,
 		formatKey: d.opts.Comparer.FormatKey,
+		readEnv:   block.ReadEnv{
+			// TODO(jackson): Add categorized stats.
+		},
 	}
+	checkConfig.blobValueFetcher.Init(&readState.current.BlobFiles, d.fileCache, checkConfig.readEnv)
+	defer func() { _ = checkConfig.blobValueFetcher.Close() }()
 	return checkLevelsInternal(checkConfig)
 }
 
 func checkLevelsInternal(c *checkConfig) (err error) {
+	internalOpts := internalIterOpts{
+		readEnv:          sstable.ReadEnv{Block: c.readEnv},
+		blobValueFetcher: &c.blobValueFetcher,
+	}
+
 	// Phase 1: Use a simpleMergingIter to step through all the points and ensure
 	// that points with the same user key at different levels are not inverted
 	// wrt sequence numbers and the same holds for tombstones that cover points.
@@ -641,7 +617,7 @@ func checkLevelsInternal(c *checkConfig) (err error) {
 		iterOpts := IterOptions{logger: c.logger}
 		li := &levelIter{}
 		li.init(context.Background(), iterOpts, c.comparer, c.newIters, manifestIter,
-			manifest.L0Sublevel(sublevel), internalIterOpts{})
+			manifest.L0Sublevel(sublevel), internalOpts)
 		li.initRangeDel(&mlevelAlloc[0])
 		mlevelAlloc[0].iter = li
 		mlevelAlloc = mlevelAlloc[1:]
@@ -654,7 +630,7 @@ func checkLevelsInternal(c *checkConfig) (err error) {
 		iterOpts := IterOptions{logger: c.logger}
 		li := &levelIter{}
 		li.init(context.Background(), iterOpts, c.comparer, c.newIters,
-			current.Levels[level].Iter(), manifest.Level(level), internalIterOpts{})
+			current.Levels[level].Iter(), manifest.Level(level), internalOpts)
 		li.initRangeDel(&mlevelAlloc[0])
 		mlevelAlloc[0].iter = li
 		mlevelAlloc = mlevelAlloc[1:]
@@ -677,8 +653,7 @@ func checkLevelsInternal(c *checkConfig) (err error) {
 
 type simpleMergingIterItem struct {
 	index int
-	key   InternalKey
-	value base.LazyValue
+	kv    base.InternalKV
 }
 
 type simpleMergingIterHeap struct {
@@ -692,7 +667,7 @@ func (h *simpleMergingIterHeap) len() int {
 }
 
 func (h *simpleMergingIterHeap) less(i, j int) bool {
-	ikey, jkey := h.items[i].key, h.items[j].key
+	ikey, jkey := h.items[i].kv.K, h.items[j].kv.K
 	if c := h.cmp(ikey.UserKey, jkey.UserKey); c != 0 {
 		if h.reverse {
 			return c > 0

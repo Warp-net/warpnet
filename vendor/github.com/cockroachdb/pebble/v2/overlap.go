@@ -20,7 +20,7 @@ type overlapChecker struct {
 	comparer *base.Comparer
 	newIters tableNewIters
 	opts     IterOptions
-	v        *version
+	v        *manifest.Version
 }
 
 // DetermineLSMOverlap calculates the overlap.WithLSM for the given bounds.
@@ -35,7 +35,7 @@ var _ overlap.IteratorFactory = (*overlapChecker)(nil)
 
 // Points is part of the overlap.IteratorFactory implementation.
 func (c *overlapChecker) Points(
-	ctx context.Context, m *manifest.FileMetadata,
+	ctx context.Context, m *manifest.TableMetadata,
 ) (base.InternalIterator, error) {
 	iters, err := c.newIters(ctx, m, &c.opts, internalIterOpts{}, iterPointKeys)
 	if err != nil {
@@ -46,7 +46,7 @@ func (c *overlapChecker) Points(
 
 // RangeDels is part of the overlap.IteratorFactory implementation.
 func (c *overlapChecker) RangeDels(
-	ctx context.Context, m *manifest.FileMetadata,
+	ctx context.Context, m *manifest.TableMetadata,
 ) (keyspan.FragmentIterator, error) {
 	iters, err := c.newIters(ctx, m, &c.opts, internalIterOpts{}, iterRangeDeletions)
 	if err != nil {
@@ -57,7 +57,7 @@ func (c *overlapChecker) RangeDels(
 
 // RangeKeys is part of the overlap.IteratorFactory implementation.
 func (c *overlapChecker) RangeKeys(
-	ctx context.Context, m *manifest.FileMetadata,
+	ctx context.Context, m *manifest.TableMetadata,
 ) (keyspan.FragmentIterator, error) {
 	iters, err := c.newIters(ctx, m, &c.opts, internalIterOpts{}, iterRangeKeys)
 	if err != nil {

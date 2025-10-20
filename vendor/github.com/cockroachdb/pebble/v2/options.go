@@ -8,14 +8,16 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/crlib/fifo"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/fifo"
 	"github.com/cockroachdb/pebble/v2/internal/base"
 	"github.com/cockroachdb/pebble/v2/internal/cache"
 	"github.com/cockroachdb/pebble/v2/internal/humanize"
@@ -26,26 +28,17 @@ import (
 	"github.com/cockroachdb/pebble/v2/objstorage/remote"
 	"github.com/cockroachdb/pebble/v2/rangekey"
 	"github.com/cockroachdb/pebble/v2/sstable"
+	"github.com/cockroachdb/pebble/v2/sstable/blob"
 	"github.com/cockroachdb/pebble/v2/sstable/block"
 	"github.com/cockroachdb/pebble/v2/sstable/colblk"
 	"github.com/cockroachdb/pebble/v2/vfs"
 	"github.com/cockroachdb/pebble/v2/wal"
+	"github.com/cockroachdb/redact"
 )
 
 const (
 	cacheDefaultSize       = 8 << 20 // 8 MB
 	defaultLevelMultiplier = 10
-)
-
-// Compression exports the base.Compression type.
-type Compression = block.Compression
-
-// Exported Compression constants.
-const (
-	DefaultCompression = block.DefaultCompression
-	NoCompression      = block.NoCompression
-	SnappyCompression  = block.SnappyCompression
-	ZstdCompression    = block.ZstdCompression
 )
 
 // FilterType exports the base.FilterType type.
@@ -61,6 +54,8 @@ type FilterWriter = base.FilterWriter
 
 // FilterPolicy exports the base.FilterPolicy type.
 type FilterPolicy = base.FilterPolicy
+
+var NoFilterPolicy = base.NoFilterPolicy
 
 // KeySchema exports the colblk.KeySchema type.
 type KeySchema = colblk.KeySchema
@@ -188,9 +183,9 @@ type IterOptions struct {
 	// existing is not low or if we just expect a one-time Seek (where loading the
 	// data block directly is better).
 	UseL6Filters bool
-	// CategoryAndQoS is used for categorized iterator stats. This should not be
+	// Category is used for categorized iterator stats. This should not be
 	// changed by calling SetOptions.
-	sstable.CategoryAndQoS
+	Category block.Category
 
 	DebugRangeKeyStack bool
 
@@ -261,8 +256,9 @@ func (o *IterOptions) SpanIterOptions() keyspan.SpanIterOptions {
 // scanInternalOptions is similar to IterOptions, meant for use with
 // scanInternalIterator.
 type scanInternalOptions struct {
-	sstable.CategoryAndQoS
 	IterOptions
+
+	category block.Category
 
 	visitPointKey     func(key *InternalKey, value LazyValue, iterInfo IteratorLevel) error
 	visitRangeDel     func(start, end []byte, seqNum SeqNum) error
@@ -387,25 +383,31 @@ type LevelOptions struct {
 	// BlockRestartInterval is the number of keys between restart points
 	// for delta encoding of keys.
 	//
-	// The default value is 16.
+	// The default value is 16 for L0, and the value from the previous level for
+	// all other levels.
 	BlockRestartInterval int
 
 	// BlockSize is the target uncompressed size in bytes of each table block.
 	//
-	// The default value is 4096.
+	// The default value is 4096 for L0, and the value from the previous level for
+	// all other levels.
 	BlockSize int
 
 	// BlockSizeThreshold finishes a block if the block size is larger than the
 	// specified percentage of the target block size and adding the next entry
 	// would cause the block to be larger than the target block size.
 	//
-	// The default value is 90
+	// The default value is 90 for L0, and the value from the previous level for
+	// all other levels.
 	BlockSizeThreshold int
 
 	// Compression defines the per-block compression to use.
 	//
-	// The default value (DefaultCompression) uses snappy compression.
-	Compression func() Compression
+	// The default value is Snappy for L0, or the function from the previous level
+	// for all other levels.
+	//
+	// ApplyCompressionSettings can be used to initialize this field for all levels.
+	Compression func() *sstable.CompressionProfile
 
 	// FilterPolicy defines a filter algorithm (such as a Bloom filter) that can
 	// reduce disk reads for Get calls.
@@ -413,16 +415,12 @@ type LevelOptions struct {
 	// One such implementation is bloom.FilterPolicy(10) from the pebble/bloom
 	// package.
 	//
-	// The default value means to use no filter.
+	// The default value for L0 is NoFilterPolicy (no filter), and the value from
+	// the previous level for all other levels.
 	FilterPolicy FilterPolicy
 
-	// FilterType defines whether an existing filter policy is applied at a
-	// block-level or table-level. Block-level filters use less memory to create,
-	// but are slower to access as a check for the key in the index must first be
-	// performed to locate the filter block. A table-level filter will require
-	// memory proportional to the number of keys in an sstable to create, but
-	// avoids the index lookup when determining if a key is present. Table-level
-	// filters should be preferred except under constrained memory situations.
+	// FilterType is a legacy field. The default and only possible value is
+	// TableFilter.
 	FilterType FilterType
 
 	// IndexBlockSize is the target uncompressed size in bytes of each index
@@ -431,41 +429,59 @@ type LevelOptions struct {
 	// (such as math.MaxInt32) disables the automatic creation of two-level
 	// indexes.
 	//
-	// The default value is the value of BlockSize.
+	// The default value is the value of BlockSize for L0, or the value from the
+	// previous level for all other levels.
 	IndexBlockSize int
-
-	// The target file size for the level.
-	TargetFileSize int64
 }
 
-// EnsureDefaults ensures that the default values for all of the options have
-// been initialized. It is valid to call EnsureDefaults on a nil receiver. A
-// non-nil result will always be returned.
-func (o *LevelOptions) EnsureDefaults() *LevelOptions {
-	if o == nil {
-		o = &LevelOptions{}
-	}
+// EnsureL0Defaults ensures that the L0 default values for the options have been
+// initialized.
+func (o *LevelOptions) EnsureL0Defaults() {
 	if o.BlockRestartInterval <= 0 {
 		o.BlockRestartInterval = base.DefaultBlockRestartInterval
 	}
 	if o.BlockSize <= 0 {
 		o.BlockSize = base.DefaultBlockSize
-	} else if o.BlockSize > sstable.MaximumBlockSize {
-		panic(errors.Errorf("BlockSize %d exceeds MaximumBlockSize", o.BlockSize))
+	} else if o.BlockSize > sstable.MaximumRestartOffset {
+		panic(errors.Errorf("BlockSize %d exceeds MaximumRestartOffset", o.BlockSize))
 	}
 	if o.BlockSizeThreshold <= 0 {
 		o.BlockSizeThreshold = base.DefaultBlockSizeThreshold
 	}
 	if o.Compression == nil {
-		o.Compression = func() Compression { return DefaultCompression }
+		o.Compression = func() *sstable.CompressionProfile { return sstable.SnappyCompression }
+	}
+	if o.FilterPolicy == nil {
+		o.FilterPolicy = NoFilterPolicy
 	}
 	if o.IndexBlockSize <= 0 {
 		o.IndexBlockSize = o.BlockSize
 	}
-	if o.TargetFileSize <= 0 {
-		o.TargetFileSize = 2 << 20 // 2 MB
+}
+
+// EnsureL1PlusDefaults ensures that the L1+ default values for the options have
+// been initialized. Requires the fully initialized options for the level above.
+func (o *LevelOptions) EnsureL1PlusDefaults(previousLevel *LevelOptions) {
+	if o.BlockRestartInterval <= 0 {
+		o.BlockRestartInterval = previousLevel.BlockRestartInterval
 	}
-	return o
+	if o.BlockSize <= 0 {
+		o.BlockSize = previousLevel.BlockSize
+	} else if o.BlockSize > sstable.MaximumRestartOffset {
+		panic(errors.Errorf("BlockSize %d exceeds MaximumRestartOffset", o.BlockSize))
+	}
+	if o.BlockSizeThreshold <= 0 {
+		o.BlockSizeThreshold = previousLevel.BlockSizeThreshold
+	}
+	if o.Compression == nil {
+		o.Compression = previousLevel.Compression
+	}
+	if o.FilterPolicy == nil {
+		o.FilterPolicy = previousLevel.FilterPolicy
+	}
+	if o.IndexBlockSize <= 0 {
+		o.IndexBlockSize = previousLevel.IndexBlockSize
+	}
 }
 
 // Options holds the optional parameters for configuring pebble. These options
@@ -481,10 +497,11 @@ type Options struct {
 	// The default value is 512KB.
 	BytesPerSync int
 
-	// Cache is used to cache uncompressed blocks from sstables.
-	//
-	// The default cache size is 8 MB.
+	// Cache is used to cache uncompressed blocks from sstables. If it is nil,
+	// a block cache of CacheSize will be created for each DB.
 	Cache *cache.Cache
+	// CacheSize is used when Cache is not set. The default value is 8 MB.
+	CacheSize int64
 
 	// LoadBlockSema, if set, is used to limit the number of blocks that can be
 	// loaded (i.e. read from the filesystem) in parallel. Each load acquires one
@@ -558,7 +575,7 @@ type Options struct {
 		// The threshold of L0 read-amplification at which compaction concurrency
 		// is enabled (if CompactionDebtConcurrency was not already exceeded).
 		// Every multiple of this value enables another concurrent
-		// compaction up to MaxConcurrentCompactions.
+		// compaction up to CompactionConcurrencyRange.
 		L0CompactionConcurrency int
 
 		// CompactionDebtConcurrency controls the threshold of compaction debt
@@ -569,13 +586,20 @@ type Options struct {
 		// concurrency slots as determined by the two options is chosen.
 		CompactionDebtConcurrency uint64
 
+		// CompactionGarbageFractionForMaxConcurrency is the fraction of garbage
+		// due to DELs and RANGEDELs that causes MaxConcurrentCompactions to be
+		// allowed. Concurrent compactions are allowed in a linear manner upto
+		// this limit being reached. A value <= 0.0 disables adding concurrency
+		// due to garbage.
+		CompactionGarbageFractionForMaxConcurrency func() float64
+
 		// IngestSplit, if it returns true, allows for ingest-time splitting of
 		// existing sstables into two virtual sstables to allow ingestion sstables to
 		// slot into a lower level than they otherwise would have.
 		IngestSplit func() bool
 
 		// ReadCompactionRate controls the frequency of read triggered
-		// compactions by adjusting `AllowedSeeks` in manifest.FileMetadata:
+		// compactions by adjusting `AllowedSeeks` in manifest.TableMetadata:
 		//
 		// AllowedSeeks = FileSize / ReadCompactionRate
 		//
@@ -636,28 +660,15 @@ type Options struct {
 		// A zero or negative value disables tombstone density compactions.
 		TombstoneDenseCompactionThreshold float64
 
-		// TableCacheShards is the number of shards per table cache.
+		// FileCacheShards is the number of shards per file cache.
 		// Reducing the value can reduce the number of idle goroutines per DB
 		// instance which can be useful in scenarios with a lot of DB instances
 		// and a large number of CPUs, but doing so can lead to higher contention
-		// in the table cache and reduced performance.
+		// in the file cache and reduced performance.
 		//
 		// The default value is the number of logical CPUs, which can be
 		// limited by runtime.GOMAXPROCS.
-		TableCacheShards int
-
-		// KeyValidationFunc is a function to validate a user key in an SSTable.
-		//
-		// Currently, this function is used to validate the smallest and largest
-		// keys in an SSTable undergoing compaction. In this case, returning an
-		// error from the validation function will result in a panic at runtime,
-		// given that there is rarely any way of recovering from malformed keys
-		// present in compacted files. By default, validation is not performed.
-		//
-		// Additional use-cases may be added in the future.
-		//
-		// NOTE: callers should take care to not mutate the key being validated.
-		KeyValidationFunc func(userKey []byte) error
+		FileCacheShards int
 
 		// ValidateOnIngest schedules validation of sstables after they have
 		// been ingested.
@@ -673,24 +684,6 @@ type Options struct {
 		// level to a conventional two level compaction. If nil, a multilevel
 		// compaction will never get triggered.
 		MultiLevelCompactionHeuristic MultiLevelHeuristic
-
-		// MaxWriterConcurrency is used to indicate the maximum number of
-		// compression workers the compression queue is allowed to use. If
-		// MaxWriterConcurrency > 0, then the Writer will use parallelism, to
-		// compress and write blocks to disk. Otherwise, the writer will
-		// compress and write blocks to disk synchronously.
-		MaxWriterConcurrency int
-
-		// ForceWriterParallelism is used to force parallelism in the sstable
-		// Writer for the metamorphic tests. Even with the MaxWriterConcurrency
-		// option set, we only enable parallelism in the sstable Writer if there
-		// is enough CPU available, and this option bypasses that.
-		ForceWriterParallelism bool
-
-		// CPUWorkPermissionGranter should be set if Pebble should be given the
-		// ability to optionally schedule additional CPU. See the documentation
-		// for CPUWorkPermissionGranter for more details.
-		CPUWorkPermissionGranter CPUWorkPermissionGranter
 
 		// EnableColumnarBlocks is used to decide whether to enable writing
 		// TableFormatPebblev5 sstables. This setting is only respected by
@@ -712,27 +705,6 @@ type Options struct {
 		// (else ignored). If non-nil, a ShortAttribute can be extracted from the
 		// value and stored with the key, when the value is stored elsewhere.
 		ShortAttributeExtractor ShortAttributeExtractor
-
-		// RequiredInPlaceValueBound specifies an optional span of user key
-		// prefixes that are not-MVCC, but have a suffix. For these the values
-		// must be stored with the key, since the concept of "older versions" is
-		// not defined. It is also useful for statically known exclusions to value
-		// separation. In CockroachDB, this will be used for the lock table key
-		// space that has non-empty suffixes, but those locks don't represent
-		// actual MVCC versions (the suffix ordering is arbitrary). We will also
-		// need to add support for dynamically configured exclusions (we want the
-		// default to be to allow Pebble to decide whether to separate the value
-		// or not, hence this is structured as exclusions), for example, for users
-		// of CockroachDB to dynamically exclude certain tables.
-		//
-		// Any change in exclusion behavior takes effect only on future written
-		// sstables, and does not start rewriting existing sstables.
-		//
-		// Even ignoring changes in this setting, exclusions are interpreted as a
-		// guidance by Pebble, and not necessarily honored. Specifically, user
-		// keys with multiple Pebble-versions *may* have the older versions stored
-		// in value blocks.
-		RequiredInPlaceValueBound UserKeyPrefixBound
 
 		// DisableIngestAsFlushable disables lazy ingestion of sstables through
 		// a WAL write and memtable rotation. Only effectual if the format
@@ -759,93 +731,27 @@ type Options struct {
 		// on shared storage in bytes. If it is 0, no cache is used.
 		SecondaryCacheSizeBytes int64
 
-		// NB: DO NOT crash on SingleDeleteInvariantViolationCallback or
-		// IneffectualSingleDeleteCallback, since these can be false positives
-		// even if SingleDel has been used correctly.
-		//
-		// Pebble's delete-only compactions can cause a recent RANGEDEL to peek
-		// below an older SINGLEDEL and delete an arbitrary subset of data below
-		// that SINGLEDEL. When that SINGLEDEL gets compacted (without the
-		// RANGEDEL), any of these callbacks can happen, without it being a real
-		// correctness problem.
-		//
-		// Example 1:
-		// RANGEDEL [a, c)#10 in L0
-		// SINGLEDEL b#5 in L1
-		// SET b#3 in L6
-		//
-		// If the L6 file containing the SET is narrow and the L1 file containing
-		// the SINGLEDEL is wide, a delete-only compaction can remove the file in
-		// L2 before the SINGLEDEL is compacted down. Then when the SINGLEDEL is
-		// compacted down, it will not find any SET to delete, resulting in the
-		// ineffectual callback.
-		//
-		// Example 2:
-		// RANGEDEL [a, z)#60 in L0
-		// SINGLEDEL g#50 in L1
-		// SET g#40 in L2
-		// RANGEDEL [g,h)#30 in L3
-		// SET g#20 in L6
-		//
-		// In this example, the two SETs represent the same user write, and the
-		// RANGEDELs are caused by the CockroachDB range being dropped. That is,
-		// the user wrote to g once, range was dropped, then added back, which
-		// caused the SET again, then at some point g was validly deleted using a
-		// SINGLEDEL, and then the range was dropped again. The older RANGEDEL can
-		// get fragmented due to compactions it has been part of. Say this L3 file
-		// containing the RANGEDEL is very narrow, while the L1, L2, L6 files are
-		// wider than the RANGEDEL in L0. Then the RANGEDEL in L3 can be dropped
-		// using a delete-only compaction, resulting in an LSM with state:
-		//
-		// RANGEDEL [a, z)#60 in L0
-		// SINGLEDEL g#50 in L1
-		// SET g#40 in L2
-		// SET g#20 in L6
-		//
-		// A multi-level compaction involving L1, L2, L6 will cause the invariant
-		// violation callback. This example doesn't need multi-level compactions:
-		// say there was a Pebble snapshot at g#21 preventing g#20 from being
-		// dropped when it meets g#40 in a compaction. That snapshot will not save
-		// RANGEDEL [g,h)#30, so we can have:
-		//
-		// SINGLEDEL g#50 in L1
-		// SET g#40, SET g#20 in L6
-		//
-		// And say the snapshot is removed and then the L1 and L6 compaction
-		// happens, resulting in the invariant violation callback.
-		//
-		// TODO(sumeer): rename SingleDeleteInvariantViolationCallback to remove
-		// the word "invariant".
-
-		// IneffectualPointDeleteCallback is called in compactions/flushes if any
-		// single delete is being elided without deleting a point set/merge.
-		IneffectualSingleDeleteCallback func(userKey []byte)
-
-		// SingleDeleteInvariantViolationCallback is called in compactions/flushes if any
-		// single delete has consumed a Set/Merge, and there is another immediately older
-		// Set/SetWithDelete/Merge. The user of Pebble has violated the invariant under
-		// which SingleDelete can be used correctly.
-		//
-		// Consider the sequence SingleDelete#3, Set#2, Set#1. There are three
-		// ways some of these keys can first meet in a compaction.
-		//
-		// - All 3 keys in the same compaction: this callback will detect the
-		//   violation.
-		//
-		// - SingleDelete#3, Set#2 meet in a compaction first: Both keys will
-		//   disappear. The violation will not be detected, and the DB will have
-		//   Set#1 which is likely incorrect (from the user's perspective).
-		//
-		// - Set#2, Set#1 meet in a compaction first: The output will be Set#2,
-		//   which will later be consumed by SingleDelete#3. The violation will
-		//   not be detected and the DB will be correct.
-		SingleDeleteInvariantViolationCallback func(userKey []byte)
-
 		// EnableDeleteOnlyCompactionExcises enables delete-only compactions to also
 		// apply delete-only compaction hints on sstables that partially overlap
 		// with it. This application happens through an excise, similar to
 		// the excise phase of IngestAndExcise.
 		EnableDeleteOnlyCompactionExcises func() bool
+
+		// CompactionScheduler, if set, is used to limit concurrent compactions as
+		// well as to pace compactions already chosen. If nil, a default scheduler
+		// is created and used.
+		CompactionScheduler CompactionScheduler
+
+		UserKeyCategories UserKeyCategories
+
+		// ValueSeparationPolicy controls the policy for separating values into
+		// external blob files. If nil, value separation defaults to disabled.
+		// The value separation policy is ignored if EnableColumnarBlocks() is
+		// false.
+		ValueSeparationPolicy func() ValueSeparationPolicy
+
+		// SpanPolicyFunc is used to determine the SpanPolicy for a key region.
+		SpanPolicyFunc SpanPolicyFunc
 	}
 
 	// Filters is a map from filter policy name to filter policy. It is used for
@@ -945,9 +851,20 @@ type Options struct {
 	// maximum number of bytes for a level is exceeded, compaction is requested.
 	LBaseMaxBytes int64
 
-	// Per-level options. Options for at least one level must be specified. The
-	// options for the last level are used for all subsequent levels.
-	Levels []LevelOptions
+	// TargetFileSizes contains the target file size for each level, ignoring
+	// unpopulated levels. Specifically:
+	// - TargetFileSizes[0] is the target file size for L0;
+	// - TargetFileSizes[1] is the target file size for Lbase;
+	// - TargetFileSizes[2] is the target file size for Lbase+1;
+	// and so on.
+	//
+	// The default value for TargetFileSizes[0] is 2MB.
+	// The default value for TargetFileSizes[i] is TargetFileSizes[i-1] * 2.
+	TargetFileSizes [manifest.NumLevels]int64
+
+	// Per-level options. Levels[i] contains the options for Li (regardless of
+	// what Lbase is).
+	Levels [manifest.NumLevels]LevelOptions
 
 	// LoggerAndTracer will be used, if non-nil, else Logger will be used and
 	// tracing will be a noop.
@@ -998,25 +915,52 @@ type Options struct {
 	// The default merger concatenates values.
 	Merger *Merger
 
-	// MaxConcurrentCompactions specifies the maximum number of concurrent
-	// compactions (not including download compactions).
+	// CompactionConcurrencyRange returns a [lower, upper] range for the number of
+	// compactions Pebble runs in parallel (with the caveats below), not including
+	// download compactions (which have a separate limit specified by
+	// MaxConcurrentDownloads).
 	//
-	// Concurrent compactions are performed:
+	// The lower value is the concurrency allowed under normal circumstances.
+	// Pebble can dynamically increase the concurrency based on heuristics (like
+	// high read amplification or compaction debt) up to the maximum.
+	//
+	// The upper value is a rough upper bound since delete-only compactions (a) do
+	// not use the CompactionScheduler, and (b) the CompactionScheduler may use
+	// other criteria to decide on how many compactions to permit.
+	//
+	// Elaborating on (b), when the ConcurrencyLimitScheduler is being used, the
+	// value returned by DB.GetAllowedWithoutPermission fully controls how many
+	// compactions get to run. Other CompactionSchedulers may use additional
+	// criteria, like resource availability.
+	//
+	// Elaborating on (a), we don't use the CompactionScheduler to schedule
+	// delete-only compactions since they are expected to be almost free from a
+	// CPU and disk usage perspective. Since the CompactionScheduler does not
+	// know about their existence, the total running count can exceed this
+	// value. For example, consider CompactionConcurrencyRange returns 3, and the
+	// current value returned from DB.GetAllowedWithoutPermission is also 3. Say
+	// 3 delete-only compactions are also running. Then the
+	// ConcurrencyLimitScheduler can also start 3 other compactions, for a total
+	// of 6.
+	//
+	// DB.GetAllowedWithoutPermission returns a value in the interval
+	// [lower, upper]. A value > lower is returned:
 	//  - when L0 read-amplification passes the L0CompactionConcurrency threshold;
-	//  - for automatic background compactions;
-	//  - when a manual compaction for a level is split and parallelized.
+	//  - when compaction debt passes the CompactionDebtConcurrency threshold;
+	//  - when there are multiple manual compactions waiting to run.
 	//
-	// MaxConcurrentCompactions() must be greater than 0.
+	// lower and upper must be greater than 0. If lower > upper, then upper is
+	// used for both.
 	//
-	// The default value is 1.
-	MaxConcurrentCompactions func() int
+	// The default values are 1, 1.
+	CompactionConcurrencyRange func() (lower, upper int)
 
 	// MaxConcurrentDownloads specifies the maximum number of download
 	// compactions. These are compactions that copy an external file to the local
 	// store.
 	//
-	// This limit is independent of MaxConcurrentCompactions; at any point in
-	// time, we may be running MaxConcurrentCompactions non-download compactions
+	// This limit is independent of CompactionConcurrencyRange; at any point in
+	// time, we may be running CompactionConcurrencyRange non-download compactions
 	// and MaxConcurrentDownloads download compactions.
 	//
 	// MaxConcurrentDownloads() must be greater than 0.
@@ -1060,13 +1004,13 @@ type Options struct {
 	// disabled.
 	ReadOnly bool
 
-	// TableCache is an initialized TableCache which should be set as an
-	// option if the DB needs to be initialized with a pre-existing table cache.
-	// If TableCache is nil, then a table cache which is unique to the DB instance
-	// is created. TableCache can be shared between db instances by setting it here.
-	// The TableCache set here must use the same underlying cache as Options.Cache
+	// FileCache is an initialized FileCache which should be set as an
+	// option if the DB needs to be initialized with a pre-existing file cache.
+	// If FileCache is nil, then a file cache which is unique to the DB instance
+	// is created. FileCache can be shared between db instances by setting it here.
+	// The FileCache set here must use the same underlying cache as Options.Cache
 	// and pebble will panic otherwise.
-	TableCache *TableCache
+	FileCache *FileCache
 
 	// BlockPropertyCollectors is a list of BlockPropertyCollector creation
 	// functions. A new BlockPropertyCollector is created for each sstable
@@ -1119,19 +1063,41 @@ type Options struct {
 	// changing options dynamically?
 	WALMinSyncInterval func() time.Duration
 
+	// The controls below manage deletion pacing, which slows down
+	// deletions when compactions finish or when readers close and
+	// obsolete files must be cleaned up. Rapid deletion of many
+	// files simultaneously can increase disk latency on certain
+	// SSDs, and this functionality helps protect against that.
+
 	// TargetByteDeletionRate is the rate (in bytes per second) at which sstable file
 	// deletions are limited to (under normal circumstances).
-	//
-	// Deletion pacing is used to slow down deletions when compactions finish up
-	// or readers close and newly-obsolete files need cleaning up. Deleting lots
-	// of files at once can cause disk latency to go up on some SSDs, which this
-	// functionality guards against.
 	//
 	// This value is only a best-effort target; the effective rate can be
 	// higher if deletions are falling behind or disk space is running low.
 	//
 	// Setting this to 0 disables deletion pacing, which is also the default.
 	TargetByteDeletionRate int
+
+	// FreeSpaceThresholdBytes specifies the minimum amount of free disk space that Pebble
+	// attempts to maintain. If free disk space drops below this threshold, deletions
+	// are accelerated above TargetByteDeletionRate until the threshold is restored.
+	// Default is 16GB.
+	FreeSpaceThresholdBytes uint64
+
+	// FreeSpaceTimeframe sets the duration (in seconds) within which Pebble attempts
+	// to restore the free disk space back to FreeSpaceThreshold. A lower value means
+	// more aggressive deletions. Default is 10s.
+	FreeSpaceTimeframe time.Duration
+
+	// ObsoleteBytesMaxRatio specifies the maximum allowed ratio of obsolete files to
+	// live files. If this ratio is exceeded, Pebble speeds up deletions above the
+	// TargetByteDeletionRate until the ratio is restored. Default is 0.20.
+	ObsoleteBytesMaxRatio float64
+
+	// ObsoleteBytesTimeframe sets the duration (in seconds) within which Pebble aims
+	// to restore the obsolete-to-live bytes ratio below ObsoleteBytesMaxRatio. A lower
+	// value means more aggressive deletions. Default is 300s.
+	ObsoleteBytesTimeframe time.Duration
 
 	// EnableSQLRowSpillMetrics specifies whether the Pebble instance will only be used
 	// to temporarily persist data spilled to disk for row-oriented SQL query execution.
@@ -1179,6 +1145,128 @@ type Options struct {
 	}
 }
 
+// ValueSeparationPolicy controls the policy for separating values into
+// external blob files.
+type ValueSeparationPolicy struct {
+	// Enabled controls whether value separation is enabled.
+	Enabled bool
+	// MinimumSize imposes a lower bound on the size of values that can be
+	// separated into a blob file. Values smaller than this are always written
+	// to the sstable (but may still be written to a value block within the
+	// sstable).
+	//
+	// MinimumSize must be > 0.
+	MinimumSize int
+	// MaxBlobReferenceDepth limits the number of potentially overlapping (in
+	// the keyspace) blob files that can be referenced by a single sstable. If a
+	// compaction may produce an output sstable referencing more than this many
+	// overlapping blob files, the compaction will instead rewrite referenced
+	// values into new blob files.
+	//
+	// MaxBlobReferenceDepth must be > 0.
+	MaxBlobReferenceDepth int
+	// RewriteMinimumAge specifies how old a blob file must be in order for it
+	// to be eligible for a rewrite that reclaims disk space. Lower values
+	// reduce space amplification at the cost of write amplification
+	RewriteMinimumAge time.Duration
+	// TargetGarbageRatio is a value in the range [0, 1.0] and configures how
+	// aggressively blob files should be written in order to reduce space
+	// amplification induced by value separation. As compactions rewrite blob
+	// files, data may be duplicated.  Older blob files containing the
+	// duplicated data may need to remain because other sstables are referencing
+	// other values contained in the same file.
+	//
+	// The DB can rewrite these blob files in place in order to reduce this
+	// space amplification, but this incurs write amplification. This option
+	// configures how much garbage may accrue before the DB will attempt to
+	// rewrite blob files to reduce it. A value of 0.20 indicates that once 20%
+	// of values in blob files are unreferenced, the DB should attempt to
+	// rewrite blob files to reclaim disk space.
+	//
+	// A value of 1.0 indicates that the DB should never attempt to rewrite blob
+	// files.
+	TargetGarbageRatio float64
+}
+
+// SpanPolicy contains policies that can vary by key range. The zero value is
+// the default value.
+type SpanPolicy struct {
+	// Prefer a faster compression algorithm for the keys in this span.
+	//
+	// This is useful for keys that are frequently read or written but which don't
+	// amount to a significant amount of space.
+	PreferFastCompression bool
+
+	// DisableValueSeparationBySuffix disables discriminating KVs depending on
+	// suffix.
+	//
+	// Among a set of keys with the same prefix, Pebble's default heuristics
+	// optimize access to the KV with the smallest suffix. This is useful for MVCC
+	// keys (where the smallest suffix is the latest version), but should be
+	// disabled for keys where the suffix does not correspond to a version.
+	DisableValueSeparationBySuffix bool
+
+	// ValueStoragePolicy is a hint used to determine where to store the values
+	// for KVs.
+	ValueStoragePolicy ValueStoragePolicy
+}
+
+// ValueStoragePolicy is a hint used to determine where to store the values for
+// KVs.
+type ValueStoragePolicy uint8
+
+const (
+	// ValueStorageDefault is the default value; Pebble will respect global
+	// configuration for value blocks and value separation.
+	ValueStorageDefault ValueStoragePolicy = iota
+
+	// ValueStorageLowReadLatency indicates Pebble should prefer storing values
+	// in-place.
+	ValueStorageLowReadLatency
+)
+
+// SpanPolicyFunc is used to determine the SpanPolicy for a key region.
+//
+// The returned policy is valid from the start key until (and not including) the
+// end key.
+//
+// A flush or compaction will call this function once for the first key to be
+// output. If the compaction reaches the end key, the current output sst is
+// finished and the function is called again.
+//
+// The end key can be empty, in which case the policy is valid for the entire
+// keyspace after startKey.
+type SpanPolicyFunc func(startKey []byte) (policy SpanPolicy, endKey []byte, err error)
+
+// MakeStaticSpanPolicyFunc returns a SpanPolicyFunc that applies a given policy
+// to the given span (and the default policy outside the span).
+func MakeStaticSpanPolicyFunc(cmp base.Compare, span KeyRange, policy SpanPolicy) SpanPolicyFunc {
+	return func(startKey []byte) (_ SpanPolicy, endKey []byte, _ error) {
+		if cmp(startKey, span.End) >= 0 {
+			//      Start     End
+			//      v         v
+			// -----|---------|-----|---
+			//                      ^
+			//                      startKey
+			return SpanPolicy{}, nil, nil
+		}
+		if cmp(startKey, span.Start) < 0 {
+			//      Start     End
+			//      v         v
+			// --|--|---------|-----
+			//   ^
+			//   startKey
+			return SpanPolicy{}, span.Start, nil
+		}
+		//      Start     End
+		//      v         v
+		// -----|----|----|-----
+		//           ^
+		//           startKey
+		return policy, span.End, nil
+	}
+}
+
 // WALFailoverOptions configures the WAL failover mechanics to use during
 // transient write unavailability on the primary WAL volume.
 type WALFailoverOptions struct {
@@ -1204,11 +1292,63 @@ func DebugCheckLevels(db *DB) error {
 	return db.CheckLevels(nil)
 }
 
+// DBCompressionSettings contains compression settings for the entire store. It
+// defines compression profiles for each LSM level.
+type DBCompressionSettings struct {
+	Name   string
+	Levels [manifest.NumLevels]*block.CompressionProfile
+}
+
+// Predefined compression settings.
+var (
+	DBCompressionNone     = UniformDBCompressionSettings(block.NoCompression)
+	DBCompressionFastest  = UniformDBCompressionSettings(block.FastestCompression)
+	DBCompressionBalanced = func() DBCompressionSettings {
+		cs := DBCompressionSettings{Name: "Balanced"}
+		for i := 0; i < manifest.NumLevels-2; i++ {
+			cs.Levels[i] = block.FastestCompression
+		}
+		cs.Levels[manifest.NumLevels-2] = block.FastCompression     // Zstd1 for value blocks.
+		cs.Levels[manifest.NumLevels-1] = block.BalancedCompression // Zstd1 for data and value blocks.
+		return cs
+	}()
+	DBCompressionGood = func() DBCompressionSettings {
+		cs := DBCompressionSettings{Name: "Good"}
+		for i := 0; i < manifest.NumLevels-2; i++ {
+			cs.Levels[i] = block.FastestCompression
+		}
+		cs.Levels[manifest.NumLevels-2] = block.BalancedCompression // Zstd1 for data and value blocks.
+		cs.Levels[manifest.NumLevels-1] = block.GoodCompression     // Zstd3 for data and value blocks.
+		return cs
+	}()
+)
+
+// UniformDBCompressionSettings returns a DBCompressionSettings which uses the
+// same compression profile on all LSM levels.
+func UniformDBCompressionSettings(profile *block.CompressionProfile) DBCompressionSettings {
+	cs := DBCompressionSettings{Name: profile.Name}
+	for i := range cs.Levels {
+		cs.Levels[i] = profile
+	}
+	return cs
+}
+
+// ApplyCompressionSettings sets the Compression field in each LevelOptions to
+// call the given function and return the compression profile for that level.
+func (o *Options) ApplyCompressionSettings(csFn func() DBCompressionSettings) {
+	for i := range o.Levels {
+		levelIdx := i
+		o.Levels[i].Compression = func() *block.CompressionProfile {
+			return csFn().Levels[levelIdx]
+		}
+	}
+}
+
 // EnsureDefaults ensures that the default values for all options are set if a
-// valid value was not already specified. Returns the new options.
-func (o *Options) EnsureDefaults() *Options {
-	if o == nil {
-		o = &Options{}
+// valid value was not already specified.
+func (o *Options) EnsureDefaults() {
+	if o.Cache == nil && o.CacheSize == 0 {
+		o.CacheSize = cacheDefaultSize
 	}
 	o.Comparer = o.Comparer.EnsureDefaults()
 
@@ -1217,6 +1357,22 @@ func (o *Options) EnsureDefaults() *Options {
 	}
 	if o.Cleaner == nil {
 		o.Cleaner = DeleteCleaner{}
+	}
+
+	if o.FreeSpaceThresholdBytes == 0 {
+		o.FreeSpaceThresholdBytes = 16 << 30 // 16 GB
+	}
+
+	if o.FreeSpaceTimeframe == 0 {
+		o.FreeSpaceTimeframe = 10 * time.Second
+	}
+
+	if o.ObsoleteBytesMaxRatio == 0 {
+		o.ObsoleteBytesMaxRatio = 0.20
+	}
+
+	if o.ObsoleteBytesTimeframe == 0 {
+		o.ObsoleteBytesTimeframe = 300 * time.Second
 	}
 
 	if o.Experimental.DisableIngestAsFlushable == nil {
@@ -1228,8 +1384,15 @@ func (o *Options) EnsureDefaults() *Options {
 	if o.Experimental.CompactionDebtConcurrency <= 0 {
 		o.Experimental.CompactionDebtConcurrency = 1 << 30 // 1 GB
 	}
-	if o.Experimental.KeyValidationFunc == nil {
-		o.Experimental.KeyValidationFunc = func([]byte) error { return nil }
+	if o.Experimental.CompactionGarbageFractionForMaxConcurrency == nil {
+		// When 40% of the DB is garbage, the compaction concurrency is at the
+		// maximum permitted.
+		o.Experimental.CompactionGarbageFractionForMaxConcurrency = func() float64 { return 0.4 }
+	}
+	if o.Experimental.ValueSeparationPolicy == nil {
+		o.Experimental.ValueSeparationPolicy = func() ValueSeparationPolicy {
+			return ValueSeparationPolicy{Enabled: false}
+		}
 	}
 	if o.KeySchema == "" && len(o.KeySchemas) == 0 {
 		ks := colblk.DefaultKeySchema(o.Comparer, 16 /* bundleSize */)
@@ -1271,21 +1434,17 @@ func (o *Options) EnsureDefaults() *Options {
 	if o.LBaseMaxBytes <= 0 {
 		o.LBaseMaxBytes = 64 << 20 // 64 MB
 	}
-	if o.Levels == nil {
-		o.Levels = make([]LevelOptions, 1)
-		for i := range o.Levels {
-			if i > 0 {
-				l := &o.Levels[i]
-				if l.TargetFileSize <= 0 {
-					l.TargetFileSize = o.Levels[i-1].TargetFileSize * 2
-				}
-			}
-			o.Levels[i].EnsureDefaults()
+	if o.TargetFileSizes[0] <= 0 {
+		o.TargetFileSizes[0] = 2 << 20 // 2 MB
+	}
+	for i := 1; i < len(o.TargetFileSizes); i++ {
+		if o.TargetFileSizes[i] <= 0 {
+			o.TargetFileSizes[i] = o.TargetFileSizes[i-1] * 2
 		}
-	} else {
-		for i := range o.Levels {
-			o.Levels[i].EnsureDefaults()
-		}
+	}
+	o.Levels[0].EnsureL0Defaults()
+	for i := 1; i < len(o.Levels); i++ {
+		o.Levels[i].EnsureL1PlusDefaults(&o.Levels[i-1])
 	}
 	if o.Logger == nil {
 		o.Logger = DefaultLogger
@@ -1309,8 +1468,8 @@ func (o *Options) EnsureDefaults() *Options {
 	if o.Merger == nil {
 		o.Merger = DefaultMerger
 	}
-	if o.MaxConcurrentCompactions == nil {
-		o.MaxConcurrentCompactions = func() int { return 1 }
+	if o.CompactionConcurrencyRange == nil {
+		o.CompactionConcurrencyRange = func() (int, int) { return 1, 1 }
 	}
 	if o.MaxConcurrentDownloads == nil {
 		o.MaxConcurrentDownloads = func() int { return 1 }
@@ -1330,7 +1489,7 @@ func (o *Options) EnsureDefaults() *Options {
 		o.WithFSDefaults()
 	}
 	if o.FlushSplitBytes <= 0 {
-		o.FlushSplitBytes = 2 * o.Levels[0].TargetFileSize
+		o.FlushSplitBytes = 2 * o.TargetFileSizes[0]
 	}
 	if o.WALFailover != nil {
 		o.WALFailover.FailoverOptions.EnsureDefaults()
@@ -1350,26 +1509,48 @@ func (o *Options) EnsureDefaults() *Options {
 	if o.Experimental.DeletionSizeRatioThreshold == 0 {
 		o.Experimental.DeletionSizeRatioThreshold = sstable.DefaultDeletionSizeRatioThreshold
 	}
+	if o.Experimental.EnableColumnarBlocks == nil {
+		o.Experimental.EnableColumnarBlocks = func() bool { return true }
+	}
 	if o.Experimental.TombstoneDenseCompactionThreshold == 0 {
 		o.Experimental.TombstoneDenseCompactionThreshold = 0.10
 	}
-	if o.Experimental.TableCacheShards <= 0 {
-		o.Experimental.TableCacheShards = runtime.GOMAXPROCS(0)
-	}
-	if o.Experimental.CPUWorkPermissionGranter == nil {
-		o.Experimental.CPUWorkPermissionGranter = defaultCPUWorkGranter{}
+	if o.Experimental.FileCacheShards <= 0 {
+		o.Experimental.FileCacheShards = runtime.GOMAXPROCS(0)
 	}
 	if o.Experimental.MultiLevelCompactionHeuristic == nil {
 		o.Experimental.MultiLevelCompactionHeuristic = WriteAmpHeuristic{}
 	}
+	if o.Experimental.SpanPolicyFunc == nil {
+		o.Experimental.SpanPolicyFunc = func(startKey []byte) (SpanPolicy, []byte, error) { return SpanPolicy{}, nil, nil }
+	}
+	// TODO(jackson): Enable value separation by default once we have confidence
+	// in a default policy.
 
 	o.initMaps()
+}
+
+// TargetFileSize computes the target file size for the given output level.
+func (o *Options) TargetFileSize(outputLevel int, baseLevel int) int64 {
+	if outputLevel == 0 {
+		return o.TargetFileSizes[0]
+	}
+	if baseLevel > outputLevel {
+		panic(fmt.Sprintf("invalid base level %d (output level %d)", baseLevel, outputLevel))
+	}
+	return o.TargetFileSizes[outputLevel-baseLevel+1]
+}
+
+// DefaultOptions returns a new Options object with the default values set.
+func DefaultOptions() *Options {
+	o := &Options{}
+	o.EnsureDefaults()
 	return o
 }
 
 // WithFSDefaults configures the Options to wrap the configured filesystem with
 // the default virtual file system middleware, like disk-health checking.
-func (o *Options) WithFSDefaults() *Options {
+func (o *Options) WithFSDefaults() {
 	if o.FS == nil {
 		o.FS = vfs.Default
 	}
@@ -1377,7 +1558,6 @@ func (o *Options) WithFSDefaults() *Options {
 		func(info vfs.DiskSlowInfo) {
 			o.EventListener.DiskSlow(info)
 		})
-	return o
 }
 
 // AddEventListener adds the provided event listener to the Options, in addition
@@ -1393,7 +1573,7 @@ func (o *Options) AddEventListener(l EventListener) {
 func (o *Options) initMaps() {
 	for i := range o.Levels {
 		l := &o.Levels[i]
-		if l.FilterPolicy != nil {
+		if l.FilterPolicy != NoFilterPolicy {
 			if o.Filters == nil {
 				o.Filters = make(map[string]FilterPolicy)
 			}
@@ -1405,39 +1585,23 @@ func (o *Options) initMaps() {
 	}
 }
 
-// Level returns the LevelOptions for the specified level.
-func (o *Options) Level(level int) LevelOptions {
-	if level < len(o.Levels) {
-		return o.Levels[level]
-	}
-	n := len(o.Levels) - 1
-	l := o.Levels[n]
-	for i := n; i < level; i++ {
-		l.TargetFileSize *= 2
-	}
-	return l
-}
-
 // Clone creates a shallow-copy of the supplied options.
 func (o *Options) Clone() *Options {
-	n := &Options{}
-	if o != nil {
-		*n = *o
+	if o == nil {
+		return &Options{}
 	}
-	return n
-}
-
-func filterPolicyName(p FilterPolicy) string {
-	if p == nil {
-		return "none"
+	n := *o
+	if o.WALFailover != nil {
+		c := *o.WALFailover
+		n.WALFailover = &c
 	}
-	return p.Name()
+	return &n
 }
 
 func (o *Options) String() string {
 	var buf bytes.Buffer
 
-	cacheSize := int64(cacheDefaultSize)
+	cacheSize := o.CacheSize
 	if o.Cache != nil {
 		cacheSize = o.Cache.MaxSize()
 	}
@@ -1450,6 +1614,8 @@ func (o *Options) String() string {
 	fmt.Fprintf(&buf, "  cache_size=%d\n", cacheSize)
 	fmt.Fprintf(&buf, "  cleaner=%s\n", o.Cleaner)
 	fmt.Fprintf(&buf, "  compaction_debt_concurrency=%d\n", o.Experimental.CompactionDebtConcurrency)
+	fmt.Fprintf(&buf, "  compaction_garbage_fraction_for_max_concurrency=%.2f\n",
+		o.Experimental.CompactionGarbageFractionForMaxConcurrency())
 	fmt.Fprintf(&buf, "  comparer=%s\n", o.Comparer.Name)
 	fmt.Fprintf(&buf, "  disable_wal=%t\n", o.DisableWAL)
 	if o.Experimental.DisableIngestAsFlushable != nil && o.Experimental.DisableIngestAsFlushable() {
@@ -1471,13 +1637,19 @@ func (o *Options) String() string {
 	if o.Experimental.LevelMultiplier != defaultLevelMultiplier {
 		fmt.Fprintf(&buf, "  level_multiplier=%d\n", o.Experimental.LevelMultiplier)
 	}
-	fmt.Fprintf(&buf, "  max_concurrent_compactions=%d\n", o.MaxConcurrentCompactions())
+	lower, upper := o.CompactionConcurrencyRange()
+	fmt.Fprintf(&buf, "  concurrent_compactions=%d\n", lower)
+	fmt.Fprintf(&buf, "  max_concurrent_compactions=%d\n", upper)
 	fmt.Fprintf(&buf, "  max_concurrent_downloads=%d\n", o.MaxConcurrentDownloads())
 	fmt.Fprintf(&buf, "  max_manifest_file_size=%d\n", o.MaxManifestFileSize)
 	fmt.Fprintf(&buf, "  max_open_files=%d\n", o.MaxOpenFiles)
 	fmt.Fprintf(&buf, "  mem_table_size=%d\n", o.MemTableSize)
 	fmt.Fprintf(&buf, "  mem_table_stop_writes_threshold=%d\n", o.MemTableStopWritesThreshold)
 	fmt.Fprintf(&buf, "  min_deletion_rate=%d\n", o.TargetByteDeletionRate)
+	fmt.Fprintf(&buf, "  free_space_threshold_bytes=%d\n", o.FreeSpaceThresholdBytes)
+	fmt.Fprintf(&buf, "  free_space_timeframe=%s\n", o.FreeSpaceTimeframe.String())
+	fmt.Fprintf(&buf, "  obsolete_bytes_max_ratio=%f\n", o.ObsoleteBytesMaxRatio)
+	fmt.Fprintf(&buf, "  obsolete_bytes_timeframe=%s\n", o.ObsoleteBytesTimeframe.String())
 	fmt.Fprintf(&buf, "  merger=%s\n", o.Merger.Name)
 	if o.Experimental.MultiLevelCompactionHeuristic != nil {
 		fmt.Fprintf(&buf, "  multilevel_compaction_heuristic=%s\n", o.Experimental.MultiLevelCompactionHeuristic.String())
@@ -1490,12 +1662,10 @@ func (o *Options) String() string {
 	// We no longer care about strict_wal_tail, but set it to true in case an
 	// older version reads the options.
 	fmt.Fprintf(&buf, "  strict_wal_tail=%t\n", true)
-	fmt.Fprintf(&buf, "  table_cache_shards=%d\n", o.Experimental.TableCacheShards)
+	fmt.Fprintf(&buf, "  table_cache_shards=%d\n", o.Experimental.FileCacheShards)
 	fmt.Fprintf(&buf, "  validate_on_ingest=%t\n", o.Experimental.ValidateOnIngest)
 	fmt.Fprintf(&buf, "  wal_dir=%s\n", o.WALDir)
 	fmt.Fprintf(&buf, "  wal_bytes_per_sync=%d\n", o.WALBytesPerSync)
-	fmt.Fprintf(&buf, "  max_writer_concurrency=%d\n", o.Experimental.MaxWriterConcurrency)
-	fmt.Fprintf(&buf, "  force_writer_parallelism=%t\n", o.Experimental.ForceWriterParallelism)
 	fmt.Fprintf(&buf, "  secondary_cache_size_bytes=%d\n", o.Experimental.SecondaryCacheSizeBytes)
 	fmt.Fprintf(&buf, "  create_on_shared=%d\n", o.Experimental.CreateOnShared)
 
@@ -1513,6 +1683,19 @@ func (o *Options) String() string {
 	}
 	if o.private.disableLazyCombinedIteration {
 		fmt.Fprintln(&buf, "  disable_lazy_combined_iteration=true")
+	}
+
+	if o.Experimental.ValueSeparationPolicy != nil {
+		policy := o.Experimental.ValueSeparationPolicy()
+		if policy.Enabled {
+			fmt.Fprintln(&buf)
+			fmt.Fprintln(&buf, "[Value Separation]")
+			fmt.Fprintf(&buf, "  enabled=%t\n", policy.Enabled)
+			fmt.Fprintf(&buf, "  minimum_size=%d\n", policy.MinimumSize)
+			fmt.Fprintf(&buf, "  max_blob_reference_depth=%d\n", policy.MaxBlobReferenceDepth)
+			fmt.Fprintf(&buf, "  rewrite_minimum_age=%s\n", policy.RewriteMinimumAge)
+			fmt.Fprintf(&buf, "  target_garbage_ratio=%.2f\n", policy.TargetGarbageRatio)
+		}
 	}
 
 	if o.WALFailover != nil {
@@ -1535,11 +1718,11 @@ func (o *Options) String() string {
 		fmt.Fprintf(&buf, "  block_restart_interval=%d\n", l.BlockRestartInterval)
 		fmt.Fprintf(&buf, "  block_size=%d\n", l.BlockSize)
 		fmt.Fprintf(&buf, "  block_size_threshold=%d\n", l.BlockSizeThreshold)
-		fmt.Fprintf(&buf, "  compression=%s\n", resolveDefaultCompression(l.Compression()))
-		fmt.Fprintf(&buf, "  filter_policy=%s\n", filterPolicyName(l.FilterPolicy))
+		fmt.Fprintf(&buf, "  compression=%s\n", l.Compression().Name)
+		fmt.Fprintf(&buf, "  filter_policy=%s\n", l.FilterPolicy.Name())
 		fmt.Fprintf(&buf, "  filter_type=%s\n", l.FilterType)
 		fmt.Fprintf(&buf, "  index_block_size=%d\n", l.IndexBlockSize)
-		fmt.Fprintf(&buf, "  target_file_size=%d\n", l.TargetFileSize)
+		fmt.Fprintf(&buf, "  target_file_size=%d\n", o.TargetFileSizes[i])
 	}
 
 	return buf.String()
@@ -1630,7 +1813,6 @@ func parseOptions(s string, fns parseOptionsFuncs) error {
 // ParseHooks contains callbacks to create options fields which can have
 // user-defined implementations.
 type ParseHooks struct {
-	NewCache        func(size int64) *Cache
 	NewCleaner      func(name string) (Cleaner, error)
 	NewComparer     func(name string) (*Comparer, error)
 	NewFilterPolicy func(name string) (FilterPolicy, error)
@@ -1643,6 +1825,14 @@ type ParseHooks struct {
 // options cannot be parsed into populated fields. For example, comparer and
 // merger.
 func (o *Options) Parse(s string, hooks *ParseHooks) error {
+	var valSepPolicy ValueSeparationPolicy
+	var concurrencyLimit struct {
+		lower    int
+		lowerSet bool
+		upper    int
+		upperSet bool
+	}
+
 	visitKeyValue := func(i, j int, section, key, value string) error {
 		// WARNING: DO NOT remove entries from the switches below because doing so
 		// causes a key previously written to the OPTIONS file to be considered unknown,
@@ -1682,16 +1872,7 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 			case "bytes_per_sync":
 				o.BytesPerSync, err = strconv.Atoi(value)
 			case "cache_size":
-				var n int64
-				n, err = strconv.ParseInt(value, 10, 64)
-				if err == nil && hooks != nil && hooks.NewCache != nil {
-					if o.Cache != nil {
-						o.Cache.Unref()
-					}
-					o.Cache = hooks.NewCache(n)
-				}
-				// We avoid calling cache.New in parsing because it makes it
-				// too easy to leak a cache.
+				o.CacheSize, err = strconv.ParseInt(value, 10, 64)
 			case "cleaner":
 				switch value {
 				case "archive":
@@ -1711,6 +1892,13 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 				}
 			case "compaction_debt_concurrency":
 				o.Experimental.CompactionDebtConcurrency, err = strconv.ParseUint(value, 10, 64)
+			case "compaction_garbage_fraction_for_max_concurrency":
+				var frac float64
+				frac, err = strconv.ParseFloat(value, 64)
+				if err == nil {
+					o.Experimental.CompactionGarbageFractionForMaxConcurrency =
+						func() float64 { return frac }
+				}
 			case "delete_range_flush_delay":
 				// NB: This is a deprecated serialization of the
 				// `flush_delay_delete_range`.
@@ -1797,14 +1985,12 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 				o.LBaseMaxBytes, err = strconv.ParseInt(value, 10, 64)
 			case "level_multiplier":
 				o.Experimental.LevelMultiplier, err = strconv.Atoi(value)
+			case "concurrent_compactions":
+				concurrencyLimit.lowerSet = true
+				concurrencyLimit.lower, err = strconv.Atoi(value)
 			case "max_concurrent_compactions":
-				var concurrentCompactions int
-				concurrentCompactions, err = strconv.Atoi(value)
-				if concurrentCompactions <= 0 {
-					err = errors.New("max_concurrent_compactions cannot be <= 0")
-				} else {
-					o.MaxConcurrentCompactions = func() int { return concurrentCompactions }
-				}
+				concurrencyLimit.upperSet = true
+				concurrencyLimit.upper, err = strconv.Atoi(value)
 			case "max_concurrent_downloads":
 				var concurrentDownloads int
 				concurrentDownloads, err = strconv.Atoi(value)
@@ -1826,6 +2012,14 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 				// may be meaningful again eventually.
 			case "min_deletion_rate":
 				o.TargetByteDeletionRate, err = strconv.Atoi(value)
+			case "free_space_threshold_bytes":
+				o.FreeSpaceThresholdBytes, err = strconv.ParseUint(value, 10, 64)
+			case "free_space_timeframe":
+				o.FreeSpaceTimeframe, err = time.ParseDuration(value)
+			case "obsolete_bytes_max_ratio":
+				o.ObsoleteBytesMaxRatio, err = strconv.ParseFloat(value, 64)
+			case "obsolete_bytes_timeframe":
+				o.ObsoleteBytesTimeframe, err = time.ParseDuration(value)
 			case "min_flush_rate":
 				// Do nothing; option existed in older versions of pebble, and
 				// may be meaningful again eventually.
@@ -1887,7 +2081,7 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 			case "tombstone_dense_compaction_threshold":
 				o.Experimental.TombstoneDenseCompactionThreshold, err = strconv.ParseFloat(value, 64)
 			case "table_cache_shards":
-				o.Experimental.TableCacheShards, err = strconv.Atoi(value)
+				o.Experimental.FileCacheShards, err = strconv.Atoi(value)
 			case "table_format":
 				switch value {
 				case "leveldb":
@@ -1904,9 +2098,9 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 			case "wal_bytes_per_sync":
 				o.WALBytesPerSync, err = strconv.Atoi(value)
 			case "max_writer_concurrency":
-				o.Experimental.MaxWriterConcurrency, err = strconv.Atoi(value)
+				// No longer implemented; ignore.
 			case "force_writer_parallelism":
-				o.Experimental.ForceWriterParallelism, err = strconv.ParseBool(value)
+				// No longer implemented; ignore.
 			case "secondary_cache_size_bytes":
 				o.Experimental.SecondaryCacheSizeBytes, err = strconv.ParseInt(value, 10, 64)
 			case "create_on_shared":
@@ -1919,6 +2113,29 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 				}
 				return errors.Errorf("pebble: unknown option: %s.%s",
 					errors.Safe(section), errors.Safe(key))
+			}
+			return err
+
+		case section == "Value Separation":
+			var err error
+			switch key {
+			case "enabled":
+				valSepPolicy.Enabled, err = strconv.ParseBool(value)
+			case "minimum_size":
+				var minimumSize int
+				minimumSize, err = strconv.Atoi(value)
+				valSepPolicy.MinimumSize = minimumSize
+			case "max_blob_reference_depth":
+				valSepPolicy.MaxBlobReferenceDepth, err = strconv.Atoi(value)
+			case "rewrite_minimum_age":
+				valSepPolicy.RewriteMinimumAge, err = time.ParseDuration(value)
+			case "target_garbage_ratio":
+				valSepPolicy.TargetGarbageRatio, err = strconv.ParseFloat(value, 64)
+			default:
+				if hooks != nil && hooks.SkipUnknown != nil && hooks.SkipUnknown(section+"."+key, value) {
+					return nil
+				}
+				return errors.Errorf("pebble: unknown option: %s.%s", errors.Safe(section), errors.Safe(key))
 			}
 			return err
 
@@ -1956,21 +2173,12 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 			return err
 
 		case strings.HasPrefix(section, "Level "):
-			var index int
-			if n, err := fmt.Sscanf(section, `Level "%d"`, &index); err != nil {
-				return err
-			} else if n != 1 {
-				if hooks != nil && hooks.SkipUnknown != nil && hooks.SkipUnknown(section, value) {
-					return nil
-				}
+			m := regexp.MustCompile(`Level\s*"?(\d+)"?\s*$`).FindStringSubmatch(section)
+			if m == nil {
 				return errors.Errorf("pebble: unknown section: %q", errors.Safe(section))
 			}
+			index, _ := strconv.Atoi(m[1])
 
-			if len(o.Levels) <= index {
-				newLevels := make([]LevelOptions, index+1)
-				copy(newLevels, o.Levels)
-				o.Levels = newLevels
-			}
 			l := &o.Levels[index]
 
 			var err error
@@ -1982,21 +2190,16 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 			case "block_size_threshold":
 				l.BlockSizeThreshold, err = strconv.Atoi(value)
 			case "compression":
-				switch value {
-				case "Default":
-					l.Compression = func() Compression { return DefaultCompression }
-				case "NoCompression":
-					l.Compression = func() Compression { return NoCompression }
-				case "Snappy":
-					l.Compression = func() Compression { return SnappyCompression }
-				case "ZSTD":
-					l.Compression = func() Compression { return ZstdCompression }
-				default:
+				profile := block.CompressionProfileByName(value)
+				if profile == nil {
 					return errors.Errorf("pebble: unknown compression: %q", errors.Safe(value))
 				}
+				l.Compression = func() *sstable.CompressionProfile { return profile }
 			case "filter_policy":
 				if hooks != nil && hooks.NewFilterPolicy != nil {
 					l.FilterPolicy, err = hooks.NewFilterPolicy(value)
+				} else {
+					l.FilterPolicy = NoFilterPolicy
 				}
 			case "filter_type":
 				switch value {
@@ -2008,7 +2211,7 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 			case "index_block_size":
 				l.IndexBlockSize, err = strconv.Atoi(value)
 			case "target_file_size":
-				l.TargetFileSize, err = strconv.ParseInt(value, 10, 64)
+				o.TargetFileSizes[index], err = strconv.ParseInt(value, 10, 64)
 			default:
 				if hooks != nil && hooks.SkipUnknown != nil && hooks.SkipUnknown(section+"."+key, value) {
 					return nil
@@ -2020,23 +2223,44 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 		if hooks != nil && hooks.SkipUnknown != nil && hooks.SkipUnknown(section+"."+key, value) {
 			return nil
 		}
-		return errors.Errorf("pebble: unknown section: %q", errors.Safe(section))
+		return errors.Errorf("pebble: unknown section %q or key %q", errors.Safe(section), errors.Safe(key))
 	}
-	return parseOptions(s, parseOptionsFuncs{
+	err := parseOptions(s, parseOptionsFuncs{
 		visitKeyValue: visitKeyValue,
 	})
+	if err != nil {
+		return err
+	}
+	o.Experimental.ValueSeparationPolicy = func() ValueSeparationPolicy { return valSepPolicy }
+	if concurrencyLimit.lowerSet || concurrencyLimit.upperSet {
+		if !concurrencyLimit.lowerSet {
+			concurrencyLimit.lower = 1
+		} else if concurrencyLimit.lower < 1 {
+			return errors.New("baseline_concurrent_compactions cannot be <= 0")
+		}
+		if !concurrencyLimit.upperSet {
+			concurrencyLimit.upper = concurrencyLimit.lower
+		} else if concurrencyLimit.upper < concurrencyLimit.lower {
+			return errors.Newf("max_concurrent_compactions cannot be < %d", concurrencyLimit.lower)
+		}
+		o.CompactionConcurrencyRange = func() (int, int) {
+			return concurrencyLimit.lower, concurrencyLimit.upper
+		}
+	}
+	return nil
 }
 
 // ErrMissingWALRecoveryDir is an error returned when a database is attempted to be
 // opened without supplying a Options.WALRecoveryDir entry for a directory that
 // may contain WALs required to recover a consistent database state.
 type ErrMissingWALRecoveryDir struct {
-	Dir string
+	Dir       string
+	ExtraInfo string
 }
 
 // Error implements error.
 func (e ErrMissingWALRecoveryDir) Error() string {
-	return fmt.Sprintf("directory %q may contain relevant WALs", e.Dir)
+	return fmt.Sprintf("directory %q may contain relevant WALs but is not in WALRecoveryDirs%s", e.Dir, e.ExtraInfo)
 }
 
 // CheckCompatibility verifies the options are compatible with the previous options
@@ -2045,7 +2269,9 @@ func (e ErrMissingWALRecoveryDir) Error() string {
 //
 // This function only looks at specific keys and does not error out if the
 // options are newer and contain unknown keys.
-func (o *Options) CheckCompatibility(previousOptions string) error {
+func (o *Options) CheckCompatibility(storeDir string, previousOptions string) error {
+	previousWALDir := ""
+
 	visitKeyValue := func(i, j int, section, key, value string) error {
 		switch section + "." + key {
 		case "Options.comparer":
@@ -2060,24 +2286,65 @@ func (o *Options) CheckCompatibility(previousOptions string) error {
 				return errors.Errorf("pebble: merger name from file %q != merger name from options %q",
 					errors.Safe(value), errors.Safe(o.Merger.Name))
 			}
-		case "Options.wal_dir", "WAL Failover.secondary_dir":
-			switch {
-			case o.WALDir == value:
-				return nil
-			case o.WALFailover != nil && o.WALFailover.Secondary.Dirname == value:
-				return nil
-			default:
-				for _, d := range o.WALRecoveryDirs {
-					if d.Dirname == value {
-						return nil
-					}
-				}
-				return ErrMissingWALRecoveryDir{Dir: value}
+		case "Options.wal_dir":
+			previousWALDir = value
+		case "WAL Failover.secondary_dir":
+			previousWALSecondaryDir := value
+			if err := o.checkWALDir(storeDir, previousWALSecondaryDir, "WALFailover.Secondary changed from previous options"); err != nil {
+				return err
 			}
 		}
 		return nil
 	}
-	return parseOptions(previousOptions, parseOptionsFuncs{visitKeyValue: visitKeyValue})
+	if err := parseOptions(previousOptions, parseOptionsFuncs{visitKeyValue: visitKeyValue}); err != nil {
+		return err
+	}
+	if err := o.checkWALDir(storeDir, previousWALDir, "WALDir changed from previous options"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkWALDir verifies that walDir is among o.WALDir, o.WALFailover.Secondary,
+// or o.WALRecoveryDirs. An empty "walDir" maps to the storeDir.
+func (o *Options) checkWALDir(storeDir, walDir, errContext string) error {
+	walPath := resolveStorePath(storeDir, walDir)
+	if walDir == "" {
+		walPath = storeDir
+	}
+
+	if o.WALDir == "" {
+		if walPath == storeDir {
+			return nil
+		}
+	} else {
+		if walPath == resolveStorePath(storeDir, o.WALDir) {
+			return nil
+		}
+	}
+
+	if o.WALFailover != nil && walPath == resolveStorePath(storeDir, o.WALFailover.Secondary.Dirname) {
+		return nil
+	}
+
+	for _, d := range o.WALRecoveryDirs {
+		// TODO(radu): should we also check that d.FS is the same as walDir's FS?
+		if walPath == resolveStorePath(storeDir, d.Dirname) {
+			return nil
+		}
+	}
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "\n  %s\n", errContext)
+	fmt.Fprintf(&buf, "  o.WALDir: %q\n", o.WALDir)
+	if o.WALFailover != nil {
+		fmt.Fprintf(&buf, "  o.WALFailover.Secondary.Dirname: %q\n", o.WALFailover.Secondary.Dirname)
+	}
+	fmt.Fprintf(&buf, "  o.WALRecoveryDirs: %d", len(o.WALRecoveryDirs))
+	for _, d := range o.WALRecoveryDirs {
+		fmt.Fprintf(&buf, "\n    %q", d.Dirname)
+	}
+	return ErrMissingWALRecoveryDir{Dir: walPath, ExtraInfo: buf.String()}
 }
 
 // Validate verifies that the options are mutually consistent. For example,
@@ -2112,9 +2379,6 @@ func (o *Options) Validate() error {
 		fmt.Fprintf(&buf, "FormatMajorVersion (%d) when CreateOnShared is set must be at least %d\n",
 			o.FormatMajorVersion, FormatMinForSharedObjects)
 	}
-	if o.TableCache != nil && o.Cache != o.TableCache.cache {
-		fmt.Fprintf(&buf, "underlying cache in the TableCache and the Cache dont match\n")
-	}
 	if len(o.KeySchemas) > 0 {
 		if o.KeySchema == "" {
 			fmt.Fprintf(&buf, "KeySchemas is set but KeySchema is not\n")
@@ -2123,6 +2387,15 @@ func (o *Options) Validate() error {
 			fmt.Fprintf(&buf, "KeySchema %q not found in KeySchemas\n", o.KeySchema)
 		}
 	}
+	if policy := o.Experimental.ValueSeparationPolicy(); policy.Enabled {
+		if policy.MinimumSize <= 0 {
+			fmt.Fprintf(&buf, "ValueSeparationPolicy.MinimumSize (%d) must be > 0\n", policy.MinimumSize)
+		}
+		if policy.MaxBlobReferenceDepth <= 0 {
+			fmt.Fprintf(&buf, "ValueSeparationPolicy.MaxBlobReferenceDepth (%d) must be > 0\n", policy.MaxBlobReferenceDepth)
+		}
+	}
+
 	if buf.Len() == 0 {
 		return nil
 	}
@@ -2158,29 +2431,179 @@ func (o *Options) MakeWriterOptions(level int, format sstable.TableFormat) sstab
 	}
 	if format >= sstable.TableFormatPebblev3 {
 		writerOpts.ShortAttributeExtractor = o.Experimental.ShortAttributeExtractor
-		writerOpts.RequiredInPlaceValueBound = o.Experimental.RequiredInPlaceValueBound
 		if format >= sstable.TableFormatPebblev4 && level == numLevels-1 {
 			writerOpts.WritingToLowestLevel = true
 		}
 	}
-	levelOpts := o.Level(level)
+	levelOpts := o.Levels[level]
 	writerOpts.BlockRestartInterval = levelOpts.BlockRestartInterval
 	writerOpts.BlockSize = levelOpts.BlockSize
 	writerOpts.BlockSizeThreshold = levelOpts.BlockSizeThreshold
-	writerOpts.Compression = resolveDefaultCompression(levelOpts.Compression())
+	writerOpts.Compression = levelOpts.Compression()
 	writerOpts.FilterPolicy = levelOpts.FilterPolicy
 	writerOpts.FilterType = levelOpts.FilterType
 	writerOpts.IndexBlockSize = levelOpts.IndexBlockSize
-	writerOpts.KeySchema = o.KeySchemas[o.KeySchema]
+	if o.KeySchema != "" {
+		var ok bool
+		writerOpts.KeySchema, ok = o.KeySchemas[o.KeySchema]
+		if !ok {
+			panic(fmt.Sprintf("invalid schema %q", redact.Safe(o.KeySchema)))
+		}
+	}
 	writerOpts.AllocatorSizeClasses = o.AllocatorSizeClasses
 	writerOpts.NumDeletionsThreshold = o.Experimental.NumDeletionsThreshold
 	writerOpts.DeletionSizeRatioThreshold = o.Experimental.DeletionSizeRatioThreshold
 	return writerOpts
 }
 
-func resolveDefaultCompression(c Compression) Compression {
-	if c <= DefaultCompression || c >= block.NCompression {
-		c = SnappyCompression
+// MakeBlobWriterOptions constructs blob.FileWriterOptions from the corresponding
+// options in the receiver.
+func (o *Options) MakeBlobWriterOptions(level int) blob.FileWriterOptions {
+	lo := o.Levels[level]
+	return blob.FileWriterOptions{
+		Compression:  lo.Compression(),
+		ChecksumType: block.ChecksumTypeCRC32c,
+		FlushGovernor: block.MakeFlushGovernor(
+			lo.BlockSize,
+			lo.BlockSizeThreshold,
+			base.SizeClassAwareBlockSizeThreshold,
+			o.AllocatorSizeClasses,
+		),
 	}
-	return c
+}
+
+func (o *Options) MakeObjStorageProviderSettings(dirname string) objstorageprovider.Settings {
+	s := objstorageprovider.Settings{
+		Logger:        o.Logger,
+		FS:            o.FS,
+		FSDirName:     dirname,
+		FSCleaner:     o.Cleaner,
+		NoSyncOnClose: o.NoSyncOnClose,
+		BytesPerSync:  o.BytesPerSync,
+	}
+	s.Local.ReadaheadConfig = o.Local.ReadaheadConfig
+	s.Remote.StorageFactory = o.Experimental.RemoteStorage
+	s.Remote.CreateOnShared = o.Experimental.CreateOnShared
+	s.Remote.CreateOnSharedLocator = o.Experimental.CreateOnSharedLocator
+	s.Remote.CacheSizeBytes = o.Experimental.SecondaryCacheSizeBytes
+	return s
+}
+
+// UserKeyCategories describes a partitioning of the user key space. Each
+// partition is a category with a name. The categories are used for informative
+// purposes only (like pprof labels). Pebble does not treat keys differently
+// based on the UserKeyCategories.
+//
+// The partitions are defined by their upper bounds. The last partition is
+// assumed to go until the end of keyspace; its UpperBound is ignored. The rest
+// of the partitions are ordered by their UpperBound.
+type UserKeyCategories struct {
+	categories []UserKeyCategory
+	cmp        base.Compare
+	// rangeNames[i][j] contains the string referring to the categories in the
+	// range [i, j], with j > i.
+	rangeNames [][]string
+}
+
+// UserKeyCategory describes a partition of the user key space.
+//
+// User keys >= the previous category's UpperBound and < this category's
+// UpperBound are part of this category.
+type UserKeyCategory struct {
+	Name string
+	// UpperBound is the exclusive upper bound of the category. All user keys >= the
+	// previous category's UpperBound and < this UpperBound are part of this
+	// category.
+	UpperBound []byte
+}
+
+// MakeUserKeyCategories creates a UserKeyCategories object with the given
+// categories. The object is immutable and can be reused across different
+// stores.
+func MakeUserKeyCategories(cmp base.Compare, categories ...UserKeyCategory) UserKeyCategories {
+	n := len(categories)
+	if n == 0 {
+		return UserKeyCategories{}
+	}
+	if categories[n-1].UpperBound != nil {
+		panic("last category UpperBound must be nil")
+	}
+	// Verify that the partitions are ordered as expected.
+	for i := 1; i < n-1; i++ {
+		if cmp(categories[i-1].UpperBound, categories[i].UpperBound) >= 0 {
+			panic("invalid UserKeyCategories: key prefixes must be sorted")
+		}
+	}
+
+	// Precalculate a table of range names to avoid allocations in the
+	// categorization path.
+	rangeNamesBuf := make([]string, n*n)
+	rangeNames := make([][]string, n)
+	for i := range rangeNames {
+		rangeNames[i] = rangeNamesBuf[:n]
+		rangeNamesBuf = rangeNamesBuf[n:]
+		for j := i + 1; j < n; j++ {
+			rangeNames[i][j] = categories[i].Name + "-" + categories[j].Name
+		}
+	}
+	return UserKeyCategories{
+		categories: categories,
+		cmp:        cmp,
+		rangeNames: rangeNames,
+	}
+}
+
+// Len returns the number of categories defined.
+func (kc *UserKeyCategories) Len() int {
+	return len(kc.categories)
+}
+
+// CategorizeKey returns the name of the category containing the key.
+func (kc *UserKeyCategories) CategorizeKey(userKey []byte) string {
+	idx := sort.Search(len(kc.categories)-1, func(i int) bool {
+		return kc.cmp(userKey, kc.categories[i].UpperBound) < 0
+	})
+	return kc.categories[idx].Name
+}
+
+// CategorizeKeyRange returns the name of the category containing the key range.
+// If the key range spans multiple categories, the result shows the first and
+// last category separated by a dash, e.g. `cat1-cat5`.
+func (kc *UserKeyCategories) CategorizeKeyRange(startUserKey, endUserKey []byte) string {
+	n := len(kc.categories)
+	p := sort.Search(n-1, func(i int) bool {
+		return kc.cmp(startUserKey, kc.categories[i].UpperBound) < 0
+	})
+	if p == n-1 || kc.cmp(endUserKey, kc.categories[p].UpperBound) < 0 {
+		// Fast path for a single category.
+		return kc.categories[p].Name
+	}
+	// Binary search among the remaining categories.
+	q := p + 1 + sort.Search(n-2-p, func(i int) bool {
+		return kc.cmp(endUserKey, kc.categories[p+1+i].UpperBound) < 0
+	})
+	return kc.rangeNames[p][q]
+}
+
+const storePathIdentifier = "{store_path}"
+
+// MakeStoreRelativePath takes a path that is relative to the store directory
+// and creates a path that can be used for Options.WALDir and wal.Dir.Dirname.
+//
+// This is used in metamorphic tests, so that the test run directory can be
+// copied or moved.
+func MakeStoreRelativePath(fs vfs.FS, relativePath string) string {
+	if relativePath == "" {
+		return storePathIdentifier
+	}
+	return fs.PathJoin(storePathIdentifier, relativePath)
+}
+
+// resolveStorePath is the inverse of MakeStoreRelativePath(). It replaces any
+// storePathIdentifier prefix with the store dir.
+func resolveStorePath(storeDir, path string) string {
+	if remainder, ok := strings.CutPrefix(path, storePathIdentifier); ok {
+		return storeDir + remainder
+	}
+	return path
 }

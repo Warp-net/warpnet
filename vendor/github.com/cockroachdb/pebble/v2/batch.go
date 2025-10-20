@@ -17,6 +17,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2/batchrepr"
 	"github.com/cockroachdb/pebble/v2/internal/base"
@@ -46,7 +47,7 @@ var ErrNotIndexed = errors.New("pebble: batch not indexed")
 // ErrInvalidBatch indicates that a batch is invalid or otherwise corrupted.
 var ErrInvalidBatch = batchrepr.ErrInvalidBatch
 
-// ErrBatchTooLarge indicates that a batch is invalid or otherwise corrupted.
+// ErrBatchTooLarge indicates that the size of this batch is over the limit of 4GB.
 var ErrBatchTooLarge = base.MarkCorruptionError(errors.Newf("pebble: batch too large: >= %s", humanize.Bytes.Uint64(maxBatchSize)))
 
 // DeferredBatchOp represents a batch operation (eg. set, merge, delete) that is
@@ -122,14 +123,17 @@ func (d DeferredBatchOp) Finish() error {
 //
 // # Large batches
 //
-// The size of a batch is limited only by available memory (be aware that
-// indexed batches require considerably additional memory for the skiplist
-// structure). A given WAL file has a single memtable associated with it (this
-// restriction could be removed, but doing so is onerous and complex). And a
-// memtable has a fixed size due to the underlying fixed size arena. Note that
-// this differs from RocksDB where a memtable can grow arbitrarily large using
-// a list of arena chunks. In RocksDB this is accomplished by storing pointers
-// in the arena memory, but that isn't possible in Go.
+// The size of a batch is limited to 4GB, the max that can be represented by
+// a uint32 type. Be aware that indexed batches require considerably more
+// memory for the skiplist structure (this skiplist is separate from the 4GB
+// batch limit). For users that require atomic writes of data that's greater
+// than 4GB, DB.Ingest() is able to atomically ingest pre-computed sstables.
+// A given WAL file has a single memtable associated with it (this restriction
+// could be removed, but doing so is onerous and complex). And a memtable has
+// a fixed size due to the underlying fixed size arena. Note that this differs
+// from RocksDB where a memtable can grow arbitrarily large using a list of
+// arena chunks. In RocksDB this is accomplished by storing pointers in the
+// arena memory, but that isn't possible in Go.
 //
 // During Batch.Commit, a batch which is larger than a threshold (>
 // MemTableSize/2) is wrapped in a flushableBatch and inserted into the queue
@@ -955,7 +959,7 @@ func (b *Batch) DeleteSizedDeferred(keyLen int, deletedValueSize uint32) *Deferr
 }
 
 // SingleDelete adds an action to the batch that single deletes the entry for key.
-// See Writer.SingleDelete for more details on the semantics of SingleDelete.
+// WARNING: See the detailed warning in Writer.SingleDelete before using this.
 //
 // It is safe to modify the contents of the arguments after SingleDelete returns.
 func (b *Batch) SingleDelete(key []byte, _ *WriteOptions) error {
@@ -975,6 +979,8 @@ func (b *Batch) SingleDelete(key []byte, _ *WriteOptions) error {
 // operation to the batch, except it only takes in key/value lengths instead of
 // complete slices, letting the caller encode into those objects and then call
 // Finish() on the returned object.
+//
+// WARNING: See the detailed warning in Writer.SingleDelete before using this.
 func (b *Batch) SingleDeleteDeferred(keyLen int) *DeferredBatchOp {
 	b.prepareDeferredKeyRecord(keyLen, InternalKeyKindSingleDelete)
 	b.deferredOp.index = b.index
@@ -1176,9 +1182,9 @@ func (b *Batch) LogData(data []byte, _ *WriteOptions) error {
 	return nil
 }
 
-// IngestSST adds the FileNum for an sstable to the batch. The data will only be
+// IngestSST adds the TableNum for an sstable to the batch. The data will only be
 // written to the WAL (not added to memtables or sstables).
-func (b *Batch) ingestSST(fileNum base.FileNum) {
+func (b *Batch) ingestSST(tableNum base.TableNum) {
 	if b.Empty() {
 		b.ingestedSSTBatch = true
 	} else if !b.ingestedSSTBatch {
@@ -1188,7 +1194,7 @@ func (b *Batch) ingestSST(fileNum base.FileNum) {
 
 	origMemTableSize := b.memTableSize
 	var buf [binary.MaxVarintLen64]byte
-	length := binary.PutUvarint(buf[:], uint64(fileNum))
+	length := binary.PutUvarint(buf[:], uint64(tableNum))
 	b.prepareDeferredKeyRecord(length, InternalKeyKindIngestSST)
 	copy(b.deferredOp.Key, buf[:length])
 	// Since IngestSST writes only to the WAL and does not affect the memtable,
@@ -1448,7 +1454,7 @@ func (b *Batch) initRangeKeyIter(_ *IterOptions, iter *keyspan.Iter, batchSnapsh
 		iter:     b.rangeKeyIndex.NewIter(nil, nil),
 		snapshot: batchSnapshot,
 	}
-	fragmentRangeKeys(frag, it, int(b.countRangeKeys))
+	_ = fragmentRangeKeys(frag, it, int(b.countRangeKeys))
 	iter.Init(b.comparer.Compare, rangeKeys)
 
 	// If we just read all the range keys in the batch (eg, batchSnapshot was
@@ -1655,12 +1661,12 @@ func (b *Batch) Reader() batchrepr.Reader {
 
 // SyncWait is to be used in conjunction with DB.ApplyNoSyncWait.
 func (b *Batch) SyncWait() error {
-	now := time.Now()
+	now := crtime.NowMono()
 	b.fsyncWait.Wait()
 	if b.commitErr != nil {
 		b.db = nil // prevent batch reuse on error
 	}
-	waitDuration := time.Since(now)
+	waitDuration := now.Elapsed()
 	b.commitStats.CommitWaitDuration += waitDuration
 	b.commitStats.TotalDuration += waitDuration
 	return b.commitErr
@@ -2023,7 +2029,9 @@ func newFlushableBatch(batch *Batch, comparer *Comparer) (*flushableBatch, error
 			cmp:     b.cmp,
 			index:   -1,
 		}
-		fragmentRangeKeys(frag, it, len(rangeKeyOffsets))
+		if err := fragmentRangeKeys(frag, it, len(rangeKeyOffsets)); err != nil {
+			return nil, err
+		}
 	}
 	return b, nil
 }
@@ -2311,21 +2319,21 @@ func (i *flushableBatchIter) getKey(index int) InternalKey {
 func (i *flushableBatchIter) getKV(index int) *base.InternalKV {
 	i.kv = base.InternalKV{
 		K: i.getKey(index),
-		V: i.extractValue(),
+		V: base.MakeInPlaceValue(i.extractValue()),
 	}
 	return &i.kv
 }
 
-func (i *flushableBatchIter) extractValue() base.LazyValue {
+func (i *flushableBatchIter) extractValue() []byte {
 	p := i.data[i.offsets[i.index].offset:]
 	if len(p) == 0 {
 		i.err = base.CorruptionErrorf("corrupted batch")
-		return base.LazyValue{}
+		return nil
 	}
 	kind := InternalKeyKind(p[0])
 	if kind > InternalKeyKindMax {
 		i.err = base.CorruptionErrorf("corrupted batch")
-		return base.LazyValue{}
+		return nil
 	}
 	var value []byte
 	var ok bool
@@ -2337,10 +2345,10 @@ func (i *flushableBatchIter) extractValue() base.LazyValue {
 		_, value, ok = batchrepr.DecodeStr(i.data[keyEnd:])
 		if !ok {
 			i.err = base.CorruptionErrorf("corrupted batch")
-			return base.LazyValue{}
+			return nil
 		}
 	}
-	return base.MakeInPlaceValue(value)
+	return value
 }
 
 func (i *flushableBatchIter) Valid() bool {
