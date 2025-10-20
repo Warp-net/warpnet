@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25.3'
   CGO_ENABLED: '1'
 
 permissions: write-all

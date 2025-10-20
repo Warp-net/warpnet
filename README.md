@@ -1,4 +1,4 @@
-[![Go Version](https://img.shields.io/badge/Go-1.24+-brightgreen)](https://golang.org/dl/)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-brightgreen)](https://golang.org/dl/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE.md)
 [![Build](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml)
 [![Telegram Chat](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)
@@ -19,7 +19,7 @@
 ## Getting Started
 
 List of software needed and how to install them.
-* [Golang v1.24](https://go.dev/doc/install)
+* [Golang v1.25](https://go.dev/doc/install)
 * [Wails v2.10.2](https://github.com/wailsapp/wails)
 
 ## Run As Developer
