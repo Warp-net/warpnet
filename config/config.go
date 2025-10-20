@@ -63,8 +63,6 @@ var configSingleton config
 
 func init() {
 	pflag.String("database.dir", "storage", "Database directory name")
-	pflag.String("server.host", "localhost", "Server host")
-	pflag.String("server.port", "4002", "Server port")
 	pflag.String("node.host.v4", "0.0.0.0", "Node host IPv4")
 	pflag.String("node.host.v6", "::", "Node host IPv6")
 	pflag.String("node.port", "4001", "Node port")
@@ -139,10 +137,6 @@ func init() {
 		Database: database{
 			Path: dbPath,
 		},
-		Server: server{
-			Host: viper.GetString("server.host"),
-			Port: viper.GetString("server.port"),
-		},
 		Logging: logging{Level: strings.TrimSpace(viper.GetString("logging.level"))},
 	}
 }
@@ -155,7 +149,6 @@ type config struct {
 	Version  *semver.Version
 	Node     node
 	Database database
-	Server   server
 	Logging  logging
 }
 
@@ -181,10 +174,6 @@ type database struct {
 type logging struct {
 	Level  string
 	Format string
-}
-type server struct {
-	Host string
-	Port string
 }
 
 func (n node) IsTestnet() bool {

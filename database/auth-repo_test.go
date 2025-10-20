@@ -28,9 +28,9 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	log "github.com/ipfs/go-log/writer"
-	"go.uber.org/goleak"
 	"testing"
+
+	"go.uber.org/goleak"
 
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
@@ -46,7 +46,7 @@ type AuthRepoTestSuite struct {
 
 func (s *AuthRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", true)
+	s.db, err = local.New(".", local.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 	s.repo = NewAuthRepo(s.db)
 
@@ -111,10 +111,4 @@ func (s *AuthRepoTestSuite) TestSetOwner_SetsCreatedAt() {
 func TestAuthRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(AuthRepoTestSuite))
-	closeWriter()
-}
-
-func closeWriter() {
-	defer func() { recover() }()
-	_ = log.WriterGroup.Close()
 }

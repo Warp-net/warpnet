@@ -27,6 +27,11 @@ package stream
 import (
 	"context"
 	"errors"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -34,13 +39,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
-	"net"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const loopbackStreamName = "loopback"
+
+var _ network.Conn = (*LoopbackConn)(nil)
 
 type LoopbackConn struct {
 	stream   *LoopbackStream
@@ -61,6 +64,10 @@ func (c *LoopbackConn) RemotePeer() peer.ID {
 
 func (c *LoopbackConn) RemotePublicKey() p2pCrypto.PubKey {
 	return nil
+}
+
+func (s *LoopbackConn) As(target any) bool {
+	return false
 }
 
 func (c *LoopbackConn) ConnState() network.ConnectionState {

@@ -31,6 +31,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -39,9 +40,10 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/security"
-	"github.com/dgraph-io/badger/v3"
-	"github.com/dgraph-io/badger/v3/options"
+	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/badger/v4/options"
 	"github.com/docker/go-units"
+	ds "github.com/ipfs/go-datastore"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -76,18 +78,26 @@ const (
 	discardRatio     = 0.5
 	firstRunLockFile = "run.lock"
 	sequenceKey      = "SEQUENCE"
+
+	defaultDiscardRatioGC = 0.5
+	defaultIntervalGC     = time.Hour
+	defaultSleepGC        = time.Second
+
+	ErrNotRunning    = DBError("DB is not running")
+	ErrWrongPassword = DBError("wrong username or password")
+
+	PermanentTTL = math.MaxInt64
 )
 
-var (
-	ErrNotRunning    = DBError("DB is not running")
-	ErrKeyNotFound   = badger.ErrKeyNotFound
-	ErrWrongPassword = DBError("wrong username or password")
-	ErrStopIteration = DBError("stop iteration")
-)
+var DefaultIteratorOptions = badger.DefaultIteratorOptions
 
 type (
-	WarpDB  = badger.DB
-	Txn     = badger.Txn
+	Item       = badger.Item
+	Entry      = badger.Entry
+	WriteBatch = badger.WriteBatch
+	WarpDB     = badger.DB
+	Txn        = badger.Txn
+
 	DBError string
 )
 
@@ -95,16 +105,57 @@ func (e DBError) Error() string {
 	return string(e)
 }
 
+type Options struct {
+	discardRatioGC float64
+	intervalGC     time.Duration
+	sleepGC        time.Duration
+	isInMemory     bool
+}
+
+func DefaultOptions() *Options {
+	return &Options{
+		discardRatioGC: defaultDiscardRatioGC,
+		intervalGC:     defaultIntervalGC,
+		sleepGC:        defaultSleepGC,
+		isInMemory:     false,
+	}
+}
+
+func (opt *Options) WithDiscardRatioGC(ratio float64) *Options {
+	opt.discardRatioGC = ratio
+	return opt
+}
+
+func (opt *Options) WithIntervalGC(interval time.Duration) *Options {
+	opt.intervalGC = interval
+	return opt
+}
+
+func (opt *Options) WithSleepGC(sleep time.Duration) *Options {
+	opt.sleepGC = sleep
+	return opt
+}
+
+func (opt *Options) WithInMemory(v bool) *Options {
+	opt.isInMemory = v
+	return opt
+}
+
 type DB struct {
 	badger   *badger.DB
 	sequence *badger.Sequence
 
 	isRunning *atomic.Bool
-	stopChan  chan struct{}
 
-	storedOpts      badger.Options
 	dbPath          string
 	hasFirstRunFlag bool
+
+	badgerOpts     badger.Options
+	discardRatioGC float64
+	intervalGC     time.Duration
+	sleepGC        time.Duration
+
+	stopChan chan struct{}
 }
 
 type WarpDBLogger interface {
@@ -116,9 +167,9 @@ type WarpDBLogger interface {
 
 func New(
 	dbPath string,
-	isInMemory bool,
+	o *Options,
 ) (*DB, error) {
-	opts := badger.
+	badgerOpts := badger.
 		DefaultOptions(dbPath).
 		WithSyncWrites(false).
 		WithIndexCacheSize(256 << 20).
@@ -126,15 +177,26 @@ func New(
 		WithNumCompactors(2).
 		WithLoggingLevel(badger.ERROR).
 		WithBlockCacheSize(512 << 20)
-	if isInMemory {
-		opts = opts.WithDir("")
-		opts = opts.WithValueDir("")
-		opts = opts.WithInMemory(true)
+	if o.isInMemory {
+		badgerOpts = badgerOpts.WithDir("")
+		badgerOpts = badgerOpts.WithValueDir("")
+		badgerOpts = badgerOpts.WithInMemory(true)
+	}
+
+	if o.intervalGC == 0 {
+		o.intervalGC = defaultIntervalGC
+	}
+	if o.discardRatioGC == 0 {
+		o.discardRatioGC = defaultDiscardRatioGC
+	}
+	if o.sleepGC == 0 {
+		o.sleepGC = defaultSleepGC
 	}
 
 	storage := &DB{
 		badger: nil, stopChan: make(chan struct{}), isRunning: new(atomic.Bool),
-		sequence: nil, storedOpts: opts, dbPath: dbPath, hasFirstRunFlag: findFirstRunFlag(dbPath),
+		sequence: nil, badgerOpts: badgerOpts, dbPath: dbPath, hasFirstRunFlag: findFirstRunFlag(dbPath),
+		discardRatioGC: o.discardRatioGC, intervalGC: o.intervalGC, sleepGC: o.sleepGC,
 	}
 
 	return storage, nil
@@ -170,7 +232,7 @@ func (db *DB) Run(username, password string) (err error) {
 		return DBError("database: username or password is empty")
 	}
 	hashSum := security.ConvertToSHA256([]byte(username + "@" + password))
-	execOpts := db.storedOpts.WithEncryptionKey(hashSum)
+	execOpts := db.badgerOpts.WithEncryptionKey(hashSum)
 
 	db.badger, err = badger.Open(execOpts)
 	if errors.Is(err, badger.ErrEncryptionKeyMismatch) {
@@ -189,7 +251,7 @@ func (db *DB) Run(username, password string) (err error) {
 		db.writeFirstRunFlag()
 	}
 
-	if !db.storedOpts.InMemory {
+	if !db.badgerOpts.InMemory {
 		go db.runEventualGC()
 	}
 
@@ -198,13 +260,13 @@ func (db *DB) Run(username, password string) (err error) {
 
 func (db *DB) runEventualGC() {
 	log.Infoln("database: garbage collection started")
-	gcTicker := time.NewTicker(time.Hour * 8)
+	gcTicker := time.NewTicker(db.intervalGC)
 	defer gcTicker.Stop()
 
 	dirTicker := time.NewTicker(time.Second)
 	defer dirTicker.Stop()
 
-	_ = db.badger.RunValueLogGC(discardRatio)
+	_ = db.badger.RunValueLogGC(db.discardRatioGC)
 	for {
 		select {
 		case <-dirTicker.C:
@@ -215,11 +277,12 @@ func (db *DB) runEventualGC() {
 			}
 		case <-gcTicker.C:
 			for {
-				err := db.badger.RunValueLogGC(discardRatio)
-				if errors.Is(err, badger.ErrNoRewrite) {
+				err := db.badger.RunValueLogGC(db.discardRatioGC)
+				if errors.Is(err, badger.ErrNoRewrite) ||
+					errors.Is(err, badger.ErrRejected) {
 					break
 				}
-				time.Sleep(time.Second)
+				time.Sleep(db.sleepGC)
 			}
 			log.Infoln("database: garbage collection complete")
 		case <-db.stopChan:
@@ -775,4 +838,17 @@ func (db *DB) Close() {
 		return
 	}
 	db.isRunning.Store(false)
+}
+
+func IsNotFoundError(err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, badger.ErrKeyNotFound):
+		return true
+	case errors.Is(err, ds.ErrNotFound):
+		return true
+	default:
+		return false
+	}
 }

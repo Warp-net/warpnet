@@ -29,11 +29,11 @@ package database
 
 import (
 	"encoding/binary"
-	"errors"
+	"time"
+
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
-	"time"
 )
 
 var ErrAlreadyFollowed = local.DBError("already followed")
@@ -165,11 +165,11 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 		Build()
 
 	sortableFolloweeKey, err := repo.db.Get(fixedFolloweeKey)
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return err
 	}
 	sortableFollowerKey, err := repo.db.Get(fixedFollowerKey)
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return err
 	}
 
@@ -215,7 +215,7 @@ func (repo *FollowRepo) GetFollowersCount(userId string) (uint64, error) {
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(followersCountKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return 0, nil
 	}
 	if err != nil {
@@ -239,7 +239,7 @@ func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(followeesCountKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return 0, nil
 	}
 	if err != nil {

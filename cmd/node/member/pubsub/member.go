@@ -59,8 +59,6 @@ type memberPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
-type DiscoveryHandler func(warpnet.WarpAddrInfo)
-
 func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *memberPubSub {
 	mps := &memberPubSub{
 		ctx: ctx,

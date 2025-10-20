@@ -36,15 +36,12 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/database/ipfs"
 	"github.com/Warp-net/warpnet/security"
-	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
 	_ "go.uber.org/automaxprocs" // DO NOT remove
 )
 
 func main() {
-	defer closeWriter()
 	if config.Config().Node.Moderator.Path == "" && config.Config().Node.Moderator.CID == "" {
 		log.Errorln("moderator IPFS node not configured: model path and CID are empty")
 		return
@@ -97,19 +94,13 @@ func main() {
 	}
 	defer n.Stop()
 
-	store, err := ipfs.NewIPFS(ctx, n.Node())
-	if err != nil {
-		log.Fatalf("failed to init moderator IPFS node: %v", err)
-	}
-	defer store.Close()
-
 	publisher := pubsub.NewPubSub(ctx)
 	if err := publisher.Run(n); err != nil {
 		log.Fatalf("failed to start moderator pubsub: %v", err)
 	}
 	defer publisher.Close()
 
-	moder, err := moderator.NewModerator(ctx, n, store, publisher)
+	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {
 		log.Fatalf("failed to init moderator: %v", err)
 	}
@@ -120,10 +111,4 @@ func main() {
 
 	<-interruptChan
 	log.Infoln("moderator node interrupted...")
-}
-
-// TODO temp. Check for https://github.com/libp2p/go-libp2p-kad-dht/issues/1073
-func closeWriter() {
-	defer func() { recover() }()
-	_ = writer.WriterGroup.Close()
 }

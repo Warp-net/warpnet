@@ -29,7 +29,6 @@ package database
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -169,7 +168,7 @@ func (repo *ReplyRepo) RepliesCount(tweetId string) (likesNum uint64, err error)
 
 	bt, err := repo.db.Get(replyCountKey)
 
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return 0, ErrReplyNotFound
 	}
 	if err != nil {

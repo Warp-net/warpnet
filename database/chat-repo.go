@@ -28,14 +28,14 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/oklog/ulid/v2"
-	"sync"
-	"time"
 )
 
 var (
@@ -94,7 +94,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 
 	// check if already exist
 	bt, err := txn.Get(sortableUserChatKey)
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return chat, err
 	}
 	if err == nil {
@@ -145,7 +145,7 @@ func (repo *ChatRepo) DeleteChat(chatId string) error {
 		Build()
 
 	sortableKey, err := txn.Get(fixedUserChatKey)
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return err
 	}
 	if len(sortableKey) == 0 {
@@ -178,14 +178,14 @@ func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 		Build()
 
 	sortableKey, err := txn.Get(fixedUserChatKey)
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return chat, err
 	}
 	if len(sortableKey) == 0 {
 		return chat, ErrChatNotFound
 	}
 	bt, err := txn.Get(local.DatabaseKey(sortableKey))
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return chat, err
 	}
 
@@ -339,7 +339,7 @@ func (repo *ChatRepo) GetMessage(chatId, id string) (m domain.ChatMessage, err e
 	defer txn.Rollback()
 
 	sortableKey, err := txn.Get(fixedKey)
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return m, err
 	}
 	if len(sortableKey) == 0 {
@@ -347,7 +347,7 @@ func (repo *ChatRepo) GetMessage(chatId, id string) (m domain.ChatMessage, err e
 	}
 
 	data, err := txn.Get(local.DatabaseKey(sortableKey))
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return m, err
 	}
 
@@ -376,7 +376,7 @@ func (repo *ChatRepo) DeleteMessage(chatId, id string) error {
 	defer txn.Rollback()
 
 	sortableKey, err := txn.Get(fixedKey)
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		return err
 	}
 	if len(sortableKey) == 0 {

@@ -86,14 +86,7 @@ func NewMemberNode(
 	if len(privKey) == 0 {
 		return nil, errors.New("private key is required")
 	}
-	nodeRepo, err := database.NewNodeRepo(db, version)
-	if err != nil {
-		return nil, err
-	}
-	if err := nodeRepo.AddSelfHash(selfHashHex, version.String()); err != nil {
-		return nil, err
-	}
-
+	nodeRepo := database.NewNodeRepo(db)
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {
 		return nil, err
@@ -190,7 +183,7 @@ func (m *MemberNode) Start() (err error) {
 		m.opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("member: failed to init node: %v", err)
+		return fmt.Errorf("member: failed to start node: %v", err)
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)

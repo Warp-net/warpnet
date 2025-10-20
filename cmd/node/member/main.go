@@ -8,7 +8,6 @@ import (
 	frontend "github.com/Warp-net/warpnet-frontend"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/google/uuid"
-	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -24,7 +23,7 @@ func main() {
 			log.Errorf("panic: %v", r)
 		}
 	}()
-	defer closeWriter()
+
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
 	if err != nil {
 		lvl = log.InfoLevel
@@ -103,10 +102,4 @@ func main() {
 		log.Errorf("failed to start application: %s", err)
 		os.Exit(1)
 	}
-}
-
-// TODO temp. Check for https://github.com/libp2p/go-libp2p-kad-dht/issues/1073
-func closeWriter() {
-	defer func() { recover() }()
-	_ = writer.WriterGroup.Close()
 }

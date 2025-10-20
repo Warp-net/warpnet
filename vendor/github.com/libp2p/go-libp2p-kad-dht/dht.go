@@ -23,7 +23,7 @@ import (
 	"github.com/libp2p/go-libp2p-kad-dht/internal/metrics"
 	"github.com/libp2p/go-libp2p-kad-dht/netsize"
 	pb "github.com/libp2p/go-libp2p-kad-dht/pb"
-	"github.com/libp2p/go-libp2p-kad-dht/providers"
+	"github.com/libp2p/go-libp2p-kad-dht/records"
 	"github.com/libp2p/go-libp2p-kad-dht/rtrefresh"
 	kb "github.com/libp2p/go-libp2p-kbucket"
 	"github.com/libp2p/go-libp2p-kbucket/peerdiversity"
@@ -86,7 +86,7 @@ type IpfsDHT struct {
 
 	routingTable *kb.RoutingTable // Array of routing tables for differently distanced nodes
 	// providerStore stores & manages the provider records for this Dht peer.
-	providerStore providers.ProviderStore
+	providerStore records.ProviderStore
 
 	// manages Routing Table refresh
 	rtRefreshManager *rtrefresh.RtRefreshManager
@@ -365,7 +365,7 @@ func makeDHT(ctx context.Context, h host.Host, cfg dhtcfg.Config) (*IpfsDHT, err
 	if cfg.ProviderStore != nil {
 		dht.providerStore = cfg.ProviderStore
 	} else {
-		dht.providerStore, err = providers.NewProviderManager(dht.ctx, h.ID(), dht.peerstore, cfg.Datastore)
+		dht.providerStore, err = records.NewProviderManager(dht.ctx, h.ID(), dht.peerstore, cfg.Datastore)
 		if err != nil {
 			return nil, fmt.Errorf("initializing default provider manager (%v)", err)
 		}
@@ -456,7 +456,7 @@ func makeRoutingTable(dht *IpfsDHT, cfg dhtcfg.Config, maxLastSuccessfulOutbound
 }
 
 // ProviderStore returns the provider storage object for storing and retrieving provider records.
-func (dht *IpfsDHT) ProviderStore() providers.ProviderStore {
+func (dht *IpfsDHT) ProviderStore() records.ProviderStore {
 	return dht.providerStore
 }
 
@@ -746,39 +746,39 @@ func (dht *IpfsDHT) FindLocal(ctx context.Context, id peer.ID) peer.AddrInfo {
 	return peer.AddrInfo{}
 }
 
-// nearestPeersToQuery returns the routing tables closest peers.
-func (dht *IpfsDHT) nearestPeersToQuery(pmes *pb.Message, count int) []peer.ID {
-	closer := dht.routingTable.NearestPeers(kb.ConvertKey(string(pmes.GetKey())), count)
-	return closer
-}
+// closestPeersToQuery returns the closest peers to the target key from the
+// local routing table, filtering out self and the requester's peer ID.
+//
+// Per the IPFS Kademlia DHT spec, servers SHOULD NOT include themselves or the
+// requester in FIND_NODE responses (except for FIND_PEER when the target is
+// self or the requester, which is handled separately in handleFindPeer).
+func (dht *IpfsDHT) closestPeersToQuery(pmes *pb.Message, from peer.ID, count int) []peer.ID {
+	// Get count+1 closest peers to target key, so that we can filter out 'from'
+	// (and potentially 'self' if it somehow appears) and still return 'count' peers.
+	closestPeers := dht.routingTable.NearestPeers(kb.ConvertKey(string(pmes.GetKey())), count+1)
 
-// betterPeersToQuery returns nearestPeersToQuery with some additional filtering
-func (dht *IpfsDHT) betterPeersToQuery(pmes *pb.Message, from peer.ID, count int) []peer.ID {
-	closer := dht.nearestPeersToQuery(pmes, count)
-
-	// no node? nil
-	if closer == nil {
+	if len(closestPeers) == 0 {
 		logger.Infow("no closer peers to send", from)
 		return nil
 	}
 
-	filtered := make([]peer.ID, 0, len(closer))
-	for _, clp := range closer {
-
-		// == to self? thats bad
-		if clp == dht.self {
-			logger.Error("BUG betterPeersToQuery: attempted to return self! this shouldn't happen...")
-			return nil
-		}
-		// Dont send a peer back themselves
-		if clp == from {
+	filtered := make([]peer.ID, 0, min(len(closestPeers), count))
+	for _, p := range closestPeers {
+		// Per spec: don't include self in responses. This should never happen since
+		// self should not be in the routing table, but check defensively.
+		if p == dht.self {
+			logger.Debugw("self found in routing table, skipping", "key", string(pmes.GetKey()))
 			continue
 		}
-
-		filtered = append(filtered, clp)
+		// Per spec: don't include requester in responses (exception handled in handleFindPeer).
+		if p == from {
+			continue
+		}
+		filtered = append(filtered, p)
+		if len(filtered) >= count {
+			break
+		}
 	}
-
-	// ok seems like closer nodes
 	return filtered
 }
 
@@ -855,6 +855,11 @@ func (dht *IpfsDHT) RoutingTable() *kb.RoutingTable {
 	return dht.routingTable
 }
 
+// BucketSize returns the size of the DHT's routing table buckets.
+func (dht *IpfsDHT) BucketSize() int {
+	return dht.bucketSize
+}
+
 // Close calls Process Close.
 func (dht *IpfsDHT) Close() error {
 	dht.cancel()
@@ -897,6 +902,11 @@ func (dht *IpfsDHT) Host() host.Host {
 	return dht.host
 }
 
+// MessageSender returns the DHT's message sender.
+func (dht *IpfsDHT) MessageSender() pb.MessageSender {
+	return dht.msgSender
+}
+
 // Ping sends a ping message to the passed peer and waits for a response.
 func (dht *IpfsDHT) Ping(ctx context.Context, p peer.ID) error {
 	ctx, span := internal.StartSpan(ctx, "IpfsDHT.Ping", trace.WithAttributes(attribute.Stringer("PeerID", p)))
@@ -930,6 +940,16 @@ func (dht *IpfsDHT) maybeAddAddrs(p peer.ID, addrs []ma.Multiaddr, ttl time.Dura
 		return
 	}
 	dht.peerstore.AddAddrs(p, dht.filterAddrs(addrs), ttl)
+}
+
+// FilteredAddrs returns the set of addresses that this DHT instance
+// advertises to the swarm, after applying the configured addrFilter.
+//
+// For example:
+//   - In a public DHT, local and loopback addresses are filtered out.
+//   - In a LAN DHT, only loopback addresses are filtered out.
+func (dht *IpfsDHT) FilteredAddrs() []ma.Multiaddr {
+	return dht.filterAddrs(dht.host.Addrs())
 }
 
 func (dht *IpfsDHT) filterAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {

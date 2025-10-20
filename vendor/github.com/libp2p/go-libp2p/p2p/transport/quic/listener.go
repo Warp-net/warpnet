@@ -52,7 +52,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		}
 		c, err := l.wrapConn(qconn)
 		if err != nil {
-			log.Debugf("failed to setup connection: %s", err)
+			log.Debug("failed to setup connection", "err", err)
 			qconn.CloseWithError(quic.ApplicationErrorCode(network.ConnResourceLimitExceeded), "")
 			continue
 		}
@@ -83,7 +83,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 // wrapConn wraps a QUIC connection into a libp2p [tpt.CapableConn].
 // If wrapping fails. The caller is responsible for cleaning up the
 // connection.
-func (l *listener) wrapConn(qconn quic.Connection) (*conn, error) {
+func (l *listener) wrapConn(qconn *quic.Conn) (*conn, error) {
 	remoteMultiaddr, err := quicreuse.ToQuicMultiaddr(qconn.RemoteAddr(), qconn.ConnectionState().Version)
 	if err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func (l *listener) wrapConn(qconn quic.Connection) (*conn, error) {
 	if connScope == nil {
 		connScope, err = l.rcmgr.OpenConnection(network.DirInbound, false, remoteMultiaddr)
 		if err != nil {
-			log.Debugw("resource manager blocked incoming connection", "addr", qconn.RemoteAddr(), "error", err)
+			log.Debug("resource manager blocked incoming connection", "addr", qconn.RemoteAddr(), "err", err)
 			return nil, err
 		}
 	}
@@ -112,7 +112,7 @@ func (l *listener) wrapConn(qconn quic.Connection) (*conn, error) {
 	return c, nil
 }
 
-func (l *listener) wrapConnWithScope(qconn quic.Connection, connScope network.ConnManagementScope, remoteMultiaddr ma.Multiaddr) (*conn, error) {
+func (l *listener) wrapConnWithScope(qconn *quic.Conn, connScope network.ConnManagementScope, remoteMultiaddr ma.Multiaddr) (*conn, error) {
 	// The tls.Config used to establish this connection already verified the certificate chain.
 	// Since we don't have any way of knowing which tls.Config was used though,
 	// we have to re-determine the peer's identity here.
@@ -126,7 +126,7 @@ func (l *listener) wrapConnWithScope(qconn quic.Connection, connScope network.Co
 		return nil, err
 	}
 	if err := connScope.SetPeer(remotePeerID); err != nil {
-		log.Debugw("resource manager blocked incoming connection for peer", "peer", remotePeerID, "addr", qconn.RemoteAddr(), "error", err)
+		log.Debug("resource manager blocked incoming connection for peer", "peer", remotePeerID, "addr", qconn.RemoteAddr(), "err", err)
 		return nil, err
 	}
 

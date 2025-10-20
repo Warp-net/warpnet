@@ -28,13 +28,13 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"errors"
-	"github.com/Warp-net/warpnet/domain"
-	log "github.com/sirupsen/logrus"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Warp-net/warpnet/domain"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/json"
@@ -104,7 +104,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		Build()
 
 	_, err = repo.db.Get(fixedKey)
-	if !errors.Is(err, local.ErrKeyNotFound) {
+	if !local.IsNotFoundError(err) {
 		return user, ErrUserAlreadyExists
 	}
 
@@ -162,7 +162,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	}
 
 	data, err := txn.Get(local.DatabaseKey(sortableKeyBytes))
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return existingUser, ErrUserNotFound
 	}
 	if err != nil {
@@ -247,7 +247,7 @@ func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 		AddParentId(userId).
 		Build()
 	sortableKeyBytes, err := repo.db.Get(fixedKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
@@ -255,7 +255,7 @@ func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 	}
 
 	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
@@ -280,7 +280,7 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 		Build()
 
 	sortableKeyBytes, err := repo.db.Get(nodeUserKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
@@ -288,7 +288,7 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 	}
 
 	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
@@ -319,7 +319,7 @@ func (repo *UserRepo) Delete(userId string) error {
 	defer txn.Rollback()
 
 	sortableKeyBytes, err := txn.Get(fixedKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return nil
 	}
 	if err != nil {
@@ -439,7 +439,7 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 			AddParentId(userID).
 			Build()
 		sortableKey, err := txn.Get(fixedKey)
-		if errors.Is(err, local.ErrKeyNotFound) {
+		if local.IsNotFoundError(err) {
 			continue
 		}
 		if err != nil {
@@ -447,7 +447,7 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 		}
 
 		data, err := txn.Get(local.DatabaseKey(sortableKey))
-		if errors.Is(err, local.ErrKeyNotFound) {
+		if local.IsNotFoundError(err) {
 			continue
 		}
 		if err != nil {

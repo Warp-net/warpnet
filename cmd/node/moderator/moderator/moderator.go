@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"strings"
@@ -32,12 +31,6 @@ var (
 	engineReadyChan = make(chan struct{}, 1)
 )
 
-type DistributedStorer interface {
-	GetStream(ctx context.Context, id string) (io.ReadCloser, error)
-	PutStream(ctx context.Context, reader io.ReadCloser) (id string, _ error)
-	Close() error
-}
-
 type ModeratorNode interface {
 	Start() error
 	Stop()
@@ -56,7 +49,6 @@ type Moderator struct {
 	ctx context.Context
 
 	node      ModeratorNode
-	store     DistributedStorer
 	cache     *moderationCache
 	isolation *isolation.IsolationProtocol
 
@@ -66,7 +58,6 @@ type Moderator struct {
 func NewModerator(
 	ctx context.Context,
 	node ModeratorNode,
-	store DistributedStorer,
 	pub Publisher,
 ) (_ *Moderator, err error) {
 
@@ -74,7 +65,6 @@ func NewModerator(
 		ctx:       ctx,
 		cache:     newModerationCache(),
 		node:      node,
-		store:     store,
 		isolation: isolation.NewIsolationProtocol(node, pub),
 		isClosed:  new(atomic.Bool),
 	}
@@ -90,15 +80,12 @@ func (m *Moderator) Start() (err error) {
 	confModelPath := config.Config().Node.Moderator.Path
 	cid := config.Config().Node.Moderator.CID
 
-	modelFile, isModelExists := isModelInPath(confModelPath)
+	_, isModelExists := isModelInPath(confModelPath)
 
 	log.Infof("moderator: LLM model path: %s, CID: %s", confModelPath, cid)
 
 	if !isModelExists {
-		log.Infof("moderator: LLM model not found, downloading from IPFS")
-		if err = fetchModel(confModelPath, cid, m.store); err != nil {
-			return err
-		}
+		return errors.New("moderator: LLM model not found, downloading from IPFS")
 	}
 
 	log.Infoln("moderator: wait engine init...")
@@ -110,11 +97,6 @@ func (m *Moderator) Start() (err error) {
 		return errors.New("failed to init moderator engine")
 	}
 	log.Infoln("moderator: engine is running")
-
-	if isModelExists {
-		log.Infof("moderator: LLM model found, uploading to IPFS")
-		go storeModel(modelFile, m.store)
-	}
 
 	go m.lurkTweets()
 	go m.lurkUserDescriptions()
@@ -303,50 +285,4 @@ func isModelInPath(path string) (*os.File, bool) {
 		return nil, false
 	}
 	return f, true
-}
-
-func storeModel(f *os.File, store DistributedStorer) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*8)
-	defer cancel()
-
-	cid, err := store.PutStream(ctx, f)
-	if err != nil {
-		log.Errorf("failed to put file in IPFS: %v", err)
-		_ = f.Close()
-		return
-	}
-	log.Infof("moderator: LLM model uploaded: CID: %s", cid)
-	_ = f.Close()
-	return
-}
-
-func fetchModel(path, cid string, store DistributedStorer) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*8)
-	defer cancel()
-
-	reader, err := store.GetStream(ctx, cid)
-	if err != nil {
-		return fmt.Errorf("failed to get stream in IPFS: %v", err)
-	}
-	defer reader.Close()
-
-	log.Infof("moderator: LLM model downloaded: CID: %s", cid)
-
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("creating file: %v", err)
-	}
-	defer file.Close()
-
-	_, err = io.Copy(file, reader)
-	if err != nil {
-		return fmt.Errorf("writing to file: %v", err)
-	}
-
-	finalPath := strings.TrimSuffix(path, ".tmp")
-	if err = os.Rename(path, finalPath); err != nil {
-		log.Errorf("renaming file: %v", err)
-	}
-
-	return nil
 }

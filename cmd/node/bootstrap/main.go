@@ -37,13 +37,11 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
-	writer "github.com/ipfs/go-log/writer"
 	log "github.com/sirupsen/logrus"
 	_ "go.uber.org/automaxprocs" // DO NOT remove
 )
 
 func main() {
-	defer closeWriter()
 
 	version := config.Config().Version
 	network := config.Config().Node.Network
@@ -102,10 +100,4 @@ func main() {
 	m.PushStatusOnline()
 	<-interruptChan
 	log.Infoln("bootstrap node interrupted...")
-}
-
-// TODO temp. Check for https://github.com/libp2p/go-libp2p-kad-dht/issues/1073
-func closeWriter() {
-	defer func() { recover() }()
-	_ = writer.WriterGroup.Close()
 }

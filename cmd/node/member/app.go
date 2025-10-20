@@ -88,7 +88,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.codeHashHex = codeHashHex
 
-	db, err := local.New(config.Config().Database.Path, false)
+	db, err := local.New(config.Config().Database.Path, local.DefaultOptions())
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)

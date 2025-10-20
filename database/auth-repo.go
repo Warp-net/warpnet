@@ -31,15 +31,15 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
+	"math/big"
+	"strings"
+	"time"
+
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
-	"math/big"
-	"strings"
-	"time"
 )
 
 const (
@@ -140,7 +140,7 @@ func (repo *AuthRepo) GetOwner() domain.Owner {
 		Build()
 
 	data, err := repo.db.Get(ownerKey)
-	if err != nil && !errors.Is(err, local.ErrKeyNotFound) {
+	if err != nil && !local.IsNotFoundError(err) {
 		panic(err)
 	}
 	if len(data) == 0 {

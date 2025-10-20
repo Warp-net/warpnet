@@ -376,7 +376,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 	if err != nil {
-		log.Errorf("discovery: failed to create user from new peer: %s", err)
+		log.Errorf("discovery: failed to create user from new peer: %s, user id %s", err, user.Id)
 		return
 	}
 	log.Infof(
@@ -501,6 +501,9 @@ func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpne
 func (s *discoveryService) requestNodeUser(pi warpnet.WarpAddrInfo, userId string) (user domain.User, err error) {
 	if s == nil {
 		return user, errors.New("nil discovery service")
+	}
+	if userId == "" {
+		return user, errors.New("empty user id")
 	}
 
 	getUserEvent := event.GetUserEvent{UserId: userId}

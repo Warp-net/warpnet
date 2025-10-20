@@ -68,7 +68,6 @@ type DistributedHashTableCloser interface {
 
 type NodeProvider interface {
 	io.Closer
-	GetSelfHashes() (map[string]struct{}, error)
 }
 
 type AuthProvider interface {
