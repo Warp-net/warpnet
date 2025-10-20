@@ -1,7 +1,7 @@
 name: warpnet
 title: Warpnet
 base: core24
-version: 0.5.65
+version: 0.5.67
 epoch: 1
 license: AGPL-3.0-or-later
 summary: Decentralized, peer-to-peer social network
@@ -10,8 +10,8 @@ description: |
   WarpNet is a decentralized, peer-to-peer social network inspired by Twitter, built with Go. 
   It runs without central servers, using Noise protocol for inter-node communication and built-in local storage. 
   WarpNet is censorship-resistant, scalable, and fully open-source.
-grade: stable # must be 'stable' to release into candidate/stable channels
-confinement: strict # use 'strict' once you have the right plugs and slots
+grade: stable
+confinement: strict
 source-code:
   - https://github.com/Warp-net/warpnet
 contact:
