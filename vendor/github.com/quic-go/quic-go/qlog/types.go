@@ -39,31 +39,6 @@ func (s streamType) String() string {
 	}
 }
 
-// category is the qlog event category.
-type category uint8
-
-const (
-	categoryConnectivity category = iota
-	categoryTransport
-	categorySecurity
-	categoryRecovery
-)
-
-func (c category) String() string {
-	switch c {
-	case categoryConnectivity:
-		return "connectivity"
-	case categoryTransport:
-		return "transport"
-	case categorySecurity:
-		return "security"
-	case categoryRecovery:
-		return "recovery"
-	default:
-		return "unknown category"
-	}
-}
-
 type version protocol.Version
 
 func (v version) String() string {
@@ -318,7 +293,6 @@ func (s congestionState) String() string {
 type ecn logging.ECN
 
 func (e ecn) String() string {
-	//nolint:exhaustive // The unsupported value is never logged.
 	switch logging.ECN(e) {
 	case logging.ECTNot:
 		return "Not-ECT"
