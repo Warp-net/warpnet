@@ -4,11 +4,6 @@ go 1.25
 
 tool github.com/wailsapp/wails/v2/cmd/wails
 
-replace (
-	bazil.org/fuse => bazil.org/fuse v0.0.0-20200117225306-7b5117fecadc
-	github.com/armon/go-metrics => github.com/armon/go-metrics v0.4.1
-)
-
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Warp-net/warpnet-frontend v0.0.605

@@ -41,7 +41,6 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
-	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -103,13 +102,10 @@ func NewMemberNode(
 	if err != nil {
 		return nil, err
 	}
-	pubsubHandlers := []pubsub.TopicHandler{
-		pubsub.NewDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
-	}
-	pubsubHandlers = append(pubsubHandlers, memberPubSub.PrefollowUsers(followeeIds...)...)
+
 	pubsubService := memberPubSub.NewPubSub(
 		ctx,
-		pubsubHandlers...,
+		memberPubSub.PrefollowUsers(followeeIds...)...,
 	)
 
 	infos, err := config.Config().Node.AddrInfos()
@@ -120,7 +116,6 @@ func NewMemberNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
-		dht.EnableRendezvous(),
 		dht.AddPeerCallbacks(discService.HandlePeerFound),
 		dht.BootstrapNodes(infos...),
 	)
@@ -250,9 +245,17 @@ func (m *MemberNode) Connect(p warpnet.WarpAddrInfo) error {
 	return m.node.Connect(p)
 }
 
+func (m *MemberNode) RoutingDiscovery() warpnet.Discovery {
+	if m.dHashTable == nil {
+		return nil
+	}
+	return m.dHashTable.Discovery()
+}
+
 func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi := m.node.BaseNodeInfo()
 	bi.OwnerId = m.ownerId
+	bi.Hash = m.selfHashHex
 	return bi
 }
 

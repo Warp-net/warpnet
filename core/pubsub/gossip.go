@@ -48,16 +48,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	PubSubDiscoveryTopic = "peer-discovery"
-)
-
-var ErrTopicClosed = pubsub.ErrTopicClosed
-
 type GossipNodeConnector interface {
 	Node() warpnet.P2PNode
 	NodeInfo() warpnet.NodeInfo
 	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
+	RoutingDiscovery() warpnet.Discovery
 }
 
 type topicHandler func(data []byte) error
@@ -79,13 +74,6 @@ type Gossip struct {
 type TopicHandler struct {
 	TopicName string
 	Handler   topicHandler
-}
-
-func NewDiscoveryTopicHandler(handler topicHandler) TopicHandler {
-	return TopicHandler{
-		TopicName: PubSubDiscoveryTopic,
-		Handler:   handler,
-	}
 }
 
 func NewGossip(
@@ -120,7 +108,7 @@ func (g *Gossip) Run(node GossipNodeConnector) (err error) {
 		return err
 	}
 
-	if err := g.runGossip(); err != nil {
+	if err := g.runGossip(node.RoutingDiscovery()); err != nil {
 		return fmt.Errorf("gossip: failed to run: %v", err)
 	}
 
@@ -205,7 +193,7 @@ func (g *Gossip) runListener() error {
 	}
 }
 
-func (g *Gossip) runGossip() (err error) {
+func (g *Gossip) runGossip(disc warpnet.Discovery) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("gossip: recovered from panic: %v", r)
@@ -214,8 +202,7 @@ func (g *Gossip) runGossip() (err error) {
 	if g == nil || g.node == nil {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
-
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node())
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), pubsub.WithDiscovery(disc))
 	if err != nil {
 		return err
 	}
@@ -347,7 +334,7 @@ func (g *Gossip) NotSubscribers(topicName string) []warpnet.WarpAddrInfo {
 
 func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("Gossip: service not initialized")
+		return warpnet.WarpError("gossip: service not initialized")
 	}
 
 	g.mx.Lock()
@@ -459,6 +446,6 @@ func (g *Gossip) Close() (err error) {
 	g.relayCancelFuncs = nil
 	g.topics = nil
 	g.subs = nil
-	log.Infoln("Gossip: closed")
+	log.Infoln("gossip: closed")
 	return
 }

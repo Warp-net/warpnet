@@ -54,7 +54,7 @@ type ModeratorNode struct {
 	node    *node.WarpNode
 	options []libp2p.Option
 
-	dHashTable DistributedHashTableCloser
+	dHashTable DistributedHashTableDiscoverer
 
 	memoryStoreCloseF func() error
 
@@ -182,7 +182,12 @@ func (mn *ModeratorNode) Node() warpnet.P2PNode {
 func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	baseInfo := mn.node.BaseNodeInfo()
 	baseInfo.OwnerId = warpnet.ModeratorOwner
+	baseInfo.Hash = mn.selfHashHex
 	return baseInfo
+}
+
+func (mn *ModeratorNode) RoutingDiscovery() warpnet.Discovery {
+	return mn.dHashTable.Discovery()
 }
 
 func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {

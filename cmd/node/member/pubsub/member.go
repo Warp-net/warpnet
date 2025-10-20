@@ -29,7 +29,6 @@ package pubsub
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -52,6 +51,7 @@ type PubsubServerNodeConnector interface {
 	NodeInfo() warpnet.NodeInfo
 	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
+	RoutingDiscovery() warpnet.Discovery
 }
 
 type memberPubSub struct {
@@ -149,80 +149,6 @@ func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte)
 	}
 
 	return g.pubsub.Publish(msg, topicName)
-}
-
-func (g *memberPubSub) runPeerInfoPublishing() {
-	ticker := time.NewTicker(time.Minute * 5)
-	defer ticker.Stop()
-
-	log.Infoln("pubsub: Publisher started")
-	defer log.Infoln("pubsub: Publisher stopped")
-
-	if err := g.PublishPeerInfo(); err != nil { // initial Publishing
-		log.Errorf("pubsub: failed to Publish peer info: %v", err)
-	}
-
-	for {
-		if !g.pubsub.IsGossipRunning() {
-			return
-		}
-
-		select {
-		case <-g.ctx.Done():
-			return
-		case <-ticker.C:
-			if err := g.PublishPeerInfo(); err != nil {
-				log.Errorf("pubsub: failed to Publish peer info: %v", err)
-				continue
-			}
-		}
-	}
-}
-
-const publishPeerInfoLimit = 10
-
-func (g *memberPubSub) PublishPeerInfo() error {
-	myInfo := g.pubsub.NodeInfo()
-	addrInfosMessage := []warpnet.WarpPubInfo{{
-		ID:    myInfo.ID,
-		Addrs: myInfo.Addresses,
-	}}
-
-	limit := publishPeerInfoLimit
-	for _, pi := range g.pubsub.Subscribers(pubsub.PubSubDiscoveryTopic) {
-		if limit == 0 {
-			break
-		}
-		if pi.ID.String() == "" {
-			continue
-		}
-		addrInfo := warpnet.WarpPubInfo{ID: pi.ID, Addrs: make([]string, 0, len(pi.Addrs))}
-		for _, addr := range pi.Addrs {
-			addrInfo.Addrs = append(addrInfo.Addrs, addr.String())
-		}
-		addrInfosMessage = append(addrInfosMessage, addrInfo)
-		limit--
-	}
-
-	data, err := json.Marshal(addrInfosMessage)
-	if err != nil {
-		return fmt.Errorf("failed to marshal peer info message: %v", err)
-	}
-
-	msg := event.Message{
-		Body:        json.RawMessage(data),
-		MessageId:   uuid.New().String(),
-		NodeId:      g.pubsub.NodeInfo().ID.String(),
-		Destination: "none",
-		Timestamp:   time.Now(),
-		Version:     "0.0.0", // TODO
-	}
-
-	err = g.pubsub.Publish(msg, pubsub.PubSubDiscoveryTopic)
-	if errors.Is(err, pubsub.ErrTopicClosed) {
-		return nil
-	}
-	return err
 }
 
 func (g *memberPubSub) Close() (err error) {

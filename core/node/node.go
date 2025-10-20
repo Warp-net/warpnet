@@ -104,6 +104,7 @@ func NewWarpNode(
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
+
 	pool, err := stream.NewStreamPool(ctx, node)
 	if err != nil {
 		return nil, err

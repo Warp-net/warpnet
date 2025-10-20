@@ -27,18 +27,11 @@ package dht
 import "github.com/Warp-net/warpnet/core/warpnet"
 
 type dhtConfig struct {
-	isRendezvousEnabled           bool
 	store                         RoutingStorer
 	addCallbacks, removeCallbacks []func(info warpnet.WarpAddrInfo)
 	boostrapNodes                 []warpnet.WarpAddrInfo
 }
 type Option func(*dhtConfig)
-
-func EnableRendezvous() Option {
-	return func(c *dhtConfig) {
-		c.isRendezvousEnabled = true
-	}
-}
 
 func RoutingStore(store RoutingStorer) Option {
 	return func(c *dhtConfig) {

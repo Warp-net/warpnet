@@ -132,10 +132,6 @@ func (d *NodeRepo) SetTTL(ctx context.Context, key local.Key, ttl time.Duration)
 		return ctx.Err()
 	}
 
-	if d.db.IsClosed() {
-		return local.ErrNotRunning
-	}
-
 	item, err := d.Get(ctx, key)
 	if err != nil {
 		return err
@@ -149,10 +145,6 @@ func (d *NodeRepo) GetExpiration(ctx context.Context, key local.Key) (t time.Tim
 	}
 	if ctx.Err() != nil {
 		return t, ctx.Err()
-	}
-
-	if d.db.IsClosed() {
-		return t, local.ErrNotRunning
 	}
 
 	expiration := time.Time{}
@@ -187,10 +179,6 @@ func (d *NodeRepo) Get(ctx context.Context, key local.Key) (value []byte, err er
 		return nil, ctx.Err()
 	}
 
-	if d.db.IsClosed() {
-		return nil, local.ErrNotRunning
-	}
-
 	rootKey := buildRootKey(key)
 
 	prefix := local.NewPrefixBuilder(NodesNamespace).
@@ -214,10 +202,6 @@ func (d *NodeRepo) Has(ctx context.Context, key local.Key) (_ bool, err error) {
 	}
 	if ctx.Err() != nil {
 		return false, ctx.Err()
-	}
-
-	if d.db.IsClosed() {
-		return false, local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
@@ -247,10 +231,6 @@ func (d *NodeRepo) GetSize(ctx context.Context, key local.Key) (_ int, err error
 		return size, ctx.Err()
 	}
 
-	if d.db.IsClosed() {
-		return size, local.ErrNotRunning
-	}
-
 	rootKey := buildRootKey(key)
 
 	prefix := local.NewPrefixBuilder(NodesNamespace).
@@ -276,10 +256,6 @@ func (d *NodeRepo) Delete(ctx context.Context, key local.Key) error {
 		return ctx.Err()
 	}
 
-	if d.db.IsClosed() {
-		return local.ErrNotRunning
-	}
-
 	rootKey := buildRootKey(key)
 
 	prefix := local.NewPrefixBuilder(NodesNamespace).
@@ -299,9 +275,6 @@ func (d *NodeRepo) DiskUsage(ctx context.Context) (uint64, error) {
 		return 0, ctx.Err()
 	}
 
-	if d.db.IsClosed() {
-		return 0, local.ErrNotRunning
-	}
 	lsm, vlog := d.db.InnerDB().Size()
 	if (lsm + vlog) < 0 {
 		return 0, local.DBError("disk usage: malformed value")
@@ -317,15 +290,16 @@ func (d *NodeRepo) Query(ctx context.Context, q local.Query) (local.Results, err
 		return nil, ctx.Err()
 	}
 
-	if d.db.IsClosed() {
-		return nil, local.ErrNotRunning
-	}
-
 	tx := d.db.InnerDB().NewTransaction(true)
 	return d.query(tx, q)
 }
 
-func (d *NodeRepo) query(tx *local.Txn, q local.Query) (local.Results, error) {
+func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("node repo: query recover: %v", r)
+		}
+	}()
 	opt := local.DefaultIteratorOptions
 	opt.PrefetchValues = !q.KeysOnly
 
@@ -371,22 +345,6 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (local.Results, error) {
 
 	it := tx.NewIterator(opt)
 	results := local.ResultsWithContext(q, func(ctx context.Context, output chan<- local.Result) {
-		closedEarly := false
-		defer func() {
-			if closedEarly {
-				select {
-				case output <- local.Result{
-					Error: local.ErrNotRunning,
-				}:
-				case <-ctx.Done():
-				}
-			}
-		}()
-		if !d.db.IsClosed() {
-			closedEarly = true
-			return
-		}
-
 		defer tx.Discard()
 		defer it.Close()
 
@@ -425,7 +383,6 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (local.Results, error) {
 				select {
 				case output <- local.Result{Error: err}:
 				case <-d.stopChan:
-					closedEarly = true
 					return
 				case <-ctx.Done():
 					return
@@ -467,7 +424,6 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (local.Results, error) {
 			case output <- result:
 				sent++
 			case <-d.stopChan:
-				closedEarly = true
 				return
 			case <-ctx.Done():
 				return
@@ -527,10 +483,6 @@ func (d *NodeRepo) Batch(ctx context.Context) (local.Batch, error) {
 		return nil, ctx.Err()
 	}
 
-	if d.db.IsClosed() {
-		return nil, local.ErrNotRunning
-	}
-
 	b := &batch{d, d.db.InnerDB().NewWriteBatch()}
 	// Ensure that incomplete transaction resources are cleaned up in case
 	// batch is abandoned.
@@ -547,10 +499,6 @@ func (b *batch) Put(ctx context.Context, key local.Key, value []byte) error {
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
-	}
-
-	if b.ds.db.IsClosed() {
-		return local.ErrNotRunning
 	}
 
 	return b.put(key, value)
@@ -594,10 +542,6 @@ func (b *batch) Delete(ctx context.Context, key local.Key) error {
 		return ctx.Err()
 	}
 
-	if b.ds.db.IsClosed() {
-		return local.ErrNotRunning
-	}
-
 	rootKey := buildRootKey(key)
 
 	batchKey := local.NewPrefixBuilder(NodesNamespace).
@@ -609,9 +553,6 @@ func (b *batch) Delete(ctx context.Context, key local.Key) error {
 func (b *batch) Commit(_ context.Context) error {
 	if b == nil {
 		return ErrNilNodeRepo
-	}
-	if b.ds.db.IsClosed() {
-		return local.ErrNotRunning
 	}
 
 	err := b.writeBatch.Flush()
@@ -626,9 +567,6 @@ func (b *batch) Commit(_ context.Context) error {
 func (b *batch) Cancel() error {
 	if b == nil {
 		return ErrNilNodeRepo
-	}
-	if b.ds.db.IsClosed() {
-		return local.ErrNotRunning
 	}
 
 	b.writeBatch.Cancel()

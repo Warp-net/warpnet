@@ -213,53 +213,6 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 	return
 }
 
-func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func([]byte) error {
-	return func(data []byte) error {
-		if len(data) == 0 {
-			return nil
-		}
-
-		var discoveryAddrInfos []warpnet.WarpPubInfo
-
-		outerErr := json.Unmarshal(data, &discoveryAddrInfos)
-		if outerErr != nil {
-			var single warpnet.WarpPubInfo
-			if innerErr := json.Unmarshal(data, &single); innerErr != nil {
-				return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, data)
-			}
-			discoveryAddrInfos = []warpnet.WarpPubInfo{single}
-		}
-		if len(discoveryAddrInfos) == 0 {
-			return nil
-		}
-
-		for _, info := range discoveryAddrInfos {
-			if info.ID == "" {
-				log.Errorf("pubsub: discovery: message has no ID: %s", string(data))
-				continue
-			}
-			if info.ID == s.node.NodeInfo().ID {
-				continue
-			}
-
-			peerInfo := warpnet.WarpAddrInfo{
-				ID:    info.ID,
-				Addrs: make([]warpnet.WarpAddress, 0, len(info.Addrs)),
-			}
-
-			for _, addr := range info.Addrs {
-				ma, _ := warpnet.NewMultiaddr(addr)
-				peerInfo.Addrs = append(peerInfo.Addrs, ma)
-			}
-
-			if handler != nil {
-				handler(peerInfo)
-			}
-		}
-		return nil
-	}
-}
-
 const dropMessagesLimit = 5
 
 func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {

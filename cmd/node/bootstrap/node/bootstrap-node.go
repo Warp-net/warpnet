@@ -37,7 +37,6 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/node"
-	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -72,12 +71,7 @@ func NewBootstrapNode(
 		return nil, errors.New("private key is required")
 	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
-	pubsubService := bootstrapPubSub.NewPubSubBootstrap(
-		ctx,
-		pubsub.NewDiscoveryTopicHandler(
-			discService.WrapPubSubDiscovery(discService.DefaultDiscoveryHandler),
-		),
-	)
+	pubsubService := bootstrapPubSub.NewPubSubBootstrap(ctx)
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: fail creating memory peerstore: %w", err)
@@ -97,7 +91,6 @@ func NewBootstrapNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
-		dht.EnableRendezvous(),
 		dht.AddPeerCallbacks(discService.DefaultDiscoveryHandler),
 		dht.BootstrapNodes(infos...),
 	)
@@ -138,9 +131,14 @@ func NewBootstrapNode(
 	return bn, nil
 }
 
+func (bn *BootstrapNode) RoutingDiscovery() warpnet.Discovery {
+	return bn.dHashTable.Discovery()
+}
+
 func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
 	bi := bn.node.BaseNodeInfo()
 	bi.OwnerId = warpnet.BootstrapOwner
+	bi.Hash = bn.selfHashHex
 	return bi
 }
 

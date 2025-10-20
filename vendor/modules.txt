@@ -1507,5 +1507,3 @@ howett.net/plist
 lukechampine.com/blake3
 lukechampine.com/blake3/bao
 lukechampine.com/blake3/guts
-# bazil.org/fuse => bazil.org/fuse v0.0.0-20200117225306-7b5117fecadc
-# github.com/armon/go-metrics => github.com/armon/go-metrics v0.4.1

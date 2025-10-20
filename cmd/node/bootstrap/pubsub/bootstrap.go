@@ -41,6 +41,7 @@ type PubsubServerNodeConnector interface {
 	NodeInfo() warpnet.NodeInfo
 	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
+	RoutingDiscovery() warpnet.Discovery
 }
 
 type bootstrapPubSub struct {

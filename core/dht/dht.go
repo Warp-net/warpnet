@@ -30,15 +30,12 @@ package dht
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/Warp-net/warpnet/config"
-	"github.com/libp2p/go-libp2p-kad-dht/providers"
-	lip2pDisc "github.com/libp2p/go-libp2p/core/discovery"
-
 	"github.com/Warp-net/warpnet/core/warpnet"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p-kad-dht/providers"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
@@ -81,17 +78,16 @@ import (
   implementing decentralized content lookup (as in IPFS), and enabling efficient routing in a distributed network.
 */
 
-const warpnetRendezvousPrefix = "rendezvous-warpnet@%s"
-
 type RoutingStorer interface {
 	warpnet.WarpBatching
 }
 
 type distributedHashTable struct {
-	ctx      context.Context
-	cfg      dhtConfig
-	dht      *dht.IpfsDHT
-	stopChan chan struct{}
+	ctx       context.Context
+	cfg       dhtConfig
+	dht       *dht.IpfsDHT
+	discovery *drouting.RoutingDiscovery
+	stopChan  chan struct{}
 }
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
@@ -170,6 +166,8 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 
 	go d.bootstrapDHT()
 	log.Infoln("dht: routing started")
+	d.discovery = drouting.NewRoutingDiscovery(d.dht)
+
 	return d.dht, nil
 }
 
@@ -196,73 +194,6 @@ func (d *distributedHashTable) bootstrapDHT() {
 
 	log.Infoln("dht: bootstrap complete")
 	<-d.dht.RefreshRoutingTable()
-
-	if d.cfg.isRendezvousEnabled {
-		go d.runRendezvousDiscovery(ownID)
-	}
-}
-
-func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) {
-	defer func() { recover() }()
-	if d == nil || d.dht == nil {
-		return
-	}
-
-	defer log.Infoln("dht rendezvous: finished")
-
-	tryouts := 30
-	for len(d.dht.RoutingTable().ListPeers()) == 0 {
-		if tryouts == 0 {
-			log.Infoln("dht rendezvous: timeout - no peers found")
-			return
-		}
-		time.Sleep(time.Second * 5)
-		tryouts--
-	}
-
-	namespace := fmt.Sprintf(warpnetRendezvousPrefix, config.Config().Node.Network)
-
-	routingDiscovery := drouting.NewRoutingDiscovery(d.dht)
-
-	// run it only for 5 minutes - CPU leaking
-	rndvuCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
-	defer cancel()
-	_, err := routingDiscovery.Advertise(rndvuCtx, namespace, lip2pDisc.TTL(time.Hour*3), lip2pDisc.Limit(10))
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-		log.Errorf("dht rendezvous: advertise: %s", err)
-		return
-	}
-
-	peerChan, err := routingDiscovery.FindPeers(rndvuCtx, namespace)
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-		log.Errorf("dht rendezvous: find peers: %s", err)
-		return
-	}
-	if peerChan == nil {
-		return
-	}
-
-	log.Infof("dht rendezvous: is running under a namespace %s", namespace)
-
-	for {
-		select {
-		case <-d.stopChan:
-			return
-		case <-rndvuCtx.Done():
-			return
-		case peerInfo := <-peerChan:
-			if peerInfo.ID == ownID {
-				continue
-			}
-			if len(peerInfo.Addrs) == 0 {
-				continue
-			}
-			log.Infof("dht rendezvous: found new peer: %s", peerInfo.String())
-			for _, addF := range d.cfg.addCallbacks {
-				addF(peerInfo)
-			}
-		}
-	}
 }
 
 func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
@@ -299,8 +230,12 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 
 func (d *distributedHashTable) ClosestPeers() ([]warpnet.WarpPeerID, error) {
 	return d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
-
 }
+
+func (d *distributedHashTable) Discovery() warpnet.Discovery {
+	return d.discovery
+}
+
 func (d *distributedHashTable) Close() {
 	defer func() { recover() }()
 	if d == nil || d.dht == nil {

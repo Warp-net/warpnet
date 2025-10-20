@@ -47,6 +47,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -171,6 +172,7 @@ type (
 	WarpIDService      = identify.IDService
 	WarpAutoNAT        = autonat.AutoNAT
 	P2PNode            = host.Host
+	Discovery          = discovery.Discovery
 )
 
 type WarpStreamBody struct {
@@ -222,6 +224,7 @@ type NodeInfo struct {
 	BootstrapPeers []WarpAddrInfo   `json:"bootstrap_peers"`
 	Reachability   WarpReachability `json:"reachability"`
 	Protocols      []WarpProtocolID `json:"protocols"`
+	Hash           string           `json:"hash"`
 }
 
 func (ni NodeInfo) IsBootstrap() bool {
