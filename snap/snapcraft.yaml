@@ -1,7 +1,7 @@
 name: warpnet
 title: Warpnet
 base: core24
-version: 0.5.81
+version: 0.5.82
 epoch: 1
 license: AGPL-3.0-or-later
 summary: Decentralized, peer-to-peer social network

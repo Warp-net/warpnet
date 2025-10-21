@@ -51,9 +51,15 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 
+      - name: Build (Wails, Linux with compression)
+        working-directory: cmd/node/member
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod -upx -upxflags="--best"
+
       - name: Build (Wails)
         working-directory: cmd/node/member
-        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
+        if: ${{ matrix.os != 'ubuntu-latest' }}
+        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod
 
       - name: Package + checksum (Linux AMD64)
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.platform == 'linux/amd64' }}
