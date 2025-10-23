@@ -192,6 +192,9 @@ func (mn *ModeratorNode) RoutingDiscovery() warpnet.Discovery {
 
 func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+	if nodeId == "" {
+		return nil, fmt.Errorf("moderator: stream: node id is malformed: %s", nodeIdStr)
+	}
 	return mn.node.Stream(nodeId, path, data)
 }
 

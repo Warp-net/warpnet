@@ -157,7 +157,7 @@ func (d *NodeRepo) GetExpiration(ctx context.Context, key local.Key) (t time.Tim
 
 	expiresAt, err := d.db.GetExpiration(prefix)
 	if local.IsNotFoundError(err) {
-		return t, *local.ErrDatastoreKeyNotFound
+		return t, local.ToDatatoreErrNotFound(err)
 	}
 	if err != nil {
 		return t, err
@@ -187,7 +187,7 @@ func (d *NodeRepo) Get(ctx context.Context, key local.Key) (value []byte, err er
 
 	value, err = d.db.Get(prefix)
 	if local.IsNotFoundError(err) {
-		return nil, *local.ErrDatastoreKeyNotFound
+		return nil, local.ToDatatoreErrNotFound(err)
 	}
 	if err != nil {
 		return nil, err
@@ -242,7 +242,7 @@ func (d *NodeRepo) GetSize(ctx context.Context, key local.Key) (_ int, err error
 	case err == nil:
 		return int(itemSize), nil
 	case local.IsNotFoundError(err):
-		return 0, *local.ErrDatastoreKeyNotFound
+		return 0, local.ToDatatoreErrNotFound(err)
 	default:
 		return 0, fmt.Errorf("size: %w", err)
 	}
@@ -303,10 +303,9 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 	opt := local.DefaultIteratorOptions
 	opt.PrefetchValues = !q.KeysOnly
 
-	prefix := local.NewKey(q.Prefix).String()
-	if prefix != "/" {
-		opt.Prefix = []byte(prefix + "/")
-	}
+	key := strings.TrimPrefix(q.Prefix, "/")
+	prefix := local.NewPrefixBuilder(NodesNamespace).AddRootID(key).Build().Bytes()
+	opt.Prefix = prefix
 
 	// Handle ordering
 	if len(q.Orders) > 0 {
@@ -460,9 +459,10 @@ func (d *NodeRepo) Close() (err error) {
 			err = fmt.Errorf("close recovered: %v", r)
 		}
 	}()
+	log.Infoln("node repo: query interrupted")
+
 	close(d.stopChan)
 
-	log.Infoln("node repo: query interrupted")
 	return nil
 }
 

@@ -273,8 +273,6 @@ func StreamGetFollowersHandler(
 				return nil, err
 			}
 
-			fmt.Println("own followers", followers)
-
 			return event.FollowersResponse{
 				Cursor:      cursor,
 				FollowingId: ev.UserId,
@@ -307,8 +305,6 @@ func StreamGetFollowersHandler(
 			return nil, fmt.Errorf("unmarshal other followers error response: %s", possibleError.Message)
 		}
 
-		fmt.Println("user followers data", string(followersData))
-
 		var followersResp event.FollowersResponse
 		if err := json.Unmarshal(followersData, &followersResp); err != nil {
 			return nil, err
@@ -338,7 +334,6 @@ func StreamGetFollowingsHandler(
 			if err != nil {
 				return nil, err
 			}
-			fmt.Println("own followings", followings)
 
 			return event.FollowingsResponse{
 				Cursor:     cursor,
@@ -371,7 +366,6 @@ func StreamGetFollowingsHandler(
 		if _ = json.Unmarshal(followingsData, &possibleError); possibleError.Message != "" {
 			return nil, fmt.Errorf("unmarshal other followings error response: %s", possibleError.Message)
 		}
-		fmt.Println("user FOLLOWINGs data", string(followingsData))
 
 		var followingsResp event.FollowingsResponse
 		if err := json.Unmarshal(followingsData, &followingsResp); err != nil {

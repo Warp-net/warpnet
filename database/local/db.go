@@ -77,7 +77,7 @@ import (
 const (
 	discardRatio     = 0.5
 	firstRunLockFile = "run.lock"
-	sequenceKey      = "SEQUENCE"
+	sequenceKey      = "/SEQUENCE"
 
 	defaultDiscardRatioGC = 0.5
 	defaultIntervalGC     = time.Hour
@@ -878,5 +878,18 @@ func IsNotFoundError(err error) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func ToDatatoreErrNotFound(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, badger.ErrKeyNotFound):
+		return ds.ErrNotFound
+	case errors.Is(err, ds.ErrNotFound):
+		return ds.ErrNotFound
+	default:
+		return err
 	}
 }

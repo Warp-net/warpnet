@@ -1,5 +1,5 @@
 kill:
-	pkill -9 main
+	pkill -9 warpnet
 
 dry-run-main:
 	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet

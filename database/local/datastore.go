@@ -34,8 +34,6 @@ import (
 	dsq "github.com/ipfs/go-datastore/query"
 )
 
-var ErrDatastoreKeyNotFound = &ds.ErrNotFound
-
 type (
 	Key                  = ds.Key
 	Batch                = ds.Batch
