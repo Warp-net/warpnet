@@ -278,10 +278,11 @@ func NewWebsocketTransport(
 }
 
 func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {
+	_ = limiter.GetConnLimits().GetConnTotalLimit() // TODO move to settings
 	return connmgr.NewConnManager(
-		100,
-		limiter.GetConnLimits().GetConnTotalLimit(),
-		connmgr.WithGracePeriod(time.Hour*12),
+		20,
+		50,
+		connmgr.WithGracePeriod(time.Hour),
 	)
 }
 

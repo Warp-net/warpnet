@@ -51,9 +51,9 @@ type UserTweetsCounter interface {
 
 type UserFollowsCounter interface {
 	GetFollowersCount(userId string) (uint64, error)
-	GetFolloweesCount(userId string) (uint64, error)
-	GetFollowers(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
-	GetFollowees(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
+	GetFollowingsCount(userId string) (uint64, error)
+	GetFollowers(userId string, limit *uint64, cursor *string) ([]string, string, error)
+	GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 type UserFetcher interface {
@@ -99,7 +99,7 @@ func StreamGetUserHandler(
 			if err != nil {
 				return nil, err
 			}
-			followeesCount, err := followRepo.GetFolloweesCount(u.Id)
+			followingsCount, err := followRepo.GetFollowingsCount(u.Id)
 			if err != nil {
 				return nil, err
 			}
@@ -110,7 +110,7 @@ func StreamGetUserHandler(
 
 			u.TweetsCount = tweetsCount
 			u.FollowersCount = followersCount
-			u.FolloweesCount = followeesCount
+			u.FollowingsCount = followingsCount
 
 			return u, nil
 		}
@@ -265,15 +265,15 @@ func StreamGetWhoToFollowHandler(
 			return nil, err
 		}
 
-		followeesLimit := uint64(80) // TODO limit?
-		followees, _, err := followRepo.GetFollowees(authRepo.GetOwner().UserId, &followeesLimit, nil)
+		followingsLimit := uint64(80) // TODO limit?
+		followings, _, err := followRepo.GetFollowings(authRepo.GetOwner().UserId, &followingsLimit, nil)
 		if err != nil {
 			log.Errorf("get who to follow handler: get followers %v", err)
 		}
 
 		followedUsers := map[string]struct{}{}
-		for _, follow := range followees {
-			followedUsers[follow.Followee] = struct{}{}
+		for _, followingId := range followings {
+			followedUsers[followingId] = struct{}{}
 		}
 
 		whotofollow := make([]domain.User, 0, len(users))

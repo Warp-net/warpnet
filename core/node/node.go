@@ -94,6 +94,7 @@ func NewWarpNode(
 	managersOpts := []libp2p.Option{
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(manager),
+		libp2p.DisableMetrics(), // TODO move to settings
 	}
 
 	opts = append(opts, managersOpts...)

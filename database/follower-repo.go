@@ -29,21 +29,20 @@ package database
 
 import (
 	"encoding/binary"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/database/local"
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/json"
 )
 
 var ErrAlreadyFollowed = local.DBError("already followed")
 
 const (
-	FollowRepoName       = "/FOLLOWINGS"
-	followeeSubName      = "FOLLOWEE"
-	followerSubName      = "FOLLOWER"
-	followeeCountSubName = "FOLLOWEECOUNT"
-	followerCountSubName = "FOLLOWERCOUNT"
+	FollowRepoName        = "/FOLLOW"
+	followingSubName      = "FOLLOWING"
+	followerSubName       = "FOLLOWER"
+	followingCountSubName = "FOLLOWINGCOUNT"
+	followerCountSubName  = "FOLLOWERCOUNT"
 )
 
 type FollowerStorer interface {
@@ -53,7 +52,6 @@ type FollowerStorer interface {
 	Delete(key local.DatabaseKey) error
 }
 
-// FollowRepo handles reader/writer relationships
 type FollowRepo struct {
 	db FollowerStorer
 }
@@ -62,15 +60,16 @@ func NewFollowRepo(db FollowerStorer) *FollowRepo {
 	return &FollowRepo{db: db}
 }
 
-func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Following) error {
+func (repo *FollowRepo) Follow(fromUserId, toUserId string) error {
 	if fromUserId == "" || toUserId == "" {
 		return local.DBError("invalid follow params")
 	}
+	if fromUserId == toUserId {
+		return local.DBError("cannot follow yourself")
+	}
 
-	data, _ := json.Marshal(event)
-
-	fixedFolloweeKey := local.NewPrefixBuilder(FollowRepoName).
-		AddSubPrefix(followeeSubName).
+	fixedFollowingKey := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followingSubName).
 		AddRootID(toUserId).
 		AddRange(local.FixedRangeKey).
 		AddParentId(fromUserId).
@@ -89,13 +88,13 @@ func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Followi
 	}
 	defer txn.Rollback()
 
-	_, err = txn.Get(fixedFollowerKey)
+	_, err = txn.Get(fixedFollowingKey)
 	if err == nil {
 		return ErrAlreadyFollowed
 	}
 
-	sortableFolloweeKey := local.NewPrefixBuilder(FollowRepoName).
-		AddSubPrefix(followeeSubName).
+	sortableFollowingKey := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followingSubName).
 		AddRootID(toUserId).
 		AddReversedTimestamp(time.Now()).
 		AddParentId(fromUserId).
@@ -108,40 +107,76 @@ func (repo *FollowRepo) Follow(fromUserId, toUserId string, event domain.Followi
 		AddParentId(toUserId).
 		Build()
 
-	followeesCountKey := local.NewPrefixBuilder(FollowRepoName).
-		AddSubPrefix(followeeCountSubName).
-		AddRootID(toUserId).
+	followingsCountKey := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followingCountSubName).
+		AddRootID(fromUserId).
 		Build()
 
 	followersCountKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerCountSubName).
-		AddRootID(fromUserId).
+		AddRootID(toUserId).
 		Build()
 
-	if err := txn.Set(sortableFollowerKey, data); err != nil {
+	if err := txn.Set(sortableFollowerKey, []byte{}); err != nil {
 		return err
 	}
-	if err := txn.Set(sortableFolloweeKey, data); err != nil {
+	if err := txn.Set(sortableFollowingKey, []byte{}); err != nil {
 		return err
 	}
 	if err := txn.Set(fixedFollowerKey, []byte(sortableFollowerKey)); err != nil {
 		return err
 	}
-	if err := txn.Set(fixedFolloweeKey, []byte(sortableFolloweeKey)); err != nil {
+	if err := txn.Set(fixedFollowingKey, []byte(sortableFollowingKey)); err != nil {
 		return err
 	}
 	if _, err := txn.Increment(followersCountKey); err != nil {
 		return err
 	}
-	if _, err := txn.Increment(followeesCountKey); err != nil {
+	if _, err := txn.Increment(followingsCountKey); err != nil {
 		return err
 	}
 	return txn.Commit()
 }
 
+func (repo *FollowRepo) IsFollowing(ownerId, otherUserId string) bool {
+	key := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followingSubName).
+		AddRootID(otherUserId).
+		AddRange(local.FixedRangeKey).
+		AddParentId(ownerId).
+		Build()
+
+	_, err := repo.db.Get(key)
+	if local.IsNotFoundError(err) {
+		return false
+	}
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+func (repo *FollowRepo) IsFollower(ownerId, otherUserId string) bool {
+	key := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followerSubName).
+		AddRootID(otherUserId). // follower
+		AddRange(local.FixedRangeKey).
+		AddParentId(ownerId). // followee
+		Build()
+
+	_, err := repo.db.Get(key)
+	if local.IsNotFoundError(err) {
+		return false
+	}
+	if err != nil {
+		return false
+	}
+	return true
+}
+
 func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
-	fixedFolloweeKey := local.NewPrefixBuilder(FollowRepoName).
-		AddSubPrefix(followeeSubName).
+	fixedFollowingKey := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followingSubName).
 		AddRootID(toUserId).
 		AddRange(local.FixedRangeKey).
 		AddParentId(fromUserId).
@@ -154,17 +189,17 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 		AddParentId(toUserId).
 		Build()
 
-	followeesCountKey := local.NewPrefixBuilder(FollowRepoName).
-		AddSubPrefix(followeeCountSubName).
-		AddRootID(toUserId).
+	followingsCountKey := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followingCountSubName).
+		AddRootID(fromUserId).
 		Build()
 
 	followersCountKey := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerCountSubName).
-		AddRootID(fromUserId).
+		AddRootID(toUserId).
 		Build()
 
-	sortableFolloweeKey, err := repo.db.Get(fixedFolloweeKey)
+	sortableFollowingKey, err := repo.db.Get(fixedFollowingKey)
 	if err != nil && !local.IsNotFoundError(err) {
 		return err
 	}
@@ -179,10 +214,10 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 	}
 	defer txn.Rollback()
 
-	if err := txn.Delete(fixedFolloweeKey); err != nil {
+	if err := txn.Delete(fixedFollowingKey); err != nil {
 		return err
 	}
-	if err := txn.Delete(local.DatabaseKey(sortableFolloweeKey)); err != nil {
+	if err := txn.Delete(local.DatabaseKey(sortableFollowingKey)); err != nil {
 		return err
 	}
 	if err := txn.Delete(fixedFollowerKey); err != nil {
@@ -191,7 +226,7 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 	if err := txn.Delete(local.DatabaseKey(sortableFollowerKey)); err != nil {
 		return err
 	}
-	if _, err := txn.Decrement(followeesCountKey); err != nil {
+	if _, err := txn.Decrement(followingsCountKey); err != nil {
 		return err
 	}
 	if _, err := txn.Decrement(followersCountKey); err != nil {
@@ -225,12 +260,12 @@ func (repo *FollowRepo) GetFollowersCount(userId string) (uint64, error) {
 	return count, txn.Commit()
 }
 
-func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
+func (repo *FollowRepo) GetFollowingsCount(userId string) (uint64, error) {
 	if userId == "" {
-		return 0, local.DBError("followers count: empty userID")
+		return 0, local.DBError("followings count: empty userID")
 	}
-	followeesCountKey := local.NewPrefixBuilder(FollowRepoName).
-		AddSubPrefix(followeeCountSubName).
+	followingsCountKey := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followingCountSubName).
 		AddRootID(userId).
 		Build()
 	txn, err := repo.db.NewTxn()
@@ -238,7 +273,7 @@ func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
 		return 0, err
 	}
 	defer txn.Rollback()
-	bt, err := txn.Get(followeesCountKey)
+	bt, err := txn.Get(followingsCountKey)
 	if local.IsNotFoundError(err) {
 		return 0, nil
 	}
@@ -249,9 +284,9 @@ func (repo *FollowRepo) GetFolloweesCount(userId string) (uint64, error) {
 	return count, txn.Commit()
 }
 
-func (repo *FollowRepo) GetFollowers(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error) {
-	followeePrefix := local.NewPrefixBuilder(FollowRepoName).
-		AddSubPrefix(followeeSubName).
+func (repo *FollowRepo) GetFollowers(userId string, limit *uint64, cursor *string) ([]string, string, error) {
+	followingPrefix := local.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followingSubName).
 		AddRootID(userId).
 		Build()
 
@@ -261,7 +296,7 @@ func (repo *FollowRepo) GetFollowers(userId string, limit *uint64, cursor *strin
 	}
 	defer txn.Rollback()
 
-	items, cur, err := txn.List(followeePrefix, limit, cursor)
+	keys, cur, err := txn.ListKeys(followingPrefix, limit, cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -270,21 +305,21 @@ func (repo *FollowRepo) GetFollowers(userId string, limit *uint64, cursor *strin
 		return nil, "", err
 	}
 
-	followings := make([]domain.Following, 0, len(items))
-	for _, item := range items {
-		var f domain.Following
-		err = json.Unmarshal(item.Value, &f)
-		if err != nil {
-			return nil, "", err
+	followers := make([]string, 0, len(keys))
+	for _, key := range keys {
+		splitted := strings.Split(key, local.Delimeter)
+		if len(splitted) < 2 {
+			continue
 		}
-		followings = append(followings, f)
+		// taking a last part of a key
+		followers = append(followers, splitted[len(splitted)-1])
 	}
 
-	return followings, cur, nil
+	return followers, cur, nil
 }
 
-// GetFollowees followee - one who is followed (has his/her posts monitored by another user)
-func (repo *FollowRepo) GetFollowees(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error) {
+// GetFollowings following - one who is followed (has his/her posts monitored by another user)
+func (repo *FollowRepo) GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error) {
 	followerPrefix := local.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followerSubName).
 		AddRootID(userId).
@@ -296,7 +331,7 @@ func (repo *FollowRepo) GetFollowees(userId string, limit *uint64, cursor *strin
 	}
 	defer txn.Rollback()
 
-	items, cur, err := txn.List(followerPrefix, limit, cursor)
+	keys, cur, err := txn.ListKeys(followerPrefix, limit, cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -305,14 +340,14 @@ func (repo *FollowRepo) GetFollowees(userId string, limit *uint64, cursor *strin
 		return nil, "", err
 	}
 
-	followings := make([]domain.Following, 0, len(items))
-	for _, item := range items {
-		var f domain.Following
-		err = json.Unmarshal(item.Value, &f)
-		if err != nil {
-			return nil, "", err
+	followings := make([]string, 0, len(keys))
+	for _, key := range keys {
+		splitted := strings.Split(key, local.Delimeter)
+		if len(splitted) < 2 {
+			continue
 		}
-		followings = append(followings, f)
+		// taking a last part of a key
+		followings = append(followings, splitted[len(splitted)-1])
 	}
 
 	return followings, cur, nil

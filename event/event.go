@@ -39,8 +39,6 @@ const (
 	InternalRoutePrefix                  = "/internal"
 )
 
-type ID = string
-
 type acceptedResponse string
 
 // ChatCreatedResponse defines model for ChatCreatedResponse.
@@ -53,7 +51,7 @@ type ChatMessageResponse = domain.ChatMessage
 
 // ChatMessagesResponse defines model for ChatMessagesResponse.
 type ChatMessagesResponse struct {
-	ChatId   string               `json:"chat_id"`
+	ChatId   domain.ID            `json:"chat_id"`
 	Cursor   string               `json:"cursor"`
 	Messages []domain.ChatMessage `json:"messages"`
 }
@@ -62,12 +60,12 @@ type ChatMessagesResponse struct {
 type ChatsResponse struct {
 	Chats  []domain.Chat `json:"chats"`
 	Cursor string        `json:"cursor"`
-	UserId string        `json:"user_id"`
+	UserId domain.ID     `json:"user_id"`
 }
 
 // DeleteChatEvent defines model for DeleteChatEvent.
 type DeleteChatEvent struct {
-	ChatId string `json:"chat_id"`
+	ChatId domain.ID `json:"chat_id"`
 }
 
 // DeleteMessageEvent defines model for DeleteMessageEvent.
@@ -95,47 +93,54 @@ func (e ErrorResponse) Error() string {
 	return e.Message
 }
 
-// FolloweesResponse defines model for FolloweesResponse.
-type FolloweesResponse struct {
-	Cursor    string             `json:"cursor"`
-	Followees []domain.Following `json:"followees"`
-	Follower  string             `json:"follower"`
+// FollowingsResponse defines model for FollowingsResponse.
+type FollowingsResponse struct {
+	Cursor     string      `json:"cursor"`
+	Followings []domain.ID `json:"followings"`
+	FollowerId domain.ID   `json:"follower_id"`
 }
 
-// FollowersResponse defines model for FollowersResponse.
+type IsFollowingResponse struct {
+	IsFollowing bool `json:"is_following"`
+}
+
+type IsFollowerResponse struct {
+	IsFollower bool `json:"is_follower"`
+}
+
 type FollowersResponse struct {
-	Cursor    string             `json:"cursor"`
-	Followee  string             `json:"followee"`
-	Followers []domain.Following `json:"followers"`
+	Cursor      string      `json:"cursor"`
+	FollowingId string      `json:"following_id"`
+	Followers   []domain.ID `json:"followers"`
 }
 
 // GetAllChatsEvent defines model for GetAllChatsEvent.
 type GetAllChatsEvent struct {
-	Cursor *string `json:"cursor,omitempty"`
-	Limit  *uint64 `json:"limit,omitempty"`
-	UserId string  `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+	UserId domain.ID `json:"user_id"`
 }
 
 // GetAllMessagesEvent defines model for GetAllMessagesEvent.
 type GetAllMessagesEvent struct {
-	ChatId string  `json:"chat_id"`
-	Cursor *string `json:"cursor,omitempty"`
-	Limit  *uint64 `json:"limit,omitempty"`
+	ChatId domain.ID `json:"chat_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
 }
 
 // GetAllRepliesEvent defines model for GetAllRepliesEvent.
 type GetAllRepliesEvent struct {
-	Cursor   *string `json:"cursor,omitempty"`
-	Limit    *uint64 `json:"limit,omitempty"`
-	ParentId string  `json:"parent_id"`
-	RootId   string  `json:"root_id"`
+	Cursor   *string   `json:"cursor,omitempty"`
+	Limit    *uint64   `json:"limit,omitempty"`
+	ParentId domain.ID `json:"parent_id"`
+	RootId   domain.ID `json:"root_id"`
 }
 
 // GetAllTweetsEvent defines model for GetAllTweetsEvent.
 type GetAllTweetsEvent struct {
-	Cursor *string `json:"cursor,omitempty"`
-	Limit  *uint64 `json:"limit,omitempty"`
-	UserId string  `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+	UserId domain.ID `json:"user_id"`
 }
 
 // GetAllUsersEvent defines model for GetAllUsersEvent.
@@ -144,48 +149,47 @@ type GetAllUsersEvent struct {
 	Limit  *uint64 `json:"limit,omitempty"`
 
 	// UserId default owner
-	UserId string `json:"user_id"`
+	UserId domain.ID `json:"user_id"`
 }
 
 // GetChatEvent defines model for GetChatEvent.
 type GetChatEvent struct {
-	ChatId string `json:"chat_id"`
+	ChatId domain.ID `json:"chat_id"`
 }
 
-// GetFolloweesEvent defines model for GetFolloweesEvent.
-type GetFolloweesEvent = GetFollowersEvent
+// GetFollowingsEvent defines model for GetFollowingsEvent.
+type GetFollowingsEvent = GetFollowersEvent
 
 // GetFollowersEvent defines model for GetFollowersEvent.
 type GetFollowersEvent struct {
-	Cursor *string `json:"cursor,omitempty"`
-	Limit  *uint64 `json:"limit,omitempty"`
-	UserId string  `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+	UserId domain.ID `json:"user_id"`
 }
 
-// GetLikersEvent defines model for GetLikersEvent.
-type GetReactorsEvent struct {
-	Cursor  *string `json:"cursor,omitempty"`
-	Limit   *uint64 `json:"limit,omitempty"`
-	TweetId string  `json:"tweet_id"`
+type GetIsFollowingEvent struct {
+	UserId domain.ID `json:"user_id"`
 }
+
+type GetIsFollowerEvent = GetIsFollowingEvent
 
 // GetLikersResponse defines model for GetLikersResponse.
 type GetLikersResponse = UsersResponse
 
 // GetLikesCountEvent defines model for GetLikesCountEvent.
 type GetLikesCountEvent struct {
-	TweetId string `json:"tweet_id"`
+	TweetId domain.ID `json:"tweet_id"`
 }
 
 // GetMessageEvent defines model for GetMessageEvent.
 type GetMessageEvent struct {
-	ChatId string `json:"chat_id"`
-	Id     string `json:"id"`
+	ChatId domain.ID `json:"chat_id"`
+	Id     domain.ID `json:"id"`
 }
 
 type GetTweetStatsEvent struct {
-	TweetId string `json:"tweet_id"`
-	UserId  string `json:"user_id"`
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
 }
 
 // GetReTweetsCountEvent defines model for GetReTweetsCountEvent.
@@ -193,9 +197,9 @@ type GetReTweetsCountEvent = GetLikesCountEvent
 
 // GetReplyEvent defines model for GetReplyEvent.
 type GetReplyEvent struct {
-	ReplyId string `json:"reply_id"`
-	RootId  string `json:"root_id"`
-	UserId  string `json:"user_id"`
+	ReplyId domain.ID `json:"reply_id"`
+	RootId  domain.ID `json:"root_id"`
+	UserId  domain.ID `json:"user_id"`
 }
 
 // GetRetweetersResponse defines model for GetRetweetersResponse.
@@ -206,20 +210,20 @@ type GetTimelineEvent = GetAllTweetsEvent
 
 // GetTweetEvent defines model for GetTweetEvent.
 type GetTweetEvent struct {
-	TweetId string `json:"tweet_id"`
-	UserId  string `json:"user_id"`
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
 }
 
 // GetUserEvent defines model for GetUserEvent.
 type GetUserEvent struct {
-	UserId string `json:"user_id"`
+	UserId domain.ID `json:"user_id"`
 }
 
 // LikeEvent defines model for LikeEvent.
 type LikeEvent struct {
-	TweetId string `json:"tweet_id"`
-	UserId  string `json:"user_id"`
-	OwnerId string `json:"owner_id"`
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+	OwnerId domain.ID `json:"owner_id"`
 }
 
 // LikesCountResponse defines model for LikesCountResponse.
@@ -244,8 +248,8 @@ type LogoutEvent struct {
 // Message defines model for Message.
 type Message struct {
 	Body        json.RawMessage `json:"body"`
-	MessageId   string          `json:"message_id"`
-	NodeId      string          `json:"node_id"`
+	MessageId   domain.ID       `json:"message_id"`
+	NodeId      domain.ID       `json:"node_id"`
 	Destination string          `json:"path"` // TODO change to 'destination'
 	Timestamp   time.Time       `json:"timestamp,omitempty"`
 	Version     string          `json:"version"`
@@ -257,13 +261,16 @@ type MessageBody any
 
 // NewChatEvent defines model for NewChatEvent.
 type NewChatEvent struct {
-	ChatId      *string `json:"chat_id,omitempty"`
-	OtherUserId string  `json:"other_user_id"`
-	OwnerId     string  `json:"owner_id"`
+	ChatId      *domain.ID `json:"chat_id,omitempty"`
+	OtherUserId domain.ID  `json:"other_user_id"`
+	OwnerId     domain.ID  `json:"owner_id"`
 }
 
 // NewFollowEvent defines model for NewFollowEvent.
-type NewFollowEvent = domain.Following
+type NewFollowEvent = struct {
+	FollowerId  domain.ID
+	FollowingId domain.ID
+}
 
 // NewMessageEvent defines model for NewMessageEvent.
 type NewMessageEvent = domain.ChatMessage
@@ -273,14 +280,14 @@ type NewMessageResponse = domain.ChatMessage
 
 // NewReplyEvent defines model for NewReplyEvent.
 type NewReplyEvent struct {
-	CreatedAt    time.Time `json:"created_at"`
-	Id           string    `json:"id"`
-	ParentId     *string   `json:"parent_id,omitempty"`
-	ParentUserId string    `json:"parent_user_id"`
-	RootId       string    `json:"root_id"`
-	Text         string    `json:"text"`
-	UserId       string    `json:"user_id"`
-	Username     string    `json:"username"`
+	CreatedAt    time.Time  `json:"created_at"`
+	Id           domain.ID  `json:"id"`
+	ParentId     *domain.ID `json:"parent_id,omitempty"`
+	ParentUserId domain.ID  `json:"parent_user_id"`
+	RootId       domain.ID  `json:"root_id"`
+	Text         string     `json:"text"`
+	UserId       domain.ID  `json:"user_id"`
+	Username     string     `json:"username"`
 }
 
 // NewReplyResponse defines model for NewReplyResponse.
@@ -293,7 +300,7 @@ type NewRetweetEvent = domain.Tweet
 type NewTweetEvent = domain.Tweet
 
 // NewUnfollowEvent defines model for NewUnfollowEvent.
-type NewUnfollowEvent = domain.Following
+type NewUnfollowEvent = NewFollowEvent
 
 // NewUserEvent defines model for NewUserEvent.
 type NewUserEvent = domain.User
@@ -308,27 +315,27 @@ type ReTweetsCountResponse = LikesCountResponse
 type RepliesResponse struct {
 	Cursor  string             `json:"cursor"`
 	Replies []domain.ReplyNode `json:"replies"`
-	UserId  *string            `json:"user_id,omitempty"`
+	UserId  *domain.ID         `json:"user_id,omitempty"`
 }
 
 // TweetsResponse defines model for TweetsResponse.
 type TweetsResponse struct {
 	Cursor string         `json:"cursor"`
 	Tweets []domain.Tweet `json:"tweets"`
-	UserId string         `json:"user_id"`
+	UserId domain.ID      `json:"user_id"`
 }
 
 type TweetStatsResponse struct {
-	TweetId       ID     `json:"tweet_id"`
-	RetweetsCount uint64 `json:"retweets_count"`
-	LikeCount     uint64 `json:"likes_count"`
-	RepliesCount  uint64 `json:"replies_count"`
-	ViewsCount    uint64 `json:"views_count"`
+	TweetId       domain.ID `json:"tweet_id"`
+	RetweetsCount uint64    `json:"retweets_count"`
+	LikeCount     uint64    `json:"likes_count"`
+	RepliesCount  uint64    `json:"replies_count"`
+	ViewsCount    uint64    `json:"views_count"`
 }
 
 type IDsResponse struct {
-	Cursor string `json:"cursor"`
-	Users  []ID   `json:"users"`
+	Cursor string      `json:"cursor"`
+	Users  []domain.ID `json:"users"`
 }
 
 // UnlikeEvent defines model for UnlikeEvent.
@@ -336,8 +343,8 @@ type UnlikeEvent = LikeEvent
 
 // UnretweetEvent defines model for UnretweetEvent.
 type UnretweetEvent struct {
-	TweetId     string `json:"tweet_id"`
-	RetweeterId string `json:"retweeter_id"`
+	TweetId     domain.ID `json:"tweet_id"`
+	RetweeterId domain.ID `json:"retweeter_id"`
 }
 
 // UsersResponse defines model for UsersResponse.
@@ -378,7 +385,7 @@ type ChallengeResponse struct {
 }
 
 type ValidationEvent struct {
-	ValidatedNodeID string         `json:"validated_node_id"`
+	ValidatedNodeID domain.ID      `json:"validated_node_id"`
 	SelfHashHex     string         `json:"self_hash_hex"`
 	Challenge       ChallengeEvent `json:"challenge"`
 	User            *domain.User   `json:"user"`
@@ -401,31 +408,31 @@ const (
 type ValidationResultEvent struct {
 	Result      ValidationResult `json:"result"`
 	Reason      *string          `json:"reason,omitempty"`
-	ValidatedID string           `json:"validated_id"`
-	ValidatorID string           `json:"validator_id"`
+	ValidatedID domain.ID        `json:"validated_id"`
+	ValidatorID domain.ID        `json:"validator_id"`
 }
 
 type ModerationEvent struct {
-	NodeID   string                      `json:"node_id"`
-	UserID   string                      `json:"user_id"`
+	NodeID   domain.ID                   `json:"node_id"`
+	UserID   domain.ID                   `json:"user_id"`
 	Type     domain.ModerationObjectType `json:"type"`
-	ObjectID *string                     `json:"object_id,omitempty"`
+	ObjectID *domain.ID                  `json:"object_id,omitempty"`
 }
 
 type ModerationResultEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
 	Result   domain.ModerationResult     `json:"result"`
 	Reason   *string                     `json:"reason,omitempty"`
-	NodeID   string                      `json:"node_id"`
-	UserID   string                      `json:"user_id"`
-	ObjectID *string                     `json:"object_id,omitempty"`
+	NodeID   domain.ID                   `json:"node_id"`
+	UserID   domain.ID                   `json:"user_id"`
+	ObjectID *domain.ID                  `json:"object_id,omitempty"`
 }
 
 type (
 	GetNotificationsEvent    = GetAllTweetsEvent
 	GetNotificationsResponse struct {
 		Cursor        string                `json:"cursor"`
-		UserID        string                `json:"user_id"`
+		UserID        domain.ID             `json:"user_id"`
 		UnreadCount   uint64                `json:"unread_count"`
 		Notifications []domain.Notification `json:"notifications"`
 	}

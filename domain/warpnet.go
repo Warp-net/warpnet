@@ -33,6 +33,8 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
+type ID = string
+
 // AuthNodeInfo defines model for AuthNodeInfo.
 type AuthNodeInfo struct {
 	Identity Identity         `json:"identity"`
@@ -68,15 +70,6 @@ type Error struct {
 
 func (e *Error) Error() string {
 	return e.Message
-}
-
-// Following defines model for Following.
-type Following struct {
-	// Followee to user
-	Followee string `json:"followee"`
-
-	// Follower from user
-	Follower string `json:"follower"`
 }
 
 // Identity defines model for Identity.
@@ -150,7 +143,7 @@ type User struct {
 	Birthdate          string            `json:"birthdate"`
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          *time.Time        `json:"updated_at,omitempty"`
-	FolloweesCount     uint64            `json:"followees_count"`
+	FollowingsCount    uint64            `json:"followings_count"`
 	FollowersCount     uint64            `json:"followers_count"`
 	Id                 string            `json:"id"`
 	IsOffline          bool              `json:"isOffline"`

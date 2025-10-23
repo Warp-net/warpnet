@@ -202,7 +202,18 @@ func (g *Gossip) runGossip(disc warpnet.Discovery) (err error) {
 	if g == nil || g.node == nil {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), pubsub.WithDiscovery(disc))
+
+	// param Dout=2 must be less than Dlo=2 and Dout must not exceed D=4 / 2
+	params := pubsub.DefaultGossipSubParams()
+	params.Dhi = 8
+	params.HeartbeatInterval = time.Minute
+
+	g.pubsub, err = pubsub.NewGossipSub(
+		g.ctx, g.node.Node(),
+		pubsub.WithDiscovery(disc),
+		pubsub.WithGossipSubParams(params),
+		pubsub.WithSeenMessagesTTL(time.Minute*5),
+	)
 	if err != nil {
 		return err
 	}
@@ -253,6 +264,8 @@ func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {
 	return nil
 }
 
+const unsubTryouts = 3
+
 func (g *Gossip) Unsubscribe(topics ...string) (err error) {
 	if g == nil || !g.isRunning.Load() {
 		return warpnet.WarpError("gossip: service not initialized")
@@ -274,9 +287,18 @@ func (g *Gossip) Unsubscribe(topics ...string) (err error) {
 			}
 		}
 
-		if err = topic.Close(); err != nil {
-			return err
+		for i := 0; i < unsubTryouts; i++ {
+			err = topic.Close()
+			if err != nil && strings.Contains(err.Error(), "outstanding event handlers or subscriptions") {
+				time.Sleep(time.Second)
+				fmt.Println("unsub tryout", i)
+				continue
+			}
+			if err != nil {
+				return err
+			}
 		}
+
 		delete(g.topics, topicName)
 
 		if _, ok := g.relayCancelFuncs[topicName]; ok {

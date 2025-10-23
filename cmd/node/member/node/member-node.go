@@ -98,14 +98,14 @@ func NewMemberNode(
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.HandlePeerFound)
 
-	followeeIds, err := fetchFolloweeIds(owner.UserId, followRepo)
+	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
 	if err != nil {
 		return nil, err
 	}
 
 	pubsubService := memberPubSub.NewPubSub(
 		ctx,
-		memberPubSub.PrefollowUsers(followeeIds...)...,
+		memberPubSub.PrefollowUsers(followingIds...)...,
 	)
 
 	infos, err := config.Config().Node.AddrInfos()
@@ -206,7 +206,7 @@ func (m *MemberNode) Start() (err error) {
 	return nil
 }
 
-func fetchFolloweeIds(ownerId string, followRepo FollowStorer) (ids []string, err error) {
+func fetchFollowingIds(ownerId string, followRepo FollowStorer) (ids []string, err error) {
 	if followRepo == nil {
 		return ids, nil
 	}
@@ -216,17 +216,17 @@ func fetchFolloweeIds(ownerId string, followRepo FollowStorer) (ids []string, er
 		limit      = uint64(20)
 	)
 	for {
-		followees, cur, err := followRepo.GetFollowees(ownerId, &limit, &nextCursor)
+		followings, cur, err := followRepo.GetFollowings(ownerId, &limit, &nextCursor)
 		if err != nil {
 			return ids, err
 		}
-		for _, f := range followees {
-			if f.Followee == ownerId {
+		for _, id := range followings {
+			if id == ownerId {
 				continue
 			}
-			ids = append(ids, f.Followee)
+			ids = append(ids, id)
 		}
-		if len(followees) < int(limit) {
+		if len(followings) < int(limit) {
 			break
 		}
 		nextCursor = cur
@@ -281,7 +281,7 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 
 	peerInfo := m.node.Node().Peerstore().PeerInfo(nodeId)
 	if len(peerInfo.Addrs) == 0 && !isMastodonID {
-		log.Warningf("node %v is offline", nodeId)
+		log.Warningf("node doesn't have addresses: %s", peerInfo.String())
 		return nil, warpnet.ErrNodeIsOffline
 	}
 
@@ -393,6 +393,14 @@ func (m *MemberNode) setupHandlers(
 				handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
 			},
 			{
+				event.PUBLIC_POST_IS_FOLLOWING,
+				handler.StreamIsFollowingHandler(followRepo, authRepo),
+			},
+			{
+				event.PUBLIC_POST_IS_FOLLOWER,
+				handler.StreamIsFollowerHandler(followRepo, authRepo),
+			},
+			{
 				event.PUBLIC_POST_UNFOLLOW,
 				handler.StreamUnfollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
 			},
@@ -433,8 +441,8 @@ func (m *MemberNode) setupHandlers(
 				handler.StreamGetFollowersHandler(authRepo, userRepo, followRepo, m),
 			},
 			{
-				event.PUBLIC_GET_FOLLOWEES,
-				handler.StreamGetFolloweesHandler(authRepo, userRepo, followRepo, m),
+				event.PUBLIC_GET_FOLLOWINGS,
+				handler.StreamGetFollowingsHandler(authRepo, userRepo, followRepo, m),
 			},
 			{
 				event.PUBLIC_POST_LIKE,

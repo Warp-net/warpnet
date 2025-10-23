@@ -64,8 +64,8 @@ func (s *FollowRepoTestSuite) TestFollowAndUnfollow() {
 	userB := ulid.Make().String()
 
 	following := domain.Following{
-		Follower: userA,
-		Followee: userB,
+		Follower:  userA,
+		Following: userB,
 	}
 
 	// Follow
@@ -77,9 +77,9 @@ func (s *FollowRepoTestSuite) TestFollowAndUnfollow() {
 	s.Require().NoError(err)
 	s.Equal(uint64(1), countFollowers)
 
-	countFollowees, err := s.repo.GetFolloweesCount(userB)
+	countFollowings, err := s.repo.GetFollowingsCount(userB)
 	s.Require().NoError(err)
-	s.Equal(uint64(1), countFollowees)
+	s.Equal(uint64(1), countFollowings)
 
 	// Check followers
 	limit := uint64(10)
@@ -88,11 +88,11 @@ func (s *FollowRepoTestSuite) TestFollowAndUnfollow() {
 	s.Len(followers, 1)
 	s.Equal(userA, followers[0].Follower)
 
-	// Check followees
-	followees, _, err := s.repo.GetFollowees(userA, &limit, nil)
+	// Check followings
+	followings, _, err := s.repo.GetFollowings(userA, &limit, nil)
 	s.Require().NoError(err)
-	s.Len(followees, 1)
-	s.Equal(userB, followees[0].Followee)
+	s.Len(followings, 1)
+	s.Equal(userB, followings[0].Following)
 
 	// Unfollow
 	err = s.repo.Unfollow(userA, userB)
@@ -103,18 +103,18 @@ func (s *FollowRepoTestSuite) TestFollowAndUnfollow() {
 	s.Require().NoError(err)
 	s.Equal(uint64(0), countFollowers)
 
-	countFollowees, err = s.repo.GetFolloweesCount(userB)
+	countFollowings, err = s.repo.GetFollowingsCount(userB)
 	s.Require().NoError(err)
-	s.Equal(uint64(0), countFollowees)
+	s.Equal(uint64(0), countFollowings)
 
 	// Check empty lists
 	followers, _, err = s.repo.GetFollowers(userB, &limit, nil)
 	s.Require().NoError(err)
 	s.Len(followers, 0)
 
-	followees, _, err = s.repo.GetFollowees(userA, &limit, nil)
+	followings, _, err = s.repo.GetFollowings(userA, &limit, nil)
 	s.Require().NoError(err)
-	s.Len(followees, 0)
+	s.Len(followings, 0)
 }
 
 func (s *FollowRepoTestSuite) TestFollow_InvalidInput() {
@@ -131,8 +131,8 @@ func (s *FollowRepoTestSuite) TestGetFollowersCount_Empty() {
 	s.Equal(uint64(0), count)
 }
 
-func (s *FollowRepoTestSuite) TestGetFolloweesCount_Empty() {
-	count, err := s.repo.GetFolloweesCount("")
+func (s *FollowRepoTestSuite) TestGetFollowingsCount_Empty() {
+	count, err := s.repo.GetFollowingsCount("")
 	s.Error(err)
 	s.Equal(uint64(0), count)
 }

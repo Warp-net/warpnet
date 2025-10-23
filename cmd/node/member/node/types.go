@@ -94,11 +94,13 @@ type ClientNodeStreamer interface {
 
 type FollowStorer interface {
 	GetFollowersCount(userId string) (uint64, error)
-	GetFolloweesCount(userId string) (uint64, error)
-	Follow(fromUserId, toUserId string, event domain.Following) error
+	GetFollowingsCount(userId string) (uint64, error)
+	Follow(fromUserId, toUserId string) error
 	Unfollow(fromUserId, toUserId string) error
-	GetFollowers(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
-	GetFollowees(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
+	GetFollowers(userId string, limit *uint64, cursor *string) ([]domain.ID, string, error)
+	GetFollowings(userId string, limit *uint64, cursor *string) ([]domain.ID, string, error)
+	IsFollowing(ownerId, otherUserId string) bool
+	IsFollower(ownerId, otherUserId string) bool
 }
 
 type Storer interface {

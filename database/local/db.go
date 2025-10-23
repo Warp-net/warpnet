@@ -440,6 +440,7 @@ type WarpTransactioner interface {
 	IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error
 	ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) error
 	List(prefix DatabaseKey, limit *uint64, cursor *string) ([]ListItem, string, error)
+	ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([]string, string, error)
 	BatchGet(keys ...DatabaseKey) ([]ListItem, error)
 }
 
@@ -628,25 +629,52 @@ func (t *WarpTxn) List(prefix DatabaseKey, limit *uint64, cursor *string) ([]Lis
 	}
 
 	items := make([]ListItem, 0, *limit) //
-	cur, err := iterateKeysValues(
-		t.txn, prefix, startCursor, limit,
+	cur, err := iterate(
+		t.txn, prefix, startCursor, limit, true,
 		func(key string, value []byte) error {
 			items = append(items, ListItem{
 				Key:   key,
 				Value: value,
 			})
 			return nil
-		})
+		},
+	)
+	return items, cur, err
+}
+
+func (t *WarpTxn) ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([]string, string, error) {
+	var startCursor DatabaseKey
+	if cursor != nil && *cursor != "" {
+		startCursor = DatabaseKey(*cursor)
+	}
+	if startCursor.String() == endCursor {
+		return []string{}, endCursor, nil
+	}
+
+	if limit == nil {
+		defaultLimit := uint64(20)
+		limit = &defaultLimit
+	}
+
+	items := make([]string, 0, *limit) //
+	cur, err := iterate(
+		t.txn, prefix, startCursor, limit, false,
+		func(key string, _ []byte) error {
+			items = append(items, key)
+			return nil
+		},
+	)
 	return items, cur, err
 }
 
 type iterKeysValuesFunc func(key string, val []byte) error
 
-func iterateKeysValues(
+func iterate(
 	txn *badger.Txn,
 	prefix DatabaseKey,
 	startCursor DatabaseKey,
 	limit *uint64,
+	includeValues bool,
 	handler iterKeysValuesFunc,
 ) (cursor string, err error) {
 	if strings.Contains(prefix.String(), FixedKey) {
@@ -656,7 +684,7 @@ func iterateKeysValues(
 		return endCursor, nil
 	}
 	opts := badger.DefaultIteratorOptions
-	opts.PrefetchValues = true
+	opts.PrefetchValues = includeValues
 	opts.PrefetchSize = 20
 
 	it := txn.NewIterator(opts)

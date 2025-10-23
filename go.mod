@@ -6,7 +6,7 @@ tool github.com/wailsapp/wails/v2/cmd/wails
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/Warp-net/warpnet-frontend v0.0.605
+	github.com/Warp-net/warpnet-frontend v0.0.617
 	github.com/dgraph-io/badger/v4 v4.8.0
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
@@ -43,6 +43,7 @@ require (
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/multiformats/go-multihash v0.2.3 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect
+	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/telemetry v0.0.0-20250908211612-aef8a434d053 // indirect
@@ -233,7 +234,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/tkrajina/go-reflector v0.5.8 // indirect
-	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.21 // indirect
