@@ -866,6 +866,7 @@ func (db *DB) Close() {
 		return
 	}
 	db.isRunning.Store(false)
+	db.badger = nil
 }
 
 func IsNotFoundError(err error) bool {

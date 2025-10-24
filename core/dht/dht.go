@@ -243,34 +243,13 @@ func (d *distributedHashTable) Close() {
 	if d == nil || d.dht == nil {
 		return
 	}
-	log.Infoln("dht: closing...")
 
 	close(d.stopChan)
 
-	timer := time.NewTimer(time.Second * 5)
-	defer timer.Stop()
-
-	select {
-	case <-d.closed():
-		log.Infoln("dht: closed")
-	case <-timer.C:
-		log.Warningln("dht: close time out")
+	log.Infoln("dht: closing...")
+	if err := d.dht.Close(); err != nil {
+		log.Errorf("dht: close: %s", err.Error())
 	}
-	d.dht = nil
-}
 
-// DHT Close method use only WaitGroup and doesn't have timeout
-func (d *distributedHashTable) closed() chan struct{} {
-	closeChan := make(chan struct{})
-
-	go func() {
-		defer func() { recover() }()
-
-		if err := d.dht.Close(); err != nil { // potential leak
-			log.Errorf("dht: table close: %v\n", err)
-		}
-		close(closeChan)
-	}()
-
-	return closeChan
+	log.Infoln("dht: closed")
 }

@@ -692,7 +692,7 @@ func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageR
 	case "image/webp":
 		prefix = "data:image/webp;base64,"
 	default:
-		return event.GetImageResponse{File: string(bt)}, errors.New("unknown image type")
+		log.Warningf("unknown image type: url: %s, headers: %v", url, resp.Header)
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(bt)

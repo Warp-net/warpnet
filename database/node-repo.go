@@ -81,11 +81,14 @@ func NewNodeRepo(db NodeStorer) *NodeRepo {
 }
 
 func (d *NodeRepo) Put(ctx context.Context, key local.Key, value []byte) error {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
@@ -97,23 +100,30 @@ func (d *NodeRepo) Put(ctx context.Context, key local.Key, value []byte) error {
 }
 
 func (d *NodeRepo) Sync(ctx context.Context, _ local.Key) error {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return local.ErrNotRunning
 	}
 
 	return d.db.Sync()
 }
 
 func (d *NodeRepo) PutWithTTL(ctx context.Context, key local.Key, value []byte, ttl time.Duration) error {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+	if d.db.IsClosed() {
+		return local.ErrNotRunning
+	}
+
 	rootKey := buildRootKey(key)
 
 	prefix := local.NewPrefixBuilder(NodesNamespace).
@@ -125,11 +135,14 @@ func (d *NodeRepo) PutWithTTL(ctx context.Context, key local.Key, value []byte, 
 }
 
 func (d *NodeRepo) SetTTL(ctx context.Context, key local.Key, ttl time.Duration) error {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return local.ErrNotRunning
 	}
 
 	item, err := d.Get(ctx, key)
@@ -140,14 +153,15 @@ func (d *NodeRepo) SetTTL(ctx context.Context, key local.Key, ttl time.Duration)
 }
 
 func (d *NodeRepo) GetExpiration(ctx context.Context, key local.Key) (t time.Time, err error) {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return t, ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return t, ctx.Err()
 	}
-
-	expiration := time.Time{}
+	if d.db.IsClosed() {
+		return t, local.ErrNotRunning
+	}
 
 	rootKey := buildRootKey(key)
 
@@ -166,17 +180,20 @@ func (d *NodeRepo) GetExpiration(ctx context.Context, key local.Key) (t time.Tim
 	if expiresAt > math.MaxInt64 {
 		expiresAt = math.MaxInt64
 	}
-	expiration = time.Unix(int64(expiresAt), 0) //#nosec
+	expiration := time.Unix(int64(expiresAt), 0) //#nosec
 
 	return expiration, err
 }
 
 func (d *NodeRepo) Get(ctx context.Context, key local.Key) (value []byte, err error) {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return nil, ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return nil, local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
@@ -197,11 +214,14 @@ func (d *NodeRepo) Get(ctx context.Context, key local.Key) (value []byte, err er
 }
 
 func (d *NodeRepo) Has(ctx context.Context, key local.Key) (_ bool, err error) {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return false, ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return false, ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return false, local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
@@ -222,13 +242,15 @@ func (d *NodeRepo) Has(ctx context.Context, key local.Key) (_ bool, err error) {
 }
 
 func (d *NodeRepo) GetSize(ctx context.Context, key local.Key) (_ int, err error) {
-	if d == nil {
-		return -1, ErrNilNodeRepo
-	}
 	size := -1
-
+	if d == nil || d.db == nil {
+		return size, ErrNilNodeRepo
+	}
 	if ctx.Err() != nil {
 		return size, ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return size, local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
@@ -249,11 +271,14 @@ func (d *NodeRepo) GetSize(ctx context.Context, key local.Key) (_ int, err error
 }
 
 func (d *NodeRepo) Delete(ctx context.Context, key local.Key) error {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
@@ -268,11 +293,14 @@ func (d *NodeRepo) Delete(ctx context.Context, key local.Key) error {
 // DiskUsage implements the PersistentDatastore interface.
 // It returns the sum of lsm and value log files sizes in bytes.
 func (d *NodeRepo) DiskUsage(ctx context.Context) (uint64, error) {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return 0, ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return 0, local.ErrNotRunning
 	}
 
 	lsm, vlog := d.db.InnerDB().Size()
@@ -283,11 +311,14 @@ func (d *NodeRepo) DiskUsage(ctx context.Context) (uint64, error) {
 }
 
 func (d *NodeRepo) Query(ctx context.Context, q local.Query) (local.Results, error) {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return nil, ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+	if d.db.IsClosed() {
+		return nil, local.ErrNotRunning
 	}
 
 	tx := d.db.InnerDB().NewTransaction(true)
@@ -300,6 +331,10 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 			err = fmt.Errorf("node repo: query recover: %v", r)
 		}
 	}()
+
+	if d.db.IsClosed() {
+		return nil, local.ErrNotRunning
+	}
 	opt := local.DefaultIteratorOptions
 	opt.PrefetchValues = !q.KeysOnly
 
@@ -326,7 +361,6 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 			baseQuery.Offset = 0
 			baseQuery.Orders = nil
 
-			fmt.Println("query recursion", baseQuery.String())
 			// perform the base query.
 			res, err := d.query(tx, baseQuery)
 			if err != nil {
@@ -351,7 +385,9 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 		it.Rewind()
 
 		for skipped := 0; skipped < q.Offset && it.Valid(); it.Next() {
-			fmt.Println("skipped iteration", skipped, q.Offset)
+			if d.db.IsClosed() {
+				return
+			}
 
 			if len(q.Filters) == 0 {
 				skipped++
@@ -382,16 +418,15 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 			}
 
 			if err != nil {
-				fmt.Println("skipped select start")
 				select {
 				case output <- local.Result{Error: err}:
 				case <-d.stopChan:
 					return
 				case <-ctx.Done():
 					return
+				default:
+					log.Errorf("node repo: query skipped: %s", err.Error())
 				}
-				fmt.Println("skipped select finish")
-
 			}
 			if !matches {
 				skipped++
@@ -399,8 +434,9 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 		}
 
 		for sent := 0; (q.Limit <= 0 || sent < q.Limit) && it.Valid(); it.Next() {
-			fmt.Println("sent iteration", sent, q.Limit)
-
+			if d.db.IsClosed() {
+				return
+			}
 			item := it.Item()
 			e := local.DsEntry{Key: string(item.Key())}
 
@@ -426,8 +462,6 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 			if result.Error == nil && filter(q.Filters, e) {
 				continue
 			}
-			fmt.Println("sent select start")
-
 			select {
 			case output <- result:
 				sent++
@@ -435,8 +469,9 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 				return
 			case <-ctx.Done():
 				return
+			default:
+				log.Errorf("node repo: query sent: %v", result.Error)
 			}
-			fmt.Println("sent select finish")
 		}
 	})
 
@@ -461,53 +496,42 @@ func expires(item *local.Item) time.Time {
 }
 
 func (d *NodeRepo) Close() (err error) {
-	fmt.Println("node repo Close called")
-	if d == nil {
+	if d == nil || d.db == nil {
 		return nil
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("close recovered: %v", r)
-		}
-	}()
-	log.Infoln("node repo: query interrupted")
+	if d.db.IsClosed() {
+		return nil
+	}
 
 	close(d.stopChan)
-
+	log.Infoln("node repo: closed")
 	return nil
 }
 
-// Implements the datastore.Batch interface, enabling batching support for
-// the badger Datastore.
 type batch struct {
-	ds         *NodeRepo
+	db         NodeStorer
 	writeBatch *local.WriteBatch
 }
 
-// Batch creates a new Batch object. This provides a way to do many writes, when
-// there may be too many to fit into a single transaction.
+var _ local.Batch = (*batch)(nil)
+
 func (d *NodeRepo) Batch(ctx context.Context) (local.Batch, error) {
-	if d == nil {
+	if d == nil || d.db == nil {
 		return nil, ErrNilNodeRepo
 	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
-
-	b := &batch{d, d.db.InnerDB().NewWriteBatch()}
-	// Ensure that incomplete transaction resources are cleaned up in case
-	// batch is abandoned.
+	if d.db.IsClosed() {
+		return nil, local.ErrNotRunning
+	}
+	b := &batch{d.db, d.db.InnerDB().NewWriteBatch()}
 	runtime.SetFinalizer(b, func(b *batch) { _ = b.Cancel() })
 
 	return b, nil
 }
 
-var _ local.Batch = (*batch)(nil)
-
 func (b *batch) Put(ctx context.Context, key local.Key, value []byte) error {
-	if b == nil {
-		return ErrNilNodeRepo
-	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -516,8 +540,11 @@ func (b *batch) Put(ctx context.Context, key local.Key, value []byte) error {
 }
 
 func (b *batch) put(key local.Key, value []byte) error {
-	if b == nil {
+	if b == nil || b.db == nil || b.writeBatch == nil {
 		return ErrNilNodeRepo
+	}
+	if b.db.IsClosed() {
+		return local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
@@ -529,8 +556,11 @@ func (b *batch) put(key local.Key, value []byte) error {
 }
 
 func (b *batch) putWithTTL(key local.Key, value []byte, ttl time.Duration) error {
-	if b == nil {
+	if b == nil || b.db == nil || b.writeBatch == nil {
 		return ErrNilNodeRepo
+	}
+	if b.db.IsClosed() {
+		return local.ErrNotRunning
 	}
 
 	rootKey := buildRootKey(key)
@@ -541,13 +571,16 @@ func (b *batch) putWithTTL(key local.Key, value []byte, ttl time.Duration) error
 	return b.writeBatch.SetEntry(&local.Entry{
 		Key:       batchKey.Bytes(),
 		Value:     value,
-		ExpiresAt: uint64(ttl),
+		ExpiresAt: uint64(time.Now().Add(ttl).Unix()),
 	})
 }
 
 func (b *batch) Delete(ctx context.Context, key local.Key) error {
-	if b == nil {
+	if b == nil || b.db == nil || b.writeBatch == nil {
 		return ErrNilNodeRepo
+	}
+	if b.db.IsClosed() {
+		return local.ErrNotRunning
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -561,26 +594,31 @@ func (b *batch) Delete(ctx context.Context, key local.Key) error {
 	return b.writeBatch.Delete(batchKey.Bytes())
 }
 
-func (b *batch) Commit(_ context.Context) error {
-	if b == nil {
+func (b *batch) Commit(ctx context.Context) error {
+	if b == nil || b.db == nil || b.writeBatch == nil {
 		return ErrNilNodeRepo
+	}
+	if b.db.IsClosed() {
+		_ = b.Cancel()
+		return nil
+	}
+	if ctx.Err() != nil {
+		_ = b.Cancel()
+		return ctx.Err()
 	}
 
 	err := b.writeBatch.Flush()
-	if err != nil {
-		_ = b.Cancel()
-		return err
-	}
-	runtime.SetFinalizer(b, nil)
-	return nil
+	_ = b.Cancel()
+	return err
 }
 
 func (b *batch) Cancel() error {
-	if b == nil {
-		return ErrNilNodeRepo
+	if b == nil || b.db == nil || b.writeBatch == nil {
+		return nil
 	}
 
 	b.writeBatch.Cancel()
+	b.writeBatch = nil
 	runtime.SetFinalizer(b, nil)
 	return nil
 }

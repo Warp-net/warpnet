@@ -303,8 +303,9 @@ func (a *App) close(_ context.Context) {
 
 	log.Infoln("app: closing...")
 
-	a.db.Close()
-	a.node.Stop()
+	a.node.Stop() // close node first
+
+	a.db.Close() // db is a second
 
 	close(a.readyChan)
 }
