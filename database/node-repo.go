@@ -326,6 +326,7 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 			baseQuery.Offset = 0
 			baseQuery.Orders = nil
 
+			fmt.Println("query recursion", baseQuery.String())
 			// perform the base query.
 			res, err := d.query(tx, baseQuery)
 			if err != nil {
@@ -350,6 +351,8 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 		it.Rewind()
 
 		for skipped := 0; skipped < q.Offset && it.Valid(); it.Next() {
+			fmt.Println("skipped iteration", skipped, q.Offset)
+
 			if len(q.Filters) == 0 {
 				skipped++
 				continue
@@ -379,6 +382,7 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 			}
 
 			if err != nil {
+				fmt.Println("skipped select start")
 				select {
 				case output <- local.Result{Error: err}:
 				case <-d.stopChan:
@@ -386,6 +390,8 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 				case <-ctx.Done():
 					return
 				}
+				fmt.Println("skipped select finish")
+
 			}
 			if !matches {
 				skipped++
@@ -393,6 +399,8 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 		}
 
 		for sent := 0; (q.Limit <= 0 || sent < q.Limit) && it.Valid(); it.Next() {
+			fmt.Println("sent iteration", sent, q.Limit)
+
 			item := it.Item()
 			e := local.DsEntry{Key: string(item.Key())}
 
@@ -418,6 +426,7 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 			if result.Error == nil && filter(q.Filters, e) {
 				continue
 			}
+			fmt.Println("sent select start")
 
 			select {
 			case output <- result:
@@ -427,6 +436,7 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 			case <-ctx.Done():
 				return
 			}
+			fmt.Println("sent select finish")
 		}
 	})
 
@@ -451,6 +461,7 @@ func expires(item *local.Item) time.Time {
 }
 
 func (d *NodeRepo) Close() (err error) {
+	fmt.Println("node repo Close called")
 	if d == nil {
 		return nil
 	}

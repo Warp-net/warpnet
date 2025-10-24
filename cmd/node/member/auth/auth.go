@@ -31,15 +31,16 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/oklog/ulid/v2"
-	log "github.com/sirupsen/logrus"
 	"math"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/oklog/ulid/v2"
+	log "github.com/sirupsen/logrus"
 )
 
 type UserPersistencyLayer interface {
@@ -91,7 +92,7 @@ func (as *AuthService) IsAuthenticated() bool {
 func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.LoginResponse, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("panic:", r)
+			fmt.Println("auth: panic:", r)
 		}
 	}()
 	if as.isAuthenticated.Load() {
@@ -103,7 +104,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		}, nil
 	}
 
-	log.Infof("authenticating user %s", message.Username)
+	log.Infof("authenticating user '%s'", message.Username)
 
 	message.Password = strings.TrimSpace(message.Password)
 
@@ -121,7 +122,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 	var user domain.User
 	if owner.UserId == "" {
 		id := ulid.Make().String()
-		log.Infoln("creating new owner:", id)
+		log.Infoln("creating new user:", id)
 		owner, err = as.authPersistence.SetOwner(domain.Owner{
 			CreatedAt:       time.Now(),
 			Username:        message.Username,
@@ -136,24 +137,30 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		user, err = as.userPersistence.Create(domain.User{
 			CreatedAt: owner.CreatedAt,
 			Id:        id,
-			NodeId:    "None",
+			NodeId:    "NotSet",
 			Username:  owner.Username,
 			Latency:   math.MaxInt64, // put your user at the end of a who-to-follow list
 		})
 		if err != nil {
 			return authInfo, fmt.Errorf("new user creation failed: %v", err)
 		}
+		log.Infof(
+			"auth: user created: id: %s, name: '%s', node_id: %s, created_at: %s, latency: %d",
+			user.Id,
+			user.Username,
+			user.NodeId,
+			user.CreatedAt,
+			user.Latency,
+		)
 	}
 
 	if owner.Username != message.Username {
-		log.Errorf("username mismatch: %s == %s", owner.Username, message.Username)
+		log.Errorf("username mismatch: '%s' == '%s'", owner.Username, message.Username)
 		return authInfo, fmt.Errorf("user %s doesn't exist", message.Username)
 	}
 	as.authReady <- domain.AuthNodeInfo{
 		Identity: domain.Identity{Owner: owner, Token: token},
 	}
-
-	log.Infoln("OWNER USER ID:", owner.UserId)
 
 	timer := time.NewTimer(time.Minute * 5)
 	defer timer.Stop()
@@ -162,22 +169,45 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		log.Errorln("node startup failed: timeout")
 		return authInfo, errors.New("node starting is timed out")
 	case authInfo = <-as.authReady:
+		if authInfo.NodeInfo.ID.String() == "" {
+			panic("auth: node id missing")
+		}
+
 		user.Id = owner.UserId
 		user.Username = owner.Username
 		user.CreatedAt = owner.CreatedAt
 		user.Latency = math.MaxInt64 // put your user at the end of a who-to-follow list
-		user.NodeId = authInfo.Identity.Owner.NodeId
-		owner.NodeId = authInfo.Identity.Owner.NodeId
+		user.NodeId = authInfo.NodeInfo.ID.String()
+		owner.NodeId = authInfo.NodeInfo.ID.String()
+
+		log.Infof(
+			"auth: user authenticated: id: %s, name: '%s', node_id: %s, created_at: %s, latency: %d",
+			user.Id,
+			user.Username,
+			user.NodeId,
+			user.CreatedAt,
+			user.Latency,
+		)
 	}
 
 	if owner, err = as.authPersistence.SetOwner(owner); err != nil {
 		log.Errorf("owner update failed: %v", err)
 	}
-	if _, err = as.userPersistence.Update(user.Id, user); err != nil {
+	updatedUser, err := as.userPersistence.Update(user.Id, user)
+	if err != nil {
 		log.Errorf("user update failed: %v", err)
 	}
 
 	as.isAuthenticated.Store(true)
+
+	log.Infof(
+		"auth: user updated: id: %s, name: '%s', node_id: %s, updated_at: %s, latency: %d",
+		updatedUser.Id,
+		updatedUser.Username,
+		updatedUser.NodeId,
+		updatedUser.UpdatedAt,
+		updatedUser.Latency,
+	)
 
 	return event.LoginResponse(authInfo), nil
 }

@@ -7,8 +7,11 @@ dry-run-main:
 dry-run-second:
 	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet --node.port 4002 --node.seed dryruntest --database.dir dryrun1
 
-run-member:
+run-main:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
+
+run-second:
+	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed dryruntest --database.dir dryrun1
 
 moderator:
 	go run -tags=llama cmd/node/moderator/main.go --node.network testnet

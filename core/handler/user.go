@@ -40,6 +40,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const errEmptyUserId = warpnet.WarpError("empty user id")
+
 type UserStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
@@ -84,14 +86,13 @@ func StreamGetUserHandler(
 		}
 
 		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
+			return nil, errEmptyUserId
 		}
 
 		ownerId := authRepo.GetOwner().UserId
 
-		var u domain.User
 		if ev.UserId == ownerId {
-			u, err = repo.Get(ownerId)
+			u, err := repo.Get(ownerId)
 			if err != nil {
 				return nil, err
 			}
@@ -126,12 +127,9 @@ func StreamGetUserHandler(
 			ev,
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			u, err = repo.Get(otherUser.Id)
-			if err != nil {
-				return nil, err
-			}
-			u.IsOffline = true
-			return u, nil
+			otherUser.IsOffline = true
+			_, err = repo.Update(otherUser.Id, otherUser)
+			return otherUser, nil
 		}
 		if err != nil {
 			return nil, err
@@ -142,11 +140,11 @@ func StreamGetUserHandler(
 			return nil, fmt.Errorf("unmarshal other user error response: %s", possibleError.Message)
 		}
 
-		if err = json.Unmarshal(otherUserData, &u); err != nil {
+		if err = json.Unmarshal(otherUserData, &otherUser); err != nil {
 			return nil, fmt.Errorf("get other user: response unmarshal: %v %s", err, otherUserData)
 		}
-		_, err = repo.Update(u.Id, u)
-		return u, err
+		_, err = repo.Update(otherUser.Id, otherUser)
+		return otherUser, err
 	}
 }
 
@@ -162,7 +160,7 @@ func StreamGetUsersHandler(
 		}
 
 		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
+			return nil, errEmptyUserId
 		}
 
 		users, cursor, err := userRepo.List(ev.Limit, ev.Cursor)
@@ -170,7 +168,7 @@ func StreamGetUsersHandler(
 			return nil, err
 		}
 		if len(users) != 0 {
-			go usersRefreshBackground(userRepo, ev, streamer)
+			go refreshUsers(userRepo, ev, streamer)
 
 			return event.UsersResponse{
 				Cursor: cursor,
@@ -178,7 +176,7 @@ func StreamGetUsersHandler(
 			}, err
 		}
 
-		usersRefreshBackground(userRepo, ev, streamer)
+		refreshUsers(userRepo, ev, streamer)
 
 		users, cursor, _ = userRepo.List(ev.Limit, ev.Cursor)
 
@@ -189,7 +187,7 @@ func StreamGetUsersHandler(
 	}
 }
 
-func usersRefreshBackground(
+func refreshUsers(
 	userRepo UserFetcher,
 	ev event.GetAllUsersEvent,
 	streamer UserStreamer,
@@ -244,7 +242,7 @@ func StreamGetWhoToFollowHandler(
 		}
 
 		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty profile id")
+			return nil, errEmptyUserId
 		}
 
 		owner := authRepo.GetOwner()

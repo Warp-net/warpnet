@@ -211,6 +211,8 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		}
 	}
 	existingUser.Latency = newUser.Latency
+	now := time.Now()
+	existingUser.UpdatedAt = &now
 
 	bt, err := json.Marshal(existingUser)
 	if err != nil {

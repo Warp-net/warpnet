@@ -105,7 +105,7 @@ func NewMemberNode(
 
 	pubsubService := memberPubSub.NewPubSub(
 		ctx,
-		memberPubSub.PrefollowUsers(followingIds...)...,
+		memberPubSub.PrefollowHandlers(followingIds...)...,
 	)
 
 	infos, err := config.Config().Node.AddrInfos()

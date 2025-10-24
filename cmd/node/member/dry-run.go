@@ -107,7 +107,10 @@ func main() {
 		log.Fatalf("failed to start member node: %v", err)
 	}
 
-	readyChan <- domain.AuthNodeInfo{Identity: authInfo.Identity, NodeInfo: dryRunNode.NodeInfo()}
+	authInfo.Identity.Owner.NodeId = dryRunNode.NodeInfo().ID.String()
+	authInfo.NodeInfo = dryRunNode.NodeInfo()
+
+	readyChan <- authInfo
 	log.Infoln("WARPNET STARTED")
 	<-interruptChan
 	log.Infoln("interrupted...")

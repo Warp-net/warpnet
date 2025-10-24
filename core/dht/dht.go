@@ -36,7 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/libp2p/go-libp2p-kad-dht/providers"
+	"github.com/libp2p/go-libp2p-kad-dht/records"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
@@ -112,8 +112,8 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 }
 
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
-	cacheOption := providers.Cache(newLRU())
-	providerStore, err := providers.NewProviderManager(
+	cacheOption := records.Cache(newLRU())
+	providerStore, err := records.NewProviderManager(
 		d.ctx, n.ID(), n.Peerstore(), d.cfg.store, cacheOption,
 	)
 	if err != nil {
@@ -195,8 +195,8 @@ func (d *distributedHashTable) bootstrapDHT() {
 
 	d.correctPeerIdMismatch(d.cfg.boostrapNodes)
 
-	log.Infoln("dht: bootstrap complete")
 	<-d.dht.RefreshRoutingTable()
+	log.Infoln("dht: bootstrap complete")
 }
 
 func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
@@ -240,16 +240,37 @@ func (d *distributedHashTable) Discovery() warpnet.Discovery {
 }
 
 func (d *distributedHashTable) Close() {
-	defer func() { recover() }()
 	if d == nil || d.dht == nil {
 		return
 	}
+	log.Infoln("dht: closing...")
 
 	close(d.stopChan)
 
-	log.Infoln("dht: closing...")
-	if err := d.dht.Close(); err != nil {
-		log.Errorf("dht: table close: %v\n", err)
+	timer := time.NewTimer(time.Second * 5)
+	defer timer.Stop()
+
+	select {
+	case <-d.closed():
+		log.Infoln("dht: closed")
+	case <-timer.C:
+		log.Warningln("dht: close time out")
 	}
-	log.Infoln("dht: table closed")
+	d.dht = nil
+}
+
+// DHT Close method use only WaitGroup and doesn't have timeout
+func (d *distributedHashTable) closed() chan struct{} {
+	closeChan := make(chan struct{})
+
+	go func() {
+		defer func() { recover() }()
+
+		if err := d.dht.Close(); err != nil { // potential leak
+			log.Errorf("dht: table close: %v\n", err)
+		}
+		close(closeChan)
+	}()
+
+	return closeChan
 }

@@ -175,13 +175,14 @@ func (g *Gossip) runListener() error {
 			g.mx.RLock()
 			handlerF, ok := g.handlersMap[strings.TrimSpace(*msg.Topic)]
 			g.mx.RUnlock()
-			if !ok {
+			if !ok || handlerF == nil {
 				// default behavior
 				if err := g.SelfPublish(msg.Data); err != nil {
 					log.Errorf("gossip: self stream: %v", err)
 				}
 				continue
 			}
+
 			if err := handlerF(msg.Data); err != nil {
 				log.Errorf(
 					"gossip: failed to handle peer %s message from topic %s: %v",

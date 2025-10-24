@@ -148,6 +148,9 @@ func StreamIsFollowingHandler(
 		if err != nil {
 			return nil, err
 		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("empty following id")
+		}
 
 		ownerUserId := authRepo.GetOwner().UserId
 
@@ -165,6 +168,9 @@ func StreamIsFollowerHandler(
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("empty follower id")
 		}
 
 		ownerUserId := authRepo.GetOwner().UserId

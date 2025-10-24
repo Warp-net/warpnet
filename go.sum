@@ -54,6 +54,16 @@ github.com/Warp-net/warpnet-frontend v0.0.616 h1:AyBUEyh6Zy/xylZ0mwq8Migte8sFP4D
 github.com/Warp-net/warpnet-frontend v0.0.616/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
 github.com/Warp-net/warpnet-frontend v0.0.617 h1:zO0xVKPN2Kt1ebfLKOZInktZ2UcmCTQJ5dBPCvPLuoQ=
 github.com/Warp-net/warpnet-frontend v0.0.617/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
+github.com/Warp-net/warpnet-frontend v0.0.618 h1:iS4SKUZL/VbS/kTTocKKv1EjWfXNktUQVxeUoMskfKg=
+github.com/Warp-net/warpnet-frontend v0.0.618/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
+github.com/Warp-net/warpnet-frontend v0.0.619 h1:lfGfI7wyPpNZOTrthHotH+fINvEcCLDKlD8128rKDBg=
+github.com/Warp-net/warpnet-frontend v0.0.619/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
+github.com/Warp-net/warpnet-frontend v0.0.620 h1:Qj6eT5VAQcsI4N76lZVwe71BTK5ktW70c+CX2CbYhYo=
+github.com/Warp-net/warpnet-frontend v0.0.620/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
+github.com/Warp-net/warpnet-frontend v0.0.621 h1:0xpR2KbgdGidFvvb+A5fYlnWYK/e4hGjswuKJ0ARcFk=
+github.com/Warp-net/warpnet-frontend v0.0.621/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
+github.com/Warp-net/warpnet-frontend v0.0.622 h1:Gl4mkWZLY9mZ2OxuZFc/wfALCKY3pwomLt6ul1IK0g8=
+github.com/Warp-net/warpnet-frontend v0.0.622/go.mod h1:6poG02p6OkD7QI2OVbFJlxqhHGNEZQtT0Bf/fp7m+WQ=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d h1:licZJFw2RwpHMqeKTCYkitsPqHNxTmd4SNR5r94FGM8=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d/go.mod h1:asat636LX7Bqt5lYEZ27JNDcqxfjdBQuJ/MM4CN/Lzo=
 github.com/alecthomas/assert/v2 v2.11.0 h1:2Q9r3ki8+JYXvGsDyBXwH3LcJ+WK5D0gc5E8vS6K3D0=
