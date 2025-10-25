@@ -39,7 +39,7 @@ type NodeInformer interface {
 
 func StreamGetInfoHandler(
 	i NodeInformer,
-	handler discovery.DiscoveryHandler,
+	discHandler discovery.DiscoveryHandler,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		remoteID := s.Conn().RemotePeer()
@@ -52,8 +52,8 @@ func StreamGetInfoHandler(
 
 		log.Debugf("node info request received: %s %s", remoteID, remoteAddr)
 
-		if handler != nil {
-			handler(info)
+		if discHandler != nil {
+			discHandler(info)
 		}
 
 		return i.NodeInfo(), nil

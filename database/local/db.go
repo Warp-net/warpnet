@@ -34,6 +34,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -444,7 +445,7 @@ type WarpTransactioner interface {
 	BatchGet(keys ...DatabaseKey) ([]ListItem, error)
 }
 
-type WarpTxn struct {
+type warpTxn struct {
 	txn *badger.Txn
 }
 
@@ -455,10 +456,12 @@ func (db *DB) NewTxn() (WarpTransactioner, error) {
 	if !db.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
-	return &WarpTxn{db.badger.NewTransaction(true)}, nil
+	wtx := &warpTxn{db.badger.NewTransaction(true)}
+	runtime.SetFinalizer(wtx, func(tx *warpTxn) { tx.Rollback() })
+	return wtx, nil
 }
 
-func (t *WarpTxn) Set(key DatabaseKey, value []byte) error {
+func (t *warpTxn) Set(key DatabaseKey, value []byte) error {
 	err := t.txn.Set(key.Bytes(), value)
 	if err != nil {
 		return err
@@ -466,7 +469,7 @@ func (t *WarpTxn) Set(key DatabaseKey, value []byte) error {
 	return nil
 }
 
-func (t *WarpTxn) Get(key DatabaseKey) ([]byte, error) {
+func (t *warpTxn) Get(key DatabaseKey) ([]byte, error) {
 	var result []byte
 	item, err := t.txn.Get(key.Bytes())
 	if err != nil {
@@ -482,7 +485,7 @@ func (t *WarpTxn) Get(key DatabaseKey) ([]byte, error) {
 	return result, nil
 }
 
-func (t *WarpTxn) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error {
+func (t *warpTxn) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error {
 	e := badger.NewEntry(key.Bytes(), value)
 	e.WithTTL(ttl)
 
@@ -493,7 +496,7 @@ func (t *WarpTxn) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) e
 	return nil
 }
 
-func (t *WarpTxn) BatchSet(data []ListItem) (err error) {
+func (t *warpTxn) BatchSet(data []ListItem) (err error) {
 	var (
 		lastIndex int
 		isTooBig  bool
@@ -520,18 +523,18 @@ func (t *WarpTxn) BatchSet(data []ListItem) (err error) {
 	return err
 }
 
-func (t *WarpTxn) Delete(key DatabaseKey) error {
+func (t *warpTxn) Delete(key DatabaseKey) error {
 	if err := t.txn.Delete(key.Bytes()); err != nil {
 		return err
 	}
 	return t.txn.Delete([]byte(key))
 }
 
-func (t *WarpTxn) Increment(key DatabaseKey) (uint64, error) {
+func (t *warpTxn) Increment(key DatabaseKey) (uint64, error) {
 	return increment(t.txn, key.Bytes(), 1)
 }
 
-func (t *WarpTxn) Decrement(key DatabaseKey) (uint64, error) {
+func (t *warpTxn) Decrement(key DatabaseKey) (uint64, error) {
 	return increment(t.txn, key.Bytes(), -1)
 }
 
@@ -562,7 +565,7 @@ const endCursor = "end"
 
 type IterKeysFunc func(key string) error
 
-func (t *WarpTxn) IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
+func (t *warpTxn) IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 	if strings.Contains(prefix.String(), FixedKey) {
 		return DBError("cannot iterate thru fixed key")
 	}
@@ -585,7 +588,7 @@ func (t *WarpTxn) IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 	return nil
 }
 
-func (t *WarpTxn) ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
+func (t *warpTxn) ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 	if strings.Contains(prefix.String(), FixedKey) {
 		return DBError("cannot iterate thru fixed key")
 	}
@@ -614,7 +617,7 @@ type ListItem struct {
 	Value []byte
 }
 
-func (t *WarpTxn) List(prefix DatabaseKey, limit *uint64, cursor *string) ([]ListItem, string, error) {
+func (t *warpTxn) List(prefix DatabaseKey, limit *uint64, cursor *string) ([]ListItem, string, error) {
 	var startCursor DatabaseKey
 	if cursor != nil && *cursor != "" {
 		startCursor = DatabaseKey(*cursor)
@@ -642,7 +645,7 @@ func (t *WarpTxn) List(prefix DatabaseKey, limit *uint64, cursor *string) ([]Lis
 	return items, cur, err
 }
 
-func (t *WarpTxn) ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([]string, string, error) {
+func (t *warpTxn) ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([]string, string, error) {
 	var startCursor DatabaseKey
 	if cursor != nil && *cursor != "" {
 		startCursor = DatabaseKey(*cursor)
@@ -730,7 +733,7 @@ func iterate(
 	return lastKey.DropId(), nil
 }
 
-func (t *WarpTxn) BatchGet(keys ...DatabaseKey) ([]ListItem, error) {
+func (t *warpTxn) BatchGet(keys ...DatabaseKey) ([]ListItem, error) {
 	result := make([]ListItem, 0, len(keys))
 
 	for _, key := range keys {
@@ -755,16 +758,16 @@ func (t *WarpTxn) BatchGet(keys ...DatabaseKey) ([]ListItem, error) {
 	return result, nil
 }
 
-func (t *WarpTxn) Commit() error {
+func (t *warpTxn) Commit() error {
 	return t.txn.Commit()
 }
 
-func (t *WarpTxn) Discard() error {
+func (t *warpTxn) Discard() error {
 	t.txn.Discard()
 	return nil
 }
 
-func (t *WarpTxn) Rollback() {
+func (t *warpTxn) Rollback() {
 	t.txn.Discard()
 }
 

@@ -289,8 +289,7 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	peerInfo := m.node.Node().Peerstore().PeerInfo(nodeId)
 
 	if len(peerInfo.Addrs) == 0 && !isMastodonID {
-		log.Infof("member: stream: node id string %s, node id struct %v", nodeIdStr, nodeId)
-		log.Warning("member: stream: node doesn't have addresses")
+		log.Warningf("member: stream: node %s doesn't have addresses", nodeIdStr)
 		return nil, warpnet.ErrNodeIsOffline
 	}
 
@@ -431,7 +430,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_TWEET,
-				handler.StreamGetTweetHandler(tweetRepo),
+				handler.StreamGetTweetHandler(tweetRepo, authRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_TWEET_STATS,
@@ -439,7 +438,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_REPLY,
-				handler.StreamGetReplyHandler(replyRepo),
+				handler.StreamGetReplyHandler(replyRepo, authRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_REPLIES,
@@ -487,7 +486,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_MESSAGE,
-				handler.StreamSendMessageHandler(chatRepo, userRepo, m),
+				handler.StreamNewMessageHandler(chatRepo, userRepo, m),
 			},
 			{
 				event.PRIVATE_DELETE_MESSAGE,
@@ -519,7 +518,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PRIVATE_GET_NOTIFICATIONS,
-				handler.StreamGetNotificationsHandler(notificationRepo),
+				handler.StreamGetNotificationsHandler(notificationRepo, authRepo),
 			},
 		}...,
 	)

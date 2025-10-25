@@ -34,6 +34,7 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -90,23 +91,23 @@ func StreamGetUserHandler(
 		}
 
 		ownerId := authRepo.GetOwner().UserId
-
-		if ev.UserId == ownerId {
+		isMe := ev.UserId == ownerId
+		if isMe {
 			u, err := repo.Get(ownerId)
 			if err != nil {
 				return nil, err
 			}
 			followersCount, err := followRepo.GetFollowersCount(u.Id)
 			if err != nil {
-				return nil, err
+				log.Errorf("get user: fetch followers count: %v", err)
 			}
 			followingsCount, err := followRepo.GetFollowingsCount(u.Id)
 			if err != nil {
-				return nil, err
+				log.Errorf("get user: fetch followings count: %v", err)
 			}
 			tweetsCount, err := tweetRepo.TweetsCount(u.Id)
 			if err != nil {
-				return nil, err
+				log.Errorf("get user: fetch tweets count: %v", err)
 			}
 
 			u.TweetsCount = tweetsCount
@@ -117,6 +118,9 @@ func StreamGetUserHandler(
 		}
 
 		otherUser, err := repo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return nil, err
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -173,7 +177,7 @@ func StreamGetUsersHandler(
 			return event.UsersResponse{
 				Cursor: cursor,
 				Users:  users,
-			}, err
+			}, nil
 		}
 
 		refreshUsers(userRepo, ev, streamer)
@@ -196,6 +200,9 @@ func refreshUsers(
 		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return
+	}
 	if err != nil {
 		log.Errorf("get users handler: get user %v", err)
 		return
@@ -245,19 +252,6 @@ func StreamGetWhoToFollowHandler(
 			return nil, errEmptyUserId
 		}
 
-		owner := authRepo.GetOwner()
-
-		profile, err := userRepo.Get(ev.UserId)
-		if err != nil {
-			log.Errorf("get who to follow handler: get user %v", err)
-			profile = domain.User{
-				Id:       owner.UserId,
-				Username: owner.Username,
-				Network:  warpnet.WarpnetName,
-				NodeId:   owner.NodeId,
-			}
-		}
-
 		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
@@ -272,6 +266,19 @@ func StreamGetWhoToFollowHandler(
 		followedUsers := map[string]struct{}{}
 		for _, followingId := range followings {
 			followedUsers[followingId] = struct{}{}
+		}
+
+		owner := authRepo.GetOwner()
+
+		profile, err := userRepo.Get(ev.UserId)
+		if err != nil {
+			log.Errorf("get who to follow handler: get user %v", err)
+			profile = domain.User{
+				Id:       owner.UserId,
+				Username: owner.Username,
+				Network:  warpnet.WarpnetName,
+				NodeId:   owner.NodeId,
+			}
 		}
 
 		whotofollow := make([]domain.User, 0, len(users))

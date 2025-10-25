@@ -30,13 +30,15 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
-	"strings"
 )
 
 type ReplyTweetStorer interface {
@@ -80,11 +82,6 @@ func StreamNewReplyHandler(
 		rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
 		parentId := strings.TrimPrefix(*ev.ParentId, domain.RetweetPrefix)
 
-		parentUser, err := userRepo.Get(ev.ParentUserId)
-		if err != nil {
-			return nil, err
-		}
-
 		reply, err := replyRepo.AddReply(domain.Tweet{
 			CreatedAt: ev.CreatedAt,
 			Id:        ev.Id,
@@ -98,7 +95,16 @@ func StreamNewReplyHandler(
 			return nil, err
 		}
 
-		if parentUser.NodeId == streamer.NodeInfo().ID.String() {
+		parentUser, err := userRepo.Get(ev.ParentUserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return reply, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		isOwnTweetReply := parentUser.NodeId == streamer.NodeInfo().ID.String()
+		if isOwnTweetReply {
 			return reply, nil
 		}
 
@@ -116,7 +122,10 @@ func StreamNewReplyHandler(
 				Username:     ev.Username,
 			},
 		)
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return reply, nil
+		}
+		if err != nil {
 			return nil, err
 		}
 
@@ -129,7 +138,12 @@ func StreamNewReplyHandler(
 	}
 }
 
-func StreamGetReplyHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
+func StreamGetReplyHandler(
+	repo ReplyStorer,
+	authRepo OwnerTweetStorer,
+	userRepo TweetUserFetcher,
+	streamer TweetStreamer,
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetReplyEvent
 		err := json.Unmarshal(buf, &ev)
@@ -139,11 +153,51 @@ func StreamGetReplyHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
 		if ev.RootId == "" {
 			return nil, warpnet.WarpError("empty root id")
 		}
+		if ev.ReplyId == "" {
+			return nil, warpnet.WarpError("empty reply id")
+		}
 
 		rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
 		id := strings.TrimPrefix(ev.ReplyId, domain.RetweetPrefix)
 
-		return repo.GetReply(rootId, id)
+		owner := authRepo.GetOwner()
+
+		isMyOwnReply := ev.UserId == owner.UserId
+		if isMyOwnReply {
+			return repo.GetReply(rootId, id)
+		}
+
+		otherUser, err := userRepo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return repo.GetReply(rootId, id)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		getTweetResp, err := streamer.GenericStream(
+			otherUser.NodeId,
+			event.PUBLIC_GET_REPLY,
+			ev,
+		)
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return repo.GetReply(rootId, id)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var reply domain.Tweet
+		if err = json.Unmarshal(getTweetResp, &reply); err != nil {
+			return repo.GetReply(rootId, id)
+		}
+
+		var possibleError event.ErrorResponse
+		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
+		}
+
+		return reply, nil
 	}
 }
 
@@ -188,6 +242,9 @@ func StreamDeleteReplyHandler(
 		}
 
 		parentUser, err := userRepo.Get(parentTweet.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return event.Accepted, nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -205,7 +262,10 @@ func StreamDeleteReplyHandler(
 				UserId:  ev.UserId,
 			},
 		)
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return event.Accepted, nil
+		}
+		if err != nil {
 			return nil, err
 		}
 
@@ -238,10 +298,10 @@ func StreamGetRepliesHandler(
 
 		rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
 		parentId := strings.TrimPrefix(ev.ParentId, domain.RetweetPrefix)
+		isOwnTweetReplies := parentId == streamer.NodeInfo().OwnerId
 
-		if parentId == streamer.NodeInfo().OwnerId {
+		if isOwnTweetReplies {
 			replies, cursor, err := repo.GetRepliesTree(rootId, parentId, ev.Limit, ev.Cursor)
-
 			if err != nil {
 				return nil, err
 			}
@@ -253,6 +313,14 @@ func StreamGetRepliesHandler(
 		}
 
 		parentUser, err := userRepo.Get(parentId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			replies, cursor, _ := repo.GetRepliesTree(rootId, parentId, ev.Limit, ev.Cursor)
+			return event.RepliesResponse{
+				Cursor:  cursor,
+				Replies: replies,
+				UserId:  &parentId,
+			}, nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -262,7 +330,15 @@ func StreamGetRepliesHandler(
 			event.PUBLIC_GET_REPLIES,
 			ev,
 		)
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			replies, cursor, _ := repo.GetRepliesTree(rootId, parentId, ev.Limit, ev.Cursor)
+			return event.RepliesResponse{
+				Cursor:  cursor,
+				Replies: replies,
+				UserId:  &parentId,
+			}, nil
+		}
+		if err != nil {
 			return nil, err
 		}
 

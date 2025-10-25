@@ -40,7 +40,14 @@ type NotifierFetcher interface {
 	List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
 }
 
-func StreamGetNotificationsHandler(repo NotifierFetcher) warpnet.WarpHandlerFunc {
+type NotifierAuthStorer interface {
+	GetOwner() domain.Owner
+}
+
+func StreamGetNotificationsHandler(
+	repo NotifierFetcher,
+	authRepo NotifierAuthStorer,
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetNotificationsEvent
 		err := json.Unmarshal(buf, &ev)
@@ -48,11 +55,9 @@ func StreamGetNotificationsHandler(repo NotifierFetcher) warpnet.WarpHandlerFunc
 			return nil, err
 		}
 
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
-		}
+		owner := authRepo.GetOwner()
 
-		notifications, cur, err := repo.List(ev.UserId, ev.Limit, ev.Cursor)
+		notifications, cur, err := repo.List(owner.UserId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +71,6 @@ func StreamGetNotificationsHandler(repo NotifierFetcher) warpnet.WarpHandlerFunc
 		})
 		return event.GetNotificationsResponse{
 			Cursor:        cur,
-			UserID:        ev.UserId,
 			UnreadCount:   unreadCount,
 			Notifications: notifications,
 		}, nil

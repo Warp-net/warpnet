@@ -428,12 +428,13 @@ type ModerationResultEvent struct {
 	ObjectID *domain.ID                  `json:"object_id,omitempty"`
 }
 
-type (
-	GetNotificationsEvent    = GetAllTweetsEvent
-	GetNotificationsResponse struct {
-		Cursor        string                `json:"cursor"`
-		UserID        domain.ID             `json:"user_id"`
-		UnreadCount   uint64                `json:"unread_count"`
-		Notifications []domain.Notification `json:"notifications"`
-	}
-)
+type GetNotificationsEvent struct {
+	Cursor *string `json:"cursor,omitempty"`
+	Limit  *uint64 `json:"limit,omitempty"`
+}
+
+type GetNotificationsResponse struct {
+	Cursor        string                `json:"cursor"`
+	UnreadCount   uint64                `json:"unread_count"`
+	Notifications []domain.Notification `json:"notifications"`
+}

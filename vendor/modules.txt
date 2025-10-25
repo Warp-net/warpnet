@@ -52,7 +52,7 @@ github.com/ProtonMail/go-crypto/openpgp/x448
 # github.com/StackExchange/wmi v1.2.1
 ## explicit; go 1.13
 github.com/StackExchange/wmi
-# github.com/Warp-net/warpnet-frontend v0.0.622
+# github.com/Warp-net/warpnet-frontend v0.0.626
 ## explicit; go 1.24.0
 github.com/Warp-net/warpnet-frontend
 # github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d

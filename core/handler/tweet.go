@@ -70,6 +70,7 @@ type TweetsStorer interface {
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
+	UnRetweet(retweetedByUserID, tweetId string) error
 	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
 }
 
@@ -118,7 +119,9 @@ func StreamNewTweetHandler(
 		if err = timelineRepo.AddTweetToTimeline(owner.UserId, tweet); err != nil {
 			log.Infof("fail adding tweet to timeline: %v", err)
 		}
-		if owner.UserId == ev.UserId {
+
+		isMyOwnTweet := owner.UserId == ev.UserId
+		if isMyOwnTweet { // publish to friends timelines
 			respTweetEvent := event.NewTweetEvent{
 				CreatedAt: tweet.CreatedAt,
 				Id:        tweet.Id,
@@ -138,7 +141,12 @@ func StreamNewTweetHandler(
 	}
 }
 
-func StreamGetTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+func StreamGetTweetHandler(
+	repo TweetsStorer,
+	authRepo OwnerTweetStorer,
+	userRepo TweetUserFetcher,
+	streamer TweetStreamer,
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetEvent
 		err := json.Unmarshal(buf, &ev)
@@ -152,12 +160,48 @@ func StreamGetTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("empty tweet id")
 		}
-
 		if repo.IsBlocklisted(ev.TweetId) {
 			return nil, warpnet.WarpError("tweet is moderated")
 		}
 
-		return repo.Get(ev.UserId, ev.TweetId)
+		owner := authRepo.GetOwner()
+
+		isMyOwnTweet := ev.UserId == owner.UserId
+		if isMyOwnTweet {
+			return repo.Get(ev.UserId, ev.TweetId)
+		}
+
+		otherUser, err := userRepo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return repo.Get(ev.UserId, ev.TweetId)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		getTweetResp, err := streamer.GenericStream(
+			otherUser.NodeId,
+			event.PUBLIC_GET_TWEET,
+			ev,
+		)
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return repo.Get(ev.UserId, ev.TweetId)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var tweet domain.Tweet
+		if err = json.Unmarshal(getTweetResp, &tweet); err != nil {
+			return repo.Get(ev.UserId, ev.TweetId)
+		}
+
+		var possibleError event.ErrorResponse
+		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
+		}
+
+		return tweet, nil
 	}
 }
 
@@ -189,7 +233,7 @@ func StreamGetTweetsHandler(
 				Cursor: cursor,
 				Tweets: tweets,
 				UserId: ev.UserId,
-			}, err
+			}, nil
 		}
 
 		tweetsRefreshBackground(repo, userRepo, ev, streamer)
@@ -202,7 +246,7 @@ func StreamGetTweetsHandler(
 			Cursor: cursor,
 			Tweets: tweets,
 			UserId: ev.UserId,
-		}, err
+		}, nil
 	}
 }
 
@@ -216,6 +260,9 @@ func tweetsRefreshBackground(
 		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return
+	}
 	if err != nil {
 		log.Errorf("get tweets handler: get user: %v", err)
 		return
@@ -247,7 +294,7 @@ func tweetsRefreshBackground(
 		if repo.IsBlocklisted(tweet.Id) {
 			continue
 		}
-		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24)
+		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24*30)
 	}
 }
 
@@ -278,7 +325,12 @@ func StreamDeleteTweetHandler(
 		}
 
 		if _, err := likeRepo.Unlike(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
-			log.Errorf("delete tweet: fail unliking tweet: %v", err)
+			log.Errorf("delete tweet: unliking tweet: %v", err)
+		}
+
+		t, _ := repo.Get(ev.UserId, domain.RetweetPrefix+ev.TweetId)
+		if t.RetweetedBy != nil {
+			_ = repo.UnRetweet(*t.RetweetedBy, t.Id)
 		}
 
 		if err := repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
@@ -286,7 +338,8 @@ func StreamDeleteTweetHandler(
 		}
 
 		owner := authRepo.GetOwner()
-		if owner.UserId == ev.UserId {
+		isMyOwnTweet := owner.UserId == ev.UserId
+		if isMyOwnTweet {
 			respTweetEvent := event.DeleteTweetEvent{
 				UserId:  ev.UserId,
 				TweetId: ev.TweetId,
@@ -333,8 +386,12 @@ func StreamGetTweetStatsHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		if ev.UserId != streamer.NodeInfo().OwnerId {
+		isMyOwnTweet := ev.UserId == streamer.NodeInfo().OwnerId
+		if !isMyOwnTweet {
 			u, err := userRepo.Get(ev.UserId)
+			if errors.Is(err, database.ErrUserNotFound) {
+				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -344,7 +401,10 @@ func StreamGetTweetStatsHandler(
 				event.PUBLIC_GET_TWEET_STATS,
 				ev,
 			)
-			if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+			if errors.Is(err, warpnet.ErrNodeIsOffline) {
+				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
+			}
+			if err != nil {
 				return nil, err
 			}
 
@@ -357,6 +417,7 @@ func StreamGetTweetStatsHandler(
 			if err := json.Unmarshal(statsResp, &stats); err != nil {
 				return nil, fmt.Errorf("fetching tweet stats response: %v", err)
 			}
+
 			return stats, nil
 		}
 
@@ -403,18 +464,3 @@ func StreamGetTweetStatsHandler(
 		}, nil
 	}
 }
-
-//g.Go(func() error {
-//	retweeters, retweetersCursor, err = retweetRepo.Retweeters(tweetId, ev.Limit, ev.Cursor)
-//	if errors.Is(err, database.ErrTweetNotFound) {
-//		return nil
-//	}
-//	return err
-//})
-//g.Go(func() error {
-//	likers, likersCursor, err = likeRepo.Likers(tweetId, ev.Limit, ev.Cursor)
-//	if errors.Is(err, database.ErrLikesNotFound) {
-//		return nil
-//	}
-//	return err
-//})

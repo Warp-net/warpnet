@@ -50,6 +50,7 @@ import (
 	"github.com/dsoprea/go-exif/v3"
 	exifcommon "github.com/dsoprea/go-exif/v3/common"
 	jis "github.com/dsoprea/go-jpeg-image-structure/v2"
+	log "github.com/sirupsen/logrus"
 )
 
 /*
@@ -118,7 +119,9 @@ func StreamUploadImageHandler(
 
 		img, _, err := image.Decode(bytes.NewReader(imgBytes))
 		if errors.Is(err, image.ErrFormat) {
-			return nil, warpnet.WarpError("invalid image format: PNG, JPG, JPEG, GIF are only allowed") // TODO add more types
+			return nil, warpnet.WarpError(
+				"invalid image format: PNG, JPG, JPEG, GIF are only allowed", // TODO add more types
+			)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("upload: image decoding: %w", err)
@@ -132,6 +135,9 @@ func StreamUploadImageHandler(
 
 		nodeInfo := info.NodeInfo()
 		ownerUser, err := userRepo.Get(nodeInfo.OwnerId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return nil, err
+		}
 		if err != nil {
 			return nil, fmt.Errorf("upload: fetching user: %w", err)
 		}
@@ -188,16 +194,25 @@ func StreamGetImageHandler(
 		if ev.UserId == "" {
 			ev.UserId = ownerId
 		}
+		isOwnImageRequest := ownerId == ev.UserId
 
-		img, err := mediaRepo.GetImage(ev.UserId, ev.Key)
-		if err != nil && !errors.Is(err, database.ErrMediaNotFound) {
-			return nil, fmt.Errorf("get image: fetching media: %w", err)
-		}
-		if img != "" {
+		if isOwnImageRequest {
+			img, err := mediaRepo.GetImage(ev.UserId, ev.Key)
+			if errors.Is(err, database.ErrMediaNotFound) || img == "" {
+				log.Warnf("get image: key not found: %s", ev.Key)
+				return event.GetImageResponse{File: ""}, nil
+			}
+			if err != nil {
+				return nil, fmt.Errorf("get image: fetching media: %w", err)
+			}
 			return event.GetImageResponse{File: string(img)}, nil
 		}
 
 		u, err := userRepo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			img, _ := mediaRepo.GetImage(ev.UserId, ev.Key)
+			return event.GetImageResponse{File: string(img)}, nil
+		}
 		if err != nil {
 			return nil, fmt.Errorf("get image: fetching user: %w", err)
 		}
@@ -215,7 +230,11 @@ func StreamGetImageHandler(
 			return nil, fmt.Errorf("get image: unmarshalling response: %w", err)
 		}
 
-		return resp, mediaRepo.SetForeignImageWithTTL(u.Id, ev.Key, database.Base64Image(imgResp.File))
+		if err := mediaRepo.SetForeignImageWithTTL(u.Id, ev.Key, database.Base64Image(imgResp.File)); err != nil {
+			log.Errorf("get image: storing foreign image: %v", err)
+		}
+
+		return resp, nil
 	}
 }
 
