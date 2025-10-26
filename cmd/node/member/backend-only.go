@@ -1,5 +1,5 @@
-//go:build dryrun
-// +build dryrun
+//go:build backend
+// +build backend
 
 /*
 
@@ -88,11 +88,11 @@ func main() {
 
 	authInfo := <-readyChan
 
-	dryRunNode, err := member.NewMemberNode(
+	backendNode, err := member.NewMemberNode(
 		ctx,
 		authRepo.PrivateKey(),
 		psk,
-		"dry-run",
+		"backend-only",
 		config.Config().Version,
 		authRepo,
 		db,
@@ -100,15 +100,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to init node: %v", err)
 	}
-	defer dryRunNode.Stop()
+	defer backendNode.Stop()
 
-	err = dryRunNode.Start()
+	err = backendNode.Start()
 	if err != nil {
 		log.Fatalf("failed to start member node: %v", err)
 	}
 
-	authInfo.Identity.Owner.NodeId = dryRunNode.NodeInfo().ID.String()
-	authInfo.NodeInfo = dryRunNode.NodeInfo()
+	authInfo.Identity.Owner.NodeId = backendNode.NodeInfo().ID.String()
+	authInfo.NodeInfo = backendNode.NodeInfo()
 
 	readyChan <- authInfo
 	log.Infoln("WARPNET STARTED")

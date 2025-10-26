@@ -48,6 +48,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type DistributedHashTableDiscoverer interface {
+	ClosestPeers() ([]warpnet.WarpPeerID, error)
+	Close()
+}
+
 type ModeratorNode struct {
 	ctx context.Context
 

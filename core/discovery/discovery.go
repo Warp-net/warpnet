@@ -158,46 +158,6 @@ func (s *discoveryService) Close() {
 	close(s.discoveryChan)
 }
 
-func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo) {
-	defer func() { recover() }()
-	if s == nil || s.node == nil {
-		log.Errorf("discovery: default discovery handler: nil discovery service")
-		return
-	}
-
-	if peerInfo.ID == s.node.NodeInfo().ID {
-		return
-	}
-
-	ok, err := s.nodeRepo.IsBlocklisted(peerInfo.ID)
-	if ok && err == nil {
-		log.Infof("discovery: found blocklisted peer: %s", peerInfo.ID.String())
-		return
-	}
-
-	err = s.node.SimpleConnect(peerInfo)
-	if err != nil {
-		if errors.Is(err, warpnet.ErrAllDialsFailed) {
-			err = warpnet.ErrAllDialsFailed
-		}
-		log.Errorf("discovery: default handler: connecting to peer %s: %v\n", peerInfo.ID.String(), err)
-		return
-	}
-
-	err = s.requestChallenge(peerInfo)
-	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: default handler: challenge is invalid for peer: %s\n", peerInfo.ID.String())
-		_ = s.nodeRepo.BlocklistExponential(peerInfo.ID)
-		return
-	}
-	if err != nil {
-		log.Errorf("discovery: default handler: request challenge for peer %s: %v\n", peerInfo.ID, err)
-		return
-	}
-	s.node.Peerstore().AddAddrs(peerInfo.ID, peerInfo.Addrs, time.Hour*8)
-	return
-}
-
 const dropMessagesLimit = 5
 
 func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
@@ -207,120 +167,21 @@ func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	if !s.limiter.Allow() {
-		log.Infof("discovery: limited by rate limiter: %s", pi.ID.String())
-		return
-	}
-
-	if len(s.discoveryChan) == cap(s.discoveryChan) {
+	select {
+	case s.discoveryChan <- pi:
+	default:
 		log.Warnf("discovery: channel overflow %d", cap(s.discoveryChan))
 		for i := 0; i < dropMessagesLimit; i++ {
 			<-s.discoveryChan // drop old data
 		}
 	}
-	s.discoveryChan <- pi
-}
-
-func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
-	if s == nil || s.node == nil || s.nodeRepo == nil || s.userRepo == nil {
-		log.Errorf("discovery: handle: nil discovery service")
-		return
-	}
-
-	if pi.ID == "" || len(pi.Addrs) == 0 {
-		return
-	}
-
-	if pi.ID == s.node.NodeInfo().ID {
-		return
-	}
-
-	ok, err := s.nodeRepo.IsBlocklisted(pi.ID)
-	if err != nil {
-		log.Errorf("discovery: failed to check blocklist: %s", err)
-	}
-	if ok {
-		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String())
-		return
-	}
-	if !hasPublicAddresses(pi.Addrs) {
-		log.Warningf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
-		return
-	}
-
-	err = s.node.SimpleConnect(pi)
-	if errors.Is(err, backoff.ErrBackoffEnabled) {
-		log.Debugf("discovery: connecting is backoffed: %s", pi.ID)
-		return
-	}
-	if err != nil {
-		log.Debugf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
-		if errors.Is(err, warpnet.ErrAllDialsFailed) {
-			err = warpnet.ErrAllDialsFailed
-		}
-		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
-		return
-	}
-
-	err = s.requestChallenge(pi)
-	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
-		_ = s.nodeRepo.BlocklistExponential(pi.ID)
-		s.node.Peerstore().RemovePeer(pi.ID)
-		return
-	}
-	if err != nil {
-		log.Errorf("discovery: failed to request challenge for peer %s: %v\n", pi.ID, err)
-		return
-	}
-
-	info, err := s.requestNodeInfo(pi)
-	if err != nil {
-		log.Errorf("discovery: %v", err)
-		return
-	}
-
-	if info.IsBootstrap() || info.IsModerator() {
-		return
-	}
-
-	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
-	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
-		return
-	}
-
-	fmt.Printf("\033[1mdiscovery: connected to new peer: %s \033[0m\n", pi.String())
-
-	user, err := s.requestNodeUser(pi, info.OwnerId)
-	if err != nil {
-		log.Errorf("discovery: %v", err)
-		return
-	}
-
-	newUser, err := s.userRepo.Create(user)
-	if errors.Is(err, database.ErrUserAlreadyExists) {
-		newUser, _ = s.userRepo.Update(user.Id, user)
-		return
-	}
-	if err != nil {
-		log.Errorf("discovery: failed to create user from new peer: %s, user id %s", err, user.Id)
-		return
-	}
-	log.Infof(
-		"discovery: new user added: id: %s, name: %s, node_id: %s, created_at: %s, latency: %d",
-		newUser.Id,
-		newUser.Username,
-		newUser.NodeId,
-		newUser.CreatedAt,
-		newUser.Latency,
-	)
 }
 
 type pubsubDiscoveryMessage struct {
 	Body []warpnet.WarpPubInfo `json:"body"`
 }
 
-func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func([]byte) error {
+func (s *discoveryService) PubSubDiscoveryHandler() func([]byte) error {
 	return func(data []byte) error {
 		if len(data) == 0 {
 			return nil
@@ -358,12 +219,125 @@ func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func([]
 				peerInfo.Addrs = append(peerInfo.Addrs, ma)
 			}
 
-			if handler != nil {
-				handler(peerInfo)
+			select {
+			case s.discoveryChan <- peerInfo:
+			default:
+				log.Warnf("discovery: channel overflow %d", cap(s.discoveryChan))
+				for i := 0; i < dropMessagesLimit; i++ {
+					<-s.discoveryChan // drop old data
+				}
 			}
 		}
 		return nil
 	}
+}
+
+func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
+	if s == nil || s.node == nil || s.nodeRepo == nil || s.userRepo == nil {
+		log.Errorf("discovery: handle: nil discovery service")
+		return
+	}
+
+	if pi.ID == "" || len(pi.Addrs) == 0 {
+		return
+	}
+
+	if pi.ID == s.node.NodeInfo().ID {
+		return
+	}
+
+	if !s.limiter.Allow() {
+		log.Infof("discovery: limited by rate limiter: %s", pi.ID.String())
+		return
+	}
+
+	ok, err := s.nodeRepo.IsBlocklisted(pi.ID)
+	if err != nil {
+		log.Errorf("discovery: failed to check blocklist: %s", err)
+	}
+	if ok {
+		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String())
+		return
+	}
+	if !hasPublicAddresses(pi.Addrs) {
+		log.Warningf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
+		return
+	}
+
+	err = s.node.SimpleConnect(pi)
+	if errors.Is(err, backoff.ErrBackoffEnabled) {
+		log.Debugf("discovery: connecting is backoffed: %s", pi.ID)
+		return
+	}
+	if err != nil {
+		log.Debugf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
+		if errors.Is(err, warpnet.ErrAllDialsFailed) {
+			err = warpnet.ErrAllDialsFailed
+		}
+		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
+		return
+	}
+
+	if s.node.NodeInfo().IsBootstrap() {
+		log.Infof("node challend request: %s %v", pi.ID.String(), pi.Addrs)
+	}
+
+	err = s.requestChallenge(pi)
+	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
+		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
+		_ = s.nodeRepo.BlocklistExponential(pi.ID)
+		s.node.Peerstore().RemovePeer(pi.ID)
+		return
+	}
+	if err != nil {
+		log.Errorf("discovery: failed to request challenge for peer %s: %v\n", pi.ID, err)
+		return
+	}
+
+	if s.node.NodeInfo().IsBootstrap() {
+		s.node.Peerstore().AddAddrs(pi.ID, pi.Addrs, time.Hour*8)
+	}
+
+	info, err := s.requestNodeInfo(pi)
+	if err != nil {
+		log.Errorf("discovery: request node info: %s", err.Error())
+		return
+	}
+
+	if info.IsBootstrap() || info.IsModerator() {
+		return
+	}
+
+	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
+	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
+		return
+	}
+
+	fmt.Printf("\033[1mdiscovery: connected to new peer: %s \033[0m\n", pi.String())
+
+	user, err := s.requestNodeUser(pi, info.OwnerId)
+	if err != nil {
+		log.Errorf("discovery: request node user: %s", err.Error())
+		return
+	}
+
+	newUser, err := s.userRepo.Create(user)
+	if errors.Is(err, database.ErrUserAlreadyExists) {
+		newUser, _ = s.userRepo.Update(user.Id, user)
+		return
+	}
+	if err != nil {
+		log.Errorf("discovery: failed to create user from new peer: %s, user id %s", err, user.Id)
+		return
+	}
+	log.Infof(
+		"discovery: new user added: id: %s, name: %s, node_id: %s, created_at: %s, latency: %d",
+		newUser.Id,
+		newUser.Username,
+		newUser.NodeId,
+		newUser.CreatedAt,
+		newUser.Latency,
+	)
 }
 
 const (

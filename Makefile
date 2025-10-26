@@ -1,17 +1,17 @@
 kill:
 	pkill -9 warpnet
 
-dry-run-main:
-	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet
+backend-only-main:
+	go run -tags backend cmd/node/member/backend-only.go --node.network testnet
 
-dry-run-second:
-	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet --node.port 4002 --node.seed dryruntest --database.dir dryrun1
+backend-only-second:
+	go run -tags backend cmd/node/member/backend-only.go --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
 
 run-main:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
 
 run-second:
-	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed dryruntest --database.dir dryrun1
+	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
 
 moderator:
 	go run -tags=llama cmd/node/moderator/main.go --node.network testnet

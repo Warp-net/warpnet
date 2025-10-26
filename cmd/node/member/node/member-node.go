@@ -106,7 +106,7 @@ func NewMemberNode(
 	pubSubHandlers := memberPubSub.PrefollowHandlers(followingIds...)
 	pubSubHandlers = append(
 		pubSubHandlers,
-		memberPubSub.NewBootstrapDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
+		memberPubSub.NewBootstrapDiscoveryTopicHandler(discService.PubSubDiscoveryHandler()),
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 

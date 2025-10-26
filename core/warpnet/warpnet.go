@@ -39,11 +39,11 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/docker/go-units"
-	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/libp2p/go-libp2p-kad-dht/providers"
+	"github.com/libp2p/go-libp2p-kad-dht/records"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -156,8 +156,8 @@ type (
 	WarpProtocolID     = protocol.ID
 	WarpStream         = network.Stream
 	StreamHandler      = network.StreamHandler
-	WarpBatching       = datastore.Batching
-	WarpProviderStore  = providers.ProviderStore
+	WarpBatching       = local.Batching
+	WarpProviderStore  = records.ProviderStore
 	WarpAddrInfo       = peer.AddrInfo
 	WarpStreamStats    = network.Stats
 	WarpPeerRouting    = routing.PeerRouting
@@ -411,7 +411,7 @@ func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromString(s)
 }
 
-func NewPeerstore(ctx context.Context, db datastore.Batching) (WarpPeerstore, error) {
+func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
 	store, err := pstoreds.NewPeerstore(ctx, db, pstoreds.DefaultOpts())
 	return WarpPeerstore(store), err
 }

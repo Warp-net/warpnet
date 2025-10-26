@@ -42,8 +42,8 @@ import (
 )
 
 func main() {
-	if config.Config().Node.Moderator.Path == "" && config.Config().Node.Moderator.CID == "" {
-		log.Errorln("moderator IPFS node not configured: model path and CID are empty")
+	if config.Config().Node.Moderator.Path == "" {
+		log.Errorln("moderator not configured: model path is empty")
 		return
 	}
 

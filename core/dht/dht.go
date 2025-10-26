@@ -54,7 +54,7 @@ import (
   2. Data storage — each node is responsible for a portion of the key space.
   3. Key-based lookup — provides fast access to data without a central server.
 
-  DHT is used in BitTorrent, IPFS, Ethereum, as well as in P2P messengers and other decentralized applications.
+  DHT is used in BitTorrent, Ethereum, as well as in P2P messengers and other decentralized applications.
 
   The go-libp2p-kad-dht library is an implementation of Kademlia DHT for libp2p.
   It allows peer-to-peer nodes to exchange data and discover each other without centralized servers.
@@ -66,8 +66,8 @@ import (
     - Enables finding nodes and querying them for data by key.
   - **Flexible routing**
     - Optimized for dynamic networks where nodes frequently join and leave.
-  - **Support for PubSub and IPFS**
-    - Used in IPFS and applicable to P2P messengers and decentralized applications.
+  - **Support for PubSub**
+    - Used in ... and applicable to P2P messengers and decentralized applications.
   - **Key hashing**
     - Distributes the key space across nodes, ensuring balanced load distribution.
 

@@ -71,7 +71,6 @@ func init() {
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	//pflag.String("node.metrics.server", "", "Metrics server address")
 	pflag.String("node.moderator.modelname", "llama-2-7b-chat.Q8_0.gguf", "File name AI model. Unused if 'cid' provided")
-	pflag.String("node.moderator.modelcid", "bafybeid7to3a6zkv5fdh5lw7iyl5wruj46qirvfsc6xbngprjy67ma6slm", "AI model content ID in IPFS. Unused if 'modelpath' provided")
 	pflag.String("logging.level", "info", "Logging level")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)

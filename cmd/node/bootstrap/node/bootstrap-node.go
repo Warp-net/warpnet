@@ -74,9 +74,7 @@ func NewBootstrapNode(
 
 	pubsubService := bootstrapPubSub.NewPubSubBootstrap(
 		ctx,
-		bootstrapPubSub.NewMemberDiscoveryTopicHandler(
-			discService.WrapPubSubDiscovery(discService.DefaultDiscoveryHandler),
-		),
+		bootstrapPubSub.NewMemberDiscoveryTopicHandler(discService.PubSubDiscoveryHandler()),
 	)
 
 	memoryStore, err := pstoremem.NewPeerstore()
@@ -98,7 +96,7 @@ func NewBootstrapNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
-		dht.AddPeerCallbacks(discService.DefaultDiscoveryHandler),
+		dht.AddPeerCallbacks(discService.HandlePeerFound),
 		dht.BootstrapNodes(infos...),
 	)
 
@@ -181,7 +179,7 @@ func (bn *BootstrapNode) setupHandlers() {
 	bn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
-			handler.StreamGetInfoHandler(bn, bn.discService.DefaultDiscoveryHandler),
+			handler.StreamGetInfoHandler(bn, bn.discService.HandlePeerFound),
 		},
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_POST_NODE_CHALLENGE,

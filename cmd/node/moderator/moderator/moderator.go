@@ -85,7 +85,7 @@ func (m *Moderator) Start() (err error) {
 	log.Infof("moderator: LLM model path: %s, CID: %s", confModelPath, cid)
 
 	if !isModelExists {
-		return errors.New("moderator: LLM model not found, downloading from IPFS")
+		return errors.New("moderator: LLM model is not found")
 	}
 
 	log.Infoln("moderator: wait engine init...")
