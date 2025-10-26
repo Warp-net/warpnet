@@ -125,11 +125,14 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 
 	s.node = n
 
+	isBootstrap := s.node.NodeInfo().IsBootstrap()
+	isModerator := s.node.NodeInfo().IsModerator()
+
 	go func() {
 		for {
 			select {
 			case <-s.ctx.Done():
-				log.Errorf("discovery: context closed")
+				log.Errorf("discovery: context done")
 				return
 			case <-s.stopChan:
 				return
@@ -138,7 +141,15 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 					log.Infoln("discovery: service closed")
 					return
 				}
-				s.handle(info)
+
+				switch {
+				case isBootstrap:
+					s.handleAsBootstrap(info)
+				case isModerator:
+					// pass
+				default:
+					s.handleAsMember(info)
+				}
 			}
 		}
 	}()
@@ -232,7 +243,7 @@ func (s *discoveryService) PubSubDiscoveryHandler() func([]byte) error {
 	}
 }
 
-func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
+func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
 	if s == nil || s.node == nil || s.nodeRepo == nil || s.userRepo == nil {
 		log.Errorf("discovery: handle: nil discovery service")
 		return
@@ -259,6 +270,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String())
 		return
 	}
+
 	if !hasPublicAddresses(pi.Addrs) {
 		log.Warningf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
 		return
@@ -278,10 +290,6 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	if s.node.NodeInfo().IsBootstrap() {
-		log.Infof("node challend request: %s %v", pi.ID.String(), pi.Addrs)
-	}
-
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
@@ -294,10 +302,6 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	if s.node.NodeInfo().IsBootstrap() {
-		s.node.Peerstore().AddAddrs(pi.ID, pi.Addrs, time.Hour*8)
-	}
-
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
 		log.Errorf("discovery: request node info: %s", err.Error())
@@ -305,6 +309,11 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	}
 
 	if info.IsBootstrap() || info.IsModerator() {
+		return
+	}
+
+	if s.userRepo == nil {
+		log.Warning("discovery: user repo is nil")
 		return
 	}
 
@@ -327,7 +336,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 	if err != nil {
-		log.Errorf("discovery: failed to create user from new peer: %s, user id %s", err, user.Id)
+		log.Errorf("discovery: create user from new peer: %s, user id %s", err, user.Id)
 		return
 	}
 	log.Infof(
@@ -338,6 +347,53 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		newUser.CreatedAt,
 		newUser.Latency,
 	)
+}
+
+func (s *discoveryService) handleAsBootstrap(pi warpnet.WarpAddrInfo) {
+	if s == nil || s.node == nil {
+		log.Errorf("discovery: bootstrap handle: nil discovery service")
+		return
+	}
+
+	if pi.ID == "" || len(pi.Addrs) == 0 {
+		return
+	}
+
+	if pi.ID == s.node.NodeInfo().ID {
+		return
+	}
+
+	if !hasPublicAddresses(pi.Addrs) {
+		log.Warningf("discovery: bootstrap handle: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
+		return
+	}
+
+	err := s.node.SimpleConnect(pi)
+	if errors.Is(err, backoff.ErrBackoffEnabled) {
+		log.Debugf("discovery: bootstrap handle: connecting is backoffed: %s", pi.ID)
+		return
+	}
+	if err != nil {
+		log.Debugf("discovery: bootstrap handle: connect to new peer %s: %v", pi.ID.String(), err)
+		if errors.Is(err, warpnet.ErrAllDialsFailed) {
+			err = warpnet.ErrAllDialsFailed
+		}
+		log.Warnf("discovery: bootstrap handle: connect to new peer %s: %v", pi.ID.String(), err)
+		return
+	}
+
+	log.Infof("node challenge request: %s %v", pi.ID.String(), pi.Addrs)
+
+	err = s.requestChallenge(pi)
+	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
+		log.Warnf("discovery: bootstrap handle: challenge is invalid for peer: %s\n", pi.ID.String())
+		s.node.Peerstore().RemovePeer(pi.ID)
+		return
+	}
+	if err != nil {
+		log.Errorf("discovery: bootstrap handle: request challenge for peer %s: %v\n", pi.ID, err)
+		return
+	}
 }
 
 const (
