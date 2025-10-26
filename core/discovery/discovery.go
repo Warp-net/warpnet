@@ -81,8 +81,6 @@ type discoveryService struct {
 	nodeRepo NodeStorer
 	version  *semver.Version
 
-	handlers []DiscoveryHandler
-
 	retrier        retrier.Retrier
 	limiter        *leakyBucketRateLimiter
 	cache          *discoveryCache
@@ -98,13 +96,12 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
-	handlers ...DiscoveryHandler,
 ) *discoveryService {
 	addrInfos, _ := config.Config().Node.AddrInfos()
 
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
-		config.Config().Version, handlers,
+		config.Config().Version,
 		retrier.New(time.Second, 5, retrier.FixedBackoff),
 		newRateLimiter(16, 1),
 		newDiscoveryCache(),
@@ -114,13 +111,13 @@ func NewDiscoveryService(
 	}
 }
 
-func NewBootstrapDiscoveryService(ctx context.Context, handlers ...DiscoveryHandler) *discoveryService {
+func NewBootstrapDiscoveryService(ctx context.Context) *discoveryService {
 	addrs := make(map[warpnet.WarpPeerID][]warpnet.WarpAddress)
 	addrInfos, _ := config.Config().Node.AddrInfos()
 	for _, info := range addrInfos {
 		addrs[info.ID] = info.Addrs
 	}
-	return NewDiscoveryService(ctx, nil, nil, handlers...)
+	return NewDiscoveryService(ctx, nil, nil)
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
@@ -168,10 +165,10 @@ func (s *discoveryService) Close() {
 }
 
 func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo) {
+	defer func() { recover() }()
 	if s == nil || s.node == nil {
 		return
 	}
-	defer func() { recover() }()
 
 	if peerInfo.ID == s.node.NodeInfo().ID {
 		return
@@ -199,30 +196,24 @@ func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo
 		return
 	}
 	if err != nil {
-		log.Errorf(
-			"discovery: default handler: failed to request challenge for peer %s: %v\n",
-			peerInfo.ID, err,
-		)
+		log.Errorf("discovery: default handler: request challenge for peer %s: %v\n", peerInfo.ID, err)
 		return
 	}
 	s.node.Peerstore().AddAddrs(peerInfo.ID, peerInfo.Addrs, time.Hour*8)
-
-	for _, h := range s.handlers {
-		h(peerInfo)
-	}
 	return
 }
 
 const dropMessagesLimit = 5
 
 func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
+	defer func() { recover() }()
+
 	if s == nil {
 		return
 	}
-	defer func() { recover() }()
 
 	if !s.limiter.Allow() {
-		log.Debugf("discovery: limited by rate limiter: %s", pi.ID.String())
+		log.Infof("discovery: limited by rate limiter: %s", pi.ID.String())
 		return
 	}
 
@@ -231,7 +222,6 @@ func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
 		for i := 0; i < dropMessagesLimit; i++ {
 			<-s.discoveryChan // drop old data
 		}
-
 	}
 	s.discoveryChan <- pi
 }
@@ -258,12 +248,8 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	for _, h := range s.handlers {
-		h(pi)
-	}
-
 	if !hasPublicAddresses(pi.Addrs) {
-		log.Debugf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
+		log.Warningf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
 		return
 	}
 
@@ -293,6 +279,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
+	log.Warningf("discovery: request peer info %s, %v", pi.ID.String(), pi.Addrs)
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
 		log.Errorf("discovery: %v", err)
