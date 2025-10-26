@@ -23,6 +23,5 @@ jobs:
       - name: Deploy to Testnet Droplet
         run: |
           scp ./deploy/deploy.sh root@207.154.221.44:/root
-          mkdir -p /root/testnet
-          scp ./deploy/docker-compose-testnet.yml root@207.154.221.44:/root/testnet/docker-compose-testnet.yml
+          scp ./deploy/docker-compose-testnet.yml root@207.154.221.44:/root/docker-compose-testnet.yml
           ssh root@207.154.221.44 'GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} MAINNET=false bash /root/deploy.sh'
