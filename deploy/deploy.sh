@@ -36,4 +36,4 @@ else
     docker compose -p warpnet-testnet -f docker-compose-testnet.yml down --remove-orphans
     docker compose -p warpnet-testnet -f docker-compose-testnet.yml up -d --build
 fi
-docker image prune --force --all
+docker image prune --force
