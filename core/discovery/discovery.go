@@ -252,7 +252,6 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		log.Warningf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
 		return
 	}
-	fmt.Println("HERE 1")
 
 	err = s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
@@ -267,7 +266,6 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
 		return
 	}
-	fmt.Println("HERE 2")
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
@@ -281,25 +279,22 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	fmt.Println("HERE 3")
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
 		log.Errorf("discovery: %v", err)
 		return
 	}
 
+	fmt.Printf("\033[1mdiscovery: connected to new peer: %s \033[0m\n", pi.String())
+
 	if info.IsBootstrap() || info.IsModerator() {
-		fmt.Println("HERE 4")
 		return
 	}
 
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
-		fmt.Println("HERE 5")
 		return
 	}
-
-	fmt.Printf("\033[1mdiscovery: connected to new peer: %s \033[0m\n", pi.String())
 
 	user, err := s.requestNodeUser(pi, info.OwnerId)
 	if err != nil {
@@ -332,7 +327,6 @@ type pubsubDiscoveryMessage struct {
 
 func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func([]byte) error {
 	return func(data []byte) error {
-		fmt.Println(string(data))
 		if len(data) == 0 {
 			return nil
 		}
