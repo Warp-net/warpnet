@@ -2,10 +2,7 @@ services:
   warpnet1:
     container_name: warpnet-mainnet-1
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
-    ports:
-      - "4001:4001"
-    networks:
-      - mainnet
+    network_mode: host
     restart: always
     environment:
       - NODE_PORT=4001
@@ -17,13 +14,10 @@ services:
   warpnet2:
     container_name: warpnet-mainnet-2
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
-    ports:
-      - "4002:4001"
-    networks:
-      - mainnet
+    network_mode: host
     restart: always
     environment:
-      - NODE_PORT=4001
+      - NODE_PORT=4002
       - NODE_HOST_V4=207.154.221.44
       - NODE_SEED=warpnet2
       - NODE_NETWORK=warpnet
@@ -32,16 +26,13 @@ services:
   warpnet3:
     container_name: warpnet-mainnet-3
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
-    ports:
-      - "4003:4001"
-    networks:
-      - mainnet
+    network_mode: host
     restart: always
     environment:
+      - NODE_PORT=4003
       - NODE_SEED=warpnet3
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=warpnet
-      - NODE_PORT=4001
       - LOGGING_LEVEL=info
 
 #  warpnet-moderator:
@@ -57,7 +48,3 @@ services:
 #      - NODE_SEED=warpnet-moderator1
 #    volumes:
 #      - /root/.warpdata:/root/.warpdata:rw
-
-networks:
-  mainnet:
-    name: warpnet_mainnet_net
