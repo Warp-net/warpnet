@@ -1,10 +1,11 @@
 package discovery
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"math/rand/v2"
 	"sync"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
 const maxLiveTime = 24 * time.Hour
