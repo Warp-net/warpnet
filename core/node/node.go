@@ -239,7 +239,7 @@ func (n *WarpNode) trackIncomingEvents() {
 		case event.EvtLocalReachabilityChanged:
 			r := ev.(event.EvtLocalReachabilityChanged).Reachability // it's int32 under the hood
 			log.Infof(
-				"node: event: reachability changed: %s",
+				"node: event: own node reachability changed: %s",
 				strings.ToLower(r.String()),
 			)
 			n.reachability.Store(int32(r))
@@ -265,6 +265,17 @@ func (n *WarpNode) trackIncomingEvents() {
 					addr.Address.String(), localAddrActions[int(addr.Action)],
 				)
 			}
+		case event.EvtHostReachableAddrsChanged:
+			peerReachability := ev.(event.EvtHostReachableAddrsChanged)
+			log.Infof(
+				`node: event: peer reachability changed: \n
+				     reachable: %v,
+					 unreachable: %v,
+					 unknown: %v`,
+				peerReachability.Reachable,
+				peerReachability.Unreachable,
+				peerReachability.Unknown,
+			)
 		default:
 			bt, _ := json.Marshal(ev)
 			log.Infof("node: event: %T %s", ev, bt)

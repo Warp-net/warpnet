@@ -80,10 +80,9 @@ type discoveryService struct {
 	nodeRepo NodeStorer
 	version  *semver.Version
 
-	retrier        retrier.Retrier
-	limiter        *leakyBucketRateLimiter
-	cache          *discoveryCache
-	bootstrapAddrs []warpnet.WarpAddrInfo
+	retrier retrier.Retrier
+	limiter *leakyBucketRateLimiter
+	cache   *discoveryCache
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan chan warpnet.WarpAddrInfo
@@ -96,15 +95,12 @@ func NewDiscoveryService(
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
 ) *discoveryService {
-	addrInfos, _ := config.Config().Node.AddrInfos()
-
 	return &discoveryService{
 		ctx, nil, userRepo, nodeRepo,
 		config.Config().Version,
 		retrier.New(time.Second, 5, retrier.FixedBackoff),
 		newRateLimiter(16, 1),
 		newDiscoveryCache(),
-		addrInfos,
 		make(chan warpnet.WarpAddrInfo, 1000), make(chan struct{}),
 	}
 }
@@ -232,7 +228,6 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	}
 
 	if pi.ID == "" || len(pi.Addrs) == 0 {
-		log.Errorf("discovery: handle: peer has no addresses: %s", pi.String())
 		return
 	}
 
@@ -285,8 +280,6 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	fmt.Printf("\033[1mdiscovery: connected to new peer: %s \033[0m\n", pi.String())
-
 	if info.IsBootstrap() || info.IsModerator() {
 		return
 	}
@@ -295,6 +288,8 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
 		return
 	}
+
+	fmt.Printf("\033[1mdiscovery: connected to new peer: %s \033[0m\n", pi.String())
 
 	user, err := s.requestNodeUser(pi, info.OwnerId)
 	if err != nil {

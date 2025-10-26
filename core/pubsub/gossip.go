@@ -426,13 +426,13 @@ func (g *Gossip) IsGossipRunning() bool {
 }
 
 func (g *Gossip) runPeerInfoPublishing() {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(time.Minute * 5)
 	defer ticker.Stop()
 
 	log.Infoln("pubsub: publisher started")
 	defer log.Infoln("pubsub: publisher stopped")
 
-	if err := g.publishPeerInfo(); err != nil { // initial Publishing
+	if err := g.publishPeerInfo(); err != nil { // initial publishing
 		log.Errorf("pubsub: failed to publish peer info: %v", err)
 	}
 
