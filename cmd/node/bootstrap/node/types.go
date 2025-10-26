@@ -45,7 +45,6 @@ type PubSubProvider interface {
 }
 
 type DistributedHashTableCloser interface {
-	Discovery() warpnet.Discovery
 	Close()
 }
 

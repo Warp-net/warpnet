@@ -186,10 +186,6 @@ func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	return baseInfo
 }
 
-func (mn *ModeratorNode) RoutingDiscovery() warpnet.Discovery {
-	return mn.dHashTable.Discovery()
-}
-
 func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	if nodeId == "" {

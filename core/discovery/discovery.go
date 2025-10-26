@@ -34,7 +34,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"sync/atomic"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -86,9 +85,9 @@ type discoveryService struct {
 	cache          *discoveryCache
 	bootstrapAddrs []warpnet.WarpAddrInfo
 
+	// channel is needed to collect discoveries while node is setting up
 	discoveryChan chan warpnet.WarpAddrInfo
 	stopChan      chan struct{}
-	syncDone      *atomic.Bool
 }
 
 //goland:noinspection ALL
@@ -107,7 +106,6 @@ func NewDiscoveryService(
 		newDiscoveryCache(),
 		addrInfos,
 		make(chan warpnet.WarpAddrInfo, 1000), make(chan struct{}),
-		new(atomic.Bool),
 	}
 }
 
@@ -167,6 +165,7 @@ func (s *discoveryService) Close() {
 func (s *discoveryService) DefaultDiscoveryHandler(peerInfo warpnet.WarpAddrInfo) {
 	defer func() { recover() }()
 	if s == nil || s.node == nil {
+		log.Errorf("discovery: default discovery handler: nil discovery service")
 		return
 	}
 
@@ -207,8 +206,8 @@ const dropMessagesLimit = 5
 
 func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
 	defer func() { recover() }()
-
 	if s == nil {
+		log.Errorf("discovery: handle peer found: nil discovery service")
 		return
 	}
 
@@ -228,10 +227,12 @@ func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
 
 func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	if s == nil || s.node == nil || s.nodeRepo == nil || s.userRepo == nil {
+		log.Errorf("discovery: handle: nil discovery service")
 		return
 	}
 
 	if pi.ID == "" || len(pi.Addrs) == 0 {
+		log.Errorf("discovery: handle: peer has no addresses: %s", pi.String())
 		return
 	}
 
@@ -247,11 +248,11 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String())
 		return
 	}
-
 	if !hasPublicAddresses(pi.Addrs) {
 		log.Warningf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
 		return
 	}
+	fmt.Println("HERE 1")
 
 	err = s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
@@ -266,6 +267,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
 		return
 	}
+	fmt.Println("HERE 2")
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
@@ -279,7 +281,7 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	log.Warningf("discovery: request peer info %s, %v", pi.ID.String(), pi.Addrs)
+	fmt.Println("HERE 3")
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
 		log.Errorf("discovery: %v", err)
@@ -287,18 +289,13 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 	}
 
 	if info.IsBootstrap() || info.IsModerator() {
+		fmt.Println("HERE 4")
 		return
 	}
 
-	//if err := s.validateProtocols(info); err != nil {
-	//	log.Errorf("discovery: protocol validation: %v", err)
-	//	_ = s.nodeRepo.BlocklistExponential(pi.ID)
-	//	s.node.Peerstore().RemovePeer(pi.ID)
-	//	return
-	//}
-
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
+		fmt.Println("HERE 5")
 		return
 	}
 
@@ -327,6 +324,57 @@ func (s *discoveryService) handle(pi warpnet.WarpAddrInfo) {
 		newUser.CreatedAt,
 		newUser.Latency,
 	)
+}
+
+type pubsubDiscoveryMessage struct {
+	Body []warpnet.WarpPubInfo `json:"body"`
+}
+
+func (s *discoveryService) WrapPubSubDiscovery(handler DiscoveryHandler) func([]byte) error {
+	return func(data []byte) error {
+		fmt.Println(string(data))
+		if len(data) == 0 {
+			return nil
+		}
+
+		var msg pubsubDiscoveryMessage
+		outerErr := json.Unmarshal(data, &msg)
+		if outerErr != nil {
+			var single warpnet.WarpPubInfo
+			if innerErr := json.Unmarshal(data, &single); innerErr != nil {
+				return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, data)
+			}
+			msg.Body = []warpnet.WarpPubInfo{single}
+		}
+		if len(msg.Body) == 0 {
+			return fmt.Errorf("pubsub: discovery: empty message: %s", string(data))
+		}
+
+		for _, info := range msg.Body {
+			if info.ID == "" {
+				log.Errorf("pubsub: discovery: message has no ID: %s", string(data))
+				continue
+			}
+			if info.ID == s.node.NodeInfo().ID {
+				continue
+			}
+
+			peerInfo := warpnet.WarpAddrInfo{
+				ID:    info.ID,
+				Addrs: make([]warpnet.WarpAddress, 0, len(info.Addrs)),
+			}
+
+			for _, addr := range info.Addrs {
+				ma, _ := warpnet.NewMultiaddr(addr)
+				peerInfo.Addrs = append(peerInfo.Addrs, ma)
+			}
+
+			if handler != nil {
+				handler(peerInfo)
+			}
+		}
+		return nil
+	}
 }
 
 const (

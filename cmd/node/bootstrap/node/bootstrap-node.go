@@ -71,7 +71,14 @@ func NewBootstrapNode(
 		return nil, errors.New("private key is required")
 	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
-	pubsubService := bootstrapPubSub.NewPubSubBootstrap(ctx)
+
+	pubsubService := bootstrapPubSub.NewPubSubBootstrap(
+		ctx,
+		bootstrapPubSub.NewMemberDiscoveryTopicHandler(
+			discService.WrapPubSubDiscovery(discService.DefaultDiscoveryHandler),
+		),
+	)
+
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: fail creating memory peerstore: %w", err)
@@ -129,10 +136,6 @@ func NewBootstrapNode(
 	}
 
 	return bn, nil
-}
-
-func (bn *BootstrapNode) RoutingDiscovery() warpnet.Discovery {
-	return bn.dHashTable.Discovery()
 }
 
 func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {

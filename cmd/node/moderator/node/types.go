@@ -38,7 +38,6 @@ type DiscoveryHandler interface {
 }
 
 type DistributedHashTableDiscoverer interface {
-	Discovery() warpnet.Discovery
 	ClosestPeers() ([]warpnet.WarpPeerID, error)
 	Close()
 }

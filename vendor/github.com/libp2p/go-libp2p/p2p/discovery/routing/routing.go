@@ -47,8 +47,10 @@ func (d *RoutingDiscovery) Advertise(ctx context.Context, ns string, opts ...dis
 	pctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
+	println(cid.String(), " advertised to", ns, " with ttl", ttl)
 	err = d.Provide(pctx, cid, true)
 	if err != nil {
+		println(err.Error(), "errrrrrrrrr")
 		return 0, err
 	}
 
@@ -68,7 +70,7 @@ func (d *RoutingDiscovery) FindPeers(ctx context.Context, ns string, opts ...dis
 	if err != nil {
 		return nil, err
 	}
-
+	println("finding peers", cid.String(), "ns", ns, )
 	return d.FindProvidersAsync(ctx, cid, options.Limit), nil
 }
 

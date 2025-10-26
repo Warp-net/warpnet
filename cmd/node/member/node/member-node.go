@@ -103,10 +103,12 @@ func NewMemberNode(
 		return nil, err
 	}
 
-	pubsubService := memberPubSub.NewPubSub(
-		ctx,
-		memberPubSub.PrefollowHandlers(followingIds...)...,
+	pubSubHandlers := memberPubSub.PrefollowHandlers(followingIds...)
+	pubSubHandlers = append(
+		pubSubHandlers,
+		memberPubSub.NewBootstrapDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
 	)
+	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
@@ -243,13 +245,6 @@ func (m *MemberNode) Connect(p warpnet.WarpAddrInfo) error {
 	}
 
 	return m.node.Connect(p)
-}
-
-func (m *MemberNode) RoutingDiscovery() warpnet.Discovery {
-	if m.dHashTable == nil {
-		return nil
-	}
-	return m.dHashTable.Discovery()
 }
 
 func (m *MemberNode) NodeInfo() warpnet.NodeInfo {

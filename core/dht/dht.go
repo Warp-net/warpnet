@@ -40,7 +40,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
-	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -84,11 +83,10 @@ type RoutingStorer interface {
 }
 
 type distributedHashTable struct {
-	ctx       context.Context
-	cfg       dhtConfig
-	dht       *dht.IpfsDHT
-	discovery *drouting.RoutingDiscovery
-	stopChan  chan struct{}
+	ctx      context.Context
+	cfg      dhtConfig
+	dht      *dht.IpfsDHT
+	stopChan chan struct{}
 }
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
@@ -169,8 +167,6 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 
 	go d.bootstrapDHT()
 	log.Infoln("dht: routing started")
-	d.discovery = drouting.NewRoutingDiscovery(d.dht)
-
 	return d.dht, nil
 }
 
@@ -233,10 +229,6 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 
 func (d *distributedHashTable) ClosestPeers() ([]warpnet.WarpPeerID, error) {
 	return d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
-}
-
-func (d *distributedHashTable) Discovery() warpnet.Discovery {
-	return d.discovery
 }
 
 func (d *distributedHashTable) Close() {
