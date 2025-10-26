@@ -23,17 +23,17 @@ fi
 
 echo $GITHUB_TOKEN | sudo docker login ghcr.io -u filinvadim --password-stdin
 docker pull ghcr.io/warp-net/warpnet-bootstrap:latest
-docker pull ghcr.io/warp-net/warpnet-moderator:latest
+#docker pull ghcr.io/warp-net/warpnet-moderator:latest
 
 export HOSTNAME=''
 
 if [ "$MAINNET" = "true" ]; then
     echo "Mainnet is enabled"
-    docker compose -p warpnet-mainnet -f docker-compose-warpnet.yml down --remove-orphans
-    docker compose -p warpnet-mainnet -f docker-compose-warpnet.yml up -d --build
+    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml down --remove-orphans
+    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml up -d --build
 else
     echo "Mainnet is disabled"
-    docker compose -p warpnet-testnet -f docker-compose-testnet.yml down --remove-orphans
-    docker compose -p warpnet-testnet -f docker-compose-testnet.yml up -d --build
+    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down --remove-orphans
+    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --build
 fi
 docker image prune --force
