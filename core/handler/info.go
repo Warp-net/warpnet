@@ -45,7 +45,7 @@ func StreamGetInfoHandler(
 		remoteID := s.Conn().RemotePeer()
 		remoteAddr := s.Conn().RemoteMultiaddr()
 
-		info := warpnet.WarpAddrInfo{
+		addrInfo := warpnet.WarpAddrInfo{
 			ID:    remoteID,
 			Addrs: []warpnet.WarpAddress{remoteAddr},
 		}
@@ -53,9 +53,14 @@ func StreamGetInfoHandler(
 		log.Debugf("node info request received: %s %s", remoteID, remoteAddr)
 
 		if discHandler != nil {
-			discHandler(info)
+			discHandler(addrInfo)
 		}
 
-		return i.NodeInfo(), nil
+		nodeInfo := i.NodeInfo()
+		if nodeInfo.IsBootstrap() {
+			log.Infof("node info request received: %s %s", remoteID, remoteAddr)
+		}
+
+		return nodeInfo, nil
 	}
 }
