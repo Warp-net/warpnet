@@ -33,6 +33,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math/rand"
 	"slices"
 	"strings"
 	"sync"
@@ -426,7 +427,8 @@ func (g *Gossip) IsGossipRunning() bool {
 }
 
 func (g *Gossip) runPeerInfoPublishing() {
-	ticker := time.NewTicker(time.Minute * 5)
+	jitter := time.Second * time.Duration(rand.Intn(60))
+	ticker := time.NewTicker((time.Minute * 5) + jitter)
 	defer ticker.Stop()
 
 	log.Infoln("pubsub: publisher started")

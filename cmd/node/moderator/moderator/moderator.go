@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/isolation"
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -75,17 +73,6 @@ func NewModerator(
 func (m *Moderator) Start() (err error) {
 	if m == nil {
 		panic("moderator: nil")
-	}
-
-	confModelPath := config.Config().Node.Moderator.Path
-	cid := config.Config().Node.Moderator.CID
-
-	_, isModelExists := isModelInPath(confModelPath)
-
-	log.Infof("moderator: LLM model path: %s, CID: %s", confModelPath, cid)
-
-	if !isModelExists {
-		return errors.New("moderator: LLM model is not found")
 	}
 
 	log.Infoln("moderator: wait engine init...")
@@ -277,12 +264,4 @@ func (m *Moderator) moderateUser(peerID warpnet.WarpPeerID, userID string) func(
 		// TODO
 		return nil
 	}
-}
-
-func isModelInPath(path string) (*os.File, bool) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, false
-	}
-	return f, true
 }

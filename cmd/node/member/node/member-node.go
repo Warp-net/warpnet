@@ -185,10 +185,6 @@ func (m *MemberNode) Start() (err error) {
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
 
-	if m.pseudoNode != nil {
-		m.node.Node().Peerstore().AddAddrs(m.pseudoNode.ID(), m.pseudoNode.Addrs(), time.Hour*24)
-	}
-
 	m.pubsubService.Run(m)
 
 	if err := m.discService.Run(m); err != nil {

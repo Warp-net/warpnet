@@ -619,26 +619,46 @@ func (b *batch) Cancel() error {
 	return nil
 }
 
+type BlockLevel int
+
+func (b BlockLevel) Next() BlockLevel {
+	return b + 1
+}
+
 const (
-	ForeverBlockDuration time.Duration = 0
-	MaxBlockDuration                   = 90 * 24 * time.Hour
+	InitialBlock BlockLevel = iota + 1
+	AdvancedBlock
+	PermanentBlock
 )
+
+const (
+	foreverBlockDuration  time.Duration = 0
+	advancedBlockDuration               = 7 * 24 * time.Hour
+	initialBlockDuration                = 24 * time.Hour
+)
+
+var blockDurationMapping = map[BlockLevel]time.Duration{
+	InitialBlock:   initialBlockDuration,
+	AdvancedBlock:  advancedBlockDuration,
+	PermanentBlock: foreverBlockDuration,
+}
 
 type BlocklistedItem struct {
 	PeerID   warpnet.WarpPeerID
+	Level    BlockLevel
 	Duration *time.Duration
 }
 
-func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
+func (d *NodeRepo) Blocklist(id warpnet.WarpPeerID) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
-	if peerId == "" {
+	if id == "" {
 		return local.DBError("empty peer ID")
 	}
 	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
-		AddRootID(peerId.String()).
+		AddRootID(id.String()).
 		Build()
 
 	txn, err := d.db.NewTxn()
@@ -652,26 +672,24 @@ func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
 		return err
 	}
 
-	var item BlocklistedItem
+	item := BlocklistedItem{PeerID: id}
 	if len(bt) != 0 {
 		if err := json.Unmarshal(bt, &item); err != nil {
 			return err
 		}
 	}
 
-	if item.Duration == nil {
-		item.Duration = func(d time.Duration) *time.Duration { return &d }(time.Hour)
+	if item.Level == 0 {
+		item.Level = InitialBlock
+	} else {
+		item.Level = item.Level.Next()
 	}
-	if *item.Duration == ForeverBlockDuration {
+
+	dur := blockDurationMapping[item.Level]
+	item.Duration = &dur
+
+	if *item.Duration == foreverBlockDuration {
 		return nil
-	}
-
-	newDuration := *item.Duration * 2
-	item.Duration = &newDuration
-	item.PeerID = peerId
-
-	if *item.Duration > MaxBlockDuration {
-		*item.Duration = ForeverBlockDuration
 	}
 
 	bt, err = json.Marshal(item)
@@ -679,52 +697,51 @@ func (d *NodeRepo) BlocklistExponential(peerId warpnet.WarpPeerID) error {
 		return err
 	}
 
-	if err := txn.SetWithTTL(blocklistKey, bt, *item.Duration); err != nil {
+	if err := txn.SetWithTTL(blocklistKey, bt, dur); err != nil {
 		return err
 	}
 
 	return txn.Commit()
 }
 
-func (d *NodeRepo) IsBlocklisted(peerId warpnet.WarpPeerID) (bool, error) {
+func (d *NodeRepo) IsBlocklisted(peerId warpnet.WarpPeerID) (bool, BlockLevel) {
 	if d == nil {
-		return false, ErrNilNodeRepo
+		return false, 0
 	}
 	if peerId == "" {
-		return false, nil
+		return false, 0
 	}
 	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddRootID(peerId.String()).
 		Build()
-	_, err := d.db.Get(blocklistKey)
+	bt, err := d.db.Get(blocklistKey)
+	if err != nil || len(bt) == 0 {
+		return false, 0
+	}
 
-	if local.IsNotFoundError(err) {
-		return false, nil
+	var item BlocklistedItem
+	if err := json.Unmarshal(bt, &item); err != nil {
+		return true, 0
 	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
+
+	return true, item.Level
 }
 
-func (d *NodeRepo) BlocklistRemove(peerId warpnet.WarpPeerID) (err error) {
+func (d *NodeRepo) BlocklistRemove(peerId warpnet.WarpPeerID) {
 	if d == nil {
-		return ErrNilNodeRepo
+		return
 	}
 	if peerId == "" {
-		return local.DBError("empty peer ID")
+		return
 	}
 	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddRootID(peerId.String()).
 		Build()
 
-	err = d.db.Delete(blocklistKey)
-	if local.IsNotFoundError(err) {
-		return nil
-	}
-	return err
+	_ = d.db.Delete(blocklistKey)
+	return
 }
 
 func buildRootKey(key local.Key) string {

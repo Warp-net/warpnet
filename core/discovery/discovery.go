@@ -59,9 +59,9 @@ type DiscoveryInfoStorer interface {
 }
 
 type NodeStorer interface {
-	BlocklistRemove(peerId warpnet.WarpPeerID) (err error)
-	IsBlocklisted(peerId warpnet.WarpPeerID) (bool, error)
-	BlocklistExponential(peerId warpnet.WarpPeerID) error
+	BlocklistRemove(peerId warpnet.WarpPeerID)
+	IsBlocklisted(peerId warpnet.WarpPeerID) (bool, database.BlockLevel)
+	Blocklist(peerId warpnet.WarpPeerID) error
 }
 
 type UserStorer interface {
@@ -231,18 +231,13 @@ func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	ok, err := s.nodeRepo.IsBlocklisted(pi.ID)
-	if err != nil {
-		log.Errorf("discovery: failed to check blocklist: %s", err)
-	}
+	ok, _ := s.nodeRepo.IsBlocklisted(pi.ID)
 	if ok {
 		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String())
 		return
 	}
 
-	fmt.Printf("\033[1mdiscovery: new peer: %s \033[0m\n", pi.String())
-
-	err = s.node.SimpleConnect(pi)
+	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: connecting is backoffed: %s", pi.ID)
 		return
@@ -259,7 +254,7 @@ func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
-		_ = s.nodeRepo.BlocklistExponential(pi.ID)
+		_ = s.nodeRepo.Blocklist(pi.ID)
 		s.node.Peerstore().RemovePeer(pi.ID)
 		return
 	}
@@ -334,7 +329,7 @@ func (s *discoveryService) handleAsBootstrap(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	log.Infof("node challenge request: %s %v", pi.ID.String(), pi.Addrs)
+	log.Infof("node challenge request: %s", pi.ID.String())
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
