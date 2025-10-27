@@ -49,7 +49,7 @@ import (
 )
 
 type DistributedHashTableDiscoverer interface {
-	ClosestPeers() ([]warpnet.WarpPeerID, error)
+	NearestPeers() []warpnet.WarpPeerID
 	Close()
 }
 
@@ -176,8 +176,8 @@ func (mn *ModeratorNode) ID() warpnet.WarpPeerID {
 	return mn.node.Node().ID()
 }
 
-func (mn *ModeratorNode) ClosestPeers() ([]warpnet.WarpPeerID, error) {
-	return mn.dHashTable.ClosestPeers()
+func (mn *ModeratorNode) NearestPeers() []warpnet.WarpPeerID {
+	return mn.dHashTable.NearestPeers()
 }
 
 func (mn *ModeratorNode) Node() warpnet.P2PNode {

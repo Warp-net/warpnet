@@ -228,7 +228,7 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 	}
 }
 
-func (d *distributedHashTable) ClosestPeers() []warpnet.WarpPeerID {
+func (d *distributedHashTable) NearestPeers() []warpnet.WarpPeerID {
 	return d.dht.RoutingTable().NearestPeers(kbucket.ConvertPeerID(d.dht.PeerID()), 5)
 }
 
