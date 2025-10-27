@@ -43,3 +43,5 @@ snapcraft:
 status:
 	snapcraft status warpnet
 
+build-windows:
+	cd cmd/node/member && wails build -clean -platform windows -tags webkit2_41 -m -nosyncgomod --node.network testnet && cd -

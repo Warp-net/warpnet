@@ -113,7 +113,6 @@ func init() {
 	}
 	appPath := getAppPath()
 
-	modelPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(viper.GetString("node.moderator.modelpath")))
 	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
 
 	configSingleton = config{
@@ -129,7 +128,7 @@ func init() {
 				Server: viper.GetString("node.metrics.server"),
 			},
 			Moderator: moderator{
-				Path: modelPath,
+				Path: viper.GetString("node.moderator.modelpath"),
 			},
 		},
 		Database: database{
