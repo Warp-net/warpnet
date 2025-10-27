@@ -70,7 +70,7 @@ func init() {
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env.")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	//pflag.String("node.metrics.server", "", "Metrics server address")
-	pflag.String("node.moderator.modelname", "llama-2-7b-chat.Q8_0.gguf", "File name AI model. Unused if 'cid' provided")
+	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name AI model. Unused if 'cid' provided")
 	pflag.String("logging.level", "info", "Logging level")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -113,7 +113,7 @@ func init() {
 	}
 	appPath := getAppPath()
 
-	modelPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(viper.GetString("node.moderator.modelname")))
+	modelPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(viper.GetString("node.moderator.modelpath")))
 	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
 
 	configSingleton = config{
@@ -130,7 +130,6 @@ func init() {
 			},
 			Moderator: moderator{
 				Path: modelPath,
-				CID:  viper.GetString("node.moderator.modelcid"),
 			},
 		},
 		Database: database{
@@ -162,7 +161,7 @@ type node struct {
 	Seed      string
 }
 type moderator struct {
-	Path, CID string
+	Path string
 }
 type metrics struct {
 	Server string
