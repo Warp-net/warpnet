@@ -30,11 +30,11 @@ package database
 import (
 	"context"
 	"crypto/ed25519"
-	"github.com/Masterminds/semver/v3"
-	"github.com/Warp-net/warpnet/security"
-	"go.uber.org/goleak"
 	"testing"
 	"time"
+
+	"github.com/Warp-net/warpnet/security"
+	"go.uber.org/goleak"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/local"
@@ -54,14 +54,13 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	var err error
 	s.ctx = context.Background()
 
-	s.db, err = local.New(".", true)
+	s.db, err = local.New(".", local.DefaultOptions())
 	s.Require().NoError(err)
 
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo, err = NewNodeRepo(s.db, semver.MustParse("0.0.0"))
-	s.Require().NoError(err)
+	s.repo = NewNodeRepo(s.db)
 
 }
 
@@ -164,5 +163,4 @@ func TestNodeRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	suite.Run(t, new(NodeRepoTestSuite))
-	closeWriter()
 }

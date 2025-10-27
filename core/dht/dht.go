@@ -30,19 +30,16 @@ package dht
 import (
 	"context"
 	"errors"
-	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/Warp-net/warpnet/config"
-	"github.com/libp2p/go-libp2p-kad-dht/providers"
-	lip2pDisc "github.com/libp2p/go-libp2p/core/discovery"
-
 	"github.com/Warp-net/warpnet/core/warpnet"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p-kad-dht/records"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
-	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -57,7 +54,7 @@ import (
   2. Data storage — each node is responsible for a portion of the key space.
   3. Key-based lookup — provides fast access to data without a central server.
 
-  DHT is used in BitTorrent, IPFS, Ethereum, as well as in P2P messengers and other decentralized applications.
+  DHT is used in BitTorrent, Ethereum, as well as in P2P messengers and other decentralized applications.
 
   The go-libp2p-kad-dht library is an implementation of Kademlia DHT for libp2p.
   It allows peer-to-peer nodes to exchange data and discover each other without centralized servers.
@@ -69,8 +66,8 @@ import (
     - Enables finding nodes and querying them for data by key.
   - **Flexible routing**
     - Optimized for dynamic networks where nodes frequently join and leave.
-  - **Support for PubSub and IPFS**
-    - Used in IPFS and applicable to P2P messengers and decentralized applications.
+  - **Support for PubSub**
+    - Used in ... and applicable to P2P messengers and decentralized applications.
   - **Key hashing**
     - Distributes the key space across nodes, ensuring balanced load distribution.
 
@@ -80,8 +77,6 @@ import (
   The go-libp2p-kad-dht library is useful for finding other nodes in a libp2p network,
   implementing decentralized content lookup (as in IPFS), and enabling efficient routing in a distributed network.
 */
-
-const warpnetRendezvousPrefix = "rendezvous-warpnet@%s"
 
 type RoutingStorer interface {
 	warpnet.WarpBatching
@@ -115,8 +110,8 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 }
 
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
-	cacheOption := providers.Cache(newLRU())
-	providerStore, err := providers.NewProviderManager(
+	cacheOption := records.Cache(newLRU())
+	providerStore, err := records.NewProviderManager(
 		d.ctx, n.ID(), n.Peerstore(), d.cfg.store, cacheOption,
 	)
 	if err != nil {
@@ -135,6 +130,8 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		dht.ProviderStore(providerStore),
 		dht.RoutingTableLatencyTolerance(time.Hour*24),
 		dht.BucketSize(50),
+		dht.Concurrency(runtime.NumCPU()/2),
+		dht.LookupCheckConcurrency(runtime.NumCPU()/2),
 	)
 	if err != nil {
 		log.Errorf("dht: new: %v", err)
@@ -194,75 +191,8 @@ func (d *distributedHashTable) bootstrapDHT() {
 
 	d.correctPeerIdMismatch(d.cfg.boostrapNodes)
 
-	log.Infoln("dht: bootstrap complete")
 	<-d.dht.RefreshRoutingTable()
-
-	if d.cfg.isRendezvousEnabled {
-		go d.runRendezvousDiscovery(ownID)
-	}
-}
-
-func (d *distributedHashTable) runRendezvousDiscovery(ownID warpnet.WarpPeerID) {
-	defer func() { recover() }()
-	if d == nil || d.dht == nil {
-		return
-	}
-
-	defer log.Infoln("dht rendezvous: finished")
-
-	tryouts := 30
-	for len(d.dht.RoutingTable().ListPeers()) == 0 {
-		if tryouts == 0 {
-			log.Infoln("dht rendezvous: timeout - no peers found")
-			return
-		}
-		time.Sleep(time.Second * 5)
-		tryouts--
-	}
-
-	namespace := fmt.Sprintf(warpnetRendezvousPrefix, config.Config().Node.Network)
-
-	routingDiscovery := drouting.NewRoutingDiscovery(d.dht)
-
-	// run it only for 5 minutes - CPU leaking
-	rndvuCtx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
-	defer cancel()
-	_, err := routingDiscovery.Advertise(rndvuCtx, namespace, lip2pDisc.TTL(time.Hour*3), lip2pDisc.Limit(10))
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-		log.Errorf("dht rendezvous: advertise: %s", err)
-		return
-	}
-
-	peerChan, err := routingDiscovery.FindPeers(rndvuCtx, namespace)
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-		log.Errorf("dht rendezvous: find peers: %s", err)
-		return
-	}
-	if peerChan == nil {
-		return
-	}
-
-	log.Infof("dht rendezvous: is running under a namespace %s", namespace)
-
-	for {
-		select {
-		case <-d.stopChan:
-			return
-		case <-rndvuCtx.Done():
-			return
-		case peerInfo := <-peerChan:
-			if peerInfo.ID == ownID {
-				continue
-			}
-			if len(peerInfo.Addrs) == 0 {
-				continue
-			}
-			log.Infof("dht rendezvous: found new peer: %s", peerInfo.String())
-			for _, addF := range d.cfg.addCallbacks {
-				addF(peerInfo)
-			}
-		}
-	}
+	log.Infoln("dht: bootstrap complete")
 }
 
 func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
@@ -299,19 +229,19 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 
 func (d *distributedHashTable) ClosestPeers() ([]warpnet.WarpPeerID, error) {
 	return d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
-
 }
+
 func (d *distributedHashTable) Close() {
-	defer func() { recover() }()
 	if d == nil || d.dht == nil {
 		return
 	}
 
 	close(d.stopChan)
 
-	log.Infoln("dht rendezvous: closing...")
+	log.Infoln("dht: closing...")
 	if err := d.dht.Close(); err != nil {
-		log.Errorf("dht: table close: %v\n", err)
+		log.Errorf("dht: close: %s", err.Error())
 	}
-	log.Infoln("dht: table closed")
+
+	log.Infoln("dht: closed")
 }

@@ -63,17 +63,13 @@ var configSingleton config
 
 func init() {
 	pflag.String("database.dir", "storage", "Database directory name")
-	pflag.String("server.host", "localhost", "Server host")
-	pflag.String("server.port", "4002", "Server port")
 	pflag.String("node.host.v4", "0.0.0.0", "Node host IPv4")
 	pflag.String("node.host.v6", "::", "Node host IPv6")
 	pflag.String("node.port", "4001", "Node port")
 	pflag.String("node.seed", "", "Node seed for deterministic ID generation")
-	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env.")
+	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
-	//pflag.String("node.metrics.server", "", "Metrics server address")
-	pflag.String("node.moderator.modelname", "llama-2-7b-chat.Q8_0.gguf", "File name AI model. Unused if 'cid' provided")
-	pflag.String("node.moderator.modelcid", "bafybeid7to3a6zkv5fdh5lw7iyl5wruj46qirvfsc6xbngprjy67ma6slm", "AI model content ID in IPFS. Unused if 'modelpath' provided")
+	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name of 'AI' model")
 	pflag.String("logging.level", "info", "Logging level")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -116,7 +112,6 @@ func init() {
 	}
 	appPath := getAppPath()
 
-	modelPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(viper.GetString("node.moderator.modelname")))
 	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
 
 	configSingleton = config{
@@ -132,16 +127,11 @@ func init() {
 				Server: viper.GetString("node.metrics.server"),
 			},
 			Moderator: moderator{
-				Path: modelPath,
-				CID:  viper.GetString("node.moderator.modelcid"),
+				Path: strings.TrimSpace(viper.GetString("node.moderator.modelpath")),
 			},
 		},
 		Database: database{
 			Path: dbPath,
-		},
-		Server: server{
-			Host: viper.GetString("server.host"),
-			Port: viper.GetString("server.port"),
 		},
 		Logging: logging{Level: strings.TrimSpace(viper.GetString("logging.level"))},
 	}
@@ -155,7 +145,6 @@ type config struct {
 	Version  *semver.Version
 	Node     node
 	Database database
-	Server   server
 	Logging  logging
 }
 
@@ -170,7 +159,7 @@ type node struct {
 	Seed      string
 }
 type moderator struct {
-	Path, CID string
+	Path string
 }
 type metrics struct {
 	Server string
@@ -181,10 +170,6 @@ type database struct {
 type logging struct {
 	Level  string
 	Format string
-}
-type server struct {
-	Host string
-	Port string
 }
 
 func (n node) IsTestnet() bool {

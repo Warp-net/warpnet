@@ -29,7 +29,6 @@ package database
 
 import (
 	"encoding/binary"
-	"errors"
 
 	"github.com/Warp-net/warpnet/database/local"
 )
@@ -82,7 +81,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 	defer txn.Rollback()
 
 	_, err = txn.Get(likerKey)
-	if !errors.Is(err, local.ErrKeyNotFound) {
+	if !local.IsNotFoundError(err) {
 		_ = txn.Commit()
 		return repo.LikesCount(tweetId) // like exists
 	}
@@ -124,7 +123,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 	defer txn.Rollback()
 
 	_, err = txn.Get(likerKey)
-	if errors.Is(err, local.ErrKeyNotFound) { // already unliked
+	if local.IsNotFoundError(err) { // already unliked
 		_ = txn.Commit()
 		return repo.LikesCount(tweetId)
 	}
@@ -132,7 +131,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 		return 0, err
 	}
 	likesCount, err = txn.Decrement(likeKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return 0, txn.Commit()
 	}
 	if err != nil {
@@ -151,7 +150,7 @@ func (repo *LikeRepo) LikesCount(tweetId string) (likesNum uint64, err error) {
 		Build()
 
 	bt, err := repo.db.Get(likeKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return 0, ErrLikesNotFound
 	}
 	if err != nil {
@@ -179,7 +178,7 @@ func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ l
 	defer txn.Rollback()
 
 	items, cur, err := txn.List(likePrefix, limit, cursor)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return nil, "", ErrLikesNotFound
 	}
 	if err != nil {

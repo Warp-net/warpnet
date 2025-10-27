@@ -29,8 +29,10 @@ package handler
 
 import (
 	"errors"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -88,18 +90,23 @@ func StreamNewReTweetHandler(
 		}
 
 		ownerId := streamer.NodeInfo().OwnerId
-		if ownerId == *retweetEvent.RetweetedBy { // I'm a retweeter
+		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
+		if isOwnerRetweeter {
 			// owner retweeted it
 			if err = timelineRepo.AddTweetToTimeline(ownerId, retweet); err != nil {
 				log.Infof("fail adding retweet to timeline: %v", err)
 			}
-
 		}
-		if ownerId == retweetEvent.UserId { // my own tweet retweet
+
+		isOwnTweetRetweet := ownerId == retweetEvent.UserId // my own tweet retweet
+		if isOwnTweetRetweet {
 			return retweet, nil
 		}
 
 		tweetOwner, err := userRepo.Get(retweetEvent.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return retweet, nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -109,9 +116,13 @@ func StreamNewReTweetHandler(
 			event.PUBLIC_POST_RETWEET,
 			event.NewRetweetEvent(retweet),
 		)
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return retweet, nil
+		}
+		if err != nil {
 			return nil, err
 		}
+
 		var possibleError event.ErrorResponse
 		if _ = json.Unmarshal(retweetDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other retweet error response: %s", possibleError.Message)
@@ -152,12 +163,16 @@ func StreamUnretweetHandler(
 		}
 
 		ownerId := streamer.NodeInfo().OwnerId
-		if tweet.UserId == ownerId {
+		isOwnTweetUnretweet := tweet.UserId == ownerId
+		if isOwnTweetUnretweet {
 			// tweet belongs to owner, unretweet themself
 			return event.Accepted, nil
 		}
 
 		tweetOwner, err := userRepo.Get(tweet.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return event.Accepted, nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -167,9 +182,13 @@ func StreamUnretweetHandler(
 			event.PUBLIC_POST_UNRETWEET,
 			ev,
 		)
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return event.Accepted, nil
+		}
+		if err != nil {
 			return nil, err
 		}
+
 		var possibleError event.ErrorResponse
 		if _ = json.Unmarshal(unretweetDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other unretweet error response: %s", possibleError.Message)

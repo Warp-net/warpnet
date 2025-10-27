@@ -1,14 +1,10 @@
-[![Go Version](https://img.shields.io/badge/Go-1.24+-brightgreen)](https://golang.org/dl/)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-brightgreen)](https://golang.org/dl/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE.md)
 [![Build](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml)
 [![Telegram Chat](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)
 [![warpnet](https://snapcraft.io/warpnet/badge.svg)](https://snapcraft.io/warpnet)
 <br />
 <div align="center">
-  <a href="https://github.com/Warp-net/warpnet">
-    <img src="https://github.com/Warp-net/.github/blob/main/docs/logo.png" alt="Logo" width="80" height="80">
-  </a>
-
 <h3 align="center">Warpnet</h3>
   <p align="center">
     <a href="warp-net.github.io"><strong>Explore the docs »</strong></a>
@@ -20,40 +16,13 @@
   </p>
 </div>
 
-<summary>Table of Contents</summary>
-<ol>
-    <li>
-      <a href="#general-principles-of-the-warp-network">General Principles</a>
-    </li>
-    <li><a href="#getting-started">Getting Started</a></li>
-    <li><a href="#TODO">TODO</a></li>
-    <li><a href="#Contributing">Contributing</a></li>
-    <li><a href="#Contact">Contact</a></li>
-    <li><a href="#License">License</a></li>
-</ol>
-
 ## Getting Started
 
 List of software needed and how to install them.
-* [Golang v1.24](https://go.dev/doc/install)
+* [Golang v1.25](https://go.dev/doc/install)
 * [Wails v2.10.2](https://github.com/wailsapp/wails)
 
 ## Run As Developer
-## Run As Developer
-
-```bash
-cd cmd/node/member # pick the member node dir
-wails build -devtools -tags webkit2_41 # compile a binary
-./build/bin/warpnet --node.network testnet # run binary on a testnet
-```
-
-## TODO
-- [ ] Set up a website
-- [v] Add docs to website
-- [ ] Create DMG package
-- [ ] Create Snap package
-- [ ] Set up bootstrap nodes on each continent
-- [ ] ...
 
 ```bash
 cd cmd/node/member # pick the member node dir
@@ -81,16 +50,6 @@ Remember to give the project a star! Thanks again!
 <a href="https://github.com/Warp-net/warpnet/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=Warp-net/warpnet" alt="contrib.rocks image" />
 </a>
-
-### Support
-
-BTC `bc1quwwnec87tukn9j93spr4de7mctvexpftpwu09d`
-
-USDT (Tron) `THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143`
-
-SOL `A3vhW7tnUwa3u3xzfrgyVLphHCrbPqC6XmSmcVjhY191`
-
-Wrapped TON `0xDdFc51Fa8a6c10Bb48c9960DC5A0092D7ECBF355`
 
 ## Contact
 

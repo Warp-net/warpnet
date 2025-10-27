@@ -30,14 +30,18 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
+
+const errEmptyUserId = warpnet.WarpError("empty user id")
 
 type UserStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
@@ -50,9 +54,9 @@ type UserTweetsCounter interface {
 
 type UserFollowsCounter interface {
 	GetFollowersCount(userId string) (uint64, error)
-	GetFolloweesCount(userId string) (uint64, error)
-	GetFollowers(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
-	GetFollowees(userId string, limit *uint64, cursor *string) ([]domain.Following, string, error)
+	GetFollowingsCount(userId string) (uint64, error)
+	GetFollowers(userId string, limit *uint64, cursor *string) ([]string, string, error)
+	GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 type UserFetcher interface {
@@ -83,38 +87,40 @@ func StreamGetUserHandler(
 		}
 
 		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
+			return nil, errEmptyUserId
 		}
 
 		ownerId := authRepo.GetOwner().UserId
-
-		var u domain.User
-		if ev.UserId == ownerId {
-			u, err = repo.Get(ownerId)
+		isMe := ev.UserId == ownerId
+		if isMe {
+			u, err := repo.Get(ownerId)
 			if err != nil {
 				return nil, err
 			}
 			followersCount, err := followRepo.GetFollowersCount(u.Id)
 			if err != nil {
-				return nil, err
+				log.Errorf("get user: fetch followers count: %v", err)
 			}
-			followeesCount, err := followRepo.GetFolloweesCount(u.Id)
+			followingsCount, err := followRepo.GetFollowingsCount(u.Id)
 			if err != nil {
-				return nil, err
+				log.Errorf("get user: fetch followings count: %v", err)
 			}
 			tweetsCount, err := tweetRepo.TweetsCount(u.Id)
 			if err != nil {
-				return nil, err
+				log.Errorf("get user: fetch tweets count: %v", err)
 			}
 
 			u.TweetsCount = tweetsCount
 			u.FollowersCount = followersCount
-			u.FolloweesCount = followeesCount
+			u.FollowingsCount = followingsCount
 
 			return u, nil
 		}
 
 		otherUser, err := repo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return nil, err
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -125,12 +131,9 @@ func StreamGetUserHandler(
 			ev,
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			u, err = repo.Get(otherUser.Id)
-			if err != nil {
-				return nil, err
-			}
-			u.IsOffline = true
-			return u, nil
+			otherUser.IsOffline = true
+			_, err = repo.Update(otherUser.Id, otherUser)
+			return otherUser, nil
 		}
 		if err != nil {
 			return nil, err
@@ -141,11 +144,11 @@ func StreamGetUserHandler(
 			return nil, fmt.Errorf("unmarshal other user error response: %s", possibleError.Message)
 		}
 
-		if err = json.Unmarshal(otherUserData, &u); err != nil {
+		if err = json.Unmarshal(otherUserData, &otherUser); err != nil {
 			return nil, fmt.Errorf("get other user: response unmarshal: %v %s", err, otherUserData)
 		}
-		_, err = repo.Update(u.Id, u)
-		return u, err
+		_, err = repo.Update(otherUser.Id, otherUser)
+		return otherUser, err
 	}
 }
 
@@ -161,7 +164,7 @@ func StreamGetUsersHandler(
 		}
 
 		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
+			return nil, errEmptyUserId
 		}
 
 		users, cursor, err := userRepo.List(ev.Limit, ev.Cursor)
@@ -169,15 +172,15 @@ func StreamGetUsersHandler(
 			return nil, err
 		}
 		if len(users) != 0 {
-			go usersRefreshBackground(userRepo, ev, streamer)
+			go refreshUsers(userRepo, ev, streamer)
 
 			return event.UsersResponse{
 				Cursor: cursor,
 				Users:  users,
-			}, err
+			}, nil
 		}
 
-		usersRefreshBackground(userRepo, ev, streamer)
+		refreshUsers(userRepo, ev, streamer)
 
 		users, cursor, _ = userRepo.List(ev.Limit, ev.Cursor)
 
@@ -188,7 +191,7 @@ func StreamGetUsersHandler(
 	}
 }
 
-func usersRefreshBackground(
+func refreshUsers(
 	userRepo UserFetcher,
 	ev event.GetAllUsersEvent,
 	streamer UserStreamer,
@@ -197,6 +200,9 @@ func usersRefreshBackground(
 		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return
+	}
 	if err != nil {
 		log.Errorf("get users handler: get user %v", err)
 		return
@@ -243,7 +249,23 @@ func StreamGetWhoToFollowHandler(
 		}
 
 		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty profile id")
+			return nil, errEmptyUserId
+		}
+
+		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
+		if err != nil {
+			return nil, err
+		}
+
+		followingsLimit := uint64(80) // TODO limit?
+		followings, _, err := followRepo.GetFollowings(authRepo.GetOwner().UserId, &followingsLimit, nil)
+		if err != nil {
+			log.Errorf("get who to follow handler: get followers %v", err)
+		}
+
+		followedUsers := map[string]struct{}{}
+		for _, followingId := range followings {
+			followedUsers[followingId] = struct{}{}
 		}
 
 		owner := authRepo.GetOwner()
@@ -257,22 +279,6 @@ func StreamGetWhoToFollowHandler(
 				Network:  warpnet.WarpnetName,
 				NodeId:   owner.NodeId,
 			}
-		}
-
-		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
-		if err != nil {
-			return nil, err
-		}
-
-		followeesLimit := uint64(80) // TODO limit?
-		followees, _, err := followRepo.GetFollowees(authRepo.GetOwner().UserId, &followeesLimit, nil)
-		if err != nil {
-			log.Errorf("get who to follow handler: get followers %v", err)
-		}
-
-		followedUsers := map[string]struct{}{}
-		for _, follow := range followees {
-			followedUsers[follow.Followee] = struct{}{}
 		}
 
 		whotofollow := make([]domain.User, 0, len(users))

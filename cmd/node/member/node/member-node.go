@@ -41,7 +41,6 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
-	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -86,14 +85,7 @@ func NewMemberNode(
 	if len(privKey) == 0 {
 		return nil, errors.New("private key is required")
 	}
-	nodeRepo, err := database.NewNodeRepo(db, version)
-	if err != nil {
-		return nil, err
-	}
-	if err := nodeRepo.AddSelfHash(selfHashHex, version.String()); err != nil {
-		return nil, err
-	}
-
+	nodeRepo := database.NewNodeRepo(db)
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {
 		return nil, err
@@ -106,18 +98,17 @@ func NewMemberNode(
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.HandlePeerFound)
 
-	followeeIds, err := fetchFolloweeIds(owner.UserId, followRepo)
+	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
 	if err != nil {
 		return nil, err
 	}
-	pubsubHandlers := []pubsub.TopicHandler{
-		pubsub.NewDiscoveryTopicHandler(discService.WrapPubSubDiscovery(discService.HandlePeerFound)),
-	}
-	pubsubHandlers = append(pubsubHandlers, memberPubSub.PrefollowUsers(followeeIds...)...)
-	pubsubService := memberPubSub.NewPubSub(
-		ctx,
-		pubsubHandlers...,
+
+	pubSubHandlers := memberPubSub.PrefollowHandlers(followingIds...)
+	pubSubHandlers = append(
+		pubSubHandlers,
+		memberPubSub.NewBootstrapDiscoveryTopicHandler(discService.PubSubDiscoveryHandler()),
 	)
+	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
@@ -127,7 +118,6 @@ func NewMemberNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
-		dht.EnableRendezvous(),
 		dht.AddPeerCallbacks(discService.HandlePeerFound),
 		dht.BootstrapNodes(infos...),
 	)
@@ -190,14 +180,10 @@ func (m *MemberNode) Start() (err error) {
 		m.opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("member: failed to init node: %v", err)
+		return fmt.Errorf("member: failed to start node: %v", err)
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
-
-	if m.pseudoNode != nil {
-		m.node.Node().Peerstore().AddAddrs(m.pseudoNode.ID(), m.pseudoNode.Addrs(), time.Hour*24)
-	}
 
 	m.pubsubService.Run(m)
 
@@ -218,7 +204,7 @@ func (m *MemberNode) Start() (err error) {
 	return nil
 }
 
-func fetchFolloweeIds(ownerId string, followRepo FollowStorer) (ids []string, err error) {
+func fetchFollowingIds(ownerId string, followRepo FollowStorer) (ids []string, err error) {
 	if followRepo == nil {
 		return ids, nil
 	}
@@ -228,17 +214,17 @@ func fetchFolloweeIds(ownerId string, followRepo FollowStorer) (ids []string, er
 		limit      = uint64(20)
 	)
 	for {
-		followees, cur, err := followRepo.GetFollowees(ownerId, &limit, &nextCursor)
+		followings, cur, err := followRepo.GetFollowings(ownerId, &limit, &nextCursor)
 		if err != nil {
 			return ids, err
 		}
-		for _, f := range followees {
-			if f.Followee == ownerId {
+		for _, id := range followings {
+			if id == ownerId {
 				continue
 			}
-			ids = append(ids, f.Followee)
+			ids = append(ids, id)
 		}
-		if len(followees) < int(limit) {
+		if len(followings) < int(limit) {
 			break
 		}
 		nextCursor = cur
@@ -260,6 +246,7 @@ func (m *MemberNode) Connect(p warpnet.WarpAddrInfo) error {
 func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi := m.node.BaseNodeInfo()
 	bi.OwnerId = m.ownerId
+	bi.Hash = m.selfHashHex
 	return bi
 }
 
@@ -276,21 +263,22 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	if m == nil {
 		return nil, nil
 	}
+	if nodeIdStr == "" {
+		return nil, errors.New("member: stream: node id is empty")
+	}
+
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+	if nodeId == "" {
+		return nil, fmt.Errorf("member: stream: node id is malformed: %s", nodeIdStr)
+	}
 
 	var isMastodonID bool
 	if m.pseudoNode != nil {
 		isMastodonID = m.pseudoNode.IsMastodonID(nodeId)
 	}
 
-	peerInfo := m.node.Node().Peerstore().PeerInfo(nodeId)
-	if len(peerInfo.Addrs) == 0 && !isMastodonID {
-		log.Warningf("node %v is offline", nodeId)
-		return nil, warpnet.ErrNodeIsOffline
-	}
-
 	if isMastodonID {
-		log.Debugf("stream: peer %s is mastodon", nodeIdStr)
+		log.Debugf("member: stream: peer %s is mastodon", nodeIdStr)
 		return m.pseudoNode.Route(path, data)
 	}
 
@@ -397,6 +385,14 @@ func (m *MemberNode) setupHandlers(
 				handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
 			},
 			{
+				event.PUBLIC_POST_IS_FOLLOWING,
+				handler.StreamIsFollowingHandler(followRepo, authRepo),
+			},
+			{
+				event.PUBLIC_POST_IS_FOLLOWER,
+				handler.StreamIsFollowerHandler(followRepo, authRepo),
+			},
+			{
 				event.PUBLIC_POST_UNFOLLOW,
 				handler.StreamUnfollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
 			},
@@ -418,7 +414,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_TWEET,
-				handler.StreamGetTweetHandler(tweetRepo),
+				handler.StreamGetTweetHandler(tweetRepo, authRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_TWEET_STATS,
@@ -426,7 +422,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_REPLY,
-				handler.StreamGetReplyHandler(replyRepo),
+				handler.StreamGetReplyHandler(replyRepo, authRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_REPLIES,
@@ -437,8 +433,8 @@ func (m *MemberNode) setupHandlers(
 				handler.StreamGetFollowersHandler(authRepo, userRepo, followRepo, m),
 			},
 			{
-				event.PUBLIC_GET_FOLLOWEES,
-				handler.StreamGetFolloweesHandler(authRepo, userRepo, followRepo, m),
+				event.PUBLIC_GET_FOLLOWINGS,
+				handler.StreamGetFollowingsHandler(authRepo, userRepo, followRepo, m),
 			},
 			{
 				event.PUBLIC_POST_LIKE,
@@ -474,7 +470,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_MESSAGE,
-				handler.StreamSendMessageHandler(chatRepo, userRepo, m),
+				handler.StreamNewMessageHandler(chatRepo, userRepo, m),
 			},
 			{
 				event.PRIVATE_DELETE_MESSAGE,
@@ -506,7 +502,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PRIVATE_GET_NOTIFICATIONS,
-				handler.StreamGetNotificationsHandler(notificationRepo),
+				handler.StreamGetNotificationsHandler(notificationRepo, authRepo),
 			},
 		}...,
 	)

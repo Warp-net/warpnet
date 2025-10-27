@@ -26,10 +26,12 @@ const webpack = require('webpack');
 
 module.exports = {
     devServer: {
-        overlay: {
-            warnings: true,
-            errors: true
-        }
+        client: {
+            overlay: {
+                warnings: false,
+                errors: true
+            }
+        },
     },
     configureWebpack: {
         resolve: {

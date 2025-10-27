@@ -48,13 +48,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type DistributedHashTableDiscoverer interface {
+	ClosestPeers() ([]warpnet.WarpPeerID, error)
+	Close()
+}
+
 type ModeratorNode struct {
 	ctx context.Context
 
 	node    *node.WarpNode
 	options []libp2p.Option
 
-	dHashTable DistributedHashTableCloser
+	dHashTable DistributedHashTableDiscoverer
 
 	memoryStoreCloseF func() error
 
@@ -182,11 +187,15 @@ func (mn *ModeratorNode) Node() warpnet.P2PNode {
 func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	baseInfo := mn.node.BaseNodeInfo()
 	baseInfo.OwnerId = warpnet.ModeratorOwner
+	baseInfo.Hash = mn.selfHashHex
 	return baseInfo
 }
 
 func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+	if nodeId == "" {
+		return nil, fmt.Errorf("moderator: stream: node id is malformed: %s", nodeIdStr)
+	}
 	return mn.node.Stream(nodeId, path, data)
 }
 

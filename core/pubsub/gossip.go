@@ -33,6 +33,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math/rand"
 	"slices"
 	"strings"
 	"sync"
@@ -48,11 +49,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	PubSubDiscoveryTopic = "peer-discovery"
-)
-
-var ErrTopicClosed = pubsub.ErrTopicClosed
+const PubSubDiscoveryTopic = "peer-discovery"
 
 type GossipNodeConnector interface {
 	Node() warpnet.P2PNode
@@ -61,6 +58,13 @@ type GossipNodeConnector interface {
 }
 
 type topicHandler func(data []byte) error
+
+func NewDiscoveryTopicHandler(handler func(data []byte) error) TopicHandler {
+	return TopicHandler{
+		TopicName: PubSubDiscoveryTopic,
+		Handler:   handler,
+	}
+}
 
 type Gossip struct {
 	ctx    context.Context
@@ -79,13 +83,6 @@ type Gossip struct {
 type TopicHandler struct {
 	TopicName string
 	Handler   topicHandler
-}
-
-func NewDiscoveryTopicHandler(handler topicHandler) TopicHandler {
-	return TopicHandler{
-		TopicName: PubSubDiscoveryTopic,
-		Handler:   handler,
-	}
 }
 
 func NewGossip(
@@ -187,7 +184,7 @@ func (g *Gossip) runListener() error {
 			g.mx.RLock()
 			handlerF, ok := g.handlersMap[strings.TrimSpace(*msg.Topic)]
 			g.mx.RUnlock()
-			if !ok {
+			if !ok || handlerF == nil {
 				// default behavior
 				if err := g.SelfPublish(msg.Data); err != nil {
 					log.Errorf("gossip: self stream: %v", err)
@@ -221,9 +218,10 @@ func (g *Gossip) runGossip() (err error) {
 	}
 	g.isRunning.Store(true)
 
+	go g.runPeerInfoPublishing()
 	log.Infoln("gossip: started")
 
-	return nil
+	return
 }
 
 func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {
@@ -347,7 +345,7 @@ func (g *Gossip) NotSubscribers(topicName string) []warpnet.WarpAddrInfo {
 
 func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 	if g == nil || !g.isRunning.Load() {
-		return warpnet.WarpError("Gossip: service not initialized")
+		return warpnet.WarpError("gossip: service not initialized")
 	}
 
 	g.mx.Lock()
@@ -428,6 +426,78 @@ func (g *Gossip) IsGossipRunning() bool {
 	return g.isRunning.Load()
 }
 
+func (g *Gossip) runPeerInfoPublishing() {
+	jitter := time.Second * time.Duration(rand.Intn(60))
+	ticker := time.NewTicker((time.Minute * 5) + jitter)
+	defer ticker.Stop()
+
+	log.Infoln("pubsub: publisher started")
+	defer log.Infoln("pubsub: publisher stopped")
+
+	if err := g.publishPeerInfo(); err != nil { // initial publishing
+		log.Errorf("pubsub: initial publish peer info: %v", err)
+	}
+
+	for {
+		if !g.IsGossipRunning() {
+			return
+		}
+
+		select {
+		case <-g.ctx.Done():
+			return
+		case <-ticker.C:
+			err := g.publishPeerInfo()
+			if errors.Is(err, pubsub.ErrTopicClosed) {
+				return
+			}
+			if err != nil {
+				log.Errorf("pubsub: failed to publish peer info: %v", err)
+			}
+		}
+	}
+}
+
+const defaultPublishPeerInfoLimit = 10
+
+func (g *Gossip) publishPeerInfo() error {
+	myId := g.node.Node().ID()
+	myAddrs := g.node.Node().Addrs()
+	peerStore := g.node.Node().Peerstore()
+	limit := defaultPublishPeerInfoLimit
+
+	addrInfosMessage := []warpnet.WarpAddrInfo{{
+		ID:    myId,
+		Addrs: myAddrs,
+	}}
+
+	peerIds := peerStore.PeersWithAddrs()
+	for _, id := range peerIds {
+		if limit == 0 {
+			break
+		}
+		addrs := peerStore.Addrs(id)
+		addrInfosMessage = append(addrInfosMessage, warpnet.WarpAddrInfo{ID: id, Addrs: addrs})
+		limit--
+	}
+
+	data, err := json.Marshal(addrInfosMessage)
+	if err != nil {
+		return fmt.Errorf("failed to marshal peer info message: %v", err)
+	}
+
+	msg := event.Message{
+		Body:        json.RawMessage(data),
+		MessageId:   uuid.New().String(),
+		NodeId:      g.NodeInfo().ID.String(),
+		Destination: "None",
+		Timestamp:   time.Now(),
+		Version:     "0.0.0", // TODO
+	}
+
+	return g.Publish(msg, PubSubDiscoveryTopic)
+}
+
 func (g *Gossip) Close() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -459,6 +529,6 @@ func (g *Gossip) Close() (err error) {
 	g.relayCancelFuncs = nil
 	g.topics = nil
 	g.subs = nil
-	log.Infoln("Gossip: closed")
+	log.Infoln("gossip: closed")
 	return
 }

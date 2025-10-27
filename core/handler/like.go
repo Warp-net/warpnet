@@ -29,13 +29,15 @@ package handler
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
-	"strings"
 )
 
 type LikeTweetsStorer interface {
@@ -89,16 +91,22 @@ func StreamLikeHandler(
 			return nil, err
 		}
 
-		likedUser, err := userRepo.Get(ev.UserId) // get other user info
-		if err != nil {
-			return nil, err
+		isOwnTweetLike := ev.OwnerId == ev.UserId
+		if isOwnTweetLike { // own tweet like
+			return event.LikesCountResponse{num}, nil
 		}
 
-		if ev.OwnerId == ev.UserId { // own tweet like
+		isSomeoneLiked := ev.OwnerId != streamer.NodeInfo().OwnerId
+		if isSomeoneLiked { // likes exchange finished
 			return event.LikesCountResponse{num}, nil
 		}
-		if ev.OwnerId != streamer.NodeInfo().OwnerId { // like exchange finished
+
+		likedUser, err := userRepo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
 			return event.LikesCountResponse{num}, nil
+		}
+		if err != nil {
+			return nil, err
 		}
 
 		likeDataResp, err := streamer.GenericStream(
@@ -110,7 +118,10 @@ func StreamLikeHandler(
 				UserId:  ev.UserId,
 			},
 		)
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return event.LikesCountResponse{num}, nil
+		}
+		if err != nil {
 			return nil, err
 		}
 
@@ -138,22 +149,28 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		unlikedUser, err := userRepo.Get(ev.UserId)
-		if err != nil {
-			return nil, err
-		}
-
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		num, err := repo.Unlike(tweetId, ev.OwnerId)
 		if err != nil {
 			return nil, err
 		}
 
-		if ev.OwnerId == ev.UserId { // own tweet dislike
+		isOwnTweetDislike := ev.OwnerId == ev.UserId
+		if isOwnTweetDislike { // own tweet like
 			return event.LikesCountResponse{num}, nil
 		}
-		if ev.OwnerId != streamer.NodeInfo().OwnerId { // dislike exchange finished
+
+		isSomeoneDisliked := ev.OwnerId != streamer.NodeInfo().OwnerId
+		if isSomeoneDisliked { // likes exchange finished
 			return event.LikesCountResponse{num}, nil
+		}
+
+		unlikedUser, err := userRepo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return event.LikesCountResponse{num}, nil
+		}
+		if err != nil {
+			return nil, err
 		}
 
 		unlikeDataResp, err := streamer.GenericStream(
@@ -165,7 +182,10 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 				OwnerId: ev.OwnerId,
 			},
 		)
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return event.LikesCountResponse{num}, nil
+		}
+		if err != nil {
 			return nil, err
 		}
 

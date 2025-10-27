@@ -1,11 +1,17 @@
 kill:
-	pkill -9 main
+	pkill -9 warpnet
 
-dry-run:
-	go run -tags dryrun cmd/node/member/dry-run.go --node.network testnet
+backend-only-main:
+	go run -tags backend cmd/node/member/backend-only.go --node.network testnet
 
-run-member:
+backend-only-second:
+	go run -tags backend cmd/node/member/backend-only.go --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
+
+run-main:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
+
+run-second:
+	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
 
 moderator:
 	go run -tags=llama cmd/node/moderator/main.go --node.network testnet
@@ -14,7 +20,7 @@ tests:
 	CGO_ENABLED=0 go test -count=1 -short -v ./...
 
 prune-testnet:
-	(pkill -9 main || true) && rm -rf $(HOME)/.warpdata/testnet/storage
+	(pkill -9 main || true) && rm -rf $(HOME)/.warpdata/testnet/*
 
 check-heap:
 	go build -gcflags="-m" main.go
@@ -37,3 +43,5 @@ snapcraft:
 status:
 	snapcraft status warpnet
 
+build-windows:
+	cd cmd/node/member && wails build -clean -platform windows -tags webkit2_41 -m -nosyncgomod --node.network testnet && cd -

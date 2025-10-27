@@ -6,7 +6,7 @@ RUN apt update && apt install -y \
     curl tar build-essential ca-certificates \
     libgtk-3-dev libwebkit2gtk-4.1-dev
 
-ENV GO_VERSION=1.24.2
+ENV GO_VERSION=1.25.3
 RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -o go.tar.gz \
     && tar -C /usr/local -xzf go.tar.gz \
     && rm go.tar.gz

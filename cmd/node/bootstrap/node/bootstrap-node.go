@@ -31,13 +31,12 @@ import (
 	"fmt"
 
 	root "github.com/Warp-net/warpnet"
-	bootstrapPubSub "github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
+	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/node"
-	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -47,6 +46,22 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
+
+type DiscoveryHandler interface {
+	HandlePeerFound(peerInfo warpnet.WarpAddrInfo)
+	Run(n discovery.DiscoveryInfoStorer) error
+	Close()
+}
+
+type PubSubProvider interface {
+	Run(m pubsub.PubsubServerNodeConnector)
+	Close() error
+	OwnerID() string
+}
+
+type DistributedHashTableCloser interface {
+	Close()
+}
 
 type BootstrapNode struct {
 	ctx               context.Context
@@ -58,8 +73,7 @@ type BootstrapNode struct {
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
-	// validation block
-	selfHashHex string
+	selfHashHex       string
 }
 
 func NewBootstrapNode(
@@ -72,12 +86,12 @@ func NewBootstrapNode(
 		return nil, errors.New("private key is required")
 	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
-	pubsubService := bootstrapPubSub.NewPubSubBootstrap(
+
+	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
-		pubsub.NewDiscoveryTopicHandler(
-			discService.WrapPubSubDiscovery(discService.DefaultDiscoveryHandler),
-		),
+		pubsub.NewMemberDiscoveryTopicHandler(discService.PubSubDiscoveryHandler()),
 	)
+
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: fail creating memory peerstore: %w", err)
@@ -97,8 +111,7 @@ func NewBootstrapNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
-		dht.EnableRendezvous(),
-		dht.AddPeerCallbacks(discService.DefaultDiscoveryHandler),
+		dht.AddPeerCallbacks(discService.HandlePeerFound),
 		dht.BootstrapNodes(infos...),
 	)
 
@@ -141,6 +154,7 @@ func NewBootstrapNode(
 func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
 	bi := bn.node.BaseNodeInfo()
 	bi.OwnerId = warpnet.BootstrapOwner
+	bi.Hash = bn.selfHashHex
 	return bi
 }
 
@@ -180,7 +194,7 @@ func (bn *BootstrapNode) setupHandlers() {
 	bn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
-			handler.StreamGetInfoHandler(bn, bn.discService.DefaultDiscoveryHandler),
+			handler.StreamGetInfoHandler(bn, bn.discService.HandlePeerFound),
 		},
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_POST_NODE_CHALLENGE,
@@ -201,6 +215,9 @@ func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 		return
 	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+	if nodeId == "" {
+		return nil, fmt.Errorf("bootstrap: stream: node id is malformed: %s", nodeIdStr)
+	}
 	bt, err := bn.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		return bt, nil

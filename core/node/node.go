@@ -94,6 +94,7 @@ func NewWarpNode(
 	managersOpts := []libp2p.Option{
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(manager),
+		libp2p.DisableMetrics(), // TODO move to settings
 	}
 
 	opts = append(opts, managersOpts...)
@@ -104,6 +105,7 @@ func NewWarpNode(
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %v", err)
 	}
+
 	pool, err := stream.NewStreamPool(ctx, node)
 	if err != nil {
 		return nil, err
@@ -237,7 +239,7 @@ func (n *WarpNode) trackIncomingEvents() {
 		case event.EvtLocalReachabilityChanged:
 			r := ev.(event.EvtLocalReachabilityChanged).Reachability // it's int32 under the hood
 			log.Infof(
-				"node: event: reachability changed: %s",
+				"node: event: own node reachability changed: %s",
 				strings.ToLower(r.String()),
 			)
 			n.reachability.Store(int32(r))
@@ -254,7 +256,7 @@ func (n *WarpNode) trackIncomingEvents() {
 		case event.EvtAutoRelayAddrsUpdated:
 			newAddrsEvent := ev.(event.EvtAutoRelayAddrsUpdated)
 			if len(newAddrsEvent.RelayAddrs) != 0 {
-				log.Infof("node: event: relay address added: %s", newAddrsEvent.RelayAddrs[0].String())
+				log.Infoln("node: event: relay address added")
 			}
 		case event.EvtLocalAddressesUpdated:
 			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
@@ -263,6 +265,17 @@ func (n *WarpNode) trackIncomingEvents() {
 					addr.Address.String(), localAddrActions[int(addr.Action)],
 				)
 			}
+		case event.EvtHostReachableAddrsChanged:
+			peerReachability := ev.(event.EvtHostReachableAddrsChanged)
+			log.Infof(
+				`node: event: peer reachability changed: \n
+				     reachable: %v,
+					 unreachable: %v,
+					 unknown: %v`,
+				peerReachability.Reachable,
+				peerReachability.Unreachable,
+				peerReachability.Unknown,
+			)
 		default:
 			bt, _ := json.Marshal(ev)
 			log.Infof("node: event: %T %s", ev, bt)

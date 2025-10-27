@@ -29,10 +29,11 @@ package database
 
 import (
 	"crypto/rand"
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/goleak"
 
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
@@ -43,7 +44,7 @@ const testUserID = "01BX5ZZKBKACTAV9WEVGEMTEST"
 
 func setupChatRepo() (*ChatRepo, func(), error) {
 	var err error
-	db, err := local.New(".", true)
+	db, err := local.New(".", local.DefaultOptions().WithInMemory(true))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,8 +79,6 @@ func TestCreateAndGetChat(t *testing.T) {
 	assert.Equal(t, chat.OwnerId, fetched.OwnerId)
 	assert.Equal(t, chat.OtherUserId, fetched.OtherUserId)
 
-	closeWriter()
-
 }
 
 func TestDeleteChat(t *testing.T) {
@@ -102,8 +101,6 @@ func TestDeleteChat(t *testing.T) {
 	deleted, err := repo.GetChat(chat.Id)
 	assert.Error(t, err)
 	assert.Empty(t, deleted.Id)
-	closeWriter()
-
 }
 
 func TestGetUserChats(t *testing.T) {
@@ -126,9 +123,6 @@ func TestGetUserChats(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, chats, 3)
 	assert.Equal(t, cursor, "end")
-
-	closeWriter()
-
 }
 
 func TestCreateAndGetMessage(t *testing.T) {
@@ -154,9 +148,6 @@ func TestCreateAndGetMessage(t *testing.T) {
 	got, err := repo.GetMessage(chat.Id, created.Id)
 	assert.NoError(t, err)
 	assert.Equal(t, msg.Text, got.Text)
-
-	closeWriter()
-
 }
 
 func TestListMessages(t *testing.T) {
@@ -188,9 +179,6 @@ func TestListMessages(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, msgs, 5)
 	assert.Equal(t, cursor, "end")
-
-	closeWriter()
-
 }
 
 func TestDeleteMessage(t *testing.T) {
@@ -219,7 +207,5 @@ func TestDeleteMessage(t *testing.T) {
 	got, err := repo.GetMessage(chat.Id, created.Id)
 	assert.Error(t, err)
 	assert.Empty(t, got.Text)
-
-	closeWriter()
 
 }

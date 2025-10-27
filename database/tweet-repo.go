@@ -29,7 +29,6 @@ package database
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -37,7 +36,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/dgraph-io/badger/v3"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/Warp-net/warpnet/database/local"
@@ -101,7 +99,7 @@ func (repo *TweetRepo) IsBlocklisted(tweetId string) bool {
 		AddRange(local.FixedRangeKey).
 		Build()
 	_, err := repo.db.Get(fixedKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return false
 	}
 
@@ -182,7 +180,7 @@ func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err erro
 		AddParentId(tweetID).
 		Build()
 	sortableKeyBytes, err := repo.db.Get(fixedKey)
-	if errors.Is(err, badger.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return tweet, ErrTweetNotFound
 	}
 	if err != nil {
@@ -190,7 +188,7 @@ func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err erro
 	}
 
 	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
-	if errors.Is(err, badger.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return tweet, ErrTweetNotFound
 	}
 	if err != nil {
@@ -218,7 +216,7 @@ func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(countKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return 0, nil
 	}
 	if err != nil {
@@ -348,7 +346,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	}
 
 	_, err = repo.db.Get(retweetCountKey)
-	if !errors.Is(err, local.ErrKeyNotFound) {
+	if !local.IsNotFoundError(err) {
 		if _, err = txn.Increment(retweetCountKey); err != nil {
 			log.Debugf("Failed to increment retweet count for %s - %s", tweet.Id, err)
 			return newTweet, txn.Commit()
@@ -394,7 +392,7 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	}
 
 	_, err = repo.db.Get(retweetCountKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return txn.Commit()
 	}
 	if err != nil {
@@ -424,7 +422,7 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 	defer txn.Rollback()
 
 	bt, err := txn.Get(retweetCountKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return 0, ErrTweetNotFound
 	}
 	if err != nil {
@@ -453,7 +451,7 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 	defer txn.Rollback()
 
 	items, cur, err := txn.List(retweetersPrefix, limit, cursor)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return nil, "", ErrTweetNotFound
 	}
 	if err != nil {

@@ -77,6 +77,11 @@ func NewApp() *App {
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("app: startup panic: %v", r)
+		}
+	}()
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
 
@@ -88,7 +93,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.codeHashHex = codeHashHex
 
-	db, err := local.New(config.Config().Database.Path, false)
+	db, err := local.New(config.Config().Database.Path, local.DefaultOptions())
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)
@@ -156,6 +161,8 @@ func (a *App) runNode(psk security.PSK) {
 	}
 
 	// report to auth handler - Node set up and running
+	serverNodeAuthInfo.Identity.Owner.NodeId = a.node.NodeInfo().ID.String()
+	serverNodeAuthInfo.NodeInfo = a.node.NodeInfo()
 	a.readyChan <- serverNodeAuthInfo
 }
 
@@ -173,7 +180,7 @@ type AppMessage struct {
 func (a *App) Call(request AppMessage) (response AppMessage) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Errorf("method Call crashed: %v \n", r)
+			log.Errorf("app: call panic: %v", r)
 		}
 	}()
 	if a == nil || a.auth == nil {
@@ -288,12 +295,17 @@ func newErrorResp(msg string) stdjson.RawMessage {
 }
 
 func (a *App) close(_ context.Context) {
-	defer func() { recover() }()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("app: close panic: %v", r)
+		}
+	}()
 
 	log.Infoln("app: closing...")
 
-	a.db.Close()
-	a.node.Stop()
+	a.node.Stop() // close node first
+
+	a.db.Close() // db is a second
 
 	close(a.readyChan)
 }

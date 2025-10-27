@@ -30,6 +30,7 @@ package warpnet
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io"
 	gonet "net"
@@ -39,14 +40,15 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/Warp-net/warpnet/database/local"
 	"github.com/docker/go-units"
-	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/libp2p/go-libp2p-kad-dht/providers"
+	"github.com/libp2p/go-libp2p-kad-dht/records"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -78,6 +80,8 @@ import (
 
 var ErrAllDialsFailed = swarm.ErrAllDialsFailed
 
+type relayStatus string
+
 const (
 	BootstrapOwner = "bootstrap"
 	ModeratorOwner = "moderator"
@@ -99,11 +103,7 @@ const (
 	ReachabilityPublic  WarpReachability = network.ReachabilityPublic
 	ReachabilityPrivate WarpReachability = network.ReachabilityPrivate
 	ReachabilityUnknown WarpReachability = network.ReachabilityUnknown
-)
 
-type relayStatus string
-
-const (
 	RelayStatusOff     relayStatus = "off"
 	RelayStatusWaiting relayStatus = "waiting"
 	RelayStatusRunning relayStatus = "running"
@@ -155,8 +155,8 @@ type (
 	WarpProtocolID     = protocol.ID
 	WarpStream         = network.Stream
 	StreamHandler      = network.StreamHandler
-	WarpBatching       = datastore.Batching
-	WarpProviderStore  = providers.ProviderStore
+	WarpBatching       = local.Batching
+	WarpProviderStore  = records.ProviderStore
 	WarpAddrInfo       = peer.AddrInfo
 	WarpStreamStats    = network.Stats
 	WarpPeerRouting    = routing.PeerRouting
@@ -171,6 +171,7 @@ type (
 	WarpIDService      = identify.IDService
 	WarpAutoNAT        = autonat.AutoNAT
 	P2PNode            = host.Host
+	Discovery          = discovery.Discovery
 )
 
 type WarpStreamBody struct {
@@ -207,11 +208,6 @@ func (wh *WarpStreamHandler) String() string {
 	return fmt.Sprintf("%s %T", wh.Path, wh.Handler)
 }
 
-type WarpPubInfo struct {
-	ID    WarpPeerID `json:"peer_id"`
-	Addrs []string   `json:"addrs"`
-}
-
 type NodeInfo struct {
 	OwnerId        string           `json:"owner_id"`
 	ID             WarpPeerID       `json:"node_id"`
@@ -222,6 +218,7 @@ type NodeInfo struct {
 	BootstrapPeers []WarpAddrInfo   `json:"bootstrap_peers"`
 	Reachability   WarpReachability `json:"reachability"`
 	Protocols      []WarpProtocolID `json:"protocols"`
+	Hash           string           `json:"hash"`
 }
 
 func (ni NodeInfo) IsBootstrap() bool {
@@ -275,10 +272,11 @@ func NewWebsocketTransport(
 }
 
 func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {
+	_ = limiter.GetConnLimits().GetConnTotalLimit() // TODO move to settings
 	return connmgr.NewConnManager(
-		100,
-		limiter.GetConnLimits().GetConnTotalLimit(),
-		connmgr.WithGracePeriod(time.Hour*12),
+		20,
+		50,
+		connmgr.WithGracePeriod(time.Hour),
 	)
 }
 
@@ -407,7 +405,7 @@ func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromString(s)
 }
 
-func NewPeerstore(ctx context.Context, db datastore.Batching) (WarpPeerstore, error) {
+func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
 	store, err := pstoreds.NewPeerstore(ctx, db, pstoreds.DefaultOpts())
 	return WarpPeerstore(store), err
 }
@@ -445,4 +443,8 @@ func IsRelayAddress(addr string) bool {
 
 func IsRelayMultiaddress(maddr multiaddr.Multiaddr) bool {
 	return strings.Contains(maddr.String(), "p2p-circuit")
+}
+
+func IsNoAddressesError(err error) bool {
+	return errors.Is(err, routing.ErrNotFound)
 }

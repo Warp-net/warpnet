@@ -172,7 +172,7 @@ func (k DatabaseKey) DropId() string {
 	return key[:lastColon]
 }
 
-// AddFollowedId adds a followee ID segment to the key (reuses user ID validation)
+// AddFollowedId adds a following ID segment to the key (reuses user ID validation)
 func (pb *PrefixBuilder) AddWriterId(writerId string) *PrefixBuilder {
 	// Skip processing if there's already an error
 	//if pb.err != nil {

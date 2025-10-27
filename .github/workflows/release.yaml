@@ -9,7 +9,7 @@ on:
         type: string
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25.3'
   RELEASE_TAG: ${{ github.event.inputs.tag }}
   CGO_ENABLED: '1'
 
@@ -51,9 +51,15 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 
+      - name: Build (Wails, Linux with compression)
+        working-directory: cmd/node/member
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod -upx -upxflags="--best"
+
       - name: Build (Wails)
         working-directory: cmd/node/member
-        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
+        if: ${{ matrix.os != 'ubuntu-latest' }}
+        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod
 
       - name: Package + checksum (Linux AMD64)
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.platform == 'linux/amd64' }}

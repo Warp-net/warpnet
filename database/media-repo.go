@@ -29,10 +29,10 @@ package database
 
 import (
 	"encoding/hex"
-	"errors"
+	"time"
+
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/security"
-	"time"
 )
 
 const (
@@ -80,7 +80,7 @@ func (repo *MediaRepo) GetImage(userId, key string) (Base64Image, error) {
 		Build()
 
 	data, err := repo.db.Get(mediaKey)
-	if errors.Is(err, local.ErrKeyNotFound) {
+	if local.IsNotFoundError(err) {
 		return "", ErrMediaNotFound
 	}
 

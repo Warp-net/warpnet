@@ -44,10 +44,10 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/mattn/go-mastodon"
 	log "github.com/sirupsen/logrus"
 
 	stripper "github.com/grokify/html-strip-tags-go"
-	"github.com/mattn/go-mastodon"
 )
 
 const (
@@ -106,7 +106,7 @@ func NewWarpnetMastodonPseudoNode(
 			BackgroundImageKey: acct.HeaderStatic,
 			Bio:                stripper.StripTags(acct.Note),
 			CreatedAt:          acct.CreatedAt,
-			FolloweesCount:     uint64(acct.FollowingCount),
+			FollowingsCount:    uint64(acct.FollowingCount),
 			FollowersCount:     uint64(acct.FollowersCount),
 			Id:                 string(acct.ID),
 			NodeId:             pseudoPeerID.String(),
@@ -216,17 +216,24 @@ func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []
 	case event.PUBLIC_GET_REPLIES:
 		_ = json.Unmarshal(data, &getOneEvent)
 		resp, err = m.getRepliesHandler(getOneEvent.TweetId)
+	case event.PUBLIC_POST_FOLLOW:
+		_ = json.Unmarshal(data, &getOneEvent)
+		err = m.postFollowHandler(getOneEvent.UserId)
+	case event.PUBLIC_POST_UNFOLLOW:
+		_ = json.Unmarshal(data, &getOneEvent)
+		err = m.postUnfollowHandler(getOneEvent.UserId)
 	case event.PUBLIC_GET_FOLLOWERS:
 		_ = json.Unmarshal(data, &getAllEvent)
 		resp, err = m.getFollowersHandler(getAllEvent.UserId, getAllEvent.Cursor)
-	case event.PUBLIC_GET_FOLLOWEES:
+	case event.PUBLIC_GET_FOLLOWINGS:
 		_ = json.Unmarshal(data, &getAllEvent)
-		resp, err = m.getFolloweesHandler(getAllEvent.UserId, getAllEvent.Cursor)
+		resp, err = m.getFollowingsHandler(getAllEvent.UserId, getAllEvent.Cursor)
 	case event.PUBLIC_GET_IMAGE:
 		_ = json.Unmarshal(data, &getImage)
 		resp, err = m.getImageHandler(getImage.Key)
 	default:
-		return nil, warpnet.WarpError("unknown route")
+		msg := fmt.Sprintf("mastodon: unknown route %s", r.String())
+		return nil, warpnet.WarpError(msg)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("mastodon: failed to handle request, route: %s, message: %w", r.String(), err)
@@ -264,7 +271,7 @@ func (m *warpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 		Bio:                stripper.StripTags(acct.Note),
 		Birthdate:          birthdate,
 		CreatedAt:          acct.CreatedAt,
-		FolloweesCount:     uint64(acct.FollowingCount),
+		FollowingsCount:    uint64(acct.FollowingCount),
 		FollowersCount:     uint64(acct.FollowersCount),
 		Id:                 string(acct.ID),
 		IsOffline:          false,
@@ -332,7 +339,7 @@ func (m *warpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *strin
 			Bio:                stripper.StripTags(acct.Note),
 			Birthdate:          birthdate,
 			CreatedAt:          acct.CreatedAt,
-			FolloweesCount:     uint64(acct.FollowingCount),
+			FollowingsCount:    uint64(acct.FollowingCount),
 			FollowersCount:     uint64(acct.FollowersCount),
 			Id:                 string(acct.ID),
 			IsOffline:          false,
@@ -501,7 +508,7 @@ func (m *warpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.
 	}
 
 	stats := event.TweetStatsResponse{
-		TweetId:       event.ID(status.ID),
+		TweetId:       domain.ID(status.ID),
 		RetweetsCount: uint64(status.ReblogsCount),
 		LikeCount:     uint64(status.FavouritesCount),
 		RepliesCount:  uint64(status.RepliesCount),
@@ -590,25 +597,22 @@ func (m *warpnetMastodonPseudoNode) getFollowersHandler(userId string, cursor *s
 	}
 
 	resp := event.FollowersResponse{
-		Followee:  userId,
-		Followers: make([]domain.Following, 0, len(followers)),
-		Cursor:    string(followers[len(followers)-1].ID),
+		FollowingId: userId,
+		Followers:   make([]string, 0, len(followers)),
+		Cursor:      string(followers[len(followers)-1].ID),
 	}
 
 	for _, follower := range followers {
 		if follower == nil {
 			continue
 		}
-		resp.Followers = append(resp.Followers, domain.Following{
-			Followee: userId,
-			Follower: string(follower.ID),
-		})
+		resp.Followers = append(resp.Followers, domain.ID(follower.ID))
 	}
 
 	return resp, nil
 }
 
-func (m *warpnetMastodonPseudoNode) getFolloweesHandler(userId string, cursor *string) (event.FolloweesResponse, error) {
+func (m *warpnetMastodonPseudoNode) getFollowingsHandler(userId string, cursor *string) (event.FollowingsResponse, error) {
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
@@ -622,31 +626,44 @@ func (m *warpnetMastodonPseudoNode) getFolloweesHandler(userId string, cursor *s
 		pagination.SinceID = cursorId
 	}
 
-	followees, err := m.bridge.GetAccountFollowing(m.ctx, id, pagination)
+	followings, err := m.bridge.GetAccountFollowing(m.ctx, id, pagination)
 	if err != nil {
-		return event.FolloweesResponse{}, err
+		return event.FollowingsResponse{}, err
 	}
-	if len(followees) == 0 {
-		return event.FolloweesResponse{}, nil
-	}
-
-	resp := event.FolloweesResponse{
-		Follower:  userId,
-		Followees: make([]domain.Following, 0, len(followees)),
-		Cursor:    string(followees[len(followees)-1].ID),
+	if len(followings) == 0 {
+		return event.FollowingsResponse{}, nil
 	}
 
-	for _, followee := range followees {
-		if followee == nil {
+	resp := event.FollowingsResponse{
+		FollowerId: userId,
+		Followings: make([]string, 0, len(followings)),
+		Cursor:     string(followings[len(followings)-1].ID),
+	}
+
+	for _, following := range followings {
+		if following == nil {
 			continue
 		}
-		resp.Followees = append(resp.Followees, domain.Following{
-			Followee: string(followee.ID),
-			Follower: userId,
-		})
+		resp.Followings = append(resp.Followings, domain.ID(following.ID))
 	}
 
 	return resp, nil
+}
+
+func (m *warpnetMastodonPseudoNode) postFollowHandler(userId string) error {
+	var id mastodon.ID
+	_ = id.UnmarshalJSON([]byte(userId))
+
+	_, err := m.bridge.AccountFollow(m.ctx, id)
+	return err
+}
+
+func (m *warpnetMastodonPseudoNode) postUnfollowHandler(userId string) error {
+	var id mastodon.ID
+	_ = id.UnmarshalJSON([]byte(userId))
+
+	_, err := m.bridge.AccountUnfollow(m.ctx, id)
+	return err
 }
 
 func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageResponse, error) {
@@ -675,7 +692,7 @@ func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageR
 	case "image/webp":
 		prefix = "data:image/webp;base64,"
 	default:
-		return event.GetImageResponse{File: string(bt)}, errors.New("unknown image type")
+		log.Warningf("unknown image type: url: %s, headers: %v", url, resp.Header)
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(bt)

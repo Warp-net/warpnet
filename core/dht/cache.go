@@ -28,9 +28,10 @@ package dht
 
 import (
 	"fmt"
-	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	"strconv"
 	"time"
+
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 type cache struct {

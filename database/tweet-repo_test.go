@@ -28,9 +28,10 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"go.uber.org/goleak"
 	"testing"
 	"time"
+
+	"go.uber.org/goleak"
 
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
@@ -46,7 +47,7 @@ type TweetRepoTestSuite struct {
 
 func (s *TweetRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", true)
+	s.db, err = local.New(".", local.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
@@ -171,5 +172,4 @@ func TestTweetRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	suite.Run(t, new(TweetRepoTestSuite))
-	closeWriter()
 }

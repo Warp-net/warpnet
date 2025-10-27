@@ -17,7 +17,7 @@ import (
 )
 
 type Listener interface {
-	Accept(context.Context) (quic.Connection, error)
+	Accept(context.Context) (*quic.Conn, error)
 	Addr() net.Addr
 	Multiaddrs() []ma.Multiaddr
 	io.Closer
@@ -26,7 +26,7 @@ type Listener interface {
 type protoConf struct {
 	ln                  *listener
 	tlsConf             *tls.Config
-	allowWindowIncrease func(conn quic.Connection, delta uint64) bool
+	allowWindowIncrease func(conn *quic.Conn, delta uint64) bool
 }
 
 type quicListener struct {
@@ -80,7 +80,7 @@ func newQuicListener(tr RefCountedQUICTransport, quicConfig *quic.Config) (*quic
 	return cl, nil
 }
 
-func (l *quicListener) allowWindowIncrease(conn quic.Connection, delta uint64) bool {
+func (l *quicListener) allowWindowIncrease(conn *quic.Conn, delta uint64) bool {
 	l.protocolsMu.Lock()
 	defer l.protocolsMu.Unlock()
 
@@ -91,7 +91,7 @@ func (l *quicListener) allowWindowIncrease(conn quic.Connection, delta uint64) b
 	return conf.allowWindowIncrease(conn, delta)
 }
 
-func (l *quicListener) Add(tlsConf *tls.Config, allowWindowIncrease func(conn quic.Connection, delta uint64) bool, onRemove func()) (Listener, error) {
+func (l *quicListener) Add(association any, tlsConf *tls.Config, allowWindowIncrease func(conn *quic.Conn, delta uint64) bool, onRemove func()) (*listener, error) {
 	l.protocolsMu.Lock()
 	defer l.protocolsMu.Unlock()
 
@@ -105,14 +105,32 @@ func (l *quicListener) Add(tlsConf *tls.Config, allowWindowIncrease func(conn qu
 		}
 	}
 
-	ln := newSingleListener(l.l.Addr(), l.addrs, func() {
+	ln := &listener{
+		queue:             make(chan *quic.Conn, queueLen),
+		acceptLoopRunning: l.running,
+		addr:              l.l.Addr(),
+		addrs:             l.addrs,
+	}
+	if association != nil {
+		if tr, ok := l.transport.(*refcountedTransport); ok {
+			tr.associateForListener(association, ln)
+		}
+	}
+
+	ln.remove = func() {
+		if association != nil {
+			if tr, ok := l.transport.(*refcountedTransport); ok {
+				tr.RemoveAssociationsForListener(ln)
+			}
+		}
 		l.protocolsMu.Lock()
 		for _, proto := range tlsConf.NextProtos {
 			delete(l.protocols, proto)
 		}
 		l.protocolsMu.Unlock()
 		onRemove()
-	}, l.running)
+	}
+
 	for _, proto := range tlsConf.NextProtos {
 		l.protocols[proto] = protoConf{
 			ln:                  ln,
@@ -157,7 +175,7 @@ const queueLen = 16
 
 // A listener for a single ALPN protocol (set).
 type listener struct {
-	queue             chan quic.Connection
+	queue             chan *quic.Conn
 	acceptLoopRunning chan struct{}
 	addr              net.Addr
 	addrs             []ma.Multiaddr
@@ -167,17 +185,7 @@ type listener struct {
 
 var _ Listener = &listener{}
 
-func newSingleListener(addr net.Addr, addrs []ma.Multiaddr, remove func(), running chan struct{}) *listener {
-	return &listener{
-		queue:             make(chan quic.Connection, queueLen),
-		acceptLoopRunning: running,
-		remove:            remove,
-		addr:              addr,
-		addrs:             addrs,
-	}
-}
-
-func (l *listener) add(c quic.Connection) {
+func (l *listener) add(c *quic.Conn) {
 	select {
 	case l.queue <- c:
 	default:
@@ -185,7 +193,7 @@ func (l *listener) add(c quic.Connection) {
 	}
 }
 
-func (l *listener) Accept(ctx context.Context) (quic.Connection, error) {
+func (l *listener) Accept(ctx context.Context) (*quic.Conn, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
