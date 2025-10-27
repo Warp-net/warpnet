@@ -128,7 +128,7 @@ func init() {
 				Server: viper.GetString("node.metrics.server"),
 			},
 			Moderator: moderator{
-				Path: viper.GetString("node.moderator.modelpath"),
+				Path: strings.TrimSpace(viper.GetString("node.moderator.modelpath")),
 			},
 		},
 		Database: database{
