@@ -67,10 +67,9 @@ func init() {
 	pflag.String("node.host.v6", "::", "Node host IPv6")
 	pflag.String("node.port", "4001", "Node port")
 	pflag.String("node.seed", "", "Node seed for deterministic ID generation")
-	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env.")
+	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
-	//pflag.String("node.metrics.server", "", "Metrics server address")
-	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name AI model. Unused if 'cid' provided")
+	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name of 'AI' model")
 	pflag.String("logging.level", "info", "Logging level")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)

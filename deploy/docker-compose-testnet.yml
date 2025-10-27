@@ -46,5 +46,7 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - NODE_SEED=warpnet-moderator1
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
 
 

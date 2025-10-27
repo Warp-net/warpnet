@@ -35,6 +35,8 @@ services:
       - NODE_NETWORK=warpnet
       - LOGGING_LEVEL=info
 
+
+# TODO: I NEED AN EXPENSIVE AND POWERFUL MACHINE FOR THAT!
 #  warpnet-moderator:
 #    container_name: moderator1
 #    image: ghcr.io/warp-net/warpnet-moderator:latest
@@ -46,5 +48,4 @@ services:
 #      - NODE_NETWORK=warpnet
 #      - LOGGING_LEVEL=info
 #      - NODE_SEED=warpnet-moderator1
-#    volumes:
-#      - /root/.warpdata:/root/.warpdata:rw
+
