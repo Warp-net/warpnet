@@ -38,7 +38,6 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
-	_ "go.uber.org/automaxprocs" // DO NOT remove
 )
 
 func main() {
