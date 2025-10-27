@@ -433,7 +433,7 @@ func (g *Gossip) runPeerInfoPublishing() {
 	defer log.Infoln("pubsub: publisher stopped")
 
 	if err := g.publishPeerInfo(); err != nil { // initial publishing
-		log.Errorf("pubsub: failed to publish peer info: %v", err)
+		log.Errorf("pubsub: initial publish peer info: %v", err)
 	}
 
 	for {
@@ -445,36 +445,37 @@ func (g *Gossip) runPeerInfoPublishing() {
 		case <-g.ctx.Done():
 			return
 		case <-ticker.C:
-			if err := g.publishPeerInfo(); err != nil {
-				log.Errorf("pubsub: failed to Publish peer info: %v", err)
-				continue
+			err := g.publishPeerInfo()
+			if errors.Is(err, pubsub.ErrTopicClosed) {
+				return
+			}
+			if err != nil {
+				log.Errorf("pubsub: failed to publish peer info: %v", err)
 			}
 		}
 	}
 }
 
-const publishPeerInfoLimit = 10
+const defaultPublishPeerInfoLimit = 10
 
 func (g *Gossip) publishPeerInfo() error {
-	myInfo := g.NodeInfo()
-	addrInfosMessage := []warpnet.WarpPubInfo{{
-		ID:    myInfo.ID,
-		Addrs: myInfo.Addresses,
+	myId := g.node.Node().ID()
+	myAddrs := g.node.Node().Addrs()
+	peerStore := g.node.Node().Peerstore()
+	limit := defaultPublishPeerInfoLimit
+
+	addrInfosMessage := []warpnet.WarpAddrInfo{{
+		ID:    myId,
+		Addrs: myAddrs,
 	}}
 
-	limit := publishPeerInfoLimit
-	for _, pi := range g.Subscribers(PubSubDiscoveryTopic) {
+	peerIds := peerStore.PeersWithAddrs()
+	for _, id := range peerIds {
 		if limit == 0 {
 			break
 		}
-		if pi.ID.String() == "" {
-			continue
-		}
-		addrInfo := warpnet.WarpPubInfo{ID: pi.ID, Addrs: make([]string, 0, len(pi.Addrs))}
-		for _, addr := range pi.Addrs {
-			addrInfo.Addrs = append(addrInfo.Addrs, addr.String())
-		}
-		addrInfosMessage = append(addrInfosMessage, addrInfo)
+		addrs := peerStore.Addrs(id)
+		addrInfosMessage = append(addrInfosMessage, warpnet.WarpAddrInfo{ID: id, Addrs: addrs})
 		limit--
 	}
 
@@ -492,11 +493,7 @@ func (g *Gossip) publishPeerInfo() error {
 		Version:     "0.0.0", // TODO
 	}
 
-	err = g.Publish(msg, PubSubDiscoveryTopic)
-	if errors.Is(err, pubsub.ErrTopicClosed) {
-		return nil
-	}
-	return err
+	return g.Publish(msg, PubSubDiscoveryTopic)
 }
 
 func (g *Gossip) Close() (err error) {

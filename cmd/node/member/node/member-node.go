@@ -281,13 +281,6 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 		isMastodonID = m.pseudoNode.IsMastodonID(nodeId)
 	}
 
-	peerInfo := m.node.Node().Peerstore().PeerInfo(nodeId)
-
-	if len(peerInfo.Addrs) == 0 && !isMastodonID {
-		log.Warningf("member: stream: node %s doesn't have addresses", nodeIdStr)
-		return nil, warpnet.ErrNodeIsOffline
-	}
-
 	if isMastodonID {
 		log.Debugf("member: stream: peer %s is mastodon", nodeIdStr)
 		return m.pseudoNode.Route(path, data)

@@ -36,9 +36,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -46,7 +44,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	log "github.com/sirupsen/logrus"
@@ -78,15 +75,15 @@ type discoveryService struct {
 	node     DiscoveryInfoStorer
 	userRepo UserStorer
 	nodeRepo NodeStorer
-	version  *semver.Version
 
-	retrier retrier.Retrier
+	ownId   warpnet.WarpPeerID
 	limiter *leakyBucketRateLimiter
 	cache   *discoveryCache
 
 	// channel is needed to collect discoveries while node is setting up
-	discoveryChan chan warpnet.WarpAddrInfo
-	stopChan      chan struct{}
+	discoveryChan   chan warpnet.WarpAddrInfo
+	discoveryTicker *time.Ticker
+	stopChan        chan struct{}
 }
 
 //goland:noinspection ALL
@@ -95,22 +92,22 @@ func NewDiscoveryService(
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
 ) *discoveryService {
+	capacity := 16
+	leakPerSec := 1
 	return &discoveryService{
-		ctx, nil, userRepo, nodeRepo,
-		config.Config().Version,
-		retrier.New(time.Second, 5, retrier.FixedBackoff),
-		newRateLimiter(16, 1),
-		newDiscoveryCache(),
-		make(chan warpnet.WarpAddrInfo, 1000), make(chan struct{}),
+		ctx:             ctx,
+		node:            nil,
+		userRepo:        userRepo,
+		nodeRepo:        nodeRepo,
+		limiter:         newRateLimiter(capacity, leakPerSec),
+		cache:           newDiscoveryCache(),
+		discoveryChan:   make(chan warpnet.WarpAddrInfo, 1000),
+		discoveryTicker: time.NewTicker(time.Minute * 5),
+		stopChan:        make(chan struct{}),
 	}
 }
 
 func NewBootstrapDiscoveryService(ctx context.Context) *discoveryService {
-	addrs := make(map[warpnet.WarpPeerID][]warpnet.WarpAddress)
-	addrInfos, _ := config.Config().Node.AddrInfos()
-	for _, info := range addrInfos {
-		addrs[info.ID] = info.Addrs
-	}
 	return NewDiscoveryService(ctx, nil, nil)
 }
 
@@ -124,6 +121,7 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 	log.Infoln("discovery: service started")
 
 	s.node = n
+	s.ownId = s.node.NodeInfo().ID
 
 	isBootstrap := s.node.NodeInfo().IsBootstrap()
 	isModerator := s.node.NodeInfo().IsModerator()
@@ -132,21 +130,23 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 		for {
 			select {
 			case <-s.ctx.Done():
-				log.Errorf("discovery: context done")
 				return
 			case <-s.stopChan:
 				return
+			case <-s.discoveryTicker.C:
+				log.Warnf("discovery: stalled")
 			case info, ok := <-s.discoveryChan:
 				if !ok {
 					log.Infoln("discovery: service closed")
 					return
 				}
+				s.discoveryTicker.Reset(time.Minute * 5)
 
 				switch {
 				case isBootstrap:
 					s.handleAsBootstrap(info)
 				case isModerator:
-					// pass
+					s.handleAsModerator(info)
 				default:
 					s.handleAsMember(info)
 				}
@@ -156,24 +156,10 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 	return nil
 }
 
-func (s *discoveryService) Close() {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Errorf("discovery: close recovered from panic: %v", r)
-		}
-	}()
-	if s.stopChan == nil {
-		return
-	}
-	close(s.stopChan)
-	close(s.discoveryChan)
-}
-
 const dropMessagesLimit = 5
 
 func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
-	defer func() { recover() }()
-	if s == nil {
+	if s == nil || s.discoveryChan == nil {
 		log.Errorf("discovery: handle peer found: nil discovery service")
 		return
 	}
@@ -189,49 +175,36 @@ func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
 }
 
 type pubsubDiscoveryMessage struct {
-	Body []warpnet.WarpPubInfo `json:"body"`
+	Body []warpnet.WarpAddrInfo `json:"body"`
 }
 
 func (s *discoveryService) PubSubDiscoveryHandler() func([]byte) error {
 	return func(data []byte) error {
+		if s == nil || s.discoveryChan == nil {
+			log.Errorf("discovery: pubsub: nil discovery service")
+			return nil
+		}
+
 		if len(data) == 0 {
 			return nil
 		}
 
 		var msg pubsubDiscoveryMessage
-		outerErr := json.Unmarshal(data, &msg)
-		if outerErr != nil {
-			var single warpnet.WarpPubInfo
-			if innerErr := json.Unmarshal(data, &single); innerErr != nil {
-				return fmt.Errorf("pubsub: discovery: failed to decode discovery message: %v %s", innerErr, data)
-			}
-			msg.Body = []warpnet.WarpPubInfo{single}
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return fmt.Errorf("discovery: pubsub: unmarshal pubsub message: %v %s", err, data)
 		}
+
 		if len(msg.Body) == 0 {
-			return fmt.Errorf("pubsub: discovery: empty message: %s", string(data))
+			return fmt.Errorf("discovery: pubsub: empty message: %s", string(data))
 		}
 
 		for _, info := range msg.Body {
-			if info.ID == "" {
-				log.Errorf("pubsub: discovery: message has no ID: %s", string(data))
+			if info.ID == s.ownId {
 				continue
-			}
-			if info.ID == s.node.NodeInfo().ID {
-				continue
-			}
-
-			peerInfo := warpnet.WarpAddrInfo{
-				ID:    info.ID,
-				Addrs: make([]warpnet.WarpAddress, 0, len(info.Addrs)),
-			}
-
-			for _, addr := range info.Addrs {
-				ma, _ := warpnet.NewMultiaddr(addr)
-				peerInfo.Addrs = append(peerInfo.Addrs, ma)
 			}
 
 			select {
-			case s.discoveryChan <- peerInfo:
+			case s.discoveryChan <- info:
 			default:
 				log.Warnf("discovery: channel overflow %d", cap(s.discoveryChan))
 				for i := 0; i < dropMessagesLimit; i++ {
@@ -249,11 +222,7 @@ func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	if pi.ID == "" || len(pi.Addrs) == 0 {
-		return
-	}
-
-	if pi.ID == s.node.NodeInfo().ID {
+	if pi.ID == "" || pi.ID == s.ownId {
 		return
 	}
 
@@ -271,10 +240,7 @@ func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	if !hasPublicAddresses(pi.Addrs) {
-		log.Warningf("discovery: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
-		return
-	}
+	fmt.Printf("\033[1mdiscovery: new peer: %s \033[0m\n", pi.String())
 
 	err = s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
@@ -309,11 +275,6 @@ func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
 	}
 
 	if info.IsBootstrap() || info.IsModerator() {
-		return
-	}
-
-	if s.userRepo == nil {
-		log.Warning("discovery: user repo is nil")
 		return
 	}
 
@@ -355,16 +316,7 @@ func (s *discoveryService) handleAsBootstrap(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	if pi.ID == "" || len(pi.Addrs) == 0 {
-		return
-	}
-
-	if pi.ID == s.node.NodeInfo().ID {
-		return
-	}
-
-	if !hasPublicAddresses(pi.Addrs) {
-		log.Warningf("discovery: bootstrap handle: peer %s has no public addresses: %v", pi.ID.String(), pi.Addrs)
+	if pi.ID == "" || pi.ID == s.ownId {
 		return
 	}
 
@@ -396,23 +348,13 @@ func (s *discoveryService) handleAsBootstrap(pi warpnet.WarpAddrInfo) {
 	}
 }
 
+func (s *discoveryService) handleAsModerator(pi warpnet.WarpAddrInfo) {}
+
 const (
 	ErrChallengeMismatch         warpnet.WarpError = "challenge mismatch"
 	ErrChallengeSignatureInvalid warpnet.WarpError = "invalid challenge signature"
 )
 
-func (s *discoveryService) validateProtocols(info warpnet.NodeInfo) error {
-	for _, p := range info.Protocols {
-		if event.PUBLIC_POST_MODERATION_RESULT == p {
-			_, err := s.node.GenericStream(
-				info.ID.String(), event.PUBLIC_POST_MODERATION_RESULT, nil,
-			)
-
-			return err
-		}
-	}
-	return errors.New("no public moderation protocol found")
-}
 func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 	if s == nil {
 		return errors.New("nil discovery service")
@@ -535,11 +477,16 @@ func (s *discoveryService) requestNodeUser(pi warpnet.WarpAddrInfo, userId strin
 	return user, nil
 }
 
-func hasPublicAddresses(addrs []warpnet.WarpAddress) bool {
-	for _, addr := range addrs {
-		if warpnet.IsPublicMultiAddress(addr) {
-			return true
+func (s *discoveryService) Close() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("discovery: close recovered from panic: %v", r)
 		}
+	}()
+	if s.stopChan == nil {
+		return
 	}
-	return false
+	s.discoveryTicker.Stop()
+	close(s.stopChan)
+	close(s.discoveryChan)
 }

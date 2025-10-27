@@ -30,6 +30,7 @@ package warpnet
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io"
 	gonet "net"
@@ -79,6 +80,8 @@ import (
 
 var ErrAllDialsFailed = swarm.ErrAllDialsFailed
 
+type relayStatus string
+
 const (
 	BootstrapOwner = "bootstrap"
 	ModeratorOwner = "moderator"
@@ -100,11 +103,7 @@ const (
 	ReachabilityPublic  WarpReachability = network.ReachabilityPublic
 	ReachabilityPrivate WarpReachability = network.ReachabilityPrivate
 	ReachabilityUnknown WarpReachability = network.ReachabilityUnknown
-)
 
-type relayStatus string
-
-const (
 	RelayStatusOff     relayStatus = "off"
 	RelayStatusWaiting relayStatus = "waiting"
 	RelayStatusRunning relayStatus = "running"
@@ -207,11 +206,6 @@ func (wh *WarpStreamHandler) IsValid() bool {
 
 func (wh *WarpStreamHandler) String() string {
 	return fmt.Sprintf("%s %T", wh.Path, wh.Handler)
-}
-
-type WarpPubInfo struct {
-	ID    WarpPeerID `json:"peer_id"`
-	Addrs []string   `json:"addrs"`
 }
 
 type NodeInfo struct {
@@ -449,4 +443,8 @@ func IsRelayAddress(addr string) bool {
 
 func IsRelayMultiaddress(maddr multiaddr.Multiaddr) bool {
 	return strings.Contains(maddr.String(), "p2p-circuit")
+}
+
+func IsNoAddressesError(err error) bool {
+	return errors.Is(err, routing.ErrNotFound)
 }

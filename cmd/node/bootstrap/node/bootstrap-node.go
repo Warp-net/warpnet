@@ -31,7 +31,7 @@ import (
 	"fmt"
 
 	root "github.com/Warp-net/warpnet"
-	bootstrapPubSub "github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
+	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -47,6 +47,22 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type DiscoveryHandler interface {
+	HandlePeerFound(peerInfo warpnet.WarpAddrInfo)
+	Run(n discovery.DiscoveryInfoStorer) error
+	Close()
+}
+
+type PubSubProvider interface {
+	Run(m pubsub.PubsubServerNodeConnector)
+	Close() error
+	OwnerID() string
+}
+
+type DistributedHashTableCloser interface {
+	Close()
+}
+
 type BootstrapNode struct {
 	ctx               context.Context
 	node              *node.WarpNode
@@ -57,8 +73,7 @@ type BootstrapNode struct {
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
-	// validation block
-	selfHashHex string
+	selfHashHex       string
 }
 
 func NewBootstrapNode(
@@ -72,9 +87,9 @@ func NewBootstrapNode(
 	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
 
-	pubsubService := bootstrapPubSub.NewPubSubBootstrap(
+	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
-		bootstrapPubSub.NewMemberDiscoveryTopicHandler(discService.PubSubDiscoveryHandler()),
+		pubsub.NewMemberDiscoveryTopicHandler(discService.PubSubDiscoveryHandler()),
 	)
 
 	memoryStore, err := pstoremem.NewPeerstore()

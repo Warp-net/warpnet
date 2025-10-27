@@ -66,7 +66,7 @@ func (c *LoopbackConn) RemotePublicKey() p2pCrypto.PubKey {
 	return nil
 }
 
-func (s *LoopbackConn) As(target any) bool {
+func (s *LoopbackConn) As(_ any) bool {
 	return false
 }
 

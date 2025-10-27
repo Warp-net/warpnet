@@ -424,8 +424,6 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 					return
 				case <-ctx.Done():
 					return
-				default:
-					log.Errorf("node repo: query skipped: %s, output len: %d", err.Error(), len(output))
 				}
 			}
 			if !matches {
@@ -469,8 +467,6 @@ func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err err
 				return
 			case <-ctx.Done():
 				return
-			default:
-				log.Errorf("node repo: query sent: %d", len(output))
 			}
 		}
 	})

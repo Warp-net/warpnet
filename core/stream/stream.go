@@ -33,6 +33,9 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"io"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -40,8 +43,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
-	"io"
-	"time"
 )
 
 type NodeStreamer interface {
@@ -78,7 +79,7 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	}
 
 	// long-long wait in case of p2p-circuit stream
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	connectedness := p.n.Network().Connectedness(peerAddr.ID)
@@ -107,6 +108,9 @@ func (p *streamPool) send(
 	}
 
 	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
+	if warpnet.IsNoAddressesError(err) {
+		return nil, warpnet.ErrNodeIsOffline
+	}
 	if err != nil {
 		log.Debugf("stream: new: failed to create stream: %v", err)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
