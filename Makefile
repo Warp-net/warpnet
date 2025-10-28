@@ -13,7 +13,7 @@ run-main:
 run-second:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
 
-moderator:
+run-moderator:
 	go run -tags=llama cmd/node/moderator/main.go --node.network testnet
 
 tests:

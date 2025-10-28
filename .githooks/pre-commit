@@ -24,8 +24,12 @@ fi
 CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG")
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
 
+echo "CURRENT_VERSION=$CURRENT_VERSION"
+echo "PATCH=$PATCH"
+
 PATCH=$((PATCH + 1))
 NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
 
 sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
 sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VERSION}/" "$SNAPCRAFT"

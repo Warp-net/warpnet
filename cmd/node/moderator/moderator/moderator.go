@@ -34,7 +34,7 @@ type ModeratorNode interface {
 	Stop()
 	Node() warpnet.P2PNode
 	ID() warpnet.WarpPeerID
-	NearestPeers() []warpnet.WarpPeerID
+	ClosestPeers() []warpnet.WarpPeerID
 	NodeInfo() warpnet.NodeInfo
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
@@ -118,7 +118,7 @@ func (m *Moderator) lurkTweets() {
 		if m.isClosed.Load() {
 			return
 		}
-		peers := m.node.NearestPeers()
+		peers := m.node.ClosestPeers()
 		if len(peers) == 0 {
 			log.Warnf("moderator: no peers found")
 			continue

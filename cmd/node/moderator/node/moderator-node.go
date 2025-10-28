@@ -49,7 +49,7 @@ import (
 )
 
 type DistributedHashTableDiscoverer interface {
-	NearestPeers() []warpnet.WarpPeerID
+	ClosestPeers() []warpnet.WarpPeerID
 	Close()
 }
 
@@ -150,6 +150,10 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("node: failed to init node: %v", err)
 	}
 
+	for len(mn.ClosestPeers()) == 0 {
+		log.Infoln("waiting for closest peers to connect", mn.ClosestPeers())
+	}
+
 	mn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
@@ -176,8 +180,8 @@ func (mn *ModeratorNode) ID() warpnet.WarpPeerID {
 	return mn.node.Node().ID()
 }
 
-func (mn *ModeratorNode) NearestPeers() []warpnet.WarpPeerID {
-	return mn.dHashTable.NearestPeers()
+func (mn *ModeratorNode) ClosestPeers() []warpnet.WarpPeerID {
+	return mn.dHashTable.ClosestPeers()
 }
 
 func (mn *ModeratorNode) Node() warpnet.P2PNode {
@@ -199,7 +203,7 @@ func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 	return mn.node.Stream(nodeId, path, data)
 }
 
-func (mn *ModeratorNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+func (mn *ModeratorNode) SelfStream(_ stream.WarpRoute, _ any) (_ []byte, err error) {
 	return nil, errors.New("not implemented")
 }
 

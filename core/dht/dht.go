@@ -37,7 +37,6 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
-	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
@@ -228,8 +227,9 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 	}
 }
 
-func (d *distributedHashTable) NearestPeers() []warpnet.WarpPeerID {
-	return d.dht.RoutingTable().NearestPeers(kbucket.ConvertPeerID(d.dht.PeerID()), 5)
+func (d *distributedHashTable) ClosestPeers() []warpnet.WarpPeerID {
+	closest, _ := d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
+	return closest
 }
 
 func (d *distributedHashTable) Close() {
