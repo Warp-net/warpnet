@@ -111,6 +111,8 @@ func (m *Moderator) lurkTweets() {
 		log.Fatalf("moderator: nil cache")
 	}
 
+	peerStore := m.node.Node().Peerstore()
+
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -118,10 +120,9 @@ func (m *Moderator) lurkTweets() {
 		if m.isClosed.Load() {
 			return
 		}
-		peers := m.node.ClosestPeers()
+		peers := peerStore.PeersWithAddrs()
 		if len(peers) == 0 {
-			peersWithAddrs := m.node.Node().Peerstore().PeersWithAddrs()
-			log.Warnf("moderator: closest peers are not found, all peers: %v", peersWithAddrs)
+			log.Warn("moderator: peers are not found")
 			continue
 		}
 		for _, peer := range peers {

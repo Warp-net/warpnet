@@ -30,7 +30,6 @@ package dht
 import (
 	"context"
 	"errors"
-	"runtime"
 	"time"
 
 	"github.com/Warp-net/warpnet/config"
@@ -123,15 +122,13 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		dht.Mode(dht.ModeServer),
 		dht.ProtocolPrefix(protocol.ID("/"+config.Config().Node.Network)),
 		dht.Datastore(d.cfg.store),
-		dht.MaxRecordAge(time.Hour*24*365),
+		dht.MaxRecordAge(time.Hour),
 		dht.RoutingTableRefreshPeriod(time.Hour),
 		dht.RoutingTableRefreshQueryTimeout(time.Minute*5),
 		dht.BootstrapPeers(d.cfg.boostrapNodes...),
 		dht.ProviderStore(providerStore),
-		dht.RoutingTableLatencyTolerance(time.Hour*24),
+		dht.RoutingTableLatencyTolerance(time.Minute),
 		dht.BucketSize(50),
-		dht.Concurrency(runtime.NumCPU()/2),
-		dht.LookupCheckConcurrency(runtime.NumCPU()/2),
 	)
 	if err != nil {
 		log.Errorf("dht: new: %v", err)

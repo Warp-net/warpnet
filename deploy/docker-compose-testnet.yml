@@ -46,8 +46,7 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=debug
       - NODE_SEED=warpnet-moderator-testnet
-      - GOLOG_LOG_LEVEL=debug
-      - GOLOG_LOG_FMT=json
+      - GOLOG_LOG_LEVEL=info
       - GOLOG_OUTPUT=stdout
     volumes:
       - /root/.warpdata:/root/.warpdata:rw

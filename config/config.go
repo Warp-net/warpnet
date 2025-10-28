@@ -177,6 +177,9 @@ func (n node) IsTestnet() bool {
 }
 
 func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
+	if len(n.Bootstrap) == 0 {
+		return nil, fmt.Errorf("no bootstrap nodes found")
+	}
 	for _, addr := range n.Bootstrap {
 		maddr, err := warpnet.NewMultiaddr(addr)
 		if err != nil {
