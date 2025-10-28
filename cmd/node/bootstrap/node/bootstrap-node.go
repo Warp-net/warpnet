@@ -171,9 +171,7 @@ func (bn *BootstrapNode) Start() (err error) {
 	}
 	bn.setupHandlers()
 
-	for len(bn.node.Node().Peerstore().PeersWithAddrs()) == 0 {
-		log.Infoln("waiting for peers with addresses", bn.node.Node().Peerstore().PeersWithAddrs())
-	}
+	log.Infoln("peers with addresses", bn.node.Node().Peerstore().PeersWithAddrs())
 
 	//bn.pubsubService.Run(bn)
 	//if err := bn.discService.Run(bn); err != nil {
