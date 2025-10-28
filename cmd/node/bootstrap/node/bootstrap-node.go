@@ -171,12 +171,10 @@ func (bn *BootstrapNode) Start() (err error) {
 	}
 	bn.setupHandlers()
 
-	log.Infoln("peers with addresses", bn.node.Node().Peerstore().PeersWithAddrs())
-
-	//bn.pubsubService.Run(bn)
-	//if err := bn.discService.Run(bn); err != nil {
-	//	return err
-	//}
+	bn.pubsubService.Run(bn)
+	if err := bn.discService.Run(bn); err != nil {
+		return err
+	}
 
 	nodeInfo := bn.NodeInfo()
 	println()

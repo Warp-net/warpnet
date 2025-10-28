@@ -268,10 +268,7 @@ func (n *WarpNode) trackIncomingEvents() {
 		case event.EvtHostReachableAddrsChanged:
 			peerReachability := ev.(event.EvtHostReachableAddrsChanged)
 			log.Infof(
-				`node: event: peer reachability changed: \n
-				     reachable: %v,
-					 unreachable: %v,
-					 unknown: %v`,
+				`node: event: peer reachability changed: reachable: %v, unreachable: %v, unknown: %v`,
 				peerReachability.Reachable,
 				peerReachability.Unreachable,
 				peerReachability.Unknown,

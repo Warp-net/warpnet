@@ -121,7 +121,7 @@ func (m *Moderator) lurkTweets() {
 		peers := m.node.ClosestPeers()
 		if len(peers) == 0 {
 			peersWithAddrs := m.node.Node().Peerstore().PeersWithAddrs()
-			log.Warnf("moderator: closes peers are not found, all peers: %v", peersWithAddrs)
+			log.Warnf("moderator: closest peers are not found, all peers: %v", peersWithAddrs)
 			continue
 		}
 		for _, peer := range peers {
