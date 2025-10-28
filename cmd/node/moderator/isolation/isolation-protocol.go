@@ -33,9 +33,13 @@ func (ip *IsolationProtocol) IsolateTweet(nodeId warpnet.WarpPeerID, tweet domai
 		log.Errorf("broadcaster publish owner tweet update: %v", err)
 	}
 
-	var resultType = domain.OK
+	var (
+		resultType = domain.OK
+		reason     *string
+	)
 	if tweet.Moderation != nil && tweet.Moderation.IsOk {
 		resultType = domain.FAIL
+		reason = tweet.Moderation.Reason
 	}
 
 	result := event.ModerationResultEvent{
@@ -43,11 +47,11 @@ func (ip *IsolationProtocol) IsolateTweet(nodeId warpnet.WarpPeerID, tweet domai
 		NodeID:   ip.node.Node().ID().String(),
 		UserID:   tweet.UserId,
 		ObjectID: &tweet.Id,
-		Reason:   tweet.Moderation.Reason,
+		Reason:   reason,
 		Result:   resultType,
 	}
 	result.ObjectID = &tweet.Id
-	result.Reason = tweet.Moderation.Reason
+	result.Reason = reason
 	result.Result = domain.FAIL
 
 	_, err := ip.node.GenericStream(
