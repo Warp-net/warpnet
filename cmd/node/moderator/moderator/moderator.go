@@ -132,6 +132,9 @@ func (m *Moderator) lurkTweets() {
 			if m.cache.IsModeratedAlready(peer) {
 				continue
 			}
+			if peer == m.node.ID() {
+				continue
+			}
 
 			infoResp, err := m.node.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
 			if err != nil {
