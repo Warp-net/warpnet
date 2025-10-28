@@ -144,10 +144,6 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("node: failed to init node: %v", err)
 	}
 
-	for len(mn.ClosestPeers()) == 0 {
-		log.Infoln("waiting for closest peers to connect", mn.ClosestPeers())
-	}
-
 	mn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
