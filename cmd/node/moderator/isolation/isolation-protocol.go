@@ -27,7 +27,10 @@ func NewIsolationProtocol(node StreamingNode, pub Publisher) *IsolationProtocol 
 	return &IsolationProtocol{pub: pub, node: node}
 }
 
-func (ip *IsolationProtocol) IsolateTweet(nodeId warpnet.WarpPeerID, tweet domain.Tweet) {
+func (ip *IsolationProtocol) IsolateTweet(nodeId warpnet.WarpPeerID, tweet *domain.Tweet) {
+	if tweet == nil {
+		return
+	}
 	bt, _ := json.Marshal(tweet)
 	if err := ip.pub.PublishUpdateToFollowers(tweet.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
 		log.Errorf("broadcaster publish owner tweet update: %v", err)
@@ -37,7 +40,7 @@ func (ip *IsolationProtocol) IsolateTweet(nodeId warpnet.WarpPeerID, tweet domai
 		resultType = domain.OK
 		reason     *string
 	)
-	if tweet.Moderation != nil && tweet.Moderation.IsOk {
+	if tweet.Moderation != nil && !tweet.Moderation.IsOk {
 		resultType = domain.FAIL
 		reason = tweet.Moderation.Reason
 	}

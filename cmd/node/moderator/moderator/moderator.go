@@ -181,7 +181,7 @@ func (m *Moderator) lurkTweets() {
 	}
 }
 
-func (m *Moderator) moderateRandomUserTweet(peerID warpnet.WarpPeerID, userID string) (tweet domain.Tweet, err error) {
+func (m *Moderator) moderateRandomUserTweet(peerID warpnet.WarpPeerID, userID string) (*domain.Tweet, error) {
 	limit := uint64(20)
 
 	tweetsResp, err := m.node.GenericStream(
@@ -193,18 +193,22 @@ func (m *Moderator) moderateRandomUserTweet(peerID warpnet.WarpPeerID, userID st
 		},
 	)
 	if err != nil {
-		return tweet, fmt.Errorf("moderator: get tweets: %v", err)
+		return nil, fmt.Errorf("moderator: get tweets: %v", err)
+	}
+	if tweetsResp == nil || len(tweetsResp) == 0 {
+		return nil, nil
 	}
 
 	var tweetsEvent event.TweetsResponse
 	if err := json.Unmarshal(tweetsResp, &tweetsEvent); err != nil {
-		return tweet, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %v", tweetsResp, err)
+		return nil, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %v", tweetsResp, err)
 	}
 	if len(tweetsEvent.Tweets) == 0 {
-		return tweet, nil
+		return nil, nil
 	}
 
-	randomTweet := tweetsEvent.Tweets[rand.Intn(len(tweetsEvent.Tweets))]
+	randomTweet := new(domain.Tweet)
+	*randomTweet = tweetsEvent.Tweets[rand.Intn(len(tweetsEvent.Tweets))]
 	if randomTweet.Moderation != nil && randomTweet.Moderation.IsOk {
 		return randomTweet, nil
 	}

@@ -45,3 +45,6 @@ status:
 
 build-windows:
 	cd cmd/node/member && wails build -clean -platform windows -tags webkit2_41 -m -nosyncgomod --node.network testnet && cd -
+
+get-golang-armv6:
+	wget -c https://go.dev/dl/go1.25.3.linux-armv6l.tar.gz
