@@ -172,21 +172,21 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 }
 
 func (s *discoveryService) MDNSDiscoveryHandler(pi warpnet.WarpAddrInfo) {
-	if len(s.node.Peerstore().Addrs(pi.ID)) != 0 {
+	if s.node != nil && len(s.node.Peerstore().Addrs(pi.ID)) != 0 {
 		return
 	}
 	s.enqueue(pi, sourceMDNS)
 }
 
 func (s *discoveryService) DHTDiscoveryHandler(id warpnet.WarpPeerID) {
-	if len(s.node.Peerstore().Addrs(id)) != 0 {
+	if s.node != nil && len(s.node.Peerstore().Addrs(id)) != 0 {
 		return
 	}
 	s.enqueue(warpnet.WarpAddrInfo{ID: id}, sourceDHT)
 }
 
 func (s *discoveryService) StreamDiscoveryHandler(pi warpnet.WarpAddrInfo) {
-	if len(s.node.Peerstore().Addrs(pi.ID)) != 0 {
+	if s.node != nil && len(s.node.Peerstore().Addrs(pi.ID)) != 0 {
 		return // end discovery loop
 	}
 	s.enqueue(pi, sourceStream)
