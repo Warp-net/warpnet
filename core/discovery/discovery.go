@@ -49,6 +49,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type discoveredPeer struct {
+	ID     warpnet.WarpPeerID
+	Addrs  []warpnet.WarpAddress
+	Source string
+}
+
 type DiscoveryHandler func(warpnet.WarpAddrInfo)
 
 type DiscoveryInfoStorer interface {
@@ -81,7 +87,7 @@ type discoveryService struct {
 	cache   *discoveryCache
 
 	// channel is needed to collect discoveries while node is setting up
-	discoveryChan   chan warpnet.WarpAddrInfo
+	discoveryChan   chan discoveredPeer
 	discoveryTicker *time.Ticker
 	stopChan        chan struct{}
 }
@@ -92,16 +98,16 @@ func NewDiscoveryService(
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
 ) *discoveryService {
-	capacity := 16
-	leakPerSec := 1
+	capacity := 32
+	leakPerTenSec := 2
 	return &discoveryService{
 		ctx:             ctx,
 		node:            nil,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
-		limiter:         newRateLimiter(capacity, leakPerSec),
+		limiter:         newRateLimiter(capacity, leakPerTenSec),
 		cache:           newDiscoveryCache(),
-		discoveryChan:   make(chan warpnet.WarpAddrInfo, 1000),
+		discoveryChan:   make(chan discoveredPeer, 1000),
 		discoveryTicker: time.NewTicker(time.Minute * 5),
 		stopChan:        make(chan struct{}),
 	}
@@ -158,20 +164,17 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 
 const dropMessagesLimit = 5
 
+// HandlePeerFound MDNS handler
 func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
-	if s == nil || s.discoveryChan == nil {
-		log.Errorf("discovery: handle peer found: nil discovery service")
-		return
-	}
+	s.enqueue(pi, "mdns")
+}
 
-	select {
-	case s.discoveryChan <- pi:
-	default:
-		log.Warnf("discovery: channel overflow %d", cap(s.discoveryChan))
-		for i := 0; i < dropMessagesLimit; i++ {
-			<-s.discoveryChan // drop old data
-		}
-	}
+func (s *discoveryService) DHTDiscoveryHandler(pi warpnet.WarpAddrInfo) {
+	s.enqueue(pi, "dht")
+}
+
+func (s *discoveryService) StreamDiscoveryHandler(pi warpnet.WarpAddrInfo) {
+	s.enqueue(pi, "stream")
 }
 
 type pubsubDiscoveryMessage struct {
@@ -203,69 +206,84 @@ func (s *discoveryService) PubSubDiscoveryHandler() func([]byte) error {
 				continue
 			}
 
-			select {
-			case s.discoveryChan <- info:
-			default:
-				log.Warnf("discovery: channel overflow %d", cap(s.discoveryChan))
-				for i := 0; i < dropMessagesLimit; i++ {
-					<-s.discoveryChan // drop old data
-				}
-			}
+			s.enqueue(info, "gossip")
 		}
 		return nil
 	}
 }
 
-func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
+func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source string) {
+	if s == nil || s.discoveryChan == nil {
+		log.Errorf("discovery: handle new peer found: nil discovery service")
+		return
+	}
+
+	select {
+	case s.discoveryChan <- discoveredPeer{
+		ID:     pi.ID,
+		Addrs:  pi.Addrs,
+		Source: source,
+	}:
+	default:
+		log.Warnf("discovery: channel overflow %d", cap(s.discoveryChan))
+		for i := 0; i < dropMessagesLimit; i++ {
+			<-s.discoveryChan // drop old data
+		}
+	}
+}
+
+func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if s == nil || s.node == nil || s.nodeRepo == nil || s.userRepo == nil {
 		log.Errorf("discovery: handle: nil discovery service")
 		return
 	}
 
-	if pi.ID == "" || pi.ID == s.ownId {
+	if peer.ID == "" || peer.ID == s.ownId {
 		return
 	}
 
 	if !s.limiter.Allow() {
-		log.Infof("discovery: limited by rate limiter: %s", pi.ID.String())
+		log.Infof("discovery: limited by rate limiter: %s, source %s", peer.ID.String(), peer.Source)
 		return
 	}
 
-	ok, _ := s.nodeRepo.IsBlocklisted(pi.ID)
+	ok, _ := s.nodeRepo.IsBlocklisted(peer.ID)
 	if ok {
-		log.Infof("discovery: found blocklisted peer: %s", pi.ID.String())
+		log.Infof("discovery: found blocklisted peer: %s, source %s", peer.ID.String(), peer.Source)
 		return
 	}
+
+	pi := warpnet.WarpAddrInfo{peer.ID, peer.Addrs}
 
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
-		log.Debugf("discovery: connecting is backoffed: %s", pi.ID)
+		log.Debugf("discovery: connecting is backoffed: %s, source %s", pi.ID, peer.Source)
 		return
 	}
 	if err != nil {
-		log.Debugf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
+		log.Debugf("discovery: failed to connect to new peer %s: %v, source %s", pi.ID.String(), err, peer.Source)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
-		log.Warnf("discovery: failed to connect to new peer %s: %v", pi.ID.String(), err)
+		log.Warnf("discovery: failed to connect to new peer %s: %v, source %s", pi.ID.String(), err, peer.Source)
 		return
 	}
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: challenge is invalid for peer: %s\n", pi.ID.String())
+		log.Warnf("discovery: challenge is invalid for peer: %s, source %s", pi.ID.String(), peer.Source)
 		_ = s.nodeRepo.Blocklist(pi.ID)
 		s.node.Peerstore().RemovePeer(pi.ID)
 		return
 	}
 	if err != nil {
-		log.Errorf("discovery: failed to request challenge for peer %s: %v\n", pi.ID, err)
+		log.Errorf("discovery: failed to request challenge for peer %s: %v, source %s", pi.ID, err, peer.Source)
 		return
 	}
 
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
-		log.Errorf("discovery: request node info: %s", err.Error())
+		log.Errorf("discovery: request node info: %s, source %s", err.Error(), peer.Source)
 		return
 	}
 
@@ -278,11 +296,11 @@ func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
 		return
 	}
 
-	fmt.Printf("\033[1mdiscovery: connected to new peer: %s \033[0m\n", pi.String())
+	fmt.Printf("\033[1mdiscovery: connected to new peer: %s, source %s \033[0m\n", pi.String(), peer.Source)
 
 	user, err := s.requestNodeUser(pi, info.OwnerId)
 	if err != nil {
-		log.Errorf("discovery: request node user: %s", err.Error())
+		log.Errorf("discovery: request node user: %s, source %s", err.Error(), peer.Source)
 		return
 	}
 
@@ -292,58 +310,75 @@ func (s *discoveryService) handleAsMember(pi warpnet.WarpAddrInfo) {
 		return
 	}
 	if err != nil {
-		log.Errorf("discovery: create user from new peer: %s, user id %s", err, user.Id)
+		log.Errorf("discovery: create user from new peer: %s, user id %s, source %s", err, user.Id, peer.Source)
 		return
 	}
 	log.Infof(
-		"discovery: new user added: id: %s, name: %s, node_id: %s, created_at: %s, latency: %d",
+		"discovery: new user added: id: %s, name: %s, node_id: %s, created_at: %s, latency: %d, source: %s",
 		newUser.Id,
 		newUser.Username,
 		newUser.NodeId,
 		newUser.CreatedAt,
 		newUser.Latency,
+		peer.Source,
 	)
 }
 
-func (s *discoveryService) handleAsBootstrap(pi warpnet.WarpAddrInfo) {
+func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	if s == nil || s.node == nil {
 		log.Errorf("discovery: bootstrap handle: nil discovery service")
 		return
 	}
 
-	if pi.ID == "" || pi.ID == s.ownId {
+	if peer.ID == "" || peer.ID == s.ownId {
 		return
 	}
+
+	pi := warpnet.WarpAddrInfo{peer.ID, peer.Addrs}
 
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
-		log.Debugf("discovery: bootstrap handle: connecting is backoffed: %s", pi.ID)
+		log.Debugf("discovery: bootstrap handle: connecting is backoffed: %s, source %s", pi.ID, peer.Source)
 		return
 	}
 	if err != nil {
-		log.Debugf("discovery: bootstrap handle: connect to new peer %s: %v", pi.ID.String(), err)
+		log.Debugf(
+			"discovery: bootstrap handle: connect to new peer %s: %v, source %s",
+			pi.ID.String(), err, peer.Source,
+		)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
-		log.Warnf("discovery: bootstrap handle: connect to new peer %s: %v", pi.ID.String(), err)
+		log.Warnf(
+			"discovery: bootstrap handle: connect to new peer %s: %v, source %s",
+			pi.ID.String(), err, peer.Source,
+		)
 		return
 	}
 
-	log.Infof("node challenge request: %s", pi.ID.String())
+	log.Infof("node challenge request: %s, source %s", pi.ID.String(), peer.Source)
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: bootstrap handle: challenge is invalid for peer: %s\n", pi.ID.String())
+		log.Warnf(
+			"discovery: bootstrap handle: challenge is invalid for peer: %s, source %s",
+			pi.ID.String(), peer.Source,
+		)
 		s.node.Peerstore().RemovePeer(pi.ID)
 		return
 	}
 	if err != nil {
-		log.Errorf("discovery: bootstrap handle: request challenge for peer %s: %v\n", pi.ID, err)
+		log.Errorf(
+			"discovery: bootstrap handle: request challenge for peer %s: %v, source %s",
+			pi.ID, err, peer.Source,
+		)
 		return
 	}
 }
 
-func (s *discoveryService) handleAsModerator(pi warpnet.WarpAddrInfo) {}
+func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
+	fmt.Printf("id %s, addrs %v, source %s", pi.ID.String(), pi.Addrs, pi.Source)
+}
 
 const (
 	ErrChallengeMismatch         warpnet.WarpError = "challenge mismatch"

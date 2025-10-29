@@ -218,7 +218,7 @@ func (g *Gossip) runGossip() (err error) {
 	}
 	g.isRunning.Store(true)
 
-	go g.runPeerInfoPublishing()
+	go g.runPeerInfoPublishing(time.Minute * 5)
 	log.Infoln("gossip: started")
 
 	return
@@ -426,9 +426,8 @@ func (g *Gossip) IsGossipRunning() bool {
 	return g.isRunning.Load()
 }
 
-func (g *Gossip) runPeerInfoPublishing() {
-	jitter := time.Second * time.Duration(rand.Intn(60))
-	ticker := time.NewTicker((time.Minute * 5) + jitter)
+func (g *Gossip) runPeerInfoPublishing(duration time.Duration) {
+	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 
 	log.Infoln("pubsub: publisher started")
@@ -447,6 +446,9 @@ func (g *Gossip) runPeerInfoPublishing() {
 		case <-g.ctx.Done():
 			return
 		case <-ticker.C:
+			jitter := time.Second * time.Duration(rand.Intn(60))
+			ticker.Reset(duration + jitter)
+
 			err := g.publishPeerInfo()
 			if errors.Is(err, pubsub.ErrTopicClosed) {
 				return

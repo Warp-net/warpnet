@@ -118,7 +118,7 @@ func NewMemberNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
-		dht.AddPeerCallbacks(discService.HandlePeerFound),
+		dht.AddPeerCallbacks(discService.DHTDiscoveryHandler),
 		dht.BootstrapNodes(infos...),
 	)
 
@@ -354,7 +354,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_INFO,
-				handler.StreamGetInfoHandler(m, m.discService.HandlePeerFound),
+				handler.StreamGetInfoHandler(m, m.discService.StreamDiscoveryHandler),
 			},
 			{
 				event.PRIVATE_GET_STATS,

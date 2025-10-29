@@ -49,6 +49,7 @@ import (
 
 type DiscoveryHandler interface {
 	HandlePeerFound(peerInfo warpnet.WarpAddrInfo)
+	StreamDiscoveryHandler(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
 	Close()
 }
@@ -111,7 +112,7 @@ func NewBootstrapNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
-		dht.AddPeerCallbacks(discService.HandlePeerFound),
+		dht.AddPeerCallbacks(discService.DHTDiscoveryHandler),
 		dht.BootstrapNodes(infos...),
 	)
 
@@ -194,7 +195,7 @@ func (bn *BootstrapNode) setupHandlers() {
 	bn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_GET_INFO,
-			handler.StreamGetInfoHandler(bn, bn.discService.HandlePeerFound),
+			handler.StreamGetInfoHandler(bn, bn.discService.StreamDiscoveryHandler),
 		},
 		warpnet.WarpStreamHandler{
 			event.PUBLIC_POST_NODE_CHALLENGE,
