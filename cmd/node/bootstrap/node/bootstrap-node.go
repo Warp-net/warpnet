@@ -48,7 +48,6 @@ import (
 )
 
 type DiscoveryHandler interface {
-	HandlePeerFound(peerInfo warpnet.WarpAddrInfo)
 	StreamDiscoveryHandler(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
 	Close()

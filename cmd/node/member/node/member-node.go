@@ -96,7 +96,7 @@ func NewMemberNode(
 	owner := authRepo.GetOwner()
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
-	mdnsService := mdns.NewMulticastDNS(ctx, discService.HandlePeerFound)
+	mdnsService := mdns.NewMulticastDNS(ctx, discService.MDNSDiscoveryHandler)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
 	if err != nil {

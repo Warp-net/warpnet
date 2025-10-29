@@ -49,12 +49,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type discoveredPeer struct {
-	ID     warpnet.WarpPeerID
-	Addrs  []warpnet.WarpAddress
-	Source string
-}
-
 type DiscoveryHandler func(warpnet.WarpAddrInfo)
 
 type DiscoveryInfoStorer interface {
@@ -74,6 +68,21 @@ type UserStorer interface {
 	Create(user domain.User) (domain.User, error)
 	Update(userId string, newUser domain.User) (domain.User, error)
 	GetByNodeID(nodeID string) (user domain.User, err error)
+}
+
+type discoverySource string
+
+const (
+	sourceStream = discoverySource("stream")
+	sourceGossip = discoverySource("gossip")
+	sourceMDNS   = discoverySource("mdns")
+	sourceDHT    = discoverySource("dht")
+)
+
+type discoveredPeer struct {
+	ID     warpnet.WarpPeerID
+	Addrs  []warpnet.WarpAddress
+	Source discoverySource
 }
 
 type discoveryService struct {
@@ -162,19 +171,25 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 	return nil
 }
 
-const dropMessagesLimit = 5
-
-// HandlePeerFound MDNS handler
-func (s *discoveryService) HandlePeerFound(pi warpnet.WarpAddrInfo) {
-	s.enqueue(pi, "mdns")
+func (s *discoveryService) MDNSDiscoveryHandler(pi warpnet.WarpAddrInfo) {
+	if len(s.node.Peerstore().Addrs(pi.ID)) != 0 {
+		return
+	}
+	s.enqueue(pi, sourceMDNS)
 }
 
-func (s *discoveryService) DHTDiscoveryHandler(pi warpnet.WarpAddrInfo) {
-	s.enqueue(pi, "dht")
+func (s *discoveryService) DHTDiscoveryHandler(id warpnet.WarpPeerID) {
+	if len(s.node.Peerstore().Addrs(id)) != 0 {
+		return
+	}
+	s.enqueue(warpnet.WarpAddrInfo{ID: id}, sourceDHT)
 }
 
 func (s *discoveryService) StreamDiscoveryHandler(pi warpnet.WarpAddrInfo) {
-	s.enqueue(pi, "stream")
+	if len(s.node.Peerstore().Addrs(pi.ID)) != 0 {
+		return // end discovery loop
+	}
+	s.enqueue(pi, sourceStream)
 }
 
 type pubsubDiscoveryMessage struct {
@@ -206,15 +221,26 @@ func (s *discoveryService) PubSubDiscoveryHandler() func([]byte) error {
 				continue
 			}
 
-			s.enqueue(info, "gossip")
+			s.enqueue(info, sourceGossip)
 		}
 		return nil
 	}
 }
 
-func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source string) {
+const dropMessagesLimit = 5
+
+func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySource) {
 	if s == nil || s.discoveryChan == nil {
 		log.Errorf("discovery: handle new peer found: nil discovery service")
+		return
+	}
+
+	if pi.ID == "" || pi.ID == s.ownId {
+		return
+	}
+
+	if !s.limiter.Allow() {
+		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
 		return
 	}
 
@@ -238,18 +264,9 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	if peer.ID == "" || peer.ID == s.ownId {
-		return
-	}
-
-	if !s.limiter.Allow() {
-		log.Infof("discovery: limited by rate limiter: %s, source %s", peer.ID.String(), peer.Source)
-		return
-	}
-
 	ok, _ := s.nodeRepo.IsBlocklisted(peer.ID)
 	if ok {
-		log.Infof("discovery: found blocklisted peer: %s, source %s", peer.ID.String(), peer.Source)
+		log.Infof("discovery: source '%s': found blocklisted peer: %s", peer.Source, peer.ID.String())
 		return
 	}
 
@@ -257,33 +274,40 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
-		log.Debugf("discovery: connecting is backoffed: %s, source %s", pi.ID, peer.Source)
+		log.Debugf("discovery: source '%s': connecting is backoffed: %s", peer.Source, pi.ID)
 		return
 	}
 	if err != nil {
-		log.Debugf("discovery: failed to connect to new peer %s: %v, source %s", pi.ID.String(), err, peer.Source)
+		log.Debugf(
+			"discovery: source '%s': failed to connect to new peer %s: %v",
+			peer.Source, pi.ID.String(), err,
+		)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
-		log.Warnf("discovery: failed to connect to new peer %s: %v, source %s", pi.ID.String(), err, peer.Source)
+		log.Warnf(
+			"discovery: source '%s': failed to connect to new peer %s: %v",
+			peer.Source, pi.ID.String(), err)
 		return
 	}
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: challenge is invalid for peer: %s, source %s", pi.ID.String(), peer.Source)
+		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
 		_ = s.nodeRepo.Blocklist(pi.ID)
 		s.node.Peerstore().RemovePeer(pi.ID)
 		return
 	}
 	if err != nil {
-		log.Errorf("discovery: failed to request challenge for peer %s: %v, source %s", pi.ID, err, peer.Source)
+		log.Errorf(
+			"discovery: source '%s': failed to request challenge for peer %s: %v",
+			peer.Source, pi.ID, err)
 		return
 	}
 
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
-		log.Errorf("discovery: request node info: %s, source %s", err.Error(), peer.Source)
+		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
 		return
 	}
 
@@ -296,11 +320,11 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	fmt.Printf("\033[1mdiscovery: connected to new peer: %s, source %s \033[0m\n", pi.String(), peer.Source)
+	fmt.Printf("\033[1mdiscovery: connected to new peer: %s, source '%s' \033[0m\n", pi.String(), peer.Source)
 
 	user, err := s.requestNodeUser(pi, info.OwnerId)
 	if err != nil {
-		log.Errorf("discovery: request node user: %s, source %s", err.Error(), peer.Source)
+		log.Errorf("discovery: source '%s': request node user: %s", peer.Source, err.Error())
 		return
 	}
 
@@ -310,7 +334,9 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 	if err != nil {
-		log.Errorf("discovery: create user from new peer: %s, user id %s, source %s", err, user.Id, peer.Source)
+		log.Errorf(
+			"discovery: source '%s': create user %s from new peer: %v, ",
+			peer.Source, user.Id, err)
 		return
 	}
 	log.Infof(
@@ -338,30 +364,30 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
-		log.Debugf("discovery: bootstrap handle: connecting is backoffed: %s, source %s", pi.ID, peer.Source)
+		log.Debugf("discovery: source '%s': bootstrap handle: connecting is backoffed: %s", peer.Source, pi.ID)
 		return
 	}
 	if err != nil {
 		log.Debugf(
-			"discovery: bootstrap handle: connect to new peer %s: %v, source %s",
-			pi.ID.String(), err, peer.Source,
+			"discovery: source '%s': bootstrap handle: connect to new peer %s: %v",
+			peer.Source, pi.ID.String(), err,
 		)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
 		log.Warnf(
-			"discovery: bootstrap handle: connect to new peer %s: %v, source %s",
-			pi.ID.String(), err, peer.Source,
+			"discovery: source '%s': bootstrap handle: connect to new peer %s: %v",
+			peer.Source, pi.ID.String(), err,
 		)
 		return
 	}
 
-	log.Infof("node challenge request: %s, source %s", pi.ID.String(), peer.Source)
+	log.Infof("node challenge request: %s, source '%s'", pi.ID.String(), peer.Source)
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf(
-			"discovery: bootstrap handle: challenge is invalid for peer: %s, source %s",
+			"discovery: source '%s': bootstrap handle: challenge is invalid for peer: %s, source '%s'",
 			pi.ID.String(), peer.Source,
 		)
 		s.node.Peerstore().RemovePeer(pi.ID)
@@ -369,15 +395,15 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	}
 	if err != nil {
 		log.Errorf(
-			"discovery: bootstrap handle: request challenge for peer %s: %v, source %s",
-			pi.ID, err, peer.Source,
+			"discovery: source '%s': bootstrap handle: request challenge for peer %s: %v",
+			peer.Source, pi.ID, err,
 		)
 		return
 	}
 }
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
-	fmt.Printf("id %s, addrs %v, source %s", pi.ID.String(), pi.Addrs, pi.Source)
+	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
 }
 
 const (
