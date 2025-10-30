@@ -384,14 +384,16 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return nil
 	}
 
-	term, err := s.nodeRepo.BlocklistTerm(pi.ID)
-	if err != nil {
-		log.Errorf("discovery: peer %s blocklist term: %s", pi.ID.String(), err.Error())
-	}
-
 	var level int
-	if term != nil {
-		level = int(term.Level)
+	if s.nodeRepo != nil {
+		term, err := s.nodeRepo.BlocklistTerm(pi.ID)
+		if err != nil {
+			log.Errorf("discovery: peer %s blocklist term: %s", pi.ID.String(), err.Error())
+		}
+
+		if term != nil {
+			level = int(term.Level)
+		}
 	}
 
 	ownChallenges, samples, err := s.composeChallengeRequest(level)
