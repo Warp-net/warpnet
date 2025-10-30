@@ -56,7 +56,7 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpne
 			return nil, err
 		}
 
-		solutions := make([]event.ChallengeSolution, 0, len(ev.Samples))
+		solutions := make([]event.ChallengeSolution, len(ev.Samples))
 
 		for i, sample := range ev.Samples {
 			challenge, err := security.ResolveChallenge(
