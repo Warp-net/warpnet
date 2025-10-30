@@ -374,12 +374,19 @@ type GetImageResponse struct {
 }
 
 type ChallengeEvent struct {
+	Samples []ChallengeSample `json:"samples"`
+}
+type ChallengeSample struct {
 	DirStack  []int `json:"dir_stack"` // every index is level and value is dir num
 	FileStack []int `json:"file_stack"`
 	Nonce     int64 `json:"nonce"`
 }
 
 type ChallengeResponse struct {
+	Solutions []ChallengeSolution `json:"solutions"`
+}
+
+type ChallengeSolution struct {
 	Challenge string `json:"challenge"`
 	Signature string `json:"signature"`
 }

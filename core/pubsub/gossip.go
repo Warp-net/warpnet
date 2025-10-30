@@ -40,6 +40,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -49,7 +50,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const PubSubDiscoveryTopic = "peer-discovery"
+const pubSubDiscoveryTopic = "peer-discovery"
 
 type GossipNodeConnector interface {
 	Node() warpnet.P2PNode
@@ -58,13 +59,6 @@ type GossipNodeConnector interface {
 }
 
 type topicHandler func(data []byte) error
-
-func NewDiscoveryTopicHandler(handler func(data []byte) error) TopicHandler {
-	return TopicHandler{
-		TopicName: PubSubDiscoveryTopic,
-		Handler:   handler,
-	}
-}
 
 type Gossip struct {
 	ctx    context.Context
@@ -497,7 +491,7 @@ func (g *Gossip) publishPeerInfo() error {
 		Version:     "0.0.0", // TODO
 	}
 
-	return g.Publish(msg, PubSubDiscoveryTopic)
+	return g.Publish(msg, pubSubDiscoveryTopic)
 }
 
 func (g *Gossip) Close() (err error) {
@@ -533,4 +527,33 @@ func (g *Gossip) Close() (err error) {
 	g.subs = nil
 	log.Infoln("gossip: closed")
 	return
+}
+
+type pubsubDiscoveryMessage struct {
+	Body []warpnet.WarpAddrInfo `json:"body"`
+}
+
+func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandler {
+	return TopicHandler{
+		TopicName: pubSubDiscoveryTopic,
+		Handler: func(data []byte) error {
+			if len(data) == 0 {
+				return nil
+			}
+
+			var msg pubsubDiscoveryMessage
+			if err := json.Unmarshal(data, &msg); err != nil {
+				return fmt.Errorf("pubsub: discovery: unmarshal pubsub message: %v %s", err, data)
+			}
+
+			if len(msg.Body) == 0 {
+				return fmt.Errorf("pubsub: discovery: empty message: %s", string(data))
+			}
+
+			for _, info := range msg.Body {
+				discHandler(info)
+			}
+			return nil
+		},
+	}
 }

@@ -96,7 +96,7 @@ func NewMemberNode(
 	owner := authRepo.GetOwner()
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
-	mdnsService := mdns.NewMulticastDNS(ctx, discService.MDNSDiscoveryHandler)
+	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
 	if err != nil {
@@ -106,7 +106,7 @@ func NewMemberNode(
 	pubSubHandlers := memberPubSub.PrefollowHandlers(followingIds...)
 	pubSubHandlers = append(
 		pubSubHandlers,
-		memberPubSub.NewBootstrapDiscoveryTopicHandler(discService.PubSubDiscoveryHandler()),
+		memberPubSub.NewBootstrapDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
@@ -118,7 +118,7 @@ func NewMemberNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
-		dht.AddPeerCallbacks(discService.DHTDiscoveryHandler),
+		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(infos...),
 	)
 
@@ -354,7 +354,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_INFO,
-				handler.StreamGetInfoHandler(m, m.discService.StreamDiscoveryHandler),
+				handler.StreamGetInfoHandler(m, m.discService.DiscoveryHandlerStream),
 			},
 			{
 				event.PRIVATE_GET_STATS,

@@ -38,7 +38,7 @@ import (
 )
 
 type DiscoveryHandler interface {
-	StreamDiscoveryHandler(pi warpnet.WarpAddrInfo)
+	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
 	Close()
 }
