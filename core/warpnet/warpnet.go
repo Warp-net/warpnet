@@ -88,8 +88,9 @@ const (
 	WarpnetName    = "warpnet"
 	NoiseID        = noise.ID
 
-	Connected = network.Connected
-	Limited   = network.Limited
+	Connected    = network.Connected
+	Limited      = network.Limited
+	Disconnected = network.NotConnected
 
 	P_IP4 = multiaddr.P_IP4
 	P_IP6 = multiaddr.P_IP6

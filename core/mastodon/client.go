@@ -121,7 +121,7 @@ func NewWarpnetMastodonPseudoNode(
 			Version:        version,
 			Addresses:      []string{mastodonPseudoMaddr},
 			StartTime:      time.Now(),
-			RelayState:     "off",
+			RelayState:     warpnet.RelayStatusOff,
 			BootstrapPeers: nil,
 			Reachability:   warpnet.ReachabilityPublic,
 		},

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -207,34 +206,34 @@ func (m *Moderator) moderateRandomUserTweet(peerID warpnet.WarpPeerID, userID st
 		return nil, nil
 	}
 
-	randomTweet := new(domain.Tweet)
-	*randomTweet = tweetsEvent.Tweets[rand.Intn(len(tweetsEvent.Tweets))]
-	if randomTweet.Moderation != nil && randomTweet.Moderation.IsOk {
-		return randomTweet, nil
-	}
-	if randomTweet.Text == "" {
-		return randomTweet, nil
-	}
+	for _, tweet := range tweetsEvent.Tweets {
+		if tweet.Moderation != nil {
+			continue
+		}
+		if tweet.Text == "" {
+			continue
+		}
 
-	result, reason, err := engine.Moderate(randomTweet.Text)
-	if err != nil {
-		return randomTweet, err
-	}
+		result, reason, err := engine.Moderate(tweet.Text)
+		if err != nil {
+			return nil, err
+		}
 
-	if !result {
-		randomTweet.Text = ""
-	}
+		if !result {
+			tweet.Text = ""
+		}
 
-	randomTweet.Moderation = &domain.TweetModeration{
-		IsModerated: true,
-		ModeratorID: m.node.ID().String(),
-		Model:       "llama2",
-		IsOk:        domain.ModerationResult(result) != domain.FAIL,
-		Reason:      &reason,
-		TimeAt:      time.Now(),
+		tweet.Moderation = &domain.TweetModeration{
+			IsModerated: true,
+			ModeratorID: m.node.ID().String(),
+			Model:       "llama2",
+			IsOk:        domain.ModerationResult(result) != domain.FAIL,
+			Reason:      &reason,
+			TimeAt:      time.Now(),
+		}
+		return &tweet, nil
 	}
-
-	return randomTweet, nil
+	return nil, nil
 }
 
 func (m *Moderator) lurkUserDescriptions() {

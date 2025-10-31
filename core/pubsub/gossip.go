@@ -460,6 +460,7 @@ func (g *Gossip) publishPeerInfo() error {
 	myId := g.node.Node().ID()
 	myAddrs := g.node.Node().Addrs()
 	peerStore := g.node.Node().Peerstore()
+	network := g.node.Node().Network()
 	limit := defaultPublishPeerInfoLimit
 
 	addrInfosMessage := []warpnet.WarpAddrInfo{{
@@ -468,9 +469,13 @@ func (g *Gossip) publishPeerInfo() error {
 	}}
 
 	peerIds := peerStore.PeersWithAddrs()
+
 	for _, id := range peerIds {
 		if limit == 0 {
 			break
+		}
+		if network.Connectedness(id) == warpnet.Disconnected {
+			continue
 		}
 		addrs := peerStore.Addrs(id)
 		addrInfosMessage = append(addrInfosMessage, warpnet.WarpAddrInfo{ID: id, Addrs: addrs})

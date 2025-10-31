@@ -186,13 +186,14 @@ func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 	}
 }
 
+var localAddrActions = map[int]string{
+	0: "unknown",
+	1: "added",
+	2: "maintained",
+	3: "removed",
+}
+
 func (n *WarpNode) trackIncomingEvents() {
-	localAddrActions := map[int]string{
-		0: "unknown",
-		1: "added",
-		2: "maintained",
-		3: "removed",
-	}
 
 	for ev := range n.eventsSub.Out() {
 		switch ev.(type) {
@@ -214,11 +215,15 @@ func (n *WarpNode) trackIncomingEvents() {
 		case event.EvtPeerConnectednessChanged:
 			connectednessEvent := ev.(event.EvtPeerConnectednessChanged)
 			pid := connectednessEvent.Peer.String()
+			if connectednessEvent.Connectedness == warpnet.Limited {
+				return
+			}
 			log.Infof(
 				"node: event: peer ...%s connectedness updated: %s",
 				pid[len(pid)-6:],
 				connectednessEvent.Connectedness.String(),
 			)
+
 		case event.EvtPeerIdentificationFailed:
 			identificationEvent := ev.(event.EvtPeerIdentificationFailed)
 			pid := identificationEvent.Peer.String()
