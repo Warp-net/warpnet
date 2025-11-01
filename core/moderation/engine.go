@@ -44,7 +44,7 @@ func NewLlamaEngine(modelPath string, threads int) (_ *llamaEngine, err error) {
 
 	opts := []llama.PredictOption{
 		llama.SetThreads(threads),
-		llama.SetTokens(32),
+		llama.SetTokens(64),
 		llama.SetTopP(0.9),
 		llama.SetTemperature(0.0),
 		llama.SetSeed(42),

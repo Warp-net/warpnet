@@ -28,6 +28,9 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"errors"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -39,16 +42,24 @@ type ModerationNotifier interface {
 	Add(not domain.Notification) error
 }
 
-func StreamModerationResultHandler(repo ModerationNotifier) warpnet.WarpHandlerFunc {
+type ModerationTweetUpdater interface {
+	Update(tweet domain.Tweet) error
+}
+
+type ModerationOwnerFetcher interface {
+	GetOwner() domain.Owner
+}
+
+func StreamModerationResultHandler(
+	notifyRepo ModerationNotifier,
+	tweetRepo ModerationTweetUpdater,
+	authRepo ModerationOwnerFetcher,
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
-		}
-
-		if ev.Result == domain.OK {
-			return event.Accepted, nil
 		}
 
 		notificationText := "moderation result: "
@@ -58,14 +69,61 @@ func StreamModerationResultHandler(repo ModerationNotifier) warpnet.WarpHandlerF
 		if ev.Reason != nil {
 			notificationText += *ev.Reason
 		}
-
-		// TODO: handle notification
 		log.Infof("moderation: result received: %s", notificationText)
-		return event.Accepted, repo.Add(domain.Notification{
-			Type:   domain.NotificationModerationType,
-			Text:   notificationText,
-			UserId: ev.UserID,
-			IsRead: false,
-		})
+
+		switch ev.Type {
+		case domain.ModerationTweetType:
+			if ev.ObjectID == nil {
+				return nil, errors.New("moderation: no object id")
+			}
+			if ev.UserID == "" {
+				return nil, errors.New("moderation: no user id")
+			}
+
+			moderatorId := ""
+			if s.Conn() != nil {
+				moderatorId = s.Conn().RemotePeer().String()
+			}
+
+			tweet := domain.Tweet{
+				Id:     *ev.ObjectID,
+				UserId: ev.UserID,
+				Moderation: &domain.TweetModeration{
+					ModeratorID: moderatorId,
+					Model:       ev.Model,
+					IsOk:        ev.Result,
+					Reason:      ev.Reason,
+					TimeAt:      time.Now(),
+				},
+			}
+
+			if err := tweetRepo.Update(tweet); err != nil {
+				log.Errorf("moderation: failed to update tweet: %v", err)
+			}
+		default:
+			log.Errorf("moderation handler: unknown event type %s", ev.Type.String())
+			return event.Accepted, nil
+		}
+
+		if ev.Result == domain.OK {
+			log.Infof("moderation handler: OK")
+			return event.Accepted, nil
+		}
+
+		owner := authRepo.GetOwner()
+		if ev.UserID == owner.UserId {
+			log.Infoln("moderation handler: adding notification")
+			err := notifyRepo.Add(domain.Notification{
+				Type:   domain.NotificationModerationType,
+				Text:   notificationText,
+				UserId: owner.UserId,
+				IsRead: false,
+			})
+			if err != nil {
+				log.Errorf("moderation handler: adding notification result: %v", err)
+			}
+		}
+
+		return event.Accepted, nil
 	}
 }

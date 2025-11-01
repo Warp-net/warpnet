@@ -17,6 +17,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	ErrNoTweetsForModeration = warpnet.WarpError("no tweets for moderation")
+)
+
 type Engine interface {
 	Moderate(content string) (bool, string, error)
 	Close()
@@ -39,15 +43,14 @@ type ModeratorNode interface {
 }
 
 type Publisher interface {
-	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
+	PublishUpdateToFollowers(ownerId, dest string, body any) (err error)
 }
 
 type Moderator struct {
-	ctx context.Context
-
-	node      ModeratorNode
-	cache     *moderationCache
-	isolation *isolation.IsolationProtocol
+	ctx        context.Context
+	node       ModeratorNode
+	tweetCache *tweetModerationCache
+	isolation  *isolation.IsolationProtocol
 
 	isClosed *atomic.Bool
 }
@@ -59,11 +62,11 @@ func NewModerator(
 ) (_ *Moderator, err error) {
 
 	mn := &Moderator{
-		ctx:       ctx,
-		cache:     newModerationCache(),
-		node:      node,
-		isolation: isolation.NewIsolationProtocol(node, pub),
-		isClosed:  new(atomic.Bool),
+		ctx:        ctx,
+		tweetCache: newTweetModerationCache(),
+		node:       node,
+		isolation:  isolation.NewIsolationProtocol(node, pub),
+		isClosed:   new(atomic.Bool),
 	}
 
 	return mn, nil
@@ -84,7 +87,7 @@ func (m *Moderator) Start() (err error) {
 	}
 	log.Infoln("moderator: engine is running")
 
-	go m.lurkTweets()
+	go m.runTweetsModeration()
 	go m.lurkUserDescriptions()
 	log.Infoln("moderator: started")
 
@@ -99,15 +102,12 @@ func (m *Moderator) Close() {
 	}
 }
 
-func (m *Moderator) lurkTweets() {
+func (m *Moderator) runTweetsModeration() {
 	if m == nil || m.node == nil {
 		log.Fatalf("moderator: nil node")
 	}
 	if engine == nil {
 		log.Fatalf("moderator: nil moderator")
-	}
-	if m.cache == nil {
-		log.Fatalf("moderator: nil cache")
 	}
 
 	peerStore := m.node.Node().Peerstore()
@@ -128,9 +128,6 @@ func (m *Moderator) lurkTweets() {
 			if m.isClosed.Load() {
 				return
 			}
-			if m.cache.IsModeratedAlready(peer) {
-				continue
-			}
 			if peer == m.node.ID() {
 				continue
 			}
@@ -140,7 +137,7 @@ func (m *Moderator) lurkTweets() {
 				if strings.Contains(err.Error(), "protocols not supported") {
 					continue
 				}
-				log.Errorf("moderator: get info: %v", err)
+				log.Errorf("moderator: no info response from new peer %s, %v", peer.String(), err)
 				continue
 			}
 			if infoResp == nil || len(infoResp) == 0 {
@@ -155,87 +152,121 @@ func (m *Moderator) lurkTweets() {
 				continue
 			}
 			if info.IsModerator() || info.IsBootstrap() {
-				m.cache.SetAsModerated(peer, CacheEntry{})
 				continue
 			}
-
-			log.Infof("moderator: checking peer: %s, owner: %s", peer.String(), info.OwnerId)
-
 			if info.OwnerId == "" {
 				log.Errorf("moderator: node info %s has no owner", peer.String())
 				continue
 			}
+			log.Infof("moderator: checking peer: %s, owner: %s", peer.String(), info.OwnerId)
 
-			moderatedTweet, err := m.moderateRandomUserTweet(peer, info.OwnerId)
+			tweet, err := m.pickTweet(peer, info.OwnerId)
+			if errors.Is(err, ErrNoTweetsForModeration) {
+				continue
+			}
+			if err != nil {
+				log.Errorf("moderator: moderation engine failure %s: %v", peer.String(), err)
+				continue
+			}
+
+			moderationResult, err := m.moderateTweet(tweet)
 			if err != nil {
 				log.Errorf("moderator: moderation engine failure %s: %v", peer.String(), err)
 				continue
 			}
 			log.Infoln("moderator: isolate tweet protocol started")
-			m.isolation.IsolateTweet(peer, moderatedTweet)
-
-			m.cache.SetAsModerated(peer, CacheEntry{})
-			log.Infoln("moderator: set as moderated", m.cache.IsModeratedAlready(peer))
+			m.isolation.IsolateTweet(peer, tweet, moderationResult)
+			log.Infoln("moderator: isolate tweet protocol finished")
 		}
 	}
 }
 
-func (m *Moderator) moderateRandomUserTweet(peerID warpnet.WarpPeerID, userID string) (*domain.Tweet, error) {
-	limit := uint64(20)
+const tweetsLimit uint64 = 20
 
-	tweetsResp, err := m.node.GenericStream(
-		peerID.String(),
-		event.PUBLIC_GET_TWEETS,
-		event.GetAllTweetsEvent{
-			Limit:  &limit,
-			UserId: userID,
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("moderator: get tweets: %v", err)
-	}
-	if tweetsResp == nil || len(tweetsResp) == 0 {
-		return nil, nil
-	}
+func (m *Moderator) pickTweet(peerID warpnet.WarpPeerID, userID string) (*domain.Tweet, error) {
+	var cursor *string
 
-	var tweetsEvent event.TweetsResponse
-	if err := json.Unmarshal(tweetsResp, &tweetsEvent); err != nil {
-		return nil, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %v", tweetsResp, err)
-	}
-	if len(tweetsEvent.Tweets) == 0 {
-		return nil, nil
-	}
-
-	for _, tweet := range tweetsEvent.Tweets {
-		if tweet.Moderation != nil {
-			continue
-		}
-		if tweet.Text == "" {
-			continue
-		}
-
-		result, reason, err := engine.Moderate(tweet.Text)
+	for {
+		data, err := m.node.GenericStream(
+			peerID.String(),
+			event.PUBLIC_GET_TWEETS,
+			event.GetAllTweetsEvent{
+				Limit:  func(l uint64) *uint64 { return &l }(tweetsLimit),
+				UserId: userID,
+				Cursor: cursor,
+			},
+		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("moderator: get tweets: %v", err)
+		}
+		if data == nil || len(data) == 0 {
+			return nil, ErrNoTweetsForModeration
 		}
 
-		if !result {
-			tweet.Text = ""
+		var tweetsResp event.TweetsResponse
+		if err := json.Unmarshal(data, &tweetsResp); err != nil {
+			return nil, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %v", string(data), err)
 		}
 
-		tweet.Moderation = &domain.TweetModeration{
-			IsModerated: true,
-			ModeratorID: m.node.ID().String(),
-			Model:       "llama2",
-			IsOk:        domain.ModerationResult(result) != domain.FAIL,
-			Reason:      &reason,
-			TimeAt:      time.Now(),
+		if len(tweetsResp.Tweets) == 0 {
+			return nil, ErrNoTweetsForModeration
 		}
-		return &tweet, nil
+
+		log.Infof("moderator: peers %s, got tweets: %d", peerID.String(), len(tweetsResp.Tweets))
+
+		cursor = &tweetsResp.Cursor
+
+		key := CacheKey{
+			Type:   domain.ModerationTweetType,
+			PeerId: peerID.String(),
+			Cursor: cursor,
+		}
+
+		if m.tweetCache.IsModeratedAlready(key) {
+			continue
+		}
+
+		m.tweetCache.SetAsModerated(key)
+
+		for i := range tweetsResp.Tweets {
+			tweet := tweetsResp.Tweets[i]
+
+			if tweet.IsModerated() {
+				continue
+			}
+			if tweet.Text == "" {
+				continue
+			}
+			return &tweet, nil
+		}
+		if tweetsResp.Cursor == event.EndCursor || tweetsResp.Cursor == "" {
+			return nil, ErrNoTweetsForModeration
+		}
 	}
-	return nil, nil
 }
 
+func (m *Moderator) moderateTweet(tweet *domain.Tweet) (*domain.TweetModeration, error) {
+	if tweet == nil {
+		return nil, errors.New("moderator: tweet is nil")
+	}
+	result, reason, err := engine.Moderate(tweet.Text)
+	if err != nil {
+		return nil, err
+	}
+
+	if !result {
+		tweet.Text = ""
+	}
+
+	moderatorId := m.node.ID().String()
+	return &domain.TweetModeration{
+		ModeratorID: moderatorId,
+		Model:       domain.LLAMA2,
+		IsOk:        domain.ModerationResult(result) != domain.FAIL,
+		Reason:      &reason,
+		TimeAt:      time.Now(),
+	}, nil
+}
 func (m *Moderator) lurkUserDescriptions() {
 	// TODO
 }

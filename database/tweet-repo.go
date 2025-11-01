@@ -60,6 +60,12 @@ type TweetsStorer interface {
 	Set(key local.DatabaseKey, value []byte) error
 	Get(key local.DatabaseKey) ([]byte, error)
 	Delete(key local.DatabaseKey) error
+	GetExpiration(key local.DatabaseKey) (uint64, error)
+}
+
+type tweetGetter interface {
+	Get(key local.DatabaseKey) ([]byte, error)
+	GetExpiration(key local.DatabaseKey) (uint64, error)
 }
 
 type TweetRepo struct {
@@ -127,7 +133,7 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 	}
 	defer txn.Rollback()
 
-	newTweet, err := storeTweet(txn, userId, tweet, duration)
+	newTweet, err := storeTweet(txn, userId, tweet, duration, false)
 	if err != nil {
 		return tweet, err
 	}
@@ -135,8 +141,47 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 	return newTweet, txn.Commit()
 }
 
+func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
+	if updateTweet.Id == "" {
+		return local.DBError("no tweet id")
+	}
+	if updateTweet.UserId == "" {
+		return local.DBError("no user id")
+	}
+	now := time.Now()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	existedTweet, expiresAt, err := get(txn, updateTweet.UserId, updateTweet.Id)
+	if err != nil {
+		return err
+	}
+
+	// TODO other fields
+	if updateTweet.Moderation != nil {
+		existedTweet.Moderation = updateTweet.Moderation
+	}
+	existedTweet.UpdatedAt = &now
+
+	expiration := time.Unix(int64(expiresAt), 0)
+	ttl := expiration.Sub(now)
+	if ttl <= 0 {
+		ttl = 0
+	}
+	_, err = storeTweet(txn, existedTweet.UserId, existedTweet, ttl, true)
+	if err != nil {
+		return err
+	}
+
+	return txn.Commit()
+}
+
 func storeTweet(
-	txn local.WarpTransactioner, userId string, tweet domain.Tweet, duration time.Duration,
+	txn local.WarpTransactioner, userId string, tweet domain.Tweet, duration time.Duration, isUpdate bool,
 ) (domain.Tweet, error) {
 	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddRootID(userId).
@@ -150,11 +195,6 @@ func storeTweet(
 		AddParentId(tweet.Id).
 		Build()
 
-	countKey := local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(tweetsCountSubspace).
-		AddRootID(userId).
-		Build()
-
 	data, err := json.Marshal(tweet)
 	if err != nil {
 		return tweet, fmt.Errorf("tweet marshal: %w", err)
@@ -166,6 +206,14 @@ func storeTweet(
 	if err = txn.SetWithTTL(sortableKey, data, duration); err != nil {
 		return tweet, err
 	}
+	if isUpdate {
+		return tweet, nil
+	}
+
+	countKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsCountSubspace).
+		AddRootID(userId).
+		Build()
 	if _, err := txn.Increment(countKey); err != nil {
 		return tweet, err
 	}
@@ -174,32 +222,39 @@ func storeTweet(
 
 // Get retrieves a tweet by its ID
 func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err error) {
+	t, _, err := get(repo.db, userID, tweetID)
+	return t, err
+}
+
+func get(txn tweetGetter, userID, tweetID string) (tweet domain.Tweet, exp uint64, err error) {
 	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddRootID(userID).
 		AddRange(local.FixedRangeKey).
 		AddParentId(tweetID).
 		Build()
-	sortableKeyBytes, err := repo.db.Get(fixedKey)
+	sortableKeyBytes, err := txn.Get(fixedKey)
 	if local.IsNotFoundError(err) {
-		return tweet, ErrTweetNotFound
+		return tweet, exp, ErrTweetNotFound
 	}
 	if err != nil {
-		return tweet, err
+		return tweet, exp, err
 	}
 
-	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
+	data, err := txn.Get(local.DatabaseKey(sortableKeyBytes))
 	if local.IsNotFoundError(err) {
-		return tweet, ErrTweetNotFound
+		return tweet, exp, ErrTweetNotFound
 	}
 	if err != nil {
-		return tweet, err
+		return tweet, exp, err
 	}
+
+	exp, _ = txn.GetExpiration(local.DatabaseKey(sortableKeyBytes))
 
 	err = json.Unmarshal(data, &tweet)
 	if err != nil {
-		return tweet, err
+		return tweet, exp, err
 	}
-	return tweet, nil
+	return tweet, exp, nil
 }
 
 func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
@@ -340,7 +395,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		tweet.Id = domain.RetweetPrefix + tweet.Id
 	}
 
-	newTweet, err := storeTweet(txn, *tweet.RetweetedBy, tweet, warpnet.PermanentTTL)
+	newTweet, err := storeTweet(txn, *tweet.RetweetedBy, tweet, warpnet.PermanentTTL, false)
 	if err != nil {
 		return tweet, err
 	}

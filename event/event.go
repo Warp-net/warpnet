@@ -37,6 +37,8 @@ import (
 const (
 	Accepted            acceptedResponse = `{"code":0,"message":"Accepted"}`
 	InternalRoutePrefix                  = "/internal"
+
+	EndCursor = "end"
 )
 
 type acceptedResponse string
@@ -430,7 +432,7 @@ type ModerationResultEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
 	Result   domain.ModerationResult     `json:"result"`
 	Reason   *string                     `json:"reason,omitempty"`
-	NodeID   domain.ID                   `json:"node_id"`
+	Model    domain.ModelType            `json:"model"`
 	UserID   domain.ID                   `json:"user_id"`
 	ObjectID *domain.ID                  `json:"object_id,omitempty"`
 }

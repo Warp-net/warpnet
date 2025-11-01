@@ -20,7 +20,7 @@ const moderationPromptTemplate = `
 
 	Respond in English only. 
 
-	If yes, answer: 'Yes' and add short reason 
+	If yes, answer: 'Yes' and add short reason, max 14 words.
 	If no, answer: 'No'
 	No other answer types accepted.
 	

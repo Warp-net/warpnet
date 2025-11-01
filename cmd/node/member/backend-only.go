@@ -35,6 +35,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
@@ -54,6 +55,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: time.DateTime,
+	})
+	log.SetOutput(os.Stdout)
 	log.SetLevel(log.InfoLevel)
 
 	var interruptChan = make(chan os.Signal, 1)

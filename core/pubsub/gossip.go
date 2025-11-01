@@ -562,3 +562,13 @@ func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandl
 		},
 	}
 }
+
+// NewDiscoveryRelayTopicHandler acts only as relay
+func NewDiscoveryRelayTopicHandler() TopicHandler {
+	return TopicHandler{
+		TopicName: pubSubDiscoveryTopic,
+		Handler: func(_ []byte) error {
+			return nil
+		},
+	}
+}

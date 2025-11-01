@@ -62,10 +62,8 @@ func main() {
 		lvl = log.ErrorLevel
 	}
 	log.SetLevel(lvl)
-	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: time.DateTime,
-	})
+	log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
+	log.SetOutput(os.Stdout) // stderr reserved for llama
 
 	var interruptChan = make(chan os.Signal, 1)
 	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT)

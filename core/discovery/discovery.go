@@ -44,6 +44,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	log "github.com/sirupsen/logrus"
@@ -95,6 +96,7 @@ type discoveryService struct {
 	ownId   warpnet.WarpPeerID
 	limiter *leakyBucketRateLimiter
 	cache   *discoveryCache
+	retrier retrier.Retrier
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -113,6 +115,7 @@ func NewDiscoveryService(
 	return &discoveryService{
 		ctx:             ctx,
 		node:            nil,
+		retrier:         retrier.New(time.Second, 3, retrier.ExponentialBackoff),
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
@@ -401,11 +404,16 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		return err
 	}
 
-	resp, err := s.node.GenericStream(
-		pi.ID.String(),
-		event.PUBLIC_POST_NODE_CHALLENGE,
-		event.ChallengeEvent{Samples: samples},
-	)
+	var resp []byte
+	err = s.retrier.Try(s.ctx, func() error {
+		resp, err = s.node.GenericStream(
+			pi.ID.String(),
+			event.PUBLIC_POST_NODE_CHALLENGE,
+			event.ChallengeEvent{Samples: samples},
+		)
+		return err
+	})
+
 	if err != nil {
 		return fmt.Errorf("failed to get challenge from new peer %s: %v", pi.ID.String(), err)
 	}

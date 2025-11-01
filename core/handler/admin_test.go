@@ -5,12 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"math/rand/v2"
+	"testing"
+
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
-	"math/rand/v2"
-	"testing"
 )
 
 func TestStreamChallengeHandler_Success(t *testing.T) {
@@ -29,11 +30,11 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		t.Fatalf("failed to generate challenge: %v", err)
 	}
 
-	ev := event.ChallengeEvent{
+	ev := event.ChallengeEvent{[]event.ChallengeSample{{
 		DirStack:  location.DirStack,
 		FileStack: location.FileStack,
 		Nonce:     nonce,
-	}
+	}}}
 
 	bt, err := json.Marshal(ev)
 	if err != nil {
@@ -52,16 +53,18 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 
 	hexedOwnChallenge := hex.EncodeToString(ownChallenge)
 
-	if challengeResp.Challenge != hexedOwnChallenge {
-		t.Fatalf("challenge: %s != %s", hexedOwnChallenge, challengeResp.Challenge)
+	solution := challengeResp.Solutions[0]
+
+	if solution.Challenge != hexedOwnChallenge {
+		t.Fatalf("challenge: %s != %s", hexedOwnChallenge, solution.Challenge)
 	}
 
-	decodedSig, err := base64.StdEncoding.DecodeString(challengeResp.Signature)
+	decodedSig, err := base64.StdEncoding.DecodeString(solution.Signature)
 	if err != nil {
 		t.Fatalf("failed to decode signature: %v", err)
 	}
 
-	challengeOrigin, err := hex.DecodeString(challengeResp.Challenge)
+	challengeOrigin, err := hex.DecodeString(solution.Challenge)
 	if err != nil {
 		t.Fatalf("failed to decode challenge origin: %v", err)
 	}

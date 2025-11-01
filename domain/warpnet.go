@@ -119,17 +119,20 @@ type Tweet struct {
 	Moderation  *TweetModeration `json:"moderation,omitempty"`
 }
 
+func (t *Tweet) IsModerated() bool {
+	return t.Moderation != nil
+}
+
 type ModelType string
 
 const LLAMA2 ModelType = "llama2"
 
 type TweetModeration struct {
-	IsModerated bool      `json:"is_moderated"`
-	ModeratorID string    `json:"moderator_id"`
-	Model       ModelType `json:"model"`
-	IsOk        bool      `json:"is_ok"`
-	Reason      *string   `json:"reason"`
-	TimeAt      time.Time `json:"time_at"`
+	ModeratorID ID               `json:"moderator_id"`
+	Model       ModelType        `json:"model"`
+	IsOk        ModerationResult `json:"is_ok"`
+	Reason      *string          `json:"reason"`
+	TimeAt      time.Time        `json:"time_at"`
 }
 
 // User defines model for User.
@@ -212,3 +215,19 @@ const (
 	ModerationReplyType
 	ModerationImageType
 )
+
+func (t ModerationObjectType) String() string {
+	switch t {
+	case ModerationUserType:
+		return "user description"
+	case ModerationTweetType:
+		return "tweet text"
+	case ModerationReplyType:
+		return "reply text"
+	case ModerationImageType:
+		return "image content"
+	default:
+		return "unknown"
+	}
+
+}
