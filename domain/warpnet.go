@@ -200,13 +200,6 @@ const (
 	FAIL ModerationResult = false
 )
 
-func (mr ModerationResult) String() string {
-	if mr {
-		return "OK"
-	}
-	return "FAIL"
-}
-
 type ModerationObjectType int
 
 const (

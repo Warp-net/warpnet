@@ -226,6 +226,7 @@ func StreamGetTweetsHandler(
 		if err != nil {
 			return nil, err
 		}
+
 		if len(tweets) != 0 {
 			go tweetsRefreshBackground(repo, userRepo, ev, streamer)
 
