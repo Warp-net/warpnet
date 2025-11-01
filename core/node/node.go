@@ -65,7 +65,6 @@ type WarpNode struct {
 	backoff  BackoffEnabler
 
 	isClosed     *atomic.Bool
-	readyChan    chan struct{}
 	version      *semver.Version
 	reachability atomic.Int32
 
@@ -126,7 +125,6 @@ func NewWarpNode(
 		relay:            relayService,
 		streamer:         pool,
 		isClosed:         new(atomic.Bool),
-		readyChan:        make(chan struct{}),
 		version:          version,
 		startTime:        time.Now(),
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
@@ -136,12 +134,6 @@ func NewWarpNode(
 	}
 
 	go wn.trackIncomingEvents()
-
-	select {
-	case <-wn.readyChan:
-	case <-time.After(time.Minute):
-	}
-
 	return wn, nil
 }
 
@@ -194,7 +186,6 @@ var localAddrActions = map[int]string{
 }
 
 func (n *WarpNode) trackIncomingEvents() {
-
 	for ev := range n.eventsSub.Out() {
 		switch ev.(type) {
 		case event.EvtPeerProtocolsUpdated:
@@ -246,10 +237,6 @@ func (n *WarpNode) trackIncomingEvents() {
 				strings.ToLower(r.String()),
 			)
 			n.reachability.Store(int32(r))
-			select {
-			case n.readyChan <- struct{}{}:
-			default:
-			}
 		case event.EvtNATDeviceTypeChanged:
 			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
 			log.Infof(
@@ -410,6 +397,5 @@ func (n *WarpNode) StopNode() {
 	}
 	n.isClosed.Store(true)
 	n.node = nil
-	close(n.readyChan)
 	return
 }

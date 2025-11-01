@@ -46,6 +46,10 @@ type ModerationTweetUpdater interface {
 	Update(tweet domain.Tweet) error
 }
 
+type ModerationTimelelineDeleter interface {
+	DeleteTweetFromTimeline(userID, tweetID string, createdAt time.Time) error
+}
+
 type ModerationOwnerFetcher interface {
 	GetOwner() domain.Owner
 }
@@ -54,6 +58,7 @@ func StreamModerationResultHandler(
 	notifyRepo ModerationNotifier,
 	tweetRepo ModerationTweetUpdater,
 	authRepo ModerationOwnerFetcher,
+	// timelineRepo ModerationTimelelineDeleter,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
@@ -100,6 +105,7 @@ func StreamModerationResultHandler(
 			if err := tweetRepo.Update(tweet); err != nil {
 				log.Errorf("moderation: failed to update tweet: %v", err)
 			}
+			//if err := timelineRepo.DeleteTweetFromTimeline(ev.UserID)
 		default:
 			log.Errorf("moderation handler: unknown event type %s", ev.Type.String())
 			return event.Accepted, nil

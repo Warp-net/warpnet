@@ -30,14 +30,15 @@ package mdns
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
+
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	log "github.com/sirupsen/logrus"
-	"sync"
-	"sync/atomic"
 )
 
 /*
@@ -93,7 +94,7 @@ func (m *mdnsDiscoveryService) HandlePeerFound(p peer.AddrInfo) {
 		panic("mdns: node is nil")
 	}
 
-	log.Debugf("mdns: discovery handling peer %s %v", p.ID.String(), p.Addrs)
+	log.Infof("mdns: discovery handling peer %s %v", p.ID.String(), p.Addrs)
 
 	m.mx.Lock()
 	defer m.mx.Unlock()

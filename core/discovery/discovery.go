@@ -176,15 +176,19 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 }
 
 func (s *discoveryService) DiscoveryHandlerMDNS(pi warpnet.WarpAddrInfo) {
+	log.Infof("discovery: mdns: %s", pi.String())
 	s.enqueue(pi, sourceMDNS)
 }
 
 func (s *discoveryService) DiscoveryHandlerDHT(id warpnet.WarpPeerID) {
+	log.Infof("discovery: dht: %v", id.String())
 	info := warpnet.WarpAddrInfo{ID: id}
 	s.enqueue(info, sourceDHT)
 }
 
 func (s *discoveryService) DiscoveryHandlerStream(pi warpnet.WarpAddrInfo) {
+	log.Infof("discovery: stream: %s", pi.String())
+
 	if s.node != nil && len(s.node.Peerstore().Addrs(pi.ID)) != 0 {
 		return // end discovery loop
 	}
@@ -192,6 +196,7 @@ func (s *discoveryService) DiscoveryHandlerStream(pi warpnet.WarpAddrInfo) {
 }
 
 func (s *discoveryService) DiscoveryHandlerPubSub(pi warpnet.WarpAddrInfo) {
+	log.Infof("discovery: gossip: %s", pi.String())
 	s.enqueue(pi, sourceGossip) // main source
 }
 

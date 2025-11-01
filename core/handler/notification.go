@@ -50,7 +50,6 @@ func StreamGetNotificationsHandler(
 	authRepo NotifierAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		log.Info("notification handler request")
 		var ev event.GetNotificationsEvent
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {

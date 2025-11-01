@@ -78,7 +78,7 @@ func main() {
 
 	authRepo := database.NewAuthRepo(db)
 	userRepo := database.NewUserRepo(db)
-	authService := auth.NewAuthService(authRepo, userRepo, readyChan)
+	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
 	go func() {
 		username, pass := manualCredsInput()
