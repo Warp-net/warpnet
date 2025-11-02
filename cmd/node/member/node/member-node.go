@@ -498,7 +498,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_MODERATION_RESULT,
-				handler.StreamModerationResultHandler(notificationRepo, tweetRepo, authRepo),
+				handler.StreamModerationResultHandler(notificationRepo, tweetRepo, authRepo, timelineRepo),
 			},
 			{
 				event.PRIVATE_GET_NOTIFICATIONS,

@@ -112,7 +112,7 @@ func (m *Moderator) runTweetsModeration() {
 
 	peerStore := m.node.Node().Peerstore()
 
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 
 	for range ticker.C {

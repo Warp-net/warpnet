@@ -62,7 +62,6 @@ var testnetBootstrapNodes = []string{
 var configSingleton config
 
 func init() {
-	pflag.String("database.dir", "storage", "Database directory name")
 	pflag.String("node.host.v4", "0.0.0.0", "Node host IPv4")
 	pflag.String("node.host.v6", "::", "Node host IPv6")
 	pflag.String("node.port", "4001", "Node port")
@@ -70,7 +69,10 @@ func init() {
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name of 'AI' model")
+
 	pflag.String("logging.level", "info", "Logging level")
+	pflag.String("logging.format", "text", "'text' or 'json'")
+	pflag.String("database.dir", "storage", "Database directory name")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
@@ -133,7 +135,10 @@ func init() {
 		Database: database{
 			Path: dbPath,
 		},
-		Logging: logging{Level: strings.TrimSpace(viper.GetString("logging.level"))},
+		Logging: logging{
+			Level:  strings.TrimSpace(viper.GetString("logging.level")),
+			Format: logFormat(strings.TrimSpace(strings.ToLower(viper.GetString("logging.format")))),
+		},
 	}
 }
 
@@ -167,9 +172,17 @@ type metrics struct {
 type database struct {
 	Path string
 }
+
+type logFormat string
+
+const (
+	JSONFormat logFormat = "json"
+	TextFormat logFormat = "text"
+)
+
 type logging struct {
 	Level  string
-	Format string
+	Format logFormat
 }
 
 func (n node) IsTestnet() bool {

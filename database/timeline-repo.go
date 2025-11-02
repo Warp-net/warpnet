@@ -29,9 +29,10 @@ package database
 
 import (
 	"fmt"
-	"github.com/Warp-net/warpnet/domain"
 	"sort"
 	"time"
+
+	"github.com/Warp-net/warpnet/domain"
 
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/json"
@@ -58,13 +59,19 @@ func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) 
 		return local.DBError("userID cannot be blank")
 	}
 	if tweet.Id == "" {
-		return fmt.Errorf("tweet id should not be nil")
+		return local.DBError("tweet id should not be empty")
 	}
 	if tweet.CreatedAt.IsZero() {
-		return fmt.Errorf("tweet created at should not be zero")
+		tweet.CreatedAt = time.Now()
 	}
 
-	key := local.NewPrefixBuilder(TimelineRepoName).
+	fixedKey := local.NewPrefixBuilder(TimelineRepoName).
+		AddRootID(userId).
+		AddRange(local.FixedRangeKey).
+		AddParentId(tweet.Id).
+		Build()
+
+	sortableKey := local.NewPrefixBuilder(TimelineRepoName).
 		AddRootID(userId).
 		AddReversedTimestamp(tweet.CreatedAt).
 		AddParentId(tweet.Id).
@@ -74,22 +81,54 @@ func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) 
 	if err != nil {
 		return fmt.Errorf("timeline marshal: %w", err)
 	}
-	return repo.db.Set(key, data)
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return fmt.Errorf("creating transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	if err := txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
+		return fmt.Errorf("adding timeline sortable key: %w", err)
+	}
+	if err := txn.Set(sortableKey, data); err != nil {
+		return fmt.Errorf("adding timeline data: %w", err)
+	}
+	return txn.Commit()
 }
 
-func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string, createdAt time.Time) error {
+func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string) error {
 	if userID == "" {
 		return local.DBError("user ID cannot be blank")
 	}
-	if createdAt.IsZero() {
-		return fmt.Errorf("created time should not be zero")
-	}
-	key := local.NewPrefixBuilder(TimelineRepoName).
+
+	fixedKey := local.NewPrefixBuilder(TimelineRepoName).
 		AddRootID(userID).
-		AddReversedTimestamp(createdAt).
+		AddRange(local.FixedRangeKey).
 		AddParentId(tweetID).
 		Build()
-	return repo.db.Delete(key)
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return fmt.Errorf("creating transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	sortableKeyBytes, err := txn.Get(fixedKey)
+	if local.IsNotFoundError(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if err := txn.Delete(fixedKey); err != nil {
+		return err
+	}
+	if err := txn.Delete(local.DatabaseKey(sortableKeyBytes)); err != nil {
+		return err
+	}
+	return txn.Commit()
 }
 
 // GetTimeline retrieves a user's timeline sorted from newest to oldest

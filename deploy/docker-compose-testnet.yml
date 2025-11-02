@@ -9,6 +9,7 @@ services:
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
       - NODE_SEED=warpnet1
 
   warpnet22:
@@ -21,6 +22,7 @@ services:
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
       - NODE_SEED=warpnet2
 
   warpnet33:
@@ -33,22 +35,24 @@ services:
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
       - NODE_SEED=warpnet3
 
-#  warpnet-moderator-testnet:
-#    container_name: moderator-testnet
-#    image: ghcr.io/warp-net/warpnet-moderator:latest
-#    network_mode: host
-#    restart: always
-#    environment:
-#      - NODE_PORT=4044
-#      - NODE_HOST_V4=207.154.221.44
-#      - NODE_NETWORK=testnet
-#      - LOGGING_LEVEL=info
-#      - NODE_SEED=warpnet-moderator-testnet
-#      - CGO_CPPFLAGS="-DLLAMA_DISABLE_LOGS=1"
-#      - CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete"
-#    volumes:
-#      - /root/.warpdata:/root/.warpdata:rw
+  warpnet-moderator-testnet:
+    container_name: moderator-testnet
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4044
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - NODE_SEED=warpnet-moderator-testnet
+      - CGO_CPPFLAGS="-DLLAMA_DISABLE_LOGS=1"
+      - CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete"
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
 
 

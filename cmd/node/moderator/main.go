@@ -62,7 +62,11 @@ func main() {
 		lvl = log.ErrorLevel
 	}
 	log.SetLevel(lvl)
-	log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
+	if config.Config().Logging.Format == config.TextFormat {
+		log.SetFormatter(&log.TextFormatter{TimestampFormat: time.DateTime})
+	} else {
+		log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
+	}
 	log.SetOutput(os.Stdout) // stderr reserved for llama
 
 	var interruptChan = make(chan os.Signal, 1)

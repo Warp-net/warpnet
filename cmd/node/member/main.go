@@ -29,10 +29,11 @@ func main() {
 		lvl = log.InfoLevel
 	}
 	log.SetLevel(lvl)
-	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: time.DateTime,
-	})
+	if config.Config().Logging.Format == config.TextFormat {
+		log.SetFormatter(&log.TextFormatter{TimestampFormat: time.DateTime})
+	} else {
+		log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
+	}
 	log.SetOutput(os.Stdout)
 
 	log.Infof("network: %s", config.Config().Node.Network)

@@ -55,10 +55,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: time.DateTime,
-	})
+	if config.Config().Logging.Format == config.TextFormat {
+		log.SetFormatter(&log.TextFormatter{TimestampFormat: time.DateTime})
+	} else {
+		log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
+	}
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.InfoLevel)
 

@@ -94,8 +94,6 @@ func (m *mdnsDiscoveryService) HandlePeerFound(p peer.AddrInfo) {
 		panic("mdns: node is nil")
 	}
 
-	log.Infof("mdns: discovery handling peer %s %v", p.ID.String(), p.Addrs)
-
 	m.mx.Lock()
 	defer m.mx.Unlock()
 

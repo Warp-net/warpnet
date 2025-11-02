@@ -60,10 +60,10 @@ type DiscoveryInfoStorer interface {
 }
 
 type NodeStorer interface {
-	BlocklistRemove(peerId warpnet.WarpPeerID) error
-	IsBlocklisted(peerId warpnet.WarpPeerID) bool
-	Blocklist(peerId warpnet.WarpPeerID) error
-	BlocklistTerm(peerId warpnet.WarpPeerID) (*database.BlocklistTerm, error)
+	BlocklistRemove(peerId string) error
+	IsBlocklisted(peerId string) bool
+	Blocklist(peerId string) error
+	BlocklistTerm(peerId string) (*database.BlocklistTerm, error)
 }
 
 type UserStorer interface {
@@ -176,19 +176,15 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 }
 
 func (s *discoveryService) DiscoveryHandlerMDNS(pi warpnet.WarpAddrInfo) {
-	log.Infof("discovery: mdns: %s", pi.String())
 	s.enqueue(pi, sourceMDNS)
 }
 
 func (s *discoveryService) DiscoveryHandlerDHT(id warpnet.WarpPeerID) {
-	log.Infof("discovery: dht: %v", id.String())
 	info := warpnet.WarpAddrInfo{ID: id}
 	s.enqueue(info, sourceDHT)
 }
 
 func (s *discoveryService) DiscoveryHandlerStream(pi warpnet.WarpAddrInfo) {
-	log.Infof("discovery: stream: %s", pi.String())
-
 	if s.node != nil && len(s.node.Peerstore().Addrs(pi.ID)) != 0 {
 		return // end discovery loop
 	}
@@ -196,7 +192,6 @@ func (s *discoveryService) DiscoveryHandlerStream(pi warpnet.WarpAddrInfo) {
 }
 
 func (s *discoveryService) DiscoveryHandlerPubSub(pi warpnet.WarpAddrInfo) {
-	log.Infof("discovery: gossip: %s", pi.String())
 	s.enqueue(pi, sourceGossip) // main source
 }
 
@@ -237,7 +232,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	if s.nodeRepo.IsBlocklisted(peer.ID) {
+	if s.nodeRepo.IsBlocklisted(peer.ID.String()) {
 		log.Infof("discovery: source '%s': found blocklisted peer: %s", peer.Source, peer.ID.String())
 		return
 	}
@@ -266,7 +261,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
-		_ = s.nodeRepo.Blocklist(pi.ID)
+		_ = s.nodeRepo.Blocklist(pi.ID.String())
 		s.node.Peerstore().RemovePeer(pi.ID)
 		return
 	}
@@ -394,7 +389,7 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 
 	var level int
 	if s.nodeRepo != nil {
-		term, err := s.nodeRepo.BlocklistTerm(pi.ID)
+		term, err := s.nodeRepo.BlocklistTerm(pi.ID.String())
 		if err != nil {
 			log.Errorf("discovery: peer %s blocklist term: %s", pi.ID.String(), err.Error())
 		}
