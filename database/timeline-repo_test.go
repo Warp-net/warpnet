@@ -95,7 +95,7 @@ func (s *TimelineRepoTestSuite) TestDeleteTweetFromTimeline() {
 	err := s.repo.AddTweetToTimeline(userID, tweet)
 	s.Require().NoError(err)
 
-	err = s.repo.DeleteTweetFromTimeline(userID, tweet.Id, tweet.CreatedAt)
+	err = s.repo.DeleteTweetFromTimeline(userID, tweet.Id)
 	s.Require().NoError(err)
 
 	limit := uint64(10)

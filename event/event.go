@@ -37,6 +37,8 @@ import (
 const (
 	Accepted            acceptedResponse = `{"code":0,"message":"Accepted"}`
 	InternalRoutePrefix                  = "/internal"
+
+	EndCursor = "end"
 )
 
 type acceptedResponse string
@@ -374,12 +376,19 @@ type GetImageResponse struct {
 }
 
 type ChallengeEvent struct {
+	Samples []ChallengeSample `json:"samples"`
+}
+type ChallengeSample struct {
 	DirStack  []int `json:"dir_stack"` // every index is level and value is dir num
 	FileStack []int `json:"file_stack"`
 	Nonce     int64 `json:"nonce"`
 }
 
 type ChallengeResponse struct {
+	Solutions []ChallengeSolution `json:"solutions"`
+}
+
+type ChallengeSolution struct {
 	Challenge string `json:"challenge"`
 	Signature string `json:"signature"`
 }
@@ -423,7 +432,7 @@ type ModerationResultEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
 	Result   domain.ModerationResult     `json:"result"`
 	Reason   *string                     `json:"reason,omitempty"`
-	NodeID   domain.ID                   `json:"node_id"`
+	Model    domain.ModelType            `json:"model"`
 	UserID   domain.ID                   `json:"user_id"`
 	ObjectID *domain.ID                  `json:"object_id,omitempty"`
 }

@@ -50,27 +50,33 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpne
 		if fs == nil {
 			panic("challenge handler called with nil file system")
 		}
-		var req event.ChallengeEvent
-		err := json.Unmarshal(buf, &req)
+		var ev event.ChallengeEvent
+		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
 
-		challenge, err := security.ResolveChallenge(
-			fs,
-			security.SampleLocation{
-				DirStack:  req.DirStack,
-				FileStack: req.FileStack,
-			},
-			req.Nonce,
-		)
-		if err != nil {
-			return nil, err
+		solutions := make([]event.ChallengeSolution, len(ev.Samples))
+
+		for i, sample := range ev.Samples {
+			challenge, err := security.ResolveChallenge(
+				fs,
+				security.SampleLocation{
+					DirStack:  sample.DirStack,
+					FileStack: sample.FileStack,
+				},
+				sample.Nonce,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			solutions[i] = event.ChallengeSolution{
+				Challenge: hex.EncodeToString(challenge),
+				Signature: security.Sign(privateKey, challenge),
+			}
 		}
 
-		return event.ChallengeResponse{
-			Challenge: hex.EncodeToString(challenge),
-			Signature: security.Sign(privateKey, challenge),
-		}, nil
+		return event.ChallengeResponse{solutions}, nil
 	}
 }

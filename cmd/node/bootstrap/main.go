@@ -60,13 +60,12 @@ func main() {
 		lvl = log.InfoLevel
 	}
 	log.SetLevel(lvl)
-	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: time.DateTime,
-		FieldMap: log.FieldMap{
-			"network": config.Config().Node.Network,
-		},
-	})
+	if config.Config().Logging.Format == config.TextFormat {
+		log.SetFormatter(&log.TextFormatter{FullTimestamp: true, TimestampFormat: time.DateTime})
+	} else {
+		log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
+	}
+	log.SetOutput(os.Stdout)
 
 	var interruptChan = make(chan os.Signal, 1)
 	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT)

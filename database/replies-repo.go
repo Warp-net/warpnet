@@ -84,7 +84,7 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 
 	data, err := json.Marshal(reply)
 	if err != nil {
-		return reply, fmt.Errorf("error marshalling reply meta: %w", err)
+		return reply, fmt.Errorf("marshalling reply meta: %w", err)
 	}
 
 	treeKey := local.NewPrefixBuilder(RepliesNamespace).
@@ -107,15 +107,15 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return reply, fmt.Errorf("error creating transaction: %w", err)
+		return reply, fmt.Errorf("creating transaction: %w", err)
 	}
 	defer txn.Rollback()
 
 	if err := txn.Set(treeKey, parentSortableKey.Bytes()); err != nil {
-		return reply, fmt.Errorf("error adding reply sortable key: %w", err)
+		return reply, fmt.Errorf("adding reply sortable key: %w", err)
 	}
 	if err := txn.Set(parentSortableKey, data); err != nil {
-		return reply, fmt.Errorf("error adding reply data: %w", err)
+		return reply, fmt.Errorf("adding reply data: %w", err)
 	}
 	if _, err := txn.Increment(replyCountKey); err != nil {
 		return reply, err
@@ -137,7 +137,7 @@ func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Twe
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return tweet, fmt.Errorf("error creating transaction: %w", err)
+		return tweet, fmt.Errorf("creating transaction: %w", err)
 	}
 	defer txn.Rollback()
 
@@ -152,7 +152,7 @@ func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Twe
 	}
 
 	if err = json.Unmarshal(data, &tweet); err != nil {
-		return tweet, fmt.Errorf("error unmarshalling reply: %w", err)
+		return tweet, fmt.Errorf("unmarshalling reply: %w", err)
 	}
 	return tweet, txn.Commit()
 }
@@ -195,19 +195,20 @@ func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return fmt.Errorf("error creating transaction: %w", err)
+		return fmt.Errorf("creating transaction: %w", err)
 	}
 	defer txn.Rollback()
 
 	sortableKey, err := txn.Get(treeKey)
 	if err != nil {
-		return fmt.Errorf("error getting sortable key: %w", err)
+		return fmt.Errorf("getting sortable key: %w", err)
 	}
 	if err := txn.Delete(treeKey); err != nil {
-		return fmt.Errorf("error deleting tree key: %w", err)
+		return fmt.Errorf("deleting tree key: %w", err)
 	}
 	if err := txn.Delete(local.DatabaseKey(sortableKey)); err != nil {
-		return fmt.Errorf("error deleting sortable key: %w", err)
+		return fmt.Errorf(""+
+			"deleting sortable key: %w", err)
 	}
 	if _, err = txn.Decrement(replyCountKey); err != nil {
 		return err
@@ -228,24 +229,24 @@ func (repo *ReplyRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cu
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return nil, "", fmt.Errorf("error creating transaction: %w", err)
+		return nil, "", fmt.Errorf("creating transaction: %w", err)
 	}
 	defer txn.Rollback()
 
 	items, cur, err := txn.List(prefix, limit, cursor)
 	if err != nil {
-		return nil, "", fmt.Errorf("error listing replies: %w", err)
+		return nil, "", fmt.Errorf("listing replies: %w", err)
 	}
 
 	if err := txn.Commit(); err != nil {
-		return nil, "", fmt.Errorf("error committing transaction: %w", err)
+		return nil, "", fmt.Errorf("committing transaction: %w", err)
 	}
 
 	replies := make([]domain.Tweet, 0, len(items))
 	for _, item := range items {
 		var t domain.Tweet
 		if err = json.Unmarshal(item.Value, &t); err != nil {
-			return nil, "", fmt.Errorf("error unmarshalling reply: %w", err)
+			return nil, "", fmt.Errorf("unmarshalling reply: %w", err)
 		}
 		replies = append(replies, t)
 	}

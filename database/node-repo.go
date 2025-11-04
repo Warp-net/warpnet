@@ -35,7 +35,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
@@ -43,8 +42,7 @@ import (
 
 // slash is required because of: invalid datastore key: NODES:/peers/keys/AASAQAISEAXNRKHMX2O3AA26JM7NGIWUPOGIITJ2UHHXGX4OWIEKPNAW6YCSK/priv
 const (
-	NodesNamespace        = "/NODES"
-	BlocklistSubNamespace = "BLOCKLIST"
+	NodesNamespace = "/NODES"
 
 	ErrNilNodeRepo = local.DBError("node repo is nil")
 )
@@ -619,47 +617,62 @@ func (b *batch) Cancel() error {
 	return nil
 }
 
+func buildRootKey(key local.Key) string {
+	rootKey := strings.TrimPrefix(key.String(), "/")
+	if len(rootKey) == 0 {
+		rootKey = key.String()
+	}
+	return rootKey
+}
+
+const (
+	BlocklistSubNamespace     = "BLOCKLIST"
+	BlocklistUserSubNamespace = "USER"
+	BlocklistTermSubNamespace = "TERM"
+)
+
 type BlockLevel int
 
 func (b BlockLevel) Next() BlockLevel {
+	if b >= PermanentBlock {
+		return PermanentBlock
+	}
 	return b + 1
 }
 
 const (
 	InitialBlock BlockLevel = iota + 1
+	MediumBlock
 	AdvancedBlock
 	PermanentBlock
 )
 
 const (
-	foreverBlockDuration  time.Duration = 0
+	noExpiryBlockDuration time.Duration = 0
 	advancedBlockDuration               = 7 * 24 * time.Hour
-	initialBlockDuration                = 24 * time.Hour
+	mediumBlockDuration                 = 24 * time.Hour
+	initialBlockDuration                = time.Hour
 )
 
 var blockDurationMapping = map[BlockLevel]time.Duration{
 	InitialBlock:   initialBlockDuration,
+	MediumBlock:    mediumBlockDuration,
 	AdvancedBlock:  advancedBlockDuration,
-	PermanentBlock: foreverBlockDuration,
+	PermanentBlock: noExpiryBlockDuration,
 }
 
-type BlocklistedItem struct {
-	PeerID   warpnet.WarpPeerID
-	Level    BlockLevel
-	Duration *time.Duration
+type BlocklistTerm struct {
+	PeerID string
+	Level  BlockLevel
 }
 
-func (d *NodeRepo) Blocklist(id warpnet.WarpPeerID) error {
+func (d *NodeRepo) Blocklist(peerId string) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}
-	if id == "" {
+	if peerId == "" {
 		return local.DBError("empty peer ID")
 	}
-	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(BlocklistSubNamespace).
-		AddRootID(id.String()).
-		Build()
 
 	txn, err := d.db.NewTxn()
 	if err != nil {
@@ -667,87 +680,130 @@ func (d *NodeRepo) Blocklist(id warpnet.WarpPeerID) error {
 	}
 	defer txn.Rollback()
 
-	bt, err := txn.Get(blocklistKey)
+	blocklistTermKey := local.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(BlocklistSubNamespace).
+		AddSubPrefix(BlocklistTermSubNamespace).
+		AddRootID(peerId).
+		Build()
+
+	bt, err := txn.Get(blocklistTermKey)
 	if err != nil && !local.IsNotFoundError(err) {
 		return err
 	}
 
-	item := BlocklistedItem{PeerID: id}
-	if len(bt) != 0 {
-		if err := json.Unmarshal(bt, &item); err != nil {
+	var term BlocklistTerm
+	if bt != nil {
+		if err := json.Unmarshal(bt, &term); err != nil {
 			return err
 		}
 	}
 
-	if item.Level == 0 {
-		item.Level = InitialBlock
+	if term.Level == 0 {
+		term.Level = InitialBlock
 	} else {
-		item.Level = item.Level.Next()
+		term.Level = term.Level.Next()
 	}
 
-	dur := blockDurationMapping[item.Level]
-	item.Duration = &dur
+	dur := blockDurationMapping[term.Level]
 
-	if *item.Duration == foreverBlockDuration {
-		return nil
+	blocklistUserKey := local.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(BlocklistSubNamespace).
+		AddSubPrefix(BlocklistUserSubNamespace).
+		AddRootID(peerId).
+		Build()
+
+	if err := txn.SetWithTTL(blocklistUserKey, []byte{}, dur); err != nil {
+		return err
 	}
 
-	bt, err = json.Marshal(item)
+	bt, err = json.Marshal(term)
 	if err != nil {
 		return err
 	}
 
-	if err := txn.SetWithTTL(blocklistKey, bt, dur); err != nil {
+	if err := txn.Set(blocklistTermKey, bt); err != nil {
 		return err
 	}
-
 	return txn.Commit()
 }
 
-func (d *NodeRepo) IsBlocklisted(peerId warpnet.WarpPeerID) (bool, BlockLevel) {
+func (d *NodeRepo) IsBlocklisted(peerId string) bool {
 	if d == nil {
-		return false, 0
+		return false
 	}
 	if peerId == "" {
-		return false, 0
+		return false
 	}
-	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
+
+	blocklistUserKey := local.NewPrefixBuilder(NodesNamespace).
 		AddSubPrefix(BlocklistSubNamespace).
-		AddRootID(peerId.String()).
+		AddSubPrefix(BlocklistUserSubNamespace).
+		AddRootID(peerId).
 		Build()
-	bt, err := d.db.Get(blocklistKey)
-	if err != nil || len(bt) == 0 {
-		return false, 0
-	}
-
-	var item BlocklistedItem
-	if err := json.Unmarshal(bt, &item); err != nil {
-		return true, 0
-	}
-
-	return true, item.Level
+	_, err := d.db.Get(blocklistUserKey)
+	return err == nil
 }
 
-func (d *NodeRepo) BlocklistRemove(peerId warpnet.WarpPeerID) {
+func (d *NodeRepo) BlocklistTerm(peerId string) (*BlocklistTerm, error) {
 	if d == nil {
-		return
+		return nil, ErrNilNodeRepo
 	}
 	if peerId == "" {
-		return
+		return nil, local.DBError("empty peer ID")
 	}
-	blocklistKey := local.NewPrefixBuilder(NodesNamespace).
-		AddSubPrefix(BlocklistSubNamespace).
-		AddRootID(peerId.String()).
-		Build()
+	var term BlocklistTerm
 
-	_ = d.db.Delete(blocklistKey)
-	return
+	blocklistTermKey := local.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(BlocklistSubNamespace).
+		AddSubPrefix(BlocklistTermSubNamespace).
+		AddRootID(peerId).
+		Build()
+	bt, err := d.db.Get(blocklistTermKey)
+	if local.IsNotFoundError(err) {
+		return &term, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(bt, &term); err != nil {
+		return nil, err
+	}
+	return &term, nil
 }
 
-func buildRootKey(key local.Key) string {
-	rootKey := strings.TrimPrefix(key.String(), "/")
-	if len(rootKey) == 0 {
-		rootKey = key.String()
+func (d *NodeRepo) BlocklistRemove(peerId string) error {
+	if d == nil {
+		return nil
 	}
-	return rootKey
+	if peerId == "" {
+		return nil
+	}
+	txn, err := d.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	blocklistUserKey := local.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(BlocklistSubNamespace).
+		AddSubPrefix(BlocklistUserSubNamespace).
+		AddRootID(peerId).
+		Build()
+	_ = txn.Delete(blocklistUserKey)
+
+	blocklistTermKey := local.NewPrefixBuilder(NodesNamespace).
+		AddSubPrefix(BlocklistSubNamespace).
+		AddSubPrefix(BlocklistTermSubNamespace).
+		AddRootID(peerId).
+		Build()
+	term := BlocklistTerm{PeerID: peerId, Level: 0}
+	bt, err := json.Marshal(term)
+	if err != nil {
+		return err
+	}
+	if err := txn.Set(blocklistTermKey, bt); err != nil {
+		return err
+	}
+	return txn.Commit()
 }

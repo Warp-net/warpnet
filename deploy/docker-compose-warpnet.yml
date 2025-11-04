@@ -9,6 +9,7 @@ services:
       - NODE_HOST_V4=207.154.221.44
       - NODE_SEED=warpnet1
       - NODE_NETWORK=warpnet
+      - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
 
   warpnet2:
@@ -21,6 +22,7 @@ services:
       - NODE_HOST_V4=207.154.221.44
       - NODE_SEED=warpnet2
       - NODE_NETWORK=warpnet
+      - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
 
   warpnet3:
@@ -33,6 +35,7 @@ services:
       - NODE_SEED=warpnet3
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=warpnet
+      - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
 
 

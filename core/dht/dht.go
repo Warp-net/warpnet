@@ -30,7 +30,6 @@ package dht
 import (
 	"context"
 	"errors"
-	"runtime"
 	"time"
 
 	"github.com/Warp-net/warpnet/config"
@@ -123,15 +122,13 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		dht.Mode(dht.ModeServer),
 		dht.ProtocolPrefix(protocol.ID("/"+config.Config().Node.Network)),
 		dht.Datastore(d.cfg.store),
-		dht.MaxRecordAge(time.Hour*24*365),
+		dht.MaxRecordAge(time.Hour),
 		dht.RoutingTableRefreshPeriod(time.Hour),
 		dht.RoutingTableRefreshQueryTimeout(time.Minute*5),
 		dht.BootstrapPeers(d.cfg.boostrapNodes...),
 		dht.ProviderStore(providerStore),
-		dht.RoutingTableLatencyTolerance(time.Hour*24),
+		dht.RoutingTableLatencyTolerance(time.Minute),
 		dht.BucketSize(50),
-		dht.Concurrency(runtime.NumCPU()/2),
-		dht.LookupCheckConcurrency(runtime.NumCPU()/2),
 	)
 	if err != nil {
 		log.Errorf("dht: new: %v", err)
@@ -142,12 +139,11 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	if d.cfg.addCallbacks != nil {
 		d.dht.RoutingTable().PeerAdded = func(id peer.ID) {
 			log.Infof("dht: peer added: %s", id)
-			info := peer.AddrInfo{ID: id}
 			for _, addF := range d.cfg.addCallbacks {
 				if addF == nil {
 					continue
 				}
-				addF(info)
+				addF(id)
 			}
 		}
 	}
@@ -155,12 +151,11 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	if d.cfg.removeCallbacks != nil {
 		d.dht.RoutingTable().PeerRemoved = func(id peer.ID) {
 			log.Infof("dht: peer removed: %s", id)
-			info := peer.AddrInfo{ID: id}
 			for _, removeF := range d.cfg.removeCallbacks {
 				if removeF == nil {
 					continue
 				}
-				removeF(info)
+				removeF(id)
 			}
 		}
 	}
@@ -227,8 +222,9 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 	}
 }
 
-func (d *distributedHashTable) ClosestPeers() ([]warpnet.WarpPeerID, error) {
-	return d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
+func (d *distributedHashTable) ClosestPeers() []warpnet.WarpPeerID {
+	closest, _ := d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
+	return closest
 }
 
 func (d *distributedHashTable) Close() {

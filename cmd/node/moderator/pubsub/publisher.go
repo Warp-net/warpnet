@@ -56,10 +56,10 @@ type moderatorPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
-func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *moderatorPubSub {
+func NewPubSub(ctx context.Context) *moderatorPubSub {
 	mps := &moderatorPubSub{}
 
-	mps.pubsub = pubsub.NewGossip(ctx, handlers...)
+	mps.pubsub = pubsub.NewGossip(ctx, pubsub.NewDiscoveryRelayTopicHandler())
 	return mps
 }
 
@@ -71,15 +71,18 @@ func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) error {
 	return g.pubsub.Run(node)
 }
 
-func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error) {
+func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body any) (err error) {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
 
-	body := json.RawMessage(bt)
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
 	msg := event.Message{
-		Body:        body,
+		Body:        bodyBytes,
 		NodeId:      g.pubsub.NodeInfo().ID.String(),
 		Destination: dest,
 		Timestamp:   time.Now(),

@@ -104,7 +104,7 @@ func (a *App) startup(ctx context.Context) {
 	userRepo := database.NewUserRepo(db)
 	a.db = db
 	a.readyChan = make(chan domain.AuthNodeInfo, 1)
-	a.auth = auth.NewAuthService(authRepo, userRepo, a.readyChan)
+	a.auth = auth.NewAuthService(ctx, authRepo, userRepo, a.readyChan)
 
 	version := config.Config().Version
 	network := config.Config().Node.Network

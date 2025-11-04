@@ -40,6 +40,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -49,7 +50,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const PubSubDiscoveryTopic = "peer-discovery"
+const pubSubDiscoveryTopic = "peer-discovery"
 
 type GossipNodeConnector interface {
 	Node() warpnet.P2PNode
@@ -58,13 +59,6 @@ type GossipNodeConnector interface {
 }
 
 type topicHandler func(data []byte) error
-
-func NewDiscoveryTopicHandler(handler func(data []byte) error) TopicHandler {
-	return TopicHandler{
-		TopicName: PubSubDiscoveryTopic,
-		Handler:   handler,
-	}
-}
 
 type Gossip struct {
 	ctx    context.Context
@@ -218,7 +212,7 @@ func (g *Gossip) runGossip() (err error) {
 	}
 	g.isRunning.Store(true)
 
-	go g.runPeerInfoPublishing()
+	go g.runPeerInfoPublishing(time.Minute * 5)
 	log.Infoln("gossip: started")
 
 	return
@@ -426,9 +420,8 @@ func (g *Gossip) IsGossipRunning() bool {
 	return g.isRunning.Load()
 }
 
-func (g *Gossip) runPeerInfoPublishing() {
-	jitter := time.Second * time.Duration(rand.Intn(60))
-	ticker := time.NewTicker((time.Minute * 5) + jitter)
+func (g *Gossip) runPeerInfoPublishing(duration time.Duration) {
+	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 
 	log.Infoln("pubsub: publisher started")
@@ -447,6 +440,9 @@ func (g *Gossip) runPeerInfoPublishing() {
 		case <-g.ctx.Done():
 			return
 		case <-ticker.C:
+			jitter := time.Second * time.Duration(rand.Intn(60))
+			ticker.Reset(duration + jitter)
+
 			err := g.publishPeerInfo()
 			if errors.Is(err, pubsub.ErrTopicClosed) {
 				return
@@ -464,6 +460,7 @@ func (g *Gossip) publishPeerInfo() error {
 	myId := g.node.Node().ID()
 	myAddrs := g.node.Node().Addrs()
 	peerStore := g.node.Node().Peerstore()
+	network := g.node.Node().Network()
 	limit := defaultPublishPeerInfoLimit
 
 	addrInfosMessage := []warpnet.WarpAddrInfo{{
@@ -472,9 +469,13 @@ func (g *Gossip) publishPeerInfo() error {
 	}}
 
 	peerIds := peerStore.PeersWithAddrs()
+
 	for _, id := range peerIds {
 		if limit == 0 {
 			break
+		}
+		if network.Connectedness(id) == warpnet.Disconnected {
+			continue
 		}
 		addrs := peerStore.Addrs(id)
 		addrInfosMessage = append(addrInfosMessage, warpnet.WarpAddrInfo{ID: id, Addrs: addrs})
@@ -495,7 +496,7 @@ func (g *Gossip) publishPeerInfo() error {
 		Version:     "0.0.0", // TODO
 	}
 
-	return g.Publish(msg, PubSubDiscoveryTopic)
+	return g.Publish(msg, pubSubDiscoveryTopic)
 }
 
 func (g *Gossip) Close() (err error) {
@@ -531,4 +532,43 @@ func (g *Gossip) Close() (err error) {
 	g.subs = nil
 	log.Infoln("gossip: closed")
 	return
+}
+
+type pubsubDiscoveryMessage struct {
+	Body []warpnet.WarpAddrInfo `json:"body"`
+}
+
+func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandler {
+	return TopicHandler{
+		TopicName: pubSubDiscoveryTopic,
+		Handler: func(data []byte) error {
+			if len(data) == 0 {
+				return nil
+			}
+
+			var msg pubsubDiscoveryMessage
+			if err := json.Unmarshal(data, &msg); err != nil {
+				return fmt.Errorf("pubsub: discovery: unmarshal pubsub message: %v %s", err, data)
+			}
+
+			if len(msg.Body) == 0 {
+				return fmt.Errorf("pubsub: discovery: empty message: %s", string(data))
+			}
+
+			for _, info := range msg.Body {
+				discHandler(info)
+			}
+			return nil
+		},
+	}
+}
+
+// NewDiscoveryRelayTopicHandler acts only as relay
+func NewDiscoveryRelayTopicHandler() TopicHandler {
+	return TopicHandler{
+		TopicName: pubSubDiscoveryTopic,
+		Handler: func(_ []byte) error {
+			return nil
+		},
+	}
 }

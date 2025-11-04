@@ -430,6 +430,7 @@ func (db *DB) Delete(key DatabaseKey) error {
 type WarpTransactioner interface {
 	Set(key DatabaseKey, value []byte) error
 	Get(key DatabaseKey) ([]byte, error)
+	GetExpiration(key DatabaseKey) (uint64, error)
 	SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error
 	BatchSet(data []ListItem) (err error)
 	Delete(key DatabaseKey) error
@@ -483,6 +484,15 @@ func (t *warpTxn) Get(key DatabaseKey) ([]byte, error) {
 	result = append([]byte{}, val...)
 
 	return result, nil
+}
+
+func (t *warpTxn) GetExpiration(key DatabaseKey) (uint64, error) {
+	item, err := t.txn.Get(key.Bytes())
+	if err != nil {
+		return 0, err
+	}
+
+	return item.ExpiresAt(), nil
 }
 
 func (t *warpTxn) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error {

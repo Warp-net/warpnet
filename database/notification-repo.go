@@ -55,6 +55,10 @@ func NewNotificationsRepo(db NotificationsStorer) *NotificationsRepo {
 }
 
 func (repo *NotificationsRepo) Add(not domain.Notification) error {
+	if not.UserId == "" {
+		return local.DBError("missing user id")
+	}
+
 	if not.Id == "" {
 		not.Id = uuid.New().String()
 	}
@@ -84,6 +88,9 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 }
 
 func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+	if userId == "" {
+		return nil, "", local.DBError("missing user id")
+	}
 	prefix := local.NewPrefixBuilder(NotificationsRepoName).
 		AddRootID(userId).
 		Build()

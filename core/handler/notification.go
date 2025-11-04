@@ -7,6 +7,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 )
 
 /*
@@ -60,6 +61,9 @@ func StreamGetNotificationsHandler(
 		notifications, cur, err := repo.List(owner.UserId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
+		}
+		if len(notifications) != 0 {
+			log.Infof("found %d notifications", len(notifications))
 		}
 
 		var unreadCount uint64

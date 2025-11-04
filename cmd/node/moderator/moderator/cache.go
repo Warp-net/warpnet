@@ -23,52 +23,30 @@ resulting from the use or misuse of this software.
 package moderator
 
 import (
-	"math/rand/v2"
-	"sync"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
-const maxLiveTime = 8 * time.Hour
-
-type CacheEntry struct {
-	expirationTime time.Time
-	// TODO
+type CacheKey struct {
+	Type   domain.ModerationObjectType
+	PeerId string
+	Cursor *string
 }
 
-type moderationCache struct {
-	mx    *sync.RWMutex
-	peers map[warpnet.WarpPeerID]CacheEntry
+type tweetModerationCache struct {
+	cache *lru.LRU[CacheKey, struct{}]
 }
 
-func newModerationCache() *moderationCache {
-	return &moderationCache{
-		peers: make(map[warpnet.WarpPeerID]CacheEntry),
-		mx:    new(sync.RWMutex),
-	}
+func newTweetModerationCache() *tweetModerationCache {
+	return &tweetModerationCache{lru.NewLRU[CacheKey, struct{}](256, nil, time.Hour*24)}
 }
 
-func (dc *moderationCache) IsModeratedAlready(id warpnet.WarpPeerID) bool {
-	dc.mx.RLock()
-	defer dc.mx.RUnlock()
-
-	_, ok := dc.peers[id]
-	return ok
+func (tmc *tweetModerationCache) IsModeratedAlready(key CacheKey) bool {
+	return tmc.cache.Contains(key)
 }
 
-func (dc *moderationCache) SetAsModerated(peerId warpnet.WarpPeerID, entry CacheEntry) {
-	dc.mx.Lock()
-	defer dc.mx.Unlock()
-
-	ttl := maxLiveTime + time.Minute*time.Duration(rand.IntN(8))
-	entry.expirationTime = time.Now().Add(ttl)
-	dc.peers[peerId] = entry
-
-	for id, e := range dc.peers {
-		if time.Now().After(e.expirationTime) {
-			delete(dc.peers, id)
-		}
-	}
-	return
+func (tmc *tweetModerationCache) SetAsModerated(key CacheKey) {
+	tmc.cache.Add(key, struct{}{})
 }

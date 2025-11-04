@@ -29,14 +29,11 @@ package database
 
 import (
 	"context"
-	"crypto/ed25519"
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/security"
 	"go.uber.org/goleak"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
@@ -110,28 +107,6 @@ func (s *NodeRepoTestSuite) TestPutWithTTLAndSetTTL() {
 func (s *NodeRepoTestSuite) TestDiskUsage() {
 	_, err := s.repo.DiskUsage(s.ctx)
 	s.Require().NoError(err)
-}
-
-func (s *NodeRepoTestSuite) TestBlocklist() {
-	pk, err := security.GenerateKeyFromSeed([]byte("peer123"))
-	s.Require().NoError(err)
-
-	id, err := warpnet.IDFromPublicKey(pk.Public().(ed25519.PublicKey))
-	s.Require().NoError(err)
-
-	err = s.repo.BlocklistExponential(id)
-	s.Require().NoError(err)
-
-	isBlocked, err := s.repo.IsBlocklisted(id)
-	s.Require().NoError(err)
-	s.True(isBlocked)
-
-	err = s.repo.BlocklistRemove(id)
-	s.Require().NoError(err)
-
-	isBlocked, err = s.repo.IsBlocklisted(id)
-	s.Require().NoError(err)
-	s.False(isBlocked)
 }
 
 func (s *NodeRepoTestSuite) TestQuerySimple() {

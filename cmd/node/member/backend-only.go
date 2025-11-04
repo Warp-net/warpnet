@@ -35,6 +35,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
@@ -54,6 +55,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if config.Config().Logging.Format == config.TextFormat {
+		log.SetFormatter(&log.TextFormatter{FullTimestamp: true, TimestampFormat: time.DateTime})
+	} else {
+		log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
+	}
+	log.SetOutput(os.Stdout)
 	log.SetLevel(log.InfoLevel)
 
 	var interruptChan = make(chan os.Signal, 1)
@@ -72,7 +79,7 @@ func main() {
 
 	authRepo := database.NewAuthRepo(db)
 	userRepo := database.NewUserRepo(db)
-	authService := auth.NewAuthService(authRepo, userRepo, readyChan)
+	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
 	go func() {
 		username, pass := manualCredsInput()

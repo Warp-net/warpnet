@@ -79,7 +79,7 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	}
 
 	// long-long wait in case of p2p-circuit stream
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	connectedness := p.n.Network().Connectedness(peerAddr.ID)

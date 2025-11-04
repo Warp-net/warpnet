@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package auth
 
 import (
+	"context"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
@@ -58,6 +59,7 @@ type AuthPersistencyLayer interface {
 }
 
 type AuthService struct {
+	ctx             context.Context
 	isAuthenticated *atomic.Bool
 	userPersistence UserPersistencyLayer
 	authPersistence AuthPersistencyLayer
@@ -65,11 +67,13 @@ type AuthService struct {
 }
 
 func NewAuthService(
+	ctx context.Context,
 	authRepo AuthPersistencyLayer,
 	userRepo UserPersistencyLayer,
 	authReady chan domain.AuthNodeInfo,
 ) *AuthService {
 	return &AuthService{
+		ctx,
 		new(atomic.Bool),
 		userRepo,
 		authRepo,
@@ -162,12 +166,10 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		Identity: domain.Identity{Owner: owner, Token: token},
 	}
 
-	timer := time.NewTimer(time.Minute * 5)
-	defer timer.Stop()
 	select {
-	case <-timer.C:
-		log.Errorln("node startup failed: timeout")
-		return authInfo, errors.New("node starting is timed out")
+	case <-as.ctx.Done():
+		log.Errorln("node startup cancelled")
+		return authInfo, errors.New("node starting is cancelled")
 	case authInfo = <-as.authReady:
 		if authInfo.NodeInfo.ID.String() == "" {
 			panic("auth: node id missing")

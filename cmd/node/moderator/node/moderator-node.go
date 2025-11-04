@@ -43,13 +43,12 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p"
-	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
 
 type DistributedHashTableDiscoverer interface {
-	ClosestPeers() ([]warpnet.WarpPeerID, error)
+	ClosestPeers() []warpnet.WarpPeerID
 	Close()
 }
 
@@ -104,10 +103,21 @@ func NewModeratorNode(
 		return nil, err
 	}
 
-	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
-	if err != nil {
-		return nil, err
+	opts := []libp2p.Option{
+		node.WarpIdentity(privKey),
+		libp2p.Peerstore(memoryStore),
+		libp2p.PrivateNetwork(warpnet.PSK(psk)),
+		libp2p.ListenAddrStrings(
+			[]string{
+				fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
+				fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
+			}...,
+		),
+		libp2p.Routing(dHashTable.StartRouting),
+		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	}
+
+	opts = append(opts, node.CommonOptions...)
 
 	mn := &ModeratorNode{
 		ctx:               ctx,
@@ -117,24 +127,8 @@ func NewModeratorNode(
 		privKey:           privKey,
 		selfHashHex:       selfHashHex,
 		version:           config.Config().Version,
-		options: []libp2p.Option{
-			libp2p.ListenAddrStrings(
-				[]string{
-					fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
-					fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
-				}...,
-			),
-			libp2p.Transport(warpnet.NewTCPTransport),
-			libp2p.Identity(p2pPrivKey),
-			libp2p.Ping(false),
-			libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
-			libp2p.Peerstore(memoryStore),
-			libp2p.PrivateNetwork(warpnet.PSK(psk)),
-			libp2p.UserAgent(warpnet.WarpnetName + "-moderator"),
-			libp2p.Routing(dHashTable.StartRouting),
-			node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
-		},
-		isClosed: new(atomic.Bool),
+		options:           opts,
+		isClosed:          new(atomic.Bool),
 	}
 
 	return mn, nil
@@ -176,7 +170,7 @@ func (mn *ModeratorNode) ID() warpnet.WarpPeerID {
 	return mn.node.Node().ID()
 }
 
-func (mn *ModeratorNode) ClosestPeers() ([]warpnet.WarpPeerID, error) {
+func (mn *ModeratorNode) ClosestPeers() []warpnet.WarpPeerID {
 	return mn.dHashTable.ClosestPeers()
 }
 
@@ -199,7 +193,7 @@ func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 	return mn.node.Stream(nodeId, path, data)
 }
 
-func (mn *ModeratorNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+func (mn *ModeratorNode) SelfStream(_ stream.WarpRoute, _ any) (_ []byte, err error) {
 	return nil, errors.New("not implemented")
 }
 
