@@ -1,5 +1,5 @@
 kill:
-	pkill -9 warpnet
+	pkill -9 warpnet && pkill -9 main
 
 backend-only-main:
 	go run -tags backend cmd/node/member/backend-only.go --node.network testnet

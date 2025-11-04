@@ -117,7 +117,6 @@ func StreamGetUserHandler(
 			return u, nil
 		}
 
-		fmt.Println("get other user: userId:", ev.UserId)
 		otherUser, err := repo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
 			return nil, err
@@ -125,8 +124,6 @@ func StreamGetUserHandler(
 		if err != nil {
 			return nil, err
 		}
-
-		fmt.Println("get other user: node id:", otherUser.NodeId)
 
 		otherUserData, err := streamer.GenericStream(
 			otherUser.NodeId,

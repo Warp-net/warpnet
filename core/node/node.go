@@ -186,88 +186,97 @@ var localAddrActions = map[int]string{
 }
 
 func (n *WarpNode) trackIncomingEvents() {
-	for ev := range n.eventsSub.Out() {
-		switch ev.(type) {
-		case event.EvtPeerProtocolsUpdated:
-			protoUpdatedEvent := ev.(event.EvtPeerProtocolsUpdated)
-			if len(protoUpdatedEvent.Added) != 0 {
-				log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
-			}
-			if len(protoUpdatedEvent.Removed) != 0 {
-				log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
-			}
-		case event.EvtLocalProtocolsUpdated:
-			protoUpdatedEvent := ev.(event.EvtLocalProtocolsUpdated)
-			if len(protoUpdatedEvent.Added) != 0 {
-				log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
-			} else {
-				log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
-			}
-		case event.EvtPeerConnectednessChanged:
-			connectednessEvent := ev.(event.EvtPeerConnectednessChanged)
-			pid := connectednessEvent.Peer.String()
-			if connectednessEvent.Connectedness == warpnet.Limited {
+	for {
+		select {
+		case <-n.ctx.Done():
+			return
+		case ev, ok := <-n.eventsSub.Out():
+			if !ok {
 				return
 			}
-			log.Infof(
-				"node: event: peer ...%s connectedness updated: %s",
-				pid[len(pid)-6:],
-				connectednessEvent.Connectedness.String(),
-			)
-
-		case event.EvtPeerIdentificationFailed:
-			identificationEvent := ev.(event.EvtPeerIdentificationFailed)
-			pid := identificationEvent.Peer.String()
-			log.Errorf(
-				"node: event: peer ...%s identification failed, reason: %s",
-				pid[len(pid)-6:], identificationEvent.Reason,
-			)
-
-		case event.EvtPeerIdentificationCompleted:
-			identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
-			pid := identificationEvent.Peer.String()
-			log.Debugf(
-				"node: event: peer ...%s identification completed, observed address: %s",
-				pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
-			)
-		case event.EvtLocalReachabilityChanged:
-			r := ev.(event.EvtLocalReachabilityChanged).Reachability // it's int32 under the hood
-			log.Infof(
-				"node: event: own node reachability changed: %s",
-				strings.ToLower(r.String()),
-			)
-			n.reachability.Store(int32(r))
-		case event.EvtNATDeviceTypeChanged:
-			natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
-			log.Infof(
-				"node: event: NAT device type changed: %s, transport: %s",
-				natDeviceTypeChangedEvent.NatDeviceType.String(), natDeviceTypeChangedEvent.TransportProtocol.String(),
-			)
-		case event.EvtAutoRelayAddrsUpdated:
-			newAddrsEvent := ev.(event.EvtAutoRelayAddrsUpdated)
-			if len(newAddrsEvent.RelayAddrs) != 0 {
-				log.Infoln("node: event: relay address added")
-			}
-		case event.EvtLocalAddressesUpdated:
-			for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
-				log.Debugf(
-					"node: event: local address %s: %s",
-					addr.Address.String(), localAddrActions[int(addr.Action)],
+			switch ev.(type) {
+			case event.EvtPeerProtocolsUpdated:
+				protoUpdatedEvent := ev.(event.EvtPeerProtocolsUpdated)
+				if len(protoUpdatedEvent.Added) != 0 {
+					log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
+				}
+				if len(protoUpdatedEvent.Removed) != 0 {
+					log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
+				}
+			case event.EvtLocalProtocolsUpdated:
+				protoUpdatedEvent := ev.(event.EvtLocalProtocolsUpdated)
+				if len(protoUpdatedEvent.Added) != 0 {
+					log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
+				} else {
+					log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
+				}
+			case event.EvtPeerConnectednessChanged:
+				connectednessEvent := ev.(event.EvtPeerConnectednessChanged)
+				pid := connectednessEvent.Peer.String()
+				if connectednessEvent.Connectedness == warpnet.Limited {
+					return
+				}
+				log.Infof(
+					"node: event: peer ...%s connectedness updated: %s",
+					pid[len(pid)-6:],
+					connectednessEvent.Connectedness.String(),
 				)
+
+			case event.EvtPeerIdentificationFailed:
+				identificationEvent := ev.(event.EvtPeerIdentificationFailed)
+				pid := identificationEvent.Peer.String()
+				log.Errorf(
+					"node: event: peer ...%s identification failed, reason: %s",
+					pid[len(pid)-6:], identificationEvent.Reason,
+				)
+
+			case event.EvtPeerIdentificationCompleted:
+				identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
+				pid := identificationEvent.Peer.String()
+				log.Debugf(
+					"node: event: peer ...%s identification completed, observed address: %s",
+					pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
+				)
+			case event.EvtLocalReachabilityChanged:
+				r := ev.(event.EvtLocalReachabilityChanged).Reachability // it's int32 under the hood
+				log.Infof(
+					"node: event: own node reachability changed: %s",
+					strings.ToLower(r.String()),
+				)
+				n.reachability.Store(int32(r))
+			case event.EvtNATDeviceTypeChanged:
+				natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
+				log.Infof(
+					"node: event: NAT device type changed: %s, transport: %s",
+					natDeviceTypeChangedEvent.NatDeviceType.String(), natDeviceTypeChangedEvent.TransportProtocol.String(),
+				)
+			case event.EvtAutoRelayAddrsUpdated:
+				newAddrsEvent := ev.(event.EvtAutoRelayAddrsUpdated)
+				if len(newAddrsEvent.RelayAddrs) != 0 {
+					log.Infoln("node: event: relay address added")
+				}
+			case event.EvtLocalAddressesUpdated:
+				for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
+					log.Debugf(
+						"node: event: local address %s: %s",
+						addr.Address.String(), localAddrActions[int(addr.Action)],
+					)
+				}
+			case event.EvtHostReachableAddrsChanged:
+				peerReachability := ev.(event.EvtHostReachableAddrsChanged)
+				log.Infof(
+					`node: event: peer reachability changed: reachable: %v, unreachable: %v, unknown: %v`,
+					peerReachability.Reachable,
+					peerReachability.Unreachable,
+					peerReachability.Unknown,
+				)
+			default:
+				bt, _ := json.Marshal(ev)
+				log.Infof("node: event: %T %s", ev, bt)
 			}
-		case event.EvtHostReachableAddrsChanged:
-			peerReachability := ev.(event.EvtHostReachableAddrsChanged)
-			log.Infof(
-				`node: event: peer reachability changed: reachable: %v, unreachable: %v, unknown: %v`,
-				peerReachability.Reachable,
-				peerReachability.Unreachable,
-				peerReachability.Unknown,
-			)
-		default:
-			bt, _ := json.Marshal(ev)
-			log.Infof("node: event: %T %s", ev, bt)
 		}
 	}
+
 }
 
 func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
@@ -387,15 +396,21 @@ func (n *WarpNode) StopNode() {
 	if n.eventsSub != nil {
 		_ = n.eventsSub.Close()
 	}
+	log.Infoln("node: event sub closed")
 
 	if n.relay != nil {
 		_ = n.relay.Close()
 	}
+	log.Infoln("node: relay closed")
 
 	if err := n.node.Close(); err != nil {
 		log.Errorf("node: failed to close: %v", err)
 	}
+	log.Infoln("node: stopped")
+
 	n.isClosed.Store(true)
 	n.node = nil
+
+	//pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 	return
 }

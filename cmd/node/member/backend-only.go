@@ -56,7 +56,7 @@ func main() {
 	}
 
 	if config.Config().Logging.Format == config.TextFormat {
-		log.SetFormatter(&log.TextFormatter{TimestampFormat: time.DateTime})
+		log.SetFormatter(&log.TextFormatter{FullTimestamp: true, TimestampFormat: time.DateTime})
 	} else {
 		log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
 	}

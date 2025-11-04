@@ -16,6 +16,7 @@ ENV GOPATH=/warpnet
 ENV CGO_ENABLED=1
 ENV GOMEMLIMIT=2750MiB 
 ENV GOGC=50
+ENV GOEXPERIMENT=greenteagc
 
 RUN go version && go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
 

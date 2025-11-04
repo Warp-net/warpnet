@@ -120,7 +120,7 @@ func NewDiscoveryService(
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
 		cache:           newDiscoveryCache(),
-		discoveryChan:   make(chan discoveredPeer, 1000),
+		discoveryChan:   make(chan discoveredPeer, 128),
 		discoveryTicker: time.NewTicker(time.Minute * 5),
 		stopChan:        make(chan struct{}),
 	}
@@ -195,8 +195,6 @@ func (s *discoveryService) DiscoveryHandlerPubSub(pi warpnet.WarpAddrInfo) {
 	s.enqueue(pi, sourceGossip) // main source
 }
 
-const dropMessagesLimit = 5
-
 func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySource) {
 	if s == nil || s.discoveryChan == nil {
 		log.Errorf("discovery: handle new peer found: nil discovery service")
@@ -219,8 +217,11 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		Source: source,
 	}:
 	default:
-		log.Warnf("discovery: channel overflow %d", cap(s.discoveryChan))
-		for i := 0; i < dropMessagesLimit; i++ {
+		div := int(cap(s.discoveryChan) / 10)
+		jitter := rand.IntN(div)
+		dropMessagesNum := jitter + 1
+		log.Warnf("discovery: channel overflow %d, drop %d first messages", cap(s.discoveryChan), dropMessagesNum)
+		for i := 0; i < dropMessagesNum; i++ {
 			<-s.discoveryChan // drop old data
 		}
 	}
@@ -566,4 +567,5 @@ func (s *discoveryService) Close() {
 	s.discoveryTicker.Stop()
 	close(s.stopChan)
 	close(s.discoveryChan)
+	log.Infoln("discovery: closed")
 }
