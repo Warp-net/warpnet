@@ -1,0 +1,65 @@
+version: "2"
+
+run:
+  concurrency: 4
+  modules-download-mode: readonly
+  issues-exit-code: 1
+  tests: true
+
+linters:
+  default: all
+  exclusions:
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - govet
+          - err113
+          - errcheck
+          - gosec
+          - goconst
+          - dupl
+          - maintidx
+  disable:
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - cyclop
+    - depguard
+    - dogsled
+    - exhaustive
+    - exhaustruct
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocyclo
+    - godox
+    - goprintffuncname
+    - inamedparam
+    - intrange
+    - ireturn
+    - lll
+    - musttag
+    - nilnil
+    - nlreturn
+    - nonamedreturns
+    - nolintlint
+    - noinlineerr
+    - paralleltest
+    - perfsprint
+    - revive
+    - tagalign
+    - tagliatelle
+    - testpackage
+    - varnamelen
+    - wrapcheck
+    - wsl
+    - wsl_v5
+
+formatters:
+  enable:
+    - gci
+    - gofumpt
