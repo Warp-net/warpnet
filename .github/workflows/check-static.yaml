@@ -1,0 +1,117 @@
+name: Static Analysis & Test Coverage
+
+env:
+  GO_VERSION: "1.25.3"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint:
+    name: Lint & Vulnerabilities
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Run golvulncheck
+        uses: golang/govulncheck-action@v1
+
+  test:
+    name: Test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run tests
+        if: ${{ matrix.os != 'ubuntu-latest' }}
+        run: go test -race ./...
+
+      - name: Run tests (with coverage)
+        if: ${{ matrix.os == 'ubuntu-latest' }} # collect & upload coverage only from one of the runners
+        run: go test -race -coverprofile=coverage.out -coverpkg=./... ./...
+
+      - name: Check code coverage
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          go tool cover -func=coverage.out -o=coverage.txt
+          go tool cover -html=coverage.out -o=coverage.html
+
+      - name: Upload coverage artifacts
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.html
+            coverage.txt
+
+      #   # This step *supposed* to work with valid CODECOV_TOKEN and created organization on Codecov
+      # - name: Upload coverage data to Codecov
+      #   if: ${{ matrix.os == 'ubuntu-latest' }}
+      #   uses: codecov/codecov-action@v4
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     file: ./coverage.out
+      #     name: codecov-umbrella
+
+      - name: Calculate coverage
+        if: ${{ github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest' }}
+        id: coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Comment coverage on PR
+        if: ${{ github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest' }}
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const coverage = '${{ steps.coverage.outputs.coverage }}';
+            const comment = `## Code Coverage Report
+
+            **Total Coverage:** ${coverage}%
+
+            Full coverage report is available in the workflow artifacts.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            })
