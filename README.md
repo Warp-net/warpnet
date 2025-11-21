@@ -15,7 +15,8 @@
     <a href="https://github.com/Warp-net/warpnet/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
   </p>
 </div>
-![alt text](https://github.com/Warp-net/.github/raw/main/docs/warpscreen.jpg)
+
+![Screenshot](https://github.com/Warp-net/.github/raw/main/docs/warpscreen.jpg)
 
 ## Getting Started
 
