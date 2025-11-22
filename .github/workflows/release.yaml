@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Specify a Git tag to process (e.g., v1.0.0)'
+        description: "Specify a Git tag to process (e.g., v1.0.0)"
         required: true
         type: string
 
 env:
-  GO_VERSION: '1.25.3'
+  GO_VERSION: "1.25.3"
   RELEASE_TAG: ${{ github.event.inputs.tag }}
-  CGO_ENABLED: '1'
+  CGO_ENABLED: "1"
 
 jobs:
   release:
@@ -23,7 +23,7 @@ jobs:
           - os: ubuntu-24.04-arm
             platform: linux/arm64
           - os: macos-latest
-            platform: darwin/arm64
+            platform: darwin/universal
           - os: windows-latest
             platform: windows/amd64
 
@@ -80,10 +80,10 @@ jobs:
       - name: Package + checksum (macOS)
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
-          mkdir -p out/darwin_arm64
-          mv cmd/node/member/build/bin/* out/darwin_arm64/warpnet
-          tar -C out/darwin_arm64 -czf warpnet_${{ env.RELEASE_TAG }}_darwin_arm64.tar.gz .
-          shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_darwin_arm64.tar.gz > warpnet_${{ env.RELEASE_TAG }}_darwin_arm64_checksums.txt
+          mkdir -p out/darwin
+          mv cmd/node/member/build/bin/* out/darwin/warpnet
+          tar -C out/darwin -czf warpnet_${{ env.RELEASE_TAG }}_darwin.tar.gz .
+          shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_darwin.tar.gz > warpnet_${{ env.RELEASE_TAG }}_darwin_checksums.txt
 
       - name: Package + checksum (Windows)
         if: ${{ matrix.os == 'windows-latest' }}
@@ -107,10 +107,7 @@ jobs:
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
             warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz
             warpnet_${{ env.RELEASE_TAG }}_linux_arm64_checksums.txt
-            warpnet_${{ env.RELEASE_TAG }}_darwin_arm64.tar.gz
-            warpnet_${{ env.RELEASE_TAG }}_darwin_arm64_checksums.txt
+            warpnet_${{ env.RELEASE_TAG }}_darwin.tar.gz
+            warpnet_${{ env.RELEASE_TAG }}_darwin_checksums.txt
             warpnet_${{ env.RELEASE_TAG }}_windows_amd64.zip
             warpnet_${{ env.RELEASE_TAG }}_windows_amd64_checksums.txt
-        
-          
-
