@@ -86,12 +86,12 @@ type ErrorEvent struct {
 }
 
 // ErrorResponse defines model for ErrorResponse.
-type ErrorResponse struct {
+type ResponseError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
-func (e ErrorResponse) Error() string {
+func (e ResponseError) Error() string {
 	return e.Message
 }
 

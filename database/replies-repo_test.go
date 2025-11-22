@@ -41,6 +41,7 @@ import (
 
 type ReplyRepoTestSuite struct {
 	suite.Suite
+
 	db   *local.DB
 	repo *ReplyRepo
 }

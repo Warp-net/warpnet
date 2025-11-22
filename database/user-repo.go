@@ -398,7 +398,7 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 		return users, "", err
 	}
 
-	if limit != nil && len(users) < int(*limit) { // too small amount - no need to filter
+	if limit != nil && uint64(len(users)) < *limit { // too small amount - no need to filter
 		return users, cur, nil
 	}
 

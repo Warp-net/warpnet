@@ -123,7 +123,7 @@ func StreamNewReTweetHandler(
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(retweetDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other retweet error response: %s", possibleError.Message)
 		}
@@ -189,7 +189,7 @@ func StreamUnretweetHandler(
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(unretweetDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other unretweet error response: %s", possibleError.Message)
 		}

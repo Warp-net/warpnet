@@ -44,7 +44,7 @@ type FileSystem interface {
 	Open(name string) (fs.File, error)
 }
 
-// TODO nonce cache check
+// StreamChallengeHandler TODO nonce cache check
 func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		if fs == nil {
@@ -77,6 +77,6 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpne
 			}
 		}
 
-		return event.ChallengeResponse{solutions}, nil
+		return event.ChallengeResponse{Solutions: solutions}, nil
 	}
 }

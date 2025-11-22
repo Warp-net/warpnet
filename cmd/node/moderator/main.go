@@ -50,7 +50,8 @@ func main() {
 	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
-		panic(err)
+		log.Errorf("moderator: fail generating PSK: %v", err)
+		return
 	}
 
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
@@ -78,35 +79,44 @@ func main() {
 	seed := []byte(config.Config().Node.Seed)
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
-		log.Fatalf("moderator: fail generating key: %v", err)
+		log.Errorf("moderator: fail generating key: %v", err)
+		return
 	}
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
-		log.Fatal(err)
+		log.Errorln(err)
+		return
 	}
 
 	n, err := node.NewModeratorNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
-		log.Fatalf("failed to init moderator node: %v", err)
+		log.Errorf("failed to init moderator node: %v", err)
+		return
 	}
 
 	if err = n.Start(); err != nil {
-		log.Fatalf("failed to start moderator node: %v", err)
+		log.Errorf("failed to start moderator node: %v", err)
+		return
 	}
 	defer n.Stop()
 
 	publisher := pubsub.NewPubSub(ctx)
 	if err := publisher.Run(n); err != nil {
-		log.Fatalf("failed to start moderator pubsub: %v", err)
+		log.Errorf("failed to start moderator pubsub: %v", err)
+		return
 	}
-	defer publisher.Close()
+	defer func() {
+		_ = publisher.Close()
+	}()
 
 	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {
-		log.Fatalf("failed to init moderator: %v", err)
+		log.Errorf("failed to init moderator: %v", err)
+		return
 	}
 	if err := moder.Start(); err != nil {
-		log.Fatalf("failed to start moderator: %v", err)
+		log.Errorf("failed to start moderator: %v", err)
+		return
 	}
 	defer moder.Close()
 

@@ -41,6 +41,7 @@ import (
 
 type TweetRepoTestSuite struct {
 	suite.Suite
+
 	db   *local.DB
 	repo *TweetRepo
 }

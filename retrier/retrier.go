@@ -31,7 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"time"
 )
 
@@ -104,7 +104,7 @@ func (r *retrier) Try(ctx context.Context, f RetrierFunc) (err error) {
 		case FixedBackoff:
 			interval = interval + interval
 		case ExponentialBackoff:
-			interval = interval * interval
+			interval = interval * 2
 		}
 		sleepDuration := interval + jitter(r.minInterval)
 		time.Sleep(sleepDuration)
@@ -114,5 +114,5 @@ func (r *retrier) Try(ctx context.Context, f RetrierFunc) (err error) {
 }
 
 func jitter(minInterval time.Duration) time.Duration {
-	return time.Duration(rand.Int63n(int64(minInterval / 2))) // Add jitter
+	return time.Duration(rand.Int64N(int64(minInterval / 2))) // Add jitter
 }

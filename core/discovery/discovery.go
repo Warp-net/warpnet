@@ -120,8 +120,8 @@ func NewDiscoveryService(
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
 		cache:           newDiscoveryCache(),
-		discoveryChan:   make(chan discoveredPeer, 128),
-		discoveryTicker: time.NewTicker(time.Minute * 5),
+		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
+		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 	}
 }
@@ -159,7 +159,7 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 					log.Infoln("discovery: service closed")
 					return
 				}
-				s.discoveryTicker.Reset(time.Minute * 5)
+				s.discoveryTicker.Reset(time.Minute * 5) //nolint:mnd
 
 				switch {
 				case isBootstrap:
@@ -217,7 +217,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		Source: source,
 	}:
 	default:
-		div := int(cap(s.discoveryChan) / 10)
+		div := int(cap(s.discoveryChan) / 10) //nolint:mnd
 		jitter := rand.IntN(div)
 		dropMessagesNum := jitter + 1
 		log.Warnf("discovery: channel overflow %d, drop %d first messages", cap(s.discoveryChan), dropMessagesNum)
@@ -238,7 +238,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	pi := warpnet.WarpAddrInfo{peer.ID, peer.Addrs}
+	pi := warpnet.WarpAddrInfo{ID: peer.ID, Addrs: peer.Addrs}
 
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
@@ -328,7 +328,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		return
 	}
 
-	pi := warpnet.WarpAddrInfo{peer.ID, peer.Addrs}
+	pi := warpnet.WarpAddrInfo{ID: peer.ID, Addrs: peer.Addrs}
 
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
@@ -355,7 +355,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf(
-			"discovery: source '%s': bootstrap handle: challenge is invalid for peer: %s, source '%s'",
+			"discovery: source '%s': bootstrap handle: challenge is invalid for peer: %s",
 			pi.ID.String(), peer.Source,
 		)
 		s.node.Peerstore().RemovePeer(pi.ID)

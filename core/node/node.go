@@ -46,7 +46,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const DefaultTimeout = 60 * time.Second
+const (
+	DefaultTimeout                          = 60 * time.Second
+	ErrPrivateKeyRequired warpnet.WarpError = "private key is required"
+)
 
 type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
@@ -66,7 +69,7 @@ type WarpNode struct {
 
 	isClosed     *atomic.Bool
 	version      *semver.Version
-	reachability atomic.Int32
+	reachability atomic.Int64
 
 	startTime        time.Time
 	eventsSub        event.Subscription
@@ -100,7 +103,7 @@ func NewWarpNode(
 
 	node, err := warpnet.NewP2PNode(opts...)
 	if err != nil {
-		return nil, fmt.Errorf("node: failed to init node: %v", err)
+		return nil, fmt.Errorf("node: failed to init node: %w", err)
 	}
 
 	pool, err := stream.NewStreamPool(ctx, node)
@@ -110,12 +113,12 @@ func NewWarpNode(
 
 	sub, err := node.EventBus().Subscribe(event.WildcardSubscription)
 	if err != nil {
-		return nil, fmt.Errorf("node: failed to subscribe: %v", err)
+		return nil, fmt.Errorf("node: failed to subscribe: %w", err)
 	}
 
 	relayService, err := relay.NewRelay(node)
 	if err != nil {
-		return nil, fmt.Errorf("node: failed to create relay	: %v", err)
+		return nil, fmt.Errorf("node: failed to create relay: %w", err)
 	}
 	version := config.Config().Version
 
@@ -127,7 +130,7 @@ func NewWarpNode(
 		isClosed:         new(atomic.Bool),
 		version:          version,
 		startTime:        time.Now(),
-		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
+		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5), //nolint:mnd
 		eventsSub:        sub,
 		mw:               middleware.NewWarpMiddleware(node.ID()),
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
@@ -194,81 +197,73 @@ func (n *WarpNode) trackIncomingEvents() {
 			if !ok {
 				return
 			}
-			switch ev.(type) {
+			switch typedEvent := ev.(type) {
 			case event.EvtPeerProtocolsUpdated:
-				protoUpdatedEvent := ev.(event.EvtPeerProtocolsUpdated)
-				if len(protoUpdatedEvent.Added) != 0 {
-					log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
+				if len(typedEvent.Added) != 0 {
+					log.Infof("node: event: protocol added: %v", typedEvent.Added)
 				}
-				if len(protoUpdatedEvent.Removed) != 0 {
-					log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
+				if len(typedEvent.Removed) != 0 {
+					log.Infof("node: event: protocol removed: %v", typedEvent.Removed)
 				}
 			case event.EvtLocalProtocolsUpdated:
-				protoUpdatedEvent := ev.(event.EvtLocalProtocolsUpdated)
-				if len(protoUpdatedEvent.Added) != 0 {
-					log.Infof("node: event: protocol added: %v", protoUpdatedEvent.Added)
+				if len(typedEvent.Added) != 0 {
+					log.Infof("node: event: protocol added: %v", typedEvent.Added)
 				} else {
-					log.Infof("node: event: protocol removed: %v", protoUpdatedEvent.Removed)
+					log.Infof("node: event: protocol removed: %v", typedEvent.Removed)
 				}
 			case event.EvtPeerConnectednessChanged:
-				connectednessEvent := ev.(event.EvtPeerConnectednessChanged)
-				pid := connectednessEvent.Peer.String()
-				if connectednessEvent.Connectedness == warpnet.Limited {
+				pid := typedEvent.Peer.String()
+				if typedEvent.Connectedness == warpnet.Limited {
 					return
 				}
 				log.Infof(
 					"node: event: peer ...%s connectedness updated: %s",
 					pid[len(pid)-6:],
-					connectednessEvent.Connectedness.String(),
+					typedEvent.Connectedness.String(),
 				)
 
 			case event.EvtPeerIdentificationFailed:
-				identificationEvent := ev.(event.EvtPeerIdentificationFailed)
-				pid := identificationEvent.Peer.String()
+				pid := typedEvent.Peer.String()
 				log.Errorf(
 					"node: event: peer ...%s identification failed, reason: %s",
-					pid[len(pid)-6:], identificationEvent.Reason,
+					pid[len(pid)-6:], typedEvent.Reason,
 				)
 
 			case event.EvtPeerIdentificationCompleted:
-				identificationEvent := ev.(event.EvtPeerIdentificationCompleted)
-				pid := identificationEvent.Peer.String()
+				pid := typedEvent.Peer.String()
 				log.Debugf(
 					"node: event: peer ...%s identification completed, observed address: %s",
-					pid[len(pid)-6:], identificationEvent.ObservedAddr.String(),
+					pid[len(pid)-6:], typedEvent.ObservedAddr.String(),
 				)
 			case event.EvtLocalReachabilityChanged:
-				r := ev.(event.EvtLocalReachabilityChanged).Reachability // it's int32 under the hood
+				r := typedEvent.Reachability // it's int32 under the hood
 				log.Infof(
 					"node: event: own node reachability changed: %s",
 					strings.ToLower(r.String()),
 				)
-				n.reachability.Store(int32(r))
+				n.reachability.Store(int64(r))
 			case event.EvtNATDeviceTypeChanged:
-				natDeviceTypeChangedEvent := ev.(event.EvtNATDeviceTypeChanged)
 				log.Infof(
 					"node: event: NAT device type changed: %s, transport: %s",
-					natDeviceTypeChangedEvent.NatDeviceType.String(), natDeviceTypeChangedEvent.TransportProtocol.String(),
+					typedEvent.NatDeviceType.String(), typedEvent.TransportProtocol.String(),
 				)
 			case event.EvtAutoRelayAddrsUpdated:
-				newAddrsEvent := ev.(event.EvtAutoRelayAddrsUpdated)
-				if len(newAddrsEvent.RelayAddrs) != 0 {
+				if len(typedEvent.RelayAddrs) != 0 {
 					log.Infoln("node: event: relay address added")
 				}
 			case event.EvtLocalAddressesUpdated:
-				for _, addr := range ev.(event.EvtLocalAddressesUpdated).Current {
+				for _, addr := range typedEvent.Current {
 					log.Debugf(
 						"node: event: local address %s: %s",
 						addr.Address.String(), localAddrActions[int(addr.Action)],
 					)
 				}
 			case event.EvtHostReachableAddrsChanged:
-				peerReachability := ev.(event.EvtHostReachableAddrsChanged)
 				log.Infof(
 					`node: event: peer reachability changed: reachable: %v, unreachable: %v, unknown: %v`,
-					peerReachability.Reachable,
-					peerReachability.Unreachable,
-					peerReachability.Unknown,
+					typedEvent.Reachable,
+					typedEvent.Unreachable,
+					typedEvent.Unknown,
 				)
 			default:
 				bt, _ := json.Marshal(ev)
@@ -276,7 +271,6 @@ func (n *WarpNode) trackIncomingEvents() {
 			}
 		}
 	}
-
 }
 
 func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
@@ -323,13 +317,15 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
 		return nil, errors.Errorf(
-			"node: selfstream: no handler for path %s, avaiable %v \n",
+			"node: selfstream: no handler for path %s, available %v \n",
 			path, n.internalHandlers,
 		)
 	}
 
 	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
-	defer streamClient.Close()
+	defer func() {
+		_ = streamClient.Close()
+	}()
 
 	_ = streamServer.SetDeadline(time.Now().Add(time.Minute))
 	go handler(streamServer) // handler closes server stream by itself
@@ -338,7 +334,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	if !ok {
 		bt, err = json.Marshal(data)
 		if err != nil {
-			return nil, fmt.Errorf("node: selfstream: marshal data %v %s", err, data)
+			return nil, fmt.Errorf("node: selfstream: marshal data %w %s", err, data)
 		}
 	}
 
@@ -411,6 +407,6 @@ func (n *WarpNode) StopNode() {
 	n.isClosed.Store(true)
 	n.node = nil
 
-	//pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	// pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 	return
 }

@@ -31,11 +31,12 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"github.com/Masterminds/semver/v3"
 	"io"
 	"io/fs"
 	"sort"
 	"strconv"
+
+	"github.com/Masterminds/semver/v3"
 )
 
 type FileSystem interface {
@@ -117,16 +118,22 @@ func generateAnchoredEntropy() []byte {
 	return input
 }
 
+var (
+	ErrPSKNetwrokRequired = errors.New("psk: network required")
+	ErrPSKVersionRequired = errors.New("psk: version required")
+)
+
+
 // GeneratePSK TODO rotate PSK?
 func GeneratePSK(network string, v *semver.Version) (PSK, error) {
 	if network == "" {
-		return nil, errors.New("psk: network required")
+		return nil, ErrPSKNetwrokRequired
 	}
 	if v == nil {
-		return nil, errors.New("psk: version required")
+		return nil, ErrPSKVersionRequired
 	}
 	entropy := generateAnchoredEntropy()
-	majorStr := strconv.FormatInt(int64(v.Major()), 10)
+	majorStr := strconv.FormatUint(v.Major(), 10)
 
 	seed := append([]byte(network), []byte(majorStr)...)
 	seed = append(seed, entropy...)

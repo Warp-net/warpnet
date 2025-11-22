@@ -40,7 +40,7 @@ type cache struct {
 
 func newLRU() *cache {
 	return &cache{
-		lru.NewLRU[string, any](256, nil, time.Hour*8),
+		lru.NewLRU[string, any](256, nil, time.Hour*8), //nolint:mnd
 	}
 }
 
@@ -108,21 +108,21 @@ func (c *cache) Resize(i int) int {
 
 func castKeyToString(key interface{}) string {
 	var innerKey string
-	switch key.(type) {
+	switch typedKey := key.(type) {
 	case string:
-		innerKey = key.(string)
+		innerKey = typedKey
 	case []byte:
-		innerKey = string(key.([]byte))
+		innerKey = string(typedKey)
 	case []rune:
-		innerKey = string(key.([]rune))
+		innerKey = string(typedKey)
 	case bool:
-		innerKey = strconv.FormatBool(key.(bool))
+		innerKey = strconv.FormatBool(typedKey)
 	case int, int8, int16, int32, int64:
-		innerKey = strconv.FormatInt(key.(int64), 10)
+		innerKey = strconv.FormatInt(typedKey.(int64), 10)
 	case uint, uint8, uint16, uint32, uint64:
-		innerKey = strconv.FormatUint(key.(uint64), 10)
+		innerKey = strconv.FormatUint(typedKey.(uint64), 10)
 	case float32, float64:
-		innerKey = strconv.FormatFloat(key.(float64), 'f', -1, 64)
+		innerKey = strconv.FormatFloat(typedKey.(float64), 'f', -1, 64)
 	default:
 		innerKey = fmt.Sprintf("%v", key)
 	}

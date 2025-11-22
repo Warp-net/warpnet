@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	ErrNoTweetsForModeration = warpnet.WarpError("no tweets for moderation")
+	ErrNoTweetsForModeration warpnet.WarpError = "no tweets for moderation found"
+	ErrModeratorInitFailed   warpnet.WarpError = "failed to init moderator engine"
 )
 
 type Engine interface {
@@ -83,7 +84,7 @@ func (m *Moderator) Start() (err error) {
 	// wait until moderator set up
 	<-engineReadyChan
 	if engine == nil {
-		return errors.New("failed to init moderator engine")
+		return ErrModeratorInitFailed
 	}
 	log.Infoln("moderator: engine is running")
 
@@ -197,7 +198,7 @@ func (m *Moderator) pickTweet(peerID warpnet.WarpPeerID, userID string) (*domain
 			},
 		)
 		if err != nil {
-			return nil, fmt.Errorf("moderator: get tweets: %v", err)
+			return nil, fmt.Errorf("moderator: get tweets: %w", err)
 		}
 		if data == nil || len(data) == 0 {
 			return nil, ErrNoTweetsForModeration
@@ -205,7 +206,7 @@ func (m *Moderator) pickTweet(peerID warpnet.WarpPeerID, userID string) (*domain
 
 		var tweetsResp event.TweetsResponse
 		if err := json.Unmarshal(data, &tweetsResp); err != nil {
-			return nil, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %v", string(data), err)
+			return nil, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %w", string(data), err)
 		}
 
 		if len(tweetsResp.Tweets) == 0 {
