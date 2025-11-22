@@ -78,7 +78,6 @@ func TestCreateAndGetChat(t *testing.T) {
 	assert.Equal(t, chat.Id, fetched.Id)
 	assert.Equal(t, chat.OwnerId, fetched.OwnerId)
 	assert.Equal(t, chat.OtherUserId, fetched.OtherUserId)
-
 }
 
 func TestDeleteChat(t *testing.T) {

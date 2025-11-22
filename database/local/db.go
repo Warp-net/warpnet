@@ -539,15 +539,20 @@ func (t *warpTxn) Delete(key DatabaseKey) error {
 	return t.txn.Delete([]byte(key))
 }
 
+const (
+	incr int8 = 1 << iota
+	decr
+)
+
 func (t *warpTxn) Increment(key DatabaseKey) (uint64, error) {
-	return increment(t.txn, key.Bytes(), 1)
+	return increment(t.txn, key.Bytes(), incr)
 }
 
 func (t *warpTxn) Decrement(key DatabaseKey) (uint64, error) {
-	return increment(t.txn, key.Bytes(), -1)
+	return increment(t.txn, key.Bytes(), decr)
 }
 
-func increment(txn *badger.Txn, key []byte, incVal uint64) (uint64, error) {
+func increment(txn *badger.Txn, key []byte, incType int8) (uint64, error) {
 	var newValue uint64
 
 	item, err := txn.Get(key)
@@ -562,7 +567,13 @@ func increment(txn *badger.Txn, key []byte, incVal uint64) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	newValue = decodeUint64(val) + incVal
+	switch incType {
+	case incr:
+		newValue = decodeUint64(val) + 1
+	case decr:
+		newValue = decodeUint64(val) - 1
+
+	}
 	if newValue < 0 {
 		newValue = 0
 	}
