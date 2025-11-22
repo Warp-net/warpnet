@@ -123,7 +123,6 @@ var (
 	ErrPSKVersionRequired = errors.New("psk: version required")
 )
 
-
 // GeneratePSK TODO rotate PSK?
 func GeneratePSK(network string, v *semver.Version) (PSK, error) {
 	if network == "" {

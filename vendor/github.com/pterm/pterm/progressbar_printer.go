@@ -1,14 +1,15 @@
 package pterm
 
 import (
-	"atomicgo.dev/cursor"
-	"atomicgo.dev/schedule"
 	"fmt"
 	"io"
 	"math"
 	"os"
 	"strings"
 	"time"
+
+	"atomicgo.dev/cursor"
+	"atomicgo.dev/schedule"
 
 	"github.com/gookit/color"
 

@@ -25,7 +25,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/json-iterator/go"
+	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -96,7 +96,7 @@ func ParseNetstat(output string, mode string,
 			n.PacketsSent = parsed[2]
 			n.Dropout = parsed[3]
 		case "ine":
-		        n.Errin = parsed[0]
+			n.Errin = parsed[0]
 			n.Errout = parsed[1]
 		}
 

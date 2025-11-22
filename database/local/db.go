@@ -578,7 +578,7 @@ func increment(txn *badger.Txn, key []byte, incType int8) (uint64, error) {
 		newValue = 0
 	}
 
-	return uint64(newValue), txn.Set(key, encodeUint64(newValue))
+	return newValue, txn.Set(key, encodeUint64(newValue))
 }
 
 const endCursor = "end"

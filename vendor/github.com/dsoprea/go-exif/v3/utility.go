@@ -5,11 +5,11 @@ import (
 	"io"
 	"math"
 
-	"github.com/dsoprea/go-logging"
-	"github.com/dsoprea/go-utility/v2/filesystem"
+	log "github.com/dsoprea/go-logging"
+	rifs "github.com/dsoprea/go-utility/v2/filesystem"
 
-	"github.com/dsoprea/go-exif/v3/common"
-	"github.com/dsoprea/go-exif/v3/undefined"
+	exifcommon "github.com/dsoprea/go-exif/v3/common"
+	exifundefined "github.com/dsoprea/go-exif/v3/undefined"
 )
 
 var (

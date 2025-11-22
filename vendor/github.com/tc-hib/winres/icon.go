@@ -143,7 +143,6 @@ func (icon *Icon) SaveICO(ico io.Writer) error {
 // That means:
 //  1. First name in case-sensitive ascending order, or else...
 //  2. First ID in ascending order
-//
 func (rs *ResourceSet) SetIcon(resID Identifier, icon *Icon) error {
 	return rs.SetIconTranslation(resID, LCIDNeutral, icon)
 }
@@ -154,7 +153,6 @@ func (rs *ResourceSet) SetIcon(resID Identifier, icon *Icon) error {
 // That means:
 //  1. First name in case-sensitive ascending order, or else...
 //  2. First ID in ascending order
-//
 func (rs *ResourceSet) SetIconTranslation(resID Identifier, langID uint16, icon *Icon) error {
 	b := &bytes.Buffer{}
 	binary.Write(b, binary.LittleEndian, iconDirHeader{

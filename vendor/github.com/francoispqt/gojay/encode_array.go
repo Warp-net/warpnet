@@ -168,7 +168,7 @@ func (enc *Encoder) ArrayKeyOmitEmpty(key string, v MarshalerJSONArray) {
 	enc.writeByte(']')
 }
 
-// ArrayKeyNullEmpty adds an array or slice to be encoded and encodes `null`` if it is nil.
+// ArrayKeyNullEmpty adds an array or slice to be encoded and encodes `null“ if it is nil.
 // Must be called inside an object as it will encode a key.
 func (enc *Encoder) ArrayKeyNullEmpty(key string, v MarshalerJSONArray) {
 	if enc.hasKeys {

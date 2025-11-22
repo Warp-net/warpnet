@@ -88,7 +88,7 @@ var (
 	php      = newMIME("text/x-php", ".php", magic.Php)
 	rtf      = newMIME("text/rtf", ".rtf", magic.Rtf)
 	js       = newMIME("application/javascript", ".js", magic.Js).
-		alias("application/x-javascript", "text/javascript")
+			alias("application/x-javascript", "text/javascript")
 	srt = newMIME("application/x-subrip", ".srt", magic.Srt).
 		alias("application/x-srt", "text/x-srt")
 	vtt    = newMIME("text/vtt", ".vtt", magic.Vtt)
@@ -101,7 +101,7 @@ var (
 	iCalendar = newMIME("text/calendar", ".ics", magic.ICalendar)
 	svg       = newMIME("image/svg+xml", ".svg", magic.Svg)
 	rss       = newMIME("application/rss+xml", ".rss", magic.Rss).
-		alias("text/rss")
+			alias("text/rss")
 	owl2    = newMIME("application/owl+xml", ".owl", magic.Owl2)
 	atom    = newMIME("application/atom+xml", ".atom", magic.Atom)
 	x3d     = newMIME("model/x3d+xml", ".x3d", magic.X3d)
@@ -146,7 +146,7 @@ var (
 	ape      = newMIME("audio/ape", ".ape", magic.Ape)
 	musePack = newMIME("audio/musepack", ".mpc", magic.MusePack)
 	wav      = newMIME("audio/wav", ".wav", magic.Wav).
-		alias("audio/x-wav", "audio/vnd.wave", "audio/wave")
+			alias("audio/x-wav", "audio/vnd.wave", "audio/wave")
 	aiff = newMIME("audio/aiff", ".aiff", magic.Aiff).alias("audio/x-aiff")
 	au   = newMIME("audio/basic", ".au", magic.Au)
 	amr  = newMIME("audio/amr", ".amr", magic.Amr).
@@ -166,7 +166,7 @@ var (
 	quickTime = newMIME("video/quicktime", ".mov", magic.QuickTime)
 	mqv       = newMIME("video/quicktime", ".mqv", magic.Mqv)
 	threeGP   = newMIME("video/3gpp", ".3gp", magic.ThreeGP).
-		alias("video/3gp", "audio/3gpp")
+			alias("video/3gp", "audio/3gpp")
 	threeG2 = newMIME("video/3gpp2", ".3g2", magic.ThreeG2).
 		alias("video/3g2", "audio/3gpp2")
 	avi = newMIME("video/x-msvideo", ".avi", magic.Avi).

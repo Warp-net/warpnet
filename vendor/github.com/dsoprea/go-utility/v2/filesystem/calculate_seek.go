@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/dsoprea/go-logging"
+	log "github.com/dsoprea/go-logging"
 )
 
 // SeekType is a convenience type to associate the different seek-types with

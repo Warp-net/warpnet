@@ -25,8 +25,9 @@ resulting from the use or misuse of this software.
 package security
 
 import (
-	root "github.com/Warp-net/warpnet"
 	"testing"
+
+	root "github.com/Warp-net/warpnet"
 )
 
 func TestChallengeResolve_Success(t *testing.T) {

@@ -9,11 +9,11 @@ import (
 	"encoding/hex"
 
 	"github.com/dsoprea/go-exif/v3"
-	"github.com/dsoprea/go-exif/v3/common"
+	exifcommon "github.com/dsoprea/go-exif/v3/common"
 	"github.com/dsoprea/go-iptc"
-	"github.com/dsoprea/go-logging"
-	"github.com/dsoprea/go-photoshop-info-format"
-	"github.com/dsoprea/go-utility/v2/image"
+	log "github.com/dsoprea/go-logging"
+	photoshopinfo "github.com/dsoprea/go-photoshop-info-format"
+	riimage "github.com/dsoprea/go-utility/v2/image"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/dsoprea/go-logging"
+	log "github.com/dsoprea/go-logging"
 )
 
 // CopyBytesBetweenPositions will copy bytes from one position in the given RWS

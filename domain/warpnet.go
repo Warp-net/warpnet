@@ -146,8 +146,8 @@ type User struct {
 	Birthdate          string            `json:"birthdate"`
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          *time.Time        `json:"updated_at,omitempty"`
-	FollowingsCount    int64            `json:"followings_count"`
-	FollowersCount     int64            `json:"followers_count"`
+	FollowingsCount    int64             `json:"followings_count"`
+	FollowersCount     int64             `json:"followers_count"`
 	Id                 string            `json:"id"`
 	IsOffline          bool              `json:"isOffline"`
 	NodeId             string            `json:"node_id"`

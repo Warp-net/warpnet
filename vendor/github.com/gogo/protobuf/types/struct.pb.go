@@ -7,14 +7,15 @@ import (
 	bytes "bytes"
 	encoding_binary "encoding/binary"
 	fmt "fmt"
-	proto "github.com/gogo/protobuf/proto"
-	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	io "io"
 	math "math"
 	math_bits "math/bits"
 	reflect "reflect"
 	strconv "strconv"
 	strings "strings"
+
+	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -31,7 +32,7 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 // `NullValue` is a singleton enumeration to represent the null value for the
 // `Value` type union.
 //
-//  The JSON representation for `NullValue` is JSON `null`.
+//	The JSON representation for `NullValue` is JSON `null`.
 type NullValue int32
 
 const (

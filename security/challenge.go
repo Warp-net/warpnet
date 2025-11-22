@@ -132,7 +132,7 @@ func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, 
 	if lineLen == 1 {
 		left, right = 0, 1
 	} else {
-		left = rand.IntN(lineLen - 1) //#nosec
+		left = rand.IntN(lineLen - 1)                //#nosec
 		right = left + 1 + rand.IntN(lineLen-left-1) //#nosec
 	}
 

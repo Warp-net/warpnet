@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	salt = "cec27db4" // #nosec intentionally
+	salt    = "cec27db4" // #nosec intentionally
 	keySize = 32
 )
 

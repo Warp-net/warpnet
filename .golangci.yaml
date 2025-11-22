@@ -18,6 +18,7 @@ linters:
           - gosec
           - goconst
           - maintidx
+          - dupl
   disable:
     - mnd
     - interfacebloat
