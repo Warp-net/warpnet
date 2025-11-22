@@ -40,7 +40,7 @@ type tweetModerationCache struct {
 }
 
 func newTweetModerationCache() *tweetModerationCache {
-	return &tweetModerationCache{lru.NewLRU[CacheKey, struct{}](256, nil, time.Hour*24)}
+	return &tweetModerationCache{lru.NewLRU[CacheKey, struct{}](256, nil, time.Hour*24)} //nolint:mnd
 }
 
 func (tmc *tweetModerationCache) IsModeratedAlready(key CacheKey) bool {

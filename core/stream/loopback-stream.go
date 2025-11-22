@@ -66,7 +66,7 @@ func (c *LoopbackConn) RemotePublicKey() p2pCrypto.PubKey {
 	return nil
 }
 
-func (s *LoopbackConn) As(_ any) bool {
+func (c *LoopbackConn) As(_ any) bool {
 	return false
 }
 
@@ -85,7 +85,6 @@ func (c *LoopbackConn) LocalMultiaddr() multiaddr.Multiaddr {
 
 func (c *LoopbackConn) RemoteMultiaddr() multiaddr.Multiaddr {
 	return multiaddr.StringCast("/ip4/0.0.0.0/tcp/0")
-
 }
 
 func (c *LoopbackConn) Stat() network.ConnStats {

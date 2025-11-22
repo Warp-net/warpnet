@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"golang.org/x/net/html"
 	"html/template"
+
+	"golang.org/x/net/html"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"

@@ -15,7 +15,6 @@ require (
 	github.com/grokify/html-strip-tags-go v0.1.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/ipfs/go-datastore v0.9.0
-	github.com/ipfs/go-log/v2 v2.8.2
 	github.com/json-iterator/go v1.1.12
 	github.com/libp2p/go-libp2p v0.44.0
 	github.com/libp2p/go-libp2p-kad-dht v0.35.1
@@ -39,6 +38,7 @@ require (
 	github.com/dgraph-io/ristretto/v2 v2.3.0 // indirect
 	github.com/ipfs/boxo v0.35.0 // indirect
 	github.com/ipfs/go-cid v0.5.0 // indirect
+	github.com/ipfs/go-log/v2 v2.8.2 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/multiformats/go-multihash v0.2.3 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect

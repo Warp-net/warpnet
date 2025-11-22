@@ -2,10 +2,11 @@ package cpu
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 var (

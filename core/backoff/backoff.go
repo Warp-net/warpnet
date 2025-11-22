@@ -2,11 +2,12 @@ package backoff
 
 import (
 	"context"
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"math/rand/v2"
 	"sync"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const ErrBackoffEnabled warpnet.WarpError = "backoff enabled"

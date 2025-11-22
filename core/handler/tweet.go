@@ -196,7 +196,7 @@ func StreamGetTweetHandler(
 			return repo.Get(ev.UserId, ev.TweetId)
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
 		}
@@ -279,7 +279,7 @@ func tweetsRefreshBackground(
 		return
 	}
 
-	var possibleError event.ErrorResponse
+	var possibleError event.ResponseError
 	if _ = json.Unmarshal(tweetsDataResp, &possibleError); possibleError.Message != "" {
 		log.Errorf("get tweets handler: unmarshal other tweets error response: %s", possibleError.Message)
 		return
@@ -295,7 +295,7 @@ func tweetsRefreshBackground(
 		if repo.IsBlocklisted(tweet.Id) {
 			continue
 		}
-		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24*30)
+		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24*30) //nolint:mnd
 	}
 }
 
@@ -388,7 +388,7 @@ func StreamGetTweetStatsHandler(
 		}
 
 		isMyOwnTweet := ev.UserId == streamer.NodeInfo().OwnerId
-		if !isMyOwnTweet {
+		if !isMyOwnTweet { //nolint:nestif
 			u, err := userRepo.Get(ev.UserId)
 			if errors.Is(err, database.ErrUserNotFound) {
 				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
@@ -409,14 +409,14 @@ func StreamGetTweetStatsHandler(
 				return nil, err
 			}
 
-			var possibleError event.ErrorResponse
+			var possibleError event.ResponseError
 			if _ = json.Unmarshal(statsResp, &possibleError); possibleError.Message != "" {
-				return nil, fmt.Errorf("unmarshal other reply response: %s", possibleError.Message)
+				return nil, fmt.Errorf("unmarshal other reply response: %w", possibleError)
 			}
 
 			var stats event.TweetStatsResponse
 			if err := json.Unmarshal(statsResp, &stats); err != nil {
-				return nil, fmt.Errorf("fetching tweet stats response: %v", err)
+				return nil, fmt.Errorf("fetching tweet stats response: %w", err)
 			}
 
 			return stats, nil
@@ -426,7 +426,7 @@ func StreamGetTweetStatsHandler(
 			retweetsCount uint64
 			likesCount    uint64
 			repliesCount  uint64
-			ctx, cancelF  = context.WithDeadline(context.Background(), time.Now().Add(time.Second*5))
+			ctx, cancelF  = context.WithDeadline(context.Background(), time.Now().Add(time.Second*5)) //nolint:mnd
 			g, _          = errgroup.WithContext(ctx)
 			tweetId       = strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		)

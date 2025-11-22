@@ -3,7 +3,7 @@ package rifs
 import (
 	"io"
 
-	"github.com/dsoprea/go-logging"
+	log "github.com/dsoprea/go-logging"
 )
 
 // ReadSeekerToReaderAt is a wrapper that allows a ReadSeeker to masquerade as a

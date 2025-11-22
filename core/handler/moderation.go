@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"errors"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -36,6 +35,11 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	ErrNoObjectID warpnet.WarpError = "no object id found"
+	ErrNoUserID   warpnet.WarpError = "no user id found"
 )
 
 type ModerationNotifier interface {
@@ -79,10 +83,10 @@ func StreamModerationResultHandler(
 		switch ev.Type {
 		case domain.ModerationTweetType:
 			if ev.ObjectID == nil {
-				return nil, errors.New("moderation: no object id")
+				return nil, ErrNoObjectID
 			}
 			if ev.UserID == "" {
-				return nil, errors.New("moderation: no user id")
+				return nil, ErrNoUserID
 			}
 
 			moderatorId := ""

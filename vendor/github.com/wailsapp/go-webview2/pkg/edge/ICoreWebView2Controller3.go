@@ -3,9 +3,10 @@
 package edge
 
 import (
-	"golang.org/x/sys/windows"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 type ICoreWebView2Controller3Vtbl struct {

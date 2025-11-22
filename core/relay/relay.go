@@ -28,9 +28,10 @@ resulting from the use or misuse of this software.
 package relay
 
 import (
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
-	"time"
 )
 
 /*

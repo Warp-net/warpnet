@@ -1,7 +1,6 @@
 // Package version provides functions to build a VERSIONINFO structure for Windows applications.
 //
 // This what Windows displays in the Details tab of file properties.
-//
 package version
 
 import (
@@ -194,7 +193,6 @@ func (vi *Info) SetFileVersion(fileVersion string) {
 //
 // If a struct contains one translation with a different language ID,
 // it will be imported as if it had been the same value as the map key.
-//
 func MergeTranslations(translations map[uint16]*Info) *Info {
 	vi := &Info{}
 

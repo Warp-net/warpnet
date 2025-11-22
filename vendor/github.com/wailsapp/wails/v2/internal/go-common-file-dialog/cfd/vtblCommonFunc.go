@@ -3,10 +3,11 @@
 package cfd
 
 import (
-	"github.com/go-ole/go-ole"
 	"strings"
 	"syscall"
 	"unsafe"
+
+	"github.com/go-ole/go-ole"
 )
 
 func hresultToError(hr uintptr) error {

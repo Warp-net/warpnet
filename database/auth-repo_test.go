@@ -40,6 +40,7 @@ import (
 
 type AuthRepoTestSuite struct {
 	suite.Suite
+
 	db   *local.DB
 	repo *AuthRepo
 }

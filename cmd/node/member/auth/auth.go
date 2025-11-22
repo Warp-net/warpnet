@@ -214,14 +214,19 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 	return event.LoginResponse(authInfo), nil
 }
 
+const (
+	MinPasswordLength = 8
+	MaxPasswordLength = 32
+)
+
 func validatePassword(pw string) error {
 	if pw == "" {
 		return errors.New("empty password")
 	}
-	if len(pw) < 8 {
+	if len(pw) < MinPasswordLength {
 		return errors.New("password must be at least 8 characters")
 	}
-	if len(pw) > 32 {
+	if len(pw) > MaxPasswordLength {
 		return errors.New("password must be less than 32 characters")
 	}
 

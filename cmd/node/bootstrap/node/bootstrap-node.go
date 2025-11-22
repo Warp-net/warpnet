@@ -83,7 +83,7 @@ func NewBootstrapNode(
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
 	if len(privKey) == 0 {
-		return nil, errors.New("private key is required")
+		return nil, node.ErrPrivateKeyRequired
 	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
 

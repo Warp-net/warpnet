@@ -38,7 +38,10 @@ import (
 	"time"
 )
 
-const salt = "cec27db4" // #nosec intentionally
+const (
+	salt    = "cec27db4" // #nosec intentionally
+	keySize = 32
+)
 
 func generateWeakKey(salt []byte) []byte {
 	ts := time.Now().Unix()
@@ -49,13 +52,13 @@ func generateWeakKey(salt []byte) []byte {
 		b[i], b[j] = b[j], b[i]
 	})
 
-	raw := append(b, salt...)
+	raw := append(b, salt...) //nolint:gocritic
 
-	if len(raw) < 32 {
-		padding := strings.Repeat("0", 32-len(raw))
+	if len(raw) < keySize {
+		padding := strings.Repeat("0", keySize-len(raw))
 		raw = append(raw, []byte(padding)...)
-	} else if len(raw) > 32 {
-		raw = raw[:32]
+	} else if len(raw) > keySize {
+		raw = raw[:keySize]
 	}
 
 	return raw

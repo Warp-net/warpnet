@@ -1052,7 +1052,6 @@ func (client *WANCableLinkConfig1) GetBPIEncryptionEnabled() (NewBPIEncryptionEn
 	return client.GetBPIEncryptionEnabledCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewCableLinkConfigState: allowed values: notReady, dsSyncComplete, usParamAcquired, rangingComplete, ipComplete, todEstablished, paramTransferComplete, registrationComplete, operational, accessDenied
@@ -1164,7 +1163,6 @@ func (client *WANCableLinkConfig1) GetDownstreamFrequency() (NewDownstreamFreque
 	return client.GetDownstreamFrequencyCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewDownstreamModulation: allowed values: 64QAM, 256QAM
@@ -1304,7 +1302,6 @@ func (client *WANCableLinkConfig1) GetUpstreamFrequency() (NewUpstreamFrequency 
 	return client.GetUpstreamFrequencyCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewUpstreamModulation: allowed values: QPSK, 16QAM
@@ -1494,7 +1491,6 @@ func (client *WANCommonInterfaceConfig1) GetActiveConnection(NewActiveConnection
 	)
 }
 
-//
 // Return values:
 //
 // * NewWANAccessType: allowed values: DSL, POTS, Cable, Ethernet
@@ -1580,7 +1576,6 @@ func (client *WANCommonInterfaceConfig1) GetEnabledForInternet() (NewEnabledForI
 	return client.GetEnabledForInternetCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewMaximumActiveConnections: allowed value range: minimum=1, step=1
@@ -1965,7 +1960,6 @@ func (client *WANDSLLinkConfig1) GetAutoConfig() (NewAutoConfig bool, err error)
 	return client.GetAutoConfigCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewLinkStatus: allowed values: Up, Down
@@ -2329,7 +2323,6 @@ func newWANEthernetLinkConfig1ClientsFromGenericClients(genericClients []goupnp.
 	return clients
 }
 
-//
 // Return values:
 //
 // * NewEthernetLinkStatus: allowed values: Up, Down
@@ -2640,7 +2633,6 @@ func (client *WANIPConnection1) GetAutoDisconnectTime() (NewAutoDisconnectTime u
 	return client.GetAutoDisconnectTimeCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewPossibleConnectionTypes: allowed values: Unconfigured, IP_Routed, IP_Bridged
@@ -2716,7 +2708,6 @@ func (client *WANIPConnection1) GetExternalIPAddress() (NewExternalIPAddress str
 	return client.GetExternalIPAddressCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewProtocol: allowed values: TCP, UDP
@@ -2937,7 +2928,6 @@ func (client *WANIPConnection1) GetSpecificPortMappingEntry(NewRemoteHost string
 	)
 }
 
-//
 // Return values:
 //
 // * NewConnectionStatus: allowed values: Unconfigured, Connected, Disconnected
@@ -3471,7 +3461,6 @@ func (client *WANPOTSLinkConfig1) GetFclass() (NewFclass string, err error) {
 	return client.GetFclassCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewLinkType: allowed values: PPP_Dialup
@@ -3964,7 +3953,6 @@ func (client *WANPPPConnection1) GetAutoDisconnectTime() (NewAutoDisconnectTime 
 	return client.GetAutoDisconnectTimeCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewPossibleConnectionTypes: allowed values: Unconfigured, IP_Routed, DHCP_Spoofed, PPPoE_Bridged, PPTP_Relay, L2TP_Relay, PPPoE_Relay
@@ -4040,7 +4028,6 @@ func (client *WANPPPConnection1) GetExternalIPAddress() (NewExternalIPAddress st
 	return client.GetExternalIPAddressCtx(context.Background())
 }
 
-//
 // Return values:
 //
 // * NewProtocol: allowed values: TCP, UDP
@@ -4435,7 +4422,6 @@ func (client *WANPPPConnection1) GetSpecificPortMappingEntry(NewRemoteHost strin
 	)
 }
 
-//
 // Return values:
 //
 // * NewConnectionStatus: allowed values: Unconfigured, Connected, Disconnected

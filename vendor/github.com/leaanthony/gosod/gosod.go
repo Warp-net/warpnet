@@ -1,8 +1,9 @@
 package gosod
 
 import (
-	"github.com/leaanthony/gosod/internal/templatedir"
 	"io/fs"
+
+	"github.com/leaanthony/gosod/internal/templatedir"
 )
 
 // New creates a new TemplateDir structure for the given filesystem

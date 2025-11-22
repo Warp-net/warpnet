@@ -76,6 +76,11 @@ const (
 	macMetaKey  = "MAC"
 
 	imagePrefix = "data:image/jpeg;base64,"
+
+	ErrTooLargeImage          warpnet.WarpError = "image is too large"
+	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 image data"
+	ErrEmptyImageKey          warpnet.WarpError = "empty image key"
+	ErrInvalidEXIF            warpnet.WarpError = "invalid exif type: not a segment list"
 )
 
 type MediaNodeInformer interface {
@@ -103,9 +108,9 @@ func StreamUploadImageHandler(
 			return nil, err
 		}
 
-		parts := strings.SplitN(ev.File, ",", 2)
-		if len(parts) != 2 {
-			return nil, warpnet.WarpError("invalid base64 image data")
+		parts := strings.SplitN(ev.File, ",", 2) //nolint:mnd
+		if len(parts) != 2 {                     //nolint:mnd
+			return nil, ErrInvalidBase64Signature
 		}
 
 		imgBytes, err := base64.StdEncoding.DecodeString(parts[1])
@@ -114,7 +119,7 @@ func StreamUploadImageHandler(
 		}
 
 		if size := binary.Size(imgBytes); size > units.MiB*50 {
-			return nil, warpnet.WarpError("image is too large")
+			return nil, ErrTooLargeImage
 		}
 
 		img, _, err := image.Decode(bytes.NewReader(imgBytes))
@@ -128,7 +133,7 @@ func StreamUploadImageHandler(
 		}
 
 		var imageBuf bytes.Buffer
-		err = jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100})
+		err = jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100}) //nolint:mnd
 		if err != nil {
 			return nil, fmt.Errorf("upload: JPEG encoding: %w", err)
 		}
@@ -187,7 +192,7 @@ func StreamGetImageHandler(
 			return nil, fmt.Errorf("get image: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
-			return nil, fmt.Errorf("get image: empty image key")
+			return nil, fmt.Errorf("get image: %w", ErrEmptyImageKey)
 		}
 
 		ownerId := streamer.NodeInfo().OwnerId
@@ -248,7 +253,7 @@ func amendExifMetadata(imageBytes, metadata []byte) ([]byte, error) {
 
 	sl, ok := intfc.(*jis.SegmentList)
 	if !ok {
-		return nil, warpnet.WarpError("amend EXIF: invalid exif type: not a segment list")
+		return nil, fmt.Errorf("amend EXIF: %w", ErrInvalidEXIF)
 	}
 
 	ifdMapping, err := exifcommon.NewIfdMappingWithStandard()

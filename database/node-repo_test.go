@@ -42,6 +42,7 @@ import (
 
 type NodeRepoTestSuite struct {
 	suite.Suite
+
 	db   *local.DB
 	repo *NodeRepo
 	ctx  context.Context

@@ -78,7 +78,8 @@ import "fmt"
 // The value of previousTypeName must be the result of calling
 // reflect.TypeOf(err).String() on the original error object.
 // This is usually composed as follows:
-//     [*]<shortpackage>.<errortype>
+//
+//	[*]<shortpackage>.<errortype>
 //
 // For example, Go's standard error type has name "*errors.errorString".
 // The asterisk indicates that `errorString` implements the `error`

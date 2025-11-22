@@ -44,13 +44,13 @@ func main() {
 
 	err = wails.Run(&options.App{
 		Title:            "warpnet",
-		Width:            1024,
-		Height:           1024,
+		Width:            1024, //nolint:mnd
+		Height:           1024, //nolint:mnd
 		WindowStartState: options.Maximised,
 		AssetServer: &assetserver.Options{
 			Assets: frontend.GetStaticEmbedded(),
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1}, //nolint:mnd
 		OnStartup:        app.startup,
 		OnShutdown:       app.close,
 		SingleInstanceLock: &options.SingleInstanceLock{
@@ -101,6 +101,6 @@ func main() {
 	})
 	if err != nil {
 		log.Errorf("failed to start application: %s", err)
-		os.Exit(1)
+		return
 	}
 }

@@ -124,11 +124,11 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		dht.Datastore(d.cfg.store),
 		dht.MaxRecordAge(time.Hour),
 		dht.RoutingTableRefreshPeriod(time.Hour),
-		dht.RoutingTableRefreshQueryTimeout(time.Minute*5),
+		dht.RoutingTableRefreshQueryTimeout(time.Minute*5), //nolint:mnd
 		dht.BootstrapPeers(d.cfg.boostrapNodes...),
 		dht.ProviderStore(providerStore),
 		dht.RoutingTableLatencyTolerance(time.Minute),
-		dht.BucketSize(50),
+		dht.BucketSize(50), //nolint:mnd
 	)
 	if err != nil {
 		log.Errorf("dht: new: %v", err)
@@ -191,7 +191,7 @@ func (d *distributedHashTable) bootstrapDHT() {
 }
 
 func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // common timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd    // common timeout
 	defer cancel()
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -212,7 +212,7 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 
 			d.dht.RoutingTable().RemovePeer(pidErr.Expected)
 			d.dht.Host().Peerstore().ClearAddrs(pidErr.Expected)
-			d.dht.Host().Peerstore().AddAddrs(pidErr.Actual, addr.Addrs, time.Hour*24)
+			d.dht.Host().Peerstore().AddAddrs(pidErr.Actual, addr.Addrs, time.Hour*24) //nolint:mnd
 			log.Infof("dht: peer id corrected from %s to %s", pidErr.Expected, pidErr.Actual)
 			return nil
 		})

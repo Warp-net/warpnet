@@ -34,15 +34,18 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto/pb"
 )
+
+var ErrEmptySeed = errors.New("empty seed")
 
 type PrivateKey crypto.PrivKey
 
 func GenerateKeyFromSeed(seed []byte) (ed25519.PrivateKey, error) {
 	if len(seed) == 0 {
-		return nil, errors.New("seed is empty")
+		return nil, ErrEmptySeed
 	}
 	hashAlgo := go_crypto.SHA256
 	keyType := pb.KeyType_Ed25519

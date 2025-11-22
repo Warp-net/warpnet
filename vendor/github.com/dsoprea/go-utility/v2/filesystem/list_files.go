@@ -5,7 +5,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/dsoprea/go-logging"
+	log "github.com/dsoprea/go-logging"
 )
 
 // FileListFilterPredicate is the callback predicate used for filtering.

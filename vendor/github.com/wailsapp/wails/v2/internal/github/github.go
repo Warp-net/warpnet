@@ -3,13 +3,14 @@ package github
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/charmbracelet/glamour/styles"
 	"io"
 	"net/http"
 	"net/url"
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/charmbracelet/glamour/styles"
 
 	"github.com/charmbracelet/glamour"
 )

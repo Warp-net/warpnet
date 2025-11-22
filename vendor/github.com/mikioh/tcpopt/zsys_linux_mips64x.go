@@ -1,6 +1,7 @@
 // Created by cgo -godefs - DO NOT EDIT
 // cgo -godefs defs_linux.go
 
+//go:build (mips64 || mips64le) && linux
 // +build mips64 mips64le
 // +build linux
 

@@ -126,7 +126,7 @@ func StreamCreateChatHandler(
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(otherChatData, &possibleError); possibleError.Message != "" {
 			log.Errorf("create chat: unmarshal other reply response: %s", possibleError.Message)
 		}
@@ -321,7 +321,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(otherMsgData, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other message error response: %s", possibleError.Message)
 			msg.Status = "undelivered"

@@ -22,7 +22,6 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-// #nosec
 package warpnet
 
 import (

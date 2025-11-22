@@ -28,10 +28,11 @@ resulting from the use or misuse of this software.
 package metrics
 
 import (
+	"strconv"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	log "github.com/sirupsen/logrus"
-	"strconv"
 )
 
 type metricsClient struct {

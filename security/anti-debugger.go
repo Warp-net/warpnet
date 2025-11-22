@@ -31,10 +31,11 @@ package security
 
 import (
 	"bytes"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 	"os"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 func init() {

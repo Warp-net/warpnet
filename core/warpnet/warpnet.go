@@ -98,8 +98,11 @@ const (
 
 	PermanentTTL = peerstore.PermanentAddrTTL
 
-	ErrNodeIsOffline = WarpError("node is offline")
-	ErrUserIsOffline = WarpError("user is offline")
+	ErrNodeIsOffline   WarpError = "node is offline"
+	ErrUserIsOffline   WarpError = "user is offline"
+	ErrEmptyNodeId     WarpError = "node id is empty"
+	ErrMalformedNodeId WarpError = "node id is malformed"
+	ErrNotImplemented  WarpError = "not implemented"
 
 	ReachabilityPublic  WarpReachability = network.ReachabilityPublic
 	ReachabilityPrivate WarpReachability = network.ReachabilityPrivate

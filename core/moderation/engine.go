@@ -1,5 +1,4 @@
 //go:build llama
-// +build llama
 
 package moderation
 

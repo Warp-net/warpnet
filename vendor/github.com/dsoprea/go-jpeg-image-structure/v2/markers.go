@@ -1,7 +1,7 @@
 package jpegstructure
 
 import (
-	"github.com/dsoprea/go-logging"
+	log "github.com/dsoprea/go-logging"
 )
 
 const (

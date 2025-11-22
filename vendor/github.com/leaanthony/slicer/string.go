@@ -2,8 +2,10 @@
 package slicer
 
 // Imports
-import "sort"
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // StringSlicer handles slices of string
 type StringSlicer struct {

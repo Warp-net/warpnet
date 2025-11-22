@@ -1,8 +1,8 @@
 package edge
 
 import (
-	"unsafe"
 	"math"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dsoprea/go-logging"
+	log "github.com/dsoprea/go-logging"
 	"github.com/go-xmlfmt/xmlfmt"
 )
 

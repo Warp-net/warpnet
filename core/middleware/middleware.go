@@ -29,6 +29,11 @@ package middleware
 
 import (
 	"errors"
+	"io"
+	"runtime/debug"
+	"sync"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -36,10 +41,6 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/docker/go-units"
 	log "github.com/sirupsen/logrus"
-	"io"
-	"runtime/debug"
-	"sync"
-	"time"
 )
 
 type middlewareError string
@@ -112,9 +113,9 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
+		reader := io.LimitReader(s, MaxLimit) // TODO size limit???
 		data, err := io.ReadAll(reader)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			log.Errorf("middleware: auth: reading from stream: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
@@ -151,13 +152,19 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			WarpStream: s,
 			Body:       msg.Body,
 		})
-
 	}
 }
 
+const (
+	MaxLimit              = units.MiB * 5 // TODO size limit???
+	InternalNodeErrorCode = 5000
+)
+
 func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
-		defer s.Close()
+		defer func() {
+			_ = s.Close()
+		}()
 
 		var (
 			response any
@@ -166,15 +173,15 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			data     []byte
 		)
 
-		switch s.(type) {
+		switch typedStream := s.(type) {
 		case *warpnet.WarpStreamBody:
-			data = s.(*warpnet.WarpStreamBody).Body
+			data = typedStream.Body
 		default:
-			reader := io.LimitReader(s, units.MiB*5) // TODO size limit???
+			reader := io.LimitReader(s, MaxLimit)
 			data, err = io.ReadAll(reader)
-			if err != nil && err != io.EOF {
+			if err != nil && !errors.Is(err, io.EOF) {
 				log.Errorf("middleware: reading from stream: %v", err)
-				response = event.ErrorResponse{Message: ErrStreamReadError.Error()}
+				response = event.ResponseError{Message: ErrStreamReadError.Error()}
 				_ = encoder.Encode(response)
 				return
 			}
@@ -193,26 +200,26 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			response, err = handler(data, s)
 		}
 		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-			if len(data) > 500 {
+			if len(data) > 500 { //nolint:mnd
 				data = data[:500]
 			}
 			log.Errorf("middleware: handling of %s %s message: %s failed: %v\n", s.Protocol(), s.Conn().RemotePeer(), string(data), err)
-			response = event.ErrorResponse{Code: 500, Message: err.Error()} // TODO errors ranking
+			response = event.ResponseError{Code: InternalNodeErrorCode, Message: err.Error()} // TODO errors ranking
 		}
 
 		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
 		if response == nil {
-			response = event.ErrorResponse{Message: "empty response"}
+			response = event.ResponseError{Message: "empty response"}
 		}
 
-		switch response.(type) {
+		switch typedResponse := response.(type) {
 		case []byte:
-			if _, err := s.Write(response.([]byte)); err != nil {
+			if _, err := s.Write(typedResponse); err != nil {
 				log.Errorf("middleware: writing raw bytes to stream: %v", err)
 			}
 			return
 		case string:
-			if _, err := s.Write([]byte(response.(string))); err != nil {
+			if _, err := s.Write([]byte(typedResponse)); err != nil {
 				log.Errorf("middleware: writing string to stream: %v", err)
 			}
 			return

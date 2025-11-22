@@ -41,6 +41,7 @@ import (
 
 type TimelineRepoTestSuite struct {
 	suite.Suite
+
 	db   *local.DB
 	repo *TimelineRepo
 }

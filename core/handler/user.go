@@ -111,8 +111,8 @@ func StreamGetUserHandler(
 			}
 
 			u.TweetsCount = tweetsCount
-			u.FollowersCount = followersCount
-			u.FollowingsCount = followingsCount
+			u.FollowersCount = int64(followersCount)
+			u.FollowingsCount = int64(followingsCount)
 
 			return u, nil
 		}
@@ -133,19 +133,19 @@ func StreamGetUserHandler(
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
 			otherUser.IsOffline = true
 			_, err = repo.Update(otherUser.Id, otherUser)
-			return otherUser, nil
+			return otherUser, err
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
-			return nil, fmt.Errorf("unmarshal other user error response: %s", possibleError.Message)
+			return nil, fmt.Errorf("unmarshal other user error response: %w", possibleError)
 		}
 
 		if err = json.Unmarshal(otherUserData, &otherUser); err != nil {
-			return nil, fmt.Errorf("get other user: response unmarshal: %v %s", err, otherUserData)
+			return nil, fmt.Errorf("get other user: response unmarshal: %w %s", err, otherUserData)
 		}
 		_, err = repo.Update(otherUser.Id, otherUser)
 		return otherUser, err
@@ -218,7 +218,7 @@ func refreshUsers(
 		return
 	}
 
-	var possibleError event.ErrorResponse
+	var possibleError event.ResponseError
 	if _ = json.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
 		log.Errorf("unmarshal other users error response: %s", possibleError.Message)
 		return
@@ -257,7 +257,7 @@ func StreamGetWhoToFollowHandler(
 			return nil, err
 		}
 
-		followingsLimit := uint64(80) // TODO limit?
+		followingsLimit := uint64(80) //nolint:mnd    // TODO limit?
 		followings, _, err := followRepo.GetFollowings(authRepo.GetOwner().UserId, &followingsLimit, nil)
 		if err != nil {
 			log.Errorf("get who to follow handler: get followers %v", err)

@@ -83,7 +83,7 @@ func NewMemberNode(
 	db Storer,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
-		return nil, errors.New("private key is required")
+		return nil, node.ErrPrivateKeyRequired
 	}
 	nodeRepo := database.NewNodeRepo(db)
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
@@ -180,7 +180,7 @@ func (m *MemberNode) Start() (err error) {
 		m.opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("member: failed to start node: %v", err)
+		return fmt.Errorf("member: failed to start node: %w", err)
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
@@ -211,7 +211,7 @@ func fetchFollowingIds(ownerId string, followRepo FollowStorer) (ids []string, e
 
 	var (
 		nextCursor string
-		limit      = uint64(20)
+		limit      = uint64(20) //nolint:mnd
 	)
 	for {
 		followings, cur, err := followRepo.GetFollowings(ownerId, &limit, &nextCursor)
@@ -224,7 +224,7 @@ func fetchFollowingIds(ownerId string, followRepo FollowStorer) (ids []string, e
 			}
 			ids = append(ids, id)
 		}
-		if len(followings) < int(limit) {
+		if uint64(len(followings)) < limit {
 			break
 		}
 		nextCursor = cur
@@ -264,12 +264,12 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 		return nil, nil
 	}
 	if nodeIdStr == "" {
-		return nil, errors.New("member: stream: node id is empty")
+		return nil, fmt.Errorf("member: stream: %w", warpnet.ErrEmptyNodeId)
 	}
 
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	if nodeId == "" {
-		return nil, fmt.Errorf("member: stream: node id is malformed: %s", nodeIdStr)
+		return nil, fmt.Errorf("member: stream: %w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
 	}
 
 	var isMastodonID bool
@@ -289,7 +289,7 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	}
 
 	if err != nil {
-		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10)
+		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10) //nolint:mnd
 		defer cancelF()
 		_ = m.retrier.Try(ctx, func() error {
 			bt, err = m.node.Stream(nodeId, path, data) // TODO dead letters queue
@@ -342,6 +342,7 @@ func (m *MemberNode) setupHandlers(
 		NodeInfo: m.NodeInfo(),
 	}
 
+	//nolint:govet
 	m.node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
 			{

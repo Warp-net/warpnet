@@ -27,7 +27,6 @@ package node
 import (
 	"context"
 	"crypto/ed25519"
-	"errors"
 	"fmt"
 	"sync/atomic"
 
@@ -141,7 +140,7 @@ func (mn *ModeratorNode) Start() (err error) {
 
 	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
-		return fmt.Errorf("node: failed to init node: %v", err)
+		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
 	mn.node.SetStreamHandlers(
@@ -188,17 +187,17 @@ func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	if nodeId == "" {
-		return nil, fmt.Errorf("moderator: stream: node id is malformed: %s", nodeIdStr)
+		return nil, fmt.Errorf("moderator: stream: %w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
 	}
 	return mn.node.Stream(nodeId, path, data)
 }
 
 func (mn *ModeratorNode) SelfStream(_ stream.WarpRoute, _ any) (_ []byte, err error) {
-	return nil, errors.New("not implemented")
+	return nil, warpnet.ErrNotImplemented
 }
 
 func (mn *ModeratorNode) Stop() {
-	defer func() { recover() }()
+	defer func() { _ = recover() }()
 	if mn == nil {
 		return
 	}

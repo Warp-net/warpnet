@@ -23,16 +23,15 @@
 //
 // Example use:
 //
-//     redactable := redact.Sprintf("hello %s", "universe")
+//	redactable := redact.Sprintf("hello %s", "universe")
 //
-//     // At this point, 'redactable' contains "hello ‹universe›".
+//	// At this point, 'redactable' contains "hello ‹universe›".
 //
-//     // This prints "hello universe":
-//     fmt.Println(redactable.StripMarkers())
+//	// This prints "hello universe":
+//	fmt.Println(redactable.StripMarkers())
 //
-//     // This reports "hello ‹×›":
-//     fmt.Println(redactable.Redact())
-//
+//	// This reports "hello ‹×›":
+//	fmt.Println(redactable.Redact())
 //
 // When defining your own custom types, you can define
 // a SafeFormat method, implementing the redact.SafeFormatter

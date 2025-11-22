@@ -28,8 +28,9 @@ resulting from the use or misuse of this software.
 package json
 
 import (
-	jsoniter "github.com/json-iterator/go"
 	"io"
+
+	jsoniter "github.com/json-iterator/go"
 )
 
 type RawMessage = jsoniter.RawMessage
