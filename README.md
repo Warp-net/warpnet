@@ -16,6 +16,8 @@
   </p>
 </div>
 
+![Screenshot](https://github.com/Warp-net/.github/raw/main/docs/warpscreen.jpg)
+
 ## Getting Started
 
 List of software needed and how to install them.

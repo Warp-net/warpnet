@@ -20,8 +20,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux/amd64
-#          - os: ubuntu-latest
-#            platform: linux/arm64
+          - os: ubuntu-24.04-arm
+            platform: linux/arm64
           - os: macos-latest
             platform: darwin/arm64
           - os: windows-latest
@@ -43,7 +43,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Linux deps
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ startsWith(matrix.os, 'ubuntu') }}
         run: |
           sudo apt update
           sudo apt install -y build-essential libgtk-3-dev libwebkit2gtk-4.1-dev
@@ -53,16 +53,16 @@ jobs:
 
       - name: Build (Wails, Linux with compression)
         working-directory: cmd/node/member
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ startsWith(matrix.os, 'ubuntu') }}
         run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod -upx -upxflags="--best"
 
       - name: Build (Wails)
         working-directory: cmd/node/member
-        if: ${{ matrix.os != 'ubuntu-latest' }}
+        if: ${{ !startsWith(matrix.os, 'ubuntu') }}
         run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod
 
       - name: Package + checksum (Linux AMD64)
-        if: ${{ matrix.os == 'ubuntu-latest' && matrix.platform == 'linux/amd64' }}
+        if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/amd64' }}
         run: |
           mkdir -p out/linux_amd64
           mv cmd/node/member/build/bin/* out/linux_amd64/warpnet
@@ -70,7 +70,7 @@ jobs:
           shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz > warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
 
       - name: Package + checksum (Linux ARM64)
-        if: ${{ matrix.os == 'ubuntu-latest' && matrix.platform == 'linux/arm64' }}
+        if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/arm64' }}
         run: |
           mkdir -p out/linux_arm64
           mv cmd/node/member/build/bin/* out/linux_arm64/warpnet
@@ -105,6 +105,8 @@ jobs:
           files: |
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
+            warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz
+            warpnet_${{ env.RELEASE_TAG }}_linux_arm64_checksums.txt
             warpnet_${{ env.RELEASE_TAG }}_darwin_arm64.tar.gz
             warpnet_${{ env.RELEASE_TAG }}_darwin_arm64_checksums.txt
             warpnet_${{ env.RELEASE_TAG }}_windows_amd64.zip
