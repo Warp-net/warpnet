@@ -77,14 +77,13 @@ jobs:
             coverage.html
             coverage.txt
 
-      #   # This step *supposed* to work with valid CODECOV_TOKEN and created organization on Codecov
-      # - name: Upload coverage data to Codecov
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   uses: codecov/codecov-action@v4
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
-      #     file: ./coverage.out
-      #     name: codecov-umbrella
+      - name: Upload coverage data to Codecov
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: codecov/codecov-action@v4
+        with:
+         token: ${{ secrets.CODECOV_TOKEN }}
+         file: ./coverage.out
+         name: codecov-umbrella
 
       - name: Calculate coverage
         if: ${{ github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest' }}
