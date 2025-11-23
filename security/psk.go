@@ -111,7 +111,7 @@ const spbFounding = -((int64(133129) << 16) + 51200)
 func generateAnchoredEntropy() []byte {
 	spbFoundingStr := strconv.FormatInt(spbFounding, 10)
 	input := []byte(spbFoundingStr)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		sum := sha256.Sum256(input)
 		input = sum[:]
 	}
