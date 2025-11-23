@@ -60,7 +60,7 @@ jobs:
 
       - name: Run tests (with coverage)
         if: ${{ matrix.os == 'ubuntu-latest' }} # collect & upload coverage only from one of the runners
-        run: go test -race -coverprofile=coverage.out -coverpkg=./... ./...
+        run: go test -race -coverprofile=coverage.out ./...
 
       - name: Check code coverage
         if: ${{ matrix.os == 'ubuntu-latest' }}
