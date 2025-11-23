@@ -95,22 +95,3 @@ jobs:
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
 
-      - name: Comment coverage on PR
-        if: ${{ github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest' }}
-        uses: actions/github-script@v8
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const coverage = '${{ steps.coverage.outputs.coverage }}';
-            const comment = `## Code Coverage Report
-
-            **Total Coverage:** ${coverage}%
-
-            Full coverage report is available in the workflow artifacts.`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            })
