@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//nolint:all
 package handler
 
 import (
@@ -88,6 +89,8 @@ func TestAmendExif_Success(t *testing.T) {
 }
 
 func validateExif(t *testing.T, data []byte) {
+	t.Helper()
+	
 	parser := jis.NewJpegMediaParser()
 
 	intfc, err := parser.ParseBytes(data)

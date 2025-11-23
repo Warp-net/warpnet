@@ -182,7 +182,7 @@ func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []
 		getOneEvent event.GetTweetEvent
 		getAllEvent event.GetAllTweetsEvent
 		getImage    event.GetImageEvent
-		resp        interface{}
+		resp        any
 	)
 	var data []byte
 	if payload != nil {

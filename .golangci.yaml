@@ -66,6 +66,7 @@ linters:
     - wsl_v5
     - unconvert
     - unused
+    - testifylint
 
 #formatters:
 #  enable:

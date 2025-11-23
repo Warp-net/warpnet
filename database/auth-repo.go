@@ -157,7 +157,6 @@ func (repo *AuthRepo) GetOwner() domain.Owner {
 		owner.RedundantUserID = owner.UserId
 	}
 	return owner
-
 }
 
 func (repo *AuthRepo) SetOwner(o domain.Owner) (_ domain.Owner, err error) {

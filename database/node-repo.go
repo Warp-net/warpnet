@@ -129,7 +129,6 @@ func (d *NodeRepo) PutWithTTL(ctx context.Context, key local.Key, value []byte, 
 		Build()
 
 	return d.db.SetWithTTL(prefix, value, ttl)
-
 }
 
 func (d *NodeRepo) SetTTL(ctx context.Context, key local.Key, ttl time.Duration) error {

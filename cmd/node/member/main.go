@@ -59,7 +59,7 @@ func main() {
 				panic("second instance launched")
 			},
 		},
-		Bind: []interface{}{
+		Bind: []any{
 			app,
 		},
 		Linux: &linux.Options{
