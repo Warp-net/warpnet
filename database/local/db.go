@@ -175,13 +175,21 @@ func New(
 		WithSyncWrites(false).
 		WithIndexCacheSize(256 << 20).
 		WithCompression(options.ZSTD).
-		WithNumCompactors(2).
+		WithNumCompactors(4).
 		WithLoggingLevel(badger.ERROR).
 		WithBlockCacheSize(512 << 20)
 	if o.isInMemory {
-		badgerOpts = badgerOpts.WithDir("")
-		badgerOpts = badgerOpts.WithValueDir("")
-		badgerOpts = badgerOpts.WithInMemory(true)
+		badgerOpts = badger.
+			DefaultOptions("").
+			WithDir("").
+			WithValueDir("").
+			WithInMemory(true).
+			WithSyncWrites(false).
+			WithIndexCacheSize(256 << 20).
+			WithNumCompactors(2).
+			WithLoggingLevel(badger.ERROR).
+			WithBlockCacheSize(512 << 20)
+
 	}
 
 	if o.intervalGC == 0 {
@@ -219,6 +227,9 @@ func (db *DB) IsFirstRun() bool {
 }
 
 func (db *DB) writeFirstRunFlag() {
+	if db.badgerOpts.InMemory {
+		return
+	}
 	path := filepath.Join(db.dbPath, firstRunLockFile)
 	log.Infof("database: lock file created: %s", path)
 	f, _ := os.Create(path) //#nosec
@@ -260,6 +271,9 @@ func (db *DB) Run(username, password string) (err error) {
 }
 
 func (db *DB) runEventualGC() {
+	if db.badgerOpts.InMemory {
+		return
+	}
 	log.Infoln("database: garbage collection started")
 	gcTicker := time.NewTicker(db.intervalGC)
 	defer gcTicker.Stop()
@@ -834,8 +848,11 @@ func (db *DB) InnerDB() *badger.DB {
 }
 
 func (db *DB) Sync() error {
-	if db == nil {
+	if db == nil || db.badger == nil {
 		return ErrNotRunning
+	}
+	if db.badgerOpts.InMemory {
+		return nil
 	}
 	return db.badger.Sync()
 }

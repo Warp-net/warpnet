@@ -52,7 +52,7 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	var err error
 	s.ctx = context.Background()
 
-	s.db, err = local.New(".", local.DefaultOptions())
+	s.db, err = local.New("", local.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
 	auth := NewAuthRepo(s.db)

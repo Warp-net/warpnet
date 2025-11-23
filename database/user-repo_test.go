@@ -47,7 +47,7 @@ type UserRepoTestSuite struct {
 
 func (s *UserRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", local.DefaultOptions().WithInMemory(true))
+	s.db, err = local.New("", local.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
 	authRepo := NewAuthRepo(s.db)

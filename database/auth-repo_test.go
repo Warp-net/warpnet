@@ -47,7 +47,7 @@ type AuthRepoTestSuite struct {
 
 func (s *AuthRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", local.DefaultOptions().WithInMemory(true))
+	s.db, err = local.New("", local.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 	s.repo = NewAuthRepo(s.db)
 
