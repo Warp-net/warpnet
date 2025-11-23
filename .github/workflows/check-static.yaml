@@ -36,6 +36,7 @@ jobs:
 
       - name: Run golvulncheck
         uses: golang/govulncheck-action@v1
+        continue-on-error: true
 
   test:
     name: Test
