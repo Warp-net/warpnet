@@ -517,7 +517,7 @@ func (g *Gossip) Close() (err error) {
 		}
 	}()
 	if !g.isRunning.Load() {
-		return
+		return nil
 	}
 
 	g.mx.Lock()
@@ -542,7 +542,7 @@ func (g *Gossip) Close() (err error) {
 	g.topics = nil
 	g.subs = nil
 	log.Infoln("gossip: closed")
-	return
+	return err
 }
 
 type pubsubDiscoveryMessage struct {

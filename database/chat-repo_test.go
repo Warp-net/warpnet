@@ -74,7 +74,7 @@ func (s *ChatRepoSuite) TestDeleteChat() {
 func (s *ChatRepoSuite) TestGetUserChats() {
 	userID := testUserID
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		other := ulid.Make().String()
 		_, err := s.repo.CreateChat(nil, userID, other)
 		s.NoError(err)
@@ -117,7 +117,7 @@ func (s *ChatRepoSuite) TestListMessages() {
 	s.NotEmpty(chat.Id)
 	defer s.repo.DeleteChat(chat.Id)
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 5; i++ { //nolint:modernize
 		msg := domain.ChatMessage{
 			ChatId:    chat.Id,
 			Text:      "msg",

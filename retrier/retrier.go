@@ -102,17 +102,17 @@ func (r *retrier) Try(ctx context.Context, f RetrierFunc) (err error) {
 		case NoBackoff:
 
 		case FixedBackoff:
-			interval = interval + interval
+			interval += interval
 		case ExponentialBackoff:
-			interval = interval * 2
+			interval *= 2
 		}
 		sleepDuration := interval + jitter(r.minInterval)
 		time.Sleep(sleepDuration)
 	}
 
-	return fmt.Errorf("%v %w", err, ErrDeadlineReached)
+	return fmt.Errorf("%v %w", err, ErrDeadlineReached) //nolint:errorlint
 }
 
 func jitter(minInterval time.Duration) time.Duration {
-	return time.Duration(rand.Int64N(int64(minInterval / 2))) // Add jitter
+	return time.Duration(rand.Int64N(int64(minInterval / 2))) //#nosec
 }

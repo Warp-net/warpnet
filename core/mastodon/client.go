@@ -33,7 +33,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -112,7 +111,7 @@ func NewWarpnetMastodonPseudoNode(
 			FollowersCount:     acct.FollowersCount,
 			Id:                 string(acct.ID),
 			NodeId:             pseudoPeerID.String(),
-			TweetsCount:        uint64(acct.StatusesCount),
+			TweetsCount:        acct.StatusesCount,
 			Username:           acct.DisplayName,
 			Website:            func(s string) *string { return &s }(website),
 			Network:            MastodonNetwork,
@@ -252,10 +251,12 @@ func (m *warpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
+	now := time.Now()
 	acct, err := m.bridge.GetAccount(m.ctx, id)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("masotodon: bridge: get account: %w", err)
 	}
+	elapsed := time.Since(now)
 
 	var birthdate, site string
 	for _, f := range acct.Fields {
@@ -278,8 +279,8 @@ func (m *warpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 		Id:                 string(acct.ID),
 		IsOffline:          false,
 		NodeId:             m.pseudoPeerID.String(),
-		Latency:            math.MaxInt64, // TODO
-		TweetsCount:        uint64(acct.StatusesCount),
+		RoundTripTime:      elapsed.Milliseconds(),
+		TweetsCount:        acct.StatusesCount,
 		Username:           acct.DisplayName,
 		Website:            &site,
 		Network:            MastodonNetwork,
@@ -303,10 +304,13 @@ func (m *warpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *strin
 		Users: []domain.User{m.defaultUser, m.proxyUser},
 	}
 
+	now := time.Now()
 	followers, err := m.bridge.GetAccountFollowers(m.ctx, id, pagination)
 	if err != nil {
 		return defaultUsers, err
 	}
+	elapsed := time.Since(now)
+
 	if len(followers) == 0 {
 		return defaultUsers, nil
 	}
@@ -346,8 +350,8 @@ func (m *warpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *strin
 			Id:                 string(acct.ID),
 			IsOffline:          false,
 			NodeId:             m.pseudoPeerID.String(),
-			Latency:            math.MaxInt64, // TODO
-			TweetsCount:        uint64(acct.StatusesCount),
+			RoundTripTime:      elapsed.Milliseconds(),
+			TweetsCount:        acct.StatusesCount,
 			Username:           acct.DisplayName,
 			Website:            &site,
 			Network:            MastodonNetwork,
@@ -669,7 +673,12 @@ func (m *warpnetMastodonPseudoNode) postUnfollowHandler(userId string) error {
 }
 
 func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageResponse, error) {
-	resp, err := m.bridge.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return event.GetImageResponse{}, err
+	}
+
+	resp, err := m.bridge.Do(req)
 	if err != nil {
 		return event.GetImageResponse{}, err
 	}

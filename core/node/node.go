@@ -130,7 +130,7 @@ func NewWarpNode(
 		isClosed:         new(atomic.Bool),
 		version:          version,
 		startTime:        time.Now(),
-		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5), //nolint:mnd
+		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
 		mw:               middleware.NewWarpMiddleware(node.ID()),
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
@@ -370,7 +370,7 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		if !ok {
 			bt, err = json.Marshal(data)
 			if err != nil {
-				return nil, fmt.Errorf("node: generic stream: marshal data %v %s", err, data)
+				return nil, fmt.Errorf("node: generic stream: marshal data %w %s", err, data)
 			}
 		}
 	}

@@ -41,7 +41,6 @@ import (
 )
 
 func main() {
-
 	version := config.Config().Version
 	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)

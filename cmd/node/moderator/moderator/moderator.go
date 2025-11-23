@@ -61,7 +61,6 @@ func NewModerator(
 	node ModeratorNode,
 	pub Publisher,
 ) (_ *Moderator, err error) {
-
 	mn := &Moderator{
 		ctx:        ctx,
 		tweetCache: newTweetModerationCache(),
@@ -248,7 +247,7 @@ func (m *Moderator) pickTweet(peerID warpnet.WarpPeerID, userID string) (*domain
 
 func (m *Moderator) moderateTweet(tweet *domain.Tweet) (*domain.TweetModeration, error) {
 	if tweet == nil {
-		return nil, errors.New("moderator: tweet is nil")
+		return nil, ErrNoTweetsForModeration
 	}
 	result, reason, err := engine.Moderate(tweet.Text)
 	if err != nil {

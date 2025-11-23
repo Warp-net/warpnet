@@ -58,11 +58,12 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/host/autonat"
+	// "github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds" is deprecated: The database-backed peerstore will be removed from go-libp2p in the future. Use the memory peerstore (pstoremem) instead. For more details see https://github.com/libp2p/go-libp2p/issues/2329 and https://github.com/libp2p/go-libp2p/issues/2355.
+	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds" //nolint:staticcheck
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 
 	"github.com/libp2p/go-libp2p/core/transport"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
-	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
@@ -141,12 +142,10 @@ type (
 )
 
 type (
-	// types
 	WarpMDNS        mdns.Service
 	WarpPrivateKey  p2pCrypto.PrivKey
 	WarpRoutingFunc func(node P2PNode) (WarpPeerRouting, error)
 
-	// aliases
 	WarpMessage        = pubsub.Message
 	WarpReachability   = network.Reachability
 	WarpOption         = libp2p.Option
@@ -180,29 +179,30 @@ type (
 
 type WarpStreamBody struct {
 	WarpStream
+
 	Body []byte
 }
 
 type WarpHandlerFunc func(msg []byte, s WarpStream) (any, error)
 
-// structures
 type WarpStreamHandler struct {
 	Path    WarpProtocolID
 	Handler WarpHandlerFunc
 }
 
+//nolint:staticcheck
 func (wh *WarpStreamHandler) IsValid() bool {
-	if !strings.HasPrefix(string(wh.Path), "/") {
+	if !strings.HasPrefix(string(wh.Path), "/") { //nolint:staticcheck
 		return false
 	}
-	if !(strings.Contains(string(wh.Path), "get") ||
-		strings.Contains(string(wh.Path), "delete") ||
-		strings.Contains(string(wh.Path), "post")) {
+	if !(strings.Contains(string(wh.Path), "get") || //nolint:staticcheck
+		strings.Contains(string(wh.Path), "delete") || //nolint:staticcheck
+		strings.Contains(string(wh.Path), "post")) { //nolint:staticcheck
 		return false
 	}
-	if !(strings.Contains(string(wh.Path), "private") ||
-		strings.Contains(string(wh.Path), "internal") ||
-		strings.Contains(string(wh.Path), "public")) {
+	if !(strings.Contains(string(wh.Path), "private") || //nolint:staticcheck
+		strings.Contains(string(wh.Path), "internal") || //nolint:staticcheck
+		strings.Contains(string(wh.Path), "public")) { //nolint:staticcheck
 		return false
 	}
 	return true
@@ -247,8 +247,8 @@ type NodeStats struct {
 	MemoryStats   map[string]string `json:"memory_stats"`
 	CPUStats      map[string]string `json:"cpu_stats"`
 
-	BytesSent     int64 `json:"bytes_sent"`
-	BytesReceived int64 `json:"bytes_received"`
+	BytesSent     uint64 `json:"bytes_sent"`
+	BytesReceived uint64 `json:"bytes_received"`
 
 	PeersOnline int `json:"peers_online"`
 	PeersStored int `json:"peers_stored"`
@@ -323,7 +323,7 @@ func GetMemoryStats() map[string]string {
 	return map[string]string{
 		"heap":    units.HumanSize(float64(memStats.Alloc)),
 		"stack":   units.HumanSize(float64(memStats.StackInuse)),
-		"last_gc": time.Unix(0, int64(memStats.LastGC)).Format(time.DateTime),
+		"last_gc": time.Unix(0, int64(memStats.LastGC)).Format(time.DateTime), //#nosec
 	}
 }
 
@@ -347,8 +347,8 @@ func GetCPUStats() map[string]string {
 	return stats
 }
 
-func GetNetworkIO() (bytesSent int64, bytesRecv int64) {
-	ioCounters, err := net.IOCounters(false) // false = суммарно по всем интерфейсам
+func GetNetworkIO() (bytesSent uint64, bytesRecv uint64) {
+	ioCounters, err := net.IOCounters(false)
 	if err != nil {
 		log.Error("could not get network io counters", err)
 		return 0, 0
@@ -357,7 +357,7 @@ func GetNetworkIO() (bytesSent int64, bytesRecv int64) {
 		return 0, 0
 	}
 	stats := ioCounters[0]
-	return int64(stats.BytesSent), int64(stats.BytesRecv)
+	return stats.BytesSent, stats.BytesRecv
 }
 
 func FromStringToPeerID(s string) WarpPeerID {

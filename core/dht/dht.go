@@ -196,7 +196,6 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 
 	g, ctx := errgroup.WithContext(ctx)
 	for _, addr := range boostrapNodes {
-		addr := addr // this is important!
 		g.Go(func() error {
 			localCtx, localCancel := context.WithTimeout(ctx, time.Second) // local timeout
 			defer localCancel()

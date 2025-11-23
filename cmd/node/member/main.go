@@ -44,13 +44,13 @@ func main() {
 
 	err = wails.Run(&options.App{
 		Title:            "warpnet",
-		Width:            1024, //nolint:mnd
-		Height:           1024, //nolint:mnd
+		Width:            1024,
+		Height:           1024,
 		WindowStartState: options.Maximised,
 		AssetServer: &assetserver.Options{
 			Assets: frontend.GetStaticEmbedded(),
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1}, //nolint:mnd
+		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
 		OnShutdown:       app.close,
 		SingleInstanceLock: &options.SingleInstanceLock{

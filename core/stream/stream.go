@@ -100,7 +100,9 @@ func (p *streamPool) send(
 	}
 
 	if len(serverInfo.ID) > 52 {
-		return nil, fmt.Errorf("stream: node id is too long: %v", serverInfo.ID)
+		return nil, fmt.Errorf(
+			"stream: %w: node id is too long: %s", warpnet.ErrMalformedNodeId, serverInfo.ID.String(),
+		)
 	}
 
 	if err := serverInfo.ID.Validate(); err != nil {
@@ -116,7 +118,7 @@ func (p *streamPool) send(
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
-		return nil, fmt.Errorf("stream: new: %v", err)
+		return nil, fmt.Errorf("stream: new: %w", err)
 	}
 	defer closeStream(stream)
 

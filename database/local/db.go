@@ -160,10 +160,10 @@ type DB struct {
 }
 
 type WarpDBLogger interface {
-	Errorf(string, ...interface{})
-	Warningf(string, ...interface{})
-	Infof(string, ...interface{})
-	Debugf(string, ...interface{})
+	Errorf(string, ...any)
+	Warningf(string, ...any)
+	Infof(string, ...any)
+	Debugf(string, ...any)
 }
 
 func New(
@@ -189,7 +189,6 @@ func New(
 			WithNumCompactors(2).
 			WithLoggingLevel(badger.ERROR).
 			WithBlockCacheSize(512 << 20)
-
 	}
 
 	if o.intervalGC == 0 {
@@ -540,7 +539,7 @@ func (t *warpTxn) BatchSet(data []ListItem) (err error) {
 	}
 	if isTooBig {
 		leftovers := data[lastIndex:]
-		data = nil
+		data = nil //nolint:wastedassign
 		err = t.BatchSet(leftovers)
 	}
 	return err
@@ -585,11 +584,10 @@ func increment(txn *badger.Txn, key []byte, incType int8) (uint64, error) {
 	case incr:
 		newValue = decodeUint64(val) + 1
 	case decr:
-		newValue = decodeUint64(val) - 1
-
-	}
-	if newValue < 0 {
-		newValue = 0
+		decodedVal := decodeUint64(val)
+		if decodedVal > 0 {
+			newValue = decodedVal - 1
+		}
 	}
 
 	return newValue, txn.Set(key, encodeUint64(newValue))
@@ -758,7 +756,6 @@ func iterate(
 			return "", err
 		}
 		iterNum++
-
 	}
 
 	if iterNum < *limit {

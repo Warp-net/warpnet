@@ -50,7 +50,7 @@ const (
 	userSubNamespace = "USER"
 	nodeSubNamespace = "NODE"
 
-	defaultAverageLatency int64 = 125000
+	defaultAverageRTT int64 = 125000
 
 	DefaultWarpnetUserNetwork = "warpnet"
 )
@@ -87,14 +87,14 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		return user, err
 	}
 
-	if user.Latency == 0 {
-		user.Latency = defaultAverageLatency
+	if user.RoundTripTime == 0 {
+		user.RoundTripTime = defaultAverageRTT
 	}
 	if user.Network == "" {
 		user.Network = DefaultWarpnetUserNetwork
 	}
 
-	rttRange := local.RangePrefix(strconv.FormatInt(user.Latency, 10))
+	rttRange := local.RangePrefix(strconv.FormatInt(user.RoundTripTime, 10))
 
 	fixedKey := local.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
@@ -210,7 +210,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 			existingUser.Moderation.Strikes += newUser.Moderation.Strikes
 		}
 	}
-	existingUser.Latency = newUser.Latency
+	existingUser.RoundTripTime = newUser.RoundTripTime
 	now := time.Now()
 	existingUser.UpdatedAt = &now
 

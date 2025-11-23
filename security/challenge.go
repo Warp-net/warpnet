@@ -157,6 +157,8 @@ func getRandomLine(codebase FileSystem, path string) (string, int, error) {
 	return lines[index], index, nil
 }
 
+var ErrInvalidStackSize = errors.New("challenge: invalid file stack size - expected 4 elements")
+
 func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 	currentDir := "."
 
@@ -177,7 +179,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 			}
 		}
 		if dirIndex >= len(dirs) {
-			return "", fmt.Errorf("challenge: dir index %d out of bounds at level %d", dirIndex, level)
+			return "", fmt.Errorf("challenge: dir index %d: level %d: %w", dirIndex, level, ErrSampleIndexOutOfBounds)
 		}
 
 		nextDir := dirs[dirIndex].Name()
@@ -200,7 +202,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 		}
 	}
 	if len(loc.FileStack) != 4 {
-		return "", fmt.Errorf("challenge: invalid file stack size - expected 4 elements")
+		return "", ErrInvalidStackSize
 	}
 
 	fileIndex := loc.FileStack[0]

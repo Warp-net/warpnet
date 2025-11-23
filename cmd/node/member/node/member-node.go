@@ -211,7 +211,7 @@ func fetchFollowingIds(ownerId string, followRepo FollowStorer) (ids []string, e
 
 	var (
 		nextCursor string
-		limit      = uint64(20) //nolint:mnd
+		limit      = uint64(20)
 	)
 	for {
 		followings, cur, err := followRepo.GetFollowings(ownerId, &limit, &nextCursor)
@@ -289,7 +289,7 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	}
 
 	if err != nil {
-		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10) //nolint:mnd
+		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancelF()
 		_ = m.retrier.Try(ctx, func() error {
 			bt, err = m.node.Stream(nodeId, path, data) // TODO dead letters queue

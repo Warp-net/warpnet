@@ -107,7 +107,6 @@ func (s *TimelineRepoTestSuite) TestDeleteTweetFromTimeline() {
 
 func (s *TimelineRepoTestSuite) TestMultipleTweetsOrder() {
 	userID := ulid.Make().String()
-	var tweets []domain.Tweet
 
 	for i := 0; i < 3; i++ {
 		t := domain.Tweet{
@@ -116,7 +115,6 @@ func (s *TimelineRepoTestSuite) TestMultipleTweetsOrder() {
 			Text:      "tweet",
 			CreatedAt: time.Now().Add(time.Duration(-i) * time.Second),
 		}
-		tweets = append(tweets, t)
 		s.Require().NoError(s.repo.AddTweetToTimeline(userID, t))
 	}
 

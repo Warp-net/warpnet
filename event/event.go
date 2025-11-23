@@ -36,9 +36,8 @@ import (
 
 const (
 	Accepted            acceptedResponse = `{"code":0,"message":"Accepted"}`
-	InternalRoutePrefix                  = "/internal"
-
-	EndCursor = "end"
+	InternalRoutePrefix string           = "/internal"
+	EndCursor           string           = "end"
 )
 
 type acceptedResponse string
@@ -253,7 +252,7 @@ type Message struct {
 	MessageId   domain.ID       `json:"message_id"`
 	NodeId      domain.ID       `json:"node_id"`
 	Destination string          `json:"path"` // TODO change to 'destination'
-	Timestamp   time.Time       `json:"timestamp,omitempty"`
+	Timestamp   time.Time       `json:"timestamp"`
 	Version     string          `json:"version"`
 	Signature   string          `json:"signature"`
 }

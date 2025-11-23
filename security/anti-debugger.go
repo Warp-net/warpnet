@@ -40,7 +40,7 @@ import (
 
 func init() {
 	_ = os.Unsetenv("LD_PRELOAD")
-	//enableCoreDumps()
+	// enableCoreDumps()
 	disableCoreDumps()
 	mustNotGDBAttached()
 }

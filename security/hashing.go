@@ -32,12 +32,12 @@ import (
 	"encoding/hex"
 )
 
-func ConvertToSHA256(string []byte) []byte {
-	if len(string) == 0 {
-		return string
+func ConvertToSHA256(input []byte) []byte {
+	if len(input) == 0 {
+		return input
 	}
 	hash := sha256.New()
-	hash.Write(string)
+	hash.Write(input)
 	return hash.Sum(nil)
 }
 

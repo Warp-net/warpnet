@@ -143,12 +143,13 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
+	//nolint:govet
 	mn.node.SetStreamHandlers(
-		warpnet.WarpStreamHandler{
+		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(mn, nil),
 		},
-		warpnet.WarpStreamHandler{
+		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_POST_NODE_CHALLENGE,
 			handler.StreamChallengeHandler(root.GetCodeBase(), mn.privKey),
 		},

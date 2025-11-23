@@ -335,9 +335,9 @@ func setLinuxDesktopIcon(iconData []byte) {
 	iconDir := filepath.Join(homeDir, ".local", "share", "icons", "hicolor", "512x512", "apps")
 
 	//#nosec
-	_ = os.MkdirAll(desktopDir, 0755) //nolint:mnd
+	_ = os.MkdirAll(desktopDir, 0755)
 	//#nosec
-	_ = os.MkdirAll(iconDir, 0755) //nolint:mnd
+	_ = os.MkdirAll(iconDir, 0755)
 
 	execPath, err := os.Executable()
 	if err != nil {
@@ -347,13 +347,13 @@ func setLinuxDesktopIcon(iconData []byte) {
 	desktopFile := filepath.Join(desktopDir, "warpnet.desktop")
 	content := fmt.Sprintf(linuxDesktopTemplate, execPath)
 	//#nosec
-	if err := os.WriteFile(desktopFile, []byte(content), 0644); err != nil { //nolint:mnd
+	if err := os.WriteFile(desktopFile, []byte(content), 0644); err != nil {
 		log.Fatalf("setting icon: write .desktop file fail: %v", err)
 	}
 
 	iconPath := filepath.Join(iconDir, "warpnet.png")
 	//#nosec
-	if err := os.WriteFile(iconPath, iconData, 0644); err != nil { //nolint:mnd
+	if err := os.WriteFile(iconPath, iconData, 0644); err != nil {
 		log.Fatalf("setting icon: write icon file fail: %v", err)
 	}
 }

@@ -167,7 +167,7 @@ func (bn *BootstrapNode) Start() (err error) {
 		bn.opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("bootstrap: failed to init node: %v", err)
+		return fmt.Errorf("bootstrap: failed to init node: %w", err)
 	}
 	bn.setupHandlers()
 
@@ -216,7 +216,7 @@ func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	if nodeId == "" {
-		return nil, fmt.Errorf("bootstrap: stream: node id is malformed: %s", nodeIdStr)
+		return nil, fmt.Errorf("bootstrap: stream:%w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
 	}
 	bt, err := bn.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {

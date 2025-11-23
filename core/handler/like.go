@@ -119,7 +119,7 @@ func StreamLikeHandler(
 			},
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 		if err != nil {
 			return nil, err

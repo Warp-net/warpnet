@@ -131,9 +131,6 @@ func NewBootstrapDiscoveryService(ctx context.Context) *discoveryService {
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
-	if s == nil {
-		return warpnet.WarpError("nil discovery service")
-	}
 	if s.discoveryChan == nil {
 		return warpnet.WarpError("discovery channel is nil")
 	}
@@ -221,7 +218,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		jitter := rand.IntN(div)
 		dropMessagesNum := jitter + 1
 		log.Warnf("discovery: channel overflow %d, drop %d first messages", cap(s.discoveryChan), dropMessagesNum)
-		for i := 0; i < dropMessagesNum; i++ {
+		for range dropMessagesNum {
 			<-s.discoveryChan // drop old data
 		}
 	}
@@ -298,7 +295,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	newUser, err := s.userRepo.Create(user)
 	if errors.Is(err, database.ErrUserAlreadyExists) {
-		newUser, _ = s.userRepo.Update(user.Id, user)
+		newUser, _ = s.userRepo.Update(user.Id, user) //nolint:wastedassign
 		return
 	}
 	if err != nil {
@@ -308,12 +305,12 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 	log.Infof(
-		"discovery: new user added: id: %s, name: %s, node_id: %s, created_at: %s, latency: %d, source: %s",
+		"discovery: new user added: id: %s, name: %s, node_id: %s, created_at: %s, RTT: %d, source: %s",
 		newUser.Id,
 		newUser.Username,
 		newUser.NodeId,
 		newUser.CreatedAt,
-		newUser.Latency,
+		newUser.RoundTripTime,
 		peer.Source,
 	)
 }
@@ -380,9 +377,6 @@ const (
 )
 
 func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
-	if s == nil {
-		return errors.New("nil discovery service")
-	}
 	if s.cache.IsChallengedAlready(pi.ID) {
 		log.Debugf("discovery: peer %s already challenged", pi.ID.String())
 		return nil
@@ -416,17 +410,18 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to get challenge from new peer %s: %v", pi.ID.String(), err)
+		return fmt.Errorf("failed to get challenge from new peer %s: %w", pi.ID.String(), err)
 	}
 
-	if resp == nil || len(resp) == 0 {
-		return fmt.Errorf("no challenge response from new peer %s", pi.ID.String())
+	if len(resp) == 0 {
+		err := warpnet.WarpError("no challenge response from new peer")
+		return fmt.Errorf("%w: %s", err, pi.ID.String())
 	}
 
 	var challengeResp event.ChallengeResponse
 	err = json.Unmarshal(resp, &challengeResp)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal challenge from new peer: %s %v", resp, err)
+		return fmt.Errorf("failed to unmarshal challenge from new peer: %s %w", resp, err)
 	}
 
 	if err := s.validateChallenges(ownChallenges, pi.ID, challengeResp.Solutions); err != nil {
@@ -467,7 +462,8 @@ func (s *discoveryService) validateChallenges(
 	peerId warpnet.WarpPeerID,
 	solutions []event.ChallengeSolution) error {
 	if len(solutions) != len(ownChallenges) {
-		return fmt.Errorf("invalid number of solutions: %d != %d", len(solutions), len(ownChallenges))
+		err := warpnet.WarpError("invalid number of solutions")
+		return fmt.Errorf("discovery: %w: %d != %d", err, len(solutions), len(ownChallenges))
 	}
 
 	for i := range solutions {
@@ -476,7 +472,7 @@ func (s *discoveryService) validateChallenges(
 
 		challengeRespDecoded, err := hex.DecodeString(solution.Challenge)
 		if err != nil {
-			return fmt.Errorf("failed to decode challenge origin: %v", err)
+			return fmt.Errorf("failed to decode challenge origin: %w", err)
 		}
 
 		if !bytes.Equal(ownChallenge, challengeRespDecoded) {
@@ -486,7 +482,8 @@ func (s *discoveryService) validateChallenges(
 
 		peerstorePubKey := s.node.Peerstore().PubKey(peerId)
 		if peerstorePubKey == nil {
-			return fmt.Errorf("peer %s has no public key", peerId.String())
+			err := warpnet.WarpError("public key is not found")
+			return fmt.Errorf("%w: %s", err, peerId.String())
 		}
 		if peerstorePubKey.Type() != pb.KeyType_Ed25519 {
 			return warpnet.WarpError("peer is not an Ed25519 public key")
@@ -502,56 +499,54 @@ func (s *discoveryService) validateChallenges(
 }
 
 func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpnet.NodeInfo, err error) {
-	if s == nil {
-		return info, errors.New("nil discovery service")
-	}
-
 	infoResp, err := s.node.GenericStream(pi.ID.String(), event.PUBLIC_GET_INFO, nil)
 	if err != nil {
-		return info, fmt.Errorf("failed to get info from new peer %s: %v", pi.ID.String(), err)
+		return info, fmt.Errorf("failed to get info from new peer %s: %w", pi.ID.String(), err)
 	}
 
-	if infoResp == nil || len(infoResp) == 0 {
-		return info, fmt.Errorf("no info response from new peer %s", pi.ID.String())
+	if len(infoResp) == 0 {
+		err := warpnet.WarpError("no info response from new peer")
+		return info, fmt.Errorf("%w: %s", err, pi.ID.String())
 	}
 
 	err = json.Unmarshal(infoResp, &info)
 	if err != nil {
-		return info, fmt.Errorf("failed to unmarshal info from new peer: %s %v", infoResp, err)
+		return info, fmt.Errorf("failed to unmarshal info from new peer: %s %w", infoResp, err)
 	}
 	if info.OwnerId == "" {
-		return info, fmt.Errorf("node info %s has no owner", pi.ID.String())
+		err := warpnet.WarpError("node info has no owner")
+		return info, fmt.Errorf("%w: %s", err, pi.ID.String())
 	}
 	return info, nil
 }
 
 func (s *discoveryService) requestNodeUser(pi warpnet.WarpAddrInfo, userId string) (user domain.User, err error) {
-	if s == nil {
-		return user, errors.New("nil discovery service")
-	}
 	if userId == "" {
-		return user, errors.New("empty user id")
+		return user, warpnet.WarpError("empty user id")
 	}
 
 	getUserEvent := event.GetUserEvent{UserId: userId}
 
+	now := time.Now()
 	userResp, err := s.node.GenericStream(pi.ID.String(), event.PUBLIC_GET_USER, getUserEvent)
 	if err != nil {
-		return user, fmt.Errorf("failed to user data from new peer %s: %v", pi.ID.String(), err)
+		return user, fmt.Errorf("failed to user data from new peer %s: %w", pi.ID.String(), err)
 	}
+	elapsed := time.Since(now)
 
-	if userResp == nil || len(userResp) == 0 {
-		return user, fmt.Errorf("no user response from new peer %s", pi.String())
+	if len(userResp) == 0 {
+		err := warpnet.WarpError("no user response from new peer")
+		return user, fmt.Errorf("%w: %s", err, pi.String())
 	}
 
 	err = json.Unmarshal(userResp, &user)
 	if err != nil {
-		return user, fmt.Errorf("failed to unmarshal user from new peer: %v", err)
+		return user, fmt.Errorf("failed to unmarshal user from new peer: %w", err)
 	}
 
 	user.IsOffline = false
 	user.NodeId = pi.ID.String()
-	user.Latency = int64(s.node.Peerstore().LatencyEWMA(pi.ID))
+	user.RoundTripTime = elapsed.Milliseconds()
 	return user, nil
 }
 

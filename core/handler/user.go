@@ -83,7 +83,7 @@ func StreamGetUserHandler(
 		var ev event.GetUserEvent
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
-			return nil, fmt.Errorf("get user: event unmarshal: %v %s", err, buf)
+			return nil, fmt.Errorf("get user: event unmarshal: %w %s", err, buf)
 		}
 
 		if ev.UserId == "" {
@@ -110,7 +110,7 @@ func StreamGetUserHandler(
 				log.Errorf("get user: fetch tweets count: %v", err)
 			}
 
-			u.TweetsCount = tweetsCount
+			u.TweetsCount = int64(tweetsCount)
 			u.FollowersCount = int64(followersCount)
 			u.FollowingsCount = int64(followingsCount)
 
