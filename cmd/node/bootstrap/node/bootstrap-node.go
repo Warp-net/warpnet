@@ -191,12 +191,13 @@ func (bn *BootstrapNode) setupHandlers() {
 		panic("bootstrap: nil bootstrap node")
 	}
 
+	//nolint:govet
 	bn.node.SetStreamHandlers(
-		warpnet.WarpStreamHandler{
+		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(bn, bn.discService.DiscoveryHandlerStream),
 		},
-		warpnet.WarpStreamHandler{
+		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_POST_NODE_CHALLENGE,
 			handler.StreamChallengeHandler(root.GetCodeBase(), bn.privKey),
 		},

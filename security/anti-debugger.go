@@ -53,9 +53,9 @@ func enableCoreDumps() {
 }
 
 func disableCoreDumps() {
-	//tick := time.NewTicker(10 * time.Second)
-	//defer tick.Stop()
-	//<-tick.C
+	// tick := time.NewTicker(10 * time.Second)
+	// defer tick.Stop()
+	// <-tick.C
 	err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0)
 	if err != nil {
 		log.Fatalf("failed to disable core dumps: %v", err)
@@ -76,5 +76,4 @@ func mustNotGDBAttached() {
 			}
 		}
 	}
-	return
 }

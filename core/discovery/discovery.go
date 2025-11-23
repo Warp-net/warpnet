@@ -214,8 +214,8 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		Source: source,
 	}:
 	default:
-		div := int(cap(s.discoveryChan) / 10) //nolint:mnd
-		jitter := rand.IntN(div)
+		div := cap(s.discoveryChan) / 10
+		jitter := rand.IntN(div) //#nosec
 		dropMessagesNum := jitter + 1
 		log.Warnf("discovery: channel overflow %d, drop %d first messages", cap(s.discoveryChan), dropMessagesNum)
 		for range dropMessagesNum {
@@ -442,7 +442,7 @@ func (s *discoveryService) composeChallengeRequest(challengeLevel int) ([]challe
 	ownChalenges := make([][]byte, challengeLevel)
 	samples := make([]event.ChallengeSample, challengeLevel)
 	for i := 0; i < challengeLevel; i++ {
-		nonce := rand.Int64()
+		nonce := rand.Int64() //#nosec
 		ownChallenge, location, err := security.GenerateChallenge(root.GetCodeBase(), nonce)
 		if err != nil {
 			return nil, nil, err

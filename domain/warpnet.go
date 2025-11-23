@@ -222,5 +222,4 @@ func (t ModerationObjectType) String() string {
 	default:
 		return "unknown"
 	}
-
 }

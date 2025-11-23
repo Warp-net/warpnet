@@ -143,7 +143,7 @@ func (p *streamPool) send(
 	closeWrite(stream)
 	if err != nil {
 		log.Errorf("stream: writing: %v", err)
-		return nil, fmt.Errorf("stream: writing: %s", err)
+		return nil, fmt.Errorf("stream: writing: %w", err)
 	}
 
 	buf := bytes.NewBuffer(nil)

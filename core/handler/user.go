@@ -110,9 +110,9 @@ func StreamGetUserHandler(
 				log.Errorf("get user: fetch tweets count: %v", err)
 			}
 
-			u.TweetsCount = int64(tweetsCount)
-			u.FollowersCount = int64(followersCount)
-			u.FollowingsCount = int64(followingsCount)
+			u.TweetsCount = int64(tweetsCount)         //#nosec
+			u.FollowersCount = int64(followersCount)   //#nosec
+			u.FollowingsCount = int64(followingsCount) //#nosec
 
 			return u, nil
 		}

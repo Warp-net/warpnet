@@ -44,32 +44,32 @@ func newLRU() *cache {
 	}
 }
 
-func (c *cache) Add(key, value interface{}) bool {
+func (c *cache) Add(key, value any) bool {
 	innerKey := castKeyToString(key)
 	return c.ec.Add(innerKey, value)
 }
 
-func (c *cache) Get(key interface{}) (interface{}, bool) {
+func (c *cache) Get(key any) (any, bool) {
 	innerKey := castKeyToString(key)
 	return c.ec.Get(innerKey)
 }
 
-func (c *cache) Contains(key interface{}) bool {
+func (c *cache) Contains(key any) bool {
 	innerKey := castKeyToString(key)
 	return c.ec.Contains(innerKey)
 }
 
-func (c *cache) Peek(key interface{}) (interface{}, bool) {
+func (c *cache) Peek(key any) (any, bool) {
 	innerKey := castKeyToString(key)
 	return c.ec.Peek(innerKey)
 }
 
-func (c *cache) Remove(key interface{}) bool {
+func (c *cache) Remove(key any) bool {
 	innerKey := castKeyToString(key)
 	return c.ec.Remove(innerKey)
 }
 
-func (c *cache) RemoveOldest() (interface{}, interface{}, bool) {
+func (c *cache) RemoveOldest() (any, any, bool) {
 	k, v, ok := c.ec.RemoveOldest()
 	if !ok {
 		return nil, nil, false
@@ -77,7 +77,7 @@ func (c *cache) RemoveOldest() (interface{}, interface{}, bool) {
 	return k, v, true
 }
 
-func (c *cache) GetOldest() (interface{}, interface{}, bool) {
+func (c *cache) GetOldest() (any, any, bool) {
 	k, v, ok := c.ec.GetOldest()
 	if !ok {
 		return nil, nil, false
@@ -85,9 +85,9 @@ func (c *cache) GetOldest() (interface{}, interface{}, bool) {
 	return k, v, true
 }
 
-func (c *cache) Keys() []interface{} {
+func (c *cache) Keys() []any {
 	keys := c.ec.Keys()
-	res := make([]interface{}, len(keys))
+	res := make([]any, len(keys))
 	for i, k := range keys {
 		res[i] = k
 	}
@@ -106,7 +106,7 @@ func (c *cache) Resize(i int) int {
 	return c.ec.Resize(i)
 }
 
-func castKeyToString(key interface{}) string {
+func castKeyToString(key any) string {
 	var innerKey string
 	switch typedKey := key.(type) {
 	case string:

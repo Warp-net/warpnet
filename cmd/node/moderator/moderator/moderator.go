@@ -140,7 +140,7 @@ func (m *Moderator) runTweetsModeration() {
 				log.Errorf("moderator: no info response from new peer %s, %v", peer.String(), err)
 				continue
 			}
-			if infoResp == nil || len(infoResp) == 0 {
+			if len(infoResp) == 0 {
 				log.Errorf("moderator: no info response from new peer %s", peer.String())
 				continue
 			}
@@ -199,7 +199,7 @@ func (m *Moderator) pickTweet(peerID warpnet.WarpPeerID, userID string) (*domain
 		if err != nil {
 			return nil, fmt.Errorf("moderator: get tweets: %w", err)
 		}
-		if data == nil || len(data) == 0 {
+		if len(data) == 0 {
 			return nil, ErrNoTweetsForModeration
 		}
 

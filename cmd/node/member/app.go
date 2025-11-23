@@ -201,7 +201,6 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		log.Errorln("message body is empty")
 		response.Body = newErrorResp("message body is empty")
 		return response
-
 	}
 
 	switch request.Path {

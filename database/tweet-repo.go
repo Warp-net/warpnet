@@ -163,7 +163,7 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	}
 	existedTweet.UpdatedAt = &now
 
-	expiration := time.Unix(int64(expiresAt), 0)
+	expiration := time.Unix(int64(expiresAt), 0) //#nosec
 	ttl := expiration.Sub(now)
 	if ttl <= 0 { //nolint:modernize
 		ttl = 0

@@ -515,9 +515,9 @@ func (m *warpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.
 
 	stats := event.TweetStatsResponse{
 		TweetId:       domain.ID(status.ID),
-		RetweetsCount: uint64(status.ReblogsCount),
-		LikeCount:     uint64(status.FavouritesCount),
-		RepliesCount:  uint64(status.RepliesCount),
+		RetweetsCount: uint64(status.ReblogsCount),    //#nosec
+		LikeCount:     uint64(status.FavouritesCount), //#nosec
+		RepliesCount:  uint64(status.RepliesCount),    //#nosec
 		ViewsCount:    0,
 	}
 	return stats, nil
@@ -673,7 +673,10 @@ func (m *warpnetMastodonPseudoNode) postUnfollowHandler(userId string) error {
 }
 
 func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageResponse, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	ctx, cancelF := context.WithTimeout(m.ctx, time.Second*5)
+	defer cancelF()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return event.GetImageResponse{}, err
 	}

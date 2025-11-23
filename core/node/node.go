@@ -408,5 +408,4 @@ func (n *WarpNode) StopNode() {
 	n.node = nil
 
 	// pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
-	return
 }

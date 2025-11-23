@@ -138,7 +138,6 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		if err != nil {
 			log.Errorf("new owner creation failed: %v", err)
 			return authInfo, fmt.Errorf("create owner: %w", err)
-
 		}
 		user, err = as.userPersistence.Create(domain.User{
 			CreatedAt:     owner.CreatedAt,

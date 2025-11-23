@@ -450,7 +450,7 @@ func (g *Gossip) runPeerInfoPublishing(duration time.Duration) {
 		case <-g.ctx.Done():
 			return
 		case <-ticker.C:
-			jitter := time.Second * time.Duration(rand.IntN(60))
+			jitter := time.Second * time.Duration(rand.IntN(60)) //#nosec
 			ticker.Reset(duration + jitter)
 
 			err := g.publishPeerInfo()
