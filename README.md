@@ -3,6 +3,7 @@
 [![Build](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml)
 [![Telegram Chat](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)
 [![warpnet](https://snapcraft.io/warpnet/badge.svg)](https://snapcraft.io/warpnet)
+[![codecov](https://codecov.io/github/filinvadim/warpnet/graph/badge.svg?token=474B8GR4UY)](https://codecov.io/github/filinvadim/warpnet)
 <br />
 <div align="center">
 <h3 align="center">Warpnet</h3>
