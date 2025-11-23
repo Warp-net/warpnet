@@ -59,7 +59,7 @@ func main() {
 				panic("second instance launched")
 			},
 		},
-		Bind: []interface{}{
+		Bind: []any{
 			app,
 		},
 		Linux: &linux.Options{
@@ -101,6 +101,6 @@ func main() {
 	})
 	if err != nil {
 		log.Errorf("failed to start application: %s", err)
-		os.Exit(1)
+		return
 	}
 }

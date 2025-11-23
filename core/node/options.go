@@ -90,6 +90,8 @@ func EmptyOption() func() libp2p.Option {
 	}
 }
 
+const ErrMultipleIdentities warpnet.WarpError = "cannot specify multiple identities"
+
 func WarpIdentity(privKey ed25519.PrivateKey) libp2p.Option {
 	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
 	if err != nil {
@@ -97,7 +99,7 @@ func WarpIdentity(privKey ed25519.PrivateKey) libp2p.Option {
 	}
 	return func(cfg *libp2pConfig.Config) error {
 		if cfg.PeerKey != nil {
-			return fmt.Errorf("cannot specify multiple identities")
+			return ErrMultipleIdentities
 		}
 		cfg.PeerKey = p2pPrivKey
 		return nil
@@ -116,24 +118,26 @@ func WithDialTimeoutLocal(t time.Duration) warpnet.SwarmOption {
 	}
 }
 
+const ErrFieldNotFound warpnet.WarpError = "field not found"
+
 func WithDefaultTCPConnectionTimeout(t time.Duration) warpnet.TCPOption {
 	fieldName := "connectTimeout"
 	return func(tr *warpnet.TCPTransport) error {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Errorf("reflection error setting %s: %v", fieldName, r)
+				log.Errorf("options: reflection error setting %s: %v", fieldName, r)
 			}
 		}()
 		v := reflect.ValueOf(tr).Elem()
 		field := v.FieldByName(fieldName)
 		if !field.IsValid() {
-			return fmt.Errorf("field %s not found", fieldName)
+			return fmt.Errorf("options: %w: %s", ErrFieldNotFound, fieldName)
 		}
 		if field.CanSet() {
 			field.Set(reflect.ValueOf(t))
 			return nil
 		}
-		ptr := unsafe.Pointer(field.UnsafeAddr())
+		ptr := unsafe.Pointer(field.UnsafeAddr()) //#nosec
 		typedPtr := (*time.Duration)(ptr)
 		*typedPtr = t
 		return nil
@@ -143,19 +147,19 @@ func WithDefaultTCPConnectionTimeout(t time.Duration) warpnet.TCPOption {
 func setPrivateDurationField(s *warpnet.Swarm, fieldName string, t time.Duration) error {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Errorf("reflection error setting %s: %v", fieldName, r)
+			log.Errorf("options: reflection error setting %s: %v", fieldName, r)
 		}
 	}()
 	v := reflect.ValueOf(s).Elem()
 	field := v.FieldByName(fieldName)
 	if !field.IsValid() {
-		return fmt.Errorf("field %s not found", fieldName)
+		return fmt.Errorf("options: %w: %s", ErrFieldNotFound, fieldName)
 	}
 	if field.CanSet() {
 		field.Set(reflect.ValueOf(t))
 		return nil
 	}
-	ptr := unsafe.Pointer(field.UnsafeAddr())
+	ptr := unsafe.Pointer(field.UnsafeAddr()) //#nosec
 	typedPtr := (*time.Duration)(ptr)
 	*typedPtr = t
 	return nil

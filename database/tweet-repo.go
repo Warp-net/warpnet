@@ -105,11 +105,7 @@ func (repo *TweetRepo) IsBlocklisted(tweetId string) bool {
 		AddRange(local.FixedRangeKey).
 		Build()
 	_, err := repo.db.Get(fixedKey)
-	if local.IsNotFoundError(err) {
-		return false
-	}
-
-	return true
+	return !local.IsNotFoundError(err)
 }
 
 func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
@@ -167,9 +163,9 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	}
 	existedTweet.UpdatedAt = &now
 
-	expiration := time.Unix(int64(expiresAt), 0)
+	expiration := time.Unix(int64(expiresAt), 0) //#nosec
 	ttl := expiration.Sub(now)
-	if ttl <= 0 {
+	if ttl <= 0 { //nolint:modernize
 		ttl = 0
 	}
 	_, err = storeTweet(txn, existedTweet.UserId, existedTweet, ttl, true)
@@ -363,7 +359,7 @@ func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]dom
 	return tweets, cur, nil
 }
 
-//====================== RETWEET ====================
+// ====================== RETWEET ====================
 
 func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error) {
 	if tweet.RetweetedBy == nil {

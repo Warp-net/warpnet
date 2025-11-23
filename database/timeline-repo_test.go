@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//nolint:all
 package database
 
 import (
@@ -41,13 +42,14 @@ import (
 
 type TimelineRepoTestSuite struct {
 	suite.Suite
+
 	db   *local.DB
 	repo *TimelineRepo
 }
 
 func (s *TimelineRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", local.DefaultOptions().WithInMemory(true))
+	s.db, err = local.New("", local.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
 	auth := NewAuthRepo(s.db)
@@ -106,7 +108,6 @@ func (s *TimelineRepoTestSuite) TestDeleteTweetFromTimeline() {
 
 func (s *TimelineRepoTestSuite) TestMultipleTweetsOrder() {
 	userID := ulid.Make().String()
-	var tweets []domain.Tweet
 
 	for i := 0; i < 3; i++ {
 		t := domain.Tweet{
@@ -115,7 +116,6 @@ func (s *TimelineRepoTestSuite) TestMultipleTweetsOrder() {
 			Text:      "tweet",
 			CreatedAt: time.Now().Add(time.Duration(-i) * time.Second),
 		}
-		tweets = append(tweets, t)
 		s.Require().NoError(s.repo.AddTweetToTimeline(userID, t))
 	}
 

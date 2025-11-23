@@ -20,4 +20,4 @@ ENV GOEXPERIMENT=greenteagc
 
 RUN go version && go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
 
-CMD ["/warpnet/warpnet 2>/dev/null"]
+CMD ["/warpnet/warpnet"]

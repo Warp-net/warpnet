@@ -191,7 +191,7 @@ func (n node) IsTestnet() bool {
 
 func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
 	if len(n.Bootstrap) == 0 {
-		return nil, fmt.Errorf("no bootstrap nodes found")
+		return infos, nil
 	}
 	for _, addr := range n.Bootstrap {
 		maddr, err := warpnet.NewMultiaddr(addr)
@@ -229,8 +229,6 @@ func getAppPath() string {
 	default:
 		log.Fatal("unsupported OS")
 	}
-
-	dbPath = filepath.Join(dbPath)
 
 	err := os.MkdirAll(dbPath, 0750)
 	if err != nil {

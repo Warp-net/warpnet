@@ -160,10 +160,10 @@ type DB struct {
 }
 
 type WarpDBLogger interface {
-	Errorf(string, ...interface{})
-	Warningf(string, ...interface{})
-	Infof(string, ...interface{})
-	Debugf(string, ...interface{})
+	Errorf(string, ...any)
+	Warningf(string, ...any)
+	Infof(string, ...any)
+	Debugf(string, ...any)
 }
 
 func New(
@@ -175,13 +175,20 @@ func New(
 		WithSyncWrites(false).
 		WithIndexCacheSize(256 << 20).
 		WithCompression(options.ZSTD).
-		WithNumCompactors(2).
+		WithNumCompactors(4).
 		WithLoggingLevel(badger.ERROR).
 		WithBlockCacheSize(512 << 20)
 	if o.isInMemory {
-		badgerOpts = badgerOpts.WithDir("")
-		badgerOpts = badgerOpts.WithValueDir("")
-		badgerOpts = badgerOpts.WithInMemory(true)
+		badgerOpts = badger.
+			DefaultOptions("").
+			WithDir("").
+			WithValueDir("").
+			WithInMemory(true).
+			WithSyncWrites(false).
+			WithIndexCacheSize(256 << 20).
+			WithNumCompactors(2).
+			WithLoggingLevel(badger.ERROR).
+			WithBlockCacheSize(512 << 20)
 	}
 
 	if o.intervalGC == 0 {
@@ -219,9 +226,12 @@ func (db *DB) IsFirstRun() bool {
 }
 
 func (db *DB) writeFirstRunFlag() {
+	if db.badgerOpts.InMemory {
+		return
+	}
 	path := filepath.Join(db.dbPath, firstRunLockFile)
 	log.Infof("database: lock file created: %s", path)
-	f, _ := os.Create(path)
+	f, _ := os.Create(path) //#nosec
 	if f != nil {
 		_ = f.Close()
 	}
@@ -260,6 +270,9 @@ func (db *DB) Run(username, password string) (err error) {
 }
 
 func (db *DB) runEventualGC() {
+	if db.badgerOpts.InMemory {
+		return
+	}
 	log.Infoln("database: garbage collection started")
 	gcTicker := time.NewTicker(db.intervalGC)
 	defer gcTicker.Stop()
@@ -273,8 +286,7 @@ func (db *DB) runEventualGC() {
 		case <-dirTicker.C:
 			isFound := findFirstRunFlag(db.dbPath)
 			if !isFound {
-				log.Errorln("database: folder was emptied")
-				os.Exit(1)
+				panic("database: folder was emptied")
 			}
 		case <-gcTicker.C:
 			for {
@@ -298,7 +310,7 @@ func (db *DB) Stats() map[string]string {
 
 	cacheMetrics := db.badger.BlockCacheMetrics()
 
-	maxVersion := strconv.FormatInt(int64(db.badger.MaxVersion()), 10)
+	maxVersion := strconv.FormatUint(db.badger.MaxVersion(), 10)
 
 	return map[string]string{
 		"size":           units.HumanSize(float64(size)),
@@ -527,7 +539,7 @@ func (t *warpTxn) BatchSet(data []ListItem) (err error) {
 	}
 	if isTooBig {
 		leftovers := data[lastIndex:]
-		data = nil
+		data = nil //nolint:wastedassign
 		err = t.BatchSet(leftovers)
 	}
 	return err
@@ -540,16 +552,21 @@ func (t *warpTxn) Delete(key DatabaseKey) error {
 	return t.txn.Delete([]byte(key))
 }
 
+const (
+	incr int8 = 1 << iota
+	decr
+)
+
 func (t *warpTxn) Increment(key DatabaseKey) (uint64, error) {
-	return increment(t.txn, key.Bytes(), 1)
+	return increment(t.txn, key.Bytes(), incr)
 }
 
 func (t *warpTxn) Decrement(key DatabaseKey) (uint64, error) {
-	return increment(t.txn, key.Bytes(), -1)
+	return increment(t.txn, key.Bytes(), decr)
 }
 
-func increment(txn *badger.Txn, key []byte, incVal int64) (uint64, error) {
-	var newValue int64
+func increment(txn *badger.Txn, key []byte, incType int8) (uint64, error) {
+	var newValue uint64
 
 	item, err := txn.Get(key)
 	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
@@ -563,12 +580,17 @@ func increment(txn *badger.Txn, key []byte, incVal int64) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	newValue = decodeInt64(val) + incVal
-	if newValue < 0 {
-		newValue = 0
+	switch incType {
+	case incr:
+		newValue = decodeUint64(val) + 1
+	case decr:
+		decodedVal := decodeUint64(val)
+		if decodedVal > 0 {
+			newValue = decodedVal - 1
+		}
 	}
 
-	return uint64(newValue), txn.Set(key, encodeInt64(newValue))
+	return newValue, txn.Set(key, encodeUint64(newValue))
 }
 
 const endCursor = "end"
@@ -734,7 +756,6 @@ func iterate(
 			return "", err
 		}
 		iterNum++
-
 	}
 
 	if iterNum < *limit {
@@ -824,8 +845,11 @@ func (db *DB) InnerDB() *badger.DB {
 }
 
 func (db *DB) Sync() error {
-	if db == nil {
+	if db == nil || db.badger == nil {
 		return ErrNotRunning
+	}
+	if db.badgerOpts.InMemory {
+		return nil
 	}
 	return db.badger.Sync()
 }
@@ -844,17 +868,17 @@ func (db *DB) IsClosed() bool {
 	return !db.isRunning.Load()
 }
 
-func encodeInt64(n int64) []byte {
+func encodeUint64(n uint64) []byte {
 	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(n))
+	binary.BigEndian.PutUint64(b, n)
 	return b
 }
 
-func decodeInt64(b []byte) int64 {
+func decodeUint64(b []byte) uint64 {
 	if len(b) == 0 {
 		return 0
 	}
-	return int64(binary.BigEndian.Uint64(b))
+	return binary.BigEndian.Uint64(b)
 }
 
 func (db *DB) Close() {

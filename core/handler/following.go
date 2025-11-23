@@ -257,13 +257,13 @@ func validateResponse(resp []byte) error {
 		return nil
 	}
 
-	var errorResp event.ErrorResponse
+	var errorResp event.ResponseError
 	err := json.Unmarshal(resp, &errorResp)
 	if err != nil {
 		return fmt.Errorf("followings: validate: unmarshal: %w", err)
 	}
 	if errorResp.Message != "" {
-		return fmt.Errorf("followings: validate: message: %s", errorResp.Message)
+		return fmt.Errorf("followings: validate: message: %w", errorResp)
 	}
 	return nil
 }
@@ -325,9 +325,9 @@ func StreamGetFollowersHandler(
 		if err != nil {
 			return nil, err
 		}
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(followersData, &possibleError); possibleError.Message != "" {
-			return nil, fmt.Errorf("unmarshal other followers error response: %s", possibleError.Message)
+			return nil, fmt.Errorf("unmarshal other followers error response: %w", possibleError)
 		}
 
 		var followersResp event.FollowersResponse
@@ -394,9 +394,9 @@ func StreamGetFollowingsHandler(
 		if err != nil {
 			return nil, err
 		}
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(followingsData, &possibleError); possibleError.Message != "" {
-			return nil, fmt.Errorf("unmarshal other followings error response: %s", possibleError.Message)
+			return nil, fmt.Errorf("unmarshal other followings error response: %w", possibleError)
 		}
 
 		var followingsResp event.FollowingsResponse

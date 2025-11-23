@@ -28,17 +28,18 @@ resulting from the use or misuse of this software.
 package json
 
 import (
-	jsoniter "github.com/json-iterator/go"
 	"io"
+
+	jsoniter "github.com/json-iterator/go"
 )
 
 type RawMessage = jsoniter.RawMessage
 
-func Unmarshal(data []byte, v interface{}) error {
+func Unmarshal(data []byte, v any) error {
 	return jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(data, v)
 }
 
-func Marshal(v interface{}) ([]byte, error) {
+func Marshal(v any) ([]byte, error) {
 	return jsoniter.ConfigCompatibleWithStandardLibrary.Marshal(v)
 }
 

@@ -33,7 +33,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -54,19 +53,21 @@ const (
 	mastodonServer = "https://mastodon.social"
 	// pk, _ = security.GenerateKeyFromSeed([]byte(mastodonServer))
 	// mastodonPseudoPeerID, _ := warpnet.IDFromPublicKey(pk.Public().(ed25519.PublicKey))
-	mastodonPseudoPeerID = "12D3KooWDfpE8bR2iBjEMMe7gTVwEiahF9duFxETLHq3N6en9hsG"
+	mastodonPseudoPeerID = "12D3KooWDfpE8bR2iBjEMMe7gTVwEiahF9duFxETLHq3N6en9hsG" //#nosec
 	mastodonPseudoMaddr  = "/dns4/mastodon.social/tcp/443"
 
 	// read only proxy account
-	clientID     = "GMhQuzhygPDmyNW5RN6p2vMOLokLUkt86TPyObJwE7E"
-	clientSecret = "qGDlFgu--O4j9fy4ZIs5ov_nl_Oq32-rWdWdxHjN2hg"
-	accessToken  = "1FP-aJ5pPbhMdoaGLuVNDSOT2HeO7BWPciK8ST4_a8o"
+	clientID     = "GMhQuzhygPDmyNW5RN6p2vMOLokLUkt86TPyObJwE7E" //#nosec
+	clientSecret = "qGDlFgu--O4j9fy4ZIs5ov_nl_Oq32-rWdWdxHjN2hg" //#nosec
+	accessToken  = "1FP-aJ5pPbhMdoaGLuVNDSOT2HeO7BWPciK8ST4_a8o" //#nosec
 
 	defaultLimit          = 20
-	defaultMastodonUserID = "13179"
+	defaultMastodonUserID = "13179" //#nosec
 	website               = "https://github.com/Warp-net/warpnet"
 
 	MastodonNetwork = "mastodon"
+
+	mediaTypeImage = "image"
 )
 
 type warpnetMastodonPseudoNode struct {
@@ -106,11 +107,11 @@ func NewWarpnetMastodonPseudoNode(
 			BackgroundImageKey: acct.HeaderStatic,
 			Bio:                stripper.StripTags(acct.Note),
 			CreatedAt:          acct.CreatedAt,
-			FollowingsCount:    uint64(acct.FollowingCount),
-			FollowersCount:     uint64(acct.FollowersCount),
+			FollowingsCount:    acct.FollowingCount,
+			FollowersCount:     acct.FollowersCount,
 			Id:                 string(acct.ID),
 			NodeId:             pseudoPeerID.String(),
-			TweetsCount:        uint64(acct.StatusesCount),
+			TweetsCount:        acct.StatusesCount,
 			Username:           acct.DisplayName,
 			Website:            func(s string) *string { return &s }(website),
 			Network:            MastodonNetwork,
@@ -181,7 +182,7 @@ func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []
 		getOneEvent event.GetTweetEvent
 		getAllEvent event.GetAllTweetsEvent
 		getImage    event.GetImageEvent
-		resp        interface{}
+		resp        any
 	)
 	var data []byte
 	if payload != nil {
@@ -250,10 +251,12 @@ func (m *warpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 	var id mastodon.ID
 	_ = id.UnmarshalJSON([]byte(userId))
 
+	now := time.Now()
 	acct, err := m.bridge.GetAccount(m.ctx, id)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("masotodon: bridge: get account: %w", err)
 	}
+	elapsed := time.Since(now)
 
 	var birthdate, site string
 	for _, f := range acct.Fields {
@@ -271,13 +274,13 @@ func (m *warpnetMastodonPseudoNode) getUserHandler(userId string) (domain.User, 
 		Bio:                stripper.StripTags(acct.Note),
 		Birthdate:          birthdate,
 		CreatedAt:          acct.CreatedAt,
-		FollowingsCount:    uint64(acct.FollowingCount),
-		FollowersCount:     uint64(acct.FollowersCount),
+		FollowingsCount:    acct.FollowingCount,
+		FollowersCount:     acct.FollowersCount,
 		Id:                 string(acct.ID),
 		IsOffline:          false,
 		NodeId:             m.pseudoPeerID.String(),
-		Latency:            math.MaxInt64, // TODO
-		TweetsCount:        uint64(acct.StatusesCount),
+		RoundTripTime:      elapsed.Milliseconds(),
+		TweetsCount:        acct.StatusesCount,
 		Username:           acct.DisplayName,
 		Website:            &site,
 		Network:            MastodonNetwork,
@@ -301,10 +304,13 @@ func (m *warpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *strin
 		Users: []domain.User{m.defaultUser, m.proxyUser},
 	}
 
+	now := time.Now()
 	followers, err := m.bridge.GetAccountFollowers(m.ctx, id, pagination)
 	if err != nil {
 		return defaultUsers, err
 	}
+	elapsed := time.Since(now)
+
 	if len(followers) == 0 {
 		return defaultUsers, nil
 	}
@@ -339,13 +345,13 @@ func (m *warpnetMastodonPseudoNode) getUsersHandler(userId string, cursor *strin
 			Bio:                stripper.StripTags(acct.Note),
 			Birthdate:          birthdate,
 			CreatedAt:          acct.CreatedAt,
-			FollowingsCount:    uint64(acct.FollowingCount),
-			FollowersCount:     uint64(acct.FollowersCount),
+			FollowingsCount:    acct.FollowingCount,
+			FollowersCount:     acct.FollowersCount,
 			Id:                 string(acct.ID),
 			IsOffline:          false,
 			NodeId:             m.pseudoPeerID.String(),
-			Latency:            math.MaxInt64, // TODO
-			TweetsCount:        uint64(acct.StatusesCount),
+			RoundTripTime:      elapsed.Milliseconds(),
+			TweetsCount:        acct.StatusesCount,
 			Username:           acct.DisplayName,
 			Website:            &site,
 			Network:            MastodonNetwork,
@@ -390,7 +396,7 @@ func (m *warpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 
 		media := toot.MediaAttachments
 		imageKey := ""
-		if len(media) > 0 && media[0].Type == "image" {
+		if len(media) > 0 && media[0].Type == mediaTypeImage {
 			imageKey = media[0].URL // TODO all images!
 		}
 
@@ -447,7 +453,7 @@ func (m *warpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 
 	media := status.MediaAttachments
 	imageKey := ""
-	if len(media) > 0 && media[0].Type == "image" {
+	if len(media) > 0 && media[0].Type == mediaTypeImage {
 		imageKey = media[0].URL
 	}
 
@@ -509,9 +515,9 @@ func (m *warpnetMastodonPseudoNode) getTweetStatsHandler(tweetId string) (event.
 
 	stats := event.TweetStatsResponse{
 		TweetId:       domain.ID(status.ID),
-		RetweetsCount: uint64(status.ReblogsCount),
-		LikeCount:     uint64(status.FavouritesCount),
-		RepliesCount:  uint64(status.RepliesCount),
+		RetweetsCount: uint64(status.ReblogsCount),    //#nosec
+		LikeCount:     uint64(status.FavouritesCount), //#nosec
+		RepliesCount:  uint64(status.RepliesCount),    //#nosec
 		ViewsCount:    0,
 	}
 	return stats, nil
@@ -540,7 +546,7 @@ func (m *warpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 
 		media := status.MediaAttachments
 		imageKey := ""
-		if len(media) > 0 && media[0].Type == "image" { // TODO
+		if len(media) > 0 && media[0].Type == mediaTypeImage { // TODO
 			imageKey = media[0].URL
 		}
 
@@ -667,7 +673,15 @@ func (m *warpnetMastodonPseudoNode) postUnfollowHandler(userId string) error {
 }
 
 func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageResponse, error) {
-	resp, err := m.bridge.Get(url)
+	ctx, cancelF := context.WithTimeout(m.ctx, time.Second*5)
+	defer cancelF()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return event.GetImageResponse{}, err
+	}
+
+	resp, err := m.bridge.Do(req)
 	if err != nil {
 		return event.GetImageResponse{}, err
 	}
@@ -681,7 +695,7 @@ func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageR
 	}
 
 	prefix := ""
-	contentType := resp.Header.Get("content-type")
+	contentType := resp.Header.Get("Content-Type")
 	switch contentType {
 	case "image/jpeg":
 		prefix = "data:image/jpeg;base64,"

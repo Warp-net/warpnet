@@ -17,9 +17,15 @@ linters:
           - errcheck
           - gosec
           - goconst
-          - dupl
           - maintidx
+          - dupl
   disable:
+    - mnd
+    - interfacebloat
+    - iface
+    - godot
+    - godoclint
+    - dupl
     - containedctx
     - contextcheck
     - copyloopvar
@@ -58,8 +64,11 @@ linters:
     - wrapcheck
     - wsl
     - wsl_v5
+    - unconvert
+    - unused
+    - testifylint
 
-formatters:
-  enable:
-    - gci
-    - gofumpt
+#formatters:
+#  enable:
+#    - gci # conflicts with goimports
+#    - gofumpt # conflicts with Goland

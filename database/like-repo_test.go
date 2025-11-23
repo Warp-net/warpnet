@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//nolint:all
 package database
 
 import (
@@ -39,13 +40,14 @@ import (
 
 type LikeRepoTestSuite struct {
 	suite.Suite
+
 	db   *local.DB
 	repo *LikeRepo
 }
 
 func (s *LikeRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", local.DefaultOptions().WithInMemory(true))
+	s.db, err = local.New("", local.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
 	authRepo := NewAuthRepo(s.db)

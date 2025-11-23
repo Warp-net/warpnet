@@ -30,7 +30,6 @@ package auth
 import (
 	"context"
 	"crypto/ed25519"
-	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -38,11 +37,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 )
+
+const ErrUsernamesMismatch warpnet.WarpError = "username doesn't exist"
 
 type UserPersistencyLayer interface {
 	Create(user domain.User) (domain.User, error)
@@ -118,7 +120,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 
 	if err := as.authPersistence.Authenticate(message.Username, message.Password); err != nil {
 		log.Errorf("authentication failed: %v", err)
-		return authInfo, fmt.Errorf("authentication failed: %v", err)
+		return authInfo, fmt.Errorf("authentication failed: %w", err)
 	}
 	token := as.authPersistence.SessionToken()
 	owner := as.authPersistence.GetOwner()
@@ -135,18 +137,17 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		})
 		if err != nil {
 			log.Errorf("new owner creation failed: %v", err)
-			return authInfo, fmt.Errorf("create owner: %v", err)
-
+			return authInfo, fmt.Errorf("create owner: %w", err)
 		}
 		user, err = as.userPersistence.Create(domain.User{
-			CreatedAt: owner.CreatedAt,
-			Id:        id,
-			NodeId:    "NotSet",
-			Username:  owner.Username,
-			Latency:   math.MaxInt64, // put your user at the end of a who-to-follow list
+			CreatedAt:     owner.CreatedAt,
+			Id:            id,
+			NodeId:        "NotSet",
+			Username:      owner.Username,
+			RoundTripTime: math.MaxInt64, // put your user at the end of a who-to-follow list
 		})
 		if err != nil {
-			return authInfo, fmt.Errorf("new user creation failed: %v", err)
+			return authInfo, fmt.Errorf("new user creation failed: %w", err)
 		}
 		log.Infof(
 			"auth: user created: id: %s, name: '%s', node_id: %s, created_at: %s, latency: %d",
@@ -154,13 +155,13 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 			user.Username,
 			user.NodeId,
 			user.CreatedAt,
-			user.Latency,
+			user.RoundTripTime,
 		)
 	}
 
 	if owner.Username != message.Username {
 		log.Errorf("username mismatch: '%s' == '%s'", owner.Username, message.Username)
-		return authInfo, fmt.Errorf("user %s doesn't exist", message.Username)
+		return authInfo, fmt.Errorf("%w: %s", ErrUsernamesMismatch, message.Username)
 	}
 	as.authReady <- domain.AuthNodeInfo{
 		Identity: domain.Identity{Owner: owner, Token: token},
@@ -169,7 +170,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 	select {
 	case <-as.ctx.Done():
 		log.Errorln("node startup cancelled")
-		return authInfo, errors.New("node starting is cancelled")
+		return authInfo, as.ctx.Err()
 	case authInfo = <-as.authReady:
 		if authInfo.NodeInfo.ID.String() == "" {
 			panic("auth: node id missing")
@@ -178,7 +179,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		user.Id = owner.UserId
 		user.Username = owner.Username
 		user.CreatedAt = owner.CreatedAt
-		user.Latency = math.MaxInt64 // put your user at the end of a who-to-follow list
+		user.RoundTripTime = math.MaxInt64 // put your user at the end of a who-to-follow list
 		user.NodeId = authInfo.NodeInfo.ID.String()
 		owner.NodeId = authInfo.NodeInfo.ID.String()
 
@@ -188,11 +189,11 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 			user.Username,
 			user.NodeId,
 			user.CreatedAt,
-			user.Latency,
+			user.RoundTripTime,
 		)
 	}
 
-	if owner, err = as.authPersistence.SetOwner(owner); err != nil {
+	if _, err = as.authPersistence.SetOwner(owner); err != nil {
 		log.Errorf("owner update failed: %v", err)
 	}
 	updatedUser, err := as.userPersistence.Update(user.Id, user)
@@ -208,21 +209,34 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		updatedUser.Username,
 		updatedUser.NodeId,
 		updatedUser.UpdatedAt,
-		updatedUser.Latency,
+		updatedUser.RoundTripTime,
 	)
 
 	return event.LoginResponse(authInfo), nil
 }
 
+const (
+	MinPasswordLength = 8
+	MaxPasswordLength = 32
+
+	ErrEmptyPassword             warpnet.WarpError = "empty password"
+	ErrMinPasswordLength         warpnet.WarpError = "password must be at least 8 characters"
+	ErrMaxPasswordLength         warpnet.WarpError = "password must be at least 32 characters"
+	ErrPasswordUpperCaseRequired warpnet.WarpError = "password must have at least one uppercase letter"
+	ErrPasswordLowerCaseRequired warpnet.WarpError = "password must have at least one lowercase letter"
+	ErrPasswordDigitRequired     warpnet.WarpError = "password must have at least one digit"
+	ErrPasswordSpecialRequired   warpnet.WarpError = "password must have at least one special character"
+)
+
 func validatePassword(pw string) error {
 	if pw == "" {
-		return errors.New("empty password")
+		return ErrEmptyPassword
 	}
-	if len(pw) < 8 {
-		return errors.New("password must be at least 8 characters")
+	if len(pw) < MinPasswordLength {
+		return ErrMinPasswordLength
 	}
-	if len(pw) > 32 {
-		return errors.New("password must be less than 32 characters")
+	if len(pw) > MaxPasswordLength {
+		return ErrMaxPasswordLength
 	}
 
 	var (
@@ -234,13 +248,13 @@ func validatePassword(pw string) error {
 
 	switch {
 	case !hasUpper(pw):
-		return errors.New("password must have at least one uppercase letter")
+		return ErrPasswordUpperCaseRequired
 	case !hasLower(pw):
-		return errors.New("password must have at least one lowercase letter")
+		return ErrPasswordLowerCaseRequired
 	case !hasNumber(pw):
-		return errors.New("password must have at least one digit")
+		return ErrPasswordDigitRequired
 	case !hasSpecial(pw):
-		return errors.New("password must have at least one special character")
+		return ErrPasswordSpecialRequired
 	}
 	return nil
 }

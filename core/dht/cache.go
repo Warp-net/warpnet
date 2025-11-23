@@ -40,36 +40,36 @@ type cache struct {
 
 func newLRU() *cache {
 	return &cache{
-		lru.NewLRU[string, any](256, nil, time.Hour*8),
+		lru.NewLRU[string, any](256, nil, time.Hour*8), //nolint:mnd
 	}
 }
 
-func (c *cache) Add(key, value interface{}) bool {
+func (c *cache) Add(key, value any) bool {
 	innerKey := castKeyToString(key)
 	return c.ec.Add(innerKey, value)
 }
 
-func (c *cache) Get(key interface{}) (interface{}, bool) {
+func (c *cache) Get(key any) (any, bool) {
 	innerKey := castKeyToString(key)
 	return c.ec.Get(innerKey)
 }
 
-func (c *cache) Contains(key interface{}) bool {
+func (c *cache) Contains(key any) bool {
 	innerKey := castKeyToString(key)
 	return c.ec.Contains(innerKey)
 }
 
-func (c *cache) Peek(key interface{}) (interface{}, bool) {
+func (c *cache) Peek(key any) (any, bool) {
 	innerKey := castKeyToString(key)
 	return c.ec.Peek(innerKey)
 }
 
-func (c *cache) Remove(key interface{}) bool {
+func (c *cache) Remove(key any) bool {
 	innerKey := castKeyToString(key)
 	return c.ec.Remove(innerKey)
 }
 
-func (c *cache) RemoveOldest() (interface{}, interface{}, bool) {
+func (c *cache) RemoveOldest() (any, any, bool) {
 	k, v, ok := c.ec.RemoveOldest()
 	if !ok {
 		return nil, nil, false
@@ -77,7 +77,7 @@ func (c *cache) RemoveOldest() (interface{}, interface{}, bool) {
 	return k, v, true
 }
 
-func (c *cache) GetOldest() (interface{}, interface{}, bool) {
+func (c *cache) GetOldest() (any, any, bool) {
 	k, v, ok := c.ec.GetOldest()
 	if !ok {
 		return nil, nil, false
@@ -85,9 +85,9 @@ func (c *cache) GetOldest() (interface{}, interface{}, bool) {
 	return k, v, true
 }
 
-func (c *cache) Keys() []interface{} {
+func (c *cache) Keys() []any {
 	keys := c.ec.Keys()
-	res := make([]interface{}, len(keys))
+	res := make([]any, len(keys))
 	for i, k := range keys {
 		res[i] = k
 	}
@@ -106,23 +106,23 @@ func (c *cache) Resize(i int) int {
 	return c.ec.Resize(i)
 }
 
-func castKeyToString(key interface{}) string {
+func castKeyToString(key any) string {
 	var innerKey string
-	switch key.(type) {
+	switch typedKey := key.(type) {
 	case string:
-		innerKey = key.(string)
+		innerKey = typedKey
 	case []byte:
-		innerKey = string(key.([]byte))
+		innerKey = string(typedKey)
 	case []rune:
-		innerKey = string(key.([]rune))
+		innerKey = string(typedKey)
 	case bool:
-		innerKey = strconv.FormatBool(key.(bool))
+		innerKey = strconv.FormatBool(typedKey)
 	case int, int8, int16, int32, int64:
-		innerKey = strconv.FormatInt(key.(int64), 10)
+		innerKey = strconv.FormatInt(typedKey.(int64), 10)
 	case uint, uint8, uint16, uint32, uint64:
-		innerKey = strconv.FormatUint(key.(uint64), 10)
+		innerKey = strconv.FormatUint(typedKey.(uint64), 10)
 	case float32, float64:
-		innerKey = strconv.FormatFloat(key.(float64), 'f', -1, 64)
+		innerKey = strconv.FormatFloat(typedKey.(float64), 'f', -1, 64)
 	default:
 		innerKey = fmt.Sprintf("%v", key)
 	}

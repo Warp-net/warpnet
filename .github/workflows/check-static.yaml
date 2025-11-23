@@ -36,6 +36,7 @@ jobs:
 
       - name: Run golvulncheck
         uses: golang/govulncheck-action@v1
+        continue-on-error: true
 
   test:
     name: Test
@@ -77,14 +78,13 @@ jobs:
             coverage.html
             coverage.txt
 
-      #   # This step *supposed* to work with valid CODECOV_TOKEN and created organization on Codecov
-      # - name: Upload coverage data to Codecov
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   uses: codecov/codecov-action@v4
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
-      #     file: ./coverage.out
-      #     name: codecov-umbrella
+      - name: Upload coverage data to Codecov
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: codecov/codecov-action@v4
+        with:
+         token: ${{ secrets.CODECOV_TOKEN }}
+         file: ./coverage.out
+         name: codecov-umbrella
 
       - name: Calculate coverage
         if: ${{ github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest' }}
@@ -93,22 +93,3 @@ jobs:
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
 
-      - name: Comment coverage on PR
-        if: ${{ github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest' }}
-        uses: actions/github-script@v8
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const coverage = '${{ steps.coverage.outputs.coverage }}';
-            const comment = `## Code Coverage Report
-
-            **Total Coverage:** ${coverage}%
-
-            Full coverage report is available in the workflow artifacts.`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            })

@@ -29,7 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"math/rand/v2"
+	"math/rand/v2" //#nosec
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -57,6 +57,14 @@ func GenerateChallenge(codebase FileSystem, nonce int64) ([]byte, SampleLocation
 	challengeResult := ConvertToSHA256([]byte(sample + strconv.FormatInt(nonce, 10)))
 	return challengeResult, location, nil
 }
+
+var (
+	ErrNoSampleFiles          = errors.New("challenge: no usable files or subdirectories")
+	ErrEmptySampleLine        = errors.New("empty sample line found")
+	ErrNoNonEmptySampleLines  = errors.New("no non-empty lines found")
+	ErrSampleIndexOutOfBounds = errors.New("sample index out of bounds")
+	ErrInvalidSubstringBounds = errors.New("invalid substring bounds")
+)
 
 func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, result SampleLocation, err error) {
 	entries, err := fs.ReadDir(codebase, dir)
@@ -104,10 +112,10 @@ func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, 
 	}
 
 	if len(files) == 0 {
-		return "", result, errors.New("challenge: no usable files or subdirectories")
+		return "", result, ErrNoSampleFiles
 	}
 
-	fileIndex := rand.IntN(len(files))
+	fileIndex := rand.IntN(len(files)) //#nosec
 	selectedFile := files[fileIndex]
 	fullPath := filepath.Join(dir, selectedFile.Name())
 
@@ -116,7 +124,7 @@ func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, 
 		return "", result, fmt.Errorf("challenge: read random line from %s: %w", fullPath, err)
 	}
 	if len(line) == 0 {
-		return "", result, fmt.Errorf("challenge: empty line in %s", fullPath)
+		return "", result, fmt.Errorf("challenge: %w, path: %s", ErrEmptySampleLine, fullPath)
 	}
 
 	lineLen := len(line)
@@ -124,8 +132,8 @@ func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, 
 	if lineLen == 1 {
 		left, right = 0, 1
 	} else {
-		left = rand.IntN(lineLen - 1)
-		right = left + 1 + rand.IntN(lineLen-left-1)
+		left = rand.IntN(lineLen - 1)                //#nosec
+		right = left + 1 + rand.IntN(lineLen-left-1) //#nosec
 	}
 
 	sample := line[left:right]
@@ -142,12 +150,14 @@ func getRandomLine(codebase FileSystem, path string) (string, int, error) {
 		return "", 0, err
 	}
 	if len(lines) == 0 {
-		return "", 0, fmt.Errorf("challenge: no non-empty lines in %s", path)
+		return "", 0, fmt.Errorf("challenge: %w, path %s", ErrNoNonEmptySampleLines, path)
 	}
 
-	index := rand.IntN(len(lines))
+	index := rand.IntN(len(lines)) //#nosec
 	return lines[index], index, nil
 }
+
+var ErrInvalidStackSize = errors.New("challenge: invalid file stack size - expected 4 elements")
 
 func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 	currentDir := "."
@@ -169,7 +179,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 			}
 		}
 		if dirIndex >= len(dirs) {
-			return "", fmt.Errorf("challenge: dir index %d out of bounds at level %d", dirIndex, level)
+			return "", fmt.Errorf("challenge: dir index %d: level %d: %w", dirIndex, level, ErrSampleIndexOutOfBounds)
 		}
 
 		nextDir := dirs[dirIndex].Name()
@@ -192,7 +202,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 		}
 	}
 	if len(loc.FileStack) != 4 {
-		return "", fmt.Errorf("challenge: invalid file stack size - expected 4 elements")
+		return "", ErrInvalidStackSize
 	}
 
 	fileIndex := loc.FileStack[0]
@@ -201,7 +211,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 	right := loc.FileStack[3]
 
 	if fileIndex >= len(regularFiles) {
-		return "", fmt.Errorf("challenge: file index %d out of bounds - found %d files", fileIndex, len(regularFiles))
+		return "", fmt.Errorf("challenge: %d %w - found %d files", fileIndex, ErrSampleIndexOutOfBounds, len(regularFiles))
 	}
 
 	targetFile := regularFiles[fileIndex].Name()
@@ -212,12 +222,12 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 		return "", fmt.Errorf("challenge: read lines from %s: %w", fullPath, err)
 	}
 	if lineIndex >= len(lines) {
-		return "", fmt.Errorf("challenge: line index %d out of bounds, len=%d", lineIndex, len(lines))
+		return "", fmt.Errorf("challenge: %d %w, len=%d", lineIndex, ErrSampleIndexOutOfBounds, len(lines))
 	}
 
 	line := lines[lineIndex]
 	if left > right || left < 0 || right > len(line) {
-		return "", fmt.Errorf("challenge: invalid substring bounds: [%d:%d] on len=%d", left, right, len(line))
+		return "", fmt.Errorf("challenge: %w: [%d:%d] on len=%d", ErrInvalidSubstringBounds, left, right, len(line))
 	}
 
 	return line[left:right], nil

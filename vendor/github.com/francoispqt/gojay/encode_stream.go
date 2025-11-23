@@ -127,7 +127,7 @@ func (s *StreamEncoder) Value(key interface{}) interface{} {
 func (s *StreamEncoder) Cancel(err error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
-	
+
 	select {
 	case <-s.done:
 	default:

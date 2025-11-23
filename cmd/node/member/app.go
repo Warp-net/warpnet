@@ -25,7 +25,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/json-iterator/go"
+	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -88,7 +88,6 @@ func (a *App) startup(ctx context.Context) {
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
 		log.Errorf("failed to get codebase hash: %v \n", err)
-		os.Exit(1)
 		return
 	}
 	a.codeHashHex = codeHashHex
@@ -96,7 +95,6 @@ func (a *App) startup(ctx context.Context) {
 	db, err := local.New(config.Config().Database.Path, local.DefaultOptions())
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
-		os.Exit(1)
 		return
 	}
 
@@ -110,7 +108,7 @@ func (a *App) startup(ctx context.Context) {
 	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
-		log.Errorf("failed: %v", err)
+		log.Errorf("failed to generate PSK: %v", err)
 		return
 	}
 
@@ -203,7 +201,6 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		log.Errorln("message body is empty")
 		response.Body = newErrorResp("message body is empty")
 		return response
-
 	}
 
 	switch request.Path {
@@ -285,7 +282,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 }
 
 func newErrorResp(msg string) stdjson.RawMessage {
-	errResp := event.ErrorResponse{
+	errResp := event.ResponseError{
 		Code:    http.StatusInternalServerError,
 		Message: msg,
 	}
@@ -336,7 +333,9 @@ func setLinuxDesktopIcon(iconData []byte) {
 	desktopDir := filepath.Join(homeDir, ".local", "share", "applications")
 	iconDir := filepath.Join(homeDir, ".local", "share", "icons", "hicolor", "512x512", "apps")
 
+	//#nosec
 	_ = os.MkdirAll(desktopDir, 0755)
+	//#nosec
 	_ = os.MkdirAll(iconDir, 0755)
 
 	execPath, err := os.Executable()
@@ -346,11 +345,13 @@ func setLinuxDesktopIcon(iconData []byte) {
 
 	desktopFile := filepath.Join(desktopDir, "warpnet.desktop")
 	content := fmt.Sprintf(linuxDesktopTemplate, execPath)
+	//#nosec
 	if err := os.WriteFile(desktopFile, []byte(content), 0644); err != nil {
 		log.Fatalf("setting icon: write .desktop file fail: %v", err)
 	}
 
 	iconPath := filepath.Join(iconDir, "warpnet.png")
+	//#nosec
 	if err := os.WriteFile(iconPath, iconData, 0644); err != nil {
 		log.Fatalf("setting icon: write icon file fail: %v", err)
 	}

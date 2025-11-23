@@ -93,17 +93,17 @@ func StreamLikeHandler(
 
 		isOwnTweetLike := ev.OwnerId == ev.UserId
 		if isOwnTweetLike { // own tweet like
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 
 		isSomeoneLiked := ev.OwnerId != streamer.NodeInfo().OwnerId
 		if isSomeoneLiked { // likes exchange finished
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 
 		likedUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 		if err != nil {
 			return nil, err
@@ -119,18 +119,18 @@ func StreamLikeHandler(
 			},
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(likeDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other like error response: %s", possibleError.Message)
 		}
 
-		return event.LikesCountResponse{num}, nil
+		return event.LikesCountResponse{Count: num}, nil
 	}
 }
 
@@ -157,17 +157,17 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 
 		isOwnTweetDislike := ev.OwnerId == ev.UserId
 		if isOwnTweetDislike { // own tweet like
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 
 		isSomeoneDisliked := ev.OwnerId != streamer.NodeInfo().OwnerId
 		if isSomeoneDisliked { // likes exchange finished
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 
 		unlikedUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 		if err != nil {
 			return nil, err
@@ -183,17 +183,17 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 			},
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return event.LikesCountResponse{num}, nil
+			return event.LikesCountResponse{Count: num}, nil
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(unlikeDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
 		}
 
-		return event.LikesCountResponse{num}, nil
+		return event.LikesCountResponse{Count: num}, nil
 	}
 }

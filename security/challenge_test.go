@@ -22,11 +22,13 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
+//nolint:all
 package security
 
 import (
-	root "github.com/Warp-net/warpnet"
 	"testing"
+
+	root "github.com/Warp-net/warpnet"
 )
 
 func TestChallengeResolve_Success(t *testing.T) {

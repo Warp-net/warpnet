@@ -28,8 +28,9 @@ resulting from the use or misuse of this software.
 package stream
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"strings"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
 type WarpRoute string

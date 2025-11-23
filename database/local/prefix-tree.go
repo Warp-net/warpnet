@@ -175,20 +175,20 @@ func (k DatabaseKey) DropId() string {
 // AddFollowedId adds a following ID segment to the key (reuses user ID validation)
 func (pb *PrefixBuilder) AddWriterId(writerId string) *PrefixBuilder {
 	// Skip processing if there's already an error
-	//if pb.err != nil {
-	//	return pb
-	//}
+	// if pb.err != nil {
+	//	 return pb
+	// }
 	//
-	//pb.key = fmt.Sprintf("%s/writer/%s", pb.key, writerId)
+	// pb.key = fmt.Sprintf("%s/writer/%s", pb.key, writerId)
 	return pb
 }
 
 func (pb *PrefixBuilder) AddReaderId(readerId string) *PrefixBuilder {
 	// Skip processing if there's already an error
-	//if pb.err != nil {
-	//	return pb
-	//}
+	// if pb.err != nil {
+	//	 return pb
+	// }
 	//
-	//pb.key = fmt.Sprintf("%s/reader/%s", pb.key, readerId)
+	// pb.key = fmt.Sprintf("%s/reader/%s", pb.key, readerId)
 	return pb
 }

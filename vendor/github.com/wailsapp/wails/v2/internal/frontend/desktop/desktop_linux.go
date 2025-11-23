@@ -5,6 +5,7 @@ package desktop
 
 import (
 	"context"
+
 	"github.com/wailsapp/wails/v2/internal/binding"
 	"github.com/wailsapp/wails/v2/internal/frontend"
 	"github.com/wailsapp/wails/v2/internal/frontend/desktop/linux"

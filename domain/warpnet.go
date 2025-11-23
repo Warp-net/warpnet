@@ -54,7 +54,7 @@ type Chat struct {
 // ChatMessage defines model for ChatMessage.
 type ChatMessage struct {
 	ChatId     string    `json:"chat_id"`
-	CreatedAt  time.Time `json:"created_at,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 	Id         string    `json:"id"`
 	ReceiverId string    `json:"receiver_id"`
 	SenderId   string    `json:"sender_id"`
@@ -146,14 +146,14 @@ type User struct {
 	Birthdate          string            `json:"birthdate"`
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          *time.Time        `json:"updated_at,omitempty"`
-	FollowingsCount    uint64            `json:"followings_count"`
-	FollowersCount     uint64            `json:"followers_count"`
+	FollowingsCount    int64             `json:"followings_count"`
+	FollowersCount     int64             `json:"followers_count"`
 	Id                 string            `json:"id"`
 	IsOffline          bool              `json:"isOffline"`
 	NodeId             string            `json:"node_id"`
 	Network            string            `json:"network"`
-	Latency            int64             `json:"latency"`
-	TweetsCount        uint64            `json:"tweets_count"`
+	RoundTripTime      int64             `json:"rtt"`
+	TweetsCount        int64             `json:"tweets_count"`
 	Username           string            `json:"username"`
 	Website            *string           `json:"website,omitempty"`
 	Moderation         *UserModeration   `json:"moderation"`
@@ -222,5 +222,4 @@ func (t ModerationObjectType) String() string {
 	default:
 		return "unknown"
 	}
-
 }

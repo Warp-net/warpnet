@@ -129,7 +129,6 @@ func (d *NodeRepo) PutWithTTL(ctx context.Context, key local.Key, value []byte, 
 		Build()
 
 	return d.db.SetWithTTL(prefix, value, ttl)
-
 }
 
 func (d *NodeRepo) SetTTL(ctx context.Context, key local.Key, ttl time.Duration) error {
@@ -326,7 +325,8 @@ func (d *NodeRepo) Query(ctx context.Context, q local.Query) (local.Results, err
 func (d *NodeRepo) query(tx *local.Txn, q local.Query) (_ local.Results, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("node repo: query recover: %v", r)
+			err = local.DBError("node repo: query recovered")
+			err = fmt.Errorf("%w: %v", err, r)
 		}
 	}()
 
@@ -565,7 +565,7 @@ func (b *batch) putWithTTL(key local.Key, value []byte, ttl time.Duration) error
 	return b.writeBatch.SetEntry(&local.Entry{
 		Key:       batchKey.Bytes(),
 		Value:     value,
-		ExpiresAt: uint64(time.Now().Add(ttl).Unix()),
+		ExpiresAt: uint64(time.Now().Add(ttl).Unix()), //#nosec
 	})
 }
 

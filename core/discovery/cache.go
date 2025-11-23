@@ -46,7 +46,7 @@ func (dc *discoveryCache) SetAsChallenged(peerId warpnet.WarpPeerID) {
 	if !ok {
 		entry = cacheEntry{}
 	}
-	waitPeriod := time.Hour * time.Duration(rand.IntN(8))
+	waitPeriod := time.Hour * time.Duration(rand.IntN(8)) //#nosec
 	entry.nextChallenge = time.Now().Add(waitPeriod)
 	dc.nodes[peerId] = entry
 
@@ -55,5 +55,4 @@ func (dc *discoveryCache) SetAsChallenged(peerId warpnet.WarpPeerID) {
 			delete(dc.nodes, id)
 		}
 	}
-	return
 }

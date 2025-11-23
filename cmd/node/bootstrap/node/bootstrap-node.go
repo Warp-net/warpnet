@@ -83,7 +83,7 @@ func NewBootstrapNode(
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
 	if len(privKey) == 0 {
-		return nil, errors.New("private key is required")
+		return nil, node.ErrPrivateKeyRequired
 	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
 
@@ -167,7 +167,7 @@ func (bn *BootstrapNode) Start() (err error) {
 		bn.opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("bootstrap: failed to init node: %v", err)
+		return fmt.Errorf("bootstrap: failed to init node: %w", err)
 	}
 	bn.setupHandlers()
 
@@ -191,12 +191,13 @@ func (bn *BootstrapNode) setupHandlers() {
 		panic("bootstrap: nil bootstrap node")
 	}
 
+	//nolint:govet
 	bn.node.SetStreamHandlers(
-		warpnet.WarpStreamHandler{
+		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(bn, bn.discService.DiscoveryHandlerStream),
 		},
-		warpnet.WarpStreamHandler{
+		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_POST_NODE_CHALLENGE,
 			handler.StreamChallengeHandler(root.GetCodeBase(), bn.privKey),
 		},
@@ -216,7 +217,7 @@ func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	if nodeId == "" {
-		return nil, fmt.Errorf("bootstrap: stream: node id is malformed: %s", nodeIdStr)
+		return nil, fmt.Errorf("bootstrap: stream:%w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
 	}
 	bt, err := bn.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {

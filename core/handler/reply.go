@@ -129,7 +129,7 @@ func StreamNewReplyHandler(
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other reply error response: %s", possibleError.Message)
 		}
@@ -192,7 +192,7 @@ func StreamGetReplyHandler(
 			return repo.GetReply(rootId, id)
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
 		}
@@ -269,7 +269,7 @@ func StreamDeleteReplyHandler(
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other delete reply error response: %s", possibleError.Message)
 		}
@@ -342,9 +342,9 @@ func StreamGetRepliesHandler(
 			return nil, err
 		}
 
-		var possibleError event.ErrorResponse
+		var possibleError event.ResponseError
 		if _ = json.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
-			return nil, fmt.Errorf("unmarshal other delete reply error response: %s", possibleError.Message)
+			return nil, fmt.Errorf("unmarshal other delete reply error response: %w", possibleError)
 		}
 
 		var repliesResp event.RepliesResponse

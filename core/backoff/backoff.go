@@ -2,21 +2,24 @@ package backoff
 
 import (
 	"context"
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"math/rand/v2"
 	"sync"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const ErrBackoffEnabled warpnet.WarpError = "backoff enabled"
 
 const (
-	MinBackoffDelay        = 100 * time.Millisecond
-	MaxBackoffDelay        = 5 * time.Minute
-	TimeToLive             = 10 * time.Minute
-	BackoffCleanupInterval = 1 * time.Minute
-	BackoffMultiplier      = 2
+	// BackoffCleanupInterval = 1 * time.Minute
+
+
+	MinBackoffDelay = 100 * time.Millisecond
+	MaxBackoffDelay = 5 * time.Minute
+	TimeToLive      = 10 * time.Minute
+	BasicBackoffMultiplier = 2
 	MaxBackoffJitterCoff   = 100
 	MaxBackoffAttempts     = 5
 )
@@ -63,8 +66,8 @@ func (b *backoff) IsBackoffEnabled(id peer.ID) bool {
 	case h.attempts >= b.maxAttempts:
 		return true
 	case h.duration < MaxBackoffDelay:
-		jitter := rand.IntN(MaxBackoffJitterCoff)
-		h.duration = (BackoffMultiplier * h.duration) + time.Duration(jitter)*time.Millisecond
+		jitter := rand.IntN(MaxBackoffJitterCoff) //#nosec
+		h.duration = (BasicBackoffMultiplier * h.duration) + time.Duration(jitter)*time.Millisecond
 		if h.duration > MaxBackoffDelay || h.duration < 0 {
 			h.duration = MaxBackoffDelay
 		}

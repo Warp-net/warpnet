@@ -1,8 +1,6 @@
 package exifundefined
 
-import (
-	"github.com/dsoprea/go-logging"
-)
+import log "github.com/dsoprea/go-logging"
 
 // UndefinedTagHandle defines one undefined-type tag with a corresponding
 // decoder.

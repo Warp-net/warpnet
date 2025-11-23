@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	ErrNoTweetsForModeration = warpnet.WarpError("no tweets for moderation")
+	ErrNoTweetsForModeration warpnet.WarpError = "no tweets for moderation found"
+	ErrModeratorInitFailed   warpnet.WarpError = "failed to init moderator engine"
 )
 
 type Engine interface {
@@ -60,7 +61,6 @@ func NewModerator(
 	node ModeratorNode,
 	pub Publisher,
 ) (_ *Moderator, err error) {
-
 	mn := &Moderator{
 		ctx:        ctx,
 		tweetCache: newTweetModerationCache(),
@@ -83,7 +83,7 @@ func (m *Moderator) Start() (err error) {
 	// wait until moderator set up
 	<-engineReadyChan
 	if engine == nil {
-		return errors.New("failed to init moderator engine")
+		return ErrModeratorInitFailed
 	}
 	log.Infoln("moderator: engine is running")
 
@@ -140,7 +140,7 @@ func (m *Moderator) runTweetsModeration() {
 				log.Errorf("moderator: no info response from new peer %s, %v", peer.String(), err)
 				continue
 			}
-			if infoResp == nil || len(infoResp) == 0 {
+			if len(infoResp) == 0 {
 				log.Errorf("moderator: no info response from new peer %s", peer.String())
 				continue
 			}
@@ -197,15 +197,15 @@ func (m *Moderator) pickTweet(peerID warpnet.WarpPeerID, userID string) (*domain
 			},
 		)
 		if err != nil {
-			return nil, fmt.Errorf("moderator: get tweets: %v", err)
+			return nil, fmt.Errorf("moderator: get tweets: %w", err)
 		}
-		if data == nil || len(data) == 0 {
+		if len(data) == 0 {
 			return nil, ErrNoTweetsForModeration
 		}
 
 		var tweetsResp event.TweetsResponse
 		if err := json.Unmarshal(data, &tweetsResp); err != nil {
-			return nil, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %v", string(data), err)
+			return nil, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %w", string(data), err)
 		}
 
 		if len(tweetsResp.Tweets) == 0 {
@@ -247,7 +247,7 @@ func (m *Moderator) pickTweet(peerID warpnet.WarpPeerID, userID string) (*domain
 
 func (m *Moderator) moderateTweet(tweet *domain.Tweet) (*domain.TweetModeration, error) {
 	if tweet == nil {
-		return nil, errors.New("moderator: tweet is nil")
+		return nil, ErrNoTweetsForModeration
 	}
 	result, reason, err := engine.Moderate(tweet.Text)
 	if err != nil {

@@ -41,7 +41,6 @@ import (
 )
 
 func main() {
-
 	version := config.Config().Version
 	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)
@@ -77,21 +76,25 @@ func main() {
 
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
-		log.Fatalf("bootstrap: fail generating key: %v", err)
+		log.Errorf("bootstrap: fail generating key: %v", err)
+		return
 	}
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
-		log.Fatal(err)
+		log.Errorln(err)
+		return
 	}
 
 	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
 	if err != nil {
-		log.Fatalf("failed to init bootstrap node: %v", err)
+		log.Errorf("failed to init bootstrap node: %v", err)
+		return
 	}
 	defer n.Stop()
 
 	if err := n.Start(); err != nil {
-		log.Fatalf("failed to start bootstrap node: %v", err)
+		log.Errorf("failed to start bootstrap node: %v", err)
+		return
 	}
 
 	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Server, n.NodeInfo().ID.String(), true)

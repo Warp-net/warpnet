@@ -115,7 +115,6 @@ func (m *mdnsDiscoveryService) defaultDiscoveryHandler(peerInfo warpnet.WarpAddr
 		return
 	}
 	log.Debugf("mdns: discovery: connected to peer: %s %s", peerInfo.Addrs, peerInfo.ID)
-	return
 }
 
 func NewMulticastDNS(ctx context.Context, discoveryHandler discovery.DiscoveryHandler) *MulticastDNS {
@@ -164,5 +163,4 @@ func (m *MulticastDNS) Close() {
 		log.Errorf("mdns: failed to close: %v", err)
 	}
 	m.isRunning.Store(false)
-	m.mdns = nil
 }

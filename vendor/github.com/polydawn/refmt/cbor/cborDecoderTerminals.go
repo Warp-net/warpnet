@@ -155,19 +155,19 @@ func (d *Decoder) decodeBytesOrStringIndefinite(bs []byte, majorWanted byte) (bs
 //
 // There are a number of ways this may try to conserve allocations:
 //
-// - If you say zerocopy=true, and the underlying reader system already has an
-//  appropriate byte slice available, then a slice from that will be returned.
+//   - If you say zerocopy=true, and the underlying reader system already has an
+//     appropriate byte slice available, then a slice from that will be returned.
 //
-// - If you provide a byte slice, we will attempt to use it.
-//  The byte slice is truncated and used for its capacity only -- not appended.
-//  The final returned slice may be a different one if the provided slice did not
-//  have sufficient capacity.
+//   - If you provide a byte slice, we will attempt to use it.
+//     The byte slice is truncated and used for its capacity only -- not appended.
+//     The final returned slice may be a different one if the provided slice did not
+//     have sufficient capacity.
 //
-// - If you say zerocopy=true, and the underlying read system doesn't have an
-//  efficient way to yield a slice of its internal buffer, and you provided no
-//  destination slice, then we will use a recycleable piece of memory in the Decoder
-//  state and return a slice viewing into it.  For small values this will
-//  likely save an alloc.
+//   - If you say zerocopy=true, and the underlying read system doesn't have an
+//     efficient way to yield a slice of its internal buffer, and you provided no
+//     destination slice, then we will use a recycleable piece of memory in the Decoder
+//     state and return a slice viewing into it.  For small values this will
+//     likely save an alloc.
 //
 // The above rules are resolved in this order; e.g. your byte slice is disregarded
 // if zerocopy=true and the underlying reader can do something even more efficient,

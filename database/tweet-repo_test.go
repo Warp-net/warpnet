@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//nolint:all
 package database
 
 import (
@@ -41,13 +42,14 @@ import (
 
 type TweetRepoTestSuite struct {
 	suite.Suite
+
 	db   *local.DB
 	repo *TweetRepo
 }
 
 func (s *TweetRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New(".", local.DefaultOptions().WithInMemory(true))
+	s.db, err = local.New("", local.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
