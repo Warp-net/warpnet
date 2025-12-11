@@ -4,9 +4,8 @@
 package cfd
 
 import (
-	"unsafe"
-
 	"github.com/go-ole/go-ole"
+	"unsafe"
 )
 
 var (

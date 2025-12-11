@@ -4,11 +4,10 @@
 package cfd
 
 import (
-	"syscall"
-	"unsafe"
-
 	"github.com/go-ole/go-ole"
 	"github.com/google/uuid"
+	"syscall"
+	"unsafe"
 )
 
 var (

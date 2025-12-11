@@ -75,6 +75,7 @@ type ResourceSet struct {
 //
 // Warning: the ResourceSet takes ownership of the data parameter.
 // The caller should not write into it anymore after calling this method.
+//
 func (rs *ResourceSet) Set(typeID, resID Identifier, langID uint16, data []byte) error {
 	if err := checkIdentifier(resID); err != nil {
 		return err
@@ -331,8 +332,9 @@ func (rs *ResourceSet) bytes() ([]byte, []int) {
 //
 // Options:
 //
-//	ForceCheckSum()         // Forces updating the checksum even when it was not set in the original file
-//	WithAuthenticode(<how>) // Allows updating the .rsrc section despite the file being signed
+//  ForceCheckSum()         // Forces updating the checksum even when it was not set in the original file
+//  WithAuthenticode(<how>) // Allows updating the .rsrc section despite the file being signed
+//
 func (rs *ResourceSet) WriteToEXE(dst io.Writer, src io.ReadSeeker, opt ...exeOption) error {
 	data, reloc := rs.bytes()
 	options := exeOptions{}

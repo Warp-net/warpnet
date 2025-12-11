@@ -3,8 +3,9 @@ package exifundefined
 import (
 	"encoding/binary"
 
-	exifcommon "github.com/dsoprea/go-exif/v3/common"
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
+
+	"github.com/dsoprea/go-exif/v3/common"
 )
 
 type TagA000FlashpixVersion struct {

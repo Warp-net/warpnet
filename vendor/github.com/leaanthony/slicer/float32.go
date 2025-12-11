@@ -2,11 +2,9 @@
 package slicer
 
 // Imports
-import (
-	"fmt"
-	"sort"
-	"strings"
-)
+import "sort"
+import "fmt"
+import "strings"
 
 // Float32Slicer handles slices of float32
 type Float32Slicer struct {

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 	"github.com/golang/geo/s2"
 
-	exifcommon "github.com/dsoprea/go-exif/v3/common"
+	"github.com/dsoprea/go-exif/v3/common"
 )
 
 var (

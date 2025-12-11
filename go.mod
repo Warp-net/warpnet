@@ -36,9 +36,20 @@ require (
 
 require (
 	github.com/dgraph-io/ristretto/v2 v2.3.0 // indirect
+	github.com/gammazero/chanqueue v1.1.1 // indirect
+	github.com/gammazero/deque v1.1.0 // indirect
+	github.com/ipfs/bbloom v0.0.4 // indirect
 	github.com/ipfs/boxo v0.35.0 // indirect
+	github.com/ipfs/go-block-format v0.2.3 // indirect
 	github.com/ipfs/go-cid v0.5.0 // indirect
+	github.com/ipfs/go-cidutil v0.1.0 // indirect
+	github.com/ipfs/go-ds-crdt v0.6.7 // indirect
+	github.com/ipfs/go-dsqueue v0.0.5 // indirect
+	github.com/ipfs/go-ipld-format v0.6.3 // indirect
+	github.com/ipfs/go-ipld-legacy v0.2.2 // indirect
 	github.com/ipfs/go-log/v2 v2.8.2 // indirect
+	github.com/ipfs/go-metrics-interface v0.3.0 // indirect
+	github.com/ipld/go-codec-dagpb v1.7.0 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/multiformats/go-multihash v0.2.3 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect

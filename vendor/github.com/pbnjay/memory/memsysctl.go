@@ -1,4 +1,3 @@
-//go:build darwin || freebsd || openbsd || dragonfly || netbsd
 // +build darwin freebsd openbsd dragonfly netbsd
 
 package memory

@@ -2,10 +2,8 @@
 package slicer
 
 // Imports
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
+import "strings"
 
 // BoolSlicer handles slices of bool
 type BoolSlicer struct {

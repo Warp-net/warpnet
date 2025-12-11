@@ -4,7 +4,6 @@
 // that can be found in the LICENSE file in the root of the source
 // tree.
 
-//go:build !linux
 // +build !linux
 
 // Package routing is currently only supported in Linux, but the build system requires a valid go file for all architectures.

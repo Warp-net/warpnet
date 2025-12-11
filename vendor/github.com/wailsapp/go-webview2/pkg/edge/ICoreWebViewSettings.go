@@ -283,7 +283,7 @@ func (i *ICoreWebViewSettings) GetUserAgent() (string, error) {
 }
 
 func (i *ICoreWebViewSettings) PutUserAgent(userAgent string) error {
-
+	
 	// Convert string 'userAgent' to *uint16
 	_userAgent, err := windows.UTF16PtrFromString(userAgent)
 	if err != nil {

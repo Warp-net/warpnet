@@ -3,9 +3,9 @@ package exifundefined
 import (
 	"encoding/binary"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 
-	exifcommon "github.com/dsoprea/go-exif/v3/common"
+	"github.com/dsoprea/go-exif/v3/common"
 )
 
 // Encode encodes the given encodeable undefined value to bytes.

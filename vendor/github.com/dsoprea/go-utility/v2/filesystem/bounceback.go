@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 )
 
 // BouncebackStats describes operation counts.

@@ -9,9 +9,9 @@ import (
 	"encoding/binary"
 
 	"github.com/dsoprea/go-exif/v3"
-	exifcommon "github.com/dsoprea/go-exif/v3/common"
+	"github.com/dsoprea/go-exif/v3/common"
 	"github.com/dsoprea/go-iptc"
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 )
 
 // SegmentList contains a slice of segments.

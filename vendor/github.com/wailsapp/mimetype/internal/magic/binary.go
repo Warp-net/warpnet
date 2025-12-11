@@ -153,9 +153,7 @@ func Marc(raw []byte, limit uint32) bool {
 // GLB is the binary file format representation of 3D models save in
 // the GL transmission Format (glTF).
 // see more: https://docs.fileformat.com/3d/glb/
-//
-//	https://www.iana.org/assignments/media-types/model/gltf-binary
-//
+//           https://www.iana.org/assignments/media-types/model/gltf-binary
 // GLB file format is based on little endian and its header structure
 // show  below:
 //

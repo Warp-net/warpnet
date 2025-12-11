@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 	"gopkg.in/yaml.v2"
 
-	exifcommon "github.com/dsoprea/go-exif/v3/common"
+	"github.com/dsoprea/go-exif/v3/common"
 )
 
 const (
