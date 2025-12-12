@@ -31,36 +31,38 @@ import (
 	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
-	log "github.com/sirupsen/logrus"
+	"github.com/Warp-net/warpnet/json"
 )
 
-// CRDTReplyRepo wraps ReplyRepo with CRDT-based statistics
+// CRDTReplyRepo manages replies with CRDT-based statistics
 type CRDTReplyRepo struct {
-	*ReplyRepo
+	db        ReplyStorer
 	crdtStore *crdt.CRDTStatsStore
 }
 
 // NewCRDTReplyRepo creates a new CRDT-enabled reply repository
 func NewCRDTReplyRepo(db ReplyStorer, crdtStore *crdt.CRDTStatsStore) *CRDTReplyRepo {
 	return &CRDTReplyRepo{
-		ReplyRepo: NewRepliesRepo(db),
+		db:        db,
 		crdtStore: crdtStore,
 	}
 }
 
 // AddReply adds a reply and updates CRDT counter
 func (repo *CRDTReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
-	// Add reply locally first
-	added, err := repo.ReplyRepo.AddReply(reply)
+	// Add reply using base repo
+	baseRepo := &ReplyRepo{db: repo.db}
+	added, err := baseRepo.AddReply(reply)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
 
 	// Update CRDT counter for the root tweet
 	if repo.crdtStore != nil {
-		_, err := repo.crdtStore.IncrementStat(reply.RootId, crdt.StatTypeReplies)
-		if err != nil {
-			log.Warnf("failed to increment CRDT reply count: %v", err)
+		current, _ := repo.crdtStore.Get(reply.RootId, crdt.StatTypeReplies)
+		newValue := current + 1
+		if err := repo.crdtStore.Put(reply.RootId, crdt.StatTypeReplies, newValue); err != nil {
+			return added, err
 		}
 	}
 
@@ -69,39 +71,102 @@ func (repo *CRDTReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 
 // DeleteReply deletes a reply and updates CRDT counter
 func (repo *CRDTReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
-	// Delete reply locally first
-	err := repo.ReplyRepo.DeleteReply(rootID, parentID, replyID)
+	// Delete reply using base repo
+	baseRepo := &ReplyRepo{db: repo.db}
+	err := baseRepo.DeleteReply(rootID, parentID, replyID)
 	if err != nil {
 		return err
 	}
 
 	// Update CRDT counter
 	if repo.crdtStore != nil {
-		_, err := repo.crdtStore.DecrementStat(rootID, crdt.StatTypeReplies)
-		if err != nil {
-			log.Warnf("failed to decrement CRDT reply count: %v", err)
+		current, _ := repo.crdtStore.Get(rootID, crdt.StatTypeReplies)
+		if current > 0 {
+			newValue := current - 1
+			if err := repo.crdtStore.Put(rootID, crdt.StatTypeReplies, newValue); err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-// RepliesCount returns the aggregated reply count from CRDT if available
+// RepliesCount returns the aggregated reply count from CRDT
 func (repo *CRDTReplyRepo) RepliesCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
 	}
 
-	// Try to get aggregated count from CRDT first
 	if repo.crdtStore != nil {
-		count, err := repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeReplies)
-		if err != nil {
-			log.Warnf("failed to get CRDT reply count, falling back to local: %v", err)
-			return repo.ReplyRepo.RepliesCount(tweetId)
-		}
-		return count, nil
+		return repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeReplies)
 	}
 
-	// Fallback to local count
-	return repo.ReplyRepo.RepliesCount(tweetId)
+	return 0, nil
+}
+
+// Get retrieves a reply
+func (repo *CRDTReplyRepo) Get(replyID, rootID string) (domain.Tweet, error) {
+	// The original ReplyRepo doesn't have a Get method, we need to query directly
+	treeKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddRootID(rootID).
+		AddRange(local.FixedRangeKey).
+		AddParentId(replyID).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	defer txn.Rollback()
+
+	value, err := txn.Get(treeKey)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+
+	var reply domain.Tweet
+	if err := json.Unmarshal(value, &reply); err != nil {
+		return domain.Tweet{}, err
+	}
+
+	return reply, txn.Commit()
+}
+
+// List retrieves replies for a tweet
+func (repo *CRDTReplyRepo) List(rootID, parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+	// Use existing List implementation
+	prefix := local.NewPrefixBuilder(RepliesNamespace).
+		AddRootID(rootID).
+		AddParentId(parentID).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	items, nextCursor, err := txn.List(prefix, limit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+
+	replies := make([]domain.Tweet, 0, len(items))
+	for _, item := range items {
+		var reply domain.Tweet
+		if err := json.Unmarshal(item.Value, &reply); err != nil {
+			continue
+		}
+		replies = append(replies, reply)
+	}
+
+	_ = txn.Commit()
+	return replies, nextCursor, nil
+}
+
+// GetRepliesTree retrieves the full tree of replies
+func (repo *CRDTReplyRepo) GetRepliesTree(rootID, parentID string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
+	baseRepo := &ReplyRepo{db: repo.db}
+	return baseRepo.GetRepliesTree(rootID, parentID, limit, cursor)
 }

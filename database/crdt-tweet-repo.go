@@ -33,36 +33,85 @@ import (
 	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/database/local"
 	"github.com/Warp-net/warpnet/domain"
-	log "github.com/sirupsen/logrus"
 )
 
-// CRDTTweetRepo wraps TweetRepo with CRDT-based statistics for retweets
+// CRDTTweetRepo manages tweets with CRDT-based statistics for retweets and views
 type CRDTTweetRepo struct {
-	*TweetRepo
+	db        TweetsStorer
 	crdtStore *crdt.CRDTStatsStore
 }
 
 // NewCRDTTweetRepo creates a new CRDT-enabled tweet repository
 func NewCRDTTweetRepo(db TweetsStorer, crdtStore *crdt.CRDTStatsStore) *CRDTTweetRepo {
 	return &CRDTTweetRepo{
-		TweetRepo: NewTweetRepo(db),
+		db:        db,
 		crdtStore: crdtStore,
 	}
 }
 
+// Delegate non-stats methods to base repo
+func (repo *CRDTTweetRepo) IsBlocklisted(tweetId string) bool {
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return false
+	}
+	defer txn.Rollback()
+	
+	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsModeratedSubspace).
+		AddRootID(tweetId).
+		AddRange(local.FixedRangeKey).
+		Build()
+	
+	_, err = txn.Get(fixedKey)
+	return !local.IsNotFoundError(err)
+}
+
+func (repo *CRDTTweetRepo) Blocklist(tweetId string) error {
+	if tweetId == "" {
+		return nil
+	}
+	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsModeratedSubspace).
+		AddRootID(tweetId).
+		AddRange(local.FixedRangeKey).
+		Build()
+	return repo.db.Set(fixedKey, []byte(""))
+}
+
+func (repo *CRDTTweetRepo) Get(userID, tweetID string) (domain.Tweet, error) {
+	return getTweet(repo.db, userID, tweetID)
+}
+
+func (repo *CRDTTweetRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+	return listTweets(repo.db, userId, limit, cursor)
+}
+
+func (repo *CRDTTweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, error) {
+	return createTweet(repo.db, userId, tweet)
+}
+
+func (repo *CRDTTweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
+	return createTweetWithTTL(repo.db, userId, tweet, duration)
+}
+
+func (repo *CRDTTweetRepo) Delete(userID, tweetID string) error {
+	return baseTweetRepoDelete(repo.db, userID, tweetID)
+}
+
 // NewRetweet creates a new retweet and updates CRDT counter
 func (repo *CRDTTweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error) {
-	// Create retweet locally first
-	retweeted, err := repo.TweetRepo.NewRetweet(tweet)
+	retweeted, err := baseTweetRepoNewRetweet(repo.db, tweet)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
 
 	// Update CRDT counter
 	if repo.crdtStore != nil {
-		_, err := repo.crdtStore.IncrementStat(tweet.Id, crdt.StatTypeRetweets)
-		if err != nil {
-			log.Warnf("failed to increment CRDT retweet count: %v", err)
+		current, _ := repo.crdtStore.Get(tweet.Id, crdt.StatTypeRetweets)
+		newValue := current + 1
+		if err := repo.crdtStore.Put(tweet.Id, crdt.StatTypeRetweets, newValue); err != nil {
+			return retweeted, err
 		}
 	}
 
@@ -71,66 +120,41 @@ func (repo *CRDTTweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err e
 
 // UnRetweet removes a retweet and updates CRDT counter
 func (repo *CRDTTweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
-	// Remove retweet locally first
-	err := repo.TweetRepo.UnRetweet(retweetedByUserID, tweetId)
+	err := baseTweetRepoUnRetweet(repo.db, retweetedByUserID, tweetId)
 	if err != nil {
 		return err
 	}
 
 	// Update CRDT counter
 	if repo.crdtStore != nil {
-		_, err := repo.crdtStore.DecrementStat(tweetId, crdt.StatTypeRetweets)
-		if err != nil {
-			log.Warnf("failed to decrement CRDT retweet count: %v", err)
+		current, _ := repo.crdtStore.Get(tweetId, crdt.StatTypeRetweets)
+		if current > 0 {
+			newValue := current - 1
+			if err := repo.crdtStore.Put(tweetId, crdt.StatTypeRetweets, newValue); err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-// RetweetsCount returns the aggregated retweet count from CRDT if available
+// RetweetsCount returns the aggregated retweet count from CRDT
 func (repo *CRDTTweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
 	}
 
-	// Try to get aggregated count from CRDT first
 	if repo.crdtStore != nil {
-		count, err := repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeRetweets)
-		if err != nil {
-			log.Warnf("failed to get CRDT retweet count, falling back to local: %v", err)
-			return repo.TweetRepo.RetweetsCount(tweetId)
-		}
-		return count, nil
+		return repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeRetweets)
 	}
 
-	// Fallback to local count
-	return repo.TweetRepo.RetweetsCount(tweetId)
+	return 0, nil
 }
 
-// Create adds a new tweet and increments view counter
-func (repo *CRDTTweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, error) {
-	created, err := repo.TweetRepo.Create(userId, tweet)
-	if err != nil {
-		return domain.Tweet{}, err
-	}
-
-	// Initialize view counter in CRDT (optional)
-	if repo.crdtStore != nil {
-		// Views will be tracked when tweets are fetched
-	}
-
-	return created, nil
-}
-
-// CreateWithTTL adds a tweet with TTL and initializes CRDT counters
-func (repo *CRDTTweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
-	created, err := repo.TweetRepo.CreateWithTTL(userId, tweet, duration)
-	if err != nil {
-		return domain.Tweet{}, err
-	}
-
-	return created, nil
+// Retweeters returns the list of users who retweeted a tweet
+func (repo *CRDTTweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error) {
+	return baseTweetRepoGetRetweeters(repo.db, tweetId, limit, cursor)
 }
 
 // IncrementViewCount increments the view counter for a tweet using CRDT
@@ -140,12 +164,12 @@ func (repo *CRDTTweetRepo) IncrementViewCount(tweetId string) (uint64, error) {
 	}
 
 	if repo.crdtStore != nil {
-		count, err := repo.crdtStore.IncrementStat(tweetId, crdt.StatTypeViews)
-		if err != nil {
-			log.Warnf("failed to increment CRDT view count: %v", err)
+		current, _ := repo.crdtStore.Get(tweetId, crdt.StatTypeViews)
+		newValue := current + 1
+		if err := repo.crdtStore.Put(tweetId, crdt.StatTypeViews, newValue); err != nil {
 			return 0, err
 		}
-		return count, nil
+		return repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeViews)
 	}
 
 	return 0, local.DBError("CRDT store not available")
@@ -158,13 +182,49 @@ func (repo *CRDTTweetRepo) GetViewCount(tweetId string) (uint64, error) {
 	}
 
 	if repo.crdtStore != nil {
-		count, err := repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeViews)
-		if err != nil {
-			log.Warnf("failed to get CRDT view count: %v", err)
-			return 0, err
-		}
-		return count, nil
+		return repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeViews)
 	}
 
-	return 0, local.DBError("CRDT store not available")
+	return 0, nil
+}
+
+// Helper functions that call original TweetRepo methods
+func getTweet(db TweetsStorer, userID, tweetID string) (domain.Tweet, error) {
+	repo := &TweetRepo{db: db}
+	return repo.Get(userID, tweetID)
+}
+
+func listTweets(db TweetsStorer, userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+	repo := &TweetRepo{db: db}
+	return repo.List(userId, limit, cursor)
+}
+
+func createTweet(db TweetsStorer, userId string, tweet domain.Tweet) (domain.Tweet, error) {
+	repo := &TweetRepo{db: db}
+	return repo.Create(userId, tweet)
+}
+
+func createTweetWithTTL(db TweetsStorer, userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
+	repo := &TweetRepo{db: db}
+	return repo.CreateWithTTL(userId, tweet, duration)
+}
+
+func baseTweetRepoDelete(db TweetsStorer, userID, tweetID string) error {
+	repo := &TweetRepo{db: db}
+	return repo.Delete(userID, tweetID)
+}
+
+func baseTweetRepoNewRetweet(db TweetsStorer, tweet domain.Tweet) (domain.Tweet, error) {
+	repo := &TweetRepo{db: db}
+	return repo.NewRetweet(tweet)
+}
+
+func baseTweetRepoUnRetweet(db TweetsStorer, retweetedByUserID, tweetId string) error {
+	repo := &TweetRepo{db: db}
+	return repo.UnRetweet(retweetedByUserID, tweetId)
+}
+
+func baseTweetRepoGetRetweeters(db TweetsStorer, tweetId string, limit *uint64, cursor *string) ([]string, string, error) {
+	repo := &TweetRepo{db: db}
+	return repo.Retweeters(tweetId, limit, cursor)
 }

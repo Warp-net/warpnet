@@ -30,24 +30,23 @@ package database
 import (
 	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/database/local"
-	log "github.com/sirupsen/logrus"
 )
 
-// CRDTLikeRepo wraps LikeRepo with CRDT-based statistics
+// CRDTLikeRepo manages likes with CRDT-based statistics
 type CRDTLikeRepo struct {
-	*LikeRepo
+	db        LikeStorer
 	crdtStore *crdt.CRDTStatsStore
 }
 
 // NewCRDTLikeRepo creates a new CRDT-enabled like repository
 func NewCRDTLikeRepo(db LikeStorer, crdtStore *crdt.CRDTStatsStore) *CRDTLikeRepo {
 	return &CRDTLikeRepo{
-		LikeRepo:  NewLikeRepo(db),
+		db:        db,
 		crdtStore: crdtStore,
 	}
 }
 
-// Like increments the like count using both local storage and CRDT
+// Like records a like and updates CRDT counter
 func (repo *CRDTLikeRepo) Like(tweetId, userId string) (likesCount uint64, err error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
@@ -56,27 +55,50 @@ func (repo *CRDTLikeRepo) Like(tweetId, userId string) (likesCount uint64, err e
 		return 0, local.DBError("empty user id")
 	}
 
-	// Store like locally first
-	_, err = repo.LikeRepo.Like(tweetId, userId)
+	// Store the user-like relationship locally (who liked what)
+	likerKey := local.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikerSubNamespace).
+		AddRootID(tweetId).
+		AddRange(local.NoneRangeKey).
+		AddParentId(userId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return 0, err
 	}
+	defer txn.Rollback()
 
-	// Update CRDT counter
-	if repo.crdtStore != nil {
-		count, err := repo.crdtStore.IncrementStat(tweetId, crdt.StatTypeLikes)
-		if err != nil {
-			log.Warnf("failed to increment CRDT like count: %v", err)
-			// Don't fail the operation if CRDT update fails
-			return repo.LikeRepo.LikesCount(tweetId)
-		}
-		return count, nil
+	// Check if already liked
+	_, err = txn.Get(likerKey)
+	if !local.IsNotFoundError(err) {
+		_ = txn.Commit()
+		// Already liked, return current count from CRDT
+		return repo.LikesCount(tweetId)
 	}
 
-	return repo.LikeRepo.LikesCount(tweetId)
+	// Store the like relationship
+	if err = txn.Set(likerKey, []byte(userId)); err != nil {
+		return 0, err
+	}
+	
+	if err = txn.Commit(); err != nil {
+		return 0, err
+	}
+
+	// Update CRDT counter (increment for this node)
+	if repo.crdtStore != nil {
+		current, _ := repo.crdtStore.Get(tweetId, crdt.StatTypeLikes)
+		newValue := current + 1
+		if err := repo.crdtStore.Put(tweetId, crdt.StatTypeLikes, newValue); err != nil {
+			return 0, err
+		}
+	}
+
+	return repo.LikesCount(tweetId)
 }
 
-// Unlike decrements the like count using both local storage and CRDT
+// Unlike removes a like and updates CRDT counter
 func (repo *CRDTLikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
@@ -85,42 +107,95 @@ func (repo *CRDTLikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err
 		return 0, local.DBError("empty user id")
 	}
 
-	// Remove like locally first
-	_, err = repo.LikeRepo.Unlike(tweetId, userId)
+	likerKey := local.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikerSubNamespace).
+		AddRootID(tweetId).
+		AddRange(local.NoneRangeKey).
+		AddParentId(userId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return 0, err
 	}
+	defer txn.Rollback()
 
-	// Update CRDT counter
-	if repo.crdtStore != nil {
-		count, err := repo.crdtStore.DecrementStat(tweetId, crdt.StatTypeLikes)
-		if err != nil {
-			log.Warnf("failed to decrement CRDT like count: %v", err)
-			// Don't fail the operation if CRDT update fails
-			return repo.LikeRepo.LikesCount(tweetId)
-		}
-		return count, nil
+	// Check if like exists
+	_, err = txn.Get(likerKey)
+	if local.IsNotFoundError(err) {
+		_ = txn.Commit()
+		// Already unliked, return current count
+		return repo.LikesCount(tweetId)
 	}
 
-	return repo.LikeRepo.LikesCount(tweetId)
+	// Remove the like relationship
+	if err = txn.Delete(likerKey); err != nil {
+		return 0, err
+	}
+	
+	if err = txn.Commit(); err != nil {
+		return 0, err
+	}
+
+	// Update CRDT counter (decrement for this node)
+	if repo.crdtStore != nil {
+		current, _ := repo.crdtStore.Get(tweetId, crdt.StatTypeLikes)
+		if current > 0 {
+			newValue := current - 1
+			if err := repo.crdtStore.Put(tweetId, crdt.StatTypeLikes, newValue); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	return repo.LikesCount(tweetId)
 }
 
-// LikesCount returns the aggregated like count from CRDT if available, otherwise from local storage
+// LikesCount returns the aggregated like count from CRDT
 func (repo *CRDTLikeRepo) LikesCount(tweetId string) (likesNum uint64, err error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
 	}
 
-	// Try to get aggregated count from CRDT first
 	if repo.crdtStore != nil {
-		count, err := repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeLikes)
-		if err != nil {
-			log.Warnf("failed to get CRDT like count, falling back to local: %v", err)
-			return repo.LikeRepo.LikesCount(tweetId)
-		}
-		return count, nil
+		return repo.crdtStore.GetAggregatedStat(tweetId, crdt.StatTypeLikes)
 	}
 
-	// Fallback to local count
-	return repo.LikeRepo.LikesCount(tweetId)
+	return 0, nil
+}
+
+// Likers returns the list of users who liked a tweet
+func (repo *CRDTLikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error) {
+	if tweetId == "" {
+		return nil, "", local.DBError("empty tweet id")
+	}
+
+	likePrefix := local.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikerSubNamespace).
+		AddRootID(tweetId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	items, cur, err := txn.List(likePrefix, limit, cursor)
+	if local.IsNotFoundError(err) {
+		return nil, "", ErrLikesNotFound
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	if err = txn.Commit(); err != nil {
+		return nil, "", err
+	}
+
+	likers := make([]string, 0, len(items))
+	for _, item := range items {
+		userId := string(item.Value)
+		likers = append(likers, userId)
+	}
+	return likers, cur, nil
 }
