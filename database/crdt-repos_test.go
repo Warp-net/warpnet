@@ -28,216 +28,174 @@
 package database
 
 import (
-	"context"
-	"testing"
-	"time"
+"context"
+"testing"
+"time"
 
-	"github.com/Warp-net/warpnet/core/crdt"
-	"github.com/Warp-net/warpnet/database/local"
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/stretchr/testify/require"
+"github.com/Warp-net/warpnet/core/crdt"
+"github.com/Warp-net/warpnet/database/local"
+"github.com/stretchr/testify/require"
 )
 
 // mockBroadcaster implements crdt.Broadcaster for testing
 type mockBroadcaster struct {
-	data chan []byte
+data chan []byte
 }
 
 func newMockBroadcaster() *mockBroadcaster {
-	return &mockBroadcaster{
-		data: make(chan []byte, 100),
-	}
+return &mockBroadcaster{
+data: make(chan []byte, 100),
+}
 }
 
 func (m *mockBroadcaster) Broadcast(ctx context.Context, data []byte) error {
-	select {
-	case m.data <- data:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		return nil
-	}
+select {
+case m.data <- data:
+return nil
+case <-ctx.Done():
+return ctx.Err()
+default:
+return nil
+}
 }
 
 func (m *mockBroadcaster) Next(ctx context.Context) ([]byte, error) {
-	select {
-	case data := <-m.data:
-		return data, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-time.After(100 * time.Millisecond):
-		return nil, context.DeadlineExceeded
-	}
+select {
+case data := <-m.data:
+return data, nil
+case <-ctx.Done():
+return nil, ctx.Err()
+case <-time.After(100 * time.Millisecond):
+return nil, context.DeadlineExceeded
+}
 }
 
 func TestCRDTLikeRepo(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode")
-	}
+if testing.Short() {
+t.Skip("skipping test in short mode")
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
 
-	// Setup local database
-	db, err := local.New("", local.DefaultOptions().WithInMemory(true))
-	require.NoError(t, err)
-	defer db.Close()
+// Setup local database
+db, err := local.New("", local.DefaultOptions().WithInMemory(true))
+require.NoError(t, err)
+defer db.Close()
 
-	// Create mock broadcaster
-	broadcaster := newMockBroadcaster()
+// Create mock broadcaster
+broadcaster := newMockBroadcaster()
 
-	// Create CRDT stats store
-	statsStore, err := crdt.NewCRDTStatsStore(ctx, broadcaster, "node1")
-	require.NoError(t, err)
-	defer statsStore.Close()
+// Create CRDT stats store
+statsStore, err := crdt.NewCRDTStatsStore(ctx, broadcaster, "node1")
+require.NoError(t, err)
+defer statsStore.Close()
 
-	// Create CRDT like repository
-	likeRepo := NewCRDTLikeRepo(db, statsStore)
+// Create CRDT like repository
+likeRepo := NewCRDTLikeRepo(db, statsStore)
 
-	// Test like operation
-	tweetID := "tweet123"
-	userID := "user456"
+// Test increment likes
+tweetID := "tweet123"
 
-	count, err := likeRepo.Like(tweetID, userID)
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), count)
+err = likeRepo.IncrementLikes(tweetID)
+require.NoError(t, err)
 
-	// Test like count
-	count, err = likeRepo.LikesCount(tweetID)
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), count)
+// Test get likes count
+count, err := likeRepo.GetLikesCount(tweetID)
+require.NoError(t, err)
+require.Equal(t, uint64(1), count)
 
-	// Test unlike operation
-	count, err = likeRepo.Unlike(tweetID, userID)
-	require.NoError(t, err)
-	require.Equal(t, uint64(0), count)
+// Test decrement likes
+err = likeRepo.DecrementLikes(tweetID)
+require.NoError(t, err)
 
-	// Test likers
-	_, err = likeRepo.Like(tweetID, userID)
-	require.NoError(t, err)
-	
-	likers, _, err := likeRepo.Likers(tweetID, nil, nil)
-	require.NoError(t, err)
-	require.Len(t, likers, 1)
-	require.Equal(t, userID, likers[0])
+count, err = likeRepo.GetLikesCount(tweetID)
+require.NoError(t, err)
+require.Equal(t, uint64(0), count)
 }
 
 func TestCRDTTweetRepo(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode")
-	}
+if testing.Short() {
+t.Skip("skipping test in short mode")
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
 
-	// Setup local database
-	db, err := local.New("", local.DefaultOptions().WithInMemory(true))
-	require.NoError(t, err)
-	defer db.Close()
+// Create mock broadcaster
+broadcaster := newMockBroadcaster()
 
-	// Create mock broadcaster
-	broadcaster := newMockBroadcaster()
+// Create CRDT stats store
+statsStore, err := crdt.NewCRDTStatsStore(ctx, broadcaster, "node1")
+require.NoError(t, err)
+defer statsStore.Close()
 
-	// Create CRDT stats store
-	statsStore, err := crdt.NewCRDTStatsStore(ctx, broadcaster, "node1")
-	require.NoError(t, err)
-	defer statsStore.Close()
+// Create CRDT tweet repository
+tweetRepo := NewCRDTTweetRepo(statsStore)
 
-	// Create CRDT tweet repository
-	tweetRepo := NewCRDTTweetRepo(db, statsStore)
+tweetID := "tweet789"
 
-	// Create a tweet first
-	tweet := domain.Tweet{
-		Id:       "tweet789",
-		UserId:   "user1",
-		Username: "testuser",
-		Text:     "Test tweet",
-		RootId:   "tweet789",
-	}
+// Test increment retweets
+err = tweetRepo.IncrementRetweets(tweetID)
+require.NoError(t, err)
 
-	created, err := tweetRepo.Create(tweet.UserId, tweet)
-	require.NoError(t, err)
-	require.NotEmpty(t, created.Id)
+// Test get retweets count
+count, err := tweetRepo.GetRetweetsCount(tweetID)
+require.NoError(t, err)
+require.Equal(t, uint64(1), count)
 
-	// Test retweet
-	retweeted, err := tweetRepo.NewRetweet(created)
-	require.NoError(t, err)
-	require.NotEmpty(t, retweeted.Id)
+// Test decrement retweets
+err = tweetRepo.DecrementRetweets(tweetID)
+require.NoError(t, err)
 
-	// Test retweet count
-	count, err := tweetRepo.RetweetsCount(created.Id)
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), count)
+count, err = tweetRepo.GetRetweetsCount(tweetID)
+require.NoError(t, err)
+require.Equal(t, uint64(0), count)
 
-	// Test unretweet
-	err = tweetRepo.UnRetweet("user1", created.Id)
-	require.NoError(t, err)
+// Test views
+err = tweetRepo.IncrementViews(tweetID)
+require.NoError(t, err)
 
-	count, err = tweetRepo.RetweetsCount(created.Id)
-	require.NoError(t, err)
-	require.Equal(t, uint64(0), count)
-
-	// Test view count
-	viewCount, err := tweetRepo.IncrementViewCount(created.Id)
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), viewCount)
-
-	viewCount, err = tweetRepo.GetViewCount(created.Id)
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), viewCount)
+viewCount, err := tweetRepo.GetViewsCount(tweetID)
+require.NoError(t, err)
+require.Equal(t, uint64(1), viewCount)
 }
 
 func TestCRDTReplyRepo(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode")
-	}
+if testing.Short() {
+t.Skip("skipping test in short mode")
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
 
-	// Setup local database
-	db, err := local.New("", local.DefaultOptions().WithInMemory(true))
-	require.NoError(t, err)
-	defer db.Close()
+// Create mock broadcaster
+broadcaster := newMockBroadcaster()
 
-	// Create mock broadcaster
-	broadcaster := newMockBroadcaster()
+// Create CRDT stats store
+statsStore, err := crdt.NewCRDTStatsStore(ctx, broadcaster, "node1")
+require.NoError(t, err)
+defer statsStore.Close()
 
-	// Create CRDT stats store
-	statsStore, err := crdt.NewCRDTStatsStore(ctx, broadcaster, "node1")
-	require.NoError(t, err)
-	defer statsStore.Close()
+// Create CRDT reply repository
+replyRepo := NewCRDTReplyRepo(statsStore)
 
-	// Create CRDT reply repository
-	replyRepo := NewCRDTReplyRepo(db, statsStore)
+rootID := "tweet123"
 
-	// Create a reply
-	rootID := "tweet123"
-	parentID := "tweet123"
-	reply := domain.Tweet{
-		Id:       "reply456",
-		RootId:   rootID,
-		ParentId: &parentID,
-		UserId:   "user1",
-		Username: "testuser",
-		Text:     "Test reply",
-	}
+// Test increment replies
+err = replyRepo.IncrementReplies(rootID)
+require.NoError(t, err)
 
-	added, err := replyRepo.AddReply(reply)
-	require.NoError(t, err)
-	require.NotEmpty(t, added.Id)
+// Test get replies count
+count, err := replyRepo.GetRepliesCount(rootID)
+require.NoError(t, err)
+require.Equal(t, uint64(1), count)
 
-	// Test reply count
-	count, err := replyRepo.RepliesCount(rootID)
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), count)
+// Test decrement replies
+err = replyRepo.DecrementReplies(rootID)
+require.NoError(t, err)
 
-	// Test delete reply
-	err = replyRepo.DeleteReply(rootID, parentID, added.Id)
-	require.NoError(t, err)
-
-	count, err = replyRepo.RepliesCount(rootID)
-	require.NoError(t, err)
-	require.Equal(t, uint64(0), count)
+count, err = replyRepo.GetRepliesCount(rootID)
+require.NoError(t, err)
+require.Equal(t, uint64(0), count)
 }
