@@ -55,13 +55,14 @@ type PubsubServerNodeConnector interface {
 
 var NewBootstrapDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
 
-type memberPubSub struct {
+// MemberPubSub provides pubsub functionality for member nodes
+type MemberPubSub struct {
 	ctx    context.Context
 	pubsub *pubsub.Gossip
 }
 
-func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *memberPubSub {
-	mps := &memberPubSub{
+func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *MemberPubSub {
+	mps := &MemberPubSub{
 		ctx: ctx,
 	}
 
@@ -69,7 +70,7 @@ func NewPubSub(ctx context.Context, handlers ...pubsub.TopicHandler) *memberPubS
 	return mps
 }
 
-func (g *memberPubSub) Run(node PubsubServerNodeConnector) {
+func (g *MemberPubSub) Run(node PubsubServerNodeConnector) {
 	if g.pubsub.IsGossipRunning() {
 		return
 	}
@@ -80,14 +81,14 @@ func (g *memberPubSub) Run(node PubsubServerNodeConnector) {
 	}
 }
 
-func (g *memberPubSub) OwnerID() string {
+func (g *MemberPubSub) OwnerID() string {
 	if g == nil || g.pubsub == nil {
 		return ""
 	}
 	return g.pubsub.NodeInfo().OwnerId
 }
 
-func (g *memberPubSub) NodeID() string {
+func (g *MemberPubSub) NodeID() string {
 	if g == nil || g.pubsub == nil {
 		return ""
 	}
@@ -107,7 +108,7 @@ func PrefollowHandlers(userIds ...string) (handlers []pubsub.TopicHandler) {
 }
 
 // SubscribeUserUpdate - follow someone
-func (g *memberPubSub) SubscribeUserUpdate(userId string) (err error) {
+func (g *MemberPubSub) SubscribeUserUpdate(userId string) (err error) {
 	if g == nil || g.pubsub == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
@@ -124,7 +125,7 @@ func (g *memberPubSub) SubscribeUserUpdate(userId string) (err error) {
 }
 
 // UnsubscribeUserUpdate - unfollow someone
-func (g *memberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
+func (g *MemberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
@@ -133,7 +134,7 @@ func (g *memberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
 }
 
 // PublishUpdateToFollowers - Publish for followers
-func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error) {
+func (g *MemberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error) {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
@@ -152,12 +153,12 @@ func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte)
 	return g.pubsub.Publish(msg, topicName)
 }
 
-func (g *memberPubSub) Close() (err error) {
+func (g *MemberPubSub) Close() (err error) {
 	return g.pubsub.Close()
 }
 
 // Gossip returns the underlying Gossip instance for CRDT integration
-func (g *memberPubSub) Gossip() *pubsub.Gossip {
+func (g *MemberPubSub) Gossip() *pubsub.Gossip {
 	if g == nil {
 		return nil
 	}

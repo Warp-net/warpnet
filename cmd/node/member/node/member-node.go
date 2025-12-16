@@ -42,7 +42,6 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
-	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -341,25 +340,26 @@ func (m *MemberNode) setupHandlers(
 
 	// Initialize CRDT statistics store
 	var crdtStore *crdt.CRDTStatsStore
-	// Type assert to get access to underlying Gossip
-	type gossipProvider interface {
-		Gossip() *pubsub.Gossip
-	}
-	if gp, ok := m.pubsubService.(gossipProvider); ok {
-		if gossip := gp.Gossip(); gossip != nil {
+	var crdtLikeRepo *database.CRDTLikeRepo
+	var crdtTweetRepo *database.CRDTTweetRepo
+	var crdtReplyRepo *database.CRDTReplyRepo
+	
+	// Access Gossip directly from MemberPubSub
+	if mps, ok := m.pubsubService.(*memberPubSub.MemberPubSub); ok {
+		if gossip := mps.Gossip(); gossip != nil {
 			crdtBroadcaster := crdt.NewGossipBroadcaster(m.ctx, gossip, crdt.StatsTopicPrefix)
 			var err error
 			crdtStore, err = crdt.NewCRDTStatsStore(m.ctx, crdtBroadcaster, m.NodeInfo().ID.String())
 			if err != nil {
 				log.Errorf("member: failed to initialize CRDT store: %v", err)
-				// Continue without CRDT - will use local stats only
-				crdtStore = nil
+			} else {
+				// Initialize CRDT repositories
+				crdtLikeRepo = database.NewCRDTLikeRepo(db, crdtStore)
+				crdtTweetRepo = database.NewCRDTTweetRepo(crdtStore)
+				crdtReplyRepo = database.NewCRDTReplyRepo(crdtStore)
 			}
 		}
 	}
-
-	// Mark CRDT store as used - will be integrated with handlers
-	_ = crdtStore
 
 	authNodeInfo := domain.AuthNodeInfo{
 		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
@@ -443,11 +443,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_TWEET_STATS,
-				handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m),
-			},
-			{
-				event.PUBLIC_GET_CRDT_STATS,
-				handler.StreamGetCRDTStatsHandler(crdtStore),
+				handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m, crdtLikeRepo, crdtTweetRepo, crdtReplyRepo),
 			},
 			{
 				event.PUBLIC_GET_REPLY,

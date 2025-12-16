@@ -367,12 +367,30 @@ type RepliesTweetCounter interface {
 	RepliesCount(tweetId string) (likesNum uint64, err error)
 }
 
+// CRDTLikesCounter provides CRDT-based likes counting
+type CRDTLikesCounter interface {
+	GetLikesCount(tweetID string) (uint64, error)
+}
+
+// CRDTRetweetsCounter provides CRDT-based retweets counting
+type CRDTRetweetsCounter interface {
+	GetRetweetsCount(tweetID string) (uint64, error)
+}
+
+// CRDTRepliesCounter provides CRDT-based replies counting
+type CRDTRepliesCounter interface {
+	GetRepliesCount(tweetID string) (uint64, error)
+}
+
 func StreamGetTweetStatsHandler(
 	likeRepo LikeTweetStorer,
 	retweetRepo RetweetsTweetStorer,
-	replyRepo RepliesTweetCounter, // TODO views
+	replyRepo RepliesTweetCounter,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
+	crdtLikeRepo CRDTLikesCounter,
+	crdtRetweetRepo CRDTRetweetsCounter,
+	crdtReplyRepo CRDTRepliesCounter,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetStatsEvent
@@ -432,22 +450,35 @@ func StreamGetTweetStatsHandler(
 		)
 		defer cancelF()
 
+		// Use CRDT repos if available, otherwise fallback to local repos
 		g.Go(func() (retweetsErr error) {
-			retweetsCount, retweetsErr = retweetRepo.RetweetsCount(tweetId)
+			if crdtRetweetRepo != nil {
+				retweetsCount, retweetsErr = crdtRetweetRepo.GetRetweetsCount(tweetId)
+			} else {
+				retweetsCount, retweetsErr = retweetRepo.RetweetsCount(tweetId)
+			}
 			if errors.Is(retweetsErr, database.ErrTweetNotFound) {
 				return nil
 			}
 			return retweetsErr
 		})
 		g.Go(func() (likesErr error) {
-			likesCount, likesErr = likeRepo.LikesCount(tweetId)
+			if crdtLikeRepo != nil {
+				likesCount, likesErr = crdtLikeRepo.GetLikesCount(tweetId)
+			} else {
+				likesCount, likesErr = likeRepo.LikesCount(tweetId)
+			}
 			if errors.Is(likesErr, database.ErrLikesNotFound) {
 				return nil
 			}
 			return likesErr
 		})
 		g.Go(func() (repliesErr error) {
-			repliesCount, repliesErr = replyRepo.RepliesCount(tweetId)
+			if crdtReplyRepo != nil {
+				repliesCount, repliesErr = crdtReplyRepo.GetRepliesCount(tweetId)
+			} else {
+				repliesCount, repliesErr = replyRepo.RepliesCount(tweetId)
+			}
 			if errors.Is(repliesErr, database.ErrReplyNotFound) {
 				return nil
 			}
