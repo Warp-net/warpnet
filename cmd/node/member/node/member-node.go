@@ -344,20 +344,18 @@ func (m *MemberNode) setupHandlers(
 	var crdtTweetRepo *database.CRDTTweetRepo
 	var crdtReplyRepo *database.CRDTReplyRepo
 	
-	// Access Gossip directly from MemberPubSub
-	if mps, ok := m.pubsubService.(*memberPubSub.MemberPubSub); ok {
-		if gossip := mps.Gossip(); gossip != nil {
-			crdtBroadcaster := crdt.NewGossipBroadcaster(m.ctx, gossip, crdt.StatsTopicPrefix)
-			var err error
-			crdtStore, err = crdt.NewCRDTStatsStore(m.ctx, crdtBroadcaster, m.NodeInfo().ID.String())
-			if err != nil {
-				log.Errorf("member: failed to initialize CRDT store: %v", err)
-			} else {
-				// Initialize CRDT repositories
-				crdtLikeRepo = database.NewCRDTLikeRepo(db, crdtStore)
-				crdtTweetRepo = database.NewCRDTTweetRepo(crdtStore)
-				crdtReplyRepo = database.NewCRDTReplyRepo(crdtStore)
-			}
+	// Access Gossip via interface method (no type casting)
+	if gossip := m.pubsubService.Gossip(); gossip != nil {
+		crdtBroadcaster := crdt.NewGossipBroadcaster(m.ctx, gossip, crdt.StatsTopicPrefix)
+		var err error
+		crdtStore, err = crdt.NewCRDTStatsStore(m.ctx, crdtBroadcaster, m.NodeInfo().ID.String())
+		if err != nil {
+			log.Errorf("member: failed to initialize CRDT store: %v", err)
+		} else {
+			// Initialize CRDT repositories
+			crdtLikeRepo = database.NewCRDTLikeRepo(db, crdtStore)
+			crdtTweetRepo = database.NewCRDTTweetRepo(crdtStore)
+			crdtReplyRepo = database.NewCRDTReplyRepo(crdtStore)
 		}
 	}
 

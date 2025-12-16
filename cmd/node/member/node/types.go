@@ -31,6 +31,7 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/local"
@@ -54,6 +55,7 @@ type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
 	Close() error
+	Gossip() *corePubsub.Gossip
 }
 
 type UserFetcher interface {
