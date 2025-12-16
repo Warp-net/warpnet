@@ -56,6 +56,7 @@ const (
 	PUBLIC_GET_REPLY          = "/public/get/reply/0.0.0"
 	PUBLIC_GET_TWEET          = "/public/get/tweet/0.0.0"
 	PUBLIC_GET_TWEET_STATS    = "/public/get/tweetstats/0.0.0"
+	PUBLIC_GET_CRDT_STATS     = "/public/get/crdtstats/0.0.0"
 	PUBLIC_GET_TWEETS         = "/public/get/tweets/0.0.0"
 	PUBLIC_GET_USER           = "/public/get/user/0.0.0"
 	PUBLIC_GET_USERS          = "/public/get/users/0.0.0"

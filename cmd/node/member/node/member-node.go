@@ -35,12 +35,14 @@ import (
 	root "github.com/Warp-net/warpnet"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
+	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -337,6 +339,28 @@ func (m *MemberNode) setupHandlers(
 	mediaRepo := database.NewMediaRepo(db)
 	notificationRepo := database.NewNotificationsRepo(db)
 
+	// Initialize CRDT statistics store
+	var crdtStore *crdt.CRDTStatsStore
+	// Type assert to get access to underlying Gossip
+	type gossipProvider interface {
+		Gossip() *pubsub.Gossip
+	}
+	if gp, ok := m.pubsubService.(gossipProvider); ok {
+		if gossip := gp.Gossip(); gossip != nil {
+			crdtBroadcaster := crdt.NewGossipBroadcaster(m.ctx, gossip, crdt.StatsTopicPrefix)
+			var err error
+			crdtStore, err = crdt.NewCRDTStatsStore(m.ctx, crdtBroadcaster, m.NodeInfo().ID.String())
+			if err != nil {
+				log.Errorf("member: failed to initialize CRDT store: %v", err)
+				// Continue without CRDT - will use local stats only
+				crdtStore = nil
+			}
+		}
+	}
+
+	// Mark CRDT store as used - will be integrated with handlers
+	_ = crdtStore
+
 	authNodeInfo := domain.AuthNodeInfo{
 		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
 		NodeInfo: m.NodeInfo(),
@@ -420,6 +444,10 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PUBLIC_GET_TWEET_STATS,
 				handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m),
+			},
+			{
+				event.PUBLIC_GET_CRDT_STATS,
+				handler.StreamGetCRDTStatsHandler(crdtStore),
 			},
 			{
 				event.PUBLIC_GET_REPLY,

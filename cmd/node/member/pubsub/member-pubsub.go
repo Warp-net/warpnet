@@ -155,3 +155,11 @@ func (g *memberPubSub) PublishUpdateToFollowers(ownerId, dest string, bt []byte)
 func (g *memberPubSub) Close() (err error) {
 	return g.pubsub.Close()
 }
+
+// Gossip returns the underlying Gossip instance for CRDT integration
+func (g *memberPubSub) Gossip() *pubsub.Gossip {
+	if g == nil {
+		return nil
+	}
+	return g.pubsub
+}
