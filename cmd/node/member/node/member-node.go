@@ -41,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -199,6 +200,21 @@ func (m *MemberNode) Start() (err error) {
 	nodeInfo := m.NodeInfo()
 
 	crdtBroadcaster := stats.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	
+	// Subscribe to CRDT stats topic to enable synchronization between nodes
+	if gossip := m.pubsubService.Gossip(); gossip != nil {
+		err = gossip.Subscribe(corePubsub.TopicHandler{
+			TopicName: stats.StatsTopicPrefix,
+			Handler: func(data []byte) error {
+				crdtBroadcaster.Receive(data)
+				return nil
+			},
+		})
+		if err != nil {
+			log.Errorf("member: failed to subscribe to CRDT stats topic: %v", err)
+		}
+	}
+	
 	m.statsDb, err = stats.NewCRDTStatsStore(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
