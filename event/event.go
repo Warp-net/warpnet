@@ -328,6 +328,7 @@ type TweetsResponse struct {
 
 type TweetStatsResponse struct {
 	TweetId       domain.ID `json:"tweet_id"`
+	TweetsCount   uint64    `json:"tweets_count"`
 	RetweetsCount uint64    `json:"retweets_count"`
 	LikeCount     uint64    `json:"likes_count"`
 	RepliesCount  uint64    `json:"replies_count"`

@@ -35,7 +35,6 @@ import (
 	root "github.com/Warp-net/warpnet"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -45,6 +44,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	stats "github.com/Warp-net/warpnet/database/stats-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
@@ -64,14 +64,16 @@ type MemberNode struct {
 	pubsubService        PubSubProvider
 	dHashTable           DistributedHashTableCloser
 	nodeRepo             NodeProvider
-	retrier              retrier.Retrier
+	statsRepo            NodeProvider
 	authRepo             AuthProvider
 	userRepo             UserProvider
 	followRepo           FollowStorer
 	db                   Storer
+	statsDb              StatsStorer
 	privKey              ed25519.PrivateKey
 	ownerId, selfHashHex string
 	pseudoNode           PseudoStreamer
+	retrier              retrier.Retrier
 }
 
 func NewMemberNode(
@@ -92,6 +94,7 @@ func NewMemberNode(
 		return nil, err
 	}
 
+	statsRepo := database.NewNodeRepo(db)
 	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
@@ -161,6 +164,7 @@ func NewMemberNode(
 		pubsubService: pubsubService,
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
+		statsRepo:     statsRepo,
 		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
@@ -184,8 +188,6 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start node: %w", err)
 	}
 
-	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
-
 	m.pubsubService.Run(m)
 
 	if err := m.discService.Run(m); err != nil {
@@ -195,6 +197,16 @@ func (m *MemberNode) Start() (err error) {
 	m.mdnsService.Start(m)
 
 	nodeInfo := m.NodeInfo()
+
+	crdtBroadcaster := stats.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	m.statsDb, err = stats.NewCRDTStatsStore(
+		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
+	)
+	if err != nil {
+		log.Errorf("member: failed to initialize stats store: %v", err)
+	}
+
+	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb, m.privKey)
 
 	println()
 	fmt.Printf(
@@ -325,39 +337,20 @@ func (m *MemberNode) setupHandlers(
 	userRepo UserProvider,
 	followRepo FollowStorer,
 	db Storer,
+	statsDB StatsStorer,
 	privKey ed25519.PrivateKey,
 ) {
 	if m == nil {
 		panic("member: setup handlers: nil node")
 	}
+
 	timelineRepo := database.NewTimelineRepo(db)
-	tweetRepo := database.NewTweetRepo(db)
-	replyRepo := database.NewRepliesRepo(db)
-	likeRepo := database.NewLikeRepo(db)
+	tweetRepo := database.NewTweetRepo(db, statsDB)
+	replyRepo := database.NewRepliesRepo(db, statsDB)
+	likeRepo := database.NewLikeRepo(db, statsDB)
 	chatRepo := database.NewChatRepo(db)
 	mediaRepo := database.NewMediaRepo(db)
 	notificationRepo := database.NewNotificationsRepo(db)
-
-	// Initialize CRDT statistics store
-	var crdtStore *crdt.CRDTStatsStore
-	var crdtLikeRepo *database.CRDTLikeRepo
-	var crdtTweetRepo *database.CRDTTweetRepo
-	var crdtReplyRepo *database.CRDTReplyRepo
-	
-	// Access Gossip via interface method (no type casting)
-	if gossip := m.pubsubService.Gossip(); gossip != nil {
-		crdtBroadcaster := crdt.NewGossipBroadcaster(m.ctx, gossip, crdt.StatsTopicPrefix)
-		var err error
-		crdtStore, err = crdt.NewCRDTStatsStore(m.ctx, crdtBroadcaster, m.NodeInfo().ID.String())
-		if err != nil {
-			log.Errorf("member: failed to initialize CRDT store: %v", err)
-		} else {
-			// Initialize CRDT repositories
-			crdtLikeRepo = database.NewCRDTLikeRepo(db, crdtStore)
-			crdtTweetRepo = database.NewCRDTTweetRepo(crdtStore)
-			crdtReplyRepo = database.NewCRDTReplyRepo(crdtStore)
-		}
-	}
 
 	authNodeInfo := domain.AuthNodeInfo{
 		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
@@ -441,7 +434,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_TWEET_STATS,
-				handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m, crdtLikeRepo, crdtTweetRepo, crdtReplyRepo),
+				handler.StreamGetTweetStatsHandler(tweetRepo, likeRepo, tweetRepo, replyRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_REPLY,
@@ -573,6 +566,9 @@ func (m *MemberNode) Stop() {
 	}
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
+	}
+	if m.statsDb != nil {
+		_ = m.statsDb.Close()
 	}
 
 	if m.nodeRepo != nil {

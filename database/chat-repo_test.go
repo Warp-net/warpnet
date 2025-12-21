@@ -33,7 +33,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/suite"
@@ -46,11 +46,11 @@ type ChatRepoSuite struct {
 	suite.Suite
 
 	repo *ChatRepo
-	db   *local.DB
+	db   *local_store.DB
 }
 
 func (s *ChatRepoSuite) SetupSuite() {
-	db, err := local.New("", local.DefaultOptions().WithInMemory(true))
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
 	s.db = db
@@ -79,7 +79,6 @@ func (s *ChatRepoSuite) TestCreateAndGetChat() {
 	s.Equal(chat.Id, fetched.Id)
 	s.Equal(chat.OwnerId, fetched.OwnerId)
 	s.Equal(chat.OtherUserId, fetched.OtherUserId)
-
 
 }
 

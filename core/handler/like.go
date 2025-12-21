@@ -88,6 +88,7 @@ func StreamLikeHandler(
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		num, err := repo.Like(tweetId, ev.OwnerId) // store my like
 		if err != nil {
+			log.Errorf("like handler failed: %v", err)
 			return nil, err
 		}
 
@@ -152,6 +153,7 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		num, err := repo.Unlike(tweetId, ev.OwnerId)
 		if err != nil {
+			log.Errorf("unlike handler failed: %v", err)
 			return nil, err
 		}
 

@@ -40,7 +40,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/docker/go-units"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -158,7 +158,7 @@ type (
 	WarpProtocolID     = protocol.ID
 	WarpStream         = network.Stream
 	StreamHandler      = network.StreamHandler
-	WarpBatching       = local.Batching
+	WarpBatching       = datastore.Batching
 	WarpProviderStore  = records.ProviderStore
 	WarpAddrInfo       = peer.AddrInfo
 	WarpStreamStats    = network.Stats

@@ -20,7 +20,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -30,16 +30,16 @@ import (
 )
 
 type AppStorer interface {
-	NewTxn() (local.WarpTransactioner, error)
-	Get(key local.DatabaseKey) ([]byte, error)
-	GetExpiration(key local.DatabaseKey) (uint64, error)
-	GetSize(key local.DatabaseKey) (int64, error)
+	NewTxn() (local_store.WarpTransactioner, error)
+	Get(key local_store.DatabaseKey) ([]byte, error)
+	GetExpiration(key local_store.DatabaseKey) (uint64, error)
+	GetSize(key local_store.DatabaseKey) (int64, error)
 	Sync() error
 	IsClosed() bool
-	InnerDB() *local.WarpDB
-	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
-	Set(key local.DatabaseKey, value []byte) error
-	Delete(key local.DatabaseKey) error
+	InnerDB() *local_store.WarpDB
+	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	Set(key local_store.DatabaseKey, value []byte) error
+	Delete(key local_store.DatabaseKey) error
 	Path() string
 	Stats() map[string]string
 	IsFirstRun() bool
@@ -92,7 +92,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.codeHashHex = codeHashHex
 
-	db, err := local.New(config.Config().Database.Path, local.DefaultOptions())
+	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		return

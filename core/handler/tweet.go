@@ -64,6 +64,8 @@ type TweetBroadcaster interface {
 }
 
 type TweetsStorer interface {
+	TweetsCount(userId string) (uint64, error)
+	GetViewsCount(tweetId string) (uint64, error)
 	IsBlocklisted(tweetId string) bool
 	Blocklist(tweetId string) error
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
@@ -383,14 +385,12 @@ type CRDTRepliesCounter interface {
 }
 
 func StreamGetTweetStatsHandler(
+	tweetRepo TweetsStorer,
 	likeRepo LikeTweetStorer,
 	retweetRepo RetweetsTweetStorer,
 	replyRepo RepliesTweetCounter,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
-	crdtLikeRepo CRDTLikesCounter,
-	crdtRetweetRepo CRDTRetweetsCounter,
-	crdtReplyRepo CRDTRepliesCounter,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetStatsEvent
@@ -424,6 +424,7 @@ func StreamGetTweetStatsHandler(
 				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
 			}
 			if err != nil {
+				log.Errorf("stream other stats handler failed: %v", err)
 				return nil, err
 			}
 
@@ -441,55 +442,59 @@ func StreamGetTweetStatsHandler(
 		}
 
 		var (
+			tweetsCount   uint64
 			retweetsCount uint64
 			likesCount    uint64
 			repliesCount  uint64
+			viewsCount    uint64
 			ctx, cancelF  = context.WithDeadline(context.Background(), time.Now().Add(time.Second*5)) //nolint:mnd
 			g, _          = errgroup.WithContext(ctx)
 			tweetId       = strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		)
 		defer cancelF()
 
-		// Use CRDT repos if available, otherwise fallback to local repos
-		g.Go(func() (retweetsErr error) {
-			if crdtRetweetRepo != nil {
-				retweetsCount, retweetsErr = crdtRetweetRepo.GetRetweetsCount(tweetId)
-			} else {
-				retweetsCount, retweetsErr = retweetRepo.RetweetsCount(tweetId)
+		g.Go(func() (tweetsErr error) {
+			tweetsCount, tweetsErr = tweetRepo.TweetsCount(ev.UserId)
+			if errors.Is(tweetsErr, database.ErrTweetNotFound) {
+				return nil
 			}
+			return tweetsErr
+		})
+		g.Go(func() (retweetsErr error) {
+			retweetsCount, retweetsErr = retweetRepo.RetweetsCount(tweetId)
 			if errors.Is(retweetsErr, database.ErrTweetNotFound) {
 				return nil
 			}
 			return retweetsErr
 		})
 		g.Go(func() (likesErr error) {
-			if crdtLikeRepo != nil {
-				likesCount, likesErr = crdtLikeRepo.GetLikesCount(tweetId)
-			} else {
-				likesCount, likesErr = likeRepo.LikesCount(tweetId)
-			}
+			likesCount, likesErr = likeRepo.LikesCount(tweetId)
 			if errors.Is(likesErr, database.ErrLikesNotFound) {
 				return nil
 			}
 			return likesErr
 		})
 		g.Go(func() (repliesErr error) {
-			if crdtReplyRepo != nil {
-				repliesCount, repliesErr = crdtReplyRepo.GetRepliesCount(tweetId)
-			} else {
-				repliesCount, repliesErr = replyRepo.RepliesCount(tweetId)
-			}
+			repliesCount, repliesErr = replyRepo.RepliesCount(tweetId)
 			if errors.Is(repliesErr, database.ErrReplyNotFound) {
 				return nil
 			}
 			return repliesErr
+		})
+		g.Go(func() (viewsErr error) {
+			viewsCount, viewsErr = tweetRepo.GetViewsCount(tweetId)
+			if errors.Is(viewsErr, database.ErrViewsNotFound) {
+				return nil
+			}
+			return viewsErr
 		})
 		if err = g.Wait(); err != nil {
 			log.Errorf("get tweet stats: %s %v", buf, err)
 		}
 		return event.TweetStatsResponse{
 			TweetId:       ev.TweetId,
-			ViewsCount:    0, // TODO
+			TweetsCount:   tweetsCount,
+			ViewsCount:    viewsCount,
 			RetweetsCount: retweetsCount,
 			LikeCount:     likesCount,
 			RepliesCount:  repliesCount,

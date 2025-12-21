@@ -35,15 +35,19 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/Warp-net/warpnet/database/local"
+	local "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/oklog/ulid/v2"
 )
 
-var ErrTweetNotFound = local.DBError("tweet not found")
+var (
+	ErrTweetNotFound = local.DBError("tweet not found")
+	ErrViewsNotFound = local.DBError("views not found")
+)
 
 const (
 	TweetsNamespace         = "/TWEETS"
@@ -51,6 +55,7 @@ const (
 	tweetsModeratedSubspace = "TWEETSMODERATED"
 	reTweetsCountSubspace   = "RETWEETSCOUNT"
 	reTweetersSubspace      = "RETWEETERS"
+	viewsSubspace           = "VIEWS"
 
 	DefaultWarpnetTweetNetwork = "warpnet"
 )
@@ -67,13 +72,18 @@ type tweetGetter interface {
 	Get(key local.DatabaseKey) ([]byte, error)
 	GetExpiration(key local.DatabaseKey) (uint64, error)
 }
-
-type TweetRepo struct {
-	db TweetsStorer
+type TweetStatsStorer interface {
+	GetAggregatedStat(key ds.Key) (uint64, error)
+	Put(key ds.Key, value uint64) error
 }
 
-func NewTweetRepo(db TweetsStorer) *TweetRepo {
-	return &TweetRepo{db: db}
+type TweetRepo struct {
+	db      TweetsStorer
+	statsDb TweetStatsStorer
+}
+
+func NewTweetRepo(db TweetsStorer, statsDb TweetStatsStorer) *TweetRepo {
+	return &TweetRepo{db: db, statsDb: statsDb}
 }
 
 // Create adds a new tweet to the database
@@ -131,10 +141,26 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 
 	newTweet, err := storeTweet(txn, userId, tweet, duration, false)
 	if err != nil {
-		return tweet, err
+		return newTweet, err
 	}
 
-	return newTweet, txn.Commit()
+	countKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsCountSubspace).
+		AddRootID(userId).
+		Build()
+
+	tweetCount, err := txn.Increment(countKey)
+	if err != nil {
+		return newTweet, err
+	}
+
+	if err := txn.Commit(); err != nil {
+		return newTweet, err
+	}
+	if repo.statsDb == nil {
+		return newTweet, nil
+	}
+	return newTweet, repo.statsDb.Put(countKey.DatastoreKey(), tweetCount)
 }
 
 func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
@@ -172,7 +198,6 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	if err != nil {
 		return err
 	}
-
 	return txn.Commit()
 }
 
@@ -204,14 +229,6 @@ func storeTweet(
 	}
 	if isUpdate {
 		return tweet, nil
-	}
-
-	countKey := local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(tweetsCountSubspace).
-		AddRootID(userId).
-		Build()
-	if _, err := txn.Increment(countKey); err != nil {
-		return tweet, err
 	}
 	return tweet, nil
 }
@@ -261,6 +278,15 @@ func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
 		AddSubPrefix(tweetsCountSubspace).
 		AddRootID(userId).
 		Build()
+
+	if repo.statsDb != nil {
+		total, err := repo.statsDb.GetAggregatedStat(countKey.DatastoreKey())
+		if err == nil {
+			return total, nil
+		}
+		log.Errorf("crdt tweets count not found for user %s - %s", userId, err)
+	}
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return 0, err
@@ -288,16 +314,25 @@ func (repo *TweetRepo) Delete(userID, tweetID string) error {
 	if err := deleteTweet(txn, userID, tweetID); err != nil {
 		return err
 	}
+	countKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsCountSubspace).
+		AddRootID(userID).
+		Build()
 
-	return txn.Commit()
+	tweetCount, err := txn.Decrement(countKey)
+	if err != nil {
+		return err
+	}
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	if repo.statsDb == nil {
+		return nil
+	}
+	return repo.statsDb.Put(countKey.DatastoreKey(), tweetCount)
 }
 
 func deleteTweet(txn local.WarpTransactioner, userId, tweetId string) error {
-	countKey := local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(tweetsCountSubspace).
-		AddRootID(userId).
-		Build()
-
 	fixedKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddRootID(userId).
 		AddRange(local.FixedRangeKey).
@@ -312,9 +347,6 @@ func deleteTweet(txn local.WarpTransactioner, userId, tweetId string) error {
 		return err
 	}
 	if err := txn.Delete(local.DatabaseKey(sortableKeyBytes)); err != nil {
-		return err
-	}
-	if _, err := txn.Decrement(countKey); err != nil {
 		return err
 	}
 	return nil
@@ -403,12 +435,23 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 			return newTweet, txn.Commit()
 		}
 	}
-	_, err = txn.Increment(retweetCountKey)
+	countKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsCountSubspace).
+		AddRootID(*tweet.RetweetedBy).
+		Build()
+
+	tweetCount, err := txn.Increment(countKey)
 	if err != nil {
 		return newTweet, err
 	}
 
-	return newTweet, txn.Commit()
+	if err := txn.Commit(); err != nil {
+		return newTweet, err
+	}
+	if repo.statsDb == nil {
+		return newTweet, nil
+	}
+	return newTweet, repo.statsDb.Put(countKey.DatastoreKey(), tweetCount)
 }
 
 func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
@@ -449,12 +492,17 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	if err != nil {
 		return err
 	}
-	_, err = txn.Decrement(retweetCountKey)
+	retweetCount, err := txn.Decrement(retweetCountKey)
 	if err != nil {
 		return err
 	}
-
-	return txn.Commit()
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	if repo.statsDb == nil {
+		return nil
+	}
+	return repo.statsDb.Put(retweetCountKey.DatastoreKey(), retweetCount)
 }
 
 func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
@@ -466,13 +514,15 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 		AddRootID(tweetId).
 		Build()
 
-	txn, err := repo.db.NewTxn()
-	if err != nil {
-		return 0, err
+	if repo.statsDb != nil {
+		total, err := repo.statsDb.GetAggregatedStat(retweetCountKey.DatastoreKey())
+		if err == nil {
+			return total, nil
+		}
+		log.Errorf("crdt retweets count not found for %s - %s", tweetId, err)
 	}
-	defer txn.Rollback()
 
-	bt, err := txn.Get(retweetCountKey)
+	bt, err := repo.db.Get(retweetCountKey)
 	if local.IsNotFoundError(err) {
 		return 0, ErrTweetNotFound
 	}
@@ -480,7 +530,7 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 		return 0, err
 	}
 	count := binary.BigEndian.Uint64(bt)
-	return count, txn.Commit()
+	return count, nil
 }
 
 type retweetersIDs = []string
@@ -518,4 +568,62 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 		retweeters = append(retweeters, userId)
 	}
 	return retweeters, cur, nil
+}
+
+func (repo *TweetRepo) IncrementViews(tweetId string) error {
+	if tweetId == "" {
+		return local.DBError("retweeters: empty tweet id")
+	}
+
+	viewsKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(viewsSubspace).
+		AddRootID(tweetId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	viewsCount, err := txn.Increment(viewsKey)
+	if err != nil {
+		return err
+	}
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	if repo.statsDb == nil {
+		return nil
+	}
+
+	return repo.statsDb.Put(viewsKey.DatastoreKey(), viewsCount)
+}
+
+func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
+	if tweetId == "" {
+		return 0, local.DBError("retweeters: empty tweet id")
+	}
+
+	viewsKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(viewsSubspace).
+		AddRootID(tweetId).
+		Build()
+
+	if repo.statsDb != nil {
+		total, err := repo.statsDb.GetAggregatedStat(viewsKey.DatastoreKey())
+		if err == nil {
+			return total, nil
+		}
+		log.Errorf("crdt retweets count not found for %s - %s", tweetId, err)
+	}
+
+	bt, err := repo.db.Get(viewsKey)
+	if local.IsNotFoundError(err) {
+		return 0, ErrViewsNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return binary.BigEndian.Uint64(bt), nil
 }

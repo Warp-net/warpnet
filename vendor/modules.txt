@@ -164,6 +164,9 @@ github.com/cockroachdb/redact/internal/rfmt/fmtsort
 # github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console
+# github.com/cskr/pubsub v1.0.2
+## explicit; go 1.12
+github.com/cskr/pubsub
 # github.com/cyphar/filepath-securejoin v0.4.1
 ## explicit; go 1.18
 github.com/cyphar/filepath-securejoin
@@ -414,12 +417,36 @@ github.com/huin/goupnp/ssdp
 github.com/ipfs/bbloom
 # github.com/ipfs/boxo v0.35.0
 ## explicit; go 1.24.0
+github.com/ipfs/boxo/bitswap
+github.com/ipfs/boxo/bitswap/client
+github.com/ipfs/boxo/bitswap/client/internal
+github.com/ipfs/boxo/bitswap/client/internal/blockpresencemanager
+github.com/ipfs/boxo/bitswap/client/internal/getter
+github.com/ipfs/boxo/bitswap/client/internal/messagequeue
+github.com/ipfs/boxo/bitswap/client/internal/notifications
+github.com/ipfs/boxo/bitswap/client/internal/peermanager
+github.com/ipfs/boxo/bitswap/client/internal/session
+github.com/ipfs/boxo/bitswap/client/internal/sessioninterestmanager
+github.com/ipfs/boxo/bitswap/client/internal/sessionmanager
+github.com/ipfs/boxo/bitswap/client/internal/sessionpeermanager
+github.com/ipfs/boxo/bitswap/client/traceability
+github.com/ipfs/boxo/bitswap/client/wantlist
+github.com/ipfs/boxo/bitswap/internal
+github.com/ipfs/boxo/bitswap/internal/defaults
+github.com/ipfs/boxo/bitswap/message
+github.com/ipfs/boxo/bitswap/message/pb
+github.com/ipfs/boxo/bitswap/metrics
+github.com/ipfs/boxo/bitswap/network
+github.com/ipfs/boxo/bitswap/network/bsnet
+github.com/ipfs/boxo/bitswap/network/bsnet/internal
+github.com/ipfs/boxo/bitswap/server
+github.com/ipfs/boxo/bitswap/server/internal/decision
+github.com/ipfs/boxo/bitswap/tracer
 github.com/ipfs/boxo/blockservice
 github.com/ipfs/boxo/blockservice/internal
 github.com/ipfs/boxo/blockstore
 github.com/ipfs/boxo/datastore/dshelp
 github.com/ipfs/boxo/exchange
-github.com/ipfs/boxo/exchange/offline
 github.com/ipfs/boxo/fetcher
 github.com/ipfs/boxo/fetcher/helpers
 github.com/ipfs/boxo/ipld/merkledag
@@ -427,8 +454,11 @@ github.com/ipfs/boxo/ipld/merkledag/pb
 github.com/ipfs/boxo/ipns
 github.com/ipfs/boxo/ipns/pb
 github.com/ipfs/boxo/path
+github.com/ipfs/boxo/peering
 github.com/ipfs/boxo/provider
 github.com/ipfs/boxo/provider/internal/queue
+github.com/ipfs/boxo/retrieval
+github.com/ipfs/boxo/routing/providerquerymanager
 github.com/ipfs/boxo/util
 github.com/ipfs/boxo/verifcid
 # github.com/ipfs/go-block-format v0.2.3
@@ -455,6 +485,9 @@ github.com/ipfs/go-ds-crdt/pb
 # github.com/ipfs/go-dsqueue v0.0.5
 ## explicit; go 1.24.0
 github.com/ipfs/go-dsqueue
+# github.com/ipfs/go-ipfs-pq v0.0.3
+## explicit; go 1.19
+github.com/ipfs/go-ipfs-pq
 # github.com/ipfs/go-ipld-format v0.6.3
 ## explicit; go 1.24.0
 github.com/ipfs/go-ipld-format
@@ -467,6 +500,11 @@ github.com/ipfs/go-log/v2
 # github.com/ipfs/go-metrics-interface v0.3.0
 ## explicit; go 1.23
 github.com/ipfs/go-metrics-interface
+# github.com/ipfs/go-peertaskqueue v0.8.2
+## explicit; go 1.22.0
+github.com/ipfs/go-peertaskqueue
+github.com/ipfs/go-peertaskqueue/peertask
+github.com/ipfs/go-peertaskqueue/peertracker
 # github.com/ipld/go-codec-dagpb v1.7.0
 ## explicit; go 1.22
 github.com/ipld/go-codec-dagpb

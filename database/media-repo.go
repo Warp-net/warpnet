@@ -31,7 +31,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/security"
 )
 
@@ -42,14 +42,14 @@ const (
 )
 
 var (
-	ErrMediaNotFound    = local.DBError("media not found")
-	ErrMediaRepoNotInit = local.DBError("media repo is not initialized")
+	ErrMediaNotFound    = local_store.DBError("media not found")
+	ErrMediaRepoNotInit = local_store.DBError("media repo is not initialized")
 )
 
 type MediaStorer interface {
-	Set(key local.DatabaseKey, value []byte) error
-	Get(key local.DatabaseKey) ([]byte, error)
-	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
+	Set(key local_store.DatabaseKey, value []byte) error
+	Get(key local_store.DatabaseKey) ([]byte, error)
+	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
 }
 
 type MediaRepo struct {
@@ -73,14 +73,14 @@ func (repo *MediaRepo) GetImage(userId, key string) (Base64Image, error) {
 		return "", ErrMediaNotFound
 	}
 
-	mediaKey := local.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
 		AddRootID(ImageSubNamespace).
 		AddParentId(userId).
 		AddId(key).
 		Build()
 
 	data, err := repo.db.Get(mediaKey)
-	if local.IsNotFoundError(err) {
+	if local_store.IsNotFoundError(err) {
 		return "", ErrMediaNotFound
 	}
 
@@ -92,12 +92,12 @@ func (repo *MediaRepo) SetImage(userId string, img Base64Image) (_ ImageKey, err
 		return "", ErrMediaRepoNotInit
 	}
 	if len(img) == 0 || len(userId) == 0 {
-		return "", local.DBError("no data for image set")
+		return "", local_store.DBError("no data for image set")
 	}
 	h := security.ConvertToSHA256([]byte(img))
 	key := hex.EncodeToString(h)
 
-	mediaKey := local.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
 		AddRootID(ImageSubNamespace).
 		AddParentId(userId).
 		AddId(key).
@@ -111,13 +111,13 @@ func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img Base64Imag
 		return ErrMediaRepoNotInit
 	}
 	if len(img) == 0 || len(userId) == 0 {
-		return local.DBError("no data for image set provided")
+		return local_store.DBError("no data for image set provided")
 	}
 	if key == "" {
-		return local.DBError("no key for image set provided")
+		return local_store.DBError("no key for image set provided")
 	}
 
-	mediaKey := local.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
 		AddRootID(ImageSubNamespace).
 		AddParentId(userId).
 		AddId(key).

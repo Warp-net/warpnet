@@ -34,16 +34,16 @@ import (
 
 	"github.com/Warp-net/warpnet/domain"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/json"
 )
 
 const TimelineRepoName = "/TIMELINE"
 
 type TimelineStorer interface {
-	Set(key local.DatabaseKey, value []byte) error
-	NewTxn() (local.WarpTransactioner, error)
-	Delete(key local.DatabaseKey) error
+	Set(key local_store.DatabaseKey, value []byte) error
+	NewTxn() (local_store.WarpTransactioner, error)
+	Delete(key local_store.DatabaseKey) error
 }
 
 type TimelineRepo struct {
@@ -56,22 +56,22 @@ func NewTimelineRepo(db TimelineStorer) *TimelineRepo {
 
 func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) error {
 	if userId == "" {
-		return local.DBError("userID cannot be blank")
+		return local_store.DBError("userID cannot be blank")
 	}
 	if tweet.Id == "" {
-		return local.DBError("tweet id should not be empty")
+		return local_store.DBError("tweet id should not be empty")
 	}
 	if tweet.CreatedAt.IsZero() {
 		tweet.CreatedAt = time.Now()
 	}
 
-	fixedKey := local.NewPrefixBuilder(TimelineRepoName).
+	fixedKey := local_store.NewPrefixBuilder(TimelineRepoName).
 		AddRootID(userId).
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(tweet.Id).
 		Build()
 
-	sortableKey := local.NewPrefixBuilder(TimelineRepoName).
+	sortableKey := local_store.NewPrefixBuilder(TimelineRepoName).
 		AddRootID(userId).
 		AddReversedTimestamp(tweet.CreatedAt).
 		AddParentId(tweet.Id).
@@ -99,12 +99,12 @@ func (repo *TimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) 
 
 func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string) error {
 	if userID == "" {
-		return local.DBError("user ID cannot be blank")
+		return local_store.DBError("user ID cannot be blank")
 	}
 
-	fixedKey := local.NewPrefixBuilder(TimelineRepoName).
+	fixedKey := local_store.NewPrefixBuilder(TimelineRepoName).
 		AddRootID(userID).
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(tweetID).
 		Build()
 
@@ -115,7 +115,7 @@ func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string) error 
 	defer txn.Rollback()
 
 	sortableKeyBytes, err := txn.Get(fixedKey)
-	if local.IsNotFoundError(err) {
+	if local_store.IsNotFoundError(err) {
 		return nil
 	}
 	if err != nil {
@@ -125,7 +125,7 @@ func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string) error 
 	if err := txn.Delete(fixedKey); err != nil {
 		return err
 	}
-	if err := txn.Delete(local.DatabaseKey(sortableKeyBytes)); err != nil {
+	if err := txn.Delete(local_store.DatabaseKey(sortableKeyBytes)); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -134,10 +134,10 @@ func (repo *TimelineRepo) DeleteTweetFromTimeline(userID, tweetID string) error 
 // GetTimeline retrieves a user's timeline sorted from newest to oldest
 func (repo *TimelineRepo) GetTimeline(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if userId == "" {
-		return nil, "", local.DBError("user ID cannot be blank")
+		return nil, "", local_store.DBError("user ID cannot be blank")
 	}
 
-	prefix := local.NewPrefixBuilder(TimelineRepoName).AddRootID(userId).Build()
+	prefix := local_store.NewPrefixBuilder(TimelineRepoName).AddRootID(userId).Build()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {

@@ -92,6 +92,7 @@ func StreamNewReplyHandler(
 			Username:  ev.Username,
 		})
 		if err != nil {
+			log.Errorf("reply handler failed: %v", err)
 			return nil, err
 		}
 
@@ -250,6 +251,7 @@ func StreamDeleteReplyHandler(
 		}
 
 		if err = replyRepo.DeleteReply(rootId, parentTweet.Id, ev.ReplyId); err != nil {
+			log.Errorf("delete reply handler failed: %v", err)
 			return nil, err
 		}
 

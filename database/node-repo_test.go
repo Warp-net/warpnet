@@ -35,7 +35,7 @@ import (
 
 	"go.uber.org/goleak"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
 	"github.com/stretchr/testify/suite"
@@ -44,7 +44,7 @@ import (
 type NodeRepoTestSuite struct {
 	suite.Suite
 
-	db   *local.DB
+	db   *local_store.DB
 	repo *NodeRepo
 	ctx  context.Context
 }
@@ -53,7 +53,7 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	var err error
 	s.ctx = context.Background()
 
-	s.db, err = local.New("", local.DefaultOptions().WithInMemory(true))
+	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
 	auth := NewAuthRepo(s.db)

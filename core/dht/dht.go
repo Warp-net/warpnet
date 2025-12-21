@@ -34,6 +34,7 @@ import (
 
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -224,6 +225,10 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 func (d *distributedHashTable) ClosestPeers() []warpnet.WarpPeerID {
 	closest, _ := d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
 	return closest
+}
+
+func (d *distributedHashTable) FindProvidersAsync(ctx context.Context, key cid.Cid, count int) (ch <-chan peer.AddrInfo)  {
+	return d.dht.FindProvidersAsync(ctx, key, count)
 }
 
 func (d *distributedHashTable) Close() {
