@@ -42,6 +42,14 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/docker/go-units"
+	"github.com/ipfs/boxo/bitswap"
+	bitswapNetwork "github.com/ipfs/boxo/bitswap/network"
+	"github.com/ipfs/boxo/bitswap/network/bsnet"
+	"github.com/ipfs/boxo/blockservice"
+	"github.com/ipfs/boxo/blockstore"
+	"github.com/ipfs/boxo/exchange"
+	"github.com/ipfs/boxo/ipld/merkledag"
+	format "github.com/ipfs/go-ipld-format"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
@@ -451,4 +459,26 @@ func IsRelayMultiaddress(maddr multiaddr.Multiaddr) bool {
 
 func IsNoAddressesError(err error) bool {
 	return errors.Is(err, routing.ErrNotFound)
+}
+
+func NewBitswapNetwork(host host.Host, opts ...bsnet.NetOpt) bitswapNetwork.BitSwapNetwork {
+	return bsnet.NewFromIpfsHost(host, opts...)
+}
+
+func NewBitswapExchange(
+	ctx context.Context,
+	net bitswapNetwork.BitSwapNetwork,
+	providerFinder routing.ContentDiscovery,
+	bstore blockstore.Blockstore,
+	opts ...bitswap.Option,
+) exchange.Interface {
+	return bitswap.New(ctx, net, providerFinder, bstore, opts...)
+}
+
+func NewBlockService(bs blockstore.Blockstore, ex exchange.Interface, opts ...blockservice.Option) blockservice.BlockService {
+	return blockservice.New(bs, ex, opts...)
+}
+
+func NewDAGService(bs blockservice.BlockService) format.DAGService {
+	return merkledag.NewDAGService(bs)
 }

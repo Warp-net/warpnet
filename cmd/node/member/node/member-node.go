@@ -35,6 +35,7 @@ import (
 	root "github.com/Warp-net/warpnet"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -44,7 +45,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	stats "github.com/Warp-net/warpnet/database/stats-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
@@ -198,11 +198,11 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	crdtBroadcaster, err := stats.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	crdtBroadcaster, err := crdt.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
-	m.statsDb, err = stats.NewCRDTStatsStore(
+	m.statsDb, err = crdt.NewCRDTStatsStore(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {

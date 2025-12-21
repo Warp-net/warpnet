@@ -87,7 +87,7 @@ const (
 	ErrNotRunning    = DBError("DB is not running")
 	ErrWrongPassword = DBError("wrong username or password")
 
-	PermanentTTL = math.MaxInt64
+	PermanentTTL = math.MaxInt64 - 1
 )
 
 var DefaultIteratorOptions = badger.DefaultIteratorOptions

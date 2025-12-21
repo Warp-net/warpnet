@@ -25,7 +25,7 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package stats_store
+package crdt
 
 import (
 	"context"
@@ -42,8 +42,8 @@ type GossipPubSuber interface {
 type GossipBroadcaster struct {
 	ctx context.Context
 
-	gossip   GossipPubSuber
-	topic    string
+	gossip GossipPubSuber
+	topic  string
 	dataChan chan []byte
 
 	once     sync.Once

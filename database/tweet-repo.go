@@ -34,7 +34,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
+	_ "github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
@@ -56,8 +56,6 @@ const (
 	reTweetsCountSubspace   = "RETWEETSCOUNT"
 	reTweetersSubspace      = "RETWEETERS"
 	viewsSubspace           = "VIEWS"
-
-	DefaultWarpnetTweetNetwork = "warpnet"
 )
 
 type TweetsStorer interface {
@@ -423,7 +421,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		tweet.Id = domain.RetweetPrefix + tweet.Id
 	}
 
-	newTweet, err := storeTweet(txn, *tweet.RetweetedBy, tweet, warpnet.PermanentTTL, false)
+	newTweet, err := storeTweet(txn, *tweet.RetweetedBy, tweet, local.PermanentTTL, false)
 	if err != nil {
 		return tweet, err
 	}

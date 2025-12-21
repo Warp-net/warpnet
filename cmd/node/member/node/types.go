@@ -75,6 +75,7 @@ type DistributedHashTableCloser interface {
 
 type NodeProvider interface {
 	datastore.Datastore
+	Prefix() string
 }
 
 type AuthProvider interface {

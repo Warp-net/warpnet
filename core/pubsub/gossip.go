@@ -51,7 +51,7 @@ import (
 )
 
 const (
-	pubSubDiscoveryTopic = "/warpnet/discovery/1.0.0 "
+	pubSubDiscoveryTopic = "/warpnet/discovery/1.0.0"
 
 	ErrPubsubNotInit      warpnet.WarpError = "gossip: service not initialized"
 	ErrAlreadyRunning     warpnet.WarpError = "gossip: pubsub is already running"
@@ -540,7 +540,7 @@ func (g *Gossip) publishPeerInfo() error {
 		Body:        json.RawMessage(data),
 		MessageId:   uuid.New().String(),
 		NodeId:      g.NodeInfo().ID.String(),
-		Destination: "None",
+		Destination: pubSubDiscoveryTopic,
 		Timestamp:   time.Now(),
 		Version:     "0.0.0", // TODO
 	}

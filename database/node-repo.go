@@ -83,6 +83,10 @@ func NewNodeRepo(db NodeStorer, prefix string) *NodeRepo {
 	return nr
 }
 
+func (d *NodeRepo) Prefix() string {
+	return d.prefix
+}
+
 func (d *NodeRepo) Put(ctx context.Context, key datastore.Key, value []byte) error {
 	if d == nil || d.db == nil {
 		return ErrNilNodeRepo

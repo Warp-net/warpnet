@@ -30,8 +30,10 @@ package datastore
 import (
 	"context"
 
+	"github.com/ipfs/boxo/blockstore"
 	ds "github.com/ipfs/go-datastore"
 	dsq "github.com/ipfs/go-datastore/query"
+	dssync "github.com/ipfs/go-datastore/sync"
 )
 
 var ErrNotFound = ds.ErrNotFound
@@ -65,3 +67,12 @@ func NaiveQueryApply(q Query, qr Results) Results {
 func ResultsWithContext(q Query, proc func(context.Context, chan<- Result)) Results {
 	return dsq.ResultsWithContext(q, proc)
 }
+
+func MutexWrap(d ds.Datastore) *dssync.MutexDatastore {
+	return dssync.MutexWrap(d)
+}
+
+func NewBlockstore(b Batching, opts ...blockstore.Option) blockstore.Blockstore {
+	return blockstore.NewBlockstore(b, opts...)
+}
+

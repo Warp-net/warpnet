@@ -317,8 +317,8 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
 		return nil, errors.Errorf(
-			"node: selfstream: no handler for path %s, available %v \n",
-			path, n.internalHandlers,
+			"node: selfstream: no handler for path %s, available handlers %d \n",
+			path, len(n.internalHandlers),
 		)
 	}
 

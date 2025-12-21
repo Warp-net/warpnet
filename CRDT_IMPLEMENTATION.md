@@ -16,17 +16,16 @@ This implementation adds Conflict-free Replicated Data Type (CRDT) based consens
 - Graceful error handling and fallback mechanisms
 
 **Key Methods**:
-- `IncrementStat(tweetID, statType)` - Increment a counter
-- `DecrementStat(tweetID, statType)` - Decrement a counter
-- `GetAggregatedStat(tweetID, statType)` - Get sum across all nodes
-- `GetTweetStats(tweetID)` - Get all stats for a tweet
+- `IncrementStat(...)` - Increment a counter
+- `DecrementStat(...)` - Decrement a counter
+- `GetAggregatedStat(...)` - Get sum across all nodes
 
 ### 2. Database Integration Layer
 
 **Files**: 
-- `database/crdt-like-repo.go` - CRDT-enabled likes
-- `database/crdt-tweet-repo.go` - CRDT-enabled retweets and views
-- `database/crdt-reply-repo.go` - CRDT-enabled replies
+- `database/like-repo.go` - CRDT-enabled likes
+- `database/tweet-repo.go` - CRDT-enabled retweets and views
+- `database/reply-repo.go` - CRDT-enabled replies
 
 Each repository wrapper:
 - Maintains backward compatibility with existing code
@@ -36,8 +35,7 @@ Each repository wrapper:
 
 ### 3. Testing
 **Files**: 
-- `core/crdt/stats_test.go` - CRDT store unit tests
-- `database/crdt-like-repo_test.go` - Integration tests
+- TODO
 
 Tests cover:
 - Single node operations
@@ -63,13 +61,8 @@ Comprehensive documentation including:
 Each statistic uses a G-Counter CRDT with the following structure:
 
 ```
-Key Pattern: /{namespace}/{tweetID}/{statType}/{nodeID}
+Key Pattern: /STATS/crdt/{nodeID}/{key}
 Value: 64-bit unsigned integer
-
-Example:
-/mainnet/tweet123/likes/node456 -> 3
-/mainnet/tweet123/likes/node789 -> 7
-Aggregated Count: 3 + 7 = 10
 ```
 
 ### Update Flow
@@ -93,7 +86,7 @@ Aggregated Count: 3 + 7 = 10
 ```
 1. Request Tweet Stats
    ↓
-2. Query CRDT with Prefix /{namespace}/{tweetID}/{statType}/
+2. Query CRDT with Prefix
    ↓
 3. Iterate All Node Entries
    ↓
@@ -177,36 +170,6 @@ All requirements from the issue have been met:
 - Deterministic convergence
 - Strong mathematical guarantees
 
-## Integration Example
-
-```go
-// Initialize CRDT store
-ctx := context.Background()
-crdtStore, err := crdt.NewCRDTStatsStore(
-    ctx,
-    datastore,  // Your datastore
-    pubsub,     // libp2p PubSub
-    nodeID,     // Unique node ID
-    "mainnet",  // Network name
-)
-
-// Create CRDT-enabled repositories
-likeRepo := database.NewCRDTLikeRepo(db, crdtStore)
-tweetRepo := database.NewCRDTTweetRepo(db, crdtStore)
-replyRepo := database.NewCRDTReplyRepo(db, crdtStore)
-
-// Use normally - CRDT handles the rest
-count, err := likeRepo.Like(tweetID, userID)
-count, err := tweetRepo.NewRetweet(tweet)
-count, err := replyRepo.AddReply(reply)
-
-// Get aggregated stats
-stats, err := crdtStore.GetTweetStats(tweetID)
-fmt.Printf("Likes: %d, Retweets: %d, Replies: %d, Views: %d\n",
-    stats.LikesCount, stats.RetweetsCount, 
-    stats.RepliesCount, stats.ViewsCount)
-```
-
 ## Performance Characteristics
 
 ### Space Complexity
@@ -236,40 +199,6 @@ fmt.Printf("Likes: %d, Retweets: %d, Replies: %d, Views: %d\n",
 2. **LWW-Register**: Last-write-wins for timestamps
 3. **Selective Sync**: Only sync stats for viewed tweets
 4. **Sharding**: Partition stats across CRDT instances
-
-## Testing
-
-All tests passing:
-```bash
-$ go test -short ./core/crdt ./database
-PASS
-ok      github.com/Warp-net/warpnet/core/crdt    0.006s
-ok      github.com/Warp-net/warpnet/database     1.080s
-```
-
-## Dependencies Added
-
-- `github.com/ipfs/go-ds-crdt` v0.6.7 - Core CRDT implementation
-- `github.com/ipfs/boxo` v0.35.0 - IPLD and blockstore utilities
-- Related IPFS/libp2p dependencies for CRDT support
-
-## Files Changed
-
-### New Files (7)
-- `core/crdt/stats.go` - CRDT store implementation
-- `core/crdt/stats_test.go` - CRDT store tests
-- `core/crdt/README.md` - Architecture documentation
-- `database/crdt-like-repo.go` - CRDT like repository
-- `database/crdt-tweet-repo.go` - CRDT tweet repository
-- `database/crdt-reply-repo.go` - CRDT reply repository
-- `database/crdt-like-repo_test.go` - Integration tests
-
-### Modified Files (2)
-- `go.mod` - Added CRDT dependencies
-- `go.sum` - Dependency checksums
-
-### Vendor Directory
-- Updated with new dependencies (~100 new vendored packages)
 
 ## Security Considerations
 
