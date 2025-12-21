@@ -30,45 +30,51 @@ package stats_store
 import (
 	"context"
 	"sync"
-
-	"github.com/Warp-net/warpnet/event"
 )
 
 // GossipPublisher interface for publishing to Gossip
-type GossipPublisher interface {
-	Publish(msg event.Message, topics ...string) error
+type GossipPubSuber interface {
+	PublishRaw(topicName string, data []byte) error
+	SubscribeRaw(topicName string, h func([]byte) error) error
 }
 
 // GossipBroadcaster adapts Gossip to CRDT Broadcaster interface
 type GossipBroadcaster struct {
-	gossip   GossipPublisher
+	ctx context.Context
+
+	gossip   GossipPubSuber
 	topic    string
 	dataChan chan []byte
-	ctx      context.Context
-	cancel   context.CancelFunc
-	mu       sync.Mutex
+
+	once     sync.Once
+	mx       sync.Mutex
 }
 
-const StatsTopicPrefix = "/warpnet/stats/crdt/1.0.0"
+const statsTopic = "/warpnet/stats/1.0.0"
 
 // NewGossipBroadcaster creates a new Gossip-based broadcaster for CRDT
-func NewGossipBroadcaster(ctx context.Context, gossip GossipPublisher) *GossipBroadcaster {
-	ctx, cancel := context.WithCancel(ctx)
-	return &GossipBroadcaster{
+func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
+	gb := &GossipBroadcaster{
 		gossip:   gossip,
-		topic:    StatsTopicPrefix,
+		topic:    statsTopic,
 		dataChan: make(chan []byte, 100),
 		ctx:      ctx,
-		cancel:   cancel,
+		once:     sync.Once{},
+		mx:       sync.Mutex{},
 	}
+	err := gossip.SubscribeRaw(statsTopic, func(data []byte) error {
+		gb.Receive(data)
+		return nil
+	})
+	return gb, err
 }
 
 // Broadcast sends data via Gossip
 func (gb *GossipBroadcaster) Broadcast(_ context.Context, data []byte) error {
-	msg := event.Message{
-		Body: data,
-	}
-	return gb.gossip.Publish(msg, gb.topic)
+	gb.mx.Lock()
+	defer gb.mx.Unlock()
+
+	return gb.gossip.PublishRaw(gb.topic, data)
 }
 
 // Next receives broadcasted data
@@ -79,26 +85,32 @@ func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-gb.ctx.Done():
+		gb.close()
 		return nil, gb.ctx.Err()
 	}
 }
 
 // Receive is called by Gossip subscription handler to deliver data
 func (gb *GossipBroadcaster) Receive(data []byte) {
-	gb.mu.Lock()
-	defer gb.mu.Unlock()
+	gb.mx.Lock()
+	defer gb.mx.Unlock()
 
 	select {
 	case gb.dataChan <- data:
 	case <-gb.ctx.Done():
+		gb.close()
 		return
 	default:
-		// Channel full, drop oldest
+		<-gb.dataChan
+		gb.dataChan <- data
 	}
 }
 
-// Close stops the broadcaster
-func (gb *GossipBroadcaster) Close() {
-	gb.cancel()
-	close(gb.dataChan)
+func (gb *GossipBroadcaster) close() {
+	if gb == nil {
+		return
+	}
+	gb.once.Do(func() {
+		close(gb.dataChan)
+	})
 }

@@ -43,7 +43,7 @@ import (
 
 // slash is required because of: invalid datastore key: NODES:/peers/keys/AASAQAISEAXNRKHMX2O3AA26JM7NGIWUPOGIITJ2UHHXGX4OWIEKPNAW6YCSK/priv
 const (
-	NodesNamespace = "/"
+	requiredPrefixSlash = "/"
 
 	ErrNilNodeRepo = local_store.DBError("node repo is nil")
 )
@@ -65,17 +65,21 @@ type NodeStorer interface {
 
 type NodeRepo struct {
 	db       NodeStorer
+	prefix   string
 	stopChan chan struct{}
 
 	BootstrapSelfHashHex string
 }
 
-func NewNodeRepo(db NodeStorer) *NodeRepo {
+func NewNodeRepo(db NodeStorer, prefix string) *NodeRepo {
+	if !strings.HasPrefix(prefix, requiredPrefixSlash) {
+		prefix = requiredPrefixSlash + prefix
+	}
 	nr := &NodeRepo{
 		db:       db,
+		prefix:   prefix,
 		stopChan: make(chan struct{}),
 	}
-
 	return nr
 }
 
@@ -92,7 +96,7 @@ func (d *NodeRepo) Put(ctx context.Context, key datastore.Key, value []byte) err
 
 	rootKey := buildRootKey(key)
 
-	prefix := local_store.NewPrefixBuilder(NodesNamespace).
+	prefix := local_store.NewPrefixBuilder(d.prefix).
 		AddRootID(rootKey).
 		Build()
 	return d.db.Set(prefix, value)
@@ -125,7 +129,7 @@ func (d *NodeRepo) PutWithTTL(ctx context.Context, key datastore.Key, value []by
 
 	rootKey := buildRootKey(key)
 
-	prefix := local_store.NewPrefixBuilder(NodesNamespace).
+	prefix := local_store.NewPrefixBuilder(d.prefix).
 		AddRootID(rootKey).
 		Build()
 
@@ -163,7 +167,7 @@ func (d *NodeRepo) GetExpiration(ctx context.Context, key datastore.Key) (t time
 
 	rootKey := buildRootKey(key)
 
-	prefix := local_store.NewPrefixBuilder(NodesNamespace).
+	prefix := local_store.NewPrefixBuilder(d.prefix).
 		AddRootID(rootKey).
 		Build()
 
@@ -196,7 +200,7 @@ func (d *NodeRepo) Get(ctx context.Context, key datastore.Key) (value []byte, er
 
 	rootKey := buildRootKey(key)
 
-	prefix := local_store.NewPrefixBuilder(NodesNamespace).
+	prefix := local_store.NewPrefixBuilder(d.prefix).
 		AddRootID(rootKey).
 		Build()
 
@@ -224,7 +228,7 @@ func (d *NodeRepo) Has(ctx context.Context, key datastore.Key) (_ bool, err erro
 
 	rootKey := buildRootKey(key)
 
-	prefix := local_store.NewPrefixBuilder(NodesNamespace).
+	prefix := local_store.NewPrefixBuilder(d.prefix).
 		AddRootID(rootKey).
 		Build()
 
@@ -253,7 +257,7 @@ func (d *NodeRepo) GetSize(ctx context.Context, key datastore.Key) (_ int, err e
 
 	rootKey := buildRootKey(key)
 
-	prefix := local_store.NewPrefixBuilder(NodesNamespace).
+	prefix := local_store.NewPrefixBuilder(d.prefix).
 		AddRootID(rootKey).
 		Build()
 
@@ -281,7 +285,7 @@ func (d *NodeRepo) Delete(ctx context.Context, key datastore.Key) error {
 
 	rootKey := buildRootKey(key)
 
-	prefix := local_store.NewPrefixBuilder(NodesNamespace).
+	prefix := local_store.NewPrefixBuilder(d.prefix).
 		AddRootID(rootKey).
 		Build()
 
@@ -338,7 +342,7 @@ func (d *NodeRepo) query(tx *local_store.Txn, q datastore.Query) (_ datastore.Re
 	opt.PrefetchValues = !q.KeysOnly
 
 	key := strings.TrimPrefix(q.Prefix, "/")
-	prefix := local_store.NewPrefixBuilder(NodesNamespace).AddRootID(key).Build().Bytes()
+	prefix := local_store.NewPrefixBuilder(d.prefix).AddRootID(key).Build().Bytes()
 	opt.Prefix = prefix
 
 	// Handle ordering
@@ -505,6 +509,7 @@ func (d *NodeRepo) Close() (err error) {
 
 type batch struct {
 	db         NodeStorer
+	prefix     string
 	writeBatch *local_store.WriteBatch
 }
 
@@ -520,7 +525,7 @@ func (d *NodeRepo) Batch(ctx context.Context) (datastore.Batch, error) {
 	if d.db.IsClosed() {
 		return nil, local_store.ErrNotRunning
 	}
-	b := &batch{d.db, d.db.InnerDB().NewWriteBatch()}
+	b := &batch{d.db, d.prefix, d.db.InnerDB().NewWriteBatch()}
 	runtime.SetFinalizer(b, func(b *batch) { _ = b.Cancel() })
 
 	return b, nil
@@ -544,7 +549,7 @@ func (b *batch) put(key datastore.Key, value []byte) error {
 
 	rootKey := buildRootKey(key)
 
-	batchKey := local_store.NewPrefixBuilder(NodesNamespace).
+	batchKey := local_store.NewPrefixBuilder(b.prefix).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.Set(batchKey.Bytes(), value)
@@ -560,7 +565,7 @@ func (b *batch) putWithTTL(key datastore.Key, value []byte, ttl time.Duration) e
 
 	rootKey := buildRootKey(key)
 
-	batchKey := local_store.NewPrefixBuilder(NodesNamespace).
+	batchKey := local_store.NewPrefixBuilder(b.prefix).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.SetEntry(&local_store.Entry{
@@ -583,7 +588,7 @@ func (b *batch) Delete(ctx context.Context, key datastore.Key) error {
 
 	rootKey := buildRootKey(key)
 
-	batchKey := local_store.NewPrefixBuilder(NodesNamespace).
+	batchKey := local_store.NewPrefixBuilder(b.prefix).
 		AddRootID(rootKey).
 		Build()
 	return b.writeBatch.Delete(batchKey.Bytes())
@@ -681,7 +686,7 @@ func (d *NodeRepo) Blocklist(peerId string) error {
 	}
 	defer txn.Rollback()
 
-	blocklistTermKey := local_store.NewPrefixBuilder(NodesNamespace).
+	blocklistTermKey := local_store.NewPrefixBuilder(d.prefix).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddSubPrefix(BlocklistTermSubNamespace).
 		AddRootID(peerId).
@@ -707,7 +712,7 @@ func (d *NodeRepo) Blocklist(peerId string) error {
 
 	dur := blockDurationMapping[term.Level]
 
-	blocklistUserKey := local_store.NewPrefixBuilder(NodesNamespace).
+	blocklistUserKey := local_store.NewPrefixBuilder(d.prefix).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddSubPrefix(BlocklistUserSubNamespace).
 		AddRootID(peerId).
@@ -736,7 +741,7 @@ func (d *NodeRepo) IsBlocklisted(peerId string) bool {
 		return false
 	}
 
-	blocklistUserKey := local_store.NewPrefixBuilder(NodesNamespace).
+	blocklistUserKey := local_store.NewPrefixBuilder(d.prefix).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddSubPrefix(BlocklistUserSubNamespace).
 		AddRootID(peerId).
@@ -754,7 +759,7 @@ func (d *NodeRepo) BlocklistTerm(peerId string) (*BlocklistTerm, error) {
 	}
 	var term BlocklistTerm
 
-	blocklistTermKey := local_store.NewPrefixBuilder(NodesNamespace).
+	blocklistTermKey := local_store.NewPrefixBuilder(d.prefix).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddSubPrefix(BlocklistTermSubNamespace).
 		AddRootID(peerId).
@@ -786,14 +791,14 @@ func (d *NodeRepo) BlocklistRemove(peerId string) error {
 	}
 	defer txn.Rollback()
 
-	blocklistUserKey := local_store.NewPrefixBuilder(NodesNamespace).
+	blocklistUserKey := local_store.NewPrefixBuilder(d.prefix).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddSubPrefix(BlocklistUserSubNamespace).
 		AddRootID(peerId).
 		Build()
 	_ = txn.Delete(blocklistUserKey)
 
-	blocklistTermKey := local_store.NewPrefixBuilder(NodesNamespace).
+	blocklistTermKey := local_store.NewPrefixBuilder(d.prefix).
 		AddSubPrefix(BlocklistSubNamespace).
 		AddSubPrefix(BlocklistTermSubNamespace).
 		AddRootID(peerId).

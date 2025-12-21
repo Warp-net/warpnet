@@ -174,6 +174,7 @@ func (hh *heads) List(ctx context.Context) ([]cid.Cid, uint64, error) {
 // primeCache builds the heads cache based on what's in storage; since
 // it is called from the constructor only we don't bother locking.
 func (hh *heads) primeCache(ctx context.Context) (ret error) {
+	println(hh.namespace.String(), "??????????????")
 	q := query.Query{
 		Prefix:   hh.namespace.String(),
 		KeysOnly: false,
@@ -192,6 +193,7 @@ func (hh *heads) primeCache(ctx context.Context) (ret error) {
 		headKey := ds.NewKey(strings.TrimPrefix(r.Key, hh.namespace.String()))
 		headCid, err := dshelp.DsKeyToCidV1(headKey, cid.DagProtobuf)
 		if err != nil {
+			println(headKey.String(), "@@@@@@@@@@@@")
 			return err
 		}
 		height, n := binary.Uvarint(r.Value)

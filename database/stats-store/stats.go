@@ -51,7 +51,7 @@ import (
 
 const (
 	// namespace for CRDT stats
-	namespace = "crdt"
+	namespace = "/STATS/crdt"
 )
 
 // TweetStats represents aggregated statistics for a tweet using CRDT
@@ -96,7 +96,9 @@ func NewCRDTStatsStore(
 	dagService := merkledag.NewDAGService(blockService)
 
 	opts := crdt.DefaultOptions()
-	opts.Logger = log.StandardLogger()
+	l := log.New()
+	l.SetLevel(log.DebugLevel)
+	opts.Logger = l
 	opts.RebroadcastInterval = time.Minute
 
 	crdtStore, err := crdt.New(

@@ -88,13 +88,13 @@ func NewMemberNode(
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	nodeRepo := database.NewNodeRepo(db)
+	nodeRepo := database.NewNodeRepo(db, "NODES")
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {
 		return nil, err
 	}
 
-	statsRepo := database.NewNodeRepo(db)
+	statsRepo := database.NewNodeRepo(db, "STATS")
 	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
@@ -198,12 +198,15 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	crdtBroadcaster := stats.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	crdtBroadcaster, err := stats.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	if err != nil {
+		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
+	}
 	m.statsDb, err = stats.NewCRDTStatsStore(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {
-		log.Errorf("member: failed to initialize stats store: %v", err)
+		return fmt.Errorf("member: failed to initialize stats store: %v", err)
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb, m.privKey)
