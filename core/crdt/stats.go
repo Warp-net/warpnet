@@ -87,9 +87,7 @@ func NewCRDTStatsStore(
 	dagService := warpnet.NewDAGService(blockService)
 
 	opts := crdt.DefaultOptions()
-	l := log.New()
-	l.SetLevel(log.DebugLevel)
-	opts.Logger = l
+	opts.Logger = log.StandardLogger()
 	opts.RebroadcastInterval = time.Minute
 
 	crdtStore, err := crdt.New(
