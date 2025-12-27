@@ -25,16 +25,21 @@ resulting from the use or misuse of this software.
 package node
 
 import (
-	"io"
+	"context"
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/datastore"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/ipfs/go-cid"
+	ds "github.com/ipfs/go-datastore"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type DiscoveryHandler interface {
@@ -54,6 +59,7 @@ type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
 	Close() error
+	Gossip() *corePubsub.Gossip
 }
 
 type UserFetcher interface {
@@ -63,11 +69,13 @@ type UserFetcher interface {
 }
 
 type DistributedHashTableCloser interface {
+	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) (ch <-chan peer.AddrInfo)
 	Close()
 }
 
 type NodeProvider interface {
-	io.Closer
+	datastore.Datastore
+	Prefix() string
 }
 
 type AuthProvider interface {
@@ -103,19 +111,25 @@ type FollowStorer interface {
 }
 
 type Storer interface {
-	NewTxn() (local.WarpTransactioner, error)
-	Get(key local.DatabaseKey) ([]byte, error)
-	GetExpiration(key local.DatabaseKey) (uint64, error)
-	GetSize(key local.DatabaseKey) (int64, error)
+	NewTxn() (local_store.WarpTransactioner, error)
+	Get(key local_store.DatabaseKey) ([]byte, error)
+	GetExpiration(key local_store.DatabaseKey) (uint64, error)
+	GetSize(key local_store.DatabaseKey) (int64, error)
 	Sync() error
 	IsClosed() bool
-	InnerDB() *local.WarpDB
-	SetWithTTL(key local.DatabaseKey, value []byte, ttl time.Duration) error
-	Set(key local.DatabaseKey, value []byte) error
-	Delete(key local.DatabaseKey) error
+	InnerDB() *local_store.WarpDB
+	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	Set(key local_store.DatabaseKey, value []byte) error
+	Delete(key local_store.DatabaseKey) error
 	Path() string
 	Stats() map[string]string
 	IsFirstRun() bool
+}
+
+type StatsStorer interface {
+	Put(key ds.Key, value uint64) error
+	GetAggregatedStat(key ds.Key) (uint64, error)
+	Close() error
 }
 
 type PseudoStreamer interface {

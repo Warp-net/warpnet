@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 )
 
 // GetOffset returns the current offset of the Seeker and just panics if unable

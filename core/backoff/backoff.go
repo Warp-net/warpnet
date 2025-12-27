@@ -15,10 +15,9 @@ const ErrBackoffEnabled warpnet.WarpError = "backoff enabled"
 const (
 	// BackoffCleanupInterval = 1 * time.Minute
 
-
-	MinBackoffDelay = 100 * time.Millisecond
-	MaxBackoffDelay = 5 * time.Minute
-	TimeToLive      = 10 * time.Minute
+	MinBackoffDelay        = 100 * time.Millisecond
+	MaxBackoffDelay        = 5 * time.Minute
+	TimeToLive             = 10 * time.Minute
 	BasicBackoffMultiplier = 2
 	MaxBackoffJitterCoff   = 100
 	MaxBackoffAttempts     = 5

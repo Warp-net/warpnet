@@ -2,11 +2,9 @@
 package slicer
 
 // Imports
-import (
-	"fmt"
-	"sort"
-	"strings"
-)
+import "sort"
+import "fmt"
+import "strings"
 
 // Int16Slicer handles slices of int16
 type Int16Slicer struct {

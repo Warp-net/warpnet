@@ -4,7 +4,7 @@ import (
 	"io"
 	"time"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 )
 
 // ProgressFunc receives progress updates.

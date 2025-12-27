@@ -51,11 +51,10 @@ func UnmarshalJSONObject(data []byte, v UnmarshalerJSONObject) error {
 
 // Unmarshal parses the JSON-encoded data and stores the result in the value pointed to by v.
 // If v is nil, not an implementation of UnmarshalerJSONObject or UnmarshalerJSONArray or not one of the following types:
-//
-//	*string, **string, *int, **int, *int8, **int8, *int16, **int16, *int32, **int32, *int64, **int64, *uint8, **uint8, *uint16, **uint16,
-//	*uint32, **uint32, *uint64, **uint64, *float64, **float64, *float32, **float32, *bool, **bool
-//
+// 	*string, **string, *int, **int, *int8, **int8, *int16, **int16, *int32, **int32, *int64, **int64, *uint8, **uint8, *uint16, **uint16,
+// 	*uint32, **uint32, *uint64, **uint64, *float64, **float64, *float32, **float32, *bool, **bool
 // Unmarshal returns an InvalidUnmarshalError.
+//
 //
 // If a JSON value is not appropriate for a given target type, or if a JSON number
 // overflows the target type, Unmarshal skips that field and completes the unmarshaling as best it can.
@@ -252,8 +251,8 @@ type Decoder struct {
 //
 // See the documentation for Unmarshal for details about the conversion of JSON into a Go value.
 // The differences between Decode and Unmarshal are:
-//   - Decode reads from an io.Reader in the Decoder, whereas Unmarshal reads from a []byte
-//   - Decode leaves to the user the option of borrowing and releasing a Decoder, whereas Unmarshal internally always borrows a Decoder and releases it when the unmarshaling is completed
+// 	- Decode reads from an io.Reader in the Decoder, whereas Unmarshal reads from a []byte
+// 	- Decode leaves to the user the option of borrowing and releasing a Decoder, whereas Unmarshal internally always borrows a Decoder and releases it when the unmarshaling is completed
 func (dec *Decoder) Decode(v interface{}) error {
 	if dec.isPooled == 1 {
 		panic(InvalidUsagePooledDecoderError("Invalid usage of pooled decoder"))

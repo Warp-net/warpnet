@@ -90,7 +90,7 @@ func TestAmendExif_Success(t *testing.T) {
 
 func validateExif(t *testing.T, data []byte) {
 	t.Helper()
-	
+
 	parser := jis.NewJpegMediaParser()
 
 	intfc, err := parser.ParseBytes(data)

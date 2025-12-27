@@ -5,7 +5,6 @@ package packagemanager
 
 import (
 	"encoding/json"
-
 	"github.com/wailsapp/wails/v2/internal/shell"
 )
 

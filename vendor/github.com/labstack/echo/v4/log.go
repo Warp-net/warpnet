@@ -4,9 +4,8 @@
 package echo
 
 import (
-	"io"
-
 	"github.com/labstack/gommon/log"
+	"io"
 )
 
 // Logger defines the logging interface.

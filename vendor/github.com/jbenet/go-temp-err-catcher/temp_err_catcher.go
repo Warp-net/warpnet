@@ -37,8 +37,9 @@ func ErrIsTemporary(e error) bool {
 // You can set a few options in TempErrCatcher. They all have defaults
 // so a zero TempErrCatcher is ready to be used:
 //
-//	var c tec.TempErrCatcher
-//	c.IsTemporary(tempErr)
+//  var c tec.TempErrCatcher
+//  c.IsTemporary(tempErr)
+//
 type TempErrCatcher struct {
 	IsTemp func(error) bool    // the classifier to use. default: ErrIsTemporary
 	Wait   func(time.Duration) // the wait func to call. default: time.Sleep
@@ -103,10 +104,11 @@ func (tec *TempErrCatcher) Reset() {
 
 // ErrTemporary wraps any error and implements Temporary function.
 //
-//	err := errors.New("beep boop")
-//	var c tec.TempErrCatcher
-//	c.IsTemporary(err)              // false
-//	c.IsTemporary(tec.ErrTemp{err}) // true
+//   err := errors.New("beep boop")
+//   var c tec.TempErrCatcher
+//   c.IsTemporary(err)              // false
+//   c.IsTemporary(tec.ErrTemp{err}) // true
+//
 type ErrTemporary struct {
 	Err error
 }

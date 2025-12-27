@@ -32,15 +32,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/oklog/ulid/v2"
 )
 
 var (
-	ErrChatNotFound    = local.DBError("chat not found")
-	ErrMessageNotFound = local.DBError("message not found")
+	ErrChatNotFound    = local_store.DBError("chat not found")
+	ErrMessageNotFound = local_store.DBError("message not found")
 )
 
 const (
@@ -50,7 +50,7 @@ const (
 )
 
 type ChatStorer interface {
-	NewTxn() (local.WarpTransactioner, error)
+	NewTxn() (local_store.WarpTransactioner, error)
 }
 
 type ChatRepo struct {
@@ -64,7 +64,7 @@ func NewChatRepo(db ChatStorer) *ChatRepo {
 
 func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (chat domain.Chat, err error) {
 	if ownerId == "" || otherUserId == "" {
-		return domain.Chat{}, local.DBError("user ID or other user ID is empty")
+		return domain.Chat{}, local_store.DBError("user ID or other user ID is empty")
 	}
 
 	repo.mx.Lock()
@@ -80,12 +80,12 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 		chatId = new(string)
 		*chatId = repo.composeChatId(ownerId, otherUserId)
 	}
-	fixedUserChatKey := local.NewPrefixBuilder(ChatNamespace).
+	fixedUserChatKey := local_store.NewPrefixBuilder(ChatNamespace).
 		AddRootID(*chatId).
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		Build()
 
-	sortableUserChatKey := local.NewPrefixBuilder(ChatNamespace).
+	sortableUserChatKey := local_store.NewPrefixBuilder(ChatNamespace).
 		AddRootID(*chatId).
 		AddReversedTimestamp(time.Now()).
 		Build()
@@ -94,7 +94,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 
 	// check if already exist
 	bt, err := txn.Get(sortableUserChatKey)
-	if err != nil && !local.IsNotFoundError(err) {
+	if err != nil && !local_store.IsNotFoundError(err) {
 		return chat, err
 	}
 	if err == nil {
@@ -130,7 +130,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 
 func (repo *ChatRepo) DeleteChat(chatId string) error {
 	if chatId == "" {
-		return local.DBError("chat ID is empty")
+		return local_store.DBError("chat ID is empty")
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -139,13 +139,13 @@ func (repo *ChatRepo) DeleteChat(chatId string) error {
 	}
 	defer txn.Rollback()
 
-	fixedUserChatKey := local.NewPrefixBuilder(ChatNamespace).
+	fixedUserChatKey := local_store.NewPrefixBuilder(ChatNamespace).
 		AddRootID(chatId).
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		Build()
 
 	sortableKey, err := txn.Get(fixedUserChatKey)
-	if err != nil && !local.IsNotFoundError(err) {
+	if err != nil && !local_store.IsNotFoundError(err) {
 		return err
 	}
 	if len(sortableKey) == 0 {
@@ -154,7 +154,7 @@ func (repo *ChatRepo) DeleteChat(chatId string) error {
 	if err := txn.Delete(fixedUserChatKey); err != nil {
 		return err
 	}
-	if err := txn.Delete(local.DatabaseKey(sortableKey)); err != nil {
+	if err := txn.Delete(local_store.DatabaseKey(sortableKey)); err != nil {
 		return err
 	}
 
@@ -163,7 +163,7 @@ func (repo *ChatRepo) DeleteChat(chatId string) error {
 
 func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 	if chatId == "" {
-		return chat, local.DBError("chat ID is empty")
+		return chat, local_store.DBError("chat ID is empty")
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -172,20 +172,20 @@ func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 	}
 	defer txn.Rollback()
 
-	fixedUserChatKey := local.NewPrefixBuilder(ChatNamespace).
+	fixedUserChatKey := local_store.NewPrefixBuilder(ChatNamespace).
 		AddRootID(chatId).
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		Build()
 
 	sortableKey, err := txn.Get(fixedUserChatKey)
-	if err != nil && !local.IsNotFoundError(err) {
+	if err != nil && !local_store.IsNotFoundError(err) {
 		return chat, err
 	}
 	if len(sortableKey) == 0 {
 		return chat, ErrChatNotFound
 	}
-	bt, err := txn.Get(local.DatabaseKey(sortableKey))
-	if err != nil && !local.IsNotFoundError(err) {
+	bt, err := txn.Get(local_store.DatabaseKey(sortableKey))
+	if err != nil && !local_store.IsNotFoundError(err) {
 		return chat, err
 	}
 
@@ -197,10 +197,10 @@ func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 
 func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error) {
 	if userId == "" {
-		return []domain.Chat{}, "", local.DBError("ID cannot be blank")
+		return []domain.Chat{}, "", local_store.DBError("ID cannot be blank")
 	}
 
-	prefix := local.NewPrefixBuilder(ChatNamespace).Build()
+	prefix := local_store.NewPrefixBuilder(ChatNamespace).Build()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -236,10 +236,10 @@ func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string)
 
 func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage, error) {
 	if msg == (domain.ChatMessage{}) {
-		return msg, local.DBError("empty message")
+		return msg, local_store.DBError("empty message")
 	}
 	if msg.ChatId == "" {
-		return msg, local.DBError("chat ID is empty")
+		return msg, local_store.DBError("chat ID is empty")
 	}
 
 	repo.mx.Lock()
@@ -252,13 +252,13 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 		msg.Id = ulid.Make().String()
 	}
 
-	fixedKey := local.NewPrefixBuilder(MessageNamespace).
+	fixedKey := local_store.NewPrefixBuilder(MessageNamespace).
 		AddRootID(msg.ChatId).
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(msg.Id).
 		Build()
 
-	sortableKey := local.NewPrefixBuilder(MessageNamespace).
+	sortableKey := local_store.NewPrefixBuilder(MessageNamespace).
 		AddRootID(msg.ChatId).
 		AddReversedTimestamp(msg.CreatedAt).
 		AddParentId(msg.Id).
@@ -287,10 +287,10 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 
 func (repo *ChatRepo) ListMessages(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error) {
 	if chatId == "" {
-		return nil, "", local.DBError("chat ID cannot be blank")
+		return nil, "", local_store.DBError("chat ID cannot be blank")
 	}
 
-	prefix := local.NewPrefixBuilder(MessageNamespace).
+	prefix := local_store.NewPrefixBuilder(MessageNamespace).
 		AddRootID(chatId).
 		Build()
 
@@ -324,11 +324,11 @@ func (repo *ChatRepo) ListMessages(chatId string, limit *uint64, cursor *string)
 
 func (repo *ChatRepo) GetMessage(chatId, id string) (m domain.ChatMessage, err error) {
 	if chatId == "" || id == "" {
-		return m, local.DBError("chatId or id cannot be blank")
+		return m, local_store.DBError("chatId or id cannot be blank")
 	}
-	fixedKey := local.NewPrefixBuilder(MessageNamespace).
+	fixedKey := local_store.NewPrefixBuilder(MessageNamespace).
 		AddRootID(chatId).
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(id).
 		Build()
 
@@ -339,15 +339,15 @@ func (repo *ChatRepo) GetMessage(chatId, id string) (m domain.ChatMessage, err e
 	defer txn.Rollback()
 
 	sortableKey, err := txn.Get(fixedKey)
-	if err != nil && !local.IsNotFoundError(err) {
+	if err != nil && !local_store.IsNotFoundError(err) {
 		return m, err
 	}
 	if len(sortableKey) == 0 {
 		return m, ErrMessageNotFound
 	}
 
-	data, err := txn.Get(local.DatabaseKey(sortableKey))
-	if err != nil && !local.IsNotFoundError(err) {
+	data, err := txn.Get(local_store.DatabaseKey(sortableKey))
+	if err != nil && !local_store.IsNotFoundError(err) {
 		return m, err
 	}
 
@@ -363,9 +363,9 @@ func (repo *ChatRepo) GetMessage(chatId, id string) (m domain.ChatMessage, err e
 }
 
 func (repo *ChatRepo) DeleteMessage(chatId, id string) error {
-	fixedKey := local.NewPrefixBuilder(MessageNamespace).
+	fixedKey := local_store.NewPrefixBuilder(MessageNamespace).
 		AddRootID(chatId).
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(id).
 		Build()
 
@@ -376,7 +376,7 @@ func (repo *ChatRepo) DeleteMessage(chatId, id string) error {
 	defer txn.Rollback()
 
 	sortableKey, err := txn.Get(fixedKey)
-	if err != nil && !local.IsNotFoundError(err) {
+	if err != nil && !local_store.IsNotFoundError(err) {
 		return err
 	}
 	if len(sortableKey) == 0 {
@@ -385,7 +385,7 @@ func (repo *ChatRepo) DeleteMessage(chatId, id string) error {
 	if err = txn.Delete(fixedKey); err != nil {
 		return err
 	}
-	if err = txn.Delete(local.DatabaseKey(sortableKey)); err != nil {
+	if err = txn.Delete(local_store.DatabaseKey(sortableKey)); err != nil {
 		return err
 	}
 

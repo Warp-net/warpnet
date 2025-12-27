@@ -86,6 +86,7 @@ func StreamNewReTweetHandler(
 
 		retweet, err := tweetRepo.NewRetweet(retweetEvent)
 		if err != nil {
+			log.Errorf("retweet handler failed: %v", err)
 			return nil, err
 		}
 
@@ -159,6 +160,7 @@ func StreamUnretweetHandler(
 		}
 		err = tweetRepo.UnRetweet(retweetedBy, ev.TweetId)
 		if err != nil {
+			log.Errorf("unretweet handler failed: %v", err)
 			return nil, err
 		}
 

@@ -3,7 +3,7 @@ package rifs
 import (
 	"io"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 )
 
 // BoundedReadWriteSeekCloser wraps a RWS that is also a closer with boundaries.

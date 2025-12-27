@@ -4,7 +4,7 @@ import (
 	"os"
 	"path"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 )
 
 var (

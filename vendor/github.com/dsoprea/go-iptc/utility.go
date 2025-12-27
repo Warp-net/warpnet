@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 )
 
 // DumpBytesToString returns a stringified list of hex-encoded bytes.

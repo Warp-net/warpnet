@@ -36,13 +36,13 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/json"
 )
 
 var (
-	ErrUserNotFound      = local.DBError("user not found")
-	ErrUserAlreadyExists = local.DBError("user already exists")
+	ErrUserNotFound      = local_store.DBError("user not found")
+	ErrUserAlreadyExists = local_store.DBError("user already exists")
 )
 
 const (
@@ -56,10 +56,10 @@ const (
 )
 
 type UserStorer interface {
-	NewTxn() (local.WarpTransactioner, error)
-	Set(key local.DatabaseKey, value []byte) error
-	Get(key local.DatabaseKey) ([]byte, error)
-	Delete(key local.DatabaseKey) error
+	NewTxn() (local_store.WarpTransactioner, error)
+	Set(key local_store.DatabaseKey, value []byte) error
+	Get(key local_store.DatabaseKey) ([]byte, error)
+	Delete(key local_store.DatabaseKey) error
 }
 
 type UserRepo struct {
@@ -77,7 +77,7 @@ func (repo *UserRepo) Create(user domain.User) (domain.User, error) {
 
 func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error) {
 	if user.Id == "" {
-		return user, local.DBError("user id is empty")
+		return user, local_store.DBError("user id is empty")
 	}
 	if user.CreatedAt.IsZero() {
 		user.CreatedAt = time.Now()
@@ -94,21 +94,21 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		user.Network = DefaultWarpnetUserNetwork
 	}
 
-	rttRange := local.RangePrefix(strconv.FormatInt(user.RoundTripTime, 10))
+	rttRange := local_store.RangePrefix(strconv.FormatInt(user.RoundTripTime, 10))
 
-	fixedKey := local.NewPrefixBuilder(UsersRepoName).
+	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(user.Id).
 		Build()
 
 	_, err = repo.db.Get(fixedKey)
-	if !local.IsNotFoundError(err) {
+	if !local_store.IsNotFoundError(err) {
 		return user, ErrUserAlreadyExists
 	}
 
-	sortableKey := local.NewPrefixBuilder(UsersRepoName).
+	sortableKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
 		AddRange(rttRange).
@@ -122,7 +122,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 	defer txn.Rollback()
 
 	if user.NodeId != "" {
-		nodeUserKey := local.NewPrefixBuilder(UsersRepoName).
+		nodeUserKey := local_store.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(user.NodeId).
 			Build()
@@ -143,10 +143,10 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, error) {
 	var existingUser domain.User
 
-	fixedKey := local.NewPrefixBuilder(UsersRepoName).
+	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
 
@@ -161,8 +161,8 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		return existingUser, err
 	}
 
-	data, err := txn.Get(local.DatabaseKey(sortableKeyBytes))
-	if local.IsNotFoundError(err) {
+	data, err := txn.Get(local_store.DatabaseKey(sortableKeyBytes))
+	if local_store.IsNotFoundError(err) {
 		return existingUser, ErrUserNotFound
 	}
 	if err != nil {
@@ -221,12 +221,12 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if err = txn.Set(fixedKey, sortableKeyBytes); err != nil {
 		return existingUser, err
 	}
-	if err = txn.Set(local.DatabaseKey(sortableKeyBytes), bt); err != nil {
+	if err = txn.Set(local_store.DatabaseKey(sortableKeyBytes), bt); err != nil {
 		return existingUser, err
 	}
 
 	if newUser.NodeId != "" {
-		nodeUserKey := local.NewPrefixBuilder(UsersRepoName).
+		nodeUserKey := local_store.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(newUser.NodeId).
 			Build()
@@ -242,22 +242,22 @@ func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 	if userId == "" {
 		return user, ErrUserNotFound
 	}
-	fixedKey := local.NewPrefixBuilder(UsersRepoName).
+	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
 	sortableKeyBytes, err := repo.db.Get(fixedKey)
-	if local.IsNotFoundError(err) {
+	if local_store.IsNotFoundError(err) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
 		return user, err
 	}
 
-	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
-	if local.IsNotFoundError(err) {
+	data, err := repo.db.Get(local_store.DatabaseKey(sortableKeyBytes))
+	if local_store.IsNotFoundError(err) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
@@ -276,21 +276,21 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 	if nodeID == "" {
 		return user, ErrUserNotFound
 	}
-	nodeUserKey := local.NewPrefixBuilder(UsersRepoName).
+	nodeUserKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(nodeSubNamespace).
 		AddRootID(nodeID).
 		Build()
 
 	sortableKeyBytes, err := repo.db.Get(nodeUserKey)
-	if local.IsNotFoundError(err) {
+	if local_store.IsNotFoundError(err) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
 		return user, err
 	}
 
-	data, err := repo.db.Get(local.DatabaseKey(sortableKeyBytes))
-	if local.IsNotFoundError(err) {
+	data, err := repo.db.Get(local_store.DatabaseKey(sortableKeyBytes))
+	if local_store.IsNotFoundError(err) {
 		return user, ErrUserNotFound
 	}
 	if err != nil {
@@ -307,10 +307,10 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 
 // Delete removes a user by their ID
 func (repo *UserRepo) Delete(userId string) error {
-	fixedKey := local.NewPrefixBuilder(UsersRepoName).
+	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
-		AddRange(local.FixedRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
 
@@ -321,14 +321,14 @@ func (repo *UserRepo) Delete(userId string) error {
 	defer txn.Rollback()
 
 	sortableKeyBytes, err := txn.Get(fixedKey)
-	if local.IsNotFoundError(err) {
+	if local_store.IsNotFoundError(err) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 
-	data, err := txn.Get(local.DatabaseKey(sortableKeyBytes))
+	data, err := txn.Get(local_store.DatabaseKey(sortableKeyBytes))
 	if err != nil {
 		return err
 	}
@@ -342,11 +342,11 @@ func (repo *UserRepo) Delete(userId string) error {
 	if err = txn.Delete(fixedKey); err != nil {
 		return err
 	}
-	if err = txn.Delete(local.DatabaseKey(sortableKeyBytes)); err != nil {
+	if err = txn.Delete(local_store.DatabaseKey(sortableKeyBytes)); err != nil {
 		return err
 	}
 	if u.NodeId != "" {
-		nodeUserKey := local.NewPrefixBuilder(UsersRepoName).
+		nodeUserKey := local_store.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(nodeSubNamespace).
 			AddRootID(u.NodeId).
 			Build()
@@ -359,7 +359,7 @@ func (repo *UserRepo) Delete(userId string) error {
 }
 
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
-	prefix := local.NewPrefixBuilder(UsersRepoName).
+	prefix := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
 		AddRootID("None").
 		Build()
@@ -434,22 +434,22 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 	users = make([]domain.User, 0, len(userIDs))
 
 	for _, userID := range userIDs {
-		fixedKey := local.NewPrefixBuilder(UsersRepoName).
+		fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(userSubNamespace).
 			AddRootID("None").
-			AddRange(local.FixedRangeKey).
+			AddRange(local_store.FixedRangeKey).
 			AddParentId(userID).
 			Build()
 		sortableKey, err := txn.Get(fixedKey)
-		if local.IsNotFoundError(err) {
+		if local_store.IsNotFoundError(err) {
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		data, err := txn.Get(local.DatabaseKey(sortableKey))
-		if local.IsNotFoundError(err) {
+		data, err := txn.Get(local_store.DatabaseKey(sortableKey))
+		if local_store.IsNotFoundError(err) {
 			continue
 		}
 		if err != nil {

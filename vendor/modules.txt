@@ -164,6 +164,9 @@ github.com/cockroachdb/redact/internal/rfmt/fmtsort
 # github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console
+# github.com/cskr/pubsub v1.0.2
+## explicit; go 1.12
+github.com/cskr/pubsub
 # github.com/cyphar/filepath-securejoin v0.4.1
 ## explicit; go 1.18
 github.com/cyphar/filepath-securejoin
@@ -247,6 +250,12 @@ github.com/francoispqt/gojay
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify
 github.com/fsnotify/fsnotify/internal
+# github.com/gammazero/chanqueue v1.1.1
+## explicit; go 1.22
+github.com/gammazero/chanqueue
+# github.com/gammazero/deque v1.1.0
+## explicit; go 1.23
+github.com/gammazero/deque
 # github.com/getsentry/sentry-go v0.35.0
 ## explicit; go 1.21
 github.com/getsentry/sentry-go
@@ -403,33 +412,116 @@ github.com/huin/goupnp/httpu
 github.com/huin/goupnp/scpd
 github.com/huin/goupnp/soap
 github.com/huin/goupnp/ssdp
+# github.com/ipfs/bbloom v0.0.4
+## explicit; go 1.12
+github.com/ipfs/bbloom
 # github.com/ipfs/boxo v0.35.0
 ## explicit; go 1.24.0
+github.com/ipfs/boxo/bitswap
+github.com/ipfs/boxo/bitswap/client
+github.com/ipfs/boxo/bitswap/client/internal
+github.com/ipfs/boxo/bitswap/client/internal/blockpresencemanager
+github.com/ipfs/boxo/bitswap/client/internal/getter
+github.com/ipfs/boxo/bitswap/client/internal/messagequeue
+github.com/ipfs/boxo/bitswap/client/internal/notifications
+github.com/ipfs/boxo/bitswap/client/internal/peermanager
+github.com/ipfs/boxo/bitswap/client/internal/session
+github.com/ipfs/boxo/bitswap/client/internal/sessioninterestmanager
+github.com/ipfs/boxo/bitswap/client/internal/sessionmanager
+github.com/ipfs/boxo/bitswap/client/internal/sessionpeermanager
+github.com/ipfs/boxo/bitswap/client/traceability
+github.com/ipfs/boxo/bitswap/client/wantlist
+github.com/ipfs/boxo/bitswap/internal
+github.com/ipfs/boxo/bitswap/internal/defaults
+github.com/ipfs/boxo/bitswap/message
+github.com/ipfs/boxo/bitswap/message/pb
+github.com/ipfs/boxo/bitswap/metrics
+github.com/ipfs/boxo/bitswap/network
+github.com/ipfs/boxo/bitswap/network/bsnet
+github.com/ipfs/boxo/bitswap/network/bsnet/internal
+github.com/ipfs/boxo/bitswap/server
+github.com/ipfs/boxo/bitswap/server/internal/decision
+github.com/ipfs/boxo/bitswap/tracer
+github.com/ipfs/boxo/blockservice
+github.com/ipfs/boxo/blockservice/internal
+github.com/ipfs/boxo/blockstore
+github.com/ipfs/boxo/datastore/dshelp
+github.com/ipfs/boxo/exchange
+github.com/ipfs/boxo/fetcher
+github.com/ipfs/boxo/fetcher/helpers
+github.com/ipfs/boxo/ipld/merkledag
+github.com/ipfs/boxo/ipld/merkledag/pb
 github.com/ipfs/boxo/ipns
 github.com/ipfs/boxo/ipns/pb
 github.com/ipfs/boxo/path
+github.com/ipfs/boxo/peering
+github.com/ipfs/boxo/provider
+github.com/ipfs/boxo/provider/internal/queue
+github.com/ipfs/boxo/retrieval
+github.com/ipfs/boxo/routing/providerquerymanager
 github.com/ipfs/boxo/util
+github.com/ipfs/boxo/verifcid
+# github.com/ipfs/go-block-format v0.2.3
+## explicit; go 1.24.0
+github.com/ipfs/go-block-format
 # github.com/ipfs/go-cid v0.5.0
 ## explicit; go 1.22
 github.com/ipfs/go-cid
+# github.com/ipfs/go-cidutil v0.1.0
+## explicit; go 1.17
+github.com/ipfs/go-cidutil
 # github.com/ipfs/go-datastore v0.9.0
 ## explicit; go 1.24
 github.com/ipfs/go-datastore
 github.com/ipfs/go-datastore/autobatch
+github.com/ipfs/go-datastore/keytransform
+github.com/ipfs/go-datastore/namespace
 github.com/ipfs/go-datastore/query
 github.com/ipfs/go-datastore/sync
+# github.com/ipfs/go-ds-crdt v0.6.7
+## explicit; go 1.25
+github.com/ipfs/go-ds-crdt
+github.com/ipfs/go-ds-crdt/pb
+# github.com/ipfs/go-dsqueue v0.0.5
+## explicit; go 1.24.0
+github.com/ipfs/go-dsqueue
+# github.com/ipfs/go-ipfs-pq v0.0.3
+## explicit; go 1.19
+github.com/ipfs/go-ipfs-pq
+# github.com/ipfs/go-ipld-format v0.6.3
+## explicit; go 1.24.0
+github.com/ipfs/go-ipld-format
+# github.com/ipfs/go-ipld-legacy v0.2.2
+## explicit; go 1.23.10
+github.com/ipfs/go-ipld-legacy
 # github.com/ipfs/go-log/v2 v2.8.2
 ## explicit; go 1.24
 github.com/ipfs/go-log/v2
+# github.com/ipfs/go-metrics-interface v0.3.0
+## explicit; go 1.23
+github.com/ipfs/go-metrics-interface
+# github.com/ipfs/go-peertaskqueue v0.8.2
+## explicit; go 1.22.0
+github.com/ipfs/go-peertaskqueue
+github.com/ipfs/go-peertaskqueue/peertask
+github.com/ipfs/go-peertaskqueue/peertracker
+# github.com/ipld/go-codec-dagpb v1.7.0
+## explicit; go 1.22
+github.com/ipld/go-codec-dagpb
 # github.com/ipld/go-ipld-prime v0.21.0
 ## explicit; go 1.19
 github.com/ipld/go-ipld-prime
 github.com/ipld/go-ipld-prime/adl
 github.com/ipld/go-ipld-prime/codec
 github.com/ipld/go-ipld-prime/codec/dagcbor
+github.com/ipld/go-ipld-prime/codec/dagjson
+github.com/ipld/go-ipld-prime/codec/raw
 github.com/ipld/go-ipld-prime/datamodel
+github.com/ipld/go-ipld-prime/fluent
+github.com/ipld/go-ipld-prime/fluent/qp
 github.com/ipld/go-ipld-prime/linking
 github.com/ipld/go-ipld-prime/linking/cid
+github.com/ipld/go-ipld-prime/linking/preload
 github.com/ipld/go-ipld-prime/multicodec
 github.com/ipld/go-ipld-prime/node/basic
 github.com/ipld/go-ipld-prime/node/basicnode
@@ -439,6 +531,9 @@ github.com/ipld/go-ipld-prime/schema
 github.com/ipld/go-ipld-prime/schema/dmt
 github.com/ipld/go-ipld-prime/schema/dsl
 github.com/ipld/go-ipld-prime/storage
+github.com/ipld/go-ipld-prime/traversal
+github.com/ipld/go-ipld-prime/traversal/selector
+github.com/ipld/go-ipld-prime/traversal/selector/builder
 # github.com/jackmordaunt/icns v1.0.0
 ## explicit
 github.com/jackmordaunt/icns
@@ -968,6 +1063,7 @@ github.com/pmezard/go-difflib/difflib
 # github.com/polydawn/refmt v0.89.0
 ## explicit; go 1.16
 github.com/polydawn/refmt/cbor
+github.com/polydawn/refmt/json
 github.com/polydawn/refmt/obj
 github.com/polydawn/refmt/obj/atlas
 github.com/polydawn/refmt/shared

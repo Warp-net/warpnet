@@ -2,10 +2,8 @@
 package slicer
 
 // Imports
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
+import "strings"
 
 // InterfaceSlicer handles slices of interface{}
 type InterfaceSlicer struct {

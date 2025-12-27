@@ -51,7 +51,7 @@ import (
 )
 
 const (
-	pubSubDiscoveryTopic = "peer-discovery"
+	pubSubDiscoveryTopic = "/warpnet/discovery/1.0.0"
 
 	ErrPubsubNotInit      warpnet.WarpError = "gossip: service not initialized"
 	ErrAlreadyRunning     warpnet.WarpError = "gossip: pubsub is already running"
@@ -232,39 +232,51 @@ func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {
 	if g == nil || !g.isRunning.Load() {
 		return ErrPubsubNotInit
 	}
+
+	for _, h := range handlers {
+		if err := g.SubscribeRaw(h.TopicName, h.Handler); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return ErrPubsubNotInit
+	}
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	for _, h := range handlers {
-		if h.TopicName == "" {
-			return ErrPubsubEmptyTopic
-		}
-
-		topic, ok := g.topics[h.TopicName]
-		if !ok {
-			topic, err = g.pubsub.Join(h.TopicName)
-			if err != nil {
-				return err
-			}
-			g.topics[h.TopicName] = topic
-		}
-
-		relayCancel, err := topic.Relay()
-		if err != nil {
-			return err
-		}
-
-		sub, err := topic.Subscribe()
-		if err != nil {
-			return err
-		}
-
-		log.Infof("gossip: subscribed to topic: %s", h.TopicName)
-
-		g.relayCancelFuncs[h.TopicName] = relayCancel
-		g.subs = append(g.subs, sub)
-		g.handlersMap[h.TopicName] = h.Handler
+	if topicName == "" {
+		return ErrPubsubEmptyTopic
 	}
+
+	topic, ok := g.topics[topicName]
+	if !ok {
+		topic, err = g.pubsub.Join(topicName)
+		if err != nil {
+			return err
+		}
+		g.topics[topicName] = topic
+	}
+
+	relayCancel, err := topic.Relay()
+	if err != nil {
+		return err
+	}
+
+	sub, err := topic.Subscribe()
+	if err != nil {
+		return err
+	}
+
+	log.Infof("gossip: subscribed to topic: %s", topicName)
+
+	g.relayCancelFuncs[topicName] = relayCancel
+	g.subs = append(g.subs, sub)
+	g.handlersMap[topicName] = h
+
 	return nil
 }
 
@@ -393,7 +405,33 @@ func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 			return err
 		}
 	}
+	return nil
+}
 
+func (g *Gossip) PublishRaw(topicName string, data []byte) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return ErrPubsubNotInit
+	}
+
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	topic, ok := g.topics[topicName]
+	if !ok {
+		topic, err = g.pubsub.Join(topicName)
+		if err != nil {
+			return err
+		}
+		g.topics[topicName] = topic
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	err = topic.Publish(ctx, data)
+	cancel()
+	if err != nil && !errors.Is(err, pubsub.ErrTopicClosed) {
+		log.Errorf("gossip: failed to publish owner update message: %v", err)
+		return err
+	}
 	return nil
 }
 
@@ -501,7 +539,7 @@ func (g *Gossip) publishPeerInfo() error {
 		Body:        json.RawMessage(data),
 		MessageId:   uuid.New().String(),
 		NodeId:      g.NodeInfo().ID.String(),
-		Destination: "None",
+		Destination: pubSubDiscoveryTopic,
 		Timestamp:   time.Now(),
 		Version:     "0.0.0", // TODO
 	}

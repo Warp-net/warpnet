@@ -34,7 +34,7 @@ import (
 
 	"go.uber.org/goleak"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/stretchr/testify/suite"
 )
@@ -42,13 +42,13 @@ import (
 type UserRepoTestSuite struct {
 	suite.Suite
 
-	db   *local.DB
+	db   *local_store.DB
 	repo *UserRepo
 }
 
 func (s *UserRepoTestSuite) SetupSuite() {
 	var err error
-	s.db, err = local.New("", local.DefaultOptions().WithInMemory(true))
+	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
 	authRepo := NewAuthRepo(s.db)

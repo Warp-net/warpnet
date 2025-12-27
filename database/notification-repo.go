@@ -30,7 +30,7 @@ package database
 import (
 	"time"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
@@ -40,10 +40,10 @@ const (
 	NotificationsRepoName = "/NOTIFICATIONS"
 )
 
-var ErrNotificationsNotFound = local.DBError("notifications not found")
+var ErrNotificationsNotFound = local_store.DBError("notifications not found")
 
 type NotificationsStorer interface {
-	NewTxn() (local.WarpTransactioner, error)
+	NewTxn() (local_store.WarpTransactioner, error)
 }
 
 type NotificationsRepo struct {
@@ -56,7 +56,7 @@ func NewNotificationsRepo(db NotificationsStorer) *NotificationsRepo {
 
 func (repo *NotificationsRepo) Add(not domain.Notification) error {
 	if not.UserId == "" {
-		return local.DBError("missing user id")
+		return local_store.DBError("missing user id")
 	}
 
 	if not.Id == "" {
@@ -66,7 +66,7 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 		not.CreatedAt = time.Now()
 	}
 
-	notKey := local.NewPrefixBuilder(NotificationsRepoName).
+	notKey := local_store.NewPrefixBuilder(NotificationsRepoName).
 		AddRootID(not.UserId).
 		AddReversedTimestamp(not.CreatedAt).
 		AddParentId(not.Type.String()).
@@ -89,9 +89,9 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 
 func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
 	if userId == "" {
-		return nil, "", local.DBError("missing user id")
+		return nil, "", local_store.DBError("missing user id")
 	}
-	prefix := local.NewPrefixBuilder(NotificationsRepoName).
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
 		AddRootID(userId).
 		Build()
 

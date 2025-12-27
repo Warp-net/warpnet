@@ -3,9 +3,8 @@
 package edge
 
 import (
-	"unsafe"
-
 	"golang.org/x/sys/windows"
+	"unsafe"
 )
 
 type EventRegistrationToken struct {

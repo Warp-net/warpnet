@@ -34,11 +34,8 @@ void addAccelerator(GtkWidget* menuItem, GtkAccelGroup* group, guint key, GdkMod
 }
 */
 import "C"
-import (
-	"unsafe"
-
-	"github.com/wailsapp/wails/v2/pkg/menu"
-)
+import "github.com/wailsapp/wails/v2/pkg/menu"
+import "unsafe"
 
 var menuIdCounter int
 var menuItemToId map[*menu.MenuItem]int

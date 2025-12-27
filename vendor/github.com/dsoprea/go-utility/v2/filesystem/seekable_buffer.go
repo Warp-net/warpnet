@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	log "github.com/dsoprea/go-logging"
+	"github.com/dsoprea/go-logging"
 )
 
 // SeekableBuffer is a simple memory structure that satisfies

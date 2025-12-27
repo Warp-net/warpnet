@@ -10,11 +10,11 @@ var nullBytes = []byte("null")
 
 // MarshalJSONArray returns the JSON encoding of v, an implementation of MarshalerJSONArray.
 //
+//
 // Example:
+// 	type TestSlice []*TestStruct
 //
-//	type TestSlice []*TestStruct
-//
-//	func (t TestSlice) MarshalJSONArray(enc *Encoder) {
+// 	func (t TestSlice) MarshalJSONArray(enc *Encoder) {
 //		for _, e := range t {
 //			enc.AddObject(e)
 //		}
@@ -24,8 +24,8 @@ var nullBytes = []byte("null")
 //		test := &TestSlice{
 //			&TestStruct{123456},
 //			&TestStruct{7890},
-//		}
-//		b, _ := Marshal(test)
+// 		}
+// 		b, _ := Marshal(test)
 //		fmt.Println(b) // [{"id":123456},{"id":7890}]
 //	}
 func MarshalJSONArray(v MarshalerJSONArray) ([]byte, error) {
@@ -46,7 +46,6 @@ func MarshalJSONArray(v MarshalerJSONArray) ([]byte, error) {
 // MarshalJSONObject returns the JSON encoding of v, an implementation of MarshalerJSONObject.
 //
 // Example:
-//
 //	type Object struct {
 //		id int
 //	}
@@ -57,12 +56,12 @@ func MarshalJSONArray(v MarshalerJSONArray) ([]byte, error) {
 //		return s == nil
 //	}
 //
-//	func main() {
+// 	func main() {
 //		test := &Object{
 //			id: 123456,
 //		}
 //		b, _ := gojay.Marshal(test)
-//		fmt.Println(b) // {"id":123456}
+// 		fmt.Println(b) // {"id":123456}
 //	}
 func MarshalJSONObject(v MarshalerJSONObject) ([]byte, error) {
 	enc := BorrowEncoder(nil)
@@ -79,9 +78,7 @@ func MarshalJSONObject(v MarshalerJSONObject) ([]byte, error) {
 // Marshal returns the JSON encoding of v.
 //
 // If v is nil, not an implementation MarshalerJSONObject or MarshalerJSONArray or not one of the following types:
-//
 //	string, int, int8, int16, int32, int64, uint8, uint16, uint32, uint64, float64, float32, bool
-//
 // Marshal returns an InvalidMarshalError.
 func Marshal(v interface{}) ([]byte, error) {
 	return marshal(v, false)
@@ -90,9 +87,7 @@ func Marshal(v interface{}) ([]byte, error) {
 // MarshalAny returns the JSON encoding of v.
 //
 // If v is nil, not an implementation MarshalerJSONObject or MarshalerJSONArray or not one of the following types:
-//
 //	string, int, int8, int16, int32, int64, uint8, uint16, uint32, uint64, float64, float32, bool
-//
 // MarshalAny falls back to "json/encoding" package to marshal the value.
 func MarshalAny(v interface{}) ([]byte, error) {
 	return marshal(v, true)

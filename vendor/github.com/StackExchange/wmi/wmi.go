@@ -1,4 +1,3 @@
-//go:build windows
 // +build windows
 
 /*
@@ -21,6 +20,7 @@ Example code to print names of running processes:
 			println(i, v.Name)
 		}
 	}
+
 */
 package wmi
 

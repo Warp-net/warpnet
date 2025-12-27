@@ -2,7 +2,6 @@ package ast
 
 import (
 	"fmt"
-
 	gast "github.com/yuin/goldmark/ast"
 )
 

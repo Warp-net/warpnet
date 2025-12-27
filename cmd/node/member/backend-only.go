@@ -40,7 +40,7 @@ import (
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
@@ -68,7 +68,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := local.New(config.Config().Database.Path, local.DefaultOptions())
+	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)

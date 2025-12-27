@@ -36,7 +36,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Warp-net/warpnet/database/local"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -48,13 +48,13 @@ const (
 	DefaultOwnerKey = "OWNER"
 )
 
-var ErrNilAuthRepo = local.DBError("auth repo is nil")
+var ErrNilAuthRepo = local_store.DBError("auth repo is nil")
 
 type AuthStorer interface {
 	Run(username, password string) (err error)
-	Set(key local.DatabaseKey, value []byte) error
-	Get(key local.DatabaseKey) ([]byte, error)
-	NewTxn() (local.WarpTransactioner, error)
+	Set(key local_store.DatabaseKey, value []byte) error
+	Get(key local_store.DatabaseKey) ([]byte, error)
+	NewTxn() (local_store.WarpTransactioner, error)
 	Close()
 }
 
@@ -79,7 +79,7 @@ func (repo *AuthRepo) Authenticate(username, password string) (err error) {
 		return ErrNilAuthRepo
 	}
 	if repo.db == nil {
-		return local.ErrNotRunning
+		return local_store.ErrNotRunning
 	}
 
 	err = repo.db.Run(username, password)
@@ -135,12 +135,12 @@ func (repo *AuthRepo) GetOwner() domain.Owner {
 		return repo.owner
 	}
 
-	ownerKey := local.NewPrefixBuilder(AuthRepoName).
+	ownerKey := local_store.NewPrefixBuilder(AuthRepoName).
 		AddRootID(DefaultOwnerKey).
 		Build()
 
 	data, err := repo.db.Get(ownerKey)
-	if err != nil && !local.IsNotFoundError(err) {
+	if err != nil && !local_store.IsNotFoundError(err) {
 		panic(err)
 	}
 	if len(data) == 0 {
@@ -160,7 +160,7 @@ func (repo *AuthRepo) GetOwner() domain.Owner {
 }
 
 func (repo *AuthRepo) SetOwner(o domain.Owner) (_ domain.Owner, err error) {
-	ownerKey := local.NewPrefixBuilder(AuthRepoName).
+	ownerKey := local_store.NewPrefixBuilder(AuthRepoName).
 		AddRootID(DefaultOwnerKey).
 		Build()
 

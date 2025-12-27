@@ -35,6 +35,7 @@ import (
 	root "github.com/Warp-net/warpnet"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -63,14 +64,16 @@ type MemberNode struct {
 	pubsubService        PubSubProvider
 	dHashTable           DistributedHashTableCloser
 	nodeRepo             NodeProvider
-	retrier              retrier.Retrier
+	statsRepo            NodeProvider
 	authRepo             AuthProvider
 	userRepo             UserProvider
 	followRepo           FollowStorer
 	db                   Storer
+	statsDb              StatsStorer
 	privKey              ed25519.PrivateKey
 	ownerId, selfHashHex string
 	pseudoNode           PseudoStreamer
+	retrier              retrier.Retrier
 }
 
 func NewMemberNode(
@@ -85,12 +88,13 @@ func NewMemberNode(
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	nodeRepo := database.NewNodeRepo(db)
+	nodeRepo := database.NewNodeRepo(db, "NODES")
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {
 		return nil, err
 	}
 
+	statsRepo := database.NewNodeRepo(db, "STATS")
 	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
@@ -160,6 +164,7 @@ func NewMemberNode(
 		pubsubService: pubsubService,
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
+		statsRepo:     statsRepo,
 		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
@@ -183,8 +188,6 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start node: %w", err)
 	}
 
-	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.privKey)
-
 	m.pubsubService.Run(m)
 
 	if err := m.discService.Run(m); err != nil {
@@ -194,6 +197,19 @@ func (m *MemberNode) Start() (err error) {
 	m.mdnsService.Start(m)
 
 	nodeInfo := m.NodeInfo()
+
+	crdtBroadcaster, err := crdt.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	if err != nil {
+		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
+	}
+	m.statsDb, err = crdt.NewCRDTStatsStore(
+		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to initialize stats store: %w", err)
+	}
+
+	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb, m.privKey)
 
 	println()
 	fmt.Printf(
@@ -324,15 +340,17 @@ func (m *MemberNode) setupHandlers(
 	userRepo UserProvider,
 	followRepo FollowStorer,
 	db Storer,
+	statsDB StatsStorer,
 	privKey ed25519.PrivateKey,
 ) {
 	if m == nil {
 		panic("member: setup handlers: nil node")
 	}
+
 	timelineRepo := database.NewTimelineRepo(db)
-	tweetRepo := database.NewTweetRepo(db)
-	replyRepo := database.NewRepliesRepo(db)
-	likeRepo := database.NewLikeRepo(db)
+	tweetRepo := database.NewTweetRepo(db, statsDB)
+	replyRepo := database.NewRepliesRepo(db, statsDB)
+	likeRepo := database.NewLikeRepo(db, statsDB)
 	chatRepo := database.NewChatRepo(db)
 	mediaRepo := database.NewMediaRepo(db)
 	notificationRepo := database.NewNotificationsRepo(db)
@@ -419,7 +437,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_GET_TWEET_STATS,
-				handler.StreamGetTweetStatsHandler(likeRepo, tweetRepo, replyRepo, userRepo, m),
+				handler.StreamGetTweetStatsHandler(tweetRepo, likeRepo, tweetRepo, replyRepo, userRepo, m),
 			},
 			{
 				event.PUBLIC_GET_REPLY,
@@ -551,6 +569,9 @@ func (m *MemberNode) Stop() {
 	}
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
+	}
+	if m.statsDb != nil {
+		_ = m.statsDb.Close()
 	}
 
 	if m.nodeRepo != nil {
