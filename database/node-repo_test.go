@@ -59,7 +59,7 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo = NewNodeRepo(s.db)
+	s.repo = NewNodeRepo(s.db, "test")
 
 }
 
