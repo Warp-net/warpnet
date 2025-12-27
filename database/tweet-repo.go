@@ -429,16 +429,12 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	_, err = repo.db.Get(retweetCountKey)
 	if !local.IsNotFoundError(err) {
 		if _, err = txn.Increment(retweetCountKey); err != nil {
-			log.Debugf("Failed to increment retweet count for %s - %s", tweet.Id, err)
+			log.Debugf("failed to increment retweet count for %s - %s", tweet.Id, err)
 			return newTweet, txn.Commit()
 		}
 	}
-	countKey := local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(tweetsCountSubspace).
-		AddRootID(*tweet.RetweetedBy).
-		Build()
 
-	tweetCount, err := txn.Increment(countKey)
+	tweetCount, err := txn.Increment(retweetCountKey)
 	if err != nil {
 		return newTweet, err
 	}
@@ -449,7 +445,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	if repo.statsDb == nil {
 		return newTweet, nil
 	}
-	return newTweet, repo.statsDb.Put(countKey.DatastoreKey(), tweetCount)
+	return newTweet, repo.statsDb.Put(retweetCountKey.DatastoreKey(), tweetCount)
 }
 
 func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
