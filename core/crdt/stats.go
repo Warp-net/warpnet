@@ -127,7 +127,9 @@ func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to query stats: %w", err)
 	}
-	defer results.Close()
+	defer func() {
+		_ = results.Close()
+	}()
 
 	var total uint64
 	for result := range results.Next() {

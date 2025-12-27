@@ -206,7 +206,7 @@ func (m *MemberNode) Start() (err error) {
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {
-		return fmt.Errorf("member: failed to initialize stats store: %v", err)
+		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb, m.privKey)

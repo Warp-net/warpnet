@@ -278,7 +278,6 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 	g.handlersMap[topicName] = h
 
 	return nil
-
 }
 
 func (g *Gossip) Unsubscribe(topics ...string) (err error) {

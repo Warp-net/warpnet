@@ -108,7 +108,6 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 		return likesCount, nil
 	}
 	return likesCount, repo.statsDb.Put(likeKey.DatastoreKey(), likesCount)
-
 }
 
 func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err error) {
