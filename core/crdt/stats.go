@@ -43,6 +43,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const StatsRepoName = "/STATS"
+
 // Broadcaster interface for CRDT synchronization
 type Broadcaster interface {
 	Broadcast(ctx context.Context, data []byte) error
@@ -77,8 +79,12 @@ func NewCRDTStatsStore(
 	node host.Host,
 	router CRDTRouter,
 ) (*CRDTStatsStore, error) {
-	ctx, cancel := context.WithCancel(ctx)
 	prefix := datastore.Prefix()
+	if prefix != "/CRDT" {
+		return nil, warpnet.WarpError("CRDT datastore namespace must start with '/CRDT' prefix")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+
 	baseStore := ds.MutexWrap(datastore)
 	blockstore := ds.NewBlockstore(baseStore)
 	bitswapNetwork := warpnet.NewBitswapNetwork(node)
@@ -87,12 +93,14 @@ func NewCRDTStatsStore(
 	dagService := warpnet.NewDAGService(blockService)
 
 	opts := crdt.DefaultOptions()
-	opts.Logger = log.StandardLogger()
+	l := log.StandardLogger()
+	opts.Logger = l
+
 	opts.RebroadcastInterval = time.Minute
 
 	crdtStore, err := crdt.New(
 		baseStore,
-		ds.NewKey(prefix),
+		ds.NewKey(""), // node repo's already set the prefix
 		dagService,
 		broadcaster,
 		opts,
@@ -108,7 +116,7 @@ func NewCRDTStatsStore(
 		ctx:         ctx,
 		cancel:      cancel,
 		nodeID:      node.ID().String(),
-		prefix:      prefix,
+		prefix:      StatsRepoName,
 	}
 
 	return store, nil
@@ -132,13 +140,16 @@ func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 	}()
 
 	var total uint64
-	for result := range results.Next() {
-		if result.Error != nil {
-			log.Warnf("error reading result: %v", result.Error)
-			continue
-		}
 
-		value := s.decodeCounter(result.Value)
+	entries, err := results.Rest()
+	if err != nil {
+		return 0, fmt.Errorf("failed to collect query stats: %w", err)
+	}
+	if len(entries) == 0 {
+		return 0, ds.ErrNotFound
+	}
+	for _, entry := range entries {
+		value := s.decodeCounter(entry.Value)
 		total += value
 	}
 

@@ -14,6 +14,7 @@ import (
 	ds "github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
 	logging "github.com/ipfs/go-log/v2"
+	"fmt"
 )
 
 // heads manages the current Merkle-CRDT heads.
@@ -189,7 +190,10 @@ func (hh *heads) primeCache(ctx context.Context) (ret error) {
 		if r.Error != nil {
 			return r.Error
 		}
+		fmt.Println("????????????? RAW", r.Key)
+
 		headKey := ds.NewKey(strings.TrimPrefix(r.Key, hh.namespace.String()))
+		fmt.Println("????????????? head", headKey)
 		headCid, err := dshelp.DsKeyToCidV1(headKey, cid.DagProtobuf)
 		if err != nil {
 			return err

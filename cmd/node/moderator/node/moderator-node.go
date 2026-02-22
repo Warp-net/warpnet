@@ -102,7 +102,7 @@ func NewModeratorNode(
 		return nil, err
 	}
 
-	opts := []libp2p.Option{
+	opts := []libp2p.Option{ //nolint:prealloc
 		node.WarpIdentity(privKey),
 		libp2p.Peerstore(memoryStore),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),

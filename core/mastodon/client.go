@@ -681,7 +681,7 @@ func (m *warpnetMastodonPseudoNode) getImageHandler(url string) (event.GetImageR
 		return event.GetImageResponse{}, err
 	}
 
-	resp, err := m.bridge.Do(req)
+	resp, err := m.bridge.Do(req) //nolint:gosec
 	if err != nil {
 		return event.GetImageResponse{}, err
 	}
