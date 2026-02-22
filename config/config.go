@@ -230,7 +230,7 @@ func getAppPath() string {
 		log.Fatal("unsupported OS")
 	}
 
-	err := os.MkdirAll(dbPath, 0750)
+	err := os.MkdirAll(dbPath, 0750) //nolint:gosec
 	if err != nil {
 		log.Fatal(err)
 	}

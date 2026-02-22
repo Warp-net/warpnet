@@ -30,6 +30,7 @@ package crdt
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -81,7 +82,7 @@ func NewCRDTStatsStore(
 ) (*CRDTStatsStore, error) {
 	prefix := datastore.Prefix()
 	if prefix != "/CRDT" {
-		return nil, fmt.Errorf("CRDT datastore namespace must start with '/CRDT' prefix: %s", prefix)
+		return nil, errors.New("CRDT datastore namespace must start with '/CRDT' prefix")
 	}
 	ctx, cancel := context.WithCancel(ctx)
 

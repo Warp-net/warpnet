@@ -234,7 +234,7 @@ type LikesCountResponse struct {
 
 // LoginEvent defines model for LoginEvent.
 type LoginEvent struct {
-	Password string `json:"password"`
+	Password string `json:"password"` //nolint:gosec
 	Username string `json:"username"`
 }
 
