@@ -282,7 +282,7 @@ func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
 		if err == nil {
 			return total, nil
 		}
-		log.Errorf("crdt tweets count not found for user %s - %s", userId, err)
+		log.Warnf("crdt tweets count not found for user %s - %s", userId, err)
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -513,7 +513,7 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 		if err == nil {
 			return total, nil
 		}
-		log.Errorf("crdt retweets count not found for %s - %s", tweetId, err)
+		log.Warnf("crdt retweets count not found for %s - %s", tweetId, err)
 	}
 
 	bt, err := repo.db.Get(retweetCountKey)
@@ -609,7 +609,7 @@ func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
 		if err == nil {
 			return total, nil
 		}
-		log.Errorf("crdt retweets count not found for %s - %s", tweetId, err)
+		log.Warnf("crdt retweets count not found for %s - %s", tweetId, err)
 	}
 
 	bt, err := repo.db.Get(viewsKey)

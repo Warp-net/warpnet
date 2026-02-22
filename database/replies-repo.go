@@ -185,7 +185,7 @@ func (repo *ReplyRepo) RepliesCount(tweetId string) (likesNum uint64, err error)
 		if err == nil {
 			return total, nil
 		}
-		log.Errorf("get replies count stat: %v", err)
+		log.Warnf("get replies count stat: %v", err)
 	}
 
 	bt, err := repo.db.Get(replyCountKey)

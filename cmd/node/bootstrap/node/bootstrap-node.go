@@ -121,7 +121,7 @@ func NewBootstrapNode(
 	}
 
 	// WebRTC and QUIC don't support private networks yet
-	opts := []warpnet.WarpOption{
+	opts := []warpnet.WarpOption{ //nolint:prealloc
 		node.WarpIdentity(privKey),
 		libp2p.Peerstore(memoryStore),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),

@@ -94,7 +94,7 @@ func NewMemberNode(
 		return nil, err
 	}
 
-	statsRepo := database.NewNodeRepo(db, "STATS")
+	statsRepo := database.NewNodeRepo(db, "CRDT")
 	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
@@ -142,7 +142,7 @@ func NewMemberNode(
 		return nil, err
 	}
 
-	opts := []warpnet.WarpOption{
+	opts := []warpnet.WarpOption{ //nolint:prealloc
 		node.WarpIdentity(privKey),
 		libp2p.Peerstore(store),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
