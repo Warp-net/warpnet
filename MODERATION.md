@@ -26,7 +26,7 @@ The moderation engine is built using llama.cpp bindings and provides:
 - LLM-based content analysis
 - Binary moderation decisions (OK or FAIL)
 - Reason generation for rejected content
-- Support for LLAMA2 model
+- Support for Llama 2 model (referenced as LLAMA2 in code)
 
 Engine configuration:
 - Context size: 512 tokens
@@ -128,7 +128,7 @@ Represents a moderation decision:
 - Type: Object type (tweet, user, reply, image)
 - Result: Boolean (OK or FAIL)
 - Reason: Optional string explaining rejection
-- Model: Type of AI model used (LLAMA2)
+- Model: Type of AI model used (Llama 2)
 - UserID: Content owner identifier
 - ObjectID: Content identifier
 
@@ -185,7 +185,7 @@ The moderation engine is conditionally compiled:
 Current limitations:
 - User description moderation not yet active
 - Image content moderation not implemented
-- Single model support (LLAMA2)
+- Single model support (Llama 2)
 - No appeals or review process
 - Moderation decisions are final
 
