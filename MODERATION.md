@@ -82,6 +82,8 @@ The current moderation policy prohibits the following content:
 - Religious extremism, terrorism incitement
 - Spam, mass unsolicited promos
 
+Note: The policy text is defined in the prompt template (core/moderation/prompt.go) and reflects the current implementation. The phrasing "Sexism against women only" is taken verbatim from the source code.
+
 The policy is embedded in the prompt template and enforced by the LLM model.
 
 ## Prompt Engineering
@@ -112,6 +114,11 @@ Answer:
 The system expects responses in one of two formats:
 - "No" - Content is acceptable
 - "Yes [reason]" - Content violates policy with a brief explanation
+
+The 14-word limit for reasons helps ensure:
+- Consistent and concise explanations
+- Reliable model output parsing
+- Efficient token usage
 
 ## Data Structures
 
