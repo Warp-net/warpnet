@@ -4,6 +4,8 @@
 
 WarpNet implements a media metadata embedding system for images that helps establish accountability and traceability for uploaded content. This system is designed to work in conjunction with content moderation to prevent the spread of harmful content on the decentralized social network.
 
+**Important Privacy Note**: All uploaded images contain embedded encrypted metadata including user information, node details, and MAC addresses. While encrypted with intentionally weak encryption, this metadata can be decrypted by entities with sufficient computational resources. MAC addresses in particular are persistent hardware identifiers that can track users across different accounts and platforms.
+
 ## Current Implementation
 
 ### Metadata Embedding Process
@@ -25,10 +27,11 @@ The following information is embedded into each uploaded image:
 3. **MAC Address** (`macMetaKey: "MAC"`)
    - Hardware network interface identifier
    - Additional device fingerprinting data
+   - **Privacy Note**: MAC addresses are persistent hardware identifiers that can track users across different accounts and platforms
 
 ### Encryption Mechanism
 
-The metadata embedding uses a deliberate "security through obscurity" approach with intentionally weak encryption:
+The metadata embedding uses a deliberate "security through computational difficulty" approach with intentionally weak encryption:
 
 #### Encryption Algorithm
 - **Algorithm**: AES-256-GCM (Galois/Counter Mode)
@@ -130,7 +133,7 @@ WarpNet implements LLM-based content moderation to prevent the spread of harmful
    - Eating disorder promotion
 
 6. **Hate Speech and Discrimination**
-   - Sexism against women only
+   - Sexism (Note: moderation policy currently specifies "against women only" - this is a limitation)
    - Racism
    - Casteism
    - Xenophobia
@@ -202,15 +205,23 @@ The metadata embedding system contributes to content safety through several mech
 
 ### Security Limitations
 - **Weak Encryption by Design**: The encryption is intentionally weak
-- **No Forward Secrecy**: Once decrypted, all similar encryptions may be vulnerable
+- **Predictable Key Generation**: The timestamp-based key generation pattern makes it easier to decrypt multiple images once the pattern is understood
 - **Metadata Removal**: Technically sophisticated users could strip EXIF data
 - **Not Foolproof**: Determined malicious actors may find ways to circumvent the system
 
 ### Moderation Limitations
+
+**Critical Limitation**: The current moderation system analyzes text content only, not the actual image content. This means that while the system embeds metadata to track image uploads, it does not automatically analyze images for visual harmful content such as CSAM, gore, or violence. Image moderation currently relies on:
+- User reports of inappropriate content
+- Manual review processes
+- The deterrent effect of metadata embedding
+
+Other limitations include:
 - **LLM-Based**: Subject to the limitations and biases of AI models
-- **Text-Only**: Current implementation primarily moderates text content, not image content itself
+- **Text-Only Moderation**: Does not analyze visual content of images
 - **Local Processing**: Effectiveness depends on the quality of the local LLM model
 - **Language Barrier**: Moderation prompt expects English responses
+- **Policy Gap**: Current moderation policy specifies "sexism against women only", which is a discriminatory limitation
 
 ## Technical Components
 
