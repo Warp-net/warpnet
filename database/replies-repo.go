@@ -57,7 +57,8 @@ type ReplyStorer interface {
 
 type ReplyStatsStorer interface {
 	GetAggregatedStat(key ds.Key) (uint64, error)
-	Put(key ds.Key, value uint64) error
+	Increment(key ds.Key) error
+	Decrement(key ds.Key) error
 }
 
 type ReplyRepo struct {
@@ -125,7 +126,7 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	if err := txn.Set(parentSortableKey, data); err != nil {
 		return reply, fmt.Errorf("adding reply data: %w", err)
 	}
-	replyCount, err := txn.Increment(replyCountKey)
+	_, err = txn.Increment(replyCountKey)
 	if err != nil {
 		return reply, err
 	}
@@ -135,7 +136,10 @@ func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	if repo.statsDb == nil {
 		return reply, nil
 	}
-	return reply, repo.statsDb.Put(replyCountKey.DatastoreKey(), replyCount)
+	if err := repo.statsDb.Increment(replyCountKey.DatastoreKey()); err != nil {
+		log.Warnf("reply: stats db increment: %v", err)
+	}
+	return reply, nil
 }
 
 func (repo *ReplyRepo) GetReply(rootID string, replyId string) (tweet domain.Tweet, err error) {
@@ -232,7 +236,7 @@ func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 		return fmt.Errorf(""+
 			"deleting sortable key: %w", err)
 	}
-	replyCount, err := txn.Decrement(replyCountKey)
+	_, err = txn.Decrement(replyCountKey)
 	if err != nil {
 		return err
 	}
@@ -242,8 +246,10 @@ func (repo *ReplyRepo) DeleteReply(rootID, parentID, replyID string) error {
 	if repo.statsDb == nil {
 		return nil
 	}
-
-	return repo.statsDb.Put(replyCountKey.DatastoreKey(), replyCount)
+	if err := repo.statsDb.Decrement(replyCountKey.DatastoreKey()); err != nil {
+		log.Warnf("reply: stats db decrement: %v", err)
+	}
+	return nil
 }
 
 func (repo *ReplyRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {

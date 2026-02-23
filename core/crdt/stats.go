@@ -43,7 +43,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const StatsRepoName = "/STATS"
+const (
+	StatsRepoName = "/STATS"
+
+	incrNamespace = "incr"
+	decrNamespace = "decr"
+)
 
 // Broadcaster interface for CRDT synchronization
 type Broadcaster interface {
@@ -127,42 +132,84 @@ func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	prefix := s.makeKeyPrefix(key)
+	var positive uint64
+	var negative uint64
 
-	results, err := s.crdt.Query(s.ctx, ds.Query{
-		Prefix: prefix.String(),
-	})
-	if err != nil {
-		return 0, fmt.Errorf("failed to query stats: %w", err)
-	}
-	defer func() {
+	for _, namespace := range []string{incrNamespace, decrNamespace} {
+		prefix := ds.NewKey(
+			fmt.Sprintf("/%s/%s/%s", s.prefix, namespace, key.String()),
+		)
+
+		results, err := s.crdt.Query(s.ctx, ds.Query{
+			Prefix: prefix.String(),
+		})
+		if err != nil {
+			return 0, err
+		}
+
+		entries, err := results.Rest()
 		_ = results.Close()
-	}()
+		if err != nil {
+			return 0, err
+		}
 
-	var total uint64
+		for _, entry := range entries {
+			value := s.decodeCounter(entry.Value)
 
-	entries, err := results.Rest()
-	if err != nil {
-		return 0, fmt.Errorf("failed to collect query stats: %w", err)
+			if namespace == incrNamespace {
+				positive += value
+			} else {
+				negative += value
+			}
+		}
 	}
-	if len(entries) == 0 {
-		return 0, ds.ErrNotFound
+	if positive < negative {
+		return 0, nil
 	}
-	for _, entry := range entries {
-		value := s.decodeCounter(entry.Value)
-		total += value
-	}
-
-	return total, nil
+	return positive - negative, nil
 }
 
-// Put stores a counter value
-func (s *CRDTStatsStore) Put(key ds.Key, value uint64) error {
+func (s *CRDTStatsStore) Increment(key ds.Key) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	dsKey := s.makeKey(key)
-	data := s.encodeCounter(value)
+	dsKey := s.makeIncrKey(key)
+
+	existing, err := s.crdt.Get(s.ctx, dsKey)
+
+	var current uint64
+	if err == nil {
+		current = s.decodeCounter(existing)
+	} else {
+		current = 0
+	}
+
+	newValue := current + 1
+
+	data := s.encodeCounter(newValue)
+
+	return s.crdt.Put(s.ctx, dsKey, data)
+}
+
+func (s *CRDTStatsStore) Decrement(key ds.Key) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	dsKey := s.makeDecrKey(key)
+
+	existing, err := s.crdt.Get(s.ctx, dsKey)
+
+	var current uint64
+	if err == nil {
+		current = s.decodeCounter(existing)
+	} else {
+		current = 0
+	}
+
+	newValue := current + 1
+
+	data := s.encodeCounter(newValue)
+
 	return s.crdt.Put(s.ctx, dsKey, data)
 }
 
@@ -175,14 +222,12 @@ func (s *CRDTStatsStore) Close() error {
 	return s.crdt.Close()
 }
 
-// makeKey creates a datastore key for a specific tweet stat on a specific node
-func (s *CRDTStatsStore) makeKey(dataKey ds.Key) ds.Key {
-	return ds.NewKey(fmt.Sprintf("/%s/%s/%s", s.prefix, dataKey.String(), s.nodeID)) // node ID must be last!
+func (s *CRDTStatsStore) makeIncrKey(dataKey ds.Key) ds.Key {
+	return ds.NewKey(fmt.Sprintf("/%s/%s/%s/%s", s.prefix, incrNamespace, dataKey.String(), s.nodeID)) // node ID must be last!
 }
 
-// makeKeyPrefix creates a prefix for querying all nodes' stats for a tweet
-func (s *CRDTStatsStore) makeKeyPrefix(dataKey ds.Key) ds.Key {
-	return ds.NewKey(fmt.Sprintf("/%s/%s", s.prefix, dataKey.String()))
+func (s *CRDTStatsStore) makeDecrKey(dataKey ds.Key) ds.Key {
+	return ds.NewKey(fmt.Sprintf("/%s/%s/%s/%s", s.prefix, decrNamespace, dataKey.String(), s.nodeID)) // node ID must be last!
 }
 
 // encodeCounter encodes a uint64 counter value
