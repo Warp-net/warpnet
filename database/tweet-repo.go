@@ -72,7 +72,8 @@ type tweetGetter interface {
 }
 type TweetStatsStorer interface {
 	GetAggregatedStat(key ds.Key) (uint64, error)
-	Put(key ds.Key, value uint64) error
+	Increment(key ds.Key) error
+	Decrement(key ds.Key) error
 }
 
 type TweetRepo struct {
@@ -147,7 +148,7 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 		AddRootID(userId).
 		Build()
 
-	tweetCount, err := txn.Increment(countKey)
+	_, err = txn.Increment(countKey)
 	if err != nil {
 		return newTweet, err
 	}
@@ -158,7 +159,10 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 	if repo.statsDb == nil {
 		return newTweet, nil
 	}
-	return newTweet, repo.statsDb.Put(countKey.DatastoreKey(), tweetCount)
+	if err := repo.statsDb.Increment(countKey.DatastoreKey()); err != nil {
+		log.Warnf("tweet: stats db increment: %v", err)
+	}
+	return newTweet, nil
 }
 
 func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
@@ -317,7 +321,7 @@ func (repo *TweetRepo) Delete(userID, tweetID string) error {
 		AddRootID(userID).
 		Build()
 
-	tweetCount, err := txn.Decrement(countKey)
+	_, err = txn.Decrement(countKey)
 	if err != nil {
 		return err
 	}
@@ -327,7 +331,10 @@ func (repo *TweetRepo) Delete(userID, tweetID string) error {
 	if repo.statsDb == nil {
 		return nil
 	}
-	return repo.statsDb.Put(countKey.DatastoreKey(), tweetCount)
+	if err := repo.statsDb.Decrement(countKey.DatastoreKey()); err != nil {
+		log.Warnf("tweet: stats db decrement: %v", err)
+	}
+	return nil
 }
 
 func deleteTweet(txn local.WarpTransactioner, userId, tweetId string) error {
@@ -434,7 +441,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		}
 	}
 
-	tweetCount, err := txn.Increment(retweetCountKey)
+	_, err = txn.Increment(retweetCountKey)
 	if err != nil {
 		return newTweet, err
 	}
@@ -445,7 +452,10 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	if repo.statsDb == nil {
 		return newTweet, nil
 	}
-	return newTweet, repo.statsDb.Put(retweetCountKey.DatastoreKey(), tweetCount)
+	if err := repo.statsDb.Increment(retweetCountKey.DatastoreKey()); err != nil {
+		log.Warnf("retweet: stats db increment: %v", err)
+	}
+	return newTweet, nil
 }
 
 func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
@@ -486,7 +496,7 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	if err != nil {
 		return err
 	}
-	retweetCount, err := txn.Decrement(retweetCountKey)
+	_, err = txn.Decrement(retweetCountKey)
 	if err != nil {
 		return err
 	}
@@ -496,7 +506,10 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	if repo.statsDb == nil {
 		return nil
 	}
-	return repo.statsDb.Put(retweetCountKey.DatastoreKey(), retweetCount)
+	if err := repo.statsDb.Decrement(retweetCountKey.DatastoreKey()); err != nil {
+		log.Warnf("retweet: stats db decrement: %v", err)
+	}
+	return nil
 }
 
 func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
@@ -580,7 +593,7 @@ func (repo *TweetRepo) IncrementViews(tweetId string) error {
 	}
 	defer txn.Rollback()
 
-	viewsCount, err := txn.Increment(viewsKey)
+	_, err = txn.Increment(viewsKey)
 	if err != nil {
 		return err
 	}
@@ -590,8 +603,10 @@ func (repo *TweetRepo) IncrementViews(tweetId string) error {
 	if repo.statsDb == nil {
 		return nil
 	}
-
-	return repo.statsDb.Put(viewsKey.DatastoreKey(), viewsCount)
+	if err := repo.statsDb.Increment(viewsKey.DatastoreKey()); err != nil {
+		log.Warnf("view: stats db increment: %v", err)
+	}
+	return nil
 }
 
 func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {

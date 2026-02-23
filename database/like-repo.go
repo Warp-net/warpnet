@@ -50,7 +50,8 @@ type LikeStorer interface {
 
 type LikeStatsStorer interface {
 	GetAggregatedStat(key ds.Key) (uint64, error)
-	Put(key ds.Key, value uint64) error
+	Increment(key ds.Key) error
+	Decrement(key ds.Key) error
 }
 
 type LikeRepo struct {
@@ -107,7 +108,10 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 	if repo.statsDb == nil {
 		return likesCount, nil
 	}
-	return likesCount, repo.statsDb.Put(likeKey.DatastoreKey(), likesCount)
+	if err := repo.statsDb.Increment(likeKey.DatastoreKey()); err != nil {
+		log.Warnf("unlike: stats db increment: %v", err)
+	}
+	return likesCount, nil
 }
 
 func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err error) {
@@ -158,7 +162,11 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 		return likesCount, nil
 	}
 
-	return likesCount, repo.statsDb.Put(unlikeKey.DatastoreKey(), likesCount)
+	if err := repo.statsDb.Decrement(unlikeKey.DatastoreKey()); err != nil {
+		log.Warnf("unlike: stats db decrement: %v", err)
+	}
+
+	return likesCount, nil
 }
 
 func (repo *LikeRepo) LikesCount(tweetId string) (likesNum uint64, err error) {
