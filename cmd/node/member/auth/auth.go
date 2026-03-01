@@ -30,7 +30,9 @@ package auth
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/hex"
 	"fmt"
+	"github.com/Warp-net/warpnet/security"
 	"math"
 	"regexp"
 	"strings"
@@ -95,7 +97,7 @@ func (as *AuthService) IsAuthenticated() bool {
 	return as.isAuthenticated.Load()
 }
 
-func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.LoginResponse, err error) {
+func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("auth: panic:", r)
@@ -106,6 +108,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 			Identity: domain.Identity{
 				Token: as.authPersistence.SessionToken(),
 				Owner: as.authPersistence.GetOwner(),
+				PSK:   hex.EncodeToString(psk),
 			},
 		}, nil
 	}
@@ -164,7 +167,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent) (authInfo event.Login
 		return authInfo, fmt.Errorf("%w: %s", ErrUsernamesMismatch, message.Username)
 	}
 	as.authReady <- domain.AuthNodeInfo{
-		Identity: domain.Identity{Owner: owner, Token: token},
+		Identity: domain.Identity{Owner: owner, Token: token, PSK: hex.EncodeToString(psk)},
 	}
 
 	select {
