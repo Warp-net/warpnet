@@ -30,6 +30,7 @@ package auth
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"github.com/Warp-net/warpnet/security"
@@ -108,7 +109,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 			Identity: domain.Identity{
 				Token: as.authPersistence.SessionToken(),
 				Owner: as.authPersistence.GetOwner(),
-				PSK:   hex.EncodeToString(psk),
+				PSK:   base64.StdEncoding.EncodeToString(psk),
 			},
 		}, nil
 	}
