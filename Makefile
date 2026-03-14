@@ -4,6 +4,9 @@ kill:
 backend-only-main:
 	go run -tags backend cmd/node/member/backend-only.go --node.network testnet
 
+backend-only-android:
+	go run -tags backend -ldflags="-checklinkname=0" cmd/node/member/backend-only.go --node.network testnet
+
 backend-only-second:
 	go run -tags backend cmd/node/member/backend-only.go --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
 
