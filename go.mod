@@ -1,6 +1,6 @@
 module github.com/Warp-net/warpnet
 
-go 1.25
+go 1.26
 
 tool github.com/wailsapp/wails/v2/cmd/wails
 

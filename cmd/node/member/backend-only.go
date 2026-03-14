@@ -86,7 +86,9 @@ func main() {
 		_, err = authService.AuthLogin(event.LoginEvent{
 			Username: username,
 			Password: pass,
-		})
+		},
+			psk,
+		)
 		if err != nil {
 			log.Fatalf("failed to login: %v", err)
 		}
