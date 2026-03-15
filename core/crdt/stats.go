@@ -97,11 +97,19 @@ func NewCRDTStatsStore(
 	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
 	dagService := warpnet.NewDAGService(blockService)
 
-	opts := crdt.DefaultOptions()
-	l := log.StandardLogger()
-	opts.Logger = l
+	l := log.StandardLogger().WithContext(ctx).WithField("prefix", "crdt")
 
+	opts := crdt.DefaultOptions()
+	opts.Logger = l
+	opts.PutHook = func(k ds.Key, _ []byte) {
+		l.Infof("crdt: item put: %s", k.String())
+	}
+	opts.DeleteHook = func(k ds.Key) {
+		l.Infof("crdt: item deleted: %s", k.String())
+	}
 	opts.RebroadcastInterval = time.Minute
+	opts.DAGSyncerTimeout = time.Minute
+	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
 		baseStore,
