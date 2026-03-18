@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sdp
@@ -895,6 +895,7 @@ func unmarshalMediaDescription(lex *lexer) (stateFn, error) { //nolint:cyclop
 			"UDT",
 			"IX",
 			"MRCPv2",
+			"FEC",
 		) {
 			return nil, fmt.Errorf("%w `%v`", errSDPInvalidNumericValue, field)
 		}

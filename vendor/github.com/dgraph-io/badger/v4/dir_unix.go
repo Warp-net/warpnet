@@ -1,8 +1,8 @@
-//go:build !windows && !plan9 && !js && !wasip1
-// +build !windows,!plan9,!js,!wasip1
+//go:build !windows && !plan9 && !js && !wasip1 && !aix
+// +build !windows,!plan9,!js,!wasip1,!aix
 
 /*
- * SPDX-FileCopyrightText: © Hypermode Inc. <hello@hypermode.com>
+ * SPDX-FileCopyrightText: © 2017-2025 Istari Digital, Inc.
  * SPDX-License-Identifier: Apache-2.0
  */
 
