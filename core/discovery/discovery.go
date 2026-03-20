@@ -34,7 +34,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -89,6 +88,12 @@ type discoveredPeer struct {
 	Source discoverySource
 }
 
+// SelfUpdater is the interface for triggering a binary self-update.
+// It is satisfied by *selfupdate.Service on Linux and by a no-op stub on other platforms.
+type SelfUpdater interface {
+	Trigger()
+}
+
 // selfUpdateThreshold is the number of peers with a higher version that must
 // be observed before the bootstrap node initiates a self-update.
 const selfUpdateThreshold = 2
@@ -104,12 +109,11 @@ type discoveryService struct {
 	cache   *discoveryCache
 	retrier retrier.Retrier
 
-	// higherVersionCount tracks how many peers reported a version greater than
-	// the bootstrap node's own version.
+	// selfUpdater is an optional service that performs binary self-update.
+	// When non-nil and the higherVersionCount reaches selfUpdateThreshold,
+	// Trigger() is called exactly once.
+	selfUpdater        SelfUpdater
 	higherVersionCount int64
-	// selfUpdateOnce ensures the self-update is attempted at most once per
-	// process lifetime.
-	selfUpdateOnce sync.Once
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -139,8 +143,10 @@ func NewDiscoveryService(
 	}
 }
 
-func NewBootstrapDiscoveryService(ctx context.Context) *discoveryService {
-	return NewDiscoveryService(ctx, nil, nil)
+func NewBootstrapDiscoveryService(ctx context.Context, updater SelfUpdater) *discoveryService {
+	svc := NewDiscoveryService(ctx, nil, nil)
+	svc.selfUpdater = updater
+	return svc
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
@@ -386,20 +392,14 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	}
 
 	ownInfo := s.node.NodeInfo()
-	if ownInfo.Version != nil && info.Version != nil && info.Version.GreaterThan(ownInfo.Version) {
+	if s.selfUpdater != nil && ownInfo.Version != nil && info.Version != nil && info.Version.GreaterThan(ownInfo.Version) {
 		count := atomic.AddInt64(&s.higherVersionCount, 1)
 		log.Infof(
 			"discovery: bootstrap handle: peer %s has higher version %s (own: %s), count: %d",
 			pi.ID.String(), info.Version.String(), ownInfo.Version.String(), count,
 		)
 		if count >= selfUpdateThreshold {
-			s.selfUpdateOnce.Do(func() {
-				go func() {
-					if err := selfUpdate(s.ctx, ownInfo.Version.String()); err != nil {
-						log.Errorf("discovery: bootstrap handle: self-update failed: %v", err)
-					}
-				}()
-			})
+			s.selfUpdater.Trigger()
 		}
 	}
 }
