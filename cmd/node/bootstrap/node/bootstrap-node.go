@@ -64,6 +64,11 @@ type DistributedHashTableCloser interface {
 	Close()
 }
 
+type SelfUpdateService interface {
+	Run()
+	Trigger()
+}
+
 type BootstrapNode struct {
 	ctx               context.Context
 	node              *node.WarpNode
@@ -71,7 +76,7 @@ type BootstrapNode struct {
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
-	updateService     *selfupdate.Service
+	updateService     SelfUpdateService
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK

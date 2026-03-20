@@ -39,6 +39,7 @@ import (
 
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/core/backoff"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -88,12 +89,6 @@ type discoveredPeer struct {
 	Source discoverySource
 }
 
-// SelfUpdater is the interface for triggering a binary self-update.
-// It is satisfied by *selfupdate.Service on Linux and by a no-op stub on other platforms.
-type SelfUpdater interface {
-	Trigger()
-}
-
 // selfUpdateThreshold is the number of peers with a higher version that must
 // be observed before the bootstrap node initiates a self-update.
 const selfUpdateThreshold = 2
@@ -112,7 +107,7 @@ type discoveryService struct {
 	// selfUpdater is an optional service that performs binary self-update.
 	// When non-nil and the higherVersionCount reaches selfUpdateThreshold,
 	// Trigger() is called exactly once.
-	selfUpdater        SelfUpdater
+	selfUpdater        selfupdate.Updater
 	higherVersionCount int64
 
 	// channel is needed to collect discoveries while node is setting up
@@ -143,7 +138,7 @@ func NewDiscoveryService(
 	}
 }
 
-func NewBootstrapDiscoveryService(ctx context.Context, updater SelfUpdater) *discoveryService {
+func NewBootstrapDiscoveryService(ctx context.Context, updater selfupdate.Updater) *discoveryService {
 	svc := NewDiscoveryService(ctx, nil, nil)
 	svc.selfUpdater = updater
 	return svc
