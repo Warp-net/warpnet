@@ -384,7 +384,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 			"discovery: bootstrap handle: peer %s has higher version %s (own: %s)",
 			pi.ID.String(), info.Version.String(), ownInfo.Version.String(),
 		)
-		s.selfUpdater.ObservedHigherVersion()
+		s.selfUpdater.ObservedHigherVersion(pi.ID.String())
 	}
 }
 

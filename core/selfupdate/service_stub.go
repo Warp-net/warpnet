@@ -47,4 +47,4 @@ func (s *Service) Run() {}
 func (s *Service) Trigger() {}
 
 // ObservedHigherVersion is a no-op on non-Linux platforms.
-func (s *Service) ObservedHigherVersion() {}
+func (s *Service) ObservedHigherVersion(peerID string) {}

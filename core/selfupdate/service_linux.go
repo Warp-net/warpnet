@@ -34,7 +34,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sync/atomic"
+	"sync"
 	"syscall"
 
 	"github.com/creativeprojects/go-selfupdate"
@@ -58,15 +58,17 @@ type Service struct {
 	ctx                context.Context
 	currentVersion     string
 	triggerCh          chan struct{}
-	higherVersionCount int64
+	mu                 sync.Mutex
+	higherVersionPeers map[string]struct{}
 }
 
 // NewService creates a new self-update service for the given version string.
 func NewService(ctx context.Context, currentVersion string) *Service {
 	return &Service{
-		ctx:            ctx,
-		currentVersion: currentVersion,
-		triggerCh:      make(chan struct{}, 1),
+		ctx:                ctx,
+		currentVersion:     currentVersion,
+		triggerCh:          make(chan struct{}, 1),
+		higherVersionPeers: make(map[string]struct{}),
 	}
 }
 
@@ -105,12 +107,19 @@ func (s *Service) Trigger() {
 	}
 }
 
-// ObservedHigherVersion records that a peer with a higher version has been seen.
-// Once peerVersionThreshold such observations have been made, a self-update is
+// ObservedHigherVersion records that the peer identified by peerID is running a
+// higher version than this node. Each peer is counted at most once; once
+// peerVersionThreshold distinct peers have been recorded, a self-update is
 // triggered exactly once.
-func (s *Service) ObservedHigherVersion() {
-	count := atomic.AddInt64(&s.higherVersionCount, 1)
-	if count == peerVersionThreshold {
+func (s *Service) ObservedHigherVersion(peerID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, already := s.higherVersionPeers[peerID]; already {
+		return
+	}
+	s.higherVersionPeers[peerID] = struct{}{}
+	if int64(len(s.higherVersionPeers)) == peerVersionThreshold {
 		s.Trigger()
 	}
 }

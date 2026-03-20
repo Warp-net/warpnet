@@ -29,9 +29,10 @@ package selfupdate
 
 // Updater is the interface for the self-update service.
 // Run starts the background listener (signal + internal trigger).
-// ObservedHigherVersion records a peer with a higher version; once enough
-// such observations have been made, the service triggers a self-update.
+// ObservedHigherVersion records a peer (by its ID string) that is running a
+// higher version; once peerVersionThreshold distinct peers have been recorded,
+// the service triggers a self-update automatically.
 type Updater interface {
 	Run()
-	ObservedHigherVersion()
+	ObservedHigherVersion(peerID string)
 }

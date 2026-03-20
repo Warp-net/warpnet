@@ -31,6 +31,7 @@ package selfupdate
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -84,7 +85,7 @@ func TestDetectLatestRelease_VersionComparison(t *testing.T) {
 }
 
 // TestObservedHigherVersion_BelowThreshold verifies that no trigger is sent
-// when fewer than peerVersionThreshold observations have been recorded.
+// when fewer than peerVersionThreshold distinct peers have been recorded.
 func TestObservedHigherVersion_BelowThreshold(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -92,7 +93,7 @@ func TestObservedHigherVersion_BelowThreshold(t *testing.T) {
 	svc := NewService(ctx, "1.0.0")
 
 	for i := int64(0); i < peerVersionThreshold-1; i++ {
-		svc.ObservedHigherVersion()
+		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
 	}
 
 	select {
@@ -104,7 +105,7 @@ func TestObservedHigherVersion_BelowThreshold(t *testing.T) {
 }
 
 // TestObservedHigherVersion_AtThreshold verifies that exactly peerVersionThreshold
-// observations cause one trigger to be sent.
+// distinct peers cause one trigger to be sent.
 func TestObservedHigherVersion_AtThreshold(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -112,7 +113,7 @@ func TestObservedHigherVersion_AtThreshold(t *testing.T) {
 	svc := NewService(ctx, "1.0.0")
 
 	for i := int64(0); i < peerVersionThreshold; i++ {
-		svc.ObservedHigherVersion()
+		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
 	}
 
 	select {
@@ -133,7 +134,7 @@ func TestObservedHigherVersion_AboveThreshold(t *testing.T) {
 	svc := NewService(ctx, "1.0.0")
 
 	for i := int64(0); i < peerVersionThreshold+5; i++ {
-		svc.ObservedHigherVersion()
+		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
 	}
 
 	// Drain the channel; exactly one item should be present.
@@ -148,5 +149,26 @@ func TestObservedHigherVersion_AboveThreshold(t *testing.T) {
 			}
 			return
 		}
+	}
+}
+
+// TestObservedHigherVersion_DuplicatePeer verifies that repeated observations
+// from the same peer are counted only once.
+func TestObservedHigherVersion_DuplicatePeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	svc := NewService(ctx, "1.0.0")
+
+	// Report the same peer many times — should never reach threshold.
+	for i := int64(0); i < peerVersionThreshold+10; i++ {
+		svc.ObservedHigherVersion("peer-same")
+	}
+
+	select {
+	case <-svc.triggerCh:
+		t.Fatal("trigger fired based on duplicate peer observations")
+	default:
+		// expected: duplicate peer counted only once, threshold not reached
 	}
 }
