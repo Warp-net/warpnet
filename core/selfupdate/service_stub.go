@@ -45,3 +45,6 @@ func (s *Service) Run() {}
 
 // Trigger is a no-op on non-Linux platforms.
 func (s *Service) Trigger() {}
+
+// ObservedHigherVersion is a no-op on non-Linux platforms.
+func (s *Service) ObservedHigherVersion() {}

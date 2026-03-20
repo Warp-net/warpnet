@@ -34,7 +34,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"sync/atomic"
 	"time"
 
 	root "github.com/Warp-net/warpnet"
@@ -89,10 +88,6 @@ type discoveredPeer struct {
 	Source discoverySource
 }
 
-// selfUpdateThreshold is the number of peers with a higher version that must
-// be observed before the bootstrap node initiates a self-update.
-const selfUpdateThreshold = 2
-
 type discoveryService struct {
 	ctx      context.Context
 	node     DiscoveryInfoStorer
@@ -105,10 +100,7 @@ type discoveryService struct {
 	retrier retrier.Retrier
 
 	// selfUpdater is an optional service that performs binary self-update.
-	// When non-nil and the higherVersionCount reaches selfUpdateThreshold,
-	// Trigger() is called exactly once.
-	selfUpdater        selfupdate.Updater
-	higherVersionCount int64
+	selfUpdater selfupdate.Updater
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -388,14 +380,11 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 
 	ownInfo := s.node.NodeInfo()
 	if s.selfUpdater != nil && ownInfo.Version != nil && info.Version != nil && info.Version.GreaterThan(ownInfo.Version) {
-		count := atomic.AddInt64(&s.higherVersionCount, 1)
 		log.Infof(
-			"discovery: bootstrap handle: peer %s has higher version %s (own: %s), count: %d",
-			pi.ID.String(), info.Version.String(), ownInfo.Version.String(), count,
+			"discovery: bootstrap handle: peer %s has higher version %s (own: %s)",
+			pi.ID.String(), info.Version.String(), ownInfo.Version.String(),
 		)
-		if count >= selfUpdateThreshold {
-			s.selfUpdater.Trigger()
-		}
+		s.selfUpdater.ObservedHigherVersion()
 	}
 }
 

@@ -34,13 +34,20 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/creativeprojects/go-selfupdate"
 	log "github.com/sirupsen/logrus"
 )
 
-const warpnetRepository = "Warp-net/warpnet"
+const (
+	warpnetRepository = "Warp-net/warpnet"
+
+	// peerVersionThreshold is the number of peers with a higher version that
+	// must be observed before a self-update is triggered.
+	peerVersionThreshold int64 = 2
+)
 
 // Service is a Linux-only self-update service for the bootstrap node.
 // It responds to SIGUSR1 as well as internal Trigger() calls.
@@ -48,9 +55,10 @@ const warpnetRepository = "Warp-net/warpnet"
 // running binary if one is found, then exits so the supervisor can restart
 // the process with the new version.
 type Service struct {
-	ctx            context.Context
-	currentVersion string
-	triggerCh      chan struct{}
+	ctx                context.Context
+	currentVersion     string
+	triggerCh          chan struct{}
+	higherVersionCount int64
 }
 
 // NewService creates a new self-update service for the given version string.
@@ -94,6 +102,16 @@ func (s *Service) Trigger() {
 	select {
 	case s.triggerCh <- struct{}{}:
 	default:
+	}
+}
+
+// ObservedHigherVersion records that a peer with a higher version has been seen.
+// Once peerVersionThreshold such observations have been made, a self-update is
+// triggered exactly once.
+func (s *Service) ObservedHigherVersion() {
+	count := atomic.AddInt64(&s.higherVersionCount, 1)
+	if count == peerVersionThreshold {
+		s.Trigger()
 	}
 }
 

@@ -66,7 +66,6 @@ type DistributedHashTableCloser interface {
 
 type SelfUpdateService interface {
 	Run()
-	Trigger()
 }
 
 type BootstrapNode struct {
