@@ -1,0 +1,18 @@
+codecov:
+  notify:
+    after_n_builds: 3
+
+comment:
+  after_n_builds: 3
+
+coverage:
+  round: nearest
+  status:
+    project:
+      default:
+        target: auto
+        threshold: "2%"
+    patch:
+      default:
+        target: "70%"
+        threshold: "2%"

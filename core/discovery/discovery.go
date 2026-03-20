@@ -34,6 +34,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	root "github.com/Warp-net/warpnet"
@@ -87,6 +89,10 @@ type discoveredPeer struct {
 	Source discoverySource
 }
 
+// selfUpdateThreshold is the number of peers with a higher version that must
+// be observed before the bootstrap node initiates a self-update.
+const selfUpdateThreshold = 2
+
 type discoveryService struct {
 	ctx      context.Context
 	node     DiscoveryInfoStorer
@@ -97,6 +103,13 @@ type discoveryService struct {
 	limiter *leakyBucketRateLimiter
 	cache   *discoveryCache
 	retrier retrier.Retrier
+
+	// higherVersionCount tracks how many peers reported a version greater than
+	// the bootstrap node's own version.
+	higherVersionCount int64
+	// selfUpdateOnce ensures the self-update is attempted at most once per
+	// process lifetime.
+	selfUpdateOnce sync.Once
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -364,6 +377,30 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 			peer.Source, pi.ID, err,
 		)
 		return
+	}
+
+	info, err := s.requestNodeInfo(pi)
+	if err != nil {
+		log.Errorf("discovery: source '%s': bootstrap handle: request node info: %s", peer.Source, err.Error())
+		return
+	}
+
+	ownInfo := s.node.NodeInfo()
+	if ownInfo.Version != nil && info.Version != nil && info.Version.GreaterThan(ownInfo.Version) {
+		count := atomic.AddInt64(&s.higherVersionCount, 1)
+		log.Infof(
+			"discovery: bootstrap handle: peer %s has higher version %s (own: %s), count: %d",
+			pi.ID.String(), info.Version.String(), ownInfo.Version.String(), count,
+		)
+		if count >= selfUpdateThreshold {
+			s.selfUpdateOnce.Do(func() {
+				go func() {
+					if err := selfUpdate(s.ctx, ownInfo.Version.String()); err != nil {
+						log.Errorf("discovery: bootstrap handle: self-update failed: %v", err)
+					}
+				}()
+			})
+		}
 	}
 }
 
