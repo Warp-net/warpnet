@@ -33,9 +33,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 
 	"github.com/creativeprojects/go-selfupdate"
 	log "github.com/sirupsen/logrus"
@@ -50,7 +48,7 @@ const (
 )
 
 // Service is a Linux-only self-update service for the bootstrap node.
-// It responds to SIGUSR1 as well as internal Trigger() calls.
+// It responds to internal Trigger() calls issued via ObservedHigherVersion.
 // When triggered, it checks GitHub for a newer release and replaces the
 // running binary if one is found, then exits so the supervisor can restart
 // the process with the new version.
@@ -73,21 +71,13 @@ func NewService(ctx context.Context, currentVersion string) *Service {
 }
 
 // Run starts the service in a background goroutine.
-// It listens for SIGUSR1 as well as calls to Trigger().
+// It listens for calls to Trigger() (issued via ObservedHigherVersion).
 func (s *Service) Run() {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGUSR1)
-
 	go func() {
-		defer signal.Stop(sigCh)
 		for {
 			select {
 			case <-s.ctx.Done():
 				return
-			case <-sigCh:
-				if err := s.doUpdate(); err != nil {
-					log.Errorf("selfupdate: %v", err)
-				}
 			case <-s.triggerCh:
 				if err := s.doUpdate(); err != nil {
 					log.Errorf("selfupdate: %v", err)
