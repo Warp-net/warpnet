@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	defaultListenPort     = "1080"
+	defaultListenPort     = "4080"
 	DefaultStreamProtocol = "/socks5/exit/1.0.0"
 )
 
@@ -38,8 +38,6 @@ type socksServer struct {
 func NewServer(ctx context.Context, port, psk string) *socksServer {
 	if port == "" {
 		port = defaultListenPort
-	} else {
-		port = port + "0"
 	}
 	s := &socksServer{
 		ctx:              ctx,
