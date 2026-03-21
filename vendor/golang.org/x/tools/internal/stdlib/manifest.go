@@ -1815,7 +1815,6 @@ var PackageSymbols = map[string][]Symbol{
 		{"ResultNoRows", Var, 0, ""},
 		{"Rows", Type, 0, ""},
 		{"RowsAffected", Type, 0, ""},
-		{"RowsColumnScanner", Type, 26, ""},
 		{"RowsColumnTypeDatabaseTypeName", Type, 8, ""},
 		{"RowsColumnTypeLength", Type, 8, ""},
 		{"RowsColumnTypeNullable", Type, 8, ""},
