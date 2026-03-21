@@ -32,6 +32,7 @@ package selfupdate
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -90,7 +91,7 @@ func TestObservedHigherVersion_BelowThreshold(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	svc := NewService(ctx, "1.0.0")
+	svc := NewService(ctx, "1.0.0", make(chan<- os.Signal))
 
 	for i := int64(0); i < peerVersionThreshold-1; i++ {
 		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
@@ -110,7 +111,7 @@ func TestObservedHigherVersion_AtThreshold(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	svc := NewService(ctx, "1.0.0")
+	svc := NewService(ctx, "1.0.0", make(chan<- os.Signal, 1))
 
 	for i := int64(0); i < peerVersionThreshold; i++ {
 		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
@@ -131,7 +132,7 @@ func TestObservedHigherVersion_AboveThreshold(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	svc := NewService(ctx, "1.0.0")
+	svc := NewService(ctx, "1.0.0", make(chan<- os.Signal, 1))
 
 	for i := int64(0); i < peerVersionThreshold+5; i++ {
 		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
@@ -158,7 +159,7 @@ func TestObservedHigherVersion_DuplicatePeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	svc := NewService(ctx, "1.0.0")
+	svc := NewService(ctx, "1.0.0", make(chan<- os.Signal, 1))
 
 	// Report the same peer many times — should never reach threshold.
 	for i := int64(0); i < peerVersionThreshold+10; i++ {
