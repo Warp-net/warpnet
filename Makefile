@@ -4,6 +4,9 @@ kill:
 backend-only-main:
 	go run -tags backend cmd/node/member/backend-only.go --node.network testnet
 
+backend-only-android:
+	go run -tags backend -ldflags="-checklinkname=0" cmd/node/member/backend-only.go --node.network testnet
+
 backend-only-second:
 	go run -tags backend cmd/node/member/backend-only.go --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
 
@@ -50,4 +53,4 @@ build-windows:
 	cd cmd/node/member && wails build -clean -platform windows -tags webkit2_41 -m -nosyncgomod --node.network testnet && cd -
 
 download-golang-armv6:
-	wget -c https://go.dev/dl/go1.25.3.linux-armv6l.tar.gz
+	wget -c https://go.dev/dl/go1.26.0.linux-armv6l.tar.gz

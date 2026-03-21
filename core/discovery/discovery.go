@@ -362,7 +362,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf(
 			"discovery: source '%s': bootstrap handle: challenge is invalid for peer: %s",
-			pi.ID.String(), peer.Source,
+			peer.Source, pi.ID.String(),
 		)
 		s.node.Peerstore().RemovePeer(pi.ID)
 		return

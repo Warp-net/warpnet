@@ -42,8 +42,8 @@ const maxInlineKeyLength = 42
 type ID string
 
 // Loggable returns a pretty peer ID string in loggable JSON format.
-func (id ID) Loggable() map[string]interface{} {
-	return map[string]interface{}{
+func (id ID) Loggable() map[string]any {
+	return map[string]any{
 		"peerID": id.String(),
 	}
 }
@@ -169,7 +169,10 @@ func IDFromPublicKey(pk ic.PubKey) (ID, error) {
 	if AdvancedEnableInlining && len(b) <= maxInlineKeyLength {
 		alg = mh.IDENTITY
 	}
-	hash, _ := mh.Sum(b, alg, -1)
+	hash, err := mh.Sum(b, alg, -1)
+	if err != nil {
+		return "", err
+	}
 	return ID(hash), nil
 }
 

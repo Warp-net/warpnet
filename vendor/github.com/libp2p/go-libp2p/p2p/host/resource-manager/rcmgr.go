@@ -178,17 +178,20 @@ func NewResourceManager(limits Limiter, opts ...Option) (network.ResourceManager
 	r.verifySourceAddressRateLimiter = newVerifySourceAddressRateLimiter(r.connLimiter)
 
 	if !r.disableMetrics {
-		var sr TraceReporter
 		sr, err := NewStatsTraceReporter()
 		if err != nil {
 			log.Error("failed to initialise StatsTraceReporter", "err", err)
 		} else {
+			// Report system limits to Prometheus
+			sr.ReportSystemLimits(limits)
+
 			if r.trace == nil {
 				r.trace = &trace{}
 			}
 			found := false
 			for _, rep := range r.trace.reporters {
-				if rep == sr {
+				// Compare the actual reporter, not the interface
+				if _, ok := rep.(StatsTraceReporter); ok {
 					found = true
 					break
 				}
@@ -626,11 +629,11 @@ func PeerStrInScopeName(name string) string {
 		return ""
 	}
 	// Index to avoid allocating a new string
-	peerSplitIdx := strings.Index(name, "peer:")
-	if peerSplitIdx == -1 {
+	_, after, ok := strings.Cut(name, "peer:")
+	if !ok {
 		return ""
 	}
-	p := (name[peerSplitIdx+len("peer:"):])
+	p := (after)
 	return p
 }
 
@@ -644,11 +647,11 @@ func ParseProtocolScopeName(name string) string {
 		}
 
 		// Index to avoid allocating a new string
-		separatorIdx := strings.Index(name, ":")
-		if separatorIdx == -1 {
+		_, after, ok := strings.Cut(name, ":")
+		if !ok {
 			return ""
 		}
-		return name[separatorIdx+1:]
+		return after
 	}
 	return ""
 }
