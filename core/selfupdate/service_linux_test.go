@@ -42,7 +42,7 @@ import (
 // TestDetectLatestRelease verifies that the Warp-net/warpnet GitHub repository
 // is reachable and has at least one published release.
 func TestDetectLatestRelease(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	release, found, err := goselfupdate.DetectLatest(ctx, goselfupdate.ParseSlug(warpnetRepository))
@@ -61,7 +61,7 @@ func TestDetectLatestRelease(t *testing.T) {
 // TestDetectLatestRelease_VersionComparison verifies that the library correctly
 // reports when the current version is already up to date.
 func TestDetectLatestRelease_VersionComparison(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	release, found, err := goselfupdate.DetectLatest(ctx, goselfupdate.ParseSlug(warpnetRepository))
@@ -88,12 +88,12 @@ func TestDetectLatestRelease_VersionComparison(t *testing.T) {
 // TestObservedHigherVersion_BelowThreshold verifies that no trigger is sent
 // when fewer than peerVersionThreshold distinct peers have been recorded.
 func TestObservedHigherVersion_BelowThreshold(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	svc := NewService(ctx, "1.0.0", make(chan<- os.Signal))
 
-	for i := int64(0); i < peerVersionThreshold-1; i++ {
+	for i := int64(0); i < peerVersionThreshold-1; i++ { //nolint:modernize
 		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
 	}
 
@@ -108,12 +108,12 @@ func TestObservedHigherVersion_BelowThreshold(t *testing.T) {
 // TestObservedHigherVersion_AtThreshold verifies that exactly peerVersionThreshold
 // distinct peers cause one trigger to be sent.
 func TestObservedHigherVersion_AtThreshold(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	svc := NewService(ctx, "1.0.0", make(chan<- os.Signal, 1))
 
-	for i := int64(0); i < peerVersionThreshold; i++ {
+	for i := int64(0); i < peerVersionThreshold; i++ { //nolint:modernize
 		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
 	}
 
@@ -129,12 +129,12 @@ func TestObservedHigherVersion_AtThreshold(t *testing.T) {
 // the threshold do not cause more than one trigger to be queued (channel capacity
 // is 1; extra triggers are dropped gracefully).
 func TestObservedHigherVersion_AboveThreshold(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	svc := NewService(ctx, "1.0.0", make(chan<- os.Signal, 1))
 
-	for i := int64(0); i < peerVersionThreshold+5; i++ {
+	for i := int64(0); i < peerVersionThreshold+5; i++ { //nolint:modernize
 		svc.ObservedHigherVersion(fmt.Sprintf("peer-%d", i))
 	}
 
@@ -156,13 +156,13 @@ func TestObservedHigherVersion_AboveThreshold(t *testing.T) {
 // TestObservedHigherVersion_DuplicatePeer verifies that repeated observations
 // from the same peer are counted only once.
 func TestObservedHigherVersion_DuplicatePeer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	svc := NewService(ctx, "1.0.0", make(chan<- os.Signal, 1))
 
 	// Report the same peer many times — should never reach threshold.
-	for i := int64(0); i < peerVersionThreshold+10; i++ {
+	for range peerVersionThreshold + 10 {
 		svc.ObservedHigherVersion("peer-same")
 	}
 

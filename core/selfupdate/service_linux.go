@@ -32,6 +32,7 @@ package selfupdate
 import (
 	"context"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/creativeprojects/go-selfupdate"
 	log "github.com/sirupsen/logrus"
 	"os"
@@ -95,7 +96,7 @@ func (s *Service) Run() {
 }
 
 func (s *Service) Stop() {
-	defer func() { recover() }()
+	defer func() { recover() }() //nolint:errcheck
 	if s == nil {
 		return
 	}
@@ -131,6 +132,8 @@ func (s *Service) ObservedHigherVersion(peerID string) {
 	}
 }
 
+const ErrNoNewRelease warpnet.WarpError = "no new release found"
+
 // doUpdate performs the actual self-update: detects the latest GitHub release,
 // and if it is newer than currentVersion, downloads and replaces the binary.
 func (s *Service) doUpdate() error {
@@ -141,7 +144,7 @@ func (s *Service) doUpdate() error {
 		return fmt.Errorf("failed to detect latest release: %w", err)
 	}
 	if !found {
-		return fmt.Errorf("no release found for %s", warpnetRepository)
+		return ErrNoNewRelease
 	}
 
 	if latest.LessOrEqual(s.currentVersion) {
