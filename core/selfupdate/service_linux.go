@@ -32,11 +32,10 @@ package selfupdate
 import (
 	"context"
 	"fmt"
-	"os"
-	"sync"
-
 	"github.com/creativeprojects/go-selfupdate"
 	log "github.com/sirupsen/logrus"
+	"os"
+	"sync"
 )
 
 const (
@@ -48,7 +47,7 @@ const (
 )
 
 // Service is a Linux-only self-update service for the bootstrap node.
-// It responds to internal Trigger() calls issued via ObservedHigherVersion.
+// It responds to internal trigger() calls issued via ObservedHigherVersion.
 // When triggered, it checks GitHub for a newer release and replaces the
 // running binary if one is found, then exits so the supervisor can restart
 // the process with the new version.
@@ -57,40 +56,58 @@ type Service struct {
 	currentVersion     string
 	triggerCh          chan struct{}
 	mu                 sync.Mutex
-	higherVersionPeers map[string]struct{}
+	higherVersionPeers map[string]bool
+	stopChan           chan struct{}
+	interruptChan      chan<- os.Signal
 }
 
 // NewService creates a new self-update service for the given version string.
-func NewService(ctx context.Context, currentVersion string) *Service {
+func NewService(
+	ctx context.Context,
+	currentVersion string,
+	interruptChan chan<- os.Signal,
+) *Service {
 	return &Service{
 		ctx:                ctx,
 		currentVersion:     currentVersion,
 		triggerCh:          make(chan struct{}, 1),
-		higherVersionPeers: make(map[string]struct{}),
+		higherVersionPeers: make(map[string]bool),
+		stopChan:           make(chan struct{}),
+		interruptChan:      interruptChan,
 	}
 }
 
 // Run starts the service in a background goroutine.
-// It listens for calls to Trigger() (issued via ObservedHigherVersion).
+// It listens for calls to trigger() (issued via ObservedHigherVersion).
 func (s *Service) Run() {
-	go func() {
-		for {
-			select {
-			case <-s.ctx.Done():
-				return
-			case <-s.triggerCh:
-				if err := s.doUpdate(); err != nil {
-					log.Errorf("selfupdate: %v", err)
-				}
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-s.ctx.Done():
+			return
+		case <-s.triggerCh:
+			if err := s.doUpdate(); err != nil {
+				log.Errorf("selfupdate: %v", err)
 			}
 		}
-	}()
+	}
 }
 
-// Trigger sends an internal signal to the service to perform an update check.
+func (s *Service) Stop() {
+	defer func() { recover() }()
+	if s == nil {
+		return
+	}
+	close(s.stopChan)
+	log.Info("selfupdate: stopped")
+
+}
+
+// trigger sends an internal signal to the service to perform an update check.
 // It is non-blocking: if the service is already busy or the channel is full,
 // the trigger is silently dropped (the update will still run).
-func (s *Service) Trigger() {
+func (s *Service) trigger() {
 	select {
 	case s.triggerCh <- struct{}{}:
 	default:
@@ -105,19 +122,19 @@ func (s *Service) ObservedHigherVersion(peerID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, already := s.higherVersionPeers[peerID]; already {
+	if s.higherVersionPeers[peerID] {
 		return
 	}
-	s.higherVersionPeers[peerID] = struct{}{}
+	s.higherVersionPeers[peerID] = true
 	if int64(len(s.higherVersionPeers)) == peerVersionThreshold {
-		s.Trigger()
+		s.trigger()
 	}
 }
 
 // doUpdate performs the actual self-update: detects the latest GitHub release,
 // and if it is newer than currentVersion, downloads and replaces the binary.
 func (s *Service) doUpdate() error {
-	log.Infof("selfupdate: checking for updates (current version %s)", s.currentVersion)
+	log.Infof("selfupdate: checking for updates, current version: %s", s.currentVersion)
 
 	latest, found, err := selfupdate.DetectLatest(s.ctx, selfupdate.ParseSlug(warpnetRepository))
 	if err != nil {
@@ -134,16 +151,16 @@ func (s *Service) doUpdate() error {
 
 	log.Infof("selfupdate: newer version %s found, updating...", latest.Version())
 
-	exe, err := selfupdate.ExecutablePath()
+	bin, err := selfupdate.ExecutablePath()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
 
-	if err := selfupdate.UpdateTo(s.ctx, latest.AssetURL, latest.AssetName, exe); err != nil {
+	if err := selfupdate.UpdateTo(s.ctx, latest.AssetURL, latest.AssetName, bin); err != nil {
 		return fmt.Errorf("failed to update binary: %w", err)
 	}
 
 	log.Infof("selfupdate: successfully updated to version %s, restarting...", latest.Version())
-	os.Exit(0)
+	s.interruptChan <- os.Interrupt
 	return nil
 }

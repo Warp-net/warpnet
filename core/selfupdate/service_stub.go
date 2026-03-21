@@ -29,22 +29,19 @@ resulting from the use or misuse of this software.
 
 package selfupdate
 
-import "context"
+import (
+	"context"
+	"os"
+)
 
 // Service is a no-op stub for non-Linux platforms.
 // Self-update is only supported on Linux.
 type Service struct{}
 
-// NewService returns a no-op service on non-Linux platforms.
-func NewService(_ context.Context, _ string) *Service {
+func NewService(_ context.Context, _ string, _ chan<- os.Signal) *Service {
 	return &Service{}
 }
-
-// Run is a no-op on non-Linux platforms.
-func (s *Service) Run() {}
-
-// Trigger is a no-op on non-Linux platforms.
-func (s *Service) Trigger() {}
-
-// ObservedHigherVersion is a no-op on non-Linux platforms.
+func (s *Service) Run()                                {}
+func (s *Service) Stop()                               {}
+func (s *Service) Trigger()                            {}
 func (s *Service) ObservedHigherVersion(peerID string) {}

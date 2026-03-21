@@ -27,6 +27,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"os"
 	"os/signal"
 	"syscall"
@@ -84,8 +85,11 @@ func main() {
 		log.Errorln(err)
 		return
 	}
+	selfUpdateService := selfupdate.NewService(ctx, version.String(), interruptChan)
+	go selfUpdateService.Run()
+	defer selfUpdateService.Stop()
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, selfUpdateService, codeHashHex)
 	if err != nil {
 		log.Errorf("failed to init bootstrap node: %v", err)
 		return

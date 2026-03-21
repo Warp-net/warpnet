@@ -37,7 +37,6 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/node"
-	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -65,7 +64,7 @@ type DistributedHashTableCloser interface {
 }
 
 type SelfUpdateService interface {
-	Run()
+	ObservedHigherVersion(pid string)
 }
 
 type BootstrapNode struct {
@@ -75,7 +74,6 @@ type BootstrapNode struct {
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
-	updateService     SelfUpdateService
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
@@ -86,14 +84,13 @@ func NewBootstrapNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
+	selfUpdateService SelfUpdateService,
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	version := config.Config().Version
-	updateService := selfupdate.NewService(ctx, version.String())
-	discService := discovery.NewBootstrapDiscoveryService(ctx, updateService)
+	discService := discovery.NewBootstrapDiscoveryService(ctx, selfUpdateService)
 
 	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
@@ -150,7 +147,6 @@ func NewBootstrapNode(
 		discService:       discService,
 		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
-		updateService:     updateService,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		selfHashHex:       selfHashHex,
@@ -180,7 +176,6 @@ func (bn *BootstrapNode) Start() (err error) {
 	}
 	bn.setupHandlers()
 
-	bn.updateService.Run()
 	bn.pubsubService.Run(bn)
 	if err := bn.discService.Run(bn); err != nil {
 		return err

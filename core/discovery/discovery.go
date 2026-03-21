@@ -38,7 +38,6 @@ import (
 
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/core/backoff"
-	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -73,6 +72,10 @@ type UserStorer interface {
 	GetByNodeID(nodeID string) (user domain.User, err error)
 }
 
+type Updater interface {
+	ObservedHigherVersion(peerID string)
+}
+
 type discoverySource string
 
 const (
@@ -100,7 +103,7 @@ type discoveryService struct {
 	retrier retrier.Retrier
 
 	// selfUpdater is an optional service that performs binary self-update.
-	selfUpdater selfupdate.Updater
+	selfUpdater Updater
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -130,7 +133,7 @@ func NewDiscoveryService(
 	}
 }
 
-func NewBootstrapDiscoveryService(ctx context.Context, updater selfupdate.Updater) *discoveryService {
+func NewBootstrapDiscoveryService(ctx context.Context, updater Updater) *discoveryService {
 	svc := NewDiscoveryService(ctx, nil, nil)
 	svc.selfUpdater = updater
 	return svc
@@ -377,11 +380,20 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		log.Errorf("discovery: source '%s': bootstrap handle: request node info: %s", peer.Source, err.Error())
 		return
 	}
+	if s.selfUpdater == nil {
+		return
+	}
+	if info.Version == nil {
+		return
+	}
 
 	ownInfo := s.node.NodeInfo()
-	if s.selfUpdater != nil && ownInfo.Version != nil && info.Version != nil && info.Version.GreaterThan(ownInfo.Version) {
+	if ownInfo.Version == nil {
+		return
+	}
+	if info.Version.GreaterThan(ownInfo.Version) {
 		log.Infof(
-			"discovery: bootstrap handle: peer %s has higher version %s (own: %s)",
+			"discovery: peer %s has higher version %s (own: %s)",
 			pi.ID.String(), info.Version.String(), ownInfo.Version.String(),
 		)
 		s.selfUpdater.ObservedHigherVersion(pi.ID.String())
