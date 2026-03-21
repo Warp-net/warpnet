@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	defaultListenPort     = ":4080"
+	defaultListenPort     = "1080"
 	DefaultStreamProtocol = "/socks5/exit/1.0.0"
 )
 
 type socksServer struct {
 	ctx      context.Context
+	port     string
 	srv      *socks5.Server
 	listener net.Listener
 	node     warpnet.P2PNode
@@ -34,15 +35,22 @@ type socksServer struct {
 	stopChan chan struct{}
 }
 
-func NewServer(ctx context.Context, username, password string) *socksServer {
+func NewServer(ctx context.Context, port, psk string) *socksServer {
+	if port == "" {
+		port = defaultListenPort
+	} else {
+		port = port + "0"
+	}
 	s := &socksServer{
 		ctx:              ctx,
+		port:             port,
 		latencyList:      skiplist.New(skiplist.Int64),
 		stopChan:         make(chan struct{}),
 		peersWithLatency: make(map[string]time.Duration),
 		mx:               sync.RWMutex{},
 	}
-	creds := socks5.StaticCredentials{username: password}
+	creds := socks5.StaticCredentials{"warpnet": psk}
+	log.Infoln("socks5: psk is", psk)
 
 	server := socks5.NewServer(
 		socks5.WithLogger(log.StandardLogger()),
@@ -57,7 +65,7 @@ func NewServer(ctx context.Context, username, password string) *socksServer {
 }
 
 func (s *socksServer) Start(node warpnet.P2PNode) error { // warpnet.P2PNode is libp2p host.Host alias
-	l, err := net.Listen("tcp", defaultListenPort) // nolint: noctx
+	l, err := net.Listen("tcp", ":"+s.port) // nolint: noctx
 	if err != nil {
 		return err
 	}
