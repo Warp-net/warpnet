@@ -102,7 +102,6 @@ func (s *Service) Stop() {
 	}
 	close(s.stopChan)
 	log.Info("selfupdate: stopped")
-
 }
 
 // trigger sends an internal signal to the service to perform an update check.
