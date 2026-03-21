@@ -56,11 +56,6 @@ func StreamGetInfoHandler(
 			discHandler(addrInfo)
 		}
 
-		nodeInfo := i.NodeInfo()
-		if nodeInfo.IsBootstrap() {
-			log.Infof("node info request received: %s %s", remoteID, remoteAddr)
-		}
-
-		return nodeInfo, nil
+		return i.NodeInfo(), nil
 	}
 }

@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
 
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
@@ -195,6 +196,8 @@ func (bn *BootstrapNode) setupHandlers() {
 	if bn.node == nil {
 		panic("bootstrap: nil bootstrap node")
 	}
+
+	bn.node.Node().SetStreamHandler(socks5.DefaultStreamProtocol, socks5.StreamSocksExitHandler)
 
 	//nolint:govet
 	bn.node.SetStreamHandlers(

@@ -121,7 +121,6 @@ func NewDiscoveryService(
 	leakPerTenSec := 2
 	return &discoveryService{
 		ctx:             ctx,
-		node:            nil,
 		retrier:         retrier.New(time.Second, 3, retrier.ExponentialBackoff),
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
@@ -134,9 +133,16 @@ func NewDiscoveryService(
 }
 
 func NewBootstrapDiscoveryService(ctx context.Context, updater Updater) *discoveryService {
-	svc := NewDiscoveryService(ctx, nil, nil)
-	svc.selfUpdater = updater
-	return svc
+	return &discoveryService{
+		ctx:             ctx,
+		selfUpdater:     updater,
+		retrier:         retrier.New(time.Second, 3, retrier.ExponentialBackoff),
+		limiter:         newRateLimiter(32, 2),
+		cache:           newDiscoveryCache(),
+		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
+		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
+		stopChan:        make(chan struct{}),
+	}
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
@@ -355,8 +361,6 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		)
 		return
 	}
-
-	log.Infof("node challenge request: %s, source '%s'", pi.ID.String(), peer.Source)
 
 	err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
