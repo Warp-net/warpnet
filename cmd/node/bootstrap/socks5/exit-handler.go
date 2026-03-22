@@ -28,7 +28,6 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 	conn, err := dialFirstAvailable()
 	if err != nil {
 		log.Errorf("failed to establish telegram connection: %v", err)
-		s.Write([]byte(err.Error()))
 		return
 	}
 	defer conn.Close()
@@ -45,30 +44,17 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 
 	if err := g.Wait(); err != nil {
 		log.Errorf("telegram server exited with error: %v", err)
-		s.Write([]byte(err.Error()))
 	}
 }
 
 func dialFirstAvailable() (net.Conn, error) {
-	type result struct {
-		conn net.Conn
-		err  error
-	}
-
-	resultChan := make(chan result, len(telegramDCs))
-
 	for _, addr := range telegramDCs {
-		go func(address string) {
-			conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-			resultChan <- result{conn: conn, err: err}
-		}(addr)
-	}
-
-	for i := 0; i < len(telegramDCs); i++ {
-		res := <-resultChan
-		if res.err == nil {
-			return res.conn, nil
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		if err != nil {
+			log.Errorf("failed to dial telegram connection: %v, addr=[%s]", err, addr)
+			continue
 		}
+		return conn, nil
 	}
 
 	return nil, fmt.Errorf("no DC reachable")
