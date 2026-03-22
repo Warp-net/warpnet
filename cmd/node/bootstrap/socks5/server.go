@@ -12,14 +12,15 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	defaultListenPort     = "4080"
-	DefaultStreamProtocol = "/socks5/exit/1.0.0"
+	defaultListenPort                            = "4080"
+	DefaultStreamProtocol warpnet.WarpProtocolID = "/socks5/exit/1.0.0"
 )
 
 type socksServer struct {
@@ -93,7 +94,7 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 	log.Infof("socks5: picked peer %s", peer.String())
 	stream, err := s.node.NewStream(ctx, peer, DefaultStreamProtocol)
 	if err != nil {
-		return fmt.Errorf("socks5: overlay stream: %w", err)
+		return fmt.Errorf("socks5: overlay stream: %w, peer: %s", err, peer.String())
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
@@ -123,7 +124,7 @@ func (s *socksServer) pickSuitablePeer() warpnet.WarpPeerID {
 		if len(peers) != 0 {
 			return peers[0]
 		}
-		return s.node.ID() // will fail with error "can't stream to yourself"
+		return ""
 	}
 
 	for element := s.latencyList.Front(); element != nil; element = element.Next() {
@@ -158,14 +159,19 @@ func (s *socksServer) trackPeersLatency() {
 			}
 			for _, peer := range peers {
 				if p2pNet.Connectedness(peer) == network.NotConnected {
-					if err := s.node.Connect(s.ctx, s.node.Peerstore().PeerInfo(peer)); err != nil {
+					if err := s.node.Connect(s.ctx, p2pStore.PeerInfo(peer)); err != nil {
 						continue
 					}
 				}
 				if p2pNet.Connectedness(peer) == network.CannotConnect {
 					continue
 				}
-				latency := s.node.Peerstore().LatencyEWMA(peer)
+				protocols, _ := p2pStore.GetProtocols(peer)
+				if len(protocols) == 0 || !slices.Contains(protocols, DefaultStreamProtocol) {
+					continue
+				}
+
+				latency := p2pStore.LatencyEWMA(peer)
 				latency = latency + (time.Duration(rand.Intn(5)) * time.Millisecond) // jitter
 
 				s.mx.Lock()
