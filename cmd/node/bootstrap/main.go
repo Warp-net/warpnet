@@ -27,6 +27,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"os"
 	"os/signal"
 	"syscall"
@@ -84,8 +86,11 @@ func main() {
 		log.Errorln(err)
 		return
 	}
+	selfUpdateService := selfupdate.NewService(ctx, version.String(), interruptChan)
+	go selfUpdateService.Run()
+	defer selfUpdateService.Stop()
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, selfUpdateService, codeHashHex)
 	if err != nil {
 		log.Errorf("failed to init bootstrap node: %v", err)
 		return
@@ -95,6 +100,19 @@ func main() {
 	if err := n.Start(); err != nil {
 		log.Errorf("failed to start bootstrap node: %v", err)
 		return
+	}
+
+	if config.Config().Socks5.IsEnabled {
+		port := config.Config().Socks5.Port
+		srv := socks5.NewServer(ctx, port, psk.String())
+		if err := srv.Start(n.Node()); err != nil {
+			log.Errorf("failed to start socks5 server: %v", err)
+		}
+		defer func() {
+			if err := srv.Stop(); err != nil {
+				log.Errorf("failed to stop socks5 server: %v", err)
+			}
+		}()
 	}
 
 	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Server, n.NodeInfo().ID.String(), true)

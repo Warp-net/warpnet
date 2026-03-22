@@ -47,7 +47,7 @@ type AppStorer interface {
 }
 
 type AppAuthServicer interface {
-	AuthLogin(message event.LoginEvent) (authInfo event.LoginResponse, err error)
+	AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error)
 	PrivateKey() ed25519.PrivateKey
 	Storage() auth.AuthPersistencyLayer
 }
@@ -65,6 +65,7 @@ type App struct {
 	node        NodeServer
 	db          AppStorer
 	codeHashHex string
+	psk         security.PSK
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
 }
@@ -111,7 +112,7 @@ func (a *App) startup(ctx context.Context) {
 		log.Errorf("failed to generate PSK: %v", err)
 		return
 	}
-
+	a.psk = psk
 	go a.runNode(psk)
 }
 
@@ -214,7 +215,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 
 		var loginResp event.LoginResponse
-		loginResp, err = a.auth.AuthLogin(ev)
+		loginResp, err = a.auth.AuthLogin(ev, a.psk)
 		if err != nil {
 			log.Errorf("auth: %v \n", err)
 			response.Body = newErrorResp(err.Error())

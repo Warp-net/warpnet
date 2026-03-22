@@ -74,6 +74,9 @@ func init() {
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
 
+	pflag.String("socks5.port", ":1080", "SOCKS5 server port")
+	pflag.Bool("socks5.enabled", true, "SOCKS5 server is enabled")
+
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
@@ -118,6 +121,10 @@ func init() {
 
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
+		Socks5: socks5{
+			Port:      viper.GetString("socks5.port"),
+			IsEnabled: viper.GetBool("socks5.enabled"),
+		},
 		Node: node{
 			Bootstrap: bootstrapAddrList,
 			Seed:      seed,
@@ -149,6 +156,7 @@ func Config() config {
 type config struct {
 	Version  *semver.Version
 	Node     node
+	Socks5   socks5
 	Database database
 	Logging  logging
 }
@@ -171,6 +179,11 @@ type metrics struct {
 }
 type database struct {
 	Path string
+}
+
+type socks5 struct {
+	Port      string
+	IsEnabled bool
 }
 
 type logFormat string

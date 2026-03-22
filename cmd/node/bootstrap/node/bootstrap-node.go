@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
 
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
@@ -63,6 +64,10 @@ type DistributedHashTableCloser interface {
 	Close()
 }
 
+type SelfUpdateService interface {
+	ObservedHigherVersion(pid string)
+}
+
 type BootstrapNode struct {
 	ctx               context.Context
 	node              *node.WarpNode
@@ -80,12 +85,13 @@ func NewBootstrapNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
+	selfUpdateService SelfUpdateService,
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	discService := discovery.NewBootstrapDiscoveryService(ctx)
+	discService := discovery.NewBootstrapDiscoveryService(ctx, selfUpdateService)
 
 	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
@@ -190,6 +196,8 @@ func (bn *BootstrapNode) setupHandlers() {
 	if bn.node == nil {
 		panic("bootstrap: nil bootstrap node")
 	}
+
+	bn.node.Node().SetStreamHandler(socks5.DefaultStreamProtocol, socks5.StreamSocksExitHandler)
 
 	//nolint:govet
 	bn.node.SetStreamHandlers(

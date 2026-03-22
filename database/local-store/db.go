@@ -897,7 +897,6 @@ func (db *DB) Close() {
 	}
 	close(db.stopChan)
 
-	_ = db.Sync()
 	if err := db.badger.Close(); err != nil {
 		log.Infof("database: close: %v", err)
 		return
@@ -919,7 +918,7 @@ func IsNotFoundError(err error) bool {
 	}
 }
 
-func ToDatatoreErrNotFound(err error) error {
+func ToDatastoreErrNotFound(err error) error {
 	switch {
 	case err == nil:
 		return nil

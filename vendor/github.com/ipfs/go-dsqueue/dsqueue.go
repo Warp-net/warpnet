@@ -249,14 +249,9 @@ func (q *DSQueue) worker(ctx context.Context, bufferSize, dedupCacheSize int, id
 						log.Errorw("error deleting queue entry, stopping dsqueue", "err", err, "key", head.Key, "qname", q.name)
 						return
 					}
-					parts := strings.SplitN(strings.TrimPrefix(head.Key, "/"), "/", 2)
-					if len(parts) != 2 {
-						log.Errorw("malformed queued item, removing it from queue", "err", err, "key", head.Key, "qname", q.name)
-						continue
-					}
-					item, err = base64.RawURLEncoding.DecodeString(parts[1])
+					item, err = decodeItem(head.Key)
 					if err != nil {
-						log.Errorw("error decoding queued item, removing it from queue", "err", err, "key", head.Key, "qname", q.name)
+						log.Errorw(err.Error(), "qname", q.name)
 						continue
 					}
 				} else {
@@ -411,16 +406,10 @@ func (q *DSQueue) clearDatastore(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("cannot create datastore batch: %w", err)
 	}
 
-	var rmCount, writeCount int
+	var rmCount int
 	for result := range results.Next() {
 		if ctx.Err() != nil {
 			return 0, ctx.Err()
-		}
-		if writeCount >= DefaultBufferSize {
-			writeCount = 0
-			if err = batch.Commit(ctx); err != nil {
-				return 0, fmt.Errorf("cannot commit datastore updates: %w", err)
-			}
 		}
 		if result.Error != nil {
 			return 0, fmt.Errorf("cannot read query result from datastore: %w", result.Error)
@@ -429,7 +418,6 @@ func (q *DSQueue) clearDatastore(ctx context.Context) (int, error) {
 			return 0, fmt.Errorf("cannot delete key from datastore: %w", err)
 		}
 		rmCount++
-		writeCount++
 	}
 
 	if err = batch.Commit(ctx); err != nil {
@@ -471,8 +459,7 @@ func (q *DSQueue) commitInput(ctx context.Context, counter uint64, items *deque.
 		return fmt.Errorf("failed to create batch: %w", err)
 	}
 
-	for i := range items.Len() {
-		item := items.At(i)
+	for item := range items.Iter() {
 		key := makeKey(item, counter)
 		if err = b.Put(ctx, key, nil); err != nil {
 			log.Errorw("failed to add item to batch", "err", err, "qname", q.name)
@@ -509,7 +496,6 @@ func (q *DSQueue) readDatastore(ctx context.Context, n int, items [][]byte) ([][
 	if err != nil {
 		return nil, fmt.Errorf("cannot create datastore batch: %w", err)
 	}
-	var delCount int
 
 	for result := range results.Next() {
 		if ctx.Err() != nil {
@@ -522,23 +508,10 @@ func (q *DSQueue) readDatastore(ctx context.Context, n int, items [][]byte) ([][
 		if err = batch.Delete(ctx, datastore.NewKey(result.Key)); err != nil {
 			return nil, fmt.Errorf("error deleting queue item: %w", err)
 		}
-		delCount++
 
-		if delCount >= DefaultBufferSize {
-			delCount = 0
-			if err = batch.Commit(ctx); err != nil {
-				return nil, fmt.Errorf("cannot commit datastore updates: %w", err)
-			}
-		}
-
-		parts := strings.SplitN(strings.TrimPrefix(result.Key, "/"), "/", 2)
-		if len(parts) != 2 {
-			log.Errorw("malformed queued item, removing it from queue", "err", err, "key", result.Key, "qname", q.name)
-			continue
-		}
-		item, err := base64.RawURLEncoding.DecodeString(parts[1])
+		item, err := decodeItem(result.Key)
 		if err != nil {
-			log.Errorw("error decoding queued item, removing it from queue", "err", err, "key", result.Key, "qname", q.name)
+			log.Errorw(err.Error(), "qname", q.name)
 			continue
 		}
 		items = append(items, item)
@@ -552,4 +525,16 @@ func (q *DSQueue) readDatastore(ctx context.Context, n int, items [][]byte) ([][
 	}
 
 	return items, nil
+}
+
+func decodeItem(key string) ([]byte, error) {
+	parts := strings.SplitN(strings.TrimPrefix(key, "/"), "/", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("malformed queued item %q", key)
+	}
+	item, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode queued item %q: %s", key, err)
+	}
+	return item, nil
 }

@@ -75,4 +75,3 @@ func MutexWrap(d ds.Datastore) *dssync.MutexDatastore {
 func NewBlockstore(b Batching, opts ...blockstore.Option) blockstore.Blockstore {
 	return blockstore.NewBlockstore(b, opts...)
 }
-

@@ -4,6 +4,9 @@ kill:
 backend-only-main:
 	go run -tags backend cmd/node/member/backend-only.go --node.network testnet
 
+backend-only-android:
+	go run -tags backend -ldflags="-checklinkname=0" cmd/node/member/backend-only.go --node.network testnet
+
 backend-only-second:
 	go run -tags backend cmd/node/member/backend-only.go --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
 
@@ -12,6 +15,9 @@ run-main:
 
 run-second:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
+
+bootstrap-main:
+	go run cmd/node/bootstrap/main.go --node.network testnet
 
 run-moderator:
 	CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete" go run -tags=llama cmd/node/moderator/main.go --node.network testnet --node.port 4002 --node.seed moderatorlocalhost --node.moderator.modelpath $(HOME)/.warpdata/llama-2-7b-chat.Q8_0.gguf 2>/dev/null
@@ -47,4 +53,4 @@ build-windows:
 	cd cmd/node/member && wails build -clean -platform windows -tags webkit2_41 -m -nosyncgomod --node.network testnet && cd -
 
 download-golang-armv6:
-	wget -c https://go.dev/dl/go1.25.3.linux-armv6l.tar.gz
+	wget -c https://go.dev/dl/go1.26.0.linux-armv6l.tar.gz

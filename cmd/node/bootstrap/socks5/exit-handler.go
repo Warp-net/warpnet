@@ -1,0 +1,88 @@
+package socks5
+
+import (
+	"context"
+	"errors"
+	log "github.com/sirupsen/logrus"
+
+	"golang.org/x/sync/errgroup"
+	"io"
+	"net"
+	"time"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
+)
+
+var telegramDCs = []string{
+	// EU
+	"149.154.167.50:443",
+	"149.154.167.51:443",
+	// ME
+	"149.154.167.91:443",
+	"149.154.167.92:443",
+}
+
+func StreamSocksExitHandler(s warpnet.WarpStream) {
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.Errorf("socks5: failed to close exit node stream: %v", err)
+		}
+	}()
+	log.Debugf("socks5: exit node called: %s", s.Conn().RemoteMultiaddr())
+
+	conn, err := dialFirstAvailable()
+	if err != nil {
+		log.Errorf("socks5: failed to establish telegram connection: %v", err)
+		return
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Errorf("socks5: failed to close telegram connection: %v", err)
+		}
+	}()
+
+	log.Debugf("socks5: exit node connected to: %s", conn.RemoteAddr().String())
+
+	g, _ := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		_, err := io.Copy(conn, io.TeeReader(s, debugWriter{name: "stream->tcp"}))
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			_ = tcpConn.CloseWrite()
+		}
+		return err
+	})
+	g.Go(func() error {
+		_, err := io.Copy(io.MultiWriter(s, debugWriter{name: "tcp->stream"}), conn)
+		_ = s.CloseWrite()
+		return err
+	})
+
+	if err := g.Wait(); err != nil && !errors.Is(err, io.EOF) {
+		log.Errorf("socks5: telegram server exited with error: %v", err)
+	}
+	log.Debugf("socks5: exit node job finished successfully")
+}
+
+const ErrTelegramUnreachable warpnet.WarpError = "no Telegram DC reachable"
+
+func dialFirstAvailable() (net.Conn, error) {
+	for _, addr := range telegramDCs {
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second) // nolint: noctx
+		if err != nil {
+			log.Errorf("failed to dial telegram connection: %v, addr=[%s]", err, addr)
+			continue
+		}
+		return conn, nil
+	}
+
+	return nil, ErrTelegramUnreachable
+}
+
+type debugWriter struct {
+	name string
+}
+
+func (d debugWriter) Write(p []byte) (int, error) {
+	log.Debugf("debug writer: %s: %d bytes", d.name, len(p))
+	return len(p), nil
+}
