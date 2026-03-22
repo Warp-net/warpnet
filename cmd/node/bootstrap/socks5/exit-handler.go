@@ -25,7 +25,7 @@ var telegramDCs = []string{
 
 func StreamSocksExitHandler(s warpnet.WarpStream) {
 	defer s.Close()
-	log.Infof("socks5: exit node called: %s", s.Conn().RemoteMultiaddr())
+	log.Debugf("socks5: exit node called: %s", s.Conn().RemoteMultiaddr())
 
 	conn, err := dialFirstAvailable()
 	if err != nil {
@@ -34,7 +34,7 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 	}
 	defer conn.Close()
 
-	log.Infof("socks5: exit node connected to: %s", conn.RemoteAddr().String())
+	log.Debugf("socks5: exit node connected to: %s", conn.RemoteAddr().String())
 
 	g, _ := errgroup.WithContext(context.Background())
 	g.Go(func() error {
@@ -51,9 +51,9 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 	})
 
 	if err := g.Wait(); err != nil && !errors.Is(err, io.EOF) {
-		log.Errorf("telegram server exited with error: %v", err)
+		log.Errorf("socks5: telegram server exited with error: %v", err)
 	}
-	log.Infof("socks5: exit node job finished successfully")
+	log.Debugf("socks5: exit node job finished successfully")
 }
 
 func dialFirstAvailable() (net.Conn, error) {
@@ -74,6 +74,6 @@ type debugWriter struct {
 }
 
 func (d debugWriter) Write(p []byte) (int, error) {
-	log.Infof("debug writer: %s: %d bytes", d.name, len(p))
+	log.Debugf("debug writer: %s: %d bytes", d.name, len(p))
 	return len(p), nil
 }

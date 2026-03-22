@@ -37,8 +37,10 @@ type socksServer struct {
 	stopChan chan struct{}
 }
 
-func NewServer(ctx context.Context, psk string) *socksServer {
-	port := defaultListenPort
+func NewServer(ctx context.Context, port, psk string) *socksServer {
+	if port == "" || !strings.HasPrefix(port, ":") {
+		port = defaultListenPort
+	}
 
 	s := &socksServer{
 		ctx:              ctx,
@@ -91,7 +93,7 @@ func (s *socksServer) Stop() error {
 
 func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr string) (net.Conn, error) {
 	peer := s.pickSuitablePeer()
-	log.Infof("socks5: picked peer %s, %s, %s", peer.String(), net, addr)
+	log.Debugf("socks5: picked peer %s, %s, %s", peer.String(), net, addr)
 
 	stream, err := s.node.NewStream(
 		network.WithAllowLimitedConn(ctx, warpnet.WarpnetName),

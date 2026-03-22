@@ -102,11 +102,14 @@ func main() {
 		return
 	}
 
-	srv := socks5.NewServer(ctx, psk.String())
-	if err := srv.Start(n.Node()); err != nil {
-		log.Errorf("failed to start socks5 server: %v", err)
+	if config.Config().Socks5.IsEnabled {
+		port := config.Config().Socks5.Port
+		srv := socks5.NewServer(ctx, port, psk.String())
+		if err := srv.Start(n.Node()); err != nil {
+			log.Errorf("failed to start socks5 server: %v", err)
+		}
+		defer srv.Stop()
 	}
-	defer srv.Stop()
 
 	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Server, n.NodeInfo().ID.String(), true)
 	m.PushStatusOnline()
