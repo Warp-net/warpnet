@@ -160,7 +160,8 @@ func (s *socksServer) trackPeersLatency() {
 				}
 
 				latency := p2pStore.LatencyEWMA(peer)
-				latency = latency + (time.Duration(rand.Intn(5)) * time.Millisecond) //nolint:gosec // jitter
+				// jitter
+				latency += time.Duration(rand.Intn(5)) * time.Millisecond //nolint:gosec
 
 				s.mx.Lock()
 				if prevLatency, ok := s.peersWithLatency[peer.String()]; ok {
