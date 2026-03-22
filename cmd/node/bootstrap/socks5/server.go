@@ -113,13 +113,15 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 	g, _ := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		_, err := io.Copy(stream, r.Reader)
+		n, err := io.Copy(stream, io.TeeReader(r.Reader, debugWriter{name: "client->stream"}))
+		log.Infof("socks5: client->stream finished: bytes=%d err=%v", n, err)
 		_ = stream.CloseWrite()
 		return err
 	})
 
 	g.Go(func() error {
-		_, err := io.Copy(w, stream)
+		n, err := io.Copy(io.MultiWriter(w, debugWriter{name: "stream->client"}), stream)
+		log.Infof("socks5: stream->client finished: bytes=%d err=%v", n, err)
 		return err
 	})
 
@@ -127,9 +129,9 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 		log.Errorf("socks5: overlay stream result: %v", err)
 		return err
 	}
-
 	return nil
 }
+
 func (s *socksServer) pickSuitablePeer() warpnet.WarpPeerID {
 	s.mx.RLock()
 	defer s.mx.RUnlock()
