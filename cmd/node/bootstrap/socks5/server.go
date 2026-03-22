@@ -2,6 +2,7 @@ package socks5
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/huandu/skiplist"
@@ -92,6 +93,7 @@ func (s *socksServer) Stop() error {
 func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r *socks5.Request) error {
 	peer := s.pickSuitablePeer()
 	log.Infof("socks5: picked peer %s", peer.String())
+
 	stream, err := s.node.NewStream(
 		network.WithAllowLimitedConn(ctx, warpnet.WarpnetName),
 		peer,
@@ -100,6 +102,7 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 	if err != nil {
 		return fmt.Errorf("socks5: overlay stream: %w, peer: %s", err, peer.String())
 	}
+
 	defer func() {
 		if err := stream.Close(); err != nil {
 			log.Errorf("socks5: close stream: %v", err)
@@ -107,30 +110,27 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 	}()
 
 	g, _ := errgroup.WithContext(ctx)
+
+	// client -> stream
 	g.Go(func() error {
 		_, err := io.Copy(stream, r.Reader)
-		if err != nil {
-			return fmt.Errorf("socks5: reader: %w", err)
-		}
-		return nil
+		_ = stream.CloseWrite()
+		return err
 	})
 
+	// stream -> client
 	g.Go(func() error {
 		_, err := io.Copy(w, stream)
-		if err != nil {
-			return fmt.Errorf("socks5: writer: %w", err)
-		}
-		return nil
+		return err
 	})
 
-	if err := g.Wait(); err != nil {
+	if err := g.Wait(); err != nil && !errors.Is(err, io.EOF) {
 		log.Errorf("socks5: overlay stream result: %v", err)
 		return err
 	}
 
 	return nil
 }
-
 func (s *socksServer) pickSuitablePeer() warpnet.WarpPeerID {
 	s.mx.RLock()
 	defer s.mx.RUnlock()

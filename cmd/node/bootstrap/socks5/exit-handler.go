@@ -2,6 +2,7 @@ package socks5
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 
@@ -38,17 +39,21 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 	g, _ := errgroup.WithContext(context.Background())
 	g.Go(func() error {
 		_, err := io.Copy(conn, s)
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			_ = tcpConn.CloseWrite()
+		}
 		return err
 	})
 	g.Go(func() error {
 		_, err := io.Copy(s, conn)
+		_ = s.CloseWrite()
 		return err
 	})
 
-	if err := g.Wait(); err != nil {
+	if err := g.Wait(); err != nil && !errors.Is(err, io.EOF) {
 		log.Errorf("telegram server exited with error: %v", err)
 	}
-	log.Infof("socks5: exit node job finished")
+	log.Infof("socks5: exit node job finished successfully")
 }
 
 func dialFirstAvailable() (net.Conn, error) {
