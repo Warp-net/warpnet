@@ -76,7 +76,7 @@ func (e *Error) Error() string {
 type Identity struct {
 	Owner Owner  `json:"owner"`
 	Token string `json:"token"`
-	PSK   string `json:"psk"` // hex
+	PSK   string `json:"psk"`
 }
 
 // Like defines model for Like.

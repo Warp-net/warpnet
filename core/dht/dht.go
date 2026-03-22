@@ -227,7 +227,7 @@ func (d *distributedHashTable) ClosestPeers() []warpnet.WarpPeerID {
 	return closest
 }
 
-func (d *distributedHashTable) FindProvidersAsync(ctx context.Context, key cid.Cid, count int) (ch <-chan peer.AddrInfo)  {
+func (d *distributedHashTable) FindProvidersAsync(ctx context.Context, key cid.Cid, count int) (ch <-chan peer.AddrInfo) {
 	return d.dht.FindProvidersAsync(ctx, key, count)
 }
 

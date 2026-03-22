@@ -42,12 +42,12 @@ type GossipPubSuber interface {
 type GossipBroadcaster struct {
 	ctx context.Context
 
-	gossip GossipPubSuber
-	topic  string
+	gossip   GossipPubSuber
+	topic    string
 	dataChan chan []byte
 
-	once     sync.Once
-	mx       sync.Mutex
+	once sync.Once
+	mx   sync.Mutex
 }
 
 const statsTopic = "/warpnet/stats/1.0.0"

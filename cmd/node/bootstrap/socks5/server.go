@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultListenPort                            = "4080"
+	defaultListenPort                            = ":4080"
 	DefaultStreamProtocol warpnet.WarpProtocolID = "/socks5/exit/1.0.0"
 )
 
@@ -65,7 +65,7 @@ func NewServer(ctx context.Context, port, psk string) *socksServer {
 }
 
 func (s *socksServer) Start(node warpnet.P2PNode) error { // warpnet.P2PNode is libp2p host.Host alias
-	l, err := net.Listen("tcp", ":"+s.port) // nolint: noctx
+	l, err := net.Listen("tcp", s.port) // nolint: noctx
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,6 @@ func (s *socksServer) trackPeersLatency() {
 
 			peers := p2pStore.PeersWithAddrs()
 			if len(peers) == 0 {
-				time.Sleep(time.Second * 30)
 				continue
 			}
 			for _, peer := range peers {

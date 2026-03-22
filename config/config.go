@@ -75,7 +75,7 @@ func init() {
 	pflag.String("database.dir", "storage", "Database directory name")
 
 	pflag.String("socks5.port", ":1080", "SOCKS5 server port")
-	pflag.Bool("socks5.enabled", true, "SOCKS5 server disabled")
+	pflag.Bool("socks5.enabled", true, "SOCKS5 server is enabled")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
