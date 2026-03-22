@@ -33,6 +33,8 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 	}
 	defer conn.Close()
 
+	log.Infof("socks5: exit node connected to: %s", conn.RemoteAddr().String())
+
 	g, _ := errgroup.WithContext(context.Background())
 	g.Go(func() error {
 		_, err := io.Copy(conn, s)
@@ -46,6 +48,7 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 	if err := g.Wait(); err != nil {
 		log.Errorf("telegram server exited with error: %v", err)
 	}
+	log.Infof("socks5: exit node job finished")
 }
 
 func dialFirstAvailable() (net.Conn, error) {
