@@ -102,7 +102,7 @@ func main() {
 		return
 	}
 
-	srv := socks5.NewServer(ctx, config.Config().Node.Port, psk.String())
+	srv := socks5.NewServer(ctx, psk.String())
 	if err := srv.Start(n.Node()); err != nil {
 		log.Errorf("failed to start socks5 server: %v", err)
 	}

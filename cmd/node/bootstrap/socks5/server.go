@@ -35,10 +35,9 @@ type socksServer struct {
 	stopChan chan struct{}
 }
 
-func NewServer(ctx context.Context, port, psk string) *socksServer {
-	if port == "" {
-		port = defaultListenPort
-	}
+func NewServer(ctx context.Context, psk string) *socksServer {
+	port := defaultListenPort
+
 	s := &socksServer{
 		ctx:              ctx,
 		port:             port,
