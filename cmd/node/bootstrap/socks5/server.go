@@ -2,6 +2,7 @@ package socks5
 
 import (
 	"context"
+	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/huandu/skiplist"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -47,7 +48,6 @@ func NewServer(ctx context.Context, psk string) *socksServer {
 		mx:               sync.RWMutex{},
 	}
 	creds := socks5.StaticCredentials{"warpnet": psk}
-	log.Infoln("socks5: psk is", psk)
 
 	server := socks5.NewServer(
 		socks5.WithLogger(log.StandardLogger()),
@@ -90,9 +90,10 @@ func (s *socksServer) Stop() error {
 
 func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r *socks5.Request) error {
 	peer := s.pickSuitablePeer()
+	log.Infof("socks5: picked peer %s", peer.String())
 	stream, err := s.node.NewStream(ctx, peer, DefaultStreamProtocol)
 	if err != nil {
-		return err
+		return fmt.Errorf("socks5: overlay stream: %w", err)
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
@@ -102,10 +103,12 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 
 	g, _ := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		return s.srv.Proxy(stream, r.Reader)
+		_, err := io.Copy(stream, r.Reader)
+		return fmt.Errorf("socks5: reader: %w", err)
 	})
 	g.Go(func() error {
-		return s.srv.Proxy(w, stream)
+		_, err := io.Copy(w, stream)
+		return fmt.Errorf("socks5: writer: %w", err)
 	})
 
 	return g.Wait()
