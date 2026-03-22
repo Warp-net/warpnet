@@ -155,16 +155,13 @@ func (s *socksServer) trackPeersLatency() {
 						continue
 					}
 				}
-				if p2pNet.Connectedness(peer) == network.CannotConnect {
-					continue
-				}
 				protocols, _ := p2pStore.GetProtocols(peer)
 				if len(protocols) == 0 || !slices.Contains(protocols, DefaultStreamProtocol) {
 					continue
 				}
 
 				latency := p2pStore.LatencyEWMA(peer)
-				latency = latency + (time.Duration(rand.Intn(5)) * time.Millisecond) // jitter
+				latency = latency + (time.Duration(rand.Intn(5)) * time.Millisecond) //nolint:gosec // jitter
 
 				s.mx.Lock()
 				if prevLatency, ok := s.peersWithLatency[peer.String()]; ok {

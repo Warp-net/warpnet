@@ -3,7 +3,6 @@ package socks5
 import (
 	"context"
 	"errors"
-	"fmt"
 	log "github.com/sirupsen/logrus"
 
 	"golang.org/x/sync/errgroup"
@@ -24,15 +23,23 @@ var telegramDCs = []string{
 }
 
 func StreamSocksExitHandler(s warpnet.WarpStream) {
-	defer s.Close()
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.Errorf("socks5: failed to close exit node stream: %v", err)
+		}
+	}()
 	log.Debugf("socks5: exit node called: %s", s.Conn().RemoteMultiaddr())
 
 	conn, err := dialFirstAvailable()
 	if err != nil {
-		log.Errorf("failed to establish telegram connection: %v", err)
+		log.Errorf("socks5: failed to establish telegram connection: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Errorf("socks5: failed to close telegram connection: %v", err)
+		}
+	}()
 
 	log.Debugf("socks5: exit node connected to: %s", conn.RemoteAddr().String())
 
@@ -56,9 +63,11 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 	log.Debugf("socks5: exit node job finished successfully")
 }
 
+const ErrTelegramUnreachable warpnet.WarpError = "no Telegram DC reachable"
+
 func dialFirstAvailable() (net.Conn, error) {
 	for _, addr := range telegramDCs {
-		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second) // nolint: noctx
 		if err != nil {
 			log.Errorf("failed to dial telegram connection: %v, addr=[%s]", err, addr)
 			continue
@@ -66,7 +75,7 @@ func dialFirstAvailable() (net.Conn, error) {
 		return conn, nil
 	}
 
-	return nil, fmt.Errorf("no DC reachable")
+	return nil, ErrTelegramUnreachable
 }
 
 type debugWriter struct {

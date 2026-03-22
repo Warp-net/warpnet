@@ -109,7 +109,11 @@ func main() {
 		if err := srv.Start(n.Node()); err != nil {
 			log.Errorf("failed to start socks5 server: %v", err)
 		}
-		defer srv.Stop()
+		defer func() {
+			if err := srv.Stop(); err != nil {
+				log.Errorf("failed to stop socks5 server: %v", err)
+			}
+		}()
 	}
 
 	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Server, n.NodeInfo().ID.String(), true)
