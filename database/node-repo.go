@@ -177,7 +177,7 @@ func (d *NodeRepo) GetExpiration(ctx context.Context, key datastore.Key) (t time
 
 	expiresAt, err := d.db.GetExpiration(prefix)
 	if local_store.IsNotFoundError(err) {
-		return t, local_store.ToDatatoreErrNotFound(err)
+		return t, local_store.ToDatastoreErrNotFound(err)
 	}
 	if err != nil {
 		return t, err
@@ -210,7 +210,7 @@ func (d *NodeRepo) Get(ctx context.Context, key datastore.Key) (value []byte, er
 
 	value, err = d.db.Get(prefix)
 	if local_store.IsNotFoundError(err) {
-		return nil, local_store.ToDatatoreErrNotFound(err)
+		return nil, local_store.ToDatastoreErrNotFound(err)
 	}
 	if err != nil {
 		return nil, err
@@ -270,7 +270,7 @@ func (d *NodeRepo) GetSize(ctx context.Context, key datastore.Key) (_ int, err e
 	case err == nil:
 		return int(itemSize), nil
 	case local_store.IsNotFoundError(err):
-		return 0, local_store.ToDatatoreErrNotFound(err)
+		return 0, local_store.ToDatastoreErrNotFound(err)
 	default:
 		return 0, fmt.Errorf("size: %w", err)
 	}
