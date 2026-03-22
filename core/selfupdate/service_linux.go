@@ -35,17 +35,21 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/creativeprojects/go-selfupdate"
 	log "github.com/sirupsen/logrus"
+	"math/rand"
 	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 const (
 	warpnetRepository = "Warp-net/warpnet"
-
-	// peerVersionThreshold is the number of peers with a higher version that
-	// must be observed before a self-update is triggered.
-	peerVersionThreshold int64 = 2
 )
+
+// peerVersionThreshold is the number of peers with a higher version that
+// must be observed before a self-update is triggered.
+// jitter added to prevent thundering horde restarts
+var peerVersionThreshold = rand.Intn(5)
 
 // Service is a Linux-only self-update service for the bootstrap node.
 // It responds to internal trigger() calls issued via ObservedHigherVersion.
@@ -55,6 +59,7 @@ const (
 type Service struct {
 	ctx                context.Context
 	currentVersion     string
+	isTriggered        atomic.Bool
 	triggerCh          chan struct{}
 	mu                 sync.Mutex
 	higherVersionPeers map[string]bool
@@ -70,6 +75,7 @@ func NewService(
 ) *Service {
 	return &Service{
 		ctx:                ctx,
+		isTriggered:        atomic.Bool{},
 		currentVersion:     currentVersion,
 		triggerCh:          make(chan struct{}, 1),
 		higherVersionPeers: make(map[string]bool),
@@ -88,9 +94,11 @@ func (s *Service) Run() {
 		case <-s.ctx.Done():
 			return
 		case <-s.triggerCh:
+			s.isTriggered.Store(true)
 			if err := s.doUpdate(); err != nil {
 				log.Errorf("selfupdate: %v", err)
 			}
+			s.isTriggered.Store(false)
 		}
 	}
 }
@@ -100,6 +108,9 @@ func (s *Service) Stop() {
 	if s == nil {
 		return
 	}
+	for s.isTriggered.Load() {
+		time.Sleep(time.Second)
+	}
 	close(s.stopChan)
 	log.Info("selfupdate: stopped")
 }
@@ -108,6 +119,9 @@ func (s *Service) Stop() {
 // It is non-blocking: if the service is already busy or the channel is full,
 // the trigger is silently dropped (the update will still run).
 func (s *Service) trigger() {
+	if s.isTriggered.Load() {
+		return
+	}
 	select {
 	case s.triggerCh <- struct{}{}:
 	default:
@@ -126,8 +140,9 @@ func (s *Service) ObservedHigherVersion(peerID string) {
 		return
 	}
 	s.higherVersionPeers[peerID] = true
-	if int64(len(s.higherVersionPeers)) == peerVersionThreshold {
+	if len(s.higherVersionPeers) == peerVersionThreshold {
 		s.trigger()
+		s.higherVersionPeers = make(map[string]bool)
 	}
 }
 
