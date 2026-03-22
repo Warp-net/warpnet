@@ -2,15 +2,14 @@ package socks5
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/huandu/skiplist"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	log "github.com/sirupsen/logrus"
 	"github.com/things-go/go-socks5"
-	"golang.org/x/sync/errgroup"
-	"io"
 	"math/rand"
 	"net"
 	"slices"
@@ -53,7 +52,7 @@ func NewServer(ctx context.Context, psk string) *socksServer {
 
 	server := socks5.NewServer(
 		socks5.WithLogger(log.StandardLogger()),
-		socks5.WithConnectHandle(s.warpnetOverlayHandler),
+		socks5.WithDial(s.warpnetOverlayHandler),
 		socks5.WithAuthMethods([]socks5.Authenticator{
 			socks5.UserPassAuthenticator{Credentials: creds},
 		}),
@@ -90,9 +89,9 @@ func (s *socksServer) Stop() error {
 	return s.listener.Close()
 }
 
-func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r *socks5.Request) error {
+func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr string) (net.Conn, error) {
 	peer := s.pickSuitablePeer()
-	log.Infof("socks5: picked peer %s", peer.String())
+	log.Infof("socks5: picked peer %s, %s, %s", peer.String(), net, addr)
 
 	stream, err := s.node.NewStream(
 		network.WithAllowLimitedConn(ctx, warpnet.WarpnetName),
@@ -100,36 +99,10 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 		DefaultStreamProtocol,
 	)
 	if err != nil {
-		return fmt.Errorf("socks5: overlay stream: %w, peer: %s", err, peer.String())
+		return nil, fmt.Errorf("socks5: overlay stream: %w, peer: %s", err, peer.String())
 	}
-	_ = stream.SetWriteDeadline(time.Now().Add(5 * time.Second))
 
-	defer func() {
-		if err := stream.Close(); err != nil {
-			log.Errorf("socks5: close stream: %v", err)
-		}
-	}()
-
-	g, _ := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		n, err := io.Copy(stream, io.TeeReader(r.Reader, debugWriter{name: "client->stream"}))
-		log.Infof("socks5: client->stream finished: bytes=%d err=%v", n, err)
-		_ = stream.CloseWrite()
-		return err
-	})
-
-	g.Go(func() error {
-		n, err := io.Copy(io.MultiWriter(w, debugWriter{name: "stream->client"}), stream)
-		log.Infof("socks5: stream->client finished: bytes=%d err=%v", n, err)
-		return err
-	})
-
-	if err := g.Wait(); err != nil && !errors.Is(err, io.EOF) {
-		log.Errorf("socks5: overlay stream result: %v", err)
-		return err
-	}
-	return nil
+	return &streamConn{stream}, nil
 }
 
 func (s *socksServer) pickSuitablePeer() warpnet.WarpPeerID {
@@ -202,4 +175,25 @@ func (s *socksServer) trackPeersLatency() {
 			}
 		}
 	}
+}
+
+type streamConn struct {
+	stream warpnet.WarpStream
+}
+
+func (c *streamConn) Read(p []byte) (int, error)         { return c.stream.Read(p) }
+func (c *streamConn) Write(p []byte) (int, error)        { return c.stream.Write(p) }
+func (c *streamConn) Close() error                       { return c.stream.Close() }
+func (c *streamConn) LocalAddr() net.Addr                { return toNetAddr(c.stream.Conn().LocalMultiaddr()) }
+func (c *streamConn) RemoteAddr() net.Addr               { return toNetAddr(c.stream.Conn().RemoteMultiaddr()) }
+func (c *streamConn) SetDeadline(t time.Time) error      { return c.stream.SetDeadline(t) }
+func (c *streamConn) SetReadDeadline(t time.Time) error  { return c.stream.SetReadDeadline(t) }
+func (c *streamConn) SetWriteDeadline(t time.Time) error { return c.stream.SetWriteDeadline(t) }
+
+func toNetAddr(maddr multiaddr.Multiaddr) net.Addr {
+	addr, err := manet.ToNetAddr(maddr)
+	if err != nil {
+		return &net.TCPAddr{} // fallback
+	}
+	return addr
 }
