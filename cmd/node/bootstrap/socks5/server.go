@@ -102,6 +102,7 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 	if err != nil {
 		return fmt.Errorf("socks5: overlay stream: %w, peer: %s", err, peer.String())
 	}
+	_ = stream.SetWriteDeadline(time.Now().Add(5 * time.Second))
 
 	defer func() {
 		if err := stream.Close(); err != nil {
@@ -111,14 +112,12 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, w io.Writer, r 
 
 	g, _ := errgroup.WithContext(ctx)
 
-	// client -> stream
 	g.Go(func() error {
 		_, err := io.Copy(stream, r.Reader)
 		_ = stream.CloseWrite()
 		return err
 	})
 
-	// stream -> client
 	g.Go(func() error {
 		_, err := io.Copy(w, stream)
 		return err

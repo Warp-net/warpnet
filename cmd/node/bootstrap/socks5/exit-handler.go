@@ -38,14 +38,14 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 
 	g, _ := errgroup.WithContext(context.Background())
 	g.Go(func() error {
-		_, err := io.Copy(conn, s)
+		_, err := io.Copy(conn, io.TeeReader(s, debugWriter{name: "stream->tcp"}))
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
 			_ = tcpConn.CloseWrite()
 		}
 		return err
 	})
 	g.Go(func() error {
-		_, err := io.Copy(s, conn)
+		_, err := io.Copy(io.MultiWriter(s, debugWriter{name: "tcp->stream"}), conn)
 		_ = s.CloseWrite()
 		return err
 	})
@@ -67,4 +67,13 @@ func dialFirstAvailable() (net.Conn, error) {
 	}
 
 	return nil, fmt.Errorf("no DC reachable")
+}
+
+type debugWriter struct {
+	name string
+}
+
+func (d debugWriter) Write(p []byte) (int, error) {
+	log.Infof("debug writer: %s: %d bytes", d.name, len(p))
+	return len(p), nil
 }
