@@ -24,6 +24,7 @@ var telegramDCs = []string{
 
 func StreamSocksExitHandler(s warpnet.WarpStream) {
 	defer s.Close()
+	log.Infof("socks5: exit node called: %s", s.Conn().RemoteMultiaddr())
 
 	conn, err := dialFirstAvailable()
 	if err != nil {
