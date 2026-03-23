@@ -128,7 +128,7 @@ func (b *socksBalancer) detectSuitablePeers(ctx context.Context) {
 			continue
 		}
 		addrInfo := p2pStore.PeerInfo(peer)
-		if b.isRussianPeer(ctx, addrInfo) { // skip russian exit nodes
+		if b.isRestrictedPeer(ctx, addrInfo) { // skip Restricted exit nodes
 			b.ruIPCache.Add(peer.String(), struct{}{})
 			continue
 		}
@@ -149,7 +149,7 @@ func (b *socksBalancer) detectSuitablePeers(ctx context.Context) {
 	}
 }
 
-func (b *socksBalancer) IsRussianPeer(peer warpnet.WarpPeerID) bool {
+func (b *socksBalancer) IsRestrictedPeer(peer warpnet.WarpPeerID) bool {
 	return b.ruIPCache.Contains(peer.String())
 }
 
@@ -158,18 +158,18 @@ func (b *socksBalancer) Close() {
 	close(b.stopChan)
 }
 
-func (b *socksBalancer) isRussianPeer(ctx context.Context, info warpnet.WarpAddrInfo) bool {
+func (b *socksBalancer) isRestrictedPeer(ctx context.Context, info warpnet.WarpAddrInfo) bool {
 	if info.Addrs == nil || len(info.Addrs) == 0 {
 		return false
 	}
 	for _, addr := range info.Addrs {
 		if ip, err := addr.ValueForProtocol(multiaddr.P_IP4); err == nil {
-			if b.isRussianIP(ctx, ip) {
+			if b.isRestrictedIP(ctx, ip) {
 				return true
 			}
 		}
 		if ip, err := addr.ValueForProtocol(multiaddr.P_IP6); err == nil {
-			if b.isRussianIP(ctx, ip) {
+			if b.isRestrictedIP(ctx, ip) {
 				return true
 			}
 		}
@@ -183,9 +183,14 @@ const (
 	ruCode = "RU"
 	ruName = "Russia"
 
-	// russian detour
 	chCode = "CH"
 	chName = "China"
+
+	byCode = "BY"
+	byName = "Belarus"
+
+	irCode = "IR"
+	irName = "Iran"
 )
 
 var restrictedCountries = map[string]bool{
@@ -193,6 +198,10 @@ var restrictedCountries = map[string]bool{
 	ruName: true,
 	chCode: true,
 	chName: true,
+	byCode: true,
+	byName: true,
+	irCode: true,
+	irName: true,
 }
 
 type GeoResponse struct {
@@ -201,7 +210,7 @@ type GeoResponse struct {
 	CountryCode string `json:"countryCode"`
 }
 
-func (b *socksBalancer) isRussianIP(ctx context.Context, ip string) bool {
+func (b *socksBalancer) isRestrictedIP(ctx context.Context, ip string) bool {
 	if err := b.rateLimiter.Wait(ctx); err != nil {
 		return false
 	}
