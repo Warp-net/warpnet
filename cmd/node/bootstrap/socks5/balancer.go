@@ -81,7 +81,7 @@ func (b *socksBalancer) GetFastestPeer() warpnet.WarpPeerID {
 		return ""
 	}
 
-	return candidates[rand.Intn(len(candidates))]
+	return candidates[rand.Intn(len(candidates))] //nolint:gosec
 }
 
 const latencyRefreshDuration = time.Second * 30
@@ -154,12 +154,12 @@ func (b *socksBalancer) IsRestrictedPeer(peer warpnet.WarpPeerID) bool {
 }
 
 func (b *socksBalancer) Close() {
-	defer func() { recover() }()
+	defer func() { recover() }() //nolint:errcheck
 	close(b.stopChan)
 }
 
 func (b *socksBalancer) isRestrictedPeer(ctx context.Context, info warpnet.WarpAddrInfo) bool {
-	if info.Addrs == nil || len(info.Addrs) == 0 {
+	if len(info.Addrs) == 0 {
 		return false
 	}
 	for _, addr := range info.Addrs {
@@ -214,11 +214,11 @@ func (b *socksBalancer) isRestrictedIP(ctx context.Context, ip string) bool {
 	if err := b.rateLimiter.Wait(ctx); err != nil {
 		return false
 	}
-	resp, err := b.client.Get(geoAPI + ip)
+	resp, err := b.client.Get(geoAPI + ip) //nolint:noctx
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return false
