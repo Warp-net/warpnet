@@ -11,5 +11,5 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
-      - NODE_SEED=warpnet1
+      - NODE_SEED=warpnet-ru
 
