@@ -101,7 +101,7 @@ func main() {
 	if config.Config().Socks5.IsEnabled {
 		port := config.Config().Socks5.Port
 		srv := socks5.NewServer(ctx, port, psk.String())
-		if err := srv.Start(n.Node()); err != nil {
+		if err := srv.Start(n); err != nil {
 			log.Errorf("failed to start socks5 server: %v", err)
 		}
 		defer func() {

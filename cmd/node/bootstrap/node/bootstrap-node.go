@@ -64,10 +64,6 @@ type DistributedHashTableCloser interface {
 	Close()
 }
 
-type SelfUpdateService interface {
-	ObservedHigherVersion(pid string)
-}
-
 type BootstrapNode struct {
 	ctx               context.Context
 	node              *node.WarpNode
