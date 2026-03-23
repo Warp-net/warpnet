@@ -60,7 +60,7 @@ func (b *socksBalancer) GetFastestPeer() warpnet.WarpPeerID {
 	if b.latencyList.Len() == 0 {
 		peers := b.streamer.Peerstore().PeersWithAddrs()
 		if len(peers) != 0 {
-			return peers[rand.Intn(len(peers))]
+			return peers[rand.Intn(len(peers))] //nolint:gosec
 		}
 		return ""
 	}
