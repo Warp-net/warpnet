@@ -40,6 +40,9 @@ setup-hooks:
 ssh-do:
 	ssh root@207.154.221.44
 
+ssh-lightnode:
+	ssh root@130.94.88.38
+
 snapcraft:
 	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/ *.snap
 	sudo snapcraft pack --destructive-mode
