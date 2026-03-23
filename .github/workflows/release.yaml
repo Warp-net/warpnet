@@ -56,6 +56,11 @@ jobs:
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
         run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod -upx -upxflags="--best"
 
+      - name: Build Bootstrap (Linux with compression)
+        working-directory: cmd/node/bootstrap
+        if: ${{ startsWith(matrix.os, 'ubuntu') }}
+        run: go build -ldflags "-s -w" -gcflags=all=-l -mod=vendor -o bootstrap
+
       - name: Build (Wails)
         working-directory: cmd/node/member
         if: ${{ !startsWith(matrix.os, 'ubuntu') }}
@@ -68,6 +73,15 @@ jobs:
           mv cmd/node/member/build/bin/* out/linux_amd64/warpnet
           tar -C out/linux_amd64 -czf warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz .
           shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz > warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
+
+      - name: Package Bootstrap + checksum (Linux AMD64)
+        if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/amd64' }}
+        run: |
+          mkdir -p out/bootstrap_linux_amd64
+          mv cmd/node/bootstrap/bootstrap out/bootstrap_linux_amd64/bootstrap
+          tar -C out/bootstrap_linux_amd64 -czf bootstrap_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz .
+          shasum -a 256 bootstrap_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz > bootstrap_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
+      
 
       - name: Package + checksum (Linux ARM64)
         if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/arm64' }}
@@ -103,6 +117,8 @@ jobs:
           name: ${{ env.RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
+            bootstrap_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz
+            bootstrap_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz
             warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
             warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz
