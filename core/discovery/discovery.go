@@ -72,10 +72,6 @@ type UserStorer interface {
 	GetByNodeID(nodeID string) (user domain.User, err error)
 }
 
-type Updater interface {
-	ObservedHigherVersion(peerID string)
-}
-
 type discoverySource string
 
 const (
@@ -101,9 +97,6 @@ type discoveryService struct {
 	limiter *leakyBucketRateLimiter
 	cache   *discoveryCache
 	retrier retrier.Retrier
-
-	// selfUpdater is an optional service that performs binary self-update.
-	selfUpdater Updater
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -132,10 +125,9 @@ func NewDiscoveryService(
 	}
 }
 
-func NewBootstrapDiscoveryService(ctx context.Context, updater Updater) *discoveryService {
+func NewBootstrapDiscoveryService(ctx context.Context) *discoveryService {
 	return &discoveryService{
 		ctx:             ctx,
-		selfUpdater:     updater,
 		retrier:         retrier.New(time.Second, 3, retrier.ExponentialBackoff),
 		limiter:         newRateLimiter(32, 2),
 		cache:           newDiscoveryCache(),
@@ -377,30 +369,6 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 			peer.Source, pi.ID, err,
 		)
 		return
-	}
-
-	info, err := s.requestNodeInfo(pi)
-	if err != nil {
-		log.Errorf("discovery: source '%s': bootstrap handle: request node info: %s", peer.Source, err.Error())
-		return
-	}
-	if s.selfUpdater == nil {
-		return
-	}
-	if info.Version == nil {
-		return
-	}
-
-	ownInfo := s.node.NodeInfo()
-	if ownInfo.Version == nil {
-		return
-	}
-	if info.Version.GreaterThan(ownInfo.Version) {
-		log.Infof(
-			"discovery: peer %s has higher version %s (own: %s)",
-			pi.ID.String(), info.Version.String(), ownInfo.Version.String(),
-		)
-		s.selfUpdater.ObservedHigherVersion(pi.ID.String())
 	}
 }
 

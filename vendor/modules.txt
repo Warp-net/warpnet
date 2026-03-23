@@ -9,9 +9,6 @@ atomicgo.dev/keyboard/keys
 # atomicgo.dev/schedule v0.1.0
 ## explicit; go 1.18
 atomicgo.dev/schedule
-# code.gitea.io/sdk/gitea v0.22.1
-## explicit; go 1.23.0
-code.gitea.io/sdk/gitea
 # dario.cat/mergo v1.0.2
 ## explicit; go 1.13
 dario.cat/mergo
@@ -21,9 +18,6 @@ filippo.io/bigmod
 # filippo.io/keygen v0.0.0-20260114151900-8e2790ea4c5b
 ## explicit; go 1.24.0
 filippo.io/keygen
-# github.com/42wim/httpsig v1.2.3
-## explicit; go 1.23.0
-github.com/42wim/httpsig
 # github.com/Masterminds/semver v1.5.0
 ## explicit
 github.com/Masterminds/semver
@@ -176,11 +170,6 @@ github.com/cockroachdb/redact/internal/rfmt/fmtsort
 # github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console
-# github.com/creativeprojects/go-selfupdate v1.5.2
-## explicit; go 1.24.11
-github.com/creativeprojects/go-selfupdate
-github.com/creativeprojects/go-selfupdate/internal
-github.com/creativeprojects/go-selfupdate/update
 # github.com/cskr/pubsub v1.0.2
 ## explicit; go 1.12
 github.com/cskr/pubsub
@@ -193,9 +182,6 @@ github.com/davecgh/go-spew/spew
 # github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c
 ## explicit; go 1.14
 github.com/davidlazar/go-crypto/salsa20
-# github.com/davidmz/go-pageant v1.0.2
-## explicit; go 1.16
-github.com/davidmz/go-pageant
 # github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
 ## explicit; go 1.17
 github.com/decred/dcrd/dcrec/secp256k1/v4
@@ -287,9 +273,6 @@ github.com/getsentry/sentry-go/internal/ratelimit
 # github.com/go-errors/errors v1.5.1
 ## explicit; go 1.14
 github.com/go-errors/errors
-# github.com/go-fed/httpsig v1.1.0
-## explicit; go 1.13
-github.com/go-fed/httpsig
 # github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376
 ## explicit; go 1.13
 github.com/go-git/gcfg
@@ -393,12 +376,6 @@ github.com/golang/groupcache/lru
 # github.com/google/flatbuffers v25.2.10+incompatible
 ## explicit
 github.com/google/flatbuffers/go
-# github.com/google/go-github/v74 v74.0.0
-## explicit; go 1.23.0
-github.com/google/go-github/v74/github
-# github.com/google/go-querystring v1.1.0
-## explicit; go 1.10
-github.com/google/go-querystring/query
 # github.com/google/gopacket v1.1.19
 ## explicit; go 1.12
 github.com/google/gopacket/routing
@@ -420,15 +397,6 @@ github.com/gorilla/websocket
 # github.com/grokify/html-strip-tags-go v0.1.0
 ## explicit; go 1.16
 github.com/grokify/html-strip-tags-go
-# github.com/hashicorp/go-cleanhttp v0.5.2
-## explicit; go 1.13
-github.com/hashicorp/go-cleanhttp
-# github.com/hashicorp/go-retryablehttp v0.7.8
-## explicit; go 1.23
-github.com/hashicorp/go-retryablehttp
-# github.com/hashicorp/go-version v1.8.0
-## explicit
-github.com/hashicorp/go-version
 # github.com/hashicorp/golang-lru v1.0.2
 ## explicit; go 1.12
 github.com/hashicorp/golang-lru/simplelru
@@ -1237,12 +1205,6 @@ github.com/tkrajina/go-reflector/reflector
 # github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80
 ## explicit
 github.com/tomnomnom/linkheader
-# github.com/ulikunitz/xz v0.5.15
-## explicit; go 1.12
-github.com/ulikunitz/xz
-github.com/ulikunitz/xz/internal/hash
-github.com/ulikunitz/xz/internal/xlog
-github.com/ulikunitz/xz/lzma
 # github.com/valyala/bytebufferpool v1.0.0
 ## explicit
 github.com/valyala/bytebufferpool
@@ -1360,9 +1322,6 @@ github.com/yuin/goldmark-emoji/definition
 # github.com/yusufpapurcu/wmi v1.2.4
 ## explicit; go 1.16
 github.com/yusufpapurcu/wmi
-# gitlab.com/gitlab-org/api/client-go v1.9.1
-## explicit; go 1.24.0
-gitlab.com/gitlab-org/api/client-go
 # go.opentelemetry.io/auto/sdk v1.2.1
 ## explicit; go 1.24.0
 go.opentelemetry.io/auto/sdk
@@ -1448,17 +1407,9 @@ golang.org/x/crypto/chacha20poly1305
 golang.org/x/crypto/cryptobyte
 golang.org/x/crypto/cryptobyte/asn1
 golang.org/x/crypto/curve25519
-golang.org/x/crypto/ed25519
 golang.org/x/crypto/hkdf
 golang.org/x/crypto/internal/alias
 golang.org/x/crypto/internal/poly1305
-golang.org/x/crypto/openpgp
-golang.org/x/crypto/openpgp/armor
-golang.org/x/crypto/openpgp/elgamal
-golang.org/x/crypto/openpgp/errors
-golang.org/x/crypto/openpgp/packet
-golang.org/x/crypto/openpgp/s2k
-golang.org/x/crypto/ripemd160
 golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/sha3
 golang.org/x/crypto/ssh
@@ -1502,10 +1453,6 @@ golang.org/x/net/ipv6
 golang.org/x/net/proxy
 golang.org/x/net/route
 golang.org/x/net/trace
-# golang.org/x/oauth2 v0.35.0
-## explicit; go 1.24.0
-golang.org/x/oauth2
-golang.org/x/oauth2/internal
 # golang.org/x/sync v0.20.0
 ## explicit; go 1.25.0
 golang.org/x/sync/errgroup

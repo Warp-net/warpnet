@@ -85,13 +85,12 @@ func NewBootstrapNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
-	selfUpdateService SelfUpdateService,
 	selfHashHex string,
 ) (_ *BootstrapNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	discService := discovery.NewBootstrapDiscoveryService(ctx, selfUpdateService)
+	discService := discovery.NewBootstrapDiscoveryService(ctx)
 
 	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
