@@ -99,6 +99,9 @@ func main() {
 	}
 
 	if config.Config().Socks5.IsEnabled {
+		if config.Config().Node.IsPskPrinted {
+			log.Infof("CURRENT PSK: %s", psk.String())
+		}
 		port := config.Config().Socks5.Port
 		srv := socks5.NewServer(ctx, port, psk.String())
 		if err := srv.Start(n); err != nil {
