@@ -81,7 +81,6 @@ jobs:
           mv cmd/node/bootstrap/bootstrap out/bootstrap_linux_amd64/bootstrap
           tar -C out/bootstrap_linux_amd64 -czf bootstrap_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz .
           shasum -a 256 bootstrap_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz > bootstrap_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
-      
 
       - name: Package + checksum (Linux ARM64)
         if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/arm64' }}

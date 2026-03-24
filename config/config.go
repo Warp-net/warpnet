@@ -71,6 +71,7 @@ func init() {
 	pflag.String("node.seed", "", "Node seed for deterministic ID generation")
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
+	pflag.Bool("node.print-psk", false, "Print current node PSK")
 	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name of 'AI' model")
 
 	pflag.String("logging.level", "info", "Logging level")
@@ -129,12 +130,13 @@ func init() {
 			IsEnabled: viper.GetBool("socks5.enabled"),
 		},
 		Node: node{
-			Bootstrap: bootstrapAddrList,
-			Seed:      seed,
-			HostV4:    host,
-			HostV6:    viper.GetString("node.host.v6"),
-			Port:      port,
-			Network:   network,
+			Bootstrap:    bootstrapAddrList,
+			Seed:         seed,
+			HostV4:       host,
+			HostV6:       viper.GetString("node.host.v6"),
+			Port:         port,
+			Network:      network,
+			IsPskPrinted: viper.GetBool("node.print-psk"),
 			Metrics: metrics{
 				Server: viper.GetString("node.metrics.server"),
 			},
@@ -165,14 +167,15 @@ type config struct {
 }
 
 type node struct {
-	Bootstrap []string
-	HostV4    string
-	HostV6    string
-	Port      string
-	Network   string
-	Metrics   metrics
-	Moderator moderator
-	Seed      string
+	Bootstrap    []string
+	HostV4       string
+	HostV6       string
+	Port         string
+	Network      string
+	IsPskPrinted bool
+	Metrics      metrics
+	Moderator    moderator
+	Seed         string
 }
 type moderator struct {
 	Path string

@@ -2,7 +2,6 @@ package socks5
 
 import (
 	"context"
-	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/huandu/skiplist"
@@ -178,7 +177,7 @@ func (b *socksBalancer) isRestrictedPeer(ctx context.Context, info warpnet.WarpA
 }
 
 const (
-	geoAPI = "http://ip-api.com/json/" //nolint:nosec
+	geoAPI = "http://ip-api.com/json/" //nolint:gosec
 
 	ruCode = "RU"
 	ruName = "Russia"
@@ -223,8 +222,6 @@ func (b *socksBalancer) isRestrictedIP(ctx context.Context, ip string) bool {
 	if err != nil {
 		return false
 	}
-
-	fmt.Println(string(body), "BODY")
 
 	var response GeoResponse
 	if err := jsoniter.Unmarshal(body, &response); err != nil {
