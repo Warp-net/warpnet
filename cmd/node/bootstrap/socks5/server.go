@@ -37,13 +37,16 @@ type rule struct {
 }
 
 func (r *rule) Allow(ctx context.Context, req *socks5.Request) (context.Context, bool) {
-	host, _, err := net.SplitHostPort(req.RemoteAddr.String())
-	if err != nil {
+	var host string
+
+	switch addr := req.RemoteAddr.(type) {
+	case *net.TCPAddr:
+		host = addr.IP.String()
+	default:
 		host = req.RemoteAddr.String()
 	}
 
 	r.m.PushSocksConnections(host)
-
 	return ctx, true
 }
 
