@@ -109,6 +109,7 @@ func main() {
 		n.NodeInfo().ID.String(),
 	)
 	defer m.Stop()
+	m.Start()
 
 	if config.Config().Socks5.IsEnabled {
 		if config.Config().Node.IsPskPrinted {
@@ -126,7 +127,6 @@ func main() {
 		}()
 	}
 
-	m.PushStatusOnline()
 	<-interruptChan
 	log.Infoln("bootstrap node interrupted...")
 }

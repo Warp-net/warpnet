@@ -117,7 +117,7 @@ func main() {
 		n.NodeInfo().ID.String(),
 	)
 	defer m.Stop()
-	m.PushStatusOnline()
+	m.Start()
 
 	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {

@@ -176,8 +176,8 @@ func (a *App) runNode(network string, psk security.PSK) {
 		"member",
 		a.node.NodeInfo().ID.String(),
 	)
+	m.Start()
 	a.m = m
-	m.PushStatusOnline()
 }
 
 type AppMessage struct {
