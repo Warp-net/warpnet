@@ -32,6 +32,21 @@ type MetricsPusher interface {
 	PushSocksConnections(ip string)
 }
 
+type rule struct {
+	m MetricsPusher
+}
+
+func (r *rule) Allow(ctx context.Context, req *socks5.Request) (context.Context, bool) {
+	host, _, err := net.SplitHostPort(req.RemoteAddr.String())
+	if err != nil {
+		host = req.RemoteAddr.String()
+	}
+
+	r.m.PushSocksConnections(host)
+
+	return ctx, true
+}
+
 type socksServer struct {
 	ctx      context.Context
 	port     string
@@ -59,6 +74,7 @@ func NewServer(
 	creds := socks5.StaticCredentials{warpnet.WarpnetName: psk}
 
 	server := socks5.NewServer(
+		socks5.WithRule(&rule{m: m}),
 		socks5.WithDial(s.warpnetOverlayHandler),
 		socks5.WithAuthMethods([]socks5.Authenticator{
 			socks5.UserPassAuthenticator{Credentials: creds},
