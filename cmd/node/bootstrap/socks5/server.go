@@ -59,7 +59,7 @@ func NewServer(
 		m:        m,
 		connsNum: atomic.Int64{},
 	}
-	creds := socks5.StaticCredentials{"warpnet": psk}
+	creds := socks5.StaticCredentials{warpnet.WarpnetName: psk}
 
 	server := socks5.NewServer(
 		socks5.WithDial(s.warpnetOverlayHandler),
