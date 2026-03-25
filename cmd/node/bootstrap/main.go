@@ -102,7 +102,12 @@ func main() {
 		return
 	}
 
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		network,
+		"bootstrap",
+		n.NodeInfo().ID.String(),
+	)
 	defer m.Stop()
 
 	if config.Config().Socks5.IsEnabled {
@@ -110,7 +115,7 @@ func main() {
 			log.Infof("CURRENT PSK: %s", psk.String())
 		}
 		port := config.Config().Socks5.Port
-		srv := socks5.NewServer(ctx, network, port, psk.String(), m)
+		srv := socks5.NewServer(ctx, port, psk.String(), m)
 		if err := srv.Start(n); err != nil {
 			log.Errorf("failed to start socks5 server: %v", err)
 		}
@@ -121,7 +126,7 @@ func main() {
 		}()
 	}
 
-	m.PushStatusOnline(config.Config().Node.Network, "bootstrap")
+	m.PushStatusOnline()
 	<-interruptChan
 	log.Infoln("bootstrap node interrupted...")
 }

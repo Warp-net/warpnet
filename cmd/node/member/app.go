@@ -119,10 +119,10 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.psk = psk
-	go a.runNode(psk)
+	go a.runNode(network, psk)
 }
 
-func (a *App) runNode(psk security.PSK) {
+func (a *App) runNode(network string, psk security.PSK) {
 	var (
 		err                error
 		serverNodeAuthInfo domain.AuthNodeInfo
@@ -170,9 +170,14 @@ func (a *App) runNode(psk security.PSK) {
 	serverNodeAuthInfo.NodeInfo = a.node.NodeInfo()
 	a.readyChan <- serverNodeAuthInfo
 
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, a.node.NodeInfo().ID.String())
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		network,
+		"member",
+		a.node.NodeInfo().ID.String(),
+	)
 	a.m = m
-	m.PushStatusOnline(config.Config().Node.Network, "member")
+	m.PushStatusOnline()
 }
 
 type AppMessage struct {

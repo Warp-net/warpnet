@@ -9,7 +9,6 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	log "github.com/sirupsen/logrus"
 	"github.com/things-go/go-socks5"
-	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -31,12 +30,13 @@ type Streamer interface {
 }
 
 type MetricsPusher interface {
-	PushSocksConnections(network string, value int64)
+	PushSocksConnections(ip string, value int64)
 }
 
 type socksServer struct {
 	ctx           context.Context
-	network, port string
+	port          string
+	prevKnownAddr string
 	connsNum      atomic.Int64
 	srv           *socks5.Server
 	listener      net.Listener
@@ -47,7 +47,7 @@ type socksServer struct {
 
 func NewServer(
 	ctx context.Context,
-	network, port, psk string,
+	port, psk string,
 	m MetricsPusher,
 ) *socksServer {
 	if port == "" || !strings.HasPrefix(port, ":") {
@@ -56,7 +56,6 @@ func NewServer(
 
 	s := &socksServer{
 		ctx:      ctx,
-		network:  network,
 		port:     port,
 		m:        m,
 		connsNum: atomic.Int64{},
@@ -108,19 +107,24 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr strin
 		DefaultStreamProtocol,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("socks5: overlay stream: %w, address: %s", err, addr)
+		return nil, fmt.Errorf(
+			"socks5: overlay stream: %w, network: %s, address: %s",
+			err, net, addr,
+		)
 	}
 	s.connsNum.Add(1)
 
+	closeF := func() {
+		s.connsNum.Add(-1)
+		if s.prevKnownAddr != addr {
+			s.m.PushSocksConnections(addr, s.connsNum.Load())
+			s.prevKnownAddr = addr
+		}
+	}
 	return &streamConn{
-		once:   sync.Once{},
-		stream: stream,
-		customCloseF: func() {
-			s.connsNum.Add(-1)
-			if rand.Intn(10)%2 == 0 {
-				s.m.PushSocksConnections(s.network, s.connsNum.Load())
-			}
-		},
+		once:         sync.Once{},
+		stream:       stream,
+		customCloseF: closeF,
 	}, nil
 }
 

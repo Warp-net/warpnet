@@ -110,9 +110,14 @@ func main() {
 		_ = publisher.Close()
 	}()
 
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		network,
+		"moderator",
+		n.NodeInfo().ID.String(),
+	)
 	defer m.Stop()
-	m.PushStatusOnline(config.Config().Node.Network, "moderator")
+	m.PushStatusOnline()
 
 	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {
