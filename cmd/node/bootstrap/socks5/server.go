@@ -34,15 +34,14 @@ type MetricsPusher interface {
 }
 
 type socksServer struct {
-	ctx           context.Context
-	port          string
-	prevKnownAddr string
-	connsNum      atomic.Int64
-	srv           *socks5.Server
-	listener      net.Listener
-	streamer      Streamer
-	balancer      *socksBalancer
-	m             MetricsPusher
+	ctx      context.Context
+	port     string
+	connsNum atomic.Int64
+	srv      *socks5.Server
+	listener net.Listener
+	streamer Streamer
+	balancer *socksBalancer
+	m        MetricsPusher
 }
 
 func NewServer(
@@ -116,10 +115,7 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr strin
 
 	closeF := func() {
 		s.connsNum.Add(-1)
-		if s.prevKnownAddr != addr {
-			s.m.PushSocksConnections(addr, s.connsNum.Load())
-			s.prevKnownAddr = addr
-		}
+		s.m.PushSocksConnections(addr, s.connsNum.Load())
 	}
 	return &streamConn{
 		once:         sync.Once{},
