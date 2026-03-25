@@ -26,6 +26,7 @@ package main
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/metrics"
 	"os"
 	"os/signal"
 	"syscall"
@@ -108,6 +109,10 @@ func main() {
 	defer func() {
 		_ = publisher.Close()
 	}()
+
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	defer m.Stop()
+	m.PushStatusOnline(config.Config().Node.Network, "moderator")
 
 	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {

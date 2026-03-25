@@ -1,4 +1,12 @@
 services:
+  push-gateway:
+    container_name: push-gateway-testnet
+    image: prom/pushgateway:latest
+    network_mode: host
+    command:
+      - "--web.listen-address=:4091"
+    restart: always
+
   warpnet:
     container_name: warpnet-testnet
     image: ghcr.io/warp-net/warpnet-bootstrap:latest
@@ -7,9 +15,10 @@ services:
     environment:
       - NODE_PORT=4011
       - SOCKS5_PORT=4080
-      - NODE_HOST_V4=207.154.221.44
+      - NODE_HOST_V4=130.94.88.38
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet-ru
+      - NODE_METRICS_GATEWAY=127.0.0.1:4091
 

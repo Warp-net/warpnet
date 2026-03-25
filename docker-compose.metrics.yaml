@@ -1,0 +1,41 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    network_mode: host
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    restart: always
+
+  grafana:
+    image: grafana/grafana:latest
+    network_mode: host
+    depends_on:
+      - prometheus
+    configs:
+      - source: grafana_datasource
+        target: /etc/grafana/provisioning/datasources/datasource.yml
+    restart: always
+
+configs:
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 15s
+      scrape_configs:
+        - job_name: "warpnet_node"
+          honor_labels: true
+          static_configs:
+            - targets: ["130.94.88.38:4091"]
+
+  grafana_datasource:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          access: proxy
+          url: http://127.0.0.1:9090
+          isDefault: true

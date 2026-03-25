@@ -28,47 +28,126 @@ resulting from the use or misuse of this software.
 package metrics
 
 import (
-	"strconv"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	log "github.com/sirupsen/logrus"
+	"sync"
+	"time"
 )
 
-type metricsClient struct {
-	address, nodeID string
-	isBootstrapNode bool
+type MetricsClient struct {
+	pushGatewayURL string
+	jobName        string
+	nodeID         string
+	statusOnce     sync.Once
+	stopChan       chan struct{}
 }
 
-func NewMetricsClient(
-	address, nodeID string,
-	isBootstrap bool,
-) *metricsClient {
-	return &metricsClient{address, nodeID, isBootstrap}
+func NewMetricsClient(pushGatewayURL string, nodeID string) *MetricsClient {
+	return &MetricsClient{
+		pushGatewayURL: pushGatewayURL,
+		jobName:        "warpnet_node",
+		nodeID:         nodeID,
+		statusOnce:     sync.Once{},
+		stopChan:       make(chan struct{}),
+	}
 }
 
-// PushStatusOnline - inform PushGateway about node status
-func (m *metricsClient) PushStatusOnline() {
-	if m.address == "" {
+func (client *MetricsClient) Stop() {
+	close(client.stopChan)
+}
+
+func (client *MetricsClient) PushStatusOnline(network string, nodeType string) {
+	if client.pushGatewayURL == "" {
 		return
 	}
-	if m.nodeID == "" {
-		log.Errorf("failed to push status online, no node ID")
+	if network == "" {
+		log.Errorf("metrics: network is empty")
 		return
 	}
-	onlineMetric := prometheus.NewGauge(prometheus.GaugeOpts{
+
+	client.statusOnce.Do(func() {
+		go func() {
+			client.pushStatusOnline(network, nodeType)
+
+			ticker := time.NewTicker(15 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-client.stopChan:
+					return
+				case <-ticker.C:
+					client.pushStatusOnline(network, nodeType)
+				}
+			}
+		}()
+	})
+}
+
+func (client *MetricsClient) pushStatusOnline(network string, nodeType string) {
+	onlineGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "node_online_status",
-		Help: "1 if node is online, 0 otherwise.",
+		Help: "1 if node is online, 0 otherwise",
+		ConstLabels: prometheus.Labels{
+			"network":   network,
+			"node_type": nodeType,
+		},
+	})
+	onlineGauge.Set(1)
+
+	pusher := push.New(client.pushGatewayURL, client.jobName).
+		Grouping("node_id", client.nodeID).
+		Collector(onlineGauge)
+
+	if err := pusher.Push(); err != nil {
+		log.Errorf("metrics: push failed: online %v", err)
+	}
+}
+
+func (client *MetricsClient) PushSocksConnNumAdd(network string) {
+	client.pushSocksConnNum(network, 1)
+}
+
+func (client *MetricsClient) PushSocksConnNumRemove(network string) {
+	client.pushSocksConnNum(network, 0)
+}
+
+func (client *MetricsClient) pushSocksConnNum(network string, num int) {
+	socksGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "node_socks_conn_num",
+		Help: "SOCKS5 connection num",
+		ConstLabels: prometheus.Labels{
+			"network": network,
+		},
+	})
+	socksGauge.Set(float64(num))
+
+	pusher := push.New(client.pushGatewayURL, client.jobName).
+		Grouping("node_id", client.nodeID).
+		Collector(socksGauge)
+
+	if err := pusher.Push(); err != nil {
+		log.Errorf("metrics: push failed: %v", err)
+	}
+}
+
+func (client *MetricsClient) PushSocksConnections(network string, value int64) {
+	socksGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "socks_active_connections",
+		Help: "Current number of active SOCKS5 connections",
+		ConstLabels: prometheus.Labels{
+			"network": network,
+		},
 	})
 
-	onlineMetric.Set(1)
+	socksGauge.Set(float64(value))
 
-	err := push.New(m.address, "status").
-		Collector(onlineMetric).
-		Grouping("node_id", m.nodeID).
-		Grouping("is_bootstrap", strconv.FormatBool(m.isBootstrapNode)).
-		Push()
-	if err != nil {
-		log.Errorf("failed to push online metric: %v", err)
+	pusher := push.New(client.pushGatewayURL, client.jobName).
+		Grouping("node_id", client.nodeID).
+		Collector(socksGauge)
+
+	if err := pusher.Push(); err != nil {
+		log.Errorf("metrics: push failed: %s %v", "socks5", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	stdjson "encoding/json"
 	"fmt"
+	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
 	"os/user"
@@ -59,6 +60,10 @@ type NodeServer interface {
 	Start() error
 }
 
+type MetricsStopper interface {
+	Stop()
+}
+
 type App struct {
 	ctx         context.Context
 	auth        AppAuthServicer
@@ -68,6 +73,7 @@ type App struct {
 	psk         security.PSK
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
+	m           MetricsStopper
 }
 
 // NewApp creates a new App application struct
@@ -163,6 +169,10 @@ func (a *App) runNode(psk security.PSK) {
 	serverNodeAuthInfo.Identity.Owner.NodeId = a.node.NodeInfo().ID.String()
 	serverNodeAuthInfo.NodeInfo = a.node.NodeInfo()
 	a.readyChan <- serverNodeAuthInfo
+
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, a.node.NodeInfo().ID.String())
+	a.m = m
+	m.PushStatusOnline(config.Config().Node.Network, "member")
 }
 
 type AppMessage struct {
@@ -300,6 +310,7 @@ func (a *App) close(_ context.Context) {
 	}()
 
 	log.Infoln("app: closing...")
+	a.m.Stop()
 
 	a.node.Stop() // close node first
 

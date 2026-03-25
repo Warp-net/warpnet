@@ -12,6 +12,7 @@ services:
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet1
+      - NODE_METRICS_GATEWAY=130.94.88.38:4091
 
   warpnet22:
     container_name: warpnet-testnet-2
@@ -26,6 +27,7 @@ services:
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet2
+      - NODE_METRICS_GATEWAY=130.94.88.38:4091
 
   warpnet33:
     container_name: warpnet-testnet-3
@@ -40,6 +42,7 @@ services:
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet3
+      - NODE_METRICS_GATEWAY=130.94.88.38:4091
 
   warpnet-moderator-testnet:
     container_name: moderator-testnet

@@ -26,6 +26,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
 	"os"
@@ -74,6 +75,9 @@ func main() {
 	defer cancel()
 
 	seed := []byte(config.Config().Node.Seed)
+	if len(seed) == 0 {
+		_, _ = rand.Read(seed)
+	}
 
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
@@ -98,12 +102,15 @@ func main() {
 		return
 	}
 
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	defer m.Stop()
+
 	if config.Config().Socks5.IsEnabled {
 		if config.Config().Node.IsPskPrinted {
 			log.Infof("CURRENT PSK: %s", psk.String())
 		}
 		port := config.Config().Socks5.Port
-		srv := socks5.NewServer(ctx, port, psk.String())
+		srv := socks5.NewServer(ctx, port, psk.String(), m)
 		if err := srv.Start(n); err != nil {
 			log.Errorf("failed to start socks5 server: %v", err)
 		}
@@ -114,8 +121,7 @@ func main() {
 		}()
 	}
 
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Server, n.NodeInfo().ID.String(), true)
-	m.PushStatusOnline()
+	m.PushStatusOnline(config.Config().Node.Network, "bootstrap")
 	<-interruptChan
 	log.Infoln("bootstrap node interrupted...")
 }
