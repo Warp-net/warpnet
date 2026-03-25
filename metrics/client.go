@@ -28,47 +28,50 @@ resulting from the use or misuse of this software.
 package metrics
 
 import (
-	"strconv"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	log "github.com/sirupsen/logrus"
 )
 
-type metricsClient struct {
-	address, nodeID string
-	isBootstrapNode bool
+type MetricsClient struct {
+	pushGatewayURL string
+	jobName        string
+	nodeID         string
 }
 
-func NewMetricsClient(
-	address, nodeID string,
-	isBootstrap bool,
-) *metricsClient {
-	return &metricsClient{address, nodeID, isBootstrap}
+func NewMetricsClient(pushGatewayURL string, nodeID string) *MetricsClient {
+	return &MetricsClient{
+		pushGatewayURL: pushGatewayURL,
+		jobName:        "warpnet_node",
+		nodeID:         nodeID,
+	}
 }
 
-// PushStatusOnline - inform PushGateway about node status
-func (m *metricsClient) PushStatusOnline() {
-	if m.address == "" {
+func (client *MetricsClient) PushStatusOnline(network string, nodeType string) {
+	if client.pushGatewayURL == "" {
 		return
 	}
-	if m.nodeID == "" {
-		log.Errorf("failed to push status online, no node ID")
+	if network == "" {
+		log.Errorf("metrics: network is empty")
 		return
 	}
-	onlineMetric := prometheus.NewGauge(prometheus.GaugeOpts{
+
+	onlineGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "node_online_status",
-		Help: "1 if node is online, 0 otherwise.",
+		Help: "1 if node is online, 0 otherwise",
+		ConstLabels: prometheus.Labels{
+			"network":   network,
+			"node_type": nodeType,
+		},
 	})
 
-	onlineMetric.Set(1)
+	onlineGauge.Set(1)
 
-	err := push.New(m.address, "status").
-		Collector(onlineMetric).
-		Grouping("node_id", m.nodeID).
-		Grouping("is_bootstrap", strconv.FormatBool(m.isBootstrapNode)).
-		Push()
-	if err != nil {
-		log.Errorf("failed to push online metric: %v", err)
+	pusher := push.New(client.pushGatewayURL, client.jobName).
+		Grouping("node_id", client.nodeID).
+		Collector(onlineGauge)
+
+	if err := pusher.Push(); err != nil {
+		log.Errorf("metrics push failed: %v", err)
 	}
 }
