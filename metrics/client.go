@@ -31,12 +31,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	log "github.com/sirupsen/logrus"
+	"sync"
+	"time"
 )
 
 type MetricsClient struct {
 	pushGatewayURL string
 	jobName        string
 	nodeID         string
+	statusOnce     sync.Once
+	stopChan       chan struct{}
 }
 
 func NewMetricsClient(pushGatewayURL string, nodeID string) *MetricsClient {
@@ -44,7 +48,13 @@ func NewMetricsClient(pushGatewayURL string, nodeID string) *MetricsClient {
 		pushGatewayURL: pushGatewayURL,
 		jobName:        "warpnet_node",
 		nodeID:         nodeID,
+		statusOnce:     sync.Once{},
+		stopChan:       make(chan struct{}),
 	}
+}
+
+func (client *MetricsClient) Stop() {
+	close(client.stopChan)
 }
 
 func (client *MetricsClient) PushStatusOnline(network string, nodeType string) {
@@ -56,6 +66,26 @@ func (client *MetricsClient) PushStatusOnline(network string, nodeType string) {
 		return
 	}
 
+	client.statusOnce.Do(func() {
+		go func() {
+			client.pushStatusOnline(network, nodeType)
+
+			ticker := time.NewTicker(15 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-client.stopChan:
+					return
+				case <-ticker.C:
+					client.pushStatusOnline(network, nodeType)
+				}
+			}
+		}()
+	})
+}
+
+func (client *MetricsClient) pushStatusOnline(network string, nodeType string) {
 	onlineGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "node_online_status",
 		Help: "1 if node is online, 0 otherwise",
@@ -64,7 +94,6 @@ func (client *MetricsClient) PushStatusOnline(network string, nodeType string) {
 			"node_type": nodeType,
 		},
 	})
-
 	onlineGauge.Set(1)
 
 	pusher := push.New(client.pushGatewayURL, client.jobName).

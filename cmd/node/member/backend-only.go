@@ -121,6 +121,7 @@ func main() {
 	readyChan <- authInfo
 	log.Infoln("WARPNET STARTED")
 	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	defer m.Stop()
 	m.PushStatusOnline(config.Config().Node.Network, "member")
 	<-interruptChan
 	log.Infoln("interrupted...")

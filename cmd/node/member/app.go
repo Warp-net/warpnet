@@ -60,6 +60,10 @@ type NodeServer interface {
 	Start() error
 }
 
+type MetricsStopper interface {
+	Stop()
+}
+
 type App struct {
 	ctx         context.Context
 	auth        AppAuthServicer
@@ -69,6 +73,7 @@ type App struct {
 	psk         security.PSK
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
+	m           MetricsStopper
 }
 
 // NewApp creates a new App application struct
@@ -166,6 +171,7 @@ func (a *App) runNode(psk security.PSK) {
 	a.readyChan <- serverNodeAuthInfo
 
 	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, a.node.NodeInfo().ID.String())
+	a.m = m
 	m.PushStatusOnline(config.Config().Node.Network, "member")
 }
 
@@ -304,6 +310,7 @@ func (a *App) close(_ context.Context) {
 	}()
 
 	log.Infoln("app: closing...")
+	a.m.Stop()
 
 	a.node.Stop() // close node first
 

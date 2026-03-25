@@ -26,6 +26,7 @@ package main
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/metrics"
 	"os"
 	"os/signal"
 	"syscall"
@@ -119,6 +120,10 @@ func main() {
 		return
 	}
 	defer moder.Close()
+
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	defer m.Stop()
+	m.PushStatusOnline(config.Config().Node.Network, "moderator")
 
 	<-interruptChan
 	log.Infoln("moderator node interrupted...")

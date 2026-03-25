@@ -119,6 +119,7 @@ func main() {
 	}
 
 	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	defer m.Stop()
 	m.PushStatusOnline(config.Config().Node.Network, "bootstrap")
 	<-interruptChan
 	log.Infoln("bootstrap node interrupted...")
