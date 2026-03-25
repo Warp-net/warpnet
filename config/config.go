@@ -71,7 +71,7 @@ func init() {
 	pflag.String("node.seed", "", "Node seed for deterministic ID generation")
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
-	pflag.String("node.metrics.gateway", "", "Prometheus push metrics server")
+	pflag.String("node.metrics.gateway", "130.94.88.38:4091", "Prometheus push metrics server")
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
 	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name of 'AI' model")
 

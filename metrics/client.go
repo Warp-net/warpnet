@@ -72,6 +72,6 @@ func (client *MetricsClient) PushStatusOnline(network string, nodeType string) {
 		Collector(onlineGauge)
 
 	if err := pusher.Push(); err != nil {
-		log.Errorf("metrics push failed: %v", err)
+		log.Errorf("metrics: push failed: %v", err)
 	}
 }

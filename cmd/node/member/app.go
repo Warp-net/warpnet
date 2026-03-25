@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	stdjson "encoding/json"
 	"fmt"
+	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
 	"os/user"
@@ -163,6 +164,9 @@ func (a *App) runNode(psk security.PSK) {
 	serverNodeAuthInfo.Identity.Owner.NodeId = a.node.NodeInfo().ID.String()
 	serverNodeAuthInfo.NodeInfo = a.node.NodeInfo()
 	a.readyChan <- serverNodeAuthInfo
+
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, a.node.NodeInfo().ID.String())
+	m.PushStatusOnline(config.Config().Node.Network, "member")
 }
 
 type AppMessage struct {
