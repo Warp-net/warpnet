@@ -110,6 +110,10 @@ func main() {
 		_ = publisher.Close()
 	}()
 
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	defer m.Stop()
+	m.PushStatusOnline(config.Config().Node.Network, "moderator")
+
 	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {
 		log.Errorf("failed to init moderator: %v", err)
@@ -120,10 +124,6 @@ func main() {
 		return
 	}
 	defer moder.Close()
-
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
-	defer m.Stop()
-	m.PushStatusOnline(config.Config().Node.Network, "moderator")
 
 	<-interruptChan
 	log.Infoln("moderator node interrupted...")

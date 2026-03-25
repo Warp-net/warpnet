@@ -11,6 +11,8 @@ import (
 	"github.com/things-go/go-socks5"
 	"net"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -27,23 +29,35 @@ type Streamer interface {
 	SimpleConnect(warpnet.WarpAddrInfo) error
 }
 
+type MetricsPusher interface {
+	PushSocksConnections(network string, value int64)
+}
+
 type socksServer struct {
 	ctx      context.Context
 	port     string
+	connsNum atomic.Int64
 	srv      *socks5.Server
 	listener net.Listener
 	streamer Streamer
 	balancer *socksBalancer
+	m        MetricsPusher
 }
 
-func NewServer(ctx context.Context, port, psk string) *socksServer {
+func NewServer(
+	ctx context.Context,
+	port, psk string,
+	m MetricsPusher,
+) *socksServer {
 	if port == "" || !strings.HasPrefix(port, ":") {
 		port = defaultListenPort
 	}
 
 	s := &socksServer{
-		ctx:  ctx,
-		port: port,
+		ctx:      ctx,
+		port:     port,
+		m:        m,
+		connsNum: atomic.Int64{},
 	}
 	creds := socks5.StaticCredentials{"warpnet": psk}
 
@@ -94,17 +108,29 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr strin
 	if err != nil {
 		return nil, fmt.Errorf("socks5: overlay stream: %w, address: %s", err, addr)
 	}
+	s.connsNum.Add(1)
 
-	return &streamConn{stream}, nil
+	return &streamConn{
+		once:   sync.Once{},
+		stream: stream,
+		customCloseF: func() {
+			s.connsNum.Add(-1)
+		},
+	}, nil
 }
 
 type streamConn struct {
-	stream warpnet.WarpStream
+	once         sync.Once
+	stream       warpnet.WarpStream
+	customCloseF func()
 }
 
-func (c *streamConn) Read(p []byte) (int, error)         { return c.stream.Read(p) }
-func (c *streamConn) Write(p []byte) (int, error)        { return c.stream.Write(p) }
-func (c *streamConn) Close() error                       { return c.stream.Close() }
+func (c *streamConn) Read(p []byte) (int, error)  { return c.stream.Read(p) }
+func (c *streamConn) Write(p []byte) (int, error) { return c.stream.Write(p) }
+func (c *streamConn) Close() error {
+	c.once.Do(c.customCloseF)
+	return c.stream.Close()
+}
 func (c *streamConn) LocalAddr() net.Addr                { return toNetAddr(c.stream.Conn().LocalMultiaddr()) }
 func (c *streamConn) RemoteAddr() net.Addr               { return toNetAddr(c.stream.Conn().RemoteMultiaddr()) }
 func (c *streamConn) SetDeadline(t time.Time) error      { return c.stream.SetDeadline(t) }

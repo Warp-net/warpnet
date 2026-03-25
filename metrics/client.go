@@ -101,6 +101,53 @@ func (client *MetricsClient) pushStatusOnline(network string, nodeType string) {
 		Collector(onlineGauge)
 
 	if err := pusher.Push(); err != nil {
+		log.Errorf("metrics: push failed: online %v", err)
+	}
+}
+
+func (client *MetricsClient) PushSocksConnNumAdd(network string) {
+	client.pushSocksConnNum(network, 1)
+}
+
+func (client *MetricsClient) PushSocksConnNumRemove(network string) {
+	client.pushSocksConnNum(network, 0)
+}
+
+func (client *MetricsClient) pushSocksConnNum(network string, num int) {
+	socksGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "node_socks_conn_num",
+		Help: "SOCKS5 connection num",
+		ConstLabels: prometheus.Labels{
+			"network": network,
+		},
+	})
+	socksGauge.Set(float64(num))
+
+	pusher := push.New(client.pushGatewayURL, client.jobName).
+		Grouping("node_id", client.nodeID).
+		Collector(socksGauge)
+
+	if err := pusher.Push(); err != nil {
 		log.Errorf("metrics: push failed: %v", err)
+	}
+}
+
+func (client *MetricsClient) PushSocksConnections(network string, value int64) {
+	socksGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "socks_active_connections",
+		Help: "Current number of active SOCKS5 connections",
+		ConstLabels: prometheus.Labels{
+			"network": network,
+		},
+	})
+
+	socksGauge.Set(float64(value))
+
+	pusher := push.New(client.pushGatewayURL, client.jobName).
+		Grouping("node_id", client.nodeID).
+		Collector(socksGauge)
+
+	if err := pusher.Push(); err != nil {
+		log.Errorf("metrics: push failed: %s %v", "socks5", err)
 	}
 }

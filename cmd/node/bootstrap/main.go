@@ -102,6 +102,9 @@ func main() {
 		return
 	}
 
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
+	defer m.Stop()
+
 	if config.Config().Socks5.IsEnabled {
 		if config.Config().Node.IsPskPrinted {
 			log.Infof("CURRENT PSK: %s", psk.String())
@@ -118,8 +121,6 @@ func main() {
 		}()
 	}
 
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
-	defer m.Stop()
 	m.PushStatusOnline(config.Config().Node.Network, "bootstrap")
 	<-interruptChan
 	log.Infoln("bootstrap node interrupted...")
