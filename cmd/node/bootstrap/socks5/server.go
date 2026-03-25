@@ -12,7 +12,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -30,13 +29,12 @@ type Streamer interface {
 }
 
 type MetricsPusher interface {
-	PushSocksConnections(ip string, value int64)
+	PushSocksConnections(ip string)
 }
 
 type socksServer struct {
 	ctx      context.Context
 	port     string
-	connsNum atomic.Int64
 	srv      *socks5.Server
 	listener net.Listener
 	streamer Streamer
@@ -54,10 +52,9 @@ func NewServer(
 	}
 
 	s := &socksServer{
-		ctx:      ctx,
-		port:     port,
-		m:        m,
-		connsNum: atomic.Int64{},
+		ctx:  ctx,
+		port: port,
+		m:    m,
 	}
 	creds := socks5.StaticCredentials{warpnet.WarpnetName: psk}
 
@@ -111,29 +108,23 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr strin
 			err, net, addr,
 		)
 	}
-	s.connsNum.Add(1)
 
-	closeF := func() {
-		s.connsNum.Add(-1)
-		s.m.PushSocksConnections(addr, s.connsNum.Load())
-	}
+	s.m.PushSocksConnections(addr)
+
 	return &streamConn{
-		once:         sync.Once{},
-		stream:       stream,
-		customCloseF: closeF,
+		once:   sync.Once{},
+		stream: stream,
 	}, nil
 }
 
 type streamConn struct {
-	once         sync.Once
-	stream       warpnet.WarpStream
-	customCloseF func()
+	once   sync.Once
+	stream warpnet.WarpStream
 }
 
 func (c *streamConn) Read(p []byte) (int, error)  { return c.stream.Read(p) }
 func (c *streamConn) Write(p []byte) (int, error) { return c.stream.Write(p) }
 func (c *streamConn) Close() error {
-	c.once.Do(c.customCloseF)
 	return c.stream.Close()
 }
 func (c *streamConn) LocalAddr() net.Addr                { return toNetAddr(c.stream.Conn().LocalMultiaddr()) }
