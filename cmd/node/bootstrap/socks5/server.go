@@ -9,6 +9,7 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	log "github.com/sirupsen/logrus"
 	"github.com/things-go/go-socks5"
+	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -34,19 +35,19 @@ type MetricsPusher interface {
 }
 
 type socksServer struct {
-	ctx      context.Context
-	port     string
-	connsNum atomic.Int64
-	srv      *socks5.Server
-	listener net.Listener
-	streamer Streamer
-	balancer *socksBalancer
-	m        MetricsPusher
+	ctx           context.Context
+	network, port string
+	connsNum      atomic.Int64
+	srv           *socks5.Server
+	listener      net.Listener
+	streamer      Streamer
+	balancer      *socksBalancer
+	m             MetricsPusher
 }
 
 func NewServer(
 	ctx context.Context,
-	port, psk string,
+	network, port, psk string,
 	m MetricsPusher,
 ) *socksServer {
 	if port == "" || !strings.HasPrefix(port, ":") {
@@ -55,6 +56,7 @@ func NewServer(
 
 	s := &socksServer{
 		ctx:      ctx,
+		network:  network,
 		port:     port,
 		m:        m,
 		connsNum: atomic.Int64{},
@@ -115,6 +117,9 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr strin
 		stream: stream,
 		customCloseF: func() {
 			s.connsNum.Add(-1)
+			if rand.Intn(10)%2 == 0 {
+				s.m.PushSocksConnections(s.network, s.connsNum.Load())
+			}
 		},
 	}, nil
 }
