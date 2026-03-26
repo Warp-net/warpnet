@@ -65,8 +65,11 @@ func NewServer(
 	port, psk string,
 	m MetricsPusher,
 ) *socksServer {
-	if port == "" || !strings.HasPrefix(port, ":") {
+	if port == "" {
 		port = defaultListenPort
+	}
+	if !strings.HasPrefix(port, ":") {
+		port = ":" + port
 	}
 
 	s := &socksServer{
@@ -105,33 +108,45 @@ func (s *socksServer) Start(streamer Streamer) error { // warpnet.P2PNode is lib
 		}
 	}()
 
-	log.Infof("started socks5 server at %s", defaultListenPort)
+	log.Infof("started socks5 server at %s", s.port)
 	return nil
 }
 
 func (s *socksServer) Stop() error {
-	log.Infof("stopped socks5 server at %s", defaultListenPort)
+	log.Infof("stopped socks5 server at %s", s.port)
 	s.balancer.Close()
 	return s.listener.Close()
 }
 
-func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr string) (net.Conn, error) {
+func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr string) (net.Conn, error) {
+	peer, isRedirect := s.balancer.route()
+	if peer == "" {
+		return nil, fmt.Errorf("no peers found") //nolint:errcheck
+	}
+	if isRedirect {
+		peerAddrs := s.streamer.Peerstore().Addrs(peer)
+		for _, pAddr := range peerAddrs {
+			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), time.Second)
+			if err != nil {
+				continue
+			}
+			return conn, nil
+		}
+
+	}
 	stream, err := s.streamer.Node().NewStream(
 		network.WithAllowLimitedConn(ctx, warpnet.WarpnetName),
-		s.balancer.GetFastestPeer(),
+		peer,
 		DefaultStreamProtocol,
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"socks5: overlay stream: %w, network: %s, address: %s",
-			err, net, addr,
+			"socks5: overlay stream: %w, proto: %s, address: %s",
+			err, proto, addr,
 		)
 	}
 
-	return &streamConn{
-		once:   sync.Once{},
-		stream: stream,
-	}, nil
+	return &streamConn{once: sync.Once{}, stream: stream}, nil
 }
 
 type streamConn struct {
