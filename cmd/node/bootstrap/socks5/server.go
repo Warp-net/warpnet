@@ -128,8 +128,6 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, net, addr strin
 		)
 	}
 
-	s.m.PushSocksConnections(addr)
-
 	return &streamConn{
 		once:   sync.Once{},
 		stream: stream,
