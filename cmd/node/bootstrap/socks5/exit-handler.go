@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"strings"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -99,11 +100,12 @@ func isExpectedNetworkClose(err error) bool {
 	if errors.Is(err, net.ErrClosed) {
 		return true
 	}
-
+	if strings.Contains(err.Error(), "stream reset") {
+		return true
+	}
 	var netError net.Error
 	if errors.As(err, &netError) && netError.Timeout() {
 		return true
 	}
-
 	return false
 }
