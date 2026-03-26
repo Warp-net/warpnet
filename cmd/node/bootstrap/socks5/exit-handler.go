@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 	"io"
@@ -23,11 +24,6 @@ var telegramDCs = []string{
 }
 
 func StreamSocksExitHandler(s warpnet.WarpStream) {
-	defer func() {
-		if err := s.Close(); err != nil {
-			log.Errorf("socks5: failed to close exit node stream: %v", err)
-		}
-	}()
 	log.Debugf("socks5: exit node called: %s", s.Conn().RemoteMultiaddr())
 
 	conn, err := dialFirstAvailable()
@@ -35,28 +31,37 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 		log.Errorf("socks5: failed to establish telegram connection: %v", err)
 		return
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Errorf("socks5: failed to close telegram connection: %v", err)
-		}
-	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	closeF := sync.OnceFunc(func() {
+		cancel()
+		_ = conn.Close()
+		_ = s.Close()
+	})
+	defer closeF()
 
 	log.Debugf("socks5: exit node connected to: %s", conn.RemoteAddr().String())
 
-	g, _ := errgroup.WithContext(context.Background())
+	g, _ := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		_, err := io.Copy(conn, io.TeeReader(s, debugWriter{name: "stream->tcp"}))
-		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			_ = tcpConn.CloseWrite()
+		defer closeF()
+
+		_, err := io.Copy(conn, s)
+		if isExpectedNetworkClose(err) {
+			return nil
 		}
 		return err
 	})
 	g.Go(func() error {
-		_, err := io.Copy(io.MultiWriter(s, debugWriter{name: "tcp->stream"}), conn)
-		_ = s.CloseWrite()
+		defer closeF()
+
+		_, err := io.Copy(s, conn)
+		if isExpectedNetworkClose(err) {
+			return nil
+		}
 		return err
 	})
-
 	if err := g.Wait(); err != nil && !errors.Is(err, io.EOF) {
 		log.Errorf("socks5: telegram server exited with error: %v", err)
 	}
@@ -65,24 +70,40 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 
 const ErrTelegramUnreachable warpnet.WarpError = "no Telegram DC reachable"
 
-func dialFirstAvailable() (net.Conn, error) {
+func dialFirstAvailable() (_ net.Conn, err error) {
 	for _, addr := range telegramDCs {
-		conn, err := net.DialTimeout("tcp", addr, 2*time.Second) // nolint: noctx
+		conn, err := net.DialTimeout("tcp", addr, 10*time.Second) // nolint: noctx
 		if err != nil {
 			log.Errorf("failed to dial telegram connection: %v, addr=[%s]", err, addr)
 			continue
 		}
+		if tcpConnection, ok := conn.(*net.TCPConn); ok {
+			_ = tcpConnection.SetKeepAlive(true)
+			_ = tcpConnection.SetKeepAlivePeriod(30 * time.Second)
+			_ = tcpConnection.SetNoDelay(true)
+		}
+
 		return conn, nil
 	}
-
+	log.Errorf("failed to dial telegram connection: %v", err)
 	return nil, ErrTelegramUnreachable
 }
 
-type debugWriter struct {
-	name string
-}
+func isExpectedNetworkClose(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if errors.Is(err, net.ErrClosed) {
+		return true
+	}
 
-func (d debugWriter) Write(p []byte) (int, error) {
-	log.Debugf("debug writer: %s: %d bytes", d.name, len(p))
-	return len(p), nil
+	var netError net.Error
+	if errors.As(err, &netError) && netError.Timeout() {
+		return true
+	}
+
+	return false
 }
