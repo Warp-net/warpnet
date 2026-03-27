@@ -64,7 +64,11 @@ var CommonOptions = []libp2p.Option{
 // This must be used explicitly to enable DPI evasion; vanilla TCP is the
 // default so that nodes interoperate without requiring camouflage support.
 func WithDPITransport(opts ...dpi.Option) libp2p.Option {
-	return libp2p.Transport(warpnet.NewSpoofTCPTransport, opts...)
+	anyOpts := make([]any, len(opts))
+	for i, o := range opts {
+		anyOpts[i] = o
+	}
+	return libp2p.Transport(warpnet.NewSpoofTCPTransport, anyOpts...)
 }
 
 func EnableAutoRelayWithStaticRelays(static []warpnet.WarpAddrInfo, currentNodeID warpnet.WarpPeerID) func() libp2p.Option {
