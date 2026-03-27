@@ -129,3 +129,7 @@ func (c *MetricsClient) Stop() {
 func (c *MetricsClient) PushSocksConnections(ip string) {
 	c.socksGauge.WithLabelValues(c.network, ip).Set(1)
 }
+
+func (c *MetricsClient) RemoveSocksConnections(ip string) {
+	c.socksGauge.WithLabelValues(c.network, ip).Set(0)
+}

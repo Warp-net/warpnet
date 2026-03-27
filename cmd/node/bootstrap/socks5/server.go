@@ -30,7 +30,10 @@ type Streamer interface {
 
 type MetricsPusher interface {
 	PushSocksConnections(ip string)
+	RemoveSocksConnections(ip string)
 }
+
+const reqIpKey = "ip-key"
 
 type rule struct {
 	m MetricsPusher
@@ -47,7 +50,8 @@ func (r *rule) Allow(ctx context.Context, req *socks5.Request) (context.Context,
 	}
 
 	r.m.PushSocksConnections(host)
-	return ctx, true
+
+	return context.WithValue(ctx, reqIpKey, host), true
 }
 
 type socksServer struct {
@@ -119,6 +123,8 @@ func (s *socksServer) Stop() error {
 }
 
 func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr string) (net.Conn, error) {
+	host, _ := ctx.Value(reqIpKey).(string)
+
 	peer, isRedirect := s.balancer.route()
 	if peer == "" {
 		return nil, fmt.Errorf("no peers found") //nolint:errcheck
@@ -132,7 +138,6 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 			}
 			return conn, nil
 		}
-
 	}
 	stream, err := s.streamer.Node().NewStream(
 		network.WithAllowLimitedConn(ctx, warpnet.WarpnetName),
@@ -146,17 +151,25 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 		)
 	}
 
-	return &streamConn{once: sync.Once{}, stream: stream}, nil
+	return &streamConn{
+		once:   sync.Once{},
+		stream: stream,
+		closeF: func() {
+			s.m.RemoveSocksConnections(host)
+		},
+	}, nil
 }
 
 type streamConn struct {
 	once   sync.Once
 	stream warpnet.WarpStream
+	closeF func()
 }
 
 func (c *streamConn) Read(p []byte) (int, error)  { return c.stream.Read(p) }
 func (c *streamConn) Write(p []byte) (int, error) { return c.stream.Write(p) }
 func (c *streamConn) Close() error {
+	c.closeF()
 	return c.stream.Close()
 }
 func (c *streamConn) LocalAddr() net.Addr                { return toNetAddr(c.stream.Conn().LocalMultiaddr()) }
