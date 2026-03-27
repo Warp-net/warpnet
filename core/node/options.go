@@ -48,7 +48,7 @@ var CommonOptions = []libp2p.Option{
 		WithDialTimeout(DefaultTimeout),
 		WithDialTimeoutLocal(DefaultTimeout),
 	),
-	libp2p.Transport(warpnet.NewTCPTransport),
+	libp2p.Transport(warpnet.NewSpoofTCPTransport),
 	libp2p.Ping(true),
 	libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
 	libp2p.EnableAutoNATv2(),
