@@ -240,8 +240,8 @@ func TestOptions(t *testing.T) {
 	require.NoError(t, WithFragmentSize(5)(st))
 	assert.Equal(t, 5, st.fragmentSize)
 
-	require.NoError(t, WithHandshakeLen(1024)(st))
-	assert.Equal(t, 1024, st.handshakeLen)
+	require.NoError(t, WithHandshakeLen(2048)(st))
+	assert.Equal(t, 2048, st.handshakeLen)
 
 	require.NoError(t, WithMaxDelay(10*time.Millisecond)(st))
 	assert.Equal(t, 10*time.Millisecond, st.maxDelay)
@@ -249,12 +249,25 @@ func TestOptions(t *testing.T) {
 	require.NoError(t, WithConnectTimeout(30*time.Second)(st))
 	assert.Equal(t, 30*time.Second, st.connectTimeout)
 
+	require.NoError(t, WithSNI("custom.example.com")(st))
+	assert.Equal(t, "custom.example.com", st.sni)
+
+	require.NoError(t, WithBrowserFingerprint(BrowserFirefox)(st))
+	assert.Equal(t, BrowserFirefox, st.browserFingerprint)
+
+	require.NoError(t, WithHandshakeTimeout(5*time.Second)(st))
+	assert.Equal(t, 5*time.Second, st.handshakeTimeout)
+
 	// Negative/zero values should not change defaults.
 	st2 := &SpoofTransport{fragmentSize: 2, handshakeLen: 512}
 	require.NoError(t, WithFragmentSize(0)(st2))
 	assert.Equal(t, 2, st2.fragmentSize)
 	require.NoError(t, WithHandshakeLen(-1)(st2))
 	assert.Equal(t, 512, st2.handshakeLen)
+	require.NoError(t, WithConnectTimeout(-1)(st2))
+	assert.Equal(t, time.Duration(0), st2.connectTimeout)
+	require.NoError(t, WithHandshakeTimeout(0)(st2))
+	assert.Equal(t, time.Duration(0), st2.handshakeTimeout)
 }
 
 func TestRandDuration(t *testing.T) {

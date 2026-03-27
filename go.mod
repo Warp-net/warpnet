@@ -28,6 +28,7 @@ require (
 	github.com/multiformats/go-multiaddr v0.16.1
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/client_golang v1.23.2
+	github.com/refraction-networking/utls v1.6.7
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/pflag v1.0.10

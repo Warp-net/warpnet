@@ -28,21 +28,25 @@ resulting from the use or misuse of this software.
 // Package dpi provides a libp2p transport wrapper that defeats Deep Packet
 // Inspection through two complementary techniques:
 //
-//  1. TLS camouflage – a fake TLS 1.3 handshake (ClientHello / ServerHello)
-//     is performed before the real Noise handshake, and all subsequent data
-//     is framed as TLS Application Data records (content-type 0x17). To a DPI
-//     middlebox the connection looks like a standard HTTPS session.
+//  1. TLS camouflage – a real TLS tunnel is established using uTLS with a
+//     genuine browser fingerprint (Chrome, Firefox, etc.) on the client side
+//     and standard crypto/tls with a plausible certificate chain on the server
+//     side. The Noise protocol handshake and all application data travel inside
+//     this TLS tunnel, making the connection indistinguishable from normal
+//     HTTPS browser traffic to DPI middleboxes.
 //
-//  2. TCP fragmentation – the initial bytes (including the fake ClientHello)
-//     are split into small TCP segments with random inter-segment delays so
-//     that stateful DPI that only inspects the first segment cannot match
-//     known signatures.
+//  2. TCP fragmentation – the initial bytes of the TLS ClientHello are split
+//     into small TCP segments with random inter-segment delays so that
+//     stateful DPI that only inspects the first segment cannot match known
+//     signatures.
+//
+// Active probing defenses include SNI/ALPN consistency validation, a plausible
+// two-certificate chain (fake CA + leaf), and configurable handshake timeouts.
 package dpi
 
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"io"
 	"math/big"
 	"net"
@@ -66,9 +70,8 @@ const (
 	DefaultFragmentSize = 2
 
 	// DefaultHandshakeLen is the number of initial bytes subject to
-	// fragmentation. This covers multistream-select (~50 bytes) and the
-	// Noise XX handshake (~256 bytes) with margin.
-	DefaultHandshakeLen = 512
+	// fragmentation. This covers the TLS ClientHello (~500 bytes) with margin.
+	DefaultHandshakeLen = 1024
 
 	// DefaultMaxDelay is the upper bound for the random delay inserted
 	// between handshake fragments. Keeping this small avoids noticeable
@@ -195,7 +198,7 @@ func WithHandshakeLen(n int) Option {
 }
 
 // WithMaxDelay sets the upper bound for random inter-fragment delays.
-// Non-positive values are ignored.
+// Zero disables delays; negative values are ignored.
 func WithMaxDelay(d time.Duration) Option {
 	return func(t *SpoofTransport) error {
 		if d >= 0 {
@@ -216,7 +219,7 @@ func WithConnectTimeout(d time.Duration) Option {
 	}
 }
 
-// WithSNI sets the Server Name Indication value used in the fake TLS
+// WithSNI sets the Server Name Indication value used in the TLS
 // ClientHello. Defaults to "www.googleapis.com".
 func WithSNI(sni string) Option {
 	return func(t *SpoofTransport) error {
@@ -225,8 +228,32 @@ func WithSNI(sni string) Option {
 	}
 }
 
+// WithBrowserFingerprint selects which browser's TLS fingerprint to
+// mimic. Use the Browser* constants (e.g. BrowserChrome, BrowserFirefox).
+// Defaults to Chrome if empty or unknown.
+func WithBrowserFingerprint(browser string) Option {
+	return func(t *SpoofTransport) error {
+		t.browserFingerprint = browser
+		return nil
+	}
+}
+
+// WithHandshakeTimeout sets the maximum duration for the TLS handshake.
+// Connections that do not complete the handshake within this window are
+// closed, defending against slow-handshake active probing. Non-positive
+// values are ignored.
+func WithHandshakeTimeout(d time.Duration) Option {
+	return func(t *SpoofTransport) error {
+		if d > 0 {
+			t.handshakeTimeout = d
+		}
+		return nil
+	}
+}
+
 // SpoofTransport is a libp2p transport that wraps TCP connections with
-// TLS camouflage and handshake-phase traffic fragmentation to evade DPI.
+// real TLS camouflage (uTLS browser fingerprint) and handshake-phase
+// traffic fragmentation to evade DPI.
 type SpoofTransport struct {
 	inner     *tcp.TcpTransport
 	upgrader  transport.Upgrader
@@ -237,7 +264,12 @@ type SpoofTransport struct {
 	handshakeLen   int
 	maxDelay       time.Duration
 	connectTimeout time.Duration
-	sni            string
+
+	// TLS camouflage settings.
+	sni                string
+	browserFingerprint string
+	handshakeTimeout   time.Duration
+	camoConfig         *camouflageConfig // built once in constructor
 }
 
 var _ transport.Transport = (*SpoofTransport)(nil)
@@ -275,11 +307,44 @@ func NewSpoofTransport(
 		return nil, err
 	}
 	t.inner = inner
+
+	// Build the TLS camouflage configuration once. The server-side TLS
+	// config (including the generated certificate chain) is reused for
+	// all accepted connections.
+	cfg, err := t.buildCamouflageConfig()
+	if err != nil {
+		return nil, err
+	}
+	t.camoConfig = cfg
+
 	return t, nil
 }
 
-// Dial dials the remote peer, wrapping the raw TCP connection with SpoofConn
-// before the Noise handshake.
+// buildCamouflageConfig constructs the camouflageConfig from transport
+// settings. Called once during construction.
+func (t *SpoofTransport) buildCamouflageConfig() (*camouflageConfig, error) {
+	sni := t.sni
+	if sni == "" {
+		sni = defaultSNI
+	}
+
+	cache := &certCache{}
+	serverCfg, err := buildServerTLSConfig(sni, defaultALPNProtos, cache)
+	if err != nil {
+		return nil, err
+	}
+
+	return &camouflageConfig{
+		sni:              sni,
+		alpnProtos:       defaultALPNProtos,
+		clientHelloID:    browserToHelloID(t.browserFingerprint),
+		handshakeTimeout: t.handshakeTimeout,
+		serverTLSConfig:  serverCfg,
+	}, nil
+}
+
+// Dial dials the remote peer, wrapping the raw TCP connection with
+// SpoofConn + real TLS camouflage before the Noise handshake.
 func (t *SpoofTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (transport.CapableConn, error) {
 	connScope, err := t.rcmgr.OpenConnection(network.DirOutbound, true, raddr)
 	if err != nil {
@@ -314,13 +379,13 @@ func (t *SpoofTransport) dialWithScope(
 	setLinger(rawConn, 0)
 	tryKeepAlive(rawConn, true)
 
-	// Layer 1: TCP fragmentation (fragments the TLS ClientHello into
-	// small TCP segments to defeat first-segment DPI).
+	// Layer 1: TCP fragmentation – fragments the TLS ClientHello into
+	// small TCP segments to defeat first-segment DPI.
 	spoofed := t.wrapConn(rawConn)
 
-	// Layer 2: TLS camouflage (fake TLS 1.3 handshake + record framing
-	// so traffic looks like HTTPS to reassembling DPI).
-	camouflaged, err := newCamouflageConn(spoofed, true, t.sni)
+	// Layer 2: Real TLS tunnel – uTLS presents a genuine browser
+	// ClientHello fingerprint; all subsequent traffic is encrypted TLS.
+	camouflaged, err := newCamouflageConn(spoofed, true, t.camoConfig)
 	if err != nil {
 		_ = rawConn.Close()
 		return nil, err
@@ -339,6 +404,8 @@ func (t *SpoofTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (manet
 		ctx, cancel = context.WithTimeout(ctx, t.connectTimeout)
 		defer cancel()
 	}
+	// When sharedTCP (tcpreuse.ConnMgr) is available, it handles reuseport
+	// dialing internally. When absent, fall back to standard dialing.
 	if t.sharedTCP != nil {
 		return t.sharedTCP.DialContext(ctx, raddr)
 	}
@@ -347,8 +414,8 @@ func (t *SpoofTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (manet
 }
 
 // Listen creates a TCP listener whose accepted connections are wrapped
-// with SpoofConn so that server-side handshake responses are also
-// fragmented.
+// with SpoofConn + real TLS camouflage so that the TLS handshake
+// completes before the Noise upgrade.
 func (t *SpoofTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 	var gated transport.GatedMaListener
 	if t.sharedTCP != nil {
@@ -370,7 +437,7 @@ func (t *SpoofTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) 
 		fragmentSize:    t.fragmentSize,
 		handshakeLen:    t.handshakeLen,
 		maxDelay:        t.maxDelay,
-		sni:             t.sni,
+		camoConfig:      t.camoConfig,
 	}
 
 	return t.upgrader.UpgradeGatedMaListener(t, spoofList), nil
@@ -405,7 +472,7 @@ func (t *SpoofTransport) wrapConn(c manet.Conn) *SpoofConn {
 }
 
 // ---------------------------------------------------------------------------
-// spoofGatedMaListener – wraps accepted connections with SpoofConn
+// spoofGatedMaListener – wraps accepted connections with SpoofConn + TLS
 // ---------------------------------------------------------------------------
 
 type spoofGatedMaListener struct {
@@ -413,7 +480,7 @@ type spoofGatedMaListener struct {
 	fragmentSize int
 	handshakeLen int
 	maxDelay     time.Duration
-	sni          string
+	camoConfig   *camouflageConfig
 }
 
 func (l *spoofGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope, error) {
@@ -436,9 +503,9 @@ func (l *spoofGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope
 		maxDelay:     l.maxDelay,
 	}
 
-	// Layer 2: TLS camouflage – server side reads ClientHello and
-	// responds with ServerHello before the Noise upgrade.
-	camouflaged, err := newCamouflageConn(spoofed, false, l.sni)
+	// Layer 2: Real TLS tunnel – server side accepts TLS with a plausible
+	// certificate chain and validates the client's ALPN.
+	camouflaged, err := newCamouflageConn(spoofed, false, l.camoConfig)
 	if err != nil {
 		if scope != nil {
 			scope.Done()
@@ -464,8 +531,8 @@ func setLinger(conn net.Conn, sec int) {
 }
 
 func tryKeepAlive(conn net.Conn, enabled bool) {
-	// Prefer the full TCP keepalive interface (including period), but fall back
-	// to just enabling keepalive if SetKeepAlivePeriod is unavailable.
+	// Prefer the full TCP keepalive interface (including period), but fall
+	// back to just enabling keepalive if SetKeepAlivePeriod is unavailable.
 	type fullKeepAlive interface {
 		SetKeepAlive(bool) error
 		SetKeepAlivePeriod(time.Duration) error
@@ -492,24 +559,6 @@ func tryKeepAlive(conn net.Conn, enabled bool) {
 			log.Debugf("error enabling TCP keepalive (no period support): %v", err)
 		}
 	}
-}
-
-// errShortWrite is returned when Write returns 0 bytes without an error.
-var errShortWrite = errors.New("dpi: short write (0 bytes)")
-
-// writeAll writes the entire buffer to w, retrying on short writes.
-func writeAll(w io.Writer, buf []byte) error {
-	for len(buf) > 0 {
-		n, err := w.Write(buf)
-		if n == 0 && err == nil {
-			return errShortWrite
-		}
-		buf = buf[n:]
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func randDuration(max time.Duration) time.Duration {

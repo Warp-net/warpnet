@@ -26,13 +26,14 @@ package dpi
 
 import (
 	"bytes"
-	"encoding/binary"
-	"io"
+	"crypto/x509"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	ma "github.com/multiformats/go-multiaddr"
+	utls "github.com/refraction-networking/utls"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,125 +54,108 @@ func newPipePair() (*pipeConn, *pipeConn) {
 	return &pipeConn{a}, &pipeConn{b}
 }
 
-// ---------------------------------------------------------------------------
-// ClientHello structure tests
-// ---------------------------------------------------------------------------
-
-func TestBuildClientHello_HasValidTLSStructure(t *testing.T) {
-	hello := buildClientHello("example.com")
-
-	require.True(t, len(hello) > tlsRecordHeaderLen, "ClientHello too short")
-
-	// TLS record header.
-	assert.Equal(t, byte(tlsRecordHandshake), hello[0], "content type should be Handshake (0x16)")
-	assert.Equal(t, byte(0x03), hello[1])
-	assert.Equal(t, byte(0x03), hello[2], "record version should be TLS 1.2")
-	recordLen := int(binary.BigEndian.Uint16(hello[3:5]))
-	assert.Equal(t, len(hello)-tlsRecordHeaderLen, recordLen)
-
-	// Handshake header.
-	payload := hello[tlsRecordHeaderLen:]
-	assert.Equal(t, byte(tlsHandshakeClientHello), payload[0], "handshake type should be ClientHello")
-
-	// Handshake length (3 bytes).
-	hsLen := int(payload[1])<<16 | int(payload[2])<<8 | int(payload[3])
-	assert.Equal(t, len(payload)-4, hsLen, "handshake length mismatch")
-
-	// Client version.
-	assert.Equal(t, byte(0x03), payload[4])
-	assert.Equal(t, byte(0x03), payload[5], "client version should be TLS 1.2")
-
-	// Random (32 bytes) at offset 6.
-	// Session ID length at offset 38.
-	require.True(t, len(payload) > 38)
-	sidLen := int(payload[38])
-	assert.Equal(t, 32, sidLen, "session ID should be 32 bytes")
-}
-
-func TestBuildClientHello_ContainsSNI(t *testing.T) {
-	sni := "test.example.org"
-	hello := buildClientHello(sni)
-
-	// The SNI should appear in the raw bytes.
-	assert.True(t, bytes.Contains(hello, []byte(sni)),
-		"ClientHello should contain the SNI hostname")
-}
-
-func TestBuildClientHello_ContainsALPN(t *testing.T) {
-	hello := buildClientHello("example.com")
-	assert.True(t, bytes.Contains(hello, []byte("h2")), "should contain h2 ALPN")
-	assert.True(t, bytes.Contains(hello, []byte("http/1.1")), "should contain http/1.1 ALPN")
-}
-
-func TestBuildClientHello_RealisticSize(t *testing.T) {
-	hello := buildClientHello("www.google.com")
-	// Real ClientHello is typically 300-600 bytes.
-	assert.True(t, len(hello) >= 250, "ClientHello too small: %d", len(hello))
-	assert.True(t, len(hello) <= 800, "ClientHello too large: %d", len(hello))
+// testCamoConfig builds a camouflageConfig suitable for tests.
+func testCamoConfig(sni string) *camouflageConfig {
+	if sni == "" {
+		sni = "test.example.com"
+	}
+	cache := &certCache{}
+	serverCfg, err := buildServerTLSConfig(sni, defaultALPNProtos, cache)
+	if err != nil {
+		panic(err)
+	}
+	return &camouflageConfig{
+		sni:              sni,
+		alpnProtos:       defaultALPNProtos,
+		clientHelloID:    utls.HelloChrome_Auto,
+		handshakeTimeout: 10 * time.Second,
+		serverTLSConfig:  serverCfg,
+	}
 }
 
 // ---------------------------------------------------------------------------
-// ServerHello structure tests
+// Certificate chain tests
 // ---------------------------------------------------------------------------
 
-func TestBuildServerHello_HasValidTLSStructure(t *testing.T) {
-	sessionID := make([]byte, 32)
-	sh := buildServerHello(sessionID)
-
-	require.True(t, len(sh) > tlsRecordHeaderLen)
-	assert.Equal(t, byte(tlsRecordHandshake), sh[0])
-	recordLen := int(binary.BigEndian.Uint16(sh[3:5]))
-	assert.Equal(t, len(sh)-tlsRecordHeaderLen, recordLen)
-
-	payload := sh[tlsRecordHeaderLen:]
-	assert.Equal(t, byte(tlsHandshakeServerHello), payload[0])
-}
-
-func TestBuildServerHello_EchoesSessionID(t *testing.T) {
-	sessionID := bytes.Repeat([]byte{0xAB}, 32)
-	sh := buildServerHello(sessionID)
-	assert.True(t, bytes.Contains(sh, sessionID), "ServerHello should echo the session ID")
-}
-
-// ---------------------------------------------------------------------------
-// TLS record framing tests
-// ---------------------------------------------------------------------------
-
-func TestMakeTLSRecord_Structure(t *testing.T) {
-	payload := []byte("hello")
-	rec := makeTLSRecord(tlsRecordApplicationData, payload)
-
-	assert.Equal(t, byte(tlsRecordApplicationData), rec[0])
-	assert.Equal(t, byte(0x03), rec[1])
-	assert.Equal(t, byte(0x03), rec[2])
-	recLen := binary.BigEndian.Uint16(rec[3:5])
-	assert.Equal(t, uint16(5), recLen)
-	assert.Equal(t, payload, rec[tlsRecordHeaderLen:])
-}
-
-func TestReadTLSRecord_RoundTrip(t *testing.T) {
-	original := []byte("test payload data")
-	record := makeTLSRecord(tlsRecordApplicationData, original)
-
-	payload, err := readTLSRecord(bytes.NewReader(record), tlsRecordApplicationData)
+func TestGenerateCertChain_ValidStructure(t *testing.T) {
+	cert, err := generateCertChain("test.example.com")
 	require.NoError(t, err)
-	assert.Equal(t, original, payload)
+
+	// Should have two certificates: leaf + CA.
+	require.Len(t, cert.Certificate, 2, "cert chain should have leaf + CA")
+
+	leaf, err := x509.ParseCertificate(cert.Certificate[0])
+	require.NoError(t, err)
+	ca, err := x509.ParseCertificate(cert.Certificate[1])
+	require.NoError(t, err)
+
+	// CA cert checks.
+	assert.True(t, ca.IsCA, "CA cert should have IsCA=true")
+	assert.Contains(t, ca.Subject.Organization, "Cloudflare, Inc.")
+
+	// Leaf cert checks.
+	assert.False(t, leaf.IsCA, "leaf cert should not be CA")
+	assert.Equal(t, "test.example.com", leaf.Subject.CommonName)
+	assert.Contains(t, leaf.DNSNames, "test.example.com")
+	assert.Contains(t, leaf.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
+
+	// Leaf should be signed by CA.
+	roots := x509.NewCertPool()
+	roots.AddCert(ca)
+	_, err = leaf.Verify(x509.VerifyOptions{Roots: roots})
+	require.NoError(t, err, "leaf cert should be verifiable against CA")
 }
 
-func TestReadTLSRecord_WrongType(t *testing.T) {
-	record := makeTLSRecord(tlsRecordHandshake, []byte("data"))
+func TestGenerateCertChain_PlausibleDates(t *testing.T) {
+	cert, err := generateCertChain("example.com")
+	require.NoError(t, err)
 
-	_, err := readTLSRecord(bytes.NewReader(record), tlsRecordApplicationData)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected TLS record type")
+	leaf, err := x509.ParseCertificate(cert.Certificate[0])
+	require.NoError(t, err)
+
+	now := time.Now()
+	assert.True(t, leaf.NotBefore.Before(now), "leaf NotBefore should be in the past")
+	assert.True(t, leaf.NotAfter.After(now), "leaf NotAfter should be in the future")
+
+	// Validity period should be roughly 1 year.
+	validity := leaf.NotAfter.Sub(leaf.NotBefore)
+	assert.True(t, validity > 300*24*time.Hour, "cert validity too short")
+	assert.True(t, validity < 400*24*time.Hour, "cert validity too long")
+}
+
+func TestGenerateCertChain_DifferentSerials(t *testing.T) {
+	cert1, err := generateCertChain("a.example.com")
+	require.NoError(t, err)
+	cert2, err := generateCertChain("b.example.com")
+	require.NoError(t, err)
+
+	leaf1, _ := x509.ParseCertificate(cert1.Certificate[0])
+	leaf2, _ := x509.ParseCertificate(cert2.Certificate[0])
+	assert.NotEqual(t, leaf1.SerialNumber, leaf2.SerialNumber,
+		"different certs should have different serial numbers")
 }
 
 // ---------------------------------------------------------------------------
-// Camouflage handshake + data round-trip
+// Browser fingerprint mapping tests
+// ---------------------------------------------------------------------------
+
+func TestBrowserToHelloID(t *testing.T) {
+	assert.Equal(t, utls.HelloChrome_Auto, browserToHelloID(BrowserChrome))
+	assert.Equal(t, utls.HelloFirefox_Auto, browserToHelloID(BrowserFirefox))
+	assert.Equal(t, utls.HelloSafari_Auto, browserToHelloID(BrowserSafari))
+	assert.Equal(t, utls.HelloEdge_Auto, browserToHelloID(BrowserEdge))
+	// Unknown defaults to Chrome.
+	assert.Equal(t, utls.HelloChrome_Auto, browserToHelloID("unknown"))
+	assert.Equal(t, utls.HelloChrome_Auto, browserToHelloID(""))
+}
+
+// ---------------------------------------------------------------------------
+// TLS handshake + data round-trip
 // ---------------------------------------------------------------------------
 
 func TestCamouflageConn_HandshakeAndDataRoundTrip(t *testing.T) {
 	clientRaw, serverRaw := newPipePair()
+	cfg := testCamoConfig("test.example.com")
 
 	var (
 		wg         sync.WaitGroup
@@ -184,11 +168,11 @@ func TestCamouflageConn_HandshakeAndDataRoundTrip(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		clientConn, clientErr = newCamouflageConn(clientRaw, true, "test.example.com")
+		clientConn, clientErr = newCamouflageConn(clientRaw, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		serverConn, serverErr = newCamouflageConn(serverRaw, false, "")
+		serverConn, serverErr = newCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 
@@ -196,7 +180,7 @@ func TestCamouflageConn_HandshakeAndDataRoundTrip(t *testing.T) {
 	require.NoError(t, serverErr, "server handshake failed")
 
 	// Send data from client to server.
-	testData := []byte("Hello from client via TLS camouflage!")
+	testData := []byte("Hello from client via real TLS camouflage!")
 	go func() {
 		_, err := clientConn.Write(testData)
 		assert.NoError(t, err)
@@ -208,7 +192,7 @@ func TestCamouflageConn_HandshakeAndDataRoundTrip(t *testing.T) {
 	assert.Equal(t, testData, buf[:n])
 
 	// Send data from server to client.
-	replyData := []byte("Server reply over camouflaged connection")
+	replyData := []byte("Server reply over TLS tunnel")
 	go func() {
 		_, err := serverConn.Write(replyData)
 		assert.NoError(t, err)
@@ -224,6 +208,7 @@ func TestCamouflageConn_HandshakeAndDataRoundTrip(t *testing.T) {
 
 func TestCamouflageConn_LargeDataTransfer(t *testing.T) {
 	clientRaw, serverRaw := newPipePair()
+	cfg := testCamoConfig("cdn.example.com")
 
 	var wg sync.WaitGroup
 	var clientConn, serverConn *CamouflageConn
@@ -232,19 +217,19 @@ func TestCamouflageConn_LargeDataTransfer(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		clientConn, clientErr = newCamouflageConn(clientRaw, true, "cdn.example.com")
+		clientConn, clientErr = newCamouflageConn(clientRaw, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		serverConn, serverErr = newCamouflageConn(serverRaw, false, "")
+		serverConn, serverErr = newCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 
 	require.NoError(t, clientErr)
 	require.NoError(t, serverErr)
 
-	// Send data larger than one TLS record (>16KB).
-	bigData := bytes.Repeat([]byte("X"), 32*1024)
+	// Send 64KB of data through the TLS tunnel.
+	bigData := bytes.Repeat([]byte("X"), 64*1024)
 
 	go func() {
 		_, err := clientConn.Write(bigData)
@@ -265,10 +250,88 @@ func TestCamouflageConn_LargeDataTransfer(t *testing.T) {
 	_ = serverConn.Close()
 }
 
-func TestCamouflageConn_WireTrafficLooksTLS(t *testing.T) {
-	// Use a recording conn to inspect raw bytes on the wire.
+// ---------------------------------------------------------------------------
+// Wire traffic inspection – verify real TLS on the wire
+// ---------------------------------------------------------------------------
+
+func TestCamouflageConn_WireTrafficIsRealTLS(t *testing.T) {
 	clientRaw, serverRaw := newPipePair()
+	cfg := testCamoConfig("www.google.com")
 	recorder := &recordingConn{pipeConn: clientRaw}
+
+	var wg sync.WaitGroup
+	var serverErr error
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, _ = newCamouflageConn(recorder, true, cfg)
+	}()
+	go func() {
+		defer wg.Done()
+		_, serverErr = newCamouflageConn(serverRaw, false, cfg)
+	}()
+	wg.Wait()
+
+	require.NoError(t, serverErr)
+
+	// Verify the first bytes written were a TLS ClientHello (0x16).
+	firstWrite := recorder.getWrite(0)
+	require.True(t, len(firstWrite) >= 5,
+		"first write too short: %d", len(firstWrite))
+	assert.Equal(t, byte(0x16), firstWrite[0],
+		"first byte on wire should be TLS Handshake content type (0x16)")
+	// TLS record version should be 0x0301 (TLS 1.0) or 0x0303 (TLS 1.2)
+	// in the record header – uTLS mimics this from the browser.
+	assert.Equal(t, byte(0x03), firstWrite[1],
+		"TLS major version should be 3")
+}
+
+// ---------------------------------------------------------------------------
+// Active probing defense tests
+// ---------------------------------------------------------------------------
+
+func TestValidateALPN(t *testing.T) {
+	allowed := []string{"h2", "http/1.1"}
+
+	assert.True(t, validateALPN("h2", allowed))
+	assert.True(t, validateALPN("http/1.1", allowed))
+	assert.True(t, validateALPN("", allowed)) // empty is always OK
+	assert.False(t, validateALPN("mqtt", allowed))
+	assert.False(t, validateALPN("grpc", allowed))
+}
+
+func TestCertCache_ReusesForSameSNI(t *testing.T) {
+	cache := &certCache{}
+
+	cert1, err := cache.getOrGenerate("test.example.com")
+	require.NoError(t, err)
+	cert2, err := cache.getOrGenerate("test.example.com")
+	require.NoError(t, err)
+
+	// Same SNI should return the same certificate.
+	assert.Equal(t, cert1.Certificate, cert2.Certificate)
+}
+
+func TestCertCache_RegeneratesForDifferentSNI(t *testing.T) {
+	cache := &certCache{}
+
+	cert1, err := cache.getOrGenerate("a.example.com")
+	require.NoError(t, err)
+	cert2, err := cache.getOrGenerate("b.example.com")
+	require.NoError(t, err)
+
+	// Different SNI should produce different certificates.
+	assert.NotEqual(t, cert1.Certificate, cert2.Certificate)
+}
+
+// ---------------------------------------------------------------------------
+// Multiaddr preservation test
+// ---------------------------------------------------------------------------
+
+func TestCamouflageConn_PreservesMultiaddr(t *testing.T) {
+	clientRaw, serverRaw := newPipePair()
+	cfg := testCamoConfig("example.com")
 
 	var wg sync.WaitGroup
 	var clientConn *CamouflageConn
@@ -277,54 +340,31 @@ func TestCamouflageConn_WireTrafficLooksTLS(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		clientConn, clientErr = newCamouflageConn(recorder, true, "www.google.com")
+		clientConn, clientErr = newCamouflageConn(clientRaw, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		_, serverErr = newCamouflageConn(serverRaw, false, "")
+		_, serverErr = newCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 
 	require.NoError(t, clientErr)
 	require.NoError(t, serverErr)
 
-	// Verify the first bytes written were a TLS Handshake record (ClientHello).
-	firstWrite := recorder.getWrite(0)
-	require.True(t, len(firstWrite) >= tlsRecordHeaderLen,
-		"first write too short: %d", len(firstWrite))
-	assert.Equal(t, byte(tlsRecordHandshake), firstWrite[0],
-		"first byte on wire should be TLS Handshake content type (0x16)")
-
-	// Send application data and verify it's wrapped in TLS Application Data.
-	recorder.resetWrites()
-	go func() {
-		_, _ = clientConn.Write([]byte("application payload"))
-	}()
-
-	// Read from server side to unblock the pipe.
-	buf := make([]byte, 1024)
-	_, _ = io.ReadAtLeast(serverRaw.Conn, buf, 1)
-
-	writes := recorder.allWriteBytes()
-	require.True(t, len(writes) >= tlsRecordHeaderLen)
-	assert.Equal(t, byte(tlsRecordApplicationData), writes[0],
-		"application data should be wrapped in TLS Application Data record (0x17)")
+	// CamouflageConn should delegate multiaddr to the raw connection.
+	assert.Equal(t, clientRaw.LocalMultiaddr(), clientConn.LocalMultiaddr())
+	assert.Equal(t, clientRaw.RemoteMultiaddr(), clientConn.RemoteMultiaddr())
 
 	_ = clientConn.Close()
 }
 
-func TestExtractSessionID(t *testing.T) {
-	hello := buildClientHello("example.com")
-	payload := hello[tlsRecordHeaderLen:]
-
-	sid := extractSessionID(payload)
-	assert.Equal(t, 32, len(sid), "session ID should be 32 bytes")
-	assert.False(t, bytes.Equal(sid, make([]byte, 32)),
-		"session ID should not be all zeros (it's random)")
-}
+// ---------------------------------------------------------------------------
+// Empty write test
+// ---------------------------------------------------------------------------
 
 func TestCamouflageConn_EmptyWrite(t *testing.T) {
 	clientRaw, serverRaw := newPipePair()
+	cfg := testCamoConfig("example.com")
 
 	var wg sync.WaitGroup
 	var clientConn *CamouflageConn
@@ -333,17 +373,18 @@ func TestCamouflageConn_EmptyWrite(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		clientConn, clientErr = newCamouflageConn(clientRaw, true, "example.com")
+		clientConn, clientErr = newCamouflageConn(clientRaw, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		_, serverErr = newCamouflageConn(serverRaw, false, "")
+		_, serverErr = newCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 
 	require.NoError(t, clientErr)
 	require.NoError(t, serverErr)
 
+	// TLS handles empty writes gracefully.
 	n, err := clientConn.Write(nil)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, n)
@@ -381,20 +422,4 @@ func (r *recordingConn) getWrite(i int) []byte {
 		return nil
 	}
 	return r.writes[i]
-}
-
-func (r *recordingConn) resetWrites() {
-	r.mu.Lock()
-	r.writes = nil
-	r.mu.Unlock()
-}
-
-func (r *recordingConn) allWriteBytes() []byte {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var out []byte
-	for _, w := range r.writes {
-		out = append(out, w...)
-	}
-	return out
 }
