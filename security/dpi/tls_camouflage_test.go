@@ -44,14 +44,22 @@ import (
 
 type pipeConn struct {
 	net.Conn
+	local  ma.Multiaddr
+	remote ma.Multiaddr
 }
 
-func (p *pipeConn) LocalMultiaddr() ma.Multiaddr  { return nil }
-func (p *pipeConn) RemoteMultiaddr() ma.Multiaddr { return nil }
+func (p *pipeConn) LocalMultiaddr() ma.Multiaddr  { return p.local }
+func (p *pipeConn) RemoteMultiaddr() ma.Multiaddr { return p.remote }
 
 func newPipePair() (*pipeConn, *pipeConn) {
 	a, b := net.Pipe()
-	return &pipeConn{a}, &pipeConn{b}
+
+	// Use distinct, non-nil multiaddrs so tests can verify delegation.
+	ma1, _ := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/1")
+	ma2, _ := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/2")
+
+	return &pipeConn{Conn: a, local: ma1, remote: ma2},
+		&pipeConn{Conn: b, local: ma2, remote: ma1}
 }
 
 // testCamoConfig builds a camouflageConfig suitable for tests.
@@ -352,6 +360,8 @@ func TestCamouflageConn_PreservesMultiaddr(t *testing.T) {
 	require.NoError(t, serverErr)
 
 	// CamouflageConn should delegate multiaddr to the raw connection.
+	require.NotNil(t, clientRaw.LocalMultiaddr(), "test setup: raw local multiaddr must be non-nil")
+	require.NotNil(t, clientRaw.RemoteMultiaddr(), "test setup: raw remote multiaddr must be non-nil")
 	assert.Equal(t, clientRaw.LocalMultiaddr(), clientConn.LocalMultiaddr())
 	assert.Equal(t, clientRaw.RemoteMultiaddr(), clientConn.RemoteMultiaddr())
 

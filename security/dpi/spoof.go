@@ -114,9 +114,6 @@ func (c *SpoofConn) Write(b []byte) (int, error) {
 }
 
 func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	fragSize := c.fragmentSize
 	if fragSize <= 0 {
 		fragSize = DefaultFragmentSize
@@ -124,17 +121,35 @@ func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {
 
 	total := 0
 	for len(b) > 0 {
-		if c.bytesWritten >= c.handshakeLen {
-			n, err := c.Conn.Write(b)
-			total += n
-			c.bytesWritten += n
-			return total, err
+		c.mu.Lock()
+		pastHandshake := c.bytesWritten >= c.handshakeLen
+		c.mu.Unlock()
+
+		if pastHandshake {
+			// Past handshake: write-all loop for the remainder.
+			for len(b) > 0 {
+				n, err := c.Conn.Write(b)
+				c.mu.Lock()
+				c.bytesWritten += n
+				c.mu.Unlock()
+				total += n
+				if n == 0 && err == nil {
+					return total, io.ErrShortWrite
+				}
+				if err != nil {
+					return total, err
+				}
+				b = b[n:]
+			}
+			return total, nil
 		}
 
 		size := min(fragSize, len(b))
 		n, err := c.Conn.Write(b[:size])
-		total += n
+		c.mu.Lock()
 		c.bytesWritten += n
+		c.mu.Unlock()
+		total += n
 		if n == 0 && err == nil {
 			return total, io.ErrShortWrite
 		}
@@ -143,7 +158,10 @@ func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {
 		}
 		b = b[n:]
 
-		if len(b) > 0 && c.bytesWritten < c.handshakeLen {
+		c.mu.Lock()
+		stillHandshake := c.bytesWritten < c.handshakeLen
+		c.mu.Unlock()
+		if len(b) > 0 && stillHandshake {
 			delay := randDuration(c.maxDelay)
 			if delay > 0 {
 				time.Sleep(delay)
@@ -416,21 +434,17 @@ func (t *SpoofTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (manet
 // Listen creates a TCP listener whose accepted connections are wrapped
 // with SpoofConn + real TLS camouflage so that the TLS handshake
 // completes before the Noise upgrade.
+//
+// Note: we intentionally bypass sharedTCP demultiplexed listening because
+// our connections start with a real TLS ClientHello (0x16...), not
+// multistream-select. Using DemultiplexedConnType_MultistreamSelect would
+// cause incoming connections to be misclassified.
 func (t *SpoofTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
-	var gated transport.GatedMaListener
-	if t.sharedTCP != nil {
-		var err error
-		gated, err = t.sharedTCP.DemultiplexedListen(laddr, tcpreuse.DemultiplexedConnType_MultistreamSelect)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		mal, err := manet.Listen(laddr)
-		if err != nil {
-			return nil, err
-		}
-		gated = t.upgrader.GateMaListener(mal)
+	mal, err := manet.Listen(laddr)
+	if err != nil {
+		return nil, err
 	}
+	gated := t.upgrader.GateMaListener(mal)
 
 	spoofList := &spoofGatedMaListener{
 		GatedMaListener: gated,
