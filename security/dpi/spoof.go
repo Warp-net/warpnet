@@ -42,6 +42,8 @@ package dpi
 import (
 	"context"
 	"crypto/rand"
+	"errors"
+	"io"
 	"math/big"
 	"net"
 	"sync"
@@ -130,6 +132,9 @@ func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {
 		n, err := c.Conn.Write(b[:size])
 		total += n
 		c.bytesWritten += n
+		if n == 0 && err == nil {
+			return total, io.ErrShortWrite
+		}
 		if err != nil {
 			return total, err
 		}
@@ -190,17 +195,23 @@ func WithHandshakeLen(n int) Option {
 }
 
 // WithMaxDelay sets the upper bound for random inter-fragment delays.
+// Non-positive values are ignored.
 func WithMaxDelay(d time.Duration) Option {
 	return func(t *SpoofTransport) error {
-		t.maxDelay = d
+		if d >= 0 {
+			t.maxDelay = d
+		}
 		return nil
 	}
 }
 
 // WithConnectTimeout sets the TCP connect timeout.
+// Non-positive values are ignored.
 func WithConnectTimeout(d time.Duration) Option {
 	return func(t *SpoofTransport) error {
-		t.connectTimeout = d
+		if d > 0 {
+			t.connectTimeout = d
+		}
 		return nil
 	}
 }
@@ -481,6 +492,24 @@ func tryKeepAlive(conn net.Conn, enabled bool) {
 			log.Debugf("error enabling TCP keepalive (no period support): %v", err)
 		}
 	}
+}
+
+// errShortWrite is returned when Write returns 0 bytes without an error.
+var errShortWrite = errors.New("dpi: short write (0 bytes)")
+
+// writeAll writes the entire buffer to w, retrying on short writes.
+func writeAll(w io.Writer, buf []byte) error {
+	for len(buf) > 0 {
+		n, err := w.Write(buf)
+		if n == 0 && err == nil {
+			return errShortWrite
+		}
+		buf = buf[n:]
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func randDuration(max time.Duration) time.Duration {

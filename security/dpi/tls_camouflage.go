@@ -36,6 +36,7 @@ import (
 	"sync"
 
 	manet "github.com/multiformats/go-multiaddr/net"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -101,7 +102,7 @@ func (cc *CamouflageConn) Write(b []byte) (int, error) {
 		}
 
 		record := makeTLSRecord(tlsRecordApplicationData, chunk)
-		if _, err := cc.Conn.Write(record); err != nil {
+		if err := writeAll(cc.Conn, record); err != nil {
 			return total, err
 		}
 		total += len(chunk)
@@ -155,10 +156,10 @@ func (cc *CamouflageConn) clientHandshake(sni string) error {
 	hello := buildClientHello(sni)
 	ccs := makeTLSRecord(tlsRecordChangeCipherSpec, []byte{0x01})
 
-	if _, err := cc.Conn.Write(hello); err != nil {
+	if err := writeAll(cc.Conn, hello); err != nil {
 		return err
 	}
-	if _, err := cc.Conn.Write(ccs); err != nil {
+	if err := writeAll(cc.Conn, ccs); err != nil {
 		return err
 	}
 	if _, err := readTLSRecord(cc.Conn, tlsRecordHandshake); err != nil {
@@ -183,10 +184,10 @@ func (cc *CamouflageConn) serverHandshake() error {
 	sh := buildServerHello(sessionID)
 	ccs := makeTLSRecord(tlsRecordChangeCipherSpec, []byte{0x01})
 
-	if _, err = cc.Conn.Write(sh); err != nil {
+	if err = writeAll(cc.Conn, sh); err != nil {
 		return err
 	}
-	if _, err = cc.Conn.Write(ccs); err != nil {
+	if err = writeAll(cc.Conn, ccs); err != nil {
 		return err
 	}
 	return nil
@@ -308,7 +309,7 @@ func buildServerHello(sessionID []byte) []byte {
 	writeRandom(&msg)
 
 	if len(sessionID) == 0 {
-		sessionID = make([]byte, 32)
+		sessionID = makeRandom(32)
 	}
 	msg.WriteByte(byte(len(sessionID)))
 	msg.Write(sessionID)
@@ -345,11 +346,11 @@ func extractSessionID(payload []byte) []byte {
 	// type(1) + len(3) + version(2) + random(32) = offset 38
 	const sidOffset = 1 + 3 + 2 + 32
 	if len(payload) < sidOffset+1 {
-		return make([]byte, 32)
+		return makeRandom(32) // random fallback avoids zero-fingerprint
 	}
 	sidLen := int(payload[sidOffset])
 	if len(payload) < sidOffset+1+sidLen {
-		return make([]byte, 32)
+		return makeRandom(32)
 	}
 	out := make([]byte, sidLen)
 	copy(out, payload[sidOffset+1:])
@@ -455,7 +456,14 @@ func putUint16(buf *bytes.Buffer, v uint16) {
 
 func makeRandom(n int) []byte {
 	b := make([]byte, n)
-	_, _ = rand.Read(b)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		log.Debugf("dpi: crypto/rand short read, falling back: %v", err)
+		// Deterministic fallback: use time-seeded bytes. This is only
+		// reached if the OS entropy source is broken.
+		for i := range b {
+			b[i] = byte(i * 37)
+		}
+	}
 	return b
 }
 

@@ -48,7 +48,7 @@ var CommonOptions = []libp2p.Option{
 		WithDialTimeout(DefaultTimeout),
 		WithDialTimeoutLocal(DefaultTimeout),
 	),
-	libp2p.Transport(warpnet.NewSpoofTCPTransport, dpi.WithConnectTimeout(DefaultTimeout)),
+	libp2p.Transport(warpnet.NewTCPTransport),
 	libp2p.Ping(true),
 	libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
 	libp2p.EnableAutoNATv2(),
@@ -57,6 +57,14 @@ var CommonOptions = []libp2p.Option{
 	libp2p.EnableHolePunching(),
 	libp2p.EnableNATService(),
 	libp2p.NATPortMap(),
+}
+
+// WithDPITransport returns a libp2p option that replaces the default TCP
+// transport with SpoofTransport (TLS camouflage + TCP fragmentation).
+// This must be used explicitly to enable DPI evasion; vanilla TCP is the
+// default so that nodes interoperate without requiring camouflage support.
+func WithDPITransport(opts ...dpi.Option) libp2p.Option {
+	return libp2p.Transport(warpnet.NewSpoofTCPTransport, opts...)
 }
 
 func EnableAutoRelayWithStaticRelays(static []warpnet.WarpAddrInfo, currentNodeID warpnet.WarpPeerID) func() libp2p.Option {

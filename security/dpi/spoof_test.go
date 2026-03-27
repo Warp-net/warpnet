@@ -26,6 +26,7 @@ package dpi
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"sync"
 	"testing"
@@ -266,4 +267,61 @@ func TestRandDuration(t *testing.T) {
 		d := randDuration(10 * time.Millisecond)
 		assert.True(t, d >= 0 && d < 10*time.Millisecond, "got %v", d)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Short-write / zero-write tests
+// ---------------------------------------------------------------------------
+
+// shortWriteConn simulates a connection that returns partial writes.
+type shortWriteConn struct {
+	fakeConn
+	maxPerWrite int // max bytes per Write call
+}
+
+func (s *shortWriteConn) Write(b []byte) (int, error) {
+	n := len(b)
+	if n > s.maxPerWrite {
+		n = s.maxPerWrite
+	}
+	return s.fakeConn.Write(b[:n])
+}
+
+func TestSpoofConn_ShortWrite(t *testing.T) {
+	fc := &shortWriteConn{maxPerWrite: 1}
+	sc := &SpoofConn{
+		Conn:         fc,
+		fragmentSize: 3,
+		handshakeLen: 10,
+		maxDelay:     0,
+	}
+
+	data := []byte("ABCDEF")
+	n, err := sc.Write(data)
+	require.NoError(t, err)
+	assert.Equal(t, 6, n)
+	assert.Equal(t, data, fc.allBytes())
+}
+
+// zeroWriteConn always returns (0, nil) to trigger infinite-loop detection.
+type zeroWriteConn struct {
+	fakeConn
+}
+
+func (z *zeroWriteConn) Write([]byte) (int, error) {
+	return 0, nil
+}
+
+func TestSpoofConn_ZeroWriteReturnsError(t *testing.T) {
+	fc := &zeroWriteConn{}
+	sc := &SpoofConn{
+		Conn:         fc,
+		fragmentSize: 2,
+		handshakeLen: 10,
+		maxDelay:     0,
+	}
+
+	_, err := sc.Write([]byte("AB"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, io.ErrShortWrite)
 }
