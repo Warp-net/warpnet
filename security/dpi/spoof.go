@@ -25,12 +25,18 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package dpi provides a libp2p transport wrapper that fragments initial
-// handshake traffic to evade Deep Packet Inspection. The technique is inspired
-// by SpoofDPI: the first bytes of a connection (covering multistream-select
-// negotiation and the Noise handshake) are split into small TCP segments with
-// random inter-segment delays so that stateful DPI middleboxes cannot
-// reassemble and fingerprint the protocol handshake in real time.
+// Package dpi provides a libp2p transport wrapper that defeats Deep Packet
+// Inspection through two complementary techniques:
+//
+//  1. TLS camouflage – a fake TLS 1.3 handshake (ClientHello / ServerHello)
+//     is performed before the real Noise handshake, and all subsequent data
+//     is framed as TLS Application Data records (content-type 0x17). To a DPI
+//     middlebox the connection looks like a standard HTTPS session.
+//
+//  2. TCP fragmentation – the initial bytes (including the fake ClientHello)
+//     are split into small TCP segments with random inter-segment delays so
+//     that stateful DPI that only inspects the first segment cannot match
+//     known signatures.
 package dpi
 
 import (
@@ -199,18 +205,28 @@ func WithConnectTimeout(d time.Duration) Option {
 	}
 }
 
+// WithSNI sets the Server Name Indication value used in the fake TLS
+// ClientHello. Defaults to "www.googleapis.com".
+func WithSNI(sni string) Option {
+	return func(t *SpoofTransport) error {
+		t.sni = sni
+		return nil
+	}
+}
+
 // SpoofTransport is a libp2p transport that wraps TCP connections with
-// handshake-phase traffic fragmentation to evade DPI.
+// TLS camouflage and handshake-phase traffic fragmentation to evade DPI.
 type SpoofTransport struct {
-	inner    *tcp.TcpTransport
-	upgrader transport.Upgrader
-	rcmgr    network.ResourceManager
+	inner     *tcp.TcpTransport
+	upgrader  transport.Upgrader
+	rcmgr     network.ResourceManager
 	sharedTCP *tcpreuse.ConnMgr
 
 	fragmentSize   int
 	handshakeLen   int
 	maxDelay       time.Duration
 	connectTimeout time.Duration
+	sni            string
 }
 
 var _ transport.Transport = (*SpoofTransport)(nil)
@@ -287,13 +303,23 @@ func (t *SpoofTransport) dialWithScope(
 	setLinger(rawConn, 0)
 	tryKeepAlive(rawConn, true)
 
+	// Layer 1: TCP fragmentation (fragments the TLS ClientHello into
+	// small TCP segments to defeat first-segment DPI).
 	spoofed := t.wrapConn(rawConn)
+
+	// Layer 2: TLS camouflage (fake TLS 1.3 handshake + record framing
+	// so traffic looks like HTTPS to reassembling DPI).
+	camouflaged, err := newCamouflageConn(spoofed, true, t.sni)
+	if err != nil {
+		_ = rawConn.Close()
+		return nil, err
+	}
 
 	direction := network.DirOutbound
 	if ok, isClient, _ := network.GetSimultaneousConnect(ctx); ok && !isClient {
 		direction = network.DirInbound
 	}
-	return t.upgrader.Upgrade(ctx, t, spoofed, direction, p, connScope)
+	return t.upgrader.Upgrade(ctx, t, camouflaged, direction, p, connScope)
 }
 
 func (t *SpoofTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (manet.Conn, error) {
@@ -333,6 +359,7 @@ func (t *SpoofTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) 
 		fragmentSize:    t.fragmentSize,
 		handshakeLen:    t.handshakeLen,
 		maxDelay:        t.maxDelay,
+		sni:             t.sni,
 	}
 
 	return t.upgrader.UpgradeGatedMaListener(t, spoofList), nil
@@ -375,6 +402,7 @@ type spoofGatedMaListener struct {
 	fragmentSize int
 	handshakeLen int
 	maxDelay     time.Duration
+	sni          string
 }
 
 func (l *spoofGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope, error) {
@@ -389,13 +417,26 @@ func (l *spoofGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope
 	setLinger(conn, 0)
 	tryKeepAlive(conn, true)
 
+	// Layer 1: TCP fragmentation for server-side responses.
 	spoofed := &SpoofConn{
 		Conn:         conn,
 		fragmentSize: l.fragmentSize,
 		handshakeLen: l.handshakeLen,
 		maxDelay:     l.maxDelay,
 	}
-	return spoofed, scope, nil
+
+	// Layer 2: TLS camouflage – server side reads ClientHello and
+	// responds with ServerHello before the Noise upgrade.
+	camouflaged, err := newCamouflageConn(spoofed, false, l.sni)
+	if err != nil {
+		if scope != nil {
+			scope.Done()
+		}
+		_ = conn.Close()
+		return nil, nil, err
+	}
+
+	return camouflaged, scope, nil
 }
 
 // ---------------------------------------------------------------------------
