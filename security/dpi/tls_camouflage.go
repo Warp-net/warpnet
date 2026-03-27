@@ -31,6 +31,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -40,9 +41,9 @@ import (
 )
 
 const (
-	tlsRecordHandshake       = 0x16
+	tlsRecordHandshake        = 0x16
 	tlsRecordChangeCipherSpec = 0x14
-	tlsRecordApplicationData = 0x17
+	tlsRecordApplicationData  = 0x17
 
 	tlsHandshakeClientHello = 0x01
 	tlsHandshakeServerHello = 0x02
@@ -54,6 +55,12 @@ const (
 	maxTLSRecordPayload = 16384 // 2^14
 
 	defaultSNI = "www.googleapis.com"
+)
+
+// Sentinel errors for TLS record parsing.
+var (
+	errUnexpectedRecordType = errors.New("unexpected TLS record type")
+	errRecordTooLarge       = errors.New("TLS record too large")
 )
 
 // CamouflageConn wraps a connection with TLS record framing so that
@@ -127,7 +134,7 @@ func (cc *CamouflageConn) Read(b []byte) (int, error) {
 
 	n := copy(b, payload)
 	if n < len(payload) {
-		cc.readBuf.Write(payload[n:])
+		_, _ = cc.readBuf.Write(payload[n:])
 	}
 	return n, nil
 }
@@ -205,12 +212,12 @@ func readTLSRecord(r io.Reader, expectedType byte) ([]byte, error) {
 	}
 
 	if hdr[0] != expectedType {
-		return nil, fmt.Errorf("unexpected TLS record type: got 0x%02x, want 0x%02x", hdr[0], expectedType)
+		return nil, fmt.Errorf("%w: got 0x%02x, want 0x%02x", errUnexpectedRecordType, hdr[0], expectedType)
 	}
 
 	length := int(binary.BigEndian.Uint16(hdr[3:5]))
 	if length > maxTLSRecordPayload+2048 {
-		return nil, fmt.Errorf("TLS record too large: %d", length)
+		return nil, fmt.Errorf("%w: %d", errRecordTooLarge, length)
 	}
 
 	payload := make([]byte, length)
@@ -232,6 +239,9 @@ func makeTLSRecord(contentType byte, payload []byte) []byte {
 
 // ---------------------------------------------------------------------------
 // ClientHello / ServerHello construction
+//
+// All bytes.Buffer write methods are infallible (only OOM panics), so
+// errors are explicitly discarded with _, _ = to satisfy errcheck.
 // ---------------------------------------------------------------------------
 
 // buildClientHello constructs a realistic TLS 1.3 ClientHello wrapped
@@ -240,8 +250,8 @@ func buildClientHello(sni string) []byte {
 	var msg bytes.Buffer
 
 	// Handshake header: type(1) + length(3).
-	msg.WriteByte(tlsHandshakeClientHello)
-	msg.Write([]byte{0, 0, 0}) // length placeholder
+	_ = msg.WriteByte(tlsHandshakeClientHello)
+	_, _ = msg.Write([]byte{0, 0, 0}) // length placeholder
 
 	bodyStart := msg.Len()
 
@@ -253,8 +263,8 @@ func buildClientHello(sni string) []byte {
 
 	// Session ID (32 bytes – TLS 1.3 compatibility mode).
 	sessionID := makeRandom(32)
-	msg.WriteByte(32)
-	msg.Write(sessionID)
+	_ = msg.WriteByte(32)
+	_, _ = msg.Write(sessionID)
 
 	// Cipher suites.
 	suites := []uint16{
@@ -268,8 +278,8 @@ func buildClientHello(sni string) []byte {
 	}
 
 	// Compression methods.
-	msg.WriteByte(1)
-	msg.WriteByte(0x00)
+	_ = msg.WriteByte(1)
+	_ = msg.WriteByte(0x00)
 
 	// Extensions.
 	var exts bytes.Buffer
@@ -285,7 +295,7 @@ func buildClientHello(sni string) []byte {
 	writeRenegotiationInfoExt(&exts)
 
 	putUint16(&msg, uint16(exts.Len()))
-	msg.Write(exts.Bytes())
+	_, _ = msg.Write(exts.Bytes())
 
 	// Patch handshake length.
 	raw := msg.Bytes()
@@ -299,8 +309,8 @@ func buildClientHello(sni string) []byte {
 func buildServerHello(sessionID []byte) []byte {
 	var msg bytes.Buffer
 
-	msg.WriteByte(tlsHandshakeServerHello)
-	msg.Write([]byte{0, 0, 0})
+	_ = msg.WriteByte(tlsHandshakeServerHello)
+	_, _ = msg.Write([]byte{0, 0, 0})
 
 	bodyStart := msg.Len()
 
@@ -311,11 +321,11 @@ func buildServerHello(sessionID []byte) []byte {
 	if len(sessionID) == 0 {
 		sessionID = makeRandom(32)
 	}
-	msg.WriteByte(byte(len(sessionID)))
-	msg.Write(sessionID)
+	_ = msg.WriteByte(byte(len(sessionID)))
+	_, _ = msg.Write(sessionID)
 
 	putUint16(&msg, 0x1301) // TLS_AES_128_GCM_SHA256
-	msg.WriteByte(0x00)     // null compression
+	_ = msg.WriteByte(0x00) // null compression
 
 	// Extensions.
 	var exts bytes.Buffer
@@ -329,10 +339,10 @@ func buildServerHello(sessionID []byte) []byte {
 	putUint16(&exts, 2+2+32) // group(2)+keyLen(2)+key(32)
 	putUint16(&exts, 0x001d) // x25519
 	putUint16(&exts, 32)
-	exts.Write(keyData)
+	_, _ = exts.Write(keyData)
 
 	putUint16(&msg, uint16(exts.Len()))
-	msg.Write(exts.Bytes())
+	_, _ = msg.Write(exts.Bytes())
 
 	raw := msg.Bytes()
 	patchHandshakeLen(raw, bodyStart)
@@ -367,15 +377,15 @@ func writeSNIExt(buf *bytes.Buffer, sni string) {
 	putUint16(buf, 0x0000)
 	putUint16(buf, uint16(2+listLen)) // ext data len
 	putUint16(buf, uint16(listLen))   // server name list len
-	buf.WriteByte(0x00)               // host_name type
+	_ = buf.WriteByte(0x00)           // host_name type
 	putUint16(buf, uint16(len(name)))
-	buf.Write(name)
+	_, _ = buf.Write(name)
 }
 
 func writeSupportedVersionsExt(buf *bytes.Buffer) {
 	putUint16(buf, 0x002b)
-	putUint16(buf, 5) // data len
-	buf.WriteByte(4)   // versions list len
+	putUint16(buf, 5)     // data len
+	_ = buf.WriteByte(4)  // versions list len
 	putUint16(buf, tlsVersionTLS13)
 	putUint16(buf, tlsVersionTLS12)
 }
@@ -413,26 +423,26 @@ func writeKeyShareClientExt(buf *bytes.Buffer) {
 	putUint16(buf, uint16(entryLen))   // client_shares len
 	putUint16(buf, 0x001d)             // x25519
 	putUint16(buf, 32)
-	buf.Write(key)
+	_, _ = buf.Write(key)
 }
 
 func writeALPNExt(buf *bytes.Buffer) {
 	var list bytes.Buffer
 	for _, p := range []string{"h2", "http/1.1"} {
-		list.WriteByte(byte(len(p)))
-		list.WriteString(p)
+		_ = list.WriteByte(byte(len(p)))
+		_, _ = list.WriteString(p)
 	}
 	putUint16(buf, 0x0010)
 	putUint16(buf, uint16(2+list.Len()))
 	putUint16(buf, uint16(list.Len()))
-	buf.Write(list.Bytes())
+	_, _ = buf.Write(list.Bytes())
 }
 
 func writeECPointFormatsExt(buf *bytes.Buffer) {
 	putUint16(buf, 0x000b)
-	putUint16(buf, 2) // ext data len
-	buf.WriteByte(1)   // formats length
-	buf.WriteByte(0)   // uncompressed
+	putUint16(buf, 2)     // ext data len
+	_ = buf.WriteByte(1)  // formats length
+	_ = buf.WriteByte(0)  // uncompressed
 }
 
 func writeEmptyExt(buf *bytes.Buffer, extType uint16) {
@@ -443,7 +453,7 @@ func writeEmptyExt(buf *bytes.Buffer, extType uint16) {
 func writeRenegotiationInfoExt(buf *bytes.Buffer) {
 	putUint16(buf, 0xff01)
 	putUint16(buf, 1)
-	buf.WriteByte(0)
+	_ = buf.WriteByte(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -451,15 +461,13 @@ func writeRenegotiationInfoExt(buf *bytes.Buffer) {
 // ---------------------------------------------------------------------------
 
 func putUint16(buf *bytes.Buffer, v uint16) {
-	buf.Write([]byte{byte(v >> 8), byte(v)})
+	_, _ = buf.Write([]byte{byte(v >> 8), byte(v)})
 }
 
 func makeRandom(n int) []byte {
 	b := make([]byte, n)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		log.Debugf("dpi: crypto/rand short read, falling back: %v", err)
-		// Deterministic fallback: use time-seeded bytes. This is only
-		// reached if the OS entropy source is broken.
 		for i := range b {
 			b[i] = byte(i * 37)
 		}
@@ -468,7 +476,7 @@ func makeRandom(n int) []byte {
 }
 
 func writeRandom(buf *bytes.Buffer) {
-	buf.Write(makeRandom(32))
+	_, _ = buf.Write(makeRandom(32))
 }
 
 func patchHandshakeLen(raw []byte, bodyStart int) {
