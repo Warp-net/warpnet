@@ -128,11 +128,7 @@ func (cc *CamouflageConn) CloseWrite() error {
 func newCamouflageConn(conn manet.Conn, isClient bool, cfg *camouflageConfig) (*CamouflageConn, error) {
 	// Set a deadline for the handshake to defend against slow-handshake
 	// active probing attacks.
-	timeout := cfg.handshakeTimeout
-	if timeout <= 0 {
-		timeout = defaultHandshakeTimeout
-	}
-	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(cfg.handshakeTimeout)); err != nil {
 		log.Debugf("dpi: set handshake deadline: %v", err)
 	}
 
@@ -159,30 +155,15 @@ func newCamouflageConn(conn manet.Conn, isClient bool, cfg *camouflageConfig) (*
 // ClientHello fingerprint. The resulting connection is indistinguishable
 // from a real browser HTTPS session to passive DPI observers.
 func clientTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) {
-	sni := cfg.sni
-	if sni == "" {
-		sni = defaultSNI
-	}
-
-	alpn := cfg.alpnProtos
-	if len(alpn) == 0 {
-		alpn = defaultALPNProtos
-	}
-
 	utlsConfig := &utls.Config{
-		ServerName: sni,
-		NextProtos: alpn,
+		ServerName: cfg.sni,
+		NextProtos: cfg.alpnProtos,
 		// We verify peer identity via the Noise handshake inside TLS
 		// so certificate verification is intentionally skipped here.
 		InsecureSkipVerify: true, //nolint:gosec // identity verified by Noise
 	}
 
-	helloID := cfg.clientHelloID
-	if helloID.Client == "" {
-		helloID = utls.HelloChrome_Auto
-	}
-
-	uconn := utls.UClient(conn, utlsConfig, helloID)
+	uconn := utls.UClient(conn, utlsConfig, cfg.clientHelloID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.handshakeTimeout)
 	defer cancel()
@@ -374,13 +355,6 @@ func randomSerial() (*big.Int, error) {
 // server side, including the generated certificate chain and ALPN
 // protocol list.
 func buildServerTLSConfig(sni string, alpn []string, cache *certCache) (*tls.Config, error) {
-	if sni == "" {
-		sni = defaultSNI
-	}
-	if len(alpn) == 0 {
-		alpn = defaultALPNProtos
-	}
-
 	cert, err := cache.getOrGenerate(sni)
 	if err != nil {
 		return nil, fmt.Errorf("generate server certificate: %w", err)

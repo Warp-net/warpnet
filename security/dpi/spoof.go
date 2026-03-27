@@ -298,13 +298,16 @@ func NewSpoofTransport(
 		rcmgr = &network.NullResourceManager{}
 	}
 	t := &SpoofTransport{
-		upgrader:       upgrader,
-		rcmgr:          rcmgr,
-		sharedTCP:      sharedTCP,
-		fragmentSize:   DefaultFragmentSize,
-		handshakeLen:   DefaultHandshakeLen,
-		maxDelay:       DefaultMaxDelay,
-		connectTimeout: defaultConnectTimeout,
+		upgrader:           upgrader,
+		rcmgr:             rcmgr,
+		sharedTCP:          sharedTCP,
+		fragmentSize:       DefaultFragmentSize,
+		handshakeLen:       DefaultHandshakeLen,
+		maxDelay:           DefaultMaxDelay,
+		connectTimeout:     defaultConnectTimeout,
+		sni:                defaultSNI,
+		browserFingerprint: BrowserChrome,
+		handshakeTimeout:   defaultHandshakeTimeout,
 	}
 	for _, o := range opts {
 		if err := o(t); err != nil {
@@ -333,19 +336,14 @@ func NewSpoofTransport(
 // buildCamouflageConfig constructs the camouflageConfig from transport
 // settings. Called once during construction.
 func (t *SpoofTransport) buildCamouflageConfig() (*camouflageConfig, error) {
-	sni := t.sni
-	if sni == "" {
-		sni = defaultSNI
-	}
-
 	cache := &certCache{}
-	serverCfg, err := buildServerTLSConfig(sni, defaultALPNProtos, cache)
+	serverCfg, err := buildServerTLSConfig(t.sni, defaultALPNProtos, cache)
 	if err != nil {
 		return nil, err
 	}
 
 	return &camouflageConfig{
-		sni:              sni,
+		sni:              t.sni,
 		alpnProtos:       defaultALPNProtos,
 		clientHelloID:    browserToHelloID(t.browserFingerprint),
 		handshakeTimeout: t.handshakeTimeout,
