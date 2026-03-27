@@ -326,7 +326,7 @@ type tcpProxy struct {
 
 func newTCPProxy(t *testing.T, targetAddr string) *tcpProxy {
 	t.Helper()
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	lis, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx
 	require.NoError(t, err)
 	return &tcpProxy{
 		listener:   lis,
@@ -360,7 +360,7 @@ func (p *tcpProxy) run(t *testing.T) {
 	}
 	defer clientConn.Close()
 
-	serverConn, err := net.Dial("tcp", p.targetAddr)
+	serverConn, err := net.Dial("tcp", p.targetAddr) //nolint:noctx
 	require.NoError(t, err)
 	defer serverConn.Close()
 
@@ -429,7 +429,7 @@ func TestIntegration_DPIEmulation(t *testing.T) {
 	for _, addr := range bAddrs {
 		parts := addr.Protocols()
 		if len(parts) >= 2 && parts[0].Name == "ip4" && parts[1].Name == "tcp" {
-			ip, _ := addr.ValueForProtocol(4) // /ip4
+			ip, _ := addr.ValueForProtocol(4)   // /ip4
 			port, _ := addr.ValueForProtocol(6) // /tcp
 			bTCPAddr = ip + ":" + port
 			break

@@ -174,11 +174,13 @@ func clientTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) 
 	return uconn, nil
 }
 
+var errConfigNotInit = errors.New("dpi: server TLS  config not initialized") //nolint:all
+
 // serverTLSHandshake accepts a TLS connection using standard crypto/tls
 // with a plausible certificate chain.
 func serverTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) {
 	if cfg.serverTLSConfig == nil {
-		return nil, fmt.Errorf("server TLS config not initialized: %v", cfg)
+		return nil, errConfigNotInit //nolint:all
 	}
 
 	tlsConn := tls.Server(conn, cfg.serverTLSConfig)
