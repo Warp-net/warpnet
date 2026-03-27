@@ -25,23 +25,6 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package dpi provides a libp2p transport wrapper that defeats Deep Packet
-// Inspection through two complementary techniques:
-//
-//  1. TLS camouflage – a real TLS tunnel is established using uTLS with a
-//     genuine browser fingerprint (Chrome, Firefox, etc.) on the client side
-//     and standard crypto/tls with a plausible certificate chain on the server
-//     side. The Noise protocol handshake and all application data travel inside
-//     this TLS tunnel, making the connection indistinguishable from normal
-//     HTTPS browser traffic to DPI middleboxes.
-//
-//  2. TCP fragmentation – the initial bytes of the TLS ClientHello are split
-//     into small TCP segments with random inter-segment delays so that
-//     stateful DPI that only inspects the first segment cannot match known
-//     signatures.
-//
-// Active probing defenses include SNI/ALPN consistency validation, a plausible
-// two-certificate chain (fake CA + leaf), and configurable handshake timeouts.
 package dpi
 
 import (
@@ -63,6 +46,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Package dpi provides a libp2p transport wrapper that defeats Deep Packet
+// Inspection through two complementary techniques:
+//
+//  1. TLS camouflage – a real TLS tunnel is established using uTLS with a
+//     genuine browser fingerprint (Chrome, Firefox, etc.) on the client side
+//     and standard crypto/tls with a plausible certificate chain on the server
+//     side. The Noise protocol handshake and all application data travel inside
+//     this TLS tunnel, making the connection indistinguishable from normal
+//     HTTPS browser traffic to DPI middleboxes.
+//
+//  2. TCP fragmentation – the initial bytes of the TLS ClientHello are split
+//     into small TCP segments with random inter-segment delays so that
+//     stateful DPI that only inspects the first segment cannot match known
+//     signatures.
+//
+// Active probing defenses include SNI/ALPN consistency validation, a plausible
+// two-certificate chain (fake CA + leaf), and configurable handshake timeouts.
+
 const (
 	// DefaultFragmentSize is the number of bytes per TCP segment during
 	// the handshake phase. Small values (1-3) are most effective at defeating
@@ -80,10 +81,6 @@ const (
 
 	defaultConnectTimeout = 60 * time.Second
 )
-
-// ---------------------------------------------------------------------------
-// SpoofConn – connection wrapper that fragments writes during the handshake
-// ---------------------------------------------------------------------------
 
 // SpoofConn wraps a manet.Conn and transparently splits Write calls into
 // small TCP segments while the connection is in the handshake phase (the
@@ -187,11 +184,6 @@ func (c *SpoofConn) CloseWrite() error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// SpoofTransport – DPI-evasion transport wrapping TCP
-// ---------------------------------------------------------------------------
-
-// Option configures a SpoofTransport.
 type Option func(*SpoofTransport) error
 
 // WithFragmentSize sets the number of bytes per TCP segment during the
@@ -437,7 +429,8 @@ func (t *SpoofTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (manet
 //
 // Note: we intentionally bypass sharedTCP demultiplexed listening because
 // our connections start with a real TLS ClientHello (0x16...), not
-// multistream-select. Using DemultiplexedConnType_MultistreamSelect would
+// multistream select.
+// Using demultiplexed conn type multistream select would
 // cause incoming connections to be misclassified.
 func (t *SpoofTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 	mal, err := manet.Listen(laddr)
@@ -485,12 +478,9 @@ func (t *SpoofTransport) wrapConn(c manet.Conn) *SpoofConn {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// spoofGatedMaListener – wraps accepted connections with SpoofConn + TLS
-// ---------------------------------------------------------------------------
-
 type spoofGatedMaListener struct {
 	transport.GatedMaListener
+
 	fragmentSize int
 	handshakeLen int
 	maxDelay     time.Duration
@@ -531,10 +521,6 @@ func (l *spoofGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope
 	return camouflaged, scope, nil
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
 func setLinger(conn net.Conn, sec int) {
 	type canLinger interface {
 		SetLinger(int) error
@@ -545,7 +531,7 @@ func setLinger(conn net.Conn, sec int) {
 }
 
 func tryKeepAlive(conn net.Conn, enabled bool) {
-	// Prefer the full TCP keepalive interface (including period), but fall
+	// Prefer the full TCP keepalive interface (including period) but fall
 	// back to just enabling keepalive if SetKeepAlivePeriod is unavailable.
 	type fullKeepAlive interface {
 		SetKeepAlive(bool) error
@@ -575,13 +561,13 @@ func tryKeepAlive(conn net.Conn, enabled bool) {
 	}
 }
 
-func randDuration(max time.Duration) time.Duration {
-	if max <= 0 {
+func randDuration(maximum time.Duration) time.Duration {
+	if maximum <= 0 {
 		return 0
 	}
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(maximum)))
 	if err != nil {
-		return max / 2
+		return maximum / 2
 	}
 	return time.Duration(n.Int64())
 }

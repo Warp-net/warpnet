@@ -38,12 +38,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ---------------------------------------------------------------------------
-// pipeConn – a pair of connected manet.Conn backed by net.Pipe
-// ---------------------------------------------------------------------------
-
 type pipeConn struct {
 	net.Conn
+
 	local  ma.Multiaddr
 	remote ma.Multiaddr
 }
@@ -80,10 +77,6 @@ func testCamoConfig(sni string) *camouflageConfig {
 		serverTLSConfig:  serverCfg,
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Certificate chain tests
-// ---------------------------------------------------------------------------
 
 func TestGenerateCertChain_ValidStructure(t *testing.T) {
 	cert, err := generateCertChain("test.example.com")
@@ -143,10 +136,6 @@ func TestGenerateCertChain_DifferentSerials(t *testing.T) {
 		"different certs should have different serial numbers")
 }
 
-// ---------------------------------------------------------------------------
-// Browser fingerprint mapping tests
-// ---------------------------------------------------------------------------
-
 func TestBrowserToHelloID(t *testing.T) {
 	assert.Equal(t, utls.HelloChrome_Auto, browserToHelloID(BrowserChrome))
 	assert.Equal(t, utls.HelloFirefox_Auto, browserToHelloID(BrowserFirefox))
@@ -156,10 +145,6 @@ func TestBrowserToHelloID(t *testing.T) {
 	assert.Equal(t, utls.HelloChrome_Auto, browserToHelloID("unknown"))
 	assert.Equal(t, utls.HelloChrome_Auto, browserToHelloID(""))
 }
-
-// ---------------------------------------------------------------------------
-// TLS handshake + data round-trip
-// ---------------------------------------------------------------------------
 
 func TestCamouflageConn_HandshakeAndDataRoundTrip(t *testing.T) {
 	clientRaw, serverRaw := newPipePair()
@@ -258,10 +243,6 @@ func TestCamouflageConn_LargeDataTransfer(t *testing.T) {
 	_ = serverConn.Close()
 }
 
-// ---------------------------------------------------------------------------
-// Wire traffic inspection – verify real TLS on the wire
-// ---------------------------------------------------------------------------
-
 func TestCamouflageConn_WireTrafficIsRealTLS(t *testing.T) {
 	clientRaw, serverRaw := newPipePair()
 	cfg := testCamoConfig("www.google.com")
@@ -294,10 +275,6 @@ func TestCamouflageConn_WireTrafficIsRealTLS(t *testing.T) {
 	assert.Equal(t, byte(0x03), firstWrite[1],
 		"TLS major version should be 3")
 }
-
-// ---------------------------------------------------------------------------
-// Active probing defense tests
-// ---------------------------------------------------------------------------
 
 func TestValidateALPN(t *testing.T) {
 	allowed := []string{"h2", "http/1.1"}
@@ -333,10 +310,6 @@ func TestCertCache_RegeneratesForDifferentSNI(t *testing.T) {
 	assert.NotEqual(t, cert1.Certificate, cert2.Certificate)
 }
 
-// ---------------------------------------------------------------------------
-// Multiaddr preservation test
-// ---------------------------------------------------------------------------
-
 func TestCamouflageConn_PreservesMultiaddr(t *testing.T) {
 	clientRaw, serverRaw := newPipePair()
 	cfg := testCamoConfig("example.com")
@@ -367,10 +340,6 @@ func TestCamouflageConn_PreservesMultiaddr(t *testing.T) {
 
 	_ = clientConn.Close()
 }
-
-// ---------------------------------------------------------------------------
-// Empty write test
-// ---------------------------------------------------------------------------
 
 func TestCamouflageConn_EmptyWrite(t *testing.T) {
 	clientRaw, serverRaw := newPipePair()
@@ -406,12 +375,9 @@ func TestCamouflageConn_EmptyWrite(t *testing.T) {
 	_ = clientConn.Close()
 }
 
-// ---------------------------------------------------------------------------
-// recordingConn – records writes for inspection
-// ---------------------------------------------------------------------------
-
 type recordingConn struct {
 	*pipeConn
+
 	mu     sync.Mutex
 	writes [][]byte
 }

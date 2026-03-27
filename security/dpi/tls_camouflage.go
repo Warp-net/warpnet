@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package dpi
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -38,6 +39,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -70,10 +72,6 @@ var (
 	errALPNMismatch    = errors.New("dpi: ALPN protocol not in allowed set")
 )
 
-// ---------------------------------------------------------------------------
-// camouflageConfig – shared TLS configuration
-// ---------------------------------------------------------------------------
-
 // camouflageConfig holds the TLS camouflage settings shared by all
 // connections created by a single SpoofTransport instance.
 type camouflageConfig struct {
@@ -83,10 +81,6 @@ type camouflageConfig struct {
 	handshakeTimeout time.Duration
 	serverTLSConfig  *tls.Config // generated once per transport
 }
-
-// ---------------------------------------------------------------------------
-// CamouflageConn – real TLS tunnel with browser fingerprint
-// ---------------------------------------------------------------------------
 
 // CamouflageConn wraps a TCP connection with a real TLS tunnel.
 // The client side uses uTLS to present a genuine browser TLS fingerprint
@@ -128,10 +122,6 @@ func (cc *CamouflageConn) CloseWrite() error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// Connection construction + TLS handshake
-// ---------------------------------------------------------------------------
-
 // newCamouflageConn wraps conn with a real TLS tunnel and performs the
 // TLS handshake. isClient determines whether this side initiates the
 // handshake (uTLS with browser fingerprint) or accepts (crypto/tls server).
@@ -154,7 +144,7 @@ func newCamouflageConn(conn manet.Conn, isClient bool, cfg *camouflageConfig) (*
 		tlsConn, err = serverTLSHandshake(conn, cfg)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errHandshakeFailed, err)
+		return nil, fmt.Errorf("%w: %s", errHandshakeFailed, err.Error())
 	}
 
 	// Clear the handshake deadline so subsequent I/O is not constrained.
@@ -182,7 +172,7 @@ func clientTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) 
 	utlsConfig := &utls.Config{
 		ServerName: sni,
 		NextProtos: alpn,
-		// We verify peer identity via the Noise handshake inside TLS,
+		// We verify peer identity via the Noise handshake inside TLS
 		// so certificate verification is intentionally skipped here.
 		InsecureSkipVerify: true, //nolint:gosec // identity verified by Noise
 	}
@@ -193,7 +183,10 @@ func clientTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) 
 	}
 
 	uconn := utls.UClient(conn, utlsConfig, helloID)
-	if err := uconn.Handshake(); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.handshakeTimeout)
+	defer cancel()
+	if err := uconn.HandshakeContext(ctx); err != nil {
 		return nil, fmt.Errorf("uTLS handshake: %w", err)
 	}
 
@@ -204,11 +197,14 @@ func clientTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) 
 // with a plausible certificate chain.
 func serverTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) {
 	if cfg.serverTLSConfig == nil {
-		return nil, errors.New("server TLS config not initialized")
+		return nil, fmt.Errorf("server TLS config not initialized: %v", cfg)
 	}
 
 	tlsConn := tls.Server(conn, cfg.serverTLSConfig)
-	if err := tlsConn.Handshake(); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.handshakeTimeout)
+	defer cancel()
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		return nil, fmt.Errorf("server TLS handshake: %w", err)
 	}
 
@@ -231,17 +227,11 @@ func validateALPN(negotiated string, allowed []string) bool {
 	if negotiated == "" {
 		return true
 	}
-	for _, a := range allowed {
-		if negotiated == a {
-			return true
-		}
+	if slices.Contains(allowed, negotiated) {
+		return true
 	}
 	return false
 }
-
-// ---------------------------------------------------------------------------
-// Browser fingerprint mapping
-// ---------------------------------------------------------------------------
 
 // browserToHelloID maps a human-readable browser name to a uTLS
 // ClientHelloID preset. Unknown names fall back to Chrome.
@@ -263,10 +253,6 @@ func browserToHelloID(browser string) utls.ClientHelloID {
 		return utls.HelloChrome_Auto
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Certificate generation
-// ---------------------------------------------------------------------------
 
 // certCache caches a generated TLS certificate to avoid expensive key
 // generation on every connection. One certificate per SpoofTransport.

@@ -37,10 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ---------------------------------------------------------------------------
-// fakeConn implements manet.Conn for testing
-// ---------------------------------------------------------------------------
-
 type fakeConn struct {
 	mu     sync.Mutex
 	writes [][]byte // each Write call recorded separately
@@ -61,7 +57,7 @@ func (f *fakeConn) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (f *fakeConn) Read([]byte) (int, error)        { return 0, nil }
+func (f *fakeConn) Read([]byte) (int, error)         { return 0, nil }
 func (f *fakeConn) Close() error                     { f.closed = true; return nil }
 func (f *fakeConn) LocalAddr() net.Addr              { return fakeAddr{} }
 func (f *fakeConn) RemoteAddr() net.Addr             { return fakeAddr{} }
@@ -97,10 +93,6 @@ func (f *fakeConn) writeSizes() []int {
 	return sizes
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 func TestSpoofConn_FragmentsDuringHandshake(t *testing.T) {
 	fc := &fakeConn{}
 	sc := &SpoofConn{
@@ -123,7 +115,7 @@ func TestSpoofConn_FragmentsDuringHandshake(t *testing.T) {
 	// remaining 2 bytes after handshake.
 	sizes := fc.writeSizes()
 	assert.Equal(t, 6, len(sizes), "expected 6 writes, got %d: %v", len(sizes), sizes)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 5; i++ { //nolint:modernize
 		assert.Equal(t, 2, sizes[i], "handshake fragment %d should be 2 bytes", i)
 	}
 	assert.Equal(t, 2, sizes[5], "post-handshake remainder should be written at once")
@@ -282,19 +274,16 @@ func TestRandDuration(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Short-write / zero-write tests
-// ---------------------------------------------------------------------------
-
 // shortWriteConn simulates a connection that returns partial writes.
 type shortWriteConn struct {
 	fakeConn
+
 	maxPerWrite int // max bytes per Write call
 }
 
 func (s *shortWriteConn) Write(b []byte) (int, error) {
 	n := len(b)
-	if n > s.maxPerWrite {
+	if n > s.maxPerWrite { //nolint:modernize
 		n = s.maxPerWrite
 	}
 	return s.fakeConn.Write(b[:n])
