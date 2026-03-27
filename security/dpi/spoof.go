@@ -106,6 +106,11 @@ func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	fragSize := c.fragmentSize
+	if fragSize <= 0 {
+		fragSize = DefaultFragmentSize
+	}
+
 	total := 0
 	for len(b) > 0 {
 		if c.bytesWritten >= c.handshakeLen {
@@ -115,7 +120,7 @@ func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {
 			return total, err
 		}
 
-		size := min(c.fragmentSize, len(b))
+		size := min(fragSize, len(b))
 		n, err := c.Conn.Write(b[:size])
 		total += n
 		c.bytesWritten += n
@@ -194,15 +199,6 @@ func WithConnectTimeout(d time.Duration) Option {
 	}
 }
 
-// WithTCPOption appends a tcp.Option that is forwarded to the inner TCP
-// transport (used for Listen delegation).
-func WithTCPOption(opt tcp.Option) Option {
-	return func(t *SpoofTransport) error {
-		t.tcpOpts = append(t.tcpOpts, opt)
-		return nil
-	}
-}
-
 // SpoofTransport is a libp2p transport that wraps TCP connections with
 // handshake-phase traffic fragmentation to evade DPI.
 type SpoofTransport struct {
@@ -215,8 +211,6 @@ type SpoofTransport struct {
 	handshakeLen   int
 	maxDelay       time.Duration
 	connectTimeout time.Duration
-
-	tcpOpts []tcp.Option
 }
 
 var _ transport.Transport = (*SpoofTransport)(nil)
@@ -249,7 +243,7 @@ func NewSpoofTransport(
 		}
 	}
 
-	inner, err := tcp.NewTCPTransport(upgrader, rcmgr, sharedTCP, t.tcpOpts...)
+	inner, err := tcp.NewTCPTransport(upgrader, rcmgr, sharedTCP)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +285,7 @@ func (t *SpoofTransport) dialWithScope(
 	}
 
 	setLinger(rawConn, 0)
-	setKeepAlive(rawConn, true)
+	tryKeepAlive(rawConn, true)
 
 	spoofed := t.wrapConn(rawConn)
 
@@ -393,7 +387,7 @@ func (l *spoofGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope
 	}
 
 	setLinger(conn, 0)
-	setKeepAlive(conn, true)
+	tryKeepAlive(conn, true)
 
 	spoofed := &SpoofConn{
 		Conn:         conn,
@@ -417,12 +411,34 @@ func setLinger(conn net.Conn, sec int) {
 	}
 }
 
-func setKeepAlive(conn net.Conn, enabled bool) {
-	type canKeepAlive interface {
+func tryKeepAlive(conn net.Conn, enabled bool) {
+	// Prefer the full TCP keepalive interface (including period), but fall back
+	// to just enabling keepalive if SetKeepAlivePeriod is unavailable.
+	type fullKeepAlive interface {
+		SetKeepAlive(bool) error
+		SetKeepAlivePeriod(time.Duration) error
+	}
+	if c, ok := conn.(fullKeepAlive); ok {
+		if err := c.SetKeepAlive(enabled); err != nil {
+			log.Debugf("error enabling TCP keepalive: %v", err)
+			return
+		}
+		if !enabled {
+			return
+		}
+		if err := c.SetKeepAlivePeriod(30 * time.Second); err != nil {
+			log.Debugf("error setting TCP keepalive period: %v", err)
+		}
+		return
+	}
+
+	type basicKeepAlive interface {
 		SetKeepAlive(bool) error
 	}
-	if c, ok := conn.(canKeepAlive); ok {
-		_ = c.SetKeepAlive(enabled)
+	if c, ok := conn.(basicKeepAlive); ok {
+		if err := c.SetKeepAlive(enabled); err != nil {
+			log.Debugf("error enabling TCP keepalive (no period support): %v", err)
+		}
 	}
 }
 

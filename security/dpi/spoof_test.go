@@ -206,6 +206,28 @@ func TestSpoofConn_EmptyWrite(t *testing.T) {
 	assert.Equal(t, 0, fc.writeCount())
 }
 
+func TestSpoofConn_ZeroFragmentSizeUsesDefault(t *testing.T) {
+	fc := &fakeConn{}
+	sc := &SpoofConn{
+		Conn:         fc,
+		fragmentSize: 0, // zero triggers fallback to DefaultFragmentSize
+		handshakeLen: 10,
+		maxDelay:     0,
+	}
+
+	data := []byte("ABCDEF") // 6 bytes, should fragment into DefaultFragmentSize (2) chunks
+	n, err := sc.Write(data)
+	require.NoError(t, err)
+	assert.Equal(t, 6, n)
+	assert.Equal(t, data, fc.allBytes())
+
+	// With DefaultFragmentSize=2, 6 bytes should produce 3 writes.
+	assert.Equal(t, 3, fc.writeCount())
+	for _, s := range fc.writeSizes() {
+		assert.Equal(t, 2, s)
+	}
+}
+
 func TestOptions(t *testing.T) {
 	st := &SpoofTransport{
 		fragmentSize:   DefaultFragmentSize,
