@@ -6,11 +6,11 @@ ufw disable 2>/dev/null || true
 systemctl restart systemd-networkd || true
 
 iptables -I DOCKER-USER -j ACCEPT
-iptables -A INPUT -p tcp --match multiport --dports 4001:4099 -j ACCEPT
-iptables -A FORWARD -i docker0 -o docker0 -j ACCEPT
-iptables -A FORWARD -i br-6383b19e4979 -o br-6383b19e4979 -j ACCEPT
+iptables -I INPUT -p tcp --match multiport --dports 4001:4099 -j ACCEPT
+iptables -I FORWARD -i docker0 -o docker0 -j ACCEPT
+iptables -I FORWARD -i br-6383b19e4979 -o br-6383b19e4979 -j ACCEPT
 iptables -P FORWARD ACCEPT
-iptables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+iptables -I INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
 echo "nameserver 1.1.1.1" >> /etc/resolv.conf

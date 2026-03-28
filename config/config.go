@@ -51,6 +51,8 @@ var warpnetBootstrapNodes = []string{
 	"/ip4/207.154.221.44/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
 	"/ip4/207.154.221.44/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
 	"/ip4/207.154.221.44/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
+	// RU
+	"/ip4/130.94.88.38/tcp/4011/p2p/12D3KooWNW7nbLpbsEVJ86JN6c1zXRDKGCbqmLfhitFCPccRv2YW",
 }
 
 var testnetBootstrapNodes = []string{
@@ -58,8 +60,6 @@ var testnetBootstrapNodes = []string{
 	"/ip4/207.154.221.44/tcp/4011/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
 	"/ip4/207.154.221.44/tcp/4022/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
 	"/ip4/207.154.221.44/tcp/4033/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
-	// RU
-	"/ip4/130.94.88.38/tcp/4011/p2p/12D3KooWNW7nbLpbsEVJ86JN6c1zXRDKGCbqmLfhitFCPccRv2YW",
 }
 
 var configSingleton config
