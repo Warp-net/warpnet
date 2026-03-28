@@ -164,7 +164,7 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 
 	bootstrapped := make(chan struct{})
 	go d.bootstrapDHT(bootstrapped)
-	go d.startRendezvous(bootstrapped)
+	//go d.startRendezvous(bootstrapped)
 	log.Infoln("dht: routing started")
 	return d.dht, nil
 }
