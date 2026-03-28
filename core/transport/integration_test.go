@@ -34,9 +34,11 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -579,6 +581,152 @@ func TestIntegration_DPIEmulation(t *testing.T) {
 		}
 		t.Logf("  record[%d]: type=0x%02x (%s) version=%d.%d len=%d",
 			i, r.ContentType, typeName, r.Major, r.Minor, r.Length)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// mDNS discovery test
+// ---------------------------------------------------------------------------
+
+// mdnsNotifee connects to discovered peers and signals via a channel.
+type mdnsNotifee struct {
+	h         host.Host
+	found     chan peer.AddrInfo
+	connected chan peer.ID
+}
+
+func (n *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
+	if pi.ID == n.h.ID() {
+		return // ignore self
+	}
+	// Signal discovery.
+	select {
+	case n.found <- pi:
+	default:
+	}
+
+	// Attempt to connect.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	n.h.Peerstore().AddAddrs(pi.ID, pi.Addrs, time.Hour)
+	if err := n.h.Connect(ctx, pi); err != nil {
+		return
+	}
+	select {
+	case n.connected <- pi.ID:
+	default:
+	}
+}
+
+// TestIntegration_MDNSDiscovery verifies that two libp2p hosts using
+// CamouflageTransport can discover each other via mDNS and successfully
+// exchange data through the camouflaged connection.
+func TestIntegration_MDNSDiscovery(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Host A.
+	hostA, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.Transport(NewCamouflageTransport,
+			WithMaxDelay(0),
+		),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.DisableRelay(),
+	)
+	require.NoError(t, err)
+	defer hostA.Close()
+
+	// Host B.
+	hostB, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.Transport(NewCamouflageTransport,
+			WithMaxDelay(0),
+		),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.DisableRelay(),
+	)
+	require.NoError(t, err)
+	defer hostB.Close()
+
+	t.Logf("Host A: %s addrs=%v", hostA.ID(), hostA.Addrs())
+	t.Logf("Host B: %s addrs=%v", hostB.ID(), hostB.Addrs())
+
+	// Set up echo handler on host B.
+	echoDone := make(chan struct{})
+	hostB.SetStreamHandler(testProtocol, func(s network.Stream) {
+		defer s.Close()
+		defer close(echoDone)
+		buf, err := io.ReadAll(s)
+		if err != nil {
+			t.Errorf("hostB: read error: %v", err)
+			return
+		}
+		_, _ = s.Write(buf)
+	})
+
+	// Start mDNS on both hosts.
+	const mdnsServiceName = "_camouflage-test._udp"
+
+	notifeeA := &mdnsNotifee{
+		h:         hostA,
+		found:     make(chan peer.AddrInfo, 5),
+		connected: make(chan peer.ID, 5),
+	}
+	mdnsA := mdns.NewMdnsService(hostA, mdnsServiceName, notifeeA)
+	require.NoError(t, mdnsA.Start())
+	defer mdnsA.Close()
+
+	notifeeB := &mdnsNotifee{
+		h:         hostB,
+		found:     make(chan peer.AddrInfo, 5),
+		connected: make(chan peer.ID, 5),
+	}
+	mdnsB := mdns.NewMdnsService(hostB, mdnsServiceName, notifeeB)
+	require.NoError(t, mdnsB.Start())
+	defer mdnsB.Close()
+
+	// Wait for at least one side to discover and connect to the other.
+	t.Log("Waiting for mDNS discovery...")
+	var connectedPeer peer.ID
+	select {
+	case connectedPeer = <-notifeeA.connected:
+		t.Logf("Host A connected to discovered peer %s", connectedPeer)
+		assert.Equal(t, hostB.ID(), connectedPeer)
+	case connectedPeer = <-notifeeB.connected:
+		t.Logf("Host B connected to discovered peer %s", connectedPeer)
+		assert.Equal(t, hostA.ID(), connectedPeer)
+	case <-ctx.Done():
+		// Dump discovery state for debugging.
+		t.Logf("Host A network peers: %v", hostA.Network().Peers())
+		t.Logf("Host B network peers: %v", hostB.Network().Peers())
+		t.Fatal("timeout waiting for mDNS discovery and connection")
+	}
+
+	// Verify data exchange works over the mDNS-discovered connection.
+	// Ensure A is connected to B (might have been B→A above).
+	if hostA.Network().Connectedness(hostB.ID()) != network.Connected {
+		// If B discovered A, A might not have a connection to B yet.
+		err := hostA.Connect(ctx, peer.AddrInfo{ID: hostB.ID(), Addrs: hostB.Addrs()})
+		require.NoError(t, err)
+	}
+
+	stream, err := hostA.NewStream(ctx, hostB.ID(), testProtocol)
+	require.NoError(t, err, "should open stream over mDNS-discovered connection")
+
+	testPayload := []byte("Hello via mDNS discovery through CamouflageTransport!")
+	_, err = stream.Write(testPayload)
+	require.NoError(t, err)
+	_ = stream.CloseWrite()
+
+	reply, err := io.ReadAll(stream)
+	require.NoError(t, err)
+	assert.Equal(t, testPayload, reply, "echoed data should match")
+
+	select {
+	case <-echoDone:
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for echo handler")
 	}
 }
 
