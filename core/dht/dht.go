@@ -40,6 +40,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
+	mh "github.com/multiformats/go-multihash"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -161,12 +162,15 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		}
 	}
 
-	go d.bootstrapDHT()
+	bootstrapped := make(chan struct{})
+	go d.bootstrapDHT(bootstrapped)
+	go d.startRendezvous(bootstrapped)
 	log.Infoln("dht: routing started")
 	return d.dht, nil
 }
 
-func (d *distributedHashTable) bootstrapDHT() {
+func (d *distributedHashTable) bootstrapDHT(done chan<- struct{}) {
+	defer close(done)
 	if d == nil || d.dht == nil {
 		return
 	}
@@ -189,6 +193,82 @@ func (d *distributedHashTable) bootstrapDHT() {
 
 	<-d.dht.RefreshRoutingTable()
 	log.Infoln("dht: bootstrap complete")
+}
+
+// rendezvousCID returns a deterministic CID derived from the network name.
+// All nodes on the same network advertise and find providers for this CID,
+// enabling fast peer discovery via the DHT provider subsystem.
+func rendezvousCID() cid.Cid {
+	networkName := config.Config().Node.Network
+	hash, _ := mh.Sum([]byte("warpnet-rendezvous:"+networkName), mh.SHA2_256, -1)
+	return cid.NewCidV1(cid.Raw, hash)
+}
+
+// startRendezvous periodically advertises this node as a provider for a
+// well-known rendezvous CID and discovers other providers. Discovered
+// peers are fed into the DHT add-peer callbacks for the existing
+// discovery pipeline.
+func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
+	if d == nil || d.dht == nil {
+		return
+	}
+
+	// Wait for DHT bootstrap to complete before advertising.
+	select {
+	case <-bootstrapped:
+	case <-d.ctx.Done():
+		return
+	case <-d.stopChan:
+		return
+	}
+
+	rvCID := rendezvousCID()
+	ownID := d.dht.Host().ID()
+
+	// Initial provide + find immediately after bootstrap.
+	d.provideRendezvous(rvCID)
+	d.findRendezvousPeers(rvCID, ownID)
+
+	ticker := time.NewTicker(30 * time.Second) //nolint:mnd
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-d.stopChan:
+			return
+		case <-ticker.C:
+			d.provideRendezvous(rvCID)
+			d.findRendezvousPeers(rvCID, ownID)
+		}
+	}
+}
+
+func (d *distributedHashTable) provideRendezvous(rvCID cid.Cid) {
+	ctx, cancel := context.WithTimeout(d.ctx, 15*time.Second) //nolint:mnd
+	defer cancel()
+	if err := d.dht.Provide(ctx, rvCID, true); err != nil {
+		log.Debugf("dht: rendezvous: provide: %v", err)
+	}
+}
+
+func (d *distributedHashTable) findRendezvousPeers(rvCID cid.Cid, ownID warpnet.WarpPeerID) {
+	ctx, cancel := context.WithTimeout(d.ctx, 15*time.Second) //nolint:mnd
+	defer cancel()
+	for pi := range d.dht.FindProvidersAsync(ctx, rvCID, 20) { //nolint:mnd
+		if pi.ID == ownID || len(pi.Addrs) == 0 {
+			continue
+		}
+		d.dht.Host().Peerstore().AddAddrs(pi.ID, pi.Addrs, warpnet.PermanentTTL)
+		if d.cfg.addCallbacks != nil {
+			for _, cb := range d.cfg.addCallbacks {
+				if cb != nil {
+					cb(pi.ID)
+				}
+			}
+		}
+	}
 }
 
 func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
