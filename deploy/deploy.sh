@@ -1,7 +1,10 @@
 #!/bin/bash
+set -e
 
-ufw disable
-systemctl restart systemd-networkd
+# Firewall setup (errors are non-fatal — ufw may not be installed on all servers)
+ufw disable 2>/dev/null || true
+systemctl restart systemd-networkd || true
+
 iptables -I DOCKER-USER -j ACCEPT
 iptables -A INPUT -p tcp --match multiport --dports 4001:4099 -j ACCEPT
 iptables -A FORWARD -i docker0 -o docker0 -j ACCEPT
