@@ -195,25 +195,32 @@ func (d *distributedHashTable) bootstrapDHT(done chan<- struct{}) {
 	log.Infoln("dht: bootstrap complete")
 }
 
-// rendezvousCID returns a deterministic CID derived from the network name.
-// All nodes on the same network advertise and find providers for this CID,
-// enabling fast peer discovery via the DHT provider subsystem.
-func rendezvousCID() cid.Cid {
-	networkName := config.Config().Node.Network
-	hash, _ := mh.Sum([]byte("warpnet-rendezvous:"+networkName), mh.SHA2_256, -1)
+// namespaceCID converts a namespace string into a deterministic CID,
+// following the same convention as go-libp2p-discovery/routing:
+// SHA-256 hash of the namespace in a CIDv1 with Raw codec.
+func namespaceCID(ns string) cid.Cid {
+	hash, _ := mh.Sum([]byte(ns), mh.SHA2_256, -1)
 	return cid.NewCidV1(cid.Raw, hash)
 }
 
-// startRendezvous periodically advertises this node as a provider for a
-// well-known rendezvous CID and discovers other providers. Discovered
-// peers are fed into the DHT add-peer callbacks for the existing
-// discovery pipeline.
+// rendezvousNamespace returns the discovery namespace for the current network.
+func rendezvousNamespace() string {
+	return "warpnet/rendezvous/" + config.Config().Node.Network
+}
+
+// startRendezvous implements DHT-based rendezvous discovery, mirroring
+// the behaviour of go-libp2p-discovery RoutingDiscovery:
+//   - Advertise: dht.Provide(namespaceCID) — announces this node as a provider
+//   - FindPeers: dht.FindProvidersAsync(namespaceCID) — finds other providers
+//
+// Provide requires at least one peer in the routing table to store the
+// provider record, so it is skipped when the table is empty.
 func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 	if d == nil || d.dht == nil {
 		return
 	}
 
-	// Wait for DHT bootstrap to complete before advertising.
+	// Wait for DHT bootstrap to complete before starting.
 	select {
 	case <-bootstrapped:
 	case <-d.ctx.Done():
@@ -222,12 +229,11 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 		return
 	}
 
-	rvCID := rendezvousCID()
+	rvCID := namespaceCID(rendezvousNamespace())
 	ownID := d.dht.Host().ID()
 
-	// Initial provide + find immediately after bootstrap.
-	d.provideRendezvous(rvCID)
-	d.findRendezvousPeers(rvCID, ownID)
+	d.advertise(rvCID)
+	d.findPeers(rvCID, ownID)
 
 	ticker := time.NewTicker(30 * time.Second) //nolint:mnd
 	defer ticker.Stop()
@@ -239,27 +245,37 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 		case <-d.stopChan:
 			return
 		case <-ticker.C:
-			d.provideRendezvous(rvCID)
-			d.findRendezvousPeers(rvCID, ownID)
+			d.advertise(rvCID)
+			d.findPeers(rvCID, ownID)
 		}
 	}
 }
 
-func (d *distributedHashTable) provideRendezvous(rvCID cid.Cid) {
-	ctx, cancel := context.WithTimeout(d.ctx, 15*time.Second) //nolint:mnd
+// advertise announces this node as a provider for the rendezvous CID.
+// Silently skips when the routing table has no peers (nothing to provide to).
+func (d *distributedHashTable) advertise(rvCID cid.Cid) {
+	if d.dht.RoutingTable().Size() == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(d.ctx, 30*time.Second) //nolint:mnd
 	defer cancel()
 	if err := d.dht.Provide(ctx, rvCID, true); err != nil {
-		log.Debugf("dht: rendezvous: provide: %v", err)
+		log.Debugf("dht: rendezvous: advertise: %v", err)
+	} else {
+		log.Debugln("dht: rendezvous: advertised")
 	}
 }
 
-func (d *distributedHashTable) findRendezvousPeers(rvCID cid.Cid, ownID warpnet.WarpPeerID) {
-	ctx, cancel := context.WithTimeout(d.ctx, 15*time.Second) //nolint:mnd
+// findPeers queries the DHT for providers of the rendezvous CID
+// and feeds discovered peers into the add-peer callbacks.
+func (d *distributedHashTable) findPeers(rvCID cid.Cid, ownID warpnet.WarpPeerID) {
+	ctx, cancel := context.WithTimeout(d.ctx, 30*time.Second) //nolint:mnd
 	defer cancel()
-	for pi := range d.dht.FindProvidersAsync(ctx, rvCID, 20) { //nolint:mnd
+	for pi := range d.dht.FindProvidersAsync(ctx, rvCID, 50) { //nolint:mnd
 		if pi.ID == ownID || len(pi.Addrs) == 0 {
 			continue
 		}
+		log.Debugf("dht: rendezvous: found peer %s %v", pi.ID, pi.Addrs)
 		d.dht.Host().Peerstore().AddAddrs(pi.ID, pi.Addrs, warpnet.PermanentTTL)
 		if d.cfg.addCallbacks != nil {
 			for _, cb := range d.cfg.addCallbacks {
