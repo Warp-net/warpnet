@@ -30,18 +30,36 @@ package transport
 import (
 	"context"
 	"github.com/Warp-net/warpnet/security"
+	"log/slog"
 	"net"
 	"time"
 
+	golog "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/transport"
+	logging "github.com/libp2p/go-libp2p/gologshim"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcpreuse"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	log "github.com/sirupsen/logrus"
 )
+
+func init() {
+	slog.SetDefault(slog.New(golog.SlogHandler()))
+	logging.SetDefaultHandler(golog.SlogHandler())
+
+	if err := golog.SetLogLevel("tcp-tpt", "debug"); err != nil {
+		panic(err)
+	}
+	if err := golog.SetLogLevel("transport", "debug"); err != nil {
+		panic(err)
+	}
+	if err := golog.SetLogLevel("net", "debug"); err != nil {
+		panic(err)
+	}
+}
 
 // Package provides a libp2p transport wrapper that defeats Deep Packet
 // Inspection through two complementary techniques:
