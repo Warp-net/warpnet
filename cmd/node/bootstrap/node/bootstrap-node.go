@@ -37,6 +37,7 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
+	warpmdns "github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -69,6 +70,7 @@ type BootstrapNode struct {
 	node              *node.WarpNode
 	opts              []warpnet.WarpOption
 	discService       DiscoveryHandler
+	mdnsService       *warpmdns.MulticastDNS
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
 	memoryStoreCloseF func() error
@@ -87,6 +89,7 @@ func NewBootstrapNode(
 		return nil, node.ErrPrivateKeyRequired
 	}
 	discService := discovery.NewBootstrapDiscoveryService(ctx)
+	mdnsService := warpmdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
@@ -141,6 +144,7 @@ func NewBootstrapNode(
 		ctx:               ctx,
 		opts:              opts,
 		discService:       discService,
+		mdnsService:       mdnsService,
 		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
@@ -172,6 +176,7 @@ func (bn *BootstrapNode) Start() (err error) {
 	}
 	bn.setupHandlers()
 
+	bn.mdnsService.Start(bn)
 	bn.pubsubService.Run(bn)
 	if err := bn.discService.Run(bn); err != nil {
 		return err
@@ -250,8 +255,12 @@ func (bn *BootstrapNode) Network() warpnet.WarpNetwork {
 	return bn.node.Node().Network()
 }
 
-func (bn *BootstrapNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+func (bn *BootstrapNode) Connect(info warpnet.WarpAddrInfo) error {
 	return bn.node.Node().Connect(bn.ctx, info)
+}
+
+func (bn *BootstrapNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+	return bn.Connect(info)
 }
 
 func (bn *BootstrapNode) Stop() {
@@ -260,6 +269,9 @@ func (bn *BootstrapNode) Stop() {
 	}
 	if bn.discService != nil {
 		bn.discService.Close()
+	}
+	if bn.mdnsService != nil {
+		bn.mdnsService.Close()
 	}
 	if bn.pubsubService != nil {
 		if err := bn.pubsubService.Close(); err != nil {
