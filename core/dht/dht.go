@@ -40,6 +40,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
+	_ "github.com/libp2p/go-libp2p/p2p/discovery/routing" // use this!
 	mh "github.com/multiformats/go-multihash"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"

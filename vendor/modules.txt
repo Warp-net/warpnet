@@ -731,6 +731,7 @@ github.com/libp2p/go-libp2p/gologshim
 github.com/libp2p/go-libp2p/p2p/canonicallog
 github.com/libp2p/go-libp2p/p2p/discovery/backoff
 github.com/libp2p/go-libp2p/p2p/discovery/mdns
+github.com/libp2p/go-libp2p/p2p/discovery/routing
 github.com/libp2p/go-libp2p/p2p/host/autonat
 github.com/libp2p/go-libp2p/p2p/host/autonat/pb
 github.com/libp2p/go-libp2p/p2p/host/autorelay

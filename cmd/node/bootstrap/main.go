@@ -31,6 +31,7 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -112,7 +113,12 @@ func main() {
 		port := config.Config().Socks5.Port
 		srv := socks5.NewServer(ctx, port, psk.String(), m)
 		if err := srv.Start(n); err != nil {
-			log.Errorf("failed to start socks5 server: %v", err)
+			if strings.Contains(err.Error(), "address already in use") {
+				srv := socks5.NewServer(ctx, ":0", psk.String(), m)
+				_ = srv.Start(n)
+			} else {
+				log.Errorf("failed to start socks5 server: %v", err)
+			}
 		}
 		defer func() {
 			if err := srv.Stop(); err != nil {

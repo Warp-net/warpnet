@@ -925,7 +925,7 @@ func checkMDNSAvailable(t *testing.T) {
 	t.Helper()
 
 	// Quick socket-level check first.
-	conn, err := net.ListenPacket("udp4", "224.0.0.251:0")
+	conn, err := net.ListenPacket("udp4", "224.0.0.251:0") //nolint:noctx
 	if err != nil {
 		t.Skipf("multicast not available: %v", err)
 	}

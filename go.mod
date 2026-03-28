@@ -26,6 +26,7 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.15.0
 	github.com/mattn/go-mastodon v0.0.10
 	github.com/multiformats/go-multiaddr v0.16.1
+	github.com/multiformats/go-multihash v0.2.3
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/refraction-networking/utls v1.6.7
@@ -61,7 +62,6 @@ require (
 	github.com/ipfs/go-peertaskqueue v0.8.3 // indirect
 	github.com/ipld/go-codec-dagpb v1.7.0 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
-	github.com/multiformats/go-multihash v0.2.3 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/pion/transport/v4 v4.0.1 // indirect
 	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
