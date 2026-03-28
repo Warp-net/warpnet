@@ -324,17 +324,25 @@ func (t *CamouflageTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (
 // with SpoofConn + real TLS camouflage so that the TLS handshake
 // completes before the Noise upgrade.
 //
-// Note: we intentionally bypass sharedTCP demultiplexed listening because
-// our connections start with a real TLS ClientHello (0x16...), not
-// multistream select.
-// Using demultiplexed conn type multistream select would
-// cause incoming connections to be misclassified.
+// When sharedTCP is available, we register as DemultiplexedConnType_TLS
+// so that the tcpreuse demultiplexer routes incoming TLS ClientHello
+// connections (first byte 0x16) to this transport. Without this, the
+// shared port cannot dispatch connections to us.
 func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
-	mal, err := manet.Listen(laddr)
-	if err != nil {
-		return nil, err
+	var gated transport.GatedMaListener
+	if t.sharedTCP != nil {
+		var err error
+		gated, err = t.sharedTCP.DemultiplexedListen(laddr, tcpreuse.DemultiplexedConnType_TLS)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		mal, err := manet.Listen(laddr)
+		if err != nil {
+			return nil, err
+		}
+		gated = t.upgrader.GateMaListener(mal)
 	}
-	gated := t.upgrader.GateMaListener(mal)
 
 	camouflageList := &camouflageGatedMaListener{
 		GatedMaListener: gated,
