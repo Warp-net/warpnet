@@ -37,11 +37,11 @@ import (
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
+	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
-	_ "github.com/libp2p/go-libp2p/p2p/discovery/routing" // use this!
-	mh "github.com/multiformats/go-multihash"
+	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -196,26 +196,15 @@ func (d *distributedHashTable) bootstrapDHT(done chan<- struct{}) {
 	log.Infoln("dht: bootstrap complete")
 }
 
-// namespaceCID converts a namespace string into a deterministic CID,
-// following the same convention as go-libp2p-discovery/routing:
-// SHA-256 hash of the namespace in a CIDv1 with Raw codec.
-func namespaceCID(ns string) cid.Cid {
-	hash, _ := mh.Sum([]byte(ns), mh.SHA2_256, -1)
-	return cid.NewCidV1(cid.Raw, hash)
-}
-
 // rendezvousNamespace returns the discovery namespace for the current network.
 func rendezvousNamespace() string {
 	return "warpnet/rendezvous/" + config.Config().Node.Network
 }
 
-// startRendezvous implements DHT-based rendezvous discovery, mirroring
-// the behaviour of go-libp2p-discovery RoutingDiscovery:
-//   - Advertise: dht.Provide(namespaceCID) — announces this node as a provider
-//   - FindPeers: dht.FindProvidersAsync(namespaceCID) — finds other providers
-//
-// Provide requires at least one peer in the routing table to store the
-// provider record, so it is skipped when the table is empty.
+// startRendezvous uses libp2p RoutingDiscovery (backed by the DHT content
+// router) to advertise this node and discover peers under a shared
+// namespace. This is the standard libp2p approach for DHT-based
+// rendezvous point discovery.
 func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 	if d == nil || d.dht == nil {
 		return
@@ -230,11 +219,12 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 		return
 	}
 
-	rvCID := namespaceCID(rendezvousNamespace())
+	rd := drouting.NewRoutingDiscovery(d.dht)
+	ns := rendezvousNamespace()
 	ownID := d.dht.Host().ID()
 
-	d.advertise(rvCID)
-	d.findPeers(rvCID, ownID)
+	d.advertise(rd, ns)
+	d.findPeers(rd, ns, ownID)
 
 	ticker := time.NewTicker(30 * time.Second) //nolint:mnd
 	defer ticker.Stop()
@@ -246,33 +236,39 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 		case <-d.stopChan:
 			return
 		case <-ticker.C:
-			d.advertise(rvCID)
-			d.findPeers(rvCID, ownID)
+			d.advertise(rd, ns)
+			d.findPeers(rd, ns, ownID)
 		}
 	}
 }
 
-// advertise announces this node as a provider for the rendezvous CID.
-// Silently skips when the routing table has no peers (nothing to provide to).
-func (d *distributedHashTable) advertise(rvCID cid.Cid) {
+// advertise announces this node as a provider for the rendezvous namespace.
+// Silently skips when the routing table has no peers (Provide needs
+// at least one peer to store the record).
+func (d *distributedHashTable) advertise(rd *drouting.RoutingDiscovery, ns string) {
 	if d.dht.RoutingTable().Size() == 0 {
 		return
 	}
-	ctx, cancel := context.WithTimeout(d.ctx, 30*time.Second) //nolint:mnd
+	ctx, cancel := context.WithTimeout(d.ctx, 60*time.Second) //nolint:mnd
 	defer cancel()
-	if err := d.dht.Provide(ctx, rvCID, true); err != nil {
+	if _, err := rd.Advertise(ctx, ns); err != nil {
 		log.Debugf("dht: rendezvous: advertise: %v", err)
 	} else {
 		log.Debugln("dht: rendezvous: advertised")
 	}
 }
 
-// findPeers queries the DHT for providers of the rendezvous CID
+// findPeers queries the DHT for providers of the rendezvous namespace
 // and feeds discovered peers into the add-peer callbacks.
-func (d *distributedHashTable) findPeers(rvCID cid.Cid, ownID warpnet.WarpPeerID) {
+func (d *distributedHashTable) findPeers(rd *drouting.RoutingDiscovery, ns string, ownID warpnet.WarpPeerID) {
 	ctx, cancel := context.WithTimeout(d.ctx, 30*time.Second) //nolint:mnd
 	defer cancel()
-	for pi := range d.dht.FindProvidersAsync(ctx, rvCID, 50) { //nolint:mnd
+	ch, err := rd.FindPeers(ctx, ns, discovery.Limit(50)) //nolint:mnd
+	if err != nil {
+		log.Debugf("dht: rendezvous: find peers: %v", err)
+		return
+	}
+	for pi := range ch {
 		if pi.ID == ownID || len(pi.Addrs) == 0 {
 			continue
 		}
