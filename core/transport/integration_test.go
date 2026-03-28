@@ -626,7 +626,7 @@ func (n *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
 // environments, e.g. containers). It will be skipped if multicast is
 // unavailable.
 func TestIntegration_MDNSDiscovery(t *testing.T) {
-	checkMulticastAvailable(t)
+	checkMDNSAvailable(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -739,7 +739,7 @@ func TestIntegration_MDNSDiscovery(t *testing.T) {
 // TestIntegration_MDNSDiscoveryWithPSKAndRelay closely matches the real
 // app setup: CamouflageTransport + Noise + PSK + Relay + HolePunching.
 func TestIntegration_MDNSDiscoveryWithPSKAndRelay(t *testing.T) {
-	checkMulticastAvailable(t)
+	checkMDNSAvailable(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -916,15 +916,84 @@ func TestIntegration_DirectConnectWithPSK(t *testing.T) {
 	}
 }
 
-// checkMulticastAvailable skips the test if UDP multicast is not
-// available (e.g., in containers or sandboxed environments).
-func checkMulticastAvailable(t *testing.T) {
+// checkMDNSAvailable performs a real mDNS discovery probe using plain
+// TCP hosts. If two hosts cannot discover each other via mDNS within a
+// short timeout, the calling test is skipped. This catches CI
+// environments where multicast sockets can be opened but mDNS packets
+// are not delivered (e.g. macOS GitHub Actions runners).
+func checkMDNSAvailable(t *testing.T) {
 	t.Helper()
+
+	// Quick socket-level check first.
 	conn, err := net.ListenPacket("udp4", "224.0.0.251:0")
 	if err != nil {
 		t.Skipf("multicast not available: %v", err)
 	}
 	_ = conn.Close()
+
+	// Real mDNS probe with plain TCP (no camouflage) to isolate mDNS
+	// availability from transport behavior.
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+
+	h1, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.DisableRelay(),
+	)
+	if err != nil {
+		t.Skipf("mDNS probe: cannot create host: %v", err)
+	}
+	defer h1.Close()
+
+	h2, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.DisableRelay(),
+	)
+	if err != nil {
+		t.Skipf("mDNS probe: cannot create host: %v", err)
+	}
+	defer h2.Close()
+
+	found := make(chan struct{}, 1)
+	notifee := &mdnsNotifee{
+		h:         h2,
+		found:     make(chan peer.AddrInfo, 1),
+		connected: make(chan peer.ID, 1),
+	}
+
+	const probeSvc = "_mdns-probe._udp"
+	s1 := mdns.NewMdnsService(h1, probeSvc, &mdnsNotifee{
+		h:         h1,
+		found:     make(chan peer.AddrInfo, 1),
+		connected: make(chan peer.ID, 1),
+	})
+	if err := s1.Start(); err != nil {
+		t.Skipf("mDNS probe: cannot start service: %v", err)
+	}
+	defer s1.Close()
+
+	s2 := mdns.NewMdnsService(h2, probeSvc, notifee)
+	if err := s2.Start(); err != nil {
+		t.Skipf("mDNS probe: cannot start service: %v", err)
+	}
+	defer s2.Close()
+
+	go func() {
+		select {
+		case <-notifee.found:
+			found <- struct{}{}
+		case <-ctx.Done():
+		}
+	}()
+
+	select {
+	case <-found:
+		// mDNS works in this environment.
+	case <-ctx.Done():
+		t.Skipf("mDNS not functional in this environment (probe timed out)")
+	}
 }
 
 // portFromAddr extracts the port from a "host:port" string.
