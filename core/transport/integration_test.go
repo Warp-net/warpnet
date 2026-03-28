@@ -621,7 +621,13 @@ func (n *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
 // TestIntegration_MDNSDiscovery verifies that two libp2p hosts using
 // CamouflageTransport can discover each other via mDNS and successfully
 // exchange data through the camouflaged connection.
+//
+// NOTE: This test requires UDP multicast to work (not available in all
+// environments, e.g. containers). It will be skipped if multicast is
+// unavailable.
 func TestIntegration_MDNSDiscovery(t *testing.T) {
+	checkMulticastAvailable(t)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -733,6 +739,7 @@ func TestIntegration_MDNSDiscovery(t *testing.T) {
 // TestIntegration_MDNSDiscoveryWithPSKAndRelay closely matches the real
 // app setup: CamouflageTransport + Noise + PSK + Relay + HolePunching.
 func TestIntegration_MDNSDiscoveryWithPSKAndRelay(t *testing.T) {
+	checkMulticastAvailable(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -907,6 +914,17 @@ func TestIntegration_DirectConnectWithPSK(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("timeout")
 	}
+}
+
+// checkMulticastAvailable skips the test if UDP multicast is not
+// available (e.g., in containers or sandboxed environments).
+func checkMulticastAvailable(t *testing.T) {
+	t.Helper()
+	conn, err := net.ListenPacket("udp4", "224.0.0.251:0")
+	if err != nil {
+		t.Skipf("multicast not available: %v", err)
+	}
+	_ = conn.Close()
 }
 
 // portFromAddr extracts the port from a "host:port" string.
