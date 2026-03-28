@@ -19,6 +19,7 @@ jobs:
           eval "$(ssh-agent -s)"
           ssh-add ~/.ssh/id_rsa
           ssh-keyscan -H 207.154.221.44 >> ~/.ssh/known_hosts
+          ssh-keyscan -H 130.94.88.38 >> ~/.ssh/known_hosts
 
       - name: Deploy to Mainnet DO Droplet
         run: |
