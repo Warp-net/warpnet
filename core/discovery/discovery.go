@@ -204,6 +204,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		log.Errorf("discovery: handle new peer found: nil discovery service")
 		return
 	}
+	log.Debugf("discovery: found peer: %s, source: %s", pi.ID.String(), source)
 
 	if pi.ID == "" || pi.ID == s.ownId {
 		return

@@ -184,6 +184,8 @@ func (g *Gossip) runListener() error {
 				continue
 			}
 
+			log.Debugf("gossip: received message: %s", string(msg.Data))
+
 			g.mx.RLock()
 			handlerF, ok := g.handlersMap[strings.TrimSpace(*msg.Topic)]
 			g.mx.RUnlock()

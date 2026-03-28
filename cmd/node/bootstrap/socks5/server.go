@@ -117,8 +117,13 @@ func (s *socksServer) Start(streamer Streamer) error { // warpnet.P2PNode is lib
 }
 
 func (s *socksServer) Stop() error {
-	log.Infof("stopped socks5 server at %s", s.port)
-	s.balancer.Close()
+	log.Infof("stopped socks5 server at %s", defaultListenPort)
+	if s.balancer != nil {
+		s.balancer.Close()
+	}
+	if s.listener == nil {
+		return nil
+	}
 	return s.listener.Close()
 }
 

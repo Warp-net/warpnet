@@ -95,6 +95,7 @@ func NewModeratorNode(
 		ctx,
 		dht.RoutingStore(mapStore),
 		dht.BootstrapNodes(infos...),
+		dht.Network(config.Config().Node.Network),
 	)
 
 	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
