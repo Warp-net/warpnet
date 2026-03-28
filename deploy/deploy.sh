@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 ufw disable
 systemctl restart systemd-networkd
@@ -21,7 +22,7 @@ if [ -z "$GITHUB_TOKEN" ]; then
   exit 1
 fi
 
-echo $GITHUB_TOKEN | sudo docker login ghcr.io -u filinvadim --password-stdin
+echo $GITHUB_TOKEN | docker login ghcr.io -u filinvadim --password-stdin
 docker pull ghcr.io/warp-net/warpnet-bootstrap:latest
 docker pull ghcr.io/warp-net/warpnet-moderator:latest
 
@@ -32,12 +33,12 @@ if [ "$MAINNET" = "true" ]; then
     mkdir -p /root/mainnet
     mv docker-compose-mainnet.yml mainnet/docker-compose-mainnet.yml
     docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml down --remove-orphans
-    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml up -d --build
+    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml up -d --force-recreate
 else
     echo "Mainnet is disabled"
     mkdir -p /root/testnet
     mv docker-compose-testnet.yml testnet/docker-compose-testnet.yml
     docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down --remove-orphans
-    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --build
+    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --force-recreate
 fi
 docker image prune --force
