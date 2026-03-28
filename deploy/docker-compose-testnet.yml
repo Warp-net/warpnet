@@ -58,6 +58,7 @@ services:
       - NODE_SEED=warpnet-moderator-testnet
       - CGO_CPPFLAGS="-DLLAMA_DISABLE_LOGS=1"
       - CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete"
+      - NODE_METRICS_GATEWAY=130.94.88.38:4091
     volumes:
       - /root/.warpdata:/root/.warpdata:rw
 

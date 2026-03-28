@@ -22,29 +22,30 @@ type socksBalancer struct {
 	streamer Streamer
 	client   *http.Client
 
-	mx               sync.RWMutex
-	latencyList      *skiplist.SkipList
+	mx       sync.RWMutex
+	exitList *skiplist.SkipList
+
 	peersWithLatency map[string]int64
-	ruIPCache        *simplelru.LRU[string, struct{}]
+	restrictedCache  *simplelru.LRU[string, int]
 	rateLimiter      *rate.Limiter
 
 	stopChan chan struct{}
 }
 
 func newBalancer(ctx context.Context, streamer Streamer) *socksBalancer {
-	lru, _ := simplelru.NewLRU[string, struct{}](3000, nil)
+	lru, _ := simplelru.NewLRU[string, int](3000, nil)
 
 	b := &socksBalancer{
 		streamer: streamer,
 		client: &http.Client{
-			Timeout: time.Second,
+			Timeout: time.Second * 2,
 		},
-		latencyList:      skiplist.New(skiplist.Int64),
+		exitList:         skiplist.New(skiplist.Int64),
 		stopChan:         make(chan struct{}),
 		peersWithLatency: make(map[string]int64),
 		mx:               sync.RWMutex{},
 		rateLimiter:      rate.NewLimiter(rate.Every(300*time.Millisecond), 1),
-		ruIPCache:        lru,
+		restrictedCache:  lru,
 	}
 	go b.trackExitNodes(ctx)
 	return b
@@ -52,22 +53,21 @@ func newBalancer(ctx context.Context, streamer Streamer) *socksBalancer {
 
 const topK = 3
 
-func (b *socksBalancer) GetFastestPeer() warpnet.WarpPeerID {
+func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 	b.mx.RLock()
 	defer b.mx.RUnlock()
 
-	if b.latencyList.Len() == 0 {
+	if b.exitList.Len() == 0 {
 		peers := b.streamer.Peerstore().PeersWithAddrs()
 		if len(peers) != 0 {
-			return peers[rand.Intn(len(peers))] //nolint:gosec
+			return peers[rand.Intn(len(peers))], true //nolint:gosec
 		}
-		return ""
+		return "", false
 	}
 
 	candidates := make([]warpnet.WarpPeerID, 0, topK)
-
 	count := 0
-	for element := b.latencyList.Front(); element != nil && count < topK; element = element.Next() {
+	for element := b.exitList.Front(); element != nil && count < topK; element = element.Next() {
 		peer, ok := element.Value.(warpnet.WarpPeerID)
 		if !ok {
 			continue
@@ -76,11 +76,11 @@ func (b *socksBalancer) GetFastestPeer() warpnet.WarpPeerID {
 		count++
 	}
 
-	if len(candidates) == 0 {
-		return ""
+	if len(candidates) != 0 {
+		return candidates[rand.Intn(len(candidates))], false //nolint:gosec
 	}
 
-	return candidates[rand.Intn(len(candidates))] //nolint:gosec
+	return "", false
 }
 
 const latencyRefreshDuration = time.Second * 30
@@ -123,33 +123,47 @@ func (b *socksBalancer) detectSuitablePeers(ctx context.Context) {
 			continue
 		}
 
-		if b.ruIPCache.Contains(peer.String()) {
-			continue
-		}
 		addrInfo := p2pStore.PeerInfo(peer)
-		if b.isRestrictedPeer(ctx, addrInfo) { // skip Restricted exit nodes
-			b.ruIPCache.Add(peer.String(), struct{}{})
-			continue
-		}
-
 		latency := p2pStore.LatencyEWMA(peer)
+		if latency.Milliseconds() == 0 {
+			latency = time.Second
+		}
 		key := makeKey(peer.String(), latency)
 
-		b.mx.Lock()
+		b.mx.RLock()
+		isRestricted := b.restrictedCache.Contains(peer.String())
+		tryouts, _ := b.restrictedCache.Get(peer.String())
+		b.mx.RUnlock()
+		if isRestricted && tryouts < 10 {
+			tryouts++
+			b.mx.Lock()
+			b.restrictedCache.Add(peer.String(), tryouts)
+			b.mx.Unlock()
+			continue
+		}
 
+		if b.isRestrictedPeer(ctx, addrInfo) { // skip restricted exit nodes
+			b.mx.Lock()
+			b.restrictedCache.Add(peer.String(), 1)
+			if prevKey, ok := b.peersWithLatency[peer.String()]; ok {
+				b.exitList.Remove(prevKey)
+				delete(b.peersWithLatency, peer.String())
+			}
+			b.mx.Unlock()
+			continue
+		}
+
+		b.mx.Lock()
+		b.restrictedCache.Remove(peer.String())
 		if prevKey, ok := b.peersWithLatency[peer.String()]; ok {
-			b.latencyList.Remove(prevKey)
+			b.exitList.Remove(prevKey)
 			delete(b.peersWithLatency, peer.String())
 		}
-		b.latencyList.Set(key, peer)
+		b.exitList.Set(key, peer)
 		b.peersWithLatency[peer.String()] = key
 
 		b.mx.Unlock()
 	}
-}
-
-func (b *socksBalancer) IsRestrictedPeer(peer warpnet.WarpPeerID) bool {
-	return b.ruIPCache.Contains(peer.String())
 }
 
 func (b *socksBalancer) Close() {
@@ -182,7 +196,7 @@ const (
 	ruCode = "RU"
 	ruName = "Russia"
 
-	chCode = "CH"
+	chCode = "CN"
 	chName = "China"
 
 	byCode = "BY"
@@ -213,6 +227,7 @@ func (b *socksBalancer) isRestrictedIP(ctx context.Context, ip string) bool {
 	if err := b.rateLimiter.Wait(ctx); err != nil {
 		return false
 	}
+	// global timeout enabled, ignore
 	resp, err := b.client.Get(geoAPI + ip) //nolint:noctx
 	if err != nil {
 		return false
