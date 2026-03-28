@@ -122,7 +122,7 @@ func main() {
 		err := srv.Start(n)
 		if err != nil && strings.Contains(err.Error(), "address already in use") {
 			_ = socks5.NewServer(ctx, ":0", psk.String(), m).Start(n)
-		} else {
+		} else if err != nil {
 			log.Errorf("failed to start socks5 server: %v", err)
 		}
 		defer srv.Stop() //nolint:errcheck
