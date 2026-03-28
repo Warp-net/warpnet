@@ -13,7 +13,7 @@ services:
     network_mode: host
     restart: always
     environment:
-      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
+      - GOLOG_LOG_LEVEL=tcp-tpt=debug
       - NODE_PORT=4011
       - SOCKS5_PORT=4080
       - NODE_HOST_V4=130.94.88.38
