@@ -255,12 +255,12 @@ func (bn *BootstrapNode) Network() warpnet.WarpNetwork {
 	return bn.node.Node().Network()
 }
 
-func (bn *BootstrapNode) Connect(info warpnet.WarpAddrInfo) error {
+func (bn *BootstrapNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
 	return bn.node.Node().Connect(bn.ctx, info)
 }
 
-func (bn *BootstrapNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
-	return bn.Connect(info)
+func (bn *BootstrapNode) Connect(info warpnet.WarpAddrInfo) error {
+	return bn.SimpleConnect(info)
 }
 
 func (bn *BootstrapNode) Stop() {
