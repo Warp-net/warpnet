@@ -730,6 +730,185 @@ func TestIntegration_MDNSDiscovery(t *testing.T) {
 	}
 }
 
+// TestIntegration_MDNSDiscoveryWithPSKAndRelay closely matches the real
+// app setup: CamouflageTransport + Noise + PSK + Relay + HolePunching.
+func TestIntegration_MDNSDiscoveryWithPSKAndRelay(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Generate a 32-byte PSK for private network.
+	testPSK := make([]byte, 32)
+	for i := range testPSK {
+		testPSK[i] = byte(i + 1)
+	}
+
+	commonOpts := func() []libp2p.Option {
+		return []libp2p.Option{
+			libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+			libp2p.Transport(NewCamouflageTransport,
+				WithMaxDelay(0),
+			),
+			libp2p.Security(noise.ID, noise.New),
+			libp2p.PrivateNetwork(testPSK),
+			libp2p.EnableRelay(),
+			libp2p.EnableHolePunching(),
+			libp2p.NATPortMap(),
+		}
+	}
+
+	hostA, err := libp2p.New(commonOpts()...)
+	require.NoError(t, err)
+	defer hostA.Close()
+
+	hostB, err := libp2p.New(commonOpts()...)
+	require.NoError(t, err)
+	defer hostB.Close()
+
+	t.Logf("Host A: %s addrs=%v", hostA.ID(), hostA.Addrs())
+	t.Logf("Host B: %s addrs=%v", hostB.ID(), hostB.Addrs())
+
+	// Set up echo handler.
+	echoDone := make(chan struct{})
+	hostB.SetStreamHandler(testProtocol, func(s network.Stream) {
+		defer s.Close()
+		defer close(echoDone)
+		buf, err := io.ReadAll(s)
+		if err != nil {
+			t.Errorf("hostB: read error: %v", err)
+			return
+		}
+		_, _ = s.Write(buf)
+	})
+
+	// Start mDNS.
+	const mdnsServiceName = "_camouflage-psk-test._udp"
+
+	notifeeA := &mdnsNotifee{
+		h:         hostA,
+		found:     make(chan peer.AddrInfo, 5),
+		connected: make(chan peer.ID, 5),
+	}
+	mdnsA := mdns.NewMdnsService(hostA, mdnsServiceName, notifeeA)
+	require.NoError(t, mdnsA.Start())
+	defer mdnsA.Close()
+
+	notifeeB := &mdnsNotifee{
+		h:         hostB,
+		found:     make(chan peer.AddrInfo, 5),
+		connected: make(chan peer.ID, 5),
+	}
+	mdnsB := mdns.NewMdnsService(hostB, mdnsServiceName, notifeeB)
+	require.NoError(t, mdnsB.Start())
+	defer mdnsB.Close()
+
+	t.Log("Waiting for mDNS discovery with PSK+Relay...")
+	select {
+	case pid := <-notifeeA.connected:
+		t.Logf("Host A connected to discovered peer %s", pid)
+		assert.Equal(t, hostB.ID(), pid)
+	case pid := <-notifeeB.connected:
+		t.Logf("Host B connected to discovered peer %s", pid)
+		assert.Equal(t, hostA.ID(), pid)
+	case <-ctx.Done():
+		t.Logf("Host A network peers: %v", hostA.Network().Peers())
+		t.Logf("Host B network peers: %v", hostB.Network().Peers())
+		t.Fatal("timeout waiting for mDNS discovery and connection (PSK+Relay)")
+	}
+
+	// Verify data exchange.
+	if hostA.Network().Connectedness(hostB.ID()) != network.Connected {
+		err := hostA.Connect(ctx, peer.AddrInfo{ID: hostB.ID(), Addrs: hostB.Addrs()})
+		require.NoError(t, err)
+	}
+
+	stream, err := hostA.NewStream(ctx, hostB.ID(), testProtocol)
+	require.NoError(t, err)
+
+	testPayload := []byte("Hello via mDNS+PSK+Relay through CamouflageTransport!")
+	_, err = stream.Write(testPayload)
+	require.NoError(t, err)
+	_ = stream.CloseWrite()
+
+	reply, err := io.ReadAll(stream)
+	require.NoError(t, err)
+	assert.Equal(t, testPayload, reply)
+
+	select {
+	case <-echoDone:
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for echo handler (PSK+Relay)")
+	}
+}
+
+// TestIntegration_DirectConnectWithPSK verifies basic manual connectivity
+// with CamouflageTransport + PSK (no discovery, just Dial).
+func TestIntegration_DirectConnectWithPSK(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	testPSK := make([]byte, 32)
+	for i := range testPSK {
+		testPSK[i] = byte(i + 1)
+	}
+
+	hostA, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.Transport(NewCamouflageTransport, WithMaxDelay(0)),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.PrivateNetwork(testPSK),
+		libp2p.DisableRelay(),
+	)
+	require.NoError(t, err)
+	defer hostA.Close()
+
+	hostB, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.Transport(NewCamouflageTransport, WithMaxDelay(0)),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.PrivateNetwork(testPSK),
+		libp2p.DisableRelay(),
+	)
+	require.NoError(t, err)
+	defer hostB.Close()
+
+	t.Logf("Host A: %s addrs=%v", hostA.ID(), hostA.Addrs())
+	t.Logf("Host B: %s addrs=%v", hostB.ID(), hostB.Addrs())
+
+	done := make(chan struct{})
+	hostB.SetStreamHandler(testProtocol, func(s network.Stream) {
+		defer s.Close()
+		defer close(done)
+		buf, err := io.ReadAll(s)
+		if err != nil {
+			t.Errorf("hostB: read error: %v", err)
+			return
+		}
+		_, _ = s.Write(buf)
+	})
+
+	hostA.Peerstore().AddAddrs(hostB.ID(), hostB.Addrs(), time.Hour)
+	err = hostA.Connect(ctx, peer.AddrInfo{ID: hostB.ID(), Addrs: hostB.Addrs()})
+	require.NoError(t, err, "should connect with CamouflageTransport+PSK")
+
+	stream, err := hostA.NewStream(ctx, hostB.ID(), testProtocol)
+	require.NoError(t, err)
+
+	testPayload := []byte("Hello through CamouflageTransport+PSK!")
+	_, err = stream.Write(testPayload)
+	require.NoError(t, err)
+	_ = stream.CloseWrite()
+
+	reply, err := io.ReadAll(stream)
+	require.NoError(t, err)
+	assert.Equal(t, testPayload, reply)
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("timeout")
+	}
+}
+
 // portFromAddr extracts the port from a "host:port" string.
 func portFromAddr(addr string) string {
 	_, port, _ := net.SplitHostPort(addr)
