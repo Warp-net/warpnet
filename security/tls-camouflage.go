@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package dpi
+package security
 
 import (
 	"context"
@@ -49,11 +49,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	defaultSNI              = "www.googleapis.com"
-	defaultHandshakeTimeout = 10 * time.Second
-)
-
 // Well-known browser fingerprint identifiers for WithBrowserFingerprint.
 const (
 	BrowserChrome  = "chrome"
@@ -72,14 +67,35 @@ var (
 	errALPNMismatch    = errors.New("dpi: ALPN protocol not in allowed set")
 )
 
-// camouflageConfig holds the TLS camouflage settings shared by all
+// CamouflageConfig holds the TLS camouflage settings shared by all
 // connections created by a single SpoofTransport instance.
-type camouflageConfig struct {
+type CamouflageConfig struct {
 	sni              string
 	alpnProtos       []string
 	clientHelloID    utls.ClientHelloID
 	handshakeTimeout time.Duration
 	serverTLSConfig  *tls.Config // generated once per transport
+}
+
+// BuildCamouflageConfig constructs the CamouflageConfig from transport
+// settings. Called once during construction.
+func BuildCamouflageConfig(
+	sni, browserFingerprint string,
+	handshakeTimeout time.Duration,
+) (*CamouflageConfig, error) {
+	cache := &certCache{}
+	serverCfg, err := buildServerTLSConfig(sni, defaultALPNProtos, cache)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CamouflageConfig{
+		sni:              sni,
+		alpnProtos:       defaultALPNProtos,
+		clientHelloID:    browserToHelloID(browserFingerprint),
+		handshakeTimeout: handshakeTimeout,
+		serverTLSConfig:  serverCfg,
+	}, nil
 }
 
 // CamouflageConn wraps a TCP connection with a real TLS tunnel.
@@ -122,10 +138,10 @@ func (cc *CamouflageConn) CloseWrite() error {
 	return nil
 }
 
-// newCamouflageConn wraps conn with a real TLS tunnel and performs the
+// NewCamouflageConn wraps conn with a real TLS tunnel and performs the
 // TLS handshake. isClient determines whether this side initiates the
 // handshake (uTLS with browser fingerprint) or accepts (crypto/tls server).
-func newCamouflageConn(conn manet.Conn, isClient bool, cfg *camouflageConfig) (*CamouflageConn, error) {
+func NewCamouflageConn(conn manet.Conn, isClient bool, cfg *CamouflageConfig) (*CamouflageConn, error) {
 	// Set a deadline for the handshake to defend against slow-handshake
 	// active probing attacks.
 	if err := conn.SetDeadline(time.Now().Add(cfg.handshakeTimeout)); err != nil {
@@ -154,7 +170,7 @@ func newCamouflageConn(conn manet.Conn, isClient bool, cfg *camouflageConfig) (*
 // clientTLSHandshake performs a TLS handshake using uTLS with a browser
 // ClientHello fingerprint. The resulting connection is indistinguishable
 // from a real browser HTTPS session to passive DPI observers.
-func clientTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) {
+func clientTLSHandshake(conn net.Conn, cfg *CamouflageConfig) (net.Conn, error) {
 	utlsConfig := &utls.Config{
 		ServerName: cfg.sni,
 		NextProtos: cfg.alpnProtos,
@@ -178,7 +194,7 @@ var errConfigNotInit = errors.New("dpi: server TLS  config not initialized") //n
 
 // serverTLSHandshake accepts a TLS connection using standard crypto/tls
 // with a plausible certificate chain.
-func serverTLSHandshake(conn net.Conn, cfg *camouflageConfig) (net.Conn, error) {
+func serverTLSHandshake(conn net.Conn, cfg *CamouflageConfig) (net.Conn, error) {
 	if cfg.serverTLSConfig == nil {
 		return nil, errConfigNotInit //nolint:all
 	}

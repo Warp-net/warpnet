@@ -25,15 +25,12 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package dpi
+package transport
 
 import (
 	"context"
-	"crypto/rand"
-	"io"
-	"math/big"
+	"github.com/Warp-net/warpnet/security"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -46,7 +43,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Package dpi provides a libp2p transport wrapper that defeats Deep Packet
+// Package provides a libp2p transport wrapper that defeats Deep Packet
 // Inspection through two complementary techniques:
 //
 //  1. TLS camouflage – a real TLS tunnel is established using uTLS with a
@@ -80,116 +77,18 @@ const (
 	DefaultMaxDelay = 5 * time.Millisecond
 
 	defaultConnectTimeout = 60 * time.Second
+
+	defaultSNI              = "www.googleapis.com"
+	defaultHandshakeTimeout = 10 * time.Second
+	defaultBrowserChrome    = "chrome"
 )
 
-// SpoofConn wraps a manet.Conn and transparently splits Write calls into
-// small TCP segments while the connection is in the handshake phase (the
-// first handshakeLen bytes). After the handshake, writes pass through
-// without modification.
-type SpoofConn struct {
-	manet.Conn
-
-	mu           sync.Mutex
-	bytesWritten int
-	fragmentSize int
-	handshakeLen int
-	maxDelay     time.Duration
-}
-
-// Write fragments b into small segments if the handshake phase is still
-// active; otherwise it delegates directly to the underlying connection.
-func (c *SpoofConn) Write(b []byte) (int, error) {
-	c.mu.Lock()
-	pastHandshake := c.bytesWritten >= c.handshakeLen
-	c.mu.Unlock()
-
-	if pastHandshake {
-		return c.Conn.Write(b)
-	}
-
-	return c.fragmentedWrite(b)
-}
-
-func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {
-	fragSize := c.fragmentSize
-	if fragSize <= 0 {
-		fragSize = DefaultFragmentSize
-	}
-
-	total := 0
-	for len(b) > 0 {
-		c.mu.Lock()
-		pastHandshake := c.bytesWritten >= c.handshakeLen
-		c.mu.Unlock()
-
-		if pastHandshake {
-			// Past handshake: write-all loop for the remainder.
-			for len(b) > 0 {
-				n, err := c.Conn.Write(b)
-				c.mu.Lock()
-				c.bytesWritten += n
-				c.mu.Unlock()
-				total += n
-				if n == 0 && err == nil {
-					return total, io.ErrShortWrite
-				}
-				if err != nil {
-					return total, err
-				}
-				b = b[n:]
-			}
-			return total, nil
-		}
-
-		size := min(fragSize, len(b))
-		n, err := c.Conn.Write(b[:size])
-		c.mu.Lock()
-		c.bytesWritten += n
-		c.mu.Unlock()
-		total += n
-		if n == 0 && err == nil {
-			return total, io.ErrShortWrite
-		}
-		if err != nil {
-			return total, err
-		}
-		b = b[n:]
-
-		c.mu.Lock()
-		stillHandshake := c.bytesWritten < c.handshakeLen
-		c.mu.Unlock()
-		if len(b) > 0 && stillHandshake {
-			delay := randDuration(c.maxDelay)
-			if delay > 0 {
-				time.Sleep(delay)
-			}
-		}
-	}
-	return total, nil
-}
-
-// CloseRead forwards to the underlying connection if supported.
-func (c *SpoofConn) CloseRead() error {
-	if cr, ok := c.Conn.(interface{ CloseRead() error }); ok {
-		return cr.CloseRead()
-	}
-	return nil
-}
-
-// CloseWrite forwards to the underlying connection if supported.
-func (c *SpoofConn) CloseWrite() error {
-	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
-		return cw.CloseWrite()
-	}
-	return nil
-}
-
-type Option func(*SpoofTransport) error
+type Option func(*CamouflageTransport) error
 
 // WithFragmentSize sets the number of bytes per TCP segment during the
 // handshake phase.
 func WithFragmentSize(size int) Option {
-	return func(t *SpoofTransport) error {
+	return func(t *CamouflageTransport) error {
 		if size > 0 {
 			t.fragmentSize = size
 		}
@@ -199,7 +98,7 @@ func WithFragmentSize(size int) Option {
 
 // WithHandshakeLen sets the total number of bytes subject to fragmentation.
 func WithHandshakeLen(n int) Option {
-	return func(t *SpoofTransport) error {
+	return func(t *CamouflageTransport) error {
 		if n > 0 {
 			t.handshakeLen = n
 		}
@@ -210,7 +109,7 @@ func WithHandshakeLen(n int) Option {
 // WithMaxDelay sets the upper bound for random inter-fragment delays.
 // Zero disables delays; negative values are ignored.
 func WithMaxDelay(d time.Duration) Option {
-	return func(t *SpoofTransport) error {
+	return func(t *CamouflageTransport) error {
 		if d >= 0 {
 			t.maxDelay = d
 		}
@@ -221,7 +120,7 @@ func WithMaxDelay(d time.Duration) Option {
 // WithConnectTimeout sets the TCP connect timeout.
 // Non-positive values are ignored.
 func WithConnectTimeout(d time.Duration) Option {
-	return func(t *SpoofTransport) error {
+	return func(t *CamouflageTransport) error {
 		if d > 0 {
 			t.connectTimeout = d
 		}
@@ -232,7 +131,7 @@ func WithConnectTimeout(d time.Duration) Option {
 // WithSNI sets the Server Name Indication value used in the TLS
 // ClientHello. Defaults to "www.googleapis.com".
 func WithSNI(sni string) Option {
-	return func(t *SpoofTransport) error {
+	return func(t *CamouflageTransport) error {
 		t.sni = sni
 		return nil
 	}
@@ -242,7 +141,7 @@ func WithSNI(sni string) Option {
 // mimic. Use the Browser* constants (e.g. BrowserChrome, BrowserFirefox).
 // Defaults to Chrome if empty or unknown.
 func WithBrowserFingerprint(browser string) Option {
-	return func(t *SpoofTransport) error {
+	return func(t *CamouflageTransport) error {
 		t.browserFingerprint = browser
 		return nil
 	}
@@ -253,7 +152,7 @@ func WithBrowserFingerprint(browser string) Option {
 // closed, defending against slow-handshake active probing. Non-positive
 // values are ignored.
 func WithHandshakeTimeout(d time.Duration) Option {
-	return func(t *SpoofTransport) error {
+	return func(t *CamouflageTransport) error {
 		if d > 0 {
 			t.handshakeTimeout = d
 		}
@@ -261,10 +160,10 @@ func WithHandshakeTimeout(d time.Duration) Option {
 	}
 }
 
-// SpoofTransport is a libp2p transport that wraps TCP connections with
+// CamouflageTransport is a libp2p transport that wraps TCP connections with
 // real TLS camouflage (uTLS browser fingerprint) and handshake-phase
 // traffic fragmentation to evade DPI.
-type SpoofTransport struct {
+type CamouflageTransport struct {
 	inner     *tcp.TcpTransport
 	upgrader  transport.Upgrader
 	rcmgr     network.ResourceManager
@@ -279,34 +178,34 @@ type SpoofTransport struct {
 	sni                string
 	browserFingerprint string
 	handshakeTimeout   time.Duration
-	camoConfig         *camouflageConfig // built once in constructor
+	camoConfig         *security.CamouflageConfig // built once in constructor
 }
 
-var _ transport.Transport = (*SpoofTransport)(nil)
+var _ transport.Transport = (*CamouflageTransport)(nil)
 
-// NewSpoofTransport creates a DPI-evasion transport. The constructor
+// NewCamouflageTransport creates a DPI-evasion transport. The constructor
 // signature is compatible with libp2p.Transport() dependency injection:
 // the framework injects the upgrader, resource manager, and shared TCP
 // manager automatically.
-func NewSpoofTransport(
+func NewCamouflageTransport(
 	upgrader transport.Upgrader,
 	rcmgr network.ResourceManager,
 	sharedTCP *tcpreuse.ConnMgr,
 	opts ...Option,
-) (*SpoofTransport, error) {
+) (*CamouflageTransport, error) {
 	if rcmgr == nil {
 		rcmgr = &network.NullResourceManager{}
 	}
-	t := &SpoofTransport{
+	t := &CamouflageTransport{
 		upgrader:           upgrader,
-		rcmgr:             rcmgr,
+		rcmgr:              rcmgr,
 		sharedTCP:          sharedTCP,
 		fragmentSize:       DefaultFragmentSize,
 		handshakeLen:       DefaultHandshakeLen,
 		maxDelay:           DefaultMaxDelay,
 		connectTimeout:     defaultConnectTimeout,
 		sni:                defaultSNI,
-		browserFingerprint: BrowserChrome,
+		browserFingerprint: defaultBrowserChrome,
 		handshakeTimeout:   defaultHandshakeTimeout,
 	}
 	for _, o := range opts {
@@ -324,7 +223,7 @@ func NewSpoofTransport(
 	// Build the TLS camouflage configuration once. The server-side TLS
 	// config (including the generated certificate chain) is reused for
 	// all accepted connections.
-	cfg, err := t.buildCamouflageConfig()
+	cfg, err := security.BuildCamouflageConfig(t.sni, t.browserFingerprint, t.handshakeTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -333,27 +232,9 @@ func NewSpoofTransport(
 	return t, nil
 }
 
-// buildCamouflageConfig constructs the camouflageConfig from transport
-// settings. Called once during construction.
-func (t *SpoofTransport) buildCamouflageConfig() (*camouflageConfig, error) {
-	cache := &certCache{}
-	serverCfg, err := buildServerTLSConfig(t.sni, defaultALPNProtos, cache)
-	if err != nil {
-		return nil, err
-	}
-
-	return &camouflageConfig{
-		sni:              t.sni,
-		alpnProtos:       defaultALPNProtos,
-		clientHelloID:    browserToHelloID(t.browserFingerprint),
-		handshakeTimeout: t.handshakeTimeout,
-		serverTLSConfig:  serverCfg,
-	}, nil
-}
-
 // Dial dials the remote peer, wrapping the raw TCP connection with
 // SpoofConn + real TLS camouflage before the Noise handshake.
-func (t *SpoofTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (transport.CapableConn, error) {
+func (t *CamouflageTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (transport.CapableConn, error) {
 	connScope, err := t.rcmgr.OpenConnection(network.DirOutbound, true, raddr)
 	if err != nil {
 		log.Debugf("dpi: resource manager blocked outgoing connection to %s: %v", p, err)
@@ -368,7 +249,7 @@ func (t *SpoofTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID
 	return c, nil
 }
 
-func (t *SpoofTransport) dialWithScope(
+func (t *CamouflageTransport) dialWithScope(
 	ctx context.Context,
 	raddr ma.Multiaddr,
 	p peer.ID,
@@ -389,11 +270,11 @@ func (t *SpoofTransport) dialWithScope(
 
 	// Layer 1: TCP fragmentation – fragments the TLS ClientHello into
 	// small TCP segments to defeat first-segment DPI.
-	spoofed := t.wrapConn(rawConn)
+	wrapped := t.wrapConn(rawConn)
 
 	// Layer 2: Real TLS tunnel – uTLS presents a genuine browser
 	// ClientHello fingerprint; all subsequent traffic is encrypted TLS.
-	camouflaged, err := newCamouflageConn(spoofed, true, t.camoConfig)
+	camouflaged, err := security.NewCamouflageConn(wrapped, true, t.camoConfig)
 	if err != nil {
 		_ = rawConn.Close()
 		return nil, err
@@ -406,7 +287,7 @@ func (t *SpoofTransport) dialWithScope(
 	return t.upgrader.Upgrade(ctx, t, camouflaged, direction, p, connScope)
 }
 
-func (t *SpoofTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (manet.Conn, error) {
+func (t *CamouflageTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (manet.Conn, error) {
 	if t.connectTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, t.connectTimeout)
@@ -430,14 +311,14 @@ func (t *SpoofTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (manet
 // multistream select.
 // Using demultiplexed conn type multistream select would
 // cause incoming connections to be misclassified.
-func (t *SpoofTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
+func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 	mal, err := manet.Listen(laddr)
 	if err != nil {
 		return nil, err
 	}
 	gated := t.upgrader.GateMaListener(mal)
 
-	spoofList := &spoofGatedMaListener{
+	camouflageList := &camouflageGatedMaListener{
 		GatedMaListener: gated,
 		fragmentSize:    t.fragmentSize,
 		handshakeLen:    t.handshakeLen,
@@ -445,47 +326,42 @@ func (t *SpoofTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) 
 		camoConfig:      t.camoConfig,
 	}
 
-	return t.upgrader.UpgradeGatedMaListener(t, spoofList), nil
+	return t.upgrader.UpgradeGatedMaListener(t, camouflageList), nil
 }
 
 // CanDial returns true if the transport can dial the given multiaddr.
-func (t *SpoofTransport) CanDial(addr ma.Multiaddr) bool {
+func (t *CamouflageTransport) CanDial(addr ma.Multiaddr) bool {
 	return t.inner.CanDial(addr)
 }
 
 // Protocols returns the set of protocols handled by this transport.
-func (t *SpoofTransport) Protocols() []int {
+func (t *CamouflageTransport) Protocols() []int {
 	return t.inner.Protocols()
 }
 
 // Proxy always returns false.
-func (t *SpoofTransport) Proxy() bool {
+func (t *CamouflageTransport) Proxy() bool {
 	return false
 }
 
-func (t *SpoofTransport) String() string {
-	return "SpoofTCP"
+func (t *CamouflageTransport) String() string {
+	return "CamouflageTCP"
 }
 
-func (t *SpoofTransport) wrapConn(c manet.Conn) *SpoofConn {
-	return &SpoofConn{
-		Conn:         c,
-		fragmentSize: t.fragmentSize,
-		handshakeLen: t.handshakeLen,
-		maxDelay:     t.maxDelay,
-	}
+func (t *CamouflageTransport) wrapConn(c manet.Conn) *security.SpoofConn {
+	return security.NewSpoofConn(c, t.fragmentSize, t.handshakeLen, t.maxDelay)
 }
 
-type spoofGatedMaListener struct {
+type camouflageGatedMaListener struct {
 	transport.GatedMaListener
 
 	fragmentSize int
 	handshakeLen int
 	maxDelay     time.Duration
-	camoConfig   *camouflageConfig
+	camoConfig   *security.CamouflageConfig
 }
 
-func (l *spoofGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope, error) {
+func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope, error) {
 	conn, scope, err := l.GatedMaListener.Accept()
 	if err != nil {
 		if scope != nil {
@@ -498,16 +374,11 @@ func (l *spoofGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope
 	tryKeepAlive(conn, true)
 
 	// Layer 1: TCP fragmentation for server-side responses.
-	spoofed := &SpoofConn{
-		Conn:         conn,
-		fragmentSize: l.fragmentSize,
-		handshakeLen: l.handshakeLen,
-		maxDelay:     l.maxDelay,
-	}
+	spoofed := security.NewSpoofConn(conn, l.fragmentSize, l.handshakeLen, l.maxDelay)
 
 	// Layer 2: Real TLS tunnel – server side accepts TLS with a plausible
 	// certificate chain and validates the client's ALPN.
-	camouflaged, err := newCamouflageConn(spoofed, false, l.camoConfig)
+	camouflaged, err := security.NewCamouflageConn(spoofed, false, l.camoConfig)
 	if err != nil {
 		if scope != nil {
 			scope.Done()
@@ -557,15 +428,4 @@ func tryKeepAlive(conn net.Conn, enabled bool) {
 			log.Debugf("error enabling TCP keepalive (no period support): %v", err)
 		}
 	}
-}
-
-func randDuration(maximum time.Duration) time.Duration {
-	if maximum <= 0 {
-		return 0
-	}
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(maximum)))
-	if err != nil {
-		return maximum / 2
-	}
-	return time.Duration(n.Int64())
 }

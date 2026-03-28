@@ -27,6 +27,7 @@ package node
 import (
 	"crypto/ed25519"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/transport"
 	"reflect"
 	"slices"
 	"time"
@@ -47,7 +48,7 @@ var CommonOptions = []libp2p.Option{
 		WithDialTimeout(DefaultTimeout),
 		WithDialTimeoutLocal(DefaultTimeout),
 	),
-	libp2p.Transport(warpnet.NewSpoofTCPTransport),
+	libp2p.Transport(transport.NewCamouflageTransport),
 	libp2p.Ping(true),
 	libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
 	libp2p.EnableAutoNATv2(),

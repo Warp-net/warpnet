@@ -22,10 +22,11 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package dpi
+package transport
 
 import (
 	"bytes"
+	"github.com/Warp-net/warpnet/security"
 	"io"
 	"net"
 	"sync"
@@ -95,12 +96,7 @@ func (f *fakeConn) writeSizes() []int {
 
 func TestSpoofConn_FragmentsDuringHandshake(t *testing.T) {
 	fc := &fakeConn{}
-	sc := &SpoofConn{
-		Conn:         fc,
-		fragmentSize: 2,
-		handshakeLen: 10,
-		maxDelay:     0, // no delays in tests
-	}
+	sc := security.NewSpoofConn(fc, 2, 10, 0) // no delays in tests
 
 	data := []byte("HELLO_WORLD!") // 12 bytes: 10 in handshake + 2 after
 	n, err := sc.Write(data)
@@ -123,12 +119,7 @@ func TestSpoofConn_FragmentsDuringHandshake(t *testing.T) {
 
 func TestSpoofConn_PassthroughAfterHandshake(t *testing.T) {
 	fc := &fakeConn{}
-	sc := &SpoofConn{
-		Conn:         fc,
-		fragmentSize: 1,
-		handshakeLen: 4,
-		maxDelay:     0,
-	}
+	sc := security.NewSpoofConn(fc, 1, 4, 0) // no delays in tests
 
 	// Exhaust the handshake phase.
 	_, err := sc.Write([]byte("ABCD"))
@@ -145,12 +136,7 @@ func TestSpoofConn_PassthroughAfterHandshake(t *testing.T) {
 
 func TestSpoofConn_PartialHandshakeAcrossWrites(t *testing.T) {
 	fc := &fakeConn{}
-	sc := &SpoofConn{
-		Conn:         fc,
-		fragmentSize: 3,
-		handshakeLen: 8,
-		maxDelay:     0,
-	}
+	sc := security.NewSpoofConn(fc, 3, 8, 0) // no delays in tests
 
 	// First write: 5 bytes. Should be fragmented into 3+2 (still in handshake).
 	n, err := sc.Write([]byte("ABCDE"))
@@ -169,12 +155,7 @@ func TestSpoofConn_PartialHandshakeAcrossWrites(t *testing.T) {
 
 func TestSpoofConn_FragmentSizeLargerThanData(t *testing.T) {
 	fc := &fakeConn{}
-	sc := &SpoofConn{
-		Conn:         fc,
-		fragmentSize: 100,
-		handshakeLen: 200,
-		maxDelay:     0,
-	}
+	sc := security.NewSpoofConn(fc, 100, 200, 0) // no delays in tests
 
 	data := []byte("short")
 	n, err := sc.Write(data)
@@ -186,12 +167,7 @@ func TestSpoofConn_FragmentSizeLargerThanData(t *testing.T) {
 
 func TestSpoofConn_EmptyWrite(t *testing.T) {
 	fc := &fakeConn{}
-	sc := &SpoofConn{
-		Conn:         fc,
-		fragmentSize: 2,
-		handshakeLen: 10,
-		maxDelay:     0,
-	}
+	sc := security.NewSpoofConn(fc, 2, 10, 0) // no delays in tests
 
 	n, err := sc.Write(nil)
 	require.NoError(t, err)
@@ -201,12 +177,7 @@ func TestSpoofConn_EmptyWrite(t *testing.T) {
 
 func TestSpoofConn_ZeroFragmentSizeUsesDefault(t *testing.T) {
 	fc := &fakeConn{}
-	sc := &SpoofConn{
-		Conn:         fc,
-		fragmentSize: 0, // zero triggers fallback to DefaultFragmentSize
-		handshakeLen: 10,
-		maxDelay:     0,
-	}
+	sc := security.NewSpoofConn(fc, 0, 10, 0) // zero triggers fallback to defaultFragmentSize
 
 	data := []byte("ABCDEF") // 6 bytes, should fragment into DefaultFragmentSize (2) chunks
 	n, err := sc.Write(data)
@@ -222,7 +193,7 @@ func TestSpoofConn_ZeroFragmentSizeUsesDefault(t *testing.T) {
 }
 
 func TestOptions(t *testing.T) {
-	st := &SpoofTransport{
+	st := &CamouflageTransport{
 		fragmentSize:   DefaultFragmentSize,
 		handshakeLen:   DefaultHandshakeLen,
 		maxDelay:       DefaultMaxDelay,
@@ -244,14 +215,14 @@ func TestOptions(t *testing.T) {
 	require.NoError(t, WithSNI("custom.example.com")(st))
 	assert.Equal(t, "custom.example.com", st.sni)
 
-	require.NoError(t, WithBrowserFingerprint(BrowserFirefox)(st))
-	assert.Equal(t, BrowserFirefox, st.browserFingerprint)
+	require.NoError(t, WithBrowserFingerprint(security.BrowserFirefox)(st))
+	assert.Equal(t, security.BrowserFirefox, st.browserFingerprint)
 
 	require.NoError(t, WithHandshakeTimeout(5*time.Second)(st))
 	assert.Equal(t, 5*time.Second, st.handshakeTimeout)
 
 	// Negative/zero values should not change defaults.
-	st2 := &SpoofTransport{fragmentSize: 2, handshakeLen: 512}
+	st2 := &CamouflageTransport{fragmentSize: 2, handshakeLen: 512}
 	require.NoError(t, WithFragmentSize(0)(st2))
 	assert.Equal(t, 2, st2.fragmentSize)
 	require.NoError(t, WithHandshakeLen(-1)(st2))
@@ -264,12 +235,12 @@ func TestOptions(t *testing.T) {
 
 func TestRandDuration(t *testing.T) {
 	// Zero max should return zero.
-	assert.Equal(t, time.Duration(0), randDuration(0))
-	assert.Equal(t, time.Duration(0), randDuration(-1))
+	assert.Equal(t, time.Duration(0), security.RandDuration(0))
+	assert.Equal(t, time.Duration(0), security.RandDuration(-1))
 
 	// Positive max should return a value in [0, max).
 	for range 100 {
-		d := randDuration(10 * time.Millisecond)
+		d := security.RandDuration(10 * time.Millisecond)
 		assert.True(t, d >= 0 && d < 10*time.Millisecond, "got %v", d)
 	}
 }
@@ -291,12 +262,7 @@ func (s *shortWriteConn) Write(b []byte) (int, error) {
 
 func TestSpoofConn_ShortWrite(t *testing.T) {
 	fc := &shortWriteConn{maxPerWrite: 1}
-	sc := &SpoofConn{
-		Conn:         fc,
-		fragmentSize: 3,
-		handshakeLen: 10,
-		maxDelay:     0,
-	}
+	sc := security.NewSpoofConn(fc, 3, 10, 0) // no delays in tests
 
 	data := []byte("ABCDEF")
 	n, err := sc.Write(data)
@@ -316,12 +282,7 @@ func (z *zeroWriteConn) Write([]byte) (int, error) {
 
 func TestSpoofConn_ZeroWriteReturnsError(t *testing.T) {
 	fc := &zeroWriteConn{}
-	sc := &SpoofConn{
-		Conn:         fc,
-		fragmentSize: 2,
-		handshakeLen: 10,
-		maxDelay:     0,
-	}
+	sc := security.NewSpoofConn(fc, 2, 10, 0) // no delays in tests
 
 	_, err := sc.Write([]byte("AB"))
 	require.Error(t, err)

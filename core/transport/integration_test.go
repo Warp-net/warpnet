@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package dpi
+package transport
 
 import (
 	"context"
@@ -55,7 +55,7 @@ func TestIntegration_TwoNodes(t *testing.T) {
 	// Create two hosts with SpoofTransport + Noise security.
 	hostA, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
-		libp2p.Transport(NewSpoofTransport,
+		libp2p.Transport(NewCamouflageTransport,
 			WithFragmentSize(3),
 			WithMaxDelay(0),
 		),
@@ -67,7 +67,7 @@ func TestIntegration_TwoNodes(t *testing.T) {
 
 	hostB, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
-		libp2p.Transport(NewSpoofTransport,
+		libp2p.Transport(NewCamouflageTransport,
 			WithFragmentSize(3),
 			WithMaxDelay(0),
 		),
@@ -130,7 +130,7 @@ func TestIntegration_LargePayload(t *testing.T) {
 
 	hostA, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
-		libp2p.Transport(NewSpoofTransport),
+		libp2p.Transport(NewCamouflageTransport),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.DisableRelay(),
 	)
@@ -139,7 +139,7 @@ func TestIntegration_LargePayload(t *testing.T) {
 
 	hostB, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
-		libp2p.Transport(NewSpoofTransport),
+		libp2p.Transport(NewCamouflageTransport),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.DisableRelay(),
 	)
@@ -189,7 +189,7 @@ func TestIntegration_BidirectionalStream(t *testing.T) {
 
 	hostA, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
-		libp2p.Transport(NewSpoofTransport),
+		libp2p.Transport(NewCamouflageTransport),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.DisableRelay(),
 	)
@@ -198,7 +198,7 @@ func TestIntegration_BidirectionalStream(t *testing.T) {
 
 	hostB, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
-		libp2p.Transport(NewSpoofTransport),
+		libp2p.Transport(NewCamouflageTransport),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.DisableRelay(),
 	)
@@ -411,7 +411,7 @@ func TestIntegration_DPIEmulation(t *testing.T) {
 	// Start host B (server) first to get its address.
 	hostB, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
-		libp2p.Transport(NewSpoofTransport,
+		libp2p.Transport(NewCamouflageTransport,
 			WithFragmentSize(3),
 			WithMaxDelay(0),
 		),
@@ -455,7 +455,7 @@ func TestIntegration_DPIEmulation(t *testing.T) {
 
 	hostA, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
-		libp2p.Transport(NewSpoofTransport,
+		libp2p.Transport(NewCamouflageTransport,
 			WithFragmentSize(3),
 			WithMaxDelay(0),
 		),

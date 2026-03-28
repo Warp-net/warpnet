@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package dpi
+package security
 
 import (
 	"bytes"
@@ -59,8 +59,8 @@ func newPipePair() (*pipeConn, *pipeConn) {
 		&pipeConn{Conn: b, local: ma2, remote: ma1}
 }
 
-// testCamoConfig builds a camouflageConfig suitable for tests.
-func testCamoConfig(sni string) *camouflageConfig {
+// testCamoConfig builds a CamouflageConfig suitable for tests.
+func testCamoConfig(sni string) *CamouflageConfig {
 	if sni == "" {
 		sni = "test.example.com"
 	}
@@ -69,7 +69,7 @@ func testCamoConfig(sni string) *camouflageConfig {
 	if err != nil {
 		panic(err)
 	}
-	return &camouflageConfig{
+	return &CamouflageConfig{
 		sni:              sni,
 		alpnProtos:       defaultALPNProtos,
 		clientHelloID:    utls.HelloChrome_Auto,
@@ -161,11 +161,11 @@ func TestCamouflageConn_HandshakeAndDataRoundTrip(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		clientConn, clientErr = newCamouflageConn(clientRaw, true, cfg)
+		clientConn, clientErr = NewCamouflageConn(clientRaw, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		serverConn, serverErr = newCamouflageConn(serverRaw, false, cfg)
+		serverConn, serverErr = NewCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 
@@ -210,11 +210,11 @@ func TestCamouflageConn_LargeDataTransfer(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		clientConn, clientErr = newCamouflageConn(clientRaw, true, cfg)
+		clientConn, clientErr = NewCamouflageConn(clientRaw, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		serverConn, serverErr = newCamouflageConn(serverRaw, false, cfg)
+		serverConn, serverErr = NewCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 
@@ -254,11 +254,11 @@ func TestCamouflageConn_WireTrafficIsRealTLS(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, _ = newCamouflageConn(recorder, true, cfg)
+		_, _ = NewCamouflageConn(recorder, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		_, serverErr = newCamouflageConn(serverRaw, false, cfg)
+		_, serverErr = NewCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 
@@ -321,11 +321,11 @@ func TestCamouflageConn_PreservesMultiaddr(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		clientConn, clientErr = newCamouflageConn(clientRaw, true, cfg)
+		clientConn, clientErr = NewCamouflageConn(clientRaw, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		_, serverErr = newCamouflageConn(serverRaw, false, cfg)
+		_, serverErr = NewCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 
@@ -352,11 +352,11 @@ func TestCamouflageConn_EmptyWrite(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		clientConn, clientErr = newCamouflageConn(clientRaw, true, cfg)
+		clientConn, clientErr = NewCamouflageConn(clientRaw, true, cfg)
 	}()
 	go func() {
 		defer wg.Done()
-		_, serverErr = newCamouflageConn(serverRaw, false, cfg)
+		_, serverErr = NewCamouflageConn(serverRaw, false, cfg)
 	}()
 	wg.Wait()
 

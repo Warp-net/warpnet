@@ -78,8 +78,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/transport/tcpreuse"
 	"github.com/libp2p/go-libp2p/p2p/transport/websocket"
 
-	"github.com/Warp-net/warpnet/security/dpi"
-
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
@@ -272,14 +270,8 @@ func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*no
 	return noise.New(id, pk, mxs)
 }
 
-func NewTCPTransport(u transport.Upgrader, r network.ResourceManager, s *tcpreuse.ConnMgr, o ...tcp.Option) (*tcp.TcpTransport, error) {
+func DefaultTCPTransport(u transport.Upgrader, r network.ResourceManager, s *tcpreuse.ConnMgr, o ...tcp.Option) (*tcp.TcpTransport, error) {
 	return tcp.NewTCPTransport(u, r, s, o...)
-}
-
-// NewSpoofTCPTransport creates a DPI-evasion transport that fragments
-// handshake traffic into small TCP segments (inspired by SpoofDPI).
-func NewSpoofTCPTransport(u transport.Upgrader, r network.ResourceManager, s *tcpreuse.ConnMgr, o ...dpi.Option) (*dpi.SpoofTransport, error) {
-	return dpi.NewSpoofTransport(u, r, s, o...)
 }
 
 func NewWebsocketTransport(
