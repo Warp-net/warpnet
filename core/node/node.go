@@ -213,9 +213,6 @@ func (n *WarpNode) trackIncomingEvents() {
 				}
 			case event.EvtPeerConnectednessChanged:
 				pid := typedEvent.Peer.String()
-				if typedEvent.Connectedness == warpnet.Limited {
-					return
-				}
 				log.Infof(
 					"node: event: peer ...%s connectedness updated: %s",
 					pid[len(pid)-6:],
