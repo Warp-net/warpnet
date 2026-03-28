@@ -32,7 +32,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -123,7 +122,7 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	d.dht, err = dht.New(
 		d.ctx, n,
 		dht.Mode(dht.ModeServer),
-		dht.ProtocolPrefix(protocol.ID("/"+config.Config().Node.Network)),
+		dht.ProtocolPrefix(protocol.ID("/"+d.cfg.network)),
 		dht.Datastore(d.cfg.store),
 		dht.MaxRecordAge(time.Hour),
 		dht.RoutingTableRefreshPeriod(time.Hour),
@@ -197,8 +196,8 @@ func (d *distributedHashTable) bootstrapDHT(done chan<- struct{}) {
 }
 
 // rendezvousNamespace returns the discovery namespace for the current network.
-func rendezvousNamespace() string {
-	return "warpnet/rendezvous/" + config.Config().Node.Network
+func rendezvousNamespace(network string) string {
+	return "warpnet/rendezvous/" + network
 }
 
 // startRendezvous uses libp2p RoutingDiscovery (backed by the DHT content
@@ -220,7 +219,7 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 	}
 
 	rd := drouting.NewRoutingDiscovery(d.dht)
-	ns := rendezvousNamespace()
+	ns := rendezvousNamespace(d.cfg.network)
 	ownID := d.dht.Host().ID()
 
 	d.advertise(rd, ns)

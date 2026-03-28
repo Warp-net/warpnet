@@ -124,6 +124,7 @@ func NewMemberNode(
 		dht.RoutingStore(nodeRepo),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(infos...),
+		dht.Network(config.Config().Node.Network),
 	)
 
 	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
