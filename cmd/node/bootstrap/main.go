@@ -31,6 +31,7 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -105,20 +106,20 @@ func main() {
 	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
 	defer m.Stop()
 
+	if config.Config().Node.IsPskPrinted {
+		log.Infof("CURRENT PSK: %s", psk.String())
+	}
+
 	if config.Config().Socks5.IsEnabled {
-		if config.Config().Node.IsPskPrinted {
-			log.Infof("CURRENT PSK: %s", psk.String())
-		}
 		port := config.Config().Socks5.Port
 		srv := socks5.NewServer(ctx, port, psk.String(), m)
-		if err := srv.Start(n); err != nil {
+		err := srv.Start(n)
+		if err != nil && strings.Contains(err.Error(), "address already in use") {
+			_ = socks5.NewServer(ctx, ":0", psk.String(), m).Start(n)
+		} else {
 			log.Errorf("failed to start socks5 server: %v", err)
 		}
-		defer func() {
-			if err := srv.Stop(); err != nil {
-				log.Errorf("failed to stop socks5 server: %v", err)
-			}
-		}()
+		defer srv.Stop() //nolint:errcheck
 	}
 
 	m.PushStatusOnline(config.Config().Node.Network, "bootstrap")

@@ -30,6 +30,7 @@ type dhtConfig struct {
 	store                         RoutingStorer
 	addCallbacks, removeCallbacks []func(info warpnet.WarpPeerID)
 	boostrapNodes                 []warpnet.WarpAddrInfo
+	network                       string
 }
 type Option func(*dhtConfig)
 
@@ -54,5 +55,11 @@ func AddPeerCallbacks(cbs ...func(id warpnet.WarpPeerID)) Option {
 func BootstrapNodes(nodes ...warpnet.WarpAddrInfo) Option {
 	return func(c *dhtConfig) {
 		c.boostrapNodes = nodes
+	}
+}
+
+func Network(network string) Option {
+	return func(c *dhtConfig) {
+		c.network = network
 	}
 }

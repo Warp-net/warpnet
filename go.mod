@@ -26,8 +26,10 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.15.0
 	github.com/mattn/go-mastodon v0.0.10
 	github.com/multiformats/go-multiaddr v0.16.1
+	github.com/multiformats/go-multihash v0.2.3
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/client_golang v1.23.2
+	github.com/refraction-networking/utls v1.6.7
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/pflag v1.0.10
@@ -43,6 +45,7 @@ require (
 require (
 	filippo.io/bigmod v0.1.1-0.20260103110540-f8a47775ebe5 // indirect
 	filippo.io/keygen v0.0.0-20260114151900-8e2790ea4c5b // indirect
+	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/cskr/pubsub v1.0.2 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.3.0 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
@@ -59,7 +62,6 @@ require (
 	github.com/ipfs/go-peertaskqueue v0.8.3 // indirect
 	github.com/ipld/go-codec-dagpb v1.7.0 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
-	github.com/multiformats/go-multihash v0.2.3 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/pion/transport/v4 v4.0.1 // indirect
 	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
@@ -278,7 +280,7 @@ require (
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/time v0.14.0
 	golang.org/x/tools v0.42.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
