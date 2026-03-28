@@ -48,6 +48,7 @@ func (r *rule) Allow(ctx context.Context, req *socks5.Request) (context.Context,
 	default:
 		host = req.RemoteAddr.String()
 	}
+	log.Infof("socks5: request from %s", host)
 
 	r.m.PushSocksConnections(host)
 
@@ -136,6 +137,7 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 	}
 	if isRedirect {
 		peerAddrs := s.streamer.Peerstore().Addrs(peer)
+		log.Infof("socks5 server: redirect to %v", peerAddrs)
 		for _, pAddr := range peerAddrs {
 			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), time.Second)
 			if err != nil {
@@ -144,6 +146,7 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 			return conn, nil
 		}
 	}
+	log.Infof("socks5 server: stream to %s", peer.String())
 	stream, err := s.streamer.Node().NewStream(
 		network.WithAllowLimitedConn(ctx, warpnet.WarpnetName),
 		peer,
