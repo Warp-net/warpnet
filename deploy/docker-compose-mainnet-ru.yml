@@ -1,6 +1,6 @@
 services:
   push-gateway:
-    container_name: push-gateway-testnet
+    container_name: push-gateway-mainnet
     image: prom/pushgateway:latest
     network_mode: host
     command:
