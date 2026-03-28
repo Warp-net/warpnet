@@ -135,7 +135,6 @@ func NewBootstrapNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		libp2p.Transport(warpnet.NewWebsocketTransport),
 		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
 	}
 	opts = append(opts, node.CommonOptions...)

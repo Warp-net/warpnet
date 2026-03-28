@@ -25,8 +25,6 @@ if [ -z "$GITHUB_TOKEN" ]; then
 fi
 
 echo $GITHUB_TOKEN | docker login ghcr.io -u filinvadim --password-stdin
-docker pull ghcr.io/warp-net/warpnet-bootstrap:latest
-docker pull ghcr.io/warp-net/warpnet-moderator:latest
 
 export HOSTNAME=''
 
