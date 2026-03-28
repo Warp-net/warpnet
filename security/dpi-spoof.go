@@ -34,7 +34,6 @@ func NewSpoofConn(conn manet.Conn, fragmentSize, handshakeLen int, maxDelay time
 		handshakeLen: handshakeLen,
 		maxDelay:     maxDelay,
 	}
-
 }
 
 // Write fragments b into small segments if the handshake phase is still
