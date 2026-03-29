@@ -480,12 +480,14 @@ func (d *NodeRepo) query(tx *local_store.Txn, q datastore.Query) (_ datastore.Re
 }
 
 func (d *NodeRepo) storageQueryPrefix(queryPrefix string) []byte {
-	key := strings.TrimPrefix(queryPrefix, "/")
-	if key == "" {
-		return local_store.NewPrefixBuilder(d.prefix).Build().Bytes()
+	prefix := strings.TrimSuffix(datastore.NewKey(queryPrefix).String(), requiredPrefixSlash)
+	base := strings.TrimSuffix(d.prefix, requiredPrefixSlash)
+
+	if prefix == "" {
+		return []byte(base + requiredPrefixSlash)
 	}
 
-	return local_store.NewPrefixBuilder(d.prefix).AddRootID(key).Build().Bytes()
+	return []byte(base + prefix + requiredPrefixSlash)
 }
 
 func (d *NodeRepo) resultKeyFromStorageKey(storageKey string) string {
