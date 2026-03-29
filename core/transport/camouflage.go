@@ -370,35 +370,34 @@ type camouflageGatedMaListener struct {
 }
 
 func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope, error) {
-	for {
-		conn, scope, err := l.GatedMaListener.Accept()
-		if err != nil {
-			if scope != nil {
-				scope.Done()
-			}
-			return nil, nil, err
+	conn, scope, err := l.GatedMaListener.Accept()
+	if err != nil {
+		if scope != nil {
+			scope.Done()
 		}
-
-		setLinger(conn, 0)
-		tryKeepAlive(conn, true)
-
-		// Layer 1: TCP fragmentation for server-side responses.
-		spoofed := security.NewSpoofConn(conn, l.fragmentSize, l.handshakeLen, l.maxDelay)
-
-		// Layer 2: Real TLS tunnel – server side accepts TLS with a plausible
-		// certificate chain and validates the client's ALPN.
-		camouflaged, err := security.NewCamouflageConn(spoofed, false, l.camoConfig)
-		if err != nil {
-			log.Debugf("dpi: camouflage handshake failed from %s: %v", conn.RemoteAddr(), err)
-			if scope != nil {
-				scope.Done()
-			}
-			_ = conn.Close()
-			continue
-		}
-
-		return camouflaged, scope, nil
+		return nil, nil, err
 	}
+
+	setLinger(conn, 0)
+	tryKeepAlive(conn, true)
+
+	// Layer 1: TCP fragmentation for server-side responses.
+	spoofed := security.NewSpoofConn(conn, l.fragmentSize, l.handshakeLen, l.maxDelay)
+
+	// Layer 2: Real TLS tunnel – server side accepts TLS with a plausible
+	// certificate chain and validates the client's ALPN.
+	camouflaged, err := security.NewCamouflageConn(spoofed, false, l.camoConfig)
+	if err != nil {
+		log.Debugf("dpi: camouflage handshake failed from %s: %v", conn.RemoteAddr(), err)
+		if scope != nil {
+			scope.Done()
+		}
+		_ = conn.Close()
+		return nil, nil, err
+	}
+
+	return camouflaged, scope, nil
+
 }
 
 func setLinger(conn net.Conn, sec int) {
@@ -410,13 +409,19 @@ func setLinger(conn net.Conn, sec int) {
 	}
 }
 
+type basicKeepAlive interface {
+	SetKeepAlive(bool) error
+}
+
+type fullKeepAlive interface {
+	SetKeepAlive(bool) error
+	SetKeepAlivePeriod(time.Duration) error
+}
+
 func tryKeepAlive(conn net.Conn, enabled bool) {
 	// Prefer the full TCP keepalive interface (including period) but fall
 	// back to just enabling keepalive if SetKeepAlivePeriod is unavailable.
-	type fullKeepAlive interface {
-		SetKeepAlive(bool) error
-		SetKeepAlivePeriod(time.Duration) error
-	}
+
 	if c, ok := conn.(fullKeepAlive); ok {
 		if err := c.SetKeepAlive(enabled); err != nil {
 			log.Debugf("error enabling TCP keepalive: %v", err)
@@ -431,9 +436,6 @@ func tryKeepAlive(conn net.Conn, enabled bool) {
 		return
 	}
 
-	type basicKeepAlive interface {
-		SetKeepAlive(bool) error
-	}
 	if c, ok := conn.(basicKeepAlive); ok {
 		if err := c.SetKeepAlive(enabled); err != nil {
 			log.Debugf("error enabling TCP keepalive (no period support): %v", err)
