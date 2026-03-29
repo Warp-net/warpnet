@@ -44,6 +44,7 @@ import (
 // slash is required because of: invalid datastore key: NODES:/peers/keys/AASAQAISEAXNRKHMX2O3AA26JM7NGIWUPOGIITJ2UHHXGX4OWIEKPNAW6YCSK/priv
 const (
 	requiredPrefixSlash = "/"
+	nodesPrefix         = "NODES"
 
 	ErrNilNodeRepo = local_store.DBError("node repo is nil")
 )
@@ -71,7 +72,8 @@ type NodeRepo struct {
 	BootstrapSelfHashHex string
 }
 
-func NewNodeRepo(db NodeStorer, prefix string) *NodeRepo {
+func NewNodeRepo(db NodeStorer) *NodeRepo {
+	prefix := nodesPrefix
 	if !strings.HasPrefix(prefix, requiredPrefixSlash) {
 		prefix = requiredPrefixSlash + prefix
 	}
@@ -81,10 +83,6 @@ func NewNodeRepo(db NodeStorer, prefix string) *NodeRepo {
 		stopChan: make(chan struct{}),
 	}
 	return nr
-}
-
-func (d *NodeRepo) Prefix() string {
-	return d.prefix
 }
 
 func (d *NodeRepo) Put(ctx context.Context, key datastore.Key, value []byte) error {
