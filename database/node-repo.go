@@ -494,7 +494,7 @@ func (d *NodeRepo) resultKeyFromStorageKey(storageKey string) string {
 	}
 
 	trimPrefix := d.prefix + requiredPrefixSlash
-	if strings.HasPrefix(storageKey, trimPrefix) {
+	if strings.HasPrefix(storageKey, trimPrefix) { //nolint:modernize
 		return requiredPrefixSlash + strings.TrimPrefix(storageKey, trimPrefix)
 	}
 
