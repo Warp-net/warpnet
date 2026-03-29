@@ -58,7 +58,6 @@ type Broadcaster interface {
 
 type CRDTStorer interface {
 	ds.Datastore
-	Prefix() string
 }
 
 type CRDTRouter interface {
@@ -84,10 +83,6 @@ func NewCRDTStatsStore(
 	node host.Host,
 	router CRDTRouter,
 ) (*CRDTStatsStore, error) {
-	prefix := datastore.Prefix()
-	if prefix != "/CRDT" {
-		return nil, warpnet.WarpError("CRDT datastore namespace must start with '/CRDT' prefix")
-	}
 	ctx, cancel := context.WithCancel(ctx)
 
 	baseStore := ds.MutexWrap(datastore)

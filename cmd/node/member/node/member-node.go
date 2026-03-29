@@ -64,7 +64,7 @@ type MemberNode struct {
 	pubsubService        PubSubProvider
 	dHashTable           DistributedHashTableCloser
 	nodeRepo             NodeProvider
-	statsRepo            NodeProvider
+	statsRepo            StatsProvider
 	authRepo             AuthProvider
 	userRepo             UserProvider
 	followRepo           FollowStorer
@@ -88,13 +88,13 @@ func NewMemberNode(
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	nodeRepo := database.NewNodeRepo(db, "NODES")
+	nodeRepo := database.NewNodeRepo(db)
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {
 		return nil, err
 	}
 
-	statsRepo := database.NewNodeRepo(db, "CRDT")
+	statsRepo := database.NewStatsRepo(db)
 	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()

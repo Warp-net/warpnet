@@ -33,7 +33,9 @@ type MetricsPusher interface {
 	RemoveSocksConnections(ip string)
 }
 
-const reqIpKey = "ip-key"
+type ctxKey string
+
+const reqIpKey ctxKey = "ip-key"
 
 type rule struct {
 	m MetricsPusher
@@ -133,13 +135,13 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 
 	peer, isRedirect := s.balancer.route()
 	if peer == "" {
-		return nil, fmt.Errorf("no peers found") //nolint:errcheck
+		return nil, fmt.Errorf("no peers found") //nolint:err113
 	}
 	if isRedirect {
 		peerAddrs := s.streamer.Peerstore().Addrs(peer)
 		log.Infof("socks5 server: redirect to %v", peerAddrs)
 		for _, pAddr := range peerAddrs {
-			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), time.Second)
+			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), time.Second) //nolint:noctx
 			if err != nil {
 				continue
 			}

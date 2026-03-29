@@ -59,7 +59,7 @@ func (s *NodeRepoTestSuite) SetupSuite() {
 	auth := NewAuthRepo(s.db)
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo = NewNodeRepo(s.db, "test")
+	s.repo = NewNodeRepo(s.db)
 
 }
 
@@ -112,12 +112,12 @@ func (s *NodeRepoTestSuite) TestDiskUsage() {
 }
 
 func (s *NodeRepoTestSuite) TestQuerySimple() {
-	key := datastore.NewKey("query/key")
+	key := datastore.NewKey("querysimple/key/item")
 	val := []byte("qval")
 	err := s.repo.Put(s.ctx, key, val)
 	s.Require().NoError(err)
 
-	q := query.Query{Prefix: "query/key"}
+	q := query.Query{Prefix: "querysimple/key"}
 	results, err := s.repo.Query(s.ctx, q)
 	s.Require().NoError(err)
 	s.Require().NotNil(results)
@@ -130,10 +130,62 @@ func (s *NodeRepoTestSuite) TestQuerySimple() {
 		if r.Error != nil {
 			continue
 		}
+		s.Equal("/querysimple/key/item", r.Entry.Key)
 		found = true
 		break
 	}
 	s.True(found)
+}
+
+func (s *NodeRepoTestSuite) TestQueryEmptyPrefix() {
+	key := datastore.NewKey("all/key")
+	val := []byte("all")
+	err := s.repo.Put(s.ctx, key, val)
+	s.Require().NoError(err)
+
+	results, err := s.repo.Query(s.ctx, query.Query{})
+	s.Require().NoError(err)
+	s.Require().NotNil(results)
+
+	defer func() {
+		_ = results.Close()
+	}()
+
+	var found bool
+	for r := range results.Next() {
+		if r.Error != nil {
+			continue
+		}
+		if r.Entry.Key == "/all/key" {
+			found = true
+			break
+		}
+	}
+
+	s.True(found)
+}
+
+func (s *NodeRepoTestSuite) TestQueryPrefixDoesNotMatchSiblingKeys() {
+	err := s.repo.Put(s.ctx, datastore.NewKey("query/key/child"), []byte("child"))
+	s.Require().NoError(err)
+	err = s.repo.Put(s.ctx, datastore.NewKey("query/key2"), []byte("sibling"))
+	s.Require().NoError(err)
+
+	results, err := s.repo.Query(s.ctx, query.Query{Prefix: "query/key"})
+	s.Require().NoError(err)
+	s.Require().NotNil(results)
+	defer func() {
+		_ = results.Close()
+	}()
+
+	keys := make([]string, 0)
+	for r := range results.Next() {
+		s.Require().NoError(r.Error)
+		keys = append(keys, r.Entry.Key)
+	}
+
+	s.Contains(keys, "/query/key/child")
+	s.NotContains(keys, "/query/key2")
 }
 
 func TestNodeRepoTestSuite(t *testing.T) {
