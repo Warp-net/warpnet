@@ -31,7 +31,6 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
