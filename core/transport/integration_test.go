@@ -691,7 +691,6 @@ func TestIntegration_MDNSDiscovery(t *testing.T) {
 		mdnsA.Close()
 		mdnsB.Close()
 
-		// дать сетевым goroutine завершиться
 		time.Sleep(100 * time.Millisecond)
 
 		hostA.Close()
@@ -771,11 +770,9 @@ func TestIntegration_MDNSDiscoveryWithPSKAndRelay(t *testing.T) {
 
 	hostA, err := libp2p.New(commonOpts()...)
 	require.NoError(t, err)
-	defer hostA.Close()
 
 	hostB, err := libp2p.New(commonOpts()...)
 	require.NoError(t, err)
-	defer hostB.Close()
 
 	t.Logf("Host A: %s addrs=%v", hostA.ID(), hostA.Addrs())
 	t.Logf("Host B: %s addrs=%v", hostB.ID(), hostB.Addrs())
@@ -803,7 +800,6 @@ func TestIntegration_MDNSDiscoveryWithPSKAndRelay(t *testing.T) {
 	}
 	mdnsA := mdns.NewMdnsService(hostA, mdnsServiceName, notifeeA)
 	require.NoError(t, mdnsA.Start())
-	defer mdnsA.Close()
 
 	notifeeB := &mdnsNotifee{
 		h:         hostB,
@@ -812,8 +808,16 @@ func TestIntegration_MDNSDiscoveryWithPSKAndRelay(t *testing.T) {
 	}
 	mdnsB := mdns.NewMdnsService(hostB, mdnsServiceName, notifeeB)
 	require.NoError(t, mdnsB.Start())
-	defer mdnsB.Close()
 
+	defer func() {
+		mdnsA.Close()
+		mdnsB.Close()
+
+		time.Sleep(100 * time.Millisecond)
+
+		hostA.Close()
+		hostB.Close()
+	}()
 	t.Log("Waiting for mDNS discovery with PSK+Relay...")
 	select {
 	case pid := <-notifeeA.connected:
