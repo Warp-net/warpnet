@@ -111,6 +111,9 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 }
 
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
+	if d.cfg.network == "" {
+		panic("no network set")
+	}
 	cacheOption := records.Cache(newLRU())
 	providerStore, err := records.NewProviderManager(
 		d.ctx, n.ID(), n.Peerstore(), d.cfg.store, cacheOption,
@@ -197,6 +200,7 @@ func rendezvousNamespace(network string) string {
 	return "warpnet/rendezvous/" + network
 }
 
+// TODO fix leaks and then enable
 // startRendezvous uses libp2p RoutingDiscovery (backed by the DHT content
 // router) to advertise this node and discover peers under a shared
 // namespace. This is the standard libp2p approach for DHT-based

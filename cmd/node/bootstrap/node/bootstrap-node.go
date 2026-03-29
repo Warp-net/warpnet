@@ -253,10 +253,6 @@ func (bn *BootstrapNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
 	return bn.node.Node().Connect(bn.ctx, info)
 }
 
-func (bn *BootstrapNode) Connect(info warpnet.WarpAddrInfo) error {
-	return bn.SimpleConnect(info)
-}
-
 func (bn *BootstrapNode) Stop() {
 	if bn == nil {
 		return
