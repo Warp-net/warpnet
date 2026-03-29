@@ -47,7 +47,7 @@ var CommonOptions = []libp2p.Option{
 		WithDialTimeout(DefaultTimeout),
 		WithDialTimeoutLocal(DefaultTimeout),
 	),
-	libp2p.Transport(warpnet.DefaultTCPTransport),
+	libp2p.Transport(warpnet.NewTCPTransport, WithDefaultTCPConnectionTimeout(DefaultTimeout)),
 	libp2p.Ping(true),
 	libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
 	libp2p.EnableAutoNATv2(),
@@ -119,6 +119,30 @@ func WithDialTimeoutLocal(t time.Duration) warpnet.SwarmOption {
 }
 
 const ErrFieldNotFound warpnet.WarpError = "field not found"
+
+func WithDefaultTCPConnectionTimeout(t time.Duration) warpnet.TCPOption {
+	fieldName := "connectTimeout"
+	return func(tr *warpnet.TCPTransport) error {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("options: reflection error setting %s: %v", fieldName, r)
+			}
+		}()
+		v := reflect.ValueOf(tr).Elem()
+		field := v.FieldByName(fieldName)
+		if !field.IsValid() {
+			return fmt.Errorf("options: %w: %s", ErrFieldNotFound, fieldName)
+		}
+		if field.CanSet() {
+			field.Set(reflect.ValueOf(t))
+			return nil
+		}
+		ptr := unsafe.Pointer(field.UnsafeAddr()) //#nosec
+		typedPtr := (*time.Duration)(ptr)
+		*typedPtr = t
+		return nil
+	}
+}
 
 func setPrivateDurationField(s *warpnet.Swarm, fieldName string, t time.Duration) error {
 	defer func() {
