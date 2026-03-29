@@ -119,13 +119,14 @@ func main() {
 	if config.Config().Socks5.IsEnabled {
 		port := config.Config().Socks5.Port
 		srv := socks5.NewServer(ctx, port, psk.String(), m)
-		err := srv.Start(n)
-		if err != nil && strings.Contains(err.Error(), "address already in use") {
-			_ = socks5.NewServer(ctx, ":0", psk.String(), m).Start(n)
-		} else if err != nil {
+		if err := srv.Start(n); err != nil {
 			log.Errorf("failed to start socks5 server: %v", err)
 		}
-		defer srv.Stop() //nolint:errcheck
+		defer func() {
+			if err := srv.Stop(); err != nil {
+				log.Errorf("failed to stop socks5 server: %v", err)
+			}
+		}()
 	}
 
 	<-interruptChan
