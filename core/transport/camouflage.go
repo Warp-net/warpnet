@@ -29,6 +29,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"net"
 	"time"
 
@@ -376,7 +377,14 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 			if scope != nil {
 				scope.Done()
 			}
-			return nil, nil, err
+			// Only propagate fatal listener-closed errors.
+			// Transient failures (connection resets, timeouts, etc.)
+			// must not kill the swarm listener goroutine.
+			if errors.Is(err, transport.ErrListenerClosed) {
+				return nil, nil, err
+			}
+			log.Debugf("dpi: underlying accept error (transient, retrying): %v", err)
+			continue
 		}
 
 		setLinger(conn, 0)
