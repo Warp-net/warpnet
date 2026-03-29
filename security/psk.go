@@ -131,6 +131,11 @@ func GeneratePSK(network string, v *semver.Version) (PSK, error) {
 	if v == nil {
 		return nil, ErrPSKVersionRequired
 	}
+	// Normalize "mainnet" to "warpnet" to keep PSK consistent
+	// regardless of which alias is used.
+	if network == "mainnet" {
+		network = "warpnet"
+	}
 	entropy := generateAnchoredEntropy()
 	majorStr := strconv.FormatUint(v.Major(), 10)
 
