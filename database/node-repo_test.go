@@ -130,9 +130,38 @@ func (s *NodeRepoTestSuite) TestQuerySimple() {
 		if r.Error != nil {
 			continue
 		}
+		s.Equal("/query/key", r.Entry.Key)
 		found = true
 		break
 	}
+	s.True(found)
+}
+
+func (s *NodeRepoTestSuite) TestQueryEmptyPrefix() {
+	key := datastore.NewKey("all/key")
+	val := []byte("all")
+	err := s.repo.Put(s.ctx, key, val)
+	s.Require().NoError(err)
+
+	results, err := s.repo.Query(s.ctx, query.Query{})
+	s.Require().NoError(err)
+	s.Require().NotNil(results)
+
+	defer func() {
+		_ = results.Close()
+	}()
+
+	var found bool
+	for r := range results.Next() {
+		if r.Error != nil {
+			continue
+		}
+		if r.Entry.Key == "/all/key" {
+			found = true
+			break
+		}
+	}
+
 	s.True(found)
 }
 
