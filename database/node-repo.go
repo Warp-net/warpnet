@@ -345,9 +345,7 @@ func (d *NodeRepo) query(tx *local_store.Txn, q datastore.Query) (_ datastore.Re
 	opt := local_store.DefaultIteratorOptions
 	opt.PrefetchValues = !q.KeysOnly
 
-	key := strings.TrimPrefix(q.Prefix, "/")
-	prefix := local_store.NewPrefixBuilder(d.prefix).AddRootID(key).Build().Bytes()
-	opt.Prefix = prefix
+	opt.Prefix = d.storageQueryPrefix(q.Prefix)
 
 	// Handle ordering
 	if len(q.Orders) > 0 {
@@ -405,7 +403,7 @@ func (d *NodeRepo) query(tx *local_store.Txn, q datastore.Query) (_ datastore.Re
 			matches := true
 			check := func(value []byte) error {
 				e := datastore.DsEntry{
-					Key:   string(item.Key()),
+					Key:   d.resultKeyFromStorageKey(string(item.Key())),
 					Value: value,
 					Size:  int(item.ValueSize()),
 				}
@@ -443,7 +441,7 @@ func (d *NodeRepo) query(tx *local_store.Txn, q datastore.Query) (_ datastore.Re
 				return
 			}
 			item := it.Item()
-			e := datastore.DsEntry{Key: string(item.Key())}
+			e := datastore.DsEntry{Key: d.resultKeyFromStorageKey(string(item.Key()))}
 
 			var result datastore.Result
 			if !q.KeysOnly {
@@ -479,6 +477,30 @@ func (d *NodeRepo) query(tx *local_store.Txn, q datastore.Query) (_ datastore.Re
 	})
 
 	return results, nil
+}
+
+func (d *NodeRepo) storageQueryPrefix(queryPrefix string) []byte {
+	prefix := strings.TrimSuffix(datastore.NewKey(queryPrefix).String(), requiredPrefixSlash)
+	base := strings.TrimSuffix(d.prefix, requiredPrefixSlash)
+
+	if prefix == "" {
+		return []byte(base + requiredPrefixSlash)
+	}
+
+	return []byte(base + prefix + requiredPrefixSlash)
+}
+
+func (d *NodeRepo) resultKeyFromStorageKey(storageKey string) string {
+	if storageKey == d.prefix {
+		return requiredPrefixSlash
+	}
+
+	trimPrefix := d.prefix + requiredPrefixSlash
+	if strings.HasPrefix(storageKey, trimPrefix) {
+		return requiredPrefixSlash + strings.TrimPrefix(storageKey, trimPrefix)
+	}
+
+	return storageKey
 }
 
 func filter(filters []datastore.Filter, entry datastore.DsEntry) bool {
