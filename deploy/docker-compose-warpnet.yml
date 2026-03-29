@@ -13,7 +13,7 @@ services:
       - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
       - NODE_METRICS_GATEWAY=130.94.88.38:4091
-      - SOCKS_ENABLED=false
+      - SOCKS5_ENABLED=false
 
   warpnet2:
     container_name: warpnet-mainnet-2
@@ -29,7 +29,7 @@ services:
       - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
       - NODE_METRICS_GATEWAY=130.94.88.38:4091
-      - SOCKS_ENABLED=false
+      - SOCKS5_ENABLED=false
 
   warpnet3:
     container_name: warpnet-mainnet-3
@@ -45,7 +45,7 @@ services:
       - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
       - NODE_METRICS_GATEWAY=130.94.88.38:4091
-      - SOCKS_ENABLED=false
+      - SOCKS5_ENABLED=false
 
 
 # TODO: I NEED AN EXPENSIVE AND POWERFUL MACHINE FOR THAT!

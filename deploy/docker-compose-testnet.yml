@@ -28,7 +28,7 @@ services:
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet2
       - NODE_METRICS_GATEWAY=130.94.88.38:4091
-      - SOCKS_ENABLED=false
+      - SOCKS5_ENABLED=false
 
   warpnet33:
     container_name: warpnet-testnet-3
@@ -44,7 +44,7 @@ services:
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet3
       - NODE_METRICS_GATEWAY=130.94.88.38:4091
-      - SOCKS_ENABLED=false
+      - SOCKS5_ENABLED=false
 
   warpnet-moderator-testnet:
     container_name: moderator-testnet
@@ -61,7 +61,7 @@ services:
       - CGO_CPPFLAGS="-DLLAMA_DISABLE_LOGS=1"
       - CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete"
       - NODE_METRICS_GATEWAY=130.94.88.38:4091
-      - SOCKS_ENABLED=false
+      - SOCKS5_ENABLED=false
 
     volumes:
       - /root/.warpdata:/root/.warpdata:rw
