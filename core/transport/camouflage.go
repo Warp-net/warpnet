@@ -225,6 +225,7 @@ func NewCamouflageTransport(
 	// all accepted connections.
 	cfg, err := security.BuildCamouflageConfig(t.sni, t.browserFingerprint, t.handshakeTimeout)
 	if err != nil {
+		log.Errorf("dpi: camouflage config build failed: %v", err)
 		return nil, err
 	}
 	t.camoConfig = cfg
@@ -237,7 +238,7 @@ func NewCamouflageTransport(
 func (t *CamouflageTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (transport.CapableConn, error) {
 	connScope, err := t.rcmgr.OpenConnection(network.DirOutbound, true, raddr)
 	if err != nil {
-		log.Debugf("dpi: resource manager blocked outgoing connection to %s: %v", p, err)
+		log.Errorf("dpi: resource manager blocked outgoing connection to %s: %v", p, err)
 		return nil, err
 	}
 
@@ -276,6 +277,7 @@ func (t *CamouflageTransport) dialWithScope(
 	// ClientHello fingerprint; all subsequent traffic is encrypted TLS.
 	camouflaged, err := security.NewCamouflageConn(wrapped, true, t.camoConfig)
 	if err != nil {
+		log.Errorf("dpi: camouflage connection failed: %v", err)
 		_ = rawConn.Close()
 		return nil, err
 	}
@@ -389,7 +391,7 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 		// certificate chain and validates the client's ALPN.
 		camouflaged, err := security.NewCamouflageConn(spoofed, false, l.camoConfig)
 		if err != nil {
-			log.Debugf("dpi: camouflage handshake failed from %s: %v", conn.RemoteAddr(), err)
+			log.Errorf("dpi: camouflage handshake failed from %s: %v", conn.RemoteAddr(), err)
 			if scope != nil {
 				scope.Done()
 			}
@@ -410,33 +412,35 @@ func setLinger(conn net.Conn, sec int) {
 	}
 }
 
-func tryKeepAlive(conn net.Conn, enabled bool) {
-	// Prefer the full TCP keepalive interface (including period) but fall
-	// back to just enabling keepalive if SetKeepAlivePeriod is unavailable.
-	type fullKeepAlive interface {
+// Prefer the full TCP keepalive interface (including period) but fall
+// back to just enabling keepalive if SetKeepAlivePeriod is unavailable.
+type (
+	fullKeepAlive interface {
 		SetKeepAlive(bool) error
 		SetKeepAlivePeriod(time.Duration) error
 	}
+	basicKeepAlive interface {
+		SetKeepAlive(bool) error
+	}
+)
+
+func tryKeepAlive(conn net.Conn, enabled bool) {
 	if c, ok := conn.(fullKeepAlive); ok {
 		if err := c.SetKeepAlive(enabled); err != nil {
-			log.Debugf("error enabling TCP keepalive: %v", err)
+			log.Errorf("error enabling TCP keepalive: %v", err)
 			return
 		}
 		if !enabled {
 			return
 		}
 		if err := c.SetKeepAlivePeriod(30 * time.Second); err != nil {
-			log.Debugf("error setting TCP keepalive period: %v", err)
+			log.Errorf("error setting TCP keepalive period: %v", err)
 		}
 		return
 	}
-
-	type basicKeepAlive interface {
-		SetKeepAlive(bool) error
-	}
 	if c, ok := conn.(basicKeepAlive); ok {
 		if err := c.SetKeepAlive(enabled); err != nil {
-			log.Debugf("error enabling TCP keepalive (no period support): %v", err)
+			log.Errorf("error enabling TCP keepalive (no period support): %v", err)
 		}
 	}
 }

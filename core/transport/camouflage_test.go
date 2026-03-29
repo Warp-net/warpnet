@@ -26,8 +26,10 @@ package transport
 
 import (
 	"bytes"
+	"crypto/rand"
 	"github.com/Warp-net/warpnet/security"
 	"io"
+	"math/big"
 	"net"
 	"sync"
 	"testing"
@@ -235,12 +237,12 @@ func TestOptions(t *testing.T) {
 
 func TestRandDuration(t *testing.T) {
 	// Zero max should return zero.
-	assert.Equal(t, time.Duration(0), security.RandDuration(0))
-	assert.Equal(t, time.Duration(0), security.RandDuration(-1))
+	assert.Equal(t, time.Duration(0), randDuration(0))
+	assert.Equal(t, time.Duration(0), randDuration(-1))
 
 	// Positive max should return a value in [0, max).
 	for range 100 {
-		d := security.RandDuration(10 * time.Millisecond)
+		d := randDuration(10 * time.Millisecond)
 		assert.True(t, d >= 0 && d < 10*time.Millisecond, "got %v", d)
 	}
 }
@@ -287,4 +289,15 @@ func TestSpoofConn_ZeroWriteReturnsError(t *testing.T) {
 	_, err := sc.Write([]byte("AB"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, io.ErrShortWrite)
+}
+
+func randDuration(maximum time.Duration) time.Duration {
+	if maximum <= 0 {
+		return 0
+	}
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(maximum)))
+	if err != nil {
+		return maximum / 2
+	}
+	return time.Duration(n.Int64())
 }

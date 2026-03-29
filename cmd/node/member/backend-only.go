@@ -49,7 +49,7 @@ import (
 
 // run node without GUI
 func main() {
-	psk, err := security.GeneratePSK("testnet", config.Config().Version)
+	psk, err := security.GeneratePSK(config.Config().Node.Network, config.Config().Version)
 	if err != nil {
 		log.Fatal(err)
 	}

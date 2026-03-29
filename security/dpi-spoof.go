@@ -99,7 +99,7 @@ func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {
 		stillHandshake := c.bytesWritten < c.handshakeLen
 		c.mu.Unlock()
 		if len(b) > 0 && stillHandshake {
-			delay := RandDuration(c.maxDelay)
+			delay := randDuration(c.maxDelay)
 			if delay > 0 {
 				time.Sleep(delay)
 			}
@@ -124,7 +124,7 @@ func (c *SpoofConn) CloseWrite() error {
 	return nil
 }
 
-func RandDuration(maximum time.Duration) time.Duration {
+func randDuration(maximum time.Duration) time.Duration {
 	if maximum <= 0 {
 		return 0
 	}
