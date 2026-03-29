@@ -157,14 +157,30 @@ func (s *Swarm) AddListenAddr(a ma.Multiaddr) error {
 			})
 			s.refs.Done()
 		}()
+		var consecutiveErrors int
 		for {
 			c, err := list.Accept()
 			if err != nil {
-				if !errors.Is(err, transport.ErrListenerClosed) {
-					log.Error("swarm listener accept error", "addr", a, "err", err)
+				if errors.Is(err, transport.ErrListenerClosed) {
+					return
 				}
-				return
+				consecutiveErrors++
+				log.Error("swarm listener accept error", "addr", a, "err", err, "consecutive", consecutiveErrors)
+				// Back off on repeated errors to avoid busy-looping,
+				// but do NOT kill the listener for transient failures
+				// (e.g. TLS handshake resets, temporary network issues).
+				if consecutiveErrors > 50 {
+					log.Error("swarm listener too many consecutive accept errors, closing", "addr", a)
+					return
+				}
+				backoff := time.Duration(consecutiveErrors) * 100 * time.Millisecond
+				if backoff > 5*time.Second {
+					backoff = 5 * time.Second
+				}
+				time.Sleep(backoff)
+				continue
 			}
+			consecutiveErrors = 0
 			canonicallog.LogPeerStatus(100, c.RemotePeer(), c.RemoteMultiaddr(), "connection_status", "established", "dir", "inbound")
 			if s.metricsTracer != nil {
 				c = wrapWithMetrics(c, s.metricsTracer, time.Now(), network.DirInbound)
