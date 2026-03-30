@@ -113,11 +113,7 @@ func main() {
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Gateway,
 		network,
-		"moderator",
-		n.NodeInfo().ID.String(),
 	)
-	defer m.Stop()
-	m.Start()
 
 	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {

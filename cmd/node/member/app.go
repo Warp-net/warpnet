@@ -60,10 +60,6 @@ type NodeServer interface {
 	Start() error
 }
 
-type MetricsStopper interface {
-	Stop()
-}
-
 type App struct {
 	ctx         context.Context
 	auth        AppAuthServicer
@@ -73,7 +69,6 @@ type App struct {
 	psk         security.PSK
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
-	m           MetricsStopper
 }
 
 // NewApp creates a new App application struct
@@ -136,6 +131,10 @@ func (a *App) runNode(network string, psk security.PSK) {
 	case serverNodeAuthInfo = <-a.readyChan:
 		log.Infoln("database authentication passed")
 	}
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		network,
+	)
 
 	a.mx.Lock()
 	a.node, err = member.NewMemberNode(
@@ -146,6 +145,7 @@ func (a *App) runNode(network string, psk security.PSK) {
 		config.Config().Version,
 		a.auth.Storage(),
 		a.db,
+		m,
 	)
 	if err != nil {
 		a.mx.Unlock()
@@ -169,15 +169,6 @@ func (a *App) runNode(network string, psk security.PSK) {
 	serverNodeAuthInfo.Identity.Owner.NodeId = a.node.NodeInfo().ID.String()
 	serverNodeAuthInfo.NodeInfo = a.node.NodeInfo()
 	a.readyChan <- serverNodeAuthInfo
-
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		network,
-		"member",
-		a.node.NodeInfo().ID.String(),
-	)
-	m.Start()
-	a.m = m
 }
 
 type AppMessage struct {
@@ -315,7 +306,6 @@ func (a *App) close(_ context.Context) {
 	}()
 
 	log.Infoln("app: closing...")
-	a.m.Stop()
 
 	a.node.Stop() // close node first
 

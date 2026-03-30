@@ -53,6 +53,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type MetricsOnlinePusher interface {
+	PushStatusOnline(nodeId, nodeType string)
+}
+
 type MemberNode struct {
 	ctx context.Context
 
@@ -84,6 +88,7 @@ func NewMemberNode(
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
+	m MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
@@ -99,7 +104,7 @@ func NewMemberNode(
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, m)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)

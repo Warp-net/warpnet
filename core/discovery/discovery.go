@@ -72,6 +72,10 @@ type UserStorer interface {
 	GetByNodeID(nodeID string) (user domain.User, err error)
 }
 
+type MetricsOnlineDiscoverer interface {
+	PushStatusOnline(nodeId, nodeType string)
+}
+
 type discoverySource string
 
 const (
@@ -102,6 +106,8 @@ type discoveryService struct {
 	discoveryChan   chan discoveredPeer
 	discoveryTicker *time.Ticker
 	stopChan        chan struct{}
+
+	m MetricsOnlineDiscoverer
 }
 
 //goland:noinspection ALL
@@ -109,6 +115,7 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
+	m MetricsOnlineDiscoverer,
 ) *discoveryService {
 	capacity := 32
 	leakPerTenSec := 2
@@ -122,10 +129,11 @@ func NewDiscoveryService(
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
+		m:               m,
 	}
 }
 
-func NewBootstrapDiscoveryService(ctx context.Context) *discoveryService {
+func NewBootstrapDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *discoveryService {
 	return &discoveryService{
 		ctx:             ctx,
 		retrier:         retrier.New(time.Second, 3, retrier.ExponentialBackoff),
@@ -134,6 +142,7 @@ func NewBootstrapDiscoveryService(ctx context.Context) *discoveryService {
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
+		m:               m,
 	}
 }
 
@@ -146,8 +155,8 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 	s.node = n
 	s.ownId = s.node.NodeInfo().ID
 
-	isBootstrap := s.node.NodeInfo().IsBootstrap()
-	isModerator := s.node.NodeInfo().IsModerator()
+	asBootstrap := s.node.NodeInfo().IsBootstrap()
+	asModerator := s.node.NodeInfo().IsModerator()
 
 	go func() {
 		for {
@@ -166,9 +175,9 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 				s.discoveryTicker.Reset(time.Minute * 5) //nolint:mnd
 
 				switch {
-				case isBootstrap:
+				case asBootstrap:
 					s.handleAsBootstrap(info)
-				case isModerator:
+				case asModerator:
 					s.handleAsModerator(info)
 				default:
 					s.handleAsMember(info)
@@ -283,6 +292,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
 		return
 	}
+	s.pushStatusOnline(info)
 
 	if info.IsBootstrap() || info.IsModerator() {
 		return
@@ -370,6 +380,25 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 			peer.Source, pi.ID, err,
 		)
 		return
+	}
+	if rand.IntN(9)%3 == 0 {
+		info, err := s.requestNodeInfo(pi)
+		if err != nil {
+			log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+			return
+		}
+		s.pushStatusOnline(info)
+	}
+}
+
+func (s *discoveryService) pushStatusOnline(info warpnet.NodeInfo) {
+	switch {
+	case info.IsBootstrap():
+		s.m.PushStatusOnline(info.ID.String(), "bootstrap")
+	case info.IsModerator():
+		s.m.PushStatusOnline(info.ID.String(), "moderator")
+	default:
+		s.m.PushStatusOnline(info.ID.String(), "member")
 	}
 }
 

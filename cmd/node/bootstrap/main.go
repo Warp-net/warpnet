@@ -105,11 +105,7 @@ func main() {
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Gateway,
 		network,
-		"bootstrap",
-		n.NodeInfo().ID.String(),
 	)
-	defer m.Stop()
-	m.Start()
 
 	if config.Config().Node.IsPskPrinted {
 		log.Infof("CURRENT PSK: %s", psk.String())
