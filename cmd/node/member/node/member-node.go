@@ -54,7 +54,8 @@ import (
 )
 
 type MetricsOnlinePusher interface {
-	PushStatusOnline(nodeId, nodeType string)
+	PushStatusOnline(nodeId string)
+	PushStatusOffline(nodeId string)
 }
 
 type MemberNode struct {

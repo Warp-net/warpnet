@@ -57,7 +57,7 @@ func NewMetricsClient(pushGatewayURL string, network string) *MetricsClient {
 			Name: "node_online_status",
 			Help: "1 if node is online, 0 otherwise",
 		},
-		[]string{"node_id", "node_type"},
+		[]string{"node_id"},
 	)
 
 	socksGauge := prometheus.NewGaugeVec(
@@ -82,8 +82,12 @@ func NewMetricsClient(pushGatewayURL string, network string) *MetricsClient {
 	}
 }
 
-func (c *MetricsClient) PushStatusOnline(nodeId, nodeType string) {
-	c.socksGauge.WithLabelValues(nodeId, nodeType).Set(1)
+func (c *MetricsClient) PushStatusOnline(nodeId string) {
+	c.socksGauge.WithLabelValues(nodeId).Set(1)
+}
+
+func (c *MetricsClient) PushStatusOffline(nodeId string) {
+	c.socksGauge.WithLabelValues(nodeId).Set(0)
 }
 
 func (c *MetricsClient) PushSocksConnections(nodeId, ip string) {

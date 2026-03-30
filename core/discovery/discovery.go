@@ -73,7 +73,8 @@ type UserStorer interface {
 }
 
 type MetricsOnlineDiscoverer interface {
-	PushStatusOnline(nodeId, nodeType string)
+	PushStatusOnline(nodeId string)
+	PushStatusOffline(nodeId string)
 }
 
 type discoverySource string
@@ -278,6 +279,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
 		_ = s.nodeRepo.Blocklist(pi.ID.String())
 		s.node.Peerstore().RemovePeer(pi.ID)
+		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
@@ -287,12 +289,13 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
+	s.m.PushStatusOnline(pi.ID.String())
+
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
 		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
 		return
 	}
-	s.pushStatusOnline(info)
 
 	if info.IsBootstrap() || info.IsModerator() {
 		return
@@ -372,6 +375,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 			peer.Source, pi.ID.String(),
 		)
 		s.node.Peerstore().RemovePeer(pi.ID)
+		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
@@ -381,25 +385,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		)
 		return
 	}
-	if rand.IntN(9)%3 == 0 {
-		info, err := s.requestNodeInfo(pi)
-		if err != nil {
-			log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
-			return
-		}
-		s.pushStatusOnline(info)
-	}
-}
-
-func (s *discoveryService) pushStatusOnline(info warpnet.NodeInfo) {
-	switch {
-	case info.IsBootstrap():
-		s.m.PushStatusOnline(info.ID.String(), "bootstrap")
-	case info.IsModerator():
-		s.m.PushStatusOnline(info.ID.String(), "moderator")
-	default:
-		s.m.PushStatusOnline(info.ID.String(), "member")
-	}
+	s.m.PushStatusOnline(pi.ID.String())
 }
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
