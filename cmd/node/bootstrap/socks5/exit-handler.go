@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"math/rand/v2"
 	"strings"
 	"sync"
 
@@ -16,18 +17,17 @@ import (
 )
 
 var telegramDCs = []string{
-	// EU
-	"149.154.167.50:443",
 	"149.154.167.51:443",
-	// ME
 	"149.154.167.91:443",
-	"149.154.167.92:443",
+	"91.108.56.130:443",   // Asia
+	"149.154.175.53:443",  // US
+	"149.154.175.100:443", // US
 }
 
 func StreamSocksExitHandler(s warpnet.WarpStream) {
 	log.Debugf("socks5: exit node called: %s", s.Conn().RemoteMultiaddr())
 
-	conn, err := dialFirstAvailable()
+	conn, err := dialAvailable()
 	if err != nil {
 		log.Errorf("socks5: failed to establish telegram connection: %v", err)
 		return
@@ -71,23 +71,38 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 
 const ErrTelegramUnreachable warpnet.WarpError = "no Telegram DC reachable"
 
-func dialFirstAvailable() (_ net.Conn, err error) {
+func dialAvailable() (_ net.Conn, err error) {
+	addr := telegramDCs[rand.IntN(len(telegramDCs))]
+	conn, err := dial(addr)
+	if err == nil {
+		return conn, nil
+	}
+
 	for _, addr := range telegramDCs {
-		conn, err := net.DialTimeout("tcp", addr, 10*time.Second) // nolint: noctx
+		conn, err := dial(addr)
 		if err != nil {
-			log.Errorf("failed to dial telegram connection: %v, addr=[%s]", err, addr)
 			continue
 		}
-		if tcpConnection, ok := conn.(*net.TCPConn); ok {
-			_ = tcpConnection.SetKeepAlive(true)
-			_ = tcpConnection.SetKeepAlivePeriod(30 * time.Second)
-			_ = tcpConnection.SetNoDelay(true)
-		}
-
 		return conn, nil
+
 	}
 	log.Errorf("failed to dial telegram connection: %v", err)
 	return nil, ErrTelegramUnreachable
+}
+
+func dial(addr string) (net.Conn, error) {
+	conn, err := net.DialTimeout("tcp", addr, 10*time.Second) // nolint: noctx
+	if err != nil {
+		log.Errorf("failed to dial telegram connection: %v, addr=[%s]", err, addr)
+		return nil, ErrTelegramUnreachable
+	}
+	if tcpConnection, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConnection.SetKeepAlive(true)
+		_ = tcpConnection.SetKeepAlivePeriod(30 * time.Second)
+		_ = tcpConnection.SetNoDelay(true)
+	}
+
+	return conn, nil
 }
 
 func isExpectedNetworkClose(err error) bool {
