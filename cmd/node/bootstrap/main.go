@@ -90,7 +90,12 @@ func main() {
 		return
 	}
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		network,
+	)
+
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex, m)
 	if err != nil {
 		log.Errorf("failed to init bootstrap node: %v", err)
 		return
@@ -101,11 +106,6 @@ func main() {
 		log.Errorf("failed to start bootstrap node: %v", err)
 		return
 	}
-
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		network,
-	)
 
 	if config.Config().Node.IsPskPrinted {
 		log.Infof("CURRENT PSK: %s", psk.String())

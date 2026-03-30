@@ -63,6 +63,10 @@ type PubSubProvider interface {
 type DistributedHashTableCloser interface {
 	Close()
 }
+type MetricsOnlinePusher interface {
+	PushStatusOnline(nodeId string)
+	PushStatusOffline(nodeId string)
+}
 
 type BootstrapNode struct {
 	ctx               context.Context
@@ -82,11 +86,12 @@ func NewBootstrapNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	selfHashHex string,
+	m MetricsOnlinePusher,
 ) (_ *BootstrapNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	discService := discovery.NewBootstrapDiscoveryService(ctx)
+	discService := discovery.NewBootstrapDiscoveryService(ctx, m)
 
 	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
