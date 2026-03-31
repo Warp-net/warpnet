@@ -83,11 +83,11 @@ func NewMetricsClient(pushGatewayURL string, network string) *MetricsClient {
 }
 
 func (c *MetricsClient) PushStatusOnline(nodeId string) {
-	c.socksGauge.WithLabelValues(nodeId).Set(1)
+	c.onlineGauge.WithLabelValues(nodeId).Set(1)
 }
 
 func (c *MetricsClient) PushStatusOffline(nodeId string) {
-	c.socksGauge.WithLabelValues(nodeId).Set(0)
+	c.onlineGauge.WithLabelValues(nodeId).Set(0)
 }
 
 func (c *MetricsClient) PushSocksConnections(nodeId, ip string) {
