@@ -24,6 +24,21 @@ var telegramDCs = []string{
 	"149.154.175.100:443", // US
 }
 
+func init() {
+	var alive []string
+
+	for _, addr := range telegramDCs {
+		conn, err := dial(addr)
+		if err != nil {
+			continue
+		}
+		_ = conn.Close()
+		alive = append(alive, addr)
+	}
+
+	telegramDCs = alive
+}
+
 func StreamSocksExitHandler(s warpnet.WarpStream) {
 	log.Debugf("socks5: exit node called: %s", s.Conn().RemoteMultiaddr())
 
