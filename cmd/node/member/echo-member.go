@@ -1,4 +1,4 @@
-//go:build backend
+//go:build echo
 
 /*
 
@@ -27,12 +27,11 @@ resulting from the use or misuse of this software.
 package main
 
 import (
-	"bufio"
 	"context"
-	"fmt"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/metrics"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -80,65 +79,63 @@ func main() {
 	userRepo := database.NewUserRepo(db)
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
-	go func() {
-		username, pass := manualCredsInput()
-
-		_, err = authService.AuthLogin(event.LoginEvent{
-			Username: username,
-			Password: pass,
-		},
-			psk,
-		)
-		if err != nil {
-			log.Fatalf("failed to login: %v", err)
-		}
-	}()
+	_, err = authService.AuthLogin(event.LoginEvent{
+		Username: "Echo",
+		Password: `\@4o97Z7<Cfu`,
+	},
+		psk,
+	)
+	if err != nil {
+		log.Fatalf("failed to login: %v", err)
+	}
 
 	authInfo := <-readyChan
 
-	backendNode, err := member.NewMemberNode(
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, config.Config().Node.Network)
+
+	echoNode, err := member.NewMemberNode(
 		ctx,
 		authRepo.PrivateKey(),
 		psk,
-		"backend-only",
+		"echo",
 		config.Config().Version,
 		authRepo,
 		db,
+		m,
 	)
 	if err != nil {
 		log.Fatalf("failed to init node: %v", err)
 	}
-	defer backendNode.Stop()
+	defer echoNode.Stop()
 
-	err = backendNode.Start()
+	err = echoNode.Start()
 	if err != nil {
 		log.Fatalf("failed to start member node: %v", err)
 	}
 
-	authInfo.Identity.Owner.NodeId = backendNode.NodeInfo().ID.String()
-	authInfo.NodeInfo = backendNode.NodeInfo()
+	authInfo.Identity.Owner.NodeId = echoNode.NodeInfo().ID.String()
+	authInfo.NodeInfo = echoNode.NodeInfo()
 
 	readyChan <- authInfo
+	setupHandlers(echoNode.Node())
 	log.Infoln("WARPNET STARTED")
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, n.NodeInfo().ID.String())
-	defer m.Stop()
-	m.PushStatusOnline(config.Config().Node.Network, "member")
+
 	<-interruptChan
 	log.Infoln("interrupted...")
 }
 
-func manualCredsInput() (string, string) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter username: ")
-	username, _ := reader.ReadString('\n')
-	fmt.Print("Enter password: ")
-	pass, _ := reader.ReadString('\n')
+func setupHandlers(node warpnet.P2PNode) {
+	//nolint:govet
+	handlers := map[warpnet.WarpProtocolID]func(stream warpnet.WarpStream){
+		event.PRIVATE_POST_TWEET:  func(stream warpnet.WarpStream) {},
+		event.PUBLIC_POST_REPLY:   func(stream warpnet.WarpStream) {},
+		event.PUBLIC_POST_LIKE:    func(stream warpnet.WarpStream) {},
+		event.PUBLIC_POST_RETWEET: func(stream warpnet.WarpStream) {},
+		event.PUBLIC_POST_CHAT:    func(stream warpnet.WarpStream) {},
+		event.PUBLIC_POST_MESSAGE: func(stream warpnet.WarpStream) {},
+	}
 
-	username = strings.TrimSuffix(username, "\n")
-	username = strings.TrimSpace(username)
-	pass = strings.TrimSuffix(pass, "\n")
-	pass = strings.TrimSpace(pass)
-
-	return username, pass
-
+	for protocol, h := range handlers {
+		node.SetStreamHandler(protocol, h)
+	}
 }

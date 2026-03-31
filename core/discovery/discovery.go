@@ -274,9 +274,10 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	err = s.requestChallenge(pi)
+	_, err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
+		// TODO track challenge content that failed
 		_ = s.nodeRepo.Blocklist(pi.ID.String())
 		s.node.Peerstore().RemovePeer(pi.ID)
 		s.m.PushStatusOffline(pi.ID.String())
@@ -368,7 +369,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		return
 	}
 
-	err = s.requestChallenge(pi)
+	_, err = s.requestChallenge(pi)
 	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
 		log.Warnf(
 			"discovery: source '%s': bootstrap handle: challenge is invalid for peer: %s",
@@ -397,10 +398,10 @@ const (
 	ErrChallengeSignatureInvalid warpnet.WarpError = "invalid challenge signature"
 )
 
-func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
+func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) ([]event.ChallengeSample, error) {
 	if s.cache.IsChallengedAlready(pi.ID) {
 		log.Debugf("discovery: peer %s already challenged", pi.ID.String())
-		return nil
+		return nil, nil
 	}
 
 	var level int
@@ -415,9 +416,9 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		}
 	}
 
-	ownChallenges, samples, err := s.composeChallengeRequest(level)
+	ownChallenges, coordinates, err := s.composeChallengeRequest(level)
 	if err != nil {
-		return err
+		return coordinates, err
 	}
 
 	var resp []byte
@@ -425,32 +426,32 @@ func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) error {
 		resp, err = s.node.GenericStream(
 			pi.ID.String(),
 			event.PUBLIC_POST_NODE_CHALLENGE,
-			event.ChallengeEvent{Samples: samples},
+			event.ChallengeEvent{Coordinates: coordinates},
 		)
 		return err
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to get challenge from new peer %s: %w", pi.ID.String(), err)
+		return coordinates, fmt.Errorf("failed to get challenge from new peer %s: %w", pi.ID.String(), err)
 	}
 
 	if len(resp) == 0 {
 		err := warpnet.WarpError("no challenge response from new peer")
-		return fmt.Errorf("%w: %s", err, pi.ID.String())
+		return coordinates, fmt.Errorf("%w: %s", err, pi.ID.String())
 	}
 
 	var challengeResp event.ChallengeResponse
 	err = json.Unmarshal(resp, &challengeResp)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal challenge from new peer: %s %w", resp, err)
+		return coordinates, fmt.Errorf("failed to unmarshal challenge from new peer: %s %w", resp, err)
 	}
 
 	if err := s.validateChallenges(ownChallenges, pi.ID, challengeResp.Solutions); err != nil {
-		return err
+		return coordinates, err
 	}
 
 	s.cache.SetAsChallenged(pi.ID)
-	return nil
+	return coordinates, nil
 }
 
 type challenge = []byte
@@ -461,7 +462,7 @@ func (s *discoveryService) composeChallengeRequest(challengeLevel int) ([]challe
 	}
 
 	ownChalenges := make([][]byte, challengeLevel)
-	samples := make([]event.ChallengeSample, challengeLevel)
+	coordinates := make([]event.ChallengeSample, challengeLevel)
 	for i := 0; i < challengeLevel; i++ {
 		nonce := rand.Int64() //#nosec
 		ownChallenge, location, err := security.GenerateChallenge(root.GetCodeBase(), nonce)
@@ -469,13 +470,13 @@ func (s *discoveryService) composeChallengeRequest(challengeLevel int) ([]challe
 			return nil, nil, err
 		}
 		ownChalenges[i] = ownChallenge
-		samples[i] = event.ChallengeSample{
+		coordinates[i] = event.ChallengeSample{
 			DirStack:  location.DirStack,
 			FileStack: location.FileStack,
 			Nonce:     nonce,
 		}
 	}
-	return ownChalenges, samples, nil
+	return ownChalenges, coordinates, nil
 }
 
 func (s *discoveryService) validateChallenges(

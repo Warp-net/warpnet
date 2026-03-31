@@ -376,7 +376,7 @@ type GetImageResponse struct {
 }
 
 type ChallengeEvent struct {
-	Samples []ChallengeSample `json:"samples"`
+	Coordinates []ChallengeSample `json:"samples"`
 }
 type ChallengeSample struct {
 	DirStack  []int `json:"dir_stack"` // every index is level and value is dir num
