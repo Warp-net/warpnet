@@ -169,7 +169,6 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 
 	removeMetrics = false
 	return &streamConn{
-		once:   sync.Once{},
 		stream: stream,
 		closeF: func() {
 			s.m.RemoveSocksConnections(s.nodeId, host)
@@ -186,7 +185,7 @@ type streamConn struct {
 func (c *streamConn) Read(p []byte) (int, error)  { return c.stream.Read(p) }
 func (c *streamConn) Write(p []byte) (int, error) { return c.stream.Write(p) }
 func (c *streamConn) Close() error {
-	c.closeF()
+	c.once.Do(c.closeF)
 	return c.stream.Close()
 }
 func (c *streamConn) LocalAddr() net.Addr                { return toNetAddr(c.stream.Conn().LocalMultiaddr()) }
