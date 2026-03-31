@@ -3,6 +3,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -63,6 +64,19 @@ func TestEchoAutoReplyOnForeignReply(t *testing.T) {
 	require.Equal(t, event.PUBLIC_POST_REPLY, string(f.calls[0].path))
 }
 
+func TestEchoSkipsReplyOnEchoFormattedReply(t *testing.T) {
+	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
+	bot := newEchoBot(f)
+
+	parentID := "tweet-1"
+	rp := event.NewReplyEvent{Id: "reply-1", RootId: "tweet-1", ParentId: &parentID, UserId: "foreign", ParentUserId: "foreign", Username: "Echo", Text: echoReplyPrefix + "hello"}
+	bt, err := json.Marshal(rp)
+	require.NoError(t, err)
+
+	bot.handleReply(bt)
+	require.Empty(t, f.calls)
+}
+
 func TestEchoAutoFollowBack(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
 	bot := newEchoBot(f)
@@ -79,11 +93,34 @@ func TestEchoAutoReplyOnChatMessage(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
 	bot := newEchoBot(f)
 
-	msg := event.NewMessageEvent{Id: "msg-1", ChatId: "chat-1", SenderId: "foreign", ReceiverId: "echo-owner", Text: "ping"}
+	msg := event.NewMessageEvent{ChatId: "chat-1", SenderId: "foreign", ReceiverId: "echo-owner", Text: "ping", CreatedAt: time.Now()}
 	bt, err := json.Marshal(msg)
 	require.NoError(t, err)
 
 	bot.handleMessage(bt)
 	require.Len(t, f.calls, 1)
 	require.Equal(t, event.PUBLIC_POST_MESSAGE, string(f.calls[0].path))
+}
+
+func TestEchoAutoReplyMessageIsTruncatedToLimit(t *testing.T) {
+	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
+	bot := newEchoBot(f)
+
+	msg := event.NewMessageEvent{
+		ChatId:     "chat-1",
+		SenderId:   "foreign",
+		ReceiverId: "echo-owner",
+		Text:       strings.Repeat("x", messageLimit),
+		CreatedAt:  time.Now(),
+	}
+	bt, err := json.Marshal(msg)
+	require.NoError(t, err)
+
+	bot.handleMessage(bt)
+	require.Len(t, f.calls, 1)
+	require.Equal(t, event.PUBLIC_POST_MESSAGE, string(f.calls[0].path))
+
+	evt, ok := f.calls[0].data.(event.NewMessageEvent)
+	require.True(t, ok)
+	require.LessOrEqual(t, len(evt.Text), messageLimit)
 }

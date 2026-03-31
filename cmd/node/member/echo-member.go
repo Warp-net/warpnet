@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/metrics"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -54,6 +55,10 @@ import (
 const (
 	echoReplyPrefix = "echo: "
 	echoChatReply   = "echo: получил сообщение"
+	messageLimit    = 5000
+	seenTTL         = 15 * time.Minute
+	pruneInterval   = time.Minute
+	maxSeenKeys     = 10_000
 )
 
 // run node without GUI
@@ -140,27 +145,69 @@ type echoStreamClient interface {
 }
 
 type echoBot struct {
-	node       echoStreamClient
-	mu         sync.Mutex
-	inProgress map[string]struct{}
+	node         echoStreamClient
+	mu           sync.Mutex
+	seen         map[string]time.Time
+	lastPruneRun time.Time
 }
 
 func newEchoBot(node echoStreamClient) *echoBot {
-	return &echoBot{node: node, inProgress: make(map[string]struct{})}
+	return &echoBot{
+		node:         node,
+		seen:         make(map[string]time.Time),
+		lastPruneRun: time.Now(),
+	}
 }
 
-func (e *echoBot) seen(action, id string) bool {
-	if id == "" {
+func (e *echoBot) wasSeen(action, id string) bool {
+	if strings.TrimSpace(id) == "" {
 		return false
 	}
 	key := action + ":" + id
+	now := time.Now()
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if _, ok := e.inProgress[key]; ok {
+	e.prune(now)
+	if seenAt, ok := e.seen[key]; ok && now.Sub(seenAt) <= seenTTL {
 		return true
 	}
-	e.inProgress[key] = struct{}{}
+	e.seen[key] = now
+	e.evictIfNeeded()
 	return false
+}
+
+func (e *echoBot) prune(now time.Time) {
+	if now.Sub(e.lastPruneRun) < pruneInterval {
+		return
+	}
+	expireBefore := now.Add(-seenTTL)
+	for k, t := range e.seen {
+		if t.Before(expireBefore) {
+			delete(e.seen, k)
+		}
+	}
+	e.lastPruneRun = now
+}
+
+func (e *echoBot) evictIfNeeded() {
+	if len(e.seen) <= maxSeenKeys {
+		return
+	}
+	var (
+		oldestKey string
+		oldestAt  time.Time
+		set       bool
+	)
+	for k, t := range e.seen {
+		if !set || t.Before(oldestAt) {
+			oldestKey, oldestAt = k, t
+			set = true
+		}
+	}
+	if set {
+		delete(e.seen, oldestKey)
+	}
 }
 
 func (e *echoBot) ownerID() string {
@@ -179,7 +226,7 @@ func (e *echoBot) handleTweet(msg []byte) {
 	if tw.UserId == e.ownerID() {
 		return
 	}
-	if e.seen("tweet", tw.Id) {
+	if e.wasSeen("tweet", tw.Id) {
 		return
 	}
 
@@ -206,7 +253,10 @@ func (e *echoBot) handleReply(msg []byte) {
 	if rp.UserId == e.ownerID() {
 		return
 	}
-	if e.seen("reply", rp.Id) {
+	if strings.EqualFold(rp.Username, "Echo") || strings.HasPrefix(rp.Text, echoReplyPrefix) {
+		return
+	}
+	if e.wasSeen("reply", rp.Id) {
 		return
 	}
 
@@ -227,7 +277,7 @@ func (e *echoBot) handleFollow(msg []byte) {
 	if fl.FollowerId == e.ownerID() || fl.FollowingId != e.ownerID() {
 		return
 	}
-	if e.seen("follow", fl.FollowerId) {
+	if e.wasSeen("follow", fl.FollowerId) {
 		return
 	}
 
@@ -246,26 +296,46 @@ func (e *echoBot) handleMessage(msg []byte) {
 		log.Warnf("echo: parse message event: %v", err)
 		return
 	}
-	if m.Id == "" || m.ChatId == "" || m.SenderId == "" || m.ReceiverId == "" {
+	if m.ChatId == "" || m.SenderId == "" || m.ReceiverId == "" {
 		return
 	}
 	if m.SenderId == e.ownerID() || m.ReceiverId != e.ownerID() {
 		return
 	}
-	if e.seen("message", m.Id) {
+	if e.wasSeen("message", e.messageSeenKey(m)) {
 		return
 	}
+	echoText := e.buildMessageReplyText(m.Text)
 
 	resp := event.NewMessageEvent{
 		ChatId:     m.ChatId,
 		SenderId:   e.ownerID(),
 		ReceiverId: m.SenderId,
-		Text:       fmt.Sprintf("%s: %s", echoChatReply, m.Text),
+		Text:       echoText,
 		CreatedAt:  time.Now(),
 	}
 	if _, err := e.node.GenericStream(e.node.NodeInfo().ID.String(), event.PUBLIC_POST_MESSAGE, resp); err != nil {
 		log.Warnf("echo: auto-chat-reply failed: %v", err)
 	}
+}
+
+func (e *echoBot) messageSeenKey(m event.NewMessageEvent) string {
+	if m.Id != "" {
+		return m.Id
+	}
+	return fmt.Sprintf("%s|%s|%s|%d|%s", m.ChatId, m.SenderId, m.ReceiverId, m.CreatedAt.UnixNano(), m.Text)
+}
+
+func (e *echoBot) buildMessageReplyText(incomingText string) string {
+	prefix := echoChatReply + ": "
+	available := messageLimit - len(prefix)
+	if available <= 0 {
+		return prefix
+	}
+	if len(incomingText) > available {
+		return prefix + incomingText[:available]
+	}
+	return prefix + incomingText
 }
 
 func (e *echoBot) likeTweet(tw event.NewTweetEvent) error {
