@@ -2,9 +2,10 @@ package socks5
 
 import (
 	"context"
+	crand "crypto/rand"
 	"errors"
 	log "github.com/sirupsen/logrus"
-	"math/rand/v2"
+	"math/big"
 	"strings"
 	"sync"
 
@@ -87,7 +88,11 @@ func StreamSocksExitHandler(s warpnet.WarpStream) {
 const ErrTelegramUnreachable warpnet.WarpError = "no Telegram DC reachable"
 
 func dialAvailable() (_ net.Conn, err error) {
-	addr := telegramDCs[rand.IntN(len(telegramDCs))]
+	randomIndex, err := crand.Int(crand.Reader, big.NewInt(int64(len(telegramDCs))))
+	if err != nil {
+		return nil, ErrTelegramUnreachable
+	}
+	addr := telegramDCs[int(randomIndex.Int64())]
 	conn, err := dial(addr)
 	if err == nil {
 		return conn, nil
@@ -99,7 +104,6 @@ func dialAvailable() (_ net.Conn, err error) {
 			continue
 		}
 		return conn, nil
-
 	}
 	log.Errorf("failed to dial telegram connection: %v", err)
 	return nil, ErrTelegramUnreachable
