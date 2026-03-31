@@ -30,6 +30,7 @@ package transport
 import (
 	"context"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/security"
@@ -378,6 +379,10 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 			if scope != nil {
 				scope.Done()
 			}
+			if isTransientAcceptError(err) {
+				log.Debugf("dpi: transient accept error ignored: %v", err)
+				continue
+			}
 			return nil, nil, err
 		}
 
@@ -401,6 +406,15 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 
 		return camouflaged, scope, nil
 	}
+}
+
+func isTransientAcceptError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "dpi: TLS handshake failed") ||
+		strings.Contains(msg, "first record does not look like a TLS handshake")
 }
 
 func setLinger(conn net.Conn, sec int) {
