@@ -534,6 +534,10 @@ func (m *MemberNode) setupHandlers(
 	)
 }
 
+func (m *MemberNode) SetStreamHandlers(hs ...warpnet.WarpStreamHandler) {
+	m.node.SetStreamHandlers(hs...)
+}
+
 func (m *MemberNode) Node() warpnet.P2PNode {
 	if m == nil || m.node == nil {
 		return nil

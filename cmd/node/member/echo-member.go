@@ -117,24 +117,48 @@ func main() {
 	authInfo.NodeInfo = echoNode.NodeInfo()
 
 	readyChan <- authInfo
-	setupHandlers(echoNode.Node())
+	setupHandlers(echoNode)
 	log.Infoln("WARPNET STARTED")
 
 	<-interruptChan
 	log.Infoln("interrupted...")
 }
 
-func setupHandlers(node warpnet.P2PNode) {
+func setupHandlers(node *member.MemberNode) {
 	//nolint:govet
-	handlers := map[warpnet.WarpProtocolID]func(stream warpnet.WarpStream){
-		event.PRIVATE_POST_TWEET:  func(stream warpnet.WarpStream) {},
-		event.PUBLIC_POST_REPLY:   func(stream warpnet.WarpStream) {},
-		event.PUBLIC_POST_LIKE:    func(stream warpnet.WarpStream) {},
-		event.PUBLIC_POST_RETWEET: func(stream warpnet.WarpStream) {},
-		event.PUBLIC_POST_MESSAGE: func(stream warpnet.WarpStream) {},
-	}
-
-	for protocol, h := range handlers {
-		node.SetStreamHandler(protocol, h)
-	}
+	node.SetStreamHandlers(
+		[]warpnet.WarpStreamHandler{
+			{
+				event.PRIVATE_POST_TWEET,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					return nil, nil // TODO
+				}},
+			{
+				event.PUBLIC_POST_REPLY,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					return nil, nil // TODO
+				}},
+			{
+				event.PUBLIC_POST_FOLLOW,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					return nil, nil // TODO
+				}},
+			{
+				event.PUBLIC_POST_LIKE,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					return nil, nil // TODO
+				}},
+			{
+				event.PUBLIC_POST_RETWEET,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					return nil, nil // TODO
+				}},
+			{
+				event.PUBLIC_POST_MESSAGE,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					return nil, nil // TODO
+				},
+			},
+		}...,
+	)
 }
