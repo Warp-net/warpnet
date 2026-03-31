@@ -151,8 +151,8 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 				continue
 			}
 			removeMetrics = false
-			return &streamConn{
-				conn: conn,
+			return &trackedConn{
+				Conn: conn,
 				closeF: func() {
 					s.m.RemoveSocksConnections(s.nodeId, host)
 				},
@@ -183,60 +183,31 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 
 type streamConn struct {
 	once   sync.Once
-	conn   net.Conn
 	stream warpnet.WarpStream
 	closeF func()
 }
 
-func (c *streamConn) Read(p []byte) (int, error) {
-	if c.conn != nil {
-		return c.conn.Read(p)
-	}
-	return c.stream.Read(p)
+type trackedConn struct {
+	net.Conn
+	once   sync.Once
+	closeF func()
 }
-func (c *streamConn) Write(p []byte) (int, error) {
-	if c.conn != nil {
-		return c.conn.Write(p)
-	}
-	return c.stream.Write(p)
-}
+
+func (c *streamConn) Read(p []byte) (int, error)  { return c.stream.Read(p) }
+func (c *streamConn) Write(p []byte) (int, error) { return c.stream.Write(p) }
 func (c *streamConn) Close() error {
 	c.once.Do(c.closeF)
-	if c.conn != nil {
-		return c.conn.Close()
-	}
 	return c.stream.Close()
 }
-func (c *streamConn) LocalAddr() net.Addr {
-	if c.conn != nil {
-		return c.conn.LocalAddr()
-	}
-	return toNetAddr(c.stream.Conn().LocalMultiaddr())
+func (c *trackedConn) Close() error {
+	c.once.Do(c.closeF)
+	return c.Conn.Close()
 }
-func (c *streamConn) RemoteAddr() net.Addr {
-	if c.conn != nil {
-		return c.conn.RemoteAddr()
-	}
-	return toNetAddr(c.stream.Conn().RemoteMultiaddr())
-}
-func (c *streamConn) SetDeadline(t time.Time) error {
-	if c.conn != nil {
-		return c.conn.SetDeadline(t)
-	}
-	return c.stream.SetDeadline(t)
-}
-func (c *streamConn) SetReadDeadline(t time.Time) error {
-	if c.conn != nil {
-		return c.conn.SetReadDeadline(t)
-	}
-	return c.stream.SetReadDeadline(t)
-}
-func (c *streamConn) SetWriteDeadline(t time.Time) error {
-	if c.conn != nil {
-		return c.conn.SetWriteDeadline(t)
-	}
-	return c.stream.SetWriteDeadline(t)
-}
+func (c *streamConn) LocalAddr() net.Addr                { return toNetAddr(c.stream.Conn().LocalMultiaddr()) }
+func (c *streamConn) RemoteAddr() net.Addr               { return toNetAddr(c.stream.Conn().RemoteMultiaddr()) }
+func (c *streamConn) SetDeadline(t time.Time) error      { return c.stream.SetDeadline(t) }
+func (c *streamConn) SetReadDeadline(t time.Time) error  { return c.stream.SetReadDeadline(t) }
+func (c *streamConn) SetWriteDeadline(t time.Time) error { return c.stream.SetWriteDeadline(t) }
 
 func toNetAddr(maddr multiaddr.Multiaddr) net.Addr {
 	addr, err := manet.ToNetAddr(maddr)
