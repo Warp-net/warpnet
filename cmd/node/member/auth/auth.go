@@ -98,11 +98,6 @@ func (as *AuthService) IsAuthenticated() bool {
 }
 
 func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("auth: panic:", r)
-		}
-	}()
 	base64PSK := base64.StdEncoding.EncodeToString(psk)
 	if as.isAuthenticated.Load() {
 		return event.LoginResponse{
@@ -177,7 +172,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		return authInfo, as.ctx.Err()
 	case authInfo = <-as.authReady:
 		if authInfo.NodeInfo.ID.String() == "" {
-			panic("auth: node id missing")
+			panic("auth: node id is missing")
 		}
 
 		user.Id = owner.UserId

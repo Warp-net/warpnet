@@ -1,14 +1,11 @@
 kill:
 	pkill -9 warpnet && pkill -9 main
 
-backend-only-main:
-	go run -tags backend cmd/node/member/backend-only.go --node.network testnet
+echo-main:
+	go run -tags echo cmd/node/member/echo-member.go --node.network testnet --node.seed echo --database.dir echo
 
 echo-android:
-	go run -tags backend -ldflags="-checklinkname=0" cmd/node/member/echo-member.go --node.network testnet
-
-backend-only-second:
-	go run -tags backend cmd/node/member/echo-member.go --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
+	go run -tags echo -ldflags="-checklinkname=0" cmd/node/member/echo-member.go --node.network testnet
 
 run-main:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet

@@ -94,15 +94,17 @@ func main() {
 	userRepo := database.NewUserRepo(db)
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
-	_, err = authService.AuthLogin(event.LoginEvent{
-		Username: "Echo",
-		Password: `\@4o97Z7<Cfu`,
-	},
-		psk,
-	)
-	if err != nil {
-		log.Fatalf("failed to login: %v", err)
-	}
+	go func() {
+		_, err = authService.AuthLogin(event.LoginEvent{
+			Username: "Echo",
+			Password: `\@4o97Z7<Cfu`,
+		},
+			psk,
+		)
+		if err != nil {
+			log.Fatalf("failed to login: %v", err)
+		}
+	}()
 
 	authInfo := <-readyChan
 
@@ -340,9 +342,6 @@ func (e *echoBot) messageSeenKey(m event.NewMessageEvent) string {
 func (e *echoBot) buildMessageReplyText(incomingText string) string {
 	prefix := echoChatReply + ": "
 	available := messageLimit - len(prefix)
-	if available <= 0 {
-		return prefix
-	}
 	if len(incomingText) > available {
 		return prefix + incomingText[:available]
 	}
@@ -418,6 +417,11 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 func setupHandlers(node *member.MemberNode) {
 	echo := newEchoBot(node)
 
+	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
+	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
+	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
+	node.Node().RemoveStreamHandler(event.PUBLIC_POST_MESSAGE)
+
 	//nolint:govet
 	node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
@@ -426,29 +430,22 @@ func setupHandlers(node *member.MemberNode) {
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
 					echo.handleTweet(msg, requesterNodeID(s))
 					return event.Accepted, nil
-				}},
+				},
+			},
 			{
 				event.PUBLIC_POST_REPLY,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
 					echo.handleReply(msg, requesterNodeID(s))
 					return event.Accepted, nil
-				}},
+				},
+			},
 			{
 				event.PUBLIC_POST_FOLLOW,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
 					echo.handleFollow(msg, requesterNodeID(s))
 					return event.Accepted, nil
-				}},
-			{
-				event.PUBLIC_POST_LIKE,
-				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					return event.Accepted, nil
-				}},
-			{
-				event.PUBLIC_POST_RETWEET,
-				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					return event.Accepted, nil
-				}},
+				},
+			},
 			{
 				event.PUBLIC_POST_MESSAGE,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
