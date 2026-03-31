@@ -5,6 +5,6 @@ WORKDIR /warpnet
 
 ENV CGO_ENABLED=0
 
-RUN go build -tags echo -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/member/echo-member.go
+RUN go build -tags echo -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/member/echo-member.go
 
 CMD ["/warpnet/warpnet"]
