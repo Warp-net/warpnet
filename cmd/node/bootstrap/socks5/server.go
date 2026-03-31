@@ -146,7 +146,8 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 		peerAddrs := s.streamer.Peerstore().Addrs(peer)
 		log.Infof("socks5 server: redirect to %v", peerAddrs)
 		for _, pAddr := range peerAddrs {
-			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), 3*time.Second) //nolint:noctx
+			dialer := net.Dialer{Timeout: 3 * time.Second}
+			conn, err := dialer.DialContext(ctx, proto, toNetAddr(pAddr).String())
 			if err != nil {
 				continue
 			}

@@ -55,9 +55,10 @@ const topK = 3
 
 func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 	b.mx.RLock()
-	defer b.mx.RUnlock()
+	hasExitNodes := b.exitList.Len() > 0
+	b.mx.RUnlock()
 
-	if b.exitList.Len() == 0 {
+	if !hasExitNodes {
 		peers := b.streamer.Peerstore().PeersWithAddrs()
 		streamCandidates := make([]warpnet.WarpPeerID, 0, len(peers))
 		redirectCandidates := make([]warpnet.WarpPeerID, 0, len(peers))
@@ -83,6 +84,7 @@ func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 		return "", false
 	}
 
+	b.mx.RLock()
 	candidates := make([]warpnet.WarpPeerID, 0, topK)
 	count := 0
 	for element := b.exitList.Front(); element != nil && count < topK; element = element.Next() {
@@ -93,6 +95,7 @@ func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 		candidates = append(candidates, peer)
 		count++
 	}
+	b.mx.RUnlock()
 
 	if len(candidates) != 0 {
 		return candidates[rand.Intn(len(candidates))], false //nolint:gosec
