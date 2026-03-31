@@ -141,7 +141,6 @@ func main() {
 
 type echoStreamClient interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
-	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
 }
 
@@ -215,7 +214,7 @@ func (e *echoBot) ownerID() string {
 	return e.node.NodeInfo().OwnerId
 }
 
-func (e *echoBot) handleTweet(msg []byte) {
+func (e *echoBot) handleTweet(msg []byte, requesterNodeID string) {
 	var tw event.NewTweetEvent
 	if err := json.Unmarshal(msg, &tw); err != nil {
 		log.Warnf("echo: parse tweet event: %v", err)
@@ -230,19 +229,22 @@ func (e *echoBot) handleTweet(msg []byte) {
 	if e.wasSeen("tweet", tw.Id) {
 		return
 	}
+	if requesterNodeID == "" {
+		return
+	}
 
-	if err := e.likeTweet(tw); err != nil {
+	if err := e.likeTweet(tw, requesterNodeID); err != nil {
 		log.Warnf("echo: auto-like failed: %v", err)
 	}
-	if err := e.retweet(tw); err != nil {
+	if err := e.retweet(tw, requesterNodeID); err != nil {
 		log.Warnf("echo: auto-retweet failed: %v", err)
 	}
-	if err := e.replyToTweet(tw); err != nil {
+	if err := e.replyToTweet(tw, requesterNodeID); err != nil {
 		log.Warnf("echo: auto-reply-tweet failed: %v", err)
 	}
 }
 
-func (e *echoBot) handleReply(msg []byte) {
+func (e *echoBot) handleReply(msg []byte, requesterNodeID string) {
 	var rp event.NewReplyEvent
 	if err := json.Unmarshal(msg, &rp); err != nil {
 		log.Warnf("echo: parse reply event: %v", err)
@@ -260,13 +262,16 @@ func (e *echoBot) handleReply(msg []byte) {
 	if e.wasSeen("reply", rp.Id) {
 		return
 	}
+	if requesterNodeID == "" {
+		return
+	}
 
-	if err := e.replyToReply(rp); err != nil {
+	if err := e.replyToReply(rp, requesterNodeID); err != nil {
 		log.Warnf("echo: auto-reply-reply failed: %v", err)
 	}
 }
 
-func (e *echoBot) handleFollow(msg []byte) {
+func (e *echoBot) handleFollow(msg []byte, requesterNodeID string) {
 	var fl event.NewFollowEvent
 	if err := json.Unmarshal(msg, &fl); err != nil {
 		log.Warnf("echo: parse follow event: %v", err)
@@ -281,8 +286,11 @@ func (e *echoBot) handleFollow(msg []byte) {
 	if e.wasSeen("follow", fl.FollowerId) {
 		return
 	}
-
-	if _, err := e.node.SelfStream(
+	if requesterNodeID == "" {
+		return
+	}
+	if _, err := e.node.GenericStream(
+		requesterNodeID,
 		event.PUBLIC_POST_FOLLOW,
 		event.NewFollowEvent{FollowerId: e.ownerID(), FollowingId: fl.FollowerId},
 	); err != nil {
@@ -290,7 +298,7 @@ func (e *echoBot) handleFollow(msg []byte) {
 	}
 }
 
-func (e *echoBot) handleMessage(msg []byte) {
+func (e *echoBot) handleMessage(msg []byte, requesterNodeID string) {
 	var m event.NewMessageEvent
 	if err := json.Unmarshal(msg, &m); err != nil {
 		log.Warnf("echo: parse message event: %v", err)
@@ -305,6 +313,9 @@ func (e *echoBot) handleMessage(msg []byte) {
 	if e.wasSeen("message", e.messageSeenKey(m)) {
 		return
 	}
+	if requesterNodeID == "" {
+		return
+	}
 	echoText := e.buildMessageReplyText(m.Text)
 
 	resp := event.NewMessageEvent{
@@ -314,7 +325,7 @@ func (e *echoBot) handleMessage(msg []byte) {
 		Text:       echoText,
 		CreatedAt:  time.Now(),
 	}
-	if _, err := e.node.SelfStream(event.PUBLIC_POST_MESSAGE, resp); err != nil {
+	if _, err := e.node.GenericStream(requesterNodeID, event.PUBLIC_POST_MESSAGE, resp); err != nil {
 		log.Warnf("echo: auto-chat-reply failed: %v", err)
 	}
 }
@@ -338,17 +349,19 @@ func (e *echoBot) buildMessageReplyText(incomingText string) string {
 	return prefix + incomingText
 }
 
-func (e *echoBot) likeTweet(tw event.NewTweetEvent) error {
-	_, err := e.node.SelfStream(
+func (e *echoBot) likeTweet(tw event.NewTweetEvent, requesterNodeID string) error {
+	_, err := e.node.GenericStream(
+		requesterNodeID,
 		event.PUBLIC_POST_LIKE,
 		event.LikeEvent{TweetId: tw.Id, UserId: tw.UserId, OwnerId: e.ownerID()},
 	)
 	return err
 }
 
-func (e *echoBot) retweet(tw event.NewTweetEvent) error {
+func (e *echoBot) retweet(tw event.NewTweetEvent, requesterNodeID string) error {
 	retweeter := e.ownerID()
-	_, err := e.node.SelfStream(
+	_, err := e.node.GenericStream(
+		requesterNodeID,
 		event.PUBLIC_POST_RETWEET,
 		event.NewRetweetEvent(domain.Tweet{
 			Id:          tw.Id,
@@ -364,9 +377,10 @@ func (e *echoBot) retweet(tw event.NewTweetEvent) error {
 	return err
 }
 
-func (e *echoBot) replyToTweet(tw event.NewTweetEvent) error {
+func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
 	parentID := tw.Id
-	_, err := e.node.SelfStream(
+	_, err := e.node.GenericStream(
+		requesterNodeID,
 		event.PUBLIC_POST_REPLY,
 		event.NewReplyEvent{
 			CreatedAt:    time.Now(),
@@ -382,9 +396,10 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent) error {
 	return err
 }
 
-func (e *echoBot) replyToReply(rp event.NewReplyEvent) error {
+func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) error {
 	parentID := rp.Id
-	_, err := e.node.SelfStream(
+	_, err := e.node.GenericStream(
+		requesterNodeID,
 		event.PUBLIC_POST_REPLY,
 		event.NewReplyEvent{
 			CreatedAt:    time.Now(),
@@ -409,19 +424,19 @@ func setupHandlers(node *member.MemberNode) {
 			{
 				event.PRIVATE_POST_TWEET,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleTweet(msg)
+					echo.handleTweet(msg, requesterNodeID(s))
 					return event.Accepted, nil
 				}},
 			{
 				event.PUBLIC_POST_REPLY,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleReply(msg)
+					echo.handleReply(msg, requesterNodeID(s))
 					return event.Accepted, nil
 				}},
 			{
 				event.PUBLIC_POST_FOLLOW,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleFollow(msg)
+					echo.handleFollow(msg, requesterNodeID(s))
 					return event.Accepted, nil
 				}},
 			{
@@ -437,10 +452,17 @@ func setupHandlers(node *member.MemberNode) {
 			{
 				event.PUBLIC_POST_MESSAGE,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleMessage(msg)
+					echo.handleMessage(msg, requesterNodeID(s))
 					return event.Accepted, nil
 				},
 			},
 		}...,
 	)
+}
+
+func requesterNodeID(s warpnet.WarpStream) string {
+	if s == nil || s.Conn() == nil {
+		return ""
+	}
+	return s.Conn().RemotePeer().String()
 }
