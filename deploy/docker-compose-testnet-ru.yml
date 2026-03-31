@@ -22,4 +22,21 @@ services:
       - NODE_SEED=warpnet-ru
       - NODE_METRICS_GATEWAY=127.0.0.1:4091
 
+  echo:
+    container_name: echo-testnet
+    build:
+      context: ..
+      dockerfile: Dockerfile.echo
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4012
+      - NODE_HOST_V4=130.94.88.38
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - NODE_SEED=echo
+      - SOCKS5_ENABLED=false
+
+
 
