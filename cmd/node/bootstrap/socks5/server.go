@@ -190,6 +190,7 @@ type streamConn struct {
 
 type trackedConn struct {
 	net.Conn
+
 	once   sync.Once
 	closeF func()
 }
