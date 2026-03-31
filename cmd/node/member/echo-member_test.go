@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -21,12 +22,21 @@ type streamCall struct {
 }
 
 type fakeEchoNode struct {
-	info  warpnet.NodeInfo
-	calls []streamCall
+	info      warpnet.NodeInfo
+	calls     []streamCall
+	selfCalls []streamCall
 }
 
 func (f *fakeEchoNode) GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+	if nodeId == f.info.ID.String() {
+		return nil, errors.New("self stream request is forbidden")
+	}
 	f.calls = append(f.calls, streamCall{nodeID: nodeId, path: path, data: data})
+	return []byte(`{"accepted":true}`), nil
+}
+
+func (f *fakeEchoNode) SelfStream(path stream.WarpRoute, data any) ([]byte, error) {
+	f.selfCalls = append(f.selfCalls, streamCall{nodeID: f.info.ID.String(), path: path, data: data})
 	return []byte(`{"accepted":true}`), nil
 }
 
@@ -41,13 +51,14 @@ func TestEchoAutoActionsOnForeignTweet(t *testing.T) {
 	require.NoError(t, err)
 
 	bot.handleTweet(bt)
-	require.Len(t, f.calls, 3)
-	require.Equal(t, event.PUBLIC_POST_LIKE, string(f.calls[0].path))
-	require.Equal(t, event.PUBLIC_POST_RETWEET, string(f.calls[1].path))
-	require.Equal(t, event.PUBLIC_POST_REPLY, string(f.calls[2].path))
+	require.Len(t, f.selfCalls, 3)
+	require.Equal(t, event.PUBLIC_POST_LIKE, string(f.selfCalls[0].path))
+	require.Equal(t, event.PUBLIC_POST_RETWEET, string(f.selfCalls[1].path))
+	require.Equal(t, event.PUBLIC_POST_REPLY, string(f.selfCalls[2].path))
+	require.Empty(t, f.calls)
 
 	bot.handleTweet(bt)
-	require.Len(t, f.calls, 3, "same tweet should be deduplicated in memory")
+	require.Len(t, f.selfCalls, 3, "same tweet should be deduplicated in memory")
 }
 
 func TestEchoAutoReplyOnForeignReply(t *testing.T) {
@@ -60,8 +71,8 @@ func TestEchoAutoReplyOnForeignReply(t *testing.T) {
 	require.NoError(t, err)
 
 	bot.handleReply(bt)
-	require.Len(t, f.calls, 1)
-	require.Equal(t, event.PUBLIC_POST_REPLY, string(f.calls[0].path))
+	require.Len(t, f.selfCalls, 1)
+	require.Equal(t, event.PUBLIC_POST_REPLY, string(f.selfCalls[0].path))
 }
 
 func TestEchoSkipsReplyOnEchoFormattedReply(t *testing.T) {
@@ -75,6 +86,7 @@ func TestEchoSkipsReplyOnEchoFormattedReply(t *testing.T) {
 
 	bot.handleReply(bt)
 	require.Empty(t, f.calls)
+	require.Empty(t, f.selfCalls)
 }
 
 func TestEchoAutoFollowBack(t *testing.T) {
@@ -85,8 +97,8 @@ func TestEchoAutoFollowBack(t *testing.T) {
 	require.NoError(t, err)
 
 	bot.handleFollow(bt)
-	require.Len(t, f.calls, 1)
-	require.Equal(t, event.PUBLIC_POST_FOLLOW, string(f.calls[0].path))
+	require.Len(t, f.selfCalls, 1)
+	require.Equal(t, event.PUBLIC_POST_FOLLOW, string(f.selfCalls[0].path))
 }
 
 func TestEchoAutoReplyOnChatMessage(t *testing.T) {
@@ -98,8 +110,8 @@ func TestEchoAutoReplyOnChatMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	bot.handleMessage(bt)
-	require.Len(t, f.calls, 1)
-	require.Equal(t, event.PUBLIC_POST_MESSAGE, string(f.calls[0].path))
+	require.Len(t, f.selfCalls, 1)
+	require.Equal(t, event.PUBLIC_POST_MESSAGE, string(f.selfCalls[0].path))
 }
 
 func TestEchoAutoReplyMessageIsTruncatedToLimit(t *testing.T) {
@@ -117,10 +129,10 @@ func TestEchoAutoReplyMessageIsTruncatedToLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	bot.handleMessage(bt)
-	require.Len(t, f.calls, 1)
-	require.Equal(t, event.PUBLIC_POST_MESSAGE, string(f.calls[0].path))
+	require.Len(t, f.selfCalls, 1)
+	require.Equal(t, event.PUBLIC_POST_MESSAGE, string(f.selfCalls[0].path))
 
-	evt, ok := f.calls[0].data.(event.NewMessageEvent)
+	evt, ok := f.selfCalls[0].data.(event.NewMessageEvent)
 	require.True(t, ok)
 	require.LessOrEqual(t, len(evt.Text), messageLimit)
 }

@@ -141,6 +141,7 @@ func main() {
 
 type echoStreamClient interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
 }
 
@@ -281,8 +282,7 @@ func (e *echoBot) handleFollow(msg []byte) {
 		return
 	}
 
-	if _, err := e.node.GenericStream(
-		e.node.NodeInfo().ID.String(),
+	if _, err := e.node.SelfStream(
 		event.PUBLIC_POST_FOLLOW,
 		event.NewFollowEvent{FollowerId: e.ownerID(), FollowingId: fl.FollowerId},
 	); err != nil {
@@ -314,7 +314,7 @@ func (e *echoBot) handleMessage(msg []byte) {
 		Text:       echoText,
 		CreatedAt:  time.Now(),
 	}
-	if _, err := e.node.GenericStream(e.node.NodeInfo().ID.String(), event.PUBLIC_POST_MESSAGE, resp); err != nil {
+	if _, err := e.node.SelfStream(event.PUBLIC_POST_MESSAGE, resp); err != nil {
 		log.Warnf("echo: auto-chat-reply failed: %v", err)
 	}
 }
@@ -339,8 +339,7 @@ func (e *echoBot) buildMessageReplyText(incomingText string) string {
 }
 
 func (e *echoBot) likeTweet(tw event.NewTweetEvent) error {
-	_, err := e.node.GenericStream(
-		e.node.NodeInfo().ID.String(),
+	_, err := e.node.SelfStream(
 		event.PUBLIC_POST_LIKE,
 		event.LikeEvent{TweetId: tw.Id, UserId: tw.UserId, OwnerId: e.ownerID()},
 	)
@@ -349,8 +348,7 @@ func (e *echoBot) likeTweet(tw event.NewTweetEvent) error {
 
 func (e *echoBot) retweet(tw event.NewTweetEvent) error {
 	retweeter := e.ownerID()
-	_, err := e.node.GenericStream(
-		e.node.NodeInfo().ID.String(),
+	_, err := e.node.SelfStream(
 		event.PUBLIC_POST_RETWEET,
 		event.NewRetweetEvent(domain.Tweet{
 			Id:          tw.Id,
@@ -368,8 +366,7 @@ func (e *echoBot) retweet(tw event.NewTweetEvent) error {
 
 func (e *echoBot) replyToTweet(tw event.NewTweetEvent) error {
 	parentID := tw.Id
-	_, err := e.node.GenericStream(
-		e.node.NodeInfo().ID.String(),
+	_, err := e.node.SelfStream(
 		event.PUBLIC_POST_REPLY,
 		event.NewReplyEvent{
 			CreatedAt:    time.Now(),
@@ -387,8 +384,7 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent) error {
 
 func (e *echoBot) replyToReply(rp event.NewReplyEvent) error {
 	parentID := rp.Id
-	_, err := e.node.GenericStream(
-		e.node.NodeInfo().ID.String(),
+	_, err := e.node.SelfStream(
 		event.PUBLIC_POST_REPLY,
 		event.NewReplyEvent{
 			CreatedAt:    time.Now(),
