@@ -131,7 +131,6 @@ func setupHandlers(node warpnet.P2PNode) {
 		event.PUBLIC_POST_REPLY:   func(stream warpnet.WarpStream) {},
 		event.PUBLIC_POST_LIKE:    func(stream warpnet.WarpStream) {},
 		event.PUBLIC_POST_RETWEET: func(stream warpnet.WarpStream) {},
-		event.PUBLIC_POST_CHAT:    func(stream warpnet.WarpStream) {},
 		event.PUBLIC_POST_MESSAGE: func(stream warpnet.WarpStream) {},
 	}
 
