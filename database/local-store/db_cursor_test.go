@@ -26,7 +26,7 @@ func seedKeys(t *testing.T, db *DB, keys []string) {
 		t.Fatalf("new txn: %v", err)
 	}
 	for i, k := range keys {
-		if err := txn.Set(DatabaseKey(k), []byte(fmt.Sprintf("val-%d", i))); err != nil {
+		if err := txn.Set(DatabaseKey(k), fmt.Appendf(nil, "val-%d", i)); err != nil {
 			txn.Rollback()
 			t.Fatalf("set %s: %v", k, err)
 		}

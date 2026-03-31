@@ -55,16 +55,36 @@ const topK = 3
 
 func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 	b.mx.RLock()
-	defer b.mx.RUnlock()
+	hasExitNodes := b.exitList.Len() > 0
+	b.mx.RUnlock()
 
-	if b.exitList.Len() == 0 {
+	if !hasExitNodes {
 		peers := b.streamer.Peerstore().PeersWithAddrs()
-		if len(peers) != 0 {
-			return peers[rand.Intn(len(peers))], true //nolint:gosec
+		streamCandidates := make([]warpnet.WarpPeerID, 0, len(peers))
+		redirectCandidates := make([]warpnet.WarpPeerID, 0, len(peers))
+		selfID := b.streamer.NodeInfo().ID
+		for _, peer := range peers {
+			if peer == selfID {
+				continue
+			}
+			redirectCandidates = append(redirectCandidates, peer)
+
+			protocols, _ := b.streamer.Peerstore().GetProtocols(peer)
+			if len(protocols) == 0 || !slices.Contains(protocols, DefaultStreamProtocol) {
+				continue
+			}
+			streamCandidates = append(streamCandidates, peer)
+		}
+		if len(streamCandidates) != 0 {
+			return streamCandidates[rand.Intn(len(streamCandidates))], false //nolint:gosec
+		}
+		if len(redirectCandidates) != 0 {
+			return redirectCandidates[rand.Intn(len(redirectCandidates))], true //nolint:gosec
 		}
 		return "", false
 	}
 
+	b.mx.RLock()
 	candidates := make([]warpnet.WarpPeerID, 0, topK)
 	count := 0
 	for element := b.exitList.Front(); element != nil && count < topK; element = element.Next() {
@@ -75,6 +95,7 @@ func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 		candidates = append(candidates, peer)
 		count++
 	}
+	b.mx.RUnlock()
 
 	if len(candidates) != 0 {
 		return candidates[rand.Intn(len(candidates))], false //nolint:gosec
