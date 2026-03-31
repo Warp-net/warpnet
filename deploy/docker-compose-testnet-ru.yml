@@ -24,9 +24,7 @@ services:
 
   echo:
     container_name: echo-testnet
-    build:
-      context: .
-      dockerfile: Dockerfile.echo
+    image: ghcr.io/warp-net/warpnet-echo:latest
     network_mode: host
     restart: always
     environment:
