@@ -38,6 +38,7 @@ else
     echo "Mainnet is disabled"
     mkdir -p /root/testnet
     mv docker-compose-testnet.yml testnet/docker-compose-testnet.yml
+    mv Dockerfile.echo testnet/Dockerfile.echo
     docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down --remove-orphans
     docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --force-recreate
 fi

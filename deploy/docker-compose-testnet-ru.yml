@@ -25,7 +25,7 @@ services:
   echo:
     container_name: echo-testnet
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile.echo
     network_mode: host
     restart: always

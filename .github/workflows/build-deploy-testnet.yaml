@@ -93,6 +93,7 @@ jobs:
       - name: Deploy to Testnet Lightnode Droplet
         run: |
           scp ./deploy/deploy.sh root@130.94.88.38:/root
+          scp ./Dockerfile.echo root@130.94.88.38:/root/Dockerfile.echo
           scp ./deploy/docker-compose-testnet-ru.yml root@130.94.88.38:/root/docker-compose-testnet.yml
           ssh root@130.94.88.38 'GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} MAINNET=false bash /root/deploy.sh'
 
