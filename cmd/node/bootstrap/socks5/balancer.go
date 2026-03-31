@@ -59,8 +59,16 @@ func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 
 	if b.exitList.Len() == 0 {
 		peers := b.streamer.Peerstore().PeersWithAddrs()
-		if len(peers) != 0 {
-			return peers[rand.Intn(len(peers))], true //nolint:gosec
+		candidates := make([]warpnet.WarpPeerID, 0, len(peers))
+		for _, peer := range peers {
+			protocols, _ := b.streamer.Peerstore().GetProtocols(peer)
+			if len(protocols) == 0 || !slices.Contains(protocols, DefaultStreamProtocol) {
+				continue
+			}
+			candidates = append(candidates, peer)
+		}
+		if len(candidates) != 0 {
+			return candidates[rand.Intn(len(candidates))], false //nolint:gosec
 		}
 		return "", false
 	}

@@ -118,7 +118,7 @@ func (s *socksServer) Start(streamer Streamer) error { // warpnet.P2PNode is lib
 }
 
 func (s *socksServer) Stop() error {
-	log.Infof("stopped socks5 server at %s", defaultListenPort)
+	log.Infof("stopped socks5 server at %s", s.port)
 	if s.balancer != nil {
 		s.balancer.Close()
 	}
@@ -131,6 +131,12 @@ func (s *socksServer) Stop() error {
 func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr string) (net.Conn, error) {
 	host, _ := ctx.Value(reqIpKey).(string)
 	s.m.PushSocksConnections(s.nodeId, host)
+	removeMetrics := true
+	defer func() {
+		if removeMetrics {
+			s.m.RemoveSocksConnections(s.nodeId, host)
+		}
+	}()
 
 	peer, isRedirect := s.balancer.route()
 	if peer == "" {
@@ -140,10 +146,11 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 		peerAddrs := s.streamer.Peerstore().Addrs(peer)
 		log.Infof("socks5 server: redirect to %v", peerAddrs)
 		for _, pAddr := range peerAddrs {
-			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), time.Second) //nolint:noctx
+			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), 3*time.Second) //nolint:noctx
 			if err != nil {
 				continue
 			}
+			removeMetrics = false
 			return conn, nil
 		}
 	}
@@ -160,6 +167,7 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 		)
 	}
 
+	removeMetrics = false
 	return &streamConn{
 		once:   sync.Once{},
 		stream: stream,
