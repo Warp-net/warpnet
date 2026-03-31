@@ -118,7 +118,7 @@ func (s *socksServer) Start(streamer Streamer) error { // warpnet.P2PNode is lib
 }
 
 func (s *socksServer) Stop() error {
-	log.Infof("stopped socks5 server at %s", defaultListenPort)
+	log.Infof("stopped socks5 server at %s", s.port)
 	if s.balancer != nil {
 		s.balancer.Close()
 	}
@@ -131,6 +131,12 @@ func (s *socksServer) Stop() error {
 func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr string) (net.Conn, error) {
 	host, _ := ctx.Value(reqIpKey).(string)
 	s.m.PushSocksConnections(s.nodeId, host)
+	removeMetrics := true
+	defer func() {
+		if removeMetrics {
+			s.m.RemoveSocksConnections(s.nodeId, host)
+		}
+	}()
 
 	peer, isRedirect := s.balancer.route()
 	if peer == "" {
@@ -140,11 +146,18 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 		peerAddrs := s.streamer.Peerstore().Addrs(peer)
 		log.Infof("socks5 server: redirect to %v", peerAddrs)
 		for _, pAddr := range peerAddrs {
-			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), time.Second) //nolint:noctx
+			dialer := net.Dialer{Timeout: 3 * time.Second}
+			conn, err := dialer.DialContext(ctx, proto, toNetAddr(pAddr).String())
 			if err != nil {
 				continue
 			}
-			return conn, nil
+			removeMetrics = false
+			return &trackedConn{
+				Conn: conn,
+				closeF: func() {
+					s.m.RemoveSocksConnections(s.nodeId, host)
+				},
+			}, nil
 		}
 	}
 	log.Infof("socks5 server: stream to %s", peer.String())
@@ -160,8 +173,8 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 		)
 	}
 
+	removeMetrics = false
 	return &streamConn{
-		once:   sync.Once{},
 		stream: stream,
 		closeF: func() {
 			s.m.RemoveSocksConnections(s.nodeId, host)
@@ -175,11 +188,22 @@ type streamConn struct {
 	closeF func()
 }
 
+type trackedConn struct {
+	net.Conn
+
+	once   sync.Once
+	closeF func()
+}
+
 func (c *streamConn) Read(p []byte) (int, error)  { return c.stream.Read(p) }
 func (c *streamConn) Write(p []byte) (int, error) { return c.stream.Write(p) }
 func (c *streamConn) Close() error {
-	c.closeF()
+	c.once.Do(c.closeF)
 	return c.stream.Close()
+}
+func (c *trackedConn) Close() error {
+	c.once.Do(c.closeF)
+	return c.Conn.Close()
 }
 func (c *streamConn) LocalAddr() net.Addr                { return toNetAddr(c.stream.Conn().LocalMultiaddr()) }
 func (c *streamConn) RemoteAddr() net.Addr               { return toNetAddr(c.stream.Conn().RemoteMultiaddr()) }

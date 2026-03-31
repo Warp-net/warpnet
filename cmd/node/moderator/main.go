@@ -109,10 +109,10 @@ func main() {
 		_ = publisher.Close()
 	}()
 
-	//m := metrics.NewMetricsClient(
-	//	config.Config().Node.Metrics.Gateway,
-	//	network,
-	//)
+	// m := metrics.NewMetricsClient(
+	// 	config.Config().Node.Metrics.Gateway,
+	// 	network,
+	// )
 
 	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {
