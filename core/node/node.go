@@ -220,10 +220,11 @@ func (n *WarpNode) trackIncomingEvents() {
 				)
 
 			case event.EvtPeerIdentificationFailed:
-				pid := typedEvent.Peer.String()
+				pid := typedEvent.Peer
+				addrs := n.node.Peerstore().Addrs(pid)
 				log.Errorf(
-					"node: event: peer ...%s identification failed, reason: %s",
-					pid[len(pid)-6:], typedEvent.Reason,
+					"node: event: peer %s %v identification failed, reason: %s",
+					pid.String(), addrs, typedEvent.Reason,
 				)
 
 			case event.EvtPeerIdentificationCompleted:
