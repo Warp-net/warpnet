@@ -109,7 +109,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 		return likesCount, nil
 	}
 	if err := repo.statsDb.Increment(likeKey.DatastoreKey()); err != nil {
-		log.Warnf("unlike: stats db increment: %v", err)
+		log.Warnf("like: stats db increment: %v", err)
 	}
 	return likesCount, nil
 }

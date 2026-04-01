@@ -294,14 +294,14 @@ func buildRepliesTree(replies []domain.Tweet) []domain.ReplyNode {
 		return []domain.ReplyNode{}
 	}
 
-	nodeMap := make(map[string]domain.ReplyNode, len(replies))
-	roots := make([]domain.ReplyNode, 0, len(replies))
+	nodeMap := make(map[string]*domain.ReplyNode, len(replies))
+	rootIds := make([]string, 0, len(replies))
 
 	for _, reply := range replies {
 		if reply.Id == "" {
 			continue
 		}
-		nodeMap[reply.Id] = domain.ReplyNode{
+		nodeMap[reply.Id] = &domain.ReplyNode{
 			Reply:    reply,
 			Children: make([]domain.ReplyNode, 0, 3),
 		}
@@ -318,18 +318,24 @@ func buildRepliesTree(replies []domain.Tweet) []domain.ReplyNode {
 		}
 
 		if reply.ParentId == nil {
-			roots = append(roots, node)
+			rootIds = append(rootIds, reply.Id)
 			continue
 		}
 
 		parentNode, ok := nodeMap[*reply.ParentId]
 		if !ok {
-			roots = append(roots, node)
+			rootIds = append(rootIds, reply.Id)
 			continue
 		}
 
-		parentNode.Children = append(parentNode.Children, node)
-		nodeMap[*reply.ParentId] = parentNode
+		parentNode.Children = append(parentNode.Children, *node)
+	}
+
+	roots := make([]domain.ReplyNode, 0, len(rootIds))
+	for _, id := range rootIds {
+		if n, ok := nodeMap[id]; ok {
+			roots = append(roots, *n)
+		}
 	}
 
 	sort.SliceStable(roots, func(i, j int) bool {

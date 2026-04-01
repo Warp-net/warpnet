@@ -67,10 +67,12 @@ func StreamGetNotificationsHandler(
 		}
 
 		var unreadCount uint64
-		sort.SliceStable(notifications, func(i, j int) bool {
-			if !notifications[i].IsRead {
+		for _, n := range notifications {
+			if !n.IsRead {
 				unreadCount++
 			}
+		}
+		sort.SliceStable(notifications, func(i, j int) bool {
 			return notifications[i].IsRead
 		})
 		return event.GetNotificationsResponse{

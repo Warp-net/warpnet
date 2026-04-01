@@ -84,7 +84,10 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 	}
 	defer txn.Rollback()
 
-	return txn.SetWithTTL(notKey, bt, time.Hour*24)
+	if err = txn.SetWithTTL(notKey, bt, time.Hour*24); err != nil {
+		return err
+	}
+	return txn.Commit()
 }
 
 func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
