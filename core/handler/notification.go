@@ -73,7 +73,10 @@ func StreamGetNotificationsHandler(
 			}
 		}
 		sort.SliceStable(notifications, func(i, j int) bool {
-			return notifications[i].IsRead
+			if notifications[i].IsRead != notifications[j].IsRead {
+				return !notifications[i].IsRead
+			}
+			return notifications[i].CreatedAt.After(notifications[j].CreatedAt)
 		})
 		return event.GetNotificationsResponse{
 			Cursor:        cur,

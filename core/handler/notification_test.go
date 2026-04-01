@@ -55,11 +55,12 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("counts unread correctly", func(t *testing.T) {
+	t.Run("counts unread correctly and sorts unread first", func(t *testing.T) {
+		now := time.Now()
 		nots := []domain.Notification{
-			{Id: "1", Type: domain.NotificationLikeType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
-			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
-			{Id: "3", Type: domain.NotificationFollowType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: now.Add(-3 * time.Second)},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: now.Add(-2 * time.Second)},
+			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, UserId: owner, CreatedAt: now.Add(-1 * time.Second)},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
 			return nots, "end", nil
@@ -74,6 +75,20 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		}
 		if len(r.Notifications) != 3 {
 			t.Fatalf("expected 3 notifications, got %d", len(r.Notifications))
+		}
+		// unread notifications should come first
+		if r.Notifications[0].IsRead {
+			t.Fatal("expected first notification to be unread")
+		}
+		if r.Notifications[1].IsRead {
+			t.Fatal("expected second notification to be unread")
+		}
+		if !r.Notifications[2].IsRead {
+			t.Fatal("expected third notification to be read")
+		}
+		// within unread group, newer should come first
+		if r.Notifications[0].Id != "3" {
+			t.Fatalf("expected newest unread first, got id=%s", r.Notifications[0].Id)
 		}
 		if r.Cursor != "end" {
 			t.Fatalf("expected cursor 'end', got %q", r.Cursor)
