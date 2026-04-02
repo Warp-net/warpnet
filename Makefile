@@ -2,7 +2,7 @@ kill:
 	pkill -9 warpnet && pkill -9 main
 
 echo-main:
-	go run -tags echo cmd/node/member/echo-member.go --node.network testnet --node.seed echo --database.dir echo
+	go run -tags echo cmd/node/member/echo-member.go --node.network testnet --node.seed echo --database.dir echo --node.port 4002
 
 echo-android:
 	go run -tags echo -ldflags="-checklinkname=0" cmd/node/member/echo-member.go --node.network testnet

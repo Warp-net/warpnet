@@ -54,7 +54,7 @@ import (
 
 const (
 	echoReplyPrefix = "echo: "
-	echoChatReply   = "echo: получил сообщение"
+	echoChatReply   = "echo: received message"
 	messageLimit    = 5000
 	seenTTL         = 15 * time.Minute
 	pruneInterval   = time.Minute
