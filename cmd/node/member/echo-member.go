@@ -108,7 +108,11 @@ func main() {
 
 	authInfo := <-readyChan
 
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, config.Config().Node.Network)
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		"",
+		config.Config().Node.Network,
+	)
 
 	echoNode, err := member.NewMemberNode(
 		ctx,
@@ -130,6 +134,7 @@ func main() {
 		log.Fatalf("failed to start member node: %v", err)
 	}
 
+	m.SetNodeId(echoNode.NodeInfo().ID.String())
 	authInfo.Identity.Owner.NodeId = echoNode.NodeInfo().ID.String()
 	authInfo.NodeInfo = echoNode.NodeInfo()
 

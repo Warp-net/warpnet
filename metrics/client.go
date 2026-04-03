@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	log "github.com/sirupsen/logrus"
+	"sync"
 )
 
 type MetricsClient struct {
@@ -41,10 +42,11 @@ type MetricsClient struct {
 	socksGauge  *prometheus.GaugeVec
 	onlineGauge *prometheus.GaugeVec
 
+	mx     sync.Mutex
 	pusher *push.Pusher
 }
 
-func NewMetricsClient(pushGatewayURL string, network string) *MetricsClient {
+func NewMetricsClient(pushGatewayURL string, nodeId, network string) *MetricsClient {
 	if network == "" {
 		log.Fatalf("metrics: network is empty")
 	}
@@ -69,6 +71,7 @@ func NewMetricsClient(pushGatewayURL string, network string) *MetricsClient {
 	)
 	pusher := push.New(pushGatewayURL, "warpnet_node").
 		Grouping("network", network).
+		Grouping("node_id", nodeId).
 		Collector(onlineGauge).
 		Collector(socksGauge)
 
@@ -82,18 +85,31 @@ func NewMetricsClient(pushGatewayURL string, network string) *MetricsClient {
 	}
 }
 
+func (c *MetricsClient) SetNodeId(nodeId string) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	c.pusher = c.pusher.Grouping("node_id", nodeId)
+}
 func (c *MetricsClient) PushStatusOnline(nodeId string) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	c.onlineGauge.WithLabelValues(nodeId).Set(1)
 }
 
 func (c *MetricsClient) PushStatusOffline(nodeId string) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	c.onlineGauge.WithLabelValues(nodeId).Set(0)
 }
 
 func (c *MetricsClient) PushSocksConnections(nodeId, ip string) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	c.socksGauge.WithLabelValues(nodeId, ip).Set(1)
 }
 
 func (c *MetricsClient) RemoveSocksConnections(nodeId, ip string) {
-	c.socksGauge.WithLabelValues(nodeId, ip).Set(0)
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	c.socksGauge.DeleteLabelValues(nodeId, ip)
 }

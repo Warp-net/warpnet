@@ -26,9 +26,11 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"os"
 	"os/signal"
 	"syscall"
@@ -90,9 +92,11 @@ func main() {
 		return
 	}
 
+	peerID, _ := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Gateway,
 		network,
+		peerID.String(),
 	)
 
 	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex, m)

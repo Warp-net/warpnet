@@ -131,8 +131,10 @@ func (a *App) runNode(network string, psk security.PSK) {
 	case serverNodeAuthInfo = <-a.readyChan:
 		log.Infoln("database authentication passed")
 	}
+
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Gateway,
+		"",
 		network,
 	)
 
@@ -164,6 +166,7 @@ func (a *App) runNode(network string, psk security.PSK) {
 		log.Errorf("failed to start member node: %v \n", err)
 		return
 	}
+	m.SetNodeId(a.node.NodeInfo().ID.String())
 
 	// report to auth handler - Node set up and running
 	serverNodeAuthInfo.Identity.Owner.NodeId = a.node.NodeInfo().ID.String()
