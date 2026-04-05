@@ -253,6 +253,10 @@ func (db *DB) Run(username, password string) (err error) {
 		return err
 	}
 	db.isRunning.Store(true)
+
+	pwd, _ := os.Getwd()
+	log.Infof("database: is running, directory: %s %s", pwd, db.dbPath)
+
 	db.sequence, err = db.badger.GetSequence([]byte(sequenceKey), 100)
 	if err != nil {
 		return err

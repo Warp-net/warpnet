@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-RUN apt update && apt install -y curl tar build-essential ca-certificates
+RUN apt update && apt install -y git curl tar build-essential ca-certificates
 
 ENV GO_VERSION=1.26.0
 RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -o go.tar.gz \
@@ -16,8 +16,8 @@ ENV GOPATH=/warpnet
 ENV CGO_ENABLED=1
 ENV GOMEMLIMIT=2750MiB 
 ENV GOGC=50
-ENV GOEXPERIMENT=greenteagc
 
-RUN go version && go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
+RUN git submodule update --init --recursive && \
+    go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
 
 CMD ["/warpnet/warpnet"]

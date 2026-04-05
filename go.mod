@@ -4,9 +4,12 @@ go 1.26
 
 tool github.com/wailsapp/wails/v2/cmd/wails
 
+replace github.com/Warp-net/warpnet/core/moderation => ./core/moderation
+
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Warp-net/warpnet-frontend v0.0.638
+	github.com/Warp-net/warpnet/core/moderation v0.0.0-00010101000000-000000000000
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
