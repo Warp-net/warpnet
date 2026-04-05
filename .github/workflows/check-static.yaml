@@ -40,9 +40,6 @@ jobs:
 
   test:
     name: Test
-    permissions:
-      contents: read
-      id-token: write
     strategy:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
@@ -85,7 +82,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         uses: codecov/codecov-action@v5
         with:
-          use_oidc: true
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.out
           name: codecov-umbrella
           slug: Warp-net/warpnet
