@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/challenge"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -89,7 +90,7 @@ func NewMemberNode(
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
-	m MetricsOnlinePusher,
+	metrics MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
@@ -105,7 +106,9 @@ func NewMemberNode(
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, m)
+	challenger := challenge.NewSpoofChallenger(ctx)
+
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, challenger, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -196,7 +199,6 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.pubsubService.Run(m)
-
 	if err := m.discService.Run(m); err != nil {
 		return err
 	}
@@ -217,6 +219,10 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb, m.privKey)
+
+	for _, addr := range m.dHashTable.BootstrapNodes() {
+		m.SetMaxNodePriority(addr.ID)
+	}
 
 	println()
 	fmt.Printf(
@@ -271,6 +277,18 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi.OwnerId = m.ownerId
 	bi.Hash = m.selfHashHex
 	return bi
+}
+
+func (m *MemberNode) SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {
+	m.node.Prioritizer().SetPriority(pid, r)
+}
+
+func (m *MemberNode) SetMaxNodePriority(pid warpnet.WarpPeerID) {
+	m.node.Prioritizer().SetMaxPriority(pid)
+}
+
+func (m *MemberNode) SetMinNodePriority(pid warpnet.WarpPeerID) {
+	m.node.Prioritizer().SetMinPriority(pid)
 }
 
 func (m *MemberNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {

@@ -315,6 +315,10 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 	}
 }
 
+func (d *distributedHashTable) BootstrapNodes() []warpnet.WarpAddrInfo {
+	return d.cfg.boostrapNodes
+}
+
 func (d *distributedHashTable) ClosestPeers() []warpnet.WarpPeerID {
 	closest, _ := d.dht.GetClosestPeers(d.ctx, d.dht.PeerID().String())
 	return closest

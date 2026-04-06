@@ -28,15 +28,14 @@ resulting from the use or misuse of this software.
 package discovery
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/challenge"
+	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"math/rand/v2"
 	"time"
 
-	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -44,9 +43,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/Warp-net/warpnet/retrier"
-	"github.com/Warp-net/warpnet/security"
-	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -57,6 +53,13 @@ type DiscoveryInfoStorer interface {
 	Peerstore() warpnet.WarpPeerstore
 	SimpleConnect(warpnet.WarpAddrInfo) error
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
+	SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
+	SetMaxNodePriority(pid warpnet.WarpPeerID)
+	SetMinNodePriority(pid warpnet.WarpPeerID)
+}
+
+type DiscoveryChallenger interface {
+	Challenge(pubKey ic.PubKey, level int, streamF challenge.StreamFunc) (bool, error)
 }
 
 type NodeStorer interface {
@@ -98,10 +101,9 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 
-	ownId   warpnet.WarpPeerID
-	limiter *leakyBucketRateLimiter
-	cache   *discoveryCache
-	retrier retrier.Retrier
+	ownId      warpnet.WarpPeerID
+	limiter    *leakyBucketRateLimiter
+	challenger DiscoveryChallenger
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -116,17 +118,17 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
+	challenger DiscoveryChallenger,
 	m MetricsOnlineDiscoverer,
 ) *discoveryService {
 	capacity := 32
 	leakPerTenSec := 2
 	return &discoveryService{
 		ctx:             ctx,
-		retrier:         retrier.New(time.Second, 3, retrier.ExponentialBackoff),
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
-		cache:           newDiscoveryCache(),
+		challenger:      challenger,
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -134,12 +136,12 @@ func NewDiscoveryService(
 	}
 }
 
-func NewBootstrapDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *discoveryService {
+func NewBootstrapDiscoveryService(
+	ctx context.Context, challenger DiscoveryChallenger, m MetricsOnlineDiscoverer) *discoveryService {
 	return &discoveryService{
 		ctx:             ctx,
-		retrier:         retrier.New(time.Second, 3, retrier.ExponentialBackoff),
 		limiter:         newRateLimiter(32, 2),
-		cache:           newDiscoveryCache(),
+		challenger:      challenger,
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -274,12 +276,22 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	_, err = s.requestChallenge(pi)
-	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
+	isRepeatable, err := s.challenger.Challenge(
+		s.node.Peerstore().PubKey(pi.ID),
+		s.getChallengeLevel(pi.ID),
+		s.requestChallenge(pi.ID),
+	)
+	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
-		// TODO track challenge content that failed
-		_ = s.nodeRepo.Blocklist(pi.ID.String())
+		if isRepeatable {
+			_ = s.nodeRepo.Blocklist(pi.ID.String())
+		} else {
+			// reset block time
+			_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
+			_ = s.nodeRepo.Blocklist(pi.ID.String())
+		}
 		s.node.Peerstore().RemovePeer(pi.ID)
+		s.node.SetMinNodePriority(pi.ID)
 		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
@@ -297,6 +309,8 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
 		return
 	}
+
+	s.node.SetNodePriority(pi.ID, info.Reachability)
 
 	if info.IsBootstrap() || info.IsModerator() {
 		return
@@ -369,8 +383,12 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		return
 	}
 
-	_, err = s.requestChallenge(pi)
-	if errors.Is(err, ErrChallengeMismatch) || errors.Is(err, ErrChallengeSignatureInvalid) {
+	_, err = s.challenger.Challenge(
+		s.node.Peerstore().PubKey(pi.ID),
+		s.getChallengeLevel(pi.ID),
+		s.requestChallenge(pi.ID),
+	)
+	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
 		log.Warnf(
 			"discovery: source '%s': bootstrap handle: challenge is invalid for peer: %s",
 			peer.Source, pi.ID.String(),
@@ -387,137 +405,55 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		return
 	}
 	s.m.PushStatusOnline(pi.ID.String())
+
+	if rand.IntN(10)/3 == 0 { //nolint:rand
+		info, err := s.requestNodeInfo(pi)
+		if err != nil {
+			log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+			return
+		}
+		s.node.SetNodePriority(pi.ID, info.Reachability)
+	}
 }
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
 }
 
-const (
-	ErrChallengeMismatch         warpnet.WarpError = "challenge mismatch"
-	ErrChallengeSignatureInvalid warpnet.WarpError = "invalid challenge signature"
-)
-
-func (s *discoveryService) requestChallenge(pi warpnet.WarpAddrInfo) ([]event.ChallengeSample, error) {
-	if s.cache.IsChallengedAlready(pi.ID) {
-		log.Debugf("discovery: peer %s already challenged", pi.ID.String())
-		return nil, nil
-	}
-
-	var level int
-	if s.nodeRepo != nil {
-		term, err := s.nodeRepo.BlocklistTerm(pi.ID.String())
-		if err != nil {
-			log.Errorf("discovery: peer %s blocklist term: %s", pi.ID.String(), err.Error())
-		}
-
-		if term != nil {
-			level = int(term.Level)
-		}
-	}
-
-	ownChallenges, coordinates, err := s.composeChallengeRequest(level)
-	if err != nil {
-		return coordinates, err
-	}
-
-	var resp []byte
-	err = s.retrier.Try(s.ctx, func() error {
-		resp, err = s.node.GenericStream(
-			pi.ID.String(),
+func (s *discoveryService) requestChallenge(peerId warpnet.WarpPeerID) challenge.StreamFunc {
+	return func(coord []event.ChallengeSample) ([]event.ChallengeSolution, error) {
+		resp, err := s.node.GenericStream(
+			peerId.String(),
 			event.PUBLIC_POST_NODE_CHALLENGE,
-			event.ChallengeEvent{Coordinates: coordinates},
+			event.ChallengeEvent{Coordinates: coord},
 		)
-		return err
-	})
+		if len(resp) == 0 {
+			err := warpnet.WarpError("no challenge response from new peer")
+			return nil, fmt.Errorf("%w: %s", err, peerId.String())
+		}
 
-	if err != nil {
-		return coordinates, fmt.Errorf("failed to get challenge from new peer %s: %w", pi.ID.String(), err)
+		var challengeResp event.ChallengeResponse
+		err = json.Unmarshal(resp, &challengeResp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal challenge from new peer: %s %w", resp, err)
+		}
+		return challengeResp.Solutions, nil
 	}
-
-	if len(resp) == 0 {
-		err := warpnet.WarpError("no challenge response from new peer")
-		return coordinates, fmt.Errorf("%w: %s", err, pi.ID.String())
-	}
-
-	var challengeResp event.ChallengeResponse
-	err = json.Unmarshal(resp, &challengeResp)
-	if err != nil {
-		return coordinates, fmt.Errorf("failed to unmarshal challenge from new peer: %s %w", resp, err)
-	}
-
-	if err := s.validateChallenges(ownChallenges, pi.ID, challengeResp.Solutions); err != nil {
-		return coordinates, err
-	}
-
-	s.cache.SetAsChallenged(pi.ID)
-	return coordinates, nil
 }
 
-type challenge = []byte
-
-func (s *discoveryService) composeChallengeRequest(challengeLevel int) ([]challenge, []event.ChallengeSample, error) {
-	if challengeLevel == 0 {
-		challengeLevel = 1
+func (s *discoveryService) getChallengeLevel(peerId warpnet.WarpPeerID) (level int) {
+	if s.nodeRepo == nil {
+		return 1
 	}
-
-	ownChalenges := make([][]byte, challengeLevel)
-	coordinates := make([]event.ChallengeSample, challengeLevel)
-	for i := 0; i < challengeLevel; i++ {
-		nonce := rand.Int64() //#nosec
-		ownChallenge, location, err := security.GenerateChallenge(root.GetCodeBase(), nonce)
-		if err != nil {
-			return nil, nil, err
-		}
-		ownChalenges[i] = ownChallenge
-		coordinates[i] = event.ChallengeSample{
-			DirStack:  location.DirStack,
-			FileStack: location.FileStack,
-			Nonce:     nonce,
-		}
+	term, err := s.nodeRepo.BlocklistTerm(peerId.String())
+	if err != nil {
+		log.Errorf("discovery: peer %s blocklist term: %s", peerId.String(), err.Error())
+		return 1
 	}
-	return ownChalenges, coordinates, nil
-}
-
-func (s *discoveryService) validateChallenges(
-	ownChallenges []challenge,
-	peerId warpnet.WarpPeerID,
-	solutions []event.ChallengeSolution) error {
-	if len(solutions) != len(ownChallenges) {
-		err := warpnet.WarpError("invalid number of solutions")
-		return fmt.Errorf("discovery: %w: %d != %d", err, len(solutions), len(ownChallenges))
+	if term != nil {
+		return int(term.Level)
 	}
-
-	for i := range solutions {
-		ownChallenge := ownChallenges[i]
-		solution := solutions[i]
-
-		challengeRespDecoded, err := hex.DecodeString(solution.Challenge)
-		if err != nil {
-			return fmt.Errorf("failed to decode challenge origin: %w", err)
-		}
-
-		if !bytes.Equal(ownChallenge, challengeRespDecoded) {
-			log.Errorf("challenge mismatch: %s != %s", hex.EncodeToString(ownChallenge), solution.Challenge)
-			return ErrChallengeMismatch
-		}
-
-		peerstorePubKey := s.node.Peerstore().PubKey(peerId)
-		if peerstorePubKey == nil {
-			err := warpnet.WarpError("public key is not found")
-			return fmt.Errorf("%w: %s", err, peerId.String())
-		}
-		if peerstorePubKey.Type() != pb.KeyType_Ed25519 {
-			return warpnet.WarpError("peer is not an Ed25519 public key")
-		}
-
-		rawPubKey, _ := peerstorePubKey.Raw()
-		if err := security.VerifySignature(rawPubKey, challengeRespDecoded, solution.Signature); err != nil {
-			log.Errorf("invalid signature: %v", err)
-			return ErrChallengeSignatureInvalid
-		}
-	}
-	return nil
+	return 1
 }
 
 func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpnet.NodeInfo, err error) {
@@ -570,6 +506,21 @@ func (s *discoveryService) requestNodeUser(pi warpnet.WarpAddrInfo, userId strin
 	user.NodeId = pi.ID.String()
 	user.RoundTripTime = elapsed.Milliseconds()
 	return user, nil
+}
+
+func (s *discoveryService) getBlockLevel(pi warpnet.WarpAddrInfo) (level int) {
+	if s.nodeRepo == nil {
+		return 1
+	}
+	term, err := s.nodeRepo.BlocklistTerm(pi.ID.String())
+	if err != nil {
+		log.Errorf("discovery: peer %s blocklist term: %s", pi.ID.String(), err.Error())
+		return 1
+	}
+	if term != nil {
+		level = int(term.Level)
+	}
+	return level
 }
 
 func (s *discoveryService) Close() {

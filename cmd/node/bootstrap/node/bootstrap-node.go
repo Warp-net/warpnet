@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
+	"github.com/Warp-net/warpnet/core/challenge"
 
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
@@ -91,7 +92,9 @@ func NewBootstrapNode(
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	discService := discovery.NewBootstrapDiscoveryService(ctx, m)
+	challenger := challenge.NewSpoofChallenger(ctx)
+
+	discService := discovery.NewBootstrapDiscoveryService(ctx, challenger, m)
 
 	pubsubService := pubsub.NewPubSubBootstrap(
 		ctx,
@@ -238,6 +241,18 @@ func (bn *BootstrapNode) Node() warpnet.P2PNode {
 		return nil
 	}
 	return bn.node.Node()
+}
+
+func (bn *BootstrapNode) SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {
+	bn.node.Prioritizer().SetPriority(pid, r)
+}
+
+func (bn *BootstrapNode) SetMaxNodePriority(pid warpnet.WarpPeerID) {
+	bn.node.Prioritizer().SetMaxPriority(pid)
+}
+
+func (bn *BootstrapNode) SetMinNodePriority(pid warpnet.WarpPeerID) {
+	bn.node.Prioritizer().SetMinPriority(pid)
 }
 
 func (bn *BootstrapNode) Peerstore() warpnet.WarpPeerstore {
