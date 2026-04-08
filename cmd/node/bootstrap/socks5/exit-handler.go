@@ -109,7 +109,7 @@ func dialAvailable() (_ net.Conn, err error) {
 		}
 		return conn, nil
 	}
-	log.Errorf("failed to dial telegram connection: %v", err)
+	log.Debugf("failed to dial telegram connection: %v", err)
 	return nil, ErrTelegramUnreachable
 }
 
