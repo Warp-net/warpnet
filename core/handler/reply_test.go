@@ -15,10 +15,10 @@ import (
 )
 
 type stubReplyRepo struct {
-	getReplyFn      func(rootID, replyID string) (domain.Tweet, error)
+	getReplyFn       func(rootID, replyID string) (domain.Tweet, error)
 	getRepliesTreeFn func(rootID, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error)
-	addReplyFn      func(reply domain.Tweet) (domain.Tweet, error)
-	deleteReplyFn   func(rootID, parentID, replyID string) error
+	addReplyFn       func(reply domain.Tweet) (domain.Tweet, error)
+	deleteReplyFn    func(rootID, parentID, replyID string) error
 }
 
 func (s stubReplyRepo) GetReply(rootID, replyID string) (domain.Tweet, error) {
@@ -343,4 +343,3 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}
 	})
 }
-

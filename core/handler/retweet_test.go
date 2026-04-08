@@ -33,11 +33,11 @@ func (s stubRetweetUserRepo) Get(userId string) (domain.User, error) {
 }
 
 type stubReTweetRepo struct {
-	getFn            func(userID, tweetID string) (domain.Tweet, error)
-	newRetweetFn     func(tweet domain.Tweet) (domain.Tweet, error)
-	unRetweetFn      func(retweetedByUserID, tweetId string) error
-	retweetsCountFn  func(tweetId string) (uint64, error)
-	retweetersFn     func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
+	getFn           func(userID, tweetID string) (domain.Tweet, error)
+	newRetweetFn    func(tweet domain.Tweet) (domain.Tweet, error)
+	unRetweetFn     func(retweetedByUserID, tweetId string) error
+	retweetsCountFn func(tweetId string) (uint64, error)
+	retweetersFn    func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 func (s stubReTweetRepo) Get(userID, tweetID string) (domain.Tweet, error) {
