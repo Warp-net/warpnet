@@ -27,6 +27,7 @@ package security
 import (
 	"bytes"
 	"crypto/x509"
+	"errors"
 	"net"
 	"sync"
 	"testing"
@@ -373,6 +374,24 @@ func TestCamouflageConn_EmptyWrite(t *testing.T) {
 	assert.Equal(t, 0, n)
 
 	_ = clientConn.Close()
+}
+
+func TestCamouflageConn_HandshakeErrorIsTemporary(t *testing.T) {
+	clientRaw, serverRaw := newPipePair()
+	_ = clientRaw.Close() // force server handshake to fail immediately
+
+	cfg := testCamoConfig("example.com")
+	cfg.handshakeTimeout = 50 * time.Millisecond
+
+	_, err := NewCamouflageConn(serverRaw, false, cfg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errHandshakeFailed)
+
+	var netErr interface {
+		Temporary() bool
+	}
+	require.True(t, errors.As(err, &netErr))
+	assert.True(t, netErr.Temporary())
 }
 
 type recordingConn struct {

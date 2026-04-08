@@ -67,6 +67,17 @@ var (
 	errALPNMismatch    = errors.New("dpi: ALPN protocol not in allowed set")
 )
 
+// temporaryHandshakeError marks handshake failures as temporary so listener
+// accept loops treat probe failures as transient and keep running.
+type temporaryHandshakeError struct {
+	err error
+}
+
+func (e *temporaryHandshakeError) Error() string   { return e.err.Error() }
+func (e *temporaryHandshakeError) Unwrap() error   { return e.err }
+func (e *temporaryHandshakeError) Temporary() bool { return true }
+func (e *temporaryHandshakeError) Timeout() bool   { return false }
+
 // CamouflageConfig holds the TLS camouflage settings shared by all
 // connections created by a single SpoofTransport instance.
 type CamouflageConfig struct {
@@ -156,7 +167,9 @@ func NewCamouflageConn(conn manet.Conn, isClient bool, cfg *CamouflageConfig) (*
 		tlsConn, err = serverTLSHandshake(conn, cfg)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", errHandshakeFailed, err.Error())
+		return nil, &temporaryHandshakeError{
+			err: fmt.Errorf("%w: %s", errHandshakeFailed, err.Error()),
+		}
 	}
 
 	// Clear the handshake deadline so subsequent I/O is not constrained.
