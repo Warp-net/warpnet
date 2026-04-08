@@ -394,6 +394,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 			peer.Source, pi.ID.String(),
 		)
 		s.node.Peerstore().RemovePeer(pi.ID)
+		s.node.SetMinNodePriority(pi.ID)
 		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
