@@ -36,7 +36,11 @@ func init() {
 		_ = conn.Close()
 		alive = append(alive, addr)
 	}
+	log.Infof("Telegram DCs alive: %v", alive)
 
+	if len(alive) == 0 {
+		alive = append(alive, telegramDCs[0])
+	}
 	telegramDCs = alive
 }
 
@@ -112,7 +116,7 @@ func dialAvailable() (_ net.Conn, err error) {
 func dial(addr string) (net.Conn, error) {
 	conn, err := net.DialTimeout("tcp", addr, 10*time.Second) // nolint: noctx
 	if err != nil {
-		log.Errorf("failed to dial telegram connection: %v, addr=[%s]", err, addr)
+		log.Debugf("failed to dial telegram connection: %v, addr=[%s]", err, addr)
 		return nil, ErrTelegramUnreachable
 	}
 	if tcpConnection, ok := conn.(*net.TCPConn); ok {
