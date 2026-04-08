@@ -332,7 +332,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 }
 
 // Handler for deleting a message
-func StreamDeleteMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer ChatStreamer) warpnet.WarpHandlerFunc {
+func StreamDeleteMessageHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteMessageEvent
 		err := json.Unmarshal(buf, &ev)
@@ -347,55 +347,13 @@ func StreamDeleteMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, strea
 			return nil, err
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
+		ownerId := authRepo.GetOwner().UserId
 		isMeParticipating := chat.OwnerId == ownerId || chat.OtherUserId == ownerId
 		if !isMeParticipating {
 			return nil, warpnet.WarpError("not authorized for this chat")
 		}
 
-		if err := repo.DeleteMessage(ev.ChatId, ev.Id); err != nil {
-			return nil, err
-		}
-
-		otherUserId := chat.OtherUserId
-		if chat.OtherUserId == ownerId {
-			otherUserId = chat.OwnerId
-		}
-
-		if otherUserId == ownerId {
-			return event.Accepted, nil
-		}
-
-		otherUser, err := userRepo.Get(otherUserId)
-		if errors.Is(err, database.ErrUserNotFound) {
-			return event.Accepted, nil
-		}
-		if err != nil {
-			return event.Accepted, nil
-		}
-
-		deleteMsgData, err := streamer.GenericStream(
-			otherUser.NodeId,
-			event.PUBLIC_DELETE_MESSAGE,
-			event.DeleteMessageEvent{
-				ChatId: ev.ChatId,
-				Id:     ev.Id,
-			},
-		)
-		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return event.Accepted, nil
-		}
-		if err != nil {
-			log.Errorf("delete message: stream: %v", err)
-			return event.Accepted, nil
-		}
-
-		var possibleError event.ResponseError
-		if _ = json.Unmarshal(deleteMsgData, &possibleError); possibleError.Message != "" {
-			log.Errorf("delete message: unmarshal other error response: %s", possibleError.Message)
-		}
-
-		return event.Accepted, nil
+		return event.Accepted, repo.DeleteMessage(ev.ChatId, ev.Id)
 	}
 }
 
