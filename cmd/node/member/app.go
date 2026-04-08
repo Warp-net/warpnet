@@ -132,9 +132,14 @@ func (a *App) runNode(network string, psk security.PSK) {
 		log.Infoln("database authentication passed")
 	}
 
+	ownNodeId, err := warpnet.IDFromPublicKey(a.auth.PrivateKey().Public().(ed25519.PublicKey))
+	if err != nil {
+		log.Fatalf("failed to get current node ID: %v", err)
+	}
+
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Gateway,
-		"",
+		ownNodeId.String(),
 		network,
 	)
 
@@ -143,6 +148,7 @@ func (a *App) runNode(network string, psk security.PSK) {
 		a.ctx,
 		a.auth.PrivateKey(),
 		psk,
+		ownNodeId,
 		a.codeHashHex,
 		config.Config().Version,
 		a.auth.Storage(),
@@ -166,7 +172,6 @@ func (a *App) runNode(network string, psk security.PSK) {
 		log.Errorf("failed to start member node: %v \n", err)
 		return
 	}
-	m.SetNodeId(a.node.NodeInfo().ID.String())
 
 	// report to auth handler - Node set up and running
 	serverNodeAuthInfo.Identity.Owner.NodeId = a.node.NodeInfo().ID.String()

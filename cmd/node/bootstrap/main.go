@@ -92,14 +92,14 @@ func main() {
 		return
 	}
 
-	peerID, _ := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
+	nodeId, _ := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Gateway,
+		nodeId.String(),
 		network,
-		peerID.String(),
 	)
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex, m)
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, nodeId, codeHashHex, m)
 	if err != nil {
 		log.Errorf("failed to init bootstrap node: %v", err)
 		return

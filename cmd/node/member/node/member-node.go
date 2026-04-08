@@ -86,6 +86,7 @@ func NewMemberNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
+	ownNodeId warpnet.WarpPeerID,
 	selfHashHex string,
 	version *semver.Version,
 	authRepo AuthProvider,
@@ -147,11 +148,6 @@ func NewMemberNode(
 		_, _ = userRepo.Update(mastodonPseudoNode.DefaultUser().Id, mastodonPseudoNode.DefaultUser())
 	}
 
-	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
-	if err != nil {
-		return nil, err
-	}
-
 	opts := []warpnet.WarpOption{ //nolint:prealloc
 		node.WarpIdentity(privKey),
 		libp2p.Peerstore(store),
@@ -161,7 +157,7 @@ func NewMemberNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
+		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
 	}
 
 	opts = append(opts, node.CommonOptions...)

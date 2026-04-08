@@ -50,9 +50,7 @@ import (
 )
 
 const (
-	mastodonServer = "https://mastodon.social"
-	// pk, _ = security.GenerateKeyFromSeed([]byte(mastodonServer))
-	// mastodonPseudoPeerID, _ := warpnet.IDFromPublicKey(pk.Public().(ed25519.PublicKey))
+	mastodonServer       = "https://mastodon.social"
 	mastodonPseudoPeerID = "12D3KooWDfpE8bR2iBjEMMe7gTVwEiahF9duFxETLHq3N6en9hsG" //#nosec
 	mastodonPseudoMaddr  = "/dns4/mastodon.social/tcp/443"
 

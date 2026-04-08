@@ -86,6 +86,7 @@ func NewBootstrapNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
+	ownNodeId warpnet.WarpPeerID,
 	selfHashHex string,
 	m MetricsOnlinePusher,
 ) (_ *BootstrapNode, err error) {
@@ -125,11 +126,6 @@ func NewBootstrapNode(
 		dht.Network(config.Config().Node.Network),
 	)
 
-	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
-	if err != nil {
-		return nil, err
-	}
-
 	// WebRTC and QUIC don't support private networks yet
 	opts := []warpnet.WarpOption{ //nolint:prealloc
 		node.WarpIdentity(privKey),
@@ -140,7 +136,7 @@ func NewBootstrapNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
+		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
 	}
 	opts = append(opts, node.CommonOptions...)
 

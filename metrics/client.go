@@ -46,7 +46,7 @@ type MetricsClient struct {
 	pusher *push.Pusher
 }
 
-func NewMetricsClient(pushGatewayURL string, nodeId, network string) *MetricsClient {
+func NewMetricsClient(pushGatewayURL, ownNodeId, network string) *MetricsClient {
 	if network == "" {
 		log.Fatalf("metrics: network is empty")
 	}
@@ -59,7 +59,7 @@ func NewMetricsClient(pushGatewayURL string, nodeId, network string) *MetricsCli
 			Name: "node_online_status",
 			Help: "1 if node is online, 0 otherwise",
 		},
-		[]string{"node_id"},
+		[]string{"peer_id"},
 	)
 
 	socksGauge := prometheus.NewGaugeVec(
@@ -67,11 +67,11 @@ func NewMetricsClient(pushGatewayURL string, nodeId, network string) *MetricsCli
 			Name: "socks_active_connections",
 			Help: "Current number of active SOCKS5 connections",
 		},
-		[]string{"node_id", "ip"},
+		[]string{"peer_id", "ip"},
 	)
 	pusher := push.New(pushGatewayURL, "warpnet_node").
 		Grouping("network", network).
-		Grouping("node_id", nodeId).
+		Grouping("node_id", ownNodeId).
 		Collector(onlineGauge).
 		Collector(socksGauge)
 
@@ -85,39 +85,36 @@ func NewMetricsClient(pushGatewayURL string, nodeId, network string) *MetricsCli
 	}
 }
 
-func (c *MetricsClient) SetNodeId(nodeId string) {
+func (c *MetricsClient) PushStatusOnline(peerId string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	c.pusher = push.New(c.pushGatewayURL, "warpnet_node").
-		Grouping("network", c.network).
-		Grouping("node_id", nodeId).
-		Collector(c.onlineGauge).
-		Collector(c.socksGauge)
-}
-func (c *MetricsClient) PushStatusOnline(nodeId string) {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-	c.onlineGauge.WithLabelValues(nodeId).Set(1)
-	_ = c.pusher.Push()
+	c.onlineGauge.WithLabelValues(peerId).Set(1)
+	logPushResult(c.pusher.Push())
 }
 
-func (c *MetricsClient) PushStatusOffline(nodeId string) {
+func (c *MetricsClient) PushStatusOffline(peerId string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	c.onlineGauge.WithLabelValues(nodeId).Set(0)
-	_ = c.pusher.Push()
+	c.onlineGauge.WithLabelValues(peerId).Set(0)
+	logPushResult(c.pusher.Push())
 }
 
-func (c *MetricsClient) PushSocksConnections(nodeId, ip string) {
+func (c *MetricsClient) PushSocksConnections(peerId, ip string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	c.socksGauge.WithLabelValues(nodeId, ip).Set(1)
-	_ = c.pusher.Push()
+	c.socksGauge.WithLabelValues(peerId, ip).Set(1)
+	logPushResult(c.pusher.Push())
 }
 
-func (c *MetricsClient) RemoveSocksConnections(nodeId, ip string) {
+func (c *MetricsClient) RemoveSocksConnections(peerId, ip string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	c.socksGauge.DeleteLabelValues(nodeId, ip)
-	_ = c.pusher.Push()
+	c.socksGauge.DeleteLabelValues(peerId, ip)
+	logPushResult(c.pusher.Push())
+}
+
+func logPushResult(err error) {
+	if err != nil {
+		log.Errorf("metrics push result: %v", err)
+	}
 }

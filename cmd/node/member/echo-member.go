@@ -108,9 +108,10 @@ func main() {
 
 	authInfo := <-readyChan
 
+	nodeId, _ := warpnet.IDFromPublicKey(authRepo.PrivateKey().Public().(ed25519.PublicKey))
 	m := metrics.NewMetricsClient(
 		config.Config().Node.Metrics.Gateway,
-		"",
+		nodeId.String(),
 		config.Config().Node.Network,
 	)
 
@@ -118,6 +119,7 @@ func main() {
 		ctx,
 		authRepo.PrivateKey(),
 		psk,
+		nodeId,
 		"echo",
 		config.Config().Version,
 		authRepo,
@@ -134,7 +136,6 @@ func main() {
 		log.Fatalf("failed to start member node: %v", err)
 	}
 
-	m.SetNodeId(echoNode.NodeInfo().ID.String())
 	authInfo.Identity.Owner.NodeId = echoNode.NodeInfo().ID.String()
 	authInfo.NodeInfo = echoNode.NodeInfo()
 
