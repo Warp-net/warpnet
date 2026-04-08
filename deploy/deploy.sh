@@ -33,12 +33,12 @@ if [ "$MAINNET" = "true" ]; then
     mkdir -p /root/mainnet
     mv docker-compose-mainnet.yml mainnet/docker-compose-mainnet.yml
     docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml down --remove-orphans
-    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml up -d --force-recreate
+    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml up -d --build
 else
     echo "Mainnet is disabled"
     mkdir -p /root/testnet
     mv docker-compose-testnet.yml testnet/docker-compose-testnet.yml
     docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down --remove-orphans
-    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --force-recreate
+    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --build
 fi
 docker image prune --force

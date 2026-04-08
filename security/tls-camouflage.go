@@ -169,6 +169,7 @@ func NewCamouflageConn(conn manet.Conn, isClient bool, cfg *CamouflageConfig) (*
 	}
 	if err != nil {
 		log.Errorf("dpi: %v: %s", errHandshakeFailed, err.Error())
+		// it's not a TLS
 		return &CamouflageConn{tlsConn: conn, rawConn: conn}, nil
 	}
 
