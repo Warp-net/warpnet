@@ -76,3 +76,39 @@ func TestStreamChallengeHandler_Success(t *testing.T) {
 		fmt.Println("challenge verified")
 	}
 }
+
+func TestStreamChallengeHandler_OutOfBoundsSampleFallback(t *testing.T) {
+	privKey, err := security.GenerateKeyFromSeed([]byte("test"))
+	if err != nil {
+		t.Fatalf("failed to generate key: %v", err)
+	}
+
+	ev := event.ChallengeEvent{[]event.ChallengeSample{{
+		DirStack:  []int{},
+		FileStack: []int{9999, 0, 0, 1},
+		Nonce:     42,
+	}}}
+
+	bt, err := json.Marshal(ev)
+	if err != nil {
+		t.Fatalf("failed to marshal challenge: %v", err)
+	}
+
+	resp, err := StreamChallengeHandler(root.GetCodeBase(), privKey)(bt, nil)
+	if err != nil {
+		t.Fatalf("challenge handler should not fail on out-of-bounds sample: %v", err)
+	}
+
+	challengeResp, ok := resp.(event.ChallengeResponse)
+	if !ok {
+		t.Fatalf("challenge handler returned unexpected response")
+	}
+	if len(challengeResp.Solutions) != 1 {
+		t.Fatalf("expected one solution, got %d", len(challengeResp.Solutions))
+	}
+
+	expected := hex.EncodeToString(security.ConvertToSHA256([]byte("42")))
+	if challengeResp.Solutions[0].Challenge != expected {
+		t.Fatalf("fallback challenge mismatch: %s != %s", challengeResp.Solutions[0].Challenge, expected)
+	}
+}

@@ -30,7 +30,9 @@ package handler
 import (
 	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
 	"io/fs"
+	"strconv"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -68,7 +70,13 @@ func StreamChallengeHandler(fs FileSystem, privateKey ed25519.PrivateKey) warpne
 				xy.Nonce,
 			)
 			if err != nil {
-				return nil, err
+				if errors.Is(err, security.ErrSampleIndexOutOfBounds) ||
+					errors.Is(err, security.ErrInvalidStackSize) ||
+					errors.Is(err, security.ErrInvalidSubstringBounds) {
+					challenge = security.ConvertToSHA256([]byte(strconv.FormatInt(xy.Nonce, 10)))
+				} else {
+					return nil, err
+				}
 			}
 
 			solutions[i] = event.ChallengeSolution{
