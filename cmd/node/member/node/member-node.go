@@ -493,8 +493,8 @@ func (m *MemberNode) setupHandlers(
 				handler.StreamNewMessageHandler(chatRepo, userRepo, m),
 			},
 			{
-				event.PRIVATE_DELETE_MESSAGE,
-				handler.StreamDeleteMessageHandler(chatRepo, authRepo),
+				event.PUBLIC_DELETE_MESSAGE,
+				handler.StreamDeleteMessageHandler(chatRepo, userRepo, m),
 			},
 			{
 				event.PRIVATE_GET_MESSAGE,
