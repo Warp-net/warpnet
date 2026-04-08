@@ -80,11 +80,13 @@ jobs:
 
       - name: Upload coverage data to Codecov
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
-         token: ${{ secrets.CODECOV_TOKEN }}
-         file: ./coverage.out
-         name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.out
+          name: codecov-umbrella
+          slug: Warp-net/warpnet
+          fail_ci_if_error: true
 
       - name: Calculate coverage
         if: ${{ github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest' }}
@@ -92,4 +94,3 @@ jobs:
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
-
