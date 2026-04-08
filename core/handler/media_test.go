@@ -75,6 +75,15 @@ func TestUploadMultipleImages_Success(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestUploadImage_NoImages(t *testing.T) {
+	ev := event.UploadImageEvent{}
+	bt, err := json.Marshal(ev)
+	assert.NoError(t, err)
+
+	_, err = StreamUploadImageHandler(n{}, m{}, u{})(bt, s{})
+	assert.ErrorIs(t, err, ErrNoImagesProvided)
+}
+
 const (
 	testMetaTag   = imageDescriptionTag
 	testMetaValue = "test meta value"

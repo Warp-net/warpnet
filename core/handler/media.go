@@ -80,6 +80,7 @@ const (
 	ErrTooLargeImage          warpnet.WarpError = "image is too large"
 	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 image data"
 	ErrEmptyImageKey          warpnet.WarpError = "empty image key"
+	ErrNoImagesProvided       warpnet.WarpError = "at least one image must be provided"
 	ErrInvalidEXIF            warpnet.WarpError = "invalid exif type: not a segment list"
 )
 
@@ -109,6 +110,17 @@ func StreamUploadImageHandler(
 		}
 
 		images := [4]string{ev.Image1, ev.Image2, ev.Image3, ev.Image4}
+
+		hasImages := false
+		for _, img := range images {
+			if img != "" {
+				hasImages = true
+				break
+			}
+		}
+		if !hasImages {
+			return nil, ErrNoImagesProvided
+		}
 
 		nodeInfo := info.NodeInfo()
 		ownerUser, err := userRepo.Get(nodeInfo.OwnerId)
