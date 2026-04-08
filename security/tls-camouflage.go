@@ -57,6 +57,7 @@ const (
 	BrowserEdge    = "edge"
 	BrowserIOS     = "ios"
 	BrowserAndroid = "android"
+	BrowserYandex  = "yandex"
 )
 
 var defaultALPNProtos = []string{"h2", "http/1.1"}
@@ -167,9 +168,8 @@ func NewCamouflageConn(conn manet.Conn, isClient bool, cfg *CamouflageConfig) (*
 		tlsConn, err = serverTLSHandshake(conn, cfg)
 	}
 	if err != nil {
-		return nil, &temporaryHandshakeError{
-			err: fmt.Errorf("%w: %s", errHandshakeFailed, err.Error()),
-		}
+		log.Errorf("dpi: %v: %s", errHandshakeFailed, err.Error())
+		return &CamouflageConn{tlsConn: conn, rawConn: conn}, nil
 	}
 
 	// Clear the handshake deadline so subsequent I/O is not constrained.
@@ -251,6 +251,8 @@ func browserToHelloID(browser string) utls.ClientHelloID {
 	switch browser {
 	case BrowserChrome:
 		return utls.HelloChrome_Auto
+	case BrowserYandex:
+		return utls.HelloChrome_Auto
 	case BrowserFirefox:
 		return utls.HelloFirefox_Auto
 	case BrowserSafari:
@@ -262,7 +264,7 @@ func browserToHelloID(browser string) utls.ClientHelloID {
 	case BrowserAndroid:
 		return utls.HelloAndroid_11_OkHttp
 	default:
-		return utls.HelloChrome_Auto
+		return utls.HelloRandomized
 	}
 }
 
