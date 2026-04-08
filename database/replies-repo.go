@@ -71,7 +71,7 @@ func NewRepliesRepo(db ReplyStorer, statsDb ReplyStatsStorer) *ReplyRepo {
 }
 
 func (repo *ReplyRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
-	if reply == (domain.Tweet{}) {
+	if reply.UserId == "" && reply.Text == "" {
 		return reply, local_store.DBError("empty reply")
 	}
 	if reply.RootId == "" {

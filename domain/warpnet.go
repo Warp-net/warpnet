@@ -115,7 +115,7 @@ type Tweet struct {
 	Text        string           `json:"text"`
 	UserId      string           `json:"user_id"`
 	Username    string           `json:"username"`
-	ImageKey    string           `json:"image_key"`
+	ImageKeys   []string         `json:"image_keys,omitempty"`
 	Network     string           `json:"network"`
 	Moderation  *TweetModeration `json:"moderation,omitempty"`
 }
