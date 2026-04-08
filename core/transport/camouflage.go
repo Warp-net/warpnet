@@ -30,7 +30,6 @@ package transport
 import (
 	"context"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/security"
@@ -379,11 +378,8 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 			if scope != nil {
 				scope.Done()
 			}
-			if isTransientAcceptError(err) {
-				log.Debugf("dpi: transient accept error ignored: %v", err)
-				continue
-			}
-			return nil, nil, err
+			log.Errorf("dpi: transient accept: %v", err)
+			continue
 		}
 
 		setLinger(conn, 0)
@@ -406,15 +402,6 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 
 		return camouflaged, scope, nil
 	}
-}
-
-func isTransientAcceptError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "dpi: TLS handshake failed") ||
-		strings.Contains(msg, "first record does not look like a TLS handshake")
 }
 
 func setLinger(conn net.Conn, sec int) {
@@ -441,20 +428,20 @@ type (
 func tryKeepAlive(conn net.Conn, enabled bool) {
 	if c, ok := conn.(fullKeepAlive); ok {
 		if err := c.SetKeepAlive(enabled); err != nil {
-			log.Errorf("error enabling TCP keepalive: %v", err)
+			log.Errorf("dpi: enabling TCP keepalive: %v", err)
 			return
 		}
 		if !enabled {
 			return
 		}
 		if err := c.SetKeepAlivePeriod(30 * time.Second); err != nil {
-			log.Errorf("error setting TCP keepalive period: %v", err)
+			log.Errorf("dpi: setting TCP keepalive period: %v", err)
 		}
 		return
 	}
 	if c, ok := conn.(basicKeepAlive); ok {
 		if err := c.SetKeepAlive(enabled); err != nil {
-			log.Errorf("error enabling TCP keepalive (no period support): %v", err)
+			log.Errorf("dpi: enabling TCP keepalive (no period support): %v", err)
 		}
 	}
 }
