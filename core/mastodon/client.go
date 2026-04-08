@@ -422,7 +422,7 @@ func (m *warpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			tootUserId = string(originalTweet.Account.ID)
 		}
 
-		resp.Tweets = append(resp.Tweets, domain.Tweet{
+		t := domain.Tweet{
 			CreatedAt:   toot.CreatedAt,
 			Id:          tweetId,
 			ParentId:    &parentId,
@@ -431,9 +431,12 @@ func (m *warpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			Text:        content,
 			UserId:      tootUserId,
 			Username:    username,
-			ImageKey:    imageKey,
 			Network:     MastodonNetwork,
-		})
+		}
+		if imageKey != "" {
+			t.ImageKeys = []string{imageKey}
+		}
+		resp.Tweets = append(resp.Tweets, t)
 	}
 
 	return resp, nil
@@ -488,8 +491,10 @@ func (m *warpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		Text:        content,
 		UserId:      userId,
 		Username:    username,
-		ImageKey:    imageKey,
 		Network:     MastodonNetwork,
+	}
+	if imageKey != "" {
+		tweet.ImageKeys = []string{imageKey}
 	}
 	return tweet, nil
 }
@@ -571,8 +576,10 @@ func (m *warpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 			Text:        stripper.StripTags(status.Content),
 			UserId:      string(status.Account.ID),
 			Username:    status.Account.DisplayName,
-			ImageKey:    imageKey,
 			Network:     MastodonNetwork,
+		}
+		if imageKey != "" {
+			tweet.ImageKeys = []string{imageKey}
 		}
 		resp.Replies = append(resp.Replies, domain.ReplyNode{Reply: tweet})
 	}
