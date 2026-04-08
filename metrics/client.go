@@ -88,28 +88,36 @@ func NewMetricsClient(pushGatewayURL string, nodeId, network string) *MetricsCli
 func (c *MetricsClient) SetNodeId(nodeId string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	c.pusher = c.pusher.Grouping("node_id", nodeId)
+	c.pusher = push.New(c.pushGatewayURL, "warpnet_node").
+		Grouping("network", c.network).
+		Grouping("node_id", nodeId).
+		Collector(c.onlineGauge).
+		Collector(c.socksGauge)
 }
 func (c *MetricsClient) PushStatusOnline(nodeId string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.onlineGauge.WithLabelValues(nodeId).Set(1)
+	_ = c.pusher.Push()
 }
 
 func (c *MetricsClient) PushStatusOffline(nodeId string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.onlineGauge.WithLabelValues(nodeId).Set(0)
+	_ = c.pusher.Push()
 }
 
 func (c *MetricsClient) PushSocksConnections(nodeId, ip string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.socksGauge.WithLabelValues(nodeId, ip).Set(1)
+	_ = c.pusher.Push()
 }
 
 func (c *MetricsClient) RemoveSocksConnections(nodeId, ip string) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.socksGauge.DeleteLabelValues(nodeId, ip)
+	_ = c.pusher.Push()
 }
