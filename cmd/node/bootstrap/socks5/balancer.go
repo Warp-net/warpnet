@@ -136,11 +136,13 @@ func (b *socksBalancer) detectSuitablePeers(ctx context.Context) {
 		}
 		if p2pNet.Connectedness(peer) == network.NotConnected {
 			if err := b.streamer.SimpleConnect(p2pStore.PeerInfo(peer)); err != nil {
+				b.removePeer(peer)
 				continue
 			}
 		}
 		protocols, _ := p2pStore.GetProtocols(peer)
 		if len(protocols) == 0 || !slices.Contains(protocols, DefaultStreamProtocol) {
+			b.removePeer(peer)
 			continue
 		}
 
@@ -184,6 +186,16 @@ func (b *socksBalancer) detectSuitablePeers(ctx context.Context) {
 		b.peersWithLatency[peer.String()] = key
 
 		b.mx.Unlock()
+	}
+}
+
+func (b *socksBalancer) removePeer(peer warpnet.WarpPeerID) {
+	b.mx.Lock()
+	defer b.mx.Unlock()
+
+	if prevKey, ok := b.peersWithLatency[peer.String()]; ok {
+		b.exitList.Remove(prevKey)
+		delete(b.peersWithLatency, peer.String())
 	}
 }
 
