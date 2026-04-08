@@ -357,11 +357,17 @@ type UsersResponse struct {
 
 type UploadImageEvent struct {
 	// Image mime type + "," + base64
-	File string `json:"file"`
+	Image1 string `json:"image1"`
+	Image2 string `json:"image2"`
+	Image3 string `json:"image3"`
+	Image4 string `json:"image4"`
 }
 
 type UploadImageResponse struct {
-	Key string `json:"key"`
+	Key1 string `json:"key1"`
+	Key2 string `json:"key2"`
+	Key3 string `json:"key3"`
+	Key4 string `json:"key4"`
 }
 
 type GetImageEvent struct {

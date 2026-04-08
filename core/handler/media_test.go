@@ -52,7 +52,21 @@ const testImagePNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYA
 
 func TestUploadImage_Success(t *testing.T) {
 	ev := event.UploadImageEvent{
-		File: testImagePNG,
+		Image1: testImagePNG,
+	}
+	bt, err := json.Marshal(ev)
+	assert.NoError(t, err)
+
+	_, err = StreamUploadImageHandler(n{}, m{}, u{})(bt, s{})
+	assert.NoError(t, err)
+}
+
+func TestUploadMultipleImages_Success(t *testing.T) {
+	ev := event.UploadImageEvent{
+		Image1: testImagePNG,
+		Image2: testImagePNG,
+		Image3: testImagePNG,
+		Image4: testImagePNG,
 	}
 	bt, err := json.Marshal(ev)
 	assert.NoError(t, err)
