@@ -433,7 +433,7 @@ func (m *warpnetMastodonPseudoNode) getTweetsHandler(userId string, cursor *stri
 			Text:        content,
 			UserId:      tootUserId,
 			Username:    username,
-			ImageKey:    imageKey,
+			ImageKeys:   []string{imageKey},
 			Network:     MastodonNetwork,
 		})
 	}
@@ -490,7 +490,7 @@ func (m *warpnetMastodonPseudoNode) getTweetHandler(tweetId string) (domain.Twee
 		Text:        content,
 		UserId:      userId,
 		Username:    username,
-		ImageKey:    imageKey,
+		ImageKeys:   []string{imageKey},
 		Network:     MastodonNetwork,
 	}
 	return tweet, nil
@@ -573,7 +573,7 @@ func (m *warpnetMastodonPseudoNode) getRepliesHandler(tweetId string) (event.Rep
 			Text:        stripper.StripTags(status.Content),
 			UserId:      string(status.Account.ID),
 			Username:    status.Account.DisplayName,
-			ImageKey:    imageKey,
+			ImageKeys:   []string{imageKey},
 			Network:     MastodonNetwork,
 		}
 		resp.Replies = append(resp.Replies, domain.ReplyNode{Reply: tweet})

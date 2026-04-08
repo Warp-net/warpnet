@@ -132,7 +132,6 @@ func StreamNewTweetHandler(
 				Text:      tweet.Text,
 				UserId:    tweet.UserId,
 				Username:  tweet.Username,
-				ImageKey:  tweet.ImageKey,
 				ImageKeys: tweet.ImageKeys,
 			}
 			bt, _ := json.Marshal(respTweetEvent)
