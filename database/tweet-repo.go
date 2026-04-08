@@ -118,7 +118,7 @@ func (repo *TweetRepo) IsBlocklisted(tweetId string) bool {
 }
 
 func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
-	if tweet == (domain.Tweet{}) {
+	if tweet.UserId == "" && tweet.Text == "" {
 		return tweet, local.DBError("nil tweet")
 	}
 	if tweet.Id == "" {

@@ -133,6 +133,7 @@ func StreamNewTweetHandler(
 				UserId:    tweet.UserId,
 				Username:  tweet.Username,
 				ImageKey:  tweet.ImageKey,
+				ImageKeys: tweet.ImageKeys,
 			}
 			bt, _ := json.Marshal(respTweetEvent)
 			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
