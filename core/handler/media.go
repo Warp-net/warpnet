@@ -80,6 +80,7 @@ const (
 	ErrTooLargeImage          warpnet.WarpError = "image is too large"
 	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 image data"
 	ErrEmptyImageKey          warpnet.WarpError = "empty image key"
+	ErrNoImagesProvided       warpnet.WarpError = "at least one image must be provided"
 	ErrInvalidEXIF            warpnet.WarpError = "invalid exif type: not a segment list"
 )
 
@@ -108,34 +109,17 @@ func StreamUploadImageHandler(
 			return nil, err
 		}
 
-		parts := strings.SplitN(ev.File, ",", 2) //nolint:mnd
-		if len(parts) != 2 {                     //nolint:mnd
-			return nil, ErrInvalidBase64Signature
-		}
+		images := [4]string{ev.Image1, ev.Image2, ev.Image3, ev.Image4}
 
-		imgBytes, err := base64.StdEncoding.DecodeString(parts[1])
-		if err != nil {
-			return nil, fmt.Errorf("upload: base64 decoding: %w", err)
+		hasImages := false
+		for _, img := range images {
+			if img != "" {
+				hasImages = true
+				break
+			}
 		}
-
-		if size := binary.Size(imgBytes); size > units.MiB*50 {
-			return nil, ErrTooLargeImage
-		}
-
-		img, _, err := image.Decode(bytes.NewReader(imgBytes))
-		if errors.Is(err, image.ErrFormat) {
-			return nil, warpnet.WarpError(
-				"invalid image format: PNG, JPG, JPEG, GIF are only allowed", // TODO add more types
-			)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("upload: image decoding: %w", err)
-		}
-
-		var imageBuf bytes.Buffer
-		err = jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100}) //nolint:mnd
-		if err != nil {
-			return nil, fmt.Errorf("upload: JPEG encoding: %w", err)
+		if !hasImages {
+			return nil, ErrNoImagesProvided
 		}
 
 		nodeInfo := info.NodeInfo()
@@ -160,20 +144,77 @@ func StreamUploadImageHandler(
 			return nil, fmt.Errorf("upload: AES encrypting: %w", err)
 		}
 
-		amendedImg, err := amendExifMetadata(imageBuf.Bytes(), encryptedMeta)
-		if err != nil {
-			return nil, fmt.Errorf("upload: meta data amending: %w", err)
+		var keys [4]string
+		for i, file := range images {
+			if file == "" {
+				continue
+			}
+
+			key, err := processAndStoreImage(file, encryptedMeta, ownerUser.Id, mediaRepo)
+			if err != nil {
+				return nil, fmt.Errorf("upload: image%d: %w", i+1, err)
+			}
+			keys[i] = key
 		}
 
-		encoded := base64.StdEncoding.EncodeToString(amendedImg)
-
-		key, err := mediaRepo.SetImage(ownerUser.Id, database.Base64Image(imagePrefix+encoded))
-		if err != nil {
-			return nil, fmt.Errorf("upload: storing media: %w", err)
-		}
-
-		return event.UploadImageResponse{Key: string(key)}, nil
+		return event.UploadImageResponse{
+			Key1: keys[0],
+			Key2: keys[1],
+			Key3: keys[2],
+			Key4: keys[3],
+		}, nil
 	}
+}
+
+func processAndStoreImage(
+	file string,
+	encryptedMeta []byte,
+	userId string,
+	mediaRepo MediaStorer,
+) (string, error) {
+	parts := strings.SplitN(file, ",", 2) //nolint:mnd
+	if len(parts) != 2 {                  //nolint:mnd
+		return "", ErrInvalidBase64Signature
+	}
+
+	imgBytes, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("base64 decoding: %w", err)
+	}
+
+	if size := binary.Size(imgBytes); size > units.MiB*50 {
+		return "", ErrTooLargeImage
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgBytes))
+	if errors.Is(err, image.ErrFormat) {
+		return "", warpnet.WarpError(
+			"invalid image format: PNG, JPG, JPEG, GIF are only allowed", // TODO add more types
+		)
+	}
+	if err != nil {
+		return "", fmt.Errorf("image decoding: %w", err)
+	}
+
+	var imageBuf bytes.Buffer
+	err = jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100}) //nolint:mnd
+	if err != nil {
+		return "", fmt.Errorf("JPEG encoding: %w", err)
+	}
+
+	amendedImg, err := amendExifMetadata(imageBuf.Bytes(), encryptedMeta)
+	if err != nil {
+		return "", fmt.Errorf("meta data amending: %w", err)
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(amendedImg)
+
+	key, err := mediaRepo.SetImage(userId, database.Base64Image(imagePrefix+encoded))
+	if err != nil {
+		return "", fmt.Errorf("storing media: %w", err)
+	}
+
+	return string(key), nil
 }
 
 type MediaStreamer interface {
