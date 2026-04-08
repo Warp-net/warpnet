@@ -1,5 +1,8 @@
 # Development Guidelines
 
+## Backend
+- Explore current backend implementation https://github.com/Warp-net/warpnet and its API details
+
 ## Build Artifacts
 - Do NOT modify the `dist` directory manually.
 - If a build changes `dist`, restore it to its previous state before committing.

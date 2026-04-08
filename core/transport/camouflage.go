@@ -30,6 +30,7 @@ package transport
 import (
 	"context"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/security"
@@ -377,6 +378,10 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 		if err != nil {
 			if scope != nil {
 				scope.Done()
+			}
+
+			if err != nil && strings.HasSuffix(err.Error(), "use of closed network connection") {
+				return nil, nil, err
 			}
 			log.Errorf("dpi: transient accept: %v", err)
 			continue
