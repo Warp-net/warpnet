@@ -48,10 +48,7 @@ func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpH
 		}
 		isTokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
 		if !isTokenMatch {
-			log.Errorf(
-				"pair: token does not match server identity: %s != %s",
-				serverAuthInfo.Identity.Token, clientInfo.Identity.Token,
-			)
+			log.Errorf("pair: token does not match server identity")
 			return nil, warpnet.WarpError("token mismatch")
 		}
 		return event.Accepted, nil

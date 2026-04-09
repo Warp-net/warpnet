@@ -11,6 +11,7 @@ import (
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 )
 
 type stubUserFetcher struct {
@@ -236,18 +237,53 @@ func TestStreamGetUsersHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("no users locally - fetches and returns", func(t *testing.T) {
-		callCount := 0
-		h := StreamGetUsersHandler(stubUserFetcher{listFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
-			callCount++
-			if callCount == 1 {
-				return nil, "", nil
-			}
-			return []domain.User{{Id: "u1"}}, "end", nil
-		}}, stubUserStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
+	t.Run("no users locally - fetches from remote and returns", func(t *testing.T) {
+		requestUser := "requester-1"
+		fetchedUsers := []domain.User{{Id: "u1"}}
+		listCallCount := 0
+		genericStreamCalled := 0
+		persistedUsers := 0
+
+		h := StreamGetUsersHandler(
+			stubUserFetcher{
+				listFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
+					listCallCount++
+					if persistedUsers == 0 {
+						return nil, "", nil
+					}
+					return fetchedUsers, "end", nil
+				},
+				getFn: func(userId string) (domain.User, error) {
+					return domain.User{Id: userId, NodeId: "node-2"}, nil
+				},
+				createFn: func(user domain.User) (domain.User, error) {
+					persistedUsers++
+					return user, nil
+				},
+			},
+			stubUserStreamer{
+				nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+				genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+					genericStreamCalled++
+					resp := event.UsersResponse{Users: fetchedUsers, Cursor: "end"}
+					b, _ := json.Marshal(resp)
+					return b, nil
+				},
+			},
+		)
+
+		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: requestUser}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
+		}
+		if genericStreamCalled != 1 {
+			t.Fatalf("expected GenericStream to be called once, got %d", genericStreamCalled)
+		}
+		if persistedUsers != len(fetchedUsers) {
+			t.Fatalf("expected %d persisted users, got %d", len(fetchedUsers), persistedUsers)
+		}
+		if listCallCount < 2 {
+			t.Fatalf("expected local list to be retried after refresh, got %d calls", listCallCount)
 		}
 		r := resp.(event.UsersResponse)
 		if len(r.Users) != 1 {
