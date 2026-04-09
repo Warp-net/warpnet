@@ -95,7 +95,7 @@ func StreamGetUserHandler(
 		if isMe {
 			u, err := repo.Get(ownerId)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("get user: owner %v", err)
 			}
 			followersCount, err := followRepo.GetFollowersCount(u.Id)
 			if err != nil {
@@ -119,9 +119,11 @@ func StreamGetUserHandler(
 
 		otherUser, err := repo.Get(ev.UserId)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get user: other user %v", err)
 		}
-
+		if otherUser.NodeId == "" {
+			return otherUser, fmt.Errorf("get user: node id is not found")
+		}
 		go func() {
 			updatedUser := updateOtherUser(ev, otherUser, streamer)
 			_, err = repo.Update(updatedUser.Id, updatedUser)
@@ -131,9 +133,6 @@ func StreamGetUserHandler(
 }
 
 func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStreamer) domain.User {
-	if user.IsOffline || user.NodeId == "" {
-		return user
-	}
 	otherUserData, err := streamer.GenericStream(
 		user.NodeId,
 		event.PUBLIC_GET_USER,

@@ -49,6 +49,7 @@ type AppStorer interface {
 
 type AppAuthServicer interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error)
+	AuthLogout()
 	PrivateKey() ed25519.PrivateKey
 	Storage() auth.AuthPersistencyLayer
 }
@@ -244,7 +245,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.close(a.ctx)
+		a.node.Stop() // close node first
+		a.auth.AuthLogout()
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	default:
@@ -317,7 +319,7 @@ func (a *App) close(_ context.Context) {
 
 	a.node.Stop() // close node first
 
-	a.db.Close() // db is a second
+	a.auth.AuthLogout()
 
 	close(a.readyChan)
 }

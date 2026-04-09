@@ -214,6 +214,10 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 	return event.LoginResponse(authInfo), nil
 }
 
+func (as *AuthService) AuthLogout() {
+	as.authPersistence.Logout()
+}
+
 const (
 	MinPasswordLength = 8
 	MaxPasswordLength = 32
