@@ -208,7 +208,7 @@ func StreamUnfollowHandler(
 		isMeUnfollowed := ownerUserId == ev.FollowingId
 
 		if isMeUnfollowed {
-			err = followRepo.Unfollow(ev.FollowingId, ev.FollowerId)
+			err = followRepo.Unfollow(ev.FollowerId, ev.FollowingId)
 			if err != nil {
 				return nil, err
 			}
