@@ -252,6 +252,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	if s.nodeRepo.IsBlocklisted(peer.ID.String()) {
 		log.Infof("discovery: source '%s': found blocklisted peer: %s", peer.Source, peer.ID.String())
+		s.m.PushStatusOffline(peer.ID.String())
 		return
 	}
 
@@ -260,6 +261,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: source '%s': connecting is backoffed: %s", peer.Source, pi.ID)
+		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
@@ -273,6 +275,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Warnf(
 			"discovery: source '%s': failed to connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err)
+		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 
@@ -366,6 +369,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: source '%s': bootstrap handle: connecting is backoffed: %s", peer.Source, pi.ID)
+		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
@@ -380,6 +384,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 			"discovery: source '%s': bootstrap handle: connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err,
 		)
+		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 
