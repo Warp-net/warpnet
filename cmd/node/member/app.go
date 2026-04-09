@@ -87,7 +87,8 @@ func (a *App) startup(ctx context.Context) {
 	}()
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
-
+	version := config.Config().Version
+	network := config.Config().Node.Network
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
 		log.Errorf("failed to get codebase hash: %v \n", err)
@@ -101,14 +102,12 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 
-	authRepo := database.NewAuthRepo(db)
+	authRepo := database.NewAuthRepo(db, network)
 	userRepo := database.NewUserRepo(db)
 	a.db = db
 	a.readyChan = make(chan domain.AuthNodeInfo, 1)
 	a.auth = auth.NewAuthService(ctx, authRepo, userRepo, a.readyChan)
 
-	version := config.Config().Version
-	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
 		log.Errorf("failed to generate PSK: %v", err)

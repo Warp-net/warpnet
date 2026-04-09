@@ -64,7 +64,9 @@ const (
 
 // run node without GUI
 func main() {
-	psk, err := security.GeneratePSK(config.Config().Node.Network, config.Config().Version)
+	version := config.Config().Version
+	network := config.Config().Node.Network
+	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,7 +93,7 @@ func main() {
 	}
 	readyChan := make(chan domain.AuthNodeInfo, 10)
 
-	authRepo := database.NewAuthRepo(db)
+	authRepo := database.NewAuthRepo(db, network)
 	userRepo := database.NewUserRepo(db)
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 

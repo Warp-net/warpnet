@@ -62,11 +62,12 @@ type AuthRepo struct {
 	db           AuthStorer
 	owner        domain.Owner
 	sessionToken string
+	network      string
 	privateKey   ed25519.PrivateKey
 }
 
-func NewAuthRepo(db AuthStorer) *AuthRepo {
-	return &AuthRepo{db: db, privateKey: nil}
+func NewAuthRepo(db AuthStorer, network string) *AuthRepo {
+	return &AuthRepo{db: db, privateKey: nil, network: network}
 }
 
 func (repo *AuthRepo) Authenticate(username, password string) (err error) {
@@ -97,12 +98,12 @@ func (repo *AuthRepo) generateSecrets(username, password string) (token string, 
 		return "", nil, err
 	}
 	randChar := string(uint8(n.Uint64())) //#nosec
-	tokenSeed := []byte(username + "@" + password + "@" + randChar + "@" + time.Now().String())
+	tokenSeed := []byte(username + "@" + password + "@" + repo.network + "@" + randChar + "@" + time.Now().String())
 	token = base64.StdEncoding.EncodeToString(security.ConvertToSHA256(tokenSeed))
 
 	pkSeed := base64.StdEncoding.EncodeToString(
 		security.ConvertToSHA256(
-			[]byte(username + "@" + password + "@" + strings.Repeat("@", len(password))), // no random - private key must be determined
+			[]byte(username + "@" + password + "@" + repo.network + strings.Repeat("@", len(password))), // no random - private key must be determined
 		),
 	)
 	privateKey, err := security.GenerateKeyFromSeed([]byte(pkSeed))
