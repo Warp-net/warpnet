@@ -2,6 +2,7 @@ package security
 
 import (
 	"crypto/ed25519"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,7 +25,7 @@ func TestVerifySignature_WrongBody(t *testing.T) {
 
 	sig := Sign(priv, []byte("original message"))
 	err := VerifySignature(pub, []byte("tampered message"), sig)
-	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrSignatureVerificationFailed))
 }
 
 func TestVerifySignature_InvalidBase64(t *testing.T) {
@@ -50,5 +51,5 @@ func TestVerifySignature_WrongKey(t *testing.T) {
 	sig := Sign(priv1, body)
 
 	err := VerifySignature(pub2, body, sig)
-	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrSignatureVerificationFailed))
 }
