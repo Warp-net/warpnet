@@ -117,12 +117,30 @@ func castKeyToString(key any) string {
 		innerKey = string(typedKey)
 	case bool:
 		innerKey = strconv.FormatBool(typedKey)
-	case int, int8, int16, int32, int64:
-		innerKey = strconv.FormatInt(typedKey.(int64), 10)
-	case uint, uint8, uint16, uint32, uint64:
-		innerKey = strconv.FormatUint(typedKey.(uint64), 10)
-	case float32, float64:
-		innerKey = strconv.FormatFloat(typedKey.(float64), 'f', -1, 64)
+	case int:
+		innerKey = strconv.FormatInt(int64(typedKey), 10)
+	case int8:
+		innerKey = strconv.FormatInt(int64(typedKey), 10)
+	case int16:
+		innerKey = strconv.FormatInt(int64(typedKey), 10)
+	case int32:
+		innerKey = strconv.FormatInt(int64(typedKey), 10)
+	case int64:
+		innerKey = strconv.FormatInt(typedKey, 10)
+	case uint:
+		innerKey = strconv.FormatUint(uint64(typedKey), 10)
+	case uint8:
+		innerKey = strconv.FormatUint(uint64(typedKey), 10)
+	case uint16:
+		innerKey = strconv.FormatUint(uint64(typedKey), 10)
+	case uint32:
+		innerKey = strconv.FormatUint(uint64(typedKey), 10)
+	case uint64:
+		innerKey = strconv.FormatUint(typedKey, 10)
+	case float32:
+		innerKey = strconv.FormatFloat(float64(typedKey), 'f', -1, 32)
+	case float64:
+		innerKey = strconv.FormatFloat(typedKey, 'f', -1, 64)
 	default:
 		innerKey = fmt.Sprintf("%v", key)
 	}
