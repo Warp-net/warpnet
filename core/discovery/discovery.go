@@ -412,7 +412,7 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	}
 	s.m.PushStatusOnline(pi.ID.String())
 
-	if rand.IntN(10)/3 == 0 { //nolint:rand
+	if rand.IntN(10)/3 == 0 { //nolint:gosec
 		info, err := s.requestNodeInfo(pi)
 		if err != nil {
 			log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
@@ -433,6 +433,9 @@ func (s *discoveryService) requestChallenge(peerId warpnet.WarpPeerID) challenge
 			event.PUBLIC_POST_NODE_CHALLENGE,
 			event.ChallengeEvent{Coordinates: coord},
 		)
+		if err != nil {
+			return nil, err
+		}
 		if len(resp) == 0 {
 			err := warpnet.WarpError("no challenge response from new peer")
 			return nil, fmt.Errorf("%w: %s", err, peerId.String())
