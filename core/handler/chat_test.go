@@ -471,7 +471,7 @@ func TestMessageReadDeleteHandlers(t *testing.T) {
 		hEmpty := StreamGetMessagesHandler(stubChatRepo{getChatFn: repo.getChatFn, listMessagesFn: func(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error) {
 			return nil, "next", nil
 		}}, auth)
-		resp, err := hEmpty(marshal(t, event.GetAllMessagesEvent{ChatId: chatID}), nil)
+		resp, err := hEmpty(marshal(t, event.GetAllMessagesEvent{ChatId: chatID, OwnerId: owner}), nil)
 		if err != nil || len(resp.(event.ChatMessagesResponse).Messages) != 0 {
 			t.Fatalf("unexpected empty response: %#v err=%v", resp, err)
 		}
@@ -479,7 +479,7 @@ func TestMessageReadDeleteHandlers(t *testing.T) {
 		hFilled := StreamGetMessagesHandler(stubChatRepo{getChatFn: repo.getChatFn, listMessagesFn: func(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error) {
 			return []domain.ChatMessage{{Id: msgID, ChatId: chatID}}, "", nil
 		}}, auth)
-		resp, err = hFilled(marshal(t, event.GetAllMessagesEvent{ChatId: chatID}), nil)
+		resp, err = hFilled(marshal(t, event.GetAllMessagesEvent{ChatId: chatID, OwnerId: owner}), nil)
 		if err != nil || len(resp.(event.ChatMessagesResponse).Messages) != 1 {
 			t.Fatalf("unexpected filled response: %#v err=%v", resp, err)
 		}

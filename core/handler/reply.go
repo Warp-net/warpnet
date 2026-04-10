@@ -188,14 +188,15 @@ func StreamGetReplyHandler(
 			return nil, err
 		}
 
-		var reply domain.Tweet
-		if err = json.Unmarshal(getTweetResp, &reply); err != nil {
+		var possibleError event.ResponseError
+		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal other get reply error response: %s", possibleError.Message)
 			return repo.GetReply(rootId, id)
 		}
 
-		var possibleError event.ResponseError
-		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
-			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
+		var reply domain.Tweet
+		if err = json.Unmarshal(getTweetResp, &reply); err != nil {
+			return repo.GetReply(rootId, id)
 		}
 
 		return reply, nil

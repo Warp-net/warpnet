@@ -50,7 +50,7 @@ func (s *AuthRepoTestSuite) SetupSuite() {
 	var err error
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
-	s.repo = NewAuthRepo(s.db)
+	s.repo = NewAuthRepo(s.db, "test")
 
 	err = s.repo.Authenticate("test", "test")
 	s.Require().NoError(err)
