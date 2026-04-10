@@ -27,7 +27,7 @@ type stubStatsPeerstore struct {
 	peers []peer.ID
 }
 
-func (s stubStatsPeerstore) Peers() peer.IDSlice { return s.peers }
+func (s stubStatsPeerstore) Peers() peer.IDSlice { return peer.IDSlice(s.peers) }
 
 // stubStatsNetwork embeds the full interface, overrides only Peers()
 type stubStatsNetwork struct {
