@@ -79,10 +79,3 @@ func TestGenerateAnchoredEntropy(t *testing.T) {
 	assert.Len(t, e1, 32)
 }
 
-func TestWalkAndHash(t *testing.T) {
-	// Already covered via TestGetCodebaseHashHex in hashing_test.go
-}
-
-func TestHashFile(t *testing.T) {
-	// Already covered via TestGetCodebaseHashHex in hashing_test.go
-}

@@ -30,6 +30,7 @@ package security
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 )
 
 func Sign(privKey, body []byte) string {
@@ -42,7 +43,7 @@ func VerifySignature(pubKey, body []byte, signatureStr string) error {
 		return err
 	}
 	if !ed25519.Verify(pubKey, body, signature) {
-		return err
+		return errors.New("signature verification failed")
 	}
 	return nil
 }

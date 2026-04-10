@@ -24,12 +24,7 @@ func TestVerifySignature_WrongBody(t *testing.T) {
 
 	sig := Sign(priv, []byte("original message"))
 	err := VerifySignature(pub, []byte("tampered message"), sig)
-	// Verification fails but VerifySignature returns nil when ed25519.Verify returns false
-	// and err from DecodeString is nil. Let's check the actual behavior.
-	// Looking at the code: if !ed25519.Verify(...) { return err } where err is nil from DecodeString
-	// So it returns nil even on verification failure. This is a bug.
-	// For the test, we document the current behavior.
-	assert.NoError(t, err, "current implementation returns nil on verification failure (potential bug)")
+	assert.Error(t, err)
 }
 
 func TestVerifySignature_InvalidBase64(t *testing.T) {
@@ -55,6 +50,5 @@ func TestVerifySignature_WrongKey(t *testing.T) {
 	sig := Sign(priv1, body)
 
 	err := VerifySignature(pub2, body, sig)
-	// Same bug as above: returns nil even when verification fails
-	assert.NoError(t, err, "current implementation returns nil on verification failure (potential bug)")
+	assert.Error(t, err)
 }

@@ -150,14 +150,18 @@ func (s *DBTestSuite) TestTxn_SetAndGet() {
 }
 
 func (s *DBTestSuite) TestTxn_Delete() {
-	txn1, _ := s.db.NewTxn()
+	txn1, err := s.db.NewTxn()
+	assert.NoError(s.T(), err)
 	key := DatabaseKey("/txn/delete-key")
-	_ = txn1.Set(key, []byte("val"))
-	_ = txn1.Commit()
+	err = txn1.Set(key, []byte("val"))
+	assert.NoError(s.T(), err)
+	err = txn1.Commit()
+	assert.NoError(s.T(), err)
 
-	txn2, _ := s.db.NewTxn()
+	txn2, err := s.db.NewTxn()
+	assert.NoError(s.T(), err)
 	defer txn2.Rollback()
-	err := txn2.Delete(key)
+	err = txn2.Delete(key)
 	assert.NoError(s.T(), err)
 	err = txn2.Commit()
 	assert.NoError(s.T(), err)

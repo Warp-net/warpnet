@@ -127,7 +127,8 @@ func TestCache_Resize(t *testing.T) {
 		c.Add(i, i)
 	}
 	evicted := c.Resize(5)
-	assert.True(t, evicted >= 0)
+	assert.Equal(t, 5, evicted)
+	assert.Equal(t, 5, c.Len())
 }
 
 func TestCastKeyToString(t *testing.T) {
