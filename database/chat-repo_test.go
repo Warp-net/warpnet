@@ -55,7 +55,7 @@ func (s *ChatRepoSuite) SetupSuite() {
 
 	s.db = db
 
-	authRepo := NewAuthRepo(db)
+	authRepo := NewAuthRepo(db, "test")
 	err = authRepo.Authenticate(rand.Text(), rand.Text())
 	s.Require().NoError(err)
 

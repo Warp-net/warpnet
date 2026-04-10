@@ -52,7 +52,7 @@ func (s *TimelineRepoTestSuite) SetupSuite() {
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
-	auth := NewAuthRepo(s.db)
+	auth := NewAuthRepo(s.db, "test")
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
 	s.repo = NewTimelineRepo(s.db)
