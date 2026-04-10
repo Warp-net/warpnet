@@ -168,7 +168,7 @@ func NewCamouflageConn(conn manet.Conn, isClient bool, cfg *CamouflageConfig) (*
 		tlsConn, err = serverTLSHandshake(conn, cfg)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("dpi: %v: %w", errHandshakeFailed, err)
+		return nil, fmt.Errorf("dpi: %v: %w", errHandshakeFailed, err) //nolint:errorlint
 	}
 
 	// Clear the handshake deadline so subsequent I/O is not constrained.
