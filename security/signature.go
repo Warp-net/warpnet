@@ -30,7 +30,10 @@ package security
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 )
+
+var ErrSignatureVerificationFailed = errors.New("signature verification failed")
 
 func Sign(privKey, body []byte) string {
 	return base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, body))
@@ -42,7 +45,7 @@ func VerifySignature(pubKey, body []byte, signatureStr string) error {
 		return err
 	}
 	if !ed25519.Verify(pubKey, body, signature) {
-		return err
+		return ErrSignatureVerificationFailed
 	}
 	return nil
 }
