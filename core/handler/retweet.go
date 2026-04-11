@@ -70,6 +70,7 @@ func StreamNewReTweetHandler(
 	tweetRepo ReTweetsStorer,
 	timelineRepo RetweetTimelineUpdater,
 	streamer RetweetStreamer,
+	notifyRepo ModerationNotifier,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var retweetEvent event.NewRetweetEvent
@@ -101,6 +102,15 @@ func StreamNewReTweetHandler(
 
 		isOwnTweetRetweet := ownerId == retweetEvent.UserId // my own tweet retweet
 		if isOwnTweetRetweet {
+			if !isOwnerRetweeter {
+				if err := notifyRepo.Add(domain.Notification{
+					Type:   domain.NotificationRetweetType,
+					Text:   *retweetEvent.RetweetedBy + " retweeted your tweet",
+					UserId: ownerId,
+				}); err != nil {
+					log.Errorf("retweet handler: adding notification: %v", err)
+				}
+			}
 			return retweet, nil
 		}
 

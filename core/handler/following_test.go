@@ -118,7 +118,7 @@ func TestStreamFollowHandler(t *testing.T) {
 	following := "following-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
+		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{}, stubModerationNotifier{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -126,7 +126,7 @@ func TestStreamFollowHandler(t *testing.T) {
 	})
 
 	t.Run("empty follower id", func(t *testing.T) {
-		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
+		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{}, stubModerationNotifier{})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowingId: following}), nil)
 		if err == nil || err.Error() != "empty follower or following id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -134,7 +134,7 @@ func TestStreamFollowHandler(t *testing.T) {
 	})
 
 	t.Run("empty following id", func(t *testing.T) {
-		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
+		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{}, stubModerationNotifier{})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner}), nil)
 		if err == nil || err.Error() != "empty follower or following id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -142,7 +142,7 @@ func TestStreamFollowHandler(t *testing.T) {
 	})
 
 	t.Run("self follow returns accepted", func(t *testing.T) {
-		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
+		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{}, stubModerationNotifier{})
 		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -154,11 +154,21 @@ func TestStreamFollowHandler(t *testing.T) {
 
 	t.Run("someone follows me", func(t *testing.T) {
 		var capturedFrom, capturedTo string
+		notified := false
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{followFn: func(from, to string) error {
 			capturedFrom = from
 			capturedTo = to
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{}, stubModerationNotifier{addFn: func(not domain.Notification) error {
+			notified = true
+			if not.Type != domain.NotificationFollowType {
+				t.Fatalf("expected follow type, got: %v", not.Type)
+			}
+			if not.UserId != owner {
+				t.Fatalf("expected notification for owner, got: %v", not.UserId)
+			}
+			return nil
+		}})
 		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -169,12 +179,15 @@ func TestStreamFollowHandler(t *testing.T) {
 		if capturedFrom != following || capturedTo != owner {
 			t.Fatalf("expected Follow(%q, %q), got Follow(%q, %q)", following, owner, capturedFrom, capturedTo)
 		}
+		if !notified {
+			t.Fatal("expected notification to be added")
+		}
 	})
 
 	t.Run("someone follows me - already followed", func(t *testing.T) {
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{followFn: func(from, to string) error {
 			return database.ErrAlreadyFollowed
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{}, stubModerationNotifier{})
 		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -188,7 +201,7 @@ func TestStreamFollowHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{followFn: func(from, to string) error {
 			return repoErr
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{}, stubModerationNotifier{})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -198,7 +211,7 @@ func TestStreamFollowHandler(t *testing.T) {
 	t.Run("I follow someone - user not found", func(t *testing.T) {
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
-		}}, stubFollowStreamer{})
+		}}, stubFollowStreamer{}, stubModerationNotifier{})
 		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -212,7 +225,7 @@ func TestStreamFollowHandler(t *testing.T) {
 		repoErr := errors.New("user fetch error")
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, repoErr
-		}}, stubFollowStreamer{})
+		}}, stubFollowStreamer{}, stubModerationNotifier{})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected user repo error: %v", err)
@@ -222,7 +235,7 @@ func TestStreamFollowHandler(t *testing.T) {
 	t.Run("I follow someone - node offline", func(t *testing.T) {
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return nil, warpnet.ErrNodeIsOffline
-		}})
+		}}, stubModerationNotifier{})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if !errors.Is(err, warpnet.ErrUserIsOffline) {
 			t.Fatalf("expected user offline error: %v", err)
@@ -233,7 +246,7 @@ func TestStreamFollowHandler(t *testing.T) {
 		streamErr := errors.New("stream broken")
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return nil, streamErr
-		}})
+		}}, stubModerationNotifier{})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if !errors.Is(err, streamErr) {
 			t.Fatalf("expected stream error: %v", err)
@@ -246,7 +259,7 @@ func TestStreamFollowHandler(t *testing.T) {
 			return database.ErrAlreadyFollowed
 		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return acceptedResp, nil
-		}})
+		}}, stubModerationNotifier{})
 		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -264,7 +277,7 @@ func TestStreamFollowHandler(t *testing.T) {
 			return nil
 		}}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return acceptedResp, nil
-		}})
+		}}, stubModerationNotifier{})
 		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -284,7 +297,7 @@ func TestStreamFollowHandler(t *testing.T) {
 			return subErr
 		}}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return acceptedResp, nil
-		}})
+		}}, stubModerationNotifier{})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if !errors.Is(err, subErr) {
 			t.Fatalf("expected subscribe error: %v", err)
@@ -295,7 +308,7 @@ func TestStreamFollowHandler(t *testing.T) {
 		errResp, _ := json.Marshal(event.ResponseError{Code: 500, Message: "remote error"})
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return errResp, nil
-		}})
+		}}, stubModerationNotifier{})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if err == nil {
 			t.Fatal("expected error from remote error response")

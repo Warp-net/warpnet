@@ -65,6 +65,7 @@ func StreamNewReplyHandler(
 	replyRepo ReplyStorer,
 	userRepo ReplyUserFetcher,
 	streamer ReplyStreamer,
+	notifyRepo ModerationNotifier,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewReplyEvent
@@ -106,6 +107,15 @@ func StreamNewReplyHandler(
 
 		isOwnTweetReply := parentUser.NodeId == streamer.NodeInfo().ID.String()
 		if isOwnTweetReply {
+			if ev.UserId != streamer.NodeInfo().OwnerId {
+				if err := notifyRepo.Add(domain.Notification{
+					Type:   domain.NotificationReplyType,
+					Text:   ev.Username + " replied to your tweet",
+					UserId: streamer.NodeInfo().OwnerId,
+				}); err != nil {
+					log.Errorf("reply handler: adding notification: %v", err)
+				}
+			}
 			return reply, nil
 		}
 
