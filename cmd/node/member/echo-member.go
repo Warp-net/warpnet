@@ -57,7 +57,7 @@ const (
 	echoReplyPrefix = "echo: "
 	echoChatReply   = "echo: received message"
 	messageLimit    = 5000
-	seenTTL         = 15 * time.Minute
+	seenTTL         = 999 * time.Minute
 	pruneInterval   = time.Minute
 	maxSeenKeys     = 10_000
 )
@@ -98,13 +98,13 @@ func main() {
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
 	go func() {
-		_, err = authService.AuthLogin(event.LoginEvent{
+		_, authErr := authService.AuthLogin(event.LoginEvent{
 			Username: "Echo",
 			Password: `\@4o97Z7<Cfu`,
 		},
 			psk,
 		)
-		if err != nil {
+		if authErr != nil {
 			log.Fatalf("failed to login: %v", err)
 		}
 	}()
@@ -143,9 +143,11 @@ func main() {
 	authInfo.NodeInfo = echoNode.NodeInfo()
 
 	readyChan <- authInfo
-	setupHandlers(echoNode)
-	log.Infoln("WARPNET STARTED")
+	eBot := newEchoBot(echoNode)
+	go runTweetsReactions(ctx, eBot, echoNode)
+	setupHandlers(eBot, echoNode)
 
+	log.Infoln("WARPNET STARTED")
 	<-interruptChan
 	log.Infoln("interrupted...")
 }
@@ -423,9 +425,7 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 	return err
 }
 
-func setupHandlers(node *member.MemberNode) {
-	echo := newEchoBot(node)
-
+func setupHandlers(echo *echoBot, node *member.MemberNode) {
 	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
@@ -464,6 +464,103 @@ func setupHandlers(node *member.MemberNode) {
 			},
 		}...,
 	)
+}
+
+func runTweetsReactions(ctx context.Context, echo *echoBot, node *member.MemberNode) {
+	if node == nil {
+		log.Fatalf("echo: nil node")
+	}
+	peerStore := node.Node().Peerstore()
+
+	ticker := time.NewTicker(time.Second * 5)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if ctx.Err() != nil {
+			return
+		}
+		peers := peerStore.PeersWithAddrs()
+		if len(peers) == 0 {
+			log.Warn("echo: peers are not found")
+			continue
+		}
+		for _, peer := range peers {
+			if ctx.Err() != nil {
+				return
+			}
+			if node == nil || peer == node.NodeInfo().ID {
+				continue
+			}
+
+			infoResp, err := node.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
+			if err != nil {
+				if strings.Contains(err.Error(), "protocols not supported") {
+					continue
+				}
+				log.Errorf("echo: no info response from new peer %s, %v", peer.String(), err)
+				continue
+			}
+			if len(infoResp) == 0 {
+				log.Errorf("echo: no info response from new peer %s", peer.String())
+				continue
+			}
+
+			var info warpnet.NodeInfo
+			err = json.Unmarshal(infoResp, &info)
+			if err != nil {
+				log.Errorf("echo: failed to unmarshal info from new peer: %s %v", infoResp, err)
+				continue
+			}
+			if info.IsModerator() || info.IsBootstrap() {
+				continue
+			}
+			if info.OwnerId == "" {
+				log.Errorf("echo: node info %s has no owner", peer.String())
+				continue
+			}
+			log.Infof("echo: checking peer: %s, owner: %s", peer.String(), info.OwnerId)
+
+			tweets, err := getTweets(node, peer, info.OwnerId)
+			if err != nil {
+				log.Errorf("echo: get tweets %s: %v", peer.String(), err)
+				continue
+			}
+
+			for _, tweet := range tweets {
+				bt, _ := json.Marshal(tweet)
+				echo.handleTweet(bt, peer.String())
+			}
+		}
+	}
+}
+
+const tweetsLimit uint64 = 20
+
+func getTweets(node *member.MemberNode, peerID warpnet.WarpPeerID, userID string) ([]domain.Tweet, error) {
+	data, err := node.GenericStream(
+		peerID.String(),
+		event.PUBLIC_GET_TWEETS,
+		event.GetAllTweetsEvent{
+			Limit:  func(l uint64) *uint64 { return &l }(tweetsLimit),
+			UserId: userID,
+			Cursor: nil,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("echo: get tweets: %w", err)
+	}
+	if len(data) == 0 {
+		return []domain.Tweet{}, nil
+	}
+
+	var tweetsResp event.TweetsResponse
+	if err := json.Unmarshal(data, &tweetsResp); err != nil {
+		return nil, fmt.Errorf("echo: failed to unmarshal tweets from new peer: %s %w", string(data), err)
+	}
+
+	log.Infof("echo: peers %s, got tweets: %d", peerID.String(), len(tweetsResp.Tweets))
+	return tweetsResp.Tweets, nil
+
 }
 
 func requesterNodeID(s warpnet.WarpStream) string {

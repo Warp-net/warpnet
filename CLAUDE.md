@@ -23,4 +23,4 @@ Requirements:
     - Discard low-value or incorrect suggestions.
 
 ## Versioning
-- Increment the patch version in the `version` file on every commit. Create according git tag.
+- Increment the patch version in the `version` file on every commit. Create an according git tag.
