@@ -142,7 +142,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("reply to own tweet - adds notification", func(t *testing.T) {
+	t.Run("someone replied to my tweet - adds notification", func(t *testing.T) {
 		notified := false
 		nodeID := warpnet.WarpPeerID("my-node")
 		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {

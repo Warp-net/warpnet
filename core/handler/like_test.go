@@ -124,13 +124,13 @@ func TestStreamLikeHandler(t *testing.T) {
 
 	t.Run("someone else liked (exchange finished)", func(t *testing.T) {
 		notified := false
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: "other-node"}}, stubModerationNotifier{addFn: func(not domain.Notification) error {
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner}}, stubModerationNotifier{addFn: func(not domain.Notification) error {
 			notified = true
 			if not.Type != domain.NotificationLikeType {
 				t.Fatalf("expected like type, got: %v", not.Type)
 			}
-			if not.UserId != "other-node" {
-				t.Fatalf("expected notification for node owner, got: %v", not.UserId)
+			if not.UserId != tweetOwner {
+				t.Fatalf("expected notification for tweet owner, got: %v", not.UserId)
 			}
 			return nil
 		}})
