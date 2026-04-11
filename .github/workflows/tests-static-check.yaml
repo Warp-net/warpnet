@@ -1,4 +1,4 @@
-name: Static Analysis & Test Coverage
+name: Tests & Static Analysis
 
 env:
   GO_VERSION: "1.26.0"

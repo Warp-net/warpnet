@@ -35,6 +35,9 @@ services:
       - LOGGING_FORMAT=json
       - NODE_SEED=echo
       - SOCKS5_ENABLED=false
+      - DATABASE_PATH=/var/lib/warpnet
+    volumes:
+      - ${HOME}/warpnet-data/testnet/echo:/var/lib/warpnet
 
 
 
