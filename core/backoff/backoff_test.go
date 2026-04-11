@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewSimpleBackoff(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	b := NewSimpleBackoff(ctx, time.Minute, 5)
 	assert.NotNil(t, b)
@@ -19,7 +19,7 @@ func TestNewSimpleBackoff(t *testing.T) {
 }
 
 func TestIsBackoffEnabled_FirstRequest(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	b := NewSimpleBackoff(ctx, time.Minute, 5)
 
@@ -29,7 +29,7 @@ func TestIsBackoffEnabled_FirstRequest(t *testing.T) {
 }
 
 func TestIsBackoffEnabled_TooSoonAfterLastTry(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	b := NewSimpleBackoff(ctx, time.Minute, 5)
 
@@ -41,7 +41,7 @@ func TestIsBackoffEnabled_TooSoonAfterLastTry(t *testing.T) {
 }
 
 func TestIsBackoffEnabled_MaxAttemptsReached(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	b := NewSimpleBackoff(ctx, time.Minute, 2)
 
@@ -62,7 +62,7 @@ func TestIsBackoffEnabled_MaxAttemptsReached(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	b := NewSimpleBackoff(ctx, time.Minute, 5)
 
@@ -77,7 +77,7 @@ func TestReset(t *testing.T) {
 }
 
 func TestCleanup(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	b := NewSimpleBackoff(ctx, time.Minute, 5)
 
@@ -99,7 +99,7 @@ func TestCleanup(t *testing.T) {
 }
 
 func TestCleanupLoop_StopsOnContextCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	b := NewSimpleBackoff(ctx, 50*time.Millisecond, 5)
 
 	_ = b // cleanup loop is already running
@@ -109,7 +109,7 @@ func TestCleanupLoop_StopsOnContextCancel(t *testing.T) {
 }
 
 func TestIsBackoffEnabled_ExpiredTTL(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	b := NewSimpleBackoff(ctx, time.Minute, 5)
 

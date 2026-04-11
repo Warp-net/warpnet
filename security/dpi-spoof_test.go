@@ -18,10 +18,10 @@ func TestRandDuration_Negative(t *testing.T) {
 }
 
 func TestRandDuration_Positive(t *testing.T) {
-	max := 100 * time.Millisecond
+	maximum := 100 * time.Millisecond
 	for range 100 {
-		d := randDuration(max)
+		d := randDuration(maximum)
 		assert.True(t, d >= 0, "duration should be non-negative")
-		assert.True(t, d < max, "duration should be less than max")
+		assert.True(t, d < maximum, "duration should be less than max")
 	}
 }

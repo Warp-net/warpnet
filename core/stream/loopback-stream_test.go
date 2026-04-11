@@ -159,7 +159,7 @@ func TestLoopbackConn_Stat(t *testing.T) {
 
 	conn := r.Conn()
 	stat := conn.Stat()
-	assert.Equal(t, network.DirInbound, stat.Stats.Direction)
+	assert.Equal(t, network.DirInbound, stat.Direction)
 }
 
 func TestLoopbackConn_NewStream(t *testing.T) {
@@ -168,7 +168,7 @@ func TestLoopbackConn_NewStream(t *testing.T) {
 	defer w.Close()
 
 	conn := r.Conn()
-	s, err := conn.NewStream(nil)
+	s, err := conn.NewStream(t.Context())
 	assert.NoError(t, err)
 	assert.NotNil(t, s)
 }
