@@ -414,7 +414,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_REPLY,
-				handler.StreamNewReplyHandler(replyRepo, userRepo, m, notificationRepo),
+				handler.StreamNewReplyHandler(replyRepo, userRepo, notificationRepo, m),
 			},
 			{
 				event.PUBLIC_DELETE_REPLY,
@@ -422,7 +422,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_FOLLOW,
-				handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m, notificationRepo),
+				handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, notificationRepo, m),
 			},
 			{
 				event.PUBLIC_POST_IS_FOLLOWING,
@@ -478,7 +478,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_LIKE,
-				handler.StreamLikeHandler(likeRepo, userRepo, m, notificationRepo),
+				handler.StreamLikeHandler(likeRepo, userRepo, notificationRepo, m),
 			},
 			{
 				event.PUBLIC_POST_UNLIKE,
@@ -490,7 +490,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_RETWEET,
-				handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, m, notificationRepo),
+				handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, notificationRepo, m),
 			},
 			{
 				event.PUBLIC_POST_UNRETWEET,

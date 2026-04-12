@@ -69,8 +69,8 @@ func StreamNewReTweetHandler(
 	userRepo RetweetedUserFetcher,
 	tweetRepo ReTweetsStorer,
 	timelineRepo RetweetTimelineUpdater,
-	streamer RetweetStreamer,
 	notifyRepo ModerationNotifier,
+	streamer RetweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var retweetEvent event.NewRetweetEvent

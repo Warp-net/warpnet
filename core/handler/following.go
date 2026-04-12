@@ -74,8 +74,8 @@ func StreamFollowHandler(
 	followRepo FollowingStorer,
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
-	streamer FollowNodeStreamer,
 	notifyRepo ModerationNotifier,
+	streamer FollowNodeStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewFollowEvent

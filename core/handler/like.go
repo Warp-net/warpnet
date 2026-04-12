@@ -67,8 +67,8 @@ type LikesStorer interface {
 func StreamLikeHandler(
 	repo LikesStorer,
 	userRepo LikedUserFetcher,
-	streamer LikeStreamer,
 	notifyRepo ModerationNotifier,
+	streamer LikeStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.LikeEvent

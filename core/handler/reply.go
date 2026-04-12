@@ -64,8 +64,8 @@ type ReplyStorer interface {
 func StreamNewReplyHandler(
 	replyRepo ReplyStorer,
 	userRepo ReplyUserFetcher,
-	streamer ReplyStreamer,
 	notifyRepo ModerationNotifier,
+	streamer ReplyStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewReplyEvent
