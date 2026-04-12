@@ -34,6 +34,8 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/metrics"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -145,7 +147,7 @@ func main() {
 
 	readyChan <- authInfo
 	eBot := newEchoBot(echoNode)
-	go runTweetsReactions(ctx, eBot, echoNode)
+	go runOwnActivity(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)
 
 	log.Infoln("WARPNET STARTED")
@@ -331,6 +333,10 @@ func (e *echoBot) handleMessage(msg []byte, requesterNodeID string) {
 		return
 	}
 	echoText := e.buildMessageReplyText(m.Text)
+	quote, err := getChuckQuote()
+	if err == nil {
+		echoText = quote
+	}
 
 	resp := event.NewMessageEvent{
 		ChatId:     m.ChatId,
@@ -390,7 +396,12 @@ func (e *echoBot) retweet(tw event.NewTweetEvent, requesterNodeID string) error 
 
 func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
 	parentID := tw.Id
-	_, err := e.node.GenericStream(
+	text := echoReplyPrefix + tw.Text
+	quote, err := getChuckQuote()
+	if err == nil {
+		text = quote
+	}
+	_, err = e.node.GenericStream(
 		requesterNodeID,
 		event.PUBLIC_POST_REPLY,
 		event.NewReplyEvent{
@@ -399,7 +410,7 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) e
 			ParentId:     &parentID,
 			ParentUserId: tw.UserId,
 			RootId:       tw.Id,
-			Text:         echoReplyPrefix + tw.Text,
+			Text:         text,
 			UserId:       e.ownerID(),
 			Username:     "Echo",
 		},
@@ -409,7 +420,12 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) e
 
 func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) error {
 	parentID := rp.Id
-	_, err := e.node.GenericStream(
+	text := echoReplyPrefix + rp.Text
+	quote, err := getChuckQuote()
+	if err == nil {
+		text = quote
+	}
+	_, err = e.node.GenericStream(
 		requesterNodeID,
 		event.PUBLIC_POST_REPLY,
 		event.NewReplyEvent{
@@ -418,7 +434,7 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 			ParentId:     &parentID,
 			ParentUserId: rp.UserId,
 			RootId:       rp.RootId,
-			Text:         echoReplyPrefix + rp.Text,
+			Text:         text,
 			UserId:       e.ownerID(),
 			Username:     "Echo",
 		},
@@ -467,11 +483,10 @@ func setupHandlers(echo *echoBot, node *member.MemberNode) {
 	)
 }
 
-func runTweetsReactions(ctx context.Context, echo *echoBot, node *member.MemberNode) {
+func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 	if node == nil {
 		log.Fatalf("echo: nil node")
 	}
-	peerStore := node.Node().Peerstore()
 
 	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
@@ -480,7 +495,10 @@ func runTweetsReactions(ctx context.Context, echo *echoBot, node *member.MemberN
 		if ctx.Err() != nil {
 			return
 		}
-		peers := peerStore.PeersWithAddrs()
+		if node == nil || node.Node() == nil {
+			continue
+		}
+		peers := node.Node().Peerstore().PeersWithAddrs()
 		if len(peers) == 0 {
 			log.Warn("echo: peers are not found")
 			continue
@@ -569,4 +587,27 @@ func requesterNodeID(s warpnet.WarpStream) string {
 		return ""
 	}
 	return s.Conn().RemotePeer().String()
+}
+
+func getChuckQuote() (string, error) {
+	time.Sleep(time.Millisecond * 100)
+	type quote struct {
+		Value string `json:"value"`
+	}
+
+	resp, err := http.Get("https://api.chucknorris.io/jokes/random")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var quoteResp quote
+	if err := json.Unmarshal(body, &quoteResp); err != nil {
+		return "", err
+	}
+	return quoteResp.Value, nil
 }
