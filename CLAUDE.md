@@ -7,6 +7,11 @@ Requirements:
 - If the documentation is unclear or conflicts with the codebase rely on codebase.
 - If the documentation is unclear or conflicts with the codebase notify about this discrepancy.
 
+## Code exploration
+Always start to explore the codebase from the files:
+  - cmd/node/member/main.go
+  - cmd/node/member/app.go
+
 ## Build Artifacts
 - Read `vendor` directory only if you need context of a code dependency
 - Do NOT modify the `vendor` directory manually.

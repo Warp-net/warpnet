@@ -78,6 +78,7 @@ type TweetsStorer interface {
 
 type TimelineUpdater interface {
 	AddTweetToTimeline(userId string, tweet domain.Tweet) error
+	DeleteTweetFromTimeline(userID, tweetID string) error
 }
 
 func StreamNewTweetHandler(
@@ -313,6 +314,7 @@ func StreamDeleteTweetHandler(
 	broadcaster TweetBroadcaster,
 	authRepo OwnerTweetStorer,
 	repo TweetsStorer,
+	timelineRepo TimelineUpdater,
 	likeRepo LikeTweetStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -339,6 +341,9 @@ func StreamDeleteTweetHandler(
 
 		if err := repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
 			return nil, err
+		}
+		if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, ev.TweetId); err != nil {
+			log.Errorf("delete tweet: timeline delete: %v", err)
 		}
 
 		owner := authRepo.GetOwner()
