@@ -69,7 +69,7 @@ func TestStreamLikeHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{})
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -77,7 +77,7 @@ func TestStreamLikeHandler(t *testing.T) {
 	})
 
 	t.Run("empty owner id", func(t *testing.T) {
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{})
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, UserId: tweetOwner}), nil)
 		if err == nil || err.Error() != "like: empty owner id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -85,7 +85,7 @@ func TestStreamLikeHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{})
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner}), nil)
 		if err == nil || err.Error() != "like: empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -93,7 +93,7 @@ func TestStreamLikeHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{})
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.LikeEvent{OwnerId: owner, UserId: tweetOwner}), nil)
 		if err == nil || err.Error() != "like: empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -104,7 +104,7 @@ func TestStreamLikeHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamLikeHandler(stubLikeRepo{likeFn: func(tweetId, userId string) (uint64, error) {
 			return 0, repoErr
-		}}, stubLikeUserRepo{}, stubStreamer{})
+		}}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error, got: %v", err)
@@ -112,7 +112,7 @@ func TestStreamLikeHandler(t *testing.T) {
 	})
 
 	t.Run("own tweet like", func(t *testing.T) {
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -123,7 +123,17 @@ func TestStreamLikeHandler(t *testing.T) {
 	})
 
 	t.Run("someone else liked (exchange finished)", func(t *testing.T) {
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: "other-node"}})
+		notified := false
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{addFn: func(not domain.Notification) error {
+			notified = true
+			if not.Type != domain.NotificationLikeType {
+				t.Fatalf("expected like type, got: %v", not.Type)
+			}
+			if not.UserId != tweetOwner {
+				t.Fatalf("expected notification for tweet owner, got: %v", not.UserId)
+			}
+			return nil
+		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner}})
 		resp, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -131,12 +141,15 @@ func TestStreamLikeHandler(t *testing.T) {
 		if resp.(event.LikesCountResponse).Count != 1 {
 			t.Fatalf("unexpected count: %v", resp)
 		}
+		if !notified {
+			t.Fatal("expected notification to be added")
+		}
 	})
 
 	t.Run("liked user not found", func(t *testing.T) {
 		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
-		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		}}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -150,7 +163,7 @@ func TestStreamLikeHandler(t *testing.T) {
 		repoErr := errors.New("user repo")
 		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, repoErr
-		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		}}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		_, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected user repo error: %v", err)
@@ -158,7 +171,7 @@ func TestStreamLikeHandler(t *testing.T) {
 	})
 
 	t.Run("stream node offline", func(t *testing.T) {
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
@@ -175,7 +188,7 @@ func TestStreamLikeHandler(t *testing.T) {
 
 	t.Run("stream error", func(t *testing.T) {
 		streamErr := errors.New("stream broken")
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
@@ -189,7 +202,7 @@ func TestStreamLikeHandler(t *testing.T) {
 
 	t.Run("remote response with error payload", func(t *testing.T) {
 		respErr, _ := json.Marshal(event.ResponseError{Code: 500, Message: "remote error"})
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return respErr, nil
@@ -209,7 +222,7 @@ func TestStreamLikeHandler(t *testing.T) {
 		h := StreamLikeHandler(stubLikeRepo{likeFn: func(tweetId, userId string) (uint64, error) {
 			capturedTweetId = tweetId
 			return 1, nil
-		}}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		}}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		_, err := h(marshal(t, event.LikeEvent{TweetId: domain.RetweetPrefix + tweetId, OwnerId: owner, UserId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -220,7 +233,7 @@ func TestStreamLikeHandler(t *testing.T) {
 	})
 
 	t.Run("successful stream", func(t *testing.T) {
-		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubStreamer{
+		h := StreamLikeHandler(stubLikeRepo{}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return []byte("{}"), nil

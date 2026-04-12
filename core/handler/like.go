@@ -67,6 +67,7 @@ type LikesStorer interface {
 func StreamLikeHandler(
 	repo LikesStorer,
 	userRepo LikedUserFetcher,
+	notifyRepo ModerationNotifier,
 	streamer LikeStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -99,6 +100,13 @@ func StreamLikeHandler(
 
 		isSomeoneLiked := ev.OwnerId != streamer.NodeInfo().OwnerId
 		if isSomeoneLiked { // likes exchange finished
+			if err := notifyRepo.Add(domain.Notification{
+				Type:   domain.NotificationLikeType,
+				Text:   ev.OwnerId + " liked your tweet",
+				UserId: streamer.NodeInfo().OwnerId,
+			}); err != nil {
+				log.Errorf("like handler: adding notification: %v", err)
+			}
 			return event.LikesCountResponse{Count: num}, nil
 		}
 

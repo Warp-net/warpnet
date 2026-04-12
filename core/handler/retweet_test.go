@@ -100,7 +100,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	}
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubStreamer{})
+		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -108,7 +108,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	})
 
 	t.Run("missing retweeted by", func(t *testing.T) {
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubStreamer{})
+		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{})
 		tw := domain.Tweet{Id: tweetId, UserId: tweetOwner}
 		_, err := h(marshal(t, event.NewRetweetEvent(tw)), nil)
 		if err == nil || err.Error() != "retweeted by unknown" {
@@ -117,7 +117,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	})
 
 	t.Run("missing tweet id", func(t *testing.T) {
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubStreamer{})
+		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{})
 		rt := retweeter
 		tw := domain.Tweet{UserId: tweetOwner, RetweetedBy: &rt}
 		_, err := h(marshal(t, event.NewRetweetEvent(tw)), nil)
@@ -130,7 +130,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 		repoErr := errors.New("db failed")
 		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{
 			newRetweetFn: func(tweet domain.Tweet) (domain.Tweet, error) { return domain.Tweet{}, repoErr },
-		}, stubTimelineRepo{}, stubStreamer{})
+		}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, makeTweet()), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -138,7 +138,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	})
 
 	t.Run("own tweet retweet", func(t *testing.T) {
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubStreamer{
+		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner},
 		})
 		rt := tweetOwner
@@ -152,6 +152,32 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("someone retweeted my tweet - adds notification", func(t *testing.T) {
+		notified := false
+		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{addFn: func(not domain.Notification) error {
+			notified = true
+			if not.Type != domain.NotificationRetweetType {
+				t.Fatalf("expected retweet type, got: %v", not.Type)
+			}
+			if not.UserId != tweetOwner {
+				t.Fatalf("expected notification for tweet owner, got: %v", not.UserId)
+			}
+			return nil
+		}}, stubStreamer{
+			nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner},
+		})
+		resp, err := h(marshal(t, makeTweet()), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp.(domain.Tweet).Id == "" {
+			t.Fatalf("expected tweet in response")
+		}
+		if !notified {
+			t.Fatal("expected notification to be added")
+		}
+	})
+
 	t.Run("owner retweeter adds to timeline", func(t *testing.T) {
 		timelineAdded := false
 		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{
@@ -159,7 +185,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 				timelineAdded = true
 				return nil
 			},
-		}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, makeTweet()), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -173,7 +199,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	t.Run("tweet owner user not found", func(t *testing.T) {
 		h := StreamNewReTweetHandler(stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
-		}}, stubReTweetRepo{}, stubTimelineRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		}}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, makeTweet()), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -184,7 +210,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	})
 
 	t.Run("stream node offline", func(t *testing.T) {
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubStreamer{
+		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
@@ -198,7 +224,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 
 	t.Run("stream error", func(t *testing.T) {
 		streamErr := errors.New("broken")
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubStreamer{
+		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
@@ -212,7 +238,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 
 	t.Run("remote response with error payload", func(t *testing.T) {
 		respErr, _ := json.Marshal(event.ResponseError{Code: 500, Message: "oops"})
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubStreamer{
+		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return respErr, nil

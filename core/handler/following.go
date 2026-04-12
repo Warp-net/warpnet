@@ -74,6 +74,7 @@ func StreamFollowHandler(
 	followRepo FollowingStorer,
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
+	notifyRepo ModerationNotifier,
 	streamer FollowNodeStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -96,6 +97,15 @@ func StreamFollowHandler(
 			err := followRepo.Follow(ev.FollowerId, ownerUserId)
 			if err != nil && !errors.Is(err, database.ErrAlreadyFollowed) {
 				return nil, err
+			}
+			if err == nil {
+				if notifyErr := notifyRepo.Add(domain.Notification{
+					Type:   domain.NotificationFollowType,
+					Text:   ev.FollowerId + " started following you",
+					UserId: ownerUserId,
+				}); notifyErr != nil {
+					log.Errorf("follow handler: adding notification: %v", notifyErr)
+				}
 			}
 			return event.Accepted, nil
 		}
