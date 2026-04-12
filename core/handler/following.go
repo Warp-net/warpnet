@@ -91,8 +91,16 @@ func StreamFollowHandler(
 		}
 
 		ownerUserId := authRepo.GetOwner().UserId
-		isMeFollowed := ownerUserId == ev.FollowingId
 
+		followingUser, err := userRepo.Get(ev.FollowingId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return event.Accepted, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		isMeFollowed := ownerUserId == ev.FollowingId
 		if isMeFollowed {
 			err := followRepo.Follow(ev.FollowerId, ownerUserId)
 			if err != nil && !errors.Is(err, database.ErrAlreadyFollowed) {
@@ -101,21 +109,13 @@ func StreamFollowHandler(
 			if err == nil {
 				if notifyErr := notifyRepo.Add(domain.Notification{
 					Type:   domain.NotificationFollowType,
-					Text:   ev.FollowerId + " started following you",
-					UserId: ownerUserId,
+					Text:   followingUser.Username + " started following you",
+					UserId: followingUser.Id,
 				}); notifyErr != nil {
 					log.Errorf("follow handler: adding notification: %v", notifyErr)
 				}
 			}
 			return event.Accepted, nil
-		}
-
-		followingUser, err := userRepo.Get(ev.FollowingId)
-		if errors.Is(err, database.ErrUserNotFound) {
-			return event.Accepted, nil
-		}
-		if err != nil {
-			return nil, err
 		}
 
 		// inform about me following someone now

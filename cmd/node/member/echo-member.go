@@ -61,7 +61,7 @@ const (
 	echoChatReply   = "echo: received message"
 	messageLimit    = 5000
 	seenTTL         = 999 * time.Minute
-	pruneInterval   = time.Minute
+	pruneInterval   = 999 * time.Minute
 	maxSeenKeys     = 10_000
 )
 

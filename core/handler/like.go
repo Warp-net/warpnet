@@ -98,24 +98,24 @@ func StreamLikeHandler(
 			return event.LikesCountResponse{Count: num}, nil
 		}
 
-		isSomeoneLiked := ev.OwnerId != streamer.NodeInfo().OwnerId
-		if isSomeoneLiked { // likes exchange finished
-			if err := notifyRepo.Add(domain.Notification{
-				Type:   domain.NotificationLikeType,
-				Text:   ev.OwnerId + " liked your tweet",
-				UserId: streamer.NodeInfo().OwnerId,
-			}); err != nil {
-				log.Errorf("like handler: adding notification: %v", err)
-			}
-			return event.LikesCountResponse{Count: num}, nil
-		}
-
 		likedUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
 			return event.LikesCountResponse{Count: num}, nil
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		isSomeoneLiked := ev.OwnerId != streamer.NodeInfo().OwnerId
+		if isSomeoneLiked { // likes exchange finished
+			if err := notifyRepo.Add(domain.Notification{
+				Type:   domain.NotificationLikeType,
+				Text:   likedUser.Username + " liked your tweet",
+				UserId: likedUser.Id,
+			}); err != nil {
+				log.Errorf("like handler: adding notification: %v", err)
+			}
+			return event.LikesCountResponse{Count: num}, nil
 		}
 
 		likeDataResp, err := streamer.GenericStream(
