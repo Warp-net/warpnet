@@ -101,20 +101,24 @@ func StreamNewReTweetHandler(
 		}
 
 		isOwnTweetRetweet := ownerId == retweetEvent.UserId // my own tweet retweet
-		retweeter, err := userRepo.Get(*retweetEvent.RetweetedBy)
-		if err == nil {
-			if isOwnTweetRetweet {
-				if !isOwnerRetweeter {
-					if err := notifyRepo.Add(domain.Notification{
-						Type:   domain.NotificationRetweetType,
-						Text:   retweeter.Username + " retweeted your tweet",
-						UserId: retweeter.Id,
-					}); err != nil {
-						log.Errorf("retweet handler: adding notification: %v", err)
-					}
+		if isOwnTweetRetweet {
+			if !isOwnerRetweeter {
+				notifyUsername := *retweetEvent.RetweetedBy
+				notifyUserId := *retweetEvent.RetweetedBy
+				retweeter, retweeterErr := userRepo.Get(*retweetEvent.RetweetedBy)
+				if retweeterErr == nil {
+					notifyUsername = retweeter.Username
+					notifyUserId = retweeter.Id
 				}
-				return retweet, nil
+				if err := notifyRepo.Add(domain.Notification{
+					Type:   domain.NotificationRetweetType,
+					Text:   notifyUsername + " retweeted your tweet",
+					UserId: notifyUserId,
+				}); err != nil {
+					log.Errorf("retweet handler: adding notification: %v", err)
+				}
 			}
+			return retweet, nil
 		}
 
 		tweetOwner, err := userRepo.Get(retweetEvent.UserId)
