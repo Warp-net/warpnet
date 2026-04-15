@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
@@ -133,6 +132,7 @@ func StreamGetUserHandler(
 	}
 }
 
+// TODO update also tweet, followers, followings counts
 func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStreamer) domain.User {
 	otherUserData, err := streamer.GenericStream(
 		user.NodeId,
@@ -150,11 +150,7 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 
 	var possibleError event.ResponseError
 	if _ = json.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
-		if strings.Contains(possibleError.Message, "user not found") {
-			user.IsOffline = true
-		} else {
-			log.Errorf("stream: unmarshal other user error response: %v", possibleError)
-		}
+		log.Errorf("stream: unmarshal other user error response: %v", possibleError)
 	}
 
 	if err = json.Unmarshal(otherUserData, &user); err != nil {

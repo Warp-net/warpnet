@@ -33,7 +33,6 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
-      - NODE_SEED=echo
       - SOCKS5_ENABLED=false
     volumes:
       - ${HOME}/warpnet-data/testnet/echo:/root/.warpdata/testnet/storage
