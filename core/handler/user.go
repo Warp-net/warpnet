@@ -30,6 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
@@ -139,6 +140,10 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 		ev,
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		user.IsOffline = true
+		return user
+	}
+	if err != nil && strings.Contains(err.Error(), "user not found") {
 		user.IsOffline = true
 		return user
 	}
