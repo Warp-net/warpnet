@@ -95,7 +95,7 @@ func StreamGetUserHandler(
 		if isMe {
 			u, err := repo.Get(ownerId)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("get user: owner %v", err)
 			}
 			followersCount, err := followRepo.GetFollowersCount(u.Id)
 			if err != nil {
@@ -118,38 +118,44 @@ func StreamGetUserHandler(
 		}
 
 		otherUser, err := repo.Get(ev.UserId)
-		if errors.Is(err, database.ErrUserNotFound) {
-			return nil, err
-		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get user: other user %v", err)
 		}
-
-		otherUserData, err := streamer.GenericStream(
-			otherUser.NodeId,
-			event.PUBLIC_GET_USER,
-			ev,
-		)
-		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			otherUser.IsOffline = true
-			_, err = repo.Update(otherUser.Id, otherUser)
-			return otherUser, err
+		if otherUser.NodeId == "" {
+			return otherUser, fmt.Errorf("get user: node id is not found")
 		}
-		if err != nil {
-			return nil, err
-		}
-
-		var possibleError event.ResponseError
-		if _ = json.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
-			return nil, fmt.Errorf("unmarshal other user error response: %w", possibleError)
-		}
-
-		if err = json.Unmarshal(otherUserData, &otherUser); err != nil {
-			return nil, fmt.Errorf("get other user: response unmarshal: %w %s", err, otherUserData)
-		}
-		_, err = repo.Update(otherUser.Id, otherUser)
-		return otherUser, err
+		go func() {
+			updatedUser := updateOtherUser(ev, otherUser, streamer)
+			_, err = repo.Update(updatedUser.Id, updatedUser)
+		}()
+		return otherUser, nil
 	}
+}
+
+func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStreamer) domain.User {
+	otherUserData, err := streamer.GenericStream(
+		user.NodeId,
+		event.PUBLIC_GET_USER,
+		ev,
+	)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		user.IsOffline = true
+		return user
+	}
+	if err != nil {
+		log.Errorf("stream: get other user: %v", err)
+		return user
+	}
+
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
+		log.Errorf("stream: unmarshal other user error response: %v", possibleError)
+	}
+
+	if err = json.Unmarshal(otherUserData, &user); err != nil {
+		log.Errorf("stream: get other user: response unmarshal: %v %s", err, otherUserData)
+	}
+	return user
 }
 
 func StreamGetUsersHandler(
