@@ -143,10 +143,6 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 		user.IsOffline = true
 		return user
 	}
-	if err != nil && strings.Contains(err.Error(), "user not found") {
-		user.IsOffline = true
-		return user
-	}
 	if err != nil {
 		log.Errorf("stream: get other user: %v", err)
 		return user
@@ -154,7 +150,11 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 
 	var possibleError event.ResponseError
 	if _ = json.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
-		log.Errorf("stream: unmarshal other user error response: %v", possibleError)
+		if strings.Contains(possibleError.Message, "user not found") {
+			user.IsOffline = true
+		} else {
+			log.Errorf("stream: unmarshal other user error response: %v", possibleError)
+		}
 	}
 
 	if err = json.Unmarshal(otherUserData, &user); err != nil {
