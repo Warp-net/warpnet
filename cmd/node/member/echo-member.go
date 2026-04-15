@@ -31,9 +31,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/stream"
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/metrics"
 	"io"
 	"net/http"
 	"os"
@@ -46,11 +43,14 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/database/local-store"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
@@ -108,7 +108,7 @@ func main() {
 			psk,
 		)
 		if authErr != nil {
-			log.Fatalf("failed to login: %v", err)
+			log.Fatalf("failed to login: %v", authErr)
 		}
 	}()
 
@@ -146,7 +146,7 @@ func main() {
 	authInfo.NodeInfo = echoNode.NodeInfo()
 
 	readyChan <- authInfo
-	eBot := newEchoBot(echoNode)
+	eBot := newEchoBot(echoNode, db)
 	go runOwnActivity(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)
 
@@ -160,16 +160,25 @@ type echoStreamClient interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
+type echoPersister interface {
+	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	Get(key local_store.DatabaseKey) ([]byte, error)
+}
+
+const echoSeenNamespace = "/ECHO_SEEN/"
+
 type echoBot struct {
 	node         echoStreamClient
+	db           echoPersister
 	mu           sync.Mutex
 	seen         map[string]time.Time
 	lastPruneRun time.Time
 }
 
-func newEchoBot(node echoStreamClient) *echoBot {
+func newEchoBot(node echoStreamClient, db echoPersister) *echoBot {
 	return &echoBot{
 		node:         node,
+		db:           db,
 		seen:         make(map[string]time.Time),
 		lastPruneRun: time.Now(),
 	}
@@ -188,7 +197,22 @@ func (e *echoBot) wasSeen(action, id string) bool {
 	if seenAt, ok := e.seen[key]; ok && now.Sub(seenAt) <= seenTTL {
 		return true
 	}
+
+	// Check persistent storage for state surviving restarts
+	if e.db != nil {
+		dbKey := local_store.DatabaseKey(echoSeenNamespace + key)
+		if _, err := e.db.Get(dbKey); err == nil {
+			e.seen[key] = now
+			return true
+		}
+	}
+
 	e.seen[key] = now
+	// Persist to database so state survives restarts
+	if e.db != nil {
+		dbKey := local_store.DatabaseKey(echoSeenNamespace + key)
+		_ = e.db.SetWithTTL(dbKey, []byte(now.Format(time.RFC3339)), seenTTL)
+	}
 	e.evictIfNeeded()
 	return false
 }

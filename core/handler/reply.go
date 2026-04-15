@@ -111,7 +111,7 @@ func StreamNewReplyHandler(
 				if err := notifyRepo.Add(domain.Notification{
 					Type:   domain.NotificationReplyType,
 					Text:   ev.Username + " replied to your tweet",
-					UserId: streamer.NodeInfo().OwnerId,
+					UserId: ev.UserId,
 				}); err != nil {
 					log.Errorf("reply handler: adding notification: %v", err)
 				}
