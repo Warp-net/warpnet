@@ -75,6 +75,10 @@ type stubTimelineRepo struct {
 	addFn func(userId string, tweet domain.Tweet) error
 }
 
+func (s stubTimelineRepo) DeleteTweetFromTimeline(userID, tweetID string) error {
+	return nil
+}
+
 func (s stubTimelineRepo) AddTweetToTimeline(userId string, tweet domain.Tweet) error {
 	if s.addFn != nil {
 		return s.addFn(userId, tweet)
