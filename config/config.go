@@ -78,6 +78,7 @@ func init() {
 	pflag.String("logging.level", "info", "Logging level")
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
+	pflag.String("database.path", "", "Full database path (overrides computed path when set)")
 
 	pflag.String("socks5.port", ":1080", "SOCKS5 server port")
 	pflag.Bool("socks5.enabled", true, "SOCKS5 server is enabled")
@@ -120,9 +121,12 @@ func init() {
 	if seed == "" {
 		seed = "seed" + network + dbDir + host + port
 	}
-	appPath := getAppPath()
 
-	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
+	dbPath := strings.TrimSpace(viper.GetString("database.path"))
+	if dbPath == "" {
+		appPath := getAppPath()
+		dbPath = filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
+	}
 
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
