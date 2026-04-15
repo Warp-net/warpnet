@@ -159,8 +159,8 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 			if not.Type != domain.NotificationRetweetType {
 				t.Fatalf("expected retweet type, got: %v", not.Type)
 			}
-			if not.UserId != tweetOwner {
-				t.Fatalf("expected notification for tweet owner, got: %v", not.UserId)
+			if not.UserId != retweeter {
+				t.Fatalf("expected notification for retweeter, got: %v", not.UserId)
 			}
 			return nil
 		}}, stubStreamer{
