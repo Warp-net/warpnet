@@ -129,8 +129,8 @@ func TestStreamLikeHandler(t *testing.T) {
 			if not.Type != domain.NotificationLikeType {
 				t.Fatalf("expected like type, got: %v", not.Type)
 			}
-			if not.UserId != owner {
-				t.Fatalf("expected notification for liker, got: %v", not.UserId)
+			if not.UserId != tweetOwner {
+				t.Fatalf("expected notification for tweet owner, got: %v", not.UserId)
 			}
 			return nil
 		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner}})
