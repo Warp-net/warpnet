@@ -101,7 +101,7 @@ func StreamNewReTweetHandler(
 		}
 
 		isOwnTweetRetweet := ownerId == retweetEvent.UserId // my own tweet retweet
-		if isOwnTweetRetweet {
+		if isOwnTweetRetweet {                              //nolint:nestif
 			if !isOwnerRetweeter {
 				notifyUsername := *retweetEvent.RetweetedBy
 				retweeter, retweeterErr := userRepo.Get(*retweetEvent.RetweetedBy)

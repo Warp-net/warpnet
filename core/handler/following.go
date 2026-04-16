@@ -101,7 +101,7 @@ func StreamFollowHandler(
 		}
 
 		isMeFollowed := ownerUserId == ev.FollowingId
-		if isMeFollowed {
+		if isMeFollowed { //nolint:nestif
 			err := followRepo.Follow(ev.FollowerId, ownerUserId)
 			if err != nil && !errors.Is(err, database.ErrAlreadyFollowed) {
 				return nil, err
