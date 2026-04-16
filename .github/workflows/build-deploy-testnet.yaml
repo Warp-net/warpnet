@@ -40,39 +40,41 @@ jobs:
           tags: ghcr.io/warp-net/warpnet-bootstrap:latest
           build-args: --dns 8.8.8.8
 
-  build-moderator:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: true
+# temp disabled
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.26
-          cache-dependency-path: godep/go.sum
-
-      - name: Log in to Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Moderator Docker image
-        id: docker_build_moderator
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.moderator
-          push: true
-          tags: ghcr.io/warp-net/warpnet-moderator:latest
-          build-args: --dns 8.8.8.8
+#  build-moderator:
+#    runs-on: ubuntu-latest
+#    permissions:
+#      contents: read
+#      packages: write
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#        with:
+#          submodules: true
+#
+#      - name: Set up Go
+#        uses: actions/setup-go@v4
+#        with:
+#          go-version: 1.26
+#          cache-dependency-path: godep/go.sum
+#
+#      - name: Log in to Container registry
+#        uses: docker/login-action@v3
+#        with:
+#          registry: ghcr.io
+#          username: ${{ github.actor }}
+#          password: ${{ secrets.GITHUB_TOKEN }}
+#
+#      - name: Build and push Moderator Docker image
+#        id: docker_build_moderator
+#        uses: docker/build-push-action@v6
+#        with:
+#          context: .
+#          file: Dockerfile.moderator
+#          push: true
+#          tags: ghcr.io/warp-net/warpnet-moderator:latest
+#          build-args: --dns 8.8.8.8
 
   build-echo:
     runs-on: ubuntu-latest
