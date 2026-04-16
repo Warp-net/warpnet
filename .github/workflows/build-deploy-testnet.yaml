@@ -111,7 +111,8 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [ build-bootstrap, build-moderator, build-echo ]
+#    needs: [ build-bootstrap, build-moderator, build-echo ]
+    needs: [ build-bootstrap, build-echo ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
