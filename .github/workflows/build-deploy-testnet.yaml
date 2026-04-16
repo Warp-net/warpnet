@@ -114,36 +114,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up SSH agent (debug)
-        run: |
-          set -x
-          set +e
-    
-          mkdir -p ~/.ssh
-    
-          echo "Writing SSH key"
-          echo "${{ secrets.DO_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-    
-          echo "Starting ssh-agent"
-          eval "$(ssh-agent -s)" 2>agent.err
-          echo "ssh-agent exit code: $?"
-          cat agent.err || true
-    
-          echo "Adding SSH key"
-          ssh-add ~/.ssh/id_rsa 2>add.err
-          echo "ssh-add exit code: $?"
-          cat add.err || true
-    
-          echo "Adding known hosts"
-          ssh-keyscan -H 207.154.221.44 >> ~/.ssh/known_hosts 2>scan1.err
-          cat scan1.err || true
-    
-          ssh-keyscan -H 130.94.88.38 >> ~/.ssh/known_hosts 2>scan2.err
-          cat scan2.err || true
-    
-          exit 1
-
       - name: Set up SSH agent
         run: |
           mkdir -p ~/.ssh
