@@ -164,8 +164,8 @@ func TestStreamFollowHandler(t *testing.T) {
 			if not.Type != domain.NotificationFollowType {
 				t.Fatalf("expected follow type, got: %v", not.Type)
 			}
-			if not.UserId != following {
-				t.Fatalf("expected notification for follower, got: %v", not.UserId)
+			if not.UserId != owner {
+				t.Fatalf("expected notification for followed user, got: %v", not.UserId)
 			}
 			return nil
 		}}, stubFollowStreamer{})
