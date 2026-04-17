@@ -6,8 +6,7 @@ tool github.com/wailsapp/wails/v2/cmd/wails
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/Warp-net/warpnet-frontend v0.0.652
-	github.com/cockroachdb/errors v1.12.0
+	github.com/Warp-net/warpnet-frontend v0.0.663
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
@@ -71,6 +70,7 @@ require (
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250805141217-38fb69db254f // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
+	github.com/cockroachdb/errors v1.12.0 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506 // indirect
 	github.com/cockroachdb/redact v1.1.6 // indirect
 	github.com/containerd/console v1.0.5 // indirect
@@ -139,8 +139,6 @@ require (
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/koron/go-ssdp v0.0.6 // indirect
-	github.com/kr/pretty v0.3.1 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/labstack/echo/v4 v4.13.4 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/leaanthony/clir v1.7.0 // indirect
@@ -225,7 +223,6 @@ require (
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/samber/lo v1.51.0 // indirect

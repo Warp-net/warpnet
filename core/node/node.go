@@ -26,6 +26,7 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -40,7 +41,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/cockroachdb/errors"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
 	log "github.com/sirupsen/logrus"
@@ -326,7 +326,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	}
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
-		return nil, errors.Errorf(
+		return nil, fmt.Errorf(
 			"node: selfstream: no handler for path %s, available handlers %d \n",
 			path, len(n.internalHandlers),
 		)
