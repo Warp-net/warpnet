@@ -6,7 +6,7 @@ tool github.com/wailsapp/wails/v2/cmd/wails
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/Warp-net/warpnet-frontend v0.0.651
+	github.com/Warp-net/warpnet-frontend v0.0.652
 	github.com/cockroachdb/errors v1.12.0
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/docker/go-units v0.5.0
