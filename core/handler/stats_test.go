@@ -44,9 +44,9 @@ type stubStatsNode struct {
 	net       stubStatsNetwork
 }
 
-func (s stubStatsNode) NodeInfo() warpnet.NodeInfo         { return s.info }
-func (s stubStatsNode) Peerstore() warpnet.WarpPeerstore   { return s.peerStore }
-func (s stubStatsNode) Network() warpnet.WarpNetwork       { return s.net }
+func (s stubStatsNode) NodeInfo() warpnet.NodeInfo       { return s.info }
+func (s stubStatsNode) Peerstore() warpnet.WarpPeerstore { return s.peerStore }
+func (s stubStatsNode) Network() warpnet.WarpNetwork     { return s.net }
 
 func TestStreamGetStatsHandler(t *testing.T) {
 	t.Run("connected with peers", func(t *testing.T) {

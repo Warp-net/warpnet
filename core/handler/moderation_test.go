@@ -42,7 +42,6 @@ func (s stubModerationTimelineDeleter) DeleteTweetFromTimeline(userID, tweetID s
 	return nil
 }
 
-
 func TestStreamModerationResultHandler(t *testing.T) {
 	owner := "owner-1"
 	tweetId := "tweet-1"

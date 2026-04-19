@@ -78,4 +78,3 @@ func TestGenerateAnchoredEntropy(t *testing.T) {
 	assert.Equal(t, e1, e2, "anchored entropy should be deterministic")
 	assert.Len(t, e1, 32)
 }
-
