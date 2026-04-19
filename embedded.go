@@ -26,6 +26,7 @@ package warpnet
 
 import (
 	"embed"
+	"io/fs"
 )
 
 //go:embed *.go */*.go */*/*.go */*/*/*.go */*/*/*/*.go */*/*/*/*/*.go
@@ -47,4 +48,11 @@ var logo []byte
 
 func GetLogo() []byte {
 	return logo
+}
+
+//go:embed frontend/dist
+var static embed.FS
+
+func GetStaticEmbedded() fs.FS {
+	return static
 }

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet"
-	frontend "github.com/Warp-net/warpnet-frontend"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -48,7 +47,7 @@ func main() {
 		Height:           1024,
 		WindowStartState: options.Maximised,
 		AssetServer: &assetserver.Options{
-			Assets: frontend.GetStaticEmbedded(),
+			Assets: warpnet.GetStaticEmbedded(),
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,

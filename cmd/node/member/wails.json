@@ -4,7 +4,7 @@
   "outputfilename": "warpnet",
   "icon": "icon.png",
   "skipfrontend": true,
-  "frontend:dir": "../../../vendor/github.com/Warp-net/warpnet-frontend",
+  "frontend:dir": "../../../frontend",
   "frontend:dev:serverUrl": "auto",
   "go:build:mod": "vendor",
   "author": {

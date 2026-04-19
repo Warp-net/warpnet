@@ -43,3 +43,5 @@ overlay
 # moderation submodule
 core/moderation
 !core/moderation/.git
+
+frontend/node_modules
