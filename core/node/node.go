@@ -322,12 +322,12 @@ func (n *WarpNode) Prioritizer() Prioritizer {
 
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
-		return nil, fmt.Errorf("node: selfstream: empty data")
-	} //nolint:err113
+		return nil, fmt.Errorf("node: selfstream: empty data") //nolint:err113
+	}
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
 		return nil, fmt.Errorf( //nolint:err113
-			"node: selfstream: no handler for path %s, available handlers %d \n",
+			"node: selfstream: no handler for path %s, available handlers %d",
 			path, len(n.internalHandlers),
 		)
 	}
