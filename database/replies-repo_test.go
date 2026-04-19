@@ -52,7 +52,7 @@ func (s *ReplyRepoTestSuite) SetupSuite() {
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
 
-	auth := NewAuthRepo(s.db)
+	auth := NewAuthRepo(s.db, "test")
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
 	s.repo = NewRepliesRepo(s.db, nil)
@@ -157,6 +157,25 @@ func (s *ReplyRepoTestSuite) TestGetRepliesTree() {
 	for _, node := range tree {
 		s.Equal("child", node.Reply.Text)
 	}
+}
+
+func (s *ReplyRepoTestSuite) TestBuildRepliesTreeNestedChildren() {
+	// buildRepliesTree should correctly propagate grandchildren when all
+	// replies in a subtree are passed in (e.g. from a remote fetch).
+	parentId := "root-parent"
+	childId := "child-1"
+	grandchildId := "grandchild-1"
+
+	replies := []domain.Tweet{
+		{Id: childId, ParentId: &parentId, Text: "child", CreatedAt: time.Now()},
+		{Id: grandchildId, ParentId: &childId, Text: "grandchild", CreatedAt: time.Now().Add(time.Second)},
+	}
+
+	tree := buildRepliesTree(replies)
+	s.Require().Len(tree, 1, "should have 1 root-level child")
+	s.Equal("child", tree[0].Reply.Text)
+	s.Require().Len(tree[0].Children, 1, "child should have 1 grandchild")
+	s.Equal("grandchild", tree[0].Children[0].Reply.Text)
 }
 
 func TestReplyRepoTestSuite(t *testing.T) {

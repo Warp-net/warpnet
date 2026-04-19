@@ -64,6 +64,7 @@ type ReplyStorer interface {
 func StreamNewReplyHandler(
 	replyRepo ReplyStorer,
 	userRepo ReplyUserFetcher,
+	notifyRepo ModerationNotifier,
 	streamer ReplyStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -106,6 +107,15 @@ func StreamNewReplyHandler(
 
 		isOwnTweetReply := parentUser.NodeId == streamer.NodeInfo().ID.String()
 		if isOwnTweetReply {
+			if ev.UserId != streamer.NodeInfo().OwnerId {
+				if err := notifyRepo.Add(domain.Notification{
+					Type:   domain.NotificationReplyType,
+					Text:   ev.Username + " replied to your tweet",
+					UserId: ev.ParentUserId,
+				}); err != nil {
+					log.Errorf("reply handler: adding notification: %v", err)
+				}
+			}
 			return reply, nil
 		}
 
@@ -188,14 +198,15 @@ func StreamGetReplyHandler(
 			return nil, err
 		}
 
-		var reply domain.Tweet
-		if err = json.Unmarshal(getTweetResp, &reply); err != nil {
+		var possibleError event.ResponseError
+		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal other get reply error response: %s", possibleError.Message)
 			return repo.GetReply(rootId, id)
 		}
 
-		var possibleError event.ResponseError
-		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
-			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
+		var reply domain.Tweet
+		if err = json.Unmarshal(getTweetResp, &reply); err != nil {
+			return repo.GetReply(rootId, id)
 		}
 
 		return reply, nil

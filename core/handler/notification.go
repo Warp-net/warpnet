@@ -7,7 +7,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	log "github.com/sirupsen/logrus"
 )
 
 /*
@@ -62,16 +61,18 @@ func StreamGetNotificationsHandler(
 		if err != nil {
 			return nil, err
 		}
-		if len(notifications) != 0 {
-			log.Infof("found %d notifications", len(notifications))
-		}
 
 		var unreadCount uint64
-		sort.SliceStable(notifications, func(i, j int) bool {
-			if !notifications[i].IsRead {
+		for _, n := range notifications {
+			if !n.IsRead {
 				unreadCount++
 			}
-			return notifications[i].IsRead
+		}
+		sort.SliceStable(notifications, func(i, j int) bool {
+			if notifications[i].IsRead != notifications[j].IsRead {
+				return !notifications[i].IsRead
+			}
+			return notifications[i].CreatedAt.After(notifications[j].CreatedAt)
 		})
 		return event.GetNotificationsResponse{
 			Cursor:        cur,

@@ -26,7 +26,8 @@ package main
 
 import (
 	"context"
-	"github.com/Warp-net/warpnet/metrics"
+	"crypto/ed25519"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"os"
 	"os/signal"
 	"syscall"
@@ -89,7 +90,13 @@ func main() {
 		return
 	}
 
-	n, err := node.NewModeratorNode(ctx, privKey, psk, codeHashHex)
+	ownNodeId, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId, codeHashHex)
 	if err != nil {
 		log.Errorf("failed to init moderator node: %v", err)
 		return
@@ -109,15 +116,6 @@ func main() {
 	defer func() {
 		_ = publisher.Close()
 	}()
-
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		network,
-		"moderator",
-		n.NodeInfo().ID.String(),
-	)
-	defer m.Stop()
-	m.Start()
 
 	moder, err := moderator.NewModerator(ctx, n, publisher)
 	if err != nil {

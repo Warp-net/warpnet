@@ -55,16 +55,36 @@ const topK = 3
 
 func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 	b.mx.RLock()
-	defer b.mx.RUnlock()
+	hasExitNodes := b.exitList.Len() > 0
+	b.mx.RUnlock()
 
-	if b.exitList.Len() == 0 {
+	if !hasExitNodes {
 		peers := b.streamer.Peerstore().PeersWithAddrs()
-		if len(peers) != 0 {
-			return peers[rand.Intn(len(peers))], true //nolint:gosec
+		streamCandidates := make([]warpnet.WarpPeerID, 0, len(peers))
+		redirectCandidates := make([]warpnet.WarpPeerID, 0, len(peers))
+		selfID := b.streamer.NodeInfo().ID
+		for _, peer := range peers {
+			if peer == selfID {
+				continue
+			}
+			redirectCandidates = append(redirectCandidates, peer)
+
+			protocols, _ := b.streamer.Peerstore().GetProtocols(peer)
+			if len(protocols) == 0 || !slices.Contains(protocols, DefaultStreamProtocol) {
+				continue
+			}
+			streamCandidates = append(streamCandidates, peer)
+		}
+		if len(streamCandidates) != 0 {
+			return streamCandidates[rand.Intn(len(streamCandidates))], false //nolint:gosec
+		}
+		if len(redirectCandidates) != 0 {
+			return redirectCandidates[rand.Intn(len(redirectCandidates))], true //nolint:gosec
 		}
 		return "", false
 	}
 
+	b.mx.RLock()
 	candidates := make([]warpnet.WarpPeerID, 0, topK)
 	count := 0
 	for element := b.exitList.Front(); element != nil && count < topK; element = element.Next() {
@@ -75,6 +95,7 @@ func (b *socksBalancer) route() (_ warpnet.WarpPeerID, isRedirect bool) {
 		candidates = append(candidates, peer)
 		count++
 	}
+	b.mx.RUnlock()
 
 	if len(candidates) != 0 {
 		return candidates[rand.Intn(len(candidates))], false //nolint:gosec
@@ -115,11 +136,13 @@ func (b *socksBalancer) detectSuitablePeers(ctx context.Context) {
 		}
 		if p2pNet.Connectedness(peer) == network.NotConnected {
 			if err := b.streamer.SimpleConnect(p2pStore.PeerInfo(peer)); err != nil {
+				b.removePeer(peer)
 				continue
 			}
 		}
 		protocols, _ := p2pStore.GetProtocols(peer)
 		if len(protocols) == 0 || !slices.Contains(protocols, DefaultStreamProtocol) {
+			b.removePeer(peer)
 			continue
 		}
 
@@ -163,6 +186,16 @@ func (b *socksBalancer) detectSuitablePeers(ctx context.Context) {
 		b.peersWithLatency[peer.String()] = key
 
 		b.mx.Unlock()
+	}
+}
+
+func (b *socksBalancer) removePeer(peer warpnet.WarpPeerID) {
+	b.mx.Lock()
+	defer b.mx.Unlock()
+
+	if prevKey, ok := b.peersWithLatency[peer.String()]; ok {
+		b.exitList.Remove(prevKey)
+		delete(b.peersWithLatency, peer.String())
 	}
 }
 

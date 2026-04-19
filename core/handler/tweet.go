@@ -78,6 +78,7 @@ type TweetsStorer interface {
 
 type TimelineUpdater interface {
 	AddTweetToTimeline(userId string, tweet domain.Tweet) error
+	DeleteTweetFromTimeline(userID, tweetID string) error
 }
 
 func StreamNewTweetHandler(
@@ -193,14 +194,15 @@ func StreamGetTweetHandler(
 			return nil, err
 		}
 
-		var tweet domain.Tweet
-		if err = json.Unmarshal(getTweetResp, &tweet); err != nil {
+		var possibleError event.ResponseError
+		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal other get tweet error response: %s", possibleError.Message)
 			return repo.Get(ev.UserId, ev.TweetId)
 		}
 
-		var possibleError event.ResponseError
-		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
-			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
+		var tweet domain.Tweet
+		if err = json.Unmarshal(getTweetResp, &tweet); err != nil {
+			return repo.Get(ev.UserId, ev.TweetId)
 		}
 
 		return tweet, nil
@@ -312,6 +314,7 @@ func StreamDeleteTweetHandler(
 	broadcaster TweetBroadcaster,
 	authRepo OwnerTweetStorer,
 	repo TweetsStorer,
+	timelineRepo TimelineUpdater,
 	likeRepo LikeTweetStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -338,6 +341,9 @@ func StreamDeleteTweetHandler(
 
 		if err := repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
 			return nil, err
+		}
+		if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, ev.TweetId); err != nil {
+			log.Errorf("delete tweet: timeline delete: %v", err)
 		}
 
 		owner := authRepo.GetOwner()

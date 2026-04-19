@@ -58,9 +58,6 @@ github.com/ProtonMail/go-crypto/openpgp/x448
 # github.com/StackExchange/wmi v1.2.1
 ## explicit; go 1.13
 github.com/StackExchange/wmi
-# github.com/Warp-net/warpnet-frontend v0.0.630
-## explicit; go 1.24.0
-github.com/Warp-net/warpnet-frontend
 # github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 ## explicit
 github.com/acarl005/stripansi
@@ -121,7 +118,7 @@ github.com/charmbracelet/x/exp/slice
 # github.com/charmbracelet/x/term v0.2.1
 ## explicit; go 1.18
 github.com/charmbracelet/x/term
-# github.com/cloudflare/circl v1.6.1
+# github.com/cloudflare/circl v1.6.3
 ## explicit; go 1.22.0
 github.com/cloudflare/circl/dh/x25519
 github.com/cloudflare/circl/dh/x448
@@ -137,39 +134,10 @@ github.com/cloudflare/circl/sign/ed25519
 github.com/cloudflare/circl/sign/ed448
 # github.com/cockroachdb/errors v1.12.0
 ## explicit; go 1.23.0
-github.com/cockroachdb/errors
-github.com/cockroachdb/errors/assert
-github.com/cockroachdb/errors/barriers
-github.com/cockroachdb/errors/contexttags
-github.com/cockroachdb/errors/domains
-github.com/cockroachdb/errors/errbase
-github.com/cockroachdb/errors/errorspb
-github.com/cockroachdb/errors/errutil
-github.com/cockroachdb/errors/hintdetail
-github.com/cockroachdb/errors/issuelink
-github.com/cockroachdb/errors/join
-github.com/cockroachdb/errors/markers
-github.com/cockroachdb/errors/report
-github.com/cockroachdb/errors/safedetails
-github.com/cockroachdb/errors/secondary
-github.com/cockroachdb/errors/stdstrings
-github.com/cockroachdb/errors/telemetrykeys
-github.com/cockroachdb/errors/withstack
 # github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
 ## explicit; go 1.18
-github.com/cockroachdb/logtags
 # github.com/cockroachdb/redact v1.1.6
 ## explicit; go 1.14
-github.com/cockroachdb/redact
-github.com/cockroachdb/redact/builder
-github.com/cockroachdb/redact/interfaces
-github.com/cockroachdb/redact/internal/buffer
-github.com/cockroachdb/redact/internal/escape
-github.com/cockroachdb/redact/internal/fmtforward
-github.com/cockroachdb/redact/internal/markers
-github.com/cockroachdb/redact/internal/redact
-github.com/cockroachdb/redact/internal/rfmt
-github.com/cockroachdb/redact/internal/rfmt/fmtsort
 # github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console
@@ -267,12 +235,6 @@ github.com/gammazero/chanqueue
 github.com/gammazero/deque
 # github.com/getsentry/sentry-go v0.35.0
 ## explicit; go 1.21
-github.com/getsentry/sentry-go
-github.com/getsentry/sentry-go/attribute
-github.com/getsentry/sentry-go/internal/debug
-github.com/getsentry/sentry-go/internal/otel/baggage
-github.com/getsentry/sentry-go/internal/otel/baggage/internal/baggage
-github.com/getsentry/sentry-go/internal/ratelimit
 # github.com/go-errors/errors v1.5.1
 ## explicit; go 1.14
 github.com/go-errors/errors
@@ -282,16 +244,16 @@ github.com/go-git/gcfg
 github.com/go-git/gcfg/scanner
 github.com/go-git/gcfg/token
 github.com/go-git/gcfg/types
-# github.com/go-git/go-billy/v5 v5.6.2
-## explicit; go 1.21
+# github.com/go-git/go-billy/v5 v5.8.0
+## explicit; go 1.24.0
 github.com/go-git/go-billy/v5
 github.com/go-git/go-billy/v5/helper/chroot
 github.com/go-git/go-billy/v5/helper/polyfill
 github.com/go-git/go-billy/v5/memfs
 github.com/go-git/go-billy/v5/osfs
 github.com/go-git/go-billy/v5/util
-# github.com/go-git/go-git/v5 v5.16.2
-## explicit; go 1.23.0
+# github.com/go-git/go-git/v5 v5.17.1
+## explicit; go 1.24.0
 github.com/go-git/go-git/v5
 github.com/go-git/go-git/v5/config
 github.com/go-git/go-git/v5/internal/path_util
@@ -361,11 +323,7 @@ github.com/go-xmlfmt/xmlfmt
 github.com/godbus/dbus/v5
 # github.com/gogo/protobuf v1.3.2
 ## explicit; go 1.15
-github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
-github.com/gogo/protobuf/protoc-gen-gogo/descriptor
-github.com/gogo/protobuf/sortkeys
-github.com/gogo/protobuf/types
 # github.com/golang/geo v0.0.0-20250806055131-e46a1d5e4545
 ## explicit; go 1.21.0
 github.com/golang/geo/r1
@@ -600,8 +558,8 @@ github.com/json-iterator/go
 # github.com/kevinburke/ssh_config v1.2.0
 ## explicit
 github.com/kevinburke/ssh_config
-# github.com/klauspost/compress v1.18.1
-## explicit; go 1.23
+# github.com/klauspost/compress v1.18.5
+## explicit; go 1.24
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
@@ -621,12 +579,6 @@ github.com/klauspost/cpuid/v2
 github.com/koron/go-ssdp
 github.com/koron/go-ssdp/internal/multicast
 github.com/koron/go-ssdp/internal/ssdplog
-# github.com/kr/pretty v0.3.1
-## explicit; go 1.12
-github.com/kr/pretty
-# github.com/kr/text v0.2.0
-## explicit
-github.com/kr/text
 # github.com/labstack/echo/v4 v4.13.4
 ## explicit; go 1.23.0
 github.com/labstack/echo/v4
@@ -1121,9 +1073,6 @@ github.com/refraction-networking/utls/internal/tls13
 # github.com/rivo/uniseg v0.4.7
 ## explicit; go 1.18
 github.com/rivo/uniseg
-# github.com/rogpeppe/go-internal v1.14.1
-## explicit; go 1.23
-github.com/rogpeppe/go-internal/fmtsort
 # github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 ## explicit; go 1.13
 github.com/sabhiram/go-gitignore

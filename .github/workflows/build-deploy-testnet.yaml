@@ -1,9 +1,9 @@
 name: Build & Deploy Testnet
 
 on:
-  push:
-    branches:
-      - develop
+  # push:
+  #   branches:
+  #     - develop
   workflow_dispatch:
 
 jobs:
@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -32,12 +34,49 @@ jobs:
       - name: Build and push Bootstrap Docker image
         uses: docker/build-push-action@v6
         with:
+          context: .
           file: Dockerfile.bootstrap
           push: true
           tags: ghcr.io/warp-net/warpnet-bootstrap:latest
           build-args: --dns 8.8.8.8
 
-  build-moderator:
+# temp disabled
+
+#  build-moderator:
+#    runs-on: ubuntu-latest
+#    permissions:
+#      contents: read
+#      packages: write
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#        with:
+#          submodules: true
+#
+#      - name: Set up Go
+#        uses: actions/setup-go@v4
+#        with:
+#          go-version: 1.26
+#          cache-dependency-path: godep/go.sum
+#
+#      - name: Log in to Container registry
+#        uses: docker/login-action@v3
+#        with:
+#          registry: ghcr.io
+#          username: ${{ github.actor }}
+#          password: ${{ secrets.GITHUB_TOKEN }}
+#
+#      - name: Build and push Moderator Docker image
+#        id: docker_build_moderator
+#        uses: docker/build-push-action@v6
+#        with:
+#          context: .
+#          file: Dockerfile.moderator
+#          push: true
+#          tags: ghcr.io/warp-net/warpnet-moderator:latest
+#          build-args: --dns 8.8.8.8
+
+  build-echo:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,6 +84,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -59,17 +100,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Moderator Docker image
-        id: docker_build_moderator
+      - name: Build and push Echo Docker image
         uses: docker/build-push-action@v6
         with:
-          file: Dockerfile.moderator
+          context: .
+          file: Dockerfile.echo
           push: true
-          tags: ghcr.io/warp-net/warpnet-moderator:latest
+          tags: ghcr.io/warp-net/warpnet-echo:latest
+          build-args: --dns 8.8.8.8
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [ build-bootstrap, build-moderator ]
+#    needs: [ build-bootstrap, build-moderator, build-echo ]
+    needs: [ build-bootstrap, build-echo ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

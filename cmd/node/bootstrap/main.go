@@ -26,9 +26,11 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"os"
 	"os/signal"
 	"syscall"
@@ -90,7 +92,14 @@ func main() {
 		return
 	}
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, codeHashHex)
+	nodeId, _ := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		nodeId.String(),
+		network,
+	)
+
+	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, nodeId, codeHashHex, m)
 	if err != nil {
 		log.Errorf("failed to init bootstrap node: %v", err)
 		return
@@ -101,15 +110,6 @@ func main() {
 		log.Errorf("failed to start bootstrap node: %v", err)
 		return
 	}
-
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		network,
-		"bootstrap",
-		n.NodeInfo().ID.String(),
-	)
-	defer m.Stop()
-	m.Start()
 
 	if config.Config().Node.IsPskPrinted {
 		log.Infof("CURRENT PSK: %s", psk.String())

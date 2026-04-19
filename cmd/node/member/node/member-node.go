@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/challenge"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -52,6 +53,11 @@ import (
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
 )
+
+type MetricsOnlinePusher interface {
+	PushStatusOnline(nodeId string)
+	PushStatusOffline(nodeId string)
+}
 
 type MemberNode struct {
 	ctx context.Context
@@ -80,10 +86,12 @@ func NewMemberNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
+	ownNodeId warpnet.WarpPeerID,
 	selfHashHex string,
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
+	metrics MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
@@ -99,7 +107,9 @@ func NewMemberNode(
 	followRepo := database.NewFollowRepo(db)
 	owner := authRepo.GetOwner()
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
+	challenger := challenge.NewSpoofChallenger(ctx)
+
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, challenger, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -138,11 +148,6 @@ func NewMemberNode(
 		_, _ = userRepo.Update(mastodonPseudoNode.DefaultUser().Id, mastodonPseudoNode.DefaultUser())
 	}
 
-	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
-	if err != nil {
-		return nil, err
-	}
-
 	opts := []warpnet.WarpOption{ //nolint:prealloc
 		node.WarpIdentity(privKey),
 		libp2p.Peerstore(store),
@@ -152,7 +157,7 @@ func NewMemberNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
+		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
 	}
 
 	opts = append(opts, node.CommonOptions...)
@@ -190,7 +195,6 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.pubsubService.Run(m)
-
 	if err := m.discService.Run(m); err != nil {
 		return err
 	}
@@ -211,6 +215,10 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb, m.privKey)
+
+	for _, addr := range m.dHashTable.BootstrapNodes() {
+		m.SetMaxNodePriority(addr.ID)
+	}
 
 	println()
 	fmt.Printf(
@@ -265,6 +273,18 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi.OwnerId = m.ownerId
 	bi.Hash = m.selfHashHex
 	return bi
+}
+
+func (m *MemberNode) SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {
+	m.node.Prioritizer().SetPriority(pid, r)
+}
+
+func (m *MemberNode) SetMaxNodePriority(pid warpnet.WarpPeerID) {
+	m.node.Prioritizer().SetMaxPriority(pid)
+}
+
+func (m *MemberNode) SetMinNodePriority(pid warpnet.WarpPeerID) {
+	m.node.Prioritizer().SetMinPriority(pid)
 }
 
 func (m *MemberNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
@@ -390,11 +410,11 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PRIVATE_DELETE_TWEET,
-				handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, tweetRepo, likeRepo),
+				handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, tweetRepo, timelineRepo, likeRepo),
 			},
 			{
 				event.PUBLIC_POST_REPLY,
-				handler.StreamNewReplyHandler(replyRepo, userRepo, m),
+				handler.StreamNewReplyHandler(replyRepo, userRepo, notificationRepo, m),
 			},
 			{
 				event.PUBLIC_DELETE_REPLY,
@@ -402,7 +422,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_FOLLOW,
-				handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
+				handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, notificationRepo, m),
 			},
 			{
 				event.PUBLIC_POST_IS_FOLLOWING,
@@ -458,7 +478,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_LIKE,
-				handler.StreamLikeHandler(likeRepo, userRepo, m),
+				handler.StreamLikeHandler(likeRepo, userRepo, notificationRepo, m),
 			},
 			{
 				event.PUBLIC_POST_UNLIKE,
@@ -470,7 +490,7 @@ func (m *MemberNode) setupHandlers(
 			},
 			{
 				event.PUBLIC_POST_RETWEET,
-				handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, m),
+				handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, notificationRepo, m),
 			},
 			{
 				event.PUBLIC_POST_UNRETWEET,
@@ -526,6 +546,10 @@ func (m *MemberNode) setupHandlers(
 			},
 		}...,
 	)
+}
+
+func (m *MemberNode) SetStreamHandlers(hs ...warpnet.WarpStreamHandler) {
+	m.node.SetStreamHandlers(hs...)
 }
 
 func (m *MemberNode) Node() warpnet.P2PNode {

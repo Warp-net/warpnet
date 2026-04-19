@@ -1,0 +1,637 @@
+//go:build echo
+
+/*
+
+ Warpnet - Decentralized Social Network
+ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
+ <github.com.mecdy@passmail.net>
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Affero General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Affero General Public License for more details.
+
+ You should have received a copy of the GNU Affero General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
+Use at your own risk. The maintainers shall not be liable for any damages or data loss
+resulting from the use or misuse of this software.
+*/
+
+//nolint:all
+package main
+
+import (
+	"context"
+	"crypto/ed25519"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/Warp-net/warpnet/cmd/node/member/auth"
+	member "github.com/Warp-net/warpnet/cmd/node/member/node"
+	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/metrics"
+	"github.com/Warp-net/warpnet/security"
+	"github.com/oklog/ulid/v2"
+	log "github.com/sirupsen/logrus"
+)
+
+const (
+	echoReplyPrefix = "echo: "
+	echoChatReply   = "echo: received message"
+	messageLimit    = 5000
+	seenTTL         = 999 * time.Minute
+	pruneInterval   = 999 * time.Minute
+	maxSeenKeys     = 10_000
+)
+
+// run node without GUI
+func main() {
+	version := config.Config().Version
+	network := config.Config().Node.Network
+	psk, err := security.GeneratePSK(network, version)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if config.Config().Logging.Format == config.TextFormat {
+		log.SetFormatter(&log.TextFormatter{FullTimestamp: true, TimestampFormat: time.DateTime})
+	} else {
+		log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
+	}
+	log.SetOutput(os.Stdout)
+	log.SetLevel(log.InfoLevel)
+
+	var interruptChan = make(chan os.Signal, 1)
+	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
+	if err != nil {
+		log.Errorf("failed to init db: %v \n", err)
+		os.Exit(1)
+		return
+	}
+	readyChan := make(chan domain.AuthNodeInfo, 10)
+
+	authRepo := database.NewAuthRepo(db, network)
+	userRepo := database.NewUserRepo(db)
+	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
+
+	go func() {
+		_, authErr := authService.AuthLogin(event.LoginEvent{
+			Username: "Echo",
+			Password: `\@4o97Z7<Cfu`,
+		},
+			psk,
+		)
+		if authErr != nil {
+			log.Fatalf("failed to login: %v", authErr)
+		}
+	}()
+
+	authInfo := <-readyChan
+
+	nodeId, _ := warpnet.IDFromPublicKey(authRepo.PrivateKey().Public().(ed25519.PublicKey))
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		nodeId.String(),
+		config.Config().Node.Network,
+	)
+
+	echoNode, err := member.NewMemberNode(
+		ctx,
+		authRepo.PrivateKey(),
+		psk,
+		nodeId,
+		"echo",
+		config.Config().Version,
+		authRepo,
+		db,
+		m,
+	)
+	if err != nil {
+		log.Fatalf("failed to init node: %v", err)
+	}
+	defer echoNode.Stop()
+
+	err = echoNode.Start()
+	if err != nil {
+		log.Fatalf("failed to start member node: %v", err)
+	}
+
+	authInfo.Identity.Owner.NodeId = echoNode.NodeInfo().ID.String()
+	authInfo.NodeInfo = echoNode.NodeInfo()
+
+	readyChan <- authInfo
+	eBot := newEchoBot(echoNode, db)
+	go runOwnActivity(ctx, eBot, echoNode)
+	setupHandlers(eBot, echoNode)
+
+	log.Infoln("WARPNET STARTED")
+	<-interruptChan
+	log.Infoln("interrupted...")
+}
+
+type echoStreamClient interface {
+	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
+}
+
+type echoPersister interface {
+	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	Get(key local_store.DatabaseKey) ([]byte, error)
+}
+
+const echoSeenNamespace = "/ECHO_SEEN/"
+
+type echoBot struct {
+	node         echoStreamClient
+	db           echoPersister
+	mu           sync.Mutex
+	seen         map[string]time.Time
+	lastPruneRun time.Time
+}
+
+func newEchoBot(node echoStreamClient, db echoPersister) *echoBot {
+	return &echoBot{
+		node:         node,
+		db:           db,
+		seen:         make(map[string]time.Time),
+		lastPruneRun: time.Now(),
+	}
+}
+
+func (e *echoBot) wasSeen(action, id string) bool {
+	if strings.TrimSpace(id) == "" {
+		return false
+	}
+	key := action + ":" + id
+	now := time.Now()
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.prune(now)
+	if seenAt, ok := e.seen[key]; ok && now.Sub(seenAt) <= seenTTL {
+		return true
+	}
+
+	// Check persistent storage for state surviving restarts
+	if e.db != nil {
+		dbKey := local_store.DatabaseKey(echoSeenNamespace + key)
+		if _, err := e.db.Get(dbKey); err == nil {
+			e.seen[key] = now
+			return true
+		}
+	}
+
+	e.seen[key] = now
+	// Persist to database so state survives restarts
+	if e.db != nil {
+		dbKey := local_store.DatabaseKey(echoSeenNamespace + key)
+		_ = e.db.SetWithTTL(dbKey, []byte(now.Format(time.RFC3339)), seenTTL)
+	}
+	e.evictIfNeeded()
+	return false
+}
+
+func (e *echoBot) prune(now time.Time) {
+	if now.Sub(e.lastPruneRun) < pruneInterval {
+		return
+	}
+	expireBefore := now.Add(-seenTTL)
+	for k, t := range e.seen {
+		if t.Before(expireBefore) {
+			delete(e.seen, k)
+		}
+	}
+	e.lastPruneRun = now
+}
+
+func (e *echoBot) evictIfNeeded() {
+	if len(e.seen) <= maxSeenKeys {
+		return
+	}
+	var (
+		oldestKey string
+		oldestAt  time.Time
+		set       bool
+	)
+	for k, t := range e.seen {
+		if !set || t.Before(oldestAt) {
+			oldestKey, oldestAt = k, t
+			set = true
+		}
+	}
+	if set {
+		delete(e.seen, oldestKey)
+	}
+}
+
+func (e *echoBot) ownerID() string {
+	return e.node.NodeInfo().OwnerId
+}
+
+func (e *echoBot) handleTweet(msg []byte, requesterNodeID string) {
+	var tw event.NewTweetEvent
+	if err := json.Unmarshal(msg, &tw); err != nil {
+		log.Warnf("echo: parse tweet event: %v", err)
+		return
+	}
+	if tw.UserId == "" || tw.Id == "" {
+		return
+	}
+	if tw.UserId == e.ownerID() {
+		return
+	}
+	if e.wasSeen("tweet", tw.Id) {
+		return
+	}
+	if requesterNodeID == "" {
+		return
+	}
+
+	if err := e.likeTweet(tw, requesterNodeID); err != nil {
+		log.Warnf("echo: auto-like failed: %v", err)
+	}
+	if err := e.retweet(tw, requesterNodeID); err != nil {
+		log.Warnf("echo: auto-retweet failed: %v", err)
+	}
+	if err := e.replyToTweet(tw, requesterNodeID); err != nil {
+		log.Warnf("echo: auto-reply-tweet failed: %v", err)
+	}
+}
+
+func (e *echoBot) handleReply(msg []byte, requesterNodeID string) {
+	var rp event.NewReplyEvent
+	if err := json.Unmarshal(msg, &rp); err != nil {
+		log.Warnf("echo: parse reply event: %v", err)
+		return
+	}
+	if rp.UserId == "" || rp.Id == "" || rp.RootId == "" {
+		return
+	}
+	if rp.UserId == e.ownerID() {
+		return
+	}
+	if strings.EqualFold(rp.Username, "Echo") || strings.HasPrefix(rp.Text, echoReplyPrefix) {
+		return
+	}
+	if e.wasSeen("reply", rp.Id) {
+		return
+	}
+	if requesterNodeID == "" {
+		return
+	}
+
+	if err := e.replyToReply(rp, requesterNodeID); err != nil {
+		log.Warnf("echo: auto-reply-reply failed: %v", err)
+	}
+}
+
+func (e *echoBot) handleFollow(msg []byte, requesterNodeID string) {
+	var fl event.NewFollowEvent
+	if err := json.Unmarshal(msg, &fl); err != nil {
+		log.Warnf("echo: parse follow event: %v", err)
+		return
+	}
+	if fl.FollowerId == "" || fl.FollowingId == "" {
+		return
+	}
+	if fl.FollowerId == e.ownerID() || fl.FollowingId != e.ownerID() {
+		return
+	}
+	if e.wasSeen("follow", fl.FollowerId) {
+		return
+	}
+	if requesterNodeID == "" {
+		return
+	}
+	if _, err := e.node.GenericStream(
+		requesterNodeID,
+		event.PUBLIC_POST_FOLLOW,
+		event.NewFollowEvent{FollowerId: e.ownerID(), FollowingId: fl.FollowerId},
+	); err != nil {
+		log.Warnf("echo: auto-follow-back failed: %v", err)
+	}
+}
+
+func (e *echoBot) handleMessage(msg []byte, requesterNodeID string) {
+	var m event.NewMessageEvent
+	if err := json.Unmarshal(msg, &m); err != nil {
+		log.Warnf("echo: parse message event: %v", err)
+		return
+	}
+	if m.ChatId == "" || m.SenderId == "" || m.ReceiverId == "" {
+		return
+	}
+	if m.SenderId == e.ownerID() || m.ReceiverId != e.ownerID() {
+		return
+	}
+	if e.wasSeen("message", e.messageSeenKey(m)) {
+		return
+	}
+	if requesterNodeID == "" {
+		return
+	}
+	echoText := e.buildMessageReplyText(m.Text)
+	quote, err := getChuckQuote()
+	if err == nil {
+		echoText = quote
+	}
+
+	resp := event.NewMessageEvent{
+		ChatId:     m.ChatId,
+		SenderId:   e.ownerID(),
+		ReceiverId: m.SenderId,
+		Text:       echoText,
+		CreatedAt:  time.Now(),
+	}
+	if _, err := e.node.GenericStream(requesterNodeID, event.PUBLIC_POST_MESSAGE, resp); err != nil {
+		log.Warnf("echo: auto-chat-reply failed: %v", err)
+	}
+}
+
+func (e *echoBot) messageSeenKey(m event.NewMessageEvent) string {
+	if m.Id != "" {
+		return m.Id
+	}
+	return fmt.Sprintf("%s|%s|%s|%d|%s", m.ChatId, m.SenderId, m.ReceiverId, m.CreatedAt.UnixNano(), m.Text)
+}
+
+func (e *echoBot) buildMessageReplyText(incomingText string) string {
+	prefix := echoChatReply + ": "
+	available := messageLimit - len(prefix)
+	if len(incomingText) > available {
+		return prefix + incomingText[:available]
+	}
+	return prefix + incomingText
+}
+
+func (e *echoBot) likeTweet(tw event.NewTweetEvent, requesterNodeID string) error {
+	_, err := e.node.GenericStream(
+		requesterNodeID,
+		event.PUBLIC_POST_LIKE,
+		event.LikeEvent{TweetId: tw.Id, UserId: tw.UserId, OwnerId: e.ownerID()},
+	)
+	return err
+}
+
+func (e *echoBot) retweet(tw event.NewTweetEvent, requesterNodeID string) error {
+	retweeter := e.ownerID()
+	_, err := e.node.GenericStream(
+		requesterNodeID,
+		event.PUBLIC_POST_RETWEET,
+		event.NewRetweetEvent(domain.Tweet{
+			Id:          tw.Id,
+			RootId:      tw.RootId,
+			ParentId:    tw.ParentId,
+			Text:        tw.Text,
+			UserId:      tw.UserId,
+			Username:    tw.Username,
+			CreatedAt:   tw.CreatedAt,
+			RetweetedBy: &retweeter,
+		}),
+	)
+	return err
+}
+
+func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
+	parentID := tw.Id
+	text := echoReplyPrefix + tw.Text
+	quote, err := getChuckQuote()
+	if err == nil {
+		text = quote
+	}
+	_, err = e.node.GenericStream(
+		requesterNodeID,
+		event.PUBLIC_POST_REPLY,
+		event.NewReplyEvent{
+			CreatedAt:    time.Now(),
+			Id:           ulid.Make().String(),
+			ParentId:     &parentID,
+			ParentUserId: tw.UserId,
+			RootId:       tw.Id,
+			Text:         text,
+			UserId:       e.ownerID(),
+			Username:     "Echo",
+		},
+	)
+	return err
+}
+
+func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) error {
+	parentID := rp.Id
+	text := echoReplyPrefix + rp.Text
+	quote, err := getChuckQuote()
+	if err == nil {
+		text = quote
+	}
+	_, err = e.node.GenericStream(
+		requesterNodeID,
+		event.PUBLIC_POST_REPLY,
+		event.NewReplyEvent{
+			CreatedAt:    time.Now(),
+			Id:           ulid.Make().String(),
+			ParentId:     &parentID,
+			ParentUserId: rp.UserId,
+			RootId:       rp.RootId,
+			Text:         text,
+			UserId:       e.ownerID(),
+			Username:     "Echo",
+		},
+	)
+	return err
+}
+
+func setupHandlers(echo *echoBot, node *member.MemberNode) {
+	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
+	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
+	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
+	node.Node().RemoveStreamHandler(event.PUBLIC_POST_MESSAGE)
+
+	//nolint:govet
+	node.SetStreamHandlers(
+		[]warpnet.WarpStreamHandler{
+			{
+				event.PRIVATE_POST_TWEET,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					echo.handleTweet(msg, requesterNodeID(s))
+					return event.Accepted, nil
+				},
+			},
+			{
+				event.PUBLIC_POST_REPLY,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					echo.handleReply(msg, requesterNodeID(s))
+					return event.Accepted, nil
+				},
+			},
+			{
+				event.PUBLIC_POST_FOLLOW,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					echo.handleFollow(msg, requesterNodeID(s))
+					return event.Accepted, nil
+				},
+			},
+			{
+				event.PUBLIC_POST_MESSAGE,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					echo.handleMessage(msg, requesterNodeID(s))
+					return event.Accepted, nil
+				},
+			},
+		}...,
+	)
+}
+
+func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode) {
+	if node == nil {
+		log.Fatalf("echo: nil node")
+	}
+
+	ticker := time.NewTicker(time.Second * 5)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if ctx.Err() != nil {
+			return
+		}
+		if node == nil || node.Node() == nil {
+			continue
+		}
+		peers := node.Node().Peerstore().PeersWithAddrs()
+		if len(peers) == 0 {
+			log.Warn("echo: peers are not found")
+			continue
+		}
+		for _, peer := range peers {
+			if ctx.Err() != nil {
+				return
+			}
+			if node == nil || peer == node.NodeInfo().ID {
+				continue
+			}
+
+			infoResp, err := node.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
+			if err != nil {
+				if strings.Contains(err.Error(), "protocols not supported") {
+					continue
+				}
+				log.Errorf("echo: no info response from new peer %s, %v", peer.String(), err)
+				continue
+			}
+			if len(infoResp) == 0 {
+				log.Errorf("echo: no info response from new peer %s", peer.String())
+				continue
+			}
+
+			var info warpnet.NodeInfo
+			err = json.Unmarshal(infoResp, &info)
+			if err != nil {
+				log.Errorf("echo: failed to unmarshal info from new peer: %s %v", infoResp, err)
+				continue
+			}
+			if info.IsModerator() || info.IsBootstrap() {
+				continue
+			}
+			if info.OwnerId == "" {
+				log.Errorf("echo: node info %s has no owner", peer.String())
+				continue
+			}
+			log.Infof("echo: checking peer: %s, owner: %s", peer.String(), info.OwnerId)
+
+			tweets, err := getTweets(node, peer, info.OwnerId)
+			if err != nil {
+				log.Errorf("echo: get tweets %s: %v", peer.String(), err)
+				continue
+			}
+
+			for _, tweet := range tweets {
+				bt, _ := json.Marshal(tweet)
+				echo.handleTweet(bt, peer.String())
+			}
+		}
+	}
+}
+
+const tweetsLimit uint64 = 20
+
+func getTweets(node *member.MemberNode, peerID warpnet.WarpPeerID, userID string) ([]domain.Tweet, error) {
+	data, err := node.GenericStream(
+		peerID.String(),
+		event.PUBLIC_GET_TWEETS,
+		event.GetAllTweetsEvent{
+			Limit:  func(l uint64) *uint64 { return &l }(tweetsLimit),
+			UserId: userID,
+			Cursor: nil,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("echo: get tweets: %w", err)
+	}
+	if len(data) == 0 {
+		return []domain.Tweet{}, nil
+	}
+
+	var tweetsResp event.TweetsResponse
+	if err := json.Unmarshal(data, &tweetsResp); err != nil {
+		return nil, fmt.Errorf("echo: failed to unmarshal tweets from new peer: %s %w", string(data), err)
+	}
+
+	log.Infof("echo: peers %s, got tweets: %d", peerID.String(), len(tweetsResp.Tweets))
+	return tweetsResp.Tweets, nil
+
+}
+
+func requesterNodeID(s warpnet.WarpStream) string {
+	if s == nil || s.Conn() == nil {
+		return ""
+	}
+	return s.Conn().RemotePeer().String()
+}
+
+func getChuckQuote() (string, error) {
+	time.Sleep(time.Millisecond * 100)
+	type quote struct {
+		Value string `json:"value"`
+	}
+
+	resp, err := http.Get("https://api.chucknorris.io/jokes/random")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var quoteResp quote
+	if err := json.Unmarshal(body, &quoteResp); err != nil {
+		return "", err
+	}
+	return quoteResp.Value, nil
+}

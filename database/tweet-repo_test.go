@@ -51,7 +51,7 @@ func (s *TweetRepoTestSuite) SetupSuite() {
 	var err error
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
-	auth := NewAuthRepo(s.db)
+	auth := NewAuthRepo(s.db, "test")
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
 	s.repo = NewTweetRepo(s.db, nil)

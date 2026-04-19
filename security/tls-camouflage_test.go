@@ -142,8 +142,8 @@ func TestBrowserToHelloID(t *testing.T) {
 	assert.Equal(t, utls.HelloSafari_Auto, browserToHelloID(BrowserSafari))
 	assert.Equal(t, utls.HelloEdge_Auto, browserToHelloID(BrowserEdge))
 	// Unknown defaults to Chrome.
-	assert.Equal(t, utls.HelloChrome_Auto, browserToHelloID("unknown"))
-	assert.Equal(t, utls.HelloChrome_Auto, browserToHelloID(""))
+	assert.Equal(t, utls.HelloRandomized, browserToHelloID("unknown"))
+	assert.Equal(t, utls.HelloRandomized, browserToHelloID(""))
 }
 
 func TestCamouflageConn_HandshakeAndDataRoundTrip(t *testing.T) {

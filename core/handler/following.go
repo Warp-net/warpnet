@@ -74,6 +74,7 @@ func StreamFollowHandler(
 	followRepo FollowingStorer,
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
+	notifyRepo ModerationNotifier,
 	streamer FollowNodeStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -90,15 +91,6 @@ func StreamFollowHandler(
 		}
 
 		ownerUserId := authRepo.GetOwner().UserId
-		isMeFollowed := ownerUserId == ev.FollowingId
-
-		if isMeFollowed {
-			err := followRepo.Follow(ev.FollowerId, ownerUserId)
-			if err != nil && !errors.Is(err, database.ErrAlreadyFollowed) {
-				return nil, err
-			}
-			return event.Accepted, nil
-		}
 
 		followingUser, err := userRepo.Get(ev.FollowingId)
 		if errors.Is(err, database.ErrUserNotFound) {
@@ -106,6 +98,32 @@ func StreamFollowHandler(
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		isMeFollowed := ownerUserId == ev.FollowingId
+		if isMeFollowed { //nolint:nestif
+			err := followRepo.Follow(ev.FollowerId, ownerUserId)
+			if err != nil && !errors.Is(err, database.ErrAlreadyFollowed) {
+				return nil, err
+			}
+			if err == nil {
+				notifyUsername := ev.FollowerId
+				followerUser, followerErr := userRepo.Get(ev.FollowerId)
+				if followerErr != nil && !errors.Is(followerErr, database.ErrUserNotFound) {
+					return nil, followerErr
+				}
+				if followerErr == nil {
+					notifyUsername = followerUser.Username
+				}
+				if notifyErr := notifyRepo.Add(domain.Notification{
+					Type:   domain.NotificationFollowType,
+					Text:   notifyUsername + " started following you",
+					UserId: ownerUserId,
+				}); notifyErr != nil {
+					log.Errorf("follow handler: adding notification: %v", notifyErr)
+				}
+			}
+			return event.Accepted, nil
 		}
 
 		// inform about me following someone now
@@ -208,7 +226,7 @@ func StreamUnfollowHandler(
 		isMeUnfollowed := ownerUserId == ev.FollowingId
 
 		if isMeUnfollowed {
-			err = followRepo.Unfollow(ev.FollowingId, ev.FollowerId)
+			err = followRepo.Unfollow(ev.FollowerId, ev.FollowingId)
 			if err != nil {
 				return nil, err
 			}

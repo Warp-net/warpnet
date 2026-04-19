@@ -73,6 +73,7 @@ func NewModeratorNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
+	ownNodeId warpnet.WarpPeerID,
 	selfHashHex string,
 ) (_ *ModeratorNode, err error) {
 	memoryStore, err := pstoremem.NewPeerstore()
@@ -98,11 +99,6 @@ func NewModeratorNode(
 		dht.Network(config.Config().Node.Network),
 	)
 
-	currentNodeID, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
-	if err != nil {
-		return nil, err
-	}
-
 	opts := []libp2p.Option{ //nolint:prealloc
 		node.WarpIdentity(privKey),
 		libp2p.Peerstore(memoryStore),
@@ -114,7 +110,7 @@ func NewModeratorNode(
 			}...,
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(infos, currentNodeID)(),
+		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
 	}
 
 	opts = append(opts, node.CommonOptions...)

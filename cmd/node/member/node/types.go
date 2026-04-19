@@ -70,6 +70,7 @@ type UserFetcher interface {
 
 type DistributedHashTableCloser interface {
 	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) (ch <-chan peer.AddrInfo)
+	BootstrapNodes() []warpnet.WarpAddrInfo
 	Close()
 }
 

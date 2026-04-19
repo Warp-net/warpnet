@@ -49,6 +49,7 @@ type AppStorer interface {
 
 type AppAuthServicer interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error)
+	AuthLogout()
 	PrivateKey() ed25519.PrivateKey
 	Storage() auth.AuthPersistencyLayer
 }
@@ -60,10 +61,6 @@ type NodeServer interface {
 	Start() error
 }
 
-type MetricsStopper interface {
-	Stop()
-}
-
 type App struct {
 	ctx         context.Context
 	auth        AppAuthServicer
@@ -73,7 +70,6 @@ type App struct {
 	psk         security.PSK
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
-	m           MetricsStopper
 }
 
 // NewApp creates a new App application struct
@@ -91,7 +87,8 @@ func (a *App) startup(ctx context.Context) {
 	}()
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
-
+	version := config.Config().Version
+	network := config.Config().Node.Network
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
 		log.Errorf("failed to get codebase hash: %v \n", err)
@@ -105,14 +102,12 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 
-	authRepo := database.NewAuthRepo(db)
+	authRepo := database.NewAuthRepo(db, network)
 	userRepo := database.NewUserRepo(db)
 	a.db = db
 	a.readyChan = make(chan domain.AuthNodeInfo, 1)
 	a.auth = auth.NewAuthService(ctx, authRepo, userRepo, a.readyChan)
 
-	version := config.Config().Version
-	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
 		log.Errorf("failed to generate PSK: %v", err)
@@ -137,15 +132,28 @@ func (a *App) runNode(network string, psk security.PSK) {
 		log.Infoln("database authentication passed")
 	}
 
+	ownNodeId, err := warpnet.IDFromPublicKey(a.auth.PrivateKey().Public().(ed25519.PublicKey))
+	if err != nil {
+		log.Fatalf("failed to get current node ID: %v", err)
+	}
+
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		ownNodeId.String(),
+		network,
+	)
+
 	a.mx.Lock()
 	a.node, err = member.NewMemberNode(
 		a.ctx,
 		a.auth.PrivateKey(),
 		psk,
+		ownNodeId,
 		a.codeHashHex,
 		config.Config().Version,
 		a.auth.Storage(),
 		a.db,
+		m,
 	)
 	if err != nil {
 		a.mx.Unlock()
@@ -169,15 +177,6 @@ func (a *App) runNode(network string, psk security.PSK) {
 	serverNodeAuthInfo.Identity.Owner.NodeId = a.node.NodeInfo().ID.String()
 	serverNodeAuthInfo.NodeInfo = a.node.NodeInfo()
 	a.readyChan <- serverNodeAuthInfo
-
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		network,
-		"member",
-		a.node.NodeInfo().ID.String(),
-	)
-	m.Start()
-	a.m = m
 }
 
 type AppMessage struct {
@@ -245,7 +244,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.close(a.ctx)
+		a.node.Stop() // close node first
+		a.auth.AuthLogout()
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	default:
@@ -315,11 +315,10 @@ func (a *App) close(_ context.Context) {
 	}()
 
 	log.Infoln("app: closing...")
-	a.m.Stop()
 
 	a.node.Stop() // close node first
 
-	a.db.Close() // db is a second
+	a.auth.AuthLogout()
 
 	close(a.readyChan)
 }

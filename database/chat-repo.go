@@ -93,15 +93,21 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 	chat.Id = *chatId
 
 	// check if already exist
-	bt, err := txn.Get(sortableUserChatKey)
+	existingSortableKey, err := txn.Get(fixedUserChatKey)
 	if err != nil && !local_store.IsNotFoundError(err) {
 		return chat, err
 	}
-	if err == nil {
-		if err = json.Unmarshal(bt, &chat); err != nil {
+	if err == nil && len(existingSortableKey) > 0 {
+		bt, err := txn.Get(local_store.DatabaseKey(existingSortableKey))
+		if err != nil && !local_store.IsNotFoundError(err) {
 			return chat, err
 		}
-		return chat, txn.Commit()
+		if err == nil {
+			if err = json.Unmarshal(bt, &chat); err != nil {
+				return chat, err
+			}
+			return chat, txn.Commit()
+		}
 	}
 
 	// create new chat
@@ -113,7 +119,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 		OwnerId:     ownerId,
 	}
 
-	bt, err = json.Marshal(chat)
+	data, err := json.Marshal(chat)
 	if err != nil {
 		return chat, err
 	}
@@ -121,7 +127,7 @@ func (repo *ChatRepo) CreateChat(chatId *string, ownerId, otherUserId string) (c
 	if err != nil {
 		return chat, err
 	}
-	err = txn.Set(sortableUserChatKey, bt)
+	err = txn.Set(sortableUserChatKey, data)
 	if err != nil {
 		return chat, err
 	}

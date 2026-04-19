@@ -253,6 +253,10 @@ func (db *DB) Run(username, password string) (err error) {
 		return err
 	}
 	db.isRunning.Store(true)
+
+	pwd, _ := os.Getwd()
+	log.Infof("database: is running, directory: %s %s", pwd, db.dbPath)
+
 	db.sequence, err = db.badger.GetSequence([]byte(sequenceKey), 100)
 	if err != nil {
 		return err
@@ -629,8 +633,9 @@ func (t *warpTxn) ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) e
 	it := t.txn.NewIterator(opts)
 	defer it.Close()
 	p := []byte(prefix)
+	seek := append(append([]byte{}, p...), 0xFF)
 
-	for it.Seek(p); it.ValidForPrefix(p); it.Next() {
+	for it.Seek(seek); it.ValidForPrefix(p); it.Next() {
 		item := it.Item()
 		key := string(item.KeyCopy(nil))
 		if strings.Contains(key, FixedKey) {
@@ -729,13 +734,14 @@ func iterate(
 	if !startCursor.IsEmpty() {
 		p = startCursor.Bytes()
 	}
+	prefixBytes := prefix.Bytes()
 
 	var (
 		lastKey DatabaseKey
 		iterNum uint64
 	)
 
-	for it.Seek(p); it.ValidForPrefix(p); it.Next() {
+	for it.Seek(p); it.ValidForPrefix(prefixBytes); it.Next() {
 		item := it.Item()
 		key := string(item.Key())
 
@@ -761,7 +767,10 @@ func iterate(
 	if iterNum < *limit {
 		lastKey = endCursor
 	}
-	return lastKey.DropId(), nil
+	if lastKey.IsEmpty() {
+		lastKey = endCursor
+	}
+	return lastKey.String(), nil
 }
 
 func (t *warpTxn) BatchGet(keys ...DatabaseKey) ([]ListItem, error) {

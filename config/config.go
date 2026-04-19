@@ -120,6 +120,7 @@ func init() {
 	if seed == "" {
 		seed = "seed" + network + dbDir + host + port
 	}
+
 	appPath := getAppPath()
 
 	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))

@@ -29,8 +29,8 @@ type Streamer interface {
 }
 
 type MetricsPusher interface {
-	PushSocksConnections(ip string)
-	RemoveSocksConnections(ip string)
+	PushSocksConnections(nodeId, ip string)
+	RemoveSocksConnections(nodeId, ip string)
 }
 
 type ctxKey string
@@ -38,7 +38,6 @@ type ctxKey string
 const reqIpKey ctxKey = "ip-key"
 
 type rule struct {
-	m MetricsPusher
 }
 
 func (r *rule) Allow(ctx context.Context, req *socks5.Request) (context.Context, bool) {
@@ -50,9 +49,7 @@ func (r *rule) Allow(ctx context.Context, req *socks5.Request) (context.Context,
 	default:
 		host = req.RemoteAddr.String()
 	}
-	log.Infof("socks5: request from %s", host)
-
-	r.m.PushSocksConnections(host)
+	log.Debugf("socks5: request from %s", host)
 
 	return context.WithValue(ctx, reqIpKey, host), true
 }
@@ -62,6 +59,7 @@ type socksServer struct {
 	port     string
 	srv      *socks5.Server
 	listener net.Listener
+	nodeId   string
 	streamer Streamer
 	balancer *socksBalancer
 	m        MetricsPusher
@@ -87,7 +85,7 @@ func NewServer(
 	creds := socks5.StaticCredentials{warpnet.WarpnetName: psk}
 
 	server := socks5.NewServer(
-		socks5.WithRule(&rule{m: m}),
+		socks5.WithRule(&rule{}),
 		socks5.WithDial(s.warpnetOverlayHandler),
 		socks5.WithAuthMethods([]socks5.Authenticator{
 			socks5.UserPassAuthenticator{Credentials: creds},
@@ -114,13 +112,13 @@ func (s *socksServer) Start(streamer Streamer) error { // warpnet.P2PNode is lib
 			log.Errorf("socks5 server: serve failed: %v", err)
 		}
 	}()
-
+	s.nodeId = s.streamer.Node().ID().String()
 	log.Infof("started socks5 server at %s", s.port)
 	return nil
 }
 
 func (s *socksServer) Stop() error {
-	log.Infof("stopped socks5 server at %s", defaultListenPort)
+	log.Infof("stopped socks5 server at %s", s.port)
 	if s.balancer != nil {
 		s.balancer.Close()
 	}
@@ -132,6 +130,13 @@ func (s *socksServer) Stop() error {
 
 func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr string) (net.Conn, error) {
 	host, _ := ctx.Value(reqIpKey).(string)
+	s.m.PushSocksConnections(s.nodeId, host)
+	removeMetrics := true
+	defer func() {
+		if removeMetrics {
+			s.m.RemoveSocksConnections(s.nodeId, host)
+		}
+	}()
 
 	peer, isRedirect := s.balancer.route()
 	if peer == "" {
@@ -141,11 +146,18 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 		peerAddrs := s.streamer.Peerstore().Addrs(peer)
 		log.Infof("socks5 server: redirect to %v", peerAddrs)
 		for _, pAddr := range peerAddrs {
-			conn, err := net.DialTimeout(proto, toNetAddr(pAddr).String(), time.Second) //nolint:noctx
+			dialer := net.Dialer{Timeout: 3 * time.Second}
+			conn, err := dialer.DialContext(ctx, proto, toNetAddr(pAddr).String())
 			if err != nil {
 				continue
 			}
-			return conn, nil
+			removeMetrics = false
+			return &trackedConn{
+				Conn: conn,
+				closeF: func() {
+					s.m.RemoveSocksConnections(s.nodeId, host)
+				},
+			}, nil
 		}
 	}
 	log.Infof("socks5 server: stream to %s", peer.String())
@@ -161,11 +173,11 @@ func (s *socksServer) warpnetOverlayHandler(ctx context.Context, proto, addr str
 		)
 	}
 
+	removeMetrics = false
 	return &streamConn{
-		once:   sync.Once{},
 		stream: stream,
 		closeF: func() {
-			s.m.RemoveSocksConnections(host)
+			s.m.RemoveSocksConnections(s.nodeId, host)
 		},
 	}, nil
 }
@@ -176,11 +188,22 @@ type streamConn struct {
 	closeF func()
 }
 
+type trackedConn struct {
+	net.Conn
+
+	once   sync.Once
+	closeF func()
+}
+
 func (c *streamConn) Read(p []byte) (int, error)  { return c.stream.Read(p) }
 func (c *streamConn) Write(p []byte) (int, error) { return c.stream.Write(p) }
 func (c *streamConn) Close() error {
-	c.closeF()
+	c.once.Do(c.closeF)
 	return c.stream.Close()
+}
+func (c *trackedConn) Close() error {
+	c.once.Do(c.closeF)
+	return c.Conn.Close()
 }
 func (c *streamConn) LocalAddr() net.Addr                { return toNetAddr(c.stream.Conn().LocalMultiaddr()) }
 func (c *streamConn) RemoteAddr() net.Addr               { return toNetAddr(c.stream.Conn().RemoteMultiaddr()) }

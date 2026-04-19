@@ -124,9 +124,10 @@ type GetAllChatsEvent struct {
 
 // GetAllMessagesEvent defines model for GetAllMessagesEvent.
 type GetAllMessagesEvent struct {
-	ChatId domain.ID `json:"chat_id"`
-	Cursor *string   `json:"cursor,omitempty"`
-	Limit  *uint64   `json:"limit,omitempty"`
+	OwnerId domain.ID `json:"owner_id"`
+	ChatId  domain.ID `json:"chat_id"`
+	Cursor  *string   `json:"cursor,omitempty"`
+	Limit   *uint64   `json:"limit,omitempty"`
 }
 
 // GetAllRepliesEvent defines model for GetAllRepliesEvent.
@@ -269,8 +270,8 @@ type NewChatEvent struct {
 
 // NewFollowEvent defines model for NewFollowEvent.
 type NewFollowEvent = struct {
-	FollowerId  domain.ID
-	FollowingId domain.ID
+	FollowerId  domain.ID `json:"follower_id"`
+	FollowingId domain.ID `json:"following_id"`
 }
 
 // NewMessageEvent defines model for NewMessageEvent.
@@ -382,7 +383,7 @@ type GetImageResponse struct {
 }
 
 type ChallengeEvent struct {
-	Samples []ChallengeSample `json:"samples"`
+	Coordinates []ChallengeSample `json:"samples"`
 }
 type ChallengeSample struct {
 	DirStack  []int `json:"dir_stack"` // every index is level and value is dir num

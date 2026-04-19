@@ -433,14 +433,6 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		return tweet, err
 	}
 
-	_, err = repo.db.Get(retweetCountKey)
-	if !local.IsNotFoundError(err) {
-		if _, err = txn.Increment(retweetCountKey); err != nil {
-			log.Debugf("failed to increment retweet count for %s - %s", tweet.Id, err)
-			return newTweet, txn.Commit()
-		}
-	}
-
 	_, err = txn.Increment(retweetCountKey)
 	if err != nil {
 		return newTweet, err

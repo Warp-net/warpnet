@@ -39,3 +39,9 @@ parts
 overlay
 .craft
 *.snap
+
+# moderation submodule
+core/moderation
+!core/moderation/.git
+
+frontend/node_modules

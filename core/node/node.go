@@ -26,6 +26,7 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -40,7 +41,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/cockroachdb/errors"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
 	log "github.com/sirupsen/logrus"
@@ -60,6 +60,12 @@ type BackoffEnabler interface {
 	Reset(id warpnet.WarpPeerID)
 }
 
+type Prioritizer interface {
+	SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
+	SetMinPriority(pid warpnet.WarpPeerID)
+	SetMaxPriority(pid warpnet.WarpPeerID)
+}
+
 type WarpNode struct {
 	ctx      context.Context
 	node     warpnet.P2PNode
@@ -67,9 +73,11 @@ type WarpNode struct {
 	streamer Streamer
 	backoff  BackoffEnabler
 
-	isClosed     *atomic.Bool
-	version      *semver.Version
+	isClosed *atomic.Bool
+	version  *semver.Version
+
 	reachability atomic.Int64
+	prioritizer  Prioritizer
 
 	startTime        time.Time
 	eventsSub        event.Subscription
@@ -134,6 +142,7 @@ func NewWarpNode(
 		eventsSub:        sub,
 		mw:               middleware.NewWarpMiddleware(node.ID()),
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
+		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
 	}
 
 	go wn.trackIncomingEvents()
@@ -218,12 +227,12 @@ func (n *WarpNode) trackIncomingEvents() {
 					pid[len(pid)-6:],
 					typedEvent.Connectedness.String(),
 				)
-
 			case event.EvtPeerIdentificationFailed:
-				pid := typedEvent.Peer.String()
+				pid := typedEvent.Peer
+				addrs := n.node.Peerstore().Addrs(pid)
 				log.Errorf(
-					"node: event: peer ...%s identification failed, reason: %s",
-					pid[len(pid)-6:], typedEvent.Reason,
+					"node: event: peer %s %v identification failed, reason: %s",
+					pid.String(), addrs, typedEvent.Reason,
 				)
 
 			case event.EvtPeerIdentificationCompleted:
@@ -307,14 +316,18 @@ func (n *WarpNode) Node() warpnet.P2PNode {
 	return n.node
 }
 
+func (n *WarpNode) Prioritizer() Prioritizer {
+	return n.prioritizer
+}
+
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
-		return nil, errors.New("node: selfstream: empty data")
+		return nil, fmt.Errorf("node: selfstream: empty data") //nolint:err113
 	}
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
 	if !ok {
-		return nil, errors.Errorf(
-			"node: selfstream: no handler for path %s, available handlers %d \n",
+		return nil, fmt.Errorf( //nolint:err113
+			"node: selfstream: no handler for path %s, available handlers %d",
 			path, len(n.internalHandlers),
 		)
 	}

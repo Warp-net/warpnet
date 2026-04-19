@@ -374,7 +374,7 @@ func StreamGetMessagesHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpne
 			return nil, err
 		}
 
-		ownerId := authRepo.GetOwner().UserId
+		ownerId := ev.OwnerId
 		isMeParticipating := chat.OwnerId == ownerId || chat.OtherUserId == ownerId
 		if !isMeParticipating {
 			return nil, warpnet.WarpError("not authorized for this chat")
