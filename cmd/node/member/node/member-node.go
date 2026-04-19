@@ -65,21 +65,21 @@ type MemberNode struct {
 	node *node.WarpNode
 	opts []warpnet.WarpOption
 
-	discService          DiscoveryHandler
-	mdnsService          MDNSStarterCloser
-	pubsubService        PubSubProvider
-	dHashTable           DistributedHashTableCloser
-	nodeRepo             NodeProvider
-	statsRepo            StatsProvider
-	authRepo             AuthProvider
-	userRepo             UserProvider
-	followRepo           FollowStorer
-	db                   Storer
-	statsDb              StatsStorer
-	privKey              ed25519.PrivateKey
-	ownerId, selfHashHex string
-	pseudoNode           PseudoStreamer
-	retrier              retrier.Retrier
+	discService                   DiscoveryHandler
+	mdnsService                   MDNSStarterCloser
+	pubsubService                 PubSubProvider
+	dHashTable                    DistributedHashTableCloser
+	nodeRepo                      NodeProvider
+	statsRepo                     StatsProvider
+	authRepo                      AuthProvider
+	userRepo                      UserProvider
+	followRepo                    FollowStorer
+	db                            Storer
+	statsDb                       StatsStorer
+	privKey                       ed25519.PrivateKey
+	ownerId, selfHashHex, network string
+	pseudoNode                    PseudoStreamer
+	retrier                       retrier.Retrier
 }
 
 func NewMemberNode(
@@ -129,12 +129,14 @@ func NewMemberNode(
 		return nil, err
 	}
 
+	warpNetwork := config.Config().Node.Network
+
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(infos...),
-		dht.Network(config.Config().Node.Network),
+		dht.Network(warpNetwork),
 	)
 
 	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
@@ -180,6 +182,7 @@ func NewMemberNode(
 		ownerId:       owner.UserId,
 		selfHashHex:   selfHashHex,
 		pseudoNode:    mastodonPseudoNode,
+		network:       warpNetwork,
 	}
 
 	return mn, nil
@@ -272,6 +275,7 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi := m.node.BaseNodeInfo()
 	bi.OwnerId = m.ownerId
 	bi.Hash = m.selfHashHex
+	bi.Network = m.network
 	return bi
 }
 

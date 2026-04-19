@@ -231,6 +231,7 @@ type NodeInfo struct {
 	Reachability   WarpReachability `json:"reachability"`
 	Protocols      []WarpProtocolID `json:"protocols"`
 	Hash           string           `json:"hash"`
+	Network        string           `json:"network,omitempty"`
 }
 
 func (ni NodeInfo) IsBootstrap() bool {
