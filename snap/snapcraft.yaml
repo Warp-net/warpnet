@@ -1,7 +1,7 @@
 name: warpnet
 title: Warpnet
 base: core24
-version: 0.6.242
+version: 0.6.243
 epoch: 1
 license: AGPL-3.0-or-later
 summary: Decentralized, peer-to-peer social network
@@ -61,6 +61,7 @@ parts:
       - curl
       - ca-certificates
       - tar
+      - git
     stage-packages:
       - libwebkit2gtk-4.1-0
     build-environment:
