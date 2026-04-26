@@ -31,7 +31,6 @@ import (
 	"errors"
 	"io"
 	"runtime/debug"
-	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
@@ -59,12 +58,12 @@ const (
 )
 
 type WarpMiddleware struct {
-	pairedAliases *sync.Map
+	//pairedAliases sync.Map
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
-	wm := &WarpMiddleware{new(sync.Map)}
-	wm.pairedAliases.Store(ownNodeId, "")
+	wm := &WarpMiddleware{}
+	//wm.pairedAliases.Store(ownNodeId, "")
 	return wm
 }
 
@@ -107,11 +106,11 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			remotePeer = s.Conn().RemotePeer()
 		)
 
-		if _, aliasExists := p.pairedAliases.Load(remotePeer); route.IsPrivate() && !aliasExists {
-			log.Errorf("middleware: auth: alias device peer ID not found, ignoring private route: %s", route)
-			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
-			return
-		}
+		//if _, aliasExists := p.pairedAliases.Load(remotePeer); route.IsPrivate() && !aliasExists {
+		//	log.Errorf("middleware: auth: alias device peer ID not found, ignoring private route: %s", route)
+		//	_, _ = s.Write(ErrUnknownClientPeer.Bytes())
+		//	return
+		//}
 
 		reader := io.LimitReader(s, MaxLimit) // TODO size limit???
 		data, err := io.ReadAll(reader)
@@ -126,6 +125,13 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			log.Errorf("middleware: auth: unmarshaling data: %s %s %v", route, data, err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
+		}
+		if s.Protocol() == event.PRIVATE_POST_PAIR { // no verifying for pairing
+			isAuthSuccess = true
+			next(&warpnet.WarpStreamBody{
+				WarpStream: s,
+				Body:       msg.Body,
+			})
 		}
 
 		if msg.Signature == "" {
@@ -193,7 +199,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 		case s.Protocol() == event.PRIVATE_POST_PAIR:
 			response, err = handler(data, s)
 			if err == nil {
-				p.pairedAliases.Store(s.Conn().RemotePeer(), "")
+				//p.pairedAliases.Store(s.Conn().RemotePeer(), "")
 				log.Debugf("middleware: paired alias: %s", s.Conn().RemotePeer())
 			}
 		default:
