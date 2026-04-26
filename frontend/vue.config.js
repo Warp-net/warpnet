@@ -37,6 +37,13 @@ module.exports = {
         resolve: {
             fallback: {
                 buffer: require.resolve('buffer'),
+                // brotli/build/encode.js (Emscripten-compiled asm.js encoder)
+                // statically requires Node's `path` and `fs`. Webpack 5 no
+                // longer ships those as built-in polyfills, so the build
+                // fails with "Module not found" without these fallbacks.
+                // The path branches are guarded by a Node env check at
+                // runtime; path-browserify is just to satisfy the resolver.
+                "path": require.resolve('path-browserify'),
                 "fs": false,
             },
         },
