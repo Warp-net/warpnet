@@ -35,19 +35,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpHandlerFunc {
+func StreamNodesPairingHandler(serverToken string) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		// TODO: add devices storage
 		var clientInfo domain.AuthNodeInfo
 		if err := json.Unmarshal(buf, &clientInfo); err != nil {
 			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)
 			return nil, err
 		}
-		if clientInfo.Identity.Token == "" {
+		if clientInfo.Token == "" {
 			return nil, warpnet.WarpError("empty token")
 		}
-		isTokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
-		if !isTokenMatch {
+
+		if serverToken != clientInfo.Token {
 			log.Errorf("pair: token does not match server identity")
 			return nil, warpnet.WarpError("token mismatch")
 		}

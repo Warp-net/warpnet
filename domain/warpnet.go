@@ -30,7 +30,6 @@ package domain
 import (
 	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
@@ -45,8 +44,13 @@ const QRByteModeCapacity = 2953
 
 // AuthNodeInfo defines model for AuthNodeInfo.
 type AuthNodeInfo struct {
-	Identity Identity         `json:"identity"`
-	NodeInfo warpnet.NodeInfo `json:"node_info"`
+	UserId         string   `json:"user_id"`
+	Token          string   `json:"token"`
+	PSK            string   `json:"psk"`
+	ID             string   `json:"node_id"`
+	Addresses      []string `json:"addresses"`
+	BootstrapPeers []string `json:"bootstrap_peers"`
+	Network        string   `json:"network,omitempty"`
 }
 
 // LogSize logs the JSON-encoded size of the AuthNodeInfo and warns when it

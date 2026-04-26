@@ -110,39 +110,17 @@ export const warpnetService = {
             }
         }
         const resp = await this.sendToNode(request);
-        if (!resp || !resp.identity) {
+        if (!resp) {
             throw new Error("Login failed: no response")
         }
         if (resp.code) {
             throw new Error(resp.message)
         }
+        const owner = this.getProfile(resp.user_id)
+        warpnetService.setOwnerProfile(owner)
 
-        if (!resp.identity) {
-            throw new Error("Login failed: no identity")
-        }
-        if (!resp.identity.owner) {
-            throw new Error("Login failed: no identity")
-        }
-
-        warpnetService.setOwnerProfile(resp.identity.owner)
-
-        // The QR carries the AuthNodeInfo envelope (identity + node_info) so
-        // the mobile pairing client gets both the credentials and the
-        // multiaddrs/peer-id it needs to dial this node. node_info is trimmed
-        // to dial-essential fields — the full struct (bootstrap_peers,
-        // protocols, aliases, ...) overflows the QR byte-mode capacity.
-        const nodeInfo = resp.node_info || {}
-        const qrPayload = {
-            identity: resp.identity,
-            node_info: {
-                owner_id: nodeInfo.owner_id,
-                node_id: nodeInfo.node_id,
-                addresses: nodeInfo.addresses,
-                network: nodeInfo.network,
-            },
-        }
-        const qrData = JSON.stringify(qrPayload);
-        resp.identity.token = null // for security reasons
+        const qrData = JSON.stringify(resp);
+        resp.token = null // for security reasons
 
         const qrCode = await buildQRCode(qrData)
         warpnetService.setQR(qrCode)

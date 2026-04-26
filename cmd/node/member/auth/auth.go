@@ -46,7 +46,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const ErrUsernamesMismatch warpnet.WarpError = "username doesn't exist"
+const (
+	ErrUsernamesMismatch    warpnet.WarpError = "username doesn't exist"
+	ErrAlreadyAuthenticated warpnet.WarpError = "already authenticated"
+)
 
 type UserPersistencyLayer interface {
 	Create(user domain.User) (domain.User, error)
@@ -98,15 +101,9 @@ func (as *AuthService) IsAuthenticated() bool {
 }
 
 func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error) {
-	hexPSK := hex.EncodeToString(psk)
 	if as.isAuthenticated.Load() {
-		return event.LoginResponse{
-			Identity: domain.Identity{
-				Token: as.authPersistence.SessionToken(),
-				Owner: as.authPersistence.GetOwner(),
-				PSK:   hexPSK,
-			},
-		}, nil
+		log.Error("auth: already authenticated")
+		return authInfo, ErrAlreadyAuthenticated
 	}
 
 	log.Infof("authenticating user '%s'", message.Username)
@@ -121,6 +118,8 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		log.Errorf("authentication failed: %v", err)
 		return authInfo, fmt.Errorf("authentication failed: %w", err)
 	}
+
+	hexPSK := hex.EncodeToString(psk)
 	token := as.authPersistence.SessionToken()
 	owner := as.authPersistence.GetOwner()
 
@@ -141,7 +140,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		user, err = as.userPersistence.Create(domain.User{
 			CreatedAt:     owner.CreatedAt,
 			Id:            id,
-			NodeId:        "NotSet",
+			NodeId:        "none",
 			Username:      owner.Username,
 			RoundTripTime: math.MaxInt64, // put your user at the end of a who-to-follow list
 		})
@@ -163,7 +162,9 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		return authInfo, fmt.Errorf("%w: %s", ErrUsernamesMismatch, message.Username)
 	}
 	as.authReady <- domain.AuthNodeInfo{
-		Identity: domain.Identity{Owner: owner, Token: token, PSK: hexPSK},
+		UserId: owner.UserId,
+		Token:  token,
+		PSK:    hexPSK,
 	}
 
 	select {
@@ -171,7 +172,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		log.Errorln("node startup cancelled")
 		return authInfo, as.ctx.Err()
 	case authInfo = <-as.authReady:
-		if authInfo.NodeInfo.ID.String() == "" {
+		if authInfo.ID == "" {
 			panic("auth: node id is missing")
 		}
 
@@ -179,8 +180,8 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		user.Username = owner.Username
 		user.CreatedAt = owner.CreatedAt
 		user.RoundTripTime = math.MaxInt64 // put your user at the end of a who-to-follow list
-		user.NodeId = authInfo.NodeInfo.ID.String()
-		owner.NodeId = authInfo.NodeInfo.ID.String()
+		user.NodeId = authInfo.ID
+		owner.NodeId = authInfo.ID
 
 		log.Infof(
 			"auth: user authenticated: id: %s, name: '%s', node_id: %s, created_at: %s, latency: %d",

@@ -84,19 +84,18 @@ function generateResponse(arg) {
         case PRIVATE_POST_LOGIN:
             const uid = generateUUID()
 
-            const owner = {
-                username: arg.body.username || "Missing!",
-                node_id: arg.node_id,
-                user_id: uid,
-                created_at: Date.now().toString(),
-            }
-
             const u = newUser()
             u.node_id = arg.node_id
             u.username = arg.body.username || "Missing!"
 
             mockMap.set("user:"+u.id, u)
-            return {identity: {token: generateUUID(), owner: owner}}
+            return {
+                token: generateUUID(),
+                node_id: arg.node_id,
+                user_id: uid,
+                psk: "test",
+                network: "testnet",
+            }
 
         case PRIVATE_POST_TWEET:
             const tweetUid = generateUUID()

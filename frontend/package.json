@@ -9,7 +9,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "tailwindcss": "4.0.5",
     "base64-js": "^1.5.1",
     "buffer": "^6.0.3",
     "core-js": "^3.6.5",
@@ -20,6 +19,7 @@
     "linkifyjs": "^3.0.4",
     "moment": "^2.29.1",
     "qrcode": "^1.5.4",
+    "tailwindcss": "4.0.5",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0",
     "webpack": "^5.97.1"

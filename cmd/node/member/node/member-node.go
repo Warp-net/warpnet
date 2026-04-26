@@ -46,7 +46,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
@@ -91,6 +90,7 @@ func NewMemberNode(
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
+	bootstrapNodes []warpnet.WarpAddrInfo,
 	metrics MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
@@ -124,18 +124,13 @@ func NewMemberNode(
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		return nil, err
-	}
-
 	warpNetwork := config.Config().Node.Network
 
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
-		dht.BootstrapNodes(infos...),
+		dht.BootstrapNodes(bootstrapNodes...),
 		dht.Network(warpNetwork),
 	)
 
@@ -159,7 +154,7 @@ func NewMemberNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
+		node.EnableAutoRelayWithStaticRelays(bootstrapNodes, ownNodeId)(),
 	}
 
 	opts = append(opts, node.CommonOptions...)
@@ -380,18 +375,14 @@ func (m *MemberNode) setupHandlers(
 	mediaRepo := database.NewMediaRepo(db)
 	notificationRepo := database.NewNotificationsRepo(db)
 
-	authNodeInfo := domain.AuthNodeInfo{
-		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
-		NodeInfo: m.NodeInfo(),
-	}
-	authNodeInfo.LogSize()
+	token := authRepo.SessionToken()
 
 	//nolint:govet
 	m.node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
 			{
 				event.PRIVATE_POST_PAIR,
-				handler.StreamNodesPairingHandler(authNodeInfo),
+				handler.StreamNodesPairingHandler(token),
 			},
 			{
 				event.PUBLIC_POST_NODE_CHALLENGE,
