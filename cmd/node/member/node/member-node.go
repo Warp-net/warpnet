@@ -384,6 +384,7 @@ func (m *MemberNode) setupHandlers(
 		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
 		NodeInfo: m.NodeInfo(),
 	}
+	authNodeInfo.LogSize()
 
 	//nolint:govet
 	m.node.SetStreamHandlers(

@@ -31,14 +31,41 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 )
 
 type ID = string
+
+// QRByteModeCapacity is the maximum payload (bytes) that fits in a QR code at
+// version 40 with error correction level 'L' in byte mode. The desktop UI
+// renders the AuthNodeInfo envelope as a pairing QR; JSON payloads larger
+// than this cannot be encoded and the QR modal renders blank.
+const QRByteModeCapacity = 2953
 
 // AuthNodeInfo defines model for AuthNodeInfo.
 type AuthNodeInfo struct {
 	Identity Identity         `json:"identity"`
 	NodeInfo warpnet.NodeInfo `json:"node_info"`
+}
+
+// LogSize logs the JSON-encoded size of the AuthNodeInfo and warns when it
+// exceeds QRByteModeCapacity, surfacing pairing-QR overflow in node logs
+// before users hit a blank QR modal.
+func (a AuthNodeInfo) LogSize() {
+	data, err := json.Marshal(a)
+	if err != nil {
+		log.Warnf("auth node info: marshal for size check: %v", err)
+		return
+	}
+	size := len(data)
+	log.Infof("auth node info size: %d bytes", size)
+	if size > QRByteModeCapacity {
+		log.Warnf(
+			"auth node info size (%d bytes) exceeds QR byte-mode capacity (%d bytes); pairing QR generation will fail",
+			size, QRByteModeCapacity,
+		)
+	}
 }
 
 // Chat defines model for Chat.

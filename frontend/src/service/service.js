@@ -126,10 +126,22 @@ export const warpnetService = {
 
         warpnetService.setOwnerProfile(resp.identity.owner)
 
-        // The QR carries the full AuthNodeInfo envelope (identity + node_info)
-        // so the mobile pairing client gets both the credentials and the
-        // multiaddrs/peer-id it needs to dial this node.
-        const qrData = JSON.stringify(resp);
+        // The QR carries the AuthNodeInfo envelope (identity + node_info) so
+        // the mobile pairing client gets both the credentials and the
+        // multiaddrs/peer-id it needs to dial this node. node_info is trimmed
+        // to dial-essential fields — the full struct (bootstrap_peers,
+        // protocols, aliases, ...) overflows the QR byte-mode capacity.
+        const nodeInfo = resp.node_info || {}
+        const qrPayload = {
+            identity: resp.identity,
+            node_info: {
+                owner_id: nodeInfo.owner_id,
+                node_id: nodeInfo.node_id,
+                addresses: nodeInfo.addresses,
+                network: nodeInfo.network,
+            },
+        }
+        const qrData = JSON.stringify(qrPayload);
         resp.identity.token = null // for security reasons
 
         const qrCode = await buildQRCode(qrData)

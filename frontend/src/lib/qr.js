@@ -25,6 +25,10 @@ resulting from the use or misuse of this software.
 import QRCode from "qrcode";
 
 const qrOptions = {
+    // 'L' maximises payload capacity (~2953 bytes in byte mode); the pairing
+    // envelope is large enough that the default 'M' level overflows and the
+    // library throws "data is too big".
+    errorCorrectionLevel: "L",
     color: {
         dark: "#c5007f",
         light: "#ffffff",
@@ -35,8 +39,6 @@ export async function buildQRCode(data) {
     let qrCodeURL
     try {
         qrCodeURL = await QRCode.toDataURL(data, qrOptions);
-        console.log("QR Code Generated:", qrCodeURL);
-
     } catch (err) {
         console.error("Error generating QR code:", err);
     }
