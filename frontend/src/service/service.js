@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-import {buildQRCode, QR_BYTE_MODE_CAPACITY} from "@/lib/qr";
+import {buildQRCode} from "@/lib/qr";
 import {generateUUID} from "@/lib/uuid";
 import {Call} from "../../wailsjs/go/main/App";
 
@@ -142,13 +142,6 @@ export const warpnetService = {
             },
         }
         const qrData = JSON.stringify(qrPayload);
-        const qrPayloadBytes = new TextEncoder().encode(qrData).length;
-        console.log(`AuthNodeInfo QR payload: ${qrPayloadBytes} bytes`);
-        if (qrPayloadBytes > QR_BYTE_MODE_CAPACITY) {
-            console.warn(
-                `AuthNodeInfo QR payload (${qrPayloadBytes}B) exceeds QR byte-mode capacity (${QR_BYTE_MODE_CAPACITY}B); QR generation will fail.`
-            );
-        }
         resp.identity.token = null // for security reasons
 
         const qrCode = await buildQRCode(qrData)
