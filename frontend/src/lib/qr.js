@@ -24,6 +24,9 @@ resulting from the use or misuse of this software.
 
 import QRCode from "qrcode";
 
+// Max payload (byte mode) for QR version 40 at error correction level 'L'.
+export const QR_BYTE_MODE_CAPACITY = 2953;
+
 const qrOptions = {
     // 'L' maximises payload capacity (~2953 bytes in byte mode); the pairing
     // envelope is large enough that the default 'M' level overflows and the
