@@ -126,7 +126,10 @@ export const warpnetService = {
 
         warpnetService.setOwnerProfile(resp.identity.owner)
 
-        const qrData = JSON.stringify(resp.identity);
+        // The QR carries the full AuthNodeInfo envelope (identity + node_info)
+        // so the mobile pairing client gets both the credentials and the
+        // multiaddrs/peer-id it needs to dial this node.
+        const qrData = JSON.stringify(resp);
         resp.identity.token = null // for security reasons
 
         const qrCode = await buildQRCode(qrData)
