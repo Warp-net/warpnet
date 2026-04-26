@@ -22,19 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-import { Buffer } from "buffer";
-
-// brotli's compress entrypoint immediately loads an asm.js encoder which
-// throws under jsdom (it expects a `Browser` global). Lazy-load it so the
-// rest of the service module can be imported in unit tests that don't
-// exercise the QR pipeline.
-let _compress;
-async function getBrotli() {
-  if (!_compress) {
-    _compress = (await import("brotli/compress")).default;
-  }
-  return _compress;
-}
+import pako from "pako";
 
 // Base45 alphabet per RFC 9285. The alphabet is a strict subset of the QR
 // alphanumeric mode set, which packs 5.5 bits/char vs. byte mode's 8 — i.e.
@@ -64,18 +52,18 @@ function base45Encode(bytes) {
 }
 
 /**
- * Encode the full AuthNodeInfo for QR pairing: Brotli-compress the UTF-8
- * JSON at maximum quality, then Base45-encode (RFC 9285) the bytes so the
- * result fits in a QR alphanumeric segment. The Android client decodes
- * this payload via `QrPayloadCodec` (`brotli/dec` + Base45) before
- * round-tripping the JSON back to the fat node for the pair handshake.
+ * Encode the full AuthNodeInfo for QR pairing: gzip-compress the UTF-8
+ * JSON at maximum level (9), then Base45-encode (RFC 9285) the bytes so
+ * the result fits in a QR alphanumeric segment. The Android client
+ * decodes this payload via `QrPayloadCodec` (`java.util.zip.GZIPInputStream`
+ * + Base45) before round-tripping the JSON back to the fat node for the
+ * pair handshake.
  */
 export async function encodeQRPayload(jsonString) {
-  const brotli = await getBrotli();
-  const raw = Buffer.from(jsonString, "utf8");
-  const compressed = brotli(raw, { mode: 1, quality: 11 });
-  if (!compressed) {
-    throw new Error("brotli compression failed");
+  const raw = new TextEncoder().encode(jsonString);
+  const compressed = pako.gzip(raw, { level: 9 });
+  if (!compressed || compressed.length === 0) {
+    throw new Error("gzip compression failed");
   }
   return base45Encode(compressed);
 }

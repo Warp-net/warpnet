@@ -1,11 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
-// @vitest-environment node
-// brotli's asm.js encoder pulls a `Browser` global that jsdom doesn't expose;
-// the production code runs in a webview where it is defined. Run this spec
-// in plain Node so the encoder loads.
 import { describe, it, expect } from "vitest";
 import { Buffer } from "buffer";
-import brotliDecompress from "brotli/decompress";
+import pako from "pako";
 import { encodeQRPayload, __test } from "@/lib/qr-payload";
 
 const BASE45_ALPHABET =
@@ -52,28 +48,20 @@ describe("qr-payload base45", () => {
 });
 
 describe("encodeQRPayload", () => {
-  it("round-trips a realistic AuthNodeInfo", async () => {
+  it("round-trips a realistic AuthNodeInfo via gzip + base45", async () => {
     const payload = {
-      identity: {
-        owner: {
-          node_id: "12D3KooWAbcdefghi",
-          user_id: "01H0000000000000000000000",
-          username: "alice",
-          created_at: "2026-01-01T00:00:00Z",
-        },
-        token: "x".repeat(48),
-        psk: "a".repeat(64),
-      },
-      node_info: {
-        node_id: "12D3KooWAbcdefghi",
-        owner_id: "01H0000000000000000000000",
-        addresses: [
-          "/ip4/192.168.1.10/tcp/4001",
-          "/ip4/10.0.0.5/tcp/4001",
-        ],
-        network: "mainnet",
-        version: "0.6.250",
-      },
+      user_id: "01H0000000000000000000000",
+      token: "x".repeat(48),
+      psk: "a".repeat(64),
+      node_id: "12D3KooWAbcdefghi",
+      addresses: [
+        "/ip4/192.168.1.10/tcp/4001",
+        "/ip4/10.0.0.5/tcp/4001",
+      ],
+      bootstrap_peers: [
+        "/ip4/207.154.221.44/tcp/4011/p2p/12D3KooWBoot/p2p-circuit/p2p/12D3KooWAbcdefghi",
+      ],
+      network: "mainnet",
     };
     const json = JSON.stringify(payload);
     const encoded = await encodeQRPayload(json);
@@ -83,9 +71,10 @@ describe("encodeQRPayload", () => {
     for (const ch of encoded) {
       expect(BASE45_ALPHABET).toContain(ch);
     }
-    // Round-trip via the same brotli decoder used on Android (RFC 7932).
+    // Round-trip via the same gzip format Android decodes with
+    // GZIPInputStream (RFC 1952).
     const compressed = base45Decode(encoded);
-    const decompressed = brotliDecompress(compressed);
+    const decompressed = pako.ungzip(compressed);
     expect(Buffer.from(decompressed).toString("utf8")).toBe(json);
   });
 });
