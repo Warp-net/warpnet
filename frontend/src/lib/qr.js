@@ -30,6 +30,11 @@ const qrOptions = {
     // leaves headroom for the full envelope without dropping below the
     // recommended error-correction floor.
     errorCorrectionLevel: "M",
+    // Render the underlying PNG at a higher resolution than the default
+    // (~200px) so the modal can display the QR at ~384px without bilinear
+    // upscaling blur. 768px gives a clean 2x for the displayed w-96 box.
+    width: 768,
+    margin: 2,
     color: {
         dark: "#c5007f",
         light: "#ffffff",

@@ -27,7 +27,7 @@ resulting from the use or misuse of this software.
       class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50"
       @click.self="close"
     >
-      <div class="bg-white rounded-lg shadow-lg p-6 w-80 relative" role="dialog" aria-modal="true" aria-label="QR Code">
+      <div class="bg-white rounded-lg shadow-lg p-6 w-[28rem] max-w-[95vw] relative" role="dialog" aria-modal="true" aria-label="QR Code">
         <button
           class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100"
           @click="close"
@@ -36,11 +36,11 @@ resulting from the use or misuse of this software.
         >
           <i class="fas fa-times" aria-hidden="true"></i>
         </button>
-        
+
         <h3 class="text-xl font-semibold text-center mb-4">Your QR Code</h3>
-        
+
         <div v-if="qrData" class="flex justify-center mb-4">
-          <img :src="qrData" alt="QR Code" class="w-48 h-48" />
+          <img :src="qrData" alt="QR Code" class="w-96 h-96 max-w-full" />
         </div>
         
         <div v-else class="text-center text-gray-500">
