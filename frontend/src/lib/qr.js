@@ -25,10 +25,11 @@ resulting from the use or misuse of this software.
 import QRCode from "qrcode";
 
 const qrOptions = {
-    // 'L' maximises payload capacity (~2953 bytes in byte mode); the pairing
-    // envelope is large enough that the default 'M' level overflows and the
-    // library throws "data is too big".
-    errorCorrectionLevel: "L",
+    // The pairing payload is Base45 (RFC 9285), whose alphabet is a strict
+    // subset of QR alphanumeric mode (~1.85x denser than byte mode). 'M'
+    // leaves headroom for the full envelope without dropping below the
+    // recommended error-correction floor.
+    errorCorrectionLevel: "M",
     color: {
         dark: "#c5007f",
         light: "#ffffff",

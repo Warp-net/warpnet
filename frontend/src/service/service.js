@@ -23,6 +23,7 @@ resulting from the use or misuse of this software.
 */
 
 import {buildQRCode} from "@/lib/qr";
+import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
 import {Call} from "../../wailsjs/go/main/App";
 
@@ -119,7 +120,17 @@ export const warpnetService = {
         const owner = this.getProfile(resp.user_id)
         warpnetService.setOwnerProfile(owner)
 
-        const qrData = JSON.stringify(resp);
+        // The QR carries the full AuthNodeInfo envelope (identity + node_info),
+        // Brotli-compressed at maximum quality and Base45-encoded so it fits in
+        // a QR alphanumeric segment without trimming any fields. The Android
+        // client reverses the same pipeline before the pair handshake.
+        const fullPayload = JSON.stringify(resp)
+        let qrData = ""
+        try {
+            qrData = await encodeQRPayload(fullPayload)
+        } catch (err) {
+            console.error("Error encoding QR payload:", err)
+        }
         resp.token = null // for security reasons
 
         const qrCode = await buildQRCode(qrData)
