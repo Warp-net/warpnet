@@ -30,7 +30,7 @@ package auth
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"github.com/Warp-net/warpnet/security"
 	"math"
@@ -98,13 +98,13 @@ func (as *AuthService) IsAuthenticated() bool {
 }
 
 func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error) {
-	base64PSK := base64.StdEncoding.EncodeToString(psk)
+	hexPSK := hex.EncodeToString(psk)
 	if as.isAuthenticated.Load() {
 		return event.LoginResponse{
 			Identity: domain.Identity{
 				Token: as.authPersistence.SessionToken(),
 				Owner: as.authPersistence.GetOwner(),
-				PSK:   base64PSK,
+				PSK:   hexPSK,
 			},
 		}, nil
 	}
@@ -163,7 +163,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		return authInfo, fmt.Errorf("%w: %s", ErrUsernamesMismatch, message.Username)
 	}
 	as.authReady <- domain.AuthNodeInfo{
-		Identity: domain.Identity{Owner: owner, Token: token, PSK: base64PSK},
+		Identity: domain.Identity{Owner: owner, Token: token, PSK: hexPSK},
 	}
 
 	select {
