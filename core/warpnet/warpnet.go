@@ -223,6 +223,7 @@ func (wh *WarpStreamHandler) String() string {
 type NodeInfo struct {
 	OwnerId        string           `json:"owner_id"`
 	ID             WarpPeerID       `json:"node_id"`
+	Aliases        []WarpPeerID     `json:"aliases"`
 	Version        *semver.Version  `json:"version"`
 	Addresses      []string         `json:"addresses"`
 	StartTime      time.Time        `json:"start_time"`

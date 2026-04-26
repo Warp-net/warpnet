@@ -412,14 +412,13 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	}
 	s.m.PushStatusOnline(pi.ID.String())
 
-	if rand.IntN(10)/3 == 0 { //nolint:gosec
-		info, err := s.requestNodeInfo(pi)
-		if err != nil {
-			log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
-			return
-		}
-		s.node.SetNodePriority(pi.ID, info.Reachability)
+	info, err := s.requestNodeInfo(pi)
+	if err != nil {
+		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+		return
 	}
+	s.node.SetNodePriority(pi.ID, info.Reachability)
+
 }
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
