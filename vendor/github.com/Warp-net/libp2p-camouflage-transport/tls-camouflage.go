@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package security
+package camouflage
 
 import (
 	"context"
@@ -46,7 +46,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	utls "github.com/refraction-networking/utls"
-	log "github.com/sirupsen/logrus"
+	"log"
 )
 
 // Well-known browser fingerprint identifiers for WithBrowserFingerprint.
@@ -157,7 +157,7 @@ func NewCamouflageConn(conn manet.Conn, isClient bool, cfg *CamouflageConfig) (*
 	// Set a deadline for the handshake to defend against slow-handshake
 	// active probing attacks.
 	if err := conn.SetDeadline(time.Now().Add(cfg.handshakeTimeout)); err != nil {
-		log.Debugf("dpi: set handshake deadline: %v", err)
+		log.Printf("dpi: set handshake deadline: %v", err)
 	}
 
 	var tlsConn net.Conn
@@ -173,7 +173,7 @@ func NewCamouflageConn(conn manet.Conn, isClient bool, cfg *CamouflageConfig) (*
 
 	// Clear the handshake deadline so subsequent I/O is not constrained.
 	if err := conn.SetDeadline(time.Time{}); err != nil {
-		log.Debugf("dpi: clear handshake deadline: %v", err)
+		log.Printf("dpi: clear handshake deadline: %v", err)
 	}
 
 	return &CamouflageConn{tlsConn: tlsConn, rawConn: conn}, nil

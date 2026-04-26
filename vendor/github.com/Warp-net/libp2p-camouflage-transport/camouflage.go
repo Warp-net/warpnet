@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package transport
+package camouflage
 
 import (
 	"context"
@@ -33,7 +33,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/transport"
@@ -41,26 +40,8 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/transport/tcpreuse"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
-	log "github.com/sirupsen/logrus"
+	"log"
 )
-
-// Package provides a libp2p transport wrapper that defeats Deep Packet
-// Inspection through two complementary techniques:
-//
-//  1. TLS camouflage – a real TLS tunnel is established using uTLS with a
-//     genuine browser fingerprint (Chrome, Firefox, etc.) on the client side
-//     and standard crypto/tls with a plausible certificate chain on the server
-//     side. The Noise protocol handshake and all application data travel inside
-//     this TLS tunnel, making the connection indistinguishable from normal
-//     HTTPS browser traffic to DPI middleboxes.
-//
-//  2. TCP fragmentation – the initial bytes of the TLS ClientHello are split
-//     into small TCP segments with random inter-segment delays so that
-//     stateful DPI that only inspects the first segment cannot match known
-//     signatures.
-//
-// Active probing defenses include SNI/ALPN consistency validation, a plausible
-// two-certificate chain (fake CA + leaf), and configurable handshake timeouts.
 
 const (
 	// DefaultFragmentSize is the number of bytes per TCP segment during
@@ -179,7 +160,7 @@ type CamouflageTransport struct {
 	sni                string
 	browserFingerprint string
 	handshakeTimeout   time.Duration
-	camoConfig         *security.CamouflageConfig // built once in constructor
+	camoConfig         *CamouflageConfig // built once in constructor
 }
 
 var _ transport.Transport = (*CamouflageTransport)(nil)
@@ -224,9 +205,9 @@ func NewCamouflageTransport(
 	// Build the TLS camouflage configuration once. The server-side TLS
 	// config (including the generated certificate chain) is reused for
 	// all accepted connections.
-	cfg, err := security.BuildCamouflageConfig(t.sni, t.browserFingerprint, t.handshakeTimeout)
+	cfg, err := BuildCamouflageConfig(t.sni, t.browserFingerprint, t.handshakeTimeout)
 	if err != nil {
-		log.Errorf("dpi: camouflage config build failed: %v", err)
+		log.Printf("dpi: camouflage config build failed: %v", err)
 		return nil, err
 	}
 	t.camoConfig = cfg
@@ -239,7 +220,7 @@ func NewCamouflageTransport(
 func (t *CamouflageTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (transport.CapableConn, error) {
 	connScope, err := t.rcmgr.OpenConnection(network.DirOutbound, true, raddr)
 	if err != nil {
-		log.Errorf("dpi: resource manager blocked outgoing connection to %s: %v", p, err)
+		log.Printf("dpi: resource manager blocked outgoing connection to %s: %v", p, err)
 		return nil, err
 	}
 
@@ -258,7 +239,7 @@ func (t *CamouflageTransport) dialWithScope(
 	connScope network.ConnManagementScope,
 ) (transport.CapableConn, error) {
 	if err := connScope.SetPeer(p); err != nil {
-		log.Debugf("dpi: resource manager blocked connection for peer %s: %v", p, err)
+		log.Printf("dpi: resource manager blocked connection for peer %s: %v", p, err)
 		return nil, err
 	}
 
@@ -276,9 +257,9 @@ func (t *CamouflageTransport) dialWithScope(
 
 	// Layer 2: Real TLS tunnel – uTLS presents a genuine browser
 	// ClientHello fingerprint; all subsequent traffic is encrypted TLS.
-	camouflaged, err := security.NewCamouflageConn(wrapped, true, t.camoConfig)
+	camouflaged, err := NewCamouflageConn(wrapped, true, t.camoConfig)
 	if err != nil {
-		log.Errorf("dpi: camouflage connection failed: %v", err)
+		log.Printf("dpi: camouflage connection failed: %v", err)
 		_ = rawConn.Close()
 		return nil, err
 	}
@@ -359,8 +340,8 @@ func (t *CamouflageTransport) String() string {
 	return "CamouflageTCP"
 }
 
-func (t *CamouflageTransport) wrapConn(c manet.Conn) *security.SpoofConn {
-	return security.NewSpoofConn(c, t.fragmentSize, t.handshakeLen, t.maxDelay)
+func (t *CamouflageTransport) wrapConn(c manet.Conn) *SpoofConn {
+	return NewSpoofConn(c, t.fragmentSize, t.handshakeLen, t.maxDelay)
 }
 
 type camouflageGatedMaListener struct {
@@ -369,7 +350,7 @@ type camouflageGatedMaListener struct {
 	fragmentSize int
 	handshakeLen int
 	maxDelay     time.Duration
-	camoConfig   *security.CamouflageConfig
+	camoConfig   *CamouflageConfig
 }
 
 func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagementScope, error) {
@@ -383,7 +364,7 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 			if err != nil && strings.HasSuffix(err.Error(), "use of closed network connection") {
 				return nil, nil, err
 			}
-			log.Errorf("dpi: transient accept: %v", err)
+			log.Printf("dpi: transient accept: %v", err)
 			continue
 		}
 
@@ -391,13 +372,13 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 		tryKeepAlive(conn, true)
 
 		// Layer 1: TCP fragmentation for server-side responses.
-		spoofed := security.NewSpoofConn(conn, l.fragmentSize, l.handshakeLen, l.maxDelay)
+		spoofed := NewSpoofConn(conn, l.fragmentSize, l.handshakeLen, l.maxDelay)
 
 		// Layer 2: Real TLS tunnel – server side accepts TLS with a plausible
 		// certificate chain and validates the client's ALPN.
-		camouflaged, err := security.NewCamouflageConn(spoofed, false, l.camoConfig)
+		camouflaged, err := NewCamouflageConn(spoofed, false, l.camoConfig)
 		if err != nil {
-			log.Errorf("dpi: camouflage handshake failed from %s: %v", conn.RemoteAddr(), err)
+			log.Printf("dpi: camouflage handshake failed from %s: %v", conn.RemoteAddr(), err)
 			if scope != nil {
 				scope.Done()
 			}
@@ -433,20 +414,20 @@ type (
 func tryKeepAlive(conn net.Conn, enabled bool) {
 	if c, ok := conn.(fullKeepAlive); ok {
 		if err := c.SetKeepAlive(enabled); err != nil {
-			log.Errorf("dpi: enabling TCP keepalive: %v", err)
+			log.Printf("dpi: enabling TCP keepalive: %v", err)
 			return
 		}
 		if !enabled {
 			return
 		}
 		if err := c.SetKeepAlivePeriod(30 * time.Second); err != nil {
-			log.Errorf("dpi: setting TCP keepalive period: %v", err)
+			log.Printf("dpi: setting TCP keepalive period: %v", err)
 		}
 		return
 	}
 	if c, ok := conn.(basicKeepAlive); ok {
 		if err := c.SetKeepAlive(enabled); err != nil {
-			log.Errorf("dpi: enabling TCP keepalive (no period support): %v", err)
+			log.Printf("dpi: enabling TCP keepalive (no period support): %v", err)
 		}
 	}
 }
