@@ -117,13 +117,30 @@ export const warpnetService = {
         if (resp.code) {
             throw new Error(resp.message)
         }
-        const owner = this.getProfile(resp.user_id)
-        warpnetService.setOwnerProfile(owner)
+        // Seed the owner profile from the flat AuthNodeInfo first so any
+        // sendToNode call below has node_id/user_id available; getProfile
+        // is fetched on a best-effort basis to back-fill the username.
+        warpnetService.setOwnerProfile({
+            user_id: resp.user_id,
+            node_id: resp.node_id,
+        })
+        try {
+            const profile = await this.getProfile(resp.user_id)
+            if (profile && profile.username) {
+                warpnetService.setOwnerProfile({
+                    user_id: resp.user_id,
+                    node_id: resp.node_id,
+                    username: profile.username,
+                })
+            }
+        } catch (err) {
+            console.error("Failed to fetch owner profile:", err)
+        }
 
-        // The QR carries the full AuthNodeInfo envelope (identity + node_info),
-        // Brotli-compressed at maximum quality and Base45-encoded so it fits in
-        // a QR alphanumeric segment without trimming any fields. The Android
-        // client reverses the same pipeline before the pair handshake.
+        // The QR carries the full AuthNodeInfo envelope, Brotli-compressed at
+        // maximum quality and Base45-encoded so it fits in a QR alphanumeric
+        // segment. The Android client reverses the same pipeline before the
+        // pair handshake.
         const fullPayload = JSON.stringify(resp)
         let qrData = ""
         try {
