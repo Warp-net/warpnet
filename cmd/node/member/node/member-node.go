@@ -275,9 +275,13 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi.Hash = m.selfHashHex
 	bi.Network = m.network
 
-	devices, err := m.deviceRepo.GetDevices(m.ownerId)
+	// Devices are persisted under the fat node's own libp2p peer ID by the
+	// pair handler (s.Conn().LocalPeer()), not under the owner's user ID,
+	// so look them up with the same key here.
+	ownerPeerId := bi.ID.String()
+	devices, err := m.deviceRepo.GetDevices(ownerPeerId)
 	if err != nil {
-		log.Infof("member: failed to get devices for owner %s: %s", m.ownerId, err)
+		log.Infof("member: failed to get devices for owner %s: %s", ownerPeerId, err)
 	}
 	for _, device := range devices {
 		bi.Aliases = append(bi.Aliases, device.NodeId)
