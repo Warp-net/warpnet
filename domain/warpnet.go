@@ -127,10 +127,12 @@ type Owner struct {
 }
 
 type Device struct {
-	ID        ID                 `json:"id"`
-	CreatedAt time.Time          `json:"created_at"`
-	NodeId    warpnet.WarpPeerID `json:"node_id"`
-	Token     string             `json:"token"`
+	ID         ID                 `json:"id"`
+	CreatedAt  time.Time          `json:"created_at"`
+	NodeId     warpnet.WarpPeerID `json:"node_id"`
+	Token      string             `json:"token"`
+	Platform   string             `json:"platform"`
+	LastActive time.Time          `json:"last_active"`
 }
 
 // ReplyNode defines model for ReplyNode.
