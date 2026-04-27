@@ -55,9 +55,12 @@ func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer) warp
 			return nil, warpnet.WarpError("token mismatch")
 		}
 
-		return event.Accepted, deviceRepo.SetDevice(s.Conn().LocalPeer().String(), domain.Device{
+		if err := deviceRepo.SetDevice(s.Conn().LocalPeer().String(), domain.Device{
 			NodeId: s.Conn().RemotePeer(),
 			Token:  clientInfo.Token,
-		})
+		}); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
 	}
 }

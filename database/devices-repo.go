@@ -62,7 +62,7 @@ func (repo *DevicesRepo) GetDevices(ownerNodeId string) (devices []domain.Device
 
 	devicesPrefix := local_store.NewPrefixBuilder(DevicesRepoName).
 		AddRootID(ownerNodeId).
-		AddRange(local_store.FixedRangeKey).
+		AddRange(local_store.NoneRangeKey).
 		Build()
 
 	tx, err := repo.db.NewTxn()
@@ -70,11 +70,12 @@ func (repo *DevicesRepo) GetDevices(ownerNodeId string) (devices []domain.Device
 		return devices, err
 	}
 
-	items, _, err := tx.List(devicesPrefix, new(10), nil)
+	limit := uint64(10)
+	items, _, err := tx.List(devicesPrefix, &limit, nil)
 	if err != nil {
 		return devices, err
 	}
-	if len(devices) == 0 {
+	if len(items) == 0 {
 		return devices, nil
 	}
 
@@ -101,7 +102,7 @@ func (repo *DevicesRepo) SetDevice(ownerNodeId string, device domain.Device) err
 	}
 	deviceKey := local_store.NewPrefixBuilder(DevicesRepoName).
 		AddRootID(ownerNodeId).
-		AddRange(local_store.FixedRangeKey).
+		AddRange(local_store.NoneRangeKey).
 		AddParentId(device.ID).
 		Build()
 
