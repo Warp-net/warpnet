@@ -72,6 +72,7 @@ type MemberNode struct {
 	statsRepo                     StatsProvider
 	authRepo                      AuthProvider
 	userRepo                      UserProvider
+	deviceRepo                    DeviceProvider
 	followRepo                    FollowStorer
 	db                            Storer
 	statsDb                       StatsStorer
@@ -105,6 +106,7 @@ func NewMemberNode(
 	statsRepo := database.NewStatsRepo(db)
 	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
+	deviceRepo := database.NewDevicesRepo(db)
 	owner := authRepo.GetOwner()
 
 	challenger := challenge.NewSpoofChallenger(ctx)
@@ -171,6 +173,7 @@ func NewMemberNode(
 		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
+		deviceRepo:    deviceRepo,
 		authRepo:      authRepo,
 		db:            db,
 		privKey:       privKey,
@@ -271,6 +274,14 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi.OwnerId = m.ownerId
 	bi.Hash = m.selfHashHex
 	bi.Network = m.network
+
+	devices, err := m.deviceRepo.GetDevices(m.ownerId)
+	if err != nil {
+		log.Infof("member: failed to get devices for owner %s: %s", m.ownerId, err)
+	}
+	for _, device := range devices {
+		bi.Aliases = append(bi.Aliases, device.NodeId)
+	}
 	return bi
 }
 
@@ -382,7 +393,7 @@ func (m *MemberNode) setupHandlers(
 		[]warpnet.WarpStreamHandler{
 			{
 				event.PRIVATE_POST_PAIR,
-				handler.StreamNodesPairingHandler(token),
+				handler.StreamNodesPairingHandler(token, m.deviceRepo),
 			},
 			{
 				event.PUBLIC_POST_NODE_CHALLENGE,

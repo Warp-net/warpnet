@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package domain
 
 import (
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"time"
 
 	"github.com/Warp-net/warpnet/json"
@@ -123,6 +124,13 @@ type Owner struct {
 	UserId          string    `json:"user_id"`
 	RedundantUserID string    `json:"id"`
 	Username        string    `json:"username"`
+}
+
+type Device struct {
+	ID        ID                 `json:"id"`
+	CreatedAt time.Time          `json:"created_at"`
+	NodeId    warpnet.WarpPeerID `json:"node_id"`
+	Token     string             `json:"token"`
 }
 
 // ReplyNode defines model for ReplyNode.

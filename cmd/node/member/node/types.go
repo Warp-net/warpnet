@@ -98,6 +98,11 @@ type UserProvider interface {
 	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
 }
 
+type DeviceProvider interface {
+	SetDevice(ownerNodeId string, device domain.Device) error
+	GetDevices(ownerNodeId string) (devices []domain.Device, err error)
+}
+
 type ClientNodeStreamer interface {
 	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
 	IsRunning() bool

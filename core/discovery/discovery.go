@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/challenge"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"math/rand/v2"
 	"time"
@@ -110,6 +111,8 @@ type discoveryService struct {
 	discoveryTicker *time.Ticker
 	stopChan        chan struct{}
 
+	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
+
 	m MetricsOnlineDiscoverer
 }
 
@@ -123,6 +126,8 @@ func NewDiscoveryService(
 ) *discoveryService {
 	capacity := 32
 	leakPerTenSec := 2
+
+	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
 	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
@@ -132,12 +137,14 @@ func NewDiscoveryService(
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
+		aliasCache:      lru,
 		m:               m,
 	}
 }
 
 func NewBootstrapDiscoveryService(
 	ctx context.Context, challenger DiscoveryChallenger, m MetricsOnlineDiscoverer) *discoveryService {
+	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
 		ctx:             ctx,
 		limiter:         newRateLimiter(32, 2),
@@ -145,6 +152,7 @@ func NewBootstrapDiscoveryService(
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
+		aliasCache:      lru,
 		m:               m,
 	}
 }
@@ -279,6 +287,13 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
+	if s.aliasCache.Contains(peer.ID) {
+		log.Infof("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
+		s.m.PushStatusOnline(pi.ID.String())
+		s.node.SetMaxNodePriority(pi.ID)
+		return
+	}
+
 	isRepeatable, err := s.challenger.Challenge(
 		s.node.Peerstore().PubKey(pi.ID),
 		s.getChallengeLevel(pi.ID),
@@ -311,6 +326,10 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if err != nil {
 		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
 		return
+	}
+
+	for _, alias := range info.Aliases {
+		s.aliasCache.Add(alias, pi.ID)
 	}
 
 	s.node.SetNodePriority(pi.ID, info.Reachability)
@@ -388,6 +407,12 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		return
 	}
 
+	if s.aliasCache.Contains(peer.ID) {
+		log.Debugf("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
+		s.m.PushStatusOnline(pi.ID.String())
+		return
+	}
+
 	_, err = s.challenger.Challenge(
 		s.node.Peerstore().PubKey(pi.ID),
 		s.getChallengeLevel(pi.ID),
@@ -419,6 +444,9 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 	}
 	s.node.SetNodePriority(pi.ID, info.Reachability)
 
+	for _, alias := range info.Aliases {
+		s.aliasCache.Add(alias, pi.ID)
+	}
 }
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
