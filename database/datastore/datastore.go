@@ -75,3 +75,20 @@ func MutexWrap(d ds.Datastore) *dssync.MutexDatastore {
 func NewBlockstore(b Batching, opts ...blockstore.Option) blockstore.Blockstore {
 	return blockstore.NewBlockstore(b, opts...)
 }
+
+// WriteThrough configures a blockstore to skip the redundant Has()
+// check before every Put. go-ds-crdt writes blocks once and never
+// overwrites them, so the check is pure overhead — same reason
+// ipfs-lite enables this option for CRDT-backed deployments.
+func WriteThrough(enabled bool) blockstore.Option {
+	return blockstore.WriteThrough(enabled)
+}
+
+// NewIdStore wraps a blockstore so it transparently synthesises
+// "identity" blocks — blocks whose payload is encoded directly in
+// the CID. go-ds-crdt occasionally produces inline blocks for tiny
+// deltas; without this wrapper, bitswap cannot satisfy WANTs for
+// such CIDs and replication can stall in small clusters.
+func NewIdStore(bs blockstore.Blockstore) blockstore.Blockstore {
+	return blockstore.NewIdStore(bs)
+}

@@ -135,9 +135,36 @@ func NewCRDTStatsStore(
 	ctx, cancel := context.WithCancel(ctx)
 
 	baseStore := ds.MutexWrap(datastore)
-	blockstore := ds.NewBlockstore(baseStore)
+
+	// Match the canonical ipfs-lite blockstore wiring for go-ds-crdt:
+	//   - WriteThrough(true) skips the redundant Has() check on every
+	//     Put. CRDT writes blocks once and never overwrites them, so
+	//     the check is pure overhead.
+	//   - NewIdStore synthesises blocks for "identity" multihashes
+	//     (small payloads encoded directly in the CID). go-ds-crdt
+	//     occasionally produces such inline blocks for tiny deltas;
+	//     without IdStore, bitswap cannot satisfy WANTs for those
+	//     CIDs and replication can stall in small clusters.
+	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
+
 	bitswapNetwork := warpnet.NewBitswapNetwork(node)
 	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
+
+	// Replay any libp2p connections that were already established
+	// when bitswap registered as a network notifier. libp2p's
+	// swarm.Notify only fires for FUTURE events, so peers that
+	// connected during the window between libp2p.New (the host
+	// starts listening) and bitswap.New (handlers wired) would
+	// otherwise be invisible to bitswap's PeerManager — leading to
+	// "No peers - broadcasting" loops that never converge in a small
+	// cluster. ipfs-lite avoids this by ensuring nothing inbound can
+	// connect before bitswap is up; here the host is already exposed
+	// by the time NewCRDTStatsStore runs, so we have to replay
+	// explicitly.
+	for _, p := range node.Network().Peers() {
+		bitswapExchange.PeerConnected(p)
+	}
+
 	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
 	dagService := warpnet.NewDAGService(blockService)
 
