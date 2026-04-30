@@ -232,7 +232,7 @@ func (s *CRDTStatsStore) countEvents(namespace string, key ds.Key) (uint64, erro
 	if err != nil {
 		return 0, fmt.Errorf("crdt stats: query %s: %w", prefix, err)
 	}
-	defer results.Close()
+	defer func() { _ = results.Close() }()
 
 	var n uint64
 	for r := range results.Next() {
