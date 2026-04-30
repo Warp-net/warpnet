@@ -142,19 +142,16 @@ func TestReceive_ConcurrentWithNext_NoDeadlock(t *testing.T) {
 	mock := &mockGossipPubSub{}
 	gb, _ := NewGossipBroadcaster(ctx, mock)
 
-	stop := make(chan struct{})
+	// Consumer blocks on Next() until either data arrives or its
+	// context is cancelled — no busy-wait, no per-iter context churn.
+	consumerCtx, stopConsumer := context.WithCancel(context.Background())
 	consumerDone := make(chan struct{})
 	go func() {
 		defer close(consumerDone)
 		for {
-			select {
-			case <-stop:
+			if _, err := gb.Next(consumerCtx); err != nil {
 				return
-			default:
 			}
-			nextCtx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
-			_, _ = gb.Next(nextCtx)
-			cancel()
 		}
 	}()
 
@@ -180,9 +177,10 @@ func TestReceive_ConcurrentWithNext_NoDeadlock(t *testing.T) {
 	select {
 	case <-producersDone:
 	case <-time.After(5 * time.Second):
+		stopConsumer()
 		t.Fatal("Receive deadlocked: producers did not finish within 5s")
 	}
-	close(stop)
+	stopConsumer()
 	<-consumerDone
 }
 

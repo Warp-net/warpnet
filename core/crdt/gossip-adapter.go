@@ -67,11 +67,14 @@ func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBr
 	return gb, err
 }
 
-// Broadcast sends data via Gossip
+// Broadcast sends data via Gossip.
+//
+// gb.gossip and gb.topic are set once at construction and never
+// mutated, so this method intentionally does NOT take gb.mx —
+// otherwise a slow PublishRaw (network I/O) would block close() and
+// Receive() through the same lock, defeating the deadlock fix in
+// Receive().
 func (gb *GossipBroadcaster) Broadcast(_ context.Context, data []byte) error {
-	gb.mx.Lock()
-	defer gb.mx.Unlock()
-
 	return gb.gossip.PublishRaw(gb.topic, data)
 }
 
