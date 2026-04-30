@@ -162,10 +162,10 @@ func TestReceive_ConcurrentWithNext_NoDeadlock(t *testing.T) {
 	const perProducer = 2000
 	var wg sync.WaitGroup
 	wg.Add(producers)
-	for i := 0; i < producers; i++ {
+	for i := range producers {
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < perProducer; j++ {
+			for j := range perProducer {
 				gb.Receive([]byte{byte(id), byte(j)})
 			}
 		}(i)
