@@ -75,13 +75,15 @@ type CRDTStatsStore struct {
 	prefix      string
 	nodeID      string
 
-	// localCounters keeps the authoritative value of THIS node's own
-	// per-key contribution (separate maps for incr / decr namespaces).
-	// It is seeded once from the CRDT store on first access and then
-	// bumped in memory under s.mu, so a subsequent increment never has
-	// to re-read from the CRDT view — which under go-ds-crdt may lag
-	// behind our own latest Put while the DAG is being built.
-	localCounters map[string]uint64
+	// incrCounters / decrCounters keep the authoritative value of THIS
+	// node's own per-key contribution to the PN-counter, split per
+	// namespace. They are seeded once from the CRDT store on first
+	// access and bumped in memory under s.mu afterwards, so a
+	// subsequent increment never has to re-read from the CRDT view —
+	// which under go-ds-crdt may lag behind our own latest Put while
+	// the DAG is being built.
+	incrCounters map[string]uint64
+	decrCounters map[string]uint64
 }
 
 // NewCRDTStatsStore creates a new CRDT-based statistics store
@@ -128,13 +130,14 @@ func NewCRDTStatsStore(
 	}
 
 	store := &CRDTStatsStore{
-		crdt:          crdtStore,
-		broadcaster:   broadcaster,
-		ctx:           ctx,
-		cancel:        cancel,
-		nodeID:        node.ID().String(),
-		prefix:        StatsRepoName,
-		localCounters: make(map[string]uint64),
+		crdt:         crdtStore,
+		broadcaster:  broadcaster,
+		ctx:          ctx,
+		cancel:       cancel,
+		nodeID:       node.ID().String(),
+		prefix:       StatsRepoName,
+		incrCounters: make(map[string]uint64),
+		decrCounters: make(map[string]uint64),
 	}
 
 	return store, nil
@@ -183,11 +186,11 @@ func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 }
 
 func (s *CRDTStatsStore) Increment(key ds.Key) error {
-	return s.bump(s.makeIncrKey(key))
+	return s.bump(s.makeIncrKey(key), s.incrCounters)
 }
 
 func (s *CRDTStatsStore) Decrement(key ds.Key) error {
-	return s.bump(s.makeDecrKey(key))
+	return s.bump(s.makeDecrKey(key), s.decrCounters)
 }
 
 // bump increases the per-node entry under dsKey by 1 and persists it
@@ -208,12 +211,12 @@ func (s *CRDTStatsStore) Decrement(key ds.Key) error {
 //     the CRDT and bumped locally afterwards;
 //   - on the seeding read, only ds.ErrNotFound is treated as 0; every
 //     other error is propagated.
-func (s *CRDTStatsStore) bump(dsKey ds.Key) error {
+func (s *CRDTStatsStore) bump(dsKey ds.Key, cache map[string]uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	cacheKey := dsKey.String()
-	current, seeded := s.localCounters[cacheKey]
+	current, seeded := cache[cacheKey]
 	if !seeded {
 		existing, err := s.crdt.Get(s.ctx, dsKey)
 		switch {
@@ -230,7 +233,7 @@ func (s *CRDTStatsStore) bump(dsKey ds.Key) error {
 	if err := s.crdt.Put(s.ctx, dsKey, s.encodeCounter(newValue)); err != nil {
 		return fmt.Errorf("crdt stats: write counter %s: %w", cacheKey, err)
 	}
-	s.localCounters[cacheKey] = newValue
+	cache[cacheKey] = newValue
 	return nil
 }
 

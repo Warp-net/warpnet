@@ -46,8 +46,8 @@ type GossipBroadcaster struct {
 	topic    string
 	dataChan chan []byte
 
-	once sync.Once
-	mx   sync.Mutex
+	mx     sync.Mutex
+	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 }
 
 const statsTopic = "/warpnet/stats/1.0.0"
@@ -59,8 +59,6 @@ func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBr
 		topic:    statsTopic,
 		dataChan: make(chan []byte, 100),
 		ctx:      ctx,
-		once:     sync.Once{},
-		mx:       sync.Mutex{},
 	}
 	err := gossip.SubscribeRaw(statsTopic, func(data []byte) error {
 		gb.Receive(data)
@@ -98,9 +96,17 @@ func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
 // `default` branch, which could deadlock under the held mutex when a
 // concurrent Next() drained the channel between the select decision
 // and the receive.
+//
+// The `closed` flag and `close()` taking the same mutex prevent a
+// "send on closed channel" panic when Next() shuts the broadcaster
+// down concurrently with an in-flight Receive.
 func (gb *GossipBroadcaster) Receive(data []byte) {
 	gb.mx.Lock()
 	defer gb.mx.Unlock()
+
+	if gb.closed {
+		return
+	}
 
 	select {
 	case <-gb.ctx.Done():
@@ -124,7 +130,11 @@ func (gb *GossipBroadcaster) close() {
 	if gb == nil {
 		return
 	}
-	gb.once.Do(func() {
-		close(gb.dataChan)
-	})
+	gb.mx.Lock()
+	defer gb.mx.Unlock()
+	if gb.closed {
+		return
+	}
+	gb.closed = true
+	close(gb.dataChan)
 }
