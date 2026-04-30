@@ -90,19 +90,33 @@ func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
 	}
 }
 
-// Receive is called by Gossip subscription handler to deliver data
+// Receive is called by Gossip subscription handler to deliver data.
+//
+// All channel operations are non-blocking. If the buffer is full, the
+// oldest pending message is dropped and the new one is enqueued. The
+// previous implementation did `<-gb.dataChan` unconditionally inside the
+// `default` branch, which could deadlock under the held mutex when a
+// concurrent Next() drained the channel between the select decision
+// and the receive.
 func (gb *GossipBroadcaster) Receive(data []byte) {
 	gb.mx.Lock()
 	defer gb.mx.Unlock()
 
 	select {
-	case gb.dataChan <- data:
 	case <-gb.ctx.Done():
-		gb.close()
+		return
+	case gb.dataChan <- data:
 		return
 	default:
-		<-gb.dataChan
-		gb.dataChan <- data
+	}
+
+	select {
+	case <-gb.dataChan:
+	default:
+	}
+	select {
+	case gb.dataChan <- data:
+	default:
 	}
 }
 

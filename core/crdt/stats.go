@@ -30,6 +30,7 @@ package crdt
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -73,6 +74,14 @@ type CRDTStatsStore struct {
 	mu          sync.RWMutex
 	prefix      string
 	nodeID      string
+
+	// localCounters keeps the authoritative value of THIS node's own
+	// per-key contribution (separate maps for incr / decr namespaces).
+	// It is seeded once from the CRDT store on first access and then
+	// bumped in memory under s.mu, so a subsequent increment never has
+	// to re-read from the CRDT view — which under go-ds-crdt may lag
+	// behind our own latest Put while the DAG is being built.
+	localCounters map[string]uint64
 }
 
 // NewCRDTStatsStore creates a new CRDT-based statistics store
@@ -119,12 +128,13 @@ func NewCRDTStatsStore(
 	}
 
 	store := &CRDTStatsStore{
-		crdt:        crdtStore,
-		broadcaster: broadcaster,
-		ctx:         ctx,
-		cancel:      cancel,
-		nodeID:      node.ID().String(),
-		prefix:      StatsRepoName,
+		crdt:          crdtStore,
+		broadcaster:   broadcaster,
+		ctx:           ctx,
+		cancel:        cancel,
+		nodeID:        node.ID().String(),
+		prefix:        StatsRepoName,
+		localCounters: make(map[string]uint64),
 	}
 
 	return store, nil
@@ -173,47 +183,55 @@ func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 }
 
 func (s *CRDTStatsStore) Increment(key ds.Key) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	dsKey := s.makeIncrKey(key)
-
-	existing, err := s.crdt.Get(s.ctx, dsKey)
-
-	var current uint64
-	if err == nil {
-		current = s.decodeCounter(existing)
-	} else {
-		current = 0
-	}
-
-	newValue := current + 1
-
-	data := s.encodeCounter(newValue)
-
-	return s.crdt.Put(s.ctx, dsKey, data)
+	return s.bump(s.makeIncrKey(key))
 }
 
 func (s *CRDTStatsStore) Decrement(key ds.Key) error {
+	return s.bump(s.makeDecrKey(key))
+}
+
+// bump increases the per-node entry under dsKey by 1 and persists it
+// to the CRDT. Because every node only ever writes to keys suffixed
+// with its own peer ID, intra-cluster writes never collide; the only
+// remaining race is between concurrent calls on the same node, which
+// s.mu serialises.
+//
+// The previous implementation read the current value back from the
+// CRDT on every call and silently treated ANY error (including
+// transient I/O failures or context cancellation) as "current = 0",
+// which would clobber a real value. It also re-read state that — under
+// go-ds-crdt's async DAG processing — may not yet reflect this node's
+// most recent Put, opening a window for lost increments.
+//
+// The fix:
+//   - cache the per-key value in memory under s.mu, seeded once from
+//     the CRDT and bumped locally afterwards;
+//   - on the seeding read, only ds.ErrNotFound is treated as 0; every
+//     other error is propagated.
+func (s *CRDTStatsStore) bump(dsKey ds.Key) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	dsKey := s.makeDecrKey(key)
-
-	existing, err := s.crdt.Get(s.ctx, dsKey)
-
-	var current uint64
-	if err == nil {
-		current = s.decodeCounter(existing)
-	} else {
-		current = 0
+	cacheKey := dsKey.String()
+	current, seeded := s.localCounters[cacheKey]
+	if !seeded {
+		existing, err := s.crdt.Get(s.ctx, dsKey)
+		switch {
+		case err == nil:
+			current = s.decodeCounter(existing)
+		case errors.Is(err, ds.ErrNotFound):
+			current = 0
+		default:
+			return fmt.Errorf("crdt stats: read counter %s: %w", cacheKey, err)
+		}
 	}
 
 	newValue := current + 1
-
-	data := s.encodeCounter(newValue)
-
-	return s.crdt.Put(s.ctx, dsKey, data)
+	if err := s.crdt.Put(s.ctx, dsKey, s.encodeCounter(newValue)); err != nil {
+		return fmt.Errorf("crdt stats: write counter %s: %w", cacheKey, err)
+	}
+	s.localCounters[cacheKey] = newValue
+	return nil
 }
 
 // Close stops the CRDT store
