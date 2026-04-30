@@ -30,8 +30,10 @@ package crdt
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -49,12 +51,13 @@ const (
 	incrNamespace = "incr"
 	decrNamespace = "decr"
 
-	// eventIDBytes is the size in bytes of the random nonce that
-	// uniquely identifies a single increment/decrement event in the
-	// CRDT keyspace. 128 bits is more than enough to avoid collisions
-	// across the lifetime of any realistic warpnet deployment, even
-	// after total local-data loss and node re-bootstraps.
-	eventIDBytes = 16
+	// generationIDBytes is the size of the random nonce that tags
+	// every value this process writes to the CRDT. 128 bits make
+	// collisions across the lifetime of the network infeasible, so
+	// no two process lifetimes ever share a sub-counter — even after
+	// total local-data loss followed by a re-bootstrap with the same
+	// nodeID.
+	generationIDBytes = 16
 )
 
 // Broadcaster interface for CRDT synchronization
@@ -71,34 +74,42 @@ type CRDTRouter interface {
 	FindProvidersAsync(context.Context, cid.Cid, int) <-chan peer.AddrInfo
 }
 
-// CRDTStatsStore implements a canonical PN-counter on top of go-ds-crdt.
+// CRDTStatsStore implements a PN-counter on top of go-ds-crdt that
+// stays correct under total local-data loss while keeping storage
+// proportional to (nodes × restarts × keys) instead of (operations).
 //
-// Design.
-// Each Increment / Decrement appends one immutable "event" entry to
-// the CRDT keyspace under a globally-unique key:
+// Layout.
+// Every value lives under a key of the shape
 //
-//	/STATS/{incr|decr}/{dataKey}/{nodeID}/{eventID}
+//	/STATS/{incr|decr}/{dataKey}/{nodeID}/{generation}
 //
-// where eventID is a fresh 128-bit cryptographic nonce. Values are an
-// inert one-byte marker; only the presence of the key matters. The
-// aggregate is then `count(incr) - count(decr)` (clamped at zero).
+// where {generation} is a fresh 128-bit cryptographic nonce minted
+// once per process start. Each (namespace, dataKey, nodeID,
+// generation) tuple is owned by exactly one writer — the process
+// that minted that generation — so write semantics inside it are
+// trivially safe: we keep the value in memory, bump it under a
+// mutex, and Put the new value to the CRDT. We never read our own
+// value back from the CRDT, so eventual-consistency lag in the
+// local DAG view cannot lose increments.
 //
-// Properties.
-//   - No read-modify-write: every operation is a pure add. Concurrent
-//     calls on the same node produce different keys, so they cannot
-//     collide and require no in-process synchronisation.
-//   - Survives total local-data loss: on a fresh restart with the
-//     same nodeID, previously broadcast events are still held by
-//     peers and resync via go-ds-crdt's DAG. New events use brand-new
-//     nonces and never collide with re-incoming history. Aggregates
-//     converge once the DAG syncs.
-//   - Restart durability: a write either reached durable storage /
-//     peers or it did not. There is never double-counting and never
-//     "ghost" overwrites of earlier higher values.
+// GetAggregatedStat sums values across all (nodeID, generation)
+// sub-counters under the prefix and returns
+// `Σ incr − Σ decr` (clamped at zero).
 //
-// Trade-off: storage and read cost grow linearly with the number of
-// events for a key. For high-volume counters this should be paired
-// with a periodic checkpoint/compaction layer outside this type.
+// Crash-safety.
+//   - Soft crash (process restart, disk intact): the next process
+//     boots with a brand-new generation. The previous generation's
+//     last-persisted value is still in the CRDT (and on peers); the
+//     new generation starts from 0 and is summed into the aggregate
+//     on top of the old one. The only loss is whatever +1's the
+//     dying process buffered locally without persisting/broadcasting
+//     — same fundamental durability boundary as the underlying
+//     datastore.
+//   - Total local-data loss: identical recovery path. Old generations
+//     are pulled back via the CRDT DAG from peers; the new
+//     generation cannot collide with any of them because its nonce
+//     is fresh, so peers' replayed history is preserved verbatim and
+//     this process simply accrues a new sub-counter alongside.
 type CRDTStatsStore struct {
 	crdt        *crdt.Datastore
 	broadcaster Broadcaster
@@ -106,6 +117,11 @@ type CRDTStatsStore struct {
 	cancel      context.CancelFunc
 	prefix      string
 	nodeID      string
+	generation  string
+
+	mu           sync.Mutex
+	incrCounters map[string]uint64 // dataKey.String() -> this generation's running incr count
+	decrCounters map[string]uint64
 }
 
 // NewCRDTStatsStore creates a new CRDT-based statistics store
@@ -151,28 +167,36 @@ func NewCRDTStatsStore(
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
 	}
 
+	gen, err := newGenerationID()
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
+	}
+
 	store := &CRDTStatsStore{
-		crdt:        crdtStore,
-		broadcaster: broadcaster,
-		ctx:         ctx,
-		cancel:      cancel,
-		nodeID:      node.ID().String(),
-		prefix:      StatsRepoName,
+		crdt:         crdtStore,
+		broadcaster:  broadcaster,
+		ctx:          ctx,
+		cancel:       cancel,
+		nodeID:       node.ID().String(),
+		prefix:       StatsRepoName,
+		generation:   gen,
+		incrCounters: make(map[string]uint64),
+		decrCounters: make(map[string]uint64),
 	}
 
 	return store, nil
 }
 
-// GetAggregatedStat returns the cluster-wide PN-counter for key,
-// computed as `count(incr events) - count(decr events)`, clamped at
-// zero. The result is eventually consistent with the union of events
-// any reachable replica has merged into the local CRDT view.
+// GetAggregatedStat returns the cluster-wide PN-counter for key.
+// Sum is taken across every (nodeID, generation) sub-counter that
+// has been merged into the local CRDT view.
 func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
-	positive, err := s.countEvents(incrNamespace, key)
+	positive, err := s.sumNamespace(incrNamespace, key)
 	if err != nil {
 		return 0, err
 	}
-	negative, err := s.countEvents(decrNamespace, key)
+	negative, err := s.sumNamespace(decrNamespace, key)
 	if err != nil {
 		return 0, err
 	}
@@ -182,74 +206,74 @@ func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 	return positive - negative, nil
 }
 
-// Increment records a fresh "+1" event for key under this node's
-// identity. Survives total local-data loss: each call writes a new,
-// unique event entry; replays of historical events from peers cannot
-// collide with newly issued ones.
+// Increment bumps this process's `incr` sub-counter for key by 1
+// and persists the new running total to the CRDT.
 func (s *CRDTStatsStore) Increment(key ds.Key) error {
-	return s.recordEvent(incrNamespace, key)
+	return s.bump(incrNamespace, key, s.incrCounters)
 }
 
-// Decrement records a fresh "-1" event for key under this node's
-// identity. Same uniqueness/recovery semantics as Increment.
+// Decrement bumps this process's `decr` sub-counter for key by 1
+// and persists the new running total to the CRDT.
 func (s *CRDTStatsStore) Decrement(key ds.Key) error {
-	return s.recordEvent(decrNamespace, key)
+	return s.bump(decrNamespace, key, s.decrCounters)
 }
 
-// recordEvent appends one immutable add-only event under
-// /<prefix>/<namespace>/<dataKey>/<nodeID>/<eventID>. The value is a
-// single inert byte: only the presence of the key participates in
-// the aggregate.
-func (s *CRDTStatsStore) recordEvent(namespace string, dataKey ds.Key) error {
-	eventID, err := newEventID()
-	if err != nil {
-		return fmt.Errorf("crdt stats: generate event id: %w", err)
-	}
-	eventKey := ds.NewKey(fmt.Sprintf(
+// bump increases this process's sub-counter for (namespace, dataKey)
+// by 1 and writes the new running total to the CRDT under the
+// generation-tagged key. The (nodeID, generation) sub-counter is
+// owned exclusively by this process, so the in-memory value is
+// always authoritative — no CRDT read, no eventual-consistency
+// window, no read-modify-write hazard.
+func (s *CRDTStatsStore) bump(namespace string, dataKey ds.Key, cache map[string]uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cacheKey := dataKey.String()
+	newValue := cache[cacheKey] + 1
+
+	fullKey := ds.NewKey(fmt.Sprintf(
 		"/%s/%s/%s/%s/%s",
-		s.prefix, namespace, dataKey.String(), s.nodeID, eventID,
+		s.prefix, namespace, cacheKey, s.nodeID, s.generation,
 	))
-	if err := s.crdt.Put(s.ctx, eventKey, []byte{1}); err != nil {
-		return fmt.Errorf("crdt stats: record %s event %s: %w", namespace, eventKey, err)
+	if err := s.crdt.Put(s.ctx, fullKey, encodeCounter(newValue)); err != nil {
+		return fmt.Errorf("crdt stats: write %s counter %s: %w", namespace, fullKey, err)
 	}
+	cache[cacheKey] = newValue
 	return nil
 }
 
-// countEvents returns the number of distinct event keys under the
-// (namespace, key) prefix. Since every event key is globally unique
-// across the lifetime of the network, the count is exactly the
-// number of `+1` (or `-1`) operations that have been merged into
-// the local CRDT view, regardless of how many nodes contributed
-// them or how many times any of them restarted.
-func (s *CRDTStatsStore) countEvents(namespace string, key ds.Key) (uint64, error) {
+// sumNamespace queries every sub-counter under the (namespace, key)
+// prefix — across all known nodes and all known generations — and
+// returns their sum. This is what makes a fresh post-disaster
+// generation simply layer on top of the prior history that peers
+// replay back to us.
+func (s *CRDTStatsStore) sumNamespace(namespace string, key ds.Key) (uint64, error) {
 	prefix := ds.NewKey(
 		fmt.Sprintf("/%s/%s/%s", s.prefix, namespace, key.String()),
 	)
-	results, err := s.crdt.Query(s.ctx, ds.Query{
-		Prefix:   prefix.String(),
-		KeysOnly: true,
-	})
+	results, err := s.crdt.Query(s.ctx, ds.Query{Prefix: prefix.String()})
 	if err != nil {
 		return 0, fmt.Errorf("crdt stats: query %s: %w", prefix, err)
 	}
 	defer func() { _ = results.Close() }()
 
-	var n uint64
+	var total uint64
 	for r := range results.Next() {
 		if r.Error != nil {
 			return 0, fmt.Errorf("crdt stats: iterate %s: %w", prefix, r.Error)
 		}
-		n++
+		total += decodeCounter(r.Value)
 	}
-	return n, nil
+	return total, nil
 }
 
-// newEventID returns a hex-encoded random nonce used as the leaf
-// component of an event key. crypto/rand keeps the IDs unpredictable
-// and collision-resistant without any persistent local state, which
-// is what makes the counter survive total local-data loss.
-func newEventID() (string, error) {
-	var buf [eventIDBytes]byte
+// newGenerationID returns a hex-encoded 128-bit random nonce that
+// tags every value this process writes. Survival of total
+// local-data loss depends on this nonce being unique per process
+// lifetime; crypto/rand without any persistent local state is what
+// makes that hold.
+func newGenerationID() (string, error) {
+	var buf [generationIDBytes]byte
 	if _, err := rand.Read(buf[:]); err != nil {
 		return "", err
 	}
@@ -263,4 +287,17 @@ func (s *CRDTStatsStore) Close() error {
 	}
 	s.cancel()
 	return s.crdt.Close()
+}
+
+func encodeCounter(value uint64) []byte {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, value)
+	return buf
+}
+
+func decodeCounter(data []byte) uint64 {
+	if len(data) < 8 {
+		return 0
+	}
+	return binary.BigEndian.Uint64(data)
 }
