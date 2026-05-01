@@ -25,12 +25,24 @@ List of software needed and how to install them.
 * [Golang v1.26](https://go.dev/doc/install)
 * [Wails v2.10.2](https://github.com/wailsapp/wails)
 
-## Run As Developer
+## Run As Developer (Linux)
 
 ```bash
-cd cmd/node/member # pick the member node dir
-wails build -devtools -tags webkit2_41 # compile a binary
-./build/bin/warpnet --node.network testnet # run binary on a testnet
+  sudo apt update
+  sudo apt install -y pkg-config build-essential
+  sudo apt install -y \
+  libgtk-3-dev \
+  libwebkit2gtk-4.1-dev \
+  libglib2.0-dev \
+  libcairo2-dev \
+  libpango1.0-dev \
+  libgdk-pixbuf-2.0-dev \
+  libatk1.0-dev \
+  libsoup-3.0-dev
+  git submodule update --init --recursive
+  cd cmd/node/member # pick the member node dir
+  wails build -devtools -tags webkit2_41 # compile a binary
+  ./build/bin/warpnet --node.network testnet # run binary on a testnet
 ```
 
 ## Contributing
