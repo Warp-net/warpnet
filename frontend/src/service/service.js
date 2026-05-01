@@ -64,6 +64,7 @@ export const PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
+export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 
 const stateMap = new Map();
 const notificationSubscribers = new Set();
@@ -668,6 +669,28 @@ export const warpnetService = {
 
         const unlikeResp = await this.sendToNode(request);
         return unlikeResp.count;
+    },
+
+    async viewTweet(tweetId, userId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return 0;
+
+        const request = {
+            path: PUBLIC_POST_VIEW,
+            body: {
+                user_id: userId,
+                tweet_id: tweetId,
+                owner_id: owner.user_id,
+            },
+        }
+
+        try {
+            const resp = await this.sendToNode(request);
+            return (resp && typeof resp.count === 'number') ? resp.count : 0;
+        } catch (err) {
+            console.error(`failed to record view for tweet [${tweetId}]`, err);
+            return 0;
+        }
     },
 
     async setLiker(tweetId, profileId, profileObj) {

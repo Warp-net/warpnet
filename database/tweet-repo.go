@@ -56,6 +56,11 @@ const (
 	reTweetsCountSubspace   = "RETWEETSCOUNT"
 	reTweetersSubspace      = "RETWEETERS"
 	viewsSubspace           = "VIEWS"
+	viewersSubspace         = "VIEWERS"
+
+	// ViewDedupTTL is the time window during which repeated views of the
+	// same tweet by the same viewer are not counted.
+	ViewDedupTTL = 30 * time.Minute
 )
 
 type TweetsStorer interface {
@@ -569,9 +574,17 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 	return retweeters, cur, nil
 }
 
-func (repo *TweetRepo) IncrementViews(tweetId string) error {
+// RecordView increments the view counter for tweetId on behalf of viewerId.
+// Repeated calls from the same viewerId within ViewDedupTTL are no-ops, so
+// rapid re-views do not inflate the count. The increment is atomic via the
+// underlying transaction and replicated through the CRDT stats store, so it
+// is safe under concurrent calls across nodes.
+func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	if tweetId == "" {
-		return local.DBError("retweeters: empty tweet id")
+		return 0, local.DBError("view: empty tweet id")
+	}
+	if viewerId == "" {
+		return 0, local.DBError("view: empty viewer id")
 	}
 
 	viewsKey := local.NewPrefixBuilder(TweetsNamespace).
@@ -579,31 +592,49 @@ func (repo *TweetRepo) IncrementViews(tweetId string) error {
 		AddRootID(tweetId).
 		Build()
 
+	viewerKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(viewersSubspace).
+		AddRootID(tweetId).
+		AddRange(local.NoneRangeKey).
+		AddParentId(viewerId).
+		Build()
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer txn.Rollback()
 
-	_, err = txn.Increment(viewsKey)
+	if _, err := txn.Get(viewerKey); err == nil {
+		_ = txn.Commit()
+		return repo.GetViewsCount(tweetId)
+	} else if !local.IsNotFoundError(err) {
+		return 0, err
+	}
+
+	if err := txn.SetWithTTL(viewerKey, []byte(viewerId), ViewDedupTTL); err != nil {
+		return 0, err
+	}
+
+	count, err := txn.Increment(viewsKey)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if err := txn.Commit(); err != nil {
-		return err
+		return 0, err
 	}
 	if repo.statsDb == nil {
-		return nil
+		return count, nil
 	}
 	if err := repo.statsDb.Increment(viewsKey.DatastoreKey()); err != nil {
 		log.Warnf("view: stats db increment: %v", err)
 	}
-	return nil
+	return count, nil
 }
 
 func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
-		return 0, local.DBError("retweeters: empty tweet id")
+		return 0, local.DBError("views: empty tweet id")
 	}
 
 	viewsKey := local.NewPrefixBuilder(TweetsNamespace).
@@ -616,7 +647,7 @@ func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
 		if err == nil {
 			return total, nil
 		}
-		log.Warnf("crdt retweets count not found for %s - %s", tweetId, err)
+		log.Warnf("crdt views count not found for %s - %s", tweetId, err)
 	}
 
 	bt, err := repo.db.Get(viewsKey)

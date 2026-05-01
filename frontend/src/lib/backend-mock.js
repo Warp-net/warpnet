@@ -57,7 +57,8 @@ import {
     PUBLIC_POST_RETWEET,
     PUBLIC_POST_UNFOLLOW,
     PUBLIC_POST_UNLIKE,
-    PUBLIC_POST_UNRETWEET
+    PUBLIC_POST_UNRETWEET,
+    PUBLIC_POST_VIEW
 } from "@/service/service";
 import {generateUUID} from "@/lib/uuid";
 
@@ -285,6 +286,22 @@ function generateResponse(arg) {
             unlikeStats.likes_count--
             mockMap.set("stats:"+arg.body.tweet_id, unlikeStats)
             return {count: unlikeStats.likes_count};
+
+        case PUBLIC_POST_VIEW: {
+            const viewStats = mockMap.get("stats:"+arg.body.tweet_id)
+            if (!viewStats) return {count: 0};
+            if (arg.body.owner_id === arg.body.user_id) {
+                return {count: viewStats.views_count};
+            }
+            const dedupKey = "view:"+arg.body.tweet_id+":"+arg.body.owner_id;
+            if (mockMap.has(dedupKey)) {
+                return {count: viewStats.views_count};
+            }
+            mockMap.set(dedupKey, true);
+            viewStats.views_count++;
+            mockMap.set("stats:"+arg.body.tweet_id, viewStats);
+            return {count: viewStats.views_count};
+        }
 
         case PUBLIC_POST_RETWEET:
             const rtId = arg.body.id || arg.body.tweet_id
