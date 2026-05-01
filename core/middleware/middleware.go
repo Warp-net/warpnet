@@ -69,6 +69,15 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	return wm
 }
 
+// Close releases background resources owned by the middleware (currently
+// the idempotency cache's expirable-LRU janitor goroutine). Safe to call
+// multiple times.
+func (p *WarpMiddleware) Close() {
+	if p.idempotency != nil {
+		p.idempotency.Close()
+	}
+}
+
 func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
 		defer func() {

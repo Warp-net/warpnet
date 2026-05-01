@@ -29,8 +29,10 @@ package middleware
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestIdempotencyCache_HitReturnsCachedResponse(t *testing.T) {
@@ -107,6 +109,36 @@ func TestIsIdempotencyApplicable(t *testing.T) {
 			t.Fatalf("%s: expected %v, got %v", path, want, got)
 		}
 	}
+}
+
+func TestIdempotencyCache_CloseStopsLibraryGoroutine(t *testing.T) {
+	c := newIdempotencyCache(time.Minute)
+
+	// Reach into the library struct and verify the `done` channel is open
+	// before Close, then closed afterwards. If the field disappears in a
+	// future library version, the test makes the regression explicit.
+	field := reflect.ValueOf(c.cache).Elem().FieldByName("done")
+	if !field.IsValid() || field.Kind() != reflect.Chan {
+		t.Fatal("expirable LRU layout changed: missing `done` chan")
+	}
+	doneCh := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface().(chan struct{})
+
+	select {
+	case <-doneCh:
+		t.Fatal("done channel unexpectedly closed before Close()")
+	default:
+	}
+
+	c.Close()
+
+	select {
+	case <-doneCh:
+	case <-time.After(time.Second):
+		t.Fatal("done channel was not closed after Close()")
+	}
+
+	// Idempotent: a second Close must not panic.
+	c.Close()
 }
 
 func TestIdempotencyCache_SetCopiesPayload(t *testing.T) {
