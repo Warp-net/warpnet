@@ -57,14 +57,14 @@ func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer Lik
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("view: empty user id")
 		}
-		if ev.OwnerId == "" {
-			return nil, warpnet.WarpError("view: empty owner id")
+		if ev.ViewerId == "" {
+			return nil, warpnet.WarpError("view: empty viewer id")
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
 		// Author's own views are not counted.
-		if ev.OwnerId == ev.UserId {
+		if ev.ViewerId == ev.UserId {
 			count, err := repo.GetViewsCount(tweetId)
 			if errors.Is(err, database.ErrViewsNotFound) {
 				return event.ViewsCountResponse{Count: 0}, nil
@@ -75,7 +75,7 @@ func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer Lik
 			return event.ViewsCountResponse{Count: count}, nil
 		}
 
-		count, err := repo.RecordView(tweetId, ev.OwnerId)
+		count, err := repo.RecordView(tweetId, ev.ViewerId)
 		if err != nil {
 			log.Errorf("view handler failed: %v", err)
 			return nil, err
@@ -83,39 +83,43 @@ func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer Lik
 
 		// Forward the view to the tweet author's node so its CRDT
 		// counter receives the increment too. Failures are non-fatal.
-		isAuthorRemote := ev.UserId != streamer.NodeInfo().OwnerId
-		if isAuthorRemote {
-			author, userErr := userRepo.Get(ev.UserId)
-			if errors.Is(userErr, database.ErrUserNotFound) {
-				return event.ViewsCountResponse{Count: count}, nil
-			}
-			if userErr != nil {
-				return event.ViewsCountResponse{Count: count}, nil
-			}
-
-			viewResp, streamErr := streamer.GenericStream(
-				author.NodeId,
-				event.PUBLIC_POST_VIEW,
-				event.ViewEvent{
-					TweetId: ev.TweetId,
-					UserId:  ev.UserId,
-					OwnerId: ev.OwnerId,
-				},
-			)
-			if errors.Is(streamErr, warpnet.ErrNodeIsOffline) {
-				return event.ViewsCountResponse{Count: count}, nil
-			}
-			if streamErr != nil {
-				log.Errorf("view handler: forwarding to author failed: %v", streamErr)
-				return event.ViewsCountResponse{Count: count}, nil
-			}
-
-			var possibleError event.ResponseError
-			if _ = json.Unmarshal(viewResp, &possibleError); possibleError.Message != "" {
-				log.Errorf("view handler: remote response error: %s", possibleError.Message)
-			}
+		if ev.UserId != streamer.NodeInfo().OwnerId {
+			forwardViewToAuthor(ev, userRepo, streamer)
 		}
 
 		return event.ViewsCountResponse{Count: count}, nil
+	}
+}
+
+func forwardViewToAuthor(ev event.ViewEvent, userRepo LikedUserFetcher, streamer LikeStreamer) {
+	author, err := userRepo.Get(ev.UserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return
+	}
+	if err != nil {
+		log.Errorf("view handler: lookup author %s: %v", ev.UserId, err)
+		return
+	}
+
+	viewResp, err := streamer.GenericStream(
+		author.NodeId,
+		event.PUBLIC_POST_VIEW,
+		event.ViewEvent{
+			TweetId:  ev.TweetId,
+			UserId:   ev.UserId,
+			ViewerId: ev.ViewerId,
+		},
+	)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		return
+	}
+	if err != nil {
+		log.Errorf("view handler: forwarding to author failed: %v", err)
+		return
+	}
+
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(viewResp, &possibleError); possibleError.Message != "" {
+		log.Errorf("view handler: remote response error: %s", possibleError.Message)
 	}
 }

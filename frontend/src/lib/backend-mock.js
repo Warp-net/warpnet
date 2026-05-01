@@ -290,10 +290,10 @@ function generateResponse(arg) {
         case PUBLIC_POST_VIEW: {
             const viewStats = mockMap.get("stats:"+arg.body.tweet_id)
             if (!viewStats) return {count: 0};
-            if (arg.body.owner_id === arg.body.user_id) {
+            if (arg.body.viewer_id === arg.body.user_id) {
                 return {count: viewStats.views_count};
             }
-            const dedupKey = "view:"+arg.body.tweet_id+":"+arg.body.owner_id;
+            const dedupKey = "view:"+arg.body.tweet_id+":"+arg.body.viewer_id;
             if (mockMap.has(dedupKey)) {
                 return {count: viewStats.views_count};
             }

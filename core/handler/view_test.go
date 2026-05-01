@@ -46,10 +46,10 @@ func TestStreamViewHandler(t *testing.T) {
 
 	t.Run("empty fields rejected", func(t *testing.T) {
 		h := StreamViewHandler(stubViewRepo{}, stubLikeUserRepo{}, stubStreamer{})
-		if _, err := h(marshal(t, event.ViewEvent{UserId: author, OwnerId: owner}), nil); err == nil {
+		if _, err := h(marshal(t, event.ViewEvent{UserId: author, ViewerId: owner}), nil); err == nil {
 			t.Fatal("expected tweet id error")
 		}
-		if _, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, OwnerId: owner}), nil); err == nil {
+		if _, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, ViewerId: owner}), nil); err == nil {
 			t.Fatal("expected user id error")
 		}
 		if _, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author}), nil); err == nil {
@@ -67,7 +67,7 @@ func TestStreamViewHandler(t *testing.T) {
 			getFn: func(tweetId string) (uint64, error) { return 7, nil },
 		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, OwnerId: author}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: author}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -84,7 +84,7 @@ func TestStreamViewHandler(t *testing.T) {
 			getFn: func(tweetId string) (uint64, error) { return 0, database.ErrViewsNotFound },
 		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, OwnerId: author}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: author}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -103,7 +103,7 @@ func TestStreamViewHandler(t *testing.T) {
 			},
 		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, OwnerId: owner}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -124,7 +124,7 @@ func TestStreamViewHandler(t *testing.T) {
 			},
 		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
-		_, err := h(marshal(t, event.ViewEvent{TweetId: domain.RetweetPrefix + tweetId, UserId: author, OwnerId: owner}), nil)
+		_, err := h(marshal(t, event.ViewEvent{TweetId: domain.RetweetPrefix + tweetId, UserId: author, ViewerId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -147,7 +147,7 @@ func TestStreamViewHandler(t *testing.T) {
 			},
 		})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, OwnerId: owner}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -169,7 +169,7 @@ func TestStreamViewHandler(t *testing.T) {
 			},
 		})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, OwnerId: owner}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

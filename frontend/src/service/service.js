@@ -680,7 +680,7 @@ export const warpnetService = {
             body: {
                 user_id: userId,
                 tweet_id: tweetId,
-                owner_id: owner.user_id,
+                viewer_id: owner.user_id,
             },
         }
 

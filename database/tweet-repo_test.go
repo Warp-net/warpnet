@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -168,6 +169,69 @@ func (s *TweetRepoTestSuite) TestUnRetweet() {
 	count, err := s.repo.RetweetsCount(original.Id)
 	s.Require().NoError(err)
 	s.Equal(uint64(0), count)
+}
+
+func (s *TweetRepoTestSuite) TestRecordView_IncrementsAndDedupes() {
+	tweetId := ulid.Make().String()
+	viewerA := ulid.Make().String()
+	viewerB := ulid.Make().String()
+
+	count, err := s.repo.RecordView(tweetId, viewerA)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+
+	// Same viewer within TTL is a no-op.
+	count, err = s.repo.RecordView(tweetId, viewerA)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+
+	// Different viewer increments.
+	count, err = s.repo.RecordView(tweetId, viewerB)
+	s.Require().NoError(err)
+	s.Equal(uint64(2), count)
+
+	got, err := s.repo.GetViewsCount(tweetId)
+	s.Require().NoError(err)
+	s.Equal(uint64(2), got)
+}
+
+func (s *TweetRepoTestSuite) TestRecordView_InvalidParams() {
+	_, err := s.repo.RecordView("", "viewer")
+	s.Error(err)
+
+	_, err = s.repo.RecordView("tweet", "")
+	s.Error(err)
+}
+
+func (s *TweetRepoTestSuite) TestGetViewsCount_NotFound() {
+	tweetId := ulid.Make().String()
+	_, err := s.repo.GetViewsCount(tweetId)
+	s.EqualError(err, ErrViewsNotFound.Error())
+}
+
+func (s *TweetRepoTestSuite) TestGetViewsCount_EmptyId() {
+	_, err := s.repo.GetViewsCount("")
+	s.Error(err)
+}
+
+func (s *TweetRepoTestSuite) TestRecordView_ConcurrentSafe() {
+	tweetId := ulid.Make().String()
+	const viewers = 16
+
+	var wg sync.WaitGroup
+	wg.Add(viewers)
+	for i := 0; i < viewers; i++ {
+		viewerId := ulid.Make().String()
+		go func() {
+			defer wg.Done()
+			_, _ = s.repo.RecordView(tweetId, viewerId)
+		}()
+	}
+	wg.Wait()
+
+	count, err := s.repo.GetViewsCount(tweetId)
+	s.Require().NoError(err)
+	s.Equal(uint64(viewers), count)
 }
 
 func TestTweetRepoTestSuite(t *testing.T) {

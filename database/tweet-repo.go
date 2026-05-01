@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"sync"
 	"time"
 
 	_ "github.com/Warp-net/warpnet/core/warpnet"
@@ -84,6 +85,10 @@ type TweetStatsStorer interface {
 type TweetRepo struct {
 	db      TweetsStorer
 	statsDb TweetStatsStorer
+	// viewMu serializes RecordView so concurrent increments on the
+	// same view counter do not collide on the underlying optimistic
+	// transaction and lose updates.
+	viewMu sync.Mutex
 }
 
 func NewTweetRepo(db TweetsStorer, statsDb TweetStatsStorer) *TweetRepo {
@@ -598,6 +603,9 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 		AddRange(local.NoneRangeKey).
 		AddParentId(viewerId).
 		Build()
+
+	repo.viewMu.Lock()
+	defer repo.viewMu.Unlock()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {

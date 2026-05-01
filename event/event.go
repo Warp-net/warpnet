@@ -345,11 +345,11 @@ type IDsResponse struct {
 type UnlikeEvent = LikeEvent
 
 // ViewEvent defines model for ViewEvent.
-// UserId is the tweet author's id; OwnerId is the viewer's id.
+// UserId is the tweet author's id; ViewerId is the viewer's id.
 type ViewEvent struct {
-	TweetId domain.ID `json:"tweet_id"`
-	UserId  domain.ID `json:"user_id"`
-	OwnerId domain.ID `json:"owner_id"`
+	TweetId  domain.ID `json:"tweet_id"`
+	UserId   domain.ID `json:"user_id"`
+	ViewerId domain.ID `json:"viewer_id"`
 }
 
 // ViewsCountResponse defines model for ViewsCountResponse.
