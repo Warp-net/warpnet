@@ -29,71 +29,31 @@ package middleware
 
 import (
 	"strings"
-	"sync"
 	"time"
+
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 const (
-	idempotencyTTL             = 10 * time.Minute
-	idempotencyJanitorInterval = time.Minute
+	idempotencyTTL  = 10 * time.Minute
+	idempotencySize = 4096
 )
-
-type idempotencyEntry struct {
-	response  []byte
-	expiresAt time.Time
-}
 
 // idempotencyCache stores responses keyed by (protocol + message id) so that
 // duplicate POST requests retried by clients (double-clicks, network retries)
 // return the original response without re-executing the side effect.
 type idempotencyCache struct {
-	mu      sync.Mutex
-	entries map[string]idempotencyEntry
-	ttl     time.Duration
-	now     func() time.Time
+	cache *lru.LRU[string, []byte]
 }
 
 func newIdempotencyCache(ttl time.Duration) *idempotencyCache {
-	c := &idempotencyCache{
-		entries: make(map[string]idempotencyEntry),
-		ttl:     ttl,
-		now:     time.Now,
-	}
-	go c.janitor()
-	return c
-}
-
-func (c *idempotencyCache) janitor() {
-	ticker := time.NewTicker(idempotencyJanitorInterval)
-	defer ticker.Stop()
-	for range ticker.C {
-		c.evictExpired()
-	}
-}
-
-func (c *idempotencyCache) evictExpired() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := c.now()
-	for k, e := range c.entries {
-		if now.After(e.expiresAt) {
-			delete(c.entries, k)
-		}
+	return &idempotencyCache{
+		cache: lru.NewLRU[string, []byte](idempotencySize, nil, ttl),
 	}
 }
 
 func (c *idempotencyCache) get(key string) ([]byte, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.entries[key]
-	if !ok {
-		return nil, false
-	}
-	if c.now().After(e.expiresAt) {
-		delete(c.entries, key)
-		return nil, false
-	}
-	return e.response, true
+	return c.cache.Get(key)
 }
 
 func (c *idempotencyCache) set(key string, response []byte) {
@@ -102,12 +62,7 @@ func (c *idempotencyCache) set(key string, response []byte) {
 	}
 	cp := make([]byte, len(response))
 	copy(cp, response)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries[key] = idempotencyEntry{
-		response:  cp,
-		expiresAt: c.now().Add(c.ttl),
-	}
+	c.cache.Add(key, cp)
 }
 
 // isIdempotencyApplicable reports whether the given protocol path is a POST

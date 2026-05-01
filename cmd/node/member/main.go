@@ -42,7 +42,7 @@ func main() {
 	setLinuxDesktopIcon(icon)
 
 	err = wails.Run(&options.App{
-		Title:            "warpnet",
+		Title:            "warpnet", //nolint:goconst
 		Width:            1024,
 		Height:           1024,
 		WindowStartState: options.Maximised,

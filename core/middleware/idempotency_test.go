@@ -33,17 +33,8 @@ import (
 	"time"
 )
 
-func newTestCache(ttl time.Duration, now func() time.Time) *idempotencyCache {
-	c := &idempotencyCache{
-		entries: make(map[string]idempotencyEntry),
-		ttl:     ttl,
-		now:     now,
-	}
-	return c
-}
-
 func TestIdempotencyCache_HitReturnsCachedResponse(t *testing.T) {
-	c := newTestCache(time.Minute, time.Now)
+	c := newIdempotencyCache(time.Minute)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "msg-1")
 	resp := []byte(`{"id":"abc"}`)
 
@@ -62,7 +53,7 @@ func TestIdempotencyCache_HitReturnsCachedResponse(t *testing.T) {
 }
 
 func TestIdempotencyCache_DistinctKeysIsolated(t *testing.T) {
-	c := newTestCache(time.Minute, time.Now)
+	c := newIdempotencyCache(time.Minute)
 	c.set(idempotencyKey("/private/post/tweet/0.0.0", "msg-1"), []byte("a"))
 	c.set(idempotencyKey("/private/post/tweet/0.0.0", "msg-2"), []byte("b"))
 
@@ -78,24 +69,22 @@ func TestIdempotencyCache_DistinctKeysIsolated(t *testing.T) {
 }
 
 func TestIdempotencyCache_Expires(t *testing.T) {
-	current := time.Unix(0, 0)
-	c := newTestCache(time.Minute, func() time.Time { return current })
+	c := newIdempotencyCache(20 * time.Millisecond)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "msg-1")
 	c.set(key, []byte("payload"))
 
-	current = current.Add(30 * time.Second)
 	if _, ok := c.get(key); !ok {
 		t.Fatal("expected hit before expiration")
 	}
 
-	current = current.Add(2 * time.Minute)
+	time.Sleep(60 * time.Millisecond)
 	if _, ok := c.get(key); ok {
 		t.Fatal("expected miss after expiration")
 	}
 }
 
 func TestIdempotencyCache_EmptyResponseNotStored(t *testing.T) {
-	c := newTestCache(time.Minute, time.Now)
+	c := newIdempotencyCache(time.Minute)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "msg-1")
 	c.set(key, nil)
 	if _, ok := c.get(key); ok {
@@ -118,7 +107,7 @@ func TestIsIdempotencyApplicable(t *testing.T) {
 }
 
 func TestIdempotencyCache_SetCopiesPayload(t *testing.T) {
-	c := newTestCache(time.Minute, time.Now)
+	c := newIdempotencyCache(time.Minute)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "msg-1")
 	payload := []byte("original")
 	c.set(key, payload)
