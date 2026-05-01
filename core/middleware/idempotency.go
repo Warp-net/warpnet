@@ -47,14 +47,29 @@ const (
 // idempotencyCache stores responses keyed by (protocol + peer + message id)
 // so that duplicate POST requests retried by clients (double-clicks, network
 // retries) return the original response without re-executing the side effect.
+// It also collapses concurrent same-key requests via an in-flight wait map,
+// so simultaneous retries share a single handler invocation.
 type idempotencyCache struct {
 	cache  *lru.LRU[string, []byte]
 	closed sync.Once
+
+	inflightMu sync.Mutex
+	inflight   map[string]*inflightCall
+}
+
+// inflightCall is the shared rendezvous for concurrent callers waiting on
+// the same idempotency key. The leader runs the compute function; followers
+// wait on `done` and read `payload` / `err`.
+type inflightCall struct {
+	done    chan struct{}
+	payload []byte
+	err     error
 }
 
 func newIdempotencyCache(ttl time.Duration) *idempotencyCache {
 	c := &idempotencyCache{
-		cache: lru.NewLRU[string, []byte](idempotencySize, nil, ttl),
+		cache:    lru.NewLRU[string, []byte](idempotencySize, nil, ttl),
+		inflight: make(map[string]*inflightCall),
 	}
 	// The library spawns a deleteExpired goroutine whose `done` channel is
 	// never closed by its public API, so the goroutine would normally outlive
@@ -78,6 +93,52 @@ func (c *idempotencyCache) set(key string, response []byte) {
 	cp := make([]byte, len(response))
 	copy(cp, response)
 	c.cache.Add(key, cp)
+}
+
+// do returns the cached payload for `key` if present; otherwise it runs
+// `compute` exactly once for any set of concurrent callers sharing the same
+// key. Followers wait for the leader and receive the same payload. The
+// returned payload is stored in the cache only when compute reports it
+// cacheable (so error responses don't poison the cache).
+func (c *idempotencyCache) do(
+	key string,
+	compute func() (payload []byte, cacheable bool, err error),
+) ([]byte, error) {
+	if v, ok := c.get(key); ok {
+		return v, nil
+	}
+
+	c.inflightMu.Lock()
+	if call, ok := c.inflight[key]; ok {
+		c.inflightMu.Unlock()
+		<-call.done
+		return call.payload, call.err
+	}
+	call := &inflightCall{done: make(chan struct{})}
+	c.inflight[key] = call
+	c.inflightMu.Unlock()
+
+	defer func() {
+		c.inflightMu.Lock()
+		delete(c.inflight, key)
+		c.inflightMu.Unlock()
+		close(call.done)
+	}()
+
+	// Re-check the cache under leadership: a previous leader may have
+	// completed and populated it between our miss and our claim.
+	if v, ok := c.get(key); ok {
+		call.payload = v
+		return v, nil
+	}
+
+	payload, cacheable, err := compute()
+	call.payload = payload
+	call.err = err
+	if err == nil && cacheable {
+		c.set(key, payload)
+	}
+	return payload, err
 }
 
 // Close stops the library's background deleteExpired goroutine by closing

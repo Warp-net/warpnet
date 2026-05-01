@@ -28,46 +28,29 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"runtime/debug"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/docker/go-units"
+	log "github.com/sirupsen/logrus"
 )
 
-type middlewareError string
+func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
+	return func(s warpnet.WarpStream) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("middleware: panic: %v %s", r, debug.Stack())
+			}
+		}() //#nosec
 
-func (e middlewareError) Error() string {
-	return string(e)
-}
-func (e middlewareError) Bytes() []byte {
-	return []byte(e)
-}
-
-const (
-	ErrUnknownClientPeer middlewareError = `["middleware: auth: unknown client peer"]`
-	ErrStreamReadError   middlewareError = `["middleware: stream: reading failed"]`
-	ErrInternalNodeError middlewareError = `["middleware: internal node error"]`
-)
-
-const (
-	MaxLimit              = units.MiB * 5 // TODO size limit???
-	InternalNodeErrorCode = 5000
-)
-
-type WarpMiddleware struct {
-	idempotency *idempotencyCache
-}
-
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
-	wm := &WarpMiddleware{
-		idempotency: newIdempotencyCache(idempotencyTTL),
-	}
-	return wm
-}
-
-// Close releases background resources owned by the middleware (currently
-// the idempotency cache's expirable-LRU janitor goroutine). Safe to call
-// multiple times.
-func (p *WarpMiddleware) Close() {
-	if p.idempotency != nil {
-		p.idempotency.Close()
+		log.Debugf("middleware: server stream opened: %s %s\n", s.Protocol(), s.Conn().RemotePeer())
+		before := time.Now()
+		next(s)
+		log.Debugf(
+			"middleware: server stream closed: %s %s, elapsed: %s\n",
+			s.Protocol(),
+			s.Conn().RemotePeer(),
+			time.Since(before).String(),
+		)
 	}
 }

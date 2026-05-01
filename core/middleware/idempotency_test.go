@@ -30,13 +30,24 @@ package middleware
 import (
 	"bytes"
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
 )
 
+// newCacheForTest creates a cache and registers Close so the library's
+// background goroutine doesn't outlive the test.
+func newCacheForTest(t *testing.T, ttl time.Duration) *idempotencyCache {
+	t.Helper()
+	c := newIdempotencyCache(ttl)
+	t.Cleanup(c.Close)
+	return c
+}
+
 func TestIdempotencyCache_HitReturnsCachedResponse(t *testing.T) {
-	c := newIdempotencyCache(time.Minute)
+	c := newCacheForTest(t, time.Minute)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
 	resp := []byte(`{"id":"abc"}`)
 
@@ -55,7 +66,7 @@ func TestIdempotencyCache_HitReturnsCachedResponse(t *testing.T) {
 }
 
 func TestIdempotencyCache_DistinctKeysIsolated(t *testing.T) {
-	c := newIdempotencyCache(time.Minute)
+	c := newCacheForTest(t, time.Minute)
 	c.set(idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1"), []byte("a"))
 	c.set(idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-2"), []byte("b"))
 
@@ -74,7 +85,7 @@ func TestIdempotencyCache_DistinctKeysIsolated(t *testing.T) {
 }
 
 func TestIdempotencyCache_Expires(t *testing.T) {
-	c := newIdempotencyCache(20 * time.Millisecond)
+	c := newCacheForTest(t, 20*time.Millisecond)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
 	c.set(key, []byte("payload"))
 
@@ -89,7 +100,7 @@ func TestIdempotencyCache_Expires(t *testing.T) {
 }
 
 func TestIdempotencyCache_EmptyResponseNotStored(t *testing.T) {
-	c := newIdempotencyCache(time.Minute)
+	c := newCacheForTest(t, time.Minute)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
 	c.set(key, nil)
 	if _, ok := c.get(key); ok {
@@ -113,6 +124,7 @@ func TestIsIdempotencyApplicable(t *testing.T) {
 
 func TestIdempotencyCache_CloseStopsLibraryGoroutine(t *testing.T) {
 	c := newIdempotencyCache(time.Minute)
+	// This test owns Close() — don't register cleanup.
 
 	// Reach into the library struct and verify the `done` channel is open
 	// before Close, then closed afterwards. If the field disappears in a
@@ -142,7 +154,7 @@ func TestIdempotencyCache_CloseStopsLibraryGoroutine(t *testing.T) {
 }
 
 func TestIdempotencyCache_SetCopiesPayload(t *testing.T) {
-	c := newIdempotencyCache(time.Minute)
+	c := newCacheForTest(t, time.Minute)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
 	payload := []byte("original")
 	c.set(key, payload)
@@ -154,5 +166,91 @@ func TestIdempotencyCache_SetCopiesPayload(t *testing.T) {
 	}
 	if !bytes.Equal(got, []byte("original")) {
 		t.Fatalf("cache should not be mutated by caller: got %s", got)
+	}
+}
+
+// TestIdempotencyCache_DoCollapsesConcurrent verifies that concurrent
+// callers with the same key share a single compute invocation.
+func TestIdempotencyCache_DoCollapsesConcurrent(t *testing.T) {
+	c := newCacheForTest(t, time.Minute)
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
+
+	var calls atomic.Int32
+	release := make(chan struct{})
+	compute := func() ([]byte, bool, error) { //nolint:unparam // signature matches do(); error path covered elsewhere
+		calls.Add(1)
+		<-release // hold the leader inside compute until all followers are queued
+		return []byte("payload-1"), true, nil
+	}
+
+	const N = 8
+	var wg sync.WaitGroup
+	results := make([][]byte, N)
+	for i := range N {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			payload, err := c.do(key, compute)
+			if err != nil {
+				t.Errorf("do err: %v", err)
+				return
+			}
+			results[i] = payload
+		}(i)
+	}
+	// Give every goroutine a chance to register as a follower.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("expected compute to run exactly once, ran %d times", got)
+	}
+	for i, r := range results {
+		if !bytes.Equal(r, []byte("payload-1")) {
+			t.Fatalf("caller %d got unexpected payload: %s", i, r)
+		}
+	}
+}
+
+// TestIdempotencyCache_DoSkipsCacheWhenNotCacheable verifies that error
+// responses are still returned to callers but not stored in the cache.
+func TestIdempotencyCache_DoSkipsCacheWhenNotCacheable(t *testing.T) {
+	c := newCacheForTest(t, time.Minute)
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
+
+	payload, err := c.do(key, func() ([]byte, bool, error) {
+		return []byte(`{"error":"boom"}`), false, nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !bytes.Equal(payload, []byte(`{"error":"boom"}`)) {
+		t.Fatalf("unexpected payload: %s", payload)
+	}
+	if _, ok := c.get(key); ok {
+		t.Fatal("error response should not be cached")
+	}
+}
+
+// TestIdempotencyCache_DoReturnsCachedOnHit verifies the fast path.
+func TestIdempotencyCache_DoReturnsCachedOnHit(t *testing.T) {
+	c := newCacheForTest(t, time.Minute)
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
+	c.set(key, []byte("cached"))
+
+	called := false
+	payload, err := c.do(key, func() ([]byte, bool, error) {
+		called = true
+		return []byte("ignored"), true, nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if called {
+		t.Fatal("compute should not run on cache hit")
+	}
+	if !bytes.Equal(payload, []byte("cached")) {
+		t.Fatalf("expected cached payload, got %s", payload)
 	}
 }
