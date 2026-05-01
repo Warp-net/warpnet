@@ -85,6 +85,7 @@ func TestPaths_PublicRoutes(t *testing.T) {
 		PUBLIC_POST_UNFOLLOW,
 		PUBLIC_POST_UNLIKE,
 		PUBLIC_POST_UNRETWEET,
+		PUBLIC_POST_VIEW,
 		PUBLIC_GET_IMAGE,
 	}
 	for _, r := range publicRoutes {
