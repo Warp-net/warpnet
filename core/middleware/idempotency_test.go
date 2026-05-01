@@ -30,6 +30,7 @@ package middleware
 import (
 	"bytes"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -170,7 +171,9 @@ func TestIdempotencyCache_SetCopiesPayload(t *testing.T) {
 }
 
 // TestIdempotencyCache_DoCollapsesConcurrent verifies that concurrent
-// callers with the same key share a single compute invocation.
+// callers with the same key share a single compute invocation. Uses a
+// deterministic barrier on the cache's follower count so the test does
+// not depend on wall-clock timing.
 func TestIdempotencyCache_DoCollapsesConcurrent(t *testing.T) {
 	c := newCacheForTest(t, time.Minute)
 	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
@@ -198,8 +201,18 @@ func TestIdempotencyCache_DoCollapsesConcurrent(t *testing.T) {
 			results[i] = payload
 		}(i)
 	}
-	// Give every goroutine a chance to register as a follower.
-	time.Sleep(50 * time.Millisecond)
+
+	// Wait until all N-1 followers have registered on the leader's
+	// inflight call. Polling the cache's own bookkeeping makes this
+	// barrier deterministic instead of relying on a fixed sleep.
+	deadline := time.Now().Add(2 * time.Second)
+	for c.followerCount(key) < N-1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("only %d/%d followers registered before deadline",
+				c.followerCount(key), N-1)
+		}
+		runtime.Gosched()
+	}
 	close(release)
 	wg.Wait()
 
@@ -210,6 +223,44 @@ func TestIdempotencyCache_DoCollapsesConcurrent(t *testing.T) {
 		if !bytes.Equal(r, []byte("payload-1")) {
 			t.Fatalf("caller %d got unexpected payload: %s", i, r)
 		}
+	}
+}
+
+// TestIdempotencyCache_GetReturnsCopy ensures callers cannot mutate the
+// cached value through the returned slice.
+func TestIdempotencyCache_GetReturnsCopy(t *testing.T) {
+	c := newCacheForTest(t, time.Minute)
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
+	c.set(key, []byte("payload"))
+
+	got, ok := c.get(key)
+	if !ok {
+		t.Fatal("expected cache hit")
+	}
+	got[0] = 'X'
+
+	again, _ := c.get(key)
+	if !bytes.Equal(again, []byte("payload")) {
+		t.Fatalf("cache mutated via returned slice: got %s", again)
+	}
+}
+
+// TestIdempotencyCache_DropsOversizedPayload ensures payloads larger than
+// idempotencyMaxPayloadBytes are not cached, bounding memory usage.
+func TestIdempotencyCache_DropsOversizedPayload(t *testing.T) {
+	c := newCacheForTest(t, time.Minute)
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
+	big := make([]byte, idempotencyMaxPayloadBytes+1)
+	c.set(key, big)
+	if _, ok := c.get(key); ok {
+		t.Fatal("oversized payload should not be cached")
+	}
+
+	// Boundary: exactly maxPayloadBytes is still cached.
+	atLimit := make([]byte, idempotencyMaxPayloadBytes)
+	c.set(key, atLimit)
+	if _, ok := c.get(key); !ok {
+		t.Fatal("payload at exact size limit should be cached")
 	}
 }
 

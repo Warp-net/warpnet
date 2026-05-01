@@ -40,8 +40,16 @@ import (
 )
 
 const (
-	idempotencyTTL  = 10 * time.Minute
-	idempotencySize = 4096
+	idempotencyTTL = 10 * time.Minute
+	// idempotencySize bounds the cache by entry count. Combined with
+	// idempotencyMaxPayloadBytes below, worst-case memory is bounded
+	// at ~(size * maxPayloadBytes).
+	idempotencySize = 1024
+	// idempotencyMaxPayloadBytes drops oversized payloads instead of
+	// caching them. Entry-count LRU alone offers no protection against
+	// a few large responses dominating memory; this guard keeps the
+	// cache cheap.
+	idempotencyMaxPayloadBytes = 64 * 1024 // 64 KiB
 )
 
 // idempotencyCache stores responses keyed by (protocol + peer + message id)
@@ -59,11 +67,13 @@ type idempotencyCache struct {
 
 // inflightCall is the shared rendezvous for concurrent callers waiting on
 // the same idempotency key. The leader runs the compute function; followers
-// wait on `done` and read `payload` / `err`.
+// wait on `done` and read `payload` / `err`. `followers` is incremented
+// while holding inflightMu and is used only for testing/observability.
 type inflightCall struct {
-	done    chan struct{}
-	payload []byte
-	err     error
+	done      chan struct{}
+	payload   []byte
+	err       error
+	followers int
 }
 
 func newIdempotencyCache(ttl time.Duration) *idempotencyCache {
@@ -82,37 +92,55 @@ func newIdempotencyCache(ttl time.Duration) *idempotencyCache {
 	return c
 }
 
+// get returns a defensive copy so callers can't mutate the cached value.
 func (c *idempotencyCache) get(key string) ([]byte, bool) {
-	return c.cache.Get(key)
+	v, ok := c.cache.Get(key)
+	if !ok {
+		return nil, false
+	}
+	return cloneBytes(v), true
 }
 
+// set stores a defensive copy of the payload. Empty payloads and payloads
+// larger than idempotencyMaxPayloadBytes are dropped to bound memory.
 func (c *idempotencyCache) set(key string, response []byte) {
-	if len(response) == 0 {
+	if len(response) == 0 || len(response) > idempotencyMaxPayloadBytes {
 		return
 	}
-	cp := make([]byte, len(response))
-	copy(cp, response)
-	c.cache.Add(key, cp)
+	c.cache.Add(key, cloneBytes(response))
+}
+
+func cloneBytes(b []byte) []byte {
+	if len(b) == 0 {
+		return nil
+	}
+	cp := make([]byte, len(b))
+	copy(cp, b)
+	return cp
 }
 
 // do returns the cached payload for `key` if present; otherwise it runs
 // `compute` exactly once for any set of concurrent callers sharing the same
-// key. Followers wait for the leader and receive the same payload. The
-// returned payload is stored in the cache only when compute reports it
-// cacheable (so error responses don't poison the cache).
+// key. Followers wait for the leader and receive a fresh copy of the
+// payload. The returned payload is stored in the cache only when compute
+// reports it cacheable (so error responses don't poison the cache) and
+// when its size is within idempotencyMaxPayloadBytes.
 func (c *idempotencyCache) do(
 	key string,
 	compute func() (payload []byte, cacheable bool, err error),
 ) ([]byte, error) {
 	if v, ok := c.get(key); ok {
+		log.Debugf("middleware: idempotent replay (cache hit) for %s", key)
 		return v, nil
 	}
 
 	c.inflightMu.Lock()
 	if call, ok := c.inflight[key]; ok {
+		call.followers++
 		c.inflightMu.Unlock()
 		<-call.done
-		return call.payload, call.err
+		log.Debugf("middleware: idempotent replay (in-flight follower) for %s", key)
+		return cloneBytes(call.payload), call.err
 	}
 	call := &inflightCall{done: make(chan struct{})}
 	c.inflight[key] = call
@@ -128,12 +156,15 @@ func (c *idempotencyCache) do(
 	// Re-check the cache under leadership: a previous leader may have
 	// completed and populated it between our miss and our claim.
 	if v, ok := c.get(key); ok {
-		call.payload = v
+		call.payload = cloneBytes(v) // owned copy for any racing followers
 		return v, nil
 	}
 
 	payload, cacheable, err := compute()
-	call.payload = payload
+	// Take an owned copy of the leader's payload before publishing it via
+	// `call.payload`, so handler-owned slices can't be mutated under
+	// followers after the leader returns.
+	call.payload = cloneBytes(payload)
 	call.err = err
 	if err == nil && cacheable {
 		c.set(key, payload)
@@ -181,4 +212,17 @@ func isIdempotencyApplicable(protocol string) bool {
 
 func idempotencyKey(protocol, peerID, messageID string) string {
 	return protocol + "|" + peerID + "|" + messageID
+}
+
+// followerCount reports the number of in-flight followers waiting on the
+// leader for `key` (excluding the leader itself). Used by tests to build
+// a deterministic barrier without time.Sleep.
+func (c *idempotencyCache) followerCount(key string) int {
+	c.inflightMu.Lock()
+	defer c.inflightMu.Unlock()
+	call, ok := c.inflight[key]
+	if !ok {
+		return 0
+	}
+	return call.followers
 }
