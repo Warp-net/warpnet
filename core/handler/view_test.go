@@ -159,9 +159,14 @@ func TestStreamViewHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("forwarding errors are not fatal", func(t *testing.T) {
+	t.Run("forwarding errors fall back to local CRDT view", func(t *testing.T) {
+		recordCalled := false
 		h := StreamViewHandler(stubViewRepo{
-			recordFn: func(tweetId, viewerId string) (uint64, error) { return 9, nil },
+			recordFn: func(tweetId, viewerId string) (uint64, error) {
+				recordCalled = true
+				return 9, nil
+			},
+			getFn: func(tweetId string) (uint64, error) { return 9, nil },
 		}, stubLikeUserRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
@@ -173,8 +178,36 @@ func TestStreamViewHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
+		if recordCalled {
+			t.Fatal("non-author node must not RecordView; only the author increments")
+		}
 		if resp.(event.ViewsCountResponse).Count != 9 {
-			t.Fatalf("unexpected response: %v", resp)
+			t.Fatalf("expected fallback to CRDT count 9, got: %v", resp)
+		}
+	})
+
+	t.Run("non-author node does not record locally on forward success", func(t *testing.T) {
+		recordCalled := false
+		h := StreamViewHandler(stubViewRepo{
+			recordFn: func(tweetId, viewerId string) (uint64, error) {
+				recordCalled = true
+				return 0, nil
+			},
+		}, stubLikeUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		}}, stubStreamer{
+			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				return []byte(`{"count":5}`), nil
+			},
+		})
+
+		_, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if recordCalled {
+			t.Fatal("non-author node must not RecordView locally")
 		}
 	})
 }

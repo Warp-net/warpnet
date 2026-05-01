@@ -75,30 +75,38 @@ func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer Lik
 			return event.ViewsCountResponse{Count: count}, nil
 		}
 
-		count, err := repo.RecordView(tweetId, ev.ViewerId)
-		if err != nil {
-			log.Errorf("view handler failed: %v", err)
-			return nil, err
+		// Author's node is the sole authority for incrementing the view
+		// counter. The CRDT stats store replicates the value to every
+		// other node, so non-author nodes only forward the event and
+		// read back the count.
+		if ev.UserId == streamer.NodeInfo().OwnerId {
+			count, err := repo.RecordView(tweetId, ev.ViewerId)
+			if err != nil {
+				log.Errorf("view handler failed: %v", err)
+				return nil, err
+			}
+			return event.ViewsCountResponse{Count: count}, nil
 		}
 
-		// Forward the view to the tweet author's node so its CRDT
-		// counter receives the increment too. Failures are non-fatal.
-		if ev.UserId != streamer.NodeInfo().OwnerId {
-			forwardViewToAuthor(ev, userRepo, streamer)
+		count := forwardViewToAuthor(ev, userRepo, streamer)
+		if count == 0 {
+			// Fall back to whatever the CRDT has propagated locally.
+			if local, err := repo.GetViewsCount(tweetId); err == nil {
+				count = local
+			}
 		}
-
 		return event.ViewsCountResponse{Count: count}, nil
 	}
 }
 
-func forwardViewToAuthor(ev event.ViewEvent, userRepo LikedUserFetcher, streamer LikeStreamer) {
+func forwardViewToAuthor(ev event.ViewEvent, userRepo LikedUserFetcher, streamer LikeStreamer) uint64 {
 	author, err := userRepo.Get(ev.UserId)
 	if errors.Is(err, database.ErrUserNotFound) {
-		return
+		return 0
 	}
 	if err != nil {
 		log.Errorf("view handler: lookup author %s: %v", ev.UserId, err)
-		return
+		return 0
 	}
 
 	viewResp, err := streamer.GenericStream(
@@ -111,15 +119,23 @@ func forwardViewToAuthor(ev event.ViewEvent, userRepo LikedUserFetcher, streamer
 		},
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
-		return
+		return 0
 	}
 	if err != nil {
 		log.Errorf("view handler: forwarding to author failed: %v", err)
-		return
+		return 0
 	}
 
 	var possibleError event.ResponseError
 	if _ = json.Unmarshal(viewResp, &possibleError); possibleError.Message != "" {
 		log.Errorf("view handler: remote response error: %s", possibleError.Message)
+		return 0
 	}
+
+	var resp event.ViewsCountResponse
+	if err := json.Unmarshal(viewResp, &resp); err != nil {
+		log.Errorf("view handler: parse remote response: %v", err)
+		return 0
+	}
+	return resp.Count
 }

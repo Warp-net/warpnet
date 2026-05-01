@@ -671,14 +671,14 @@ export const warpnetService = {
         return unlikeResp.count;
     },
 
-    async viewTweet(tweetId, userId) {
+    async viewTweet(tweetId, authorId) {
         const owner = this.getOwnerProfile()
         if (!owner) return 0;
 
         const request = {
             path: PUBLIC_POST_VIEW,
             body: {
-                user_id: userId,
+                user_id: authorId,
                 tweet_id: tweetId,
                 viewer_id: owner.user_id,
             },

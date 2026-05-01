@@ -613,31 +613,38 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	}
 	defer txn.Rollback()
 
-	if _, err := txn.Get(viewerKey); err == nil {
-		_ = txn.Commit()
+	_, err = txn.Get(viewerKey)
+	switch {
+	case err == nil:
+		// Repeat view within the dedup window: drop the read-only txn
+		// and report the current canonical count.
+		if err := txn.Commit(); err != nil {
+			return 0, err
+		}
 		return repo.GetViewsCount(tweetId)
-	} else if !local.IsNotFoundError(err) {
+	case local.IsNotFoundError(err):
+		// fall through and record the new view
+	default:
 		return 0, err
 	}
 
 	if err := txn.SetWithTTL(viewerKey, []byte(viewerId), ViewDedupTTL); err != nil {
 		return 0, err
 	}
-
-	count, err := txn.Increment(viewsKey)
-	if err != nil {
+	if _, err := txn.Increment(viewsKey); err != nil {
 		return 0, err
 	}
 	if err := txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb == nil {
-		return count, nil
+	if repo.statsDb != nil {
+		if err := repo.statsDb.Increment(viewsKey.DatastoreKey()); err != nil {
+			log.Warnf("view: stats db increment: %v", err)
+		}
 	}
-	if err := repo.statsDb.Increment(viewsKey.DatastoreKey()); err != nil {
-		log.Warnf("view: stats db increment: %v", err)
-	}
-	return count, nil
+	// Read back through the canonical path so callers always see the
+	// CRDT-aggregated total when one is available.
+	return repo.GetViewsCount(tweetId)
 }
 
 func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {

@@ -288,6 +288,10 @@ function generateResponse(arg) {
             return {count: unlikeStats.likes_count};
 
         case PUBLIC_POST_VIEW: {
+            // NOTE: this mock uses an "infinite" dedup window — once a viewer
+            // has been seen for a tweet, the count never re-increments for
+            // that pair. The real backend uses a TTL (database.ViewDedupTTL),
+            // so re-views beyond the window WILL count there.
             const viewStats = mockMap.get("stats:"+arg.body.tweet_id)
             if (!viewStats) return {count: 0};
             if (arg.body.viewer_id === arg.body.user_id) {

@@ -178,6 +178,7 @@ export default {
       tweetImages: [],
       viewObserver: null,
       viewRecorded: false,
+      viewInFlight: false,
     };
   },
   methods: {
@@ -324,16 +325,24 @@ export default {
       this.viewsCount.set(stats.tweet_id, stats.views_count || 0);
     },
     async recordView() {
-      if (this.viewRecorded) return;
-      this.viewRecorded = true;
+      if (this.viewRecorded || this.viewInFlight) return;
+      this.viewInFlight = true;
       try {
         const count = await warpnetService.viewTweet(this.tweet.id, this.tweet.user_id);
         if (count > 0) {
           this.viewsCount.set(this.tweet.id, count);
         }
+        this.viewRecorded = true;
+        if (this.viewObserver) {
+          this.viewObserver.disconnect();
+          this.viewObserver = null;
+        }
       } catch (err) {
         // Fail silently per spec - never break the page on a view miss.
+        // Leave viewRecorded false so a later intersection retries.
         console.error(`failed to record view for tweet [${this.tweet.id}]`, err);
+      } finally {
+        this.viewInFlight = false;
       }
     },
     setupViewObserver() {
@@ -345,16 +354,15 @@ export default {
       const target = this.$refs.tweetRoot;
       if (!target) return;
 
+      const threshold = 0.5;
       this.viewObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting) {
+          if (entry.isIntersecting && entry.intersectionRatio >= threshold) {
             this.recordView();
-            this.viewObserver.disconnect();
-            this.viewObserver = null;
             break;
           }
         }
-      }, { threshold: 0.5 });
+      }, { threshold });
       this.viewObserver.observe(target);
     },
   },
