@@ -467,13 +467,19 @@ func NewBitswapNetwork(host host.Host, opts ...bsnet.NetOpt) bitswapNetwork.BitS
 	return bsnet.NewFromIpfsHost(host, opts...)
 }
 
+// NewBitswapExchange returns the concrete *bitswap.Bitswap (which
+// also satisfies exchange.Interface) so callers can invoke
+// bitswap-only methods such as PeerConnected/PeerDisconnected.
+// That is required to replay already-connected libp2p peers into
+// bitswap's PeerManager — see core/crdt for the cold-start race
+// this fixes.
 func NewBitswapExchange(
 	ctx context.Context,
 	net bitswapNetwork.BitSwapNetwork,
 	providerFinder routing.ContentDiscovery,
 	bstore blockstore.Blockstore,
 	opts ...bitswap.Option,
-) exchange.Interface {
+) *bitswap.Bitswap {
 	return bitswap.New(ctx, net, providerFinder, bstore, opts...)
 }
 

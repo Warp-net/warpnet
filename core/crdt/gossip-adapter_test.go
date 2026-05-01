@@ -3,6 +3,7 @@ package crdt
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -128,6 +129,59 @@ func TestReceive_ChannelFull_DropsOldest(t *testing.T) {
 
 	// Channel should still have 100 items
 	assert.Equal(t, 100, len(gb.dataChan))
+}
+
+// TestReceive_ConcurrentWithNext_NoDeadlock is a regression test for
+// the deadlock that existed when Receive() did a blocking
+// `<-gb.dataChan` under the held mutex while a concurrent Next()
+// drained the channel. With many producers and one consumer running
+// in parallel, the producers must finish within the timeout — no
+// goroutine should be parked on a channel op under gb.mx.
+func TestReceive_ConcurrentWithNext_NoDeadlock(t *testing.T) {
+	ctx := context.Background()
+	mock := &mockGossipPubSub{}
+	gb, _ := NewGossipBroadcaster(ctx, mock)
+
+	// Consumer blocks on Next() until either data arrives or its
+	// context is cancelled — no busy-wait, no per-iter context churn.
+	consumerCtx, stopConsumer := context.WithCancel(context.Background())
+	consumerDone := make(chan struct{})
+	go func() {
+		defer close(consumerDone)
+		for {
+			if _, err := gb.Next(consumerCtx); err != nil {
+				return
+			}
+		}
+	}()
+
+	const producers = 8
+	const perProducer = 2000
+	var wg sync.WaitGroup
+	wg.Add(producers)
+	for i := range producers {
+		go func(id int) {
+			defer wg.Done()
+			for j := range perProducer {
+				gb.Receive([]byte{byte(id), byte(j)})
+			}
+		}(i)
+	}
+
+	producersDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(producersDone)
+	}()
+
+	select {
+	case <-producersDone:
+	case <-time.After(5 * time.Second):
+		stopConsumer()
+		t.Fatal("Receive deadlocked: producers did not finish within 5s")
+	}
+	stopConsumer()
+	<-consumerDone
 }
 
 func TestSubscribeHandler_ReceivesData(t *testing.T) {
