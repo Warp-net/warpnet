@@ -35,7 +35,7 @@ import (
 
 func TestIdempotencyCache_HitReturnsCachedResponse(t *testing.T) {
 	c := newIdempotencyCache(time.Minute)
-	key := idempotencyKey("/private/post/tweet/0.0.0", "msg-1")
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
 	resp := []byte(`{"id":"abc"}`)
 
 	if _, ok := c.get(key); ok {
@@ -54,23 +54,26 @@ func TestIdempotencyCache_HitReturnsCachedResponse(t *testing.T) {
 
 func TestIdempotencyCache_DistinctKeysIsolated(t *testing.T) {
 	c := newIdempotencyCache(time.Minute)
-	c.set(idempotencyKey("/private/post/tweet/0.0.0", "msg-1"), []byte("a"))
-	c.set(idempotencyKey("/private/post/tweet/0.0.0", "msg-2"), []byte("b"))
+	c.set(idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1"), []byte("a"))
+	c.set(idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-2"), []byte("b"))
 
-	if v, _ := c.get(idempotencyKey("/private/post/tweet/0.0.0", "msg-1")); !bytes.Equal(v, []byte("a")) {
+	if v, _ := c.get(idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")); !bytes.Equal(v, []byte("a")) {
 		t.Fatalf("unexpected value for msg-1: %s", v)
 	}
-	if v, _ := c.get(idempotencyKey("/private/post/tweet/0.0.0", "msg-2")); !bytes.Equal(v, []byte("b")) {
+	if v, _ := c.get(idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-2")); !bytes.Equal(v, []byte("b")) {
 		t.Fatalf("unexpected value for msg-2: %s", v)
 	}
-	if _, ok := c.get(idempotencyKey("/public/post/like/0.0.0", "msg-1")); ok {
+	if _, ok := c.get(idempotencyKey("/public/post/like/0.0.0", "peer-1", "msg-1")); ok {
 		t.Fatal("expected miss for different protocol")
+	}
+	if _, ok := c.get(idempotencyKey("/private/post/tweet/0.0.0", "peer-2", "msg-1")); ok {
+		t.Fatal("expected miss for different peer (cross-peer isolation)")
 	}
 }
 
 func TestIdempotencyCache_Expires(t *testing.T) {
 	c := newIdempotencyCache(20 * time.Millisecond)
-	key := idempotencyKey("/private/post/tweet/0.0.0", "msg-1")
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
 	c.set(key, []byte("payload"))
 
 	if _, ok := c.get(key); !ok {
@@ -85,7 +88,7 @@ func TestIdempotencyCache_Expires(t *testing.T) {
 
 func TestIdempotencyCache_EmptyResponseNotStored(t *testing.T) {
 	c := newIdempotencyCache(time.Minute)
-	key := idempotencyKey("/private/post/tweet/0.0.0", "msg-1")
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
 	c.set(key, nil)
 	if _, ok := c.get(key); ok {
 		t.Fatal("expected nil response not to be cached")
@@ -108,7 +111,7 @@ func TestIsIdempotencyApplicable(t *testing.T) {
 
 func TestIdempotencyCache_SetCopiesPayload(t *testing.T) {
 	c := newIdempotencyCache(time.Minute)
-	key := idempotencyKey("/private/post/tweet/0.0.0", "msg-1")
+	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
 	payload := []byte("original")
 	c.set(key, payload)
 	payload[0] = 'X'

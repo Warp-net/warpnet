@@ -189,7 +189,13 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 		idempotent := p.idempotency != nil && messageID != "" && isIdempotencyApplicable(protocol)
 		var cacheKey string
 		if idempotent {
-			cacheKey = idempotencyKey(protocol, messageID)
+			// Scope the key by authenticated remote peer so two peers
+			// can't collide on the same message id within the TTL window.
+			var peerID string
+			if conn := s.Conn(); conn != nil {
+				peerID = conn.RemotePeer().String()
+			}
+			cacheKey = idempotencyKey(protocol, peerID, messageID)
 			if cached, ok := p.idempotency.get(cacheKey); ok {
 				log.Debugf("middleware: idempotent replay %s %s", protocol, messageID)
 				if _, err := s.Write(cached); err != nil {
@@ -217,13 +223,21 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 		}
 
 		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
+		responseIsError := response == nil
 		if response == nil {
 			response = event.ResponseError{Message: "empty response"}
 		}
+		if _, ok := response.(event.ResponseError); ok {
+			responseIsError = true
+		}
 
 		var (
-			payload   []byte
-			cacheable = idempotent && err == nil
+			payload []byte
+			// Don't cache error responses (synthesized fallbacks, handler-
+			// returned ResponseError, or the nil/"empty response" path) —
+			// otherwise a transient failure would lock clients into the
+			// same error for the full TTL.
+			cacheable = idempotent && err == nil && !responseIsError
 		)
 		switch typedResponse := response.(type) {
 		case []byte:

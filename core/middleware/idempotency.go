@@ -71,6 +71,6 @@ func isIdempotencyApplicable(protocol string) bool {
 	return strings.Contains(protocol, "/post/")
 }
 
-func idempotencyKey(protocol, messageID string) string {
-	return protocol + "|" + messageID
+func idempotencyKey(protocol, peerID, messageID string) string {
+	return protocol + "|" + peerID + "|" + messageID
 }

@@ -78,11 +78,20 @@ const endCursor = "end"
 // through receives the cached response instead of being processed twice.
 const inflightPostRequests = new Map();
 
+// POST routes whose bodies are too large to safely serialize as a Map key
+// (e.g. base64 image uploads). Skipping dedup for them avoids an O(N)
+// JSON.stringify on the hot path; duplicate suppression there is handled
+// by the UI (disabled buttons during upload).
+const dedupSkipPaths = new Set([
+    PRIVATE_POST_UPLOAD_IMAGE,
+]);
+
 function isPostPath(path) {
     return typeof path === "string" && path.includes("/post/");
 }
 
 function postRequestKey(path, body) {
+    if (dedupSkipPaths.has(path)) return null;
     try {
         return path + "|" + JSON.stringify(body ?? {});
     } catch (_) {
