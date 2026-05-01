@@ -411,6 +411,10 @@ func (n *WarpNode) StopNode() {
 	}
 	log.Infoln("node: stopped")
 
+	if n.mw != nil {
+		n.mw.Close()
+	}
+
 	n.isClosed.Store(true)
 	n.node = nil
 

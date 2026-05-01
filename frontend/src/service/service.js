@@ -72,6 +72,34 @@ let latestNotifications = { unread_count: 0, notifications: [] };
 const defaultLimit = 20
 const endCursor = "end"
 
+// Tracks in-flight POST requests so duplicate submissions (e.g. a user
+// double-clicking "Tweet") reuse the original promise and message id,
+// turning duplicates into a single request. The backend additionally
+// caches responses by message id, so any duplicate that still slips
+// through receives the cached response instead of being processed twice.
+const inflightPostRequests = new Map();
+
+// POST routes whose bodies are too large to safely serialize as a Map key
+// (e.g. base64 image uploads). Skipping dedup for them avoids an O(N)
+// JSON.stringify on the hot path; duplicate suppression there is handled
+// by the UI (disabled buttons during upload).
+const dedupSkipPaths = new Set([
+    PRIVATE_POST_UPLOAD_IMAGE,
+]);
+
+function isPostPath(path) {
+    return typeof path === "string" && path.includes("/post/");
+}
+
+function postRequestKey(path, body) {
+    if (dedupSkipPaths.has(path)) return null;
+    try {
+        return path + "|" + JSON.stringify(body ?? {});
+    } catch (_) {
+        return null;
+    }
+}
+
 export const warpnetService = {
     setQR(qrData) {
         const key = `QR`;
@@ -928,19 +956,36 @@ export const warpnetService = {
     async sendToNode(request) {
         const owner = this.getOwnerProfile()
 
+        const dedupKey = isPostPath(request.path)
+            ? postRequestKey(request.path, request.body)
+            : null;
+        if (dedupKey && inflightPostRequests.has(dedupKey)) {
+            return inflightPostRequests.get(dedupKey);
+        }
+
         request.message_id = generateUUID()
         request.node_id = owner?.node_id || "Blank"
         request.timestamp = new Date().toISOString()
 
-        const result = await Call(request);
-        if (!result) {
-            throw new Error(`Unable to send ${request.message_id}`);
+        const promise = (async () => {
+            const result = await Call(request);
+            if (!result) {
+                throw new Error(`Unable to send ${request.message_id}`);
+            }
+            if (!result.body) {
+                console.error(`${result.code}: ${result.message}`);
+                return {};
+            }
+            return result.body;
+        })();
+
+        if (dedupKey) {
+            inflightPostRequests.set(dedupKey, promise);
+            const cleanup = () => inflightPostRequests.delete(dedupKey);
+            promise.then(cleanup, cleanup);
         }
-        if (!result.body) {
-            console.error(`${result.code}: ${result.message}`);
-            return {};
-        }
-        return result.body;
+
+        return promise;
     }
 }
 
