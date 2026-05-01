@@ -671,9 +671,13 @@ export const warpnetService = {
         return unlikeResp.count;
     },
 
+    // viewTweet returns the new view count on success, or `null` if
+    // the request failed in any way (no owner, network/handler error,
+    // malformed response). `null` is distinct from a legitimate count
+    // of 0 so callers can decide whether to retry.
     async viewTweet(tweetId, authorId) {
         const owner = this.getOwnerProfile()
-        if (!owner) return 0;
+        if (!owner) return null;
 
         const request = {
             path: PUBLIC_POST_VIEW,
@@ -686,10 +690,13 @@ export const warpnetService = {
 
         try {
             const resp = await this.sendToNode(request);
-            return (resp && typeof resp.count === 'number') ? resp.count : 0;
+            if (resp && typeof resp.count === 'number') {
+                return resp.count;
+            }
+            return null;
         } catch (err) {
             console.error(`failed to record view for tweet [${tweetId}]`, err);
-            return 0;
+            return null;
         }
     },
 

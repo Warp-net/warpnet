@@ -329,6 +329,9 @@ export default {
       this.viewInFlight = true;
       try {
         const count = await warpnetService.viewTweet(this.tweet.id, this.tweet.user_id);
+        // viewTweet returns `null` on any failure; only mark the view
+        // recorded (and stop observing) when the backend confirms.
+        if (count === null) return;
         if (count > 0) {
           this.viewsCount.set(this.tweet.id, count);
         }

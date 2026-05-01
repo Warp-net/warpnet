@@ -82,17 +82,32 @@ type TweetStatsStorer interface {
 	Decrement(key ds.Key) error
 }
 
+// viewLockShards is the number of stripes in the per-tweet RecordView
+// lock pool. Sized so timeline-scrolling workloads see negligible
+// contention without holding one mutex per tweet ever observed.
+const viewLockShards = 64
+
 type TweetRepo struct {
 	db      TweetsStorer
 	statsDb TweetStatsStorer
-	// viewMu serializes RecordView so concurrent increments on the
-	// same view counter do not collide on the underlying optimistic
-	// transaction and lose updates.
-	viewMu sync.Mutex
+	// viewLocks is a sharded mutex pool keyed by hash(tweetId). It
+	// serializes concurrent RecordView calls on the same counter so
+	// they don't collide on Badger's optimistic transactions and lose
+	// updates, while still allowing different tweets to proceed in
+	// parallel.
+	viewLocks [viewLockShards]sync.Mutex
 }
 
 func NewTweetRepo(db TweetsStorer, statsDb TweetStatsStorer) *TweetRepo {
 	return &TweetRepo{db: db, statsDb: statsDb}
+}
+
+func (repo *TweetRepo) viewLock(tweetId string) *sync.Mutex {
+	var h uint32
+	for i := 0; i < len(tweetId); i++ {
+		h = h*31 + uint32(tweetId[i])
+	}
+	return &repo.viewLocks[h%viewLockShards]
 }
 
 // Create adds a new tweet to the database
@@ -604,8 +619,9 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 		AddParentId(viewerId).
 		Build()
 
-	repo.viewMu.Lock()
-	defer repo.viewMu.Unlock()
+	mu := repo.viewLock(tweetId)
+	mu.Lock()
+	defer mu.Unlock()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -631,7 +647,8 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	if err := txn.SetWithTTL(viewerKey, []byte(viewerId), ViewDedupTTL); err != nil {
 		return 0, err
 	}
-	if _, err := txn.Increment(viewsKey); err != nil {
+	localCount, err := txn.Increment(viewsKey)
+	if err != nil {
 		return 0, err
 	}
 	if err := txn.Commit(); err != nil {
@@ -642,9 +659,14 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 			log.Warnf("view: stats db increment: %v", err)
 		}
 	}
-	// Read back through the canonical path so callers always see the
-	// CRDT-aggregated total when one is available.
-	return repo.GetViewsCount(tweetId)
+	// Prefer the CRDT-aggregated total when it reflects this write,
+	// but fall back to the just-incremented local counter if the
+	// CRDT replication failed or hasn't caught up yet — otherwise the
+	// caller could see a count smaller than the value we just wrote.
+	if crdtCount, err := repo.GetViewsCount(tweetId); err == nil && crdtCount > localCount {
+		return crdtCount, nil
+	}
+	return localCount, nil
 }
 
 func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
