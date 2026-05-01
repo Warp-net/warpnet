@@ -188,7 +188,8 @@ type (
 type WarpStreamBody struct {
 	WarpStream
 
-	Body []byte
+	Body      []byte
+	MessageId string
 }
 
 type WarpHandlerFunc func(msg []byte, s WarpStream) (any, error)

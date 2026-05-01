@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"runtime/debug"
@@ -57,10 +58,14 @@ const (
 	ErrInternalNodeError middlewareError = `["middleware: internal node error"]`
 )
 
-type WarpMiddleware struct{}
+type WarpMiddleware struct {
+	idempotency *idempotencyCache
+}
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
-	wm := &WarpMiddleware{}
+	wm := &WarpMiddleware{
+		idempotency: newIdempotencyCache(idempotencyTTL),
+	}
 	return wm
 }
 
@@ -141,6 +146,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		next(&warpnet.WarpStreamBody{
 			WarpStream: s,
 			Body:       msg.Body,
+			MessageId:  string(msg.MessageId),
 		})
 	}
 }
@@ -157,27 +163,41 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 		}()
 
 		var (
-			response any
-			err      error
-			encoder  = json.NewEncoder(s)
-			data     []byte
+			response  any
+			err       error
+			data      []byte
+			messageID string
 		)
 
 		switch typedStream := s.(type) {
 		case *warpnet.WarpStreamBody:
 			data = typedStream.Body
+			messageID = typedStream.MessageId
 		default:
 			reader := io.LimitReader(s, MaxLimit)
 			data, err = io.ReadAll(reader)
 			if err != nil && !errors.Is(err, io.EOF) {
 				log.Errorf("middleware: reading from stream: %v", err)
-				response = event.ResponseError{Message: ErrStreamReadError.Error()}
-				_ = encoder.Encode(response)
+				_ = json.NewEncoder(s).Encode(event.ResponseError{Message: ErrStreamReadError.Error()})
 				return
 			}
 		}
 
 		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
+
+		protocol := string(s.Protocol())
+		idempotent := p.idempotency != nil && messageID != "" && isIdempotencyApplicable(protocol)
+		var cacheKey string
+		if idempotent {
+			cacheKey = idempotencyKey(protocol, messageID)
+			if cached, ok := p.idempotency.get(cacheKey); ok {
+				log.Debugf("middleware: idempotent replay %s %s", protocol, messageID)
+				if _, err := s.Write(cached); err != nil {
+					log.Errorf("middleware: writing cached idempotent response: %v", err)
+				}
+				return
+			}
+		}
 
 		switch {
 		case s.Protocol() == event.PRIVATE_POST_PAIR:
@@ -201,21 +221,30 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			response = event.ResponseError{Message: "empty response"}
 		}
 
+		var (
+			payload   []byte
+			cacheable = idempotent && err == nil
+		)
 		switch typedResponse := response.(type) {
 		case []byte:
-			if _, err := s.Write(typedResponse); err != nil {
-				log.Errorf("middleware: writing raw bytes to stream: %v", err)
-			}
-			return
+			payload = typedResponse
 		case string:
-			if _, err := s.Write([]byte(typedResponse)); err != nil {
-				log.Errorf("middleware: writing string to stream: %v", err)
-			}
-			return
+			payload = []byte(typedResponse)
 		default:
-			if err := encoder.Encode(response); err != nil {
-				log.Errorf("middleware: failed encoding generic response: %v %v", response, err)
+			var buf bytes.Buffer
+			if encErr := json.NewEncoder(&buf).Encode(response); encErr != nil {
+				log.Errorf("middleware: failed encoding generic response: %v %v", response, encErr)
+				return
 			}
+			payload = buf.Bytes()
+		}
+
+		if _, err := s.Write(payload); err != nil {
+			log.Errorf("middleware: writing response to stream: %v", err)
+			return
+		}
+		if cacheable {
+			p.idempotency.set(cacheKey, payload)
 		}
 	}
 }
