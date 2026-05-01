@@ -314,7 +314,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
 			log.Warnf("chat message sent to offline node: %s", otherUser.NodeId)
-			msg.Status = "undelivered"
+			msg.Status = "undelivered" //nolint:goconst
 			return event.NewMessageResponse(msg), nil
 		}
 		if err != nil {

@@ -64,6 +64,7 @@ export const PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
+export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 
 const stateMap = new Map();
 const notificationSubscribers = new Set();
@@ -668,6 +669,35 @@ export const warpnetService = {
 
         const unlikeResp = await this.sendToNode(request);
         return unlikeResp.count;
+    },
+
+    // viewTweet returns the new view count on success, or `null` if
+    // the request failed in any way (no owner, network/handler error,
+    // malformed response). `null` is distinct from a legitimate count
+    // of 0 so callers can decide whether to retry.
+    async viewTweet(tweetId, authorId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+
+        const request = {
+            path: PUBLIC_POST_VIEW,
+            body: {
+                user_id: authorId,
+                tweet_id: tweetId,
+                viewer_id: owner.user_id,
+            },
+        }
+
+        try {
+            const resp = await this.sendToNode(request);
+            if (resp && typeof resp.count === 'number') {
+                return resp.count;
+            }
+            return null;
+        } catch (err) {
+            console.error(`failed to record view for tweet [${tweetId}]`, err);
+            return null;
+        }
     },
 
     async setLiker(tweetId, profileId, profileObj) {

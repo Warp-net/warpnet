@@ -34,6 +34,7 @@ resulting from the use or misuse of this software.
   </div>
   <div
       v-if="!deleted"
+      ref="tweetRoot"
       class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
   >
     <div class="flex-none mr-2 md:mr-4 pt-1">
@@ -130,9 +131,14 @@ resulting from the use or misuse of this software.
           <p v-if="getLikesCount(tweet.id) > 0">{{ getLikesCount(tweet.id) }}</p>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
-          <button type="button" disabled class="rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed flat-btn" aria-label="Share (coming soon)" title="Coming soon">
-            <i class="fas fa-share-square" aria-hidden="true"></i>
-          </button>
+          <span
+            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center"
+            aria-label="Views"
+            title="Views"
+          >
+            <i class="far fa-eye" aria-hidden="true"></i>
+          </span>
+          <p>{{ getViewsCount(tweet.id) }}</p>
         </div>
       </div>
     </div>
@@ -168,7 +174,11 @@ export default {
       likesCount: new Map(),
       retweetsCount: new Map(),
       repliesCount: new Map(),
+      viewsCount: new Map(),
       tweetImages: [],
+      viewObserver: null,
+      viewRecorded: false,
+      viewInFlight: false,
     };
   },
   methods: {
@@ -302,14 +312,62 @@ export default {
     getRepliesCount(tweetId) {
       return this.repliesCount.get(tweetId);
     },
+    getViewsCount(tweetId) {
+      return this.viewsCount.get(tweetId) || 0;
+    },
     async loadTweetStats(tweetId, userId) {
       const stats = await warpnetService.getTweetStats(tweetId, userId);
+      if (!stats || !stats.tweet_id) return;
 
       this.likesCount.set(stats.tweet_id, stats.likes_count);
       this.retweetsCount.set(stats.tweet_id, stats.retweets_count);
       this.repliesCount.set(stats.tweet_id, stats.replies_count);
-      // this.viewsCount.set(stats.tweet_id, stats.views_count); // TODO
-    }
+      this.viewsCount.set(stats.tweet_id, stats.views_count || 0);
+    },
+    async recordView() {
+      if (this.viewRecorded || this.viewInFlight) return;
+      this.viewInFlight = true;
+      try {
+        const count = await warpnetService.viewTweet(this.tweet.id, this.tweet.user_id);
+        // viewTweet returns `null` on any failure; only mark the view
+        // recorded (and stop observing) when the backend confirms.
+        if (count === null) return;
+        if (count > 0) {
+          this.viewsCount.set(this.tweet.id, count);
+        }
+        this.viewRecorded = true;
+        if (this.viewObserver) {
+          this.viewObserver.disconnect();
+          this.viewObserver = null;
+        }
+      } catch (err) {
+        // Fail silently per spec - never break the page on a view miss.
+        // Leave viewRecorded false so a later intersection retries.
+        console.error(`failed to record view for tweet [${this.tweet.id}]`, err);
+      } finally {
+        this.viewInFlight = false;
+      }
+    },
+    setupViewObserver() {
+      if (typeof window === 'undefined' || typeof window.IntersectionObserver === 'undefined') {
+        // Without IntersectionObserver fall back to recording immediately.
+        this.recordView();
+        return;
+      }
+      const target = this.$refs.tweetRoot;
+      if (!target) return;
+
+      const threshold = 0.5;
+      this.viewObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio >= threshold) {
+            this.recordView();
+            break;
+          }
+        }
+      }, { threshold });
+      this.viewObserver.observe(target);
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
@@ -338,6 +396,15 @@ export default {
     await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
 
     await this.refreshInteractionState();
+  },
+  mounted() {
+    this.$nextTick(() => this.setupViewObserver());
+  },
+  beforeUnmount() {
+    if (this.viewObserver) {
+      this.viewObserver.disconnect();
+      this.viewObserver = null;
+    }
   },
 };
 </script>

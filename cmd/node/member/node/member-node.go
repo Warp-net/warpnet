@@ -496,6 +496,10 @@ func (m *MemberNode) setupHandlers(
 				handler.StreamUnlikeHandler(likeRepo, userRepo, m),
 			},
 			{
+				event.PUBLIC_POST_VIEW,
+				handler.StreamViewHandler(tweetRepo, userRepo, m),
+			},
+			{
 				event.PRIVATE_POST_USER,
 				handler.StreamUpdateProfileHandler(authRepo, userRepo),
 			},
