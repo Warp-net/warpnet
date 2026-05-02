@@ -357,15 +357,27 @@ export default {
       const target = this.$refs.tweetRoot;
       if (!target) return;
 
-      const threshold = 0.5;
+      // We want "the tweet is meaningfully on screen". Two signals
+      // satisfy that:
+      //   - at least half of the tweet itself is visible (short tweets), or
+      //   - the visible slice of the tweet covers at least half of the
+      //     viewport (tall tweets / multi-image — intersectionRatio
+      //     against the tweet can never reach 0.5 when the tweet is
+      //     more than 2× the viewport height).
+      const visibleFraction = 0.5;
+      const thresholds = [0, 0.1, 0.25, 0.5, 0.75, 1];
       this.viewObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio >= threshold) {
+          if (!entry.isIntersecting) continue;
+          const root = entry.rootBounds;
+          const fillsViewport = root && root.height > 0
+            && (entry.intersectionRect.height / root.height) >= visibleFraction;
+          if (entry.intersectionRatio >= visibleFraction || fillsViewport) {
             this.recordView();
             break;
           }
         }
-      }, { threshold });
+      }, { threshold: thresholds });
       this.viewObserver.observe(target);
     },
   },
