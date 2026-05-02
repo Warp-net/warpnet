@@ -61,3 +61,7 @@ build-windows:
 
 download-golang-armv6:
 	wget -c https://go.dev/dl/go1.26.0.linux-armv6l.tar.gz
+
+.PHONY: frontend
+frontend:
+	cd frontend && make rebuild && cd -
