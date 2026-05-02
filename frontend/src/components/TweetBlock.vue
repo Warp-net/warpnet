@@ -364,8 +364,14 @@ export default {
       //     viewport (tall tweets / multi-image — intersectionRatio
       //     against the tweet can never reach 0.5 when the tweet is
       //     more than 2× the viewport height).
+      //
+      // The observer callback only fires when intersectionRatio
+      // crosses one of these thresholds, so include very small steps
+      // — a tweet 50× the viewport height has a maximum ratio near
+      // 0.02, and without a sub-0.02 threshold we'd miss every
+      // crossing of the fill-viewport signal during scroll.
       const visibleFraction = 0.5;
-      const thresholds = [0, 0.1, 0.25, 0.5, 0.75, 1];
+      const thresholds = [0, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1];
       this.viewObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;

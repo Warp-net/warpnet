@@ -29,7 +29,23 @@ import (
 	"io/fs"
 )
 
-//go:embed *.go */*.go */*/*.go */*/*/*.go */*/*/*/*.go */*/*/*/*/*.go
+// codeBaseSingleton embeds the project's Go source so the challenge
+// handler can verify it. We list each top-level Go directory
+// explicitly because `warpdroid/` is a separate Go module — a
+// catch-all glob like `*/*/*.go` would match `warpdroid/node/*.go`
+// and Go embed refuses to cross module boundaries.
+//
+//go:embed *.go
+//go:embed cmd/*/*/*.go cmd/*/*/*/*.go
+//go:embed config/*.go
+//go:embed core/*/*.go
+//go:embed database/*.go database/*/*.go
+//go:embed domain/*.go
+//go:embed event/*.go
+//go:embed json/*.go
+//go:embed metrics/*.go
+//go:embed retrier/*.go
+//go:embed security/*.go
 var codeBaseSingleton embed.FS
 
 func GetCodeBase() embed.FS {
