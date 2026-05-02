@@ -117,7 +117,9 @@ data class LikeEvent(
  *
  * - [tweetId] — id of the tweet being viewed.
  * - [userId]  — the tweet *author's* id (kept on the wire as `user_id` to
- *               match warpnet's [event.ViewEvent] shape).
+ *               match warpnet's `event.ViewEvent` shape; the literal
+ *               package lives in the Go node, not in this module, so
+ *               the link is intentionally plain text).
  * - [viewerId] — the local pairing user's id; the backend skips
  *                self-views and dedupes per (tweetId, viewerId) within
  *                a 30-minute window.
@@ -209,13 +211,27 @@ data class UsersResponse(
     val cursor: String = "",
 )
 
+/**
+ * Standalone counter response returned by `PUBLIC_POST_LIKE` /
+ * `PUBLIC_POST_UNLIKE` / `PUBLIC_POST_RETWEET` / `PUBLIC_POST_UNRETWEET`.
+ *
+ * Wire format is `{"count": N}` (warpnet's `event.LikesCountResponse`
+ * marshals its single `Count` field as `count`). The previous
+ * `@Json(name = "likes_count")` here always parsed to 0 — that name
+ * lives on the inner `likes_count` field of [TweetStatsResponse],
+ * not on this standalone response.
+ */
 @JsonClass(generateAdapter = true)
 data class LikesCountResponse(
-    @Json(name = "likes_count") val likesCount: Long = 0,
+    @Json(name = "count") val likesCount: Long = 0,
 )
 
-/** Both warpnet `LikesCountResponse` and `ViewsCountResponse` serialize as
- *  `{"count": N}`, but we read views via the dedicated key for clarity. */
+/**
+ * Standalone counter response returned by `PUBLIC_POST_VIEW`. Same
+ * `{"count": N}` wire shape as [LikesCountResponse]; we keep a
+ * dedicated type so call sites can read `count` without confusing
+ * it with the like/retweet counter.
+ */
 @JsonClass(generateAdapter = true)
 data class ViewsCountResponse(
     @Json(name = "count") val count: Long = 0,
