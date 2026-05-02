@@ -45,6 +45,7 @@ object ProtocolIds {
     const val PUBLIC_DELETE_REPLY = "/public/delete/reply/0.0.0"
     const val PUBLIC_POST_LIKE = "/public/post/like/0.0.0"
     const val PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
+    const val PUBLIC_POST_VIEW = "/public/post/view/0.0.0"
     const val PUBLIC_POST_RETWEET = "/public/post/retweet/0.0.0"
     const val PUBLIC_POST_UNRETWEET = "/public/post/unretweet/0.0.0"
     const val PUBLIC_POST_FOLLOW = "/public/post/follow/0.0.0"

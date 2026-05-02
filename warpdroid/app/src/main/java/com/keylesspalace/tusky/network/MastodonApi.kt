@@ -450,6 +450,27 @@ class MastodonApi @Inject constructor(
         }
     }
 
+    /**
+     * Record a tweet-view event when a status comes on screen.
+     *
+     * Side-effect-only: the post-increment count is dropped because
+     * existing [Status] view models don't have a slot for it, and the
+     * timeline already shows the count via [Status.viewsCount] from
+     * the periodic stats refresh. Failures are swallowed so a missed
+     * view never propagates to the UI.
+     */
+    suspend fun recordView(statusId: String, authorId: String) {
+        val active = accountManager.activeAccount ?: return
+        if (statusId.isBlank() || authorId.isBlank()) return
+        runCatching {
+            warpnet.recordView(
+                tweetId = statusId,
+                authorId = authorId,
+                viewerId = active.accountId,
+            )
+        }
+    }
+
     suspend fun bookmarkStatus(statusId: String): NetworkResult<Status> = stubFailure("bookmarkStatus")
 
     suspend fun unbookmarkStatus(statusId: String): NetworkResult<Status> = stubFailure("unbookmarkStatus")

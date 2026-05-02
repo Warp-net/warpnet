@@ -112,6 +112,23 @@ data class LikeEvent(
     @Json(name = "user_id") val userId: String,
 )
 
+/**
+ * Records a tweet view on the author's node.
+ *
+ * - [tweetId] — id of the tweet being viewed.
+ * - [userId]  — the tweet *author's* id (kept on the wire as `user_id` to
+ *               match warpnet's [event.ViewEvent] shape).
+ * - [viewerId] — the local pairing user's id; the backend skips
+ *                self-views and dedupes per (tweetId, viewerId) within
+ *                a 30-minute window.
+ */
+@JsonClass(generateAdapter = true)
+data class ViewEvent(
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "viewer_id") val viewerId: String,
+)
+
 @JsonClass(generateAdapter = true)
 data class GetTweetStatsEvent(
     @Json(name = "tweet_id") val tweetId: String,
@@ -195,6 +212,13 @@ data class UsersResponse(
 @JsonClass(generateAdapter = true)
 data class LikesCountResponse(
     @Json(name = "likes_count") val likesCount: Long = 0,
+)
+
+/** Both warpnet `LikesCountResponse` and `ViewsCountResponse` serialize as
+ *  `{"count": N}`, but we read views via the dedicated key for clarity. */
+@JsonClass(generateAdapter = true)
+data class ViewsCountResponse(
+    @Json(name = "count") val count: Long = 0,
 )
 
 @JsonClass(generateAdapter = true)

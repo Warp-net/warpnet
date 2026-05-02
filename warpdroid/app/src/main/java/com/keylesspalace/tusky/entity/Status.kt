@@ -42,6 +42,10 @@ data class Status(
     @Json(name = "favourites_count") val favouritesCount: Int,
     @Json(name = "replies_count") val repliesCount: Int,
     @Json(name = "quotes_count") val quotesCount: Int = 0,
+    /** Warpnet view counter, populated by the `tweet_stats` lookup.
+     *  Defaults to zero so Mastodon-shaped JSON without this key still
+     *  decodes cleanly via Moshi. */
+    @Json(name = "views_count") val viewsCount: Int = 0,
     val reblogged: Boolean = false,
     val favourited: Boolean = false,
     val bookmarked: Boolean = false,

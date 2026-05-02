@@ -86,6 +86,26 @@ abstract class StatusActionsViewModel(
         }
     }
 
+    /**
+     * Fire-and-forget view recording for a status that just appeared
+     * on screen. Backend dedupes per (tweet, viewer) within a 30-min
+     * window so we can call this freely on every visibility event;
+     * failures are logged inside [MastodonApi.recordView] and never
+     * surface to the UI.
+     */
+    private val viewedStatusIds = mutableSetOf<String>()
+
+    fun recordView(statusId: String, authorId: String) {
+        if (statusId.isBlank() || authorId.isBlank()) return
+        // Local guard so a single status doesn't fire the network call
+        // every time the LazyColumn recomposes its item; the server
+        // dedupes too but skipping the call avoids needless traffic.
+        if (!viewedStatusIds.add(statusId)) return
+        viewModelScope.launch {
+            mastodonApi.recordView(statusId, authorId)
+        }
+    }
+
     fun favorite(statusId: String, favourite: Boolean) {
         viewModelScope.launch {
             if (favourite) {

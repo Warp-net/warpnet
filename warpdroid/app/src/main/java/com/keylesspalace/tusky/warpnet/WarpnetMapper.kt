@@ -74,6 +74,7 @@ object WarpnetMapper {
             reblogsCount = 0,
             favouritesCount = 0,
             repliesCount = 0,
+            viewsCount = 0,
             reblogged = false,
             favourited = false,
             bookmarked = false,

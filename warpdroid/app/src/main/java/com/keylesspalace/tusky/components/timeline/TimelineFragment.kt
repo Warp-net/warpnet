@@ -353,6 +353,18 @@ class TimelineFragment :
                                             modifier = Modifier.widthIn(max = 640.dp)
                                         )
                                     } else {
+                                        // Record a Warpnet view the first time this
+                                        // status enters composition (i.e. becomes
+                                        // visible in the LazyColumn). Keyed on
+                                        // actionableId so a reblog and its inner
+                                        // status share the same dedup slot.
+                                        val actionable = viewData.status.actionableStatus
+                                        LaunchedEffect(actionable.id) {
+                                            viewModel.recordView(
+                                                statusId = actionable.id,
+                                                authorId = actionable.account.id,
+                                            )
+                                        }
                                         Status(
                                             statusViewData = viewData,
                                             listener = this@TimelineFragment,
