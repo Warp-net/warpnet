@@ -21,7 +21,7 @@ func Initialize(privKeyHex, warpNetwork, pskHex, bootstrapNodes string) string {
 	)
 
 	if clientInstance != nil {
-		return fmt.Sprintf("already initialized")
+		return "already initialized"
 	}
 
 	if pskHex != "" {

@@ -366,18 +366,36 @@ export default {
       //     more than 2× the viewport height).
       //
       // The observer callback only fires when intersectionRatio
-      // crosses one of these thresholds, so include very small steps
-      // — a tweet 50× the viewport height has a maximum ratio near
-      // 0.02, and without a sub-0.02 threshold we'd miss every
-      // crossing of the fill-viewport signal during scroll.
+      // crosses one of these thresholds, so the list must contain a
+      // value at-or-below max(intersectionRatio) for any tweet we
+      // expect to record. Compute a per-element low threshold from
+      // the actual element/viewport heights so even a 200×-viewport-
+      // tall tweet produces a callback at the fill-viewport point.
       const visibleFraction = 0.5;
-      const thresholds = [0, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1];
+      const targetHeight = target.getBoundingClientRect().height || 0;
+      const viewportHeight = (typeof window !== 'undefined'
+          && (window.innerHeight || (document && document.documentElement && document.documentElement.clientHeight)))
+          || 0;
+      const fillRatio = (targetHeight > 0 && viewportHeight > 0)
+          ? (viewportHeight * visibleFraction) / targetHeight
+          : 0;
+      const thresholds = Array.from(new Set([
+          0, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1,
+          // For ultra-tall tweets the static list bottoms out at
+          // 0.005; supplement with values around the actual fill
+          // point so we never silently miss the crossing.
+          ...(fillRatio > 0 && fillRatio < 0.005
+              ? [Math.max(fillRatio / 2, 1e-6), fillRatio]
+              : []),
+      ])).filter(t => t >= 0 && t <= 1).sort((a, b) => a - b);
       this.viewObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           const root = entry.rootBounds;
-          const fillsViewport = root && root.height > 0
-            && (entry.intersectionRect.height / root.height) >= visibleFraction;
+          const fallbackHeight = (typeof window !== 'undefined' && window.innerHeight) || 0;
+          const rootHeight = (root && root.height > 0) ? root.height : fallbackHeight;
+          const fillsViewport = rootHeight > 0
+              && (entry.intersectionRect.height / rootHeight) >= visibleFraction;
           if (entry.intersectionRatio >= visibleFraction || fillsViewport) {
             this.recordView();
             break;
