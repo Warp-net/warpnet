@@ -267,21 +267,23 @@ class WarpnetRepository @Inject constructor(
      * by [authorId]. The author's node is the sole authority for the
      * counter (CRDT replicates it everywhere else); self-views are
      * dropped server-side and the same (tweet, viewer) pair is deduped
-     * within a 30-minute window. Returns the post-increment count, or
-     * `null` if the call failed — callers should treat any failure as
-     * "no view recorded" rather than crash the UI.
+     * within a 30-minute window.
+     *
+     * Returns the post-increment count, or `null` if the response body
+     * couldn't be parsed (e.g. shape mismatch or empty body). Transport
+     * failures propagate as exceptions so the caller — typically
+     * [com.keylesspalace.tusky.network.MastodonApi.recordView] — can
+     * log them; do not call this directly from the UI without a guard.
      */
     suspend fun recordView(tweetId: String, authorId: String, viewerId: String): Long? {
         if (tweetId.isBlank() || authorId.isBlank() || viewerId.isBlank()) return null
-        return runCatching {
-            val raw = client.request(
-                ProtocolIds.PUBLIC_POST_VIEW,
-                viewEventAdapter.toJson(
-                    ViewEvent(tweetId = tweetId, userId = authorId, viewerId = viewerId),
-                ),
-            )
-            viewsCountAdapter.fromJson(raw)?.count ?: 0L
-        }.getOrNull()
+        val raw = client.request(
+            ProtocolIds.PUBLIC_POST_VIEW,
+            viewEventAdapter.toJson(
+                ViewEvent(tweetId = tweetId, userId = authorId, viewerId = viewerId),
+            ),
+        )
+        return viewsCountAdapter.fromJson(raw)?.count
     }
 
     // -----------------------------------------------------------------

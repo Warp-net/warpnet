@@ -15,6 +15,7 @@
 
 package com.keylesspalace.tusky.viewmodel
 
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -100,7 +101,9 @@ abstract class StatusActionsViewModel(
 
     fun recordView(statusId: String, authorId: String) {
         if (statusId.isBlank() || authorId.isBlank()) return
-        val now = System.currentTimeMillis()
+        // Monotonic clock so wall-clock changes (manual / NTP) can't
+        // skew dedupe windows.
+        val now = SystemClock.elapsedRealtime()
         synchronized(viewedStatusAt) {
             // Drop entries older than the dedup window so the cache
             // can't grow without bound and so a re-view after the
