@@ -1,0 +1,5 @@
+Tusky 32.2
+
+- Small fixes and stability improvements
+
+See https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md for the full changelog

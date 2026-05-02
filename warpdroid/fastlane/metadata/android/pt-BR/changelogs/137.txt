@@ -1,0 +1,7 @@
+Tusky 31.0
+
+- A visualização de "Posts agendados" foi aprimorada; agora ela exibe posts completos, incluindo todos os metadados.
+- Agora é possível reocultar os posts filtrados com uma nova opção no menu nos posts.
+- O Tusky agora lê o limite de caracteres para descrições de mídia do servidor, em vez de usar sempre o padrão de 1.500. O limite agora é exibido na caixa de diálogo de descrição.
+
+Consulte https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md para ver o changelog completo

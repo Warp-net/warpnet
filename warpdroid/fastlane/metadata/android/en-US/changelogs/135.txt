@@ -1,0 +1,7 @@
+Tusky 30.0
+
+- The reporting flow has been overhauled. It is now possible to select a report reason.
+- The image editor got an improved look
+- Tusky can now be used with onion services
+
+See https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md for the full changelog

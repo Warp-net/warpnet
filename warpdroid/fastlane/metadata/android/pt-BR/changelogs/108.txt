@@ -1,0 +1,5 @@
+Tusky 22.0 beta 6
+
+Correções:
+
+- Salva a posição de leitura na aba Notificações com mais frequência

@@ -1,0 +1,6 @@
+Tusky 23.0 beta 2
+
+Correções:
+
+- Possível travamento ao editar campos do perfil
+- Menu de contexto muito grande ao editar descrições de imagens

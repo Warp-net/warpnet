@@ -1,0 +1,3 @@
+<resources>
+    <dimen name="dialog_activity_vertical_inset">16dp</dimen>
+</resources>

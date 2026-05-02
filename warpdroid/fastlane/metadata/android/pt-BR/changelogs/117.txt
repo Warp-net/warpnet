@@ -1,0 +1,7 @@
+Tusky 24.1
+
+- A tela permanecerá ligada novamente durante a reprodução de um vídeo.
+- Foi corrigido um vazamento de memória. Isso deve melhorar a estabilidade e o desempenho.
+- Os emojis agora são contabilizados corretamente como 1 caractere ao redigir uma publicação.
+- Corrigida uma falha que ocorria ao selecionar texto em alguns dispositivos.
+- Os ícones nos textos de ajuda das linhas do tempo vazias agora estarão sempre alinhados corretamente.

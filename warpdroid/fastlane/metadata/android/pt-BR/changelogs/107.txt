@@ -1,0 +1,6 @@
+Tusky 22.0 beta 5
+
+Correções:
+
+- Revertemos a biblioteca APNG para corrigir o problema com os emojis animados
+- Salvamos uma cópia local do marcador de notificação, caso o servidor não seja compatível com a API

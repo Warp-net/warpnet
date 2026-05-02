@@ -1,0 +1,7 @@
+Tusky 32.0
+
+- Supporto per i post di citazione
+- Possibilità di aggiungere più di 4 media a un post
+- Migliorata la visualizzazione del HTML
+- Nuove preferenze dell'account: seleziona la privacy predefinita per le citazioni dei tuoi post.
+- In pulsante "Componi" è stato aggiunto quando si visualizza un hashtag, in modo da creare rapidamente un post con quell'hashtag.

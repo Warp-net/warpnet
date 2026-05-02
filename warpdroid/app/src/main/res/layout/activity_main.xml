@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mainDrawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="@bool/is_not_edge_to_edge"
+    tools:context="com.keylesspalace.tusky.MainActivity">
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:id="@+id/mainCoordinatorLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <com.google.android.material.appbar.AppBarLayout
+            android:id="@+id/appBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fitsSystemWindows="@bool/is_edge_to_edge"
+            app:liftOnScroll="false"
+            app:statusBarForeground="?attr/colorSurface">
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/mainToolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="?attr/actionBarSize"
+                app:contentInsetStartWithNavigation="0dp"
+                app:layout_scrollFlags="scroll|enterAlways"
+                app:navigationContentDescription="@string/action_open_drawer" />
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/topNav"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp"
+                app:contentInsetStart="0dp"
+                app:contentInsetStartWithNavigation="0dp"
+                app:navigationContentDescription="@string/action_open_drawer">
+
+                <com.keylesspalace.tusky.view.AdaptiveTabLayout
+                    android:id="@+id/tabLayout"
+                    style="@style/TuskyTabAppearance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:tabGravity="fill"
+                    app:tabIndicator="@drawable/tab_indicator_top"
+                    app:tabIndicatorFullWidth="true"
+                    app:tabMaxWidth="0dp"
+                    app:tabMode="scrollable" />
+
+            </com.google.android.material.appbar.MaterialToolbar>
+
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/viewPager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/windowBackgroundColor"
+            app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+
+        <com.google.android.material.bottomappbar.BottomAppBar
+            android:id="@+id/bottomNav"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/bottomAppBarHeight"
+            android:layout_gravity="bottom"
+            android:backgroundTint="?attr/colorSurface"
+            app:buttonGravity="center_vertical"
+            app:contentInsetStart="0dp"
+            app:contentInsetStartWithNavigation="0dp"
+            app:fabAlignmentMode="end"
+            app:menuAlignmentMode="auto"
+            app:navigationContentDescription="@string/action_open_drawer">
+
+            <com.keylesspalace.tusky.view.AdaptiveTabLayout
+                android:id="@+id/bottomTabLayout"
+                style="@style/TuskyTabAppearance"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/bottomAppBarHeight"
+                android:background="?attr/colorSurface"
+                app:tabGravity="fill"
+                app:tabIndicator="@drawable/tab_indicator_bottom"
+                app:tabIndicatorFullWidth="true"
+                app:tabIndicatorGravity="top"
+                app:tabMode="scrollable"
+                app:tabPaddingTop="0dp" />
+
+        </com.google.android.material.bottomappbar.BottomAppBar>
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/composeButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="@dimen/fabMargin"
+            android:contentDescription="@string/action_compose"
+            app:layout_anchor="@id/viewPager"
+            app:layout_anchorGravity="bottom|end"
+            app:srcCompat="@drawable/ic_edit_24dp_filled"
+            app:tint="?attr/colorOnPrimary" />
+
+        <include layout="@layout/item_status_bottom_sheet" />
+
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+    <com.mikepenz.materialdrawer.widget.MaterialDrawerSliderView
+        android:id="@+id/mainDrawer"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:fitsSystemWindows="true" />
+
+</androidx.drawerlayout.widget.DrawerLayout>

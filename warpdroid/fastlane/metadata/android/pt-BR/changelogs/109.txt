@@ -1,0 +1,10 @@
+Tusky 22.0 beta 7
+
+Correções:
+
+
+### Correções importantes de bugs
+
+- Recupera todas as notificações pendentes do Mastodon ao criar notificações no Android
+- Clicar em "Compor" a partir de uma notificação definia a conta errada
+- Garante que o "ID da última notificação lida" seja salvo na conta correta

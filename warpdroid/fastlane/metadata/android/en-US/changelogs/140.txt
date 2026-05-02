@@ -1,0 +1,7 @@
+Tusky 32.0
+
+- Support for displaying quote posts
+- Support more than 4 media attachments in timelines
+- Improved HTML rendering
+- New Account Preference: Select the default quote policy for your posts
+- A compose button has been added to the hashtags view that will start a post with the selected hashtag.

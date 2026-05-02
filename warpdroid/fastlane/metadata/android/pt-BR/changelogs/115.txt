@@ -1,0 +1,10 @@
+Tusky 24.0
+
+- Citações e blocos de código nos posts agora têm uma aparência mais agradável.
+- O comportamento anterior da aba de notificações foi restaurado.
+- Os emblemas de função agora são exibidos nos perfis.
+- O reprodutor de vídeo foi aprimorado. Pode selecionar a velocidade de reprodução.
+- Opção: Usar o tema preto ao seguir o design do sistema.
+- Uma nova visualização para ver os posts em destaque está disponível no menu quanto e aba personalizada.
+
+E muitas outras melhorias e correções!

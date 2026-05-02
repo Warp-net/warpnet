@@ -1,0 +1,88 @@
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.google.ksp)
+}
+
+android {
+    namespace = "site.warpnet.transport"
+    compileSdk = 36
+    defaultConfig {
+        minSdk = 24
+        consumerProguardFiles "consumer-rules.pro"
+    }
+    buildFeatures {
+        buildConfig = false
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
+    }
+    lint {
+        abortOnError = false
+    }
+}
+
+// warpnet.aar is this module's only native dependency and is vendored in
+// libs/. buildWarpnetAar regenerates it from a sibling android-binding
+// checkout via gomobile; there is no checksum pinning.
+
+ext {
+    warpnetAarFile = file("libs/warpnet.aar")
+    warpnetBindingDir = providers
+        .environmentVariable("WARPNET_ANDROID_BINDING_DIR")
+        .orElse(file("${rootDir}/../android-binding").absolutePath)
+        .get()
+}
+
+tasks.register("buildWarpnetAar", Exec) {
+    group = "warpnet"
+    description = "Rebuilds warpnet.aar from a sibling android-binding checkout via gomobile."
+    def bindingDir = file(warpnetBindingDir)
+    workingDir = bindingDir
+    commandLine "bash", "build-native.sh"
+    doFirst {
+        if (!bindingDir.exists()) {
+            throw new GradleException(
+                "Warpnet binding source not found at ${bindingDir}. Clone " +
+                "https://github.com/Warp-net/android-binding next to this repo " +
+                "or set WARPNET_ANDROID_BINDING_DIR."
+            )
+        }
+    }
+    doLast {
+        copy {
+            from bindingDir
+            include "warpnet.aar", "warpnet-sources.jar"
+            into warpnetAarFile.parentFile
+        }
+    }
+}
+
+dependencies {
+    api files("libs/warpnet.aar")
+
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.bundles.moshi
+    // Tink supplies the Ed25519 keypair generator used by
+    // Ed25519IdentityStore. The library is already pulled in transitively by
+    // androidx.security-crypto on the :app classpath; declaring it here makes
+    // it visible at compile time for this module.
+    implementation libs.tink.android
+    ksp libs.moshi.kotlin.codegen
+}
+
+// AGP forbids direct local .aar file dependencies when building an AAR
+// publication. The :app module consumes this library via a project dependency,
+// which uses per-variant intermediate artifacts and does not require the
+// publication AAR. Disable only the publication tasks (bundleDebugAar /
+// bundleReleaseAar); the bundleXxxLocalLintAar tasks must stay enabled because
+// the lint pipeline transforms their out.aar into android-lint-exploded-aar.
+tasks.matching { it.name == "bundleDebugAar" || it.name == "bundleReleaseAar" }.configureEach {
+    enabled = false
+}

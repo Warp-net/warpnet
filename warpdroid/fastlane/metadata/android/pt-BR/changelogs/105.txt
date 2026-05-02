@@ -1,0 +1,11 @@
+Tusky 22.0 beta 3
+
+Correções, incluindo:
+
+- Corrigida falha ao visualizar um tópico
+- Corrigida falha ao processar filtros do Mastodon
+- Os links nas biografias das notificações de seguir/solicitação de seguir agora são clicáveis
+- Atualizações nas notificações
+  - A notificação para uma notificação do Mastodon deve ser exibida apenas uma vez
+  - As notificações são agrupadas por tipo de notificação (seguir, menção, impulsionar, etc.)
+  - A possibilidade de notificações perdidas foi eliminada

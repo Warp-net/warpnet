@@ -1,0 +1,7 @@
+Tusky 31.0
+
+- Melloras na vista de Publicacións Programadas, agora mostra as publicacións completas con todos os metadatos dispoñibles.
+- Agora é posible volver ocultar as publicacións filtradas cunha nova opción que reside no menú de tres puntos nas publicacións.
+- Agora Tusky pode ler o límite de caracteres establecido no servidor para a descrición do multimedia e non manter os 1500 por defecto. Móstrase o límite no editor da descrición multimedia.
+
+Podes ver todos os cambios da versión en https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md

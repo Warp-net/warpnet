@@ -1,0 +1,18 @@
+Tusky 22.0 beta 1
+
+Recursos, incluindo:
+
+- Visualização de hashtags em destaque
+- Edição de descrições de imagens e ponto de foco
+- Menu "Atualizar" para acessibilidade
+- Suporte a filtros do Mastodon v4
+- Exibir diferenças detalhadas quando um post é editado
+- Opção para exibir estatísticas de posts na linha do tempo
+
+Correções, incluindo:
+
+- Exibir controles do reprodutor durante a reprodução de áudio
+- Corrigir o comprimento dos posts
+- Sempre publicar legendas de imagens
+
+e muito mais

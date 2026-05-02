@@ -1,0 +1,5 @@
+Tusky 22.0 beta 6
+
+Uzlabojumi:
+
+- Biežāk saglabā lasīšanas pozīciju "Paziņojumi" cilnē

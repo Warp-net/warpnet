@@ -1,0 +1,7 @@
+Tusky 30.0
+
+- Refixemos o proceso para denunciar. Agora pódese elexir o motivo da denunica.
+- Melloras na aparencia do editor de imaxes
+- Tusky pódese usar cos servizos onion
+
+Aquí tes todos os cambios https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md

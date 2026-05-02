@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- QR pairing UI. Isolated from strings.xml so the feature lives
+         together; move into strings.xml when it is no longer in flux. -->
+    <string name="warpnet_pair_scan_prompt">Point the camera at the QR code on your PC</string>
+    <string name="warpnet_pair_connect">Connect</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="warpnet_pair_title">Connect to my node</string>
+    <string name="warpnet_pair_confirm_body">Owner: %1$s\nNode: %2$s\nAddress: %3$s</string>
+    <string name="warpnet_pair_camera_denied">Camera permission is required to scan the pairing QR. Grant it in Settings and try again.</string>
+    <string name="warpnet_pair_invalid_qr">Could not read QR: %1$s</string>
+    <string name="warpnet_pair_manual_title">Enter pairing data</string>
+    <string name="warpnet_pair_manual_body">No camera is available. Copy the full pairing JSON from the desktop app (containing identity, PSK, network, node addresses) and paste it here.</string>
+    <string name="warpnet_pair_manual_hint">Paste pairing JSON</string>
+    <string name="warpnet_pair_manual_submit">Pair</string>
+    <string name="warpnet_pair_error_transport">Could not connect: %1$s</string>
+    <string name="warpnet_pair_error_rejected">Pairing rejected (%1$d): %2$s</string>
+    <string name="warpnet_pair_error_peer_mismatch">Peer identity does not match the QR; refusing to pair.</string>
+    <string name="warpnet_pair_session_expired">Session expired, please re-pair with your node.</string>
+    <string name="warpnet_pair_forget">Forget paired node</string>
+</resources>

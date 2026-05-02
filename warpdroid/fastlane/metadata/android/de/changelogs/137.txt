@@ -1,0 +1,7 @@
+Tusky 31.0
+
+- Die Ansicht der geplanten Beiträge wurde verbessert. Sie zeigt nun vollständige Beiträge inklusive aller Metadaten.
+- Gefilterte Beiträge können nun mit einer Option im ...-Menü des Beitrags wieder ausgeblendet werden.
+- Tusky nutzt als Zeichenlimit für Medien-Beschreibungen nun das Server-Limit anstatt des Standardwertes 1500. Das Limit wird im Dialog Medien-Beschreibung angezeigt.
+
+Sieh dir alle Änderungen auf https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md an.

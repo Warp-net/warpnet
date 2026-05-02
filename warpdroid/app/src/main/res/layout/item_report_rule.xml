@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/ruleCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="6dp">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/ruleCheckBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingMultiplier="1.1"
+            android:layout_marginHorizontal="8dp"
+            android:layout_marginVertical="4dp"
+            android:paddingStart="4dp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="?attr/status_text_medium"
+            tools:text="No racism, sexism, discrimination against gender and sexual minorities, ableism, fatmisia, xenophobia and/or violent nationalism." />
+
+    </com.google.android.material.card.MaterialCardView>
+
+</FrameLayout>

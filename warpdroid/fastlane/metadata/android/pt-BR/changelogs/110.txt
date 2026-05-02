@@ -1,0 +1,20 @@
+Tusky 22.0
+
+Novos recursos:
+
+- Visualizar hashtags em destaque
+- Seguir novas hashtags
+- Melhor ordenação ao selecionar idiomas
+- Mostrar a diferença entre versões de um post
+- Suporte a filtros do Mastodon v4
+- Opção para mostrar estatísticas na linha do tempo
+- E muito mais…
+
+Correções:
+
+- Lembrar a aba e a posição
+- Manter notificações até serem lidas
+- Exibir corretamente texto misto RTL e LTR nos perfis
+- Comprimento correto dos posts
+- Sempre publicar legendas de imagens
+- E muito mais…

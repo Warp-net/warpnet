@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="4dp">
+
+    <!-- 30% width for the field name, 70% for the value -->
+    <TextView
+        android:id="@+id/accountFieldName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.1"
+        android:textColor="?android:textColorPrimary"
+        android:textSize="?attr/status_text_medium"
+        android:textDirection="firstStrong"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintWidth_percent=".3"
+        tools:text="Field title" />
+
+    <TextView
+        android:id="@+id/accountFieldValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:drawablePadding="6dp"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.1"
+        android:textIsSelectable="true"
+        android:textSize="?attr/status_text_medium"
+        android:textDirection="firstStrong"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/accountFieldName"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="Field content. This can contain links and custom emojis" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

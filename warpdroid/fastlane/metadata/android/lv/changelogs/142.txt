@@ -1,0 +1,5 @@
+Tusky 32.2
+
+- Nelieli labojumi un stabilitātes uzlabojumi
+
+Pilnu izmaiņu žurnālu skatiet https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md vietnē

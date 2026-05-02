@@ -1,0 +1,6 @@
+Tusky 26.1
+
+- Tùy chọn tài khoản "Bảo mật trả lời" hiện có thêm hai tùy chọn: "Phù hợp với bảo mật bài đăng mặc định" và "Trực tiếp".
+- Tusky hiện bao gồm chứng chỉ gốc ISRG để tiếp tục hoạt động trên Android 7 và các máy chủ sử dụng Let's Encrypt.
+- Sửa lỗi Tusky đôi khi nhầm lẫn dòng thời gian và/hoặc thông báo của các tài khoản.
+Xem https://github.com/tuskyapp/Tusky/blob/develop/CHANGELOG.md để biết nhật ký thay đổi đầy đủ.

@@ -1,0 +1,24 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:best-practices",
+        ":approveMajorUpdates",
+        ":maintainLockFilesWeekly",
+        "schedule:automergeDaily",
+        "schedule:weekends"
+    ],
+    "ignorePresets": [
+        ":semanticPrefixFixDepsChoreOthers",
+        "docker:pinDigests",
+        "helpers:pinGitHubActionDigests"
+    ],
+    "osvVulnerabilityAlerts": true,
+    "prConcurrentLimit": 5,
+    "labels": ["dependency"],
+    "autodiscover": true,
+    "autodiscoverFilter": ["Tusky/tusky"],
+    "gitAuthor": "Tusky Renovate <renovate@tusky.app>",
+    "platform": "forgejo",
+    "automerge": false,
+    "semanticCommits": "enabled"
+}

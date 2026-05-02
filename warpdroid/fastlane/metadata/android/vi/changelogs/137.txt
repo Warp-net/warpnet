@@ -1,0 +1,7 @@
+Tusky 31.0
+
+- Chế độ xem Tút đã lên lịch đã được cải thiện, hiện tại nó hiển thị đầy đủ các tút bao gồm tất cả siêu dữ liệu có sẵn.
+- Bây giờ bạn có thể ẩn lại các tút đã lọc bằng tùy chọn mới trong menu ba chấm trên bài đăng.
+- Tusky hiện đọc giới hạn ký tự cho mô tả phương tiện từ máy chủ thay vì luôn mặc định là 1500. Giới hạn này hiện được hiển thị trong hộp thoại mô tả phương tiện.
+
+Xem https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md để biết thêm

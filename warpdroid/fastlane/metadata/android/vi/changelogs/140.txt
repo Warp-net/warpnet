@@ -1,0 +1,7 @@
+Tusky 32.0
+
+- Hỗ trợ hiển thị tút dạng trích dẫn
+- Hỗ trợ nhiều hơn 4 tệp đính kèm đa phương tiện trên dòng thời gian
+- Cải thiện hiển thị HTML
+- Tùy chọn tài khoản mới: Chọn chính sách trích dẫn mặc định cho tút của bạn
+- Thêm nút soạn thảo vào giao diện hashtag, cho phép bắt đầu một tút với hashtag đã chọn
