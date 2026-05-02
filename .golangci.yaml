@@ -19,6 +19,16 @@ linters:
           - goconst
           - maintidx
           - dupl
+      # warpdroid/node is the gomobile entry point; it intentionally
+      # uses string-returning APIs and dynamic errors so the generated
+      # JNI bindings stay simple. Hold it to its own standards rather
+      # than the repo-wide ones.
+      - path: '^warpdroid/node/'
+        linters:
+          - err113
+          - errcheck
+          - goconst
+          - staticcheck
   disable:
     - mnd
     - interfacebloat
