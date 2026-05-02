@@ -584,6 +584,11 @@
         <item quantity="other">%1$s Quotes</item>
     </plurals>
 
+    <plurals name="views">
+        <item quantity="one">%1$s View</item>
+        <item quantity="other">%1$s Views</item>
+    </plurals>
+
     <string name="label_translating">Translating…</string>
     <string name="label_translated">Translated from %1$s with %2$s</string>
 

@@ -23,6 +23,7 @@
  */
 package com.keylesspalace.tusky.network
 
+import android.util.Log
 import at.connyduck.calladapter.networkresult.NetworkResult
 import com.keylesspalace.tusky.components.filters.FilterExpiration
 import com.keylesspalace.tusky.db.AccountManager
@@ -80,6 +81,8 @@ class MastodonApi @Inject constructor(
 ) {
 
     companion object {
+        private const val TAG = "MastodonApi"
+
         const val ENDPOINT_AUTHORIZE = "oauth/authorize"
         const val DOMAIN_HEADER = "domain"
         const val PLACEHOLDER_DOMAIN = "dummy.placeholder"
@@ -447,6 +450,30 @@ class MastodonApi @Inject constructor(
         return result {
             warpnet.unfavouriteStatus(tweetId = statusId, userId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
+        }
+    }
+
+    /**
+     * Record a tweet-view event when a status comes on screen.
+     *
+     * Side-effect-only: the post-increment count is dropped because
+     * existing [Status] view models don't have a slot for it, and the
+     * timeline already shows the count via [Status.viewsCount] from
+     * the periodic stats refresh. Failures are logged at WARN level
+     * (so offline / misconfigured nodes are diagnosable) but never
+     * propagate to the UI.
+     */
+    suspend fun recordView(statusId: String, authorId: String) {
+        val active = accountManager.activeAccount ?: return
+        if (statusId.isBlank() || authorId.isBlank()) return
+        runCatching {
+            warpnet.recordView(
+                tweetId = statusId,
+                authorId = authorId,
+                viewerId = active.accountId,
+            )
+        }.onFailure { e ->
+            Log.w(TAG, "recordView failed for $statusId", e)
         }
     }
 

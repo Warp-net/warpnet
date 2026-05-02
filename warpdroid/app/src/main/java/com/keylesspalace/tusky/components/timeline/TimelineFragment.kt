@@ -46,6 +46,7 @@ import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -317,6 +318,35 @@ class TimelineFragment :
                     var itemCount: Int by remember { mutableIntStateOf(statuses.itemCount) }
                     var firstItemId: String? by remember { mutableStateOf(statuses.getOptId(0)) }
                     var lastItemId: String? by remember { mutableStateOf(statuses.getOptId(statuses.itemCount - 1)) }
+
+                    // Record a Warpnet view only for items that are
+                    // *actually* on-screen (vs. composed by LazyColumn
+                    // prefetch). Snapshot the visible-keys set; if it
+                    // stays stable for VIEW_DWELL_MS — i.e. the user
+                    // paused on those tweets — fire recordView for
+                    // each. Restarting the LaunchedEffect cancels the
+                    // dwell when the visible set changes during scroll.
+                    val visibleStatusIds: Set<String> by remember(listState) {
+                        derivedStateOf {
+                            listState.layoutInfo.visibleItemsInfo
+                                .mapNotNull { it.key as? String }
+                                .toSet()
+                        }
+                    }
+                    LaunchedEffect(visibleStatusIds, statuses.itemCount) {
+                        if (visibleStatusIds.isEmpty()) return@LaunchedEffect
+                        kotlinx.coroutines.delay(VIEW_DWELL_MS)
+                        for (idx in 0 until statuses.itemCount) {
+                            val item = statuses.peek(idx) ?: continue
+                            if (item.id !in visibleStatusIds) continue
+                            if (item !is StatusViewData.Concrete) continue
+                            val actionable = item.status.actionableStatus
+                            viewModel.recordView(
+                                statusId = actionable.id,
+                                authorId = actionable.account.id,
+                            )
+                        }
+                    }
 
                     LazyColumn(
                         state = listState,
@@ -740,6 +770,11 @@ class TimelineFragment :
         private const val KIND_ARG = "kind"
         private const val ID_ARG = "id"
         private const val HASHTAGS_ARG = "hashtags"
+
+        /** Time a status must stay composed before a view counts.
+         *  Filters out LazyColumn prefetches that the user never
+         *  actually scrolls to. */
+        private const val VIEW_DWELL_MS: Long = 750L
         private const val ARG_ENABLE_SWIPE_TO_REFRESH = "enableSwipeToRefresh"
 
         fun newInstance(

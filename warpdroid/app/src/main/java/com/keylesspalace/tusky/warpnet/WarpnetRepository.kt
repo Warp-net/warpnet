@@ -45,6 +45,8 @@ import site.warpnet.transport.dto.TweetStatsResponse
 import site.warpnet.transport.dto.TweetsResponse
 import site.warpnet.transport.dto.UnretweetEvent
 import site.warpnet.transport.dto.UsersResponse
+import site.warpnet.transport.dto.ViewEvent
+import site.warpnet.transport.dto.ViewsCountResponse
 import site.warpnet.transport.dto.WarpnetTweet
 import site.warpnet.transport.dto.WarpnetUser
 
@@ -95,6 +97,8 @@ class WarpnetRepository @Inject constructor(
     private val newFollowAdapter = moshi.adapter<NewFollowEvent>()
     private val newUnfollowAdapter = moshi.adapter<NewUnfollowEvent>()
     private val likeEventAdapter = moshi.adapter<LikeEvent>()
+    private val viewEventAdapter = moshi.adapter<ViewEvent>()
+    private val viewsCountAdapter = moshi.adapter<ViewsCountResponse>()
     private val newTweetAdapter = moshi.adapter<WarpnetTweet>()
     private val deleteTweetAdapter = moshi.adapter<DeleteTweetEvent>()
     private val unretweetAdapter = moshi.adapter<UnretweetEvent>()
@@ -155,6 +159,7 @@ class WarpnetRepository @Inject constructor(
             favouritesCount = stats.likesCount.toInt(),
             reblogsCount = stats.retweetsCount.toInt(),
             repliesCount = stats.repliesCount.toInt(),
+            viewsCount = stats.viewsCount.toInt(),
         )
     }
 
@@ -251,6 +256,34 @@ class WarpnetRepository @Inject constructor(
             likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId)),
         )
         return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
+    }
+
+    // -----------------------------------------------------------------
+    // Views
+    // -----------------------------------------------------------------
+
+    /**
+     * Record that the local pairing user just viewed a tweet authored
+     * by [authorId]. The author's node is the sole authority for the
+     * counter (CRDT replicates it everywhere else); self-views are
+     * dropped server-side and the same (tweet, viewer) pair is deduped
+     * within a 30-minute window.
+     *
+     * Returns the post-increment count, or `null` if the response body
+     * couldn't be parsed (e.g. shape mismatch or empty body). Transport
+     * failures propagate as exceptions so the caller — typically
+     * [com.keylesspalace.tusky.network.MastodonApi.recordView] — can
+     * log them; do not call this directly from the UI without a guard.
+     */
+    suspend fun recordView(tweetId: String, authorId: String, viewerId: String): Long? {
+        if (tweetId.isBlank() || authorId.isBlank() || viewerId.isBlank()) return null
+        val raw = client.request(
+            ProtocolIds.PUBLIC_POST_VIEW,
+            viewEventAdapter.toJson(
+                ViewEvent(tweetId = tweetId, userId = authorId, viewerId = viewerId),
+            ),
+        )
+        return viewsCountAdapter.fromJson(raw)?.count
     }
 
     // -----------------------------------------------------------------

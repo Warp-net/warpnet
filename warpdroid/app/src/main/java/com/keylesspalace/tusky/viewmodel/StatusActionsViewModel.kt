@@ -15,6 +15,7 @@
 
 package com.keylesspalace.tusky.viewmodel
 
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -83,6 +84,56 @@ abstract class StatusActionsViewModel(
                     Log.w(TAG, "Failed to reblog", e)
                 }
             )
+        }
+    }
+
+    /**
+     * Fire-and-forget view recording for a status that just appeared
+     * on screen. Backend dedupes per (tweet, viewer) within a 30-min
+     * window; we mirror that window client-side so a single status
+     * doesn't fire the network call every recomposition while a long
+     * timeline session is open, but a re-view after the window passes
+     * is still recorded (matches what the server would accept).
+     * Failures are logged in [MastodonApi.recordView] and never
+     * surface to the UI.
+     */
+    private val viewedStatusAt = LinkedHashMap<String, Long>()
+
+    fun recordView(statusId: String, authorId: String) {
+        if (statusId.isBlank() || authorId.isBlank()) return
+        // Monotonic clock so wall-clock changes (manual / NTP) can't
+        // skew dedupe windows.
+        val now = SystemClock.elapsedRealtime()
+        synchronized(viewedStatusAt) {
+            // Drop entries older than the dedup window so the cache
+            // can't grow without bound and so a re-view after the
+            // window expires is allowed through.
+            val it = viewedStatusAt.entries.iterator()
+            while (it.hasNext()) {
+                val (_, ts) = it.next()
+                if (now - ts < VIEW_DEDUP_WINDOW_MS) break // LinkedHashMap is insertion-ordered
+                it.remove()
+            }
+            val last = viewedStatusAt[statusId]
+            if (last != null && now - last < VIEW_DEDUP_WINDOW_MS) return
+            // Re-insert at the tail so the LRU-ish eviction above
+            // walks oldest-first.
+            viewedStatusAt.remove(statusId)
+            viewedStatusAt[statusId] = now
+            // Hard cap so a runaway recomposition burst can't pin
+            // unbounded memory even if eviction by time is slow.
+            while (viewedStatusAt.size > VIEW_DEDUP_MAX_ENTRIES) {
+                val oldest = viewedStatusAt.entries.iterator()
+                if (oldest.hasNext()) {
+                    oldest.next()
+                    oldest.remove()
+                } else {
+                    break
+                }
+            }
+        }
+        viewModelScope.launch {
+            mastodonApi.recordView(statusId, authorId)
         }
     }
 
@@ -291,5 +342,11 @@ abstract class StatusActionsViewModel(
 
     companion object {
         private const val TAG = "StatusActionsViewModel"
+
+        // Mirrors warpnet's database.ViewDedupTTL so the client doesn't
+        // bother the node with calls it would dedupe anyway, while
+        // still letting a re-view after the window through.
+        private const val VIEW_DEDUP_WINDOW_MS: Long = 30L * 60 * 1000
+        private const val VIEW_DEDUP_MAX_ENTRIES: Int = 512
     }
 }

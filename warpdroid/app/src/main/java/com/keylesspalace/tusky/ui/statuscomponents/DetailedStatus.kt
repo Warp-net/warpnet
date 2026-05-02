@@ -321,6 +321,16 @@ private fun DetailedStatistics(
                     context.showFavs(statusViewData)
                 }
         )
+        // Warpnet view counter, populated lazily by getTweetStats. We
+        // only render it when the count is known (>0) so a missing
+        // stats fetch doesn't make every detailed status read "0 Views".
+        if (statusViewData.status.viewsCount > 0) {
+            Text(
+                text = getMetaDataText(R.plurals.views, statusViewData.status.viewsCount),
+                style = LocalPreferences.current.statusTextStyles.medium,
+                color = tuskyColors.tertiaryTextColor,
+            )
+        }
     }
 }
 
