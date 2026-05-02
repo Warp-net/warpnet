@@ -31,11 +31,11 @@ sealed class WarpnetException(message: String, cause: Throwable? = null) : Excep
         WarpnetException(message, cause)
 
     /**
-     * The transport cannot sign the outgoing envelope. The current
-     * `warp-net/android-binding` does not expose the Ed25519 private key it
-     * uses for its libp2p peer identity, so Kotlin-side envelope signing
-     * cannot produce a signature the node will accept. Tracked as a binding
-     * change request — see docs/warpnet-protocol.md.
+     * The transport could not produce a signature for the outgoing envelope,
+     * usually because the binding is not initialised yet or returned an
+     * error from its native signing path. The desktop-side auth middleware
+     * rejects unsigned envelopes, so callers should treat this as a fatal
+     * setup error rather than retry.
      */
     class SigningUnavailable(message: String) : WarpnetException(message)
 }
