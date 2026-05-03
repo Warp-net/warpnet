@@ -302,3 +302,111 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 		}
 	})
 }
+
+// Fix #1 regression: refreshUsers used to persist every user from a remote
+// response, including records that point back at this node. Once such a
+// record landed in the local repo, every later fetch of that user dialed
+// self and surfaced node.ErrSelfRequest. The handler must drop them.
+func TestStreamGetUsersHandler_DropsSelfPointingRecords(t *testing.T) {
+	owner := "owner-1"
+	ownerPeerID := warpnet.WarpPeerID("owner-node")
+	ownerNodeID := ownerPeerID.String()
+
+	persisted := map[string]domain.User{}
+	repo := stubUserFetcher{
+		listFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
+			// Force the refresh path by returning no local users on the
+			// first call; on subsequent calls return whatever has been
+			// persisted so the handler has something to respond with.
+			if len(persisted) == 0 {
+				return nil, "", nil
+			}
+			out := make([]domain.User, 0, len(persisted))
+			for _, u := range persisted {
+				out = append(out, u)
+			}
+			return out, "end", nil
+		},
+		getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		},
+		createFn: func(user domain.User) (domain.User, error) {
+			persisted[user.Id] = user
+			return user, nil
+		},
+		updateFn: func(userId string, user domain.User) (domain.User, error) {
+			persisted[userId] = user
+			return user, nil
+		},
+	}
+
+	remoteResp := event.UsersResponse{
+		Users: []domain.User{
+			{Id: "valid-other", NodeId: "remote-node-2", Network: warpnet.WarpnetName},
+			{Id: "self-by-node", NodeId: ownerNodeID, Network: warpnet.WarpnetName},
+			{Id: owner, NodeId: "remote-node-3", Network: warpnet.WarpnetName},
+		},
+	}
+	respBytes := marshal(t, remoteResp)
+
+	streamer := stubUserStreamer{
+		nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: ownerPeerID},
+		genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			return respBytes, nil
+		},
+	}
+
+	h := StreamGetUsersHandler(repo, streamer)
+	if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: "requester"}), nil); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if _, ok := persisted["valid-other"]; !ok {
+		t.Fatalf("expected legitimate remote user to be persisted: %v", persisted)
+	}
+	if _, ok := persisted["self-by-node"]; ok {
+		t.Fatalf("record with self NodeId must be discarded, got: %v", persisted["self-by-node"])
+	}
+	if _, ok := persisted[owner]; ok {
+		t.Fatalf("record with owner Id must be discarded, got: %v", persisted[owner])
+	}
+}
+
+// Fix #2 regression: StreamNewReplyHandler used to detect "reply to my own
+// tweet" only via parentUser.NodeId == streamer.NodeInfo().ID.String(). When
+// the stored NodeId drifted from the runtime peer.ID encoding, that check
+// silently returned false and the handler dialed self. The check must also
+// match by owner id.
+func TestStreamNewReplyHandler_OwnTweet_NodeIdFormatDrift(t *testing.T) {
+	owner := "owner-1"
+	ownerPeerID := warpnet.WarpPeerID("owner-node")
+	rootID := "root-1"
+	parentID := "parent-1"
+
+	streamer := stubStreamer{
+		nodeInfo:        warpnet.NodeInfo{OwnerId: owner, ID: ownerPeerID},
+		genericStreamFn: failOnStream(t),
+	}
+
+	// parentUser.NodeId here intentionally diverges from
+	// ownerPeerID.String() to simulate a stored record whose NodeId was
+	// captured in a different encoding. Only the owner-id branch can save us.
+	userRepo := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: "stale-encoded-form"}, nil
+	}}
+
+	ev := event.NewReplyEvent{
+		Id:           "reply-1",
+		ParentId:     &parentID,
+		ParentUserId: owner,
+		RootId:       rootID,
+		Text:         "reply body",
+		UserId:       "stranger",
+		Username:     "stranger",
+	}
+
+	h := StreamNewReplyHandler(stubReplyRepo{}, userRepo, stubModerationNotifier{}, streamer)
+	if _, err := h(marshal(t, ev), nil); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+}
