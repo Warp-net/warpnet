@@ -198,10 +198,21 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         // If no fat-node pairing yet, bounce to the QR scanner. The returning
         // PairingActivity clears the task, so this branch only fires once per
         // cold install (or after "Forget this node").
-        if (pairedNodeStore.load() == null) {
+        val paired = pairedNodeStore.load()
+        if (paired == null) {
             startActivity(Intent(this, com.keylesspalace.tusky.components.pairing.PairingActivity::class.java))
             finish()
             return
+        }
+
+        // AccountManager is in-memory only, so the stub account is always
+        // accountId="me" at process start. MastodonApi resolves the
+        // authenticated user via accountManager.activeAccount?.accountId, so
+        // without this sync every "me"-scoped backend call (notifications,
+        // createStatus, deleteStatus, like/unlike, follow/unfollow, …) would
+        // send the literal string "me" instead of the paired user id.
+        if (accountManager.activeAccount?.accountId != paired.userId) {
+            accountManager.updateActiveAccount { copy(accountId = paired.userId) }
         }
 
         // will be redirected to LoginActivity by BaseActivity
