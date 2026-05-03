@@ -26,7 +26,7 @@
         android:orientation="horizontal"
         app:layout_constraintGuide_begin="0dp" />
 
-    <com.keylesspalace.tusky.view.BezelImageView
+    <site.warpnet.warpdroid.view.BezelImageView
         android:id="@+id/material_drawer_account_header_current"
         style="@style/BezelImageView"
         android:layout_width="@dimen/material_drawer_account_header_selected"
@@ -58,7 +58,7 @@
         app:layout_constraintStart_toStartOf="@id/material_drawer_account_header_current"
         tools:text="99" />
 
-    <com.keylesspalace.tusky.view.BezelImageView
+    <site.warpnet.warpdroid.view.BezelImageView
         android:id="@+id/material_drawer_account_header_small_first"
         style="@style/BezelImageView"
         android:layout_width="@dimen/material_drawer_account_header_secondary"
@@ -90,7 +90,7 @@
         app:layout_constraintStart_toStartOf="@id/material_drawer_account_header_small_first"
         tools:text="99" />
 
-    <com.keylesspalace.tusky.view.BezelImageView
+    <site.warpnet.warpdroid.view.BezelImageView
         android:id="@+id/material_drawer_account_header_small_second"
         style="@style/BezelImageView"
         android:layout_width="@dimen/material_drawer_account_header_secondary"
@@ -122,7 +122,7 @@
         app:layout_constraintStart_toStartOf="@id/material_drawer_account_header_small_second"
         tools:text="99" />
 
-    <com.keylesspalace.tusky.view.BezelImageView
+    <site.warpnet.warpdroid.view.BezelImageView
         android:id="@+id/material_drawer_account_header_small_third"
         style="@style/BezelImageView"
         android:layout_width="@dimen/material_drawer_account_header_secondary"

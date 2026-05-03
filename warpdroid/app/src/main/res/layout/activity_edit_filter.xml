@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="com.keylesspalace.tusky.components.filters.EditFilterActivity">
+    tools:context="site.warpnet.warpdroid.components.filters.EditFilterActivity">
 
     <include
         android:id="@+id/includedToolbar"
@@ -171,7 +171,7 @@
 
                 <Button
                     android:id="@+id/filter_delete_button"
-                    style="@style/TuskyButton.Outlined"
+                    style="@style/WarpdroidButton.Outlined"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -180,7 +180,7 @@
 
                 <Button
                     android:id="@+id/filter_save_button"
-                    style="@style/TuskyButton"
+                    style="@style/WarpdroidButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"

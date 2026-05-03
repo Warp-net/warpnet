@@ -16,7 +16,7 @@
         android:layout_gravity="center"
         android:indeterminate="true" />
 
-    <com.keylesspalace.tusky.view.TuskySwipeRefreshLayout
+    <site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout
         android:id="@+id/swipeRefreshLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -33,7 +33,7 @@
                 android:clipToPadding="false"
                 android:paddingBottom="@dimen/recyclerview_bottom_padding_no_actionbutton" />
 
-            <com.keylesspalace.tusky.view.BackgroundMessageView
+            <site.warpnet.warpdroid.view.BackgroundMessageView
                 android:id="@+id/errorMessageView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -43,7 +43,7 @@
                 tools:src="@drawable/errorphant_error"
                 tools:visibility="visible" />
         </FrameLayout>
-    </com.keylesspalace.tusky.view.TuskySwipeRefreshLayout>
+    </site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout>
 
     <include layout="@layout/item_status_bottom_sheet" />
 

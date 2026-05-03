@@ -47,7 +47,7 @@
 
     <Button
         android:id="@+id/cancelButton"
-        style="@style/TuskyButton.Outlined"
+        style="@style/WarpdroidButton.Outlined"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
@@ -58,7 +58,7 @@
 
     <Button
         android:id="@+id/confirm_button"
-        style="@style/TuskyButton"
+        style="@style/WarpdroidButton"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"

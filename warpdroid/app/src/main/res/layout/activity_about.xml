@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="com.keylesspalace.tusky.AboutActivity">
+    tools:context="site.warpnet.warpdroid.AboutActivity">
 
     <include
         android:id="@+id/includedToolbar"
@@ -53,7 +53,7 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/logo"
-                    tools:text="Tusky Test" />
+                    tools:text="Warpdroid Test" />
 
                 <TextView
                     android:id="@+id/deviceInfoTitle"
@@ -112,12 +112,12 @@
                     app:layout_constraintEnd_toEndOf="@+id/accountInfoTitle"
                     app:layout_constraintStart_toStartOf="@+id/accountInfoTitle"
                     app:layout_constraintTop_toBottomOf="@id/accountInfoTitle"
-                    tools:text="\@Tusky@mastodon.social\nVersion: xxx"
+                    tools:text="\@Warpdroid@warpnet.social\nVersion: xxx"
                     tools:visibility="visible" />
 
                 <ImageButton
                     android:id="@+id/copyDeviceInfo"
-                    style="@style/TuskyImageButton"
+                    style="@style/WarpdroidImageButton"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:layout_marginEnd="@dimen/text_content_margin"
@@ -127,18 +127,18 @@
                     app:srcCompat="@drawable/ic_content_copy_24dp" />
 
                 <TextView
-                    android:id="@+id/aboutPoweredByTusky"
+                    android:id="@+id/aboutPoweredByWarpdroid"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginHorizontal="@dimen/text_content_margin"
                     android:layout_marginTop="16dp"
-                    android:text="@string/about_powered_by_tusky"
+                    android:text="@string/about_powered_by_warpdroid"
                     android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/accountInfo" />
 
-                <com.keylesspalace.tusky.view.ClickableSpanTextView
+                <site.warpnet.warpdroid.view.ClickableSpanTextView
                     android:id="@+id/aboutLicenseInfoTextView"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -149,10 +149,10 @@
                     android:textIsSelectable="true"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/aboutPoweredByTusky"
-                    tools:text="@string/about_tusky_license" />
+                    app:layout_constraintTop_toBottomOf="@id/aboutPoweredByWarpdroid"
+                    tools:text="@string/about_warpdroid_license" />
 
-                <com.keylesspalace.tusky.view.ClickableSpanTextView
+                <site.warpnet.warpdroid.view.ClickableSpanTextView
                     android:id="@+id/aboutWebsiteInfoTextView"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -164,7 +164,7 @@
                     app:layout_constraintTop_toBottomOf="@id/aboutLicenseInfoTextView"
                     tools:text="@string/about_project_site" />
 
-                <com.keylesspalace.tusky.view.ClickableSpanTextView
+                <site.warpnet.warpdroid.view.ClickableSpanTextView
                     android:id="@+id/aboutBugsFeaturesInfoTextView"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -177,15 +177,15 @@
                     app:layout_constraintTop_toBottomOf="@id/aboutWebsiteInfoTextView" />
 
                 <Button
-                    android:id="@+id/tuskyProfileButton"
-                    style="@style/TuskyButton"
+                    android:id="@+id/warpdroidProfileButton"
+                    style="@style/WarpdroidButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
                     android:layout_marginEnd="@dimen/text_content_margin"
                     android:lineSpacingMultiplier="1.2"
                     android:maxWidth="320dp"
-                    android:text="@string/about_tusky_account"
+                    android:text="@string/about_warpdroid_account"
                     android:textSize="16sp"
                     app:layout_constraintEnd_toStartOf="@+id/aboutLicensesButton"
                     app:layout_constraintStart_toStartOf="@+id/aboutBugsFeaturesInfoTextView"
@@ -193,7 +193,7 @@
 
                 <Button
                     android:id="@+id/aboutLicensesButton"
-                    style="@style/TuskyButton.Outlined"
+                    style="@style/WarpdroidButton.Outlined"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="@dimen/text_content_margin"
@@ -203,8 +203,8 @@
                     android:textAlignment="center"
                     android:textSize="16sp"
                     app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toEndOf="@+id/tuskyProfileButton"
-                    app:layout_constraintTop_toTopOf="@+id/tuskyProfileButton" />
+                    app:layout_constraintStart_toEndOf="@+id/warpdroidProfileButton"
+                    app:layout_constraintTop_toTopOf="@+id/warpdroidProfileButton" />
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 

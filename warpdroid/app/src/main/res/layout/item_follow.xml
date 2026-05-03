@@ -76,7 +76,7 @@
         app:layout_constraintTop_toBottomOf="@id/notificationDisplayName"
         tools:text="\@username" />
 
-    <com.keylesspalace.tusky.view.ClickableSpanTextView
+    <site.warpnet.warpdroid.view.ClickableSpanTextView
         android:id="@+id/accountNote"
         android:layout_width="0dp"
         android:layout_height="wrap_content"

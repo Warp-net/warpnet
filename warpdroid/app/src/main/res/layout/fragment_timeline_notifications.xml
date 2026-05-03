@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-  ~ Copyright 2023 Tusky Contributors
+  ~ Copyright 2023 Warpdroid Contributors
   ~
-  ~ This file is a part of Tusky.
+  ~ This file is a part of Warpdroid.
   ~
   ~ This program is free software; you can redistribute it and/or modify it under the terms of the
   ~ GNU General Public License as published by the Free Software Foundation; either version 3 of the
   ~ License, or (at your option) any later version.
   ~
-  ~ Tusky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+  ~ Warpdroid is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
   ~ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
   ~ Public License for more details.
   ~
-  ~ You should have received a copy of the GNU General Public License along with Tusky; if not,
+  ~ You should have received a copy of the GNU General Public License along with Warpdroid; if not,
   ~ see <http://www.gnu.org/licenses>.
   -->
 
@@ -35,7 +35,7 @@
 
             <Button
                 android:id="@+id/buttonClear"
-                style="@style/TuskyButton.TextButton"
+                style="@style/WarpdroidButton.TextButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -44,7 +44,7 @@
 
             <Button
                 android:id="@+id/buttonFilter"
-                style="@style/TuskyButton.TextButton"
+                style="@style/WarpdroidButton.TextButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -55,7 +55,7 @@
 
     </com.google.android.material.appbar.AppBarLayout>
 
-    <com.keylesspalace.tusky.view.TuskySwipeRefreshLayout
+    <site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout
         android:id="@+id/swipeRefreshLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -68,9 +68,9 @@
             android:clipToPadding="false"
             android:paddingBottom="@dimen/recyclerview_bottom_padding_actionbutton" />
 
-    </com.keylesspalace.tusky.view.TuskySwipeRefreshLayout>
+    </site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout>
 
-    <com.keylesspalace.tusky.view.BackgroundMessageView
+    <site.warpnet.warpdroid.view.BackgroundMessageView
         android:id="@+id/statusView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

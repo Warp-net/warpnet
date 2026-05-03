@@ -13,7 +13,7 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 -->
-<!-- This file is "magic". Simply by existing in Tusky at this path, it overrides
+<!-- This file is "magic". Simply by existing in Warpdroid at this path, it overrides
      the media3 default layout. This version is adapted from media3-ui-1.9.0. -->
 <merge xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -147,7 +147,7 @@
 
         <!-- Changes from media3 default: Different style to add more margins -->
         <ImageButton android:id="@id/exo_play_pause"
-            style="@style/TuskyExoPlayerPlayPause"/>
+            style="@style/WarpdroidExoPlayerPlayPause"/>
 
         <include layout="@layout/exo_player_control_ffwd_button" />
 

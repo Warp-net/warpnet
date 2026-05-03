@@ -1,5 +1,5 @@
 <resources>
-    <style name="TuskyDialogActivityTheme" parent="@style/TuskyTheme">
+    <style name="WarpdroidDialogActivityTheme" parent="@style/WarpdroidTheme">
         <item name="android:windowFrame">@null</item>
         <item name="android:windowBackground">@drawable/background_dialog_activity</item>
         <item name="android:windowIsFloating">true</item>
@@ -9,7 +9,7 @@
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 
-    <style name="TuskyDialogActivityBlackTheme" parent="@style/TuskyBlackTheme">
+    <style name="WarpdroidDialogActivityBlackTheme" parent="@style/WarpdroidBlackTheme">
         <item name="android:windowFrame">@null</item>
         <item name="android:windowBackground">@drawable/background_dialog_activity</item>
         <item name="android:windowIsFloating">true</item>

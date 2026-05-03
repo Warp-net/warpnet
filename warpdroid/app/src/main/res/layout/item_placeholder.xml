@@ -65,7 +65,7 @@
 
     <ImageButton
         android:id="@+id/replyButtonPlaceholder"
-        style="@style/TuskyImageButton"
+        style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
         android:layout_marginStart="-14dp"
@@ -83,7 +83,7 @@
 
     <ImageButton
         android:id="@+id/reblogButtonPlaceholder"
-        style="@style/TuskyImageButton"
+        style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
         android:clickable="false"
@@ -96,7 +96,7 @@
 
     <ImageButton
         android:id="@+id/favouriteButtonPlaceholder"
-        style="@style/TuskyImageButton"
+        style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
         android:clickable="false"
@@ -109,7 +109,7 @@
 
     <ImageButton
         android:id="@+id/status_bookmark"
-        style="@style/TuskyImageButton"
+        style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
         android:clickable="false"
@@ -123,7 +123,7 @@
 
     <ImageButton
         android:id="@+id/moreButtonPlaceHolder"
-        style="@style/TuskyImageButton"
+        style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
         android:clickable="false"

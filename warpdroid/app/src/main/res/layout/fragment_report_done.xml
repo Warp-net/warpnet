@@ -52,7 +52,7 @@
 
     <Button
         android:id="@+id/buttonMute"
-        style="@style/TuskyButton.Outlined"
+        style="@style/WarpdroidButton.Outlined"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="32dp"
@@ -76,7 +76,7 @@
 
     <Button
         android:id="@+id/buttonBlock"
-        style="@style/TuskyButton.Outlined"
+        style="@style/WarpdroidButton.Outlined"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
@@ -101,7 +101,7 @@
 
     <Button
         android:id="@+id/buttonDone"
-        style="@style/TuskyButton"
+        style="@style/WarpdroidButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="32dp"

@@ -26,7 +26,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <com.keylesspalace.tusky.components.compose.view.FocusIndicatorView
+        <site.warpnet.warpdroid.components.compose.view.FocusIndicatorView
             android:id="@+id/focusIndicator"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
