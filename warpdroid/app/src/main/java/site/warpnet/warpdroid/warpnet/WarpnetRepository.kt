@@ -453,10 +453,10 @@ class WarpnetRepository @Inject constructor(
         if (viewerId.isBlank()) {
             return@coroutineScope tweets.map { it.toStatus(resolveUser(it.userId, cache)) }
         }
-        val stats = tweets.associate { t ->
-            t.id to async {
-                runCatching { getTweetStats(tweetId = t.id, userId = viewerId) }.getOrNull()
-            }
+        // Retweets reuse the original tweet id, so distinct() avoids
+        // firing the same stats RPC twice on a single timeline page.
+        val stats = tweets.map { it.id }.distinct().associateWith { id ->
+            async { runCatching { getTweetStats(tweetId = id, userId = viewerId) }.getOrNull() }
         }
         tweets.map { t ->
             val base = t.toStatus(resolveUser(t.userId, cache))

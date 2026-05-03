@@ -298,8 +298,8 @@ class SendStatusService : Service() {
     }
 
     /**
-     * Retry transient transport failures with linear backoff up to
-     * MAX_SEND_RETRIES, then surface a user-visible error notification.
+     * Retry any send failure with linear backoff up to MAX_SEND_RETRIES,
+     * then surface a user-visible error notification.
      *
      * Warpnet never throws HttpException (no HTTP), so the original
      * Tusky branch on HttpException always fell through to retrySending
@@ -310,7 +310,7 @@ class SendStatusService : Service() {
     private suspend fun failOrRetry(throwable: Throwable, statusId: Int) {
         val statusToSend = statusesToSend[statusId] ?: return
         if (statusToSend.retries >= MAX_SEND_RETRIES) {
-            Log.w(TAG, "giving up on status $statusId after ${statusToSend.retries} retries", throwable)
+            Log.w(TAG, "giving up on status $statusId after ${statusToSend.retries} attempts", throwable)
             failSending(statusId)
             return
         }
