@@ -98,7 +98,7 @@
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_apache_2">Лицензиран под лиценза Apache (копие по-долу)</string>
-    <string name="license_description">Tusky съдържа код и активи от следните проекти с отворен код:</string>
+    <string name="license_description">Warpnet съдържа код и активи от следните проекти с отворен код:</string>
     <string name="unreblog_private">Отсподеляне</string>
     <string name="reblog_private">Споделяне с оригиналната аудитория</string>
     <string name="account_moved_description">%1$s се премести в:</string>
@@ -106,7 +106,7 @@
     <string name="download_failed">Изтеглянето се провали</string>
     <string name="caption_notoemoji">Текущият набор от емоджита на Google</string>
     <string name="download_fonts">Първо ще трябва да изтеглите тези емоджи комплекти</string>
-    <string name="caption_twemoji">Стандартният емоджи комплект на Mastodon</string>
+    <string name="caption_twemoji">Стандартният емоджи комплект на Warpnet</string>
     <string name="caption_blobmoji">Blob емоджитата, известни от Android 4.4–7.1</string>
     <string name="caption_systememoji">Емоджи комплектът по подразбиране в устройство ви</string>
     <string name="action_open_post">Отваряне на публикация</string>
@@ -139,7 +139,7 @@
     <string name="error_rename_list">Списъкът не можа да се обнови</string>
     <string name="title_lists">Списъци</string>
     <string name="action_lists">Списъци</string>
-    <string name="add_account_description">Добавяне на нов Mastodon акаунт</string>
+    <string name="add_account_description">Добавяне на нов Warpnet акаунт</string>
     <string name="add_account_name">Добавяне на акаунт</string>
     <string name="filter_add_description">Фраза за филтриране</string>
     <string name="filter_dialog_whole_word_description">Когато ключовата дума или фраза е само буквено-цифрова, тя ще бъде приложена само ако съответства на цялата дума</string>
@@ -173,12 +173,12 @@
     <string name="post_media_images">Изображения</string>
     <string name="post_share_link">Споделяне на връзка към публикация</string>
     <string name="post_share_content">Споделяне на съдържание на публикация</string>
-    <string name="about_tusky_account">Профилът на Tusky</string>
-    <string name="about_bug_feature_request_site">Доклади за грешки и заявки за функции: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_project_site">Уебсайт на проекта: https://tusky.app</string>
-    <string name="about_tusky_license">Tusky е свободен софтуер с отворен код. Той е лицензиран под Общият публичен лиценз на GNU Версия 3. Можете да видите лиценза тук: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_powered_by_tusky">Осъществено от Tusky</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_account">Профилът на Warpnet</string>
+    <string name="about_bug_feature_request_site">Доклади за грешки и заявки за функции: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_project_site">Уебсайт на проекта: https://warpnet.site</string>
+    <string name="about_tusky_license">Warpnet е свободен софтуер с отворен код. Той е лицензиран под Общият публичен лиценз на GNU Версия 3. Можете да видите лиценза тук: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_powered_by_tusky">Осъществено от Warpnet</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="about_title_activity">Относно</string>
     <string name="description_account_locked">Заключен акаунт</string>
     <plurals name="notification_title_summary">
@@ -238,7 +238,7 @@
     <string name="dialog_download_image">Изтегляне</string>
     <string name="dialog_message_uploading_media">Качване…</string>
     <string name="dialog_title_finishing_media_upload">Завършване на мултимедийно качване</string>
-    <string name="dialog_whats_an_instance">Тук може да се въведе адресът или домейнът на която и да е инстанция, като mastodon.social, icosahedron.website, social.tchncs.de и <a href="https://instances.social">други!</a> \u0020 \n \u0020 \nАко все още нямате акаунт, можете да въведете името на инстанцията, към която искате да се присъедините, и да създадете акаунт там. \u0020 \n \u0020 \nИнстанцията е единично място, където се хоства акаунтът ви, но можете лесно да комуникирате и да следвате хора в други инстанции, сякаш сте на същия сайт. \u0020 \n \u0020 \nПовече информация можете да намерите на <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Тук може да се въведе адресът или домейнът на която и да е инстанция, като warpnet.site сякаш сте на същия сайт. \u0020 \n \u0020 \nПовече информация можете да намерите на <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="login_connection">Свързване…</string>
     <string name="link_whats_an_instance">Какво е инстанция?</string>
     <string name="label_header">Заглавна част</string>
@@ -327,7 +327,7 @@
     <string name="action_follow">Последване</string>
     <string name="action_logout_confirm">Сигурни ли сте, че искате да излезете от %1$s? Това ще изтрие всички локални данни на акаунта, включително чернови и предпочитания.</string>
     <string name="action_logout">Излизане</string>
-    <string name="action_login">Вписване с Tusky</string>
+    <string name="action_login">Вписване с Warpnet</string>
     <string name="action_compose">Композиране</string>
     <string name="action_more">Още</string>
     <string name="action_unfavourite">Премахване от любими</string>
@@ -411,7 +411,7 @@
     <string name="pref_title_hide_top_toolbar">Скриване на заглавието на горната лента с инструменти</string>
     <string name="pref_title_confirm_reblogs">Питане за потвърждение преди споделяне</string>
     <string name="pref_title_show_cards_in_timelines">Показване на визуализации на връзки в емисии</string>
-    <string name="warning_scheduling_interval">Mastodon има минимален интервал за планиране от 5 минути.</string>
+    <string name="warning_scheduling_interval">Warpnet има минимален интервал за планиране от 5 минути.</string>
     <string name="no_announcements">Няма оповестявания.</string>
     <string name="no_scheduled_posts">Нямате планирани публикации.</string>
     <string name="no_drafts">Нямате чернови.</string>
@@ -485,7 +485,7 @@
     <string name="notification_report_name">Докладвания</string>
     <string name="about_account_info_title">Вашият акаунт</string>
     <string name="about_device_info_title">Вашето устройство</string>
-    <string name="notification_listenable_worker_description">Известия, когато Tusky работи във фонов режим</string>
+    <string name="notification_listenable_worker_description">Известия, когато Warpnet работи във фонов режим</string>
     <string name="error_following_hashtags_unsupported">Тази инстанция не поддържа следване на хаштагове.</string>
     <string name="language_display_name_format">%1$s (%2$s)</string>
     <string name="action_subscribe_account">Абониране</string>

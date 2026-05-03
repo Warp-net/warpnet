@@ -192,7 +192,7 @@
     <string name="dialog_download_image">داگرتن</string>
     <string name="dialog_message_uploading_media">بارکردن…</string>
     <string name="dialog_title_finishing_media_upload">تەواوکردنی بارکردنی میدیا</string>
-    <string name="dialog_whats_an_instance">ناونیشان یان دۆمەینی هەر نمونەیەک دەکرێت لێرە تێبنووسرێت، وەک <a href="https://instances.social">فرەتر!</a> \u0020 \n \u0020 \nئەگەر هێشتا ئەژمێرێکت نیە، دەتوانیت ناوی ئەو نمونەیە داخڵ بکەیت کە دەتەوێت بیبەستیت و ئەژمێرێک دروست بکەیت لەوێ. \u0020 \n \u0020 \nنموونەیەک تاکە شوێنە کە ئەژمێرەکەت میوانداری کراوە، بەڵام دەتوانیت بە ئاسانی پەیوەندی لەگەڵ بکەیت و دوای ئەو خەڵکانە بکەویت لە نمونەکانی تر وەک ئەوەی تۆ لە هەمان سایت دابیت. \u0020 \n \u0020 \nزانیاری زیاتر دەتوانرێت بدۆزرێتەوە لە <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">ناونیشان یان دۆمەینی هەر نمونەیەک دەکرێت لێرە تێبنووسرێت، وەک <a href="https://warpnet.site">فرەتر!</a> \u0020 \n \u0020 \nئەگەر هێشتا ئەژمێرێکت نیە، دەتوانیت ناوی ئەو نمونەیە داخڵ بکەیت کە دەتەوێت بیبەستیت و ئەژمێرێک دروست بکەیت لەوێ. \u0020 \n \u0020 \nنموونەیەک تاکە شوێنە کە ئەژمێرەکەت میوانداری کراوە، بەڵام دەتوانیت بە ئاسانی پەیوەندی لەگەڵ بکەیت و دوای ئەو خەڵکانە بکەویت لە نمونەکانی تر وەک ئەوەی تۆ لە هەمان سایت دابیت. \u0020 \n \u0020 \nزانیاری زیاتر دەتوانرێت بدۆزرێتەوە لە <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="login_connection">گرێدان…</string>
     <string name="link_whats_an_instance">نموونەیەک چییە؟</string>
     <string name="label_header">سەرپەڕە</string>
@@ -394,8 +394,8 @@
     <string name="post_share_link">هاوبەشکردنی لینک بۆ توت</string>
     <string name="post_share_content">هاوبەشکردنی ناوەڕۆکی دووت</string>
     <string name="about_tusky_account">پرۆفایلی تاسکی</string>
-    <string name="about_bug_feature_request_site">ڕاپۆرتەکانی هەڵەکان و داواکاریەکانی تایبەتمەندی: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_project_site">وێبسایتی پڕۆژە: \nhttps://tusky.app</string>
+    <string name="about_bug_feature_request_site">ڕاپۆرتەکانی هەڵەکان و داواکاریەکانی تایبەتمەندی: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_project_site">وێبسایتی پڕۆژە: \nhttps://warpnet.site</string>
     <string name="about_tusky_license">توسکی سۆفتوێری ئازاد و سەرچاوەی کراوەیە مۆڵەتدراوە بە پێ نامەی گشتی GNU Public Version 3. دەتوانیت لێرە مۆڵەتەکە نیشان بدەی: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <string name="about_powered_by_tusky">لەلایەن تاسکیەوە دەست کراوە بە</string>
     <string name="about_tusky_version">توسکی %1$s</string>

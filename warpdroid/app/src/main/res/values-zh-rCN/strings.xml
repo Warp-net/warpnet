@@ -12,8 +12,8 @@
     <string name="error_compose_character_limit">嘟文太长了！</string>
     <string name="error_media_upload_type">无法上传此类型的文件。</string>
     <string name="error_media_upload_opening">此文件无法打开。</string>
-    <string name="error_media_upload_permission">需要授予 Tusky 读取媒体文件的权限。</string>
-    <string name="error_media_download_permission">需要授予 Tusky 存储媒体的权限。</string>
+    <string name="error_media_upload_permission">需要授予 Warpnet 读取媒体文件的权限。</string>
+    <string name="error_media_download_permission">需要授予 Warpnet 存储媒体的权限。</string>
     <string name="error_media_upload_image_or_video">无法在一篇嘟文中同时插入视频和图片。</string>
     <string name="error_media_upload_sending">上传失败。</string>
     <string name="error_sender_account_gone">嘟文发送时出错。</string>
@@ -59,7 +59,7 @@
     <string name="action_unfavourite">取消喜欢</string>
     <string name="action_more">更多</string>
     <string name="action_compose">发表嘟文</string>
-    <string name="action_login">用 Tusky 登录</string>
+    <string name="action_login">用 Warpnet 登录</string>
     <string name="action_logout">注销</string>
     <string name="action_logout_confirm">你确定要退出登录 %1$s 吗？这会删除账户的所有本地数据，包括草稿和选项。</string>
     <string name="action_follow">关注</string>
@@ -135,7 +135,7 @@
     <string name="label_header">标题</string>
     <string name="link_whats_an_instance">什么是实例？</string>
     <string name="login_connection">正在连接…</string>
-    <string name="dialog_whats_an_instance">请输入你账号所在的 Mastodon 站点的域名，比如 mastodon.social，icosahedron.website，social.tchncs.de，<a href="https://instances.social">等等</a> 。 \n \n还没有 Mastodon 账号？你也可以输入想注册的 Mastodon 站点的域名，然后在该服务器创建新的账号并授权 Tusky 登入。 \n \n在 Mastodon 里，你的账号信息储存在某一特定实例当中，但 Mastodon 可使跨站互动和站内互动一样简单。 \n \n可以前往 <a href="https://joinmastodon.org">https://joinmastodon.org</a> 了解更多信息。</string>
+    <string name="dialog_whats_an_instance">请输入你账号所在的 Warpnet 站点的域名，比如 warpnet.site，<a href="https://warpnet.site">等等</a> 。 \n \n还没有 Warpnet 账号？你也可以输入想注册的 Warpnet 站点的域名，然后在该服务器创建新的账号并授权 Warpnet 登入。 \n \n在 Warpnet 里，你的账号信息储存在某一特定实例当中，但 Warpnet 可使跨站互动和站内互动一样简单。 \n \n可以前往 <a href="https://warpnet.site">https://warpnet.site</a> 了解更多信息。</string>
     <string name="dialog_title_finishing_media_upload">正在结束上传</string>
     <string name="dialog_message_uploading_media">正在上传…</string>
     <string name="dialog_download_image">下载</string>
@@ -207,18 +207,18 @@
         <item quantity="other">%1$d 个新互动</item>
     </plurals>
     <string name="description_account_locked">锁嘟用户</string>
-    <string name="about_title_activity">关于 Tusky</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky 是基于 GNU General Public License Version 3 许可证开源的自由软件。完整的许可证协议：https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_title_activity">关于 Warpnet</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet 是基于 GNU General Public License Version 3 许可证开源的自由软件。完整的许可证协议：https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">项目地址：https://tusky.app</string>
-    <string name="about_bug_feature_request_site">问题反馈及功能请求： \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Tusky 官方账号</string>
+    <string name="about_project_site">项目地址：https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">问题反馈及功能请求： \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnet 官方账号</string>
     <string name="post_share_content">分享嘟文内容</string>
     <string name="post_share_link">分享嘟文链接</string>
     <string name="post_media_images">图片</string>
@@ -248,7 +248,7 @@
     <string name="filter_dialog_update_button">更新</string>
     <string name="filter_add_description">需要过滤的文字</string>
     <string name="add_account_name">添加账号</string>
-    <string name="add_account_description">添加新的 Mastodon 账号</string>
+    <string name="add_account_description">添加新的 Warpnet 账号</string>
     <string name="action_lists">列表</string>
     <string name="title_lists">列表</string>
     <string name="error_create_list">无法新建列表</string>
@@ -282,14 +282,14 @@
     <string name="action_open_post">打开嘟文</string>
     <string name="caption_systememoji">系统内置的表情符号</string>
     <string name="caption_blobmoji">Android 4.4–7.1 的黄馒头表情符号</string>
-    <string name="caption_twemoji">Mastodon 使用的表情符号</string>
+    <string name="caption_twemoji">Warpnet 使用的表情符号</string>
     <!-- string name="emoji_shortcode_format" translatable="false">:%1$s:</string -->
     <string name="download_failed">下载失败</string>
     <string name="profile_badge_bot_text">机器人</string>
     <string name="account_moved_description">%1$s 已迁移到：</string>
     <string name="reblog_private">转嘟（可见者不变）</string>
     <string name="unreblog_private">取消转嘟</string>
-    <string name="license_description">Tusky 使用了以下开源项目的源码：</string>
+    <string name="license_description">Warpnet 使用了以下开源项目的源码：</string>
     <string name="license_apache_2">以 Apache License 授权（详见下方）</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -366,7 +366,7 @@
     <string name="confirmation_domain_unmuted">%1$s 已取消隐藏</string>
     <string name="mute_domain_warning_dialog_ok">隐藏来自该域名的所有嘟文</string>
     <string name="pref_title_animate_gif_avatars">动画GIF头像</string>
-    <string name="about_powered_by_tusky">由Tusky提供支持</string>
+    <string name="about_powered_by_tusky">由Warpnet提供支持</string>
     <string name="pref_title_alway_open_spoiler">始终展开有内容警告的嘟文</string>
     <string name="filter_dialog_whole_word">整个单词</string>
     <string name="filter_dialog_whole_word_description">如果关键字或缩写只有字母或数字，则只有在匹配整个单词时才会应用</string>
@@ -402,7 +402,7 @@
     <string name="post_lookup_error_format">查找嘟文时出错 %1$s</string>
     <string name="no_drafts">你没有草稿。</string>
     <string name="no_scheduled_posts">您没有任何定时嘟文。</string>
-    <string name="warning_scheduling_interval">Mastodon的最小预订时间为5分钟。</string>
+    <string name="warning_scheduling_interval">Warpnet的最小预订时间为5分钟。</string>
     <string name="notification_follow_request_name">关注请求</string>
     <string name="hashtags">话题</string>
     <string name="pref_title_confirm_reblogs">转嘟前提示确认</string>
@@ -595,14 +595,14 @@
     <string name="filter_description_hide">完全隐藏</string>
     <string name="label_filter_keywords">关键词或短语过滤</string>
     <string name="pref_title_show_stat_inline">在时间线中显示嘟文统计数字</string>
-    <string name="help_empty_home">这是你的 <b>主时间线</b>。它展示你所关注账户最近发表的嘟文。 \n \n要探索账户， 你可以浏览其他时间线。比如，你的账户所在实例服务器的本地时间线 {{group}}。你也可以按名称 {{search}}进行搜索；比如，搜索Tusky 来寻找我们的 Mastodon 账户。</string>
+    <string name="help_empty_home">这是你的 <b>主时间线</b>。它展示你所关注账户最近发表的嘟文。 \n \n要探索账户， 你可以浏览其他时间线。比如，你的账户所在实例服务器的本地时间线 {{group}}。你也可以按名称 {{search}}进行搜索；比如，搜索Warpnet 来寻找我们的 Warpnet 账户。</string>
     <string name="post_media_image">图片</string>
     <string name="select_list_manage">管理列表</string>
     <string name="load_newest_notifications">加载最新通知</string>
     <string name="compose_delete_draft">删除草稿？</string>
-    <string name="error_missing_edits">你的服务器知晓此嘟文被编辑，但没有编辑的副本，所以无法呈现给你。 \n \n这是一个 <a href="https://github.com/mastodon/mastodon/issues/25398">Mastodon issue #25398</a>。</string>
+    <string name="error_missing_edits">你的服务器知晓此嘟文被编辑，但没有编辑的副本，所以无法呈现给你。 \n \n这是一个 <a href="https://github.com/Warp-net/warpnet/issues">Warpnet issue #25398</a>。</string>
     <string name="pref_ui_text_size">用户界面文本大小</string>
-    <string name="notification_listenable_worker_description">Tusky 在后台工作时进行提示</string>
+    <string name="notification_listenable_worker_description">Warpnet 在后台工作时进行提示</string>
     <string name="notification_notification_worker">获取通知中…</string>
     <string name="notification_prune_cache">缓存维护…</string>
     <string name="notification_listenable_worker_name">后台活动</string>
@@ -683,7 +683,7 @@
     <string name="dismiss_notification_request">拒绝通知请求</string>
     <string name="notification_policies_filter_out">管理来自哪些渠道的通知…</string>
     <string name="unknown_notification_filter_unsolicited_private_mentions_title">不请自来的私下提及</string>
-    <string name="notification_policies_not_supported">仅运行 4.3.0 及之后版本的 Mastodon 服务器支持这个功能。</string>
+    <string name="notification_policies_not_supported">仅运行 4.3.0 及之后版本的 Warpnet 服务器支持这个功能。</string>
     <string name="post_replied_self">嘟文串</string>
     <string name="post_replied">已回复</string>
     <string name="post_replied_format">回复%1$s</string>
@@ -720,7 +720,7 @@
     <string name="relationship_severance_event_account_suspension">%1$s 管理员已经暂停了%2$s，这意味着你无法再接收来自它们的更新或与它们互动。</string>
     <string name="moderation_warning_action_mark_statuses_as_sensitive">你的一些嘟文已经被标记为敏感。</string>
     <string name="notification_channel_other_description">其他通知，比如丢失连接和管理警告</string>
-    <string name="unknown_notification_type_explanation">Tusky 未识别出此通知类型，无法将它显示给你。你服务器的 web 界面也许能够做得到。同时请将此问题告知 Tusky 开发者以添加对此类通知的通知！</string>
+    <string name="unknown_notification_type_explanation">Warpnet 未识别出此通知类型，无法将它显示给你。你服务器的 web 界面也许能够做得到。同时请将此问题告知 Warpnet 开发者以添加对此类通知的通知！</string>
     <string name="action_reblog_unlisted">向所有人转嘟（但嘟文不会出现在公开时间线或探索部分，以及搜索结果中）</string>
     <string name="action_reblog_private">向关注者转嘟</string>
     <string name="action_reblog_public">向所有人转嘟</string>
@@ -758,10 +758,10 @@
     <string name="report_category_violation_title">它违反了服务器规则</string>
     <string name="report_category_other_description">该问题无法归入其他类别</string>
     <string name="report_category_other_title">別的什么</string>
-    <string name="action_remove_account_confirm">确定要从 Tusky 删除账户 %1$s 吗？这会删除账户的所有本地数据，包括草稿和首选项。</string>
+    <string name="action_remove_account_confirm">确定要从 Warpnet 删除账户 %1$s 吗？这会删除账户的所有本地数据，包括草稿和首选项。</string>
     <string name="action_login_again">再次登录</string>
     <string name="account_disconnected_title">已断开账户</string>
-    <string name="account_disconnected_message">%1$s 的 Tusky 登录不再有效。原因可能是更改了密码或撤销了 Tusky 的访问权限。请再次登录。</string>
+    <string name="account_disconnected_message">%1$s 的 Warpnet 登录不再有效。原因可能是更改了密码或撤销了 Warpnet 的访问权限。请再次登录。</string>
     <string name="action_remove_account">删除账户</string>
     <string name="message_filters_empty">没有过滤器。</string>
     <string name="filter_context_home">首页和列表</string>

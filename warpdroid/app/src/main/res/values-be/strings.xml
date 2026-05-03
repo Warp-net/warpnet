@@ -174,11 +174,11 @@
         <item quantity="other">%1$d новых узаемадзеянняў</item>
     </plurals>
     <string name="description_account_locked">Заблакаваны ўліковы запіс</string>
-    <string name="dialog_whats_an_instance">Сюды можна ўвесці адрас або дамен любога сервера, напрыклад mastodon.social, icosahedron.website, social.tchncs.de ды <a href="https://instances.social">больш!</a> \u0020 \n \u0020 \nКалі ў вас яшчэ няма ўліковага запісу, вы можаце ўвесці назву сервера, да якога вы жадаеце далучыцца, і стварыць там уліковы запіс. \u0020 \n \u0020 \nСервер — гэта месца, дзе размяшчаецца ваш уліковы запіс, але вы можаце лёгка размаўляць з людзьмі і падпісвацца на іх на іншых серверах, нібыта вы знаходзіцеся на тым жа сайце. \u0020 \n \u0020 \nПадрабязней на <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Сюды можна ўвесці адрас або дамен любога сервера, напрыклад warpnet.site ды <a href="https://warpnet.site">больш!</a> \u0020 \n \u0020 \nКалі ў вас яшчэ няма ўліковага запісу, вы можаце ўвесці назву сервера, да якога вы жадаеце далучыцца, і стварыць там уліковы запіс. \u0020 \n \u0020 \nСервер — гэта месца, дзе размяшчаецца ваш уліковы запіс, але вы можаце лёгка размаўляць з людзьмі і падпісвацца на іх на іншых серверах, нібыта вы знаходзіцеся на тым жа сайце. \u0020 \n \u0020 \nПадрабязней на <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="action_unbookmark">Выдаліць з закладак</string>
     <string name="action_more">Разгарнуць</string>
     <string name="action_compose">Напісаць</string>
-    <string name="action_login">Увайсці з Tusky</string>
+    <string name="action_login">Увайсці з Warpnet</string>
     <string name="action_logout">Выхад</string>
     <string name="action_logout_confirm">Вы ўпэўнены, што жадаеце выйсці з уліковага запісу %1$s? У выніку будуць выдалены ўсе лакальныя даныя уліковага запісу разам з чарнавікамі і наладамі.</string>
     <string name="action_follow">Падпісацца</string>
@@ -285,10 +285,10 @@
     <string name="notification_summary_large">%1$s, %2$s, %3$s ды %4$d іншых</string>
     <string name="notification_summary_small">%1$s ды %2$s</string>
     <string name="about_title_activity">Пра праграму</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_powered_by_tusky">Зроблена Tusky</string>
-    <string name="about_project_site">Вэбсайт праекту: \n https://tusky.app</string>
-    <string name="about_tusky_account">Профіль Tusky</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_powered_by_tusky">Зроблена Warpnet</string>
+    <string name="about_project_site">Вэбсайт праекту: \n https://warpnet.site</string>
+    <string name="about_tusky_account">Профіль Warpnet</string>
     <string name="post_share_content">Падзяліцца зместам допісу</string>
     <string name="post_share_link">Падзяліцца спасылкай на допіс</string>
     <string name="post_media_images">Выявы</string>
@@ -314,8 +314,8 @@
     <string name="pref_title_public_filter_keywords">Публічныя стужкі</string>
     <string name="pref_title_thread_filter_keywords">Размовы</string>
     <string name="load_more_placeholder_text">загрузіць больш</string>
-    <string name="about_tusky_license">Tusky — свабодная праграма з адкрытым зыходным кодам. Зроблена пад GNU General Public License Version 3. Вы можаце паглядзець ліцэнзію тут: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_bug_feature_request_site">Справаздачы аб памылках і пажаданні: \n https://github.com/tuskyapp/Tusky/issues</string>
+    <string name="about_tusky_license">Warpnet — свабодная праграма з адкрытым зыходным кодам. Зроблена пад GNU General Public License Version 3. Вы можаце паглядзець ліцэнзію тут: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_bug_feature_request_site">Справаздачы аб памылках і пажаданні: \n https://github.com/tuskyapp/Warpnet/issues</string>
     <string name="filter_addition_title">Дадаць фільтр</string>
     <string name="follows_you">Вашы падпісчыкі</string>
     <string name="pref_title_alway_show_sensitive_media">Заўсёды паказваць далікатны змест</string>
@@ -335,7 +335,7 @@
     <string name="compose_save_draft_loses_media">Захаваць чарнавік? (Далучэнні будуць запампаваныя зноў, калі Вы аднавіце чарнавік.)</string>
     <string name="performing_lookup_title">Выконваю пошук…</string>
     <string name="caption_notoemoji">Бягучы набор эмодзі ад Google</string>
-    <string name="caption_twemoji">Тыповы набор эмодзі Mastodon</string>
+    <string name="caption_twemoji">Тыповы набор эмодзі Warpnet</string>
     <string name="download_failed">Не атрымалася спампаваць</string>
     <string name="unreblog_private">Скасаваць пашырэнне</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -365,7 +365,7 @@
     <string name="title_reblogged_by">Пашырылі</string>
     <string name="profile_metadata_label">Метазвесткі профілю</string>
     <string name="title_favourited_by">Упадабалі</string>
-    <string name="add_account_description">Дадаць уліковы запіс Mastodon</string>
+    <string name="add_account_description">Дадаць уліковы запіс Warpnet</string>
     <string name="action_lists">Спісы</string>
     <string name="title_lists">Спісы</string>
     <string name="error_create_list">Не атрымалася стварыць спіс</string>
@@ -407,7 +407,7 @@
     <string name="profile_badge_bot_text">Бот</string>
     <string name="account_moved_description">%1$s пераехаў(-ла) да:</string>
     <string name="reblog_private">Пашырыць для пачатковай аўдыторыі</string>
-    <string name="license_description">Tusky змяшчае код і рэсурсы з наступных праграм з адкрытым зыходным кодам:</string>
+    <string name="license_description">Warpnet змяшчае код і рэсурсы з наступных праграм з адкрытым зыходным кодам:</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s і %2$s</string>
     <string name="description_post_media">Медыя: %1$s</string>
@@ -564,7 +564,7 @@
     <string name="poll_new_choice_hint">Варыянт %1$d</string>
     <string name="drafts_post_failed_to_send">Не атрымалася даслаць гэты допіс!</string>
     <string name="mute_notifications_switch">Бязгучныя апавяшчэнні</string>
-    <string name="warning_scheduling_interval">Найменшы час планавання ў Mastodon складае 5 хвілін.</string>
+    <string name="warning_scheduling_interval">Найменшы час планавання ў Warpnet складае 5 хвілін.</string>
     <string name="pref_reading_order_oldest_first">Спачатку старэйшыя</string>
     <string name="pref_title_reading_order">Кірунак чытання</string>
     <string name="pref_summary_http_proxy_disabled">Адключана</string>

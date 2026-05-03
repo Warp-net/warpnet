@@ -59,7 +59,7 @@
     <string name="action_unfavourite">إزالة التفضيل</string>
     <string name="action_more">المزيد</string>
     <string name="action_compose">تأليف</string>
-    <string name="action_login">تسجيل الدخول مع Tusky</string>
+    <string name="action_login">تسجيل الدخول مع Warpnet</string>
     <string name="action_logout">تسجيل الخروج</string>
     <string name="action_logout_confirm">هل أنت متأكد أنك تريد تسجيل الخروج من %1$s؟ سيؤدي ذلك إلى حذف جميع البيانات المحلية للحساب، بما في ذلك المسودات والتفضيلات.</string>
     <string name="action_follow">متابعة</string>
@@ -130,7 +130,7 @@
     <string name="label_header">صورة الرأس</string>
     <string name="link_whats_an_instance">ما هو مثيل الخادم؟</string>
     <string name="login_connection">جارٍ الاتصال…</string>
-    <string name="dialog_whats_an_instance">يمكن إدخال عنوان أو نطاق أي مثيل هنا، مثل mastodon.social، icosahedron.website، social.tchncs.de، والمزيد! <a href="https://instances.social">اكتشف المزيد!</a>\n\nإذا لم يكن لديك حساب بعد، يمكنك إدخال اسم المثيل الذي ترغب في الانضمام إليه وإنشاء حساب هناك.\n\nالمثيل هو المكان الوحيد الذي يستضيف حسابك، ولكن يمكنك التواصل بسهولة مع الأشخاص ومتابعتهم على أمثلة أخرى وكأنكم على نفس الموقع.\n\nيمكن العثور على مزيد من المعلومات على <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">يمكن إدخال عنوان أو نطاق أي مثيل هنا، مثل .warpnet.site، والمزيد! <a href="https://warpnet.site">اكتشف المزيد!</a>\n\nإذا لم يكن لديك حساب بعد، يمكنك إدخال اسم المثيل الذي ترغب في الانضمام إليه وإنشاء حساب هناك.\n\nالمثيل هو المكان الوحيد الذي يستضيف حسابك، ولكن يمكنك التواصل بسهولة مع الأشخاص ومتابعتهم على أمثلة أخرى وكأنكم على نفس الموقع.\n\nيمكن العثور على مزيد من المعلومات على <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">إنهاء رفع الوسائط</string>
     <string name="dialog_message_uploading_media">جارٍ الرفع…</string>
     <string name="dialog_download_image">تنزيل</string>
@@ -205,17 +205,17 @@
     </plurals>
     <string name="description_account_locked">حساب مقفل</string>
     <string name="about_title_activity">حول</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky برنامج حر ومفتوح المصدر. مرخص بموجب رخصة GNU General Public License Version 3. يمكنك عرض الرخصة هنا: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet برنامج حر ومفتوح المصدر. مرخص بموجب رخصة GNU General Public License Version 3. يمكنك عرض الرخصة هنا: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">موقع المشروع: https://tusky.app</string>
-    <string name="about_bug_feature_request_site">تقارير الأخطاء وطلبات الميزات:\nhttps://codeberg.org/tusky/Tusky/issues</string>
-    <string name="about_tusky_account">ملف Tusky الشخصي</string>
+    <string name="about_project_site">موقع المشروع: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">تقارير الأخطاء وطلبات الميزات:\nhttps://codeberg.org/tusky/Warpnet/issues</string>
+    <string name="about_tusky_account">ملف Warpnet الشخصي</string>
     <string name="post_share_content">مشاركة محتوى المنشور</string>
     <string name="post_share_link">مشاركة رابط المنشور</string>
     <string name="post_media_images">صور</string>
@@ -245,7 +245,7 @@
     <string name="filter_dialog_update_button">تحديث</string>
     <string name="filter_add_description">العبارة المراد تصفيتها</string>
     <string name="add_account_name">إضافة حساب</string>
-    <string name="add_account_description">إضافة حساب Mastodon جديد</string>
+    <string name="add_account_description">إضافة حساب Warpnet جديد</string>
     <string name="action_lists">القوائم</string>
     <string name="title_lists">القوائم</string>
     <string name="error_create_list">تعذر إنشاء القائمة</string>
@@ -285,7 +285,7 @@
     <string name="account_moved_description">انتقل %1$s إلى:</string>
     <string name="reblog_private">إعادة نشر للجمهور الأصلي</string>
     <string name="unreblog_private">إلغاء إعادة النشر</string>
-    <string name="license_description">يحتوي Tusky على رمز وموارد من المشاريع مفتوحة المصدر التالية:</string>
+    <string name="license_description">يحتوي Warpnet على رمز وموارد من المشاريع مفتوحة المصدر التالية:</string>
     <string name="license_apache_2">مرخص بموجب رخصة Apache (النسخة أدناه)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -437,7 +437,7 @@
     <string name="title_bookmarks">الإشارات المرجعية</string>
     <string name="action_bookmark">إشارة مرجعية</string>
     <string name="action_view_bookmarks">الإشارات المرجعية</string>
-    <string name="about_powered_by_tusky">مدعوم بواسطة Tusky</string>
+    <string name="about_powered_by_tusky">مدعوم بواسطة Warpnet</string>
     <string name="description_post_bookmarked">مُشار إليها مرجعياً</string>
     <string name="select_list_title">تحديد قائمة</string>
     <string name="list">قائمة</string>
@@ -689,7 +689,7 @@
     <string name="pref_default_reply_privacy_explanation">الخصوصية المحددة مسبقاً ستعتمد على المنشور الذي ترد عليه.</string>
     <string name="pref_match_default_post_privacy">مطابقة خصوصية المنشور الافتراضية</string>
     <string name="notification_moderation_warning_name">تحذيرات الإشراف</string>
-    <string name="notification_listenable_worker_description">إشعارات عندما يعمل Tusky في الخلفية</string>
+    <string name="notification_listenable_worker_description">إشعارات عندما يعمل Warpnet في الخلفية</string>
     <string name="notification_unknown_description">نوع إشعار غير معروف</string>
     <string name="notification_channel_other_description">إشعارات أخرى، مثل الاتصالات المفقودة وتحذيرات الإشراف</string>
     <string name="notification_channel_admin_description">إشعارات المشرف، مثل التقارير الجديدة أو تسجيلات الدخول</string>
@@ -706,7 +706,7 @@
     <string name="unfollowing_hashtag_success_format">لم تعد تتم متابعة الوسم #%1$s</string>
     <string name="poll_show_results">إظهار النتائج</string>
     <string name="pref_title_show_notifications_filter">إظهار فلتر الإشعارات</string>
-    <string name="error_missing_edits">يعرف خادمك أن هذا المنشور تم تعديله، ولكن لا توجد لديه نسخة من التعديلات، لذا لا يمكن عرضها لك.\n\nهذه <a href="https://github.com/mastodon/mastodon/issues/25398">مشكلة Mastodon #25398</a>.</string>
+    <string name="error_missing_edits">يعرف خادمك أن هذا المنشور تم تعديله، ولكن لا توجد لديه نسخة من التعديلات، لذا لا يمكن عرضها لك.\n\nهذه <a href="https://github.com/Warp-net/warpnet/issues">مشكلة Warpnet </a>.</string>
     <string name="ui_error_bookmark">فشل إضافة المنشور إلى الإشارات المرجعية: %1$s</string>
     <string name="ui_error_clear_notifications">فشل مسح الإشعارات: %1$s</string>
     <string name="ui_error_favourite">فشل تفضيل المنشور: %1$s</string>
@@ -720,7 +720,7 @@
     <string name="label_filter_context">سياقات الفلتر</string>
     <string name="label_filter_keywords">كلمات مفتاحية أو عبارات للتصفية</string>
     <string name="filter_keyword_display_format">%1$s (كلمة كاملة)</string>
-    <string name="help_empty_home">هذا هو <b>خطك الزمني الرئيسي</b>. يعرض المنشورات الأخيرة للحسابات التي تتابعها.\n\nلاستكشاف الحسابات، يمكنك إما اكتشافها في أحد الخطوط الزمنية الأخرى. على سبيل المثال، الخط الزمني المحلي لمثيلك {{group}}. أو يمكنك البحث عنها بالاسم {{search}}؛ على سبيل المثال ابحث عن Tusky للعثور على حسابنا على Mastodon.</string>
+    <string name="help_empty_home">هذا هو <b>خطك الزمني الرئيسي</b>. يعرض المنشورات الأخيرة للحسابات التي تتابعها.\n\nلاستكشاف الحسابات، يمكنك إما اكتشافها في أحد الخطوط الزمنية الأخرى. على سبيل المثال، الخط الزمني المحلي لمثيلك {{group}}. أو يمكنك البحث عنها بالاسم {{search}}؛ على سبيل المثال ابحث عن Warpnet للعثور على حسابنا على Warpnet.</string>
     <string name="help_empty_conversations">هنا <b>رسائلك الخاصة</b>؛ تسمى أحياناً محادثات أو رسائل مباشرة (DM).\n\nيتم إنشاء الرسائل الخاصة عن طريق تعيين خصوصية {{public}} المنشور إلى {{mail}} <i>مباشر</i> وذكر مستخدم واحد أو أكثر في النص.\n\nعلى سبيل المثال، يمكنك البدء من عرض ملف شخصي لحساب والنقر على زر الإنشاء {{edit}} وتغيير الخصوصية.\n\nلاحظ أن الرسائل على فيديفيرس ليست مشفرة من طرف إلى طرف. لا تشارك أي معلومات حساسة.</string>
     <string name="help_empty_lists">هذه هي <b>شاشة قوائمك</b>. يمكنك تعريف عدد من القوائم الخاصة وإضافة حسابات إليها.\n\nملاحظة: يمكنك فقط إضافة الحسابات التي تتابعها إلى قوائمك.\n\nيمكن استخدام هذه القوائم كعلامة تبويب في تفضيلات الحساب {{manage_accounts}} {{chevron_right}} علامات التبويب.</string>
     <string name="error_media_playback">فشل التشغيل: %1$s</string>
@@ -737,7 +737,7 @@
     <string name="unknown_notification_filter_unsolicited_private_mentions_description">يتم تصفيتها ما لم تكن رداً على إشارتك الخاصة أو إذا كنت تتابع المرسل</string>
     <string name="unknown_notification_filter_moderated_accounts">حسابات خاضعة للإشراف</string>
     <string name="unknown_notification_filter_moderated_accounts_description">محدودة بواسطة مشرفي الخادم</string>
-    <string name="notification_policies_not_supported">هذه الميزة مدعومة فقط على خوادم Mastodon التي تعمل بالإصدار 4.3.0 أو أحدث.</string>
+    <string name="notification_policies_not_supported">هذه الميزة مدعومة فقط على خوادم Warpnet التي تعمل بالإصدار 4.3.0 أو أحدث.</string>
     <string name="notifications_from_people_you_may_know">إشعارات من %1$d أشخاص قد تعرفهم</string>
     <string name="accept_notification_request">قبول طلب الإشعار</string>
     <string name="dismiss_notification_request">تجاهل طلب الإشعار</string>
@@ -753,7 +753,7 @@
     <string name="moderation_warning_action_sensitive">سيتم وضع علامة حساس على منشوراتك من الآن فصاعداً.</string>
     <string name="moderation_warning_action_silence">تم تقييد حسابك.</string>
     <string name="moderation_warning_action_suspend">تم تعليق حسابك.</string>
-    <string name="unknown_notification_type_explanation">لا يتعرف Tusky على نوع الإشعار هذا ولا يمكن عرضه لك. قد تتمكن واجهة الويب لخادمك من ذلك. يرجى أيضاً إبلاغ مطوري Tusky حتى يتمكنوا من إضافة دعم لهذا النوع!</string>
+    <string name="unknown_notification_type_explanation">لا يتعرف Warpnet على نوع الإشعار هذا ولا يمكن عرضه لك. قد تتمكن واجهة الويب لخادمك من ذلك. يرجى أيضاً إبلاغ مطوري Warpnet حتى يتمكنوا من إضافة دعم لهذا النوع!</string>
     <string name="notification_info_private_mention">إشارة خاصة</string>
     <string name="notification_info_private_reply">رد خاص</string>
     <string name="confirm_dismiss_caption">تجاهل تغييرات الوصف؟</string>

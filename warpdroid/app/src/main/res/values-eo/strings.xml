@@ -59,7 +59,7 @@
     <string name="action_unfavourite">Nuligi stelumon</string>
     <string name="action_more">Pli</string>
     <string name="action_compose">Verki</string>
-    <string name="action_login">Ensaluti al Mastodon</string>
+    <string name="action_login">Ensaluti al Warpnet</string>
     <string name="action_logout">Elsaluti</string>
     <string name="action_logout_confirm">Ĉu vi certas, ke vi volas elsaluti el la konto %1$s?</string>
     <string name="action_follow">Sekvi</string>
@@ -134,7 +134,7 @@
     <string name="label_header">Fonbildo</string>
     <string name="link_whats_an_instance">Kio estas nodo?</string>
     <string name="login_connection">Konektado…</string>
-    <string name="dialog_whats_an_instance">La adreso aŭ domajno de iu ajn nodo povas esti enmetita ĉi tie, kiel mastodon.social, icosahedron.website, social.tchncs.de, kaj <a href="https://instances.social">pli!</a> \u0020 \n \u0020 \nSe vi ankoraŭ ne havas konton, vi povas enmeti la nomon de la nodo, al kiu vi volas aliĝi, kaj krei konton tie. \u0020 \n \u0020 \nNodo estas unika loko tie, kie via konto estas gastigita, sed vi povas facile komuniki kun homoj, kaj sekvi ilin ĉe aliaj nodoj, kvazaŭ vi estus samreteje. \u0020 \n \u0020 \nPliaj informoj troviĝas ĉe <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">La adreso aŭ domajno de iu ajn nodo povas esti enmetita ĉi tie, kiel warpnet.site kvazaŭ vi estus samreteje. \u0020 \n \u0020 \nPliaj informoj troviĝas ĉe <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Finante alŝuto de aŭdovidaĵojn</string>
     <string name="dialog_message_uploading_media">Alŝutado…</string>
     <string name="dialog_download_image">Elŝuti</string>
@@ -205,17 +205,17 @@
     </plurals>
     <string name="description_account_locked">Ŝlosita konto</string>
     <string name="about_title_activity">Pri</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky estas libera kaj malfermitkoda programo. Ĝi estas publikigita laŭ la permesilo «GNU General Public License Version 3». Vi povas vidi la permesilon ĉi tie: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet estas libera kaj malfermitkoda programo. Ĝi estas publikigita laŭ la permesilo «GNU General Public License Version 3». Vi povas vidi la permesilon ĉi tie: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Paĝaro de la projekto: \n https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Raportoj de cimoj kaj petoj de funkcioj: \n https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Profilo de Tusky</string>
+    <string name="about_project_site">Paĝaro de la projekto: \n https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Raportoj de cimoj kaj petoj de funkcioj: \n https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Profilo de Warpnet</string>
     <string name="post_share_content">Konigi enhavon de la mesaĝo</string>
     <string name="post_share_link">Konigi ligilon al mesaĝo</string>
     <string name="post_media_images">Bildoj</string>
@@ -245,7 +245,7 @@
     <string name="filter_dialog_update_button">Aktualigi</string>
     <string name="filter_add_description">Frazo filtrota</string>
     <string name="add_account_name">Aldoni konton</string>
-    <string name="add_account_description">Aldoni novan Mastodon-konton</string>
+    <string name="add_account_description">Aldoni novan Warpnet-konton</string>
     <string name="action_lists">Listoj</string>
     <string name="title_lists">Listoj</string>
     <string name="error_create_list">Ne povis krei la liston</string>
@@ -279,13 +279,13 @@
     <string name="action_open_post">Malfermi mesaĝon</string>
     <string name="caption_systememoji">Dekomenca emoĝiaro de via aparato</string>
     <string name="caption_blobmoji">La emoĝioj «Blob» konataj de Android 4.4−7.1</string>
-    <string name="caption_twemoji">Norma emoĝiaro de Mastodon</string>
+    <string name="caption_twemoji">Norma emoĝiaro de Warpnet</string>
     <string name="download_failed">Elŝuto malsukcesis</string>
     <string name="profile_badge_bot_text">Roboto</string>
     <string name="account_moved_description">%1$s moviĝis al:</string>
     <string name="reblog_private">Diskonigi al la originala atentaro</string>
     <string name="unreblog_private">Maldiskonigi</string>
-    <string name="license_description">Tusky enhavas kodon kaj risurcojn el la sekvantaj malfermitkodaj projetkoj:</string>
+    <string name="license_description">Warpnet enhavas kodon kaj risurcojn el la sekvantaj malfermitkodaj projetkoj:</string>
     <string name="license_apache_2">Laŭ la permesilo «Apache» (kopio sube)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -388,7 +388,7 @@
     <string name="action_access_scheduled_posts">Planitaj mesaĝoj</string>
     <string name="action_schedule_post">Plani mesaĝon</string>
     <string name="action_reset_schedule">Restarigi</string>
-    <string name="about_powered_by_tusky">Funkciigita de Tusky</string>
+    <string name="about_powered_by_tusky">Funkciigita de Warpnet</string>
     <string name="description_post_bookmarked">Aldonita al la legosignoj</string>
     <string name="select_list_title">Elekti la liston</string>
     <string name="list">Listo</string>
@@ -439,7 +439,7 @@
     <string name="pref_title_confirm_reblogs">Montri konfirman fenestron antaŭ ol diskonigi</string>
     <string name="no_announcements">Estas neniu anonco.</string>
     <string name="pref_title_enable_swipe_for_tabs">Ebligi ŝovumadon por ŝanĝi inter la langetoj</string>
-    <string name="warning_scheduling_interval">Mastodon havas minimuman intervalon de planado de 5 minutoj.</string>
+    <string name="warning_scheduling_interval">Warpnet havas minimuman intervalon de planado de 5 minutoj.</string>
     <string name="post_media_attachments">Kunsendaĵoj</string>
     <string name="dialog_delete_list_warning">Ĉu vi vere volas forigi la liston %1$s?</string>
     <string name="post_media_audio">Aŭdaĵo</string>

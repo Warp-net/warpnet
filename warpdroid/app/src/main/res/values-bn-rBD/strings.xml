@@ -89,8 +89,8 @@
     <string name="post_share_link">টুট এর সাথে লিংক ভাগ করুন</string>
     <string name="post_share_content">টুট এর কন্টেন্ট ভাগ করুন</string>
     <string name="about_tusky_account">টাস্কির প্রোফাইল</string>
-    <string name="about_bug_feature_request_site">বাগ রিপোর্ট এবং বৈশিষ্ট্য অনুরোধ: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_project_site">প্রকল্প ওয়েবসাইট: \nhttps://tusky.app</string>
+    <string name="about_bug_feature_request_site">বাগ রিপোর্ট এবং বৈশিষ্ট্য অনুরোধ: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_project_site">প্রকল্প ওয়েবসাইট: \nhttps://warpnet.site</string>
     <string name="about_tusky_license">টাস্কি মুক্ত এবং ওপেন সোর্স সফ্টওয়্যার। এটি GNU জেনারেল পাবলিক লাইসেন্স সংস্করণ 3 এর অধীনে লাইসেন্সযুক্ত। আপনি এখানে লাইসেন্স দেখতে পারেন: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <string name="about_tusky_version">টাস্কি %1$s</string>
     <string name="about_title_activity">সম্পর্কিত</string>
@@ -160,7 +160,7 @@
     <string name="dialog_download_image">ডাউনলোড</string>
     <string name="dialog_message_uploading_media">আপলোড হচ্ছে …</string>
     <string name="dialog_title_finishing_media_upload">মিডিয়া আপলোড সমাপ্ত করা হচ্ছে</string>
-    <string name="dialog_whats_an_instance">কোনও উদাহরণের ঠিকানা বা ডোমেন এখানে প্রবেশ করা যেতে পারে যেমন mastodon.social, icosahedron.website, social.tchncs.de, এবং &lt;a href=\"https://instances.social\"&gt; আরও! &lt;/a&gt; \u0020 \n \u0020 \nআপনার যদি এখনো অ্যাকাউন্ট না থাকে তবে আপনি যে ইনস্ট্যান্সটিতে যোগ দিতে চান সেটির নামটি প্রবেশ করতে এবং সেখানে একটি অ্যাকাউন্ট তৈরি করতে পারেন। \u0020 \n \u0020 \n \u0020 \n \u0020 \nএকটি ইনস্ট্যান্স একটি একক স্থান যেখানে আপনার অ্যাকাউন্ট হোস্ট করা হয়, তবে আপনি সহজেই যোগাযোগ করতে পারেন এবং অন্যান্য ক্ষেত্রে যেমন আপনি একই সাইটে ছিলেন তা অনুসরণ করতে পারেন। \u0020 \n \u0020 \n \u0020 \n \u0020 \nআরো তথ্য &lt;a href=\"https://joinmastodon.org\"&gt; joinmastodon.org &lt;/a&gt; এ পাওয়া যেতে পারে। <a href="https://instances.social">more!</a> \u0020 \n \u0020 \nIf you don\'t yet have an account, you can enter the name of the instance you\'d like to join and create an account there. \u0020 \n \u0020 \nAn instance is a single place where your account is hosted, but you can easily communicate with and follow folks on other instances as though you were on the same site. \u0020 \n \u0020 \nMore info can be found at <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">কোনও উদাহরণের ঠিকানা বা ডোমেন এখানে প্রবেশ করা যেতে পারে যেমন warpnet.site but you can easily communicate with and follow folks on other instances as though you were on the same site. \u0020 \n \u0020 \nMore info can be found at <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="login_connection">সংযুক্ত হচ্ছে …</string>
     <string name="link_whats_an_instance">ইনস্ট্যান্স কি?</string>
     <string name="label_header">হেডার</string>

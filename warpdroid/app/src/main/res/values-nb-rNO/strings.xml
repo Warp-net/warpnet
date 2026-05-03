@@ -59,7 +59,7 @@
     <string name="action_unfavourite">Fjern favoritt</string>
     <string name="action_more">Mer</string>
     <string name="action_compose">Skriv</string>
-    <string name="action_login">Logg inn med Tusky</string>
+    <string name="action_login">Logg inn med Warpnet</string>
     <string name="action_logout">Logg ut</string>
     <string name="action_logout_confirm">Er du sikker på at du vil logge ut fra kontoen %1$s? Dette vil slette all lokal data for kontoen, som utkast og instillinger.</string>
     <string name="action_follow">Følg</string>
@@ -134,7 +134,7 @@
     <string name="label_header">Overskrift</string>
     <string name="link_whats_an_instance">Hva er en instans?</string>
     <string name="login_connection">Kobler til…</string>
-    <string name="dialog_whats_an_instance">Addressen eller domenet til enhver instans kan legges til her, f. eks. mastodon.social, icosahedron.website, social.tchncs.de og <a href="https://instances.social">mer!</a> \u0020 \n \u0020 \nHvis du ikke har en konto kan du oppgi navnet på instansen du vil bli medlem av, og lage en konto der. \u0020 \n \u0020 \nEn instans der hvor du har kontoen din, men du kan lett kommunisere med og følge andre personer på andre instanser, som om du var på den samme nettsiden. \u0020 \n \u0020 \nDu kan finne mer info på <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Addressen eller domenet til enhver instans kan legges til her, f. eks. warpnet.site som om du var på den samme nettsiden. \u0020 \n \u0020 \nDu kan finne mer info på <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Opplasting av media er ferdig</string>
     <string name="dialog_message_uploading_media">Laster opp…</string>
     <string name="dialog_download_image">Last ned</string>
@@ -189,9 +189,9 @@
     </plurals>
     <string name="description_account_locked">Låst konto</string>
     <string name="about_title_activity">Om</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_bug_feature_request_site">Rapporter feil og ønsker om funksjonalitet her: \n https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Tuskys Profil</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_bug_feature_request_site">Rapporter feil og ønsker om funksjonalitet her: \n https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnets Profil</string>
     <string name="post_share_content">Del inneholdet i innlegget</string>
     <string name="post_share_link">Del lenke til tuten</string>
     <string name="post_media_images">Bilder</string>
@@ -219,7 +219,7 @@
     <string name="filter_dialog_update_button">Oppdater</string>
     <string name="filter_add_description">Filtrer frase</string>
     <string name="add_account_name">Legg til konto</string>
-    <string name="add_account_description">Legg til ny Mastodon-konto</string>
+    <string name="add_account_description">Legg til ny Warpnet-konto</string>
     <string name="action_lists">Lister</string>
     <string name="title_lists">Lister</string>
     <string name="error_create_list">Kunne ikke opprette liste</string>
@@ -234,8 +234,8 @@
     <string name="pref_default_post_privacy">Standardinnstilling for innlegg</string>
     <string name="notification_mention_name">Nye nevnelser</string>
     <string name="notification_mention_descriptions">Varsler om nye nevnelser</string>
-    <string name="about_tusky_license">Tusky er fri og åpen kildekode. Applikasjonen er lisensiert under GNU General Public License versjon 3. Du kan se lisensen her: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_project_site">Hjemmeside: \n https://tusky.app</string>
+    <string name="about_tusky_license">Warpnet er fri og åpen kildekode. Applikasjonen er lisensiert under GNU General Public License versjon 3. Du kan se lisensen her: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_project_site">Hjemmeside: \n https://warpnet.site</string>
     <string name="abbreviated_in_years">om %1$dy</string>
     <string name="compose_active_account_description">Poster som %1$s</string>
     <string name="hint_describe_for_visually_impaired">Beskriv innhold for de med nedsatt synsevne</string>
@@ -265,7 +265,7 @@
     <string name="account_moved_description">%1$s har flyttet til:</string>
     <string name="reblog_private">Del til opprinnelig publikum</string>
     <string name="unreblog_private">Fjern deling</string>
-    <string name="license_description">Tusky inneholder programkode og elementer fra følgende åpen kildekode-prosjekter:</string>
+    <string name="license_description">Warpnet inneholder programkode og elementer fra følgende åpen kildekode-prosjekter:</string>
     <string name="license_apache_2">Lisensiert under Apache License (kopi under)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -395,7 +395,7 @@
     <string name="action_schedule_post">Planlegg innlegg</string>
     <string name="action_reset_schedule">Tilbakestill</string>
     <string name="post_lookup_error_format">Det oppsto en feil under henting av %1$s</string>
-    <string name="about_powered_by_tusky">Drevet av Tusky</string>
+    <string name="about_powered_by_tusky">Drevet av Warpnet</string>
     <string name="title_bookmarks">Bokmerker</string>
     <string name="action_bookmark">Bokmerke</string>
     <string name="action_view_bookmarks">Bokmerker</string>
@@ -404,7 +404,7 @@
     <string name="list">Liste</string>
     <string name="no_scheduled_posts">Du har ingen planlagte innlegg.</string>
     <string name="no_drafts">Du har ikke lagret noen utkast.</string>
-    <string name="warning_scheduling_interval">Mastodon har et minimums planleggingsinterval på 5 minutter.</string>
+    <string name="warning_scheduling_interval">Warpnet har et minimums planleggingsinterval på 5 minutter.</string>
     <string name="pref_title_show_cards_in_timelines">Vis forhåndsvisning av linker i tidslinjer</string>
     <string name="pref_title_confirm_reblogs">Vis bekreftelser før deling</string>
     <string name="pref_title_enable_swipe_for_tabs">Skru på sveiping for å bytte mellom faner</string>
@@ -527,7 +527,7 @@
     <string name="action_unfollow_hashtag_format">Slutte å følge #%1$s?</string>
     <string name="confirmation_hashtag_unfollowed">Sluttet å følge #%1$s</string>
     <string name="a11y_label_loading_thread">Laster tråd</string>
-    <string name="help_empty_home">Dette er <b>Hjemmetidslinjen</b>din. Den viser de nyeste innleggene av kontoer du følger. \u0020 \n \u0020 \nFor å utforske kontoer kan du enten oppdage dem i en av tidslinjene dine, for eksempel den lokale tidslinjen for instansen din {{group}}, eller du kan søke etter navnet deres {{search}}; søk for eksempel etter Tusky før å finne Mastodonkonten vår.</string>
+    <string name="help_empty_home">Dette er <b>Hjemmetidslinjen</b>din. Den viser de nyeste innleggene av kontoer du følger. \u0020 \n \u0020 \nFor å utforske kontoer kan du enten oppdage dem i en av tidslinjene dine, for eksempel den lokale tidslinjen for instansen din {{group}}, eller du kan søke etter navnet deres {{search}}; søk for eksempel etter Warpnet før å finne Warpnetkonten vår.</string>
     <string name="pref_title_reading_order">Leserekkefølge</string>
     <string name="pref_reading_order_oldest_first">Eldste først</string>
     <string name="pref_ui_text_size">Skriftstørrelse for brukergrensesnitt</string>
@@ -540,7 +540,7 @@
     <string name="pref_summary_http_proxy_disabled">Deaktivert</string>
     <string name="pref_summary_http_proxy_invalid">&lt;ugyldig&gt;</string>
     <string name="notification_listenable_worker_name">Bakgrunnsaktivitet</string>
-    <string name="notification_listenable_worker_description">Varsler når Tusky arbeider i bakgrunnen</string>
+    <string name="notification_listenable_worker_description">Varsler når Warpnet arbeider i bakgrunnen</string>
     <string name="notification_notification_worker">Henter varsler…</string>
     <string name="notification_prune_cache">Cache-vedlikehold…</string>
     <string name="mute_notifications_switch">Demp varsler</string>
@@ -607,7 +607,7 @@
     <string name="pref_title_show_stat_inline">Vis poststatistikk i tidslinjen</string>
     <string name="load_newest_notifications">Last de nyeste varslene</string>
     <string name="compose_delete_draft">Del utkast?</string>
-    <string name="error_missing_edits">Serveren din vet at denne posten ble endret, men har ingen kopi av entringene så de kann ikke vises. \u0020 \n \u0020 \nDette er <a href="https://github.com/mastodon/mastodon/issues/25398">Mastodon issue #25398</a>.</string>
+    <string name="error_missing_edits">Serveren din vet at denne posten ble endret, men har ingen kopi av entringene så de kann ikke vises. \u0020 \n \u0020 \nDette er <a href="https://github.com/Warp-net/warpnet/issues">Warpnet issue #25398</a>.</string>
     <string name="pref_title_show_self_boosts">Vis selvompostinger</string>
     <string name="error_media_upload_sending_fmt">Opplasting feilet: %1$s</string>
     <string name="error_blocking_domain">Kunne ikke dempe %1$s: %2$s</string>

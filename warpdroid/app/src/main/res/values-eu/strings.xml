@@ -51,7 +51,7 @@
     <string name="action_favourite">Gogokoa</string>
     <string name="action_more">Gehiago</string>
     <string name="action_compose">Idatzi</string>
-    <string name="action_login">Tuskykin saioa hasi</string>
+    <string name="action_login">Warpnetkin saioa hasi</string>
     <string name="action_logout">Itxi saioa</string>
     <string name="action_logout_confirm">Ziur zaude %1$s saioa itxi nahi duzula? Horrek kontuaren datu lokal guztiak ezabatuko ditu, zirriborroak eta hobespenak barne.</string>
     <string name="action_follow">Jarraitu</string>
@@ -114,7 +114,7 @@
     <string name="label_header">Goiburua</string>
     <string name="link_whats_an_instance">Zer da instantzia?</string>
     <string name="login_connection">Konektatzen…</string>
-    <string name="dialog_whats_an_instance">Edozein instantziaren helbidea edo domeinua hemen sar daiteke, hala nola mastodon.eus, mastodon.jalgi.eus, mastodon.social eta <a href="https://instances.social">gehiago!</a>, \u0020 \u0020 \n \u0020 \u0020 \nOraindik konturik ez baduzu, sartu nahi duzun instantziaren izena sar dezakezu eta bertan sortu kontua. \u0020 \n \u0020 \u0020 \nInstantzia zure kontua ostatatzen den leku bakarra da, baina beste instantzia batzuetako jendearekin erraz komunikatu eta jarrai dezakezu gune berean egongo bazina bezala. \u0020 \u0020 \n \u0020 \u0020 \nInformazio gehiago <a href="https://joinmastodon.org">joinmastodon.org</a> webgunean aurki daiteke. \u0020</string>
+    <string name="dialog_whats_an_instance">Edozein instantziaren helbidea edo domeinua hemen sar daiteke, hala nola warpnet.site baina beste instantzia batzuetako jendearekin erraz komunikatu eta jarrai dezakezu gune berean egongo bazina bezala. \u0020 \u0020 \n \u0020 \u0020 \nInformazio gehiago <a href="https://warpnet.site">warpnet.site</a> webgunean aurki daiteke. \u0020</string>
     <string name="dialog_title_finishing_media_upload">Mediaren igoera bukatzen</string>
     <string name="dialog_message_uploading_media">Igotzen…</string>
     <string name="dialog_download_image">Jaitsi</string>
@@ -182,16 +182,16 @@
     </plurals>
     <string name="description_account_locked">Kontu babestua</string>
     <string name="about_title_activity">Honi buruz</string>
-    <string name="about_tusky_license">Tusky software libre eta kode askekoa da. \"GNU General Public License Version 3\" lizentziapean zabaldua. Lizentzia hontaz gehiago irakurtzeko: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_tusky_license">Warpnet software libre eta kode askekoa da. \"GNU General Public License Version 3\" lizentziapean zabaldua. Lizentzia hontaz gehiago irakurtzeko: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Proiektuaren webgunea: \nhttps://tusky.app</string>
-    <string name="about_bug_feature_request_site">Akatsen berri-emateak eta hobekuntza-eskariak: \n https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Tuskyren profila</string>
+    <string name="about_project_site">Proiektuaren webgunea: \nhttps://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Akatsen berri-emateak eta hobekuntza-eskariak: \n https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnetren profila</string>
     <string name="post_share_content">Partekatu tutaren edukia</string>
     <string name="post_share_link">Partekatu tutaren esteka</string>
     <string name="post_media_images">Irudiak</string>
@@ -211,7 +211,7 @@
     <string name="replying_to">\@%1$s-(r)i erantzuten</string>
     <string name="load_more_placeholder_text">Kargatu gehiago</string>
     <string name="add_account_name">Gehitu kontua</string>
-    <string name="add_account_description">Gehitu Mastodon kontu berria</string>
+    <string name="add_account_description">Gehitu Warpnet kontu berria</string>
     <string name="action_lists">Zerrendak</string>
     <string name="title_lists">Zerrendak</string>
     <string name="compose_active_account_description">%1$s kontuarekin tut egiten</string>
@@ -236,13 +236,13 @@
     <string name="action_open_post">Ireki tuta</string>
     <string name="caption_systememoji">Zure gailuko emoji lehenetsiak</string>
     <string name="caption_blobmoji">Android 4.4etik 7.1erako Blob emoji-ak</string>
-    <string name="caption_twemoji">Mastodoneko emoji pakete estandarra</string>
+    <string name="caption_twemoji">Warpneteko emoji pakete estandarra</string>
     <string name="download_failed">Deskargatzerakoan akatsa</string>
     <string name="profile_badge_bot_text">Bot-a</string>
     <string name="account_moved_description">%1$s hona mugitu da:</string>
     <string name="reblog_private">Bultzatu jatorrizko hartzaileei</string>
     <string name="unreblog_private">Kendu bultzada</string>
-    <string name="license_description">Tusky-k ondorengo software libreko proiektuetako kode eta baliabideak ditu:</string>
+    <string name="license_description">Warpnet-k ondorengo software libreko proiektuetako kode eta baliabideak ditu:</string>
     <string name="license_apache_2">Apache Lizentziapean (testua zerrendaren azpian)</string>
     <string name="profile_metadata_label">Profilaren metadatuak</string>
     <string name="profile_metadata_add">gehitu datuak</string>
@@ -291,9 +291,9 @@
     <string name="pref_title_animate_gif_avatars">GIF abatarrak animatu</string>
     <string name="notification_poll_name">Galdeketak</string>
     <string name="notification_poll_description">Bukatutako galdeketen jakinarazpenak</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="title_hashtags_dialog">Traolak</string>
-    <string name="about_powered_by_tusky">Tusky-k sustatuta</string>
+    <string name="about_powered_by_tusky">Warpnet-k sustatuta</string>
     <string name="abbreviated_hours_ago">%1$dh</string>
     <string name="abbreviated_minutes_ago">%1$dm</string>
     <string name="abbreviated_seconds_ago">%1$ds</string>
@@ -407,7 +407,7 @@
     <string name="list">Zerrenda</string>
     <string name="no_drafts">Ez duzu zirriborrorik.</string>
     <string name="no_scheduled_posts">Ez duzu tut programaturik.</string>
-    <string name="warning_scheduling_interval">Mastodonek gutxienez 5 minutuko programazio-tartea du.</string>
+    <string name="warning_scheduling_interval">Warpnetek gutxienez 5 minutuko programazio-tartea du.</string>
     <string name="notification_follow_request_name">Eskakizunak</string>
     <string name="notification_follow_request_description">Jarraitzeko eskaereri buruzko jakinarazpenak</string>
     <string name="dialog_mute_warning">\@%1$s isildu?</string>

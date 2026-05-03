@@ -46,7 +46,7 @@
     <string name="action_favourite">பிடித்தவை</string>
     <string name="action_more">மேலும்</string>
     <string name="action_compose">எழுது</string>
-    <string name="action_login">Mastodon மூலம் உள்நுழைய</string>
+    <string name="action_login">Warpnet மூலம் உள்நுழைய</string>
     <string name="action_logout">வெளியேறு</string>
     <string name="action_logout_confirm">நீங்கள் %1$s கணக்கிலிருந்து வெளியேற விரும்புகிறீர்களா?</string>
     <string name="action_follow">பின்பற்று</string>
@@ -106,7 +106,7 @@
     <string name="label_header">தலைப்பு</string>
     <string name="link_whats_an_instance">Instance(களம்) என்றால் என்ன?</string>
     <string name="login_connection">இணைக்கபடுகிறது…</string>
-    <string name="dialog_whats_an_instance">ஏதேனும் instance-ன் முகவரியையோ அல்லது களத்தின் முகவரியையோ இங்கு உள்ளிடவும், உதாரணமாக mastodon.social, icosahedron.website, social.tchncs.de, மற்றும் \u0020<a href="https://instances.social">மேலும்!</a> \u0020 \n \u0020 \nபயனர் கணக்கு இல்லையெனில் புதிய கணக்கிற்கான instance(களம்)-னை பதிவிடவும். நீங்கள் குறிப்பிடப்படும் களத்தில் உங்கள் கணக்கு பதிவாகும். \u0020 \n \u0020 \nமேலும் இங்கு குறிப்பிடப்பட்ட ஏதேனும் ஒரு களத்தில் மட்டுமே உங்களால் கணக்கு ஆரம்பித்துக்கொள்ள இயலும் இருப்பினும் நம்மால் மற்ற களங்களில் உள்ள நண்பர்களையும் தொடர்பு கொள்ள இயலும் . \u0020 \n \u0020 \nமேலும் தகவல்கள் அறிய <a href="https://joinmastodon.org">joinmastodon.org</a>. \u0020</string>
+    <string name="dialog_whats_an_instance">ஏதேனும் instance-ன் முகவரியையோ அல்லது களத்தின் முகவரியையோ இங்கு உள்ளிடவும், உதாரணமாக warpnet.site மற்றும் \u0020<a href="https://warpnet.site">மேலும்!</a> \u0020 \n \u0020 \nபயனர் கணக்கு இல்லையெனில் புதிய கணக்கிற்கான instance(களம்)-னை பதிவிடவும். நீங்கள் குறிப்பிடப்படும் களத்தில் உங்கள் கணக்கு பதிவாகும். \u0020 \n \u0020 \nமேலும் இங்கு குறிப்பிடப்பட்ட ஏதேனும் ஒரு களத்தில் மட்டுமே உங்களால் கணக்கு ஆரம்பித்துக்கொள்ள இயலும் இருப்பினும் நம்மால் மற்ற களங்களில் உள்ள நண்பர்களையும் தொடர்பு கொள்ள இயலும் . \u0020 \n \u0020 \nமேலும் தகவல்கள் அறிய <a href="https://warpnet.site">warpnet.site</a>. \u0020</string>
     <string name="dialog_title_finishing_media_upload">மீடியா பதிவேற்றம் முடிகிறது</string>
     <string name="dialog_message_uploading_media">ஏற்றுகிறது …</string>
     <string name="dialog_download_image">பதிவிறக்க</string>
@@ -164,17 +164,17 @@
     </plurals>
     <string name="description_account_locked">கணக்கு மூடப்பட்டது</string>
     <string name="about_title_activity">பற்றி</string>
-    <string name="about_tusky_version">Tusky(டஸ்கி) %1$s</string>
-    <string name="about_tusky_license">Tusky ஒரு கட்டற்ற மற்றும் திறந்த மூல மென்பொருள். இதன் உரிமம் GNU General Public License(பொது உரிமம்) பதிப்பு 3 -ன் கீழ் உள்ளது. நீங்கள் உரிமம் பற்றி காண: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_tusky_version">Warpnet(டஸ்கி) %1$s</string>
+    <string name="about_tusky_license">Warpnet ஒரு கட்டற்ற மற்றும் திறந்த மூல மென்பொருள். இதன் உரிமம் GNU General Public License(பொது உரிமம்) பதிப்பு 3 -ன் கீழ் உள்ளது. நீங்கள் உரிமம் பற்றி காண: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">திட்டத்தின் வலைத்தளம்: \n https://tusky.app</string>
-    <string name="about_bug_feature_request_site">பிழை அறிக்கைகள் &amp; அம்ச கோரிக்கைகள்: \n https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Tusky-ன் கணக்கு</string>
+    <string name="about_project_site">திட்டத்தின் வலைத்தளம்: \n https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">பிழை அறிக்கைகள் &amp; அம்ச கோரிக்கைகள்: \n https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnet-ன் கணக்கு</string>
     <string name="post_share_content">Toot உள்ளடக்கத்தைப் பகிர்</string>
     <string name="post_share_link">Toot இணைப்பைப் பகிர்</string>
     <string name="post_media_images">படங்கள்</string>
@@ -197,7 +197,7 @@
     <string name="replying_to">\@%1$s -க்கு பதிலளி</string>
     <string name="load_more_placeholder_text">மேலும் காட்டு…</string>
     <string name="add_account_name">கணக்கை சேர்க்க</string>
-    <string name="add_account_description">புதிய Mastodon கணக்கைச் சேர்க்க</string>
+    <string name="add_account_description">புதிய Warpnet கணக்கைச் சேர்க்க</string>
     <string name="action_lists">பட்டியல்கள்</string>
     <string name="title_lists">பட்டியல்கள்</string>
     <string name="compose_active_account_description">%1$s கணக்குடன் பதிவிட</string>
@@ -221,13 +221,13 @@
     <string name="action_open_post">Tootயை திற</string>
     <string name="caption_systememoji">தங்களின் வழக்கமான emoji பொருத்தப்பட்டது</string>
     <string name="caption_blobmoji">Android 4.4–7.1-லிருந்தே Blob emojis பயன்படுத்தபடுகிறது</string>
-    <string name="caption_twemoji">Mastodon-னின் வழக்கமான emoji set</string>
+    <string name="caption_twemoji">Warpnet-னின் வழக்கமான emoji set</string>
     <string name="download_failed">பதிவிறக்கம் தோல்வியுற்றது</string>
     <string name="profile_badge_bot_text">இயலி</string>
     <string name="account_moved_description">%1$s கணக்கு நகர்த்தபட்டது இதற்க்கு:</string>
     <string name="reblog_private">அசலான பார்வையாளர்களுக்கு மட்டும் மேலேற்று</string>
     <string name="unreblog_private">மேலேற்றத்தை தவிர்</string>
-    <string name="license_description">Tusky கொண்டுள்ள நிரல் மற்றும் துணுக்குகள் பின்வரும் திறந்த மூல திட்டங்கள்:</string>
+    <string name="license_description">Warpnet கொண்டுள்ள நிரல் மற்றும் துணுக்குகள் பின்வரும் திறந்த மூல திட்டங்கள்:</string>
     <string name="license_apache_2">Apache License (copy below)-ன் கீழ் உரிமமளிக்கப்பட்டுள்ளது</string>
     <string name="profile_metadata_label">சுயவிவர மேனிலை தரவு</string>
     <string name="profile_metadata_add">தகவலை இணைக்க</string>

@@ -55,7 +55,7 @@
     <string name="action_favourite">Vzljubi</string>
     <string name="action_more">Več</string>
     <string name="action_compose">Sestavi</string>
-    <string name="action_login">Prijavite se z Mastodonom</string>
+    <string name="action_login">Prijavite se z Warpnetom</string>
     <string name="action_logout">Odjava</string>
     <string name="action_logout_confirm">Ali ste prepričani, da se želite odjaviti iz računa %1$s? To bo izbrisalo vse lokalne podatke o računu, vključno z osnutki in preferencami.</string>
     <string name="action_follow">Sledi</string>
@@ -133,7 +133,7 @@
     <string name="confirmation_unmuted">Prekinjeno utišanje uporabnika</string>
     <string name="hint_domain">Katero vozlišče?</string>
     <string name="link_whats_an_instance">Kaj je instanca?</string>
-    <string name="dialog_whats_an_instance">Tu lahko vnesete naslov ali domeno katerega koli vozlišča, na primer mastodon.social, icosahedron.website, social.tchncs.de in <a href="https://instances.social"> več! </a> \u0020 \n \u0020 \nČe še nimate računa, lahko vnesete ime vozlišča, kateremu bi se radi pridružili, in tam ustvarite račun. \u0020 \n \u0020 \nVozlišče je ena lokacija, kjer je gostovanje vašega računa, vendar lahko preprosto komunicirate in sledite ljudem na drugih vozliščih, kot da bi bili na isti lokaciji. \u0020 \n \u0020 \nVeč informacij najdete na naslovu <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Tu lahko vnesete naslov ali domeno katerega koli vozlišča, na primer warpnet.site kot da bi bili na isti lokaciji. \u0020 \n \u0020 \nVeč informacij najdete na naslovu <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Dokončanje pošiljanja medija</string>
     <string name="dialog_message_uploading_media">Pošiljanje…</string>
     <string name="dialog_download_image">Prejmi</string>
@@ -193,11 +193,11 @@
     </plurals>
     <string name="description_account_locked">Zaklenjen račun</string>
     <string name="about_title_activity">O aplikaciji</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky je prosta in odprtokodna programska oprema. Licencirana je pod licenco GNU General Public License različice 3. Licenco si lahko ogledate tukaj: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_project_site">Spletna stran projekta: \nhttps://tusky.app</string>
-    <string name="about_bug_feature_request_site">Poročila o napakah in želje za nove funkcije: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Profil Tusky</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet je prosta in odprtokodna programska oprema. Licencirana je pod licenco GNU General Public License različice 3. Licenco si lahko ogledate tukaj: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_project_site">Spletna stran projekta: \nhttps://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Poročila o napakah in želje za nove funkcije: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Profil Warpnet</string>
     <string name="post_share_content">Deli vsebino tuta</string>
     <string name="post_share_link">Deli povezavo do tuta</string>
     <string name="post_media_images">Slike</string>
@@ -226,7 +226,7 @@
     <string name="filter_dialog_update_button">Posodobi</string>
     <string name="filter_add_description">Filtriraj frazo</string>
     <string name="add_account_name">Dodaj račun</string>
-    <string name="add_account_description">Dodaj nov Mastodon račun</string>
+    <string name="add_account_description">Dodaj nov Warpnet račun</string>
     <string name="action_lists">Seznami</string>
     <string name="title_lists">Seznami</string>
     <string name="error_create_list">Seznama ni bilo mogoče ustvariti</string>
@@ -260,13 +260,13 @@
     <string name="action_open_post">Odpri tut</string>
     <string name="caption_systememoji">Privzeti komplet emotikonov vaše naprave</string>
     <string name="caption_blobmoji">Blob emotikoni so znani od Android 4.4-7.1</string>
-    <string name="caption_twemoji">Mastodonov privzeti komplet emotikonov</string>
+    <string name="caption_twemoji">Warpnetov privzeti komplet emotikonov</string>
     <string name="download_failed">Prenos ni uspel</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="account_moved_description">%1$s se je prestavil/a na:</string>
     <string name="reblog_private">Spodbudi izvirnemu občinstvu</string>
     <string name="unreblog_private">Prekini spodbudo</string>
-    <string name="license_description">Tusky vsebuje kodo in sredstva iz naslednjih odprtokodnih projektov:</string>
+    <string name="license_description">Warpnet vsebuje kodo in sredstva iz naslednjih odprtokodnih projektov:</string>
     <string name="license_apache_2">Licencirano pod licenco Apache (spodaj)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -404,7 +404,7 @@
     <string name="action_reset_schedule">Ponastavi</string>
     <string name="action_schedule_post">Napovej tut</string>
     <string name="post_lookup_error_format">Napaka pri iskanju objave %1$s</string>
-    <string name="about_powered_by_tusky">Poganja ga Tusky</string>
+    <string name="about_powered_by_tusky">Poganja ga Warpnet</string>
     <string name="post_boosted_format">%1$s spodbudil</string>
     <string name="hashtags">Ključniki</string>
     <string name="notification_follow_request_name">Zahteve za Sledenje</string>

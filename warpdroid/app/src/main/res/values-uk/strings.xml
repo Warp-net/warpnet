@@ -36,7 +36,7 @@
     <string name="action_logout">Вийти</string>
     <string name="title_drafts">Чернетки</string>
     <string name="title_favourites">Вподобане</string>
-    <string name="action_login">Увійти з Tusky</string>
+    <string name="action_login">Увійти з Warpnet</string>
     <string name="login_connection">Зʼєднання…</string>
     <string name="search_no_results">Немає результатів</string>
     <string name="hint_search">Пошук…</string>
@@ -260,7 +260,7 @@
     <string name="error_delete_list">Не вдалося видалити список</string>
     <string name="error_rename_list">Не вдалося оновити список</string>
     <string name="error_create_list">Не вдалося створити список</string>
-    <string name="add_account_description">Додати новий обліковий запис Mastodon</string>
+    <string name="add_account_description">Додати новий обліковий запис Warpnet</string>
     <string name="add_account_name">Додати обліковий запис</string>
     <string name="filter_add_description">Фільтрувати фразу</string>
     <string name="filter_dialog_whole_word_description">Коли ключове слово або фраза є лише буквено-цифровими, вони застосовуватимуться лише, якщо вони збігатимуться з цілим словом</string>
@@ -295,12 +295,12 @@
     <string name="post_media_images">Зображення</string>
     <string name="post_share_link">Поділитися посиланням на допис</string>
     <string name="post_share_content">Поділитися вмістом допису</string>
-    <string name="about_tusky_account">Профіль Tusky</string>
-    <string name="about_bug_feature_request_site">Звіти про вади та запити функцій:\nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_project_site">Вебсайт проєкту: https://tusky.app</string>
-    <string name="about_tusky_license">Tusky — вільне та відкрите програмне забезпечення. Ліцензовано загальною громадською ліцензією GNU версії 3, ви можете переглянути ліцензію тут: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_powered_by_tusky">Створено Tusky</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_account">Профіль Warpnet</string>
+    <string name="about_bug_feature_request_site">Звіти про вади та запити функцій:\nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_project_site">Вебсайт проєкту: https://warpnet.site</string>
+    <string name="about_tusky_license">Warpnet — вільне та відкрите програмне забезпечення. Ліцензовано загальною громадською ліцензією GNU версії 3, ви можете переглянути ліцензію тут: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_powered_by_tusky">Створено Warpnet</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="description_account_locked">Заблокований обліковий запис</string>
     <plurals name="notification_title_summary">
         <item quantity="one">%1$d нова взаємодія</item>
@@ -389,7 +389,7 @@
     <string name="dialog_download_image">Завантаження</string>
     <string name="dialog_message_uploading_media">Відвантаження…</string>
     <string name="dialog_title_finishing_media_upload">Завершення відвантаження медіа</string>
-    <string name="dialog_whats_an_instance">Сюди можна ввести адресу або домен будь-якого сервера, наприклад mastodon.social, icosahedron.website, social.tchncs.de та <a href="https://instances.social">інші!</a>\n\nЯкщо у вас ще немає облікового запису, ви можете ввести назву сервера, до якого ви хочете приєднатися та створити там обліковий запис.\n\nСервер — єдине місце, де розміщено ваш обліковий запис, але ви можете легко спілкуватися з людьми та стежити за ними на інших серверах, ніби ви перебуваєте на тому ж сайті.\n\nДокладніше на <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Сюди можна ввести адресу або домен будь-якого сервера, наприклад warpnet.site ніби ви перебуваєте на тому ж сайті.\n\nДокладніше на <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="link_whats_an_instance">Що таке сервер?</string>
     <string name="hint_domain">Котрий сервер?</string>
     <string name="label_header">Заголовок</string>
@@ -431,7 +431,7 @@
     <string name="pref_title_hide_top_toolbar">Сховати заголовок верхньої панелі інструментів</string>
     <string name="pref_title_confirm_reblogs">Запитувати підтвердження перед поширенням</string>
     <string name="pref_title_show_cards_in_timelines">Показувати попередній перегляд посилань у стрічках</string>
-    <string name="warning_scheduling_interval">Найкоротший час планування Mastodon становить 5 хвилин.</string>
+    <string name="warning_scheduling_interval">Найкоротший час планування Warpnet становить 5 хвилин.</string>
     <string name="no_announcements">Оголошень немає.</string>
     <string name="no_scheduled_posts">Немає запланованих дописів.</string>
     <string name="no_drafts">У вас немає чернеток.</string>
@@ -471,13 +471,13 @@
     <string name="profile_metadata_add">додати дані</string>
     <string name="profile_metadata_label">Метадані профілю</string>
     <string name="license_apache_2">Ліцензовано за ліцензією Apache (копія знизу)</string>
-    <string name="license_description">Tusky містить код та засоби з таких проєктів з відкритим кодом:</string>
+    <string name="license_description">Warpnet містить код та засоби з таких проєктів з відкритим кодом:</string>
     <string name="unreblog_private">Скасувати поширення</string>
     <string name="reblog_private">Поширити початковій аудиторії</string>
     <string name="account_moved_description">%1$s переїхав до:</string>
     <string name="download_failed">Не вдалося завантажити</string>
     <string name="caption_notoemoji">Поточний набір емодзі Google</string>
-    <string name="caption_twemoji">Стандартний набір емодзі Mastodon</string>
+    <string name="caption_twemoji">Стандартний набір емодзі Warpnet</string>
     <string name="follow_requests_info">Попри те, що ваш обліковий запис не заблоковано, співробітники %1$s вважають, що ви, можливо, захочете розглянути запити на підписку від цих облікових записів власноруч.</string>
     <string name="dialog_delete_conversation_warning">Видалити цю бесіду?</string>
     <string name="action_delete_conversation">Видалити бесіду</string>
@@ -619,17 +619,17 @@
     <string name="filter_description_format">%1$s: %2$s</string>
     <string name="hint_filter_title">Мій фільтр</string>
     <string name="pref_title_show_stat_inline">Показувати статистику допису у стрічці</string>
-    <string name="help_empty_home">Це ваша <b>головна стрічка</b>. Вона показує останні дописи облікових записів, за якими ви стежите.\n\nЩоб переглянути облікові записи, ви можете знайти їх в одній з інших стрічок. Наприклад, на локальній стрічці вашого сервера {{group}}. Або ви можете шукати їх за іменами {{search}}; наприклад, шукайте Tusky, щоб знайти наш обліковий запис Mastodon.</string>
+    <string name="help_empty_home">Це ваша <b>головна стрічка</b>. Вона показує останні дописи облікових записів, за якими ви стежите.\n\nЩоб переглянути облікові записи, ви можете знайти їх в одній з інших стрічок. Наприклад, на локальній стрічці вашого сервера {{group}}. Або ви можете шукати їх за іменами {{search}}; наприклад, шукайте Warpnet, щоб знайти наш обліковий запис Warpnet.</string>
     <string name="post_media_image">Зображення</string>
     <string name="select_list_manage">Керувати списками</string>
     <string name="pref_ui_text_size">Розмір шрифту інтерфейсу</string>
     <string name="notification_listenable_worker_name">Фонова діяльність</string>
-    <string name="notification_listenable_worker_description">Сповіщення, коли Tusky працює у фоновому режимі</string>
+    <string name="notification_listenable_worker_description">Сповіщення, коли Warpnet працює у фоновому режимі</string>
     <string name="notification_notification_worker">Отримання сповіщень…</string>
     <string name="notification_prune_cache">Обслуговування кешу…</string>
     <string name="load_newest_notifications">Завантажити найновіші сповіщення</string>
     <string name="compose_delete_draft">Видалити чернетку?</string>
-    <string name="error_missing_edits">Ваш сервер знає, що цей допис було змінено, але не має копії редагувань, тому їх неможливо показати вам.\n\nЦе <a href="https://github.com/mastodon/mastodon/issues/25398">помилка #25398 у Mastodon</a>.</string>
+    <string name="error_missing_edits">Ваш сервер знає, що цей допис було змінено, але не має копії редагувань, тому їх неможливо показати вам.\n\nЦе <a href="https://github.com/Warp-net/warpnet/issues">помилка #25398 у Warpnet</a>.</string>
     <string name="error_media_upload_sending_fmt">Не вдалося вивантажити: %1$s</string>
     <string name="about_device_info_title">Ваш пристрій</string>
     <string name="about_device_info">%1$s %2$s\nВерсія Android: %3$s\nВерсія SDK: %4$d</string>
@@ -713,7 +713,7 @@
     <string name="unknown_notification_filter_new_accounts_title">Нові облікові записи</string>
     <string name="unknown_notification_filter_moderated_accounts">Облікові записи під керівництвом модератора</string>
     <string name="unknown_notification_filter_moderated_accounts_description">Обмежено модераторами сервера</string>
-    <string name="notification_policies_not_supported">Ця функція підтримується лише на серверах Mastodon версії 4.3.0 або новіших.</string>
+    <string name="notification_policies_not_supported">Ця функція підтримується лише на серверах Warpnet версії 4.3.0 або новіших.</string>
     <string name="action_reblog_public">Поширення для всіх</string>
     <string name="notification_severed_relationship_name">Розірвані з\'єднання</string>
     <string name="notification_unknown_description">Невідомий тип сповіщення</string>
@@ -744,7 +744,7 @@
     <string name="relationship_severance_event_user_domain_block">Ви заблокували %1$s, видаливши %2$s своїх підписників і%3$s , на яких ви підписані.</string>
     <string name="moderation_warning_action_delete_statuses">Деякі з ваших дописів були видалені.</string>
     <string name="moderation_warning_action_sensitive">Відтепер ваші дописи будуть позначені делікатними.</string>
-    <string name="unknown_notification_type_explanation">Tusky не розпізнає цей тип сповіщень і не може показати його вам. Можливо, вебінтерфейс вашого сервера зможе це зробити. Будь ласка, також повідомте про це розробників Tusky, щоб вони могли додати підтримку цього типу!</string>
+    <string name="unknown_notification_type_explanation">Warpnet не розпізнає цей тип сповіщень і не може показати його вам. Можливо, вебінтерфейс вашого сервера зможе це зробити. Будь ласка, також повідомте про це розробників Warpnet, щоб вони могли додати підтримку цього типу!</string>
     <string name="unblock_success">Розблоковано %1$s</string>
     <string name="moderation_warning">Ви отримали попередження від модераторів.</string>
     <plurals name="accounts">
@@ -826,7 +826,7 @@
     <string name="quote_hidden_by_filter">Допис приховано через один з ваших фільтрів</string>
     <string name="error_deleting_status">Не вдалося видалити пост.</string>
     <string name="quote_policy_followers">Тільки підписники</string>
-    <string name="action_remove_account_confirm">Ви впевнені, що бажаєте вилучити обліковий запис %1$s з Tusky? Це видалить усі локальні дані облікового запису, у тому числі чернетки й налаштування.</string>
+    <string name="action_remove_account_confirm">Ви впевнені, що бажаєте вилучити обліковий запис %1$s з Warpnet? Це видалить усі локальні дані облікового запису, у тому числі чернетки й налаштування.</string>
     <string name="pref_default_quote_policy">Політика цитувань (синхронізується із сервером)</string>
     <string name="notification_quote_name">Цитування</string>
     <string name="edit_image_flip_horizontally">Відобразити горизонтально</string>
@@ -837,7 +837,7 @@
     <string name="message_filters_empty">Ви не маєте фільтрів.</string>
     <string name="report_which_rules_violated">Які правила порушуються? Виберіть усі відповідні варіанти.</string>
     <string name="report_category_legal_description">Ви вважаєте, що це порушує закон вашої країни чи країни, у якій розсташований сервер</string>
-    <string name="account_disconnected_message">Логін Tusky для %1$s більше не дійсний. Це могло статися тому що ви змінили свій пароль або відкликали доступ для Tusky. Будь ласка, увійдіть знову.</string>
+    <string name="account_disconnected_message">Логін Warpnet для %1$s більше не дійсний. Це могло статися тому що ви змінили свій пароль або відкликали доступ для Warpnet. Будь ласка, увійдіть знову.</string>
     <string name="scheduled_post_reply">Відповідь</string>
     <plurals name="replies">
         <item quantity="one">%1$s відповідь</item>

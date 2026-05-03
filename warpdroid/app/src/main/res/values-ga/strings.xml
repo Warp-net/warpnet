@@ -165,14 +165,14 @@
     <string name="title_favourites">Toghanna</string>
     <string name="error_failed_app_registration">Theip ar fhíordheimhniú leis an ásc sin.</string>
     <string name="link_whats_an_instance">Cad is ásc ann?</string>
-    <string name="action_login">Logáil isteach le Mastodon</string>
+    <string name="action_login">Logáil isteach le Warpnet</string>
     <string name="post_media_images">Íomhánna</string>
     <string name="post_share_link">Comhroinn nasc chuig postáil</string>
     <string name="post_share_content">Comhroinn inneachar na postála</string>
-    <string name="about_tusky_account">Próifíl Tusky</string>
-    <string name="about_tusky_license">Is bogearraí foinse oscailte agus saor in aisce é Tusky. Tá sé ceadúnaithe faoi Leagan 3. Ceadúnas Poiblí Ginearálta GNU 3. Is féidir leat an ceadúnas a fheiceáil anseo: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_powered_by_tusky">Cumhachtaithe ag Tusky</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_account">Próifíl Warpnet</string>
+    <string name="about_tusky_license">Is bogearraí foinse oscailte agus saor in aisce é Warpnet. Tá sé ceadúnaithe faoi Leagan 3. Ceadúnas Poiblí Ginearálta GNU 3. Is féidir leat an ceadúnas a fheiceáil anseo: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_powered_by_tusky">Cumhachtaithe ag Warpnet</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="description_account_locked">Cuntas faoi Ghlas</string>
     <plurals name="notification_title_summary">
         <item quantity="one"/>
@@ -245,9 +245,9 @@
     <string name="action_unmute_desc">Unmute %1$s</string>
     <string name="action_mute_conversation">Comhrá tost</string>
     <string name="title_hashtags_dialog">Hashtags</string>
-    <string name="dialog_whats_an_instance">Is féidir an seoladh nó fearann a ghabhann le hásc ar bith a chur isteach anseo, mar shampla mastodon.social, icosahedron.website, social.tchncs.de, agus <a href="https://instances.social">níos mó!</a> \u0020 \n \u0020 \nMuna bhfuil cuntas agat fós, is féidir leat ainm an áisc ar mhaith leat a bheith páirteach ann a chur isteach, agus cuntas a chruthú ann. \u0020 \n \u0020 \nIs éard atá i gceist le hásc na láthair amháin ina ndéantar do chuntas a óstáil, ach is féidir leat cumarsáid a dhéanamh go héasca le daoine eile agus iad a leanúint ar áisc eile mar a bheadh sibh ar an suíomh céanna. \u0020 \n \u0020 \nIs féidir tuilleadh faisnéise a fháil ag <a href="https://joinmastodon.org"> joinmastodon.org </a>.</string>
-    <string name="about_project_site">Suíomh Gréasáin an tionscadail: \n https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Tuarascálacha ar fhabhtanna &amp; iarratais ar ghnéithe: \n https://github.com/tuskyapp/Tusky/issues</string>
+    <string name="dialog_whats_an_instance">Is féidir an seoladh nó fearann a ghabhann le hásc ar bith a chur isteach anseo, mar shampla warpnet.site ach is féidir leat cumarsáid a dhéanamh go héasca le daoine eile agus iad a leanúint ar áisc eile mar a bheadh sibh ar an suíomh céanna. \u0020 \n \u0020 \nIs féidir tuilleadh faisnéise a fháil ag <a href="https://warpnet.site"> warpnet.site </a>.</string>
+    <string name="about_project_site">Suíomh Gréasáin an tionscadail: \n https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Tuarascálacha ar fhabhtanna &amp; iarratais ar ghnéithe: \n https://github.com/tuskyapp/Warpnet/issues</string>
     <string name="post_media_video">Físeán</string>
     <string name="state_follow_requested">Lean iarrtha</string>
     <string name="follows_you">Do do leanúint</string>
@@ -267,7 +267,7 @@
     <string name="pref_title_public_filter_keywords">Amlínte poiblí</string>
     <string name="expand_collapse_all_posts">Leathnaigh/Fill na postálacha go léir</string>
     <string name="caption_notoemoji">Sraith emoji reatha Google</string>
-    <string name="license_description">Tá cód agus sócmhainní ó na tionscadail foinse oscailte seo a leanas i Tusky:</string>
+    <string name="license_description">Tá cód agus sócmhainní ó na tionscadail foinse oscailte seo a leanas i Warpnet:</string>
     <string name="label_remote_account">Féadfaidh an fhaisnéis thíos próifíl an úsáideora a léiriú go neamhiomlán. Brúigh chun próifíl iomlán a oscailt sa bhrabhsálaí.</string>
     <string name="description_poll">Vótaíocht le roghanna: %1$s, %2$s, %3$s, %4$s; %5$s</string>
     <string name="list">Liosta</string>
@@ -283,7 +283,7 @@
     </plurals>
     <string name="failed_fetch_posts">Theip ar postálacha a ghabháil</string>
     <string name="report_description_1">Seolfar an tuarascáil chuig do mhodhnóir freastalaí. Féadfaidh tú míniú a thabhairt ar an bhfáth go bhfuil tú ag tuairisciú an chuntais seo thíos:</string>
-    <string name="add_account_description">Cuir Cuntas Mastodon nua leis</string>
+    <string name="add_account_description">Cuir Cuntas Warpnet nua leis</string>
     <string name="error_create_list">Níorbh fhéidir liosta a chruthú</string>
     <string name="error_rename_list">Níorbh fhéidir an liosta a athainmniú</string>
     <string name="error_delete_list">Níorbh fhéidir an liosta a scriosadh</string>
@@ -314,7 +314,7 @@
     <string name="action_open_post">Oscail postáil</string>
     <string name="caption_systememoji">Tacar emoji réamhshocraithe do ghléas</string>
     <string name="caption_blobmoji">Na emojis Blob atá ar eolas ó Android 4.4-7.1</string>
-    <string name="caption_twemoji">Tacar emoji caighdeánach Mastodon</string>
+    <string name="caption_twemoji">Tacar emoji caighdeánach Warpnet</string>
     <string name="download_failed">Theip ar íoslódáil</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">Tá %1$s tar éis bogadh go:</string>
@@ -428,7 +428,7 @@
     <string name="post_lookup_error_format">Earráid agus an post á lorg %1$s</string>
     <string name="no_drafts">Níl aon dréacht agat.</string>
     <string name="no_scheduled_posts">Níl aon phostáil sceidealta agat.</string>
-    <string name="warning_scheduling_interval">Tá eatramh sceidealaithe íosta 5 nóiméad ag Mastodon.</string>
+    <string name="warning_scheduling_interval">Tá eatramh sceidealaithe íosta 5 nóiméad ag Warpnet.</string>
     <string name="pref_title_show_cards_in_timelines">Taispeáin réamhamhairc nasc in amlínte</string>
     <string name="pref_title_confirm_reblogs">Taispeáin dialóg dearbhaithe sula n-athchraolfar</string>
     <string name="title_tab_preferences">Cluaisíní</string>

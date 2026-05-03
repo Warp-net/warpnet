@@ -59,7 +59,7 @@
     <string name="action_unfavourite">Favoriet verwijderen</string>
     <string name="action_more">Meer</string>
     <string name="action_compose">Bericht schrijven</string>
-    <string name="action_login">Aanmelden met Tusky</string>
+    <string name="action_login">Aanmelden met Warpnet</string>
     <string name="action_logout">Uitloggen</string>
     <string name="action_logout_confirm">Weet je zeker dat je %1$s wil afmelden? Dit verwijdert alle lokale gegevens van het account, inclusief conceptberichten en voorkeuren.</string>
     <string name="action_follow">Volgen</string>
@@ -132,7 +132,7 @@
     <string name="label_header">Omslagfoto</string>
     <string name="link_whats_an_instance">Wat is een server?</string>
     <string name="login_connection">Aan het verbinden…</string>
-    <string name="dialog_whats_an_instance">Het adres of domein van eender welke server kan hier worden ingevoerd, zoals mastodon.social, mastodon.nl, mastodon-belgium.be en <a href="https://instances.social">nog veel meer!</a> \u0020 \u0020 \n \u0020 \u0020 \nWanneer je nog geen account hebt, kun je de naam van de server waar jij je graag wil registeren invoeren, waarna je daar een account kunt aanmaken. \u0020 \u0020 \n \u0020 \u0020 \nOp Mastodon is een server (Engels: instance) een computerserver waar jouw account zich bevindt (vergelijk het met een e-mailserver). Je kan eenvoudig mensen van andere servers volgen en met ze communiceren, alsof jullie met elkaar op dezelfde website zitten. \u0020 \u0020 \n \u0020 \u0020 \n Meer informatie kun je vinden op <a href="https://joinmastodon.org">joinmastodon.org</a>. \u0020</string>
+    <string name="dialog_whats_an_instance">Het adres of domein van eender welke server kan hier worden ingevoerd, zoals warpnet.site alsof jullie met elkaar op dezelfde website zitten. \u0020 \u0020 \n \u0020 \u0020 \n Meer informatie kun je vinden op <a href="https://warpnet.site">warpnet.site</a>. \u0020</string>
     <string name="dialog_title_finishing_media_upload">Uploaden media bijna voltooid</string>
     <string name="dialog_message_uploading_media">Aan het uploaden…</string>
     <string name="dialog_download_image">Downloaden</string>
@@ -202,17 +202,17 @@
     </plurals>
     <string name="description_account_locked">Besloten account</string>
     <string name="about_title_activity">Over</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky is vrije opensource software. De licentie valt onder de GNU Algemene Publieke Licentie versie 3. Je kunt de licentie hier bekijken: https://www.gnu.org/licenses/gpl-3.0.nl.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet is vrije opensource software. De licentie valt onder de GNU Algemene Publieke Licentie versie 3. Je kunt de licentie hier bekijken: https://www.gnu.org/licenses/gpl-3.0.nl.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Projectwebsite: https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Fouten melden &amp; nieuwe functies aanvragen: \nhttps://codeberg.org/tusky/Tusky/issues</string>
-    <string name="about_tusky_account">Tusky\'s profiel</string>
+    <string name="about_project_site">Projectwebsite: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Fouten melden &amp; nieuwe functies aanvragen: \nhttps://codeberg.org/tusky/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnet\'s profiel</string>
     <string name="post_share_content">Inhoud van bericht delen</string>
     <string name="post_share_link">Link naar het bericht delen</string>
     <string name="post_media_images">Afbeeldingen</string>
@@ -235,7 +235,7 @@
     <string name="replying_to">Aan het reageren op @%1$s</string>
     <string name="load_more_placeholder_text">Meer laden</string>
     <string name="add_account_name">Account toevoegen</string>
-    <string name="add_account_description">Een nieuw Mastodonaccount toevoegen</string>
+    <string name="add_account_description">Een nieuw Warpnetaccount toevoegen</string>
     <string name="action_lists">Lijsten</string>
     <string name="title_lists">Lijsten</string>
     <string name="compose_active_account_description">Berichten plaatsen als %1$s</string>
@@ -260,13 +260,13 @@
     <string name="action_open_post">Bericht openen</string>
     <string name="caption_systememoji">Standaard emojiset van jouw apparaat</string>
     <string name="caption_blobmoji">De Blob-emojis van Android 4.4–7.1</string>
-    <string name="caption_twemoji">Standaard emojiset van Mastodon</string>
+    <string name="caption_twemoji">Standaard emojiset van Warpnet</string>
     <string name="download_failed">Downloaden mislukt</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s is verhuisd naar:</string>
     <string name="reblog_private">Boost naar oorspronkelijke ontvangers</string>
     <string name="unreblog_private">Niet meer boosten</string>
-    <string name="license_description">Tusky bevat broncode en onderdelen van de volgende opensourceprojecten:</string>
+    <string name="license_description">Warpnet bevat broncode en onderdelen van de volgende opensourceprojecten:</string>
     <string name="license_apache_2">Gelicenseerd onder de Apache-licentie (kopie hieronder)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -400,7 +400,7 @@
     <string name="action_access_scheduled_posts">Ingeplande berichten</string>
     <string name="action_schedule_post">Bericht inplannen</string>
     <string name="action_reset_schedule">Opnieuw beginnen</string>
-    <string name="about_powered_by_tusky">Mogelijk gemaakt door Tusky</string>
+    <string name="about_powered_by_tusky">Mogelijk gemaakt door Warpnet</string>
     <string name="pref_title_alway_open_spoiler">Berichten met inhoudswaarschuwingen altijd uitklappen</string>
     <string name="description_post_bookmarked">Toegevoegd aan bladwijzers</string>
     <string name="select_list_title">Lijst kiezen</string>
@@ -597,7 +597,7 @@
     <string name="compose_delete_draft">Concept verwijderen?</string>
     <string name="notification_notification_worker">Meldingen ophalen…</string>
     <string name="notification_listenable_worker_name">Achtergrondactiviteit</string>
-    <string name="notification_listenable_worker_description">Meldingen als Tusky op de achtergrond bezig is</string>
+    <string name="notification_listenable_worker_description">Meldingen als Warpnet op de achtergrond bezig is</string>
     <string name="about_device_info">%1$s %2$s \nAndroid versie: %3$s \nSDK versie: %4$d</string>
     <string name="about_account_info_title">Je account</string>
     <string name="about_account_info">\@%1$s@%2$s \nVersie: %3$s</string>
@@ -615,7 +615,7 @@
     <string name="label_translated">Uit het %1$s met %2$s vertaald</string>
     <string name="help_empty_lists">Dit zijn je <b>lijsten</b>. Je kunt privélijsten maken en er accounts aan toevoegen. \u0020 \u0020 \n \u0020 \u0020 \nMERK OP dat je enkel accounts aan lijsten kunt toevoegen als je deze volgt. \u0020 \u0020 \n \u0020 \u0020 \nJe kunt je lijsten als tabbladen toevoegen in je account-instellingen [iconics gmd_account_circle] [iconics gmd_navigate_next] tabs. \u0020</string>
     <string name="notification_policies_filter_not_following_description">Inclusief accounts die jou korter dan 3 dagen volgen</string>
-    <string name="help_empty_home">Dit is je <b> hoofdtijdlijn</b>. Hier zie je de berichten van de mensen die jij volgt. \u0020 \u0020 \n \u0020 \nOm andere accounts te ontdekken, kan je andere tijdlijnen bekijken, bijvoorbeeld je lokale tijdlijn van jouw server {{group}}. Of je kan zoeken op naam {{search}}, bijvoorbeeld typ \"tusky\" in het zoekveld om onze Mastodonaccount te vinden.</string>
+    <string name="help_empty_home">Dit is je <b> hoofdtijdlijn</b>. Hier zie je de berichten van de mensen die jij volgt. \u0020 \u0020 \n \u0020 \nOm andere accounts te ontdekken, kan je andere tijdlijnen bekijken, bijvoorbeeld je lokale tijdlijn van jouw server {{group}}. Of je kan zoeken op naam {{search}}, bijvoorbeeld typ \"tusky\" in het zoekveld om onze Warpnetaccount te vinden.</string>
     <string name="unknown_notification_filter_unsolicited_private_mentions_description">Gefilterd, tenzij het een reactie is op je eigen vermelding, of als je het account volgt</string>
     <string name="help_empty_conversations">Dit zijn je <b>privé berichten</b>, ook wel conversaties of direct messages genoemd (DM). \u0020 \n \u0020 \nPrivé berichten maak je door het zichtbaarheidsinstellingen {{public}} van een bericht op {{mail}} <i>Direct</i> te zetten, en dan één of meerdere accounts te vermelden in je bericht. \u0020 \u0020 \n \u0020 \nBijvoorbeeld: je kan op het profiel van een account op de toot-knop [iconics gmd_edit] klikken en dan de zichtbaarheid veranderen. \u0020</string>
     <string name="post_privacy_direct">Direct</string>
@@ -640,7 +640,7 @@
     <string name="app_theme_system_black">Systeemthema gebruiken (zwart)</string>
     <string name="pref_default_reply_privacy">Zichtbaarheid van reacties (niet met de server gesynchroniseerd)</string>
     <string name="ui_error_translate">Fout bij het vertalen: %1$s</string>
-    <string name="error_missing_edits">Je server weet dat dit bericht bewerkt is, maar kent de bewerkingsgeschiedenis niet, en kan deze dus niet tonen. \u0020 \n \u0020 \nDit gaat om <a href="https://github.com/mastodon/mastodon/issues/25398">Mastodon issue #25398</a>.</string>
+    <string name="error_missing_edits">Je server weet dat dit bericht bewerkt is, maar kent de bewerkingsgeschiedenis niet, en kan deze dus niet tonen. \u0020 \n \u0020 \nDit gaat om <a href="https://github.com/Warp-net/warpnet/issues">Warpnet issue #25398</a>.</string>
     <string name="list_reply_policy_list">Leden van de lijst</string>
     <string name="list_reply_policy_followed">Iedereen die jij volgt</string>
     <string name="unknown_notification_type">Onbekend type melding</string>
@@ -654,7 +654,7 @@
     <string name="unknown_notification_filter_new_accounts_description">Tijdens de laatste 30 dagen aangemaakt</string>
     <string name="unknown_notification_filter_unsolicited_private_mentions_title">Ongewenste privéberichten</string>
     <string name="unknown_notification_filter_moderated_accounts">Gemodereerde accounts</string>
-    <string name="notification_policies_not_supported">Deze functie werkt enkel op Mastodonservers die v4.3.0 of hoger geïnstalleerd hebben.</string>
+    <string name="notification_policies_not_supported">Deze functie werkt enkel op Warpnetservers die v4.3.0 of hoger geïnstalleerd hebben.</string>
     <string name="filtered_notifications">Gefilterde meldingen</string>
     <string name="notifications_from_people_you_may_know">Meldingen van %1$d mensen die je misschien kent</string>
     <string name="notification_policy_filter">Filteren</string>

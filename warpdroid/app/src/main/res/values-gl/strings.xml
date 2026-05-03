@@ -52,7 +52,7 @@
     <string name="action_follow">Seguir</string>
     <string name="action_logout_confirm">Tes a certeza de querer pechar a sesión %1$s? Isto eliminará todos os datos locais da conta, incluíndo borradores e preferencias.</string>
     <string name="action_logout">Pechar sesión</string>
-    <string name="action_login">Acceder con Tusky</string>
+    <string name="action_login">Acceder con Warpnet</string>
     <string name="action_compose">Redactar</string>
     <string name="action_more">Máis</string>
     <string name="action_unfavourite">Retirar favorito</string>
@@ -216,14 +216,14 @@
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_apache_2">Con licenza Apache License (ver abaixo)</string>
-    <string name="license_description">Tusky ten código e ferramentas dos seguintes proxectos de código aberto:</string>
+    <string name="license_description">Warpnet ten código e ferramentas dos seguintes proxectos de código aberto:</string>
     <string name="unreblog_private">Retirar promoción</string>
     <string name="reblog_private">Promover para a audiencia orixinal</string>
     <string name="account_moved_description">%1$s migrou a:</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="download_failed">Fallou a descarga</string>
     <string name="caption_notoemoji">Conxunto actual de emojis de Google</string>
-    <string name="caption_twemoji">Conxunto de emojis estándar en Mastodon</string>
+    <string name="caption_twemoji">Conxunto de emojis estándar en Warpnet</string>
     <string name="caption_blobmoji">Os emojis Blob coñecidos de Android 4.4-7.1</string>
     <string name="caption_systememoji">O conxunto de emojis predeterminados do sistema</string>
     <string name="action_open_post">Abrir publicación</string>
@@ -257,7 +257,7 @@
     <string name="error_create_list">Non se puido crear a lista</string>
     <string name="title_lists">Listas</string>
     <string name="action_lists">Listas</string>
-    <string name="add_account_description">Engadir unha nova conta Mastodon</string>
+    <string name="add_account_description">Engadir unha nova conta Warpnet</string>
     <string name="add_account_name">Engadir conta</string>
     <string name="filter_add_description">Frase a filtrar</string>
     <string name="filter_dialog_whole_word_description">Cando a palabra ou frase é só alfanumérica, só se aplicará se concorda a palabra completa</string>
@@ -291,12 +291,12 @@
     <string name="post_media_images">Imaxes</string>
     <string name="post_share_link">ligazón á publicación</string>
     <string name="post_share_content">contido da publicación</string>
-    <string name="about_tusky_account">Perfil de Tusky</string>
-    <string name="about_bug_feature_request_site">Informar de fallos e solicitar funcións:\nhttps://codeberg.org/tusky/Tusky/issues</string>
-    <string name="about_project_site">Web do proxecto: https://tusky.app</string>
-    <string name="about_tusky_license">Tusky é software libre e de código aberto. Está baixo a licenza GNU General Public License Version 3. Podes ver a licenza aquí: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_powered_by_tusky">Desenvolta por Tusky</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_account">Perfil de Warpnet</string>
+    <string name="about_bug_feature_request_site">Informar de fallos e solicitar funcións:\nhttps://codeberg.org/tusky/Warpnet/issues</string>
+    <string name="about_project_site">Web do proxecto: https://warpnet.site</string>
+    <string name="about_tusky_license">Warpnet é software libre e de código aberto. Está baixo a licenza GNU General Public License Version 3. Podes ver a licenza aquí: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_powered_by_tusky">Desenvolta por Warpnet</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="about_title_activity">Sobre</string>
     <string name="description_account_locked">Conta bloqueada</string>
     <plurals name="notification_title_summary">
@@ -386,7 +386,7 @@
     <string name="dialog_download_image">Descargar</string>
     <string name="dialog_message_uploading_media">Subindo…</string>
     <string name="dialog_title_finishing_media_upload">Rematando o envío de multimedia</string>
-    <string name="dialog_whats_an_instance">Aquí podes escribir o enderezo ou dominio de calquera instancia, como mastodon.gal, icosahedron.website, social.techncs.de, e <a href="https://instances.social">máis!</a> \n \nSe aínda non tes unha conta, podes escribir o nome da instancia á que desexas unirte e crear unha conta nela. \n \nUnha instancia é o lugar onde se hospeda a túa conta, pero podes comunicarte facilmente e seguir a persoas noutras instancias como se estiveses alí. \n \nPodes atopar máis información en <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Aquí podes escribir o enderezo ou dominio de calquera instancia, como warpnet.site pero podes comunicarte facilmente e seguir a persoas noutras instancias como se estiveses alí. \n \nPodes atopar máis información en <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="login_connection">Conectando…</string>
     <string name="link_whats_an_instance">Que é unha instancia?</string>
     <string name="label_header">Cabeceira</string>
@@ -417,7 +417,7 @@
     <string name="pref_title_hide_top_toolbar">Agochar o título da barra de ferramentas superior</string>
     <string name="pref_title_confirm_reblogs">Pedir confirmación antes de promover</string>
     <string name="pref_title_show_cards_in_timelines">Ver vista previa das ligazóns nas cronoloxías</string>
-    <string name="warning_scheduling_interval">Mastodon ten un intervalo mínimo de 5 minutos para as programacións.</string>
+    <string name="warning_scheduling_interval">Warpnet ten un intervalo mínimo de 5 minutos para as programacións.</string>
     <string name="no_announcements">Non hai anuncios.</string>
     <string name="no_scheduled_posts">Non tes estados programados.</string>
     <string name="no_drafts">Non tes borradores.</string>
@@ -566,7 +566,7 @@
     <string name="total_usage">Uso total</string>
     <string name="total_accounts">Total de contas</string>
     <string name="dialog_follow_hashtag_title">Seguir cancelo</string>
-    <string name="help_empty_home">Esta é a túa <b>cronoloxía de inicio</b>. Mostra as publicacións recentes das contas que segues.\n\nPara atopar contas podes mirar nalgunha das outras cronoloxías. Por exemplo, na cronoloxía local da túa instancia {{group}}. Ou buscalas polo seu nome {{search}}; por exemplo busca «Tusky» para atopar a nosa conta en Mastodon.</string>
+    <string name="help_empty_home">Esta é a túa <b>cronoloxía de inicio</b>. Mostra as publicacións recentes das contas que segues.\n\nPara atopar contas podes mirar nalgunha das outras cronoloxías. Por exemplo, na cronoloxía local da túa instancia {{group}}. Ou buscalas polo seu nome {{search}}; por exemplo busca «Warpnet» para atopar a nosa conta en Warpnet.</string>
     <string name="post_media_image">Imaxe</string>
     <string name="hint_filter_title">O meu filtro</string>
     <string name="action_refresh">Actualizar</string>
@@ -600,12 +600,12 @@
     <string name="filter_keyword_addition_title">Engadir palabra clave</string>
     <string name="filter_edit_keyword_title">Editar palabra clave</string>
     <string name="select_list_manage">Xestionar listas</string>
-    <string name="error_missing_edits">O teu servidor sabe que a publicación foi editada, pero non ten unha copia das edicións, polo que non pode mostralas.\n\nÉ un <a href="https://github.com/mastodon/mastodon/issues/25398">problema coñecido</a> en Mastodon.</string>
+    <string name="error_missing_edits">O teu servidor sabe que a publicación foi editada, pero non ten unha copia das edicións, polo que non pode mostralas.\n\nÉ un <a href="https://github.com/Warp-net/warpnet/issues">problema coñecido</a> en Warpnet.</string>
     <string name="load_newest_notifications">Cargar as notificacións máis recentes</string>
     <string name="compose_delete_draft">Eliminar borrador?</string>
     <string name="pref_ui_text_size">Tamaño da letra</string>
     <string name="notification_listenable_worker_name">Actividade en segundo plano</string>
-    <string name="notification_listenable_worker_description">Notificacións cando Tusky está a funcionar en segundo plano</string>
+    <string name="notification_listenable_worker_description">Notificacións cando Warpnet está a funcionar en segundo plano</string>
     <string name="notification_notification_worker">Obtendo as notificacións…</string>
     <string name="notification_prune_cache">Mantemento da caché…</string>
     <string name="error_media_upload_sending_fmt">Produciuse un fallo no envío: %1$s</string>
@@ -684,7 +684,7 @@
     <string name="notifications_from">Notificacións de %1$s</string>
     <string name="action_accept_notification_request">Aceptar</string>
     <string name="action_dismiss_notification_request">Desbotar</string>
-    <string name="notification_policies_not_supported">Esta ferramenta só é compatible con servidores Mastodon 4.3.0 ou superior.</string>
+    <string name="notification_policies_not_supported">Esta ferramenta só é compatible con servidores Warpnet 4.3.0 ou superior.</string>
     <string name="notification_policies_filter_not_following_description">Incluíndo as persoas que te seguen desde fai menos de 3 días</string>
     <string name="post_replied">Con resposta</string>
     <string name="post_replied_format">Como resposta a %1$s</string>
@@ -692,7 +692,7 @@
     <string name="preview_card_by_author">Por %1$s</string>
     <string name="preview_card_more_by_author">Máis de %1$s</string>
     <string name="follow_hashtag_success">Segues o cancelo %1$s</string>
-    <string name="unknown_notification_type_explanation">Tusky non recoñece este tipo de notificación e non pode mostrala. Deberías poder vela na interface web da túa instancia. Informa ao equipo de desenvolvemento de Tusky para que poidan engadir esta notificación!</string>
+    <string name="unknown_notification_type_explanation">Warpnet non recoñece este tipo de notificación e non pode mostrala. Deberías poder vela na interface web da túa instancia. Informa ao equipo de desenvolvemento de Warpnet para que poidan engadir esta notificación!</string>
     <string name="relationship_severance_event_account_suspension">A administración de %1$s suspendeu a %2$s, polo que non recibirás actualizacións nin poderás interactuar con esa conta.</string>
     <string name="moderation_warning_action_mark_statuses_as_sensitive">Algunha das túas publicacións marcouse como sensible.</string>
     <string name="relationship_severance_event_domain_block">A administración de %1$s bloqueou a %2$s, que inclúe %3$s das túas seguidoras e %4$s seguimentos.</string>
@@ -763,9 +763,9 @@
     <string name="report_category_spam_description">Ligazóns maliciosas, suplantación, respostas repetitivas</string>
     <string name="report_category_other_description">O problema non se axusta ás outras categorías</string>
     <string name="action_login_again">Volver a acceder</string>
-    <string name="account_disconnected_message">O acceso de %1$s con Tusky xa non é válido. Isto pode deberse a que cambiaches o contrasinal ou revogaches o acceso para Tusky. Volve a acceder.</string>
+    <string name="account_disconnected_message">O acceso de %1$s con Warpnet xa non é válido. Isto pode deberse a que cambiaches o contrasinal ou revogaches o acceso para Warpnet. Volve a acceder.</string>
     <string name="action_remove_account">Retirar conta</string>
-    <string name="action_remove_account_confirm">Tes certeza de querer retirar de Tusky a conta %1$s? Isto vai eliminar todos os datos locais da conta, incluíndo borradores e preferencias.</string>
+    <string name="action_remove_account_confirm">Tes certeza de querer retirar de Warpnet a conta %1$s? Isto vai eliminar todos os datos locais da conta, incluíndo borradores e preferencias.</string>
     <string name="account_disconnected_title">Conta desconectada</string>
     <string name="action_rehide_status">Volver ocultar estados filtrados</string>
     <string name="message_filters_empty">Non tes filtros.</string>

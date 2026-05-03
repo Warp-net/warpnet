@@ -426,7 +426,7 @@
     <string name="about_account_info">\@%1$s\@%2$s\nVersion: %3$s</string>
     <string name="about_powered_by_warpdroid">Powered by Warpdroid</string>
     <string name="about_warpdroid_license">Warpdroid is free and open-source software.
-        It is a fork of Tusky (https://tusky.app, GPL-3.0) with the Mastodon API replaced
+        It is a fork of Warpnet (https://warpnet.site, GPL-3.0) with the Warpnet API replaced
         by the Warpnet peer-to-peer transport, and is distributed under the
         GNU Affero General Public License Version 3 or later.
         You can view the license here: https://www.gnu.org/licenses/agpl-3.0.en.html</string>

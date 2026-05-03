@@ -26,7 +26,7 @@ final def APP_ID = "site.warpnet.warpdroid"
 final def APP_NAMESPACE = "site.warpnet.warpdroid"
 // url of a custom app logo. Recommended size at least 600x600.
 final def CUSTOM_LOGO_URL = ""
-// Unused in Warpdroid (no Mastodon instance picker). Kept to satisfy
+// Unused in Warpdroid. Kept to satisfy
 // existing BuildConfig references during the strip-down.
 final def CUSTOM_INSTANCE = ""
 // Link shown on the About screen.

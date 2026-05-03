@@ -53,7 +53,7 @@
     <string name="action_unfavourite">Desfavoritar</string>
     <string name="action_more">Mais</string>
     <string name="action_compose">Escrever</string>
-    <string name="action_login">Entrar com Tusky</string>
+    <string name="action_login">Entrar com Warpnet</string>
     <string name="action_logout">Sair</string>
     <string name="action_logout_confirm">Tem certeza de que deseja sair de %1$s? Isso excluirá todos os dados locais da conta, incluindo rascunhos e preferências.</string>
     <string name="action_follow">Seguir</string>
@@ -122,7 +122,7 @@
     <string name="label_header">Capa</string>
     <string name="link_whats_an_instance">O que é uma instância?</string>
     <string name="login_connection">Conectando…</string>
-    <string name="dialog_whats_an_instance">O domínio de qualquer instância pode ser inserido aqui, como mastodon.social, masto.donte.com.br, colorid.es ou qualquer <a href="https://instances.social">outro!</a>\n\nSe não tem uma conta ainda, insira o nome da instância que gostaria de participar e crie uma conta lá.\n\nUma instância é um lugar onde sua conta é hospedada, mas é fácil se comunicar e seguir pessoas de outras instâncias como se todos estivessem no mesmo site.\n\nMais informações podem ser encontradas em <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">O domínio de qualquer instância pode ser inserido aqui, como warpnet.site mas é fácil se comunicar e seguir pessoas de outras instâncias como se todos estivessem no mesmo site.\n\nMais informações podem ser encontradas em <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Concluindo o envio de mídia</string>
     <string name="dialog_message_uploading_media">Fazendo upload…</string>
     <string name="dialog_download_image">Baixar</string>
@@ -191,17 +191,17 @@
     </plurals>
     <string name="description_account_locked">Conta trancada</string>
     <string name="about_title_activity">Sobre</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky é um software livre e de código aberto. Ele é licenciado sob a versão 3 da Licença Pública Geral GNU. Leia a licença aqui: https://www.gnu.org/licenses/gpl-3.0.pt-br.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet é um software livre e de código aberto. Ele é licenciado sob a versão 3 da Licença Pública Geral GNU. Leia a licença aqui: https://www.gnu.org/licenses/gpl-3.0.pt-br.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Site do projeto: https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Reporte bugs e solicite funcionalidades: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Perfil do Tusky</string>
+    <string name="about_project_site">Site do projeto: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Reporte bugs e solicite funcionalidades: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Perfil do Warpnet</string>
     <string name="post_share_content">Compartilhar conteúdo do post</string>
     <string name="post_share_link">Compartilhar link do post</string>
     <string name="post_media_images">Imagens</string>
@@ -224,7 +224,7 @@
     <string name="replying_to">Respondendo a @%1$s</string>
     <string name="load_more_placeholder_text">Carregar mais</string>
     <string name="add_account_name">Adicionar conta</string>
-    <string name="add_account_description">Adicionar nova conta Mastodon</string>
+    <string name="add_account_description">Adicionar nova conta Warpnet</string>
     <string name="action_lists">Listas</string>
     <string name="title_lists">Listas</string>
     <string name="compose_active_account_description">Postando como %1$s</string>
@@ -248,13 +248,13 @@
     <string name="action_open_post">Abrir post</string>
     <string name="caption_systememoji">Pacote de emojis padrão do seu dispositivo</string>
     <string name="caption_blobmoji">Emojis padrão do Android da versão 4.4 até 7.1</string>
-    <string name="caption_twemoji">Pacote de emojis padrão do Mastodon</string>
+    <string name="caption_twemoji">Pacote de emojis padrão do Warpnet</string>
     <string name="download_failed">Falha ao baixar</string>
     <string name="profile_badge_bot_text">Robô</string>
     <string name="account_moved_description">%1$s mudou-se para:</string>
     <string name="reblog_private">Impulsionar para a audiência original</string>
     <string name="unreblog_private">Desimpulsionar</string>
-    <string name="license_description">O Tusky contém código e recursos dos seguintes projetos de código aberto:</string>
+    <string name="license_description">O Warpnet contém código e recursos dos seguintes projetos de código aberto:</string>
     <string name="license_apache_2">Licenciado sob a licença Apache (cópia abaixo)</string>
     <string name="profile_metadata_label">Metadados do perfil</string>
     <string name="profile_metadata_add">adicionar dados</string>
@@ -413,13 +413,13 @@
     <string name="title_bookmarks">Marcadores</string>
     <string name="action_bookmark">Criar marcador</string>
     <string name="action_view_bookmarks">Marcadores</string>
-    <string name="about_powered_by_tusky">Desenvolvido por Tusky</string>
+    <string name="about_powered_by_tusky">Desenvolvido por Warpnet</string>
     <string name="description_post_bookmarked">Marcador criado</string>
     <string name="select_list_title">Selecionar lista</string>
     <string name="list">Lista</string>
     <string name="no_scheduled_posts">Você não tem nenhum post agendado.</string>
     <string name="no_drafts">Você não tem nenhum rascunho.</string>
-    <string name="warning_scheduling_interval">Mastodon possui um intervalo mínimo de 5 minutos para agendar.</string>
+    <string name="warning_scheduling_interval">Warpnet possui um intervalo mínimo de 5 minutos para agendar.</string>
     <string name="notification_follow_request_name">Seguidores pendentes</string>
     <string name="notification_follow_request_format">%1$s quer seguir você</string>
     <string name="action_mute_conversation">Silenciar conversa</string>
@@ -559,7 +559,7 @@
     <string name="accessibility_talking_about_tag">%1$d pessoas estão falando sobre a hashtag %2$s</string>
     <string name="total_usage">Uso total</string>
     <string name="notification_listenable_worker_name">Atividade em segundo plano</string>
-    <string name="notification_listenable_worker_description">Notificações quando o Tusky está trabalhando em segundo plano</string>
+    <string name="notification_listenable_worker_description">Notificações quando o Warpnet está trabalhando em segundo plano</string>
     <string name="notification_notification_worker">Buscando notificações…</string>
     <string name="about_device_info_title">Seu dispositivo</string>
     <string name="about_device_info">%1$s %2$s \nVersão Android: %3$s \nVersão do SDK: %4$d</string>
@@ -590,11 +590,11 @@
         <item quantity="many">Seus posts não foram enviados e foram salvos como rascunhos.\n\nO servidor não pôde ser contatado ou rejeitou os posts.</item>
         <item quantity="other">Seus posts não foram enviados e foram salvos como rascunhos.\n\nO servidor não pôde ser contatado ou rejeitou os posts.</item>
     </plurals>
-    <string name="help_empty_home">Esta é a sua <b>linha do tempo inicial</b>. Ela mostra os posts recentes das contas que você segue.\n\nPara explorar contas, você pode descobri-las em uma das outras linhas do tempo. Por exemplo, a linha do tempo local da sua instância {{group}}. Ou você pode pesquisá-las por nome {{search}}; por exemplo, pesquise por Tusky para encontrar nossa conta no Mastodon.</string>
+    <string name="help_empty_home">Esta é a sua <b>linha do tempo inicial</b>. Ela mostra os posts recentes das contas que você segue.\n\nPara explorar contas, você pode descobri-las em uma das outras linhas do tempo. Por exemplo, a linha do tempo local da sua instância {{group}}. Ou você pode pesquisá-las por nome {{search}}; por exemplo, pesquise por Warpnet para encontrar nossa conta no Warpnet.</string>
     <string name="moderation_warning">Você recebeu um aviso de moderação.</string>
     <string name="confirm_dismiss_caption">Descartar alterações da legenda?</string>
     <string name="reblog_confirm">Impulsionar este post?</string>
-    <string name="error_missing_edits">Seu servidor sabe que este post foi editado, mas não possui uma cópia das edições, portanto elas não podem ser exibidas para você.\n\nEste é <a href="https://github.com/mastodon/mastodon/issues/25398">o problema nº 25398 do Mastodon</a>.</string>
+    <string name="error_missing_edits">Seu servidor sabe que este post foi editado, mas não possui uma cópia das edições, portanto elas não podem ser exibidas para você.\n\nEste é <a href="https://github.com/Warp-net/warpnet/issues">o problema nº 25398 do Warpnet</a>.</string>
     <string name="unblock_failure">Falha ao desbloquear %1$s: %2$s</string>
     <string name="reblog_privacy_unlisted_description">Igual a público, mas nunca será exibido nas linhas do tempo públicas</string>
     <string name="accept_follow_request_failure">Falha ao aceitar a solicitação para seguir de %1$s: %2$s</string>
@@ -604,7 +604,7 @@
     <string name="report_category_legal_description">Você acredita que isso viola a lei do seu país ou do país do servidor</string>
     <string name="ui_error_translate">Não foi possível traduzir: %1$s</string>
     <string name="notification_policies_filter_not_following_description">Incluindo pessoas que seguem você há menos de 3 dias</string>
-    <string name="action_remove_account_confirm">Tem certeza de que deseja remover a conta %1$s do Tusky? Isso excluirá todos os dados locais da conta, incluindo rascunhos e preferências.</string>
+    <string name="action_remove_account_confirm">Tem certeza de que deseja remover a conta %1$s do Warpnet? Isso excluirá todos os dados locais da conta, incluindo rascunhos e preferências.</string>
     <string name="pref_default_reply_privacy_explanation">A privacidade pré-selecionada dependerá do post ao qual você está respondendo.</string>
     <plurals name="minutes">
         <item quantity="one">%1$s minuto</item>
@@ -749,7 +749,7 @@
     <string name="accept_notification_request">Aceitar solicitação de notificação</string>
     <string name="dismiss_notification_request">Descartar solicitação de notificação</string>
     <string name="open_settings">Abrir preferências</string>
-    <string name="notification_policies_not_supported">Este recurso só é compatível com servidores Mastodon que executam a versão 4.3.0 ou posterior.</string>
+    <string name="notification_policies_not_supported">Este recurso só é compatível com servidores Warpnet que executam a versão 4.3.0 ou posterior.</string>
     <string name="action_dismiss_notification_request">Descartar</string>
     <string name="relationship_severance_event_title">Conexão perdida</string>
     <plurals name="accounts">
@@ -834,8 +834,8 @@
     <string name="relationship_severance_event_account_suspension">A administração de %1$s suspendeu %2$s, o que significa que você não poderá mais receber atualizações nem interagir com esta conta.</string>
     <string name="relationship_severance_event_domain_block">A administração de %1$s bloqueou %2$s, incluindo %3$s dos seus seguidores e %4$s que você segue.</string>
     <string name="relationship_severance_event_user_domain_block">Você bloqueou %1$s, removendo %2$s dos seus seguidores e %3$s que você segue.</string>
-    <string name="unknown_notification_type_explanation">O Tusky não reconhece este tipo de notificação e não pode mostrá-la a você. A interface web do seu servidor pode ser capaz de fazê-lo. Por favor, informe também os desenvolvedores do Tusky para que possam adicionar suporte para este tipo!</string>
-    <string name="account_disconnected_message">O login do Tusky para %1$s não é mais válido. Isso pode acontecer porque você alterou sua senha ou revogou o acesso do Tusky. Por favor, faça login novamente.</string>
+    <string name="unknown_notification_type_explanation">O Warpnet não reconhece este tipo de notificação e não pode mostrá-la a você. A interface web do seu servidor pode ser capaz de fazê-lo. Por favor, informe também os desenvolvedores do Warpnet para que possam adicionar suporte para este tipo!</string>
+    <string name="account_disconnected_message">O login do Warpnet para %1$s não é mais válido. Isso pode acontecer porque você alterou sua senha ou revogou o acesso do Warpnet. Por favor, faça login novamente.</string>
     <string name="quote_hidden_show_anyway">Mostrar mesmo assim</string>
     <string name="ui_error_bookmark">Falha ao criar marcador para o post: %1$s</string>
     <string name="label_filter_action">Ação do filtro</string>

@@ -49,7 +49,7 @@
     <string name="action_favourite">Dodaj do ulubionych</string>
     <string name="action_more">Więcej</string>
     <string name="action_compose">Napisz</string>
-    <string name="action_login">Zaloguj się z Tusky</string>
+    <string name="action_login">Zaloguj się z Warpnet</string>
     <string name="action_logout">Wyloguj się</string>
     <string name="action_logout_confirm">Czy na pewno chcesz wylogować się z konta %1$s?</string>
     <string name="action_follow">Obserwuj</string>
@@ -110,7 +110,7 @@
     <string name="label_header">Nagłówek</string>
     <string name="link_whats_an_instance">Czym jest instancja?</string>
     <string name="login_connection">Łączenie…</string>
-    <string name="dialog_whats_an_instance">Tutaj można wprowadzić domenę lub adres instancji, np. mastodon.social, icosahedron.website, social.tchncs.de, i <a href="https://instances.social">wiele więcej!</a> \u0020 \n \u0020 \nJeżeli nie posiadasz jeszcze konta, wprowadź tu nazwę instancji, na której chcesz się zarejestrować. \u0020 \n \u0020 \nInstancja jest miejscem, na którym znajduje się twoje konto, lecz możesz prosto komunikować się z ludźmi na innych instancjach i obserwować ich, tak jakbyście byli na jednej stronie. \u0020 \n \u0020 \nWięcej informacji można znaleźć na <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Tutaj można wprowadzić domenę lub adres instancji, np. warpnet.site tak jakbyście byli na jednej stronie. \u0020 \n \u0020 \nWięcej informacji można znaleźć na <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Kończenie wysyłania treści</string>
     <string name="dialog_message_uploading_media">Wysyłanie…</string>
     <string name="dialog_download_image">Pobierz</string>
@@ -175,16 +175,16 @@
     </plurals>
     <string name="description_account_locked">Konto zablokowane</string>
     <string name="about_title_activity">O programie</string>
-    <string name="about_tusky_license">Tusky jest wolnym i otwartoźródłowym oprogramowaniem. Jest on dostępny na licencji GNU General Public License w wersji trzeciej. Możesz przeczytać przetłumaczoną treść licencji <a href="https://web.archive.org/web/20171024013739/http://itlaw.computerworld.pl/wp-content/uploads/2008/03/powszechna-licencja-publiczna-gnu_v2.pdf">tutaj</a></string>
+    <string name="about_tusky_license">Warpnet jest wolnym i otwartoźródłowym oprogramowaniem. Jest on dostępny na licencji GNU General Public License w wersji trzeciej. Możesz przeczytać przetłumaczoną treść licencji <a href="https://web.archive.org/web/20171024013739/http://itlaw.computerworld.pl/wp-content/uploads/2008/03/powszechna-licencja-publiczna-gnu_v2.pdf">tutaj</a></string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Strona projektu: \n https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Zgłoszenia błędów i propozycje funkcji: \n https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Profil Tusky’ego</string>
+    <string name="about_project_site">Strona projektu: \n https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Zgłoszenia błędów i propozycje funkcji: \n https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Profil Warpnet’ego</string>
     <string name="post_share_content">Udostępnij zawartość wpisu</string>
     <string name="post_share_link">Udostępnij link do postu</string>
     <string name="post_media_images">Obrazy</string>
@@ -207,7 +207,7 @@
     <string name="replying_to">Odpowiadasz na wpis autorstwa @%1$s</string>
     <string name="load_more_placeholder_text">załaduj więcej</string>
     <string name="add_account_name">Dodaj konto</string>
-    <string name="add_account_description">Dodaj nowe Konto Mastodon</string>
+    <string name="add_account_description">Dodaj nowe Konto Warpnet</string>
     <string name="action_lists">Listy</string>
     <string name="title_lists">Listy</string>
     <string name="compose_active_account_description">Publikowanie jako %1$s</string>
@@ -231,12 +231,12 @@
     <string name="action_open_post">Otwórz wpis</string>
     <string name="caption_systememoji">Domyślny zestaw emoji tego urządzenia</string>
     <string name="caption_blobmoji">Emoji Blob znane z Androida 4.4–7.1</string>
-    <string name="caption_twemoji">Standardowy zestaw emoji Mastodona</string>
+    <string name="caption_twemoji">Standardowy zestaw emoji Warpneta</string>
     <string name="download_failed">Pobieranie nie powiodło się</string>
     <string name="account_moved_description">%1$s przeniósł się na:</string>
     <string name="reblog_private">Podbij grupie docelowej autora oryginału</string>
     <string name="unreblog_private">Cofnij podbicie</string>
-    <string name="license_description">Tusky zawiera kod i zasoby następujących projektów open source:</string>
+    <string name="license_description">Warpnet zawiera kod i zasoby następujących projektów open source:</string>
     <string name="license_apache_2">Na licencji Apache (kopia poniżej)</string>
     <string name="profile_metadata_label">Metadane profilu</string>
     <string name="profile_metadata_add">dodaj dane</string>
@@ -287,7 +287,7 @@
     <string name="pref_failed_to_sync">Synchronizacja ustawień nie powiodła się</string>
     <string name="notification_poll_name">Ankiety</string>
     <string name="notification_poll_description">Powiadomienia o głosowaniach, które zostały zakończone</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="pref_title_alway_open_spoiler">Zawsze rozwijaj wpisy z ostrzeżeniami o zawartości</string>
     <string name="pref_title_public_filter_keywords">Publiczne osi czasu</string>
     <string name="pref_title_thread_filter_keywords">Konwersacje</string>
@@ -417,7 +417,7 @@
     <string name="action_access_scheduled_posts">Zaplanowane wpisy</string>
     <string name="action_schedule_post">Zaplanuj wpis</string>
     <string name="action_reset_schedule">Resetuj</string>
-    <string name="about_powered_by_tusky">Napędzane przez Tusky</string>
+    <string name="about_powered_by_tusky">Napędzane przez Warpnet</string>
     <string name="post_lookup_error_format">Błąd przy wyszukiwaniu wpisu %1$s</string>
     <string name="title_bookmarks">Zakładki</string>
     <string name="action_bookmark">Dodaj do zakładek</string>
@@ -427,7 +427,7 @@
     <string name="list">Lista</string>
     <string name="no_drafts">Nie masz żadnych szkiców.</string>
     <string name="no_scheduled_posts">Nie masz żadnych zaplanowanych wpisów.</string>
-    <string name="warning_scheduling_interval">Mastodon umożliwia wysłanie minimalnie 5 minut od zaplanowania.</string>
+    <string name="warning_scheduling_interval">Warpnet umożliwia wysłanie minimalnie 5 minut od zaplanowania.</string>
     <string name="notification_follow_request_name">Prośby o obserwację</string>
     <string name="pref_title_confirm_reblogs">Pytaj o potwierdzenie przed podbiciem</string>
     <string name="add_hashtag_title">Dodaj hashtag</string>

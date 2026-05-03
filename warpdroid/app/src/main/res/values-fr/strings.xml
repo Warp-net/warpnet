@@ -59,7 +59,7 @@
     <string name="action_unfavourite">Supprimer le favori</string>
     <string name="action_more">Plus</string>
     <string name="action_compose">Écrire</string>
-    <string name="action_login">Se connecter avec Tusky</string>
+    <string name="action_login">Se connecter avec Warpnet</string>
     <string name="action_logout">Déconnexion</string>
     <string name="action_logout_confirm">Êtes-vous certain·e· de vouloir déconnecter le compte %1$s ? Cela va vider toutes les données locales du compte, incluant brouillons et préférences.</string>
     <string name="action_follow">Suivre</string>
@@ -134,7 +134,7 @@
     <string name="label_header">Image d’en-tête</string>
     <string name="link_whats_an_instance">Qu’est-ce qu’une instance ?</string>
     <string name="login_connection">Connexion en cours…</string>
-    <string name="dialog_whats_an_instance">Indiquer ici l’adresse ou le domaine d’une instance, comme mastodon.social, icosahedron.website, social.tchncs.de, <a href="https://instances.social">et bien d’autres encore</a> (en anglais) ! \u0020 \n \u0020 \nSi vous ne disposez d’aucun compte, vous pouvez renseigner le nom de l’instance que vous souhaitez rejoindre et y créer un compte. \u0020 \n \u0020 \nUne instance est l’endroit où votre compte est hébergé, mais vous pouvez facilement suivre des personnes d’autres instances et communiquer avec elles comme si vous étiez sur le même site. \u0020 \n \u0020 \nPour plus d’informations, consultez <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Indiquer ici l’adresse ou le domaine d’une instance, comme warpnet.site consultez <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Mise en ligne des médias</string>
     <string name="dialog_message_uploading_media">Téléversement en cours…</string>
     <string name="dialog_download_image">Télécharger</string>
@@ -206,17 +206,17 @@
     </plurals>
     <string name="description_account_locked">Compte verrouillé</string>
     <string name="about_title_activity">À propos</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky est une application libre et open source. Elle est publiée sous licence publique générale GNU version 3. Vous pouvez consulter la licence ici : https://www.gnu.org/licenses/gpl-3.0.fr.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet est une application libre et open source. Elle est publiée sous licence publique générale GNU version 3. Vous pouvez consulter la licence ici : https://www.gnu.org/licenses/gpl-3.0.fr.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Site du projet : https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Rapports d’anomalies &amp; demandes de fonctionnalités : \n https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Profil de Tusky</string>
+    <string name="about_project_site">Site du projet : https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Rapports d’anomalies &amp; demandes de fonctionnalités : \n https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Profil de Warpnet</string>
     <string name="post_share_content">Partager le contenu du message</string>
     <string name="post_share_link">Partager le lien du message</string>
     <string name="post_media_images">Images</string>
@@ -246,7 +246,7 @@
     <string name="filter_dialog_update_button">Mettre à jour</string>
     <string name="filter_add_description">Phrase à filtrer</string>
     <string name="add_account_name">Ajouter un compte</string>
-    <string name="add_account_description">Ajouter un nouveau compte Mastodon</string>
+    <string name="add_account_description">Ajouter un nouveau compte Warpnet</string>
     <string name="action_lists">Listes</string>
     <string name="title_lists">Listes</string>
     <string name="error_create_list">Impossible de créer la liste</string>
@@ -280,13 +280,13 @@
     <string name="action_open_post">Ouvrir le message</string>
     <string name="caption_systememoji">Votre jeu d’émojis par défaut</string>
     <string name="caption_blobmoji">Un jeu d’émojis basé sur les émojis « blob »</string>
-    <string name="caption_twemoji">Le jeu d’émojis standard de Mastodon</string>
+    <string name="caption_twemoji">Le jeu d’émojis standard de Warpnet</string>
     <string name="download_failed">Échec du téléchargement</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="account_moved_description">%1$s a déménagé vers :</string>
     <string name="reblog_private">Partager à l’audience originale</string>
     <string name="unreblog_private">Annuler le partage</string>
-    <string name="license_description">Tusky contient du code et des ressources issus des projets open source suivants :</string>
+    <string name="license_description">Warpnet contient du code et des ressources issus des projets open source suivants :</string>
     <string name="license_apache_2">Sous licence Apache (copie ci-dessous)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -405,7 +405,7 @@
     <string name="action_schedule_post">Planifier le message</string>
     <string name="action_reset_schedule">Réinitialiser</string>
     <string name="post_lookup_error_format">Erreur lors de la recherche du post %1$s</string>
-    <string name="about_powered_by_tusky">Propulsé par Tusky</string>
+    <string name="about_powered_by_tusky">Propulsé par Warpnet</string>
     <string name="title_bookmarks">Signets</string>
     <string name="action_bookmark">Signet</string>
     <string name="action_view_bookmarks">Signets</string>
@@ -414,7 +414,7 @@
     <string name="list">Liste</string>
     <string name="no_drafts">Vous n’avez aucun brouillon.</string>
     <string name="no_scheduled_posts">Vous n’avez aucun message planifié.</string>
-    <string name="warning_scheduling_interval">L’intervalle minimum de planification sur Mastodon est de 5 minutes.</string>
+    <string name="warning_scheduling_interval">L’intervalle minimum de planification sur Warpnet est de 5 minutes.</string>
     <string name="notification_follow_request_name">Demandes d\'abonnement</string>
     <string name="dialog_block_warning">Bloquer @%1$s ?</string>
     <string name="pref_title_confirm_reblogs">Demander confirmation avant de partager</string>
@@ -605,7 +605,7 @@
     <string name="pref_title_show_stat_inline">Montrer les statistiques des statuts dans les fils</string>
     <string name="accessibility_talking_about_tag">%1$d personnes parlent du hashtag %2$s</string>
     <string name="total_usage">utilisations</string>
-    <string name="help_empty_home">Ceci est votre <b>fil d\'accueil</b>. Il affiche les publications récentes des comptes que vous suivez. \u0020 \n \u0020 \nPour trouver des comptes vous pouvez soit les découvrir dans l\'un des autres fils, par exemple le fil local de votre instance {{group}} ; soit les chercher par leur nom {{search}}, par exemple cherchez « Tusky » pour trouver notre compte Mastodon.</string>
+    <string name="help_empty_home">Ceci est votre <b>fil d\'accueil</b>. Il affiche les publications récentes des comptes que vous suivez. \u0020 \n \u0020 \nPour trouver des comptes vous pouvez soit les découvrir dans l\'un des autres fils, par exemple le fil local de votre instance {{group}} ; soit les chercher par leur nom {{search}}, par exemple cherchez « Warpnet » pour trouver notre compte Warpnet.</string>
     <string name="action_add">Ajouter</string>
     <string name="label_filter_keywords">Mots-clés ou phrases à filtrer</string>
     <string name="filter_description_warn">Cacher la publication entière derrière un avertissement</string>
@@ -648,7 +648,7 @@
     <string name="unknown_notification_type">Notification de type inconnu</string>
     <string name="dialog_save_profile_changes_message">Voulez-vous sauvegarder vos changements de profil ?</string>
     <string name="pref_match_default_post_privacy">Appliquer la confidentialité des messages par défaut</string>
-    <string name="notification_listenable_worker_description">Notifications quand Tusky est en arrière-plan</string>
+    <string name="notification_listenable_worker_description">Notifications quand Warpnet est en arrière-plan</string>
     <string name="notification_notification_worker">Récupération des notifications…</string>
     <string name="compose_delete_draft">Supprimer le brouillon ?</string>
     <string name="label_translating">Traduction…</string>
@@ -726,8 +726,8 @@
     <string name="action_remove_account">Supprimer le compte</string>
     <string name="action_rehide_status">Cacher de nouveau le statu filtré</string>
     <string name="message_filters_empty">Vous n\'avez aucun filtres.</string>
-    <string name="action_remove_account_confirm">Êtes-vous sur de vouloir supprimer le compte de Tusky ? Cela supprimera toutes les données locales du compte, brouillons et préférences compris.</string>
-    <string name="error_missing_edits">Votre serveur sait que cette publication a été éditée, mais n\'a pas de copie des éditions. Elles ne peuvent donc pas vous être affichées.\n\nC\'est une <a href="https://github.com/mastodon/mastodon/issues/25398">erreur #25398 de Mastodon</a>.</string>
+    <string name="action_remove_account_confirm">Êtes-vous sur de vouloir supprimer le compte de Warpnet ? Cela supprimera toutes les données locales du compte, brouillons et préférences compris.</string>
+    <string name="error_missing_edits">Votre serveur sait que cette publication a été éditée, mais n\'a pas de copie des éditions. Elles ne peuvent donc pas vous être affichées.\n\nC\'est une <a href="https://github.com/Warp-net/warpnet/issues">erreur #25398 de Warpnet</a>.</string>
     <string name="action_reveal_media">Montrer le média</string>
     <string name="quote_policy_public">N\'importe qui</string>
     <plurals name="quotes">

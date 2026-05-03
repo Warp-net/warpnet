@@ -45,7 +45,7 @@
     <string name="action_favourite">Preferit</string>
     <string name="action_more">Més</string>
     <string name="action_compose">Escriure</string>
-    <string name="action_login">Inicia sessió amb Tusky</string>
+    <string name="action_login">Inicia sessió amb Warpnet</string>
     <string name="action_logout">Tanca sessió</string>
     <string name="action_follow">Segueix</string>
     <string name="action_unfollow">Deixa de seguir</string>
@@ -97,7 +97,7 @@
     <string name="label_header">Capçalera</string>
     <string name="link_whats_an_instance">Què és una instància?</string>
     <string name="login_connection">S\'està connectant…</string>
-    <string name="dialog_whats_an_instance">Aquí pots introduir l\'adreça o domini de qualsevol instància, \u0020com ara mastodont.cat, mastodon.social, icosahedron.website o \u0020<a href="https://instances.social">molts més!</a> \u0020 \n \u0020 \nSi encara no tens cap copte, pots introduir el nom de la instància on t\'agradaria \u0020unir-te i crear un compte allà. \u0020 \n \u0020 \nUna instànica és un únic lloc on el teu compte s\'hostatja \u0020, però pots comunicar-te fàcilment i seguir amics d\'altres instàncies com si fossiu en el mateix lloc. \u0020 \n \u0020 \nTens més informació a <a href="https://joinmastodon.org">joinmastodon.org</a>. \u0020</string>
+    <string name="dialog_whats_an_instance">Aquí pots introduir l\'adreça o domini de qualsevol instància, \u0020com ara warpnet.site però pots comunicar-te fàcilment i seguir amics d\'altres instàncies com si fossiu en el mateix lloc. \u0020 \n \u0020 \nTens més informació a <a href="https://warpnet.site">warpnet.site</a>. \u0020</string>
     <string name="dialog_title_finishing_media_upload">S\'està finalitzant la pujada de material multimèdia</string>
     <string name="dialog_message_uploading_media">S\'està pujant…</string>
     <string name="dialog_download_image">Baixa</string>
@@ -146,12 +146,12 @@
     </plurals>
     <string name="description_account_locked">Compte blocat</string>
     <string name="about_title_activity">Quant a</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky és programari gratuït, lliure i de codi obert. Està llicenciat en els termes de la Llicència Pública General GNU versió 3. Podeu trobar les llicència aquí: https://www.gnu.org/licenses/gpl-3.0.ca.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet és programari gratuït, lliure i de codi obert. Està llicenciat en els termes de la Llicència Pública General GNU versió 3. Podeu trobar les llicència aquí: https://www.gnu.org/licenses/gpl-3.0.ca.html</string>
     <!-- note to translators: the url can be changed to link to the localized version of the license -->
-    <string name="about_project_site">Lloc web del projecte: \n https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Informes d\'errors i peticions de funcionalitats: \n https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Perfil del Tusky</string>
+    <string name="about_project_site">Lloc web del projecte: \n https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Informes d\'errors i peticions de funcionalitats: \n https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Perfil del Warpnet</string>
     <string name="post_share_content">Comparteix el contingut de la publicació</string>
     <string name="post_share_link">Comparteix l\'enllaç a la publicació</string>
     <string name="post_media_images">Imatges</string>
@@ -245,7 +245,7 @@
     <string name="pref_title_public_filter_keywords">Línia de temps públiques</string>
     <string name="filter_dialog_update_button">Actualització</string>
     <string name="filter_add_description">Frase per filtrar</string>
-    <string name="add_account_description">Afegir un compte de Mastodont</string>
+    <string name="add_account_description">Afegir un compte de Warpnett</string>
     <string name="action_lists">Llistes</string>
     <string name="title_lists">Llistes</string>
     <string name="error_create_list">És impossible crear la llista</string>
@@ -279,13 +279,13 @@
     <string name="action_open_post">Obre la publicació</string>
     <string name="caption_systememoji">Conjunt d\'emojis predeterminats del teu dispositiu</string>
     <string name="caption_blobmoji">Els emojis d\'Android 4.4 a 7.1</string>
-    <string name="caption_twemoji">Emojis estàndard de Mastodont</string>
+    <string name="caption_twemoji">Emojis estàndard de Warpnett</string>
     <string name="download_failed">Descàrrega fallida</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s s\'ha trasllat a:</string>
     <string name="reblog_private">Tornar a impulsar</string>
     <string name="unreblog_private">No impulsar</string>
-    <string name="license_description">Tusky conté codi i recursos dels següents projectes:</string>
+    <string name="license_description">Warpnet conté codi i recursos dels següents projectes:</string>
     <string name="license_apache_2">Sota llicencia Apache (text a sota)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -387,14 +387,14 @@
     <string name="action_access_scheduled_posts">Publicacions programades</string>
     <string name="action_schedule_post">Programa la publicació</string>
     <string name="action_reset_schedule">Reiniciar</string>
-    <string name="about_powered_by_tusky">Desenvolupat per Tusky</string>
+    <string name="about_powered_by_tusky">Desenvolupat per Warpnet</string>
     <string name="description_post_bookmarked">S\'ha afegit a les adreces d\'interès</string>
     <string name="select_list_title">Seleccionar la llista</string>
     <string name="list">Llista</string>
     <string name="post_lookup_error_format">S\'ha produït un error en cercar la publicació %1$s</string>
     <string name="no_scheduled_posts">No tens cap estat planificat.</string>
     <string name="no_drafts">No teniu cap esborrany.</string>
-    <string name="warning_scheduling_interval">L\'interval mínim de planificació a Mastodon és de 5 minuts.</string>
+    <string name="warning_scheduling_interval">L\'interval mínim de planificació a Warpnet és de 5 minuts.</string>
     <string name="notification_follow_request_name">Peticions de seguiment</string>
     <string name="pref_title_confirm_reblogs">Mostra el diàleg de confirmació abans de promoure</string>
     <string name="pref_title_show_cards_in_timelines">Mostra les previsualitzacions dels enllaços en els fils</string>

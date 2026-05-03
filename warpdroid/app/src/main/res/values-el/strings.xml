@@ -80,7 +80,7 @@
     <string name="action_close">Κλείσιμο</string>
     <string name="title_notifications">Ειδοποιήσεις</string>
     <string name="action_compose">Συνθέστε</string>
-    <string name="action_login">Σύνδεση με Tusky</string>
+    <string name="action_login">Σύνδεση με Warpnet</string>
     <string name="action_edit_own_profile">Επεξεργασία</string>
     <string name="action_reblog">Προώθηση</string>
     <string name="dialog_unfollow_warning">Άρση ακολούθησης αυτού του λογαριασμού;</string>
@@ -136,7 +136,7 @@
     <string name="action_view_media">Πολυμέσα</string>
     <string name="dialog_message_uploading_media">Ανέβασμα…</string>
     <string name="about_title_activity">Σχετικά</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="pref_title_alway_show_sensitive_media">Να εμφανίζετε πάντα το ευαίσθητο περιεχόμενο</string>
     <string name="description_post_media">Πολυμέσα: %1$s</string>
     <string name="title_mentions_dialog">Μνείες</string>
@@ -158,7 +158,7 @@
     <string name="post_media_video">Βίντεο</string>
     <string name="post_media_audio">Ήχος</string>
     <string name="about_account_info_title">Ο λογαρισμός σου</string>
-    <string name="about_project_site">Ιστοσελίδα εφαρμογής: https://tusky.app</string>
+    <string name="about_project_site">Ιστοσελίδα εφαρμογής: https://warpnet.site</string>
     <string name="action_open_media_n">Άνοιγμα πολυμέσων #%1$d</string>
     <string name="dialog_delete_filter_text">Διαγραφή φίλτρου \'%1$s\';</string>
     <string name="error_media_upload_type">Αυτός ο τύπος αρχείου δεν μπορεί να μεταφορτωθεί.</string>

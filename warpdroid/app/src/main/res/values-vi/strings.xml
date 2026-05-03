@@ -64,7 +64,7 @@
     <string name="dialog_download_image">Tải về</string>
     <string name="dialog_message_uploading_media">Đang tải…</string>
     <string name="dialog_title_finishing_media_upload">Đã tải xong tập tin</string>
-    <string name="dialog_whats_an_instance">Bạn phải nhập một tên miền. Ví dụ mastodon.social, icosahedron.website, social.tchncs.de và <a href="https://instances.social">vô số khác!</a>\n\nNếu chưa có tài khoản, bạn phải tạo tài khoản ở đó trước.\n\nMáy chủ, nói cách khác là một cộng đồng nơi mà bạn đăng ký tài khoản trên đó, nhưng bạn vẫn có thể dễ dàng giao tiếp và theo dõi mọi người trên các máy chủ khác. \n\nTham khảo <a href="https://joinmastodon.org">joinmastodon.org</a></string>
+    <string name="dialog_whats_an_instance">Bạn phải nhập một tên miền. Ví dụ warpnet.site nhưng bạn vẫn có thể dễ dàng giao tiếp và theo dõi mọi người trên các máy chủ khác. \n\nTham khảo <a href="https://warpnet.site">warpnet.site</a></string>
     <string name="login_connection">Đang kết nối…</string>
     <string name="label_header">Ảnh bìa</string>
     <string name="label_avatar">Ảnh đại diện</string>
@@ -249,11 +249,11 @@
     <string name="notification_boost_description">Thông báo khi tút của bạn được đăng lại</string>
     <string name="notification_boost_name">Đăng lại</string>
     <string name="notification_follow_request_description">Thông báo về lượt yêu cầu theo dõi</string>
-    <string name="about_bug_feature_request_site">Báo lỗi và đề xuất tính năng \nhttps://codeberg.org/tusky/Tusky/issues</string>
-    <string name="about_project_site">Website dự án: https://tusky.app</string>
-    <string name="about_tusky_license">Tusky là phần mềm mã nguồn mở, được phân phối với giấy phép GNU General Public License Version 3. Tham khảo thêm tại: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_powered_by_tusky">Powered by Tusky</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_bug_feature_request_site">Báo lỗi và đề xuất tính năng \nhttps://codeberg.org/tusky/Warpnet/issues</string>
+    <string name="about_project_site">Website dự án: https://warpnet.site</string>
+    <string name="about_tusky_license">Warpnet là phần mềm mã nguồn mở, được phân phối với giấy phép GNU General Public License Version 3. Tham khảo thêm tại: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_powered_by_tusky">Powered by Warpnet</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="description_account_locked">Tài khoản bị khóa</string>
     <string name="notification_poll_description">Thông báo khi một cuộc bình chọn kết thúc</string>
     <string name="notification_poll_name">Bình chọn</string>
@@ -285,10 +285,10 @@
     <string name="post_media_images">Hình ảnh</string>
     <string name="post_share_link">Liên kết tút</string>
     <string name="post_share_content">Nội dung tút</string>
-    <string name="about_tusky_account">Trang Tusky</string>
+    <string name="about_tusky_account">Trang Warpnet</string>
     <string name="pref_title_confirm_reblogs">Hỏi trước khi đăng lại tút</string>
     <string name="pref_title_show_cards_in_timelines">Hiện xem trước link</string>
-    <string name="warning_scheduling_interval">Mastodon giới hạn tối thiểu 5 phút.</string>
+    <string name="warning_scheduling_interval">Warpnet giới hạn tối thiểu 5 phút.</string>
     <string name="no_scheduled_posts">Bạn không có tút đã lên lịch.</string>
     <string name="no_drafts">Bạn không có tút nháp.</string>
     <string name="edit_poll">Sửa</string>
@@ -381,14 +381,14 @@
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_apache_2">Giấy phép Apache (xem bên dưới)</string>
-    <string name="license_description">Tusky có sử dụng những dự án mã nguồn mở sau:</string>
+    <string name="license_description">Warpnet có sử dụng những dự án mã nguồn mở sau:</string>
     <string name="unreblog_private">Hủy đăng lại</string>
     <string name="reblog_private">Đăng lại công khai</string>
     <string name="account_moved_description">%1$s đã chuyển sang:</string>
     <string name="profile_badge_bot_text">Tài khoản Bot</string>
     <string name="download_failed">Tải về thất bại</string>
     <string name="caption_notoemoji">Emoji của Google</string>
-    <string name="caption_twemoji">Emoji chính thức của Mastodon</string>
+    <string name="caption_twemoji">Emoji chính thức của Warpnet</string>
     <string name="caption_blobmoji">Emoji của Android phiên bản từ 4.4 đến 7.1</string>
     <string name="caption_systememoji">Dùng emoji thiết bị</string>
     <string name="action_open_post">Xem tút</string>
@@ -411,7 +411,7 @@
     <string name="action_delete_list">Xóa danh sách</string>
     <string name="action_rename_list">Đổi tên danh sách</string>
     <string name="action_create_list">Tạo danh sách</string>
-    <string name="add_account_description">Thêm tài khoản Mastodon</string>
+    <string name="add_account_description">Thêm tài khoản Warpnet</string>
     <string name="add_account_name">Thêm tài khoản</string>
     <string name="filter_add_description">Cụm từ muốn lọc</string>
     <string name="filter_dialog_whole_word_description">Chỉ có tác dụng nếu cụm từ là chữ-số trùng khớp, viết liền không dấu cách</string>
@@ -532,7 +532,7 @@
     <string name="a11y_label_loading_thread">Đang tải thảo luận</string>
     <string name="action_share_account_link">Liên kết trang hồ sơ</string>
     <string name="send_account_link_to">Chia sẻ URL tài khoản với…</string>
-    <string name="action_share_account_username">Địa chỉ Mastodon</string>
+    <string name="action_share_account_username">Địa chỉ Warpnet</string>
     <string name="send_account_username_to">Chia sẻ tên người dùng…</string>
     <string name="account_username_copied">Đã sao chép tên người dùng</string>
     <string name="pref_title_reading_order">Thứ tự đọc</string>
@@ -586,15 +586,15 @@
     <string name="filter_edit_keyword_title">Sửa từ</string>
     <string name="filter_description_format">%1$s: %2$s</string>
     <string name="pref_title_show_stat_inline">Hiện số tương tác tút</string>
-    <string name="help_empty_home">Đây là <b>bảng tin của bạn</b>. Nó sẽ hiện tút gần đây từ những người bạn theo dõi. \n \u0020 \nĐể khám phá mọi người, bạn có thể xem qua ở các bảng tin khác. Ví dụ: {{group}} Bảng tin máy chủ của bạn. Hoặc bạn cũng có thể {{search}} tìm theo tên người dùng; ví dụ như Tusky.</string>
+    <string name="help_empty_home">Đây là <b>bảng tin của bạn</b>. Nó sẽ hiện tút gần đây từ những người bạn theo dõi. \n \u0020 \nĐể khám phá mọi người, bạn có thể xem qua ở các bảng tin khác. Ví dụ: {{group}} Bảng tin máy chủ của bạn. Hoặc bạn cũng có thể {{search}} tìm theo tên người dùng; ví dụ như Warpnet.</string>
     <string name="post_media_image">Hình ảnh</string>
     <string name="select_list_manage">Quản lý danh sách</string>
     <string name="load_newest_notifications">Tải những thông báo mới nhất</string>
     <string name="compose_delete_draft">Xóa bản nháp?</string>
-    <string name="error_missing_edits">Máy chủ của bạn biết tút đã được sửa, nhưng không có bản sao của lần sửa, nên nó không thể hiện.\n\nĐây là <a href="https://github.com/mastodon/mastodon/issues/25398">Lỗi Mastodon #25398</a>.</string>
+    <string name="error_missing_edits">Máy chủ của bạn biết tút đã được sửa, nhưng không có bản sao của lần sửa, nên nó không thể hiện.\n\nĐây là <a href="https://github.com/Warp-net/warpnet/issues">Lỗi Warpnet #25398</a>.</string>
     <string name="pref_ui_text_size">Cỡ chữ giao diện</string>
     <string name="notification_listenable_worker_name">Hoạt động chạy nền</string>
-    <string name="notification_listenable_worker_description">Thông báo khi Tusky hoạt động ngầm</string>
+    <string name="notification_listenable_worker_description">Thông báo khi Warpnet hoạt động ngầm</string>
     <string name="notification_notification_worker">Đang nạp thông báo…</string>
     <string name="notification_prune_cache">Bảo trì bộ nhớ đệm…</string>
     <string name="error_media_upload_sending_fmt">Không thể tải lên: %1$s</string>
@@ -642,7 +642,7 @@
     <string name="pref_title_confirm_follows">Hỏi trước khi theo dõi</string>
     <string name="url_copied">Đã sao chép liên kết</string>
     <string name="confirmation_hashtag_copied">Đã sao chép \'#%1$s\'</string>
-    <string name="pref_default_reply_privacy">Kiểu trả lời (chỉ Tusky)</string>
+    <string name="pref_default_reply_privacy">Kiểu trả lời (chỉ Warpnet)</string>
     <string name="error_deleting_filter">Xóa bộ lọc \'%1$s\' không được</string>
     <string name="error_saving_filter">Chưa thể lưu bộ lọc \'%1$s\'</string>
     <string name="action_follow_hashtag">Theo dõi một hashtag mới</string>
@@ -673,7 +673,7 @@
     <string name="notifications_from">Thông báo từ %1$s</string>
     <string name="action_accept_notification_request">Chấp nhận</string>
     <string name="action_dismiss_notification_request">Bỏ qua</string>
-    <string name="notification_policies_not_supported">Tính năng này chỉ được hỗ trợ trên máy chủ Mastodon chạy phiên bản 4.3.0 trở lên.</string>
+    <string name="notification_policies_not_supported">Tính năng này chỉ được hỗ trợ trên máy chủ Warpnet chạy phiên bản 4.3.0 trở lên.</string>
     <string name="unknown_notification_filter_unsolicited_private_mentions_title">Nhắn riêng không mong muốn</string>
     <string name="post_replied_format">Trả lời đến %1$s</string>
     <string name="post_replied_self">Tiếp tục chủ đề</string>
@@ -709,7 +709,7 @@
     <string name="relationship_severance_event_account_suspension">Quản trị viên %1$s đã vô hiệu hóa %2$s, bạn không còn có thể tương tác hoặc nhận được thông tin cập nhật từ họ nữa.</string>
     <string name="moderation_warning_action_mark_statuses_as_sensitive">Vài tút của bạn được đánh dấu là nhạy cảm.</string>
     <string name="relationship_severance_event_title">Mất kết nối</string>
-    <string name="unknown_notification_type_explanation">Tusky không nhận dạng được loại thông báo này và không thể hiển thị cho bạn. Giao diện web của máy chủ của bạn có thể thực hiện được. Vui lòng thông báo cho các nhà phát triển Tusky để họ có thể thêm hỗ trợ cho loại này!</string>
+    <string name="unknown_notification_type_explanation">Warpnet không nhận dạng được loại thông báo này và không thể hiển thị cho bạn. Giao diện web của máy chủ của bạn có thể thực hiện được. Vui lòng thông báo cho các nhà phát triển Warpnet để họ có thể thêm hỗ trợ cho loại này!</string>
     <string name="notification_info_private_mention">Nhắn riêng</string>
     <string name="moderation_warning">Bạn nhận một cảnh cáo kiểm duyệt.</string>
     <string name="action_reblog_unlisted">Đăng lại hạn chế</string>
@@ -751,8 +751,8 @@
     <string name="report_category_other_description">Vấn đề không thuộc những mục trên</string>
     <string name="action_login_again">Đăng nhập lại</string>
     <string name="action_remove_account">Gỡ tài khoản</string>
-    <string name="action_remove_account_confirm">Bạn có chắc muốn gỡ tài khoản %1$s khỏi Tusky? Thao tác này sẽ xóa toàn bộ dữ liệu cục bộ của tài khoản, bao gồm cả tút nháp và các thiết lập.</string>
-    <string name="account_disconnected_message">Thông tin đăng nhập %1$s trên Tusky không còn hiệu lực nữa. Điều này có thể xảy ra do bạn đã thay đổi mật khẩu hoặc thu hồi quyền truy cập Tusky. Vui lòng đăng nhập lại.</string>
+    <string name="action_remove_account_confirm">Bạn có chắc muốn gỡ tài khoản %1$s khỏi Warpnet? Thao tác này sẽ xóa toàn bộ dữ liệu cục bộ của tài khoản, bao gồm cả tút nháp và các thiết lập.</string>
+    <string name="account_disconnected_message">Thông tin đăng nhập %1$s trên Warpnet không còn hiệu lực nữa. Điều này có thể xảy ra do bạn đã thay đổi mật khẩu hoặc thu hồi quyền truy cập Warpnet. Vui lòng đăng nhập lại.</string>
     <string name="account_disconnected_title">Tài khoản đã bị ngắt kết nối</string>
     <string name="action_rehide_status">Ẩn lại tút đã lọc</string>
     <string name="filter_context_home">Trang chủ và Danh sách</string>

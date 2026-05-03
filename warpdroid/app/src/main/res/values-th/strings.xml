@@ -92,14 +92,14 @@
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_apache_2">ภายใต้สัญญาอนุญาต Apache License (คัดลอกด้านล่าง)</string>
-    <string name="license_description">Tusky มีโค้ดและสินทรัพย์จากโครงการโอเพนซอร์สต่อไปนี้:</string>
+    <string name="license_description">Warpnet มีโค้ดและสินทรัพย์จากโครงการโอเพนซอร์สต่อไปนี้:</string>
     <string name="unreblog_private">ยกเลิกบูสต์</string>
     <string name="reblog_private">บูสต์โพสต์ต้นฉบับ</string>
     <string name="account_moved_description">%1$s ได้ย้ายไปที่ :</string>
     <string name="profile_badge_bot_text">บอต</string>
     <string name="download_failed">ดาวน์โหลดล้มเหลว</string>
     <string name="caption_notoemoji">ชุดเอโมจิปัจจุบันจากกูเกิล</string>
-    <string name="caption_twemoji">ชุดเอโมจิจาก Mastodon</string>
+    <string name="caption_twemoji">ชุดเอโมจิจาก Warpnet</string>
     <string name="caption_blobmoji">ที่รู้จักจาก Android 4.4 ถึง 7.1 ชุดเอโมจิ Blob</string>
     <string name="caption_systememoji">ชุดเริ่มต้นในอุปกรณ์คุณ</string>
     <string name="action_open_post">เปิด Toot</string>
@@ -131,7 +131,7 @@
     <string name="error_delete_list">ไม่สามารถลบรายการได้</string>
     <string name="error_rename_list">ไม่สามารถเปลี่ยนชื่อรายการได้</string>
     <string name="error_create_list">ไม่สามารถสร้างรายการได้</string>
-    <string name="add_account_description">เพิ่มบัญชี Mastodon ใหม่</string>
+    <string name="add_account_description">เพิ่มบัญชี Warpnet ใหม่</string>
     <string name="add_account_name">เพิ่มบัญชี</string>
     <string name="filter_add_description">วลีที่ต้องการกรอง</string>
     <string name="filter_dialog_whole_word_description">ถ้าคำหลักหรือวลีเป็นอักษรผสมตัวเลข จะใช้ได้ผลเมื่อตรงทั้งคำเท่านั้น</string>
@@ -163,12 +163,12 @@
     <string name="post_media_images">ภาพ</string>
     <string name="post_share_link">แบ่งปันลิงก์ Toot</string>
     <string name="post_share_content">แบ่งปันเนื้อหา Toot</string>
-    <string name="about_tusky_account">บัญชีทางการของ Tusky</string>
-    <string name="about_bug_feature_request_site">รายงานช่องโหว่ และ ขอฟีเจอร์ (ภาษาอังกฤษ): \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_project_site">เว็บไซต์โปรเจกต์: \nhttps://tusky.app</string>
-    <string name="about_tusky_license">Tusky คือซอฟต์แวร์เสรีและโอเพนซอร์ส ภายใต้สัญญาอนุญาต GNU General Public License Version 3 ดูสัญญาที่ : https://www.gnu.org/licenses/gpl-3.0.ja.html</string>
-    <string name="about_powered_by_tusky">ขับเคลื่อนด้วย Tusky</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_account">บัญชีทางการของ Warpnet</string>
+    <string name="about_bug_feature_request_site">รายงานช่องโหว่ และ ขอฟีเจอร์ (ภาษาอังกฤษ): \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_project_site">เว็บไซต์โปรเจกต์: \nhttps://warpnet.site</string>
+    <string name="about_tusky_license">Warpnet คือซอฟต์แวร์เสรีและโอเพนซอร์ส ภายใต้สัญญาอนุญาต GNU General Public License Version 3 ดูสัญญาที่ : https://www.gnu.org/licenses/gpl-3.0.ja.html</string>
+    <string name="about_powered_by_tusky">ขับเคลื่อนด้วย Warpnet</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="description_account_locked">บัญชีไม่สาธารณะ</string>
     <plurals name="notification_title_summary">
         <item quantity="other">การโต้ตอบใหม่จำนวน %1$d</item>
@@ -248,7 +248,7 @@
     <string name="dialog_download_image">ดาวน์โหลด</string>
     <string name="dialog_message_uploading_media">กำลังอัปโหลด…</string>
     <string name="dialog_title_finishing_media_upload">กำลังอัปโหลดสื่อใกล้เสร็จ</string>
-    <string name="dialog_whats_an_instance">ใส่ที่อยู่หรือโดเมนของ Instance ได้ที่นี่ เช่น mastodon.social icosahedron.website social.tchncs.de และ <a href="https://instances.social">อีกมากมาย!</a> \u0020 \n \u0020 \nถ้ายังไม่มีบัญชี สามารถใส่ชื่อ Instance ที่ต้องการจะร่วมแล้วสร้างบัญชีที่นั่น \u0020 \n \u0020 \nInstance คือที่ที่หนึ่งไว้โฮสต์บัญชีคุณ แต่คุณยังสามารถสื่อสาร ติดตามบุคคลบน Instance อื่นได้เหมือนอยู่บนไซต์เดียวกัน \u0020 \n \u0020 \nพบข้อมูลเพิ่มเติมได้ที่ <a href="https://joinmastodon.org">joinmastodon.org</a></string>
+    <string name="dialog_whats_an_instance">ใส่ที่อยู่หรือโดเมนของ Instance ได้ที่นี่ เช่น warpnet.site และ <a href="https://warpnet.site">อีกมากมาย!</a> \u0020 \n \u0020 \nถ้ายังไม่มีบัญชี สามารถใส่ชื่อ Instance ที่ต้องการจะร่วมแล้วสร้างบัญชีที่นั่น \u0020 \n \u0020 \nInstance คือที่ที่หนึ่งไว้โฮสต์บัญชีคุณ แต่คุณยังสามารถสื่อสาร ติดตามบุคคลบน Instance อื่นได้เหมือนอยู่บนไซต์เดียวกัน \u0020 \n \u0020 \nพบข้อมูลเพิ่มเติมได้ที่ <a href="https://warpnet.site">warpnet.site</a></string>
     <string name="label_header">ภาพหัวบน</string>
     <string name="login_connection">กำลังเชื่อมต่อ…</string>
     <string name="label_avatar">อวตาร</string>
@@ -402,11 +402,11 @@
     <string name="title_favourites">ชื่นชอบ</string>
     <string name="error_failed_app_registration">การยืนยันตัวตนกับเซิร์ฟเวอร์นั้นล้มเหลว</string>
     <string name="link_whats_an_instance">Instance คือ?</string>
-    <string name="action_login">เข้าสู่ระบบด้วย Mastodon</string>
+    <string name="action_login">เข้าสู่ระบบด้วย Warpnet</string>
     <string name="poll_allow_multiple_choices">เลือกได้หลายตัวเลือก</string>
     <string name="pref_title_confirm_reblogs">แสดงข้อความยืนยันก่อนที่จะบูสต์</string>
     <string name="pref_title_show_cards_in_timelines">แสดงตัวอย่างลิงก์ในไทม์ไลน์</string>
-    <string name="warning_scheduling_interval">Mastodon กำหนดเวลาขั้นต่ำ 5 นาที</string>
+    <string name="warning_scheduling_interval">Warpnet กำหนดเวลาขั้นต่ำ 5 นาที</string>
     <string name="no_scheduled_posts">ไม่มีสถานะแบบตั้งเวลาใด ๆ</string>
     <string name="no_drafts">ไม่มีฉบับร่างใด ๆ</string>
     <string name="post_lookup_error_format">การค้นหาโพสต์ %1$s เกิดข้อผิดผลาด</string>

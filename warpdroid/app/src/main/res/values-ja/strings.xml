@@ -55,7 +55,7 @@
     <string name="action_favourite">お気に入り</string>
     <string name="action_more">その他</string>
     <string name="action_compose">投稿する</string>
-    <string name="action_login">Tusky でログイン</string>
+    <string name="action_login">Warpnet でログイン</string>
     <string name="action_logout">ログアウト</string>
     <string name="action_logout_confirm">アカウント %1$s からログアウトしてもよろしいですか？ログアウトすると、下書きや詳細設定を含めて、ローカルに保存されているアカウントの全てのデータが削除されます。</string>
     <string name="action_follow">フォローする</string>
@@ -124,7 +124,7 @@
     <string name="label_header">ヘッダー</string>
     <string name="link_whats_an_instance">インスタンスとは？</string>
     <string name="login_connection">接続中…</string>
-    <string name="dialog_whats_an_instance">mastodon.social, icosahedron.website, social.tchncs.deや<a href="https://instances.social">その他</a> のような、あらゆるインスタンスのアドレスやドメインを入力できます。 \u0020 \n \u0020 \nまだアカウントをお持ちでない場合は、参加したいインスタンスの名前を入力することで そのインスタンスにアカウントを作成できます。 \u0020 \n \u0020 \nインスタンスはあなたのアカウントが提供される単独の場所ですが、他のインスタンスのユーザーとあたかも同じ場所にいるように簡単にコミュニケーションをとったりフォローしたりできます。 \u0020 \n \u0020 \nさらに詳しい情報は<a href="https://joinmastodon.org">joinmastodon.org</a>でご覧いただけます。</string>
+    <string name="dialog_whats_an_instance">warpnet.site social.tchncs.deや<a href="https://warpnet.site">その他</a> のような、あらゆるインスタンスのアドレスやドメインを入力できます。 \u0020 \n \u0020 \nまだアカウントをお持ちでない場合は、参加したいインスタンスの名前を入力することで そのインスタンスにアカウントを作成できます。 \u0020 \n \u0020 \nインスタンスはあなたのアカウントが提供される単独の場所ですが、他のインスタンスのユーザーとあたかも同じ場所にいるように簡単にコミュニケーションをとったりフォローしたりできます。 \u0020 \n \u0020 \nさらに詳しい情報は<a href="https://warpnet.site">warpnet.site</a>でご覧いただけます。</string>
     <string name="dialog_title_finishing_media_upload">メディアをアップロードしています</string>
     <string name="dialog_message_uploading_media">アップロード中…</string>
     <string name="dialog_download_image">ダウンロード</string>
@@ -193,8 +193,8 @@
     </plurals>
     <string name="description_account_locked">非公開アカウント</string>
     <string name="about_title_activity">このアプリについて</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tuskyは無料のオープンソースソフトウェアです。<!--
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnetは無料のオープンソースソフトウェアです。<!--
      -->GNU General Public License Version 3 の下で使用許諾されています。<!--
      -->ライセンスはここからご覧いただけます： https://www.gnu.org/licenses/gpl-3.0.ja.html</string>
     <!-- note to translators:
@@ -203,9 +203,9 @@
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">プロジェクトのウェブサイト (英語): https://tusky.app</string>
-    <string name="about_bug_feature_request_site">バグ報告と機能リクエスト (英語): https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Tusky公式アカウント</string>
+    <string name="about_project_site">プロジェクトのウェブサイト (英語): https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">バグ報告と機能リクエスト (英語): https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnet公式アカウント</string>
     <string name="post_share_content">投稿の内容を共有</string>
     <string name="post_share_link">投稿へのリンクを共有</string>
     <string name="post_media_images">画像</string>
@@ -231,7 +231,7 @@
     <string name="filter_addition_title">フィルターを追加</string>
     <string name="filter_edit_title">フィルターを編集</string>
     <string name="add_account_name">アカウントを追加</string>
-    <string name="add_account_description">新しいMastodonアカウントを追加</string>
+    <string name="add_account_description">新しいWarpnetアカウントを追加</string>
     <string name="action_lists">リスト</string>
     <string name="title_lists">リスト</string>
     <string name="error_rename_list">リスト名を更新できませんでした</string>
@@ -258,13 +258,13 @@
     <string name="action_open_post">投稿を開く</string>
     <string name="caption_systememoji">あなたのデバイスのデフォルト絵文字セットです</string>
     <string name="caption_blobmoji">Android 4.4-7.1で知られる、Blob絵文字です</string>
-    <string name="caption_twemoji">Mastodonの標準絵文字セットです</string>
+    <string name="caption_twemoji">Warpnetの標準絵文字セットです</string>
     <string name="download_failed">ダウンロード失敗</string>
     <string name="profile_badge_bot_text">ボット</string>
     <string name="account_moved_description">%1$s は引っ越しました:</string>
     <string name="reblog_private">ブースト</string>
     <string name="unreblog_private">ブーストを解除</string>
-    <string name="license_description">Tuskyは、以下のオープンソース プロジェクトからのコードとアセットを含んでいます:</string>
+    <string name="license_description">Warpnetは、以下のオープンソース プロジェクトからのコードとアセットを含んでいます:</string>
     <string name="license_apache_2">Apache Licenseの下にライセンスされています（下記をコピー）</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -417,13 +417,13 @@
     <plurals name="poll_info_people">
         <item quantity="other">%1$s人</item>
     </plurals>
-    <string name="warning_scheduling_interval">Mastodonにおける予約までの最小間隔は5分です。</string>
+    <string name="warning_scheduling_interval">Warpnetにおける予約までの最小間隔は5分です。</string>
     <string name="notification_subscription_format">%1$sさんが投稿しました</string>
     <string name="title_announcements">お知らせ</string>
     <string name="mute_domain_warning">本当に %1$s のすべてをブロックするのですか？ そのドメインからのコンテンツは、公開タイムラインや通知に表示されなくなります。また、そのドメインのフォロワーは削除されます。</string>
     <string name="post_media_audio">音声</string>
     <string name="mute_domain_warning_dialog_ok">ドメイン全体を非表示</string>
-    <string name="about_powered_by_tusky">Tuskyによって提供されています</string>
+    <string name="about_powered_by_tusky">Warpnetによって提供されています</string>
     <string name="delete_scheduled_post_warning">この予約投稿を削除しますか？</string>
     <string name="instance_rule_info">ログインにより %1$s のルールに同意することになります。</string>
     <string name="action_unbookmark">ブックマークを削除</string>
@@ -567,7 +567,7 @@
     <string name="pref_title_show_stat_inline">タイムラインに投稿の統計情報を表示する</string>
     <string name="pref_ui_text_size">UI のテキストサイズ</string>
     <string name="notification_listenable_worker_name">バックグラウンドアクティビティ</string>
-    <string name="notification_listenable_worker_description">Tusky がバックグラウンドで動作中の通知</string>
+    <string name="notification_listenable_worker_description">Warpnet がバックグラウンドで動作中の通知</string>
     <string name="notification_notification_worker">通知を取得中…</string>
     <string name="notification_prune_cache">キャッシュの整理中…</string>
     <string name="label_filter_context">フィルターコンテキスト</string>
@@ -600,7 +600,7 @@
     <string name="load_newest_notifications">最新の通知を読み込む</string>
     <string name="compose_delete_draft">下書きを削除しますか？</string>
     <string name="error_media_upload_sending_fmt">アップロードに失敗しました: %1$s</string>
-    <string name="error_missing_edits">あなたのサーバーは、この投稿が変更されたことを把握していますが、編集履歴のコピーを備えていないので、表示できません。 \u0020 \n \u0020 \nこれは<a href="https://github.com/mastodon/mastodon/issues/25398">Mastodonのissue #25398</a>です。</string>
+    <string name="error_missing_edits">あなたのサーバーは、この投稿が変更されたことを把握していますが、編集履歴のコピーを備えていないので、表示できません。 \u0020 \n \u0020 \nこれは<a href="https://github.com/Warp-net/warpnet/issues">Warpnetのissue #25398</a>です。</string>
     <string name="title_public_trending_statuses">トレンドの投稿</string>
     <string name="about_device_info">%1$s %2$s \nAndroid バージョン: %3$s \nSDK バージョン: %4$d</string>
     <string name="about_account_info_title">あなたのアカウント</string>

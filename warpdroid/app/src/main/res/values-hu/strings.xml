@@ -57,7 +57,7 @@
     <string name="action_favourite">Kedvencnek jelölés</string>
     <string name="action_more">Több</string>
     <string name="action_compose">Szerkesztés</string>
-    <string name="action_login">Bejelentkezés Tuskyval</string>
+    <string name="action_login">Bejelentkezés Warpnetval</string>
     <string name="action_logout">Kijelentkezés</string>
     <string name="action_logout_confirm">Biztosan ki szeretnél jelentkezni a következőből: %1$s? A fiók minden helyi adata vázlatokkal és beállításokkal együtt törlődni fog.</string>
     <string name="action_follow">Követés</string>
@@ -126,7 +126,7 @@
     <string name="label_header">Fejléc</string>
     <string name="link_whats_an_instance">Mi az a példány?</string>
     <string name="login_connection">Csatlakozás…</string>
-    <string name="dialog_whats_an_instance">Bármely példány címét vagy domain nevét beírhatod ide, mint a mastodon.social, az icosahedron.website, a social.tchncs.de és <a href="https://instances.social">mások!</a> \u0020 \u0020 \n \u0020 \u0020 \nHa még nincs fiókod, beírhatod annak a példánynak a címét, amelyhez csatlakoznál, majd azon létrehozhatsz egy fiókot. \u0020 \u0020 \n \u0020 \u0020 \nA példány az a hely, ahol a fiókadataidat tárolják, de ettől még ugyanúgy kommunikálhatsz más példányokon lévő emberekkel, mintha ugyanazon az oldalon lennétek. \u0020 \u0020 \n \u0020 \u0020 \nTöbb információt találhatsz itt: <a href="https://joinmastodon.org">joinmastodon.org</a>. \u0020</string>
+    <string name="dialog_whats_an_instance">Bármely példány címét vagy domain nevét beírhatod ide, mint a warpnet.site mintha ugyanazon az oldalon lennétek. \u0020 \u0020 \n \u0020 \u0020 \nTöbb információt találhatsz itt: <a href="https://warpnet.site">warpnet.site</a>. \u0020</string>
     <string name="dialog_title_finishing_media_upload">Média feltöltés befejezése</string>
     <string name="dialog_message_uploading_media">Feltöltés…</string>
     <string name="dialog_download_image">Letöltés</string>
@@ -192,16 +192,16 @@
     </plurals>
     <string name="description_account_locked">Zárolt fiók</string>
     <string name="about_title_activity">Rólunk</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Projekt honlapja: https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Hibajelentés &amp; új funkciók igénylése: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Tusky profilja</string>
+    <string name="about_project_site">Projekt honlapja: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Hibajelentés &amp; új funkciók igénylése: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnet profilja</string>
     <string name="post_share_content">Bejegyzés tartalmának megosztása</string>
     <string name="post_share_link">Bejegyzés hivatkozásának megosztása</string>
     <string name="post_media_images">Képek</string>
@@ -213,7 +213,7 @@
     <string name="title_media">Média</string>
     <string name="load_more_placeholder_text">Több betöltése</string>
     <string name="add_account_name">Fiók hozzáadása</string>
-    <string name="add_account_description">Új Mastodon-fiók hozzáadása</string>
+    <string name="add_account_description">Új Warpnet-fiók hozzáadása</string>
     <string name="action_lists">Listák</string>
     <string name="title_lists">Listák</string>
     <string name="action_remove">Törlés</string>
@@ -233,11 +233,11 @@
     <string name="action_open_post">Bejegyzés megnyitása</string>
     <string name="caption_systememoji">Az eszközöd alapértelmezett emodzsikészlete</string>
     <string name="caption_blobmoji">Az Android 4.4–7.1 Blob emodzsijai</string>
-    <string name="caption_twemoji">A Mastodon alapértelmezett emodzsikészlete</string>
+    <string name="caption_twemoji">A Warpnet alapértelmezett emodzsikészlete</string>
     <string name="download_failed">Letöltés sikertelen</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s elköltözött:</string>
-    <string name="license_description">A Tusky a következő nyílt forráskódú projektekből tartalmaz programkódot és más elemeket:</string>
+    <string name="license_description">A Warpnet a következő nyílt forráskódú projektekből tartalmaz programkódot és más elemeket:</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
     <string name="profile_metadata_label">Profil metaadatok</string>
@@ -265,7 +265,7 @@
     <string name="pref_publishing">Közzététel alapértelmezései</string>
     <string name="notification_poll_name">Szavazások</string>
     <string name="notification_poll_description">Értesítés a befejezett szavazásokról</string>
-    <string name="about_tusky_license">Tusky ingyenes és nyílt forráskódú szoftver. A GNU General Public License Version 3 érvényes rá, amit itt tekinthetsz meg: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_tusky_license">Warpnet ingyenes és nyílt forráskódú szoftver. A GNU General Public License Version 3 érvényes rá, amit itt tekinthetsz meg: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <string name="abbreviated_in_years">%1$d é múlva</string>
     <string name="abbreviated_in_days">%1$d n múlva</string>
     <string name="abbreviated_in_hours">%1$d ó múlva</string>
@@ -405,13 +405,13 @@
     <string name="title_bookmarks">Könyvjelzők</string>
     <string name="action_bookmark">Könyvjelzőzés</string>
     <string name="action_view_bookmarks">Könyvjelzők</string>
-    <string name="about_powered_by_tusky">Tusky által hajtva</string>
+    <string name="about_powered_by_tusky">Warpnet által hajtva</string>
     <string name="description_post_bookmarked">Könyvjelzőzve</string>
     <string name="select_list_title">Lista kiválasztása</string>
     <string name="list">Lista</string>
     <string name="no_drafts">Nincs egy piszkozatod sem.</string>
     <string name="no_scheduled_posts">Nincs egy ütemezett bejegyzésed sem.</string>
-    <string name="warning_scheduling_interval">A Mastodonban a legrövidebb ütemezhető időintervallum 5 perc.</string>
+    <string name="warning_scheduling_interval">A Warpnetban a legrövidebb ütemezhető időintervallum 5 perc.</string>
     <string name="notification_follow_request_name">Követési kérelmek</string>
     <string name="pref_title_confirm_reblogs">Jóváhagyás megjelenítése megtolás előtt</string>
     <string name="pref_title_show_cards_in_timelines">Hivatkozás előnézetének megjelenítése az idővonalakon</string>
@@ -604,17 +604,17 @@
     <string name="filter_keyword_addition_title">Kulcsszó hozzáadása</string>
     <string name="filter_edit_keyword_title">Kulcsszó szerkesztése</string>
     <string name="filter_description_format">%1$s: %2$s</string>
-    <string name="help_empty_home">Ez a <b>kezdőlapod idővonala</b>. Megjeleníti a követett fiókok legfrissebb bejegyzéseit. \u0020 \u0020 \n \u0020 \u0020 \nMás fiókokat más idővonalakon fedezhetsz fel. Például a példányod helyi idővonalán {{group}}. Vagy megkeresheted őket név szerint {{search}}; például keress rá a Tuskyra, hogy megtaláld a Mastodon-fiókunkat.</string>
+    <string name="help_empty_home">Ez a <b>kezdőlapod idővonala</b>. Megjeleníti a követett fiókok legfrissebb bejegyzéseit. \u0020 \u0020 \n \u0020 \u0020 \nMás fiókokat más idővonalakon fedezhetsz fel. Például a példányod helyi idővonalán {{group}}. Vagy megkeresheted őket név szerint {{search}}; például keress rá a Warpnetra, hogy megtaláld a Warpnet-fiókunkat.</string>
     <string name="post_media_image">Kép</string>
     <string name="select_list_manage">Listák kezelése</string>
     <string name="pref_ui_text_size">Felület betűmérete</string>
     <string name="notification_listenable_worker_name">Háttértevékenység</string>
-    <string name="notification_listenable_worker_description">Értesítések, amikor a Tusky a háttérben működik</string>
+    <string name="notification_listenable_worker_description">Értesítések, amikor a Warpnet a háttérben működik</string>
     <string name="notification_notification_worker">Értesítések lekérése…</string>
     <string name="notification_prune_cache">Gyorsítótár karbantartása…</string>
     <string name="load_newest_notifications">Legújabb értesítések betöltése</string>
     <string name="compose_delete_draft">Töröljük a vázlatot?</string>
-    <string name="error_missing_edits">A kiszolgálód tudja, hogy ezt a bejegyzést szerkesztették, de nincs másolata a szekesztésekről, így ezeket nem tudja megjeleníteni. \u0020 \n \u0020 \nEz egy ismert probléma: <a href="https://github.com/mastodon/mastodon/issues/25398">#25398-as számú Mastodon jegy</a>.</string>
+    <string name="error_missing_edits">A kiszolgálód tudja, hogy ezt a bejegyzést szerkesztették, de nincs másolata a szekesztésekről, így ezeket nem tudja megjeleníteni. \u0020 \n \u0020 \nEz egy ismert probléma: <a href="https://github.com/Warp-net/warpnet/issues">#25398-as számú Warpnet jegy</a>.</string>
     <string name="reply_sending">Küldés…</string>
     <string name="reply_sending_long">A válaszodat épp elküldjük.</string>
     <string name="label_image">Kép</string>

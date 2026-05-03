@@ -60,7 +60,7 @@
     <string name="action_unfavourite">Aus Favoriten entfernen</string>
     <string name="action_more">Mehr</string>
     <string name="action_compose">Beitrag erstellen</string>
-    <string name="action_login">Mit Tusky anmelden</string>
+    <string name="action_login">Mit Warpnet anmelden</string>
     <string name="action_logout">Abmelden</string>
     <string name="action_logout_confirm">Möchtest du %1$s wirklich abmelden? Dadurch werden alle lokalen Daten des Profils, wie Entwürfe und Einstellungen, gelöscht.</string>
     <string name="action_follow">Folgen</string>
@@ -133,7 +133,7 @@
     <string name="label_header">Titelbild</string>
     <string name="link_whats_an_instance">Was ist eine Instanz?</string>
     <string name="login_connection">Wird verbunden …</string>
-    <string name="dialog_whats_an_instance">Die Adresse oder Domain einer Instanz kann hier eingegeben werden, wie z. B. mastodon.social, icosahedron.website, social.tchncs.de, und <a href="https://instances.social">weitere!</a>\n\nWenn du bis jetzt kein Konto hast, kannst du hier den Namen einer Instanz, der du beitreten willst, eingeben und dort ein Konto einrichten.\n\nEine Instanz ist ein einzelner Ort, wo dein Konto gehostet ist, aber du kannst mit anderen Leuten ganz einfach interagieren, als wärt ihr alle auf derselben Webseite.\n\nWeitere Informationen gibt es auf <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Die Adresse oder Domain einer Instanz kann hier eingegeben werden, wie z. B. warpnet.site als wärt ihr alle auf derselben Webseite.\n\nWeitere Informationen gibt es auf <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Hochladen der Datei wird abgeschlossen</string>
     <string name="dialog_message_uploading_media">Wird hochgeladen …</string>
     <string name="dialog_download_image">Herunterladen</string>
@@ -204,16 +204,16 @@
     </plurals>
     <string name="description_account_locked">Geschütztes Profil</string>
     <string name="about_title_activity">Über</string>
-    <string name="about_tusky_license">Tusky ist eine freie und quelloffene Software und ist lizenziert unter der GNU General Public License Version 3. Du kannst die Lizenz hier einsehen: https://www.gnu.org/licenses/gpl-3.0.de.html</string>
+    <string name="about_tusky_license">Warpnet ist eine freie und quelloffene Software und ist lizenziert unter der GNU General Public License Version 3. Du kannst die Lizenz hier einsehen: https://www.gnu.org/licenses/gpl-3.0.de.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Website des Projekts: https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Fehlermeldungen und Verbesserungsvorschläge:\nhttps://codeberg.org/tusky/Tusky/issues</string>
-    <string name="about_tusky_account">Profil von Tusky</string>
+    <string name="about_project_site">Website des Projekts: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Fehlermeldungen und Verbesserungsvorschläge:\nhttps://codeberg.org/tusky/Warpnet/issues</string>
+    <string name="about_tusky_account">Profil von Warpnet</string>
     <string name="post_share_content">Inhalt des Beitrags teilen</string>
     <string name="post_share_link">Link zum Beitrag teilen</string>
     <string name="post_media_images">Bilder</string>
@@ -231,7 +231,7 @@
     <string name="filter_dialog_remove_button">Entfernen</string>
     <string name="filter_dialog_update_button">Aktualisieren</string>
     <string name="add_account_name">Konto hinzufügen</string>
-    <string name="add_account_description">Neues Mastodon-Konto hinzufügen</string>
+    <string name="add_account_description">Neues Warpnet-Konto hinzufügen</string>
     <string name="action_lists">Listen</string>
     <string name="title_lists">Listen</string>
     <string name="action_create_list">Liste erstellen</string>
@@ -260,14 +260,14 @@
     <string name="action_open_post">Beitrag öffnen</string>
     <string name="caption_systememoji">Die Standard-Emojis deines Geräts</string>
     <string name="caption_blobmoji">Die Blob–Emojis aus Android 4.4–7.1</string>
-    <string name="caption_twemoji">Die Standard-Emojis von Mastodon</string>
+    <string name="caption_twemoji">Die Standard-Emojis von Warpnet</string>
     <string name="caption_notoemoji">Die aktuellen Emojis von Google</string>
     <string name="download_failed">Download fehlgeschlagen</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s ist umgezogen auf:</string>
     <string name="reblog_private">An ursprüngliches Publikum teilen</string>
     <string name="unreblog_private">Nicht mehr teilen</string>
-    <string name="license_description">Tusky enthält Code und Inhalte von den folgenden Open-Source-Projekten:</string>
+    <string name="license_description">Warpnet enthält Code und Inhalte von den folgenden Open-Source-Projekten:</string>
     <string name="license_apache_2">Lizenziert unter der Apache-Lizenz (s. u.)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -373,7 +373,7 @@
     <string name="duration_3_days">3 Tage</string>
     <string name="duration_7_days">7 Tage</string>
     <string name="edit_poll">Bearbeiten</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="action_add_poll">Umfrage hinzufügen</string>
     <string name="pref_title_alway_open_spoiler">Beiträge mit Inhaltswarnungen immer ausklappen</string>
     <string name="description_poll">Umfrage mit den Möglichkeiten: %1$s, %2$s, %3$s, %4$s; %5$s</string>
@@ -392,7 +392,7 @@
     <string name="title_bookmarks">Lesezeichen</string>
     <string name="action_bookmark">Lesezeichen</string>
     <string name="action_view_bookmarks">Lesezeichen</string>
-    <string name="about_powered_by_tusky">Unterstützt von Tusky</string>
+    <string name="about_powered_by_tusky">Unterstützt von Warpnet</string>
     <string name="description_post_bookmarked">Als Lesezeichen gespeichert</string>
     <string name="select_list_title">Liste auswählen</string>
     <string name="select_list_manage">Listen verwalten</string>
@@ -604,17 +604,17 @@
     <string name="filter_edit_keyword_title">Schlagwort bearbeiten</string>
     <string name="filter_description_format">%1$s: %2$s</string>
     <string name="status_filtered_show_anyway">Trotzdem anzeigen</string>
-    <string name="help_empty_home">Dies ist deine <b>Startseite</b>. Sie zeigt die neuesten Beiträge von Konten, denen du folgst.\n\nDamit du andere Konten entdeckst, kannst du entweder andere Timelines lesen – z. B. die Lokale Timeline deiner Instanz {{group}} – oder du suchst nach Namen {{search}} – z. B. kannst du nach Tusky suchen, um unser Mastodon-Konto zu finden.</string>
+    <string name="help_empty_home">Dies ist deine <b>Startseite</b>. Sie zeigt die neuesten Beiträge von Konten, denen du folgst.\n\nDamit du andere Konten entdeckst, kannst du entweder andere Timelines lesen – z. B. die Lokale Timeline deiner Instanz {{group}} – oder du suchst nach Namen {{search}} – z. B. kannst du nach Warpnet suchen, um unser Warpnet-Konto zu finden.</string>
     <string name="post_media_image">Bild</string>
     <string name="pref_title_show_stat_inline">Beitragsstatistiken in der Timeline anzeigen</string>
     <string name="pref_ui_text_size">Schriftgröße der Oberfläche</string>
     <string name="notification_prune_cache">Cache-Wartung …</string>
-    <string name="notification_listenable_worker_description">Benachrichtigungen, wenn Tusky im Hintergrund aktiv ist</string>
+    <string name="notification_listenable_worker_description">Benachrichtigungen, wenn Warpnet im Hintergrund aktiv ist</string>
     <string name="notification_listenable_worker_name">Hintergrundaktivität</string>
     <string name="notification_notification_worker">Benachrichtigungen werden abgerufen …</string>
     <string name="load_newest_notifications">Neueste Benachrichtigungen laden</string>
     <string name="compose_delete_draft">Entwurf löschen?</string>
-    <string name="error_missing_edits">Deinem Server ist bekannt, dass dieser Beitrag bearbeitet wurde. Allerdings besitzt er keine Kopien der Änderungen, weshalb diese nicht angezeigt werden können.\n\nHierbei handelt es sich um <a href="https://github.com/mastodon/mastodon/issues/25398">Mastodon Issue #25398</a>.</string>
+    <string name="error_missing_edits">Deinem Server ist bekannt, dass dieser Beitrag bearbeitet wurde. Allerdings besitzt er keine Kopien der Änderungen, weshalb diese nicht angezeigt werden können.\n\nHierbei handelt es sich um <a href="https://github.com/Warp-net/warpnet/issues">Warpnet Issue #25398</a>.</string>
     <string name="about_device_info_title">Dein Gerät</string>
     <string name="about_device_info">%1$s %2$s \nAndroid-Version: %3$s \nSDK-Version: %4$d</string>
     <string name="about_account_info_title">Dein Konto</string>
@@ -678,7 +678,7 @@
     <string name="unknown_notification_filter_unsolicited_private_mentions_title">unerwünschten privaten Erwähnungen</string>
     <string name="unknown_notification_filter_moderated_accounts">moderierten Konten</string>
     <string name="unknown_notification_filter_moderated_accounts_description">Durch Server-Moderator*innen eingeschränkt</string>
-    <string name="notification_policies_not_supported">Funktioniert nur bei Mastodon-Servern, die Version 4.3.0 oder neuer installiert haben.</string>
+    <string name="notification_policies_not_supported">Funktioniert nur bei Warpnet-Servern, die Version 4.3.0 oder neuer installiert haben.</string>
     <string name="filtered_notifications">Gefilterte Benachrichtigungen</string>
     <string name="notifications_from_people_you_may_know">Benachrichtigungen von %1$d Person(en), die du möglicherweise kennst</string>
     <string name="notification_policy_accept">Genehmigen</string>
@@ -727,7 +727,7 @@
     <string name="notification_channel_admin_description">Administrationsbenachrichtigungen wie neue Meldungen und Accounts</string>
     <string name="action_reblog_unlisted">Ungelisteter Boost</string>
     <string name="relationship_severance_event_account_suspension">Ein Admin von %1$s hat %2$s gesperrt. Du wirst von diesem Profil keine Updates mehr erhalten und auch nicht mit ihm interagieren können.</string>
-    <string name="unknown_notification_type_explanation">Dieser Benachrichtigungstyp ist Tusky unbekannt, weshalb er nicht angezeigt werden kann. Möglicherweise ist er in der Webansicht sichtbar. Bitte gib den Entwickler*innen von Tusky Bescheid, damit der Benachrichtigungstyp in Zukunft unterstützt werden kann!</string>
+    <string name="unknown_notification_type_explanation">Dieser Benachrichtigungstyp ist Warpnet unbekannt, weshalb er nicht angezeigt werden kann. Möglicherweise ist er in der Webansicht sichtbar. Bitte gib den Entwickler*innen von Warpnet Bescheid, damit der Benachrichtigungstyp in Zukunft unterstützt werden kann!</string>
     <string name="notification_info_reply">Antwort</string>
     <string name="notification_channel_admin">Administration</string>
     <string name="notification_severed_relationship_name">Verlorene Verbindungen</string>
@@ -755,13 +755,13 @@
     <string name="reblog_privacy_public_description">Alle können sehen dass du den Beitrag teilst</string>
     <string name="reblog_privacy_followers_only_description">Nur deine Follower können sehen dass du den Beitrag teilst</string>
     <string name="action_remove_account">Account entfernen</string>
-    <string name="action_remove_account_confirm">Möchtest duden Account %1$s wirklich aus Tusky entfernen? Dadurch werden alle lokalen Daten des Profils, wie Entwürfe und Einstellungen, gelöscht.</string>
+    <string name="action_remove_account_confirm">Möchtest duden Account %1$s wirklich aus Warpnet entfernen? Dadurch werden alle lokalen Daten des Profils, wie Entwürfe und Einstellungen, gelöscht.</string>
     <string name="report_category_legal_description">Du glaubst, dass es gegen die Gesetze deines Landes oder des Landes des Servers verstößt</string>
     <string name="report_category_other_description">Der Vorfall passt zu keiner dieser Kategorien</string>
     <string name="confirm_dismiss_poll">Änderungen an der Umfrage verwerfen?</string>
     <string name="edit_image_flip_horizontally">Horizontal spiegeln</string>
     <string name="report_which_rules_violated">Welche Regeln werden verletzt? Wähle alle aus, die zutreffen.</string>
-    <string name="account_disconnected_message">Tuskys Zugang zu %1$s ist nicht mehr gültig. Das kann passieren wenn du dein Passwort geändert hast oder Tusky den Zugriff entzogen hast. Bitte logge dich erneut ein.</string>
+    <string name="account_disconnected_message">Warpnets Zugang zu %1$s ist nicht mehr gültig. Das kann passieren wenn du dein Passwort geändert hast oder Warpnet den Zugriff entzogen hast. Bitte logge dich erneut ein.</string>
     <string name="edit_image_rotate">Rotieren</string>
     <string name="edit_image_flip">Spiegeln</string>
     <string name="edit_image_flip_vertically">Vertikal spiegeln</string>

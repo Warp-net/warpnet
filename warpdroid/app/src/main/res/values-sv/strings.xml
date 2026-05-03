@@ -59,7 +59,7 @@
     <string name="action_unfavourite">Ta bort favorit</string>
     <string name="action_more">Mer</string>
     <string name="action_compose">Skriv</string>
-    <string name="action_login">Logga in med Tusky</string>
+    <string name="action_login">Logga in med Warpnet</string>
     <string name="action_logout">Logga ut</string>
     <string name="action_logout_confirm">Är du säker på att du vill logga ut från %1$s? Alla lokala data om kontot kommer att raderas, inklusive utkast och inställningar.</string>
     <string name="action_follow">Följ</string>
@@ -132,7 +132,7 @@
     <string name="label_header">Bakgrundsbild</string>
     <string name="link_whats_an_instance">Vad är en instans?</string>
     <string name="login_connection">Ansluter…</string>
-    <string name="dialog_whats_an_instance">Adressen eller domänen för varje instans kan anges här, till exempel mastodon.social, icosahedron.website, social.tchncs.de och <a href="https://instances.social"> mer! </a> \u0020 \n \u0020 \nOm du inte har något konto kan du ange namnet på instansen du vill ansluta till och skapa ett konto där. \u0020 \n \u0020 \nEn instans är den plats där ditt konto finns, men du kan enkelt kommunicera med och följa andra personer på andra instanser, som om du var på samma sajt. \u0020 \n \u0020 \nMer information finns på <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Adressen eller domänen för varje instans kan anges här, till exempel warpnet.site som om du var på samma sajt. \u0020 \n \u0020 \nMer information finns på <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Uppladdning av media</string>
     <string name="dialog_message_uploading_media">Laddar upp…</string>
     <string name="dialog_download_image">Ladda ned</string>
@@ -203,17 +203,17 @@
     </plurals>
     <string name="description_account_locked">Låst konto</string>
     <string name="about_title_activity">Om</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky är fri programvara med öppen källkod. Det är licensierat under GNU General Public License version 3. Du kan läsa mer om licensen här: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet är fri programvara med öppen källkod. Det är licensierat under GNU General Public License version 3. Du kan läsa mer om licensen här: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Tuskys webbsida: https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Buggrapporter &amp; funktionsförslag: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Tuskys Profil</string>
+    <string name="about_project_site">Warpnets webbsida: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Buggrapporter &amp; funktionsförslag: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnets Profil</string>
     <string name="post_share_content">Dela innehåll av toot</string>
     <string name="post_share_link">Dela länk till toot</string>
     <string name="post_media_images">Bilder</string>
@@ -243,7 +243,7 @@
     <string name="filter_dialog_update_button">Uppdatera</string>
     <string name="filter_add_description">Filtrera fras</string>
     <string name="add_account_name">Lägg till konto</string>
-    <string name="add_account_description">Lägg till ett nytt Mastodon-konto</string>
+    <string name="add_account_description">Lägg till ett nytt Warpnet-konto</string>
     <string name="action_lists">Listor</string>
     <string name="title_lists">Listor</string>
     <string name="error_create_list">Kunde inte skapa lista</string>
@@ -277,13 +277,13 @@
     <string name="action_open_post">Öppna toot</string>
     <string name="caption_systememoji">Standard-emojis för din enhet</string>
     <string name="caption_blobmoji">Emojis baserade på The Blob emojis från Android 4.4–7.1</string>
-    <string name="caption_twemoji">Mastodon\'s standard emojis</string>
+    <string name="caption_twemoji">Warpnet\'s standard emojis</string>
     <string name="download_failed">Nedladdning misslyckad</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="account_moved_description">%1$s har flyttat till:</string>
     <string name="reblog_private">Knuffa till ursprunglig målgrupp</string>
     <string name="unreblog_private">Ta bort knuff</string>
-    <string name="license_description">Tusky innehåller kod och tillgångar från följande öppen källkodsprojekt:</string>
+    <string name="license_description">Warpnet innehåller kod och tillgångar från följande öppen källkodsprojekt:</string>
     <string name="license_apache_2">Licensierad under the Apache License (kopia nedanför)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -405,13 +405,13 @@
     <string name="title_bookmarks">Bokmärken</string>
     <string name="action_bookmark">Bokmärk</string>
     <string name="action_view_bookmarks">Bokmärken</string>
-    <string name="about_powered_by_tusky">Drivs av Tusky</string>
+    <string name="about_powered_by_tusky">Drivs av Warpnet</string>
     <string name="description_post_bookmarked">Bokmärkt</string>
     <string name="select_list_title">Välj lista</string>
     <string name="list">Lista</string>
     <string name="no_scheduled_posts">Du har inga schemalagda statusar.</string>
     <string name="no_drafts">Du har inga utkast.</string>
-    <string name="warning_scheduling_interval">Mastodon har ett minimalt schemaläggningsintervall på 5 minuter.</string>
+    <string name="warning_scheduling_interval">Warpnet har ett minimalt schemaläggningsintervall på 5 minuter.</string>
     <string name="action_mute_conversation">Tysta konversation</string>
     <string name="pref_title_confirm_reblogs">Visa bekräftelse innan knuff</string>
     <string name="pref_title_show_cards_in_timelines">Visa förhandsvisning av länkar i tidslinjen</string>
@@ -595,10 +595,10 @@
     <string name="filter_description_hide">Dölj helt</string>
     <string name="action_add">Lägg till</string>
     <string name="filter_keyword_display_format">%1$s (helt ord)</string>
-    <string name="help_empty_home">Detta är din <b>hemtidslinje</b>. Den visar de senaste inläggen för konton du följer. \u0020 \n \u0020 \nFör att utforska konton kan du antingen upptäcka dem i någon av de andra tidslinjerna. Till exempel den lokala tidslinjen för din instans {{group}}. Eller så kan du söka efter dem efter namn [ikonics gmd_search]; sök till exempel efter Tusky för att hitta vårt Mastodon-konto.</string>
+    <string name="help_empty_home">Detta är din <b>hemtidslinje</b>. Den visar de senaste inläggen för konton du följer. \u0020 \n \u0020 \nFör att utforska konton kan du antingen upptäcka dem i någon av de andra tidslinjerna. Till exempel den lokala tidslinjen för din instans {{group}}. Eller så kan du söka efter dem efter namn [ikonics gmd_search]; sök till exempel efter Warpnet för att hitta vårt Warpnet-konto.</string>
     <string name="pref_ui_text_size">UI textstorlek</string>
     <string name="notification_listenable_worker_name">Bakgrundsaktivitet</string>
-    <string name="notification_listenable_worker_description">Aviseringar när Tusky arbetar i bakgrunden</string>
+    <string name="notification_listenable_worker_description">Aviseringar när Warpnet arbetar i bakgrunden</string>
     <string name="notification_notification_worker">Hämtar aviseringar…</string>
     <string name="notification_prune_cache">Cacheunderhåll…</string>
     <string name="action_refresh">Uppdatera</string>
@@ -614,7 +614,7 @@
     <string name="title_public_trending_hashtags">Populära hashtaggar</string>
     <string name="load_newest_notifications">Ladda de nyaste aviseringarna</string>
     <string name="compose_delete_draft">Ta bort utkast?</string>
-    <string name="error_missing_edits">Din server vet att det här inlägget har redigerats, men har ingen kopia av ändringarna, så de kan inte visas för dig. \u0020 \n \u0020 \nDet är <a href="https://github.com/mastodon/mastodon/issues/25398">Mastodon problem #25398</a>.</string>
+    <string name="error_missing_edits">Din server vet att det här inlägget har redigerats, men har ingen kopia av ändringarna, så de kan inte visas för dig. \u0020 \n \u0020 \nDet är <a href="https://github.com/Warp-net/warpnet/issues">Warpnet problem #25398</a>.</string>
     <string name="about_device_info_title">Din enhet</string>
     <string name="about_device_info">%1$s %2$s \nAndroidversion: %3$s \nSDK-version: %4$d</string>
     <string name="about_account_info_title">Ditt konto</string>
@@ -680,7 +680,7 @@
     <string name="notification_quote_format">%1$s citerade ditt inlägg</string>
     <string name="action_rehide_status">Dölj filtrerat status på nytt</string>
     <string name="action_reblog_private">Knuffa endast för följare</string>
-    <string name="action_remove_account_confirm">Är du säker på att du vill ta bort kontot %1$s från Tusky? Detta kommer radera all lokal data från kontot, inklusive utkast och inställningar.</string>
+    <string name="action_remove_account_confirm">Är du säker på att du vill ta bort kontot %1$s från Warpnet? Detta kommer radera all lokal data från kontot, inklusive utkast och inställningar.</string>
     <string name="follow_hashtag_success">Följde hashtag %1$s</string>
     <string name="post_replied">Svarade</string>
     <string name="post_replied_format">I svar till %1$s</string>

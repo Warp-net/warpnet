@@ -50,7 +50,7 @@
     <string name="action_favourite">Aimar</string>
     <string name="action_more">Mai</string>
     <string name="action_compose">Redactar</string>
-    <string name="action_login">Començar la session amb Tusky</string>
+    <string name="action_login">Començar la session amb Warpnet</string>
     <string name="action_logout">Tampar la session</string>
     <string name="action_logout_confirm">Volètz vertadièrament vos desconnectar del compte %1$s ? \nAquò suprimirà totas las donadas localas del compte, tanben los borrolhons e las preferéncias.</string>
     <string name="action_follow">Seguir</string>
@@ -111,7 +111,7 @@
     <string name="label_header">Bandièra</string>
     <string name="link_whats_an_instance">Que es una instància ?</string>
     <string name="login_connection">Connexion…</string>
-    <string name="dialog_whats_an_instance">Aquí podètz picar l\'adreça o domini de quina que siá instància, \u0020coma mastodont.cat, mastodon.social, icosahedron.website o \u0020<a href="https://instances.social">fòrca mai !</a> \u0020 \n \u0020 \nSi encara non avètz cap de compte, podètz picar lo nom de l’instància ont vos agradariá \u0020anar e crear un compte enlà. \u0020 \n \u0020 \n \u0020 \n \u0020 \nAvètz mas d’informacins a <a href="https://joinmastodon.org">joinmastodon.org</a>. \u0020</string>
+    <string name="dialog_whats_an_instance">Aquí podètz picar l\'adreça o domini de quina que siá instància, \u0020coma warpnet.site podètz picar lo nom de l’instància ont vos agradariá \u0020anar e crear un compte enlà. \u0020 \n \u0020 \n \u0020 \n \u0020 \nAvètz mas d’informacins a <a href="https://warpnet.site">warpnet.site</a>. \u0020</string>
     <string name="dialog_title_finishing_media_upload">Finalizacion del mandadís del mèdia</string>
     <string name="dialog_message_uploading_media">Mandadís…</string>
     <string name="dialog_download_image">Telecargar</string>
@@ -175,16 +175,16 @@
     </plurals>
     <string name="description_account_locked">Compte blocat</string>
     <string name="about_title_activity">A prepaus</string>
-    <string name="about_tusky_license">Tusky es programa gratuit, liure e de còdi dobèrt. Es publicat jols tèrmes de la licéncia publica generala GNU version 3. Podètz trobar les licéncia aquí : https://www.gnu.org/licenses/gpl-3.0.ca.html</string>
+    <string name="about_tusky_license">Warpnet es programa gratuit, liure e de còdi dobèrt. Es publicat jols tèrmes de la licéncia publica generala GNU version 3. Podètz trobar les licéncia aquí : https://www.gnu.org/licenses/gpl-3.0.ca.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Site web del projècte : https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Rapòrts d\'errors e demandas de foncionalitats : \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Perfil de Tusky</string>
+    <string name="about_project_site">Site web del projècte : https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Rapòrts d\'errors e demandas de foncionalitats : \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Perfil de Warpnet</string>
     <string name="post_share_content">Partejar lo contengut del tut</string>
     <string name="post_share_link">Partejar lo ligam del tut</string>
     <string name="post_media_images">Imatges</string>
@@ -203,7 +203,7 @@
     <string name="replying_to">En responsa a @%1$s</string>
     <string name="load_more_placeholder_text">Cargar mai</string>
     <string name="add_account_name">Apondre un compte</string>
-    <string name="add_account_description">Apondre un nòu compte Mastodon</string>
+    <string name="add_account_description">Apondre un nòu compte Warpnet</string>
     <string name="action_lists">Listas</string>
     <string name="title_lists">Listas</string>
     <string name="compose_active_account_description">Publicar coma %1$s</string>
@@ -227,13 +227,13 @@
     <string name="action_open_post">Dobrir lo tut</string>
     <string name="caption_systememoji">Los emoji per defaut de vòstre aparelh</string>
     <string name="caption_blobmoji">Emoji basats en Blob emojis coneguts d\'Android 4.4–7.1</string>
-    <string name="caption_twemoji">Emoji estandards de Mastodon</string>
+    <string name="caption_twemoji">Emoji estandards de Warpnet</string>
     <string name="download_failed">Fracàs del telecargament</string>
     <string name="profile_badge_bot_text">Robòt</string>
     <string name="account_moved_description">%1$s mudèt los catons a :</string>
     <string name="reblog_private">Partejar al public d’origina</string>
     <string name="unreblog_private">Quitar de partejar</string>
-    <string name="license_description">Tusky content de còdis e compausants dels projèctes liures seguents :</string>
+    <string name="license_description">Warpnet content de còdis e compausants dels projèctes liures seguents :</string>
     <string name="license_apache_2">Licéncia Apache License (còpia çai-jos)</string>
     <string name="profile_metadata_label">Metadonada del perfil</string>
     <string name="profile_metadata_add">Contengut</string>
@@ -272,7 +272,7 @@
     <string name="pref_title_proxy_settings">Servidor mandatari</string>
     <string name="pref_default_media_sensitivity">Totjorn marcar los mèdias coma sensibles (alinhat sul servidor)</string>
     <string name="pref_failed_to_sync">Fracàs de la sincronizacion de las preferéncias</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="abbreviated_days_ago">%1$dd</string>
     <string name="abbreviated_hours_ago">%1$dh</string>
     <string name="abbreviated_minutes_ago">%1$dm</string>
@@ -402,7 +402,7 @@
     <string name="action_schedule_post">Planificar de tuts</string>
     <string name="action_reset_schedule">Escafar</string>
     <string name="post_lookup_error_format">Error en cercant la publicacion %1$s</string>
-    <string name="about_powered_by_tusky">Propulsat per Tusky</string>
+    <string name="about_powered_by_tusky">Propulsat per Warpnet</string>
     <string name="title_bookmarks">Marcapaginas</string>
     <string name="action_bookmark">Ajustar als marcapaginas</string>
     <string name="action_view_bookmarks">Marcapaginas</string>
@@ -411,7 +411,7 @@
     <string name="list">Lista</string>
     <string name="no_drafts">Avètz pas cap de borrolhon.</string>
     <string name="no_scheduled_posts">Avètz pas cap de tut planificat.</string>
-    <string name="warning_scheduling_interval">L’interval minimum de planificacion sus Mastodon e de 5 minutas.</string>
+    <string name="warning_scheduling_interval">L’interval minimum de planificacion sus Warpnet e de 5 minutas.</string>
     <string name="notification_follow_request_name">Demandas d’abonament</string>
     <string name="hashtags">Etiquetas</string>
     <string name="action_unmute_desc">Amagar pas mai a %1$s</string>
@@ -606,8 +606,8 @@
     <string name="ui_error_accept_follow_request">Fracàs de l’acceptacion de la demanda : %1$s</string>
     <string name="ui_error_reject_follow_request">Fracàs del refús de la demanda : %1$s</string>
     <string name="pref_title_show_stat_inline">Mostrar las estatisticas dins la cronologia</string>
-    <string name="help_empty_home">Aquò es vòstra <b>cronologia</b>. Mòstra las publicacions recentas dels comptes que seguissètz. \u0020 \n \u0020 \nPer explorar mai de compte podètz siá los descobrir dins d’autres fils, per exemple lo fil local de vòstra instància {{group}}, siá los trapar per lor nom {{search}}, per exemple « Tusky » per trobar nòstre compte Mastodon.</string>
-    <string name="error_missing_edits">Vòstre servidor sap qu’aquesta publicacion foguèt modificada mas ten pas cap de còpia de las modificacions doncas vos las pòt afichar. \u0020 \n \u0020 \nAquò es un problèma de <a href="https://github.com/mastodon/mastodon/issues/25398">Mastodon #25398</a>.</string>
+    <string name="help_empty_home">Aquò es vòstra <b>cronologia</b>. Mòstra las publicacions recentas dels comptes que seguissètz. \u0020 \n \u0020 \nPer explorar mai de compte podètz siá los descobrir dins d’autres fils, per exemple lo fil local de vòstra instància {{group}}, siá los trapar per lor nom {{search}}, per exemple « Warpnet » per trobar nòstre compte Warpnet.</string>
+    <string name="error_missing_edits">Vòstre servidor sap qu’aquesta publicacion foguèt modificada mas ten pas cap de còpia de las modificacions doncas vos las pòt afichar. \u0020 \n \u0020 \nAquò es un problèma de <a href="https://github.com/Warp-net/warpnet/issues">Warpnet #25398</a>.</string>
     <string name="load_newest_notifications">Cargar las notificacions mai recentas</string>
     <string name="compose_delete_draft">Suprimir lo borrolhon ?</string>
     <string name="pref_ui_text_size">talha tèxte UI</string>
@@ -729,7 +729,7 @@
         <item quantity="one">%1$s responsa</item>
         <item quantity="other">%1$s responsas</item>
     </plurals>
-    <string name="action_remove_account_confirm">Volètz vertadièrament suprimir lo compte %1$s de Tusky ? Aquò escafarà totas las donadas localas, los borrolhons e las preferéncias.</string>
+    <string name="action_remove_account_confirm">Volètz vertadièrament suprimir lo compte %1$s de Warpnet ? Aquò escafarà totas las donadas localas, los borrolhons e las preferéncias.</string>
     <string name="action_rehide_status">Rescondre de nòu l’estatut filtrat</string>
     <string name="notification_policies_filter_dont_follow_description">Fins que los aprovetz</string>
     <string name="notification_quote_format">%1$s a citat vòstra publicacion</string>

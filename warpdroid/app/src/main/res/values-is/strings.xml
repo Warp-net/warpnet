@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="action_login">Skrá inn með Tusky</string>
+    <string name="action_login">Skrá inn með Warpnet</string>
     <string name="link_whats_an_instance">Hvað er tilvik?</string>
     <string name="title_favourites">Eftirlæti</string>
     <string name="title_drafts">Drög</string>
@@ -151,7 +151,7 @@
     <string name="label_avatar">Auðkennismynd</string>
     <string name="label_header">Haus</string>
     <string name="login_connection">Tengist…</string>
-    <string name="dialog_whats_an_instance">Hægt er að setja hér inn vistfang eða lén á hvaða tilviki sem er, svo sem mastodon.social, icosahedron.website, social.tchncs.de og <a href="https://instances.social">fleiri!</a> \u0020 \n \u0020 \nEf þú ert ekki ennþá með notandaaðgang, geturðu sett inn nafnið á því tilviki sem þú vilt tilheyra og búið til aðgang þar. \u0020 \n \u0020 \nTilvik er ákveðinn einn vefþjónn þar sem notandaaðgangurinn þinn er hýstur, en eftir sem áður er auðvelt fyrir þig að eiga í samskiptum við fólk og fylgjast með einstaklingum á öðrum tilvikum, rétt eins og þið væruð á sama vefsvæðinu. \u0020 \n \u0020 \nNánari upplýsingar má finna á <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Hægt er að setja hér inn vistfang eða lén á hvaða tilviki sem er, svo sem warpnet.site rétt eins og þið væruð á sama vefsvæðinu. \u0020 \n \u0020 \nNánari upplýsingar má finna á <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Klára innsendingu myndefnis</string>
     <string name="dialog_message_uploading_media">Sendi inn…</string>
     <string name="dialog_download_image">Sækja</string>
@@ -228,12 +228,12 @@
         <item quantity="other">%1$d nýjar aðgerðir</item>
     </plurals>
     <string name="description_account_locked">Læstur notandaaðgangur</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_powered_by_tusky">Keyrir á Tusky</string>
-    <string name="about_tusky_license">Tusky er frjáls hugbúnaður með opinn grunnkóða. Hann er gefinn út með GNU General Public notkunarleyfi, útgáfu 3. Þú getur skoðað notkunarleyfið hér: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="about_project_site">Vefsvæði verkefnisins: https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Villutilkynningar og beiðnir um nýja eiginleika: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Notandasnið Tusky</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_powered_by_tusky">Keyrir á Warpnet</string>
+    <string name="about_tusky_license">Warpnet er frjáls hugbúnaður með opinn grunnkóða. Hann er gefinn út með GNU General Public notkunarleyfi, útgáfu 3. Þú getur skoðað notkunarleyfið hér: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_project_site">Vefsvæði verkefnisins: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Villutilkynningar og beiðnir um nýja eiginleika: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Notandasnið Warpnet</string>
     <string name="post_share_content">Deila efni úr færslu</string>
     <string name="post_share_link">Deila tengli á færslu</string>
     <string name="post_media_images">Myndir</string>
@@ -265,7 +265,7 @@
     <string name="filter_dialog_whole_word_description">Þegar stikkorð eða frasi er einungis tölur og bókstafir, verður það aðeins notað ef það samsvarar heilu orði</string>
     <string name="filter_add_description">Frasi sem á að sía</string>
     <string name="add_account_name">Bæta við aðgangi</string>
-    <string name="add_account_description">Bæta við nýjum Mastodon-aðgangi</string>
+    <string name="add_account_description">Bæta við nýjum Warpnet-aðgangi</string>
     <string name="error_create_list">Ekki tókst að búa til lista</string>
     <string name="error_rename_list">Ekki tókst að uppfæra lista</string>
     <string name="error_delete_list">Ekki tókst að eyða lista</string>
@@ -297,14 +297,14 @@
     <string name="action_open_post">Opna færslu</string>
     <string name="caption_systememoji">Sjálfgefið táknmyndasett á tækinu þínu</string>
     <string name="caption_blobmoji">Blob-táknmyndasettið sem þekkt var í Android 4.4–7.1</string>
-    <string name="caption_twemoji">Staðlaða Mastodon táknmyndasettið</string>
+    <string name="caption_twemoji">Staðlaða Warpnet táknmyndasettið</string>
     <string name="caption_notoemoji">Núverandi táknmyndasett Google</string>
     <string name="download_failed">Niðurhal mistókst</string>
     <string name="profile_badge_bot_text">Róbót</string>
     <string name="account_moved_description">%1$s hefur verið flutt á:</string>
     <string name="reblog_private">Endurbirta til upphaflegra lesenda</string>
     <string name="unreblog_private">Taka úr endurbirtingu</string>
-    <string name="license_description">Tusky inniheldur kóða og gögn frá eftirfarandi verkefnum með opinn grunnkóða:</string>
+    <string name="license_description">Warpnet inniheldur kóða og gögn frá eftirfarandi verkefnum með opinn grunnkóða:</string>
     <string name="license_apache_2">Notkunarleyfi er samkvæmt Apache hugbúnaðarleyfinu (afrit fyrir neðan)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -380,7 +380,7 @@
     <string name="post_lookup_error_format">Villa við að fletta upp færslunni %1$s</string>
     <string name="no_drafts">Þú ert ekki með nein drög.</string>
     <string name="no_scheduled_posts">Þú ert ekki með neinar áætlaðar stöðufærslur.</string>
-    <string name="warning_scheduling_interval">Mastodon er með 5 mínútna lágmarksbil fyrir áætlaðar aðgerðir.</string>
+    <string name="warning_scheduling_interval">Warpnet er með 5 mínútna lágmarksbil fyrir áætlaðar aðgerðir.</string>
     <string name="notification_follow_request_name">Fylgjendabeiðnir</string>
     <string name="hashtags">Myllumerki</string>
     <plurals name="favs">
@@ -599,15 +599,15 @@
     <string name="filter_description_format">%1$s: %2$s</string>
     <string name="post_media_image">Mynd</string>
     <string name="select_list_manage">Sýsla með lista</string>
-    <string name="help_empty_home">Þetta er <b>tímalínan þín</b>. Hún sýnir nýlegar færslur þeirra sem þú fylgist með.\n\nTil að skoða hvað aðrir eru að gera getur þú til dæmis uppgötvað viðkomandi í einni af hinum tímalínunum. Til dæmis á staðværu tímalínu netþjónsins þíns {{group}}. Eða að þú leitar að þeim eftir nafni {{search}}; til dæmis geturðu leitað að Tusky til að finna Mastodon-aðganginn okkar.</string>
+    <string name="help_empty_home">Þetta er <b>tímalínan þín</b>. Hún sýnir nýlegar færslur þeirra sem þú fylgist með.\n\nTil að skoða hvað aðrir eru að gera getur þú til dæmis uppgötvað viðkomandi í einni af hinum tímalínunum. Til dæmis á staðværu tímalínu netþjónsins þíns {{group}}. Eða að þú leitar að þeim eftir nafni {{search}}; til dæmis geturðu leitað að Warpnet til að finna Warpnet-aðganginn okkar.</string>
     <string name="pref_ui_text_size">Textastærð viðmóts</string>
     <string name="notification_listenable_worker_name">Bakgrunnsvirkni</string>
-    <string name="notification_listenable_worker_description">Tilkynningar þegar Tusky er að vinna í bakgrunni</string>
+    <string name="notification_listenable_worker_description">Tilkynningar þegar Warpnet er að vinna í bakgrunni</string>
     <string name="notification_notification_worker">Sæki tilkynningar…</string>
     <string name="notification_prune_cache">Viðhaldsvinna biðminnis…</string>
     <string name="load_newest_notifications">Hlaða inn nýjustu tilkynningum</string>
     <string name="compose_delete_draft">Eyða drögum?</string>
-    <string name="error_missing_edits">Þjónninn þinn veit að þessari færslu hefur verið breytt, en er hins vegar ekki með afrit af breytingunum, þannig að ekki er hægt að sýna þér þær.\n\nÞetta er <a href="https://github.com/mastodon/mastodon/issues/25398">Mastodon verkbeiðni #25398</a>.</string>
+    <string name="error_missing_edits">Þjónninn þinn veit að þessari færslu hefur verið breytt, en er hins vegar ekki með afrit af breytingunum, þannig að ekki er hægt að sýna þér þær.\n\nÞetta er <a href="https://github.com/Warp-net/warpnet/issues">Warpnet verkbeiðni #25398</a>.</string>
     <string name="about_device_info_title">Tækið þitt</string>
     <string name="about_device_info">%1$s %2$s \nAndroid-útgáfa: %3$s \nSDK-útgáfa: %4$d</string>
     <string name="about_account_info_title">Notandaaðgangurinn þinn</string>
@@ -671,7 +671,7 @@
     <string name="unknown_notification_type">Óþekkt tegund tilkynningar</string>
     <string name="unknown_notification_filter_moderated_accounts">Notendaaðgangar í umsjón</string>
     <string name="unknown_notification_filter_moderated_accounts_description">Takmarkaðir af umsjónaraðilum netþjóns</string>
-    <string name="notification_policies_not_supported">Þessi eiginleiki er aðeins tiltækur á Mastodon-netþjónum af útgáfu v4.3.0 eða nýrri.</string>
+    <string name="notification_policies_not_supported">Þessi eiginleiki er aðeins tiltækur á Warpnet-netþjónum af útgáfu v4.3.0 eða nýrri.</string>
     <string name="filtered_notifications">Síaðar tilkynningar</string>
     <string name="notifications_from_people_you_may_know">Tilkynningar frá %1$d aðilum sem þú gætir þekkt</string>
     <string name="filtered_notifications_title">Síaðar tilkynningar</string>
@@ -727,7 +727,7 @@
     <string name="moderation_warning_action_silence">Aðgangurinn þinn hefur verið takmarkaður.</string>
     <string name="moderation_warning_action_suspend">Aðgangurinn þinn hefur verið settur í bið.</string>
     <string name="poll">Könnun</string>
-    <string name="unknown_notification_type_explanation">Tusky þekkir ekki þessa tegund tilkynninga og getur ekki birt þér hana. Mögulega getur vefviðmót netþjónsins þíns birt þetta. Láttu hönnuði Tusky samt vita svo þeir getir bætt við stuðningi við þessa tegund tilkynninga!</string>
+    <string name="unknown_notification_type_explanation">Warpnet þekkir ekki þessa tegund tilkynninga og getur ekki birt þér hana. Mögulega getur vefviðmót netþjónsins þíns birt þetta. Láttu hönnuði Warpnet samt vita svo þeir getir bætt við stuðningi við þessa tegund tilkynninga!</string>
     <string name="poll_show_results">Birta niðurstöður</string>
     <string name="yes">Já</string>
     <string name="no">Nei</string>
@@ -750,11 +750,11 @@
     <string name="confirm_dismiss_poll">Henda breytingum á könnun?</string>
     <string name="message_filters_empty">Þú ert ekki með neinar virkar síur.</string>
     <string name="action_rehide_status">Fela aftur síaða stöðu</string>
-    <string name="account_disconnected_message">Innskráning %1$s á Tusky er ekki lengur gild. Þetta getur gerst ef þú hefur breytt lykilorðinu þínu eða afturkallað aðgangsheimild fyrir Tusky. Skráðu þig inn aftur.</string>
+    <string name="account_disconnected_message">Innskráning %1$s á Warpnet er ekki lengur gild. Þetta getur gerst ef þú hefur breytt lykilorðinu þínu eða afturkallað aðgangsheimild fyrir Warpnet. Skráðu þig inn aftur.</string>
     <string name="report_which_rules_violated">Hvaða reglur er verið að brjóta? Veldu allt sem á við.</string>
     <string name="report_category_spam_description">Meinlegir tenglar, fölsuð gagnvirkni eða síendurtekin svör</string>
     <string name="action_remove_account">Fjarlægja notandaaðgang</string>
-    <string name="action_remove_account_confirm">Ertu viss um að þú viljir fjarlægja aðganginn %1$s úr Tusky? Þetta mun eyða öllum gögnum aðgangsins, að meðtöldum drögum og kjörstillingum.</string>
+    <string name="action_remove_account_confirm">Ertu viss um að þú viljir fjarlægja aðganginn %1$s úr Warpnet? Þetta mun eyða öllum gögnum aðgangsins, að meðtöldum drögum og kjörstillingum.</string>
     <string name="edit_image_rotate">Snúa</string>
     <string name="edit_image_flip">Fletta</string>
     <string name="edit_image_flip_horizontally">Fletta lárétt</string>

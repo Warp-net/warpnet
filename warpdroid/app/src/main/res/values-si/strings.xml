@@ -159,7 +159,7 @@
     <string name="post_content_show_more">විහිදන්න</string>
     <string name="action_mute">නිහඬ කරන්න</string>
     <string name="about_tusky_version">ටුස්කි %1$s</string>
-    <string name="about_project_site">වියමන අඩවිය: \n https://tusky.app</string>
+    <string name="about_project_site">වියමන අඩවිය: \n https://warpnet.site</string>
     <string name="action_accept">පිළිගන්න</string>
     <string name="abbreviated_in_hours">පැ. %1$d කින්</string>
     <string name="create_poll_title">මතවිමසුම</string>

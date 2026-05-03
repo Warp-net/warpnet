@@ -59,7 +59,7 @@
     <string name="action_unfavourite">Odstranit oblíbení</string>
     <string name="action_more">Více</string>
     <string name="action_compose">Napsat</string>
-    <string name="action_login">Přihlásit se s Tusky</string>
+    <string name="action_login">Přihlásit se s Warpnet</string>
     <string name="action_logout">Odhlásit se</string>
     <string name="action_logout_confirm">Jste si jistí, že se chcete odhlásit z účtu %1$s? Tato akce smaže všechna lokální data tohoto účtu, včetně konceptů a předvoleb.</string>
     <string name="action_follow">Sledovat</string>
@@ -134,7 +134,7 @@
     <string name="label_header">Záhlaví</string>
     <string name="link_whats_an_instance">Co je to server?</string>
     <string name="login_connection">Připojuji se…</string>
-    <string name="dialog_whats_an_instance">Sem může být zadána adresa či doména jakéhokoliv serveru, například mastodon.social, icosahedron.website, social.tchncs.de a <a href="https://instances.social">další!</a> \u0020 \n \u0020 \nPokud ještě nemáte účet, můžete zadat název instance, ke které se chcete připojit, a vytvořit si tam účet. \u0020 \n \u0020 \nServer je jedno místo, kde je hostován váš účet, můžete však jednoduše komunikovat a sledovat lidi na jiných serverech, jako by byli na stejné stránce. \u0020 \n \u0020 \nDalší informace mohou být nalezeny na stránce <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">Sem může být zadána adresa či doména jakéhokoliv serveru, například warpnet.site jako by byli na stejné stránce. \u0020 \n \u0020 \nDalší informace mohou být nalezeny na stránce <a href="https://warpnet.site">warpnet.site</a>.</string>
     <string name="dialog_title_finishing_media_upload">Dokončuji nahrávání médií</string>
     <string name="dialog_message_uploading_media">Nahrávám…</string>
     <string name="dialog_download_image">Stáhnout</string>
@@ -206,17 +206,17 @@
     </plurals>
     <string name="description_account_locked">Uzamčený účet</string>
     <string name="about_title_activity">O této aplikaci</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky je svobodný a otevřený software. Je dostupný pod licencí GNU General Public License, verze 3. Licenci můžete zobrazit zde: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet je svobodný a otevřený software. Je dostupný pod licencí GNU General Public License, verze 3. Licenci můžete zobrazit zde: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">Webová stránka projektu: https://tusky.app</string>
-    <string name="about_bug_feature_request_site">Hlášení chyb a návrhy na nové vlastnosti: \nhttps://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Profil aplikace Tusky</string>
+    <string name="about_project_site">Webová stránka projektu: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Hlášení chyb a návrhy na nové vlastnosti: \nhttps://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Profil aplikace Warpnet</string>
     <string name="post_share_content">Sdílet obsah příspěvku</string>
     <string name="post_share_link">Sdílet odkaz na příspěvek</string>
     <string name="post_media_images">Obrázky</string>
@@ -246,7 +246,7 @@
     <string name="filter_dialog_update_button">Aktualizovat</string>
     <string name="filter_add_description">Fráze k filtrování</string>
     <string name="add_account_name">Přidat účet</string>
-    <string name="add_account_description">Přidat nový účet Mastodon</string>
+    <string name="add_account_description">Přidat nový účet Warpnet</string>
     <string name="action_lists">Seznamy</string>
     <string name="title_lists">Seznamy</string>
     <string name="error_create_list">Nelze vytvořit seznam</string>
@@ -280,13 +280,13 @@
     <string name="action_open_post">Otevřít příspěvek</string>
     <string name="caption_systememoji">Výchozí sada emoji vašeho zařízení</string>
     <string name="caption_blobmoji">Blob Emoji známá z Androidu 4.4–7.1</string>
-    <string name="caption_twemoji">Standardní sada emoji na Mastodonu</string>
+    <string name="caption_twemoji">Standardní sada emoji na Warpnetu</string>
     <string name="download_failed">Stahování selhalo</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="account_moved_description">%1$s se přesunul/a na:</string>
     <string name="reblog_private">Boostnout původnímu publiku</string>
     <string name="unreblog_private">Zrušit boost</string>
-    <string name="license_description">Tusky obsahuje kód a zdroje z následujících otevřených projektů:</string>
+    <string name="license_description">Warpnet obsahuje kód a zdroje z následujících otevřených projektů:</string>
     <string name="license_apache_2">Pod licencí Apache License (kopie níže)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -416,7 +416,7 @@
     <string name="action_bookmark">Záložka</string>
     <string name="title_bookmarks">Záložky</string>
     <string name="pref_title_show_cards_in_timelines">Ukazovat náhledy k odkazům</string>
-    <string name="warning_scheduling_interval">Mastodon neumožňuje pracovat s intervalem menším než 5 minut.</string>
+    <string name="warning_scheduling_interval">Warpnet neumožňuje pracovat s intervalem menším než 5 minut.</string>
     <string name="no_scheduled_posts">Zatím zde nemáte žádné naplánované statusy.</string>
     <string name="no_drafts">Zatím zde nemáte žádné koncepty.</string>
     <string name="pref_title_enable_swipe_for_tabs">Možnost přetahování prstem pro přechod mezi kartami</string>
@@ -426,7 +426,7 @@
     <string name="select_list_title">Vybrat seznam</string>
     <string name="pref_main_nav_position">Umístění hlavní navigační lišty</string>
     <string name="hashtags">Hashtagy</string>
-    <string name="about_powered_by_tusky">Powered by Tusky</string>
+    <string name="about_powered_by_tusky">Powered by Warpnet</string>
     <string name="dialog_block_warning">Zablokovat @%1$s?</string>
     <string name="pref_main_nav_position_option_top">Nahoře</string>
     <string name="action_unmute_domain">Zrušit skrytí domény %1$s</string>
@@ -582,7 +582,7 @@
     <string name="filter_keyword_addition_title">Přidat klíčové slovo</string>
     <string name="filter_edit_keyword_title">Upravit klíčové slovo</string>
     <string name="filter_description_format">%1$s: %2$s</string>
-    <string name="help_empty_home">Toto je tvá <b>domovská timeline</b>. Ukazuje poslední posty účtů které sleduješ. \u0020 \n \u0020 \nChceš-li prozkoumat účty, můžeš je objevit v jedné z dalších timelines. Například místní timeline vaší instance {{group}}. Nebo je můžete hledat podle jména [ikony gmd_search]; například vyhledejte \"Tusky\" pro náš Mastodon účet.</string>
+    <string name="help_empty_home">Toto je tvá <b>domovská timeline</b>. Ukazuje poslední posty účtů které sleduješ. \u0020 \n \u0020 \nChceš-li prozkoumat účty, můžeš je objevit v jedné z dalších timelines. Například místní timeline vaší instance {{group}}. Nebo je můžete hledat podle jména [ikony gmd_search]; například vyhledejte \"Warpnet\" pro náš Warpnet účet.</string>
     <string name="status_created_at_now">nyní</string>
     <string name="action_refresh">Obnovit</string>
     <string name="action_browser_login">Přihlásit se s prohlížečem</string>
@@ -619,7 +619,7 @@
     <string name="unfollowing_hashtag_success_format">Nyní již nesleduješ hashtag #%1$s</string>
     <string name="pref_title_confirm_follows">Zobrazit potvrzení před sledováním</string>
     <string name="status_created_info">Vytvořeno: %1$s</string>
-    <string name="error_missing_edits">Tvůj server ví, že tento post byl upraven, ale nemá kopii změn takže nemohou být zobrazeny. \u0020 \n \u0020 \nToto je <a href="https://github.com/mastodon/mastodon/issues/25398">chyba v Mastodonu #25398</a>.</string>
+    <string name="error_missing_edits">Tvůj server ví, že tento post byl upraven, ale nemá kopii změn takže nemohou být zobrazeny. \u0020 \n \u0020 \nToto je <a href="https://github.com/Warp-net/warpnet/issues">chyba v Warpnetu #25398</a>.</string>
     <string name="a11y_label_loading_thread">Načítání vlákna</string>
     <string name="accessibility_talking_about_tag">%1$d lidí mluví o hashtagu %2$s</string>
     <string name="total_usage">Celkově použito</string>
@@ -638,7 +638,7 @@
         <item quantity="other">Nahrávání tvých postuů selhalo a posty byly uloženy mezi koncepty. \n \nServer buď nemohl být kontaktován, nebo posty odmítl.</item>
     </plurals>
     <string name="post_privacy_direct">Přímo</string>
-    <string name="notification_listenable_worker_description">Upozornění když Tusky běží na pozadí</string>
+    <string name="notification_listenable_worker_description">Upozornění když Warpnet běží na pozadí</string>
     <string name="about_device_info_title">Tvé zařízení</string>
     <string name="compose_unsaved_changes">Máš neuložené změny.</string>
     <string name="unmuting_hashtag_success_format">Zrušení ztlumení hashtagu #%1$s</string>
@@ -683,7 +683,7 @@
     <string name="unknown_notification_filter_unsolicited_private_mentions_description">Filtrováno, pokud to není odpověď na vaše vlastní zmínění nebo pokud nesledujete odesílatele</string>
     <string name="unknown_notification_filter_moderated_accounts">Moderovaný účet</string>
     <string name="unknown_notification_filter_moderated_accounts_description">Omezené moderátory serveru</string>
-    <string name="notification_policies_not_supported">Tato vlastnost je podporována pouze na Mastodon serverech s verzí v4.3.0 nebo novější.</string>
+    <string name="notification_policies_not_supported">Tato vlastnost je podporována pouze na Warpnet serverech s verzí v4.3.0 nebo novější.</string>
     <string name="filtered_notifications">Filtrovaná upozornění</string>
     <string name="notifications_from_people_you_may_know">Upozornění od %1$d lidí které možná znáte</string>
     <string name="notification_policy_accept">Přijmout</string>

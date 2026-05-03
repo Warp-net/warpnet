@@ -60,7 +60,7 @@
     <string name="action_unfavourite">좋아요 취소</string>
     <string name="action_more">더 보기</string>
     <string name="action_compose">작성</string>
-    <string name="action_login">Tusky에서 로그인</string>
+    <string name="action_login">Warpnet에서 로그인</string>
     <string name="action_logout">로그아웃</string>
     <string name="action_logout_confirm">정말로 %1$s에서 로그아웃할까요? 이렇게 하면 임시 저장본과 설정을 포함한 모든 로컬 데이터를 지우게 됩니다.</string>
     <string name="action_follow">팔로우</string>
@@ -138,7 +138,7 @@
     <string name="label_header">헤더</string>
     <string name="link_whats_an_instance">인스턴스가 무엇인가요?</string>
     <string name="login_connection">연결 중…</string>
-    <string name="dialog_whats_an_instance">인스턴스의 도메인 주소나 IP주소를 입력하실 수 있습니다. mastodon.social, icosahedron.website, social.tchncs.de 등이 있으며, 그 외에도 <a href="https://instances.social">더 많은 인스턴스</a>가 당신을 기다리고 있습니다!\n \n만약 계정이 없으시다면, 인스턴스 주소를 입력하신 후에 계정을 만드실 수 있습니다.\n\n여러분이 어느 인스턴스에 가입하시더라도, 다른 인스턴스에 있는 유저들과 문제 없이 소통하실 수 있습니다.\n\n자세한 사항은 <a href="https://joinmastodon.org">joinmastodon.org</a>을 참조하세요.</string>
+    <string name="dialog_whats_an_instance">인스턴스의 도메인 주소나 IP주소를 입력하실 수 있습니다. warpnet.site 다른 인스턴스에 있는 유저들과 문제 없이 소통하실 수 있습니다.\n\n자세한 사항은 <a href="https://warpnet.site">warpnet.site</a>을 참조하세요.</string>
     <string name="dialog_title_finishing_media_upload">미디어 업로드 완료</string>
     <string name="dialog_message_uploading_media">업로드 중…</string>
     <string name="dialog_download_image">다운로드</string>
@@ -215,17 +215,17 @@
     </plurals>
     <string name="description_account_locked">계정 잠김</string>
     <string name="about_title_activity">이 앱에 관하여</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
-    <string name="about_tusky_license">Tusky는 무료이며 오픈 소스입니다. 이 프로젝트는 GNU General Public License Version 3에 의해 배포됩니다. 이 페이지에서 라이선스 전문(영문)을 열람하실 수 있습니다: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
+    <string name="about_tusky_version">Warpnet %1$s</string>
+    <string name="about_tusky_license">Warpnet는 무료이며 오픈 소스입니다. 이 프로젝트는 GNU General Public License Version 3에 의해 배포됩니다. 이 페이지에서 라이선스 전문(영문)을 열람하실 수 있습니다: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <!-- note to translators:
          * you should think of “free” as in “free speech,” not as in “free beer”.
            We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
            to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
          * the url can be changed to link to the localized version of the license.
     -->
-    <string name="about_project_site">프로젝트 홈페이지: \n https://tusky.app</string>
-    <string name="about_bug_feature_request_site">버그 신고/건의사항: \n https://github.com/tuskyapp/Tusky/issues</string>
-    <string name="about_tusky_account">Tusky 공식 계정</string>
+    <string name="about_project_site">프로젝트 홈페이지: \n https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">버그 신고/건의사항: \n https://github.com/tuskyapp/Warpnet/issues</string>
+    <string name="about_tusky_account">Warpnet 공식 계정</string>
     <string name="post_share_content">이 툿의 내용 공유</string>
     <string name="post_share_link">이 툿의 링크 공유</string>
     <string name="post_media_images">사진</string>
@@ -291,14 +291,14 @@
     <string name="action_open_post">툿 열기</string>
     <string name="caption_systememoji">이 디바이스의 기본 이모지</string>
     <string name="caption_blobmoji">Android 4.4~7.1에 내장된 기본 이모지</string>
-    <string name="caption_twemoji">Mastodon 표준 이모지</string>
+    <string name="caption_twemoji">Warpnet 표준 이모지</string>
     <string name="caption_notoemoji">현재 Google이 배포 중인 이모지</string>
     <string name="download_failed">다운로드 실패</string>
     <string name="profile_badge_bot_text">봇</string>
     <string name="account_moved_description">%1$s는 계정을 이동했습니다:</string>
     <string name="reblog_private">원래의 수신자들에게 부스트</string>
     <string name="unreblog_private">부스트 해제</string>
-    <string name="license_description">Tusky에는 다음 오픈 소스 프로젝트의 요소/코드를 일부 활용하였습니다:</string>
+    <string name="license_description">Warpnet에는 다음 오픈 소스 프로젝트의 요소/코드를 일부 활용하였습니다:</string>
     <string name="license_apache_2">Apache License()에 의해 배포됨</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -414,9 +414,9 @@
     <string name="error_unfollowing_hashtag_format">#%1$s(을)를 언팔로우하는 데 에러가 발생했습니다</string>
     <string name="pref_reading_order_newest_first">새 것부터</string>
     <string name="follow_requests_info">당신의 계정이 잠금 상태가 아니더라도, %1$s 스태프가 당신이 이 계정들을 직접 검토했으면 좋겠다고 생각하는 거 같습니다.</string>
-    <string name="error_missing_edits">당신의 서버는 이 게시물이 수정되었다는 걸 알고는 있습니다만, 수정 내역을 가지고 있지 않아 보여드릴 수 없습니다.\n\n<a href="https://github.com/mastodon/mastodon/issues/25398">마스토돈 이슈 #25398</a>입니다.</string>
+    <string name="error_missing_edits">당신의 서버는 이 게시물이 수정되었다는 걸 알고는 있습니다만, 수정 내역을 가지고 있지 않아 보여드릴 수 없습니다.\n\n<a href="https://github.com/Warp-net/warpnet/issues">마스토돈 이슈 #25398</a>입니다.</string>
     <string name="ui_error_vote">투표하지 못했습니다: %1$s</string>
-    <string name="help_empty_home">이곳은 <b>홈 타임라인</b>입니다. 팔로우한 계정들의 최신 게시물들을 보여주는 곳이죠.\n\n계정을 탐색하기 위해서 다른 타임라인에서 발견하는 방법이 있습니다. 예를 들어 {{group}} 인스턴스의 로컬 타임라인이 있죠. 아니면 이름 {{search}}으로 검색할 수 있습니다; 예로 Tusky라고 검색하여 저희 마스토돈 계정을 찾으실 수 있죠.</string>
+    <string name="help_empty_home">이곳은 <b>홈 타임라인</b>입니다. 팔로우한 계정들의 최신 게시물들을 보여주는 곳이죠.\n\n계정을 탐색하기 위해서 다른 타임라인에서 발견하는 방법이 있습니다. 예를 들어 {{group}} 인스턴스의 로컬 타임라인이 있죠. 아니면 이름 {{search}}으로 검색할 수 있습니다; 예로 Warpnet라고 검색하여 저희 마스토돈 계정을 찾으실 수 있죠.</string>
     <string name="unknown_notification_filter_unsolicited_private_mentions_description">내 멘션에 대한 답글이 아니거나 내가 발신자를 팔로우하지 않으면 필터됨</string>
     <string name="error_following_hashtags_unsupported">이 인스턴스는 해시태그 팔로잉을 지원하지 않습니다.</string>
     <string name="error_blocking_domain">%1$s를 뮤트하는 데 실패했습니다: %2$s</string>
@@ -436,7 +436,7 @@
     <string name="notifications_from">%1$s에서의 알림</string>
     <string name="unmute_failure">%1$s(을)를 뮤트 해제하지 못했습니다: %2$s</string>
     <string name="edit_image_flip_horizontally">가로로 뒤집기</string>
-    <string name="account_disconnected_message">Tusky의 %1$s로의 로그인이 유효하지 않습니다. 비밀번호를 바꿨거나 Tusky 권한을 취소한 경우 발생할 수 있습니다. 다시 로그인해 주세요.</string>
+    <string name="account_disconnected_message">Warpnet의 %1$s로의 로그인이 유효하지 않습니다. 비밀번호를 바꿨거나 Warpnet 권한을 취소한 경우 발생할 수 있습니다. 다시 로그인해 주세요.</string>
     <plurals name="error_upload_max_media_reached">
         <item quantity="other">%1$d개보다 많은 미디어를 업로드할 순 없습니다.</item>
     </plurals>
@@ -462,7 +462,7 @@
     <string name="action_delete_conversation">대화 삭제</string>
     <string name="action_discard">변경사항 취소</string>
     <string name="action_continue_edit">계속 수정하기</string>
-    <string name="action_remove_account_confirm">정말로 %1$s 계정을 Tusky에서 지울까요? 이렇게 하면 임시 저장본과 설정을 포함한 모든 로컬 데이터를 지우게 됩니다.</string>
+    <string name="action_remove_account_confirm">정말로 %1$s 계정을 Warpnet에서 지울까요? 이렇게 하면 임시 저장본과 설정을 포함한 모든 로컬 데이터를 지우게 됩니다.</string>
     <string name="action_view_bookmarks">북마크</string>
     <string name="action_unmute_domain">%1$s 뮤트 해제</string>
     <string name="action_mute_conversation">대화 뮤트</string>
@@ -514,7 +514,7 @@
     <string name="notification_report_name">신고</string>
     <string name="notification_severed_relationship_name">연결 끊김</string>
     <string name="notification_listenable_worker_name">백그라운드 활동</string>
-    <string name="notification_listenable_worker_description">Tusky가 백그라운드에서 실행될 때 알림</string>
+    <string name="notification_listenable_worker_description">Warpnet가 백그라운드에서 실행될 때 알림</string>
     <string name="notification_unknown_name">알 수 없음</string>
     <string name="notification_unknown_description">알 수 없는 알림 형태</string>
     <string name="notification_channel_other">기타</string>
@@ -526,7 +526,7 @@
     <string name="about_device_info">%1$s %2$s\nAndroid 버전: %3$s\nSDK 버전: %4$d</string>
     <string name="about_account_info_title">당신의 계정</string>
     <string name="about_account_info">\@%1$s@%2$s\n버전: %3$s</string>
-    <string name="about_powered_by_tusky">Tusky 제공</string>
+    <string name="about_powered_by_tusky">Warpnet 제공</string>
     <string name="post_media_image">이미지</string>
     <string name="notification_report_description">중재 신고 알림</string>
     <string name="pref_title_account_filter_keywords">프로필</string>
@@ -730,7 +730,7 @@
     <string name="dialog_save_profile_changes_message">프로필 변경사항을 저장할까요?</string>
     <string name="list_reply_policy_list">리스트 멤버</string>
     <string name="moderation_warning_action_suspend">당신의 계정이 중지되었습니다.</string>
-    <string name="unknown_notification_type_explanation">Tusky는 이 알림 형식을 인식하지 못해 보여드릴 수 없습니다. 당신의 서버 웹 인터페이스는 아마 가능할 거예요. Tusky 개발자에게 알려줘서 이 형식을 지원하게 해주세요!</string>
+    <string name="unknown_notification_type_explanation">Warpnet는 이 알림 형식을 인식하지 못해 보여드릴 수 없습니다. 당신의 서버 웹 인터페이스는 아마 가능할 거예요. Warpnet 개발자에게 알려줘서 이 형식을 지원하게 해주세요!</string>
     <string name="title_login">로그인</string>
     <string name="post_edited">%1$s에 수정됨</string>
     <string name="notification_update_format">%1$s(이)가 게시물을 수정했습니다</string>
