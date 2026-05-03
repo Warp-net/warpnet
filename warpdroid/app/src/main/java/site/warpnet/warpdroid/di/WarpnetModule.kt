@@ -72,8 +72,7 @@ object WarpnetModule {
     @Singleton
     fun providesPairedNodeStore(
         @ApplicationContext context: Context,
-        moshi: Moshi,
-    ): PairedNodeStore = PairedNodeStore(context, moshi)
+    ): PairedNodeStore = PairedNodeStore(context)
 
     // Kept for call-site compatibility: the deleted NetworkModule used to
     // provide this for WarpdroidApplication and PlayerModule. Media playback

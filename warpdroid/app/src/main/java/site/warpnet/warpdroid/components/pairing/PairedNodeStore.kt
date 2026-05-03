@@ -6,55 +6,44 @@
 package site.warpnet.warpdroid.components.pairing
 
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.adapter
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Keystore-backed persistence for the current pairing. One JSON blob under
- * [KEY_PAIRED_FAT_NODE] holds everything needed to reconnect — [Identity]
- * (token + PSK + owner metadata) plus the pinned peer ID and addresses.
+ * In-memory store for the active pairing.
  *
- * Token and PSK never leave this store unencrypted; the returned [PairedNode]
- * is held only in memory by the transport layer.
+ * Auth state never touches disk: every cold start lands the user back at
+ * the QR scanner. The previously-persisted EncryptedSharedPreferences
+ * file is deleted on first construction so any pairing left over from
+ * an older build of the app is wiped.
  */
-@OptIn(ExperimentalStdlibApi::class)
 @Singleton
 class PairedNodeStore @Inject constructor(
-    context: Context,
-    moshi: Moshi,
+    @ApplicationContext context: Context,
 ) {
-    private val adapter = moshi.adapter<PairedNode>()
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        PREFS_FILE,
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    private val ref = AtomicReference<PairedNode?>(null)
 
-    fun load(): PairedNode? {
-        val raw = prefs.getString(KEY_PAIRED_FAT_NODE, null) ?: return null
-        return runCatching { adapter.fromJson(raw) }.getOrNull()
+    init {
+        // Best-effort: drop the legacy encrypted-prefs file from earlier
+        // builds. If anything in androidx.security failed to initialise
+        // the master key, deleteSharedPreferences just no-ops.
+        runCatching { context.deleteSharedPreferences(LEGACY_PREFS_FILE) }
     }
 
+    fun load(): PairedNode? = ref.get()
+
     fun save(node: PairedNode) {
-        prefs.edit().putString(KEY_PAIRED_FAT_NODE, adapter.toJson(node)).apply()
+        ref.set(node)
     }
 
     /** "Forget this node" — invoked from Settings. */
     fun clear() {
-        prefs.edit().remove(KEY_PAIRED_FAT_NODE).apply()
+        ref.set(null)
     }
 
-    companion object {
-        const val KEY_PAIRED_FAT_NODE = "paired_fat_node"
-        private const val PREFS_FILE = "warpnet_pairing"
+    private companion object {
+        const val LEGACY_PREFS_FILE = "warpnet_pairing"
     }
 }
