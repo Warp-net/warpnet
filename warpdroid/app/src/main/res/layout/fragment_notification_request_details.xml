@@ -9,7 +9,7 @@
         android:layout_height="match_parent"
         android:clipToPadding="false" />
 
-    <com.keylesspalace.tusky.view.BackgroundMessageView
+    <site.warpnet.warpdroid.view.BackgroundMessageView
         android:id="@+id/statusView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

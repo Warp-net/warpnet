@@ -12,12 +12,12 @@
 
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/preferenceFragment"
-        android:name="com.keylesspalace.tusky.components.preference.notificationpolicies.NotificationPoliciesFragment"
+        android:name="site.warpnet.warpdroid.components.preference.notificationpolicies.NotificationPoliciesFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-    <com.keylesspalace.tusky.view.BackgroundMessageView
+    <site.warpnet.warpdroid.view.BackgroundMessageView
         android:id="@+id/messageView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

@@ -66,7 +66,7 @@
 
     <ImageButton
         android:id="@+id/notificationRequestDismiss"
-        style="@style/TuskyImageButton"
+        style="@style/WarpdroidImageButton"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginStart="12dp"
@@ -80,7 +80,7 @@
 
     <ImageButton
         android:id="@+id/notificationRequestAccept"
-        style="@style/TuskyImageButton"
+        style="@style/WarpdroidImageButton"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginStart="12dp"

@@ -32,14 +32,14 @@
 
     <style name="SplashTheme" parent="Theme.SplashScreen">
         <item name="windowSplashScreenAnimatedIcon">@drawable/splashscreen</item>
-        <item name="windowSplashScreenBackground">@color/tusky_grey_20</item>
+        <item name="windowSplashScreenBackground">@color/warpdroid_grey_20</item>
     </style>
 
-    <style name="TuskyTheme" parent="TuskyBaseTheme" />
+    <style name="WarpdroidTheme" parent="WarpdroidBaseTheme" />
 
-    <style name="TuskyDialogActivityTheme" parent="@style/TuskyTheme" />
+    <style name="WarpdroidDialogActivityTheme" parent="@style/WarpdroidTheme" />
 
-    <style name="TuskyBaseTheme" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="WarpdroidBaseTheme" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Provide default text sizes. These are overwritten in BaseActivity, but
              if they are missing then the Android Studio layout preview crashes
              with java.lang.reflect.InvocationTargetException -->
@@ -88,19 +88,19 @@
 
         <item name="textColorDisabled">@color/textColorDisabled</item>
 
-        <item name="materialDrawerStyle">@style/TuskyDrawerStyle</item>
-        <item name="materialDrawerHeaderStyle">@style/TuskyDrawerHeaderStyle</item>
+        <item name="materialDrawerStyle">@style/WarpdroidDrawerStyle</item>
+        <item name="materialDrawerHeaderStyle">@style/WarpdroidDrawerHeaderStyle</item>
 
-        <item name="snackbarButtonStyle">@style/TuskyButton.TextButton</item>
+        <item name="snackbarButtonStyle">@style/WarpdroidButton.TextButton</item>
 
         <!-- for dialogs created with MaterialALertDialogBuilder -->
-        <item name="materialAlertDialogTheme">@style/TuskyMaterialDialogOverlay</item>
+        <item name="materialAlertDialogTheme">@style/WarpdroidMaterialDialogOverlay</item>
         <!-- for dialogs opened from preferences -->
-        <item name="alertDialogTheme">@style/TuskyAlertDialog</item>
+        <item name="alertDialogTheme">@style/WarpdroidAlertDialog</item>
         <item name="dialogCornerRadius">16dp</item>
 
-        <item name="materialTimePickerTheme">@style/TuskyTimePickerOverlay</item>
-        <item name="materialCalendarTheme">@style/TuskyDatePickerOverlay</item>
+        <item name="materialTimePickerTheme">@style/WarpdroidTimePickerOverlay</item>
+        <item name="materialCalendarTheme">@style/WarpdroidDatePickerOverlay</item>
 
         <item name="minTouchTargetSize">32dp</item> <!-- this affects RadioButton size -->
         <item name="elevationOverlayEnabled">false</item> <!-- disable the automatic tinting of surfaces with elevation in dark mode -->
@@ -109,10 +109,10 @@
 
         <item name="chipStyle">@style/Widget.Material3.Chip.Filter</item>
 
-        <item name="preferenceTheme">@style/TuskyPreferenceTheme</item>
+        <item name="preferenceTheme">@style/WarpdroidPreferenceTheme</item>
 
         <item name="homeAsUpIndicator">@drawable/ic_arrow_back_24dp</item>
-        <item name="searchViewStyle">@style/TuskySearchViewStyle</item>
+        <item name="searchViewStyle">@style/WarpdroidSearchViewStyle</item>
 
         <item name="toolbarIconBackgroundColor">@color/toolbarIconBackgroundColor</item>
         <item name="placeholderColor">@color/placeholderColor</item>
@@ -120,126 +120,126 @@
         <item name="android:textColorHighlight">@color/color_primary_transparent_50</item>
     </style>
 
-    <style name="TuskyBlackThemeBase" parent="TuskyBaseTheme">
-        <item name="colorPrimaryDark">@color/tusky_grey_05</item>
+    <style name="WarpdroidBlackThemeBase" parent="WarpdroidBaseTheme">
+        <item name="colorPrimaryDark">@color/warpdroid_grey_05</item>
 
         <item name="colorOnPrimary">@color/black</item>
 
         <item name="android:colorBackground">@color/black</item>
         <item name="windowBackgroundColor">@color/black</item>
 
-        <item name="colorSurface">@color/tusky_grey_10</item>
-        <item name="colorSurfaceVariant">@color/tusky_grey_10</item>
+        <item name="colorSurface">@color/warpdroid_grey_10</item>
+        <item name="colorSurfaceVariant">@color/warpdroid_grey_10</item>
 
-        <item name="colorSurfaceContainerLowest">@color/tusky_grey_10</item>
-        <item name="colorSurfaceContainerLow">@color/tusky_grey_10</item>
-        <item name="colorSurfaceContainer">@color/tusky_grey_10</item>
-        <item name="colorSurfaceContainerHigh">@color/tusky_grey_10</item>
-        <item name="colorSurfaceContainerHighest">@color/tusky_grey_10</item>
+        <item name="colorSurfaceContainerLowest">@color/warpdroid_grey_10</item>
+        <item name="colorSurfaceContainerLow">@color/warpdroid_grey_10</item>
+        <item name="colorSurfaceContainer">@color/warpdroid_grey_10</item>
+        <item name="colorSurfaceContainerHigh">@color/warpdroid_grey_10</item>
+        <item name="colorSurfaceContainerHighest">@color/warpdroid_grey_10</item>
 
-        <item name="iconColor">@color/tusky_grey_40</item>
-        <item name="colorBackgroundHighlight">@color/tusky_grey_40</item>
-        <item name="colorBackgroundAccent">@color/tusky_grey_20</item>
+        <item name="iconColor">@color/warpdroid_grey_40</item>
+        <item name="colorBackgroundHighlight">@color/warpdroid_grey_40</item>
+        <item name="colorBackgroundAccent">@color/warpdroid_grey_20</item>
 
-        <item name="dividerColor">@color/tusky_grey_20</item>
-        <item name="colorOutlineVariant">@color/tusky_grey_20</item>
+        <item name="dividerColor">@color/warpdroid_grey_20</item>
+        <item name="colorOutlineVariant">@color/warpdroid_grey_20</item>
 
-        <item name="toolbarIconBackgroundColor">@color/transparent_tusky_grey_10</item>
-        <item name="placeholderColor">@color/tusky_grey_30</item>
+        <item name="toolbarIconBackgroundColor">@color/transparent_warpdroid_grey_10</item>
+        <item name="placeholderColor">@color/warpdroid_grey_30</item>
     </style>
 
-    <style name="TuskyBlackTheme" parent="TuskyBlackThemeBase" />
+    <style name="WarpdroidBlackTheme" parent="WarpdroidBlackThemeBase" />
 
     <style name="ViewMediaActivity.AppBarLayout" parent="ThemeOverlay.AppCompat">
         <item name="android:colorControlNormal">@color/white</item>
         <item name="colorControlNormal">@color/white</item>
     </style>
 
-    <style name="TuskyDialogFragment" parent="@style/ThemeOverlay.Material3.Dialog">
+    <style name="WarpdroidDialogFragment" parent="@style/ThemeOverlay.Material3.Dialog">
         <item name="android:windowBackground">@drawable/dialog_background</item>
         <item name="android:backgroundDimAmount">0.5</item>
     </style>
 
-    <style name="TuskyAlertDialog" parent="@style/ThemeOverlay.Material3.Dialog.Alert">
+    <style name="WarpdroidAlertDialog" parent="@style/ThemeOverlay.Material3.Dialog.Alert">
         <item name="android:windowBackground">@drawable/dialog_background</item>
         <item name="android:backgroundDimAmount">0.5</item>
     </style>
 
-    <style name="TuskyMaterialDialogOverlay" parent="@style/ThemeOverlay.Material3.MaterialAlertDialog">
-        <item name="alertDialogStyle">@style/TuskyMaterialDialog</item>
+    <style name="WarpdroidMaterialDialogOverlay" parent="@style/ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="alertDialogStyle">@style/WarpdroidMaterialDialog</item>
         <item name="android:backgroundDimAmount">0.5</item>
     </style>
 
-    <style name="TuskyMaterialDialog" parent="@style/MaterialAlertDialog.Material3">
+    <style name="WarpdroidMaterialDialog" parent="@style/MaterialAlertDialog.Material3">
         <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Large</item>
         <item name="backgroundTint">@color/colorBackground</item>
     </style>
 
-    <style name="TuskyTimePickerOverlay" parent="@style/ThemeOverlay.MaterialComponents.TimePicker">
-        <item name="materialTimePickerStyle">@style/TuskyTimePicker</item>
+    <style name="WarpdroidTimePickerOverlay" parent="@style/ThemeOverlay.MaterialComponents.TimePicker">
+        <item name="materialTimePickerStyle">@style/WarpdroidTimePicker</item>
     </style>
-    <style name="TuskyTimePicker" parent="@style/Widget.Material3.MaterialTimePicker">
+    <style name="WarpdroidTimePicker" parent="@style/Widget.Material3.MaterialTimePicker">
         <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Large</item>
         <item name="backgroundTint">@color/colorBackground</item>
     </style>
 
-    <style name="TuskyDatePickerOverlay" parent="@style/ThemeOverlay.MaterialComponents.MaterialCalendar">
-        <item name="materialCalendarStyle">@style/TuskyDatePicker</item>
+    <style name="WarpdroidDatePickerOverlay" parent="@style/ThemeOverlay.MaterialComponents.MaterialCalendar">
+        <item name="materialCalendarStyle">@style/WarpdroidDatePicker</item>
     </style>
-    <style name="TuskyDatePicker" parent="@style/Widget.Material3.MaterialCalendar">
+    <style name="WarpdroidDatePicker" parent="@style/Widget.Material3.MaterialCalendar">
         <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Large</item>
         <item name="backgroundTint">@color/colorBackground</item>
     </style>
 
-    <style name="TuskyTabAppearance" parent="Widget.Material3.TabLayout">
+    <style name="WarpdroidTabAppearance" parent="Widget.Material3.TabLayout">
         <item name="tabIndicatorHeight">4dp</item>
     </style>
 
-    <style name="TuskyPreferenceTheme" parent="@style/PreferenceThemeOverlay">
-        <item name="switchPreferenceCompatStyle">@style/TuskySwitchPreference</item>
-        <item name="dialogPreferenceStyle">@style/TuskyDialogPreference</item>
+    <style name="WarpdroidPreferenceTheme" parent="@style/PreferenceThemeOverlay">
+        <item name="switchPreferenceCompatStyle">@style/WarpdroidSwitchPreference</item>
+        <item name="dialogPreferenceStyle">@style/WarpdroidDialogPreference</item>
     </style>
 
-    <style name="TuskyDialogPreference" parent="@style/Preference.DialogPreference.Material">
+    <style name="WarpdroidDialogPreference" parent="@style/Preference.DialogPreference.Material">
         <item name="singleLineTitle">false</item>
     </style>
 
-    <style name="TuskySwitchPreference" parent="@style/Preference.SwitchPreferenceCompat.Material">
+    <style name="WarpdroidSwitchPreference" parent="@style/Preference.SwitchPreferenceCompat.Material">
         <item name="widgetLayout">@layout/preference_material_switch</item>
         <item name="singleLineTitle">false</item>
     </style>
 
-    <style name="TuskyImageButton" parent="@style/Widget.MaterialComponents.Button.UnelevatedButton">
+    <style name="WarpdroidImageButton" parent="@style/Widget.MaterialComponents.Button.UnelevatedButton">
         <item name="android:tint">?android:attr/textColorTertiary</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
     </style>
 
-    <style name="TuskyButton" parent="Widget.Material3.Button">
+    <style name="WarpdroidButton" parent="Widget.Material3.Button">
         <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Small</item>
     </style>
 
-    <style name="TuskyButton.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+    <style name="WarpdroidButton.Outlined" parent="Widget.Material3.Button.OutlinedButton">
         <item name="strokeColor">?attr/colorBackgroundAccent</item>
         <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Small</item>
     </style>
 
-    <style name="TuskyButton.TextButton" parent="Widget.Material3.Button.TextButton">
+    <style name="WarpdroidButton.TextButton" parent="Widget.Material3.Button.TextButton">
         <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Small</item>
     </style>
 
-    <style name="TuskyTextInput" parent="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense">
+    <style name="WarpdroidTextInput" parent="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense">
         <item name="boxStrokeColor">@color/text_input_layout_box_stroke_color</item>
         <item name="android:textColorHint">?android:attr/textColorTertiary</item>
     </style>
 
-    <style name="TuskyDrawerStyle" parent ="Widget.MaterialDrawerStyle">
+    <style name="WarpdroidDrawerStyle" parent ="Widget.MaterialDrawerStyle">
         <item name="materialDrawerBackground">?android:colorBackground</item>
         <item name="materialDrawerPrimaryIcon">?iconColor</item>
         <item name="materialDrawerSecondaryIcon">?iconColor</item>
         <item name="materialDrawerDividerColor">?dividerColor</item>
     </style>
 
-    <style name="TuskyDrawerHeaderStyle" parent ="Widget.MaterialDrawerHeaderStyle">
+    <style name="WarpdroidDrawerHeaderStyle" parent ="Widget.MaterialDrawerHeaderStyle">
         <item name="materialDrawerHeaderSelectionText">?android:textColorPrimary</item>
         <item name="materialDrawerHeaderSelectionSubtext">?android:textColorPrimary</item>
     </style>
@@ -251,12 +251,12 @@
     </style>
 
     <!-- Used in exo_player_control_view.xml. Unmodified values are 5dp each -->
-    <style name="TuskyExoPlayerPlayPause" parent="ExoStyledControls.Button.Center.PlayPause">
+    <style name="WarpdroidExoPlayerPlayPause" parent="ExoStyledControls.Button.Center.PlayPause">
         <item name="android:layout_marginLeft">20dp</item>
         <item name="android:layout_marginRight">20dp</item>
     </style>
 
-    <style name="TuskySearchViewStyle" parent="Widget.Material3.SearchView">
+    <style name="WarpdroidSearchViewStyle" parent="Widget.Material3.SearchView">
         <item name="searchIcon">@drawable/ic_search_24dp</item>
         <item name="closeIcon">@drawable/ic_close_24dp</item>
     </style>

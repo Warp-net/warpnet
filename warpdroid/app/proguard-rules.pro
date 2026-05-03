@@ -20,7 +20,7 @@
     public static final ** CREATOR;
 }
 
-# TUSKY SPECIFIC OPTIONS
+# WARPDROID SPECIFIC OPTIONS
 
 # preserve line numbers for crash reporting
 -keepattributes SourceFile,LineNumberTable
@@ -65,7 +65,7 @@
   boolean isInEditMode() return false;
 }
 
--checkdiscard class com.keylesspalace.tusky.usecase.DeveloperToolsUseCase
+-checkdiscard class site.warpnet.warpdroid.usecase.DeveloperToolsUseCase
 
 # https://codeberg.org/tusky/Tusky/pulls/5172
 -keep class androidx.appcompat.app.AppLocalesMetadataHolderService

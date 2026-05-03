@@ -7,7 +7,7 @@
         errorLine1="            if (keyCode == KeyEvent.KEYCODE_BACK) {"
         errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/components/compose/ComposeActivity.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/components/compose/ComposeActivity.kt"
             line="1235"
             column="28"/>
     </issue>
@@ -18,7 +18,7 @@
         errorLine1="            sb.append(language.toUpperCase());"
         errorLine2="                               ~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/StatusDetailedViewHolder.java"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/StatusDetailedViewHolder.java"
             line="102"
             column="32"/>
     </issue>
@@ -29,7 +29,7 @@
         errorLine1="            builder.setSpan(ImageSpan(drawable, DynamicDrawableSpan.ALIGN_CENTER), builder.length - 2, builder.length - 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)"
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/viewdata/PollViewData.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/viewdata/PollViewData.kt"
             line="74"
             column="49"/>
     </issue>
@@ -40,7 +40,7 @@
         errorLine1="                builder.setSpan(ImageSpan(drawable, DynamicDrawableSpan.ALIGN_CENTER), index, index + iconName.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)"
         errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/util/SpanUtils.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/util/SpanUtils.kt"
             line="122"
             column="53"/>
     </issue>
@@ -317,7 +317,7 @@
         errorLine1="        accountFieldAdapter.notifyDataSetChanged()"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/components/account/AccountActivity.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/components/account/AccountActivity.kt"
             line="485"
             column="9"/>
     </issue>
@@ -328,7 +328,7 @@
         errorLine1="        notifyDataSetChanged()"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/AccountFieldEditAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/AccountFieldEditAdapter.kt"
             line="45"
             column="9"/>
     </issue>
@@ -339,7 +339,7 @@
         errorLine1="        notifyDataSetChanged()"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/AccountFieldEditAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/AccountFieldEditAdapter.kt"
             line="51"
             column="9"/>
     </issue>
@@ -350,7 +350,7 @@
         errorLine1="        notifyDataSetChanged()"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/components/announcements/AnnouncementAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/components/announcements/AnnouncementAdapter.kt"
             line="175"
             column="9"/>
     </issue>
@@ -361,7 +361,7 @@
         errorLine1="        notifyDataSetChanged()"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/PollAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/PollAdapter.kt"
             line="64"
             column="9"/>
     </issue>
@@ -372,7 +372,7 @@
         errorLine1="        notifyDataSetChanged()"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/PreviewPollOptionsAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/PreviewPollOptionsAdapter.kt"
             line="34"
             column="9"/>
     </issue>
@@ -383,7 +383,7 @@
         errorLine1="        notifyDataSetChanged()"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/TabAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/TabAdapter.kt"
             line="54"
             column="9"/>
     </issue>
@@ -394,7 +394,7 @@
         errorLine1="            notifyDataSetChanged()"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/TabAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/TabAdapter.kt"
             line="161"
             column="13"/>
     </issue>
@@ -416,7 +416,7 @@
         errorLine1="            ShortcutManagerCompat.setDynamicShortcuts(context, shortcuts)"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/util/ShareShortcutHelper.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/util/ShareShortcutHelper.kt"
             line="101"
             column="13"/>
     </issue>
@@ -427,7 +427,7 @@
         errorLine1="        val a = context.obtainStyledAttributes("
         errorLine2="                ^">
         <location
-            file="src/main/java/com/keylesspalace/tusky/view/SliderPreference.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/view/SliderPreference.kt"
             line="99"
             column="17"/>
     </issue>
@@ -438,7 +438,7 @@
         errorLine1="            binding.imageView.setOnTouchListener { _, event ->"
         errorLine2="            ^">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/TabAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/TabAdapter.kt"
             line="95"
             column="13"/>
     </issue>
@@ -449,7 +449,7 @@
         errorLine1="            binding.imageView.setOnTouchListener { _, event ->"
         errorLine2="                                                 ^">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/TabAdapter.kt"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/TabAdapter.kt"
             line="95"
             column="50"/>
     </issue>
@@ -592,7 +592,7 @@
         errorLine1="                    cardMetadata.setText(providerName + metadataJoiner + TimestampUtils.getRelativeTimeSpanString(context, card.getPublishedAt().getTime(), System.currentTimeMillis()));"
         errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/tusky/adapter/StatusBaseViewHolder.java"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/StatusBaseViewHolder.java"
             line="1135"
             column="42"/>
     </issue>

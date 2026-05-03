@@ -47,7 +47,7 @@
 
     <Button
         android:id="@+id/buttonBack"
-        style="@style/TuskyButton.Outlined"
+        style="@style/WarpdroidButton.Outlined"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
@@ -58,7 +58,7 @@
 
     <Button
         android:id="@+id/buttonContinue"
-        style="@style/TuskyButton"
+        style="@style/WarpdroidButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"

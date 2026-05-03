@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.keylesspalace.tusky.view.TuskySwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/swipeToRefreshLayout"
@@ -59,7 +59,7 @@
 
                     <Button
                         android:id="@+id/accountFollowButton"
-                        style="@style/TuskyButton"
+                        style="@style/WarpdroidButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
@@ -76,7 +76,7 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/accountSubscribeButton"
-                        style="@style/TuskyButton.Outlined"
+                        style="@style/WarpdroidButton.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="0dp"
                         android:layout_marginStart="16dp"
@@ -97,7 +97,7 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/accountMuteButton"
-                        style="@style/TuskyButton.Outlined"
+                        style="@style/WarpdroidButton.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="0dp"
                         android:layout_marginStart="16dp"
@@ -125,7 +125,7 @@
                         android:textStyle="normal|bold"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
-                        tools:text="Tusky Mastodon Client " />
+                        tools:text="Warpdroid Warpnet Client " />
 
                     <TextView
                         android:id="@+id/accountUsernameTextView"
@@ -136,7 +136,7 @@
                         android:textSize="?attr/status_text_medium"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@id/accountDisplayNameTextView"
-                        tools:text="\@Tusky" />
+                        tools:text="\@Warpdroid" />
 
                     <ImageView
                         android:id="@+id/accountLockedImageView"
@@ -192,7 +192,7 @@
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/accountNoteTextInputLayout"
-                        style="@style/TuskyTextInput"
+                        style="@style/WarpdroidTextInput"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
@@ -218,7 +218,7 @@
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@id/accountNoteTextInputLayout" />
 
-                    <com.keylesspalace.tusky.view.ClickableSpanTextView
+                    <site.warpnet.warpdroid.view.ClickableSpanTextView
                         android:id="@+id/accountNoteTextView"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -449,7 +449,7 @@
 
             <com.google.android.material.tabs.TabLayout
                 android:id="@+id/accountTabLayout"
-                style="@style/TuskyTabAppearance"
+                style="@style/WarpdroidTabAppearance"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:tabGravity="center"
@@ -493,4 +493,4 @@
 
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
-</com.keylesspalace.tusky.view.TuskySwipeRefreshLayout>
+</site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout>

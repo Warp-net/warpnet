@@ -22,9 +22,9 @@
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        tools:text="\@Tusky edited 18th December 2022" />
+        tools:text="\@Warpdroid edited 18th December 2022" />
 
-    <com.keylesspalace.tusky.view.ClickableSpanTextView
+    <site.warpnet.warpdroid.view.ClickableSpanTextView
         android:id="@+id/status_edit_content_warning_description"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -68,7 +68,7 @@
         app:layout_constraintTop_toBottomOf="@id/status_edit_content_warning_separator"
         tools:text="This is an edited status" />
 
-    <com.keylesspalace.tusky.view.MediaPreviewLayout
+    <site.warpnet.warpdroid.view.MediaPreviewLayout
         android:id="@+id/status_edit_media_preview"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -91,7 +91,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/status_edit_media_preview" />
 
-    <!-- hidden because as of Mastodon 4.0.2 we don't get this info via the api -->
+    <!-- hidden because as of Warpnet 4.0.2 we don't get this info via the api -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/status_edit_poll_options"
         android:layout_width="0dp"

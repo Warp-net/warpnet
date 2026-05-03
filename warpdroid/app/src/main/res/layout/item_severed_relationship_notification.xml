@@ -32,6 +32,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/severed_relationship_icon"
         app:layout_constraintTop_toTopOf="parent"
-        tools:text="You have blocked mastodon.example, removing 2 of your followers and 7 accounts you follow." />
+        tools:text="You have blocked warpnet.example, removing 2 of your followers and 7 accounts you follow." />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

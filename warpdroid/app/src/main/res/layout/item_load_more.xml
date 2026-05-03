@@ -6,7 +6,7 @@
 
     <Button
         android:id="@+id/loadMoreButton"
-        style="@style/TuskyButton.TextButton"
+        style="@style/WarpdroidButton.TextButton"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:insetTop="0dp"

@@ -13,7 +13,7 @@ import com.squareup.moshi.JsonClass
  * speaks. Shapes mirror `warpnet/domain/warpnet.go` and
  * `warpnet/event/event.go` — see `docs/warpnet-protocol.md` for the full
  * catalogue. Only the endpoints used by [site.warpnet.transport.ProtocolIds]
- * that the [com.keylesspalace.tusky.warpnet.WarpnetRepository] calls are
+ * that the [site.warpnet.warpdroid.warpnet.WarpnetRepository] calls are
  * modelled here; adding new protocols means adding the DTO next to the
  * existing ones.
  */

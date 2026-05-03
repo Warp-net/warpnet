@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?android:colorBackground"
-    tools:context="com.keylesspalace.tusky.components.pairing.PairingActivity">
+    tools:context="site.warpnet.warpdroid.components.pairing.PairingActivity">
 
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"

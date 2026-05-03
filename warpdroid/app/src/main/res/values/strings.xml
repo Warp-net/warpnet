@@ -1,17 +1,17 @@
 <!--
-  ~ Copyright 2023 Tusky Contributors
+  ~ Copyright 2023 Warpdroid Contributors
   ~
-  ~ This file is a part of Tusky.
+  ~ This file is a part of Warpdroid.
   ~
   ~ This program is free software; you can redistribute it and/or modify it under the terms of the
   ~ GNU General Public License as published by the Free Software Foundation; either version 3 of the
   ~ License, or (at your option) any later version.
   ~
-  ~ Tusky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+  ~ Warpdroid is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
   ~ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
   ~ Public License for more details.
   ~
-  ~ You should have received a copy of the GNU General Public License along with Tusky; if not,
+  ~ You should have received a copy of the GNU General Public License along with Warpdroid; if not,
   ~ see <http://www.gnu.org/licenses>.
   -->
 
@@ -132,12 +132,12 @@
     <string name="action_unbookmark">Remove bookmark</string>
     <string name="action_more">More</string>
     <string name="action_compose">Compose</string>
-    <string name="action_login">Login with Tusky</string>
+    <string name="action_login">Login with Warpdroid</string>
     <string name="action_browser_login">Login with Browser</string>
     <string name="action_logout">Log out</string>
     <string name="action_logout_confirm">Are you sure you want to log out of %1$s? This will delete all local data of the account, including drafts and preferences.</string>
     <string name="action_remove_account">Remove account</string>
-    <string name="action_remove_account_confirm">Are you sure you want to remove the account %1$s from Tusky? This will delete all local data of the account, including drafts and preferences.</string>
+    <string name="action_remove_account_confirm">Are you sure you want to remove the account %1$s from Warpdroid? This will delete all local data of the account, including drafts and preferences.</string>
     <string name="action_post_failed">Upload failed</string>
     <plurals name="action_post_failed_detail">
         <item quantity="one">Your post failed to upload and has been saved to drafts.\n\nEither the server could not be contacted, or it rejected the post.</item>
@@ -268,7 +268,7 @@
 
     <string name="login_connection">Connecting…</string>
 
-    <string name="dialog_whats_an_instance">The address or domain of any instance can be entered here, such as mastodon.social, icosahedron.website, social.tchncs.de, and <a href="https://instances.social">more!</a>\n\nIf you don\'t yet have an account, you can enter the name of the instance you\'d like to join and create an account there.\n\nAn instance is a single place where your account is hosted, but you can easily communicate with and follow folks on other instances as though you were on the same site.\n\nMore info can be found at <a href="https://joinmastodon.org">joinmastodon.org</a>.</string>
+    <string name="dialog_whats_an_instance">In Warpnet, your account lives on the Warpnet node you pair with. Follow the pairing flow to connect this device to a node.</string>
     <string name="dialog_title_finishing_media_upload">Finishing Media Upload</string>
     <string name="dialog_message_uploading_media">Uploading…</string>
     <string name="dialog_download_image">Download</string>
@@ -395,7 +395,7 @@
     <string name="notification_moderation_warning_name">Moderation warnings</string>
     <string name="notification_report_description">Notifications about moderation reports</string>
     <string name="notification_listenable_worker_name">Background activity</string>
-    <string name="notification_listenable_worker_description">Notifications when Tusky is working in the background</string>
+    <string name="notification_listenable_worker_description">Notifications when Warpdroid is working in the background</string>
     <string name="notification_unknown_name">Unknown</string>
     <string name="notification_unknown_description">Unknown notification type</string>
 
@@ -419,13 +419,13 @@
     <string name="description_account_locked">Locked Account</string>
 
     <string name="about_title_activity">About</string>
-    <string name="about_tusky_version">Tusky %1$s</string>
+    <string name="about_warpdroid_version">Warpdroid %1$s</string>
     <string name="about_device_info_title">Your device</string>
     <string name="about_device_info">%1$s %2$s\nAndroid version: %3$s\nSDK version: %4$d</string>
     <string name="about_account_info_title">Your account</string>
     <string name="about_account_info">\@%1$s\@%2$s\nVersion: %3$s</string>
-    <string name="about_powered_by_tusky">Powered by Tusky</string>
-    <string name="about_tusky_license">Warpdroid is free and open-source software.
+    <string name="about_powered_by_warpdroid">Powered by Warpdroid</string>
+    <string name="about_warpdroid_license">Warpdroid is free and open-source software.
         It is a fork of Tusky (https://tusky.app, GPL-3.0) with the Mastodon API replaced
         by the Warpnet peer-to-peer transport, and is distributed under the
         GNU Affero General Public License Version 3 or later.
@@ -438,7 +438,7 @@
     -->
     <string name="about_project_site">Project website: https://warpnet.site</string>
     <string name="about_bug_feature_request_site">Bug reports &amp; feature requests:\nhttps://github.com/Warp-net/warpdroid/issues</string>
-    <string name="about_tusky_account">Tusky\'s Profile</string>
+    <string name="about_warpdroid_account">Warpdroid\'s Profile</string>
 
     <string name="post_share_content">Share content of post</string>
     <string name="post_share_link">Share link to post</string>
@@ -487,7 +487,7 @@
     <string name="message_filters_empty">You have no filters.</string>
 
     <string name="add_account_name">Add Account</string>
-    <string name="add_account_description">Add new Mastodon Account</string>
+    <string name="add_account_description">Add new Warpnet Account</string>
 
     <string name="action_lists">Lists</string>
     <string name="title_lists">Lists</string>
@@ -534,7 +534,7 @@
     <string name="action_open_post">Open post</string>
     <string name="caption_systememoji">Your device\'s default emoji set</string>
     <string name="caption_blobmoji">The Blob emojis known from Android 4.4–7.1</string>
-    <string name="caption_twemoji">Mastodon\'s standard emoji set</string>
+    <string name="caption_twemoji">Warpnet\'s standard emoji set</string>
     <string name="caption_notoemoji">Google\'s current emoji set</string>
 
     <string name="download_failed">Download failed</string>
@@ -545,7 +545,7 @@
     <string name="reblog_private">Boost to original audience</string>
     <string name="unreblog_private">Unboost</string>
 
-    <string name="license_description">Tusky contains code and assets from the following open source projects:</string>
+    <string name="license_description">Warpdroid contains code and assets from the following open source projects:</string>
     <string name="license_apache_2">Licensed under the Apache License (copy below)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -746,7 +746,7 @@
     <string name="no_scheduled_posts">You don\'t have any scheduled posts.</string>
     <string name="no_announcements">There are no announcements.</string>
     <string name="no_lists">You don\'t have any lists.</string>
-    <string name="warning_scheduling_interval">Mastodon has a minimum scheduling interval of 5 minutes.</string>
+    <string name="warning_scheduling_interval">Scheduled posts have a minimum interval of 5 minutes.</string>
     <string name="pref_title_show_self_username">Show username in toolbars</string>
     <string name="pref_title_show_cards_in_timelines">Show link previews in timelines</string>
     <string name="pref_title_confirm_reblogs">Show confirmation before boosting</string>
@@ -782,7 +782,7 @@
     <string name="action_subscribe_account">Subscribe</string>
     <string name="action_unsubscribe_account">Unsubscribe</string>
 
-    <string name="tusky_compose_post_quicksetting_label">Compose Post</string>
+    <string name="warpdroid_compose_post_quicksetting_label">Compose Post</string>
 
     <string name="account_date_joined">Joined %1$s</string>
 
@@ -810,7 +810,7 @@
 
     <string name="status_edit_info">Edited: %1$s</string>
     <string name="status_created_info">Created: %1$s</string>
-    <string name="error_missing_edits">Your server knows that this post was edited, but does not have a copy of the edits, so they can\'t be shown to you.\n\nThis is <a href="https://github.com/mastodon/mastodon/issues/25398">Mastodon issue #25398</a>.</string>
+    <string name="error_missing_edits">Your server knows that this post was edited, but does not have a copy of the edits, so they can\'t be shown to you.\n\nThis is <a href="https://github.com/warpnet/warpnet/issues/25398">an upstream protocol limitation</a>.</string>
     <string name="a11y_label_loading_thread">Loading thread</string>
 
     <!--@knossos@fosstodon.org created 2023-01-07 -->
@@ -853,7 +853,7 @@
     <string name="filter_edit_keyword_title">Edit keyword</string>
     <string name="filter_description_format">%1$s: %2$s</string>
 
-    <string name="help_empty_home">This is your &lt;b>home timeline&lt;/b>. It shows the recent posts of the accounts you follow.\n\nTo explore accounts you can either discover them in one of the other timelines. For example the local timeline of your instance {{group}}. Or you can search them by name {{search}}; for example search for Tusky to find our Mastodon account.</string>
+    <string name="help_empty_home">This is your &lt;b>home timeline&lt;/b>. It shows the recent posts of the accounts you follow.\n\nTo explore accounts you can either discover them in one of the other timelines. For example the local timeline of your instance {{group}}. Or you can search them by name {{search}}.</string>
     <string name="help_empty_conversations">Here are your &lt;b>private messages&lt;/b>; sometimes called conversations or direct messages (DM).\n\nPrivate messages are created by setting the visibility {{public}} of a post to {{mail}} <i>Direct</i> and mentioning one or more users in the text.\n\nFor example you can start on the profile view of an account and tap the create button {{edit}} and change the visibility.\n\nNote that messages on the Fediverse are not end-to-end encrypted. Do not share any sensitive information.</string>
     <string name="help_empty_lists">This is your <b>lists view</b>. You can define a number of private lists and add accounts to that.\n\nNOTE that you can only add accounts you follow to your lists.\n\nThese lists can be used as a tab in Account preferences {{manage_accounts}} {{chevron_right}} Tabs.</string>
 
@@ -889,7 +889,7 @@
     <string name="unknown_notification_filter_moderated_accounts">Moderated accounts</string>
     <string name="unknown_notification_filter_moderated_accounts_description">Limited by server moderators</string>
 
-    <string name="notification_policies_not_supported">This feature is only supported on Mastodon servers running v4.3.0 or later.</string>
+    <string name="notification_policies_not_supported">This feature is not supported on Warpnet.</string>
     <string name="filtered_notifications">Filtered notifications</string>
     <string name="notifications_from_people_you_may_know">Notifications from %1$d people you may know</string>
 
@@ -923,7 +923,7 @@
     <string name="moderation_warning_action_silence">Your account has been limited.</string>
     <string name="moderation_warning_action_suspend">Your account has been suspended.</string>
 
-    <string name="unknown_notification_type_explanation">Tusky does not recognize this notification type and can\'t show it to you. Your server\'s web interface may be able to do so. Please also inform the Tusky developers so they can add support for this type! </string>
+    <string name="unknown_notification_type_explanation">Warpdroid does not recognize this notification type and can\'t show it to you. Your server\'s web interface may be able to do so. Please also inform the Warpdroid developers so they can add support for this type! </string>
 
     <string name="poll">Poll</string>
     <plurals name="media_attachments">
@@ -975,7 +975,7 @@
 
     <string name="action_login_again">Login again</string>
     <string name="account_disconnected_title">Account disconnected</string>
-    <string name="account_disconnected_message">Tusky\'s login for %1$s is no longer valid. This can happen because you changed your password or revoked access for Tusky. Please log in again.</string>
+    <string name="account_disconnected_message">Warpdroid\'s login for %1$s is no longer valid. This can happen because you changed your password or revoked access for Warpdroid. Please log in again.</string>
 
     <string name="filter_context_home">Home and Lists</string>
 

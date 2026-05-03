@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="@bool/is_not_edge_to_edge"
-    tools:context="com.keylesspalace.tusky.MainActivity">
+    tools:context="site.warpnet.warpdroid.MainActivity">
 
     <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:id="@+id/mainCoordinatorLayout"
@@ -41,9 +41,9 @@
                 app:contentInsetStartWithNavigation="0dp"
                 app:navigationContentDescription="@string/action_open_drawer">
 
-                <com.keylesspalace.tusky.view.AdaptiveTabLayout
+                <site.warpnet.warpdroid.view.AdaptiveTabLayout
                     android:id="@+id/tabLayout"
-                    style="@style/TuskyTabAppearance"
+                    style="@style/WarpdroidTabAppearance"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     app:tabGravity="fill"
@@ -76,9 +76,9 @@
             app:menuAlignmentMode="auto"
             app:navigationContentDescription="@string/action_open_drawer">
 
-            <com.keylesspalace.tusky.view.AdaptiveTabLayout
+            <site.warpnet.warpdroid.view.AdaptiveTabLayout
                 android:id="@+id/bottomTabLayout"
-                style="@style/TuskyTabAppearance"
+                style="@style/WarpdroidTabAppearance"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/bottomAppBarHeight"
                 android:background="?attr/colorSurface"

@@ -22,7 +22,7 @@
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         tools:visibility="visible" />
 
-    <com.keylesspalace.tusky.view.BackgroundMessageView
+    <site.warpnet.warpdroid.view.BackgroundMessageView
         android:id="@+id/messageView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

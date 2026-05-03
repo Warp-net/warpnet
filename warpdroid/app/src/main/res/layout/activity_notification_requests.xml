@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="com.keylesspalace.tusky.components.notifications.requests.NotificationRequestsActivity">
+    tools:context="site.warpnet.warpdroid.components.notifications.requests.NotificationRequestsActivity">
 
     <include
         android:id="@+id/includedToolbar"
@@ -20,7 +20,7 @@
         tools:itemCount="5"
         tools:listitem="@layout/item_notification_request" />
 
-    <com.keylesspalace.tusky.view.BackgroundMessageView
+    <site.warpnet.warpdroid.view.BackgroundMessageView
         android:id="@+id/notificationRequestsMessageView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
