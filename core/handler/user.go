@@ -237,7 +237,18 @@ func refreshUsers(
 		return
 	}
 
+	selfNodeID := streamer.NodeInfo().ID.String()
+	selfOwnerID := streamer.NodeInfo().OwnerId
 	for _, user := range usersResp.Users {
+		// Skip records pointing back to this node — persisting them would
+		// later route fetches through GenericStream and trigger
+		// node.ErrSelfRequest.
+		if selfNodeID != "" && user.NodeId == selfNodeID {
+			continue
+		}
+		if selfOwnerID != "" && user.Id == selfOwnerID {
+			continue
+		}
 		_, _ = userRepo.Create(user)
 		_, _ = userRepo.Update(user.Id, user)
 	}

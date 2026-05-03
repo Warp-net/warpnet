@@ -61,6 +61,7 @@ func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer) warp
 		}); err != nil {
 			return nil, err
 		}
+		log.Infof("pair: device added: %s", clientInfo.ID)
 		return event.Accepted, nil
 	}
 }
