@@ -35,12 +35,15 @@ import (
 )
 
 const (
-	Accepted            acceptedResponse = `{"code":0,"message":"Accepted"}`
-	InternalRoutePrefix string           = "/internal"
-	EndCursor           string           = "end"
+	// Accepted is the verbatim JSON body the middleware writes when a
+	// handler signals plain success. Plain string (not a named type) so
+	// the middleware's response type switch hits the `case string` arm
+	// and writes the bytes as-is; with a named type it would fall through
+	// to the JSON encoder and be re-emitted as a quoted string literal.
+	Accepted            string = `{"code":0,"message":"Accepted"}`
+	InternalRoutePrefix string = "/internal"
+	EndCursor           string = "end"
 )
-
-type acceptedResponse string
 
 // ChatCreatedResponse defines model for ChatCreatedResponse.
 type ChatCreatedResponse = domain.Chat

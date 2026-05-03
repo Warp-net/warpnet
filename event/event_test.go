@@ -7,7 +7,7 @@ import (
 )
 
 func TestAcceptedResponse(t *testing.T) {
-	assert.Equal(t, `{"code":0,"message":"Accepted"}`, string(Accepted))
+	assert.Equal(t, `{"code":0,"message":"Accepted"}`, Accepted)
 }
 
 func TestInternalRoutePrefix(t *testing.T) {
