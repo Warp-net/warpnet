@@ -65,9 +65,8 @@ object WarpnetModule {
 
     @Provides
     @Singleton
-    fun providesWarpnetIdentityStore(
-        @ApplicationContext context: Context,
-    ): Ed25519IdentityStore = WarpnetTransport.createIdentityStore(context.filesDir)
+    fun providesWarpnetIdentityStore(): Ed25519IdentityStore =
+        WarpnetTransport.createIdentityStore()
 
     @Provides
     @Singleton
