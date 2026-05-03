@@ -5,6 +5,7 @@
  */
 package com.keylesspalace.tusky.warpnet
 
+import com.keylesspalace.tusky.components.pairing.PairedNodeStore
 import com.keylesspalace.tusky.entity.Account
 import com.keylesspalace.tusky.entity.Notification
 import com.keylesspalace.tusky.entity.Relationship
@@ -69,6 +70,7 @@ import site.warpnet.transport.dto.WarpnetUser
 @Singleton
 class WarpnetRepository @Inject constructor(
     private val client: WarpnetClient,
+    private val pairedNodeStore: PairedNodeStore,
     moshi: Moshi,
 ) {
     private val userAdapter = moshi.adapter<WarpnetUser>()
@@ -128,9 +130,14 @@ class WarpnetRepository @Inject constructor(
 
     /** Aggregated home feed. Second element is the next-page cursor, empty when exhausted. */
     suspend fun getHomeTimeline(cursor: String = "", limit: Int = 40): Pair<List<Status>, String> {
+        // The fat-node timeline handler rejects an empty user id; scope the
+        // request to the user we paired with so the server can build the
+        // "home" feed for that identity.
+        val userId = pairedNodeStore.load()?.userId
+            ?: throw IllegalStateException("getHomeTimeline called before a node has been paired")
         val raw = client.request(
             ProtocolIds.PRIVATE_GET_TIMELINE,
-            getAllTweetsAdapter.toJson(GetAllTweetsEvent(userId = "", cursor = cursor, limit = limit)),
+            getAllTweetsAdapter.toJson(GetAllTweetsEvent(userId = userId, cursor = cursor, limit = limit)),
         )
         val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList<Status>() to ""
         return hydrateStatuses(page.tweets) to page.cursor
