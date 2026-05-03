@@ -17,8 +17,6 @@ import site.warpnet.warpdroid.warpnet.WarpnetMapper.toStatus
 import site.warpnet.warpdroid.warpnet.WarpnetMapper.toTimelineAccount
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
-import java.time.Instant
-import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.async
@@ -227,14 +225,12 @@ class WarpnetRepository @Inject constructor(
     // -----------------------------------------------------------------
 
     suspend fun postStatus(text: String, authorUserId: String, authorUsername: String, parentId: String? = null): Status {
-        // The backend's domain.Tweet.CreatedAt is time.Time, not a pointer,
-        // so json-iterator rejects an empty string with a "parsing time"
-        // error before it ever reaches the repo (which would fall back to
-        // time.Now()). Send a valid RFC3339 timestamp; tweetRepo.Create
-        // overwrites it only when zero, which our value is not.
+        // createdAt is left null so the backend stamps the creation time
+        // (database/tweet-repo.go:152). Sending "" instead of null fails
+        // json-iterator's time.Time decode before the zero-value fallback
+        // runs.
         val draft = WarpnetTweet(
             id = "",
-            createdAt = DateTimeFormatter.ISO_INSTANT.format(Instant.now()),
             rootId = parentId ?: "",
             text = text,
             userId = authorUserId,
@@ -311,7 +307,6 @@ class WarpnetRepository @Inject constructor(
     suspend fun reblogStatus(tweetId: String, retweeterId: String, retweeterUsername: String): Long {
         val payload = WarpnetTweet(
             id = tweetId,
-            createdAt = "",
             rootId = "",
             text = "",
             userId = retweeterId,
