@@ -25,11 +25,7 @@ import com.squareup.moshi.JsonClass
 @JsonClass(generateAdapter = true)
 data class WarpnetTweet(
     val id: String,
-    // Pass null when posting a draft tweet so the backend stamps the
-    // creation time itself (database/tweet-repo.go:152). Sending the
-    // empty string instead would fail json-iterator's time.Time decode
-    // before the zero-value fallback runs.
-    @Json(name = "created_at") val createdAt: String? = null,
+    @Json(name = "created_at") val createdAt: String,
     @Json(name = "updated_at") val updatedAt: String? = null,
     @Json(name = "parent_id") val parentId: String? = null,
     @Json(name = "retweeted_by") val retweetedBy: String? = null,
