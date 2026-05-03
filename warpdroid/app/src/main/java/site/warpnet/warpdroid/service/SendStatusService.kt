@@ -298,7 +298,7 @@ class SendStatusService : Service() {
     }
 
     /**
-     * Retry transient transport failures with exponential backoff up to
+     * Retry transient transport failures with linear backoff up to
      * MAX_SEND_RETRIES, then surface a user-visible error notification.
      *
      * Warpnet never throws HttpException (no HTTP), so the original

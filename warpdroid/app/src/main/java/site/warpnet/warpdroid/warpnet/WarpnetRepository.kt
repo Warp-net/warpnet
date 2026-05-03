@@ -165,10 +165,10 @@ class WarpnetRepository @Inject constructor(
         val base = tweet.toStatus(author = runCatching { getUser(tweet.userId) }.getOrNull())
         val stats = runCatching { getTweetStats(tweetId = tweet.id, userId = userId) }.getOrNull()
         return if (stats == null) base else base.copy(
-            favouritesCount = stats.likesCount.toInt(),
-            reblogsCount = stats.retweetsCount.toInt(),
-            repliesCount = stats.repliesCount.toInt(),
-            viewsCount = stats.viewsCount.toInt(),
+            favouritesCount = stats.likesCount.clampToInt(),
+            reblogsCount = stats.retweetsCount.clampToInt(),
+            repliesCount = stats.repliesCount.clampToInt(),
+            viewsCount = stats.viewsCount.clampToInt(),
         )
     }
 
@@ -450,6 +450,9 @@ class WarpnetRepository @Inject constructor(
         // doesn't pay 30x serialised round-trip latency. Failures degrade
         // to zero counts; the toStatus baseline already matches that.
         val viewerId = pairedNodeStore.load()?.userId.orEmpty()
+        if (viewerId.isBlank()) {
+            return@coroutineScope tweets.map { it.toStatus(resolveUser(it.userId, cache)) }
+        }
         val stats = tweets.associate { t ->
             t.id to async {
                 runCatching { getTweetStats(tweetId = t.id, userId = viewerId) }.getOrNull()
@@ -459,13 +462,15 @@ class WarpnetRepository @Inject constructor(
             val base = t.toStatus(resolveUser(t.userId, cache))
             val s = stats[t.id]?.await() ?: return@map base
             base.copy(
-                favouritesCount = s.likesCount.toInt(),
-                reblogsCount = s.retweetsCount.toInt(),
-                repliesCount = s.repliesCount.toInt(),
-                viewsCount = s.viewsCount.toInt(),
+                favouritesCount = s.likesCount.clampToInt(),
+                reblogsCount = s.retweetsCount.clampToInt(),
+                repliesCount = s.repliesCount.clampToInt(),
+                viewsCount = s.viewsCount.clampToInt(),
             )
         }
     }
+
+    private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
     private suspend fun resolveUser(userId: String, cache: MutableMap<String, WarpnetUser>): WarpnetUser? {
         if (userId.isBlank()) return null
