@@ -105,7 +105,7 @@ func StreamNewReplyHandler(
 			return nil, err
 		}
 
-		isOwnTweetReply := parentUser.NodeId == streamer.NodeInfo().ID.String()
+		isOwnTweetReply := ev.ParentUserId == streamer.NodeInfo().OwnerId
 		if isOwnTweetReply {
 			if ev.UserId != streamer.NodeInfo().OwnerId {
 				if err := notifyRepo.Add(domain.Notification{
