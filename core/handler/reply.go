@@ -105,14 +105,7 @@ func StreamNewReplyHandler(
 			return nil, err
 		}
 
-		// Match by both owner id and node id: NodeId values stored from
-		// remote responses can drift in format (encoded vs raw peer.ID),
-		// so relying on the NodeId comparison alone lets self-reply
-		// requests slip through and trigger node.ErrSelfRequest.
-		nodeInfo := streamer.NodeInfo()
-		isOwnTweetReply := parentUser.NodeId == nodeInfo.ID.String() ||
-			ev.ParentUserId == nodeInfo.OwnerId ||
-			parentUser.Id == nodeInfo.OwnerId
+		isOwnTweetReply := ev.ParentUserId == streamer.NodeInfo().OwnerId
 		if isOwnTweetReply {
 			if ev.UserId != streamer.NodeInfo().OwnerId {
 				if err := notifyRepo.Add(domain.Notification{
