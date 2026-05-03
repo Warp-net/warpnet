@@ -166,8 +166,8 @@ export const warpnetService = {
             console.error("Failed to fetch owner profile:", err)
         }
 
-        // The QR carries the full AuthNodeInfo envelope, Brotli-compressed at
-        // maximum quality and Base45-encoded so it fits in a QR alphanumeric
+        // The QR carries the full AuthNodeInfo envelope, gzip-compressed at
+        // maximum level (9) and Base45-encoded so it fits in a QR alphanumeric
         // segment. The Android client reverses the same pipeline before the
         // pair handshake.
         const fullPayload = JSON.stringify(resp)

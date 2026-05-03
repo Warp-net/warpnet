@@ -18,7 +18,7 @@ object WarpnetTransport {
     const val IDENTITY_FILENAME = "warpnet_identity.key"
 
     fun createClient(moshi: Moshi = Moshi.Builder().build()): WarpnetClient =
-        WarpnetClient(moshi = moshi, signer = NoOpSigner())
+        WarpnetClient(moshi = moshi, signer = BindingSigner(DefaultBinding))
 
     /**
      * Build an [Ed25519IdentityStore] anchored at the caller's app-private

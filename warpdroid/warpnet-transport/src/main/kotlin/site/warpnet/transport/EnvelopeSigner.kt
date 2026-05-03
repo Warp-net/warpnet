@@ -10,19 +10,10 @@ package site.warpnet.transport
  * against the libp2p peer ID on every inbound request (see
  * warpnet/core/middleware/middleware.go:91).
  *
- * Why this is an interface instead of a concrete impl:
- *
- * The current `warp-net/android-binding` generates its Ed25519 keypair
- * internally and does not expose it (android-binding/client.go:41). That
- * means Kotlin cannot produce a signature that matches the peer ID the node
- * observes on the stream. Until the binding grows either a `Sign(body)`
- * export or a `SetIdentityKey(pem)` setter, the only working signer is
- * [NoOpSigner] — which lets the envelope flow through for protocol IDs that
- * the node's middleware does not verify (there aren't many in practice),
- * and lets unit tests exercise the envelope shape without real crypto.
- *
- * Once the binding is updated, implement [BindingSigner] that delegates to
- * the new export, register it via Hilt, and retire [NoOpSigner].
+ * The default production implementation is [BindingSigner], which delegates
+ * signing to the gomobile binding so the same libp2p identity key signs every
+ * request. [NoOpSigner] remains for unit tests that exercise envelope shape
+ * without real crypto.
  */
 interface EnvelopeSigner {
     /**
@@ -37,16 +28,39 @@ interface EnvelopeSigner {
 }
 
 /**
- * Returns an empty signature and an empty peer ID. Use this for development
- * against Warpnet endpoints that are not signature-verified (the minority),
- * or for unit tests. Do not ship to users.
+ * Always throws. Use only in unit tests that need an [EnvelopeSigner]
+ * instance but never invoke [sign]; production wiring uses [BindingSigner].
  */
 class NoOpSigner(override val peerId: String = "") : EnvelopeSigner {
     override fun sign(bodyJson: String): String {
         throw WarpnetException.SigningUnavailable(
-            "Envelope signing requires warp-net/android-binding to export the " +
-                "node's Ed25519 private key (or sign internally). See " +
-                "docs/warpnet-protocol.md §'Client-side implications'."
+            "NoOpSigner cannot produce a signature; wire BindingSigner instead."
         )
+    }
+}
+
+/**
+ * Production [EnvelopeSigner] that defers to the gomobile binding. The native
+ * node holds the Ed25519 identity (passed in via Initialize) and signs the
+ * body with the same key libp2p uses for the connection peer ID, so the
+ * server's auth middleware verifies the signature against the peer it sees
+ * on the stream.
+ *
+ * Both [peerId] and [sign] read through the binding lazily so the signer can
+ * be constructed before [WarpnetClient.initialise]; calls before init will
+ * see an empty peer ID / blank signature and surface as
+ * [WarpnetException.SigningUnavailable].
+ */
+class BindingSigner(private val binding: WarpnetBinding) : EnvelopeSigner {
+    override val peerId: String get() = binding.peerId()
+
+    override fun sign(bodyJson: String): String {
+        val sig = binding.sign(bodyJson)
+        if (sig.isEmpty() || sig.startsWith("error:")) {
+            throw WarpnetException.SigningUnavailable(
+                if (sig.isEmpty()) "binding not initialised" else sig
+            )
+        }
+        return sig
     }
 }

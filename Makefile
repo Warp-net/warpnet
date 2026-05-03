@@ -62,6 +62,9 @@ build-windows:
 download-golang-armv6:
 	wget -c https://go.dev/dl/go1.26.0.linux-armv6l.tar.gz
 
+gen-aar:
+	cd warpdroid/node && ./build-native.sh && cd -
+  
 .PHONY: frontend
 frontend:
 	cd frontend && make rebuild && cd -

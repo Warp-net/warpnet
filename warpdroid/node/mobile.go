@@ -1,3 +1,5 @@
+//go:build mobile
+
 package node
 
 import (
@@ -70,6 +72,23 @@ func Stream(protocolID string, data string) string {
 	}
 
 	return string(response)
+}
+
+// Sign returns the base64-encoded Ed25519 signature of body computed with the
+// libp2p identity key passed to Initialize. The Kotlin envelope signer uses
+// this so the desktop's auth middleware verifies the signature against the
+// same peer ID it sees on the libp2p stream. Returns an empty string if the
+// client is not initialized; signing errors are returned with an "error: "
+// prefix to keep the gomobile signature simple.
+func Sign(body string) string {
+	if clientInstance == nil {
+		return ""
+	}
+	sig, err := clientInstance.sign([]byte(body))
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	return sig
 }
 
 func PeerID() string {

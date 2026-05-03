@@ -16,8 +16,8 @@ import site.warpnet.transport.dto.AuthNodeInfo
  * the fat node byte-for-byte — avoiding any re-encoding drift that might
  * break the token comparison in `warpnet/core/handler/pair.go`.
  *
- * The fat node ships the QR payload Brotli-compressed and Base45-encoded
- * (see `warpnet/security/qrpayload.go`); [QrPayloadCodec] reverses that
+ * The fat node ships the QR payload gzip-compressed and Base45-encoded
+ * (see `frontend/src/lib/qr-payload.js`); [QrPayloadCodec] reverses that
  * before the JSON parse. Plain-JSON payloads (legacy / manual paste) are
  * passed through unchanged by the codec.
  *

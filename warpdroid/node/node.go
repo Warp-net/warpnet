@@ -1,9 +1,12 @@
+//go:build mobile
+
 package node
 
 import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
@@ -33,6 +36,7 @@ type clientNode struct {
 	desktopPeerID peer.ID
 	mu            sync.RWMutex
 	dht           *dht.IpfsDHT
+	privKey       crypto.PrivKey
 }
 
 // newClient creates a new WarpNet thin client configured as per requirements
@@ -133,10 +137,11 @@ func newClient(
 	}
 
 	cn := &clientNode{
-		host:   h,
-		ctx:    ctx,
-		cancel: cancel,
-		dht:    hashTable,
+		host:    h,
+		ctx:     ctx,
+		cancel:  cancel,
+		dht:     hashTable,
+		privKey: privateKey,
 	}
 
 	for _, addr := range bootstrapNodes {
@@ -245,6 +250,23 @@ func closeWrite(s network.Stream) {
 	if err := s.CloseWrite(); err != nil {
 		fmt.Printf("stream: close write: %s", err)
 	}
+}
+
+// sign produces a base64-encoded Ed25519 signature over body using the libp2p
+// identity key. The format matches security.Sign on the desktop side, so the
+// node's auth middleware (warpnet/core/middleware/auth.go) verifies it
+// against the peer ID extracted from the libp2p connection.
+func (c *clientNode) sign(body []byte) (string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.privKey == nil {
+		return "", errors.New("private key not set")
+	}
+	sig, err := c.privKey.Sign(body)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
 func (c *clientNode) getPeerID() string {

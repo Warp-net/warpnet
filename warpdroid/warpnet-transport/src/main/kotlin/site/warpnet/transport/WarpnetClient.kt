@@ -315,6 +315,14 @@ interface WarpnetBinding {
     fun pause()
     fun resume()
     fun shutdown(): String
+
+    /**
+     * Sign [body] with the libp2p identity key passed to [initialize] and
+     * return the base64-encoded Ed25519 signature. Returns an empty string
+     * if the binding is not initialised, or an "error: ..." string on
+     * signing failure (see warpdroid/node/mobile.go:Sign).
+     */
+    fun sign(body: String): String
 }
 
 /**
@@ -346,4 +354,6 @@ object DefaultBinding : WarpnetBinding {
     override fun resume() = node.Node.resume()
 
     override fun shutdown(): String = node.Node.shutdown()
+
+    override fun sign(body: String): String = node.Node.sign(body)
 }
