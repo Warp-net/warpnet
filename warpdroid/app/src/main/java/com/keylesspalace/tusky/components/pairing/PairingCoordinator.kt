@@ -53,7 +53,11 @@ class PairingCoordinator @Inject constructor(
         } ?: candidates.first()
 
         val config = WarpnetConfig(
-            privKeyHex = identityStore.loadOrCreateHex(),
+            // Derive the libp2p identity from android.os.Build info plus the
+            // pinned member peer ID, so the same device always pairs to the
+            // same fat node with the same key, and re-pairing against a
+            // different node rotates the identity.
+            privKeyHex = identityStore.deriveHex(paired.pinnedPeerId),
             pskHex = paired.psk,
             bootstrapAddrs = bootstrap,
             desktopPeerAddr = dialable,

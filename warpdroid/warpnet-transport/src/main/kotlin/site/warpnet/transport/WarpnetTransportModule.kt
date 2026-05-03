@@ -6,7 +6,6 @@
 package site.warpnet.transport
 
 import com.squareup.moshi.Moshi
-import java.io.File
 
 /**
  * Hilt module lives in the `app` module so it can bind app-scoped types. This
@@ -14,17 +13,13 @@ import java.io.File
  * the module only has to know "call [createClient]" with a [Moshi] it owns.
  */
 object WarpnetTransport {
-    /** Filename of the persisted 64-byte Ed25519 identity. */
-    const val IDENTITY_FILENAME = "warpnet_identity.key"
-
     fun createClient(moshi: Moshi = Moshi.Builder().build()): WarpnetClient =
         WarpnetClient(moshi = moshi, signer = BindingSigner(DefaultBinding))
 
     /**
-     * Build an [Ed25519IdentityStore] anchored at the caller's app-private
-     * files dir. The caller is responsible for passing
-     * [android.content.Context.getFilesDir] or equivalent.
+     * Build an [Ed25519IdentityStore]. The identity is derived deterministically
+     * from [android.os.Build] info plus the paired member node's peer ID, so
+     * the store needs no persistence handle.
      */
-    fun createIdentityStore(filesDir: File): Ed25519IdentityStore =
-        Ed25519IdentityStore(File(filesDir, IDENTITY_FILENAME))
+    fun createIdentityStore(): Ed25519IdentityStore = Ed25519IdentityStore()
 }

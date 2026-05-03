@@ -2,9 +2,9 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -13,6 +13,9 @@ permissions:
 jobs:
   assemble:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: warpdroid
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +28,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: warpdroid
 
       # services.gradle.org redirects to github.com/gradle/gradle-distributions,
       # which intermittently returns 504. The Gradle wrapper retries
@@ -51,7 +56,7 @@ jobs:
         id: build
         run: |
           set -o pipefail
-          	./gradlew build -x test -x lint -x lintAnalyzeGreenDebug -x lintReportGreenDebug -x lintAnalyzeDebug -x lintReportDebug --stacktrace 2>&1 | tee assemble.log
+          ./gradlew build -x test -x lint -x lintAnalyzeGreenDebug -x lintReportGreenDebug -x lintAnalyzeDebug -x lintReportDebug --stacktrace 2>&1 | tee assemble.log
 
       - name: Assemble debug APK
         id: assemble
@@ -65,17 +70,19 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const tail = (path, bytes = 60000) => {
-              if (!fs.existsSync(path)) return `(no ${path} produced)`;
-              const stat = fs.statSync(path);
+            const path = require('path');
+            const tail = (p, bytes = 60000) => {
+              if (!fs.existsSync(p)) return `(no ${p} produced)`;
+              const stat = fs.statSync(p);
               const start = Math.max(0, stat.size - bytes);
-              const fd = fs.openSync(path, 'r');
+              const fd = fs.openSync(p, 'r');
               const buf = Buffer.alloc(stat.size - start);
               fs.readSync(fd, buf, 0, buf.length, start);
               fs.closeSync(fd);
               return buf.toString('utf8');
             };
-            const assembleLog = tail('assemble.log');
+            const logPath = path.join('warpdroid', 'assemble.log');
+            const assembleLog = tail(logPath);
             const body = [
               `## CI build failure (\`${context.sha.substring(0, 7)}\`)`,
               '',
