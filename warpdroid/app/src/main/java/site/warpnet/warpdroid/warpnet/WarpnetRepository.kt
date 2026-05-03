@@ -17,8 +17,12 @@ import site.warpnet.warpdroid.warpnet.WarpnetMapper.toStatus
 import site.warpnet.warpdroid.warpnet.WarpnetMapper.toTimelineAccount
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import site.warpnet.transport.ProtocolIds
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.dto.DeleteTweetEvent
@@ -223,9 +227,14 @@ class WarpnetRepository @Inject constructor(
     // -----------------------------------------------------------------
 
     suspend fun postStatus(text: String, authorUserId: String, authorUsername: String, parentId: String? = null): Status {
+        // The backend's domain.Tweet.CreatedAt is time.Time, not a pointer,
+        // so json-iterator rejects an empty string with a "parsing time"
+        // error before it ever reaches the repo (which would fall back to
+        // time.Now()). Send a valid RFC3339 timestamp; tweetRepo.Create
+        // overwrites it only when zero, which our value is not.
         val draft = WarpnetTweet(
             id = "",
-            createdAt = "",
+            createdAt = DateTimeFormatter.ISO_INSTANT.format(Instant.now()),
             rootId = parentId ?: "",
             text = text,
             userId = authorUserId,
@@ -441,10 +450,28 @@ class WarpnetRepository @Inject constructor(
         return userIds.mapNotNull { id -> resolveUser(id, cache)?.toTimelineAccount() }
     }
 
-    private suspend fun hydrateStatuses(tweets: List<WarpnetTweet>): List<Status> {
-        if (tweets.isEmpty()) return emptyList()
+    private suspend fun hydrateStatuses(tweets: List<WarpnetTweet>): List<Status> = coroutineScope {
+        if (tweets.isEmpty()) return@coroutineScope emptyList()
         val cache = mutableMapOf<String, WarpnetUser>()
-        return tweets.map { t -> t.toStatus(resolveUser(t.userId, cache)) }
+        // Stats are fetched per tweet in parallel so a 30-tweet timeline
+        // doesn't pay 30x serialised round-trip latency. Failures degrade
+        // to zero counts; the toStatus baseline already matches that.
+        val viewerId = pairedNodeStore.load()?.userId.orEmpty()
+        val stats = tweets.associate { t ->
+            t.id to async {
+                runCatching { getTweetStats(tweetId = t.id, userId = viewerId) }.getOrNull()
+            }
+        }
+        tweets.map { t ->
+            val base = t.toStatus(resolveUser(t.userId, cache))
+            val s = stats[t.id]?.await() ?: return@map base
+            base.copy(
+                favouritesCount = s.likesCount.toInt(),
+                reblogsCount = s.retweetsCount.toInt(),
+                repliesCount = s.repliesCount.toInt(),
+                viewsCount = s.viewsCount.toInt(),
+            )
+        }
     }
 
     private suspend fun resolveUser(userId: String, cache: MutableMap<String, WarpnetUser>): WarpnetUser? {
