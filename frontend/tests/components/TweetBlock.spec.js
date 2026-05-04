@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { render, waitFor } from '@testing-library/vue';
 import { nextTick } from 'vue';
 
 vi.mock('@/service/service', () => ({

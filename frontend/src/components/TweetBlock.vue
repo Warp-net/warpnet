@@ -339,8 +339,7 @@ export default {
         // recorded (and stop observing) when the backend confirms.
         if (count === null) return;
         // Monotonic: never regress a higher local count when a stale
-        // loadTweetStats response lands after us, or when the backend
-        // reports 0 because the author's node is unreachable.
+        // loadTweetStats response lands after us.
         const current = this.viewsCount.get(this.tweet.id) || 0;
         if (count > current) {
           this.viewsCount.set(this.tweet.id, count);
