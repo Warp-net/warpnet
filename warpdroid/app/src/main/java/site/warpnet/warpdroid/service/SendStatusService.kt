@@ -61,7 +61,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
-import retrofit2.HttpException
 
 @AndroidEntryPoint
 class SendStatusService : Service() {
@@ -298,14 +297,24 @@ class SendStatusService : Service() {
         }
     }
 
+    /**
+     * Retry any send failure with linear backoff up to MAX_SEND_RETRIES,
+     * then surface a user-visible error notification.
+     *
+     * Warpnet never throws HttpException (no HTTP), so the original
+     * Tusky branch on HttpException always fell through to retrySending
+     * which busy-looped silently. Replace it with a bounded retry that
+     * has to either land or fail loudly - "post or throw", no third
+     * option.
+     */
     private suspend fun failOrRetry(throwable: Throwable, statusId: Int) {
-        if (throwable is HttpException) {
-            // the server refused to accept, save status & show error message
+        val statusToSend = statusesToSend[statusId] ?: return
+        if (statusToSend.retries >= MAX_SEND_RETRIES) {
+            Log.w(TAG, "giving up on status $statusId after ${statusToSend.retries} attempts", throwable)
             failSending(statusId)
-        } else {
-            // a network problem occurred, let's retry sending the status
-            retrySending(statusId)
+            return
         }
+        retrySending(statusId)
     }
 
     private suspend fun retrySending(statusId: Int) {
@@ -432,6 +441,7 @@ class SendStatusService : Service() {
         private const val CHANNEL_ID = "send_toots"
 
         private val MAX_RETRY_INTERVAL = TimeUnit.MINUTES.toMillis(1)
+        private const val MAX_SEND_RETRIES = 5
 
         private var sendingNotificationId = -1 // use negative ids to not clash with other notis
         private var errorNotificationId = Int.MIN_VALUE // use even more negative ids to not clash with other notis

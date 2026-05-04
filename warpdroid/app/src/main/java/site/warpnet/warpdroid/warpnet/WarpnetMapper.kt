@@ -33,8 +33,11 @@ object WarpnetMapper {
 
     fun WarpnetUser.toAccount(): Account = Account(
         id = id,
-        localUsername = username,
-        username = username,
+        // Warpnet has no Mastodon-style local handle; the canonical
+        // peer-derived user_id is what the desktop frontend prints after
+        // the @ sign, so mirror that here for parity.
+        localUsername = id,
+        username = id,
         displayName = username,
         createdAt = parseDate(createdAt),
         note = bio,
@@ -49,8 +52,8 @@ object WarpnetMapper {
 
     fun WarpnetUser.toTimelineAccount(): TimelineAccount = TimelineAccount(
         id = id,
-        localUsername = username,
-        username = username,
+        localUsername = id,
+        username = id,
         displayName = username,
         url = "$FAKE_BASE_URL/users/$id",
         avatar = avatarKey.orEmpty(),
@@ -117,8 +120,8 @@ object WarpnetMapper {
 
     private fun stubTimelineAccount(userId: String, username: String): TimelineAccount = TimelineAccount(
         id = userId,
-        localUsername = username,
-        username = username,
+        localUsername = userId,
+        username = userId,
         displayName = username,
         url = "$FAKE_BASE_URL/users/$userId",
         avatar = "",

@@ -19,6 +19,8 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import site.warpnet.transport.ProtocolIds
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.dto.DeleteTweetEvent
@@ -163,10 +165,10 @@ class WarpnetRepository @Inject constructor(
         val base = tweet.toStatus(author = runCatching { getUser(tweet.userId) }.getOrNull())
         val stats = runCatching { getTweetStats(tweetId = tweet.id, userId = userId) }.getOrNull()
         return if (stats == null) base else base.copy(
-            favouritesCount = stats.likesCount.toInt(),
-            reblogsCount = stats.retweetsCount.toInt(),
-            repliesCount = stats.repliesCount.toInt(),
-            viewsCount = stats.viewsCount.toInt(),
+            favouritesCount = stats.likesCount.clampToInt(),
+            reblogsCount = stats.retweetsCount.clampToInt(),
+            repliesCount = stats.repliesCount.clampToInt(),
+            viewsCount = stats.viewsCount.clampToInt(),
         )
     }
 
@@ -441,11 +443,34 @@ class WarpnetRepository @Inject constructor(
         return userIds.mapNotNull { id -> resolveUser(id, cache)?.toTimelineAccount() }
     }
 
-    private suspend fun hydrateStatuses(tweets: List<WarpnetTweet>): List<Status> {
-        if (tweets.isEmpty()) return emptyList()
+    private suspend fun hydrateStatuses(tweets: List<WarpnetTweet>): List<Status> = coroutineScope {
+        if (tweets.isEmpty()) return@coroutineScope emptyList()
         val cache = mutableMapOf<String, WarpnetUser>()
-        return tweets.map { t -> t.toStatus(resolveUser(t.userId, cache)) }
+        // Stats are fetched per tweet in parallel so a 30-tweet timeline
+        // doesn't pay 30x serialised round-trip latency. Failures degrade
+        // to zero counts; the toStatus baseline already matches that.
+        val viewerId = pairedNodeStore.load()?.userId.orEmpty()
+        if (viewerId.isBlank()) {
+            return@coroutineScope tweets.map { it.toStatus(resolveUser(it.userId, cache)) }
+        }
+        // Retweets reuse the original tweet id, so distinct() avoids
+        // firing the same stats RPC twice on a single timeline page.
+        val stats = tweets.map { it.id }.distinct().associateWith { id ->
+            async { runCatching { getTweetStats(tweetId = id, userId = viewerId) }.getOrNull() }
+        }
+        tweets.map { t ->
+            val base = t.toStatus(resolveUser(t.userId, cache))
+            val s = stats[t.id]?.await() ?: return@map base
+            base.copy(
+                favouritesCount = s.likesCount.clampToInt(),
+                reblogsCount = s.retweetsCount.clampToInt(),
+                repliesCount = s.repliesCount.clampToInt(),
+                viewsCount = s.viewsCount.clampToInt(),
+            )
+        }
     }
+
+    private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
     private suspend fun resolveUser(userId: String, cache: MutableMap<String, WarpnetUser>): WarpnetUser? {
         if (userId.isBlank()) return null
