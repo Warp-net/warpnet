@@ -322,7 +322,13 @@ export default {
       this.likesCount.set(stats.tweet_id, stats.likes_count);
       this.retweetsCount.set(stats.tweet_id, stats.retweets_count);
       this.repliesCount.set(stats.tweet_id, stats.replies_count);
-      this.viewsCount.set(stats.tweet_id, stats.views_count || 0);
+      // Views are monotonically non-decreasing: a stale read raced with
+      // our own RecordView would otherwise clobber the higher value.
+      const incoming = stats.views_count || 0;
+      const current = this.viewsCount.get(stats.tweet_id) || 0;
+      if (incoming > current) {
+        this.viewsCount.set(stats.tweet_id, incoming);
+      }
     },
     async recordView() {
       if (this.viewRecorded || this.viewInFlight) return;
@@ -332,7 +338,11 @@ export default {
         // viewTweet returns `null` on any failure; only mark the view
         // recorded (and stop observing) when the backend confirms.
         if (count === null) return;
-        if (count > 0) {
+        // Monotonic: never regress a higher local count when a stale
+        // loadTweetStats response lands after us, or when the backend
+        // reports 0 because the author's node is unreachable.
+        const current = this.viewsCount.get(this.tweet.id) || 0;
+        if (count > current) {
           this.viewsCount.set(this.tweet.id, count);
         }
         this.viewRecorded = true;
