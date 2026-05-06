@@ -1,7 +1,7 @@
 name: warpnet
 title: Warpnet
 base: core24
-version: 0.6.263
+version: 0.6.308
 epoch: 1
 license: AGPL-3.0-or-later
 summary: Decentralized, peer-to-peer social network
@@ -73,13 +73,14 @@ parts:
       craftctl default
       
       GO_VERSION=1.26.0
-      curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o go.tar.gz
+      ARCH=$(dpkg --print-architecture)
+      curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" -o go.tar.gz
       tar -C /usr/local -xzf go.tar.gz
       rm go.tar.gz
 
       /usr/local/go/bin/go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 
       cd cmd/node/member
-      /root/go/bin/wails build -v 2 -tags webkit2_41
+      /root/go/bin/wails build -m -v 2 -tags webkit2_41
 
       install -D -m0755 build/bin/warpnet "$SNAPCRAFT_PART_INSTALL/bin/warpnet"
