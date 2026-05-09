@@ -83,7 +83,7 @@
         <item name="colorOutline">@color/iconColor</item>
         <item name="colorOutlineVariant">@color/dividerColor</item>
 
-        <item name="android:listDivider">@drawable/status_divider</item>
+        <item name="android:listDivider">@drawable/tweet_divider</item>
         <item name="dividerColor">@color/dividerColor</item>
 
         <item name="textColorDisabled">@color/textColorDisabled</item>

@@ -477,7 +477,7 @@
             app:srcCompat="@drawable/ic_edit_24dp_filled"
             app:tint="?attr/colorOnPrimary" />
 
-        <include layout="@layout/item_status_bottom_sheet" />
+        <include layout="@layout/item_tweet_bottom_sheet" />
 
         <ImageView
             android:id="@+id/accountAvatarImageView"

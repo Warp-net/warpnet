@@ -197,9 +197,9 @@ class ComposeViewModel @AssistedInject constructor(
     }
 
     fun startingVisibility(): Tweet.Visibility {
-        val tootVisibility = composeOptions?.visibility
-        if (tootVisibility != null) {
-            return tootVisibility
+        val tweetVisibility = composeOptions?.visibility
+        if (tweetVisibility != null) {
+            return tweetVisibility
         }
 
         val activeAccount = accountManager.activeAccount ?: return Tweet.Visibility.UNKNOWN
@@ -433,7 +433,7 @@ class ComposeViewModel @AssistedInject constructor(
                 processed = item.state == QueuedMedia.State.PROCESSED || item.state == QueuedMedia.State.PUBLISHED
             )
         }
-        val tootToSend = TweetToSend(
+        val tweetToSend = TweetToSend(
             text = content,
             warningText = spoilerText,
             visibility = _statusVisibility.value.stringValue,
@@ -452,7 +452,7 @@ class ComposeViewModel @AssistedInject constructor(
             statusId = composeOptions?.statusId
         )
 
-        serviceClient.sendToot(tootToSend)
+        serviceClient.sendTweet(tweetToSend)
     }
 
     private fun updateMediaItem(localId: Int, mutator: (QueuedMedia) -> QueuedMedia) {

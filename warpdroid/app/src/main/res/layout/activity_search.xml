@@ -47,6 +47,6 @@
         android:layout_height="match_parent"
         android:background="@android:color/transparent" />
 
-    <include layout="@layout/item_status_bottom_sheet" />
+    <include layout="@layout/item_tweet_bottom_sheet" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -105,7 +105,7 @@ class AccountMediaFragment :
         binding.swipeRefreshLayout.isEnabled = false
         binding.swipeRefreshLayout.setOnRefreshListener { refreshContent() }
 
-        binding.statusView.visibility = View.GONE
+        binding.tweetView.visibility = View.GONE
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.media.collectLatest { pagingData ->
@@ -114,7 +114,7 @@ class AccountMediaFragment :
         }
 
         adapter.addLoadStateListener { loadState ->
-            binding.statusView.hide()
+            binding.tweetView.hide()
             binding.progressBar.hide()
 
             if (loadState.refresh != LoadState.Loading && loadState.source.refresh != LoadState.Loading) {
@@ -125,8 +125,8 @@ class AccountMediaFragment :
                 when (loadState.refresh) {
                     is LoadState.NotLoading -> {
                         if (loadState.append is LoadState.NotLoading && loadState.source.refresh is LoadState.NotLoading) {
-                            binding.statusView.show()
-                            binding.statusView.setup(
+                            binding.tweetView.show()
+                            binding.tweetView.setup(
                                 R.drawable.elephant_friend_empty,
                                 R.string.message_empty,
                                 null
@@ -134,8 +134,8 @@ class AccountMediaFragment :
                         }
                     }
                     is LoadState.Error -> {
-                        binding.statusView.show()
-                        binding.statusView.setup((loadState.refresh as LoadState.Error).error)
+                        binding.tweetView.show()
+                        binding.tweetView.setup((loadState.refresh as LoadState.Error).error)
                     }
                     is LoadState.Loading -> {
                         binding.progressBar.show()

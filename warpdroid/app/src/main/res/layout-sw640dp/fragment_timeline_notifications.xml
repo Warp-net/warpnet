@@ -79,7 +79,7 @@
         </site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout>
 
         <site.warpnet.warpdroid.view.BackgroundMessageView
-            android:id="@+id/statusView"
+            android:id="@+id/tweetView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_gravity="center"

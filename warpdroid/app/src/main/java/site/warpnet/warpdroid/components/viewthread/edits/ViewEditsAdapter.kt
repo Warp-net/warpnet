@@ -63,7 +63,7 @@ class ViewEditsAdapter(
             false
         )
 
-        binding.statusEditMediaPreview.clipToOutline = true
+        binding.tweetEditMediaPreview.clipToOutline = true
 
         val typedValue = TypedValue()
         val context = binding.root.context
@@ -96,26 +96,26 @@ class ViewEditsAdapter(
         } else {
             largeTextSizePx
         }
-        binding.statusEditContentWarningDescription.setTextSize(
+        binding.tweetEditContentWarningDescription.setTextSize(
             TypedValue.COMPLEX_UNIT_PX,
             variableTextSize
         )
-        binding.statusEditContent.setTextSize(TypedValue.COMPLEX_UNIT_PX, variableTextSize)
-        binding.statusEditMediaSensitivity.setTextSize(TypedValue.COMPLEX_UNIT_PX, variableTextSize)
+        binding.tweetEditContent.setTextSize(TypedValue.COMPLEX_UNIT_PX, variableTextSize)
+        binding.tweetEditMediaSensitivity.setTextSize(TypedValue.COMPLEX_UNIT_PX, variableTextSize)
 
         val timestamp = absoluteTimeFormatter.format(edit.createdAt, false)
 
-        binding.statusEditInfo.text = context.getString(infoStringRes, timestamp)
+        binding.tweetEditInfo.text = context.getString(infoStringRes, timestamp)
 
         if (edit.spoilerText.isEmpty()) {
-            binding.statusEditContentWarningDescription.hide()
-            binding.statusEditContentWarningSeparator.hide()
+            binding.tweetEditContentWarningDescription.hide()
+            binding.tweetEditContentWarningSeparator.hide()
         } else {
-            binding.statusEditContentWarningDescription.show()
-            binding.statusEditContentWarningSeparator.show()
-            binding.statusEditContentWarningDescription.text = edit.spoilerText.emojify(
+            binding.tweetEditContentWarningDescription.show()
+            binding.tweetEditContentWarningSeparator.show()
+            binding.tweetEditContentWarningDescription.text = edit.spoilerText.emojify(
                 edit.emojis,
-                binding.statusEditContentWarningDescription,
+                binding.tweetEditContentWarningDescription,
                 animateEmojis
             )
         }
@@ -123,10 +123,10 @@ class ViewEditsAdapter(
         val emojifiedText = edit
             .content
             .parseAsWarpnetHtml(EditsTagHandler(context))
-            .emojify(edit.emojis, binding.statusEditContent, animateEmojis)
+            .emojify(edit.emojis, binding.tweetEditContent, animateEmojis)
 
         setClickableText(
-            binding.statusEditContent,
+            binding.tweetEditContent,
             emojifiedText,
             emptyList(),
             emptyList(),
@@ -134,18 +134,18 @@ class ViewEditsAdapter(
         )
 
         if (edit.poll == null) {
-            binding.statusEditPollOptions.hide()
-            binding.statusEditPollDescription.hide()
+            binding.tweetEditPollOptions.hide()
+            binding.tweetEditPollDescription.hide()
         } else {
-            binding.statusEditPollOptions.show()
+            binding.tweetEditPollOptions.show()
 
             // not used for now since not reported by the api
             // https://github.com/mastodon/mastodon/issues/22571
-            // binding.statusEditPollDescription.show()
+            // binding.tweetEditPollDescription.show()
 
             val pollAdapter = PollAdapter()
-            binding.statusEditPollOptions.adapter = pollAdapter
-            binding.statusEditPollOptions.layoutManager = LinearLayoutManager(context)
+            binding.tweetEditPollOptions.adapter = pollAdapter
+            binding.tweetEditPollOptions.layoutManager = LinearLayoutManager(context)
 
             pollAdapter.setup(
                 options = edit.poll.options.map { it.toViewData(false) },
@@ -164,13 +164,13 @@ class ViewEditsAdapter(
         }
 
         if (edit.mediaAttachments.isEmpty()) {
-            binding.statusEditMediaPreview.hide()
-            binding.statusEditMediaSensitivity.hide()
+            binding.tweetEditMediaPreview.hide()
+            binding.tweetEditMediaSensitivity.hide()
         } else {
-            binding.statusEditMediaPreview.show()
-            binding.statusEditMediaPreview.aspectRatios = edit.mediaAttachments.aspectRatios()
+            binding.tweetEditMediaPreview.show()
+            binding.tweetEditMediaPreview.aspectRatios = edit.mediaAttachments.aspectRatios()
 
-            binding.statusEditMediaPreview.forEachIndexed { index, imageView, descriptionIndicator ->
+            binding.tweetEditMediaPreview.forEachIndexed { index, imageView, descriptionIndicator ->
 
                 val attachment = edit.mediaAttachments[index]
                 val hasDescription = !attachment.description.isNullOrBlank()
@@ -218,7 +218,7 @@ class ViewEditsAdapter(
                     }
                 }
             }
-            binding.statusEditMediaSensitivity.visible(edit.sensitive)
+            binding.tweetEditMediaSensitivity.visible(edit.sensitive)
         }
     }
 

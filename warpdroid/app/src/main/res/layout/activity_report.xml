@@ -17,6 +17,6 @@
         android:overScrollMode="never"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-    <include layout="@layout/item_status_bottom_sheet" />
+    <include layout="@layout/item_tweet_bottom_sheet" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

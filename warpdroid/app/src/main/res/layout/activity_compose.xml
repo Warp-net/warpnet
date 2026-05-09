@@ -385,10 +385,10 @@
             android:textStyle="bold"
             tools:text="500" />
 
-        <site.warpnet.warpdroid.components.compose.view.TootButton
-            android:id="@+id/composeTootButton"
+        <site.warpnet.warpdroid.components.compose.view.TweetButton
+            android:id="@+id/composeTweetButton"
             style="@style/WarpdroidButton"
-            android:layout_width="@dimen/toot_button_width"
+            android:layout_width="@dimen/tweet_button_width"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
             android:textSize="?attr/status_text_medium"

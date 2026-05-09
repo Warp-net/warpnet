@@ -59,7 +59,7 @@ import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class ReportStatusesFragment :
-    Fragment(R.layout.fragment_report_statuses),
+    Fragment(R.layout.fragment_report_tweets),
     OnRefreshListener,
     MenuProvider,
     AdapterHandler {
@@ -117,7 +117,7 @@ class ReportStatusesFragment :
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.fragment_report_statuses, menu)
+        menuInflater.inflate(R.menu.fragment_report_tweets, menu)
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {

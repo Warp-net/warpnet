@@ -22,14 +22,14 @@ import com.google.android.material.button.MaterialButton
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.entity.Tweet
 
-class TootButton
+class TweetButton
 @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : MaterialButton(context, attrs, defStyleAttr) {
 
-    private val smallStyle: Boolean = context.resources.getBoolean(R.bool.show_small_toot_button)
+    private val smallStyle: Boolean = context.resources.getBoolean(R.bool.show_small_tweet_button)
 
     init {
         if (smallStyle) {
@@ -38,7 +38,7 @@ class TootButton
         } else {
             setText(R.string.action_send)
         }
-        val padding = resources.getDimensionPixelSize(R.dimen.toot_button_horizontal_padding)
+        val padding = resources.getDimensionPixelSize(R.dimen.tweet_button_horizontal_padding)
         setPadding(padding, 0, padding, 0)
     }
 

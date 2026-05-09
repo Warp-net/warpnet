@@ -40,7 +40,7 @@ import kotlinx.coroutines.launch
 
 /** this is the base class for all activities that open links
  *  links are checked against the api if they are warpnet links so they can be opened in Warpdroid
- *  Subclasses must have a bottom sheet with Id item_status_bottom_sheet in their layout hierarchy
+ *  Subclasses must have a bottom sheet with Id item_tweet_bottom_sheet in their layout hierarchy
  */
 
 abstract class BottomSheetActivity : BaseActivity() {
@@ -54,7 +54,7 @@ abstract class BottomSheetActivity : BaseActivity() {
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
 
-        val bottomSheetLayout: LinearLayout = findViewById(R.id.item_status_bottom_sheet)
+        val bottomSheetLayout: LinearLayout = findViewById(R.id.item_tweet_bottom_sheet)
         bottomSheet = BottomSheetBehavior.from(bottomSheetLayout)
         bottomSheet.state = BottomSheetBehavior.STATE_HIDDEN
         bottomSheet.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {

@@ -104,7 +104,7 @@
         android:visibility="gone" />
 
     <site.warpnet.warpdroid.view.BackgroundMessageView
-        android:id="@+id/statusView"
+        android:id="@+id/tweetView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"

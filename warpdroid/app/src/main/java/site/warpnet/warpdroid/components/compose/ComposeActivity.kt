@@ -331,9 +331,9 @@ class ComposeActivity :
         }
 
         setupReplyViews(composeOptions?.replyingStatusAuthor, composeOptions?.replyingTweetContent)
-        val statusContent = composeOptions?.content
-        if (!statusContent.isNullOrEmpty()) {
-            binding.composeEditField.setText(statusContent)
+        val tweetContent = composeOptions?.content
+        if (!tweetContent.isNullOrEmpty()) {
+            binding.composeEditField.setText(tweetContent)
         }
 
         if (!composeOptions?.scheduledAt.isNullOrEmpty()) {
@@ -625,7 +625,7 @@ class ComposeActivity :
         enableButton(binding.composeEmojiButton, clickable = false, colorActive = false)
 
         // Setup the interface buttons.
-        binding.composeTootButton.setOnClickListener { onSendClicked() }
+        binding.composeTweetButton.setOnClickListener { onSendClicked() }
         binding.composeAddMediaButton.setOnClickListener { openPickDialog() }
         binding.composeToggleVisibilityButton.setOnClickListener { showComposeOptions() }
         binding.composeContentWarningButton.setOnClickListener { onContentWarningChanged() }
@@ -863,12 +863,12 @@ class ComposeActivity :
         binding.composeEmojiButton.isClickable = enable
         binding.composeHideMediaButton.isClickable = enable
         binding.composeScheduleButton.isClickable = enable && !editing
-        binding.composeTootButton.isEnabled = enable
+        binding.composeTweetButton.isEnabled = enable
     }
 
     private fun setStatusVisibility(visibility: Tweet.Visibility) {
         binding.composeOptionsBottomSheet.setStatusVisibility(visibility)
-        binding.composeTootButton.setStatusVisibility(visibility)
+        binding.composeTweetButton.setStatusVisibility(visibility)
 
         val iconRes = when (visibility) {
             Tweet.Visibility.PUBLIC -> R.drawable.ic_public_24dp
@@ -1229,7 +1229,7 @@ class ComposeActivity :
         if (event.action == KeyEvent.ACTION_DOWN) {
             if (event.isCtrlPressed) {
                 if (keyCode == KeyEvent.KEYCODE_ENTER) {
-                    // send toot by pressing CTRL + ENTER
+                    // send tweet by pressing CTRL + ENTER
                     this.onSendClicked()
                     return true
                 }

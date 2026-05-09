@@ -171,13 +171,13 @@ class NotificationRequestDetailsFragment :
 
                 if (loadState.refresh is LoadState.Error) {
                     binding.recyclerView.hide()
-                    binding.statusView.show()
+                    binding.tweetView.show()
                     val errorState = loadState.refresh as LoadState.Error
-                    binding.statusView.setup(errorState.error) { retry() }
+                    binding.tweetView.setup(errorState.error) { retry() }
                     Log.w(TAG, "error loading notifications for user ${viewModel.accountId}", errorState.error)
                 } else {
                     binding.recyclerView.show()
-                    binding.statusView.hide()
+                    binding.tweetView.hide()
                 }
             }
         }

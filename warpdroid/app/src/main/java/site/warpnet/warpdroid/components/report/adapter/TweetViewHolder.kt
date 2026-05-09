@@ -72,16 +72,16 @@ class TweetViewHolder(
     }
 
     init {
-        binding.statusSelection.setOnCheckedChangeListener { _, isChecked ->
+        binding.tweetSelection.setOnCheckedChangeListener { _, isChecked ->
             viewdata()?.let { viewdata ->
                 adapterHandler.setStatusChecked(viewdata.status, isChecked)
             }
         }
-        binding.statusMediaPreviewContainer.clipToOutline = true
+        binding.tweetMediaPreviewContainer.clipToOutline = true
     }
 
     fun bind(viewData: TweetViewData.Concrete) {
-        binding.statusSelection.isChecked = adapterHandler.isStatusChecked(viewData.id)
+        binding.tweetSelection.isChecked = adapterHandler.isStatusChecked(viewData.id)
 
         updateTextView()
 
@@ -123,22 +123,22 @@ class TweetViewHolder(
                     viewdata.status.emojis,
                     adapterHandler
                 )
-                binding.statusContentWarningButton.hide()
-                binding.statusContentWarningDescription.hide()
+                binding.tweetContentWarningButton.hide()
+                binding.tweetContentWarningDescription.hide()
             } else {
                 val emojiSpoiler = viewdata.status.spoilerText.emojify(
                     viewdata.status.emojis,
-                    binding.statusContentWarningDescription,
+                    binding.tweetContentWarningDescription,
                     statusDisplayOptions.animateEmojis
                 )
-                binding.statusContentWarningDescription.text = emojiSpoiler
-                binding.statusContentWarningDescription.show()
-                binding.statusContentWarningButton.show()
+                binding.tweetContentWarningDescription.text = emojiSpoiler
+                binding.tweetContentWarningDescription.show()
+                binding.tweetContentWarningButton.show()
                 setContentWarningButtonText(viewState.isContentShow(viewdata.id, true))
-                binding.statusContentWarningButton.setOnClickListener {
+                binding.tweetContentWarningButton.setOnClickListener {
                     viewdata()?.let { viewdata ->
                         val contentShown = viewState.isContentShow(viewdata.id, true)
-                        binding.statusContentWarningDescription.invalidate()
+                        binding.tweetContentWarningDescription.invalidate()
                         viewState.setContentShow(viewdata.id, !contentShown)
                         setTextVisible(
                             !contentShown,
@@ -165,9 +165,9 @@ class TweetViewHolder(
 
     private fun setContentWarningButtonText(contentShown: Boolean) {
         if (contentShown) {
-            binding.statusContentWarningButton.setText(R.string.post_content_warning_show_less)
+            binding.tweetContentWarningButton.setText(R.string.post_content_warning_show_less)
         } else {
-            binding.statusContentWarningButton.setText(R.string.post_content_warning_show_more)
+            binding.tweetContentWarningButton.setText(R.string.post_content_warning_show_more)
         }
     }
 
@@ -182,17 +182,17 @@ class TweetViewHolder(
         if (expanded) {
             val emojifiedText = content.emojify(
                 emojis,
-                binding.statusContent,
+                binding.tweetContent,
                 statusDisplayOptions.animateEmojis
             )
-            setClickableText(binding.statusContent, emojifiedText, mentions, tags, listener)
+            setClickableText(binding.tweetContent, emojifiedText, mentions, tags, listener)
         } else {
-            setClickableMentions(binding.statusContent, mentions, listener)
+            setClickableMentions(binding.tweetContent, mentions, listener)
         }
-        if (binding.statusContent.text.isNullOrBlank()) {
-            binding.statusContent.hide()
+        if (binding.tweetContent.text.isNullOrBlank()) {
+            binding.tweetContent.hide()
         } else {
-            binding.statusContent.show()
+            binding.tweetContent.show()
         }
     }
 
@@ -229,14 +229,14 @@ class TweetViewHolder(
             binding.buttonToggleContent.show()
             if (collapsed) {
                 binding.buttonToggleContent.setText(R.string.post_content_show_more)
-                binding.statusContent.filters = COLLAPSE_INPUT_FILTER
+                binding.tweetContent.filters = COLLAPSE_INPUT_FILTER
             } else {
                 binding.buttonToggleContent.setText(R.string.post_content_show_less)
-                binding.statusContent.filters = NO_INPUT_FILTER
+                binding.tweetContent.filters = NO_INPUT_FILTER
             }
         } else {
             binding.buttonToggleContent.hide()
-            binding.statusContent.filters = NO_INPUT_FILTER
+            binding.tweetContent.filters = NO_INPUT_FILTER
         }
     }
 

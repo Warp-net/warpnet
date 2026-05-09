@@ -87,7 +87,7 @@ class SendStatusBroadcastReceiver : BroadcastReceiver() {
             } else {
                 val text = mentions.joinToString(" ", postfix = " ") { "@$it" } + message.toString()
 
-                val sendIntent = SendStatusService.sendStatusIntent(
+                val sendIntent = SendStatusService.sendTweetIntent(
                     context,
                     TweetToSend(
                         text = text,

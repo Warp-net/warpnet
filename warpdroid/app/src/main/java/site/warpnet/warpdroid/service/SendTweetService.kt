@@ -446,7 +446,7 @@ class SendStatusService : Service() {
         private var sendingNotificationId = -1 // use negative ids to not clash with other notis
         private var errorNotificationId = Int.MIN_VALUE // use even more negative ids to not clash with other notis
 
-        fun sendStatusIntent(context: Context, statusToSend: TweetToSend): Intent {
+        fun sendTweetIntent(context: Context, statusToSend: TweetToSend): Intent {
             val intent = Intent(context, SendStatusService::class.java)
             intent.putExtra(KEY_STATUS, statusToSend)
 
