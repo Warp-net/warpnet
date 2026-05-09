@@ -236,7 +236,7 @@ class PreferencesFragment : BasePreferencesFragment() {
                 }
 
                 switchPreference {
-                    setDefaultValue(false)
+                    setDefaultValue(true)
                     key = PrefKeys.SHOW_STATS_INLINE
                     setTitle(R.string.pref_title_show_stat_inline)
                 }

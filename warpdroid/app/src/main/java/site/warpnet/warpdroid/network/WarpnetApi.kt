@@ -67,6 +67,7 @@ import site.warpnet.warpdroid.warpnet.WarpnetRepository
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -517,8 +518,13 @@ class WarpnetApi @Inject constructor(
         val active = accountManager.activeAccount
             ?: return stubFailure("accountVerifyCredentials")
         if (active.accountId.isNotEmpty() && active.accountId != AccountManager.STUB_USERNAME) {
-            runCatching { warpnet.getAccount(active.accountId) }
-                .onSuccess { return NetworkResult.success(it) }
+            try {
+                return NetworkResult.success(warpnet.getAccount(active.accountId))
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                Log.w(TAG, "accountVerifyCredentials: getAccount(${active.accountId}) failed, falling back to stub", t)
+            }
         }
         return NetworkResult.success(
             Account(
