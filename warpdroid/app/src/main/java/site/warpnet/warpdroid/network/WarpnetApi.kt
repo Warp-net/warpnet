@@ -502,15 +502,24 @@ class WarpnetApi @Inject constructor(
     // ---------------------------------------------------------------
 
     // Warpdroid has no login flow — the stub account stands in for what
-    // OAuth login would normally populate. Resolve locally from the
-    // AccountEntity instead of calling Warpnet (which may be offline /
-    // uninitialised at app start).
+    // OAuth login would normally populate. Resolve from Warpnet so the
+    // username/displayName/avatar reflect the paired identity instead of
+    // the AccountManager stub ("me"); MainActivity only syncs accountId
+    // from PairedNodeStore and would otherwise leave username at "me",
+    // which would be sent verbatim by createStatus and stored in the
+    // tweet author field on the fat node. If the lookup fails (offline,
+    // not yet paired) fall back to the local stub so callers still get
+    // a non-null Account.
     suspend fun accountVerifyCredentials(
         domain: String? = null,
         auth: String? = null,
     ): NetworkResult<Account> {
         val active = accountManager.activeAccount
             ?: return stubFailure("accountVerifyCredentials")
+        if (active.accountId.isNotEmpty() && active.accountId != AccountManager.STUB_USERNAME) {
+            runCatching { warpnet.getAccount(active.accountId) }
+                .onSuccess { return NetworkResult.success(it) }
+        }
         return NetworkResult.success(
             Account(
                 id = active.accountId,
