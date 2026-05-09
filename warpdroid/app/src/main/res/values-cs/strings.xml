@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Připnuté</string>
     <string name="title_follows">Sledovaní</string>
     <string name="title_followers">Sledující</string>
-    <string name="title_favourites">Oblíbené</string>
+    <string name="title_likes">Oblíbené</string>
     <string name="title_mutes">Skrytí uživatelé</string>
     <string name="title_blocks">Blokovaní uživatelé</string>
     <string name="title_follow_requests">Žádosti o sledování</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">Sbalit</string>
     <string name="message_empty">Tady nic není.</string>
     <string name="notification_reblog_format">%1$s boostnul/a váš příspěvek</string>
-    <string name="notification_favourite_format">%1$s si oblíbil/a váš příspěvek</string>
+    <string name="notification_like_format">%1$s si oblíbil/a váš příspěvek</string>
     <string name="notification_follow_format">%1$s vás nyní sleduje</string>
     <string name="report_username_format">Nahlásit uživatele @%1$s</string>
     <string name="report_comment_hint">Další komentáře?</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">Odpovědět</string>
     <string name="action_reblog">Boostnout</string>
     <string name="action_unreblog">Odstranit boost</string>
-    <string name="action_favourite">Oblíbit</string>
-    <string name="action_unfavourite">Odstranit oblíbení</string>
+    <string name="action_like">Oblíbit</string>
+    <string name="action_unlike">Odstranit oblíbení</string>
     <string name="action_more">Více</string>
     <string name="action_compose">Napsat</string>
     <string name="action_login">Přihlásit se s Warpnet</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Předvolby</string>
     <string name="action_view_account_preferences">Předvolby účtu</string>
-    <string name="action_view_favourites">Oblíbené</string>
+    <string name="action_view_likes">Oblíbené</string>
     <string name="action_view_mutes">Skrytí uživatelé</string>
     <string name="action_view_blocks">Blokovaní uživatelé</string>
     <string name="action_view_follow_requests">Žádosti o sledování</string>
@@ -193,8 +193,8 @@
     <string name="notification_follow_description">Oznámení o nových sledujících</string>
     <string name="notification_boost_name">Boosty</string>
     <string name="notification_boost_description">Oznámení, když jsou vaše příspěvky boostnuty</string>
-    <string name="notification_favourite_name">Oblíbení</string>
-    <string name="notification_favourite_description">Oznámení, když jsou vaše příspěvky označeny jako oblíbené</string>
+    <string name="notification_like_name">Oblíbení</string>
+    <string name="notification_like_description">Oznámení, když jsou vaše příspěvky označeny jako oblíbené</string>
     <string name="notification_mention_format">%1$s vás zmínil/a</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s a dalších %4$d</string>
     <string name="notification_summary_medium">%1$s, %2$s a %3$s</string>
@@ -309,7 +309,7 @@
         <item quantity="other"><b>%1$s</b> boostů</item>
     </plurals>
     <string name="title_reblogged_by">Boostnuto uživatelem</string>
-    <string name="title_favourited_by">Oblíbeno uživatelem</string>
+    <string name="title_liked_by">Oblíbeno uživatelem</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s a %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s a %3$d další</string>
@@ -317,7 +317,7 @@
     <string name="description_post_cw">Varování o obsahu: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Žádný popis</string>
     <string name="description_post_reblogged">Boostnutý</string>
-    <string name="description_post_favourited">Oblíbený</string>
+    <string name="description_post_liked">Oblíbený</string>
     <string name="description_visibility_public">Veřejný</string>
     <string name="description_visibility_unlisted">Neuvedený</string>
     <string name="description_visibility_private">Pro sledující</string>
@@ -465,7 +465,7 @@
     <string name="wellbeing_mode_notice">Některé informace, které mohou ovlivnit Vaši duševní pohodu, mohou být skryty. To zahrnuje: \n \n- Upozornění na boosty, oblíbené a sledování \n- Počty boostů a oblíbení u příspěvků \n- Statistiky sledujících a příspěvků na profilech \n \nPush oznámení nebudou ovlivněna, ale můžete si zkontrolovat jejich nastavení manuálně.</string>
     <string name="compose_save_draft_loses_media">Uložit koncept? (Přílohy budou znovu nahrány, když obnovíte koncept.)</string>
     <string name="set_focus_description">Klepnutím nebo přetažením kruhu vyberte ohnisko, které bude vždy viditelné v miniaturách.</string>
-    <string name="pref_title_confirm_favourites">Zobrazit potvrzení při oblíbení</string>
+    <string name="pref_title_confirm_likes">Zobrazit potvrzení při oblíbení</string>
     <string name="pref_title_hide_top_toolbar">Skrýt nadpis horního panelu nástrojů</string>
     <string name="wellbeing_hide_stats_profile">Skrýt kvantitativní statistiky profilů</string>
     <string name="dialog_delete_list_warning">Opravdu chcete smazat seznam %1$s?</string>
@@ -591,7 +591,7 @@
     <string name="notification_unknown_name">Neznámé</string>
     <string name="ui_error_clear_notifications">Výmaz upozornění selhal: %1$s</string>
     <string name="app_theme_system_black">Použij systémový vzhled (černý)</string>
-    <string name="ui_error_favourite">Oblíbení postu selhalo: %1$s</string>
+    <string name="ui_error_like">Oblíbení postu selhalo: %1$s</string>
     <string name="ui_error_reblog">Boostování postu selhalo: %1$s</string>
     <string name="action_share_account_link">Sdílej odkaz na účet</string>
     <string name="action_share_account_username">Sdílej uživatelské jméno účtu</string>

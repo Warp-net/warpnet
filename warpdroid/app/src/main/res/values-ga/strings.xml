@@ -120,7 +120,7 @@
     <string name="action_view_blocks">Úsáideoirí blocáilte</string>
     <string name="action_view_mutes">Úsáideoirí fuaim</string>
     <string name="action_view_bookmarks">Leabharmharcanna</string>
-    <string name="action_view_favourites">Toghanna</string>
+    <string name="action_view_likes">Toghanna</string>
     <string name="action_view_profile">Próifíl</string>
     <string name="action_close">Dún</string>
     <string name="action_retry">Atriail</string>
@@ -139,9 +139,9 @@
     <string name="action_logout_confirm">An bhfuil tú cinnte gur mhaith leat logáil amach as an gcuntas %1$s?</string>
     <string name="action_compose">Cum</string>
     <string name="action_more">Níos mó</string>
-    <string name="action_unfavourite">Bain togha</string>
+    <string name="action_unlike">Bain togha</string>
     <string name="action_bookmark">Leabharmharc</string>
-    <string name="action_favourite">Togh</string>
+    <string name="action_like">Togh</string>
     <string name="error_media_upload_type">Ní féidir an cineál comhaid sin a uaslódáil.</string>
     <string name="error_compose_character_limit">Tá an stádas ró-fhada!</string>
     <string name="error_retrieving_oauth_token">Theip ar chomhartha logála isteach a fháil.</string>
@@ -162,7 +162,7 @@
     <string name="action_view_preferences">Sainroghanna</string>
     <string name="action_logout">Logáil Amach</string>
     <string name="title_drafts">Dréachtaí</string>
-    <string name="title_favourites">Toghanna</string>
+    <string name="title_likes">Toghanna</string>
     <string name="error_failed_app_registration">Theip ar fhíordheimhniú leis an ásc sin.</string>
     <string name="link_whats_an_instance">Cad is ásc ann?</string>
     <string name="action_login">Logáil isteach le Warpnet</string>
@@ -187,8 +187,8 @@
     <string name="notification_mention_format">Luaigh %1$s tú</string>
     <string name="notification_poll_description">Fógraí faoi pobalbhreitheanna a bhfuil deireadh leo</string>
     <string name="notification_poll_name">Vótaí</string>
-    <string name="notification_favourite_description">Fógraí nuair a thoghtar do chuid postálacha</string>
-    <string name="notification_favourite_name">Toghanna</string>
+    <string name="notification_like_description">Fógraí nuair a thoghtar do chuid postálacha</string>
+    <string name="notification_like_name">Toghanna</string>
     <string name="notification_boost_description">Fógraí nuair a athchraoltar do chuid postálacha</string>
     <string name="notification_boost_name">Athchraolta</string>
     <string name="notification_follow_request_description">Fógraí faoi iarratais a leanúint</string>
@@ -241,7 +241,7 @@
     <string name="post_content_show_less">Fill</string>
     <string name="filter_dialog_whole_word_description">Nuair atá an eochairfhocal nó an frása alfa-uimhriúil amháin, ní chuirfear i bhfeidhm é ach má oireann sé don fhocal iomlán</string>
     <string name="title_posts">Postálacha</string>
-    <string name="notification_favourite_format">Thogh %1$s do phostáil</string>
+    <string name="notification_like_format">Thogh %1$s do phostáil</string>
     <string name="action_unmute_desc">Unmute %1$s</string>
     <string name="action_mute_conversation">Comhrá tost</string>
     <string name="title_hashtags_dialog">Hashtags</string>
@@ -341,13 +341,13 @@
         <item quantity="other"><b>%1$s</b> athchraolta</item>
     </plurals>
     <string name="title_reblogged_by">Athchraolta ag</string>
-    <string name="title_favourited_by">Tofa ag</string>
+    <string name="title_liked_by">Tofa ag</string>
     <string name="conversation_2_recipients">%1$s agus %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s agus %3$d níos mó</string>
     <string name="description_post_media">Meáin: %1$s</string>
     <string name="description_post_cw">Rabhadh ábhair: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Gan cur síos</string>
-    <string name="description_post_favourited">Tofa</string>
+    <string name="description_post_liked">Tofa</string>
     <string name="description_post_bookmarked">Leabharmharcáilte</string>
     <string name="description_visibility_public">Poiblí</string>
     <string name="description_visibility_unlisted">Neamhliostaithe</string>

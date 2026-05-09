@@ -34,10 +34,10 @@ interface StatusActionListener : LinkListener {
     )
 
     /**
-     * Favourite the post represented by [viewData]
+     * Like the post represented by [viewData]
      * @param state Optional SparkButtonState to trigger delayed animation
      */
-    fun onFavourite(viewData: StatusViewData.Concrete, favourite: Boolean, state: SparkButtonState?)
+    fun onLike(viewData: StatusViewData.Concrete, like: Boolean, state: SparkButtonState?)
 
     fun onBookmark(viewData: StatusViewData.Concrete, bookmark: Boolean)
 

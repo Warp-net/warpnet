@@ -2,7 +2,7 @@
 <resources>
     <string name="action_login">Skrá inn með Warpnet</string>
     <string name="link_whats_an_instance">Hvað er tilvik?</string>
-    <string name="title_favourites">Eftirlæti</string>
+    <string name="title_likes">Eftirlæti</string>
     <string name="title_drafts">Drög</string>
     <string name="action_logout">Skrá út</string>
     <string name="action_view_preferences">Kjörstillingar</string>
@@ -60,7 +60,7 @@
     <string name="post_content_show_less">Fella saman</string>
     <string name="message_empty">Ekkert hér.</string>
     <string name="notification_reblog_format">%1$s endurbirti færsluna þína</string>
-    <string name="notification_favourite_format">%1$s setti færslu frá þér í eftirlæti</string>
+    <string name="notification_like_format">%1$s setti færslu frá þér í eftirlæti</string>
     <string name="notification_follow_format">%1$s fylgist núna með þér</string>
     <string name="report_username_format">Kæra @%1$s</string>
     <string name="report_comment_hint">Aðrar athugasemdir?</string>
@@ -68,9 +68,9 @@
     <string name="action_reply">Svara</string>
     <string name="action_reblog">Endurbirta</string>
     <string name="action_unreblog">Fjarlægja endurbirtingu</string>
-    <string name="action_favourite">Eftirlæti</string>
+    <string name="action_like">Eftirlæti</string>
     <string name="action_bookmark">Bókamerki</string>
-    <string name="action_unfavourite">Fjarlægja eftirlæti</string>
+    <string name="action_unlike">Fjarlægja eftirlæti</string>
     <string name="action_more">Meira</string>
     <string name="action_compose">Semja skilaboð</string>
     <string name="action_logout_confirm">Ertu viss um að þú viljir skrá þig út af notandaaðgangnum %1$s? Þetta mun eyða öllum staðværum gögnum af aðgangnum, þar með talið drögum og kjörstillingum.</string>
@@ -89,7 +89,7 @@
     <string name="action_retry">Reyna aftur</string>
     <string name="action_close">Loka</string>
     <string name="action_view_profile">Notandasnið</string>
-    <string name="action_view_favourites">Eftirlæti</string>
+    <string name="action_view_likes">Eftirlæti</string>
     <string name="action_view_bookmarks">Bókamerki</string>
     <string name="action_view_mutes">Þaggaðir notendur</string>
     <string name="action_view_blocks">Útilokaðir notendur</string>
@@ -215,8 +215,8 @@
     <string name="notification_follow_description">Tilkynningar um nýja fylgjendur</string>
     <string name="notification_boost_name">Endurbirtingar</string>
     <string name="notification_boost_description">Tilkynningar þegar færslurnar þínar eru endurbirtar</string>
-    <string name="notification_favourite_name">Eftirlæti</string>
-    <string name="notification_favourite_description">Tilkynningar þegar færslurnar þínar eru settar í eftirlæti</string>
+    <string name="notification_like_name">Eftirlæti</string>
+    <string name="notification_like_description">Tilkynningar þegar færslurnar þínar eru settar í eftirlæti</string>
     <string name="notification_poll_name">Niðurstöður könnunar</string>
     <string name="notification_poll_description">Tilkynningar um kannanir sem er lokið</string>
     <string name="notification_mention_format">%1$s minntist á þig</string>
@@ -317,7 +317,7 @@
     <string name="unpin_action">Losa</string>
     <string name="pin_action">Festa</string>
     <string name="title_reblogged_by">Endurbirt af</string>
-    <string name="title_favourited_by">Sett í eftirlæti af</string>
+    <string name="title_liked_by">Sett í eftirlæti af</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s og %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s og %3$d til viðbótar</string>
@@ -325,7 +325,7 @@
     <string name="description_post_cw">Aðvörun vegna efnis: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Engin lýsing</string>
     <string name="description_post_reblogged">Endurbloggað</string>
-    <string name="description_post_favourited">Í eftirlætum</string>
+    <string name="description_post_liked">Í eftirlætum</string>
     <string name="description_post_bookmarked">Bókamerkt</string>
     <string name="description_visibility_public">Opinbert</string>
     <string name="description_visibility_unlisted">Óskráð</string>
@@ -460,7 +460,7 @@
     <string name="notification_subscription_format">%1$s sendi inn rétt í þessu</string>
     <string name="follow_requests_info">Jafnvel þótt aðgangurinn þinn sé ekki læstur, fannst starfsfólki %1$s að þú gætir viljað yfirfara handvirkt fylgjendabeiðnir frá þessum aðgöngum.</string>
     <string name="action_unbookmark">Fjarlægja bókamerki</string>
-    <string name="pref_title_confirm_favourites">Birta staðfestingu áður en sett er í eftirlæti</string>
+    <string name="pref_title_confirm_likes">Birta staðfestingu áður en sett er í eftirlæti</string>
     <string name="dialog_delete_conversation_warning">Eyða þessu samtali?</string>
     <string name="action_delete_conversation">Eyða samtali</string>
     <string name="duration_30_days">30 dagar</string>
@@ -572,7 +572,7 @@
     <string name="status_filter_placeholder_label_format">Síað: %1$s</string>
     <string name="pref_title_account_filter_keywords">Notendasnið</string>
     <string name="pref_title_show_stat_inline">Sýna tölfræði færslu í tímalínu</string>
-    <string name="ui_error_favourite">Mistókst að setja færslu í eftirlæti: %1$s</string>
+    <string name="ui_error_like">Mistókst að setja færslu í eftirlæti: %1$s</string>
     <string name="ui_error_reblog">Mistókst að endurbirta færslu: %1$s</string>
     <string name="ui_error_vote">Mistókst að greiða atkvæði í könnun: %1$s</string>
     <string name="ui_error_accept_follow_request">Mistókst að samþykkja fylgjendabeiðni: %1$s</string>
@@ -746,7 +746,7 @@
     <string name="reblog_privacy_public_description">Allir geta séð endurbirtinguna þína</string>
     <string name="reblog_privacy_unlisted_description">Sama og opinbert, en verður ekki birt á opinberum tímalínum</string>
     <string name="reblog_confirm">Endurbirta þessa færslu?</string>
-    <string name="favourite_confirm">Setja þessa færslu í eftirlæti?</string>
+    <string name="like_confirm">Setja þessa færslu í eftirlæti?</string>
     <string name="confirm_dismiss_poll">Henda breytingum á könnun?</string>
     <string name="message_filters_empty">Þú ert ekki með neinar virkar síur.</string>
     <string name="action_rehide_status">Fela aftur síaða stöðu</string>

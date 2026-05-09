@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Sabitlenen</string>
     <string name="title_follows">Takip edilenler</string>
     <string name="title_followers">Takipçiler</string>
-    <string name="title_favourites">Gözdeler</string>
+    <string name="title_likes">Gözdeler</string>
     <string name="title_mutes">Sessize alınmış kullanıcılar</string>
     <string name="title_blocks">Engellenmiş kullanıcılar</string>
     <string name="title_follow_requests">Takip istekleri</string>
@@ -47,14 +47,14 @@
     <string name="post_content_show_less">Daralt</string>
     <string name="message_empty">Burada hiçbir şey yok.</string>
     <string name="notification_reblog_format">%1$s gönderinizi paylaştı</string>
-    <string name="notification_favourite_format">%1$s gönderinizi gözdelerilerine ekledi</string>
+    <string name="notification_like_format">%1$s gönderinizi gözdelerilerine ekledi</string>
     <string name="notification_follow_format">%1$s seni takip etti</string>
     <string name="report_username_format">Bildir @%1$s</string>
     <string name="report_comment_hint">Daha fazla yorum?</string>
     <string name="action_quick_reply">Hızlı yanıt</string>
     <string name="action_reply">Yanıtla</string>
     <string name="action_reblog">Yeniden Paylaş</string>
-    <string name="action_favourite">Gözdele</string>
+    <string name="action_like">Gözdele</string>
     <string name="action_more">Devamı</string>
     <string name="action_compose">Oluştur</string>
     <string name="action_login">Warpnet ile giriş yap</string>
@@ -75,7 +75,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Tercihler</string>
     <string name="action_view_account_preferences">Hesap tercihleri</string>
-    <string name="action_view_favourites">Gözdeler</string>
+    <string name="action_view_likes">Gözdeler</string>
     <string name="action_view_mutes">Sessize alınmış kullanıcılar</string>
     <string name="action_view_blocks">Engellenmiş kullanıcılar</string>
     <string name="action_view_follow_requests">Takip istekleri</string>
@@ -179,8 +179,8 @@
     <string name="notification_follow_description">Yeni takipçiler hakkında bildirim</string>
     <string name="notification_boost_name">Yeniden Paylaşımlar</string>
     <string name="notification_boost_description">Yayınların paylaşıldığında bildirimler</string>
-    <string name="notification_favourite_name">Gözdeler</string>
-    <string name="notification_favourite_description">Yayınların gözde olarak işaretlendiğinde</string>
+    <string name="notification_like_name">Gözdeler</string>
+    <string name="notification_like_description">Yayınların gözde olarak işaretlendiğinde</string>
     <string name="notification_mention_format">%1$s senden bahsetti</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s ve %4$d diğer</string>
     <string name="notification_summary_medium">%1$s, %2$s ve %3$s</string>
@@ -273,13 +273,13 @@
         <item quantity="other"><b>%1$s</b> Paylaşanlar</item>
     </plurals>
     <string name="title_reblogged_by">tarafından paylaşıldı</string>
-    <string name="title_favourited_by">Tarafından gözdelendi</string>
+    <string name="title_liked_by">Tarafından gözdelendi</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s ve %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s ve %3$d dahası</string>
     <string name="title_domain_mutes">Gizli alan adları</string>
     <string name="action_unreblog">Yeniden paylaşmaktan vazgeç</string>
-    <string name="action_unfavourite">Gözdeyi kaldır</string>
+    <string name="action_unlike">Gözdeyi kaldır</string>
     <string name="action_view_domain_mutes">Gizli alan adları</string>
     <string name="action_mute_domain">%1$s alan adını sessize al</string>
     <string name="action_open_faved_by">Gözdeleri göster</string>
@@ -317,7 +317,7 @@
     <string name="description_post_cw">İçerik uyarısı: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Açıklama yok</string>
     <string name="description_post_reblogged">Yeniden blogladı</string>
-    <string name="description_post_favourited">Gözdelendi</string>
+    <string name="description_post_liked">Gözdelendi</string>
     <string name="description_visibility_public">Herkese açık</string>
     <string name="description_visibility_unlisted">Liste dışı</string>
     <string name="description_visibility_private">Takipçiler</string>
@@ -453,7 +453,7 @@
     <string name="pref_show_self_username_always">Daima</string>
     <string name="pref_show_self_username_disambiguate">Birden fazla oturum açıldığında</string>
     <string name="pref_show_self_username_never">Asla</string>
-    <string name="pref_title_confirm_favourites">Gözdelere eklemeden önce onay kutusunu göster</string>
+    <string name="pref_title_confirm_likes">Gözdelere eklemeden önce onay kutusunu göster</string>
     <string name="error_unmuting_hashtag_format">Susturmayı kaldırma hatası #%1$s</string>
     <string name="pref_title_animate_custom_emojis">Özel ayarlanmış emojileri oynat</string>
     <string name="notification_header_report_format">%1$s rapor edilmiş %2$s</string>
@@ -573,7 +573,7 @@
     <string name="ui_error_bookmark">Yerimi gönderisi başarısız oldu: %1$s</string>
     <string name="ui_error_vote">Ankete oy gönderilemedi: %1$s</string>
     <string name="ui_error_clear_notifications">Bildirimler temizlenemedi: %1$s</string>
-    <string name="ui_error_favourite">Gönderi gözdelere eklenemedi: %1$s</string>
+    <string name="ui_error_like">Gönderi gözdelere eklenemedi: %1$s</string>
     <string name="ui_error_accept_follow_request">Takip isteği kabul edilemedi: %1$s</string>
     <string name="ui_error_reject_follow_request">Takip isteği reddedilemedi: %1$s</string>
     <string name="ui_error_reblog">Gönderi yeniden paylaşılamadı: %1$s</string>

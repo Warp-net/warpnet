@@ -40,7 +40,7 @@ data class AccountEntity(
     val notificationsFollowed: Boolean = true,
     val notificationsFollowRequested: Boolean = true,
     val notificationsReblogged: Boolean = true,
-    val notificationsFavorited: Boolean = true,
+    val notificationsLiked: Boolean = true,
     val notificationsPolls: Boolean = true,
     val notificationsSubscriptions: Boolean = true,
     val notificationsUpdates: Boolean = true,

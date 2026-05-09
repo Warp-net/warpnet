@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Angeheftet</string>
     <string name="title_follows">Folge ich</string>
     <string name="title_followers">Follower</string>
-    <string name="title_favourites">Favoriten</string>
+    <string name="title_likes">Liken</string>
     <string name="title_mutes">Stummgeschaltete Profile</string>
     <string name="title_blocks">Blockierte Profile</string>
     <string name="title_follow_requests">Follower-Anfragen</string>
@@ -48,7 +48,7 @@
     <string name="post_content_show_less">Einklappen</string>
     <string name="message_empty">Hier ist nichts.</string>
     <string name="notification_reblog_format">%1$s teilte deinen Beitrag</string>
-    <string name="notification_favourite_format">%1$s favorisierte deinen Beitrag</string>
+    <string name="notification_like_format">%1$s favorisierte deinen Beitrag</string>
     <string name="notification_follow_format">%1$s folgt dir</string>
     <string name="report_username_format">\@%1$s melden</string>
     <string name="report_comment_hint">Ergänzende Hinweise?</string>
@@ -56,8 +56,8 @@
     <string name="action_reply">Antworten</string>
     <string name="action_reblog">Teilen</string>
     <string name="action_unreblog">Teilen rückgängig machen</string>
-    <string name="action_favourite">Favorisieren</string>
-    <string name="action_unfavourite">Aus Favoriten entfernen</string>
+    <string name="action_like">Favorisieren</string>
+    <string name="action_unlike">Aus Liken entfernen</string>
     <string name="action_more">Mehr</string>
     <string name="action_compose">Beitrag erstellen</string>
     <string name="action_login">Mit Warpnet anmelden</string>
@@ -78,7 +78,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Einstellungen</string>
     <string name="action_view_account_preferences">Profileinstellungen</string>
-    <string name="action_view_favourites">Favoriten</string>
+    <string name="action_view_likes">Liken</string>
     <string name="action_view_mutes">Stummgeschaltete Profile</string>
     <string name="action_view_blocks">Blockierte Profile</string>
     <string name="action_view_follow_requests">Follower-Anfragen</string>
@@ -105,7 +105,7 @@
     <string name="action_emoji_keyboard">Emoji-Tastatur</string>
     <string name="action_add_tab">Tab hinzufügen</string>
     <string name="action_open_reblogged_by">Geteilte Beiträge anzeigen</string>
-    <string name="action_open_faved_by">Favoriten anzeigen</string>
+    <string name="action_open_faved_by">Liken anzeigen</string>
     <string name="title_hashtags_dialog">Hashtags</string>
     <string name="title_mentions_dialog">Erwähnungen</string>
     <string name="title_links_dialog">Links</string>
@@ -192,8 +192,8 @@
     <string name="notification_follow_description">Benachrichtigungen über neue Follower</string>
     <string name="notification_boost_name">Geteilte Beiträge</string>
     <string name="notification_boost_description">Benachrichtigungen, wenn deine Beiträge geteilt werden</string>
-    <string name="notification_favourite_name">Favorisierte Beiträge</string>
-    <string name="notification_favourite_description">Benachrichtigungen, wenn deine Beiträge favorisiert werden</string>
+    <string name="notification_like_name">Favorisierte Beiträge</string>
+    <string name="notification_like_description">Benachrichtigungen, wenn deine Beiträge favorisiert werden</string>
     <string name="notification_mention_format">%1$s hat dich erwähnt</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s und %4$d andere</string>
     <string name="notification_summary_medium">%1$s, %2$s, und %3$s</string>
@@ -279,12 +279,12 @@
     <string name="label_remote_account">Das Profil wird möglicherweise unvollständig wiedergegeben. Hier klicken, um das vollständige Profil im Browser zu öffnen.</string>
     <string name="unpin_action">Vom Profil lösen</string>
     <string name="pin_action">Im Profil anheften</string>
-    <string name="title_favourited_by">Favorisiert von</string>
+    <string name="title_liked_by">Favorisiert von</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s und %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s und %3$d mehr</string>
     <string name="description_post_media_no_description_placeholder">Keine Beschreibung</string>
-    <string name="description_post_favourited">Favorisiert</string>
+    <string name="description_post_liked">Favorisiert</string>
     <string name="description_visibility_public">Öffentlich</string>
     <string name="description_visibility_private">Follower</string>
     <string name="description_visibility_direct">Direkt</string>
@@ -456,7 +456,7 @@
     <string name="notification_subscription_format">%1$s hat gerade etwas veröffentlicht</string>
     <string name="abbreviated_minutes_ago">%1$d Min.</string>
     <string name="review_notifications">Benachrichtigungen überprüfen</string>
-    <string name="wellbeing_mode_notice">Informationen, die dein geistiges Wohlbefinden beeinflussen könnten, werden ausgeblendet. Dazu gehören: \n \n• Benachrichtigungen über favorisierte/geteilte Beiträge, sowie »X folgt dir«-Benachrichtigungen \n• Anzahl der Favoriten von Beiträgen und wie oft diese geteilt wurden \n• Statistiken zu Followern/Beiträgen auf Profilen \n \nPush-Benachrichtigungen sind nicht betroffen, aber du kannst deine Benachrichtigungseinstellungen manuell überprüfen.</string>
+    <string name="wellbeing_mode_notice">Informationen, die dein geistiges Wohlbefinden beeinflussen könnten, werden ausgeblendet. Dazu gehören: \n \n• Benachrichtigungen über favorisierte/geteilte Beiträge, sowie »X folgt dir«-Benachrichtigungen \n• Anzahl der Liken von Beiträgen und wie oft diese geteilt wurden \n• Statistiken zu Followern/Beiträgen auf Profilen \n \nPush-Benachrichtigungen sind nicht betroffen, aber du kannst deine Benachrichtigungseinstellungen manuell überprüfen.</string>
     <string name="follow_requests_info">Auch wenn dein Konto öffentlich bzw. nicht geschützt ist, haben die Admins von %1$s gedacht, dass du diese Follower lieber manuell bestätigen solltest.</string>
     <string name="wellbeing_hide_stats_profile">Statistiken auf Profilen ausblenden</string>
     <string name="wellbeing_hide_stats_posts">Statistiken in Beiträgen ausblenden</string>
@@ -470,7 +470,7 @@
     <string name="abbreviated_in_years">in %1$d J.</string>
     <string name="abbreviated_in_seconds">in %1$d Sek.</string>
     <string name="action_unbookmark">Lesezeichen entfernen</string>
-    <string name="pref_title_confirm_favourites">Vor dem Favorisieren bestätigen</string>
+    <string name="pref_title_confirm_likes">Vor dem Favorisieren bestätigen</string>
     <string name="dialog_delete_conversation_warning">Diese Unterhaltung wirklich löschen?</string>
     <string name="action_delete_conversation">Unterhaltung löschen</string>
     <string name="duration_30_days">30 Tage</string>
@@ -578,7 +578,7 @@
     <string name="socket_timeout_exception">Kontaktaufnahme mit dem Server dauerte zu lange</string>
     <string name="ui_error_bookmark">Beitrag konnte nicht als Lesezeichen gespeichert werden: %1$s</string>
     <string name="ui_error_reblog">Beitrag konnte nicht geteilt werden: %1$s</string>
-    <string name="ui_error_favourite">Beitrag konnte nicht favorisiert werden: %1$s</string>
+    <string name="ui_error_like">Beitrag konnte nicht favorisiert werden: %1$s</string>
     <string name="ui_error_vote">Abstimmen bei der Umfrage schlug fehl: %1$s</string>
     <string name="ui_error_accept_follow_request">Akzeptieren der Follower-Anfrage schlug fehl: %1$s</string>
     <string name="ui_success_accepted_follow_request">Follower-Anfrage akzeptiert</string>
@@ -751,7 +751,7 @@
     <string name="reject_follow_request_failure">Fehler beim Ablehnen der Folgeanfrage von %1$s: %2$s</string>
     <string name="reblog_privacy_unlisted_description">Gleich wie Öffentlich, ohne in öffentlichen Timelines angezeigt zu werden</string>
     <string name="reblog_confirm">Diesen Beitrag teilen?</string>
-    <string name="favourite_confirm">Diesen Beitrag favorisieren?</string>
+    <string name="like_confirm">Diesen Beitrag favorisieren?</string>
     <string name="reblog_privacy_public_description">Alle können sehen dass du den Beitrag teilst</string>
     <string name="reblog_privacy_followers_only_description">Nur deine Follower können sehen dass du den Beitrag teilst</string>
     <string name="action_remove_account">Account entfernen</string>

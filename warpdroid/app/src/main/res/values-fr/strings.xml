@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Épinglés</string>
     <string name="title_follows">Abonnements</string>
     <string name="title_followers">Abonné·e·s</string>
-    <string name="title_favourites">Favoris</string>
+    <string name="title_likes">Favoris</string>
     <string name="title_mutes">Comptes masqués</string>
     <string name="title_blocks">Comptes bloqués</string>
     <string name="title_follow_requests">Demandes d’abonnement</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">Replier</string>
     <string name="message_empty">Rien ici.</string>
     <string name="notification_reblog_format">%1$s a partagé votre message</string>
-    <string name="notification_favourite_format">%1$s a ajouté votre message à ses favoris</string>
+    <string name="notification_like_format">%1$s a ajouté votre message à ses favoris</string>
     <string name="notification_follow_format">%1$s vous suit</string>
     <string name="report_username_format">Signaler @%1$s</string>
     <string name="report_comment_hint">Commentaires additionnels ?</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">Répondre</string>
     <string name="action_reblog">Partager</string>
     <string name="action_unreblog">Annuler le partage</string>
-    <string name="action_favourite">Favori</string>
-    <string name="action_unfavourite">Supprimer le favori</string>
+    <string name="action_like">Favori</string>
+    <string name="action_unlike">Supprimer le favori</string>
     <string name="action_more">Plus</string>
     <string name="action_compose">Écrire</string>
     <string name="action_login">Se connecter avec Warpnet</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Préférences</string>
     <string name="action_view_account_preferences">Préférences de compte</string>
-    <string name="action_view_favourites">Favoris</string>
+    <string name="action_view_likes">Favoris</string>
     <string name="action_view_mutes">Comptes masqués</string>
     <string name="action_view_blocks">Comptes bloqués</string>
     <string name="action_view_follow_requests">Demandes d’abonnement</string>
@@ -193,8 +193,8 @@
     <string name="notification_follow_description">Notifications pour les nouveaux abonnés</string>
     <string name="notification_boost_name">Partages</string>
     <string name="notification_boost_description">Notifications quand vos messages sont partagés</string>
-    <string name="notification_favourite_name">Favoris</string>
-    <string name="notification_favourite_description">Notifications quand vos messages sont mis en favoris</string>
+    <string name="notification_like_name">Favoris</string>
+    <string name="notification_like_description">Notifications quand vos messages sont mis en favoris</string>
     <string name="notification_mention_format">%1$s vous a mentionné</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s et %4$d autres</string>
     <string name="notification_summary_medium">%1$s, %2$s et %3$s</string>
@@ -309,7 +309,7 @@
         <item quantity="other">%1$s partages</item>
     </plurals>
     <string name="title_reblogged_by">Partagé par</string>
-    <string name="title_favourited_by">Mis en favoris par</string>
+    <string name="title_liked_by">Mis en favoris par</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s et %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s et %3$d autres</string>
@@ -317,7 +317,7 @@
     <string name="description_post_cw">Avertissement : %1$s</string>
     <string name="description_post_media_no_description_placeholder">Aucune description</string>
     <string name="description_post_reblogged">Partagé</string>
-    <string name="description_post_favourited">Mis en favoris</string>
+    <string name="description_post_liked">Mis en favoris</string>
     <string name="description_visibility_public">Public</string>
     <string name="description_visibility_unlisted">Non listé</string>
     <string name="description_visibility_private">Abonné·e·s</string>
@@ -475,7 +475,7 @@
     <string name="action_unsubscribe_account">Se désabonner</string>
     <string name="action_delete_conversation">Supprimer la conversation</string>
     <string name="post_media_audio">Audio</string>
-    <string name="pref_title_confirm_favourites">Demander confirmation avant de mettre en favoris</string>
+    <string name="pref_title_confirm_likes">Demander confirmation avant de mettre en favoris</string>
     <string name="drafts_post_reply_removed">Le message auquel répondait ce brouillon a été supprimé</string>
     <string name="drafts_post_failed_to_send">Échec d’envoi du message !</string>
     <string name="follow_requests_info">Bien que votre compte ne soit pas verrouillé, l’équipe de %1$s a pensé que vous voudriez valider manuellement les demandes de d’abonnement provenant de ces comptes.</string>
@@ -599,7 +599,7 @@
     <string name="error_status_source_load">Le texte d\'origine du statut n\'a pas pu être chargé.</string>
     <string name="ui_error_unknown">raison inconnue</string>
     <string name="ui_error_clear_notifications">Échec du nettoyage des notifications : %1$s</string>
-    <string name="ui_error_favourite">Échec de la mise en favori : %1$s</string>
+    <string name="ui_error_like">Échec de la mise en favori : %1$s</string>
     <string name="label_filter_title">Nom</string>
     <string name="hint_filter_title">Mon filtre</string>
     <string name="pref_title_show_stat_inline">Montrer les statistiques des statuts dans les fils</string>

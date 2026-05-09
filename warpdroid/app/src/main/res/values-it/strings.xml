@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Fissati</string>
     <string name="title_follows">Seguiti</string>
     <string name="title_followers">Seguaci</string>
-    <string name="title_favourites">Preferiti</string>
+    <string name="title_likes">Preferiti</string>
     <string name="title_mutes">Utenti silenziati</string>
     <string name="title_blocks">Utenti bloccati</string>
     <string name="title_follow_requests">Richieste di seguirti</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">Riduci</string>
     <string name="message_empty">Qui non c\'è nulla.</string>
     <string name="notification_reblog_format">%1$s ha condiviso il tuo post</string>
-    <string name="notification_favourite_format">%1$s ha messo il tuo messaggio nei preferiti</string>
+    <string name="notification_like_format">%1$s ha messo il tuo messaggio nei preferiti</string>
     <string name="notification_follow_format">%1$s ti segue</string>
     <string name="report_username_format">Segnala @%1$s</string>
     <string name="report_comment_hint">Commenti aggiuntivi?</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">Rispondi</string>
     <string name="action_reblog">Condividi</string>
     <string name="action_unreblog">Rimuovi condivisione</string>
-    <string name="action_favourite">Aggiungi ai preferiti</string>
-    <string name="action_unfavourite">Rimuovi preferito</string>
+    <string name="action_like">Aggiungi ai preferiti</string>
+    <string name="action_unlike">Rimuovi preferito</string>
     <string name="action_more">Di più</string>
     <string name="action_compose">Componi</string>
     <string name="action_login">Accedi con Warpnet</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">Profilo</string>
     <string name="action_view_preferences">Preferenze</string>
     <string name="action_view_account_preferences">Preferenze account</string>
-    <string name="action_view_favourites">Preferiti</string>
+    <string name="action_view_likes">Preferiti</string>
     <string name="action_view_mutes">Utenti silenziati</string>
     <string name="action_view_blocks">Utenti bloccati</string>
     <string name="action_view_follow_requests">Richieste di seguirti</string>
@@ -191,8 +191,8 @@
     <string name="notification_follow_description">Notifiche su nuovi seguaci</string>
     <string name="notification_boost_name">Ricondivisioni</string>
     <string name="notification_boost_description">Notifiche sui tuoi post che vengono condivisi</string>
-    <string name="notification_favourite_name">Preferiti</string>
-    <string name="notification_favourite_description">Notifiche quando i tuoi post vengono segnati come preferiti</string>
+    <string name="notification_like_name">Preferiti</string>
+    <string name="notification_like_description">Notifiche quando i tuoi post vengono segnati come preferiti</string>
     <string name="notification_mention_format">%1$s ti ha menzionato</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s e %4$d altri</string>
     <string name="notification_summary_medium">%1$s, %2$s e %3$s</string>
@@ -307,7 +307,7 @@
         <item quantity="other">%1$s ricondivisioni</item>
     </plurals>
     <string name="title_reblogged_by">Condiviso da</string>
-    <string name="title_favourited_by">Aggiunto ai preferiti da</string>
+    <string name="title_liked_by">Aggiunto ai preferiti da</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s e %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s ed altri %3$d</string>
@@ -315,7 +315,7 @@
     <string name="description_post_cw">Contenuto sensibile: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Nessuna descrizione</string>
     <string name="description_post_reblogged">Ribloggato</string>
-    <string name="description_post_favourited">Messo nei preferiti</string>
+    <string name="description_post_liked">Messo nei preferiti</string>
     <string name="description_visibility_public">Pubblico</string>
     <string name="description_visibility_unlisted">Non in elenco</string>
     <string name="description_visibility_private">Solo seguaci</string>
@@ -478,7 +478,7 @@
     <string name="action_delete_conversation">Elimina conversazione</string>
     <string name="wellbeing_mode_notice">Alcune informazioni che potrebbero influenzare il tuo benessere mentale saranno nascoste. Questo include: \n \n- Notifiche riguardo a Preferiti/Boost/Following \n- Conteggio dei Preferiti/Boost nei post \n- Statistiche riguardo a Preferiti/Post nei profili \n \nLe notifiche push non saranno influenzate, ma puoi modificare le tue impostazioni delle notifiche manualmente.</string>
     <string name="action_unbookmark">Rimuovi segnalibro</string>
-    <string name="pref_title_confirm_favourites">Chiedi conferma prima di mettere nei preferiti</string>
+    <string name="pref_title_confirm_likes">Chiedi conferma prima di mettere nei preferiti</string>
     <string name="duration_14_days">14 giorni</string>
     <string name="duration_30_days">30 giorni</string>
     <string name="duration_60_days">60 giorni</string>
@@ -595,7 +595,7 @@
     <string name="socket_timeout_exception">Contattare il tuo server ha richiesto troppo tempo</string>
     <string name="ui_error_unknown">motivo sconosciuto</string>
     <string name="ui_error_clear_notifications">Cancellazione notifiche fallita: %1$s</string>
-    <string name="ui_error_favourite">Impossibile mettere nei preferiti: %1$s</string>
+    <string name="ui_error_like">Impossibile mettere nei preferiti: %1$s</string>
     <string name="ui_error_reblog">Condivisione del post fallita: %1$s</string>
     <string name="ui_error_reject_follow_request">Rifiuto richiesta di follow fallita: %1$s</string>
     <string name="ui_error_vote">Votazione al sondaggio fallita: %1$s</string>
@@ -763,7 +763,7 @@
     <string name="filter_description_blur">Nascondi media con un avviso</string>
     <string name="reblog_privacy_followers_only_description">Solo chi ti segue può vedere le tue ricondivisioni</string>
     <string name="reblog_confirm">Ricondividere questo post?</string>
-    <string name="favourite_confirm">Mettere questo post tra i preferiti?</string>
+    <string name="like_confirm">Mettere questo post tra i preferiti?</string>
     <string name="filter_action_blur">Sfoca</string>
     <string name="reblog_privacy_unlisted_description">Uguale a \"Pubblico\" ma non verrà mai mostrato nelle timeline pubbliche</string>
     <string name="reblog_privacy_public_description">Tutti possono vedere la tua ricondivisione</string>

@@ -25,7 +25,7 @@
     <string name="title_posts_with_replies">Z odpowiedziami</string>
     <string name="title_follows">Obserwowanych</string>
     <string name="title_followers">Obserwujących</string>
-    <string name="title_favourites">Ulubione</string>
+    <string name="title_likes">Ulubione</string>
     <string name="title_mutes">Wyciszeni użytkownicy</string>
     <string name="title_blocks">Zablokowani użytkownicy</string>
     <string name="title_follow_requests">Prośby o obserwację</string>
@@ -39,14 +39,14 @@
     <string name="post_content_warning_show_more">Pokaż więcej</string>
     <string name="post_content_warning_show_less">Pokaż mniej</string>
     <string name="notification_reblog_format">%1$s podbił/a Twój wpis</string>
-    <string name="notification_favourite_format">%1$s dodał/a Twój post do ulubionych</string>
+    <string name="notification_like_format">%1$s dodał/a Twój post do ulubionych</string>
     <string name="notification_follow_format">%1$s zaczął/-ęła Cię obserwować</string>
     <string name="report_username_format">Zgłoś @%1$s</string>
     <string name="report_comment_hint">Dodatkowe komentarze?</string>
     <string name="action_quick_reply">Szybka odpowiedź</string>
     <string name="action_reply">Odpowiedz</string>
     <string name="action_reblog">Podbij</string>
-    <string name="action_favourite">Dodaj do ulubionych</string>
+    <string name="action_like">Dodaj do ulubionych</string>
     <string name="action_more">Więcej</string>
     <string name="action_compose">Napisz</string>
     <string name="action_login">Zaloguj się z Warpnet</string>
@@ -66,7 +66,7 @@
     <string name="action_close">Zamknij</string>
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Preferencje</string>
-    <string name="action_view_favourites">Ulubione</string>
+    <string name="action_view_likes">Ulubione</string>
     <string name="action_view_mutes">Wyciszeni użytkownicy</string>
     <string name="action_view_blocks">Zablokowani użytkownicy</string>
     <string name="action_view_follow_requests">Prośby o obserwację</string>
@@ -161,8 +161,8 @@
     <string name="notification_follow_description">Powiadomienia o nowych obserwujących</string>
     <string name="notification_boost_name">Podbicia</string>
     <string name="notification_boost_description">Powiadomienia o podbiciu wpisów</string>
-    <string name="notification_favourite_name">Ulubione</string>
-    <string name="notification_favourite_description">Powiadomienia o dodaniu wpisów do ulubionych</string>
+    <string name="notification_like_name">Ulubione</string>
+    <string name="notification_like_description">Powiadomienia o dodaniu wpisów do ulubionych</string>
     <string name="notification_mention_format">%1$s wspomniał o Tobie</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s i %4$d innych</string>
     <string name="notification_summary_medium">%1$s, %2$s, i %3$s</string>
@@ -248,7 +248,7 @@
     <string name="post_content_show_more">Rozwiń</string>
     <string name="post_content_show_less">Zwiń</string>
     <string name="message_empty">Nic tu nie ma.</string>
-    <string name="action_unfavourite">Usuń z ulubionych</string>
+    <string name="action_unlike">Usuń z ulubionych</string>
     <string name="action_delete_and_redraft">Usuń i przeredaguj</string>
     <string name="action_view_account_preferences">Ustawienia konta</string>
     <string name="action_open_faved_by">Pokaż ulubione</string>
@@ -329,7 +329,7 @@
         <item quantity="other"><b>%1$s</b> podbić</item>
     </plurals>
     <string name="title_reblogged_by">Podbite przez</string>
-    <string name="title_favourited_by">Polubione przez</string>
+    <string name="title_liked_by">Polubione przez</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s i %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s i %3$d innych</string>
@@ -337,7 +337,7 @@
     <string name="description_post_cw">Ostrzeżenie o zawartości: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Brak opisu</string>
     <string name="description_post_reblogged">Podbity</string>
-    <string name="description_post_favourited">Polubiony</string>
+    <string name="description_post_liked">Polubiony</string>
     <string name="description_visibility_public">Publiczny</string>
     <string name="description_visibility_unlisted">Niewidoczne</string>
     <string name="description_visibility_private">Obserwujący</string>
@@ -489,7 +489,7 @@
     <string name="notification_subscription_format">%1$s opublikował/a post</string>
     <string name="notification_follow_request_format">%1$s poprosił/a o możliwość obserwowania Cię</string>
     <string name="action_unbookmark">Usuń z zakładek</string>
-    <string name="pref_title_confirm_favourites">Pytaj o potwierdzenie przed dodaniem do ulubionych</string>
+    <string name="pref_title_confirm_likes">Pytaj o potwierdzenie przed dodaniem do ulubionych</string>
     <string name="duration_14_days">14 dni</string>
     <string name="duration_30_days">30 dni</string>
     <string name="duration_60_days">60 dni</string>

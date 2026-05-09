@@ -24,7 +24,7 @@
     <color name="dividerColor">@color/warpdroid_grey_40</color>
     <color name="dividerColorOther">@color/warpdroid_grey_10</color>
 
-    <color name="favoriteButtonActiveColor">@color/warpdroid_orange</color>
+    <color name="likeButtonActiveColor">@color/warpdroid_orange</color>
 
     <color name="warning_color">@color/warpdroid_red_lighter</color>
 

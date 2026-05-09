@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">المثبتة</string>
     <string name="title_follows">المتابَعون</string>
     <string name="title_followers">المتابعون</string>
-    <string name="title_favourites">المفضلة</string>
+    <string name="title_likes">المفضلة</string>
     <string name="title_mutes">المستخدمون المكتومون</string>
     <string name="title_blocks">المستخدمون المحظورون</string>
     <string name="title_follow_requests">طلبات المتابعة</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">طي</string>
     <string name="message_empty">لا شيء هنا.</string>
     <string name="notification_reblog_format">أعاد %1$s نشر منشورك</string>
-    <string name="notification_favourite_format">أعجب %1$s بمنشورك</string>
+    <string name="notification_like_format">أعجب %1$s بمنشورك</string>
     <string name="notification_follow_format">%1$s تابعك</string>
     <string name="report_username_format">إبلاغ عن @%1$s</string>
     <string name="report_comment_hint">تعليقات إضافية؟</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">رد</string>
     <string name="action_reblog">إعادة نشر</string>
     <string name="action_unreblog">إزالة إعادة النشر</string>
-    <string name="action_favourite">تفضيل</string>
-    <string name="action_unfavourite">إزالة التفضيل</string>
+    <string name="action_like">تفضيل</string>
+    <string name="action_unlike">إزالة التفضيل</string>
     <string name="action_more">المزيد</string>
     <string name="action_compose">تأليف</string>
     <string name="action_login">تسجيل الدخول مع Warpnet</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">الملف الشخصي</string>
     <string name="action_view_preferences">التفضيلات</string>
     <string name="action_view_account_preferences">إعدادات الحساب</string>
-    <string name="action_view_favourites">المفضلة</string>
+    <string name="action_view_likes">المفضلة</string>
     <string name="action_view_mutes">المستخدمون المكتومون</string>
     <string name="action_view_blocks">المستخدمون المحظورون</string>
     <string name="action_view_follow_requests">طلبات المتابعة</string>
@@ -189,8 +189,8 @@
     <string name="notification_follow_description">إشعارات حول المتابعين الجدد</string>
     <string name="notification_boost_name">إعادات النشر</string>
     <string name="notification_boost_description">إشعارات عندما يُعاد نشر منشوراتك</string>
-    <string name="notification_favourite_name">المفضلة</string>
-    <string name="notification_favourite_description">إشعارات عندما تُفضل منشوراتك</string>
+    <string name="notification_like_name">المفضلة</string>
+    <string name="notification_like_description">إشعارات عندما تُفضل منشوراتك</string>
     <string name="notification_mention_format">أشار %1$s إليك</string>
     <string name="notification_summary_large">%1$s، %2$s، %3$s و %4$d آخرون</string>
     <string name="notification_summary_medium">%1$s، %2$s، و %3$s</string>
@@ -298,7 +298,7 @@
     <string name="unpin_action">إلغاء التثبيت</string>
     <string name="pin_action">تثبيت</string>
     <string name="title_reblogged_by">أعاد نشرها</string>
-    <string name="title_favourited_by">فضلها</string>
+    <string name="title_liked_by">فضلها</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s و %2$s</string>
     <string name="conversation_more_recipients">%1$s، %2$s و %3$d آخرين</string>
@@ -317,7 +317,7 @@
     <string name="download_media">تنزيل الوسائط</string>
     <string name="downloading_media">جارٍ تنزيل الوسائط</string>
     <string name="dialog_redraft_post_warning">حذف وإعادة صياغة هذا المنشور؟</string>
-    <string name="description_post_favourited">مفضلة</string>
+    <string name="description_post_liked">مفضلة</string>
     <string name="pick_hashtag_hint">وسم بدون #</string>
     <string name="notifications_clear">مسح</string>
     <string name="notifications_apply_filter">فلتر</string>
@@ -494,7 +494,7 @@
     <string name="wellbeing_hide_stats_posts">إخفاء الإحصائيات الكمية على المنشورات</string>
     <string name="wellbeing_hide_stats_profile">إخفاء الإحصائيات الكمية على الملفات الشخصية</string>
     <string name="action_unbookmark">إزالة إشارة مرجعية</string>
-    <string name="pref_title_confirm_favourites">إظهار تأكيد قبل التفضيل</string>
+    <string name="pref_title_confirm_likes">إظهار تأكيد قبل التفضيل</string>
     <string name="drafts_failed_loading_reply">فشل تحميل معلومات الرد</string>
     <string name="duration_indefinite">غير محدد</string>
     <string name="limit_notifications">حد إشعارات الخط الزمني</string>
@@ -709,7 +709,7 @@
     <string name="error_missing_edits">يعرف خادمك أن هذا المنشور تم تعديله، ولكن لا توجد لديه نسخة من التعديلات، لذا لا يمكن عرضها لك.\n\nهذه <a href="https://github.com/Warp-net/warpnet/issues">مشكلة Warpnet </a>.</string>
     <string name="ui_error_bookmark">فشل إضافة المنشور إلى الإشارات المرجعية: %1$s</string>
     <string name="ui_error_clear_notifications">فشل مسح الإشعارات: %1$s</string>
-    <string name="ui_error_favourite">فشل تفضيل المنشور: %1$s</string>
+    <string name="ui_error_like">فشل تفضيل المنشور: %1$s</string>
     <string name="ui_error_reblog">فشل إعادة نشر المنشور: %1$s</string>
     <string name="ui_error_vote">فشل التصويت في الاستطلاع: %1$s</string>
     <string name="ui_error_accept_follow_request">فشل قبول طلب المتابعة: %1$s</string>
@@ -769,7 +769,7 @@
     <string name="reblog_privacy_unlisted_description">مثل العام ولكن لن يظهر أبداً في الخطوط الزمنية العامة</string>
     <string name="reblog_privacy_followers_only_description">فقط متابعوك يمكنهم رؤية إعادة نشرك</string>
     <string name="reblog_confirm">إعادة نشر هذا المنشور؟</string>
-    <string name="favourite_confirm">تفضيل هذا المنشور؟</string>
+    <string name="like_confirm">تفضيل هذا المنشور؟</string>
     <string name="error_unblocking_domain">فشل إلغاء حظر%1$s: %2$s</string>
     <string name="pref_title_show_self_boosts">إظهار إعادة النشر الذاتية</string>
     <string name="error_deleting_filter">خطأ في حذف المرشح \'%1$s\'</string>

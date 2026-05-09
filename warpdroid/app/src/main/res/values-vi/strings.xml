@@ -15,7 +15,7 @@
     <string name="notification_mention_name">Nhắc đến tôi</string>
     <string name="notification_follow_request_format">%1$s yêu cầu theo dõi bạn</string>
     <string name="notification_follow_format">%1$s đang theo dõi bạn</string>
-    <string name="notification_favourite_format">%1$s thích tút của bạn</string>
+    <string name="notification_like_format">%1$s thích tút của bạn</string>
     <string name="notification_reblog_format">%1$s đăng lại tút của bạn</string>
     <string name="post_lookup_error_format">Lỗi khi tìm tút %1$s</string>
     <string name="error_no_custom_emojis">Máy chủ %1$s không có emoji tùy chỉnh</string>
@@ -127,7 +127,7 @@
     <string name="action_view_blocks">Những tài khoản đã chặn</string>
     <string name="action_view_mutes">Những tài khoản đã phớt lờ</string>
     <string name="action_view_bookmarks">Lưu</string>
-    <string name="action_view_favourites">Thích</string>
+    <string name="action_view_likes">Thích</string>
     <string name="action_view_profile">Trang hồ sơ</string>
     <string name="action_close">Đóng</string>
     <string name="action_retry">THỬ LẠI</string>
@@ -144,9 +144,9 @@
     <string name="action_logout_confirm">Bạn có muốn đăng xuất tài khoản %1$s? Dữ liệu của tài khoản sẽ bị xóa, bao gồm những bản nháp và thiết lập.</string>
     <string name="action_compose">Soạn tút</string>
     <string name="action_more">Thêm</string>
-    <string name="action_unfavourite">Bỏ lưu</string>
+    <string name="action_unlike">Bỏ lưu</string>
     <string name="action_bookmark">Lưu</string>
-    <string name="action_favourite">Thích</string>
+    <string name="action_like">Thích</string>
     <string name="action_unreblog">Hủy đăng lại</string>
     <string name="action_reblog">Đăng lại</string>
     <string name="action_reply">Trả lời</string>
@@ -184,7 +184,7 @@
     <string name="title_notifications">Thông báo</string>
     <string name="title_home">Trang chủ</string>
     <string name="title_drafts">Những tút nháp</string>
-    <string name="title_favourites">Những tút đã thích</string>
+    <string name="title_likes">Những tút đã thích</string>
     <string name="link_whats_an_instance">Máy chủ là gì?</string>
     <string name="pref_title_show_media_preview">Hiện xem trước hình ảnh</string>
     <string name="pref_title_show_replies">Hiện những lượt trả lời</string>
@@ -257,8 +257,8 @@
     <string name="description_account_locked">Tài khoản bị khóa</string>
     <string name="notification_poll_description">Thông báo khi một cuộc bình chọn kết thúc</string>
     <string name="notification_poll_name">Bình chọn</string>
-    <string name="notification_favourite_description">Thông báo khi ai đó thích tút của bạn</string>
-    <string name="notification_favourite_name">Lượt thích</string>
+    <string name="notification_like_description">Thông báo khi ai đó thích tút của bạn</string>
+    <string name="notification_like_name">Lượt thích</string>
     <string name="filter_dialog_whole_word">Toàn bộ chữ có chứa cụm từ này</string>
     <string name="filter_edit_title">Sửa bộ lọc</string>
     <string name="filter_addition_title">Thêm bộ lọc</string>
@@ -355,14 +355,14 @@
     <string name="description_visibility_unlisted">Hạn chế</string>
     <string name="description_visibility_public">Công khai</string>
     <string name="description_post_bookmarked">Đã lưu</string>
-    <string name="description_post_favourited">Đã thích</string>
+    <string name="description_post_liked">Đã thích</string>
     <string name="description_post_reblogged">Đã đăng lại</string>
     <string name="description_post_media_no_description_placeholder">Không có mô tả</string>
     <string name="description_post_cw">Nội dung ẩn: %1$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s và %3$d người nữa</string>
     <string name="conversation_2_recipients">%1$s và %2$s</string>
     <string name="conversation_1_recipients">%1$s</string>
-    <string name="title_favourited_by">Thích bởi</string>
+    <string name="title_liked_by">Thích bởi</string>
     <string name="title_reblogged_by">Đăng lại bởi</string>
     <plurals name="reblogs">
         <item quantity="other"><b>%1$s</b> đăng lại</item>
@@ -451,7 +451,7 @@
     <string name="follow_requests_info">Dù biết tài khoản của bạn công khai, quản trị viên %1$s vẫn nghĩ bạn hãy nên duyệt thủ công yêu cầu theo dõi từ những người lạ.</string>
     <string name="dialog_delete_conversation_warning">Xóa cuộc thảo luận này?</string>
     <string name="action_delete_conversation">Xóa thảo luận</string>
-    <string name="pref_title_confirm_favourites">Hỏi trước khi thích tút</string>
+    <string name="pref_title_confirm_likes">Hỏi trước khi thích tút</string>
     <string name="action_unbookmark">Bỏ lưu</string>
     <string name="duration_14_days">14 ngày</string>
     <string name="duration_30_days">30 ngày</string>
@@ -561,7 +561,7 @@
     <string name="ui_error_unknown">chưa rõ lý do</string>
     <string name="ui_error_bookmark">Lưu tút không thành công: %1$s</string>
     <string name="ui_error_clear_notifications">Xóa thông báo không thành công: %1$s</string>
-    <string name="ui_error_favourite">Thích tút không thành công: %1$s</string>
+    <string name="ui_error_like">Thích tút không thành công: %1$s</string>
     <string name="ui_error_reblog">Đăng lại tút không thành công: %1$s</string>
     <string name="ui_error_vote">Bình chọn không thành công: %1$s</string>
     <string name="ui_error_accept_follow_request">Chấp nhận theo dõi không thành công: %1$s</string>
@@ -730,7 +730,7 @@
     <string name="filter_action_blur">Làm mờ</string>
     <string name="filter_description_blur">Ẩn media kèm cảnh báo</string>
     <string name="reblog_confirm">Đăng lại tút này?</string>
-    <string name="favourite_confirm">Thích tút này?</string>
+    <string name="like_confirm">Thích tút này?</string>
     <string name="reblog_privacy_followers_only_description">Chỉ người theo dõi thấy lượt đăng lại</string>
     <string name="reblog_privacy_public_description">Ai cũng có thể thấy lượt đăng lại</string>
     <string name="reblog_privacy_unlisted_description">Công khai, nhưng ẩn trên bảng tin</string>

@@ -67,7 +67,7 @@
     <string name="title_posts_pinned">Pinned</string>
     <string name="title_follows">Follows</string>
     <string name="title_followers">Followers</string>
-    <string name="title_favourites">Favorites</string>
+    <string name="title_likes">Likes</string>
     <string name="title_bookmarks">Bookmarks</string>
     <string name="title_mutes">Muted users</string>
     <string name="title_blocks">Blocked users</string>
@@ -102,7 +102,7 @@
     <string name="message_empty">Nothing here.</string>
 
     <string name="notification_reblog_format">%1$s boosted your post</string>
-    <string name="notification_favourite_format">%1$s favorited your post</string>
+    <string name="notification_like_format">%1$s liked your post</string>
     <string name="notification_pleroma_reaction_format">%1$s reacted to your post</string>
     <string name="notification_follow_format">%1$s followed you</string>
     <string name="notification_follow_request_format">%1$s requested to follow you</string>
@@ -126,8 +126,8 @@
     <string name="action_reblog_public">Public Boost</string>
     <string name="action_reblog_unlisted">Unlisted Boost</string>
     <string name="action_unreblog">Remove boost</string>
-    <string name="action_favourite">Favorite</string>
-    <string name="action_unfavourite">Remove favorite</string>
+    <string name="action_like">Like</string>
+    <string name="action_unlike">Remove like</string>
     <string name="action_bookmark">Bookmark</string>
     <string name="action_unbookmark">Remove bookmark</string>
     <string name="action_more">More</string>
@@ -169,7 +169,7 @@
     <string name="action_view_profile">Profile</string>
     <string name="action_view_preferences">Preferences</string>
     <string name="action_view_account_preferences">Account preferences</string>
-    <string name="action_view_favourites">Favorites</string>
+    <string name="action_view_likes">Likes</string>
     <string name="action_view_bookmarks">Bookmarks</string>
     <string name="action_view_mutes">Muted users</string>
     <string name="action_view_blocks">Blocked users</string>
@@ -210,7 +210,7 @@
     <string name="action_follow_hashtag">Follow a new hashtag</string>
     <string name="action_open_reblogger">Open boost author</string>
     <string name="action_open_reblogged_by">Show boosts</string>
-    <string name="action_open_faved_by">Show favorites</string>
+    <string name="action_open_faved_by">Show likes</string>
     <string name="action_dismiss">Dismiss</string>
     <string name="action_details">Details</string>
     <string name="action_add_reaction">add reaction</string>
@@ -378,8 +378,8 @@
     <string name="notification_follow_request_description">Notifications about follow requests</string>
     <string name="notification_boost_name">Boosts</string>
     <string name="notification_boost_description">Notifications when your posts get boosted</string>
-    <string name="notification_favourite_name">Favorites</string>
-    <string name="notification_favourite_description">Notifications when your posts get marked as favorite</string>
+    <string name="notification_like_name">Likes</string>
+    <string name="notification_like_description">Notifications when your posts get marked as like</string>
     <string name="notification_poll_name">Poll results</string>
     <string name="notification_poll_description">Notifications about polls that have ended</string>
     <string name="notification_subscription_name">New posts</string>
@@ -570,8 +570,8 @@
     </plurals>
 
     <plurals name="favs">
-        <item quantity="one">%1$s Favorite</item>
-        <item quantity="other">%1$s Favorites</item>
+        <item quantity="one">%1$s Like</item>
+        <item quantity="other">%1$s Likes</item>
     </plurals>
 
     <plurals name="reblogs">
@@ -593,7 +593,7 @@
     <string name="label_translated">Translated from %1$s with %2$s</string>
 
     <string name="title_reblogged_by">Boosted by</string>
-    <string name="title_favourited_by">Favorited by</string>
+    <string name="title_liked_by">Liked by</string>
 
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s and %2$s</string>
@@ -614,8 +614,8 @@
     <string name="description_post_reblogged">
         Reblogged
     </string>
-    <string name="description_post_favourited">
-        Favorited
+    <string name="description_post_liked">
+        Liked
     </string>
     <string name="description_post_bookmarked">
         Bookmarked
@@ -750,7 +750,7 @@
     <string name="pref_title_show_self_username">Show username in toolbars</string>
     <string name="pref_title_show_cards_in_timelines">Show link previews in timelines</string>
     <string name="pref_title_confirm_reblogs">Show confirmation before boosting</string>
-    <string name="pref_title_confirm_favourites">Show confirmation before favoriting</string>
+    <string name="pref_title_confirm_likes">Show confirmation before favoriting</string>
     <string name="pref_title_confirm_follows">Show confirmation before following</string>
     <string name="pref_title_hide_top_toolbar">Hide the title of the top toolbar</string>
     <string name="pref_title_wellbeing_mode">Wellbeing</string>
@@ -758,8 +758,8 @@
     <string name="account_note_saved">Saved!</string>
 
     <string name="wellbeing_mode_notice">Some information that might affect your mental wellbeing will be hidden. This includes:
-\n\n- Favorite/Boost/Follow notifications
-\n- Favorite/Boost count on posts
+\n\n- Like/Boost/Follow notifications
+\n- Like/Boost count on posts
 \n- Follower/Post stats on profiles
 \n\nPush-notifications will not be affected, but you can review your notification preferences manually.</string>
     <string name="review_notifications">Review Notifications</string>
@@ -825,7 +825,7 @@
     <string name="ui_error_unknown">unknown reason</string>
     <string name="ui_error_bookmark">Bookmarking post failed: %1$s</string>
     <string name="ui_error_clear_notifications">Clearing notifications failed: %1$s</string>
-    <string name="ui_error_favourite">Favoriting post failed: %1$s</string>
+    <string name="ui_error_like">Favoriting post failed: %1$s</string>
     <string name="ui_error_reblog">Boosting post failed: %1$s</string>
     <string name="ui_error_vote">Voting in poll failed: %1$s</string>
     <string name="ui_error_accept_follow_request">Accepting follow request failed: %1$s</string>
@@ -955,7 +955,7 @@
     <string name="reblog_privacy_followers_only_description">Only your followers can see your boost</string>
 
     <string name="reblog_confirm">Boost this post?</string>
-    <string name="favourite_confirm">Favorite this post?</string>
+    <string name="like_confirm">Like this post?</string>
 
     <string name="edit_image_rotate">Rotate</string>
     <string name="edit_image_flip">Flip</string>

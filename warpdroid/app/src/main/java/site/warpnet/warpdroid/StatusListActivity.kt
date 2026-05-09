@@ -79,7 +79,7 @@ class StatusListActivity : BottomSheetActivity() {
         statusId = intent.getStringExtra(EXTRA_STATUS_ID)
 
         val title = when (kind) {
-            Kind.FAVOURITES -> getString(R.string.title_favourites)
+            Kind.LIKES -> getString(R.string.title_likes)
             Kind.BOOKMARKS -> getString(R.string.title_bookmarks)
             Kind.TAG -> getString(R.string.hashtag_format, hashtag)
             Kind.PUBLIC_TRENDING_STATUSES -> getString(R.string.title_public_trending_statuses)
@@ -379,9 +379,9 @@ class StatusListActivity : BottomSheetActivity() {
         private const val EXTRA_STATUS_ID = "status"
         const val TAG = "StatusListActivity"
 
-        fun newFavouritesIntent(context: Context) =
+        fun newLikesIntent(context: Context) =
             Intent(context, StatusListActivity::class.java).apply {
-                putExtra(EXTRA_KIND, Kind.FAVOURITES.name)
+                putExtra(EXTRA_KIND, Kind.LIKES.name)
             }
 
         fun newBookmarksIntent(context: Context) =

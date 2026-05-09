@@ -24,10 +24,10 @@ enum class NotificationChannelData(
         R.string.notification_boost_description
     ),
 
-    FAVOURITE(
-        listOf(Notification.Type.Favourite, Notification.Type.PleromaEmojiReaction),
-        R.string.notification_favourite_name,
-        R.string.notification_favourite_description
+    LIKE(
+        listOf(Notification.Type.Like, Notification.Type.PleromaEmojiReaction),
+        R.string.notification_like_name,
+        R.string.notification_like_description
     ),
 
     FOLLOW(

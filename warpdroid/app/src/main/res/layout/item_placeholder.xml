@@ -88,14 +88,14 @@
         android:layout_height="48dp"
         android:clickable="false"
         android:importantForAccessibility="no"
-        app:layout_constraintEnd_toStartOf="@id/favouriteButtonPlaceholder"
+        app:layout_constraintEnd_toStartOf="@id/likeButtonPlaceholder"
         app:layout_constraintStart_toEndOf="@id/replyButtonPlaceholder"
         app:layout_constraintTop_toTopOf="@id/replyButtonPlaceholder"
         app:srcCompat="@drawable/ic_repeat_24dp"
         app:tint="?attr/placeholderColor" />
 
     <ImageButton
-        android:id="@+id/favouriteButtonPlaceholder"
+        android:id="@+id/likeButtonPlaceholder"
         style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
@@ -116,7 +116,7 @@
         android:clipToPadding="false"
         android:importantForAccessibility="no"
         app:layout_constraintEnd_toStartOf="@id/moreButtonPlaceHolder"
-        app:layout_constraintStart_toEndOf="@id/favouriteButtonPlaceholder"
+        app:layout_constraintStart_toEndOf="@id/likeButtonPlaceholder"
         app:layout_constraintTop_toTopOf="@id/replyButtonPlaceholder"
         app:srcCompat="@drawable/ic_bookmark_24dp"
         app:tint="?attr/placeholderColor" />

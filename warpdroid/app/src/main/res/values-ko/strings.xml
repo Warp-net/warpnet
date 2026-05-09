@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">고정된 게시물</string>
     <string name="title_follows">팔로우</string>
     <string name="title_followers">팔로워</string>
-    <string name="title_favourites">좋아요</string>
+    <string name="title_likes">좋아요</string>
     <string name="title_mutes">뮤트한 유저</string>
     <string name="title_blocks">블록한 유저</string>
     <string name="title_domain_mutes">숨긴 도메인</string>
@@ -48,7 +48,7 @@
     <string name="post_content_show_less">줄이기</string>
     <string name="message_empty">메시지가 없습니다.</string>
     <string name="notification_reblog_format">%1$s님이 부스트 했습니다</string>
-    <string name="notification_favourite_format">%1$s님이 당신의 게시물을 좋아합니다</string>
+    <string name="notification_like_format">%1$s님이 당신의 게시물을 좋아합니다</string>
     <string name="notification_follow_format">%1$s님이 나를 팔로우 했습니다</string>
     <string name="report_username_format">\@%1$s 신고</string>
     <string name="report_comment_hint">코멘트</string>
@@ -56,8 +56,8 @@
     <string name="action_reply">답장</string>
     <string name="action_reblog">부스트</string>
     <string name="action_unreblog">부스트 해제</string>
-    <string name="action_favourite">좋아요</string>
-    <string name="action_unfavourite">좋아요 취소</string>
+    <string name="action_like">좋아요</string>
+    <string name="action_unlike">좋아요 취소</string>
     <string name="action_more">더 보기</string>
     <string name="action_compose">작성</string>
     <string name="action_login">Warpnet에서 로그인</string>
@@ -79,7 +79,7 @@
     <string name="action_view_profile">프로필</string>
     <string name="action_view_preferences">설정</string>
     <string name="action_view_account_preferences">계정 설정</string>
-    <string name="action_view_favourites">좋아요</string>
+    <string name="action_view_likes">좋아요</string>
     <string name="action_view_mutes">뮤트한 유저</string>
     <string name="action_view_blocks">블록한 유저</string>
     <string name="action_view_domain_mutes">숨긴 도메인</string>
@@ -202,8 +202,8 @@
     <string name="notification_follow_description">누군가 나를 팔로우할 때 알림</string>
     <string name="notification_boost_name">부스트</string>
     <string name="notification_boost_description">누군가 내 게시물을 부스트할 때 알림</string>
-    <string name="notification_favourite_name">좋아요</string>
-    <string name="notification_favourite_description">누군가 내 게시물을 좋아요 했을 때 알림</string>
+    <string name="notification_like_name">좋아요</string>
+    <string name="notification_like_description">누군가 내 게시물을 좋아요 했을 때 알림</string>
     <string name="notification_poll_name">투표 결과</string>
     <string name="notification_poll_description">투표가 종료되었을 때 알림</string>
     <string name="notification_mention_format">%1$s님이 당신을 멘션했습니다</string>
@@ -317,7 +317,7 @@
         <item quantity="other">%1$s 부스트</item>
     </plurals>
     <string name="title_reblogged_by">부스트한 유저</string>
-    <string name="title_favourited_by">좋아요한 유저</string>
+    <string name="title_liked_by">좋아요한 유저</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s와 %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s 외 %3$d명</string>
@@ -325,7 +325,7 @@
     <string name="description_post_cw">열람주의: %1$s</string>
     <string name="description_post_media_no_description_placeholder">설명 없음</string>
     <string name="description_post_reblogged">부스트함</string>
-    <string name="description_post_favourited">좋아요함</string>
+    <string name="description_post_liked">좋아요함</string>
     <string name="description_visibility_public">공개</string>
     <string name="description_visibility_unlisted">타임라인에 비표시</string>
     <string name="description_visibility_private">비공개</string>
@@ -400,7 +400,7 @@
     <string name="error_could_not_load_login_page">로그인 페이지를 불러올 수 없습니다.</string>
     <string name="post_replied_self">타래 이어짐</string>
     <string name="pref_title_show_self_username">사용자명을 툴바에 보이기</string>
-    <string name="pref_title_confirm_favourites">좋아요 하기 전에 확인하기</string>
+    <string name="pref_title_confirm_likes">좋아요 하기 전에 확인하기</string>
     <string name="wellbeing_mode_notice">정신적 웰빙에 영향을 줄 수 있는 몇몇 정보들이 숨겨집니다. 다음 정보들이 숨겨집니다:\n\n- 좋아요/부스트/팔로우 알림\n- 게시물의 좋아요/부스트 수\n- 프로필의 팔로워/게시물 수\n\n푸시 알림은 영향을 받지 않습니다만, 원하신다면 알림 설정을 직접 재검토하실 수 있습니다.</string>
     <string name="pref_title_reading_order">읽는 순서</string>
     <string name="help_empty_lists">이것은 <b>리스트 뷰</b>입니다. 여러 비공개 리스트를 만들고 거기에 계정들을 추가할 수 있습니다.\n\n주의하세요, 팔로우 중인 계정만 리스트에 추가할 수 있습니다.\n\n이 리스트들은 계정 설정 {{manage_accounts}} {{chevron_right}} 탭 에서 사용할 수 있습니다.</string>
@@ -626,7 +626,7 @@
     <string name="ui_error_unknown">알 수 없는 이유</string>
     <string name="ui_error_bookmark">게시물을 북마크하지 못했습니다: %1$s</string>
     <string name="ui_error_clear_notifications">알림을 비우지 못했습니다: %1$s</string>
-    <string name="ui_error_favourite">게시물을 좋아요하지 못했습니다: %1$s</string>
+    <string name="ui_error_like">게시물을 좋아요하지 못했습니다: %1$s</string>
     <string name="ui_error_reblog">게시물을 부스트하지 못했습니다: %1$s</string>
     <string name="ui_error_accept_follow_request">팔로우 요청을 승인하지 못했습니다: %1$s</string>
     <string name="ui_error_reject_follow_request">팔로우 요청을 거절하지 못했습니다: %1$s</string>
@@ -706,7 +706,7 @@
     <string name="reblog_privacy_unlisted_description">공개와 같지만 공개 타임라인에는 절대 보여지지 않습니다</string>
     <string name="reblog_privacy_followers_only_description">팔로워만 내 부스트를 볼 수 있습니다</string>
     <string name="reblog_confirm">이 게시물을 부스트할까요?</string>
-    <string name="favourite_confirm">이 게시물을 좋아요할까요?</string>
+    <string name="like_confirm">이 게시물을 좋아요할까요?</string>
     <string name="edit_image_rotate">회전</string>
     <string name="edit_image_flip">뒤집기</string>
     <string name="edit_image_flip_vertically">세로로 뒤집기</string>

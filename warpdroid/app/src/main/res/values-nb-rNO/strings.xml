@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Festet</string>
     <string name="title_follows">Følger</string>
     <string name="title_followers">Følgere</string>
-    <string name="title_favourites">Favoritter</string>
+    <string name="title_likes">Favoritter</string>
     <string name="title_mutes">Dempede brukere</string>
     <string name="title_blocks">Blokkerte brukere</string>
     <string name="title_follow_requests">Følgeforespørsler</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">Skjul</string>
     <string name="message_empty">Ingenting her.</string>
     <string name="notification_reblog_format">%1$s delte innlegget ditt</string>
-    <string name="notification_favourite_format">%1$s favoriserte innlegget ditt</string>
+    <string name="notification_like_format">%1$s favoriserte innlegget ditt</string>
     <string name="notification_follow_format">%1$s følger deg</string>
     <string name="report_username_format">Rapporter @%1$s</string>
     <string name="report_comment_hint">Ytterligere kommentarer?</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">Svar</string>
     <string name="action_reblog">Del</string>
     <string name="action_unreblog">Fjern deling</string>
-    <string name="action_favourite">Legg til i favoritter</string>
-    <string name="action_unfavourite">Fjern favoritt</string>
+    <string name="action_like">Legg til i favoritter</string>
+    <string name="action_unlike">Fjern favoritt</string>
     <string name="action_more">Mer</string>
     <string name="action_compose">Skriv</string>
     <string name="action_login">Logg inn med Warpnet</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Innstillinger</string>
     <string name="action_view_account_preferences">Kontoinnstillinger</string>
-    <string name="action_view_favourites">Favoritter</string>
+    <string name="action_view_likes">Favoritter</string>
     <string name="action_view_mutes">Dempede brukere</string>
     <string name="action_view_blocks">Blokkerte brukere</string>
     <string name="action_view_follow_requests">Følgeforespørsler</string>
@@ -177,8 +177,8 @@
     <string name="notification_follow_description">Varsler om nye følgere</string>
     <string name="notification_boost_name">Delte innlegg</string>
     <string name="notification_boost_description">Varsler når innleggene dine blir delt</string>
-    <string name="notification_favourite_name">Favoritter</string>
-    <string name="notification_favourite_description">Varsler når innleggene dine blir favorisert</string>
+    <string name="notification_like_name">Favoritter</string>
+    <string name="notification_like_description">Varsler når innleggene dine blir favorisert</string>
     <string name="notification_mention_format">%1$s nevnte deg</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s og %4$d andre</string>
     <string name="notification_summary_medium">%1$s, %2$s, og %3$s</string>
@@ -286,7 +286,7 @@
         <item quantity="other">Delt <b>%1$s</b> ganger</item>
     </plurals>
     <string name="title_reblogged_by">Delt av</string>
-    <string name="title_favourited_by">Favorisert av</string>
+    <string name="title_liked_by">Favorisert av</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s og %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s og %3$d fler</string>
@@ -294,7 +294,7 @@
     <string name="description_post_cw">Innholdsadvarsel: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Ingen beskrivelse</string>
     <string name="description_post_reblogged">Reblogget</string>
-    <string name="description_post_favourited">Favorisert</string>
+    <string name="description_post_liked">Favorisert</string>
     <string name="description_visibility_public">Offentlig</string>
     <string name="description_visibility_unlisted">Ikke listet</string>
     <string name="description_visibility_private">Følgere</string>
@@ -462,7 +462,7 @@
     <string name="dialog_delete_conversation_warning">Slett denne samtalen?</string>
     <string name="action_delete_conversation">Slett samtale</string>
     <string name="action_unbookmark">Fjern bokmerke</string>
-    <string name="pref_title_confirm_favourites">Vis bekreftelser når favoritt skal legges til</string>
+    <string name="pref_title_confirm_likes">Vis bekreftelser når favoritt skal legges til</string>
     <string name="duration_30_days">30 dager</string>
     <string name="duration_60_days">60 dager</string>
     <string name="duration_90_days">90 dager</string>
@@ -580,7 +580,7 @@
     <string name="select_list_manage">Forvalte lister</string>
     <string name="ui_error_reblog">Deling av innlegget feilet: %1$s</string>
     <string name="ui_error_unknown">ukjent grunn</string>
-    <string name="ui_error_favourite">Favorisering av innlegg feilet: %1$s</string>
+    <string name="ui_error_like">Favorisering av innlegg feilet: %1$s</string>
     <string name="ui_error_vote">Stemming mislykkes: %1$s</string>
     <string name="filter_description_hide">Gjem helt</string>
     <string name="label_filter_action">Filterhandling</string>

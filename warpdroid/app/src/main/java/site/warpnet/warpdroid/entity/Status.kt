@@ -39,7 +39,7 @@ data class Status(
     @Json(name = "edited_at") val editedAt: Date? = null,
     val emojis: List<Emoji>,
     @Json(name = "reblogs_count") val reblogsCount: Int,
-    @Json(name = "favourites_count") val favouritesCount: Int,
+    @Json(name = "likes_count") val likesCount: Int,
     @Json(name = "replies_count") val repliesCount: Int,
     @Json(name = "quotes_count") val quotesCount: Int = 0,
     /** Warpnet view counter, populated by the `tweet_stats` lookup.
@@ -47,7 +47,7 @@ data class Status(
      *  decodes cleanly via Moshi. */
     @Json(name = "views_count") val viewsCount: Int = 0,
     val reblogged: Boolean = false,
-    val favourited: Boolean = false,
+    val liked: Boolean = false,
     val bookmarked: Boolean = false,
     val sensitive: Boolean,
     @Json(name = "spoiler_text") val spoilerText: String,

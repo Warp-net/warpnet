@@ -28,7 +28,7 @@
     <string name="title_posts_pinned">ピン留め</string>
     <string name="title_follows">フォロー</string>
     <string name="title_followers">フォロワー</string>
-    <string name="title_favourites">お気に入り</string>
+    <string name="title_likes">お気に入り</string>
     <string name="title_mutes">ミュートしたユーザー</string>
     <string name="title_blocks">ブロックしたユーザー</string>
     <string name="title_follow_requests">フォローリクエスト</string>
@@ -45,14 +45,14 @@
     <string name="post_content_show_less">閉じる</string>
     <string name="message_empty">何もありません。</string>
     <string name="notification_reblog_format">%1$sさんが投稿をブーストしました</string>
-    <string name="notification_favourite_format">%1$sさんが投稿をお気に入りに登録しました</string>
+    <string name="notification_like_format">%1$sさんが投稿をお気に入りに登録しました</string>
     <string name="notification_follow_format">%1$sさんにフォローされました</string>
     <string name="report_username_format">\@%1$sさんを通報</string>
     <string name="report_comment_hint">コメント</string>
     <string name="action_quick_reply">クイック返信</string>
     <string name="action_reply">返信</string>
     <string name="action_reblog">ブースト</string>
-    <string name="action_favourite">お気に入り</string>
+    <string name="action_like">お気に入り</string>
     <string name="action_more">その他</string>
     <string name="action_compose">投稿する</string>
     <string name="action_login">Warpnet でログイン</string>
@@ -74,7 +74,7 @@
     <string name="action_view_profile">プロフィール</string>
     <string name="action_view_preferences">設定</string>
     <string name="action_view_account_preferences">アカウント設定</string>
-    <string name="action_view_favourites">お気に入り</string>
+    <string name="action_view_likes">お気に入り</string>
     <string name="action_view_mutes">ミュートしたユーザー</string>
     <string name="action_view_blocks">ブロックしたユーザー</string>
     <string name="action_view_follow_requests">フォローリクエスト</string>
@@ -182,8 +182,8 @@
     <string name="notification_follow_description">新しいフォロワーの通知</string>
     <string name="notification_boost_name">ブースト</string>
     <string name="notification_boost_description">あなたの投稿がブーストされたときの通知</string>
-    <string name="notification_favourite_name">お気に入り</string>
-    <string name="notification_favourite_description">あなたの投稿がお気に入りに登録されたときの通知</string>
+    <string name="notification_like_name">お気に入り</string>
+    <string name="notification_like_description">あなたの投稿がお気に入りに登録されたときの通知</string>
     <string name="notification_mention_format">%1$sさんが返信しました</string>
     <string name="notification_summary_large">%1$sさん、%2$sさん、%3$sさんと他%4$d人</string>
     <string name="notification_summary_medium">%1$sさん、%2$sさん、%3$sさん</string>
@@ -283,7 +283,7 @@
         <item quantity="other"><b>%1$s</b> ブースト</item>
     </plurals>
     <string name="title_reblogged_by">ブーストした人物</string>
-    <string name="title_favourited_by">お気に入りした人物</string>
+    <string name="title_liked_by">お気に入りした人物</string>
     <string name="description_visibility_public">公開</string>
     <string name="description_visibility_unlisted">未収載</string>
     <string name="description_visibility_direct">ダイレクト</string>
@@ -291,7 +291,7 @@
     <string name="error_network">ネットワークエラーが発生しました。接続を確認してもう一度試してください。</string>
     <string name="post_username_format">\@%1$s</string>
     <string name="action_unreblog">ブーストを解除</string>
-    <string name="action_unfavourite">お気に入りを解除</string>
+    <string name="action_unlike">お気に入りを解除</string>
     <string name="action_open_reblogged_by">ブーストを表示</string>
     <string name="download_media">メディアをダウンロード</string>
     <string name="downloading_media">メディアをダウンロード中</string>
@@ -432,7 +432,7 @@
     <string name="notification_sign_up_format">%1$sさんがサインアップしました</string>
     <string name="action_add_or_remove_from_list">リストへの追加または削除</string>
     <string name="description_post_language">投稿言語</string>
-    <string name="description_post_favourited">お気に入りに追加しました</string>
+    <string name="description_post_liked">お気に入りに追加しました</string>
     <string name="description_post_bookmarked">ブックマークに追加しました</string>
     <string name="label_duration">期間</string>
     <string name="duration_indefinite">無期限</string>
@@ -490,7 +490,7 @@
     <string name="failed_to_remove_from_list">アカウントのリストからの削除に失敗しました</string>
     <string name="no_announcements">アナウンスはありません。</string>
     <string name="description_post_edited">編集しました</string>
-    <string name="pref_title_confirm_favourites">お気に入りに追加する前に確認を表示する</string>
+    <string name="pref_title_confirm_likes">お気に入りに追加する前に確認を表示する</string>
     <string name="pref_title_hide_top_toolbar">トップバーのタイトルを隠す</string>
     <string name="pref_title_wellbeing_mode">ウェルビーイング</string>
     <string name="account_note_hint">このアカウントに関するプライベートメモ</string>
@@ -580,7 +580,7 @@
     <string name="action_refresh">再読み込み</string>
     <string name="ui_error_reblog">投稿のブーストに失敗しました: %1$s</string>
     <string name="ui_error_clear_notifications">通知の消去に失敗しました: %1$s</string>
-    <string name="ui_error_favourite">投稿のお気に入りに失敗しました: %1$s</string>
+    <string name="ui_error_like">投稿のお気に入りに失敗しました: %1$s</string>
     <string name="ui_error_bookmark">投稿のブックマークに失敗しました: %1$s</string>
     <string name="ui_success_rejected_follow_request">フォローリクエストがブロックされました</string>
     <string name="ui_success_accepted_follow_request">フォローリクエストが許可されました</string>

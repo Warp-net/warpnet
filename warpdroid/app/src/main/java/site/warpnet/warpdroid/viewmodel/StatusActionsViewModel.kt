@@ -137,18 +137,18 @@ abstract class StatusActionsViewModel(
         }
     }
 
-    fun favorite(statusId: String, favourite: Boolean) {
+    fun like(statusId: String, like: Boolean) {
         viewModelScope.launch {
-            if (favourite) {
-                warpnetApi.favouriteStatus(statusId)
+            if (like) {
+                warpnetApi.likeStatus(statusId)
             } else {
-                warpnetApi.unfavouriteStatus(statusId)
+                warpnetApi.unlikeStatus(statusId)
             }.fold(
                 onSuccess = { status ->
                     eventHub.dispatch(StatusChangedEvent(status))
                 },
                 onFailure = { e ->
-                    Log.w(TAG, "Failed to favorite", e)
+                    Log.w(TAG, "Failed to like", e)
                 }
             )
         }

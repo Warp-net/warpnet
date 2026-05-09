@@ -427,7 +427,7 @@ class NetworkTimelineViewModel @Inject constructor(
                 pinned = null
             )
 
-            Kind.FAVOURITES -> api.favourites(
+            Kind.LIKES -> api.likes(
                 maxId = maxId,
                 minId = minId,
                 sinceId = sinceId,

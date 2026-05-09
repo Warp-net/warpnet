@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">已置顶</string>
     <string name="title_follows">正在关注</string>
     <string name="title_followers">关注者</string>
-    <string name="title_favourites">收藏</string>
+    <string name="title_likes">收藏</string>
     <string name="title_mutes">被隐藏的用户</string>
     <string name="title_blocks">被屏蔽的用户</string>
     <string name="title_follow_requests">关注请求</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">折叠</string>
     <string name="message_empty">还没有内容。</string>
     <string name="notification_reblog_format">%1$s 转嘟了你的嘟文</string>
-    <string name="notification_favourite_format">%1$s 喜欢了你的嘟文</string>
+    <string name="notification_like_format">%1$s 喜欢了你的嘟文</string>
     <string name="notification_follow_format">%1$s 关注了你</string>
     <string name="report_username_format">举报 @%1$s</string>
     <string name="report_comment_hint">报告更多信息？</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">回复</string>
     <string name="action_reblog">转嘟</string>
     <string name="action_unreblog">取消转嘟</string>
-    <string name="action_favourite">喜欢</string>
-    <string name="action_unfavourite">取消喜欢</string>
+    <string name="action_like">喜欢</string>
+    <string name="action_unlike">取消喜欢</string>
     <string name="action_more">更多</string>
     <string name="action_compose">发表嘟文</string>
     <string name="action_login">用 Warpnet 登录</string>
@@ -78,7 +78,7 @@
     <string name="action_view_profile">个人资料</string>
     <string name="action_view_preferences">设置</string>
     <string name="action_view_account_preferences">账户设置</string>
-    <string name="action_view_favourites">喜欢</string>
+    <string name="action_view_likes">喜欢</string>
     <string name="action_view_mutes">被隐藏的用户</string>
     <string name="action_view_blocks">被屏蔽的用户</string>
     <string name="action_view_follow_requests">关注请求</string>
@@ -195,8 +195,8 @@
     <string name="notification_follow_description">当有用户关注我时</string>
     <string name="notification_boost_name">转嘟</string>
     <string name="notification_boost_description">当我的嘟文被转发时通知</string>
-    <string name="notification_favourite_name">喜欢</string>
-    <string name="notification_favourite_description">当有用户喜欢了我的嘟文时</string>
+    <string name="notification_like_name">喜欢</string>
+    <string name="notification_like_description">当有用户喜欢了我的嘟文时</string>
     <string name="notification_poll_name">投票结果</string>
     <string name="notification_poll_description">当我参与的投票结束时</string>
     <string name="notification_mention_format">%1$s 提及了你</string>
@@ -308,7 +308,7 @@
         <item quantity="other">%1$s 次转嘟</item>
     </plurals>
     <string name="title_reblogged_by">转嘟</string>
-    <string name="title_favourited_by">喜欢</string>
+    <string name="title_liked_by">喜欢</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s 和 %2$s</string>
     <string name="conversation_more_recipients">%1$s，%2$s 和 %3$d 等人</string>
@@ -316,7 +316,7 @@
     <string name="description_post_cw">内容警告：%1$s</string>
     <string name="description_post_media_no_description_placeholder">没有描述信息</string>
     <string name="description_post_reblogged">被转嘟</string>
-    <string name="description_post_favourited">被喜欢</string>
+    <string name="description_post_liked">被喜欢</string>
     <string name="description_visibility_public">公开</string>
     <string name="description_visibility_unlisted">不公开</string>
     <string name="description_visibility_private">仅关注者</string>
@@ -460,7 +460,7 @@
     <string name="follow_requests_info">即使你的账号未上锁，但 %1$s 的管理员认为你可能需要手动处理这些账号的关注请求。</string>
     <string name="dialog_delete_conversation_warning">删除此对话吗？</string>
     <string name="action_delete_conversation">删除对话</string>
-    <string name="pref_title_confirm_favourites">收藏前提示确认</string>
+    <string name="pref_title_confirm_likes">收藏前提示确认</string>
     <string name="action_unbookmark">删除书签</string>
     <string name="duration_30_days">30 天</string>
     <string name="duration_60_days">60 天</string>
@@ -570,7 +570,7 @@
     <string name="ui_error_unknown">未知原因</string>
     <string name="ui_error_clear_notifications">未能清除通知：%1$s</string>
     <string name="ui_error_bookmark">未能将嘟文将入书签：%1$s</string>
-    <string name="ui_error_favourite">收藏嘟文失败：%1$s</string>
+    <string name="ui_error_like">收藏嘟文失败：%1$s</string>
     <string name="ui_error_reblog">转发嘟文失败：%1$s</string>
     <string name="ui_error_vote">投票失败：%1$s</string>
     <string name="ui_error_accept_follow_request">未能接受关注请求：%1$s</string>
@@ -742,7 +742,7 @@
     <string name="reblog_privacy_unlisted_description">和“公开”一样，区别是永远不会显示在公共时间线中</string>
     <string name="reblog_privacy_followers_only_description">只有你的关注者可以看到你的转嘟</string>
     <string name="reblog_confirm">转发此嘟文？</string>
-    <string name="favourite_confirm">收藏此嘟文？</string>
+    <string name="like_confirm">收藏此嘟文？</string>
     <string name="confirm_dismiss_poll">放弃投票更改？</string>
     <string name="edit_image_rotate">旋转</string>
     <string name="edit_image_flip">翻转</string>

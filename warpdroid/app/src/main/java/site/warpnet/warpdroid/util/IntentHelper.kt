@@ -74,7 +74,7 @@ fun Context.viewMedia(index: Int, attachments: List<AttachmentViewData>) {
 }
 
 fun Context.showFavs(viewData: StatusViewData.Concrete) {
-    val intent = AccountListActivity.newIntent(this, AccountListActivity.Type.FAVOURITED, viewData.actionableId)
+    val intent = AccountListActivity.newIntent(this, AccountListActivity.Type.LIKED, viewData.actionableId)
     startActivityWithSlideInAnimation(intent)
 }
 

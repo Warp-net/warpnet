@@ -65,7 +65,7 @@
     <string name="description_visibility_unlisted">ไม่อยู่ในรายการ</string>
     <string name="description_visibility_public">สาธารณะ</string>
     <string name="description_post_bookmarked">คั่นหน้า</string>
-    <string name="description_post_favourited">ชื่นชอบ</string>
+    <string name="description_post_liked">ชื่นชอบ</string>
     <string name="description_post_reblogged">ได้ถูกเขียนใหม่</string>
     <string name="description_post_media_no_description_placeholder">ไม่มีคำอธิบาย</string>
     <string name="description_post_cw">เตือนเนื้อหา : %1$s</string>
@@ -73,7 +73,7 @@
     <string name="conversation_more_recipients">%1$s, %2$s และอีก %3$d</string>
     <string name="conversation_2_recipients">%1$s และ %2$s</string>
     <string name="conversation_1_recipients">%1$s</string>
-    <string name="title_favourited_by">ชื่นชอบโดย</string>
+    <string name="title_liked_by">ชื่นชอบโดย</string>
     <string name="title_reblogged_by">บูสต์โดย</string>
     <plurals name="reblogs">
         <item quantity="other"><b>%1$s</b> บูสต์</item>
@@ -179,8 +179,8 @@
     <string name="notification_mention_format">%1$s ตอบกลับคุณ</string>
     <string name="notification_poll_description">การแจ้งเตือนเมื่อโพลได้สิ้นสุดลงแล้ว</string>
     <string name="notification_poll_name">โพล</string>
-    <string name="notification_favourite_description">การแจ้งเตือนเมื่อ Toot คุณถูกชื่นชอบ</string>
-    <string name="notification_favourite_name">ชื่นชอบ</string>
+    <string name="notification_like_description">การแจ้งเตือนเมื่อ Toot คุณถูกชื่นชอบ</string>
+    <string name="notification_like_name">ชื่นชอบ</string>
     <string name="notification_boost_description">การแจ้งเตือนเมื่อ Toot คุณถูกบูสต์</string>
     <string name="notification_boost_name">บูสต์</string>
     <string name="notification_follow_request_description">การแจ้งเตือนคำขอติดตามใหม่</string>
@@ -311,7 +311,7 @@
     <string name="action_view_blocks">ผู้ใช้ที่ถูกบล็อกไว้</string>
     <string name="action_view_mutes">ผู้ใช้ที่ปิดเสียงไว้</string>
     <string name="action_view_bookmarks">ที่คั่นหน้า</string>
-    <string name="action_view_favourites">ชื่นชอบ</string>
+    <string name="action_view_likes">ชื่นชอบ</string>
     <string name="action_view_profile">โปรไฟล์</string>
     <string name="action_close">ปิด</string>
     <string name="action_retry">ลองอีกครั้ง</string>
@@ -330,9 +330,9 @@
     <string name="action_logout_confirm">คุณต้องการออกจากระบบของบัญชี %1$s หรือไม่?</string>
     <string name="action_compose">เขียนโพสต์ใหม่</string>
     <string name="action_more">อื่น ๆ</string>
-    <string name="action_unfavourite">เลิกชื่นชอบ</string>
+    <string name="action_unlike">เลิกชื่นชอบ</string>
     <string name="action_bookmark">คั่นหน้า</string>
-    <string name="action_favourite">ชื่นชอบ</string>
+    <string name="action_like">ชื่นชอบ</string>
     <string name="action_unreblog">ลบการดัน</string>
     <string name="action_reblog">ดัน</string>
     <string name="action_reply">ตอบกลับ</string>
@@ -341,7 +341,7 @@
     <string name="report_username_format">รายงาน @%1$s</string>
     <string name="notification_follow_request_format">%1$s ต้องการติดตามคุณ</string>
     <string name="notification_follow_format">%1$s ได้ติดตามคุณ</string>
-    <string name="notification_favourite_format">%1$s ได้ชื่นชอบโพสต์ของคุณ</string>
+    <string name="notification_like_format">%1$s ได้ชื่นชอบโพสต์ของคุณ</string>
     <string name="notification_reblog_format">%1$s ได้ดันโพสต์ของคุณ</string>
     <string name="message_empty">ไม่มีอะไรที่นี่</string>
     <string name="post_content_show_less">ย่อ</string>
@@ -399,7 +399,7 @@
     <string name="action_view_preferences">การกำหนดลักษณะ</string>
     <string name="action_logout">ออกจากระบบ</string>
     <string name="title_drafts">ฉบับร่าง</string>
-    <string name="title_favourites">ชื่นชอบ</string>
+    <string name="title_likes">ชื่นชอบ</string>
     <string name="error_failed_app_registration">การยืนยันตัวตนกับเซิร์ฟเวอร์นั้นล้มเหลว</string>
     <string name="link_whats_an_instance">Instance คือ?</string>
     <string name="action_login">เข้าสู่ระบบด้วย Warpnet</string>

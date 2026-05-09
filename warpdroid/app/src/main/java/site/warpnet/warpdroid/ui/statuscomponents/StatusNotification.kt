@@ -66,7 +66,7 @@ import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 
 /**
- * Notification when someone favourited or boosted a post
+ * Notification when someone liked or boosted a post
  */
 @Composable
 fun StatusNotification(
@@ -297,7 +297,7 @@ fun StatusNotificationPreview() {
         StatusNotification(
             notificationViewData = NotificationViewData.Concrete(
                 id = "1",
-                type = Notification.Type.Favourite,
+                type = Notification.Type.Like,
                 account = fakeTimelineAccount,
                 statusViewData = fakeStatusViewData(),
                 report = null,

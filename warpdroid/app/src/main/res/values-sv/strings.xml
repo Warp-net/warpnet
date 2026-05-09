@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Fastnålade</string>
     <string name="title_follows">Följer</string>
     <string name="title_followers">Följare</string>
-    <string name="title_favourites">Favoriter</string>
+    <string name="title_likes">Liker</string>
     <string name="title_mutes">Tystade användare</string>
     <string name="title_blocks">Blockerade användare</string>
     <string name="title_follow_requests">Följarförfrågningar</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">Dölj</string>
     <string name="message_empty">Ingenting här.</string>
     <string name="notification_reblog_format">%1$s puffade ditt inlägg</string>
-    <string name="notification_favourite_format">%1$s favoritmarkerade ditt inlägg</string>
+    <string name="notification_like_format">%1$s favoritmarkerade ditt inlägg</string>
     <string name="notification_follow_format">%1$s följer dig</string>
     <string name="report_username_format">Rapportera @%1$s</string>
     <string name="report_comment_hint">Ytterligare kommentarer?</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">Svara</string>
     <string name="action_reblog">Knuffa</string>
     <string name="action_unreblog">Ta bort knuff</string>
-    <string name="action_favourite">Favorit</string>
-    <string name="action_unfavourite">Ta bort favorit</string>
+    <string name="action_like">Favorit</string>
+    <string name="action_unlike">Ta bort favorit</string>
     <string name="action_more">Mer</string>
     <string name="action_compose">Skriv</string>
     <string name="action_login">Logga in med Warpnet</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Inställningar</string>
     <string name="action_view_account_preferences">Kontospecifika inställningar</string>
-    <string name="action_view_favourites">Favoriter</string>
+    <string name="action_view_likes">Liker</string>
     <string name="action_view_mutes">Tystade användare</string>
     <string name="action_view_blocks">Blockerade användare</string>
     <string name="action_view_follow_requests">Följarförfrågningar</string>
@@ -105,7 +105,7 @@
     <string name="action_add_tab">Lägg till flik</string>
     <string name="action_open_reblogger">Öppna knuff författare</string>
     <string name="action_open_reblogged_by">Visa knuffar</string>
-    <string name="action_open_faved_by">Visa favoriter</string>
+    <string name="action_open_faved_by">Visa liker</string>
     <string name="title_hashtags_dialog">Hashtaggar</string>
     <string name="title_mentions_dialog">Omnämnanden</string>
     <string name="title_links_dialog">Länkar</string>
@@ -191,8 +191,8 @@
     <string name="notification_follow_description">Aviseringar på nya följare</string>
     <string name="notification_boost_name">Knuffar</string>
     <string name="notification_boost_description">Aviseringar när dina inlägg blir puffade</string>
-    <string name="notification_favourite_name">Favoriter</string>
-    <string name="notification_favourite_description">Aviseringar när dina inlägg blir favoritmarkerade</string>
+    <string name="notification_like_name">Liker</string>
+    <string name="notification_like_description">Aviseringar när dina inlägg blir favoritmarkerade</string>
     <string name="notification_mention_format">%1$s omnämnde dig</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s och %4$d andra</string>
     <string name="notification_summary_medium">%1$s, %2$s, och %3$s</string>
@@ -297,14 +297,14 @@
     <string name="pin_action">Nåla fast</string>
     <plurals name="favs">
         <item quantity="one"><b>%1$s</b> Favorit</item>
-        <item quantity="other"><b>%1$s</b> Favoriter</item>
+        <item quantity="other"><b>%1$s</b> Liker</item>
     </plurals>
     <plurals name="reblogs">
         <item quantity="one"><b>%1$s</b> Knuff</item>
         <item quantity="other"><b>%1$s</b> Knuffar</item>
     </plurals>
     <string name="title_reblogged_by">Knuffad av</string>
-    <string name="title_favourited_by">Favoritmarkerad av</string>
+    <string name="title_liked_by">Favoritmarkerad av</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s och %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s och %3$d mer</string>
@@ -312,7 +312,7 @@
     <string name="description_post_cw">Innehållsvarning: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Ingen beskrivning</string>
     <string name="description_post_reblogged">Knuffad</string>
-    <string name="description_post_favourited">Favoritmarkerat</string>
+    <string name="description_post_liked">Favoritmarkerat</string>
     <string name="description_visibility_public">Publik</string>
     <string name="description_visibility_unlisted">Olistad</string>
     <string name="description_visibility_private">Följare</string>
@@ -478,7 +478,7 @@
     <string name="duration_90_days">90 dagar</string>
     <string name="duration_no_change">(Ingen ändring)</string>
     <string name="pref_title_show_self_username">Visa användarnamn i verktygsrader</string>
-    <string name="pref_title_confirm_favourites">Visa bekräftelse före favoritmarkering</string>
+    <string name="pref_title_confirm_likes">Visa bekräftelse före favoritmarkering</string>
     <string name="dialog_delete_list_warning">Vill du verkligen radera listan %1$s?</string>
     <string name="drafts_post_failed_to_send">Det här inlägget kunde inte skickas!</string>
     <string name="drafts_failed_loading_reply">Kunde inte ladda information om svar</string>
@@ -608,7 +608,7 @@
     <string name="pref_title_reading_order">Läsordning</string>
     <string name="ui_error_bookmark">Att bokmärka inlägg misslyckades: %1$s</string>
     <string name="ui_error_clear_notifications">Rensing av aviseringar misslyckades: %1$s</string>
-    <string name="ui_error_favourite">Att favoritmarkera inlägg misslyckades: %1$s</string>
+    <string name="ui_error_like">Att favoritmarkera inlägg misslyckades: %1$s</string>
     <string name="ui_error_reject_follow_request">Avacceptera följarförgrågan misslyckades: %1$s</string>
     <string name="label_filter_context">Filtrera sammanhang</string>
     <string name="title_public_trending_hashtags">Populära hashtaggar</string>

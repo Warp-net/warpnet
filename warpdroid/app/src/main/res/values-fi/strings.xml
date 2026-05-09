@@ -132,7 +132,7 @@
     <string name="action_share">Jaa</string>
     <string name="action_view_media">Media</string>
     <string name="action_view_bookmarks">Kirjanmerkit</string>
-    <string name="action_view_favourites">Suosikit</string>
+    <string name="action_view_likes">Suosikit</string>
     <string name="action_view_preferences">Asetukset</string>
     <string name="action_view_profile">Profiili</string>
     <string name="action_close">Sulje</string>
@@ -152,7 +152,7 @@
     <string name="post_username_format">\@%1$s</string>
     <string name="title_licenses">Lisenssit</string>
     <string name="title_drafts">Luonnokset</string>
-    <string name="title_favourites">Suosikit</string>
+    <string name="title_likes">Suosikit</string>
     <string name="title_bookmarks">Kirjanmerkit</string>
     <string name="title_followers">Seuraajat</string>
     <string name="title_follows">Seurataan</string>
@@ -162,7 +162,7 @@
     <string name="title_public_local">Paikallinen</string>
     <string name="title_notifications">Ilmoitukset</string>
     <string name="title_home">Koti</string>
-    <string name="action_unfavourite">Poista suosikki</string>
+    <string name="action_unlike">Poista suosikki</string>
     <string name="action_open_reblogger">Avaa jakajan tili</string>
     <string name="action_edit_image">Muokkaa kuvaa</string>
     <string name="action_view_mutes">Mykistetyt tilit</string>
@@ -203,7 +203,7 @@
     <string name="action_mute_domain">Mykistä %1$s</string>
     <string name="action_add_to_list">Lisää tili listalle</string>
     <string name="action_view_domain_mutes">Piilotetut verkkonimet</string>
-    <string name="notification_favourite_format">%1$s lisäsi julkaisusi suosikkeihinsa</string>
+    <string name="notification_like_format">%1$s lisäsi julkaisusi suosikkeihinsa</string>
     <string name="action_open_reblogged_by">Näytä jaot</string>
     <string name="action_show_reblogs">Näytä jaetut julkaisut</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s ja %4$d muuta</string>
@@ -223,7 +223,7 @@
     <string name="error_empty">Tätä kenttää ei voi jättää tyhjäksi.</string>
     <string name="title_announcements">Tiedotukset</string>
     <string name="notification_subscription_description">Ilmoitukset seuraamiesi uusista julkaisuista</string>
-    <string name="action_favourite">Lisää suosikiksi</string>
+    <string name="action_like">Lisää suosikiksi</string>
     <string name="error_media_download_permission">Tiedostojen tallentamiseen vaaditaan kirjoitusoikeus.</string>
     <string name="notification_summary_small">%1$s ja %2$s</string>
     <string name="error_invalid_domain">Syöttämäsi verkkonimi on virheellinen</string>
@@ -263,7 +263,7 @@
     <string name="pref_show_self_username_always">Aina</string>
     <string name="pref_show_self_username_never">Ei koskaan</string>
     <string name="notification_boost_name">Buustaukset</string>
-    <string name="notification_favourite_name">Suosikit</string>
+    <string name="notification_like_name">Suosikit</string>
     <string name="notification_poll_name">Äänestykset</string>
     <string name="notification_poll_description">Ilmoitukset päättyneistä äänestyksistä</string>
     <string name="filter_edit_title">Muokkaa suodatinta</string>
@@ -367,7 +367,7 @@
     <string name="notification_follow_request_description">Ilmoitukset seuraamispyynnöistä</string>
     <string name="notification_follow_description">Ilmoitukset uusista seuraajista</string>
     <string name="notification_boost_description">Ilmoitukset sinun julkaisujen buustauksista</string>
-    <string name="notification_favourite_description">Ilmoitukset kun sinun julkaisut merkitään suosikiksi</string>
+    <string name="notification_like_description">Ilmoitukset kun sinun julkaisut merkitään suosikiksi</string>
     <string name="notification_listenable_worker_description">Ilmoitukset kun Warpnet toimii taustassa</string>
     <string name="notification_notification_worker">Noudetaan ilmoituksia…</string>
     <string name="notification_prune_cache">Välimuistin ylläpito…</string>

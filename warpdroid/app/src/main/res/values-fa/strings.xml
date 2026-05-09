@@ -25,7 +25,7 @@
     <string name="title_posts_with_replies">با پاسخ‌</string>
     <string name="title_follows">دنبال شونده</string>
     <string name="title_followers">پی‌گیر</string>
-    <string name="title_favourites">برگزیده‌ها</string>
+    <string name="title_likes">برگزیده‌ها</string>
     <string name="title_mutes">کاربران خموش</string>
     <string name="title_blocks">کاربران مسدود</string>
     <string name="title_follow_requests">درخواست‌های پی‌گیری</string>
@@ -41,14 +41,14 @@
     <string name="post_content_show_more">گسترش</string>
     <string name="post_content_show_less">جمع کردن</string>
     <string name="notification_reblog_format">%1$s فرسته‌تان را تقویت کرد</string>
-    <string name="notification_favourite_format">%1$s فرسته‌تان را برگزید</string>
+    <string name="notification_like_format">%1$s فرسته‌تان را برگزید</string>
     <string name="notification_follow_format">%1$s پی‌گیرتان شد</string>
     <string name="report_username_format">گزارش @%1$s</string>
     <string name="report_comment_hint">نظرهای اضافی؟</string>
     <string name="action_quick_reply">پاسخ سریع</string>
     <string name="action_reply">پاسخ</string>
     <string name="action_reblog">تقویت</string>
-    <string name="action_favourite">برگزیدن</string>
+    <string name="action_like">برگزیدن</string>
     <string name="action_more">بیش‌تر</string>
     <string name="action_compose">ایجاد</string>
     <string name="action_login">ورود با تاسکی</string>
@@ -68,7 +68,7 @@
     <string name="action_view_profile">نمایه</string>
     <string name="action_view_preferences">ترجیحات</string>
     <string name="action_view_account_preferences">ترجیحات حساب</string>
-    <string name="action_view_favourites">برگزیده‌ها</string>
+    <string name="action_view_likes">برگزیده‌ها</string>
     <string name="action_view_mutes">کاربران خموش</string>
     <string name="action_view_blocks">کاربران مسدود</string>
     <string name="action_view_follow_requests">درخواست‌های پی‌گیری</string>
@@ -169,8 +169,8 @@
     <string name="notification_follow_description">آگاهی‌ها دربارهٔ پی‌گیران جدید</string>
     <string name="notification_boost_name">تقویت‌ها</string>
     <string name="notification_boost_description">آگاهی‌ها هنگام تقویت فرسته‌هایتان</string>
-    <string name="notification_favourite_name">برگزیدن‌ها</string>
-    <string name="notification_favourite_description">آگاهی‌ها هنگام برگزیده شدن فرسته‌هایتان</string>
+    <string name="notification_like_name">برگزیدن‌ها</string>
+    <string name="notification_like_description">آگاهی‌ها هنگام برگزیده شدن فرسته‌هایتان</string>
     <string name="notification_mention_format">%1$s به شما اشاره کرد</string>
     <string name="notification_summary_large">%1$s، %2$s، %3$s و %4$d دیگر</string>
     <string name="notification_summary_medium">%1$s، %2$s و %3$s</string>
@@ -257,7 +257,7 @@
     <string name="post_username_format">\@%1$s</string>
     <string name="message_empty">این‌جا هیچ‌چیزی نیست.</string>
     <string name="action_unreblog">برداشتن تقویت</string>
-    <string name="action_unfavourite">برداشتن برگزیدگی</string>
+    <string name="action_unlike">برداشتن برگزیدگی</string>
     <string name="action_delete_and_redraft">حذف و بازنویسی</string>
     <string name="action_view_domain_mutes">دامنه‌های نهفته</string>
     <string name="action_add_poll">افزودن نظرسنجی</string>
@@ -319,7 +319,7 @@
         <item quantity="other">%1$s تقویت</item>
     </plurals>
     <string name="title_reblogged_by">تقویت‌شده به دست</string>
-    <string name="title_favourited_by">برگزیده به دست</string>
+    <string name="title_liked_by">برگزیده به دست</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s و %2$s</string>
     <string name="conversation_more_recipients">%1$s، %2$s و %3$d بیش‌تر</string>
@@ -327,7 +327,7 @@
     <string name="description_post_cw">هشدار محتوا: %1$s</string>
     <string name="description_post_media_no_description_placeholder">بدون شرح</string>
     <string name="description_post_reblogged">تقویت شده</string>
-    <string name="description_post_favourited">برگزیده</string>
+    <string name="description_post_liked">برگزیده</string>
     <string name="description_visibility_public">عمومی</string>
     <string name="description_visibility_unlisted">سیاهه نشده</string>
     <string name="description_visibility_private">پی‌گیران</string>
@@ -470,7 +470,7 @@
     <string name="account_date_joined">در %1$s پیوست</string>
     <string name="title_login">ورود</string>
     <string name="notification_sign_up_format">%1$s ثبت‌نام کرد</string>
-    <string name="pref_title_confirm_favourites">نمایش تأیید پیش از برگزیدن</string>
+    <string name="pref_title_confirm_likes">نمایش تأیید پیش از برگزیدن</string>
     <string name="tusky_compose_post_quicksetting_label">ایجاد فرسته</string>
     <string name="notification_update_description">آگاهی‌ها هنگام ویرایش فرسته‌هایی که با آن‌ها تعامل داشته‌اید</string>
     <string name="action_unbookmark">برداشن نشانک</string>
@@ -579,7 +579,7 @@
     <string name="ui_error_unknown">دلیل نامعلوم</string>
     <string name="ui_error_bookmark">نشانک گذاری فرسته شکست خورد: %1$s</string>
     <string name="ui_error_clear_notifications">پاک سازی آگاهی‌ها شکست خورد: %1$s</string>
-    <string name="ui_error_favourite">برگزیدن فرسته شکست خورد: %1$s</string>
+    <string name="ui_error_like">برگزیدن فرسته شکست خورد: %1$s</string>
     <string name="ui_error_vote">رأی دادن در نظرسنجی شکست خورد: %1$s</string>
     <string name="ui_error_accept_follow_request">پذیرش درخواست پی‌گیری شکست خورد: %1$s</string>
     <string name="ui_success_accepted_follow_request">درخواست پی‌گیری پذیرفته شد</string>
@@ -751,7 +751,7 @@
     <string name="filter_description_blur">نهفتن رسانه با هشدار</string>
     <string name="reblog_privacy_followers_only_description">فقط پی‌گیرانتان می‌توانند تقویتتان را ببینند</string>
     <string name="reblog_confirm">تقویت این فرسته؟</string>
-    <string name="favourite_confirm">برگزیدن این فرسته؟</string>
+    <string name="like_confirm">برگزیدن این فرسته؟</string>
     <string name="reblog_privacy_public_description">همه می‌توانند تقویتتان را ببینند</string>
     <string name="reblog_privacy_unlisted_description">همانند عمومی ولی هرگز در خط‌های زمانی عمومی نشان داده نخواهد شد</string>
     <string name="confirm_dismiss_poll">دور انداختن تغییرات نظرسنجی؟</string>

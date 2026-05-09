@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">已置顶</string>
     <string name="title_follows">正在关注</string>
     <string name="title_followers">关注者</string>
-    <string name="title_favourites">喜欢</string>
+    <string name="title_likes">喜欢</string>
     <string name="title_mutes">被隐藏的用户</string>
     <string name="title_blocks">被屏蔽的用户</string>
     <string name="title_follow_requests">关注请求</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">折叠</string>
     <string name="message_empty">还没有内容</string>
     <string name="notification_reblog_format">%1$s 转嘟了你的嘟文</string>
-    <string name="notification_favourite_format">%1$s 喜欢了你的嘟文</string>
+    <string name="notification_like_format">%1$s 喜欢了你的嘟文</string>
     <string name="notification_follow_format">%1$s 关注了你</string>
     <string name="report_username_format">报告用户 @%1$s 的滥用行为</string>
     <string name="report_comment_hint">报告更多信息</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">回复</string>
     <string name="action_reblog">转嘟</string>
     <string name="action_unreblog">取消转嘟</string>
-    <string name="action_favourite">喜欢</string>
-    <string name="action_unfavourite">取消喜欢</string>
+    <string name="action_like">喜欢</string>
+    <string name="action_unlike">取消喜欢</string>
     <string name="action_more">更多</string>
     <string name="action_compose">新嘟文</string>
     <string name="action_login">登录 Warpnet 账号</string>
@@ -78,7 +78,7 @@
     <string name="action_view_profile">个人资料</string>
     <string name="action_view_preferences">设置</string>
     <string name="action_view_account_preferences">账户设置</string>
-    <string name="action_view_favourites">喜欢</string>
+    <string name="action_view_likes">喜欢</string>
     <string name="action_view_mutes">被隐藏的用户</string>
     <string name="action_view_blocks">被屏蔽的用户</string>
     <string name="action_view_follow_requests">关注请求</string>
@@ -195,8 +195,8 @@
     <string name="notification_follow_description">当有用户关注我时</string>
     <string name="notification_boost_name">转嘟</string>
     <string name="notification_boost_description">当有用户转嘟了我的嘟文时</string>
-    <string name="notification_favourite_name">喜欢</string>
-    <string name="notification_favourite_description">当有用户喜欢了我的嘟文时</string>
+    <string name="notification_like_name">喜欢</string>
+    <string name="notification_like_description">当有用户喜欢了我的嘟文时</string>
     <string name="notification_poll_name">投票</string>
     <string name="notification_poll_description">当我参与的投票结束时</string>
     <string name="notification_mention_format">%1$s 提及了你</string>
@@ -308,7 +308,7 @@
         <item quantity="other"><b>%1$s</b> 次转嘟</item>
     </plurals>
     <string name="title_reblogged_by">转嘟</string>
-    <string name="title_favourited_by">喜欢</string>
+    <string name="title_liked_by">喜欢</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s 和 %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s 和 %3$d 等人</string>
@@ -316,7 +316,7 @@
     <string name="description_post_cw">内容提醒: %1$s</string>
     <string name="description_post_media_no_description_placeholder">没有媒体描述信息</string>
     <string name="description_post_reblogged">被转嘟</string>
-    <string name="description_post_favourited">被喜欢</string>
+    <string name="description_post_liked">被喜欢</string>
     <string name="description_visibility_public">公开</string>
     <string name="description_visibility_unlisted">不公开</string>
     <string name="description_visibility_private">关注者</string>

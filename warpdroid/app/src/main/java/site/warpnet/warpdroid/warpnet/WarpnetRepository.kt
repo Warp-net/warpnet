@@ -165,7 +165,7 @@ class WarpnetRepository @Inject constructor(
         val base = tweet.toStatus(author = runCatching { getUser(tweet.userId) }.getOrNull())
         val stats = runCatching { getTweetStats(tweetId = tweet.id, userId = userId) }.getOrNull()
         return if (stats == null) base else base.copy(
-            favouritesCount = stats.likesCount.clampToInt(),
+            likesCount = stats.likesCount.clampToInt(),
             reblogsCount = stats.retweetsCount.clampToInt(),
             repliesCount = stats.repliesCount.clampToInt(),
             viewsCount = stats.viewsCount.clampToInt(),
@@ -254,7 +254,7 @@ class WarpnetRepository @Inject constructor(
     // Likes
     // -----------------------------------------------------------------
 
-    suspend fun favouriteStatus(tweetId: String, userId: String): Long {
+    suspend fun likeStatus(tweetId: String, userId: String): Long {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_LIKE,
             likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId)),
@@ -262,7 +262,7 @@ class WarpnetRepository @Inject constructor(
         return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
     }
 
-    suspend fun unfavouriteStatus(tweetId: String, userId: String): Long {
+    suspend fun unlikeStatus(tweetId: String, userId: String): Long {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_UNLIKE,
             likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId)),
@@ -465,7 +465,7 @@ class WarpnetRepository @Inject constructor(
             val base = t.toStatus(resolveUser(t.userId, cache))
             val s = stats[t.id]?.await() ?: return@map base
             base.copy(
-                favouritesCount = s.likesCount.clampToInt(),
+                likesCount = s.likesCount.clampToInt(),
                 reblogsCount = s.retweetsCount.clampToInt(),
                 repliesCount = s.repliesCount.clampToInt(),
                 viewsCount = s.viewsCount.clampToInt(),

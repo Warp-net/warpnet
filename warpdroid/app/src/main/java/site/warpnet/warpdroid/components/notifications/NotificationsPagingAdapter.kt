@@ -101,7 +101,7 @@ class NotificationsPagingAdapter(
                         VIEW_TYPE_STATUS
                     }
                     Notification.Type.PleromaEmojiReaction,
-                    Notification.Type.Favourite,
+                    Notification.Type.Like,
                     Notification.Type.Reblog -> VIEW_TYPE_STATUS_NOTIFICATION
                     Notification.Type.Follow,
                     Notification.Type.SignUp -> VIEW_TYPE_FOLLOW

@@ -313,7 +313,7 @@ private fun DetailedStatistics(
                 }
         )
         Text(
-            text = getMetaDataText(R.plurals.favs, statusViewData.status.favouritesCount),
+            text = getMetaDataText(R.plurals.favs, statusViewData.status.likesCount),
             style = LocalPreferences.current.statusTextStyles.medium,
             color = warpdroidColors.tertiaryTextColor,
             modifier = Modifier

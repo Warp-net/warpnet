@@ -60,7 +60,7 @@ import site.warpnet.warpdroid.util.viewMedia
 import site.warpnet.warpdroid.util.viewTag
 import site.warpnet.warpdroid.util.viewThread
 import site.warpnet.warpdroid.util.visible
-import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmFavourite
+import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmReblog
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
 import site.warpnet.warpdroid.viewdata.NotificationViewData
@@ -206,18 +206,18 @@ class NotificationRequestDetailsFragment :
         }
     }
 
-    override fun onFavourite(
+    override fun onLike(
         viewData: StatusViewData.Concrete,
-        favourite: Boolean,
+        like: Boolean,
         state: SparkButtonState?
     ) {
-        if (favourite) {
-            confirmFavourite(preferences) {
-                viewModel.favorite(viewData.id, true)
+        if (like) {
+            confirmLike(preferences) {
+                viewModel.like(viewData.id, true)
                 state?.animate()
             }
         } else {
-            viewModel.favorite(viewData.id, false)
+            viewModel.like(viewData.id, false)
         }
     }
 

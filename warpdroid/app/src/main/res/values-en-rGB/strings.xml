@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="report_description_remote_instance">The account is from another server. Send an anonymised copy of the report there as well?</string>
-    <string name="description_post_favourited">Favourited</string>
-    <string name="title_favourited_by">Favourited by</string>
+    <string name="description_post_liked">Liked</string>
+    <string name="title_liked_by">Liked by</string>
     <plurals name="favs">
-        <item quantity="one"><b>%1$s</b> Favourite</item>
-        <item quantity="other"><b>%1$s</b> Favourites</item>
+        <item quantity="one"><b>%1$s</b> Like</item>
+        <item quantity="other"><b>%1$s</b> Likes</item>
     </plurals>
-    <string name="notification_favourite_description">Notifications when your posts get marked as favourite</string>
-    <string name="notification_favourite_name">Favourites</string>
-    <string name="action_open_faved_by">Show favourites</string>
-    <string name="action_view_favourites">Favourites</string>
-    <string name="action_unfavourite">Remove favourite</string>
-    <string name="action_favourite">Favourite</string>
-    <string name="notification_favourite_format">%1$s favourited your post</string>
-    <string name="title_favourites">Favourites</string>
+    <string name="notification_like_description">Notifications when your posts get marked as like</string>
+    <string name="notification_like_name">Likes</string>
+    <string name="action_open_faved_by">Show likes</string>
+    <string name="action_view_likes">Likes</string>
+    <string name="action_unlike">Remove like</string>
+    <string name="action_like">Like</string>
+    <string name="notification_like_format">%1$s liked your post</string>
+    <string name="title_likes">Likes</string>
     <string name="error_authorization_denied">Authorisation was denied. If you\'re sure that you supplied the correct credentials, try Login in Browser from the menu.</string>
     <string name="error_authorization_unknown">An unidentified authorisation error occurred.</string>
     <string name="pref_title_gradient_for_media">Show colourful gradients for hidden media</string>
@@ -101,7 +101,7 @@
     <string name="action_unreblog">Remove boost</string>
     <string name="action_logout_confirm">Are you sure you want to log out of %1$s? This will delete all local data of the account, including drafts and preferences.</string>
     <string name="action_share_account_link">Share a link to this account</string>
-    <string name="favourite_confirm">Favourite this post?</string>
-    <string name="pref_title_confirm_favourites">Show confirmation before favouriting</string>
-    <string name="ui_error_favourite">Favouriting post failed: %1$s</string>
+    <string name="like_confirm">Like this post?</string>
+    <string name="pref_title_confirm_likes">Show confirmation before favouriting</string>
+    <string name="ui_error_like">Favouriting post failed: %1$s</string>
 </resources>

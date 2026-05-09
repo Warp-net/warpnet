@@ -35,7 +35,7 @@
     <string name="action_view_preferences">Налаштування</string>
     <string name="action_logout">Вийти</string>
     <string name="title_drafts">Чернетки</string>
-    <string name="title_favourites">Вподобане</string>
+    <string name="title_likes">Вподобане</string>
     <string name="action_login">Увійти з Warpnet</string>
     <string name="login_connection">Зʼєднання…</string>
     <string name="search_no_results">Немає результатів</string>
@@ -70,7 +70,7 @@
     <string name="action_view_follow_requests">Запити на підписку</string>
     <string name="action_view_blocks">Заблоковані користувачі</string>
     <string name="action_view_bookmarks">Закладки</string>
-    <string name="action_view_favourites">Вподобане</string>
+    <string name="action_view_likes">Вподобане</string>
     <string name="action_view_profile">Профіль</string>
     <string name="action_close">Закрити</string>
     <string name="action_retry">Повторити</string>
@@ -84,9 +84,9 @@
     <string name="action_follow">Підписатися</string>
     <string name="action_logout_confirm">Ви впевнені, що хочете вийти %1$s? Це призведе до видалення всіх локальних даних облікового запису, включно з чернетками та вподобаннями.</string>
     <string name="action_compose">Написати</string>
-    <string name="action_unfavourite">Прибрати з обраного</string>
+    <string name="action_unlike">Прибрати з обраного</string>
     <string name="action_bookmark">Додати в закладки</string>
-    <string name="action_favourite">Вподобати</string>
+    <string name="action_like">Вподобати</string>
     <string name="action_reply">Відповісти</string>
     <string name="action_quick_reply">Швидка відповідь</string>
     <string name="report_comment_hint">Додаткові коментарі?</string>
@@ -110,7 +110,7 @@
     <string name="pref_title_notifications_enabled">Сповіщення</string>
     <string name="pref_title_edit_notification_settings">Сповіщення</string>
     <string name="title_blocks">Заблоковані користувачі</string>
-    <string name="notification_favourite_name">Вподобане</string>
+    <string name="notification_like_name">Вподобане</string>
     <string name="notification_follow_request_name">Запити на підписку</string>
     <string name="action_unmute_desc">Не ігнорувати %1$s</string>
     <string name="action_unmute">Не ігнорувати</string>
@@ -123,7 +123,7 @@
     <string name="action_more">Розгорнути</string>
     <string name="action_unreblog">Скасувати поширення</string>
     <string name="action_reblog">Поширити</string>
-    <string name="notification_favourite_format">%1$s вподобує ваш допис</string>
+    <string name="notification_like_format">%1$s вподобує ваш допис</string>
     <string name="notification_reblog_format">%1$s поширює ваш допис</string>
     <string name="post_content_show_less">Згорнути</string>
     <string name="post_content_show_more">Ще</string>
@@ -146,15 +146,15 @@
     <string name="action_unmute_domain">Не ігнорувати %1$s</string>
     <string name="action_toggle_visibility">Видимість дописів</string>
     <string name="wellbeing_mode_notice">Деякі відомості, які можуть вплинути на ваше психічний стан, буде cховано. Це включає:\n\n- Уподобання/Поширення/Сповіщення про підписки\n- Уподобання/Кількість поширень дописів\n- Статистика підписників/поширень у профілях\n\nНа push-сповіщення це не вплине, але ви можете переглянути налаштування сповіщень вручну.</string>
-    <string name="description_post_favourited">Уподобано</string>
-    <string name="title_favourited_by">Вподобали</string>
+    <string name="description_post_liked">Уподобано</string>
+    <string name="title_liked_by">Вподобали</string>
     <plurals name="favs">
         <item quantity="one">%1$s вподобання</item>
         <item quantity="few">%1$s вподобання</item>
         <item quantity="many">%1$s вподобань</item>
         <item quantity="other">%1$s вподобань</item>
     </plurals>
-    <string name="notification_favourite_description">Сповіщати про вподобання кимось дописів</string>
+    <string name="notification_like_description">Сповіщати про вподобання кимось дописів</string>
     <string name="action_hide_media">Сховати медіа</string>
     <string name="notification_subscription_format">%1$s щойно опубліковано</string>
     <string name="title_announcements">Оголошення</string>
@@ -482,7 +482,7 @@
     <string name="dialog_delete_conversation_warning">Видалити цю бесіду?</string>
     <string name="action_delete_conversation">Видалити бесіду</string>
     <string name="action_unbookmark">Вилучити закладку</string>
-    <string name="pref_title_confirm_favourites">Запитувати підтвердження перед додаванням до вподобаних</string>
+    <string name="pref_title_confirm_likes">Запитувати підтвердження перед додаванням до вподобаних</string>
     <string name="duration_14_days">14 днів</string>
     <string name="duration_30_days">30 днів</string>
     <string name="duration_60_days">60 днів</string>
@@ -594,7 +594,7 @@
     <string name="ui_error_unknown">невідома причина</string>
     <string name="ui_error_bookmark">Не вдалося додати допис до закладок: %1$s</string>
     <string name="ui_error_clear_notifications">Не вдалося очистити сповіщення: %1$s</string>
-    <string name="ui_error_favourite">Не вдалося вподобати допис: %1$s</string>
+    <string name="ui_error_like">Не вдалося вподобати допис: %1$s</string>
     <string name="ui_error_reblog">Не вдалося поширити допис: %1$s</string>
     <string name="ui_error_vote">Не вдалося проголосувати: %1$s</string>
     <string name="ui_error_accept_follow_request">Не вдалося погодити запит на підписку: %1$s</string>
@@ -772,7 +772,7 @@
     <string name="reblog_privacy_public_description">Усі можуть бачити що ви поширили</string>
     <string name="reblog_privacy_followers_only_description">Лише ваші підписники бачитимуть що ви поширили</string>
     <string name="reblog_confirm">Поширити цей допис?</string>
-    <string name="favourite_confirm">Додати допис до вподобань?</string>
+    <string name="like_confirm">Додати допис до вподобань?</string>
     <string name="confirm_dismiss_poll">Відхилити зміни в опитуванні?</string>
     <string name="action_remove_account">Вилучити обліковий запит</string>
     <string name="action_reveal_media">Показати медіа</string>

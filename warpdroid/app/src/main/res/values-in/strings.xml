@@ -26,7 +26,7 @@
     <string name="title_posts_pinned">Disematkan</string>
     <string name="title_follows">Mengikuti</string>
     <string name="title_followers">Pengikut</string>
-    <string name="title_favourites">Favorit</string>
+    <string name="title_likes">Favorit</string>
     <string name="title_bookmarks">Markah</string>
     <string name="title_blocks">Pengguna diblokir</string>
     <string name="title_domain_mutes">Domain tersembunyi</string>
@@ -56,7 +56,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Preferensi</string>
     <string name="action_view_account_preferences">Preferensi Akun</string>
-    <string name="action_view_favourites">Favorit</string>
+    <string name="action_view_likes">Favorit</string>
     <string name="action_view_bookmarks">Markah</string>
     <string name="action_view_mutes">Pengguna dibisukan</string>
     <string name="action_view_blocks">Pengguna diblokir</string>
@@ -154,7 +154,7 @@
     <string name="pref_title_appearance_settings">Penampilan</string>
     <string name="pref_title_language">Bahasa</string>
     <string name="post_text_size_smallest">Terkecil</string>
-    <string name="notification_favourite_name">Favorit</string>
+    <string name="notification_like_name">Favorit</string>
     <string name="post_media_images">Gambar</string>
     <string name="add_account_name">Tambah Akun</string>
     <string name="error_create_list">Tidak dapat membuat daftar</string>
@@ -166,7 +166,7 @@
     <string name="post_boosted_format">%1$s ter-boost</string>
     <string name="post_content_show_more">Meluaskan</string>
     <string name="notification_reblog_format">%1$s telah meng-boost post mu</string>
-    <string name="notification_favourite_format">%1$s memfavoritkan post mu</string>
+    <string name="notification_like_format">%1$s memfavoritkan post mu</string>
     <string name="notification_sign_up_format">%1$s mendaftar</string>
     <string name="notification_subscription_format">%1$s baru saja memosting</string>
     <string name="notification_update_format">%1$s mengedit post mereka</string>
@@ -175,8 +175,8 @@
     <string name="action_quick_reply">Balas Cepat</string>
     <string name="action_reblog">Boost</string>
     <string name="action_unreblog">Hapus boost</string>
-    <string name="action_favourite">Favorit</string>
-    <string name="action_unfavourite">Hapus favorit</string>
+    <string name="action_like">Favorit</string>
+    <string name="action_unlike">Hapus favorit</string>
     <string name="action_unbookmark">Hapus bookmark</string>
     <string name="action_more">Lebih</string>
     <string name="action_compose">Menyusun</string>

@@ -27,12 +27,12 @@
     <string name="title_bookmarks">Σελιδοδείκτες</string>
     <string name="title_followers">Ακόλουθοι</string>
     <string name="action_unblock">Άρση αποκλεισμού</string>
-    <string name="title_favourites">Αγαπημένα</string>
+    <string name="title_likes">Αγαπημένα</string>
     <string name="error_compose_character_limit">Η δημοσίευση είναι πολύ μεγάλη!</string>
     <string name="action_emoji_keyboard">Πληκτρολόγιο emoji</string>
     <string name="action_logout_confirm">Σίγουρα θέλετε να αποσυνδεθείτε από το %1$s; Αυτό θα διαγράψει όλα τα τοπικά δεδομένα του λογαριασμού, συμπεριλαμβανομένων των πρόχειρων και των προτιμήσεων.</string>
     <string name="title_drafts">Πρόχειρα</string>
-    <string name="action_view_favourites">Αγαπημένα</string>
+    <string name="action_view_likes">Αγαπημένα</string>
     <string name="label_quick_reply">Απάντηση…</string>
     <string name="action_reject">Απόρριψη</string>
     <string name="title_blocks">Αποκλεισμένοι χρήστες</string>
@@ -45,11 +45,11 @@
     <string name="action_reply">Απάντηση</string>
     <string name="title_tab_preferences">Καρτέλες</string>
     <string name="notification_reblog_format">%1$s προώθησε τη δημοσίευσή σας</string>
-    <string name="notification_favourite_format">%1$s προτίμησε τη δημοσίευσή σας</string>
+    <string name="notification_like_format">%1$s προτίμησε τη δημοσίευσή σας</string>
     <string name="action_follow">Ακολουθήστε</string>
     <string name="action_report">Αναφορά</string>
     <string name="action_mute">Σίγαση</string>
-    <string name="action_unfavourite">Αφαίρεση αγαπημένου</string>
+    <string name="action_unlike">Αφαίρεση αγαπημένου</string>
     <string name="report_username_format">Αναφορά %1$s</string>
     <string name="action_view_account_preferences">Προτιμήσεις λογαριασμού</string>
     <string name="action_add_tab">Προσθήκη καρτέλας</string>
@@ -75,7 +75,7 @@
     <string name="action_retry">Προσπαθήστε ξανά</string>
     <string name="dialog_delete_post_warning">Διαγραφή αυτής της δημοσίευσης;</string>
     <string name="action_unmute">Άρση σίγασης</string>
-    <string name="action_favourite">Αγαπημένο</string>
+    <string name="action_like">Αγαπημένο</string>
     <string name="title_links_dialog">Σύνδεσμοι</string>
     <string name="action_close">Κλείσιμο</string>
     <string name="title_notifications">Ειδοποιήσεις</string>

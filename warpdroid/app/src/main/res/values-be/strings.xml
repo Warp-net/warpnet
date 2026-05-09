@@ -39,7 +39,7 @@
     <string name="title_posts_with_replies">З адказамі</string>
     <string name="title_follows">Падпіскі</string>
     <string name="title_followers">Падпісчыкі</string>
-    <string name="title_favourites">Абраныя</string>
+    <string name="title_likes">Абраныя</string>
     <string name="title_bookmarks">Закладкі</string>
     <string name="title_domain_mutes">Схаваныя дамены</string>
     <string name="title_follow_requests">Запыты на падпіску</string>
@@ -65,7 +65,7 @@
     <string name="post_edited">Рэдагаваны %1$s</string>
     <string name="message_empty">Тут нічога няма.</string>
     <string name="notification_reblog_format">%1$s пашырыў(-ла) ваш допіс</string>
-    <string name="notification_favourite_format">%1$s падабаўся ваш допіс</string>
+    <string name="notification_like_format">%1$s падабаўся ваш допіс</string>
     <string name="notification_follow_format">%1$s падпісаўся(-лася) на вас</string>
     <string name="notification_follow_request_format">%1$s запытаў(-ла) падпіску на вас</string>
     <string name="notification_sign_up_format">%1$s зарэгістраваўся(-лася)</string>
@@ -80,8 +80,8 @@
     <string name="post_media_alt">ALT</string>
     <string name="action_reblog">Пашырыць</string>
     <string name="action_unreblog">Скасаваць пашырэнне</string>
-    <string name="action_favourite">Упадабаць</string>
-    <string name="action_unfavourite">Выдаліць з абраных</string>
+    <string name="action_like">Упадабаць</string>
+    <string name="action_unlike">Выдаліць з абраных</string>
     <string name="action_bookmark">Дадаць у закладкі</string>
     <string name="action_delete">Выдаліць</string>
     <string name="action_search">Пошук</string>
@@ -160,7 +160,7 @@
     <string name="notification_follow_request_description">Апавяшчаць аб запытах на падпіску</string>
     <string name="notification_boost_name">Пашырэнні</string>
     <string name="notification_boost_description">Апавяшчаць аб пашырэнні Вашых допісаў</string>
-    <string name="notification_favourite_name">Упадабаныя</string>
+    <string name="notification_like_name">Упадабаныя</string>
     <string name="notification_report_name">Скаргі</string>
     <string name="notification_report_description">Апавяшчаць аб мадэрацыйных скаргах</string>
     <string name="notification_sign_up_name">Рэгістрацыі</string>
@@ -198,7 +198,7 @@
     <string name="action_view_profile">Профіль</string>
     <string name="action_view_preferences">Налады</string>
     <string name="action_view_account_preferences">Налады ўліковага запісу</string>
-    <string name="action_view_favourites">Абраныя</string>
+    <string name="action_view_likes">Абраныя</string>
     <string name="action_view_bookmarks">Закладкі</string>
     <string name="action_view_mutes">Ігнаруемыя карыстальнікі</string>
     <string name="action_view_blocks">Заблакаваныя карыстальнікі</string>
@@ -275,7 +275,7 @@
     <string name="notification_mention_descriptions">Апавяшчаць аб новых згадках</string>
     <string name="notification_follow_name">Новыя падпісчыкі</string>
     <string name="notification_follow_description">Апавяшчаць аб новых падпісчыках</string>
-    <string name="notification_favourite_description">Паведамляць, калі вашыя допісы ўпадабаюць</string>
+    <string name="notification_like_description">Паведамляць, калі вашыя допісы ўпадабаюць</string>
     <string name="notification_poll_name">Апытанні</string>
     <string name="notification_poll_description">Апавяшчаць аб заканчэнні апытанняў</string>
     <string name="notification_subscription_name">Новыя допісы</string>
@@ -364,7 +364,7 @@
     </plurals>
     <string name="title_reblogged_by">Пашырылі</string>
     <string name="profile_metadata_label">Метазвесткі профілю</string>
-    <string name="title_favourited_by">Упадабалі</string>
+    <string name="title_liked_by">Упадабалі</string>
     <string name="add_account_description">Дадаць уліковы запіс Warpnet</string>
     <string name="action_lists">Спісы</string>
     <string name="title_lists">Спісы</string>
@@ -424,7 +424,7 @@
     <string name="pick_hashtag_hint">Хэштэг без #</string>
     <string name="description_post_edited">Зменена</string>
     <string name="description_post_bookmarked">Дададзена ў закладкі</string>
-    <string name="description_post_favourited">Упадабана</string>
+    <string name="description_post_liked">Упадабана</string>
     <string name="description_visibility_public">Публічны</string>
     <string name="description_post_language">Мова допісу</string>
     <string name="select_list_title">Выбраць спіс</string>
@@ -525,7 +525,7 @@
     <string name="status_created_info">%1$s стварыў(-ла)</string>
     <string name="pref_title_hide_top_toolbar">Схаваць загаловак верхняй панэлі інструментаў</string>
     <string name="account_note_hint">Ваша асабістая нататка пра гэты ўліковы запіс</string>
-    <string name="pref_title_confirm_favourites">Патрабаваць пацвярджэнне перад упадабаннем</string>
+    <string name="pref_title_confirm_likes">Патрабаваць пацвярджэнне перад упадабаннем</string>
     <string name="pref_title_confirm_reblogs">Патрабаваць пацвярджэнне перад пашырэннем</string>
     <string name="pref_title_wellbeing_mode">Дабрабыт</string>
     <string name="drafts_failed_loading_reply">Немагчыма атрымаць інфармацыю пра адказ</string>

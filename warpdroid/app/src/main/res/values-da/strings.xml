@@ -91,7 +91,7 @@
     <string name="title_tab_preferences">Faner</string>
     <string name="title_posts_with_replies">Med svar</string>
     <string name="title_posts_pinned">Fastgjort</string>
-    <string name="title_favourites">Favoritter</string>
+    <string name="title_likes">Favoritter</string>
     <string name="title_bookmarks">Bogmærker</string>
     <string name="title_mutes">Skjulte brugere</string>
     <string name="title_domain_mutes">Skjulte domæner</string>
@@ -111,7 +111,7 @@
     <string name="post_content_show_less">Fold sammen</string>
     <string name="message_empty">Intet her.</string>
     <string name="notification_reblog_format">%1$s fremhævede dit indlæg</string>
-    <string name="notification_favourite_format">%1$s favoritmarkede dit indlæg</string>
+    <string name="notification_like_format">%1$s favoritmarkede dit indlæg</string>
     <string name="notification_sign_up_format">%1$s tilmeldte sig</string>
     <string name="notification_subscription_format">%1$s har lige lavet et indlæg</string>
     <string name="notification_report_format">Ny anmeldelse af %1$s</string>
@@ -125,8 +125,8 @@
     <string name="action_reblog_public">Fremhæv offentligt</string>
     <string name="action_unreblog">Fjernet fremhævelse</string>
     <string name="action_reblog_unlisted">Fjernet fremhævelse</string>
-    <string name="action_favourite">Favoritmarkér</string>
-    <string name="action_unfavourite">Fjern favorit</string>
+    <string name="action_like">Favoritmarkér</string>
+    <string name="action_unlike">Fjern favorit</string>
     <string name="action_bookmark">Bogmærk</string>
     <string name="action_unbookmark">Fjern bogmærke</string>
     <plurals name="action_post_failed_detail">
@@ -225,8 +225,8 @@
     <string name="notification_follow_name">Nye følgere</string>
     <string name="notification_follow_request_name">Følgeanmodninger</string>
     <string name="notification_boost_description">Notifikationer, når dine indlæg bliver fremhævet</string>
-    <string name="notification_favourite_name">Favoritter</string>
-    <string name="notification_favourite_description">Notifikationer, når dine indlæg bliver markeret som favorit</string>
+    <string name="notification_like_name">Favoritter</string>
+    <string name="notification_like_description">Notifikationer, når dine indlæg bliver markeret som favorit</string>
     <string name="notification_poll_name">Afstemningsresultater</string>
     <string name="notification_subscription_name">Nye indlæg</string>
     <string name="notification_subscription_description">Notifikationer, når nogen, du følger, har offentliggjort et nyt indlæg</string>
@@ -368,7 +368,7 @@
     <string name="label_translating">Oversætter…</string>
     <string name="label_translated">Oversat fra %1$s med %2$s</string>
     <string name="title_reblogged_by">Fremhævet af</string>
-    <string name="title_favourited_by">Favoritmarkeret af</string>
+    <string name="title_liked_by">Favoritmarkeret af</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s og %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s og %3$d mere</string>
@@ -376,7 +376,7 @@
     <string name="description_post_cw">Indholdsadvarsel: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Ingen beskrivelse</string>
     <string name="description_post_edited">Redigeret</string>
-    <string name="description_post_favourited">Favoritmarkeret</string>
+    <string name="description_post_liked">Favoritmarkeret</string>
     <string name="description_post_bookmarked">Bogmærket</string>
     <string name="description_visibility_public">Offentlig</string>
     <string name="description_visibility_unlisted">Ikke-listet</string>
@@ -470,7 +470,7 @@
     <string name="no_lists">Du har ingen lister.</string>
     <string name="pref_title_show_cards_in_timelines">Vis linkforhåndsvisninger i tidslinjer</string>
     <string name="pref_title_confirm_reblogs">Vis bekræftelse før fremhævelse</string>
-    <string name="pref_title_confirm_favourites">Vis bekræftelse før favoritmarkering</string>
+    <string name="pref_title_confirm_likes">Vis bekræftelse før favoritmarkering</string>
     <string name="pref_title_hide_top_toolbar">Skjul titlen på den øverste værktøjslinje</string>
     <string name="pref_title_show_self_username">Vis brugernavn i værktøjslinjer</string>
     <string name="pref_title_wellbeing_mode">Velbefinden</string>
@@ -511,7 +511,7 @@
     <string name="ui_error_unknown">ukendt årsag</string>
     <string name="ui_error_bookmark">Bogmærkning af indlæg mislykkedes: %1$s</string>
     <string name="ui_error_clear_notifications">Rydning af notifikationer mislykkedes: %1$s</string>
-    <string name="ui_error_favourite">Favoritmarkering af indlæg mislykkedes: %1$s</string>
+    <string name="ui_error_like">Favoritmarkering af indlæg mislykkedes: %1$s</string>
     <string name="ui_error_reblog">Fremhævelse af indlæg mislykkedes: %1$s</string>
     <string name="ui_error_vote">Stemmeafgivelse mislykkedes: %1$s</string>
     <string name="ui_error_accept_follow_request">Accept af følgeanmodning mislykkedes: %1$s</string>
@@ -602,7 +602,7 @@
     <string name="reblog_privacy_unlisted_description">Samme som offentlig, men vises aldrig i offentlige tidslinjer</string>
     <string name="reblog_privacy_followers_only_description">Kun dine følgere kan se din fremhævelse</string>
     <string name="reblog_confirm">Fremhæv dette indlæg?</string>
-    <string name="favourite_confirm">Favoritmarkér dette indlæg?</string>
+    <string name="like_confirm">Favoritmarkér dette indlæg?</string>
     <string name="edit_image_flip">Vend</string>
     <string name="edit_image_flip_horizontally">Vend vandret</string>
     <string name="edit_image_flip_vertically">Vend lodret</string>
@@ -648,7 +648,7 @@
     <string name="action_send_public">TRUT!</string>
     <string name="action_view_preferences">Præferencer</string>
     <string name="action_view_account_preferences">Kontoindstillinger</string>
-    <string name="action_view_favourites">Favoritter</string>
+    <string name="action_view_likes">Favoritter</string>
     <string name="action_view_bookmarks">Bogmærker</string>
     <string name="action_view_mutes">Skjulte brugere</string>
     <string name="action_view_blocks">Blokerede brugere</string>

@@ -76,8 +76,8 @@ fun StatusButtons(
             append(stringResource(R.string.description_post_reblogged))
             append(", ")
         }
-        if (status.favourited) {
-            append(stringResource(R.string.description_post_favourited))
+        if (status.liked) {
+            append(stringResource(R.string.description_post_liked))
             append(", ")
         }
         if (status.bookmarked) {
@@ -93,8 +93,8 @@ fun StatusButtons(
                 append(pluralStringResource(R.plurals.reblogs, status.reblogsCount, status.reblogsCount))
                 append(", ")
             }
-            if (status.favouritesCount > 0) {
-                append(pluralStringResource(R.plurals.favs, status.favouritesCount, status.favouritesCount))
+            if (status.likesCount > 0) {
+                append(pluralStringResource(R.plurals.favs, status.likesCount, status.likesCount))
                 append(", ")
             }
         }
@@ -108,7 +108,7 @@ fun StatusButtons(
     ) {
         // TODO: properly connect these to the confirmation bottom sheet once it is in Compose
         var reblogged by remember(status.reblogged) { mutableStateOf(status.reblogged) }
-        var favourited by remember(status.favourited) { mutableStateOf(status.favourited) }
+        var liked by remember(status.liked) { mutableStateOf(status.liked) }
         var bookmarked by remember(status.bookmarked) { mutableStateOf(status.bookmarked) }
 
         val (replyButton, replyCount, reblogButton, reblogCount, favButton, favCount, bookmarkButton, moreButton) = createRefs()
@@ -247,7 +247,7 @@ fun StatusButtons(
         SparkButton(
             animateOnClick = false,
             onClick = {
-                listener.onFavourite(statusViewData, !favourited, state = sparkButtonState)
+                listener.onLike(statusViewData, !liked, state = sparkButtonState)
             },
             state = sparkButtonState,
             primaryColor = warpdroidOrange,
@@ -258,10 +258,10 @@ fun StatusButtons(
                 centerVerticallyTo(parent)
             }
         ) {
-            if (favourited) {
+            if (liked) {
                 Icon(
                     painter = painterResource(R.drawable.ic_star_24dp_filled),
-                    tint = warpdroidColors.favoriteButtonActiveColor,
+                    tint = warpdroidColors.likeButtonActiveColor,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp)
                 )
@@ -276,9 +276,9 @@ fun StatusButtons(
         }
         if (showStats) {
             Text(
-                text = formatNumber(status.favouritesCount.toLong(), 1000),
-                color = if (favourited) {
-                    warpdroidColors.favoriteButtonActiveColor
+                text = formatNumber(status.likesCount.toLong(), 1000),
+                color = if (liked) {
+                    warpdroidColors.likeButtonActiveColor
                 } else {
                     warpdroidColors.tertiaryTextColor
                 },

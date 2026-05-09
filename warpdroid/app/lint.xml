@@ -20,7 +20,7 @@
     <!-- Missing translations are OK -->
     <issue id="MissingTranslation" severity="ignore" />
 
-    <!-- Duplicate strings are OK. This can happen when e.g., "favourite" appears as both
+    <!-- Duplicate strings are OK. This can happen when e.g., "like" appears as both
          a noun and a verb -->
     <issue id="DuplicateStrings" severity="ignore" />
 

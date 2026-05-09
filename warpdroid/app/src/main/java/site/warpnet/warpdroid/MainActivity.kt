@@ -643,11 +643,11 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     }
                 },
                 primaryDrawerItem {
-                    nameRes = R.string.action_view_favourites
+                    nameRes = R.string.action_view_likes
                     isSelectable = false
                     iconRes = R.drawable.ic_star_24dp
                     onClick = {
-                        val intent = StatusListActivity.newFavouritesIntent(context)
+                        val intent = StatusListActivity.newLikesIntent(context)
                         startActivityWithSlideInAnimation(intent)
                     }
                 },

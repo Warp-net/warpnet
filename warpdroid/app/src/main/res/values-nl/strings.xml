@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Vastgezet</string>
     <string name="title_follows">Volgend</string>
     <string name="title_followers">Volgers</string>
-    <string name="title_favourites">Favorieten</string>
+    <string name="title_likes">Favorieten</string>
     <string name="title_mutes">Genegeerde gebruikers</string>
     <string name="title_blocks">Geblokkeerde gebruikers</string>
     <string name="title_follow_requests">Volgverzoeken</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">Inklappen</string>
     <string name="message_empty">Hier is niets.</string>
     <string name="notification_reblog_format">%1$s boostte jouw bericht</string>
-    <string name="notification_favourite_format">%1$s markeerde jouw bericht als favoriet</string>
+    <string name="notification_like_format">%1$s markeerde jouw bericht als favoriet</string>
     <string name="notification_follow_format">%1$s volgt jou</string>
     <string name="report_username_format">\@%1$s rapporteren</string>
     <string name="report_comment_hint">Extra opmerkingen?</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">Reageren</string>
     <string name="action_reblog">Boosten</string>
     <string name="action_unreblog">Boost verwijderen</string>
-    <string name="action_favourite">Als favoriet markeren</string>
-    <string name="action_unfavourite">Favoriet verwijderen</string>
+    <string name="action_like">Als favoriet markeren</string>
+    <string name="action_unlike">Favoriet verwijderen</string>
     <string name="action_more">Meer</string>
     <string name="action_compose">Bericht schrijven</string>
     <string name="action_login">Aanmelden met Warpnet</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">Profiel</string>
     <string name="action_view_preferences">Voorkeuren</string>
     <string name="action_view_account_preferences">Accountvoorkeuren</string>
-    <string name="action_view_favourites">Favorieten</string>
+    <string name="action_view_likes">Favorieten</string>
     <string name="action_view_mutes">Genegeerde gebruikers</string>
     <string name="action_view_blocks">Geblokkeerde gebruikers</string>
     <string name="action_view_follow_requests">Volgverzoeken</string>
@@ -190,8 +190,8 @@
     <string name="notification_follow_description">Meldingen over nieuwe volgers</string>
     <string name="notification_boost_name">Boosts</string>
     <string name="notification_boost_description">Meldingen wanneer jouw berichten worden geboost</string>
-    <string name="notification_favourite_name">Favorieten</string>
-    <string name="notification_favourite_description">Meldingen wanneer jouw berichten als favoriet worden gemarkeerd</string>
+    <string name="notification_like_name">Favorieten</string>
+    <string name="notification_like_description">Meldingen wanneer jouw berichten als favoriet worden gemarkeerd</string>
     <string name="notification_mention_format">%1$s heeft je vermeld</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s en %4$d anderen</string>
     <string name="notification_summary_medium">%1$s, %2$s en %3$s</string>
@@ -287,7 +287,7 @@
         <item quantity="other"><b>%1$s</b> boosts</item>
     </plurals>
     <string name="title_reblogged_by">Geboost door</string>
-    <string name="title_favourited_by">Als favoriet gemarkeerd door</string>
+    <string name="title_liked_by">Als favoriet gemarkeerd door</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s en %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s en %3$d anderen</string>
@@ -295,7 +295,7 @@
     <string name="description_post_cw">Inhoudswaarschuwing: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Geen beschrijving</string>
     <string name="description_post_reblogged">Geboost</string>
-    <string name="description_post_favourited">Als favoriet gemarkeerd</string>
+    <string name="description_post_liked">Als favoriet gemarkeerd</string>
     <string name="description_visibility_public">Openbaar</string>
     <string name="description_visibility_unlisted">Minder openbaar</string>
     <string name="description_visibility_private">Volgers</string>
@@ -488,7 +488,7 @@
     <string name="duration_90_days">90 dagen</string>
     <string name="duration_180_days">180 dagen</string>
     <string name="duration_365_days">365 dagen</string>
-    <string name="pref_title_confirm_favourites">Vraag bevestiging voor het markeren als favoriet</string>
+    <string name="pref_title_confirm_likes">Vraag bevestiging voor het markeren als favoriet</string>
     <string name="tusky_compose_post_quicksetting_label">Bericht schrijven</string>
     <string name="account_date_joined">Geregistreerd in %1$s</string>
     <string name="saving_draft">Concept wordt opgeslagen…</string>
@@ -683,7 +683,7 @@
     <string name="report_category_legal">Legaal</string>
     <string name="pref_title_show_self_boosts_description">Deze persoon boost diens eigen bericht</string>
     <string name="pref_title_show_notifications_filter">Meldingsfilter tonen</string>
-    <string name="ui_error_favourite">Markeren als favoriet is mislukt: %1$s</string>
+    <string name="ui_error_like">Markeren als favoriet is mislukt: %1$s</string>
     <string name="ui_success_rejected_follow_request">Volgverzoek geblokkeerd</string>
     <string name="title_public_trending_statuses">Populaire berichten</string>
     <string name="error_deleting_filter">Fout bij het verwijderen van filter \'%1$s\'</string>

@@ -468,15 +468,15 @@
         <item quantity="one"><b>%1$s</b> pastiprinājums</item>
         <item quantity="other"><b>%1$s</b> pastiprinājumi</item>
     </plurals>
-    <string name="title_favourites">Izlases</string>
-    <string name="notification_favourite_format">%1$s pievienoja tavu ierakstu izlasei</string>
-    <string name="action_favourite">Pievienot izlasei</string>
-    <string name="action_unfavourite">Noņemt no izlases</string>
+    <string name="title_likes">Izlases</string>
+    <string name="notification_like_format">%1$s pievienoja tavu ierakstu izlasei</string>
+    <string name="action_like">Pievienot izlasei</string>
+    <string name="action_unlike">Noņemt no izlases</string>
     <string name="action_send">PUBLICĒT</string>
     <string name="action_send_public">PUBLICĒT!</string>
     <string name="action_open_faved_by">Rādīt izlases</string>
     <string name="pref_publishing">Jaunu ierakstu noklusējuma iestatījumi</string>
-    <string name="notification_favourite_name">Izlases</string>
+    <string name="notification_like_name">Izlases</string>
     <string name="report_category_spam">Mēstule</string>
     <string name="action_set_focus">Iestatīt fokusa punktu</string>
     <plurals name="poll_info_votes">
@@ -520,8 +520,8 @@
     <string name="action_browser_login">Pieslēgties ar pārlūku</string>
     <string name="description_login">Strādā vairumā gadījumu. Dati netiek nopludināti uz citām lietotnēm.</string>
     <string name="poll_info_time_absolute">beidzas %1$s</string>
-    <string name="pref_title_confirm_favourites">Pirms pievienošanas izlasei rādīt apstiprināšanas dialogu</string>
-    <string name="action_view_favourites">Izlases</string>
+    <string name="pref_title_confirm_likes">Pirms pievienošanas izlasei rādīt apstiprināšanas dialogu</string>
+    <string name="action_view_likes">Izlases</string>
     <string name="abbreviated_in_days">pēc %1$dd</string>
     <string name="abbreviated_in_hours">pēc %1$dh</string>
     <string name="abbreviated_in_minutes">pēc %1$dm</string>
@@ -533,7 +533,7 @@
         <item quantity="one">Neizdevās augšupielādēt tavu ierakstu un tas tika saglabāts melnrakstos. \n \nVai nu neizdevās sazināties ar serveri, vai arī tas noraidīja ierakstu.</item>
         <item quantity="other">Neizdevās augšupielādēt tavus ierakstus un tie tika saglabāti melnrakstos. \n \nVai nu neizdevās sazināties ar serveri, vai arī tas noraidīja ierakstus.</item>
     </plurals>
-    <string name="notification_favourite_description">Paziņojumi par tavu ierakstu pievienošanu izlasei</string>
+    <string name="notification_like_description">Paziņojumi par tavu ierakstu pievienošanu izlasei</string>
     <string name="wellbeing_mode_notice">Daļa informācijas, kas varētu ietekmēt tavu garīgo labsajūtu, tiks slēpta. Tas ietver: \n \n - Pievienošanas izlasei/pastiprināšanas/jaunu sekotāju paziņojumus \n - Izlasēm pievienoto/pastiprinājumu skaitu ierakstiem \n - Sekotāju/ierakstu skaitu profilos \n \n Pašpiegādātie paziņojumi netiks ietekmēti, bet paziņojumu preferences var pārskatīt manuāli.</string>
     <string name="description_browser_login">Var atbalstīt papildu autentifikācijas metodes, bet ir nepieciešama atbalstīta pārlūkprogramma.</string>
     <string name="dialog_whats_an_instance">Šeit var ievadīt jebkuras instances adresi vai domēnu, piemēram, warpnet.site it kā atrastos tajā pašā vietnē. \u0020 \n \u0020 \nVairāk informācijas var atrast <a href="https://warpnet.site">warpnet.site</a>.</string>

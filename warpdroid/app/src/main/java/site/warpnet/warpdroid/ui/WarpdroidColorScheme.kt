@@ -27,7 +27,7 @@ data class WarpdroidColorScheme(
     val disabledTextColor: Color,
     val backgroundAccent: Color,
     val windowBackground: Color,
-    val favoriteButtonActiveColor: Color,
+    val likeButtonActiveColor: Color,
     val bookmarkButtonActiveColor: Color,
     val placeholderColor: Color
 )
@@ -41,7 +41,7 @@ val WarpdroidColors = staticCompositionLocalOf {
         disabledTextColor = Color.Unspecified,
         backgroundAccent = Color.Unspecified,
         windowBackground = Color.Unspecified,
-        favoriteButtonActiveColor = Color.Unspecified,
+        likeButtonActiveColor = Color.Unspecified,
         bookmarkButtonActiveColor = Color.Unspecified,
         placeholderColor = Color.Unspecified
     )

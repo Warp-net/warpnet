@@ -200,7 +200,7 @@ abstract class TimelineViewModel(
         USER(isOrdered = true),
         USER_PINNED(isOrdered = false),
         USER_WITH_REPLIES(isOrdered = true),
-        FAVOURITES(isOrdered = false),
+        LIKES(isOrdered = false),
         LIST(isOrdered = true),
         BOOKMARKS(isOrdered = false),
         PUBLIC_TRENDING_STATUSES(isOrdered = false),
@@ -209,7 +209,7 @@ abstract class TimelineViewModel(
         fun toFilterKind(): Filter.Kind {
             return when (valueOf(name)) {
                 HOME, LIST -> Filter.Kind.HOME
-                PUBLIC_FEDERATED, PUBLIC_LOCAL, TAG, FAVOURITES, PUBLIC_TRENDING_STATUSES -> Filter.Kind.PUBLIC
+                PUBLIC_FEDERATED, PUBLIC_LOCAL, TAG, LIKES, PUBLIC_TRENDING_STATUSES -> Filter.Kind.PUBLIC
                 USER, USER_WITH_REPLIES, USER_PINNED -> Filter.Kind.ACCOUNT
                 else -> Filter.Kind.PUBLIC
             }

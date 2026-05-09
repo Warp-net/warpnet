@@ -54,7 +54,7 @@
     <string name="notification_summary_small">%1$s en %2$s</string>
     <string name="notification_summary_medium">%1$s, %2$s, en %3$s</string>
     <string name="notification_subscription_name">Nije toots</string>
-    <string name="notification_favourite_name">Favoriten</string>
+    <string name="notification_like_name">Liken</string>
     <string name="notification_follow_request_name">Folgfersyken</string>
     <string name="notification_follow_name">Nije Folgers</string>
     <string name="post_text_size_largest">Grutst</string>
@@ -124,7 +124,7 @@
     <string name="download_image">Oan it delheljen fan %1$s</string>
     <string name="action_open_media_n">Media #%1$d iepenje</string>
     <string name="title_links_dialog">Keppelingen</string>
-    <string name="action_open_faved_by">Favoriten besjen</string>
+    <string name="action_open_faved_by">Liken besjen</string>
     <string name="action_add_tab">Ljepblêd Tafoegje</string>
     <string name="action_schedule_post">Toot ynplanne</string>
     <string name="action_emoji_keyboard">Emoji toetseboerd</string>
@@ -160,7 +160,7 @@
     <string name="action_view_blocks">Blokkearre brûkers</string>
     <string name="action_view_mutes">Negearre brûkers</string>
     <string name="action_view_bookmarks">Blêdwiizers</string>
-    <string name="action_view_favourites">Favoriten</string>
+    <string name="action_view_likes">Liken</string>
     <string name="action_view_account_preferences">Account Foarkarren</string>
     <string name="action_view_preferences">Foarkarren</string>
     <string name="action_view_profile">Profyl</string>
@@ -181,8 +181,8 @@
     <string name="action_login">Ynlogge mei Warpnet</string>
     <string name="action_compose">Gearstelle</string>
     <string name="action_more">Mear</string>
-    <string name="action_unfavourite">Net mear as favoryt oanmerke</string>
-    <string name="action_favourite">As favoryt oanmerke</string>
+    <string name="action_unlike">Net mear as favoryt oanmerke</string>
+    <string name="action_like">As favoryt oanmerke</string>
     <string name="action_reply">Reagearje</string>
     <string name="action_quick_reply">Flugge Reaksje</string>
     <string name="report_comment_hint">Oanfoljende opmerkingen?</string>
@@ -190,7 +190,7 @@
     <string name="notification_subscription_format">%1$s hat krekt in berjocht pleatst</string>
     <string name="notification_follow_request_format">%1$s fersiket jo te folgjen</string>
     <string name="notification_follow_format">%1$s folget jo</string>
-    <string name="notification_favourite_format">%1$s hat jo toot as favoryt oanmurken</string>
+    <string name="notification_like_format">%1$s hat jo toot as favoryt oanmurken</string>
     <string name="message_empty">Hjir is neat.</string>
     <string name="post_content_show_less">Yntearre</string>
     <string name="post_content_show_more">Ûttearre</string>
@@ -209,7 +209,7 @@
     <string name="title_blocks">Blokkearre brûkers</string>
     <string name="title_mutes">Negearre brûkers</string>
     <string name="title_bookmarks">Blêdwiizers</string>
-    <string name="title_favourites">Favoriten</string>
+    <string name="title_likes">Liken</string>
     <string name="title_followers">Folgers</string>
     <string name="title_follows">Folget</string>
     <string name="title_posts_pinned">Fêstset</string>

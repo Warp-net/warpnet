@@ -80,15 +80,15 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
                 binding.reblogPrivacyDropdown.setText(selectedOption.getName())
             }
         } else {
-            binding.confirmTextView.setText(R.string.favourite_confirm)
+            binding.confirmTextView.setText(R.string.like_confirm)
             binding.confirmTextView.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_star_24dp, 0, 0, 0)
             binding.confirmTextView.compoundDrawableTintList = ColorStateList.valueOf(
-                requireContext().getColor(R.color.favoriteButtonActiveColor)
+                requireContext().getColor(R.color.likeButtonActiveColor)
             )
 
             binding.reblogPrivacyLayout.hide()
 
-            binding.confirmButton.setText(R.string.action_favourite)
+            binding.confirmButton.setText(R.string.action_like)
 
             binding.confirmButton.setOnClickListener {
                 setFragmentResult(KEY_CONFIRM, bundleOf())
@@ -144,7 +144,7 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
 
     enum class Mode {
         REBLOG,
-        FAVOURITE
+        LIKE
     }
 
     companion object {
@@ -171,11 +171,11 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
             }
         }
 
-        fun Fragment.confirmFavourite(preferences: SharedPreferences, onConfirmed: () -> Unit) {
-            if (preferences.getBoolean(PrefKeys.CONFIRM_FAVOURITES, false)) {
+        fun Fragment.confirmLike(preferences: SharedPreferences, onConfirmed: () -> Unit) {
+            if (preferences.getBoolean(PrefKeys.CONFIRM_LIKES, false)) {
                 val bottomSheet = ConfirmationBottomSheet()
                 bottomSheet.arguments = bundleOf(
-                    ARG_MODE to Mode.FAVOURITE
+                    ARG_MODE to Mode.LIKE
                 )
                 bottomSheet.show(childFragmentManager, TAG)
                 childFragmentManager.setFragmentResultListener(KEY_CONFIRM, this) { _, _ ->

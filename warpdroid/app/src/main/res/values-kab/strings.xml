@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="action_login">Qqen s Warpnet</string>
-    <string name="title_favourites">Ismenyifen</string>
+    <string name="title_likes">Ismenyifen</string>
     <string name="title_drafts">Irewwayen</string>
     <string name="action_logout">Senser tuqqna</string>
     <string name="action_view_preferences">Iɣewwaṛen</string>
@@ -36,13 +36,13 @@
     <string name="action_retry">Ɛreḍ tikkelt-nniḍen</string>
     <string name="action_close">Mdel</string>
     <string name="action_view_profile">Amaɣnu</string>
-    <string name="action_view_favourites">Ismenyifen</string>
+    <string name="action_view_likes">Ismenyifen</string>
     <string name="action_open_in_web">Ldi deg uminig</string>
     <string name="action_share">Bḍu</string>
     <string name="action_mute">Sgugem</string>
     <string name="action_access_drafts">Irewwayen</string>
     <string name="action_open_faved_by">Sken-d ismenyifen</string>
-    <string name="notification_favourite_name">Ismenyifen</string>
+    <string name="notification_like_name">Ismenyifen</string>
     <plurals name="favs">
         <item quantity="one">%1$s n usmenyaf</item>
         <item quantity="other">%1$s n usmenyafen</item>
@@ -235,7 +235,7 @@
     <string name="title_licenses">Turagin</string>
     <string name="post_boosted_format">Yezzuzer-it %1$s</string>
     <string name="notification_reblog_format">%1$s yezzuzer tasuffeɣt-ik·im</string>
-    <string name="notification_favourite_format">%1$s yerna izen-ik·im ɣer ismenyafen-is</string>
+    <string name="notification_like_format">%1$s yerna izen-ik·im ɣer ismenyafen-is</string>
     <string name="action_quick_reply">Tiririt taruradt</string>
     <string name="action_reblog">Zuzer</string>
     <string name="action_unreblog">Kkes azuzer</string>
@@ -367,7 +367,7 @@
     <string name="about_account_info_title">Amiḍan-ik·im</string>
     <string name="description_post_media">Amidya: %1$s</string>
     <string name="account_note_saved">Yettwasekles!</string>
-    <string name="description_post_favourited">Yettwasmenyaf</string>
+    <string name="description_post_liked">Yettwasmenyaf</string>
     <string name="reply_sending">Tuzna…</string>
     <string name="send_post_notification_cancel_title">Tuzna tettwasefsex</string>
     <string name="label_duration">Tanzagt</string>
@@ -386,7 +386,7 @@
     <string name="post_text_size_largest">Ahrawan</string>
     <string name="pref_show_self_username_always">Yl tikkelt</string>
     <string name="send_post_notification_channel_name">Tuzna n tsuffaɣ</string>
-    <string name="title_favourited_by">Yettwasmenyaf sɣur</string>
+    <string name="title_liked_by">Yettwasmenyaf sɣur</string>
     <string name="filter_apply">Snes</string>
     <string name="hint_additional_info">Iwenniten niḍen</string>
     <string name="poll">Afmiḍi</string>
@@ -399,10 +399,10 @@
     <string name="title_edits">Yeẓreg</string>
     <string name="post_replied">Yerra-d</string>
     <string name="action_unbookmark">Kkes ticreḍt n usebter</string>
-    <string name="action_favourite">Asmenyaf</string>
+    <string name="action_like">Asmenyaf</string>
     <string name="post_content_show_less">Fneẓ</string>
     <string name="report_comment_hint">Iwenniten niḍen ?</string>
-    <string name="action_unfavourite">Kkes asmenyaf</string>
+    <string name="action_unlike">Kkes asmenyaf</string>
     <string name="send_post_notification_title">Tuzna n tsuffeɣt…</string>
     <string name="duration_no_change">(Ulac beddel)</string>
     <string name="saving_draft">Asekles n urewway…</string>

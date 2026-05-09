@@ -42,7 +42,7 @@
     <string name="title_posts_pinned">Fixado</string>
     <string name="title_follows">Segue</string>
     <string name="title_followers">Seguidores</string>
-    <string name="title_favourites">Favoritos</string>
+    <string name="title_likes">Favoritos</string>
     <string name="title_bookmarks">Itens guardados</string>
     <string name="title_mutes">Utilizadores silenciados</string>
     <string name="title_blocks">Utilizadores bloqueados</string>
@@ -64,7 +64,7 @@
     <string name="post_boosted_format">%1$s partilhou</string>
     <string name="message_empty">Nada aqui.</string>
     <string name="notification_reblog_format">%1$s partilhou a sua publicação</string>
-    <string name="notification_favourite_format">%1$s gostou da sua publicação</string>
+    <string name="notification_like_format">%1$s gostou da sua publicação</string>
     <string name="notification_follow_format">%1$s está a seguir-te</string>
     <string name="notification_follow_request_format">%1$s pediu para te seguir</string>
     <string name="notification_sign_up_format">%1$s criou conta</string>
@@ -76,8 +76,8 @@
     <string name="action_reply">Responder</string>
     <string name="action_reblog">Fazer boost</string>
     <string name="action_unreblog">Desfazer boost</string>
-    <string name="action_favourite">Adicionar aos favoritos</string>
-    <string name="action_unfavourite">Remover dos favoritos</string>
+    <string name="action_like">Adicionar aos favoritos</string>
+    <string name="action_unlike">Remover dos favoritos</string>
     <string name="action_bookmark">Guardar</string>
     <string name="action_unbookmark">Remover dos itens guardados</string>
     <string name="action_more">Mais</string>
@@ -103,7 +103,7 @@
     <string name="action_view_profile">Perfil</string>
     <string name="action_view_preferences">Configurações</string>
     <string name="action_view_account_preferences">Configurações da conta</string>
-    <string name="action_view_favourites">Favoritos</string>
+    <string name="action_view_likes">Favoritos</string>
     <string name="action_view_bookmarks">Itens Guardados</string>
     <string name="action_view_mutes">Utilizadores silenciados</string>
     <string name="action_view_blocks">Utilizadores bloqueados</string>
@@ -245,8 +245,8 @@
     <string name="notification_sign_up_description">Notificações para novos utilizadores</string>
     <string name="notification_update_name">Edições de publicações</string>
     <string name="notification_boost_description">Notificações para boosts recebidos</string>
-    <string name="notification_favourite_name">Favoritos</string>
-    <string name="notification_favourite_description">Notificações quando as suas publicações são adicionados aos favoritos</string>
+    <string name="notification_like_name">Favoritos</string>
+    <string name="notification_like_description">Notificações quando as suas publicações são adicionados aos favoritos</string>
     <string name="notification_update_description">Notificações quando publicações com as quais interagiu forem editadas</string>
     <string name="notification_mention_format">%1$s mencionou-te</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s e %4$d outros</string>
@@ -352,14 +352,14 @@
         <item quantity="other">%1$s Partilhas</item>
     </plurals>
     <string name="title_reblogged_by">Boost dado por</string>
-    <string name="title_favourited_by">Adicionado aos favoritos por</string>
+    <string name="title_liked_by">Adicionado aos favoritos por</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s e %3$d mais</string>
     <string name="description_post_media">Conteúdo multimédia: %1$s</string>
     <string name="description_post_cw">Aviso de conteúdo: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Sem descrição</string>
     <string name="description_post_reblogged">Republicado</string>
-    <string name="description_post_favourited">Adicionado aos favoritos</string>
+    <string name="description_post_liked">Adicionado aos favoritos</string>
     <string name="description_post_bookmarked">Guardado</string>
     <string name="description_visibility_public">Pública</string>
     <string name="description_visibility_unlisted">Não-listada</string>
@@ -459,7 +459,7 @@
     <string name="warning_scheduling_interval">O Warpnet tem um intervalo mínimo de agendamento de 5 minutos.</string>
     <string name="pref_title_show_cards_in_timelines">Mostrar pré-visualização de hiperligações nas timelines</string>
     <string name="pref_title_confirm_reblogs">Mostrar confirmação antes de dar boost</string>
-    <string name="pref_title_confirm_favourites">Mostrar confirmação antes de adicionar aos favoritos</string>
+    <string name="pref_title_confirm_likes">Mostrar confirmação antes de adicionar aos favoritos</string>
     <string name="pref_title_hide_top_toolbar">Esconder o título da barra superior</string>
     <string name="account_note_hint">Nota pessoal sobre este perfil</string>
     <string name="wellbeing_hide_stats_posts">Esconder estatísticas quantitativas nas publicações</string>
@@ -608,7 +608,7 @@
     <string name="ui_error_clear_notifications">Erro ao limpar as notificações: %1$s</string>
     <string name="ui_error_vote">Erro ao votar no questionário: %1$s</string>
     <string name="ui_error_accept_follow_request">Erro ao aceitar o pedido para te seguir: %1$s</string>
-    <string name="ui_error_favourite">Erro ao adicionar a publicação aos favoritos: %1$s</string>
+    <string name="ui_error_like">Erro ao adicionar a publicação aos favoritos: %1$s</string>
     <string name="ui_error_reblog">Erro ao dar boost à publicação: %1$s</string>
     <string name="dialog_delete_filter_text">Apagar filtro \'%1$s\'?</string>
     <string name="error_unmuting_hashtag_format">Erro ao remover silêncio de #%1$s</string>
@@ -760,7 +760,7 @@
     <string name="reblog_privacy_public_description">Todos podem ver a tua partilha</string>
     <string name="reblog_privacy_followers_only_description">Apenas seguidores podem ver as tuas partilhas</string>
     <string name="reblog_confirm">Partilhar esta publicação?</string>
-    <string name="favourite_confirm">Gostar desta publicação?</string>
+    <string name="like_confirm">Gostar desta publicação?</string>
     <string name="edit_image_rotate">Rodar</string>
     <string name="edit_image_flip">Inverter</string>
     <string name="edit_image_flip_horizontally">Inverter horizontalmente</string>

@@ -119,7 +119,7 @@ import site.warpnet.warpdroid.util.viewAccount
 import site.warpnet.warpdroid.util.viewMedia
 import site.warpnet.warpdroid.util.viewTag
 import site.warpnet.warpdroid.util.viewThread
-import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmFavourite
+import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmReblog
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
 import site.warpnet.warpdroid.viewdata.StatusViewData
@@ -515,7 +515,7 @@ class TimelineFragment :
                         }
 
                         TimelineViewModel.Kind.TAG,
-                        TimelineViewModel.Kind.FAVOURITES,
+                        TimelineViewModel.Kind.LIKES,
                         TimelineViewModel.Kind.LIST,
                         TimelineViewModel.Kind.BOOKMARKS,
                         TimelineViewModel.Kind.USER_PINNED,
@@ -608,18 +608,18 @@ class TimelineFragment :
         }
     }
 
-    override fun onFavourite(
+    override fun onLike(
         viewData: StatusViewData.Concrete,
-        favourite: Boolean,
+        like: Boolean,
         state: SparkButtonState?
     ) {
-        if (favourite) {
-            confirmFavourite(preferences) {
-                viewModel.favorite(viewData.actionableId, true)
+        if (like) {
+            confirmLike(preferences) {
+                viewModel.like(viewData.actionableId, true)
                 state?.animate()
             }
         } else {
-            viewModel.favorite(viewData.actionableId, false)
+            viewModel.like(viewData.actionableId, false)
         }
     }
 

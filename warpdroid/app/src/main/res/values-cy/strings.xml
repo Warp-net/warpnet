@@ -25,7 +25,7 @@
     <string name="title_posts_with_replies">Gydag ymatebion</string>
     <string name="title_follows">Yn dilyn</string>
     <string name="title_followers">Dilynwyr</string>
-    <string name="title_favourites">Ffefrynnau</string>
+    <string name="title_likes">Ffefrynnau</string>
     <string name="title_mutes">Defnyddwyr wedi\'u tewi</string>
     <string name="title_blocks">Defnyddwyr wedi\'u rhwystro</string>
     <string name="title_follow_requests">Ceisiadau i\'ch dilyn</string>
@@ -41,14 +41,14 @@
     <string name="post_content_show_more">Chwyddo</string>
     <string name="post_content_show_less">Lleihau</string>
     <string name="notification_reblog_format">Hybodd %1$s eich neges</string>
-    <string name="notification_favourite_format">Hoffodd %1$s eich neges</string>
+    <string name="notification_like_format">Hoffodd %1$s eich neges</string>
     <string name="notification_follow_format">Mae %1$s yn eich dilyn</string>
     <string name="report_username_format">Adrodd @%1$s</string>
     <string name="report_comment_hint">Sylwadau ychwanegol?</string>
     <string name="action_quick_reply">Ymateb yn gyflym</string>
     <string name="action_reply">Ymateb</string>
     <string name="action_reblog">Hybu</string>
-    <string name="action_favourite">Hoffi</string>
+    <string name="action_like">Hoffi</string>
     <string name="action_more">Mwy</string>
     <string name="action_compose">Creu</string>
     <string name="action_login">Mewngofnodi â Warpnet</string>
@@ -68,7 +68,7 @@
     <string name="action_close">Cau</string>
     <string name="action_view_profile">Proffil</string>
     <string name="action_view_preferences">Dewisiadau</string>
-    <string name="action_view_favourites">Ffefrynnau</string>
+    <string name="action_view_likes">Ffefrynnau</string>
     <string name="action_view_mutes">Defnyddwyr wedi\'u tewi</string>
     <string name="action_view_blocks">Defnyddwyr wedi\'u rhwystro</string>
     <string name="action_view_follow_requests">Ceisiadau i\'ch dilyn</string>
@@ -166,8 +166,8 @@
     <string name="notification_follow_description">Hysbysiadau am ddilynwyr newydd</string>
     <string name="notification_boost_name">Hybiau</string>
     <string name="notification_boost_description">Hysbysiadau pan gaiff eich negeseuon eu hybu</string>
-    <string name="notification_favourite_name">Ffefrynnau</string>
-    <string name="notification_favourite_description">Hysbysiadau pan gaiff eich negeseuon eu marcio fel ffefryn</string>
+    <string name="notification_like_name">Ffefrynnau</string>
+    <string name="notification_like_description">Hysbysiadau pan gaiff eich negeseuon eu marcio fel ffefryn</string>
     <string name="notification_mention_format">Crybwyllodd %1$s chi</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s a %4$d eraill</string>
     <string name="notification_summary_medium">%1$s, %2$s, a %3$s</string>
@@ -257,7 +257,7 @@
     <string name="title_domain_mutes">Parthau cudd</string>
     <string name="message_empty">Dim byd yma.</string>
     <string name="action_unreblog">Dileu hwb</string>
-    <string name="action_unfavourite">Dileu ffefryn</string>
+    <string name="action_unlike">Dileu ffefryn</string>
     <string name="action_delete_and_redraft">Dileu ac ailddrafftio</string>
     <string name="action_view_account_preferences">Dewisiadau\'ch cyfrif</string>
     <string name="action_view_domain_mutes">Parthau cudd</string>
@@ -326,9 +326,9 @@
     <string name="title_scheduled_posts">Negeseuon wedi\'u hamserlennu</string>
     <string name="error_loading_account_details">Wedi methu llwytho manylion y cyfrif</string>
     <string name="pref_title_timelines">Ffrydiau</string>
-    <string name="title_favourited_by">Hoffwyd gan</string>
+    <string name="title_liked_by">Hoffwyd gan</string>
     <string name="error_image_edit_failed">Methu golygu\'r ddelwedd.</string>
-    <string name="description_post_favourited">Hoffwyd</string>
+    <string name="description_post_liked">Hoffwyd</string>
     <string name="saving_draft">Yn cadw drafft…</string>
     <string name="action_dismiss">Diystyru</string>
     <string name="action_details">Manylion</string>
@@ -464,7 +464,7 @@
     <string name="limit_notifications">Cyfyngu ar hysbysiadau ffrwd</string>
     <string name="post_lookup_error_format">Gwall wrth chwilio am y neges %1$s</string>
     <string name="pref_title_show_self_username">Dangos enw defnyddiwr mewn bariau offer</string>
-    <string name="pref_title_confirm_favourites">Dangos cadarnhad cyn hoffi</string>
+    <string name="pref_title_confirm_likes">Dangos cadarnhad cyn hoffi</string>
     <string name="pref_title_hide_top_toolbar">Cuddio teitl y bar offer uchaf</string>
     <string name="instance_rule_title">Rheolau %1$s</string>
     <string name="language_display_name_format">%1$s (%2$s)</string>
@@ -626,7 +626,7 @@
     <string name="ui_error_unknown">rheswm anhysbys</string>
     <string name="ui_error_bookmark">Methodd tudalnodi\'r neges: %1$s</string>
     <string name="ui_error_clear_notifications">Methodd clirio hysbysiadau: %1$s</string>
-    <string name="ui_error_favourite">Methodd hoffi\'r neges: %1$s</string>
+    <string name="ui_error_like">Methodd hoffi\'r neges: %1$s</string>
     <string name="ui_error_reblog">Methodd hybu\'r neges: %1$s</string>
     <string name="ui_error_vote">Methodd y pleidleisio: %1$s</string>
     <string name="ui_error_accept_follow_request">Methodd derbyn y cais i ddilyn: %1$s</string>
@@ -805,7 +805,7 @@
     <string name="reblog_privacy_unlisted_description">Yr un fath â chyhoeddus ond ni fydd byth yn ymddangos mewn ffrydiau cyhoeddus</string>
     <string name="reblog_privacy_followers_only_description">Dim ond eich dilynwyr sy\'n gallu gweld eich hybu</string>
     <string name="reblog_confirm">Hybu\'r neges hon?</string>
-    <string name="favourite_confirm">Hoffi\'r neges hon?</string>
+    <string name="like_confirm">Hoffi\'r neges hon?</string>
     <string name="confirm_dismiss_poll">Cael gwared ar newidiadau\'r pôl?</string>
     <string name="edit_image_rotate">Cylchdroi</string>
     <string name="edit_image_flip_horizontally">Fflipio\'n llorweddol</string>

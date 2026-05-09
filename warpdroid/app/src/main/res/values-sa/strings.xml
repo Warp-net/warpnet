@@ -39,7 +39,7 @@
     <string name="title_blocks">निषिद्धोपभोक्तारः</string>
     <string name="title_mutes">मूकोपभोक्तारः</string>
     <string name="title_bookmarks">पुटचिह्नानि</string>
-    <string name="title_favourites">प्रियाः</string>
+    <string name="title_likes">प्रियाः</string>
     <string name="title_followers">अनुसर्तारः</string>
     <string name="title_follows">अनुसरति</string>
     <string name="title_posts_pinned">कीलिताः</string>
@@ -50,7 +50,7 @@
     <string name="title_direct_messages">प्रत्यक्षसन्देशाः</string>
     <string name="title_public_federated">सङ्घीयाः</string>
     <string name="notification_follow_format">%1$s त्वामन्वसरत्</string>
-    <string name="notification_favourite_format">%1$s भवदीयदौत्याय रुचिमददात्</string>
+    <string name="notification_like_format">%1$s भवदीयदौत्याय रुचिमददात्</string>
     <string name="notification_reblog_format">%1$s भवदीयं दौत्यं प्राकाशयत्</string>
     <string name="action_send_public">प्रेष्यताम् !</string>
     <string name="action_send">प्रेष्यताम्</string>
@@ -69,9 +69,9 @@
     <string name="action_login">मास्टुडोनमाध्यमेन सम्प्रविश्यताम्</string>
     <string name="action_compose">रच्यताम्</string>
     <string name="action_more">अधिकम्</string>
-    <string name="action_unfavourite">प्रियता निष्क्रियताम्</string>
+    <string name="action_unlike">प्रियता निष्क्रियताम्</string>
     <string name="action_bookmark">पुटचिह्नं क्रियताम्</string>
-    <string name="action_favourite">प्रियम्</string>
+    <string name="action_like">प्रियम्</string>
     <string name="action_unreblog">प्रकाशनं निष्क्रियताम्</string>
     <string name="action_reblog">प्रकाश्यताम्</string>
     <string name="action_reply">प्रत्युत्तरं दीयताम्</string>
@@ -87,7 +87,7 @@
     <string name="action_view_blocks">निषिद्धभोक्तारः</string>
     <string name="action_view_mutes">मूकभोक्तारः</string>
     <string name="action_view_bookmarks">पुटचिह्नानि</string>
-    <string name="action_view_favourites">प्रियाः</string>
+    <string name="action_view_likes">प्रियाः</string>
     <string name="action_view_account_preferences">लेखाविन्यासाः</string>
     <string name="action_view_preferences">विन्यासाः</string>
     <string name="action_view_profile">व्यक्तिविवरणम्</string>
@@ -236,8 +236,8 @@
     <string name="notification_mention_format">%1$s मित्रेण भवन्नामोल्लिखितम्</string>
     <string name="notification_poll_description">मतदाने समाप्ते सति सूचनाः</string>
     <string name="notification_poll_name">मतदानानि</string>
-    <string name="notification_favourite_description">प्रीतिः इत्यङ्किते सति ज्ञापनसूचनाः</string>
-    <string name="notification_favourite_name">प्रियाः</string>
+    <string name="notification_like_description">प्रीतिः इत्यङ्किते सति ज्ञापनसूचनाः</string>
+    <string name="notification_like_name">प्रियाः</string>
     <string name="notification_boost_description">दौत्यप्रकाशने सति ज्ञापनसूचनाः</string>
     <string name="notification_boost_name">प्रकाशनानि</string>
     <string name="notification_follow_request_description">अनुसरणानुरोधान्नधिकृत्य ज्ञापनसूचनाः</string>
@@ -411,14 +411,14 @@
     <string name="description_visibility_unlisted">अनिर्दिष्टम्</string>
     <string name="description_visibility_public">सार्वजनिकम्</string>
     <string name="description_post_bookmarked">पुटचिह्नं कृतम्</string>
-    <string name="description_post_favourited">प्रीतिर्दत्ता</string>
+    <string name="description_post_liked">प्रीतिर्दत्ता</string>
     <string name="description_post_reblogged">पुनर्लिखितम्</string>
     <string name="description_post_media_no_description_placeholder">विवरणं नास्ति</string>
     <string name="description_post_cw">विषयपूर्वसतर्कता: %1$s</string>
     <string name="description_post_media">सामग्र्यः %1$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s तथा %3$d अन्येऽपि</string>
     <string name="conversation_2_recipients">%1$s तथैव %2$s</string>
-    <string name="title_favourited_by">निम्नमित्रस्य प्रीतिः</string>
+    <string name="title_liked_by">निम्नमित्रस्य प्रीतिः</string>
     <string name="title_reblogged_by">निम्नमित्रेण प्रकाशितम्</string>
     <plurals name="reblogs">
         <item quantity="one"><b>%1$s</b> प्रकाशनम्</item>

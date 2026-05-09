@@ -28,7 +28,7 @@
     <string name="action_quick_reply">Rýchla odpoveď</string>
     <string name="action_reply">Odpovedať</string>
     <string name="link_whats_an_instance">Čo je server?</string>
-    <string name="title_favourites">Obľúbené</string>
+    <string name="title_likes">Obľúbené</string>
     <string name="about_title_activity">O aplikácii</string>
     <string name="error_network">Vyskytla sa chyba v sieti. Prosím skontrolujte svoje pripojenie a skúste to znova.</string>
     <string name="error_empty">Toto nemôže byť prázdne.</string>
@@ -73,7 +73,7 @@
     <string name="error_media_upload_type">Tento typ súboru nemôže byť nahraný.</string>
     <string name="error_sender_account_gone">Chyba pri odosielaní príspevku.</string>
     <string name="title_view_thread">Vlákno</string>
-    <string name="notification_favourite_format">%1$s si obľúbil/a váš toot</string>
+    <string name="notification_like_format">%1$s si obľúbil/a váš toot</string>
     <string name="action_send">TOOT</string>
     <string name="action_send_public">TOOT!</string>
     <string name="action_toggle_visibility">Viditeľnosť príspevku</string>
@@ -118,9 +118,9 @@
     <string name="action_edit_own_profile">Upraviť</string>
     <string name="pref_title_notifications_enabled">Oznámenia</string>
     <string name="pref_title_edit_notification_settings">Oznámenia</string>
-    <string name="action_view_favourites">Obľúbené</string>
+    <string name="action_view_likes">Obľúbené</string>
     <string name="filter_dialog_remove_button">Odstrániť</string>
-    <string name="notification_favourite_name">Obľúbené</string>
+    <string name="notification_like_name">Obľúbené</string>
     <string name="pref_title_post_tabs">Domovská časová os</string>
     <string name="action_logout_confirm">Naozaj sa chcete odhlásiť z %1$s? Týmto sa odstránia všetky lokálne údaje tohto účtu vrátane konceptov a predvolieb.</string>
     <string name="notification_reblog_format">%1$s boostol/boostla váš príspevok</string>
@@ -139,8 +139,8 @@
     <string name="notification_report_format">Nové hlásenie o %1$s</string>
     <string name="notification_summary_report_format">%1$s · %2$d priložených príspevkov</string>
     <string name="report_comment_hint">Ďalšie komentáre?</string>
-    <string name="action_favourite">Oblúbiť</string>
-    <string name="action_unfavourite">Odstraniť obľúbenie</string>
+    <string name="action_like">Oblúbiť</string>
+    <string name="action_unlike">Odstraniť obľúbenie</string>
     <string name="action_unbookmark">Odobrať záložku</string>
     <string name="action_more">Viac</string>
     <string name="action_compose">Napísať</string>
@@ -304,7 +304,7 @@
     <string name="notification_mention_name">Nové zmienky</string>
     <string name="notification_boost_name">Boosty</string>
     <string name="notification_boost_description">Oznámenie, keď sú vaše príspevky boostnuté</string>
-    <string name="notification_favourite_description">Oznámenie, keď sú vaše príspevky označené ako obľúbené</string>
+    <string name="notification_like_description">Oznámenie, keď sú vaše príspevky označené ako obľúbené</string>
     <string name="notification_poll_description">Oznámenie o anketách, ktoré skončily</string>
     <string name="notification_subscription_name">Nové príspevky</string>
     <string name="notification_subscription_description">Upozornenie na nový príspevok niekoho, koho sledujete.</string>
@@ -458,7 +458,7 @@
     <string name="failed_to_unpin">Odopnutie zlyhalo</string>
     <string name="failed_to_pin">Pripnutie zlyhalo</string>
     <string name="title_reblogged_by">Boostnuté užívateľom</string>
-    <string name="title_favourited_by">Obľúbené užívateľom</string>
+    <string name="title_liked_by">Obľúbené užívateľom</string>
     <string name="label_translated">Preložené z %1$s s %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s a %3$d ďalší</string>
     <string name="description_post_media">Médiá %1$s</string>
@@ -523,7 +523,7 @@
     <string name="action_add">Pridať</string>
     <string name="action_compose_shortcut">Napísať</string>
     <string name="description_post_reblogged">Boostnutý</string>
-    <string name="description_post_favourited">Obľúbený</string>
+    <string name="description_post_liked">Obľúbený</string>
     <string name="description_visibility_unlisted">Neuvedený</string>
     <string name="pick_hashtag_hint">Hashtag bez #</string>
     <plurals name="poll_info_votes">

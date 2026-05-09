@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Alpinglitaj</string>
     <string name="title_follows">Sekvatoj</string>
     <string name="title_followers">Sekvantoj</string>
-    <string name="title_favourites">Stelumoj</string>
+    <string name="title_likes">Stelumoj</string>
     <string name="title_mutes">Silentigitaj uzantoj</string>
     <string name="title_blocks">Blokitaj uzantoj</string>
     <string name="title_follow_requests">Petoj de sekvado</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">Malgrandigi</string>
     <string name="message_empty">Nenio tie ĉi.</string>
     <string name="notification_reblog_format">%1$s diskonigis vian mesaĝon</string>
-    <string name="notification_favourite_format">%1$s stelumis vian mesaĝon</string>
+    <string name="notification_like_format">%1$s stelumis vian mesaĝon</string>
     <string name="notification_follow_format">%1$s eksekvis vin</string>
     <string name="report_username_format">Signali @%1$s</string>
     <string name="report_comment_hint">Ĉu pliaj komentoj?</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">Respondi</string>
     <string name="action_reblog">Diskonigi</string>
     <string name="action_unreblog">Nuligi diskonigon</string>
-    <string name="action_favourite">Stelumi</string>
-    <string name="action_unfavourite">Nuligi stelumon</string>
+    <string name="action_like">Stelumi</string>
+    <string name="action_unlike">Nuligi stelumon</string>
     <string name="action_more">Pli</string>
     <string name="action_compose">Verki</string>
     <string name="action_login">Ensaluti al Warpnet</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">Profilo</string>
     <string name="action_view_preferences">Agordoj</string>
     <string name="action_view_account_preferences">Agordoj de konto</string>
-    <string name="action_view_favourites">Stelumoj</string>
+    <string name="action_view_likes">Stelumoj</string>
     <string name="action_view_mutes">Silentigitaj uzantoj</string>
     <string name="action_view_blocks">Blokitaj uzantoj</string>
     <string name="action_view_follow_requests">Petoj de sekvado</string>
@@ -193,8 +193,8 @@
     <string name="notification_follow_description">Sciigoj pri novaj sekvantoj</string>
     <string name="notification_boost_name">Diskonigoj</string>
     <string name="notification_boost_description">Sciigoj, kiam viaj mesaĝoj estas diskonigitaj</string>
-    <string name="notification_favourite_name">Stelumoj</string>
-    <string name="notification_favourite_description">Sciigoj, kiam viaj mesaĝoj estas stelumitaj</string>
+    <string name="notification_like_name">Stelumoj</string>
+    <string name="notification_like_description">Sciigoj, kiam viaj mesaĝoj estas stelumitaj</string>
     <string name="notification_mention_format">%1$s menciis vin</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s kaj %4$d aliaj</string>
     <string name="notification_summary_medium">%1$s, %2$s kaj %3$s</string>
@@ -306,7 +306,7 @@
         <item quantity="other"><b>%1$s</b> Diskonigoj</item>
     </plurals>
     <string name="title_reblogged_by">Diskonigita de</string>
-    <string name="title_favourited_by">Stelumita de</string>
+    <string name="title_liked_by">Stelumita de</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s kaj %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s kaj %3$d aliaj</string>
@@ -314,7 +314,7 @@
     <string name="description_post_cw">Enhava averto: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Neniu priskribo</string>
     <string name="description_post_reblogged">Diskonigita</string>
-    <string name="description_post_favourited">Stelumita</string>
+    <string name="description_post_liked">Stelumita</string>
     <string name="description_visibility_public">Publika</string>
     <string name="description_visibility_unlisted">Nelistigita</string>
     <string name="description_visibility_private">Sekvantoj</string>
@@ -462,7 +462,7 @@
     <string name="notification_subscription_description">Sciigoj, kiam iu, kiun vi sekvas, afiŝis novan mesaĝon</string>
     <string name="drafts_post_failed_to_send">Sendo de ĉi tiu mesaĝo malsukcesis!</string>
     <string name="wellbeing_hide_stats_posts">Kaŝi kvantecajn statistikaĵojn pri la mesaĝoj</string>
-    <string name="pref_title_confirm_favourites">Demandi konfirmon antaŭ ol stelumi</string>
+    <string name="pref_title_confirm_likes">Demandi konfirmon antaŭ ol stelumi</string>
     <string name="pref_title_wellbeing_mode">Bonstato</string>
     <string name="drafts_failed_loading_reply">Ŝarĝado de respondaj informoj malsukcesis</string>
     <string name="wellbeing_mode_notice">Kelkaj informoj kiuj povas afekci vian mensan bonstaton estos kaŝitaj. Ĉi tiuj inkluzivas: \n \n — Sciigoj pri stelumo/diskonigo/sekvado \n — Nombro de stelumoj/diskonigoj sur la mesaĝoj \n — Statistikoj pri mesaĝoj/sekvantoj sur la profiloj \n \n Sciigoj ne estos influitaj, sed vi povas kontroli viajn agordojn pri sciigojn permane.</string>

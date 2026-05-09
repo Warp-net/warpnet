@@ -396,7 +396,7 @@ class WarpnetApi @Inject constructor(
         maxId: String?,
     ): Response<List<TimelineAccount>> = stubList()
 
-    suspend fun statusFavouritedBy(
+    suspend fun statusLikedBy(
         statusId: String,
         maxId: String?,
     ): Response<List<TimelineAccount>> = stubList()
@@ -452,18 +452,18 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun favouriteStatus(statusId: String): NetworkResult<Status> {
-        val active = accountManager.activeAccount ?: return stubFailure("favouriteStatus")
+    suspend fun likeStatus(statusId: String): NetworkResult<Status> {
+        val active = accountManager.activeAccount ?: return stubFailure("likeStatus")
         return result {
-            warpnet.favouriteStatus(tweetId = statusId, userId = active.accountId)
+            warpnet.likeStatus(tweetId = statusId, userId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }
 
-    suspend fun unfavouriteStatus(statusId: String): NetworkResult<Status> {
-        val active = accountManager.activeAccount ?: return stubFailure("unfavouriteStatus")
+    suspend fun unlikeStatus(statusId: String): NetworkResult<Status> {
+        val active = accountManager.activeAccount ?: return stubFailure("unlikeStatus")
         return result {
-            warpnet.unfavouriteStatus(tweetId = statusId, userId = active.accountId)
+            warpnet.unlikeStatus(tweetId = statusId, userId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }
@@ -677,7 +677,7 @@ class WarpnetApi @Inject constructor(
     suspend fun blockDomain(domain: String): NetworkResult<Unit> = NetworkResult.success(Unit)
     suspend fun unblockDomain(domain: String): NetworkResult<Unit> = NetworkResult.success(Unit)
 
-    suspend fun favourites(
+    suspend fun likes(
         maxId: String?,
         minId: String? = null,
         sinceId: String?,

@@ -46,8 +46,8 @@ data class Notification(
         /** Someone boosted one of your statuses */
         object Reblog : Type("reblog")
 
-        /** Someone favourited one of your statuses */
-        object Favourite : Type("favourite")
+        /** Someone liked one of your statuses */
+        object Like : Type("like")
 
         /** Someone followed you */
         object Follow : Type("follow")
@@ -112,7 +112,7 @@ data class Notification(
 val visibleNotificationTypes = listOf(
     Type.Mention,
     Type.Reblog,
-    Type.Favourite,
+    Type.Like,
     Type.PleromaEmojiReaction,
     Type.Follow,
     Type.FollowRequest,

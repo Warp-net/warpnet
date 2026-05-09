@@ -9,7 +9,7 @@
     <string name="action_view_preferences">Roghainnean</string>
     <string name="action_logout">Clàraich a-mach</string>
     <string name="title_drafts">Dreachdan</string>
-    <string name="title_favourites">Annsachdan</string>
+    <string name="title_likes">Annsachdan</string>
     <string name="link_whats_an_instance">Dè a th’ ann an ionstans?</string>
     <string name="edit_poll">Deasaich</string>
     <string name="filter_edit_title">Deasaich a’ chriathrag</string>
@@ -47,10 +47,10 @@
     <string name="pref_title_show_boosts">Seall na brosnachaidhean</string>
     <string name="action_open_reblogged_by">Seall na brosnachaidhean</string>
     <string name="action_access_drafts">Dreachdan</string>
-    <string name="action_view_favourites">Annsachdan</string>
+    <string name="action_view_likes">Annsachdan</string>
     <string name="pref_title_notifications_enabled">Brathan</string>
     <string name="title_notifications">Brathan</string>
-    <string name="notification_favourite_name">Annsachdan</string>
+    <string name="notification_like_name">Annsachdan</string>
     <string name="action_unsubscribe_account">Cuir crìoch air an fho-sgrìobhadh</string>
     <string name="action_subscribe_account">Fo-sgrìobh</string>
     <string name="pref_title_animate_custom_emojis">Beòthaich na h-Emojis gnàthaichte</string>
@@ -170,14 +170,14 @@
     <string name="description_poll">Cunntas-bheachd le roghainnean: %1$s, %2$s, %3$s, %4$s; %5$s</string>
     <string name="description_visibility_direct">Dìreach</string>
     <string name="description_post_bookmarked">’Na chomharra-lìn</string>
-    <string name="description_post_favourited">’Na annsachd</string>
+    <string name="description_post_liked">’Na annsachd</string>
     <string name="description_post_reblogged">Air ath-bhlogadh</string>
     <string name="description_post_media_no_description_placeholder">Gun tuairisgeul</string>
     <string name="description_post_cw">Rabhadh susbainte: %1$s</string>
     <string name="description_post_media">Meadhan: %1$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s ’s %3$d eile</string>
     <string name="conversation_1_recipients">%1$s</string>
-    <string name="title_favourited_by">’Na annsachd aig</string>
+    <string name="title_liked_by">’Na annsachd aig</string>
     <string name="title_reblogged_by">’Ga brosnachadh le</string>
     <plurals name="reblogs">
         <item quantity="one"><b>%1$s</b> bhrosnachadh</item>
@@ -247,7 +247,7 @@
     <string name="post_share_link">Co-roinn ceangal dhan phost</string>
     <string name="post_share_content">Co-roinn susbaint a’ phuist</string>
     <string name="about_tusky_license">’S e bathar-bog saor le bun-tùs fosgailte a th’ ann an Warpnet. Tha e fo cheadachas GNU General Public License tionndadh 3. Chì thu an ceadachas an-seo: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
-    <string name="notification_favourite_description">Brathan nuair a thèid post agad a chomharrachadh ’na annsachd</string>
+    <string name="notification_like_description">Brathan nuair a thèid post agad a chomharrachadh ’na annsachd</string>
     <string name="notification_boost_description">Brathan nuair a thèid post agad brosnachadh</string>
     <string name="dialog_redraft_post_warning">A bheil thu airson am post seo a sguabadh às is dreachd ùr a dhèanamh air?</string>
     <string name="dialog_delete_post_warning">A bheil thu airson am post seo a sguabadh às?</string>
@@ -257,7 +257,7 @@
     <string name="action_schedule_post">Cuir post air an sgeideal</string>
     <string name="action_toggle_visibility">Faicsinneachd a’ phuist</string>
     <string name="action_access_scheduled_posts">Postaichean air an sgeideal</string>
-    <string name="notification_favourite_format">Is annsa le %1$s am post agad</string>
+    <string name="notification_like_format">Is annsa le %1$s am post agad</string>
     <string name="notification_reblog_format">Bhrosnaich %1$s am post agad</string>
     <string name="title_scheduled_posts">Postaichean air an sgeideal</string>
     <string name="title_view_thread">Snàithlean</string>
@@ -425,9 +425,9 @@
     <string name="action_view_bookmarks">Comharran-lìn</string>
     <string name="action_view_profile">Pròifil</string>
     <string name="action_logout_confirm">A bheil thu cinnteach gu bheil thu airson clàradh a-mach à %1$s? Thèid gach dàta ionadail a’ chunntais a sguabadh às, a’ gabhail a-staigh nan dreachdan is roghainnean.</string>
-    <string name="action_unfavourite">Thoir air falbh o na h-annsachdan</string>
+    <string name="action_unlike">Thoir air falbh o na h-annsachdan</string>
     <string name="action_bookmark">Cuir ris na comharran-lìn</string>
-    <string name="action_favourite">Cuir ris na h-annsachdan</string>
+    <string name="action_like">Cuir ris na h-annsachdan</string>
     <string name="action_unreblog">Thoir am brosnachadh air falbh</string>
     <string name="action_reblog">Brosnaich</string>
     <string name="action_reply">Freagair</string>
@@ -482,7 +482,7 @@
     <string name="dialog_delete_conversation_warning">A bheil thu airson an còmhradh seo a sguabadh às?</string>
     <string name="action_delete_conversation">Sguab às an còmhradh</string>
     <string name="action_unbookmark">Thoir an comharra-lìn air falbh</string>
-    <string name="pref_title_confirm_favourites">Seall dearbhadh mus cuir thu post ris na h-annsachdan</string>
+    <string name="pref_title_confirm_likes">Seall dearbhadh mus cuir thu post ris na h-annsachdan</string>
     <string name="duration_30_days">30 latha</string>
     <string name="duration_90_days">90 latha</string>
     <string name="duration_180_days">180 latha</string>
@@ -593,7 +593,7 @@
     <string name="ui_error_unknown">chan eil fhios dè an t-adhbhar</string>
     <string name="ui_error_bookmark">Cha deach leinn comharra-lìn a chur ris a’ phost: %1$s</string>
     <string name="ui_error_clear_notifications">Dh’fhàillig falamhachadh nam brathan: %1$s</string>
-    <string name="ui_error_favourite">Cha deach leinn am post a chur ris na h-annsachdan: %1$s</string>
+    <string name="ui_error_like">Cha deach leinn am post a chur ris na h-annsachdan: %1$s</string>
     <string name="ui_error_reblog">Dh’fhàillig brosnachadh a’ phuist: %1$s</string>
     <string name="ui_error_vote">Dh’fhàillig bhòtadh sa chunntas-bheachd: %1$s</string>
     <string name="ui_error_accept_follow_request">Dh’fhàillig le gabhail ris an iarrtas leantainn: %1$s</string>

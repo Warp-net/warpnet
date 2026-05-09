@@ -2,8 +2,8 @@
 <resources>
     <item name="action_expand_collapse_cw" type="id" />
     <item name="action_reply" type="id" />
-    <item name="action_favourite" type="id" />
-    <item name="action_unfavourite" type="id" />
+    <item name="action_like" type="id" />
+    <item name="action_unlike" type="id" />
     <item name="action_bookmark" type="id" />
     <item name="action_unbookmark" type="id" />
     <item name="action_reblog" type="id" />

@@ -27,7 +27,7 @@
     <string name="title_posts_pinned">Pripeto</string>
     <string name="title_follows">Sledi</string>
     <string name="title_followers">Sledilci</string>
-    <string name="title_favourites">Priljubljene</string>
+    <string name="title_likes">Priljubljene</string>
     <string name="title_mutes">Utišani uporabniki</string>
     <string name="title_blocks">Blokirani uporabniki</string>
     <string name="title_follow_requests">Zahteve za Sledenje</string>
@@ -44,7 +44,7 @@
     <string name="post_content_show_less">Strni</string>
     <string name="message_empty">Tukaj ni ničesar.</string>
     <string name="notification_reblog_format">%1$s je spodbudil tvoj tut</string>
-    <string name="notification_favourite_format">%1$s je vzljubil vaš tut</string>
+    <string name="notification_like_format">%1$s je vzljubil vaš tut</string>
     <string name="notification_follow_format">%1$s vam sledi</string>
     <string name="report_username_format">Prijavi @%1$s</string>
     <string name="report_comment_hint">Dodatni komentarji?</string>
@@ -52,7 +52,7 @@
     <string name="action_reply">Odgovori</string>
     <string name="action_reblog">Spodbudi</string>
     <string name="action_unreblog">Odstrani spodbudo</string>
-    <string name="action_favourite">Vzljubi</string>
+    <string name="action_like">Vzljubi</string>
     <string name="action_more">Več</string>
     <string name="action_compose">Sestavi</string>
     <string name="action_login">Prijavite se z Warpnetom</string>
@@ -73,7 +73,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Možnosti</string>
     <string name="action_view_account_preferences">Možnosti računa</string>
-    <string name="action_view_favourites">Priljubljeni</string>
+    <string name="action_view_likes">Priljubljeni</string>
     <string name="action_view_mutes">Utišani uporabniki</string>
     <string name="action_view_blocks">Blokirani uporabniki</string>
     <string name="action_view_follow_requests">Prošnje za sledenje</string>
@@ -126,7 +126,7 @@
     <string name="login_connection">Povezovanje…</string>
     <string name="error_failed_app_registration">Overitev s to instanco ni uspela. Če se to ponovi, se poskusite prijaviti v brskalnik iz menija.</string>
     <string name="error_authorization_unknown">Prišlo je do neznane napake pri pooblastitvi. Če se to ponovi, se poskusite prijaviti v brskalniku iz menija.</string>
-    <string name="action_unfavourite">Odstrani priljubljene</string>
+    <string name="action_unlike">Odstrani priljubljene</string>
     <string name="action_unmute">Prekini utišanje</string>
     <string name="title_hashtags_dialog">Ključniki</string>
     <string name="confirmation_unblocked">Odblokiran uporabnik</string>
@@ -179,8 +179,8 @@
     <string name="notification_follow_description">Obvestila o novih sledilcih</string>
     <string name="notification_boost_name">Spodbude</string>
     <string name="notification_boost_description">Obvestila, ko so vaši tuti spodbujeni</string>
-    <string name="notification_favourite_name">Priljubljene</string>
-    <string name="notification_favourite_description">Obvestila, ko so vaši tuti vzljubljeni</string>
+    <string name="notification_like_name">Priljubljene</string>
+    <string name="notification_like_description">Obvestila, ko so vaši tuti vzljubljeni</string>
     <string name="notification_mention_format">%1$s vas je omenil-a</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s in %4$d ostali</string>
     <string name="notification_summary_medium">%1$s, %2$s in %3$s</string>
@@ -285,7 +285,7 @@
         <item quantity="other"><b>%1$s</b> Spodbud</item>
     </plurals>
     <string name="title_reblogged_by">Spodbudil/a</string>
-    <string name="title_favourited_by">Vzljubil/a</string>
+    <string name="title_liked_by">Vzljubil/a</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s in %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s in %3$d več</string>
@@ -293,7 +293,7 @@
     <string name="description_post_cw">Opozorila o vsebini: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Brez opisa</string>
     <string name="description_post_reblogged">Ponovno objavljen</string>
-    <string name="description_post_favourited">Priljubljene</string>
+    <string name="description_post_liked">Priljubljene</string>
     <string name="description_visibility_public">Javno</string>
     <string name="description_visibility_unlisted">Ni prikazano</string>
     <string name="description_visibility_private">Sledilci</string>

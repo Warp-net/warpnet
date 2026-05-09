@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Закрепленные</string>
     <string name="title_follows">Подписки</string>
     <string name="title_followers">Подписчики</string>
-    <string name="title_favourites">Избранное</string>
+    <string name="title_likes">Избранное</string>
     <string name="title_mutes">Игнорируемые пользователи</string>
     <string name="title_blocks">Заблокированные пользователи</string>
     <string name="title_follow_requests">Запросы на подписку</string>
@@ -47,7 +47,7 @@
     <string name="post_content_show_less">Свернуть</string>
     <string name="message_empty">Тут ничего нет.</string>
     <string name="notification_reblog_format">%1$s продвинул(а) ваш пост</string>
-    <string name="notification_favourite_format">%1$s добавил(а) ваш пост в избранное</string>
+    <string name="notification_like_format">%1$s добавил(а) ваш пост в избранное</string>
     <string name="notification_follow_format">%1$s подписался(-лась) на вас</string>
     <string name="report_username_format">Пожаловаться на @%1$s</string>
     <string name="report_comment_hint">Дополнительные замечания?</string>
@@ -55,8 +55,8 @@
     <string name="action_reply">Ответить</string>
     <string name="action_reblog">Продвинуть</string>
     <string name="action_unreblog">Отменить продвижение</string>
-    <string name="action_favourite">Нравится</string>
-    <string name="action_unfavourite">Убрать из избранного</string>
+    <string name="action_like">Нравится</string>
+    <string name="action_unlike">Убрать из избранного</string>
     <string name="action_more">Больше</string>
     <string name="action_compose">Написать</string>
     <string name="action_login">Вход с помощью Warpnet</string>
@@ -78,7 +78,7 @@
     <string name="action_view_profile">Профиль</string>
     <string name="action_view_preferences">Настройки</string>
     <string name="action_view_account_preferences">Настройки учетной записи</string>
-    <string name="action_view_favourites">Избранное</string>
+    <string name="action_view_likes">Избранное</string>
     <string name="action_view_mutes">Игнорируемые пользователи</string>
     <string name="action_view_blocks">Заблокированные пользователи</string>
     <string name="action_view_follow_requests">Запросы на подписку</string>
@@ -195,8 +195,8 @@
     <string name="notification_follow_description">Уведомлять о новых подписчиках</string>
     <string name="notification_boost_name">Продвижения</string>
     <string name="notification_boost_description">Уведомлять, когда кто-то продвигает ваши посты</string>
-    <string name="notification_favourite_name">Избранное</string>
-    <string name="notification_favourite_description">Уведомлять, когда ваши сообщения добавляют в «избранное»</string>
+    <string name="notification_like_name">Избранное</string>
+    <string name="notification_like_description">Уведомлять, когда ваши сообщения добавляют в «избранное»</string>
     <string name="notification_poll_name">Результаты опросов</string>
     <string name="notification_poll_description">Уведомлять о завершившихся опросах</string>
     <string name="notification_mention_format">%1$s упомянул(а) вас</string>
@@ -336,7 +336,7 @@
         <item quantity="other"><b>%1$s</b> продвижений</item>
     </plurals>
     <string name="title_reblogged_by">Продвинули</string>
-    <string name="title_favourited_by">Добавили в избранное</string>
+    <string name="title_liked_by">Добавили в избранное</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s и %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s и ещё %3$d</string>
@@ -344,7 +344,7 @@
     <string name="description_post_cw">Предупреждение о содержании: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Без описания</string>
     <string name="description_post_reblogged">Перезалито</string>
-    <string name="description_post_favourited">Понравилось</string>
+    <string name="description_post_liked">Понравилось</string>
     <string name="description_visibility_public">Публичный</string>
     <string name="description_visibility_unlisted">Скрытый</string>
     <string name="description_visibility_private">Подписчики</string>
@@ -484,7 +484,7 @@
     <string name="pref_title_animate_custom_emojis">Анимировать эмодзи</string>
     <string name="dialog_delete_conversation_warning">Удалить этот разговор?</string>
     <string name="action_delete_conversation">Удалить разговор</string>
-    <string name="pref_title_confirm_favourites">Запрашивать подтверждение перед добавлением в избранное</string>
+    <string name="pref_title_confirm_likes">Запрашивать подтверждение перед добавлением в избранное</string>
     <string name="action_unbookmark">Убрать из закладок</string>
     <string name="a11y_label_loading_thread">Загрузка обсуждения</string>
     <string name="pref_reading_order_newest_first">Сначала новые</string>
@@ -581,7 +581,7 @@
     <string name="error_unmuting_hashtag_format">Не удалось перестать игнорировать #%1$s</string>
     <string name="ui_error_bookmark">Не удалось добавить пост в закладки: %1$s</string>
     <string name="ui_error_clear_notifications">Не удалось очистить уведомления: %1$s</string>
-    <string name="ui_error_favourite">Не удалось добавить пост в избранное: %1$s</string>
+    <string name="ui_error_like">Не удалось добавить пост в избранное: %1$s</string>
     <string name="filter_action_hide">Скрыть</string>
     <string name="label_filter_action">Действие фильтра</string>
     <string name="label_filter_context">Область применения фильтра</string>
