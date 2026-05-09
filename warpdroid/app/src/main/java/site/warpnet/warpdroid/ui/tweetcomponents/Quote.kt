@@ -162,7 +162,7 @@ private fun QuoteContent(
         )
     } else if (quotedTweetViewData.filterActive && quotedTweetViewData.filter?.action == Filter.Action.WARN) {
         QuoteHidden(
-            stringResource(R.string.status_filter_placeholder_label_format, quotedTweetViewData.filter.title),
+            stringResource(R.string.tweet_filter_placeholder_label_format, quotedTweetViewData.filter.title),
             onShowQuote = {
                 listener.changeFilter(quotedTweetViewData, filtered = false)
             },

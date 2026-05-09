@@ -33,7 +33,7 @@ class PlaceholderViewHolder(
         binding.retweetButtonPlaceholder.visible(mode != Mode.CONVERSATION)
         if (mode == Mode.NOTIFICATION) {
             binding.topPlaceholder.updatePaddingRelative(
-                start = res.getDimensionPixelSize(R.dimen.status_info_padding_large)
+                start = res.getDimensionPixelSize(R.dimen.tweet_info_padding_large)
             )
         }
         if (mode == Mode.CONVERSATION) {

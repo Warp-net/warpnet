@@ -38,7 +38,7 @@ open class FilteredTweetViewHolder(
         val matchedFilterTitle = matchedFilterResult?.filter?.title.orEmpty()
 
         binding.tweetFilterLabel.text = itemView.context.getString(
-            R.string.status_filter_placeholder_label_format,
+            R.string.tweet_filter_placeholder_label_format,
             matchedFilterTitle
         )
         binding.tweetFilterShowAnyway.setOnClickListener {

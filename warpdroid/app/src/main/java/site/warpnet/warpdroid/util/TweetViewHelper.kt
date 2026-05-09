@@ -55,24 +55,24 @@ class TweetViewHelper(private val itemView: View) {
     ) {
         val context = itemView.context
         val mediaPreviews = arrayOf<MediaPreviewImageView>(
-            itemView.findViewById(R.id.status_media_preview_0),
-            itemView.findViewById(R.id.status_media_preview_1),
-            itemView.findViewById(R.id.status_media_preview_2),
-            itemView.findViewById(R.id.status_media_preview_3)
+            itemView.findViewById(R.id.tweet_media_preview_0),
+            itemView.findViewById(R.id.tweet_media_preview_1),
+            itemView.findViewById(R.id.tweet_media_preview_2),
+            itemView.findViewById(R.id.tweet_media_preview_3)
         )
 
         val mediaOverlays = arrayOf<ImageView>(
-            itemView.findViewById(R.id.status_media_overlay_0),
-            itemView.findViewById(R.id.status_media_overlay_1),
-            itemView.findViewById(R.id.status_media_overlay_2),
-            itemView.findViewById(R.id.status_media_overlay_3)
+            itemView.findViewById(R.id.tweet_media_overlay_0),
+            itemView.findViewById(R.id.tweet_media_overlay_1),
+            itemView.findViewById(R.id.tweet_media_overlay_2),
+            itemView.findViewById(R.id.tweet_media_overlay_3)
         )
 
         val sensitiveMediaWarning = itemView.findViewById<TextView>(
-            R.id.status_sensitive_media_warning
+            R.id.tweet_sensitive_media_warning
         )
-        val sensitiveMediaShow = itemView.findViewById<View>(R.id.status_sensitive_media_button)
-        val mediaLabel = itemView.findViewById<TextView>(R.id.status_media_label)
+        val sensitiveMediaShow = itemView.findViewById<View>(R.id.tweet_sensitive_media_button)
+        val mediaLabel = itemView.findViewById<TextView>(R.id.tweet_media_label)
         if (statusDisplayOptions.mediaPreviewEnabled) {
             // Hide the unused label.
             mediaLabel.visibility = View.GONE
@@ -275,13 +275,13 @@ class TweetViewHelper(private val itemView: View) {
         statusDisplayOptions: TweetDisplayOptions
     ) {
         val pollResults = listOf<TextView>(
-            itemView.findViewById(R.id.status_poll_option_result_0),
-            itemView.findViewById(R.id.status_poll_option_result_1),
-            itemView.findViewById(R.id.status_poll_option_result_2),
-            itemView.findViewById(R.id.status_poll_option_result_3)
+            itemView.findViewById(R.id.tweet_poll_option_result_0),
+            itemView.findViewById(R.id.tweet_poll_option_result_1),
+            itemView.findViewById(R.id.tweet_poll_option_result_2),
+            itemView.findViewById(R.id.tweet_poll_option_result_3)
         )
 
-        val pollDescription = itemView.findViewById<TextView>(R.id.status_poll_description)
+        val pollDescription = itemView.findViewById<TextView>(R.id.tweet_poll_description)
 
         if (poll == null) {
             for (pollResult in pollResults) {

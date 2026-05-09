@@ -226,7 +226,7 @@ class WarpnetApi @Inject constructor(
         minId: String? = null,
         sinceId: String? = null,
         limit: Int? = null,
-    ): Response<List<Status>> = paginated {
+    ): Response<List<Tweet>> = paginated {
         warpnet.getHomeTimeline(cursor = maxId.orEmpty(), limit = limit ?: 20)
     }
 

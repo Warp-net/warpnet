@@ -84,9 +84,9 @@ class ViewEditsAdapter(
         val context = binding.root.context
 
         val infoStringRes = if (position == edits.lastIndex) {
-            R.string.status_created_info
+            R.string.tweet_created_info
         } else {
-            R.string.status_edit_info
+            R.string.tweet_edit_info
         }
 
         // Show the most recent version of the status using large text to make it clearer for

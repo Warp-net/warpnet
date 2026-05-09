@@ -56,12 +56,12 @@ fun FilteredTweet(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = stringResource(R.string.status_filter_placeholder_label_format, filterTitle),
+                text = stringResource(R.string.tweet_filter_placeholder_label_format, filterTitle),
                 fontSize = 16.sp,
                 color = warpdroidColors.primaryTextColor,
             )
             Text(
-                text = stringResource(R.string.status_filtered_show_anyway),
+                text = stringResource(R.string.tweet_filtered_show_anyway),
                 fontSize = 16.sp,
                 color = colorScheme.primary,
                 fontWeight = FontWeight.Bold,

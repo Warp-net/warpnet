@@ -52,7 +52,7 @@ class TweetViewHolder(
 ) : RecyclerView.ViewHolder(binding.root) {
 
     private val mediaViewHeight = itemView.context.resources.getDimensionPixelSize(
-        R.dimen.status_media_preview_height
+        R.dimen.tweet_media_preview_height
     )
     private val statusViewHelper = TweetViewHelper(itemView)
     private val absoluteTimeFormatter = AbsoluteTimeFormatter()

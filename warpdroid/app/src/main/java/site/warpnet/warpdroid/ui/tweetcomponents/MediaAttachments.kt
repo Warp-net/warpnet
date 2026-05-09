@@ -355,7 +355,7 @@ private fun AttachmentPreviewGrid(
         }
         if (!showMedia) {
             val text = if (filter?.action == Filter.Action.BLUR) {
-                stringResource(R.string.status_filter_placeholder_label_format, filter.title)
+                stringResource(R.string.tweet_filter_placeholder_label_format, filter.title)
             } else if (sensitive) {
                 stringResource(R.string.post_sensitive_media_title)
             } else {

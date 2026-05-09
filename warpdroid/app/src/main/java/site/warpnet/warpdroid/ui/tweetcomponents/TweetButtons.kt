@@ -148,7 +148,7 @@ fun TweetButtons(
                 } else if (status.repliesCount == 1) {
                     "1"
                 } else {
-                    stringResource(R.string.status_count_one_plus)
+                    stringResource(R.string.tweet_count_one_plus)
                 },
                 color = warpdroidColors.tertiaryTextColor,
                 style = LocalPreferences.current.statusTextStyles.medium,
