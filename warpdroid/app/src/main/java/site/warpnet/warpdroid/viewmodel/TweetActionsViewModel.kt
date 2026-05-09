@@ -73,7 +73,7 @@ abstract class TweetActionsViewModel(
             }.fold(
                 onSuccess = { status ->
                     if (status.retweet != null) {
-                        // when retweetging, the Warpnet Api does not return the retweeted status directly
+                        // when retweeting, the Warpnet Api does not return the retweeted status directly
                         // but the newly created status with retweet set to the retweeted status
                         eventHub.dispatch(TweetChangedEvent(status.retweet))
                     } else {

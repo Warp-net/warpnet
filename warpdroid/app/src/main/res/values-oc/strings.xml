@@ -254,7 +254,7 @@
     <string name="action_unlike">Suprimir lo favorit</string>
     <string name="action_view_account_preferences">Preferéncias del compte</string>
     <string name="action_add_tab">Ajustar un onglet</string>
-    <string name="action_open_retweetger">Dobrir l’autor del partatge</string>
+    <string name="action_open_retweeter">Dobrir l’autor del partatge</string>
     <string name="action_open_retweeted_by">Mostrar los retuts</string>
     <string name="action_open_faved_by">Mostrar los favorits</string>
     <string name="title_hashtags_dialog">Etiquetas</string>

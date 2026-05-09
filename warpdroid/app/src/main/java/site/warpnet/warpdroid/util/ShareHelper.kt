@@ -24,7 +24,7 @@ fun Context.shareTweetContent(viewData: TweetViewData.Concrete) {
     )
 }
 
-fun Context.shareStatusLink(viewData: TweetViewData.Concrete) {
+fun Context.shareTweetLink(viewData: TweetViewData.Concrete) {
     val urlToShare = viewData.actionable.url
     val sendIntent = Intent().apply {
         action = Intent.ACTION_SEND

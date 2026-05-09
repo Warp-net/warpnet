@@ -453,7 +453,7 @@
     <string name="title_hashtags_dialog">Cancelos</string>
     <string name="action_open_faved_by">Mostrar favoritos</string>
     <string name="action_open_retweeted_by">Mostrar promocións</string>
-    <string name="action_open_retweetger">Abrir autor da promoción</string>
+    <string name="action_open_retweeter">Abrir autor da promoción</string>
     <string name="action_add_tab">Engadir pestana</string>
     <string name="action_reset_schedule">Restablecer</string>
     <string name="action_schedule_post">Programar publicación</string>

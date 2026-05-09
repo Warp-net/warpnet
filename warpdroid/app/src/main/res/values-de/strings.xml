@@ -298,7 +298,7 @@
     <string name="hint_search_people_list">Suche nach Leuten, denen du folgst</string>
     <string name="action_remove_from_list">Konto aus der Liste entfernen</string>
     <string name="pick_hashtag_hint">Hashtag ohne #</string>
-    <string name="action_open_retweetger">Autor*in des geteilten Beitrags öffnen</string>
+    <string name="action_open_retweeter">Autor*in des geteilten Beitrags öffnen</string>
     <string name="pref_title_public_filter_keywords">Öffentliche Timelines</string>
     <plurals name="favs">
         <item quantity="one">%1$s-mal favorisiert</item>

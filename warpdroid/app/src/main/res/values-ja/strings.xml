@@ -400,7 +400,7 @@
     <string name="pref_title_alway_open_spoiler">閲覧注意としてマークされた投稿を常に展開する</string>
     <string name="action_open_media_n">メディア #%1$d を開く</string>
     <string name="action_open_faved_by">お気に入りを表示</string>
-    <string name="action_open_retweetger">ブーストしたユーザーを開く</string>
+    <string name="action_open_retweeter">ブーストしたユーザーを開く</string>
     <string name="action_unmute_conversation">会話のミュートを解除</string>
     <string name="action_mute_conversation">会話をミュート</string>
     <string name="action_unmute_domain">%1$sのミュートを解除</string>

@@ -103,7 +103,7 @@
     <string name="action_content_warning">Varování o obsahu</string>
     <string name="action_emoji_keyboard">Klávesnice s emoji</string>
     <string name="action_add_tab">Přidat panel</string>
-    <string name="action_open_retweetger">Otevřít autora retweetu</string>
+    <string name="action_open_retweeter">Otevřít autora retweetu</string>
     <string name="action_open_retweeted_by">Zobrazit retweety</string>
     <string name="action_open_faved_by">Zobrazit oblíbení</string>
     <string name="title_hashtags_dialog">Hashtagy</string>

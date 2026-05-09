@@ -265,7 +265,7 @@
     <string name="action_add_poll">Dodaj głosowanie</string>
     <string name="action_mute_domain">Wycisz %1$s</string>
     <string name="action_add_tab">Dodaj zakładkę</string>
-    <string name="action_open_retweetger">Otwórz konto osoby podbijającej</string>
+    <string name="action_open_retweeter">Otwórz konto osoby podbijającej</string>
     <string name="action_open_retweeted_by">Pokaż podbicia</string>
     <string name="action_open_media_n">Otwórz media #%1$d</string>
     <string name="download_media">Pobierz media</string>

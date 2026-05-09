@@ -104,7 +104,7 @@
     <string name="action_content_warning">敏感內容警告</string>
     <string name="action_emoji_keyboard">插入表情符號</string>
     <string name="action_add_tab">新增標籤頁</string>
-    <string name="action_open_retweetger">打開轉嘟用戶主頁</string>
+    <string name="action_open_retweeter">打開轉嘟用戶主頁</string>
     <string name="action_open_retweeted_by">顯示轉嘟</string>
     <string name="action_open_faved_by">顯示最愛</string>
     <string name="title_hashtags_dialog">話題</string>

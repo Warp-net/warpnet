@@ -55,14 +55,14 @@ fun TimelineTweetInfo(
     var text: AnnotatedString? = null
     var emojis: List<Emoji> = emptyList()
 
-    val retweetgingStatus = statusViewData.retweetgingStatus
+    val retweetingStatus = statusViewData.retweetingStatus
 
-    if (retweetgingStatus != null) {
-        onClick = { listener.onViewAccount(retweetgingStatus.account.id) }
+    if (retweetingStatus != null) {
+        onClick = { listener.onViewAccount(retweetingStatus.account.id) }
         icon = R.drawable.ic_repeat_18dp
-        text = stringResource(R.string.post_retweeted_format, statusViewData.retweetgingStatus?.account?.name.orEmpty().unicodeWrap())
-            .emojify(statusViewData.retweetgingStatus?.account?.emojis.orEmpty())
-        emojis = retweetgingStatus.account.emojis
+        text = stringResource(R.string.post_retweeted_format, statusViewData.retweetingStatus?.account?.name.orEmpty().unicodeWrap())
+            .emojify(statusViewData.retweetingStatus?.account?.emojis.orEmpty())
+        emojis = retweetingStatus.account.emojis
     } else if (statusViewData.isReply) {
         icon = R.drawable.ic_reply_18dp
         text = if (statusViewData.isSelfReply) {

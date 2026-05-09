@@ -103,7 +103,7 @@
     <string name="action_content_warning">Avviso di contenuto sensibile</string>
     <string name="action_emoji_keyboard">Tastiera emoji</string>
     <string name="action_add_tab">Aggiungi scheda</string>
-    <string name="action_open_retweetger">Vai all\'autore della condivisione</string>
+    <string name="action_open_retweeter">Vai all\'autore della condivisione</string>
     <string name="action_open_retweeted_by">Mostra ricondivisioni</string>
     <string name="action_open_faved_by">Mostra preferiti</string>
     <string name="title_hashtags_dialog">Hashtag</string>

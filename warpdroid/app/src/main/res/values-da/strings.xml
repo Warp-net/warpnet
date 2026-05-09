@@ -674,7 +674,7 @@
     <string name="action_reset_schedule">Nulstil</string>
     <string name="action_add_tab">Tilføj fane</string>
     <string name="action_follow_hashtag">Følg et nyt hashtag</string>
-    <string name="action_open_retweetger">Åbn fremhævelsesforfatter</string>
+    <string name="action_open_retweeter">Åbn fremhævelsesforfatter</string>
     <string name="action_open_retweeted_by">Vis fremhævelser</string>
     <string name="action_open_faved_by">Vis favoritter</string>
     <string name="action_dismiss">Afvis</string>

@@ -103,7 +103,7 @@
     <string name="action_content_warning">Enhava averto</string>
     <string name="action_emoji_keyboard">Klavaro de emoĝioj</string>
     <string name="action_add_tab">Aldoni langeton</string>
-    <string name="action_open_retweetger">Montri la aŭtoron de la diskonigo</string>
+    <string name="action_open_retweeter">Montri la aŭtoron de la diskonigo</string>
     <string name="action_open_retweeted_by">Montri diskonigojn</string>
     <string name="action_open_faved_by">Montri stelumojn</string>
     <string name="title_hashtags_dialog">Kradvortoj</string>

@@ -315,7 +315,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             savedInstanceState,
             addSearchButton = hideTopToolbar,
             addTrendingTagsButton = false,
-            addTrendingStatusesButton = false,
+            addTrendingTweetsButton = false,
         )
 
         lifecycleScope.launch {
@@ -550,7 +550,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         savedInstanceState: Bundle?,
         addSearchButton: Boolean,
         addTrendingTagsButton: Boolean,
-        addTrendingStatusesButton: Boolean
+        addTrendingTweetsButton: Boolean
     ) {
         val drawerOpenClickListener = View.OnClickListener { binding.mainDrawerLayout.open() }
 
@@ -619,7 +619,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             refreshMainDrawerItems(
                 addSearchButton = addSearchButton,
                 addTrendingTagsButton = addTrendingTagsButton,
-                addTrendingStatusesButton = addTrendingStatusesButton
+                addTrendingTweetsButton = addTrendingTweetsButton
             )
             setSavedInstance(savedInstanceState)
         }
@@ -628,7 +628,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     private fun refreshMainDrawerItems(
         addSearchButton: Boolean,
         addTrendingTagsButton: Boolean,
-        addTrendingStatusesButton: Boolean
+        addTrendingTweetsButton: Boolean
     ) {
         binding.mainDrawer.apply {
             itemAdapter.clear()
@@ -751,7 +751,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 )
             }
 
-            if (addTrendingStatusesButton) {
+            if (addTrendingTweetsButton) {
                 binding.mainDrawer.addItemsAtPosition(
                     6,
                     primaryDrawerItem {

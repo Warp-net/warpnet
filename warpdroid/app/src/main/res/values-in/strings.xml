@@ -201,7 +201,7 @@
     <string name="action_content_warning">Peringatan konten</string>
     <string name="action_emoji_keyboard">Papan ketik Emoji</string>
     <string name="action_add_tab">Tambah Tab</string>
-    <string name="action_open_retweetger">Buka penulis retweet</string>
+    <string name="action_open_retweeter">Buka penulis retweet</string>
     <string name="action_open_retweeted_by">Tampilkan retweet</string>
     <string name="action_open_faved_by">Tampilkan favorit</string>
     <string name="action_dismiss">Menolak</string>

@@ -407,7 +407,7 @@
     <string name="action_open_media_n">Відкрити медіа #%1$d</string>
     <string name="hashtags">Гештеги</string>
     <string name="title_hashtags_dialog">Гештеги</string>
-    <string name="action_open_retweetger">Відкрити автора поширення</string>
+    <string name="action_open_retweeter">Відкрити автора поширення</string>
     <string name="action_add_tab">Додати вкладку</string>
     <string name="action_schedule_post">Запланувати допис</string>
     <string name="action_emoji_keyboard">Клавіатура емодзі</string>

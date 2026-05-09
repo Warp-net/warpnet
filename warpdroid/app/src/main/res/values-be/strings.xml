@@ -90,7 +90,7 @@
     <string name="action_access_drafts">Чарнавікі</string>
     <string name="action_access_scheduled_posts">Запланаваныя допісы</string>
     <string name="action_toggle_visibility">Бачнасць допісаў</string>
-    <string name="action_open_retweetger">Адкрыць аўтара пашырэння</string>
+    <string name="action_open_retweeter">Адкрыць аўтара пашырэння</string>
     <string name="action_open_retweeted_by">Паказаць пашырэнні</string>
     <string name="action_open_faved_by">Паказаць абраныя</string>
     <string name="title_hashtags_dialog">Хэштэгі</string>

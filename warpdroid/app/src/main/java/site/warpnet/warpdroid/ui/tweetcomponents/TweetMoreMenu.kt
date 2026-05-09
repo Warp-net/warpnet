@@ -58,7 +58,7 @@ import site.warpnet.warpdroid.ui.tweetcomponents.text.toInlineContent
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.copyToClipboard
 import site.warpnet.warpdroid.util.shareTweetContent
-import site.warpnet.warpdroid.util.shareStatusLink
+import site.warpnet.warpdroid.util.shareTweetLink
 import site.warpnet.warpdroid.viewdata.TweetViewData
 import site.warpnet.warpdroid.viewdata.TranslationViewData
 
@@ -163,7 +163,7 @@ fun TweetMoreMenu(
                 onClick = {
                     shareMenuVisible = false
                     onDismissRequest()
-                    context.shareStatusLink(viewData)
+                    context.shareTweetLink(viewData)
                 }
             )
             DropdownMenuItem(

@@ -120,7 +120,7 @@
     <string name="action_schedule_post">Tímasetja færslu</string>
     <string name="action_reset_schedule">Frumstilla</string>
     <string name="action_add_tab">Bæta við flipa</string>
-    <string name="action_open_retweetger">Opna höfund endurbirtingar</string>
+    <string name="action_open_retweeter">Opna höfund endurbirtingar</string>
     <string name="action_open_retweeted_by">Sýna endurbirtingar</string>
     <string name="action_open_faved_by">Birta eftirlæti</string>
     <string name="title_hashtags_dialog">Myllumerki</string>

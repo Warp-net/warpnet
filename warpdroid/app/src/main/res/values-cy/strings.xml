@@ -534,7 +534,7 @@
     <string name="failed_search">Wedi methu â chwilio</string>
     <string name="failed_report">Wedi methu ag adrodd</string>
     <string name="compose_preview_image_description">Gweithredoedd ar gyfer delwedd %1$s</string>
-    <string name="action_open_retweetger">Agor awdur hybu</string>
+    <string name="action_open_retweeter">Agor awdur hybu</string>
     <string name="notification_follow_request_description">Hysbysiadau am geisiadau i\'ch dilyn</string>
     <string name="caption_notoemoji">Set emoji cyfredol Google</string>
     <plurals name="poll_timespan_seconds">

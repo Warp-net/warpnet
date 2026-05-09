@@ -134,7 +134,7 @@
     <string name="action_schedule_post">Agendar Pubicação</string>
     <string name="action_reset_schedule">Redefinir</string>
     <string name="action_add_tab">Adicionar Separador</string>
-    <string name="action_open_retweetger">Ver autor do retweet</string>
+    <string name="action_open_retweeter">Ver autor do retweet</string>
     <string name="action_open_retweeted_by">Mostrar retweets</string>
     <string name="action_open_faved_by">Mostrar favoritos</string>
     <string name="title_hashtags_dialog">Hashtags</string>

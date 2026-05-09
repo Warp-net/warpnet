@@ -103,7 +103,7 @@
     <string name="action_content_warning">Innholdsadvarsel</string>
     <string name="action_emoji_keyboard">Emoji-tastatur</string>
     <string name="action_add_tab">Legg til fane</string>
-    <string name="action_open_retweetger">Åpne deler</string>
+    <string name="action_open_retweeter">Åpne deler</string>
     <string name="action_open_retweeted_by">Vis delinger</string>
     <string name="action_open_faved_by">Vis favoritter</string>
     <string name="title_hashtags_dialog">Stikkord</string>

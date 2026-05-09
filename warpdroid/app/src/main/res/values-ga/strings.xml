@@ -91,7 +91,7 @@
     <string name="title_links_dialog">Naisc Ghréasáin</string>
     <string name="action_open_faved_by">Taispeáin toghanna</string>
     <string name="action_open_retweeted_by">Taispeáin athchraolta</string>
-    <string name="action_open_retweetger">Oscail údar an athchraolta</string>
+    <string name="action_open_retweeter">Oscail údar an athchraolta</string>
     <string name="action_add_tab">Cuir Tab leis</string>
     <string name="action_schedule_post">Sceidealaigh Postáil</string>
     <string name="action_emoji_keyboard">Méarchlár Emoji</string>

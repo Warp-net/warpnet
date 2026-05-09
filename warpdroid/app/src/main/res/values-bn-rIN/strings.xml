@@ -104,7 +104,7 @@
     <string name="action_content_warning">সতর্কবার্তা</string>
     <string name="action_emoji_keyboard">ইমোজি কীবোর্ড</string>
     <string name="action_add_tab">ট্যাব যুক্ত করুন</string>
-    <string name="action_open_retweetger">সমর্থক লেখক খুলুন</string>
+    <string name="action_open_retweeter">সমর্থক লেখক খুলুন</string>
     <string name="action_open_retweeted_by">সমর্থন দেখান</string>
     <string name="action_open_faved_by">প্রিয়গুলি দেখান</string>
     <string name="title_hashtags_dialog">হ্যাশট্যাগ</string>

@@ -103,7 +103,7 @@
     <string name="action_content_warning">Innehållsvarning</string>
     <string name="action_emoji_keyboard">Emoji-tangentbord</string>
     <string name="action_add_tab">Lägg till flik</string>
-    <string name="action_open_retweetger">Öppna knuff författare</string>
+    <string name="action_open_retweeter">Öppna knuff författare</string>
     <string name="action_open_retweeted_by">Visa knuffar</string>
     <string name="action_open_faved_by">Visa liker</string>
     <string name="title_hashtags_dialog">Hashtaggar</string>

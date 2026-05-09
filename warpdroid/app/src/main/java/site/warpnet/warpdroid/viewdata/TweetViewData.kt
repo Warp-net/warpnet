@@ -115,7 +115,7 @@ sealed class TweetViewData {
                 null
             }
 
-        val retweetgingStatus: Tweet?
+        val retweetingStatus: Tweet?
             get() = if (status.retweet != null) status else null
 
         val isReply: Boolean

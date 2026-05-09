@@ -25,7 +25,7 @@ import at.connyduck.calladapter.networkresult.fold
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
-import site.warpnet.warpdroid.components.report.adapter.StatusesPagingSource
+import site.warpnet.warpdroid.components.report.adapter.TweetsPagingSource
 import site.warpnet.warpdroid.components.report.model.TweetViewState
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Instance
@@ -94,7 +94,7 @@ class ReportViewModel @AssistedInject constructor(
             pageSize = 20,
             initialLoadSize = 20
         ),
-        pagingSourceFactory = { StatusesPagingSource(accountId, warpnetApi) }
+        pagingSourceFactory = { TweetsPagingSource(accountId, warpnetApi) }
     ).flow
         .map { pagingData ->
             /* TODO: refactor reports to use the isShowingContent / isExpanded / isCollapsed attributes from TweetViewData.Concrete

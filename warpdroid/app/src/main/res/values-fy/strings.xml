@@ -240,7 +240,7 @@
     <string name="hint_note">Oer dy</string>
     <string name="title_hashtags_dialog">Hashtags</string>
     <string name="action_open_retweeted_by">Retweets sjen litte</string>
-    <string name="action_open_retweetger">Auteur fan retweet iepenje</string>
+    <string name="action_open_retweeter">Auteur fan retweet iepenje</string>
     <string name="action_reset_schedule">Nei standert ynstelling weromsette</string>
     <string name="action_show_retweets">Retweets sjen litte</string>
     <string name="action_hide_retweets">Retweets ferburgje</string>

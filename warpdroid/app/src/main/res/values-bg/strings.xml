@@ -270,7 +270,7 @@
     <string name="title_hashtags_dialog">Хаштагове</string>
     <string name="action_open_faved_by">Показване на любими</string>
     <string name="action_open_retweeted_by">Показване на споделяния</string>
-    <string name="action_open_retweetger">Отваряне на споделилия автор</string>
+    <string name="action_open_retweeter">Отваряне на споделилия автор</string>
     <string name="action_add_tab">Добавяне на раздел</string>
     <string name="action_reset_schedule">Нулиране</string>
     <string name="action_schedule_post">Планиране на публикация</string>

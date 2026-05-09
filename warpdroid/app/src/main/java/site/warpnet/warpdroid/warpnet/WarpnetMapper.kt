@@ -61,7 +61,7 @@ object WarpnetMapper {
         note = bio,
     )
 
-    fun WarpnetTweet.toStatus(author: WarpnetUser?): Tweet {
+    fun WarpnetTweet.toTweet(author: WarpnetUser?): Tweet {
         val account = author?.toTimelineAccount() ?: stubTimelineAccount(userId, username)
         return Tweet(
             id = id,

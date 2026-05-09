@@ -501,7 +501,7 @@ class WarpnetApi @Inject constructor(
 
     suspend fun unmuteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("unmuteConversation")
 
-    suspend fun scheduledStatuses(
+    suspend fun scheduledTweets(
         limit: Int? = null,
         maxId: String? = null,
     ): Response<List<ScheduledTweet>> = stubList()

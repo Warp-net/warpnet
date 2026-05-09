@@ -103,7 +103,7 @@
     <string name="action_content_warning">Inhoudswaarschuwing</string>
     <string name="action_emoji_keyboard">Emojis</string>
     <string name="action_add_tab">Tab toevoegen</string>
-    <string name="action_open_retweetger">Auteur van deze retweet openen</string>
+    <string name="action_open_retweeter">Auteur van deze retweet openen</string>
     <string name="action_open_retweeted_by">Retweets tonen</string>
     <string name="action_open_faved_by">Favorieten tonen</string>
     <string name="title_hashtags_dialog">Hashtags</string>

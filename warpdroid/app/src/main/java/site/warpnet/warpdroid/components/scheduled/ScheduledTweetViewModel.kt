@@ -50,7 +50,7 @@ class ScheduledTweetViewModel @Inject constructor(
 
     private var currentPagingSource: ScheduledTweetPagingSource? = null
 
-    val scheduledStatuses: MutableList<ScheduledTweetViewData> = mutableListOf()
+    val scheduledTweets: MutableList<ScheduledTweetViewData> = mutableListOf()
     var nextKey: String? = null
 
     @OptIn(ExperimentalPagingApi::class, ExperimentalCoroutinesApi::class)
@@ -92,7 +92,7 @@ class ScheduledTweetViewModel @Inject constructor(
     }
 
     fun expandSpoiler(expanded: Boolean, id: String) {
-        scheduledStatuses.replaceAll { status ->
+        scheduledTweets.replaceAll { status ->
             if (id == status.id) {
                 status.copy(spoilerExpanded = expanded)
             } else {
@@ -103,7 +103,7 @@ class ScheduledTweetViewModel @Inject constructor(
     }
 
     fun showOverflow(overflowVisible: Boolean, id: String) {
-        scheduledStatuses.replaceAll { status ->
+        scheduledTweets.replaceAll { status ->
             if (id == status.id) {
                 status.copy(overflowVisible = overflowVisible)
             } else {
@@ -114,7 +114,7 @@ class ScheduledTweetViewModel @Inject constructor(
     }
 
     fun showMedia(show: Boolean, id: String) {
-        scheduledStatuses.replaceAll { status ->
+        scheduledTweets.replaceAll { status ->
             if (id == status.id) {
                 status.copy(mediaVisible = show)
             } else {
@@ -128,7 +128,7 @@ class ScheduledTweetViewModel @Inject constructor(
         viewModelScope.launch {
             warpnetApi.deleteScheduledStatus(status.id).fold(
                 {
-                    scheduledStatuses.removeAll { s ->
+                    scheduledTweets.removeAll { s ->
                         s.id == status.id
                     }
                     invalidate()

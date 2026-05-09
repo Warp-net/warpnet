@@ -40,7 +40,7 @@ import site.warpnet.warpdroid.ViewMediaActivity
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.report.ReportViewModel
 import site.warpnet.warpdroid.components.report.adapter.AdapterHandler
-import site.warpnet.warpdroid.components.report.adapter.StatusesAdapter
+import site.warpnet.warpdroid.components.report.adapter.TweetsAdapter
 import site.warpnet.warpdroid.databinding.FragmentReportTweetsBinding
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
@@ -58,7 +58,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class ReportStatusesFragment :
+class ReportTweetsFragment :
     Fragment(R.layout.fragment_report_tweets),
     OnRefreshListener,
     MenuProvider,
@@ -74,7 +74,7 @@ class ReportStatusesFragment :
 
     private val binding by viewBinding(FragmentReportTweetsBinding::bind)
 
-    private var adapter: StatusesAdapter? = null
+    private var adapter: TweetsAdapter? = null
 
     private var snackbarErrorRetry: Snackbar? = null
 
@@ -153,7 +153,7 @@ class ReportStatusesFragment :
             openSpoiler = accountManager.activeAccount!!.alwaysOpenSpoiler
         )
 
-        val adapter = StatusesAdapter(statusDisplayOptions, viewModel.statusViewState, this)
+        val adapter = TweetsAdapter(statusDisplayOptions, viewModel.statusViewState, this)
         this.adapter = adapter
 
         binding.recyclerView.addItemDecoration(
@@ -189,7 +189,7 @@ class ReportStatusesFragment :
         }
     }
 
-    private fun showError(adapter: StatusesAdapter) {
+    private fun showError(adapter: TweetsAdapter) {
         if (snackbarErrorRetry?.isShown != true) {
             snackbarErrorRetry =
                 Snackbar.make(binding.swipeRefreshLayout, R.string.failed_fetch_posts, Snackbar.LENGTH_INDEFINITE)
@@ -230,6 +230,6 @@ class ReportStatusesFragment :
     override fun onViewUrl(url: String) = viewModel.checkClickedUrl(url)
 
     companion object {
-        fun newInstance() = ReportStatusesFragment()
+        fun newInstance() = ReportTweetsFragment()
     }
 }

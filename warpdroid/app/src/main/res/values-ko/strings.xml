@@ -107,7 +107,7 @@
     <string name="action_content_warning">열람 주의</string>
     <string name="action_emoji_keyboard">이모지 추가</string>
     <string name="action_add_tab">탭 추가</string>
-    <string name="action_open_retweetger">부스트한 유저의 프로필로 이동</string>
+    <string name="action_open_retweeter">부스트한 유저의 프로필로 이동</string>
     <string name="action_open_retweeted_by">부스트 보이기</string>
     <string name="action_open_faved_by">좋아요한 유저 보이기</string>
     <string name="title_hashtags_dialog">해시태그</string>

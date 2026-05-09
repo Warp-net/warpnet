@@ -266,7 +266,7 @@
     <string name="action_logout">Iziet</string>
     <string name="action_show_retweets">Parādīt pastiprinājumus</string>
     <string name="action_hide_retweets">Paslēpt pastiprinājumus</string>
-    <string name="action_open_retweetger">Atvērt pastiprinājuma autoru</string>
+    <string name="action_open_retweeter">Atvērt pastiprinājuma autoru</string>
     <string name="action_open_retweeted_by">Parādīt pastiprinājumus</string>
     <string name="action_share_as">Dalīties, izmantojot…</string>
     <string name="send_post_content_to">Dalīties ar ierakstu…</string>

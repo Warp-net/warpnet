@@ -114,7 +114,7 @@
     <string name="title_hashtags_dialog">निश्रेणिचिह्नशीर्षकाः</string>
     <string name="action_open_faved_by">प्रियाणि दृश्यन्ताम्</string>
     <string name="action_open_retweeted_by">प्रकाशनानि दृश्यन्ताम्</string>
-    <string name="action_open_retweetger">प्रकाशनलेखकः उद्घाट्यताम्</string>
+    <string name="action_open_retweeter">प्रकाशनलेखकः उद्घाट्यताम्</string>
     <string name="action_add_tab">पीठिका युज्यताम्</string>
     <string name="action_reset_schedule">पुनरारम्भः</string>
     <string name="action_schedule_post">कालबद्धदौत्यं क्रियताम्</string>

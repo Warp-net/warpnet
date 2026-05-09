@@ -263,7 +263,7 @@
     <string name="action_add_poll">افزودن نظرسنجی</string>
     <string name="action_mute_domain">خموشی %1$s</string>
     <string name="action_add_tab">افزودن زبانه</string>
-    <string name="action_open_retweetger">گشودن تقویت‌کننده</string>
+    <string name="action_open_retweeter">گشودن تقویت‌کننده</string>
     <string name="action_open_retweeted_by">نمایش تقویت‌ها</string>
     <string name="action_open_faved_by">نمایش برگزیده‌ها</string>
     <string name="title_hashtags_dialog">برچسب‌ها</string>

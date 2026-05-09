@@ -25,7 +25,7 @@ import site.warpnet.warpdroid.databinding.ItemReportTweetBinding
 import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.viewdata.TweetViewData
 
-class StatusesAdapter(
+class TweetsAdapter(
     private val statusDisplayOptions: TweetDisplayOptions,
     private val statusViewState: TweetViewState,
     private val adapterHandler: AdapterHandler

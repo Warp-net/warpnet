@@ -163,7 +163,7 @@
     <string name="title_notifications">Ilmoitukset</string>
     <string name="title_home">Koti</string>
     <string name="action_unlike">Poista suosikki</string>
-    <string name="action_open_retweetger">Avaa jakajan tili</string>
+    <string name="action_open_retweeter">Avaa jakajan tili</string>
     <string name="action_edit_image">Muokkaa kuvaa</string>
     <string name="action_view_mutes">Mykistetyt tilit</string>
     <string name="notification_follow_format">%1$s seurasi sinua</string>

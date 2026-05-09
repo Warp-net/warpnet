@@ -279,7 +279,7 @@
     <string name="title_hashtags_dialog">แฮชแท็ก</string>
     <string name="action_open_faved_by">ดูชื่นชอบ</string>
     <string name="action_open_retweeted_by">ดูบสต์</string>
-    <string name="action_open_retweetger">ดูต้นตอบูสต์</string>
+    <string name="action_open_retweeter">ดูต้นตอบูสต์</string>
     <string name="action_add_tab">เพิ่มแท็บ</string>
     <string name="action_schedule_post">Toot แบบตั้งเวลา</string>
     <string name="action_emoji_keyboard">คีย์บอร์ดเอโมจิ</string>

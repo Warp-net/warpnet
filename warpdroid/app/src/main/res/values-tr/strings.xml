@@ -366,7 +366,7 @@
     <string name="failed_fetch_posts">Yayınlar getirilemedi</string>
     <string name="report_description_1">Rapor, sunucunuzun moderatörlerine gönderilecektir. Bu hesabı neden raporladığınızı aşağıya açıklayabilirsiniz:</string>
     <string name="report_description_remote_instance">Hesap başka bir sunucudan. Raporun anonim bir kopyasını da oraya gönderilsin mi?</string>
-    <string name="action_open_retweetger">Gönderi yazanını aç</string>
+    <string name="action_open_retweeter">Gönderi yazanını aç</string>
     <string name="action_open_retweeted_by">Yeniden paylaşımları göster</string>
     <string name="title_mentions_dialog">Bahsedenler</string>
     <string name="action_open_media_n">#%1$d medyayı aç</string>

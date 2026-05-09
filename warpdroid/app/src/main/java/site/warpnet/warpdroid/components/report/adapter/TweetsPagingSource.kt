@@ -25,7 +25,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import retrofit2.HttpException
 
-class StatusesPagingSource(
+class TweetsPagingSource(
     private val accountId: String,
     private val warpnetApi: WarpnetApi
 ) : PagingSource<String, Tweet>() {
@@ -69,7 +69,7 @@ class StatusesPagingSource(
                 nextKey = result.lastOrNull()?.id
             )
         } catch (e: Exception) {
-            Log.w("StatusesPagingSource", "failed to load statuses", e)
+            Log.w("TweetsPagingSource", "failed to load tweets", e)
             return LoadResult.Error(e)
         }
     }

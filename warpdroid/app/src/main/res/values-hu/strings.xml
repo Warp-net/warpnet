@@ -293,7 +293,7 @@
     <string name="action_unretweet">Megtolás visszavonása</string>
     <string name="action_view_domain_mutes">Rejtett domainek</string>
     <string name="action_mute_domain">%1$s némítása</string>
-    <string name="action_open_retweetger">Megtolás szerkesztő megnyitása</string>
+    <string name="action_open_retweeter">Megtolás szerkesztő megnyitása</string>
     <string name="action_open_retweeted_by">Megtolások megjelenítése</string>
     <string name="confirmation_domain_unmuted">%1$s elrejtése feloldva</string>
     <string name="mute_domain_warning">Biztos, hogy az egész %1$s domaint le akarod tiltani? Egyetlen nyilvános idővonalon sem fogsz látni semmilyen tartalmat vagy értesítést innen. Az ebből a domainből származó követőidet el fogjuk távolítani.</string>

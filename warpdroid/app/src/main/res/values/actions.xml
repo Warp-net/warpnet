@@ -19,7 +19,7 @@
     <item name="action_links" type="id" />
     <item name="action_mentions" type="id" />
     <item name="action_hashtags" type="id" />
-    <item name="action_open_retweetger" type="id" />
+    <item name="action_open_retweeter" type="id" />
     <item name="action_open_retweeted_by" type="id" />
     <item name="action_open_faved_by" type="id" />
     <item name="action_more" type="id" />

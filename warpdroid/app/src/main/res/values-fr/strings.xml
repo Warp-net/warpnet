@@ -103,7 +103,7 @@
     <string name="action_content_warning">Contenu sensible</string>
     <string name="action_emoji_keyboard">Clavier d’émojis</string>
     <string name="action_add_tab">Ajouter un onglet</string>
-    <string name="action_open_retweetger">Afficher l’auteur·rice du partage</string>
+    <string name="action_open_retweeter">Afficher l’auteur·rice du partage</string>
     <string name="action_open_retweeted_by">Afficher les partages</string>
     <string name="action_open_faved_by">Montrer les favoris</string>
     <string name="title_hashtags_dialog">Hashtags</string>

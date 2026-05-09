@@ -30,8 +30,8 @@ class ScheduledTweetRemoteMediator(
         try {
             val statusResponse = when (loadType) {
                 LoadType.REFRESH -> {
-                    viewModel.scheduledStatuses.clear()
-                    api.scheduledStatuses(limit = state.config.pageSize)
+                    viewModel.scheduledTweets.clear()
+                    api.scheduledTweets(limit = state.config.pageSize)
                 }
 
                 LoadType.PREPEND -> {
@@ -43,7 +43,7 @@ class ScheduledTweetRemoteMediator(
                     if (nextKey == null) {
                         return MediatorResult.Success(endOfPaginationReached = true)
                     }
-                    api.scheduledStatuses(limit = state.config.pageSize, maxId = nextKey)
+                    api.scheduledTweets(limit = state.config.pageSize, maxId = nextKey)
                 }
             }
 
@@ -64,7 +64,7 @@ class ScheduledTweetRemoteMediator(
             val links = HttpHeaderLink.parse(linkHeader)
             val next = HttpHeaderLink.findByRelationType(links, "next")
 
-            viewModel.scheduledStatuses.addAll(data)
+            viewModel.scheduledTweets.addAll(data)
 
             viewModel.nextKey = next?.uri?.getQueryParameter("max_id")
 

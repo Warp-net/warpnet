@@ -208,7 +208,7 @@
     <string name="action_reset_schedule">Reset</string>
     <string name="action_add_tab">Add Tab</string>
     <string name="action_follow_hashtag">Follow a new hashtag</string>
-    <string name="action_open_retweetger">Open retweet author</string>
+    <string name="action_open_retweeter">Open retweet author</string>
     <string name="action_open_retweeted_by">Show retweets</string>
     <string name="action_open_faved_by">Show likes</string>
     <string name="action_dismiss">Dismiss</string>
@@ -379,7 +379,7 @@
     <string name="notification_retweet_name">Retweets</string>
     <string name="notification_retweet_description">Notifications when your posts get retweeted</string>
     <string name="notification_like_name">Likes</string>
-    <string name="notification_like_description">Notifications when your posts get marked as like</string>
+    <string name="notification_like_description">Notifications when your posts get a like</string>
     <string name="notification_poll_name">Poll results</string>
     <string name="notification_poll_description">Notifications about polls that have ended</string>
     <string name="notification_subscription_name">New posts</string>
@@ -750,7 +750,7 @@
     <string name="pref_title_show_self_username">Show username in toolbars</string>
     <string name="pref_title_show_cards_in_timelines">Show link previews in timelines</string>
     <string name="pref_title_confirm_retweets">Show confirmation before retweeting</string>
-    <string name="pref_title_confirm_likes">Show confirmation before favoriting</string>
+    <string name="pref_title_confirm_likes">Show confirmation before liking</string>
     <string name="pref_title_confirm_follows">Show confirmation before following</string>
     <string name="pref_title_hide_top_toolbar">Hide the title of the top toolbar</string>
     <string name="pref_title_wellbeing_mode">Wellbeing</string>
@@ -825,7 +825,7 @@
     <string name="ui_error_unknown">unknown reason</string>
     <string name="ui_error_bookmark">Bookmarking post failed: %1$s</string>
     <string name="ui_error_clear_notifications">Clearing notifications failed: %1$s</string>
-    <string name="ui_error_like">Favoriting post failed: %1$s</string>
+    <string name="ui_error_like">Liking post failed: %1$s</string>
     <string name="ui_error_retweet">Retweeting post failed: %1$s</string>
     <string name="ui_error_vote">Voting in poll failed: %1$s</string>
     <string name="ui_error_accept_follow_request">Accepting follow request failed: %1$s</string>

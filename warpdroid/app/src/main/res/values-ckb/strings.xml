@@ -21,7 +21,7 @@
     <string name="title_hashtags_dialog">هاشتاگی</string>
     <string name="action_open_faved_by">پیشاندانی دڵخوازەکان</string>
     <string name="action_open_retweeted_by">پیشاندانی بەهێزکردنەکان</string>
-    <string name="action_open_retweetger">پۆستکەرەوەکە ببینە</string>
+    <string name="action_open_retweeter">پۆستکەرەوەکە ببینە</string>
     <string name="action_add_tab">زیادکردنی سەرخشت</string>
     <string name="action_reset_schedule">ڕیسێت کردن</string>
     <string name="action_schedule_post">خشتەی توت</string>

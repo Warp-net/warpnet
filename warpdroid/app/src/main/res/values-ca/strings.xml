@@ -239,7 +239,7 @@
     <string name="filter_edit_title">Modificar un filtre</string>
     <string name="filter_dialog_remove_button">Eliminar</string>
     <string name="add_account_name">Afegir un compte</string>
-    <string name="action_open_retweetger">Obre l\'autor de l\'impuls</string>
+    <string name="action_open_retweeter">Obre l\'autor de l\'impuls</string>
     <string name="action_open_retweeted_by">Mostra els impulsos</string>
     <string name="notification_poll_description">Notificacions d\'enquestes que han finalitzat</string>
     <string name="pref_title_public_filter_keywords">Línia de temps públiques</string>

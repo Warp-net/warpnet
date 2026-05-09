@@ -26,7 +26,7 @@ class ScheduledTweetPagingSource(
 
     override suspend fun load(params: LoadParams<String>): LoadResult<String, ScheduledTweetViewData> {
         return if (params is LoadParams.Refresh) {
-            val list = viewModel.scheduledStatuses.toList()
+            val list = viewModel.scheduledTweets.toList()
             LoadResult.Page(list, null, viewModel.nextKey)
         } else {
             LoadResult.Page(emptyList(), null, null)

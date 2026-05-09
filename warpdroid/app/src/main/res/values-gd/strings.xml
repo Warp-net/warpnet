@@ -397,7 +397,7 @@
     <string name="title_mentions_dialog">Iomraidhean</string>
     <string name="title_hashtags_dialog">Tagaichean hais</string>
     <string name="action_open_faved_by">Seall na h-annsachdan</string>
-    <string name="action_open_retweetger">Fosgail ùghdar a’ bhrosnachaidh</string>
+    <string name="action_open_retweeter">Fosgail ùghdar a’ bhrosnachaidh</string>
     <string name="action_add_tab">Cuir taba ris</string>
     <string name="action_reject">Diùlt</string>
     <string name="action_accept">Gabh ris</string>

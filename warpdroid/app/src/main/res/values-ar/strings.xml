@@ -312,7 +312,7 @@
     <string name="description_visibility_direct">مباشر</string>
     <string name="hint_list_name">اسم القائمة</string>
     <string name="action_delete_and_redraft">حذف وإعادة صياغة</string>
-    <string name="action_open_retweetger">أظهر من أعاد النشر</string>
+    <string name="action_open_retweeter">أظهر من أعاد النشر</string>
     <string name="action_open_media_n">فتح الوسيط #%1$d</string>
     <string name="download_media">تنزيل الوسائط</string>
     <string name="downloading_media">جارٍ تنزيل الوسائط</string>

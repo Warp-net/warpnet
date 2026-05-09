@@ -125,7 +125,7 @@ fun statusActions(
 
     if (status.retweet?.account != null) {
         addAction(
-            label = stringResource(R.string.action_open_retweetger),
+            label = stringResource(R.string.action_open_retweeter),
             action = {
                 listener.onViewAccount(status.retweet.account.id)
             }

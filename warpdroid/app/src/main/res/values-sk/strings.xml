@@ -193,7 +193,7 @@
     <string name="error_multimedia_size_limit">Video a audio súbory nesmú prekročit veľkosť %1$s MB.</string>
     <string name="error_image_edit_failed">Obrázok sa nepodarilo upraviť.</string>
     <string name="action_follow_hashtag">Sledovať nový hashtag</string>
-    <string name="action_open_retweetger">Otvoriť autora retweetu</string>
+    <string name="action_open_retweeter">Otvoriť autora retweetu</string>
     <string name="action_open_retweeted_by">Zobraziť retweety</string>
     <string name="confirmation_unmuted">Stlmenie užívateľa zrušené</string>
     <string name="confirmation_domain_unmuted">Skrytie domény %1$s zrušené</string>

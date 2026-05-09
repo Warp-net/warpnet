@@ -98,7 +98,7 @@
     <string name="action_content_warning">Opozorilo o vsebini</string>
     <string name="action_emoji_keyboard">Tipkovnica z emotikoni</string>
     <string name="action_add_tab">Dodaj zavihek</string>
-    <string name="action_open_retweetger">Odpri spodbujenega avtorja</string>
+    <string name="action_open_retweeter">Odpri spodbujenega avtorja</string>
     <string name="action_open_retweeted_by">Prikaži spodbude</string>
     <string name="action_open_faved_by">Prikaži priljubljene</string>
     <string name="title_mentions_dialog">Omembe</string>

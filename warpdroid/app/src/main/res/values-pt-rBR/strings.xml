@@ -273,7 +273,7 @@
     <string name="message_empty">Nada aqui.</string>
     <string name="action_delete_and_redraft">Excluir e rascunhar</string>
     <string name="action_view_account_preferences">Preferências da conta</string>
-    <string name="action_open_retweetger">Ver quem impulsionou</string>
+    <string name="action_open_retweeter">Ver quem impulsionou</string>
     <string name="title_hashtags_dialog">Hashtags</string>
     <string name="action_open_media_n">Abrir mídia #%1$d</string>
     <string name="download_media">Baixar mídia</string>

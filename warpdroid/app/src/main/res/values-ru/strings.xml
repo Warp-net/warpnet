@@ -104,7 +104,7 @@
     <string name="action_content_warning">Предупреждение о содержании</string>
     <string name="action_emoji_keyboard">Эмодзи-клавиатура</string>
     <string name="action_add_tab">Добавить вкладку</string>
-    <string name="action_open_retweetger">Перейти к продвинувшему пост</string>
+    <string name="action_open_retweeter">Перейти к продвинувшему пост</string>
     <string name="action_open_retweeted_by">Показать продвижения</string>
     <string name="action_open_faved_by">Показать избранное</string>
     <string name="title_hashtags_dialog">Хэштеги</string>
