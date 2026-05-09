@@ -340,11 +340,22 @@ class WarpnetApi @Inject constructor(
         status: NewStatus,
     ): NetworkResult<Status> {
         val active = accountManager.activeAccount ?: return stubFailure("createStatus")
+        // The Warpnet `Tweet.Username` field is the human-readable display
+        // name (e.g. "Vadim") — desktop renders it verbatim as the author
+        // line. WarpnetMapper.toAccount maps WarpnetUser.id → Account.username
+        // (the @-handle, peer-derived ULID) and WarpnetUser.username →
+        // Account.displayName (the real name), to match Mastodon's
+        // username-vs-displayName split. So the tweet's authorUsername has
+        // to be sourced from displayName, not username, otherwise the post
+        // shows up authored by the ULID. Fall back to the @-handle if
+        // displayName isn't populated yet (e.g. accountVerifyCredentials
+        // hasn't finished).
+        val authorName = active.displayName.ifBlank { active.username }
         return result {
             warpnet.postStatus(
                 text = status.status,
                 authorUserId = active.accountId,
-                authorUsername = active.username,
+                authorUsername = authorName,
                 parentId = status.inReplyToId,
             )
         }
@@ -420,11 +431,14 @@ class WarpnetApi @Inject constructor(
         visibility: String?,
     ): NetworkResult<Status> {
         val active = accountManager.activeAccount ?: return stubFailure("reblogStatus")
+        // Same reasoning as createStatus: the wire-level username field is
+        // the display name, not the @-handle.
+        val retweeterName = active.displayName.ifBlank { active.username }
         return result {
             warpnet.reblogStatus(
                 tweetId = statusId,
                 retweeterId = active.accountId,
-                retweeterUsername = active.username,
+                retweeterUsername = retweeterName,
             )
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
