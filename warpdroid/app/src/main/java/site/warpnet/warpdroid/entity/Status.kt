@@ -28,17 +28,17 @@ import java.util.Date
 @JsonClass(generateAdapter = true)
 data class Status(
     val id: String,
-    // not present if it's reblog
+    // not present if it's retweet
     val url: String? = null,
     val account: TimelineAccount,
     @Json(name = "in_reply_to_id") val inReplyToId: String? = null,
     @Json(name = "in_reply_to_account_id") val inReplyToAccountId: String? = null,
-    val reblog: Status? = null,
+    val retweet: Status? = null,
     val content: String,
     @Json(name = "created_at") val createdAt: Date,
     @Json(name = "edited_at") val editedAt: Date? = null,
     val emojis: List<Emoji>,
-    @Json(name = "reblogs_count") val reblogsCount: Int,
+    @Json(name = "retweets_count") val retweetsCount: Int,
     @Json(name = "likes_count") val likesCount: Int,
     @Json(name = "replies_count") val repliesCount: Int,
     @Json(name = "quotes_count") val quotesCount: Int = 0,
@@ -46,7 +46,7 @@ data class Status(
      *  Defaults to zero so Warpnet-shaped JSON without this key still
      *  decodes cleanly via Moshi. */
     @Json(name = "views_count") val viewsCount: Int = 0,
-    val reblogged: Boolean = false,
+    val retweeted: Boolean = false,
     val liked: Boolean = false,
     val bookmarked: Boolean = false,
     val sensitive: Boolean,
@@ -72,10 +72,10 @@ data class Status(
 ) {
 
     val actionableId: String
-        get() = reblog?.id ?: id
+        get() = retweet?.id ?: id
 
     val actionableStatus: Status
-        get() = reblog ?: this
+        get() = retweet ?: this
 
     val isReply: Boolean
         get() = inReplyToId != null
@@ -130,7 +130,7 @@ data class Status(
         }
     }
 
-    val isRebloggingAllowed: Boolean
+    val isRetweetgingAllowed: Boolean
         get() {
             return (visibility != Visibility.DIRECT && visibility != Visibility.UNKNOWN)
         }

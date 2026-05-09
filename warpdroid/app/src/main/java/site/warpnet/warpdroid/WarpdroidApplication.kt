@@ -111,7 +111,7 @@ class WarpdroidApplication :
                 for (channel in notificationManager.notificationChannels) {
                     if (channel.id.startsWith("CHANNEL_SIGN_UP") ||
                         channel.id.startsWith("CHANNEL_REPORT") ||
-                        channel.id.startsWith("CHANNEL_BOOST")
+                        channel.id.startsWith("CHANNEL_RETWEET")
                     ) {
                         notificationManager.deleteNotificationChannel(channel.id)
                     }
@@ -193,8 +193,8 @@ class WarpdroidApplication :
 
             if (oldVersion < 2023112001) {
                 remove(PrefKeys.TAB_FILTER_HOME_REPLIES)
-                remove(PrefKeys.TAB_FILTER_HOME_BOOSTS)
-                remove(PrefKeys.TAB_SHOW_HOME_SELF_BOOSTS)
+                remove(PrefKeys.TAB_FILTER_HOME_RETWEETS)
+                remove(PrefKeys.TAB_SHOW_HOME_SELF_RETWEETS)
             }
 
             if (oldVersion < 2024060201) {

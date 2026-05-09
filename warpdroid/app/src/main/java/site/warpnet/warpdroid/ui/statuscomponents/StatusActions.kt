@@ -24,7 +24,7 @@ import site.warpnet.warpdroid.interfaces.StatusActionListener
 import site.warpnet.warpdroid.ui.preferences.LocalAccount
 import site.warpnet.warpdroid.util.reply
 import site.warpnet.warpdroid.util.showFavs
-import site.warpnet.warpdroid.util.showReblogs
+import site.warpnet.warpdroid.util.showRetweets
 import site.warpnet.warpdroid.viewdata.StatusViewData
 
 @Composable
@@ -59,15 +59,15 @@ fun statusActions(
         }
     )
 
-    if (status.isRebloggingAllowed) {
+    if (status.isRetweetgingAllowed) {
         addAction(
-            label = if (status.reblogged) {
-                stringResource(R.string.action_unreblog)
+            label = if (status.retweeted) {
+                stringResource(R.string.action_unretweet)
             } else {
-                stringResource(R.string.action_reblog)
+                stringResource(R.string.action_retweet)
             },
             action = {
-                listener.onReblog(statusViewData, !status.reblogged, null, null)
+                listener.onRetweet(statusViewData, !status.retweeted, null, null)
             }
         )
     }
@@ -123,20 +123,20 @@ fun statusActions(
         }
     )
 
-    if (status.reblog?.account != null) {
+    if (status.retweet?.account != null) {
         addAction(
-            label = stringResource(R.string.action_open_reblogger),
+            label = stringResource(R.string.action_open_retweetger),
             action = {
-                listener.onViewAccount(status.reblog.account.id)
+                listener.onViewAccount(status.retweet.account.id)
             }
         )
     }
 
-    if (status.reblogsCount > 0) {
+    if (status.retweetsCount > 0) {
         addAction(
-            label = stringResource(R.string.action_open_reblogged_by),
+            label = stringResource(R.string.action_open_retweeted_by),
             action = {
-                context.showReblogs(statusViewData)
+                context.showRetweets(statusViewData)
             }
         )
     }

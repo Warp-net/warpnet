@@ -6,8 +6,8 @@
     <item name="action_unlike" type="id" />
     <item name="action_bookmark" type="id" />
     <item name="action_unbookmark" type="id" />
-    <item name="action_reblog" type="id" />
-    <item name="action_unreblog" type="id" />
+    <item name="action_retweet" type="id" />
+    <item name="action_unretweet" type="id" />
     <item name="action_open_profile" type="id" />
     <item name="action_open_media_1" type="id" />
     <item name="action_open_media_2" type="id" />
@@ -19,8 +19,8 @@
     <item name="action_links" type="id" />
     <item name="action_mentions" type="id" />
     <item name="action_hashtags" type="id" />
-    <item name="action_open_reblogger" type="id" />
-    <item name="action_open_reblogged_by" type="id" />
+    <item name="action_open_retweetger" type="id" />
+    <item name="action_open_retweeted_by" type="id" />
     <item name="action_open_faved_by" type="id" />
     <item name="action_more" type="id" />
     <item name="action_untranslate" type="id" />

@@ -64,24 +64,24 @@ abstract class StatusActionsViewModel(
         }
     }
 
-    fun reblog(statusId: String, reblog: Boolean, visibility: Status.Visibility = Status.Visibility.PUBLIC) {
+    fun retweet(statusId: String, retweet: Boolean, visibility: Status.Visibility = Status.Visibility.PUBLIC) {
         viewModelScope.launch {
-            if (reblog) {
-                warpnetApi.reblogStatus(statusId, visibility.stringValue)
+            if (retweet) {
+                warpnetApi.retweetStatus(statusId, visibility.stringValue)
             } else {
-                warpnetApi.unreblogStatus(statusId)
+                warpnetApi.unretweetStatus(statusId)
             }.fold(
                 onSuccess = { status ->
-                    if (status.reblog != null) {
-                        // when reblogging, the Warpnet Api does not return the reblogged status directly
-                        // but the newly created status with reblog set to the reblogged status
-                        eventHub.dispatch(StatusChangedEvent(status.reblog))
+                    if (status.retweet != null) {
+                        // when retweetging, the Warpnet Api does not return the retweeted status directly
+                        // but the newly created status with retweet set to the retweeted status
+                        eventHub.dispatch(StatusChangedEvent(status.retweet))
                     } else {
                         eventHub.dispatch(StatusChangedEvent(status))
                     }
                 },
                 onFailure = { e ->
-                    Log.w(TAG, "Failed to reblog", e)
+                    Log.w(TAG, "Failed to retweet", e)
                 }
             )
         }

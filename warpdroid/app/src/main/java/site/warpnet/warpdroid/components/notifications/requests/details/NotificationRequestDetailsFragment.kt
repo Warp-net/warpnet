@@ -61,7 +61,7 @@ import site.warpnet.warpdroid.util.viewTag
 import site.warpnet.warpdroid.util.viewThread
 import site.warpnet.warpdroid.util.visible
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
-import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmReblog
+import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmRetweet
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 import site.warpnet.warpdroid.viewdata.StatusViewData
@@ -187,20 +187,20 @@ class NotificationRequestDetailsFragment :
         // not relevant here
     }
 
-    override fun onReblog(
+    override fun onRetweet(
         viewData: StatusViewData.Concrete,
-        reblog: Boolean,
+        retweet: Boolean,
         visibility: Status.Visibility?,
         state: SparkButtonState?
     ) {
-        if (reblog && visibility == null) {
-            confirmReblog(preferences) { visibility ->
-                viewModel.reblog(viewData.id, reblog, visibility)
+        if (retweet && visibility == null) {
+            confirmRetweet(preferences) { visibility ->
+                viewModel.retweet(viewData.id, retweet, visibility)
                 state?.animate()
             }
         } else {
-            viewModel.reblog(viewData.id, reblog, visibility ?: Status.Visibility.PUBLIC)
-            if (reblog) {
+            viewModel.retweet(viewData.id, retweet, visibility ?: Status.Visibility.PUBLIC)
+            if (retweet) {
                 state?.animate()
             }
         }

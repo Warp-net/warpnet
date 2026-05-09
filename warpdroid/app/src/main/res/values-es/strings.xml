@@ -37,7 +37,7 @@
     <string name="title_drafts">Borradores</string>
     <string name="title_licenses">Licencias</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s compartió</string>
+    <string name="post_retweeted_format">%1$s compartió</string>
     <string name="post_sensitive_media_title">Contenido sensible</string>
     <string name="post_media_hidden_title">Material oculto</string>
     <string name="post_sensitive_media_directions">Pulsa para ver</string>
@@ -46,14 +46,14 @@
     <string name="post_content_show_more">Expandir</string>
     <string name="post_content_show_less">Ocultar</string>
     <string name="message_empty">Nada por aquí.</string>
-    <string name="notification_reblog_format">%1$s impulsó tu publicación</string>
+    <string name="notification_retweet_format">%1$s impulsó tu publicación</string>
     <string name="notification_like_format">%1$s marcó como favorita tu publicación</string>
     <string name="notification_follow_format">%1$s te siguió</string>
     <string name="report_username_format">Reportar @%1$s</string>
     <string name="report_comment_hint">¿Información adicional?</string>
     <string name="action_quick_reply">Respuesta rápida</string>
     <string name="action_reply">Responder</string>
-    <string name="action_reblog">Compartir</string>
+    <string name="action_retweet">Compartir</string>
     <string name="action_like">Favorito</string>
     <string name="action_more">Más</string>
     <string name="action_compose">Redactar</string>
@@ -64,8 +64,8 @@
     <string name="action_unfollow">Dejar de seguir</string>
     <string name="action_block">Bloquear</string>
     <string name="action_unblock">Desbloquear</string>
-    <string name="action_hide_reblogs">Ocultar impulsos</string>
-    <string name="action_show_reblogs">Mostrar impulsos</string>
+    <string name="action_hide_retweets">Ocultar impulsos</string>
+    <string name="action_show_retweets">Mostrar impulsos</string>
     <string name="action_report">Reportar</string>
     <string name="action_delete">Borrar</string>
     <string name="action_send">TOOT</string>
@@ -152,7 +152,7 @@
     <string name="pref_title_custom_tabs">Usar Chrome Custom Tabs</string>
     <string name="pref_title_post_filter">Filtros de cronología</string>
     <string name="pref_title_post_tabs">Cronología de inicio</string>
-    <string name="pref_title_show_boosts">Mostrar impulsos</string>
+    <string name="pref_title_show_retweets">Mostrar impulsos</string>
     <string name="pref_title_show_replies">Mostrar respuestas</string>
     <string name="pref_title_show_media_preview">Previsualizar multimedia</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -177,8 +177,8 @@
     <string name="notification_mention_descriptions">Notificaciones de nuevas menciones</string>
     <string name="notification_follow_name">Nuevos seguidores</string>
     <string name="notification_follow_description">Notificaciones de nuevos seguidores</string>
-    <string name="notification_boost_name">Impulsos</string>
-    <string name="notification_boost_description">Notificaciones cuando impulsan tus publicaciones</string>
+    <string name="notification_retweet_name">Impulsos</string>
+    <string name="notification_retweet_description">Notificaciones cuando impulsan tus publicaciones</string>
     <string name="notification_like_name">Favoritos</string>
     <string name="notification_like_description">Notificaciones de tus estados marcados como favoritos</string>
     <string name="notification_mention_format">%1$s te mencionó</string>
@@ -255,8 +255,8 @@
     <string name="download_failed">Descarga fallida</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s se trasladó a:</string>
-    <string name="reblog_private">Volver a compartir</string>
-    <string name="unreblog_private">Dejar de compartir</string>
+    <string name="retweet_private">Volver a compartir</string>
+    <string name="unretweet_private">Dejar de compartir</string>
     <string name="license_description">Warpnet contiene código y recursos de los siguientes proyectos:</string>
     <string name="license_apache_2">Licenciado bajo Apache License (texto bajo la lista)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -274,12 +274,12 @@
         <item quantity="many"><b>%1$s</b> Favoritos</item>
         <item quantity="other"><b>%1$s</b> Favoritos</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> Impulso</item>
         <item quantity="many"><b>%1$s</b> Impulsos</item>
         <item quantity="other"><b>%1$s</b> Impulsos</item>
     </plurals>
-    <string name="title_reblogged_by">Impulsado por</string>
+    <string name="title_retweeted_by">Impulsado por</string>
     <string name="title_liked_by">Marcado como favorito por</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s y %2$s</string>
@@ -289,7 +289,7 @@
     <string name="download_media">Descargar multimedia</string>
     <string name="app_theme_system">Usar tema del sistema</string>
     <string name="pref_title_language">Idioma</string>
-    <string name="action_unreblog">Dejar de impulsar</string>
+    <string name="action_unretweet">Dejar de impulsar</string>
     <string name="action_unlike">Eliminar favorito</string>
     <string name="pref_title_timeline_filters">Filtros</string>
     <string name="notification_poll_name">Resultados</string>
@@ -351,7 +351,7 @@
     <string name="description_post_media">Contenido: %1$s</string>
     <string name="description_post_cw">Aviso de contenido: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Sin descripción</string>
-    <string name="description_post_reblogged">Compartido</string>
+    <string name="description_post_retweeted">Compartido</string>
     <string name="description_visibility_public">Público</string>
     <string name="description_visibility_unlisted">Sin listar</string>
     <string name="description_visibility_direct">Directo</string>
@@ -366,8 +366,8 @@
     <string name="poll_info_time_absolute">termina en %1$s</string>
     <string name="poll_ended_voted">Una encuesta en la que has votado ha terminado</string>
     <string name="poll_ended_created">Una encuesta que has creado ha terminado</string>
-    <string name="action_open_reblogger">Abrir autor del impulso</string>
-    <string name="action_open_reblogged_by">Mostrar compartidos</string>
+    <string name="action_open_retweetger">Abrir autor del impulso</string>
+    <string name="action_open_retweeted_by">Mostrar compartidos</string>
     <string name="title_domain_mutes">Dominios ocultos</string>
     <string name="action_view_domain_mutes">Dominios ocultos</string>
     <string name="action_mute_domain">Silenciar a %1$s</string>
@@ -427,7 +427,7 @@
     <string name="action_mute_conversation">Silenciar conversación</string>
     <string name="action_unmute_conversation">Dejar de silenciar conversación</string>
     <string name="notification_follow_request_description">Notificaciones de solicitudes</string>
-    <string name="pref_title_confirm_reblogs">Pedir confirmación antes de impulsar</string>
+    <string name="pref_title_confirm_retweets">Pedir confirmación antes de impulsar</string>
     <string name="pref_title_show_cards_in_timelines">Mostrar previsualización de enlaces en la cronología</string>
     <string name="pref_title_enable_swipe_for_tabs">Habilitar gesto de deslizar para alternar entre pestañas</string>
     <plurals name="poll_info_people">
@@ -605,7 +605,7 @@
     <string name="hint_filter_title">Mi filtro</string>
     <string name="filter_edit_keyword_title">Editar palabra</string>
     <string name="filter_description_format">%1$s: %2$s</string>
-    <string name="ui_error_reblog">Fallo al impulsar publicación: %1$s</string>
+    <string name="ui_error_retweet">Fallo al impulsar publicación: %1$s</string>
     <string name="ui_error_vote">Fallo al votar en la encuesta: %1$s</string>
     <string name="label_filter_title">Título</string>
     <string name="filter_action_warn">Aviso</string>
@@ -647,7 +647,7 @@
     <string name="report_category_legal">Legal</string>
     <string name="notification_listenable_worker_description">Notificaciones cuando Warpnet está funcionando en segundo plano</string>
     <string name="error_blocking_domain">Fallo al silenciar %1$s: %2$s</string>
-    <string name="pref_title_show_self_boosts_description">Alguien impulsó su propio mensaje</string>
+    <string name="pref_title_show_self_retweets_description">Alguien impulsó su propio mensaje</string>
     <string name="error_deleting_filter">Error al borrar el filtro \'%1$s\'</string>
     <string name="error_saving_filter">Error al guardar el filtro \'%1$s\'</string>
     <string name="title_public_trending_statuses">Tendencias</string>
@@ -659,11 +659,11 @@
     <string name="error_unblocking_domain">Error al activar el sonido %1$s: %2$s</string>
     <string name="error_media_upload_sending_fmt">Error al subir el archivo: %1$s</string>
     <string name="post_privacy_direct">Directo</string>
-    <string name="action_reblog_private">Compartir para seguidores</string>
-    <string name="action_reblog_public">Compartir públicamente</string>
+    <string name="action_retweet_private">Compartir para seguidores</string>
+    <string name="action_retweet_public">Compartir públicamente</string>
     <string name="follow_hashtag_success">Siguiendo etiqueta %1$s</string>
     <string name="post_replied_format">En respuesta a %1$s</string>
-    <string name="pref_title_show_self_boosts">Mostrar publicaciones compartidas por mí</string>
+    <string name="pref_title_show_self_retweets">Mostrar publicaciones compartidas por mí</string>
     <string name="preview_card_more_by_author">Más de %1$s</string>
     <string name="pref_title_per_timeline_preferences">Preferencias de cronología</string>
     <string name="notification_policy_filter">Filtrar</string>
@@ -741,7 +741,7 @@
     <string name="notification_severed_relationship_name">Conexiones perdidas</string>
     <string name="notification_channel_other_description">Otras notificaciones, como conexiones perdidas y advertencias de moderación</string>
     <string name="yes">Si</string>
-    <string name="reblog_privacy_unlisted_description">Igual que público, pero nunca se mostrará en las líneas de tiempo públicas</string>
+    <string name="retweet_privacy_unlisted_description">Igual que público, pero nunca se mostrará en las líneas de tiempo públicas</string>
     <string name="message_filters_empty">No tienes filtros</string>
     <string name="confirm_dismiss_poll">¿Descargar cambios en la encuesta?</string>
     <string name="report_category_violation_description">Eres consciente de que infringe normas específicas</string>
@@ -762,9 +762,9 @@
     <string name="relationship_severance_event_title">Conexión perdida</string>
     <string name="no">No</string>
     <string name="confirm_dismiss_caption">¿Descartar los cambios en los subtítulos?</string>
-    <string name="reblog_privacy_public_description">Todo el mundo puede ver tu impulso</string>
-    <string name="reblog_privacy_followers_only_description">Solamente las personas que te siguen pueden ver tu impulso</string>
-    <string name="reblog_confirm">¿Impulsar este post?</string>
+    <string name="retweet_privacy_public_description">Todo el mundo puede ver tu impulso</string>
+    <string name="retweet_privacy_followers_only_description">Solamente las personas que te siguen pueden ver tu impulso</string>
+    <string name="retweet_confirm">¿Impulsar este post?</string>
     <string name="like_confirm">¿Te gusta esta publicación?</string>
     <string name="edit_image_rotate">Rotar</string>
     <string name="edit_image_flip">Voltear</string>
@@ -781,5 +781,5 @@
     <string name="filter_context_home">Inicio y listas</string>
     <string name="post_replied_self">Hilo continuado</string>
     <string name="notification_channel_other">Otros</string>
-    <string name="action_reblog_unlisted">Impulso no listado</string>
+    <string name="action_retweet_unlisted">Impulso no listado</string>
 </resources>

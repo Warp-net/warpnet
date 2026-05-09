@@ -72,8 +72,8 @@ fun StatusButtons(
     val status = statusViewData.actionable
 
     val description = buildString {
-        if (status.reblogged) {
-            append(stringResource(R.string.description_post_reblogged))
+        if (status.retweeted) {
+            append(stringResource(R.string.description_post_retweeted))
             append(", ")
         }
         if (status.liked) {
@@ -89,8 +89,8 @@ fun StatusButtons(
                 append(pluralStringResource(R.plurals.replies, status.repliesCount, status.repliesCount))
                 append(", ")
             }
-            if (status.reblogsCount > 0) {
-                append(pluralStringResource(R.plurals.reblogs, status.reblogsCount, status.reblogsCount))
+            if (status.retweetsCount > 0) {
+                append(pluralStringResource(R.plurals.retweets, status.retweetsCount, status.retweetsCount))
                 append(", ")
             }
             if (status.likesCount > 0) {
@@ -107,17 +107,17 @@ fun StatusButtons(
             },
     ) {
         // TODO: properly connect these to the confirmation bottom sheet once it is in Compose
-        var reblogged by remember(status.reblogged) { mutableStateOf(status.reblogged) }
+        var retweeted by remember(status.retweeted) { mutableStateOf(status.retweeted) }
         var liked by remember(status.liked) { mutableStateOf(status.liked) }
         var bookmarked by remember(status.bookmarked) { mutableStateOf(status.bookmarked) }
 
-        val (replyButton, replyCount, reblogButton, reblogCount, favButton, favCount, bookmarkButton, moreButton) = createRefs()
+        val (replyButton, replyCount, retweetButton, retweetCount, favButton, favCount, bookmarkButton, moreButton) = createRefs()
 
         // work around for https://issuetracker.google.com/issues/455056601
         if (LocalLayoutDirection.current == LayoutDirection.Ltr) {
-            createHorizontalChain(replyButton, reblogButton, favButton, bookmarkButton, moreButton, chainStyle = ChainStyle.SpreadInside)
+            createHorizontalChain(replyButton, retweetButton, favButton, bookmarkButton, moreButton, chainStyle = ChainStyle.SpreadInside)
         } else {
-            createHorizontalChain(moreButton, bookmarkButton, favButton, reblogButton, replyButton, chainStyle = ChainStyle.SpreadInside)
+            createHorizontalChain(moreButton, bookmarkButton, favButton, retweetButton, replyButton, chainStyle = ChainStyle.SpreadInside)
         }
         IconButton(
             onClick = {
@@ -125,7 +125,7 @@ fun StatusButtons(
             },
             modifier = Modifier.constrainAs(replyButton) {
                 start.linkTo(parent.start)
-                end.linkTo(reblogButton.start)
+                end.linkTo(retweetButton.start)
                 centerVerticallyTo(parent)
             }
         ) {
@@ -165,7 +165,7 @@ fun StatusButtons(
                 tint = warpdroidColors.disabledTextColor,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp)
-                    .constrainAs(reblogButton) {
+                    .constrainAs(retweetButton) {
                         start.linkTo(replyButton.end)
                         end.linkTo(favButton.start)
                         centerVerticallyTo(parent)
@@ -173,19 +173,19 @@ fun StatusButtons(
             )
         } else if (status.visibility == Status.Visibility.PRIVATE) {
             Icon(
-                painter = if (reblogged) {
+                painter = if (retweeted) {
                     painterResource(R.drawable.ic_lock_24dp_filled)
                 } else {
                     painterResource(R.drawable.ic_lock_24dp)
                 },
-                tint = if (reblogged) {
+                tint = if (retweeted) {
                     colorScheme.primary
                 } else {
                     warpdroidColors.disabledTextColor
                 },
                 contentDescription = null,
                 modifier = Modifier.size(24.dp)
-                    .constrainAs(reblogButton) {
+                    .constrainAs(retweetButton) {
                         start.linkTo(replyButton.end)
                         end.linkTo(favButton.start)
                         centerVerticallyTo(parent)
@@ -196,19 +196,19 @@ fun StatusButtons(
             SparkButton(
                 animateOnClick = false,
                 onClick = {
-                    listener.onReblog(statusViewData, !reblogged, null, state = sparkButtonState)
+                    listener.onRetweet(statusViewData, !retweeted, null, state = sparkButtonState)
                 },
                 state = sparkButtonState,
                 primaryColor = warpdroidBlueDark,
                 secondaryColor = warpdroidBlueLight,
                 modifier = Modifier
-                    .constrainAs(reblogButton) {
+                    .constrainAs(retweetButton) {
                         start.linkTo(replyButton.end)
                         end.linkTo(favButton.start)
                         centerVerticallyTo(parent)
                     }
             ) {
-                if (reblogged) {
+                if (retweeted) {
                     Icon(
                         painter = painterResource(R.drawable.ic_repeat_active_24dp),
                         tint = colorScheme.primary,
@@ -227,16 +227,16 @@ fun StatusButtons(
 
             if (showStats) {
                 Text(
-                    text = formatNumber(status.reblogsCount.toLong(), 1000),
-                    color = if (reblogged) {
+                    text = formatNumber(status.retweetsCount.toLong(), 1000),
+                    color = if (retweeted) {
                         colorScheme.primary
                     } else {
                         warpdroidColors.tertiaryTextColor
                     },
                     style = LocalPreferences.current.statusTextStyles.medium,
                     modifier = Modifier
-                        .constrainAs(reblogCount) {
-                            start.linkTo(reblogButton.end, margin = 4.dp)
+                        .constrainAs(retweetCount) {
+                            start.linkTo(retweetButton.end, margin = 4.dp)
                             centerVerticallyTo(parent)
                         }
                 )
@@ -253,7 +253,7 @@ fun StatusButtons(
             primaryColor = warpdroidOrange,
             secondaryColor = warpdroidOrangeLight,
             modifier = Modifier.constrainAs(favButton) {
-                start.linkTo(reblogButton.end)
+                start.linkTo(retweetButton.end)
                 end.linkTo(bookmarkButton.start)
                 centerVerticallyTo(parent)
             }

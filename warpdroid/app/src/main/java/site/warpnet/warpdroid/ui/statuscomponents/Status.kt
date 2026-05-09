@@ -89,8 +89,8 @@ fun Status(
                 url = status.account.avatar,
                 staticUrl = status.account.staticAvatar,
                 isBot = status.account.bot,
-                boostedAvatarUrl = statusViewData.rebloggedAvatar,
-                staticBoostedAvatarUrl = statusViewData.staticRebloggedAvatar,
+                retweetedAvatarUrl = statusViewData.retweetedAvatar,
+                staticRetweetedAvatarUrl = statusViewData.staticRetweetedAvatar,
                 onOpenProfile = {
                     listener.onViewAccount(status.account.id)
                 },

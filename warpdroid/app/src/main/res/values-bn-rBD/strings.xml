@@ -8,12 +8,12 @@
     <string name="description_visibility_unlisted">অতালিকাভুক্ত</string>
     <string name="description_visibility_public">সর্বজনীন</string>
     <string name="description_post_liked">পছন্দ</string>
-    <string name="description_post_reblogged">আবার ব্লগ</string>
+    <string name="description_post_retweeted">আবার ব্লগ</string>
     <string name="description_post_media_no_description_placeholder">বর্ণনা নাই</string>
     <string name="description_post_cw">সতর্কবার্তা: %1$s</string>
     <string name="description_post_media">মিডিয়া: %1$s</string>
     <string name="title_liked_by">দ্বারা পছন্দ</string>
-    <string name="title_reblogged_by">দ্বারা সর্মথন</string>
+    <string name="title_retweeted_by">দ্বারা সর্মথন</string>
     <string name="pin_action">পিন</string>
     <string name="unpin_action">আনপিন</string>
     <string name="label_remote_account">নীচের তথ্য অসম্পূর্ণভাবে ব্যবহারকারীর প্রোফাইল প্রতিফলিত হতে পারে। ব্রাউজারে সম্পূর্ণ প্রোফাইল খুলতে টিপুন।</string>
@@ -26,8 +26,8 @@
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_apache_2">এপাচে লাইসেন্সের অধীনে লাইসেন্স (নীচের কপি)</string>
     <string name="license_description">টাস্কি নিম্নলিখিত ওপেন সোর্স প্রকল্প থেকে কোড এবং সম্পদ রয়েছে:</string>
-    <string name="unreblog_private">সমর্থন ফেরত</string>
-    <string name="reblog_private">মূল শ্রোতাদেড় সমথন পাঠাও</string>
+    <string name="unretweet_private">সমর্থন ফেরত</string>
+    <string name="retweet_private">মূল শ্রোতাদেড় সমথন পাঠাও</string>
     <string name="profile_badge_bot_text">বট</string>
     <string name="download_failed">ডাউনলোড ব্যর্থ হয়েছে</string>
     <string name="caption_notoemoji">গুগল এর বর্তমান ইমোজি সেট</string>
@@ -99,8 +99,8 @@
     <string name="notification_poll_name">নির্বাচনগুলি</string>
     <string name="notification_like_description">আপনার টুটগুলি প্রিয় হিসাবে চিহ্নিত পেতে বিজ্ঞপ্তি</string>
     <string name="notification_like_name">প্রিয়গুলো</string>
-    <string name="notification_boost_description">আপনার টুটগুলি সমর্থন হলে বিজ্ঞপ্তিগুলি</string>
-    <string name="notification_boost_name">সমর্থনগুলি</string>
+    <string name="notification_retweet_description">আপনার টুটগুলি সমর্থন হলে বিজ্ঞপ্তিগুলি</string>
+    <string name="notification_retweet_name">সমর্থনগুলি</string>
     <string name="notification_follow_description">নতুন অনুসরণকারী সম্পর্কে বিজ্ঞপ্তি</string>
     <string name="notification_follow_name">নতুন অনুসরণকারী</string>
     <string name="notification_mention_descriptions">নতুন উল্লেখ সম্পর্কে বিজ্ঞপ্তি</string>
@@ -125,7 +125,7 @@
     <string name="pref_title_proxy_settings">প্রক্সি</string>
     <string name="pref_title_show_media_preview">মিডিয়া পূর্বরূপ ডাউনলোড করুন</string>
     <string name="pref_title_show_replies">উত্তর প্রদর্শন করুন</string>
-    <string name="pref_title_show_boosts">সমর্থন দেখান</string>
+    <string name="pref_title_show_retweets">সমর্থন দেখান</string>
     <string name="pref_title_post_tabs">ট্যাবগুলি</string>
     <string name="pref_title_post_filter">টাইমলাইন ফিল্টারিং</string>
     <string name="pref_title_animate_gif_avatars">GIF অবতার অ্যানিমেশন করুন</string>
@@ -190,8 +190,8 @@
     <string name="title_mentions_dialog">উল্লেখসমূহ</string>
     <string name="title_hashtags_dialog">হ্যাশট্যাগ</string>
     <string name="action_open_faved_by">প্রিয়গুলি দেখান</string>
-    <string name="action_open_reblogged_by">সমর্থন দেখান</string>
-    <string name="action_open_reblogger">সমর্থক লেখক খুলুন</string>
+    <string name="action_open_retweeted_by">সমর্থন দেখান</string>
+    <string name="action_open_retweetger">সমর্থক লেখক খুলুন</string>
     <string name="action_add_tab">ট্যাব যুক্ত করুন</string>
     <string name="action_emoji_keyboard">ইমোজি কীবোর্ড</string>
     <string name="action_content_warning">সতর্কবার্তা</string>
@@ -228,8 +228,8 @@
     <string name="action_delete_and_redraft">মুছুন এবং পুনরায় ড্রাফট কর</string>
     <string name="action_delete">মুছে ফেল</string>
     <string name="action_report">রিপোর্ট</string>
-    <string name="action_show_reblogs">সমর্থন দেখান</string>
-    <string name="action_hide_reblogs">সমর্থন লুকান</string>
+    <string name="action_show_retweets">সমর্থন দেখান</string>
+    <string name="action_hide_retweets">সমর্থন লুকান</string>
     <string name="action_unblock">অবরোধ মুক্ত</string>
     <string name="action_block">অবরুদ্ধ</string>
     <string name="action_unfollow">অনুসরণ করা বন্ধ করুন</string>
@@ -241,8 +241,8 @@
     <string name="action_more">অধিক</string>
     <string name="action_unlike">পছন্দ সরান</string>
     <string name="action_like">পছন্দ</string>
-    <string name="action_unreblog">সমর্থন সরান</string>
-    <string name="action_reblog">সমর্থন</string>
+    <string name="action_unretweet">সমর্থন সরান</string>
+    <string name="action_retweet">সমর্থন</string>
     <string name="action_reply">উত্তর</string>
     <string name="action_quick_reply">দ্রুত উত্তর</string>
     <string name="report_comment_hint">অতিরিক্ত মন্তব্যগুলি?</string>
@@ -265,7 +265,7 @@
     <string name="abbreviated_minutes_ago">%1$dমা</string>
     <string name="abbreviated_hours_ago">%1$dঘ</string>
     <string name="abbreviated_years_ago">%1$dব</string>
-    <string name="post_boosted_format">%1$s বুস্টকৃত</string>
+    <string name="post_retweeted_format">%1$s বুস্টকৃত</string>
     <string name="post_username_format">\@%1$s</string>
     <string name="dialog_mute_hide_notifications">বিজ্ঞপ্তি লুকাও</string>
     <string name="action_unmute_desc">আনমিউট %1$s</string>
@@ -276,7 +276,7 @@
     <string name="pref_title_gradient_for_media">লুকানো মিডিয়ার জন্য রঙিন গ্রেডিয়েন্ট ব্যবহার করি</string>
     <string name="hashtags">হ্যাশট্যাগ</string>
     <string name="add_hashtag_title">হ্যাশট্যাগ যোগ করো</string>
-    <string name="pref_title_confirm_reblogs">বুস্ট করার আগে নিশ্চিত করো</string>
+    <string name="pref_title_confirm_retweets">বুস্ট করার আগে নিশ্চিত করো</string>
     <string name="pref_title_show_cards_in_timelines">টাইমলাইনে লিঙ্ক প্রিভিউ দেখাও</string>
     <string name="pref_title_enable_swipe_for_tabs">ট্যাবের মাঝে সোয়াইপ সংকেত চালু করো</string>
     <string name="notification_follow_request_description">অনুসরণ রিকোয়েস্টের বিজ্ঞপ্তি</string>
@@ -389,7 +389,7 @@
     <string name="notification_follow_request_format">%1$s তোমাকে ফলো করতে চায়</string>
     <string name="notification_follow_format">%1$s তোমাকে ফলো করেছে</string>
     <string name="notification_like_format">%1$s তোমার টুট বুস্ট করেছে</string>
-    <string name="notification_reblog_format">%1$s তোমার টুট বুস্ট করেছে</string>
+    <string name="notification_retweet_format">%1$s তোমার টুট বুস্ট করেছে</string>
     <string name="title_announcements">ঘোষণা</string>
     <string name="notification_summary_large">%1$s,%2$s,%3$s এবং %4$d অন্যরা</string>
     <string name="notification_subscription_description">যখন আমার সদস্যতা নেওয়া কেউ টুট দেয় তখন বিজ্ঞপ্তি দিবে</string>
@@ -444,7 +444,7 @@
     <string name="conversation_2_recipients">%1$s এবং %2$s</string>
     <string name="action_subscribe_account">সদস্যতা</string>
     <string name="action_unsubscribe_account">সদস্যতা বাতিল</string>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> বুস্ট</item>
         <item quantity="other"><b>%1$s</b> বুস্ট</item>
     </plurals>

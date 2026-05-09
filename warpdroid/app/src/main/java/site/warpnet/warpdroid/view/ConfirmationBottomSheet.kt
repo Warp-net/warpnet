@@ -25,7 +25,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.color.MaterialColors
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.BottomsheetConfirmationBinding
-import site.warpnet.warpdroid.databinding.ItemReblogOptionBinding
+import site.warpnet.warpdroid.databinding.ItemRetweetOptionBinding
 import site.warpnet.warpdroid.entity.Status
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.util.getNonNullString
@@ -48,36 +48,36 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
     @SuppressLint("UseCompatTextViewDrawableApis")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val mode: Mode = requireArguments().getSerializableCompat(ARG_MODE)!!
-        if (mode == Mode.REBLOG) {
+        if (mode == Mode.RETWEET) {
             selectedOption = Status.Visibility.valueOf(
-                prefs.getNonNullString(PrefKeys.REBLOG_PRIVACY, Status.Visibility.PUBLIC.name)
+                prefs.getNonNullString(PrefKeys.RETWEET_PRIVACY, Status.Visibility.PUBLIC.name)
             )
 
-            binding.confirmTextView.setText(R.string.reblog_confirm)
+            binding.confirmTextView.setText(R.string.retweet_confirm)
             binding.confirmTextView.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_repeat_24dp, 0, 0, 0)
             binding.confirmTextView.compoundDrawableTintList = ColorStateList.valueOf(
                 MaterialColors.getColor(binding.confirmTextView, appcompatR.attr.colorPrimary)
             )
 
-            binding.confirmButton.setText(R.string.action_reblog)
+            binding.confirmButton.setText(R.string.action_retweet)
 
             binding.confirmButton.setOnClickListener {
                 prefs.edit {
-                    putString(PrefKeys.REBLOG_PRIVACY, selectedOption.name)
+                    putString(PrefKeys.RETWEET_PRIVACY, selectedOption.name)
                 }
                 setFragmentResult(KEY_CONFIRM, bundleOf(RESULT_VISIBILITY to selectedOption.name))
                 dismiss()
             }
 
-            binding.reblogPrivacyDropdown.setAdapter(OptionsAdapter(view.context))
+            binding.retweetPrivacyDropdown.setAdapter(OptionsAdapter(view.context))
 
-            binding.reblogPrivacyLayout.setStartIconDrawable(selectedOption.getIcon())
-            binding.reblogPrivacyDropdown.setText(selectedOption.getName())
+            binding.retweetPrivacyLayout.setStartIconDrawable(selectedOption.getIcon())
+            binding.retweetPrivacyDropdown.setText(selectedOption.getName())
 
-            binding.reblogPrivacyDropdown.setOnItemClickListener { _, _, position, _ ->
-                selectedOption = reblogOptions.getOrElse(position) { Status.Visibility.PUBLIC }
-                binding.reblogPrivacyLayout.setStartIconDrawable(selectedOption.getIcon())
-                binding.reblogPrivacyDropdown.setText(selectedOption.getName())
+            binding.retweetPrivacyDropdown.setOnItemClickListener { _, _, position, _ ->
+                selectedOption = retweetOptions.getOrElse(position) { Status.Visibility.PUBLIC }
+                binding.retweetPrivacyLayout.setStartIconDrawable(selectedOption.getIcon())
+                binding.retweetPrivacyDropdown.setText(selectedOption.getName())
             }
         } else {
             binding.confirmTextView.setText(R.string.like_confirm)
@@ -86,7 +86,7 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
                 requireContext().getColor(R.color.likeButtonActiveColor)
             )
 
-            binding.reblogPrivacyLayout.hide()
+            binding.retweetPrivacyLayout.hide()
 
             binding.confirmButton.setText(R.string.action_like)
 
@@ -102,18 +102,18 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
 
     inner class OptionsAdapter(context: Context) : ArrayAdapter<Status.Visibility>(
         context,
-        R.layout.item_reblog_option,
-        reblogOptions
+        R.layout.item_retweet_option,
+        retweetOptions
     ) {
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val item = getItem(position)
             val view: View = convertView ?: run {
                 val layoutInflater = LayoutInflater.from(parent.context)
-                val binding = ItemReblogOptionBinding.inflate(layoutInflater)
+                val binding = ItemRetweetOptionBinding.inflate(layoutInflater)
 
-                binding.reblogOptionName.setText(item.getName())
-                binding.reblogOptionDescription.setText(item.getDescription())
-                binding.reblogOptionIcon.setImageResource(item.getIcon())
+                binding.retweetOptionName.setText(item.getName())
+                binding.retweetOptionDescription.setText(item.getDescription())
+                binding.retweetOptionIcon.setImageResource(item.getIcon())
                 binding.root
             }
             if (item == selectedOption) {
@@ -143,7 +143,7 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
     }
 
     enum class Mode {
-        REBLOG,
+        RETWEET,
         LIKE
     }
 
@@ -154,13 +154,13 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
         private const val ARG_MODE = "mode"
         private const val RESULT_VISIBILITY = "visibility"
 
-        private val reblogOptions = listOf(Status.Visibility.PUBLIC, Status.Visibility.UNLISTED, Status.Visibility.PRIVATE)
+        private val retweetOptions = listOf(Status.Visibility.PUBLIC, Status.Visibility.UNLISTED, Status.Visibility.PRIVATE)
 
-        fun Fragment.confirmReblog(preferences: SharedPreferences, onConfirmed: (Status.Visibility) -> Unit) {
-            if (preferences.getBoolean(PrefKeys.CONFIRM_REBLOGS, true)) {
+        fun Fragment.confirmRetweet(preferences: SharedPreferences, onConfirmed: (Status.Visibility) -> Unit) {
+            if (preferences.getBoolean(PrefKeys.CONFIRM_RETWEETS, true)) {
                 val bottomSheet = ConfirmationBottomSheet()
                 bottomSheet.arguments = bundleOf(
-                    ARG_MODE to Mode.REBLOG
+                    ARG_MODE to Mode.RETWEET
                 )
                 bottomSheet.show(childFragmentManager, TAG)
                 childFragmentManager.setFragmentResultListener(KEY_CONFIRM, this) { requestKey, result ->
@@ -198,9 +198,9 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
         @StringRes
         private fun Status.Visibility?.getDescription(): Int {
             return when (this) {
-                Status.Visibility.PUBLIC -> R.string.reblog_privacy_public_description
-                Status.Visibility.UNLISTED -> R.string.reblog_privacy_unlisted_description
-                else -> R.string.reblog_privacy_followers_only_description
+                Status.Visibility.PUBLIC -> R.string.retweet_privacy_public_description
+                Status.Visibility.UNLISTED -> R.string.retweet_privacy_unlisted_description
+                else -> R.string.retweet_privacy_followers_only_description
             }
         }
 

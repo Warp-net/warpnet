@@ -37,7 +37,7 @@
     <string name="title_drafts">Koncepty</string>
     <string name="title_licenses">Licence</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s boostnul/a</string>
+    <string name="post_retweeted_format">%1$s retweetnul/a</string>
     <string name="post_sensitive_media_title">Citlivý obsah</string>
     <string name="post_media_hidden_title">Média skryta</string>
     <string name="post_sensitive_media_directions">Klikněte pro zobrazení</string>
@@ -46,15 +46,15 @@
     <string name="post_content_show_more">Rozbalit</string>
     <string name="post_content_show_less">Sbalit</string>
     <string name="message_empty">Tady nic není.</string>
-    <string name="notification_reblog_format">%1$s boostnul/a váš příspěvek</string>
+    <string name="notification_retweet_format">%1$s retweetnul/a váš příspěvek</string>
     <string name="notification_like_format">%1$s si oblíbil/a váš příspěvek</string>
     <string name="notification_follow_format">%1$s vás nyní sleduje</string>
     <string name="report_username_format">Nahlásit uživatele @%1$s</string>
     <string name="report_comment_hint">Další komentáře?</string>
     <string name="action_quick_reply">Rychlá odpověď</string>
     <string name="action_reply">Odpovědět</string>
-    <string name="action_reblog">Boostnout</string>
-    <string name="action_unreblog">Odstranit boost</string>
+    <string name="action_retweet">Retweetnout</string>
+    <string name="action_unretweet">Odstranit retweet</string>
     <string name="action_like">Oblíbit</string>
     <string name="action_unlike">Odstranit oblíbení</string>
     <string name="action_more">Více</string>
@@ -66,8 +66,8 @@
     <string name="action_unfollow">Přestat sledovat</string>
     <string name="action_block">Blokovat</string>
     <string name="action_unblock">Odblokovat</string>
-    <string name="action_hide_reblogs">Skrýt boosty</string>
-    <string name="action_show_reblogs">Zobrazit boosty</string>
+    <string name="action_hide_retweets">Skrýt retweety</string>
+    <string name="action_show_retweets">Zobrazit retweety</string>
     <string name="action_report">Nahlásit</string>
     <string name="action_delete">Smazat</string>
     <string name="action_send">TOOTNOUT</string>
@@ -103,8 +103,8 @@
     <string name="action_content_warning">Varování o obsahu</string>
     <string name="action_emoji_keyboard">Klávesnice s emoji</string>
     <string name="action_add_tab">Přidat panel</string>
-    <string name="action_open_reblogger">Otevřít autora boostu</string>
-    <string name="action_open_reblogged_by">Zobrazit boosty</string>
+    <string name="action_open_retweetger">Otevřít autora retweetu</string>
+    <string name="action_open_retweeted_by">Zobrazit retweety</string>
     <string name="action_open_faved_by">Zobrazit oblíbení</string>
     <string name="title_hashtags_dialog">Hashtagy</string>
     <string name="title_mentions_dialog">Zmínky</string>
@@ -166,7 +166,7 @@
     <string name="pref_title_language">Jazyk</string>
     <string name="pref_title_post_filter">Filtrování časových os</string>
     <string name="pref_title_post_tabs">Domovská timeline</string>
-    <string name="pref_title_show_boosts">Zobrazit boosty</string>
+    <string name="pref_title_show_retweets">Zobrazit retweety</string>
     <string name="pref_title_show_replies">Zobrazit odpovědi</string>
     <string name="pref_title_show_media_preview">Stahovat náhledy médií</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -191,8 +191,8 @@
     <string name="notification_mention_descriptions">Oznámení o nových zmínkách</string>
     <string name="notification_follow_name">Noví sledující</string>
     <string name="notification_follow_description">Oznámení o nových sledujících</string>
-    <string name="notification_boost_name">Boosty</string>
-    <string name="notification_boost_description">Oznámení, když jsou vaše příspěvky boostnuty</string>
+    <string name="notification_retweet_name">Retweety</string>
+    <string name="notification_retweet_description">Oznámení, když jsou vaše příspěvky retweetnuty</string>
     <string name="notification_like_name">Oblíbení</string>
     <string name="notification_like_description">Oznámení, když jsou vaše příspěvky označeny jako oblíbené</string>
     <string name="notification_mention_format">%1$s vás zmínil/a</string>
@@ -284,8 +284,8 @@
     <string name="download_failed">Stahování selhalo</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="account_moved_description">%1$s se přesunul/a na:</string>
-    <string name="reblog_private">Boostnout původnímu publiku</string>
-    <string name="unreblog_private">Zrušit boost</string>
+    <string name="retweet_private">Retweetnout původnímu publiku</string>
+    <string name="unretweet_private">Zrušit retweet</string>
     <string name="license_description">Warpnet obsahuje kód a zdroje z následujících otevřených projektů:</string>
     <string name="license_apache_2">Pod licencí Apache License (kopie níže)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -303,12 +303,12 @@
         <item quantity="few"><b>%1$s</b> oblíbení</item>
         <item quantity="other"><b>%1$s</b> oblíbení</item>
     </plurals>
-    <plurals name="reblogs">
-        <item quantity="one"><b>%1$s</b> boost</item>
-        <item quantity="few"><b>%1$s</b> boosty</item>
-        <item quantity="other"><b>%1$s</b> boostů</item>
+    <plurals name="retweets">
+        <item quantity="one"><b>%1$s</b> retweet</item>
+        <item quantity="few"><b>%1$s</b> retweety</item>
+        <item quantity="other"><b>%1$s</b> retweetů</item>
     </plurals>
-    <string name="title_reblogged_by">Boostnuto uživatelem</string>
+    <string name="title_retweeted_by">Retweetnuto uživatelem</string>
     <string name="title_liked_by">Oblíbeno uživatelem</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s a %2$s</string>
@@ -316,7 +316,7 @@
     <string name="description_post_media">Média %1$s</string>
     <string name="description_post_cw">Varování o obsahu: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Žádný popis</string>
-    <string name="description_post_reblogged">Boostnutý</string>
+    <string name="description_post_retweeted">Retweetnutý</string>
     <string name="description_post_liked">Oblíbený</string>
     <string name="description_visibility_public">Veřejný</string>
     <string name="description_visibility_unlisted">Neuvedený</string>
@@ -433,7 +433,7 @@
     <string name="action_unmute_desc">Zrušit skrytí %1$s</string>
     <string name="dialog_mute_warning">Skrýt @%1$s?</string>
     <string name="notification_follow_request_format">%1$s požádal/a aby vás mohl/a sledovat</string>
-    <string name="pref_title_confirm_reblogs">Zobrazit potvrzení při boostování</string>
+    <string name="pref_title_confirm_retweets">Zobrazit potvrzení při retweetování</string>
     <string name="notification_subscription_format">%1$s právě zveřejnil/a příspěvek</string>
     <string name="title_announcements">Oznámení</string>
     <string name="title_login">Přihlášení</string>
@@ -462,7 +462,7 @@
     <string name="notification_subscription_description">Upozornění na nový toot někoho, koho sledujete.</string>
     <string name="instance_rule_info">Přihlášením souhlasíte s pravidly serveru %1$s.</string>
     <string name="instance_rule_title">Pravidla serveru %1$s</string>
-    <string name="wellbeing_mode_notice">Některé informace, které mohou ovlivnit Vaši duševní pohodu, mohou být skryty. To zahrnuje: \n \n- Upozornění na boosty, oblíbené a sledování \n- Počty boostů a oblíbení u příspěvků \n- Statistiky sledujících a příspěvků na profilech \n \nPush oznámení nebudou ovlivněna, ale můžete si zkontrolovat jejich nastavení manuálně.</string>
+    <string name="wellbeing_mode_notice">Některé informace, které mohou ovlivnit Vaši duševní pohodu, mohou být skryty. To zahrnuje: \n \n- Upozornění na retweety, oblíbené a sledování \n- Počty retweetů a oblíbení u příspěvků \n- Statistiky sledujících a příspěvků na profilech \n \nPush oznámení nebudou ovlivněna, ale můžete si zkontrolovat jejich nastavení manuálně.</string>
     <string name="compose_save_draft_loses_media">Uložit koncept? (Přílohy budou znovu nahrány, když obnovíte koncept.)</string>
     <string name="set_focus_description">Klepnutím nebo přetažením kruhu vyberte ohnisko, které bude vždy viditelné v miniaturách.</string>
     <string name="pref_title_confirm_likes">Zobrazit potvrzení při oblíbení</string>
@@ -592,7 +592,7 @@
     <string name="ui_error_clear_notifications">Výmaz upozornění selhal: %1$s</string>
     <string name="app_theme_system_black">Použij systémový vzhled (černý)</string>
     <string name="ui_error_like">Oblíbení postu selhalo: %1$s</string>
-    <string name="ui_error_reblog">Boostování postu selhalo: %1$s</string>
+    <string name="ui_error_retweet">Retweetování postu selhalo: %1$s</string>
     <string name="action_share_account_link">Sdílej odkaz na účet</string>
     <string name="action_share_account_username">Sdílej uživatelské jméno účtu</string>
     <string name="select_list_manage">Spravovat seznamy</string>
@@ -648,8 +648,8 @@
     <string name="pref_default_reply_privacy">Soukromí odpovědí (nesynchronizováno se serverem)</string>
     <string name="report_category_spam">Spam</string>
     <string name="dialog_follow_warning">Sledovat tento účet?</string>
-    <string name="pref_title_show_self_boosts">Ukazuj vlastní boosty</string>
-    <string name="pref_title_show_self_boosts_description">Někdo boostuje svůj vlastní post</string>
+    <string name="pref_title_show_self_retweets">Ukazuj vlastní retweety</string>
+    <string name="pref_title_show_self_retweets_description">Někdo retweetuje svůj vlastní post</string>
     <string name="description_post_edited">Upraveno</string>
     <string name="description_browser_login">Může podporovat dodatečné metody autentikace, ale vyžaduje podporovaný prohlížeč.</string>
     <string name="no_lists">Nemáš žádné seznamy.</string>

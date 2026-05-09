@@ -77,8 +77,8 @@ class SearchAccountsFragment : SearchFragment<TimelineAccount>() {
                                 url = account.avatar,
                                 staticUrl = account.staticAvatar,
                                 isBot = account.bot,
-                                boostedAvatarUrl = null,
-                                staticBoostedAvatarUrl = null,
+                                retweetedAvatarUrl = null,
+                                staticRetweetedAvatarUrl = null,
                                 onOpenProfile = null,
                             )
                             Spacer(modifier = Modifier.width(8.dp))

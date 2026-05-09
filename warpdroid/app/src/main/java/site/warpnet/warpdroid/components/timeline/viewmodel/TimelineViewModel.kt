@@ -55,8 +55,8 @@ abstract class TimelineViewModel(
     protected var alwaysShowSensitiveMedia = false
     private var alwaysOpenSpoilers = false
     private var filterRemoveReplies = false
-    private var filterRemoveReblogs = false
-    private var filterRemoveSelfReblogs = false
+    private var filterRemoveRetweets = false
+    private var filterRemoveSelfRetweets = false
     protected var readingOrder: ReadingOrder = ReadingOrder.OLDEST_FIRST
 
     fun init(kind: Kind, id: String?, tags: List<String>) {
@@ -69,8 +69,8 @@ abstract class TimelineViewModel(
         if (kind == Kind.HOME) {
             // Note the variable is "true if filter" but the underlying preference/settings text is "true if show"
             filterRemoveReplies = !activeAccount.isShowHomeReplies
-            filterRemoveReblogs = !activeAccount.isShowHomeBoosts
-            filterRemoveSelfReblogs = !activeAccount.isShowHomeSelfBoosts
+            filterRemoveRetweets = !activeAccount.isShowHomeRetweets
+            filterRemoveSelfRetweets = !activeAccount.isShowHomeSelfRetweets
         }
         readingOrder = ReadingOrder.from(sharedPreferences.getString(PrefKeys.READING_ORDER, null))
 
@@ -122,8 +122,8 @@ abstract class TimelineViewModel(
         val status = concrete.status
         return if (
             (status.isReply && filterRemoveReplies) ||
-            (status.reblog != null && filterRemoveReblogs) ||
-            (status.account.id == status.reblog?.account?.id && filterRemoveSelfReblogs)
+            (status.retweet != null && filterRemoveRetweets) ||
+            (status.account.id == status.retweet?.account?.id && filterRemoveSelfRetweets)
         ) {
             true
         } else if (status.actionableStatus.account.id == activeAccountFlow.value?.accountId) {
@@ -146,20 +146,20 @@ abstract class TimelineViewModel(
                     }
                 }
 
-                PrefKeys.TAB_FILTER_HOME_BOOSTS -> {
-                    val filter = !activeAccount.isShowHomeBoosts
-                    val oldRemoveReblogs = filterRemoveReblogs
-                    filterRemoveReblogs = kind == Kind.HOME && !filter
-                    if (oldRemoveReblogs != filterRemoveReblogs) {
+                PrefKeys.TAB_FILTER_HOME_RETWEETS -> {
+                    val filter = !activeAccount.isShowHomeRetweets
+                    val oldRemoveRetweets = filterRemoveRetweets
+                    filterRemoveRetweets = kind == Kind.HOME && !filter
+                    if (oldRemoveRetweets != filterRemoveRetweets) {
                         fullReload()
                     }
                 }
 
-                PrefKeys.TAB_SHOW_HOME_SELF_BOOSTS -> {
-                    val filter = !activeAccount.isShowHomeSelfBoosts
-                    val oldRemoveSelfReblogs = filterRemoveSelfReblogs
-                    filterRemoveSelfReblogs = kind == Kind.HOME && !filter
-                    if (oldRemoveSelfReblogs != filterRemoveSelfReblogs) {
+                PrefKeys.TAB_SHOW_HOME_SELF_RETWEETS -> {
+                    val filter = !activeAccount.isShowHomeSelfRetweets
+                    val oldRemoveSelfRetweets = filterRemoveSelfRetweets
+                    filterRemoveSelfRetweets = kind == Kind.HOME && !filter
+                    if (oldRemoveSelfRetweets != filterRemoveSelfRetweets) {
                         fullReload()
                     }
                 }

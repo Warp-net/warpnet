@@ -37,7 +37,7 @@
     <string name="title_drafts">Concepten</string>
     <string name="title_licenses">Licenties</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s boostte</string>
+    <string name="post_retweeted_format">%1$s retweette</string>
     <string name="post_sensitive_media_title">Gevoelige inhoud</string>
     <string name="post_media_hidden_title">Verborgen media</string>
     <string name="post_sensitive_media_directions">Klik om te bekijken</string>
@@ -46,15 +46,15 @@
     <string name="post_content_show_more">Uitklappen</string>
     <string name="post_content_show_less">Inklappen</string>
     <string name="message_empty">Hier is niets.</string>
-    <string name="notification_reblog_format">%1$s boostte jouw bericht</string>
+    <string name="notification_retweet_format">%1$s retweette jouw bericht</string>
     <string name="notification_like_format">%1$s markeerde jouw bericht als favoriet</string>
     <string name="notification_follow_format">%1$s volgt jou</string>
     <string name="report_username_format">\@%1$s rapporteren</string>
     <string name="report_comment_hint">Extra opmerkingen?</string>
     <string name="action_quick_reply">Snel reageren</string>
     <string name="action_reply">Reageren</string>
-    <string name="action_reblog">Boosten</string>
-    <string name="action_unreblog">Boost verwijderen</string>
+    <string name="action_retweet">Retweeten</string>
+    <string name="action_unretweet">Retweet verwijderen</string>
     <string name="action_like">Als favoriet markeren</string>
     <string name="action_unlike">Favoriet verwijderen</string>
     <string name="action_more">Meer</string>
@@ -66,8 +66,8 @@
     <string name="action_unfollow">Ontvolgen</string>
     <string name="action_block">Blokkeren</string>
     <string name="action_unblock">Deblokkeren</string>
-    <string name="action_hide_reblogs">Boosts verbergen</string>
-    <string name="action_show_reblogs">Boosts tonen</string>
+    <string name="action_hide_retweets">Retweets verbergen</string>
+    <string name="action_show_retweets">Retweets tonen</string>
     <string name="action_report">Rapporteren</string>
     <string name="action_delete">Verwijderen</string>
     <string name="action_send">Toot!</string>
@@ -103,8 +103,8 @@
     <string name="action_content_warning">Inhoudswaarschuwing</string>
     <string name="action_emoji_keyboard">Emojis</string>
     <string name="action_add_tab">Tab toevoegen</string>
-    <string name="action_open_reblogger">Auteur van deze boost openen</string>
-    <string name="action_open_reblogged_by">Boosts tonen</string>
+    <string name="action_open_retweetger">Auteur van deze retweet openen</string>
+    <string name="action_open_retweeted_by">Retweets tonen</string>
     <string name="action_open_faved_by">Favorieten tonen</string>
     <string name="title_hashtags_dialog">Hashtags</string>
     <string name="title_mentions_dialog">Vermeldingen</string>
@@ -163,7 +163,7 @@
     <string name="pref_title_language">Taal</string>
     <string name="pref_title_post_filter">Tijdlijnen filteren</string>
     <string name="pref_title_post_tabs">Hoofdtijdlijn</string>
-    <string name="pref_title_show_boosts">Boosts tonen</string>
+    <string name="pref_title_show_retweets">Retweets tonen</string>
     <string name="pref_title_show_replies">Reacties tonen</string>
     <string name="pref_title_show_media_preview">Media previews downloaden</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -188,8 +188,8 @@
     <string name="notification_mention_descriptions">Meldingen over nieuwe vermeldingen</string>
     <string name="notification_follow_name">Nieuwe volgers</string>
     <string name="notification_follow_description">Meldingen over nieuwe volgers</string>
-    <string name="notification_boost_name">Boosts</string>
-    <string name="notification_boost_description">Meldingen wanneer jouw berichten worden geboost</string>
+    <string name="notification_retweet_name">Retweets</string>
+    <string name="notification_retweet_description">Meldingen wanneer jouw berichten worden geretweet</string>
     <string name="notification_like_name">Favorieten</string>
     <string name="notification_like_description">Meldingen wanneer jouw berichten als favoriet worden gemarkeerd</string>
     <string name="notification_mention_format">%1$s heeft je vermeld</string>
@@ -264,8 +264,8 @@
     <string name="download_failed">Downloaden mislukt</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s is verhuisd naar:</string>
-    <string name="reblog_private">Boost naar oorspronkelijke ontvangers</string>
-    <string name="unreblog_private">Niet meer boosten</string>
+    <string name="retweet_private">Retweet naar oorspronkelijke ontvangers</string>
+    <string name="unretweet_private">Niet meer retweeten</string>
     <string name="license_description">Warpnet bevat broncode en onderdelen van de volgende opensourceprojecten:</string>
     <string name="license_apache_2">Gelicenseerd onder de Apache-licentie (kopie hieronder)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -282,11 +282,11 @@
         <item quantity="one"><b>%1$s</b> favoriet</item>
         <item quantity="other"><b>%1$s</b> favorieten</item>
     </plurals>
-    <plurals name="reblogs">
-        <item quantity="one"><b>%1$s</b> boost</item>
-        <item quantity="other"><b>%1$s</b> boosts</item>
+    <plurals name="retweets">
+        <item quantity="one"><b>%1$s</b> retweet</item>
+        <item quantity="other"><b>%1$s</b> retweets</item>
     </plurals>
-    <string name="title_reblogged_by">Geboost door</string>
+    <string name="title_retweeted_by">Geretweet door</string>
     <string name="title_liked_by">Als favoriet gemarkeerd door</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s en %2$s</string>
@@ -294,7 +294,7 @@
     <string name="description_post_media">Media: %1$s</string>
     <string name="description_post_cw">Inhoudswaarschuwing: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Geen beschrijving</string>
-    <string name="description_post_reblogged">Geboost</string>
+    <string name="description_post_retweeted">Geretweet</string>
     <string name="description_post_liked">Als favoriet gemarkeerd</string>
     <string name="description_visibility_public">Openbaar</string>
     <string name="description_visibility_unlisted">Minder openbaar</string>
@@ -429,7 +429,7 @@
     <string name="account_note_hint">Jouw eigen opmerking over dit account</string>
     <string name="pref_title_wellbeing_mode">Welzijn</string>
     <string name="pref_title_hide_top_toolbar">De bovenste werkbalk verbergen</string>
-    <string name="pref_title_confirm_reblogs">Vraag bevestiging voor het boosten</string>
+    <string name="pref_title_confirm_retweets">Vraag bevestiging voor het retweeten</string>
     <string name="pref_title_show_cards_in_timelines">Linkpreviews in tijdlijnen weergeven</string>
     <string name="no_announcements">Er zijn geen aankondigingen.</string>
     <string name="duration_indefinite">Voor altijd</string>
@@ -467,7 +467,7 @@
     <string name="dialog_delete_conversation_warning">Dit gesprek verwijderen?</string>
     <string name="action_delete_conversation">Gesprek verwijderen</string>
     <string name="follow_requests_info">Ook al heb je geen besloten account, de medewerkers van %1$s dachten dat je misschien de volgverzoeken van deze accounts handmatig zou willen controleren.</string>
-    <string name="wellbeing_mode_notice">Informatie die je geestelijk welzijn kan beïnvloeden, zal worden verborgen. Het gaat om: \n \n- Meldingen over favorieten, boosts en volgers \n- Weergave van het aantal favorieten en boosts per bericht \n- Statistieken over het aantal volgers en berichten op profielen \n \nPushmeldingen worden hierdoor niet beïnvloed, maar je kunt de voorkeuren voor meldingen handmatig wijzigen.</string>
+    <string name="wellbeing_mode_notice">Informatie die je geestelijk welzijn kan beïnvloeden, zal worden verborgen. Het gaat om: \n \n- Meldingen over favorieten, retweets en volgers \n- Weergave van het aantal favorieten en retweets per bericht \n- Statistieken over het aantal volgers en berichten op profielen \n \nPushmeldingen worden hierdoor niet beïnvloed, maar je kunt de voorkeuren voor meldingen handmatig wijzigen.</string>
     <string name="notification_sign_up_format">%1$s heeft zich geregistreerd</string>
     <string name="error_multimedia_size_limit">Afbeeldingen en video\'s mogen niet groter zijn dan %1$s MB.</string>
     <string name="error_image_edit_failed">Deze afbeelding kon niet worden bewerkt.</string>
@@ -566,7 +566,7 @@
     <string name="pref_summary_http_proxy_invalid">&lt;ongeldig&gt;</string>
     <string name="action_refresh">Verversen</string>
     <string name="post_media_image">Afbeelding</string>
-    <string name="ui_error_reblog">Bericht boosten is mislukt: %1$s</string>
+    <string name="ui_error_retweet">Bericht retweeten is mislukt: %1$s</string>
     <string name="ui_error_vote">Stemmen in peiling mislukt: %1$s</string>
     <string name="pref_title_http_proxy_port_message">Poort moet tussen %1$d en %2$d liggen</string>
     <string name="notification_unknown_name">Onbekend</string>
@@ -681,7 +681,7 @@
     <string name="dialog_follow_warning">Deze account volgen?</string>
     <string name="pref_title_confirm_follows">Vraag bevestiging voor het volgen</string>
     <string name="report_category_legal">Legaal</string>
-    <string name="pref_title_show_self_boosts_description">Deze persoon boost diens eigen bericht</string>
+    <string name="pref_title_show_self_retweets_description">Deze persoon retweet diens eigen bericht</string>
     <string name="pref_title_show_notifications_filter">Meldingsfilter tonen</string>
     <string name="ui_error_like">Markeren als favoriet is mislukt: %1$s</string>
     <string name="ui_success_rejected_follow_request">Volgverzoek geblokkeerd</string>
@@ -692,5 +692,5 @@
     <string name="filter_edit_keyword_title">Trefwoord bewerken</string>
     <string name="error_media_playback">Afspelen mislukt: %1$s</string>
     <string name="label_filter_context">Inhoud filteren</string>
-    <string name="pref_title_show_self_boosts">Boosts van jezelf tonen</string>
+    <string name="pref_title_show_self_retweets">Retweets van jezelf tonen</string>
 </resources>

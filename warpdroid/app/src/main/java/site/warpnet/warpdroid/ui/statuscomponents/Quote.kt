@@ -190,8 +190,8 @@ private fun QuoteContent(
                     url = quotedStatus.account.avatar,
                     staticUrl = quotedStatus.account.staticAvatar,
                     isBot = quotedStatus.account.bot,
-                    boostedAvatarUrl = null,
-                    staticBoostedAvatarUrl = null,
+                    retweetedAvatarUrl = null,
+                    staticRetweetedAvatarUrl = null,
                     onOpenProfile = {
                         listener.onViewAccount(quotedStatus.account.id)
                     },

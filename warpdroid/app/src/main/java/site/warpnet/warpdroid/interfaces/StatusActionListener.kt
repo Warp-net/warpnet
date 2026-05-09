@@ -21,14 +21,14 @@ import site.warpnet.warpdroid.viewdata.StatusViewData
 interface StatusActionListener : LinkListener {
 
     /**
-     * Reblog the post represented by [viewData]
-     * @param reblog true to reblog, false to undo a reblog
-     * @param visibility The visibility to use for the reblog, if the user has already chosen it, null otherwise
+     * Retweet the post represented by [viewData]
+     * @param retweet true to retweet, false to undo a retweet
+     * @param visibility The visibility to use for the retweet, if the user has already chosen it, null otherwise
      * @param state Optional SparkButtonState for delayed animation
      */
-    fun onReblog(
+    fun onRetweet(
         viewData: StatusViewData.Concrete,
-        reblog: Boolean,
+        retweet: Boolean,
         visibility: Status.Visibility?,
         state: SparkButtonState?
     )

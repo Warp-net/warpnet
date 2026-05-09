@@ -52,8 +52,8 @@ class TabFilterPreferencesFragment : BasePreferencesFragment() {
                 category.isIconSpaceReserved = false
 
                 switchPreference {
-                    setTitle(R.string.pref_title_show_boosts)
-                    key = PrefKeys.TAB_FILTER_HOME_BOOSTS
+                    setTitle(R.string.pref_title_show_retweets)
+                    key = PrefKeys.TAB_FILTER_HOME_RETWEETS
                     preferenceDataStore = accountPreferenceDataStore
                     isIconSpaceReserved = false
                 }
@@ -66,12 +66,12 @@ class TabFilterPreferencesFragment : BasePreferencesFragment() {
                 }
 
                 switchPreference {
-                    setTitle(R.string.pref_title_show_self_boosts)
-                    setSummary(R.string.pref_title_show_self_boosts_description)
-                    key = PrefKeys.TAB_SHOW_HOME_SELF_BOOSTS
+                    setTitle(R.string.pref_title_show_self_retweets)
+                    setSummary(R.string.pref_title_show_self_retweets_description)
+                    key = PrefKeys.TAB_SHOW_HOME_SELF_RETWEETS
                     preferenceDataStore = accountPreferenceDataStore
                     isIconSpaceReserved = false
-                }.apply { dependency = PrefKeys.TAB_FILTER_HOME_BOOSTS }
+                }.apply { dependency = PrefKeys.TAB_FILTER_HOME_RETWEETS }
             }
         }
     }

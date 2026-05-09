@@ -110,8 +110,8 @@ fun StatusMoreMenu(
                                 url = account.profilePictureUrl,
                                 staticUrl = account.staticProfilePictureUrl,
                                 isBot = false,
-                                boostedAvatarUrl = null,
-                                staticBoostedAvatarUrl = null,
+                                retweetedAvatarUrl = null,
+                                staticRetweetedAvatarUrl = null,
                                 onOpenProfile = null,
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -264,20 +264,20 @@ fun StatusMoreMenu(
             HorizontalDivider()
 
             if (isOwnStatus && status.visibility == Status.Visibility.PRIVATE) {
-                if (status.reblogged) {
+                if (status.retweeted) {
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.unreblog_private)) },
+                        text = { Text(stringResource(R.string.unretweet_private)) },
                         onClick = {
                             onDismissRequest()
-                            listener.onReblog(viewData, false, Status.Visibility.PRIVATE, null)
+                            listener.onRetweet(viewData, false, Status.Visibility.PRIVATE, null)
                         }
                     )
                 } else {
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.reblog_private)) },
+                        text = { Text(stringResource(R.string.retweet_private)) },
                         onClick = {
                             onDismissRequest()
-                            listener.onReblog(viewData, true, Status.Visibility.PRIVATE, null)
+                            listener.onRetweet(viewData, true, Status.Visibility.PRIVATE, null)
                         }
                     )
                 }

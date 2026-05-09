@@ -36,7 +36,7 @@
     <string name="label_quick_reply">Απάντηση…</string>
     <string name="action_reject">Απόρριψη</string>
     <string name="title_blocks">Αποκλεισμένοι χρήστες</string>
-    <string name="action_unreblog">Αφαίρεση προώθησης</string>
+    <string name="action_unretweet">Αφαίρεση προώθησης</string>
     <string name="action_edit">Επεξεργασία</string>
     <string name="action_mute_domain">Σίγαση %1$s</string>
     <string name="action_block">Αποκλεισμός</string>
@@ -44,7 +44,7 @@
     <string name="notification_follow_request_format">%1$s ζήτησε να σας ακολουθήσει</string>
     <string name="action_reply">Απάντηση</string>
     <string name="title_tab_preferences">Καρτέλες</string>
-    <string name="notification_reblog_format">%1$s προώθησε τη δημοσίευσή σας</string>
+    <string name="notification_retweet_format">%1$s προώθησε τη δημοσίευσή σας</string>
     <string name="notification_like_format">%1$s προτίμησε τη δημοσίευσή σας</string>
     <string name="action_follow">Ακολουθήστε</string>
     <string name="action_report">Αναφορά</string>
@@ -56,7 +56,7 @@
     <string name="action_copy_link">Αντιγραφή συνδέσμου</string>
     <string name="hint_search">Αναζήτηση…</string>
     <string name="action_accept">Αποδοχή</string>
-    <string name="action_show_reblogs">Εμφάνιση προωθήσεων</string>
+    <string name="action_show_retweets">Εμφάνιση προωθήσεων</string>
     <string name="action_view_profile">Προφίλ</string>
     <string name="title_follow_requests">Αιτήματα ακολούθησης</string>
     <string name="action_search">Αναζήτηση</string>
@@ -66,7 +66,7 @@
     <string name="action_save">Αποθήκευση</string>
     <string name="action_quick_reply">Γρήγορη Απάντηση</string>
     <string name="title_mutes">Χρήστες σε σίγαση</string>
-    <string name="action_hide_reblogs">Απόκρυψη προωθήσεων</string>
+    <string name="action_hide_retweets">Απόκρυψη προωθήσεων</string>
     <string name="action_view_preferences">Προτιμήσεις</string>
     <string name="title_login">Σύνδεση</string>
     <string name="title_announcements">Ανακοινώσεις</string>
@@ -82,7 +82,7 @@
     <string name="action_compose">Συνθέστε</string>
     <string name="action_login">Σύνδεση με Warpnet</string>
     <string name="action_edit_own_profile">Επεξεργασία</string>
-    <string name="action_reblog">Προώθηση</string>
+    <string name="action_retweet">Προώθηση</string>
     <string name="dialog_unfollow_warning">Άρση ακολούθησης αυτού του λογαριασμού;</string>
     <string name="dialog_mute_hide_notifications">Απόκρυψη ειδοποιήσεων</string>
     <string name="action_unbookmark">Αφαίρεση σελιδοδείκτη</string>
@@ -95,7 +95,7 @@
     <string name="title_posts_pinned">Καρφιτσωμένο</string>
     <string name="post_sensitive_media_title">Ευαίσθητο περιεχόμενο</string>
     <string name="post_media_hidden_title">Κρυφά πολυμέσα</string>
-    <string name="post_boosted_format">%1$s προώθησε</string>
+    <string name="post_retweeted_format">%1$s προώθησε</string>
     <string name="title_posts_with_replies">Με απαντήσεις</string>
     <string name="post_content_warning_show_more">Δείτε περισσότερα</string>
     <string name="post_content_warning_show_less">Δείτε λιγότερα</string>

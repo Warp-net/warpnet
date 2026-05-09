@@ -37,7 +37,7 @@
     <string name="title_drafts">草稿</string>
     <string name="title_licenses">开源协议</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s 转嘟了</string>
+    <string name="post_retweeted_format">%1$s 转嘟了</string>
     <string name="post_sensitive_media_title">敏感内容</string>
     <string name="post_media_hidden_title">已隐藏的照片或视频</string>
     <string name="post_sensitive_media_directions">点击显示</string>
@@ -46,15 +46,15 @@
     <string name="post_content_show_more">展开</string>
     <string name="post_content_show_less">折叠</string>
     <string name="message_empty">还没有内容</string>
-    <string name="notification_reblog_format">%1$s 转嘟了你的嘟文</string>
+    <string name="notification_retweet_format">%1$s 转嘟了你的嘟文</string>
     <string name="notification_like_format">%1$s 喜欢了你的嘟文</string>
     <string name="notification_follow_format">%1$s 关注了你</string>
     <string name="report_username_format">报告用户 @%1$s 的滥用行为</string>
     <string name="report_comment_hint">报告更多信息</string>
     <string name="action_quick_reply">快速回复</string>
     <string name="action_reply">回复</string>
-    <string name="action_reblog">转嘟</string>
-    <string name="action_unreblog">取消转嘟</string>
+    <string name="action_retweet">转嘟</string>
+    <string name="action_unretweet">取消转嘟</string>
     <string name="action_like">喜欢</string>
     <string name="action_unlike">取消喜欢</string>
     <string name="action_more">更多</string>
@@ -66,8 +66,8 @@
     <string name="action_unfollow">取消关注</string>
     <string name="action_block">屏蔽</string>
     <string name="action_unblock">取消屏蔽</string>
-    <string name="action_hide_reblogs">隐藏转嘟</string>
-    <string name="action_show_reblogs">显示转嘟</string>
+    <string name="action_hide_retweets">隐藏转嘟</string>
+    <string name="action_show_retweets">显示转嘟</string>
     <string name="action_report">报告</string>
     <string name="action_delete">删除</string>
     <string name="action_delete_and_redraft">删除并重新编辑</string>
@@ -104,8 +104,8 @@
     <string name="action_content_warning">设置内容提醒信息</string>
     <string name="action_emoji_keyboard">插入表情符号</string>
     <string name="action_add_tab">添加标签页</string>
-    <string name="action_open_reblogger">打开转嘟用户主页</string>
-    <string name="action_open_reblogged_by">显示转嘟</string>
+    <string name="action_open_retweetger">打开转嘟用户主页</string>
+    <string name="action_open_retweeted_by">显示转嘟</string>
     <string name="action_open_faved_by">显示喜欢</string>
     <string name="title_hashtags_dialog">话题</string>
     <string name="title_mentions_dialog">提及</string>
@@ -168,7 +168,7 @@
     <string name="pref_title_language">界面语言</string>
     <string name="pref_title_post_filter">时间轴过滤</string>
     <string name="pref_title_post_tabs">标签页</string>
-    <string name="pref_title_show_boosts">显示转嘟</string>
+    <string name="pref_title_show_retweets">显示转嘟</string>
     <string name="pref_title_show_replies">显示回复</string>
     <string name="pref_title_show_media_preview">显示预览图</string>
     <string name="pref_title_proxy_settings">代理</string>
@@ -193,8 +193,8 @@
     <string name="notification_mention_descriptions">当有用户在嘟文中提及我时</string>
     <string name="notification_follow_name">关注</string>
     <string name="notification_follow_description">当有用户关注我时</string>
-    <string name="notification_boost_name">转嘟</string>
-    <string name="notification_boost_description">当有用户转嘟了我的嘟文时</string>
+    <string name="notification_retweet_name">转嘟</string>
+    <string name="notification_retweet_description">当有用户转嘟了我的嘟文时</string>
     <string name="notification_like_name">喜欢</string>
     <string name="notification_like_description">当有用户喜欢了我的嘟文时</string>
     <string name="notification_poll_name">投票</string>
@@ -287,8 +287,8 @@
     <string name="download_failed">下载失败</string>
     <string name="profile_badge_bot_text">机器人</string>
     <string name="account_moved_description">%1$s 已迁移到：</string>
-    <string name="reblog_private">转嘟（可见者不变）</string>
-    <string name="unreblog_private">取消转嘟</string>
+    <string name="retweet_private">转嘟（可见者不变）</string>
+    <string name="unretweet_private">取消转嘟</string>
     <string name="license_description">Warpnet 使用了以下开源项目的源码：</string>
     <string name="license_apache_2">以 Apache License 授权（详见下方）</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -304,10 +304,10 @@
     <plurals name="favs">
         <item quantity="other"><b>%1$s</b> 次喜欢</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="other"><b>%1$s</b> 次转嘟</item>
     </plurals>
-    <string name="title_reblogged_by">转嘟</string>
+    <string name="title_retweeted_by">转嘟</string>
     <string name="title_liked_by">喜欢</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s 和 %2$s</string>
@@ -315,7 +315,7 @@
     <string name="description_post_media">媒体: %1$s</string>
     <string name="description_post_cw">内容提醒: %1$s</string>
     <string name="description_post_media_no_description_placeholder">没有媒体描述信息</string>
-    <string name="description_post_reblogged">被转嘟</string>
+    <string name="description_post_retweeted">被转嘟</string>
     <string name="description_post_liked">被喜欢</string>
     <string name="description_visibility_public">公开</string>
     <string name="description_visibility_unlisted">不公开</string>

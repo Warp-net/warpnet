@@ -43,8 +43,8 @@ fun Avatar(
     url: String,
     staticUrl: String,
     isBot: Boolean,
-    boostedAvatarUrl: String?,
-    staticBoostedAvatarUrl: String?,
+    retweetedAvatarUrl: String?,
+    staticRetweetedAvatarUrl: String?,
     onOpenProfile: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
@@ -66,7 +66,7 @@ fun Avatar(
             error = placeholder,
             modifier = Modifier
                 .run {
-                    if (boostedAvatarUrl == null) {
+                    if (retweetedAvatarUrl == null) {
                         fillMaxSize()
                     } else {
                         fillMaxSize(0.75f)
@@ -74,7 +74,7 @@ fun Avatar(
                 }
                 .align(Alignment.TopStart)
                 .clip(
-                    if (boostedAvatarUrl == null) {
+                    if (retweetedAvatarUrl == null) {
                         warpdroidDefaultCornerShape
                     } else {
                         RoundedCornerShape(warpdroidDefaultRadius * 0.75f)
@@ -88,17 +88,17 @@ fun Avatar(
                     }
                 }
         )
-        if (boostedAvatarUrl != null) {
-            val boostedAvatarPlaceholder = painterResource(R.drawable.avatar_default)
+        if (retweetedAvatarUrl != null) {
+            val retweetedAvatarPlaceholder = painterResource(R.drawable.avatar_default)
             AsyncImage(
                 model = if (animateAvatars) {
-                    boostedAvatarUrl
+                    retweetedAvatarUrl
                 } else {
-                    staticBoostedAvatarUrl
+                    staticRetweetedAvatarUrl
                 },
                 contentDescription = null,
-                placeholder = boostedAvatarPlaceholder,
-                error = boostedAvatarPlaceholder,
+                placeholder = retweetedAvatarPlaceholder,
+                error = retweetedAvatarPlaceholder,
                 modifier = Modifier
                     .fillMaxSize(0.5f)
                     .align(Alignment.BottomEnd)

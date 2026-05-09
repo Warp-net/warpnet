@@ -76,13 +76,13 @@
     <string name="notification_follow_format">%1$s followed you</string>
     <string name="notification_sign_up_format">%1$s signed up</string>
     <string name="title_drafts">Drafts</string>
-    <string name="notification_reblog_format">%1$s boosted your post</string>
+    <string name="notification_retweet_format">%1$s retweeted your post</string>
     <string name="title_login">Login</string>
     <string name="title_announcements">Announcements</string>
     <string name="error_could_not_load_login_page">Could not load the login page.</string>
     <string name="title_scheduled_posts">Scheduled posts</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s boosted</string>
+    <string name="post_retweeted_format">%1$s retweeted</string>
     <string name="error_network">A network error occurred. Please check your connection and try again.</string>
     <string name="error_failed_app_registration">Failed authenticating with that instance. If this persists, try Login in Browser from the menu.</string>
     <string name="error_no_web_browser_found">Couldn\'t find a web browser to use.</string>
@@ -96,9 +96,9 @@
     <string name="action_post_failed">Upload failed</string>
     <string name="report_comment_hint">Additional comments?</string>
     <string name="action_quick_reply">Quick Reply</string>
-    <string name="action_reblog">Boost</string>
+    <string name="action_retweet">Retweet</string>
     <string name="action_reply">Reply</string>
-    <string name="action_unreblog">Remove boost</string>
+    <string name="action_unretweet">Remove retweet</string>
     <string name="action_logout_confirm">Are you sure you want to log out of %1$s? This will delete all local data of the account, including drafts and preferences.</string>
     <string name="action_share_account_link">Share a link to this account</string>
     <string name="like_confirm">Like this post?</string>

@@ -213,8 +213,8 @@ class PreferencesFragment : BasePreferencesFragment() {
 
                 switchPreference {
                     setDefaultValue(true)
-                    key = PrefKeys.CONFIRM_REBLOGS
-                    setTitle(R.string.pref_title_confirm_reblogs)
+                    key = PrefKeys.CONFIRM_RETWEETS
+                    setTitle(R.string.pref_title_confirm_retweets)
                 }
 
                 switchPreference {
@@ -262,11 +262,11 @@ class PreferencesFragment : BasePreferencesFragment() {
                             if (value == true) {
                                 notificationFilter.add(NotificationChannelData.LIKE)
                                 notificationFilter.add(NotificationChannelData.FOLLOW)
-                                notificationFilter.add(NotificationChannelData.REBLOG)
+                                notificationFilter.add(NotificationChannelData.RETWEET)
                             } else {
                                 notificationFilter.remove(NotificationChannelData.LIKE)
                                 notificationFilter.remove(NotificationChannelData.FOLLOW)
-                                notificationFilter.remove(NotificationChannelData.REBLOG)
+                                notificationFilter.remove(NotificationChannelData.RETWEET)
                             }
 
                             lifecycleScope.launch {

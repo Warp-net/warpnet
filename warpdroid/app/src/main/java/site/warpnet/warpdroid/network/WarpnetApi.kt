@@ -391,7 +391,7 @@ class WarpnetApi @Inject constructor(
     suspend fun statusEdits(statusId: String): NetworkResult<List<StatusEdit>> =
         NetworkResult.success(emptyList())
 
-    suspend fun statusRebloggedBy(
+    suspend fun statusRetweetedBy(
         statusId: String,
         maxId: String?,
     ): Response<List<TimelineAccount>> = stubList()
@@ -426,16 +426,16 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun reblogStatus(
+    suspend fun retweetStatus(
         statusId: String,
         visibility: String?,
     ): NetworkResult<Status> {
-        val active = accountManager.activeAccount ?: return stubFailure("reblogStatus")
+        val active = accountManager.activeAccount ?: return stubFailure("retweetStatus")
         // Same reasoning as createStatus: the wire-level username field is
         // the display name, not the @-handle.
         val retweeterName = active.displayName.ifBlank { active.username }
         return result {
-            warpnet.reblogStatus(
+            warpnet.retweetStatus(
                 tweetId = statusId,
                 retweeterId = active.accountId,
                 retweeterUsername = retweeterName,
@@ -444,10 +444,10 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun unreblogStatus(statusId: String): NetworkResult<Status> {
-        val active = accountManager.activeAccount ?: return stubFailure("unreblogStatus")
+    suspend fun unretweetStatus(statusId: String): NetworkResult<Status> {
+        val active = accountManager.activeAccount ?: return stubFailure("unretweetStatus")
         return result {
-            warpnet.unreblogStatus(tweetId = statusId, retweeterId = active.accountId)
+            warpnet.unretweetStatus(tweetId = statusId, retweeterId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }
@@ -608,7 +608,7 @@ class WarpnetApi @Inject constructor(
         sinceId: String? = null,
         limit: Int? = null,
         excludeReplies: Boolean? = null,
-        excludeReblogs: Boolean? = null,
+        excludeRetweets: Boolean? = null,
         onlyMedia: Boolean? = null,
         pinned: Boolean? = null,
     ): Response<List<Status>> = paginated {
@@ -631,7 +631,7 @@ class WarpnetApi @Inject constructor(
 
     suspend fun followAccount(
         accountId: String,
-        showReblogs: Boolean? = null,
+        showRetweets: Boolean? = null,
         notify: Boolean? = null,
     ): NetworkResult<Relationship> {
         val me = accountManager.activeAccount?.accountId.orEmpty()

@@ -112,11 +112,11 @@ fun NotificationInfo(
                 )
             }
         }
-        Notification.Type.Reblog -> {
+        Notification.Type.Retweet -> {
             NotificationInfo(
                 icon = R.drawable.ic_repeat_24dp,
                 iconColor = colorScheme.primary,
-                text = R.string.notification_reblog_format,
+                text = R.string.notification_retweet_format,
                 account = notificationViewData.account,
                 onViewAccount = {
                     listener.onViewAccount(notificationViewData.account.id)

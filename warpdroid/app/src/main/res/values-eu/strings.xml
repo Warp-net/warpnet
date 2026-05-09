@@ -32,7 +32,7 @@
     <string name="title_edit_profile">Editatu profila</string>
     <string name="title_drafts">Zirriborroak</string>
     <string name="title_licenses">Lizentziak</string>
-    <string name="post_boosted_format">%1$s-(e)k bultzatu du</string>
+    <string name="post_retweeted_format">%1$s-(e)k bultzatu du</string>
     <string name="post_sensitive_media_title">Eduki hunkigarria</string>
     <string name="post_media_hidden_title">Ezkutuko media</string>
     <string name="post_sensitive_media_directions">Sakatu ikusteko</string>
@@ -40,14 +40,14 @@
     <string name="post_content_warning_show_less">Erakutsi gutxiago</string>
     <string name="post_content_show_more">Zabaldu</string>
     <string name="post_content_show_less">Itxi</string>
-    <string name="notification_reblog_format">%1$s-(e)k zure tuta bultzatu du</string>
+    <string name="notification_retweet_format">%1$s-(e)k zure tuta bultzatu du</string>
     <string name="notification_like_format">%1$s-(e)k zure tuta gogoko du</string>
     <string name="notification_follow_format">%1$s-(e)k jarraitu dizu</string>
     <string name="report_username_format">\@%1$s salatu</string>
     <string name="report_comment_hint">Informazio gehigarria?</string>
     <string name="action_quick_reply">Erantzun azkarra</string>
     <string name="action_reply">Erantzun</string>
-    <string name="action_reblog">Bultzatu</string>
+    <string name="action_retweet">Bultzatu</string>
     <string name="action_like">Gogokoa</string>
     <string name="action_more">Gehiago</string>
     <string name="action_compose">Idatzi</string>
@@ -58,8 +58,8 @@
     <string name="action_unfollow">Jarraitzeari utzi</string>
     <string name="action_block">Blokeatu</string>
     <string name="action_unblock">Desblokeatu</string>
-    <string name="action_hide_reblogs">Bultzadak ezkutatu</string>
-    <string name="action_show_reblogs">Bultzadak erakutsi</string>
+    <string name="action_hide_retweets">Bultzadak ezkutatu</string>
+    <string name="action_show_retweets">Bultzadak erakutsi</string>
     <string name="action_report">Salatu</string>
     <string name="action_delete">Ezabatu</string>
     <string name="action_send">Tut</string>
@@ -143,7 +143,7 @@
     <string name="pref_title_custom_tabs">Chromeko fitxak erabili</string>
     <string name="pref_title_post_filter">Denbora-lerroaren iragaztea</string>
     <string name="pref_title_post_tabs">Fitxak</string>
-    <string name="pref_title_show_boosts">Bultzadak erakutsi</string>
+    <string name="pref_title_show_retweets">Bultzadak erakutsi</string>
     <string name="pref_title_show_replies">Erakutsi erantzunak</string>
     <string name="pref_title_show_media_preview">Jaitsi mediaren aurreikuspenak</string>
     <string name="pref_title_proxy_settings">Proxya</string>
@@ -168,8 +168,8 @@
     <string name="notification_mention_descriptions">Aipamen berrien jakinarazpenak</string>
     <string name="notification_follow_name">Jarritzaile berriak</string>
     <string name="notification_follow_description">Jarraitzaile berrien jakinarazpenak</string>
-    <string name="notification_boost_name">Bultzadak</string>
-    <string name="notification_boost_description">Bultzatutako tuten jakinarazpenak</string>
+    <string name="notification_retweet_name">Bultzadak</string>
+    <string name="notification_retweet_description">Bultzatutako tuten jakinarazpenak</string>
     <string name="notification_like_name">Gogokoak</string>
     <string name="notification_like_description">Zure tutak gogoko bezala ezartzerakoan jakinarazpenak</string>
     <string name="notification_mention_format">%1$s-(e)k aipatu zaitu</string>
@@ -240,8 +240,8 @@
     <string name="download_failed">Deskargatzerakoan akatsa</string>
     <string name="profile_badge_bot_text">Bot-a</string>
     <string name="account_moved_description">%1$s hona mugitu da:</string>
-    <string name="reblog_private">Bultzatu jatorrizko hartzaileei</string>
-    <string name="unreblog_private">Kendu bultzada</string>
+    <string name="retweet_private">Bultzatu jatorrizko hartzaileei</string>
+    <string name="unretweet_private">Kendu bultzada</string>
     <string name="license_description">Warpnet-k ondorengo software libreko proiektuetako kode eta baliabideak ditu:</string>
     <string name="license_apache_2">Apache Lizentziapean (testua zerrendaren azpian)</string>
     <string name="profile_metadata_label">Profilaren metadatuak</string>
@@ -260,7 +260,7 @@
     <string name="title_scheduled_posts">Programatutako tutak</string>
     <string name="post_username_format">\@%1$s</string>
     <string name="message_empty">Kilkerrak besterik ez hemen.</string>
-    <string name="action_unreblog">Kendu bultzada</string>
+    <string name="action_unretweet">Kendu bultzada</string>
     <string name="action_unlike">Gogokoa kendu</string>
     <string name="action_edit">Editatu</string>
     <string name="action_delete_and_redraft">Ezabatu eta zirriborroa berriro egin</string>
@@ -271,7 +271,7 @@
     <string name="action_schedule_post">Programatu tuta</string>
     <string name="action_reset_schedule">Berrezarri</string>
     <string name="action_add_tab">Gehitu fitxa</string>
-    <string name="action_open_reblogged_by">Erakutsi bultzadak</string>
+    <string name="action_open_retweeted_by">Erakutsi bultzadak</string>
     <string name="action_open_faved_by">Erakutsi gogokoak</string>
     <string name="title_mentions_dialog">Aipamenak</string>
     <string name="title_links_dialog">Estekak</string>
@@ -322,11 +322,11 @@
         <item quantity="one">Gogoko <b>%1$s</b></item>
         <item quantity="other"><b>%1$s</b> Gogoko</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one">Bultzada <b>%1$s</b></item>
         <item quantity="other"><b>%1$s</b> Bultzada</item>
     </plurals>
-    <string name="title_reblogged_by">Bultzatuta</string>
+    <string name="title_retweeted_by">Bultzatuta</string>
     <string name="title_liked_by">Gogokoa</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s eta %2$s</string>
@@ -334,7 +334,7 @@
     <string name="description_post_media">Multimedia: %1$s</string>
     <string name="description_post_cw">Edukiarekiko abisua: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Deskribapenik ez</string>
-    <string name="description_post_reblogged">Bultzatua</string>
+    <string name="description_post_retweeted">Bultzatua</string>
     <string name="description_post_liked">Gogokoa</string>
     <string name="description_visibility_public">Publikoa</string>
     <string name="description_visibility_unlisted">Zerrendatu gabea</string>
@@ -400,7 +400,7 @@
     <string name="title_bookmarks">Laster-markak</string>
     <string name="action_bookmark">Laster-marka</string>
     <string name="action_view_bookmarks">Laster-markak</string>
-    <string name="action_open_reblogger">Ireki bultzadaren egilea</string>
+    <string name="action_open_retweetger">Ireki bultzadaren egilea</string>
     <string name="pref_title_public_filter_keywords">Denbora lerro publikoak</string>
     <string name="description_post_bookmarked">Laster-marketara gehitua</string>
     <string name="select_list_title">Hautatu zerrenda</string>
@@ -418,7 +418,7 @@
     <string name="dialog_mute_hide_notifications">Jakinarazpenak ezkutatu</string>
     <string name="action_unmute_desc">Desmututu %1$s</string>
     <string name="pref_title_hide_top_toolbar">Ezkutatu goiko tresna-barraren izenburua</string>
-    <string name="pref_title_confirm_reblogs">Eskatu berrespena tuta bultzatu aurretik</string>
+    <string name="pref_title_confirm_retweets">Eskatu berrespena tuta bultzatu aurretik</string>
     <string name="pref_title_show_cards_in_timelines">Erakutsi esteken aurrebista denbora-lerroetan</string>
     <string name="pref_title_enable_swipe_for_tabs">Gaitu irristatzeko keinua fitxetan zehar mugitzeko</string>
     <plurals name="poll_timespan_minutes">

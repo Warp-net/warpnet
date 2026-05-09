@@ -18,10 +18,10 @@ enum class NotificationChannelData(
         R.string.notification_mention_descriptions,
     ),
 
-    REBLOG(
-        listOf(Notification.Type.Reblog),
-        R.string.notification_boost_name,
-        R.string.notification_boost_description
+    RETWEET(
+        listOf(Notification.Type.Retweet),
+        R.string.notification_retweet_name,
+        R.string.notification_retweet_description
     ),
 
     LIKE(

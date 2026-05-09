@@ -30,18 +30,18 @@
     <string name="title_edit_profile">Edita el perfil</string>
     <string name="title_drafts">Esborranys</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s ha impulsat</string>
+    <string name="post_retweeted_format">%1$s ha impulsat</string>
     <string name="post_sensitive_media_title">Contingut sensible</string>
     <string name="post_sensitive_media_directions">Fes clic per a visualitzar-lo</string>
     <string name="post_content_warning_show_more">Mostra\'n més</string>
     <string name="post_content_warning_show_less">Mostra\'n menys</string>
-    <string name="notification_reblog_format">%1$s ha impulsat la teva publicació</string>
+    <string name="notification_retweet_format">%1$s ha impulsat la teva publicació</string>
     <string name="notification_like_format">%1$s ha marcat com a preferida la teva publicació</string>
     <string name="notification_follow_format">%1$s et segueix</string>
     <string name="report_username_format">Denuncia @%1$s</string>
     <string name="report_comment_hint">Cap comentari addicional?</string>
     <string name="action_reply">Respon</string>
-    <string name="action_reblog">Impulsa</string>
+    <string name="action_retweet">Impulsa</string>
     <string name="action_like">Preferit</string>
     <string name="action_more">Més</string>
     <string name="action_compose">Escriure</string>
@@ -118,7 +118,7 @@
     <string name="pref_title_custom_tabs">Pestanyes personalitzades del Chrome</string>
     <string name="pref_title_post_filter">Filtre de la cronologia</string>
     <string name="pref_title_post_tabs">Pestanyes</string>
-    <string name="pref_title_show_boosts">Mostra els impulsos</string>
+    <string name="pref_title_show_retweets">Mostra els impulsos</string>
     <string name="pref_title_show_replies">Mostra les respostes</string>
     <string name="pref_title_show_media_preview">Mostra les previsualitzacions</string>
     <string name="pref_default_post_privacy">Privacitat per defecte de les publicacions</string>
@@ -131,8 +131,8 @@
     <string name="notification_mention_descriptions">Notificacions sobre mencions noves</string>
     <string name="notification_follow_name">Nous seguidors</string>
     <string name="notification_follow_description">Notificacions sobre nous seguidors</string>
-    <string name="notification_boost_name">Impulsos</string>
-    <string name="notification_boost_description">Notificacions quan s\'impulsen les teves publicacions</string>
+    <string name="notification_retweet_name">Impulsos</string>
+    <string name="notification_retweet_description">Notificacions quan s\'impulsen les teves publicacions</string>
     <string name="notification_like_name">Preferits</string>
     <string name="notification_like_description">Notificacions quan les teves publicacions es marquen com a preferides</string>
     <string name="notification_mention_format">%1$s et mencionen</string>
@@ -183,13 +183,13 @@
     <string name="action_edit_own_profile">Edita</string>
     <string name="title_direct_messages">Missatges directes</string>
     <string name="message_empty">No hi ha res aquí.</string>
-    <string name="action_unreblog">Elimina l\'impuls</string>
+    <string name="action_unretweet">Elimina l\'impuls</string>
     <string name="error_network">S\'ha produït un error de connexió! Comproveu la connexió i torneu-ho a provar!</string>
     <string name="post_media_hidden_title">Multimèdia amagada</string>
     <string name="post_content_show_less">Amaga</string>
     <string name="action_logout_confirm">Estàs segur de tancar la sessió de %1$s?</string>
-    <string name="action_hide_reblogs">Amaga els impulsos</string>
-    <string name="action_show_reblogs">Mostra els impulsos</string>
+    <string name="action_hide_retweets">Amaga els impulsos</string>
+    <string name="action_show_retweets">Mostra els impulsos</string>
     <string name="action_delete_and_redraft">Elimina i reescriu</string>
     <string name="action_open_drawer">Obre el menú</string>
     <string name="action_toggle_visibility">Visibilitat de la publicació</string>
@@ -239,8 +239,8 @@
     <string name="filter_edit_title">Modificar un filtre</string>
     <string name="filter_dialog_remove_button">Eliminar</string>
     <string name="add_account_name">Afegir un compte</string>
-    <string name="action_open_reblogger">Obre l\'autor de l\'impuls</string>
-    <string name="action_open_reblogged_by">Mostra els impulsos</string>
+    <string name="action_open_retweetger">Obre l\'autor de l\'impuls</string>
+    <string name="action_open_retweeted_by">Mostra els impulsos</string>
     <string name="notification_poll_description">Notificacions d\'enquestes que han finalitzat</string>
     <string name="pref_title_public_filter_keywords">Línia de temps públiques</string>
     <string name="filter_dialog_update_button">Actualització</string>
@@ -283,8 +283,8 @@
     <string name="download_failed">Descàrrega fallida</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s s\'ha trasllat a:</string>
-    <string name="reblog_private">Tornar a impulsar</string>
-    <string name="unreblog_private">No impulsar</string>
+    <string name="retweet_private">Tornar a impulsar</string>
+    <string name="unretweet_private">No impulsar</string>
     <string name="license_description">Warpnet conté codi i recursos dels següents projectes:</string>
     <string name="license_apache_2">Sota llicencia Apache (text a sota)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -300,12 +300,12 @@
         <item quantity="many"/>
         <item quantity="other"><b>%1$s</b> Favorits</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> impuls</item>
         <item quantity="many"/>
         <item quantity="other"><b>%1$s</b> impulsos</item>
     </plurals>
-    <string name="title_reblogged_by">Impulsat per</string>
+    <string name="title_retweeted_by">Impulsat per</string>
     <string name="title_liked_by">Marcat favorit per</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s i %2$s</string>
@@ -340,7 +340,7 @@
     <string name="title_posts_pinned">Fixat</string>
     <string name="unpin_action">No fixis</string>
     <string name="pin_action">Fixar</string>
-    <string name="description_post_reblogged">Respost</string>
+    <string name="description_post_retweeted">Respost</string>
     <string name="compose_preview_image_description">Accions per a la imatge %1$s</string>
     <string name="pref_title_animate_gif_avatars">Activar l\'animació dels GIF</string>
     <string name="title_domain_mutes">Dominis ocults</string>
@@ -396,7 +396,7 @@
     <string name="no_drafts">No teniu cap esborrany.</string>
     <string name="warning_scheduling_interval">L\'interval mínim de planificació a Warpnet és de 5 minuts.</string>
     <string name="notification_follow_request_name">Peticions de seguiment</string>
-    <string name="pref_title_confirm_reblogs">Mostra el diàleg de confirmació abans de promoure</string>
+    <string name="pref_title_confirm_retweets">Mostra el diàleg de confirmació abans de promoure</string>
     <string name="pref_title_show_cards_in_timelines">Mostra les previsualitzacions dels enllaços en els fils</string>
     <string name="pref_title_enable_swipe_for_tabs">Habilita el gest de desplaçament per despleçar-te entre pestanyes</string>
     <plurals name="poll_info_people">

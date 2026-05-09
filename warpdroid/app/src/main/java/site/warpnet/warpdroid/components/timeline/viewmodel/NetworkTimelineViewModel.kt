@@ -187,7 +187,7 @@ class NetworkTimelineViewModel @Inject constructor(
     override fun removeStatusWithId(id: String) {
         statusData.removeAll { vd ->
             val status = vd.asStatusOrNull()?.status ?: return@removeAll false
-            status.id == id || status.reblog?.id == id
+            status.id == id || status.retweet?.id == id
         }
         currentSource?.invalidate()
     }
@@ -482,25 +482,25 @@ class NetworkTimelineViewModel @Inject constructor(
     }
 
     private inline fun updateStatusByActionableId(id: String, updater: (Status) -> Status) {
-        // posts can be multiple times in the timeline, e.g. once the original and once as boost
+        // posts can be multiple times in the timeline, e.g. once the original and once as retweet
         statusData.forEachIndexed { index, viewData ->
             val status = viewData.asStatusOrNull()
             if (status?.actionableId == id) {
                 updateViewDataAt(index) { vd ->
-                    if (vd.status.reblog != null) {
-                        vd.copy(status = vd.status.copy(reblog = updater(vd.status.reblog)))
+                    if (vd.status.retweet != null) {
+                        vd.copy(status = vd.status.copy(retweet = updater(vd.status.retweet)))
                     } else {
                         vd.copy(status = updater(vd.status))
                     }
                 }
             } else if (status?.quote?.quotedStatusViewData?.id == id) {
                 updateViewDataAt(index) { vd ->
-                    if (vd.status.reblog != null) {
+                    if (vd.status.retweet != null) {
                         vd.copy(
                             status = vd.status.copy(
-                                reblog = vd.status.reblog.copy(
-                                    quote = vd.status.reblog.quote?.copy(
-                                        quotedStatus = vd.status.reblog.quote.quotedStatus?.let { updater(it) }
+                                retweet = vd.status.retweet.copy(
+                                    quote = vd.status.retweet.quote?.copy(
+                                        quotedStatus = vd.status.retweet.quote.quotedStatus?.let { updater(it) }
                                     )
                                 )
                             ),

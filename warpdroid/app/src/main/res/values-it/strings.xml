@@ -37,7 +37,7 @@
     <string name="title_drafts">Bozze</string>
     <string name="title_licenses">Licenze</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s ha condiviso</string>
+    <string name="post_retweeted_format">%1$s ha condiviso</string>
     <string name="post_sensitive_media_title">Contenuto sensibile</string>
     <string name="post_media_hidden_title">Media nascosto</string>
     <string name="post_sensitive_media_directions">Clicca per visualizzare</string>
@@ -46,15 +46,15 @@
     <string name="post_content_show_more">Espandi</string>
     <string name="post_content_show_less">Riduci</string>
     <string name="message_empty">Qui non c\'è nulla.</string>
-    <string name="notification_reblog_format">%1$s ha condiviso il tuo post</string>
+    <string name="notification_retweet_format">%1$s ha condiviso il tuo post</string>
     <string name="notification_like_format">%1$s ha messo il tuo messaggio nei preferiti</string>
     <string name="notification_follow_format">%1$s ti segue</string>
     <string name="report_username_format">Segnala @%1$s</string>
     <string name="report_comment_hint">Commenti aggiuntivi?</string>
     <string name="action_quick_reply">Risposta veloce</string>
     <string name="action_reply">Rispondi</string>
-    <string name="action_reblog">Condividi</string>
-    <string name="action_unreblog">Rimuovi condivisione</string>
+    <string name="action_retweet">Condividi</string>
+    <string name="action_unretweet">Rimuovi condivisione</string>
     <string name="action_like">Aggiungi ai preferiti</string>
     <string name="action_unlike">Rimuovi preferito</string>
     <string name="action_more">Di più</string>
@@ -66,8 +66,8 @@
     <string name="action_unfollow">Smetti di seguire</string>
     <string name="action_block">Blocca</string>
     <string name="action_unblock">Sblocca</string>
-    <string name="action_hide_reblogs">Nascondi ricondivisioni</string>
-    <string name="action_show_reblogs">Mostra ricondivisioni</string>
+    <string name="action_hide_retweets">Nascondi ricondivisioni</string>
+    <string name="action_show_retweets">Mostra ricondivisioni</string>
     <string name="action_report">Segnala</string>
     <string name="action_delete">Elimina</string>
     <string name="action_send">Pubblica</string>
@@ -103,8 +103,8 @@
     <string name="action_content_warning">Avviso di contenuto sensibile</string>
     <string name="action_emoji_keyboard">Tastiera emoji</string>
     <string name="action_add_tab">Aggiungi scheda</string>
-    <string name="action_open_reblogger">Vai all\'autore della condivisione</string>
-    <string name="action_open_reblogged_by">Mostra ricondivisioni</string>
+    <string name="action_open_retweetger">Vai all\'autore della condivisione</string>
+    <string name="action_open_retweeted_by">Mostra ricondivisioni</string>
     <string name="action_open_faved_by">Mostra preferiti</string>
     <string name="title_hashtags_dialog">Hashtag</string>
     <string name="title_mentions_dialog">Menzioni</string>
@@ -164,7 +164,7 @@
     <string name="pref_title_language">Lingua</string>
     <string name="pref_title_post_filter">Filtraggio della timeline</string>
     <string name="pref_title_post_tabs">Timeline principale</string>
-    <string name="pref_title_show_boosts">Mostra ricondivisioni</string>
+    <string name="pref_title_show_retweets">Mostra ricondivisioni</string>
     <string name="pref_title_show_replies">Mostra risposte</string>
     <string name="pref_title_show_media_preview">Mostra anteprime media</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -189,8 +189,8 @@
     <string name="notification_mention_descriptions">Notifiche di quando vieni menzionato da qualcuno</string>
     <string name="notification_follow_name">Nuovi seguaci</string>
     <string name="notification_follow_description">Notifiche su nuovi seguaci</string>
-    <string name="notification_boost_name">Ricondivisioni</string>
-    <string name="notification_boost_description">Notifiche sui tuoi post che vengono condivisi</string>
+    <string name="notification_retweet_name">Ricondivisioni</string>
+    <string name="notification_retweet_description">Notifiche sui tuoi post che vengono condivisi</string>
     <string name="notification_like_name">Preferiti</string>
     <string name="notification_like_description">Notifiche quando i tuoi post vengono segnati come preferiti</string>
     <string name="notification_mention_format">%1$s ti ha menzionato</string>
@@ -282,8 +282,8 @@
     <string name="download_failed">Scaricamento fallito</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s si è spostato su:</string>
-    <string name="reblog_private">Condividi con la visibilità originale</string>
-    <string name="unreblog_private">Annulla condivisione</string>
+    <string name="retweet_private">Condividi con la visibilità originale</string>
+    <string name="unretweet_private">Annulla condivisione</string>
     <string name="license_description">Warpnet contiene codice e risorse dai seguenti progetti open source:</string>
     <string name="license_apache_2">Licenziata sotto la Licenza Apache (copia sotto)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -301,12 +301,12 @@
         <item quantity="many">%1$s preferiti</item>
         <item quantity="other">%1$s preferiti</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one">%1$s ricondivisione</item>
         <item quantity="many">%1$s ricondivisioni</item>
         <item quantity="other">%1$s ricondivisioni</item>
     </plurals>
-    <string name="title_reblogged_by">Condiviso da</string>
+    <string name="title_retweeted_by">Condiviso da</string>
     <string name="title_liked_by">Aggiunto ai preferiti da</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s e %2$s</string>
@@ -314,7 +314,7 @@
     <string name="description_post_media">Media: %1$s</string>
     <string name="description_post_cw">Contenuto sensibile: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Nessuna descrizione</string>
-    <string name="description_post_reblogged">Ribloggato</string>
+    <string name="description_post_retweeted">Ribloggato</string>
     <string name="description_post_liked">Messo nei preferiti</string>
     <string name="description_visibility_public">Pubblico</string>
     <string name="description_visibility_unlisted">Non in elenco</string>
@@ -436,7 +436,7 @@
     <string name="account_note_saved">Salvato!</string>
     <string name="account_note_hint">La tua nota privata su questo account</string>
     <string name="pref_title_hide_top_toolbar">Nascondi il titolo della barra degli strumenti in alto</string>
-    <string name="pref_title_confirm_reblogs">Chiedi conferma prima di condividere</string>
+    <string name="pref_title_confirm_retweets">Chiedi conferma prima di condividere</string>
     <string name="pref_title_show_cards_in_timelines">Mostra le anteprime dei collegamenti nelle timeline</string>
     <string name="warning_scheduling_interval">Warpnet ha un intervallo di programmazione minimo di 5 minuti.</string>
     <string name="no_announcements">Non ci sono annunci.</string>
@@ -476,7 +476,7 @@
     <string name="drafts_failed_loading_reply">Errore nel recupero delle informazioni sulla risposta</string>
     <string name="action_unsubscribe_account">Disiscriviti</string>
     <string name="action_delete_conversation">Elimina conversazione</string>
-    <string name="wellbeing_mode_notice">Alcune informazioni che potrebbero influenzare il tuo benessere mentale saranno nascoste. Questo include: \n \n- Notifiche riguardo a Preferiti/Boost/Following \n- Conteggio dei Preferiti/Boost nei post \n- Statistiche riguardo a Preferiti/Post nei profili \n \nLe notifiche push non saranno influenzate, ma puoi modificare le tue impostazioni delle notifiche manualmente.</string>
+    <string name="wellbeing_mode_notice">Alcune informazioni che potrebbero influenzare il tuo benessere mentale saranno nascoste. Questo include: \n \n- Notifiche riguardo a Preferiti/Retweet/Following \n- Conteggio dei Preferiti/Retweet nei post \n- Statistiche riguardo a Preferiti/Post nei profili \n \nLe notifiche push non saranno influenzate, ma puoi modificare le tue impostazioni delle notifiche manualmente.</string>
     <string name="action_unbookmark">Rimuovi segnalibro</string>
     <string name="pref_title_confirm_likes">Chiedi conferma prima di mettere nei preferiti</string>
     <string name="duration_14_days">14 giorni</string>
@@ -596,7 +596,7 @@
     <string name="ui_error_unknown">motivo sconosciuto</string>
     <string name="ui_error_clear_notifications">Cancellazione notifiche fallita: %1$s</string>
     <string name="ui_error_like">Impossibile mettere nei preferiti: %1$s</string>
-    <string name="ui_error_reblog">Condivisione del post fallita: %1$s</string>
+    <string name="ui_error_retweet">Condivisione del post fallita: %1$s</string>
     <string name="ui_error_reject_follow_request">Rifiuto richiesta di follow fallita: %1$s</string>
     <string name="ui_error_vote">Votazione al sondaggio fallita: %1$s</string>
     <string name="ui_error_accept_follow_request">Accettazione richiesta di follow fallita: %1$s</string>
@@ -650,12 +650,12 @@
     <string name="title_public_trending_statuses">Post di tendenza</string>
     <string name="error_blocking_domain">Silenziamento di %1$s fallito: %2$s</string>
     <string name="error_unblocking_domain">Riattivazione di %1$s fallito: %2$s</string>
-    <string name="pref_title_show_self_boosts">Mostra boost ai tuoi post</string>
+    <string name="pref_title_show_self_retweets">Mostra retweet ai tuoi post</string>
     <string name="list_reply_policy_none">Nessuno</string>
     <string name="list_reply_policy_list">Membri della lista</string>
     <string name="list_reply_policy_followed">Qualsiasi utente seguito</string>
     <string name="list_reply_policy_label">Mostra risposte a</string>
-    <string name="pref_title_show_self_boosts_description">Qualcuno boosta il proprio post</string>
+    <string name="pref_title_show_self_retweets_description">Qualcuno retweeta il proprio post</string>
     <string name="reply_sending">Invio…</string>
     <string name="reply_sending_long">La tua risposta viene inviata.</string>
     <string name="action_translate">Traduci</string>
@@ -745,9 +745,9 @@
     <string name="notification_info_private_mention">Menzione privata</string>
     <string name="notification_info_mention">Menzione</string>
     <string name="notification_info_private_reply">Risposta privata</string>
-    <string name="action_reblog_private">Ricondividi solo per chi ti segue</string>
-    <string name="action_reblog_public">Ricondividi pubblicamente</string>
-    <string name="action_reblog_unlisted">Ricondivisione non in elenco</string>
+    <string name="action_retweet_private">Ricondividi solo per chi ti segue</string>
+    <string name="action_retweet_public">Ricondividi pubblicamente</string>
+    <string name="action_retweet_unlisted">Ricondivisione non in elenco</string>
     <string name="no">No</string>
     <string name="poll_show_results">Mostra risultati</string>
     <string name="yes">Sì</string>
@@ -761,12 +761,12 @@
     <string name="block_failure">Blocco di %1$s fallito: %2$s</string>
     <string name="accept_follow_request_failure">Accettazione del follow di %1$s fallita: %2$s</string>
     <string name="filter_description_blur">Nascondi media con un avviso</string>
-    <string name="reblog_privacy_followers_only_description">Solo chi ti segue può vedere le tue ricondivisioni</string>
-    <string name="reblog_confirm">Ricondividere questo post?</string>
+    <string name="retweet_privacy_followers_only_description">Solo chi ti segue può vedere le tue ricondivisioni</string>
+    <string name="retweet_confirm">Ricondividere questo post?</string>
     <string name="like_confirm">Mettere questo post tra i preferiti?</string>
     <string name="filter_action_blur">Sfoca</string>
-    <string name="reblog_privacy_unlisted_description">Uguale a \"Pubblico\" ma non verrà mai mostrato nelle timeline pubbliche</string>
-    <string name="reblog_privacy_public_description">Tutti possono vedere la tua ricondivisione</string>
+    <string name="retweet_privacy_unlisted_description">Uguale a \"Pubblico\" ma non verrà mai mostrato nelle timeline pubbliche</string>
+    <string name="retweet_privacy_public_description">Tutti possono vedere la tua ricondivisione</string>
     <string name="confirm_dismiss_poll">Scartare modifiche al sondaggio?</string>
     <string name="edit_image_rotate">Ruota</string>
     <string name="edit_image_flip">Ribalta</string>

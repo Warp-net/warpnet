@@ -239,13 +239,13 @@
     <string name="label_avatar">Profylôfbylding</string>
     <string name="hint_note">Oer dy</string>
     <string name="title_hashtags_dialog">Hashtags</string>
-    <string name="action_open_reblogged_by">Boosts sjen litte</string>
-    <string name="action_open_reblogger">Auteur fan boost iepenje</string>
+    <string name="action_open_retweeted_by">Retweets sjen litte</string>
+    <string name="action_open_retweetger">Auteur fan retweet iepenje</string>
     <string name="action_reset_schedule">Nei standert ynstelling weromsette</string>
-    <string name="action_show_reblogs">Boosts sjen litte</string>
-    <string name="action_hide_reblogs">Boosts ferburgje</string>
-    <string name="action_unreblog">Boost fuorthelje</string>
-    <string name="action_reblog">Boost</string>
-    <string name="notification_reblog_format">%1$s hat dyn toot boost</string>
+    <string name="action_show_retweets">Retweets sjen litte</string>
+    <string name="action_hide_retweets">Retweets ferburgje</string>
+    <string name="action_unretweet">Retweet fuorthelje</string>
+    <string name="action_retweet">Retweet</string>
+    <string name="notification_retweet_format">%1$s hat dyn toot retweet</string>
     <string name="title_announcements">Oankundigingen</string>
 </resources>

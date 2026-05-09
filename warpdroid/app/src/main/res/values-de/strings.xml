@@ -37,7 +37,7 @@
     <string name="title_drafts">Entwürfe</string>
     <string name="title_licenses">Lizenzen</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s teilte</string>
+    <string name="post_retweeted_format">%1$s teilte</string>
     <string name="post_sensitive_media_title">Inhaltswarnung</string>
     <string name="post_media_hidden_title">Mediendateien ausgeblendet</string>
     <string name="post_media_alt">ALT</string>
@@ -47,15 +47,15 @@
     <string name="post_content_show_more">Ausklappen</string>
     <string name="post_content_show_less">Einklappen</string>
     <string name="message_empty">Hier ist nichts.</string>
-    <string name="notification_reblog_format">%1$s teilte deinen Beitrag</string>
+    <string name="notification_retweet_format">%1$s teilte deinen Beitrag</string>
     <string name="notification_like_format">%1$s favorisierte deinen Beitrag</string>
     <string name="notification_follow_format">%1$s folgt dir</string>
     <string name="report_username_format">\@%1$s melden</string>
     <string name="report_comment_hint">Ergänzende Hinweise?</string>
     <string name="action_quick_reply">Schnell antworten</string>
     <string name="action_reply">Antworten</string>
-    <string name="action_reblog">Teilen</string>
-    <string name="action_unreblog">Teilen rückgängig machen</string>
+    <string name="action_retweet">Teilen</string>
+    <string name="action_unretweet">Teilen rückgängig machen</string>
     <string name="action_like">Favorisieren</string>
     <string name="action_unlike">Aus Liken entfernen</string>
     <string name="action_more">Mehr</string>
@@ -67,8 +67,8 @@
     <string name="action_unfollow">Entfolgen</string>
     <string name="action_block">Blockieren</string>
     <string name="action_unblock">Blockierung aufheben</string>
-    <string name="action_hide_reblogs">Geteilte Beiträge ausblenden</string>
-    <string name="action_show_reblogs">Geteilte Beiträge anzeigen</string>
+    <string name="action_hide_retweets">Geteilte Beiträge ausblenden</string>
+    <string name="action_show_retweets">Geteilte Beiträge anzeigen</string>
     <string name="action_report">Melden</string>
     <string name="action_delete">Löschen</string>
     <string name="action_send">TRÖT</string>
@@ -104,7 +104,7 @@
     <string name="action_content_warning">Inhaltswarnung</string>
     <string name="action_emoji_keyboard">Emoji-Tastatur</string>
     <string name="action_add_tab">Tab hinzufügen</string>
-    <string name="action_open_reblogged_by">Geteilte Beiträge anzeigen</string>
+    <string name="action_open_retweeted_by">Geteilte Beiträge anzeigen</string>
     <string name="action_open_faved_by">Liken anzeigen</string>
     <string name="title_hashtags_dialog">Hashtags</string>
     <string name="title_mentions_dialog">Erwähnungen</string>
@@ -165,7 +165,7 @@
     <string name="pref_title_language">Sprache</string>
     <string name="pref_title_post_filter">Timeline-Filter</string>
     <string name="pref_title_post_tabs">Startseite</string>
-    <string name="pref_title_show_boosts">Geteilte Beiträge anzeigen</string>
+    <string name="pref_title_show_retweets">Geteilte Beiträge anzeigen</string>
     <string name="pref_title_show_replies">Antworten anzeigen</string>
     <string name="pref_title_show_media_preview">Dateivorschauen herunterladen</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -190,8 +190,8 @@
     <string name="notification_mention_descriptions">Benachrichtigungen über neue Erwähnungen</string>
     <string name="notification_follow_name">Neue Follower</string>
     <string name="notification_follow_description">Benachrichtigungen über neue Follower</string>
-    <string name="notification_boost_name">Geteilte Beiträge</string>
-    <string name="notification_boost_description">Benachrichtigungen, wenn deine Beiträge geteilt werden</string>
+    <string name="notification_retweet_name">Geteilte Beiträge</string>
+    <string name="notification_retweet_description">Benachrichtigungen, wenn deine Beiträge geteilt werden</string>
     <string name="notification_like_name">Favorisierte Beiträge</string>
     <string name="notification_like_description">Benachrichtigungen, wenn deine Beiträge favorisiert werden</string>
     <string name="notification_mention_format">%1$s hat dich erwähnt</string>
@@ -265,8 +265,8 @@
     <string name="download_failed">Download fehlgeschlagen</string>
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s ist umgezogen auf:</string>
-    <string name="reblog_private">An ursprüngliches Publikum teilen</string>
-    <string name="unreblog_private">Nicht mehr teilen</string>
+    <string name="retweet_private">An ursprüngliches Publikum teilen</string>
+    <string name="unretweet_private">Nicht mehr teilen</string>
     <string name="license_description">Warpnet enthält Code und Inhalte von den folgenden Open-Source-Projekten:</string>
     <string name="license_apache_2">Lizenziert unter der Apache-Lizenz (s. u.)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -298,16 +298,16 @@
     <string name="hint_search_people_list">Suche nach Leuten, denen du folgst</string>
     <string name="action_remove_from_list">Konto aus der Liste entfernen</string>
     <string name="pick_hashtag_hint">Hashtag ohne #</string>
-    <string name="action_open_reblogger">Autor*in des geteilten Beitrags öffnen</string>
+    <string name="action_open_retweetger">Autor*in des geteilten Beitrags öffnen</string>
     <string name="pref_title_public_filter_keywords">Öffentliche Timelines</string>
     <plurals name="favs">
         <item quantity="one">%1$s-mal favorisiert</item>
         <item quantity="other">%1$s-mal favorisiert</item>
     </plurals>
-    <string name="title_reblogged_by">Geteilt von</string>
+    <string name="title_retweeted_by">Geteilt von</string>
     <string name="description_post_media">Medien: %1$s</string>
     <string name="description_post_cw">Inhaltswarnung: %1$s</string>
-    <string name="description_post_reblogged">Geteilt</string>
+    <string name="description_post_retweeted">Geteilt</string>
     <string name="description_visibility_unlisted">Nicht gelistet</string>
     <string name="action_delete_and_redraft">Löschen und neu erstellen</string>
     <string name="dialog_redraft_post_warning">Diesen Beitrag löschen und neu erstellen?</string>
@@ -410,7 +410,7 @@
     <string name="notification_follow_request_format">%1$s möchte dir folgen</string>
     <string name="hashtags">Hashtags</string>
     <string name="add_hashtag_title">Hashtag hinzufügen</string>
-    <string name="pref_title_confirm_reblogs">Vor dem Teilen bestätigen</string>
+    <string name="pref_title_confirm_retweets">Vor dem Teilen bestätigen</string>
     <string name="pref_title_show_cards_in_timelines">Linkvorschau in Timelines anzeigen</string>
     <string name="pref_title_enable_swipe_for_tabs">Wischgeste zum Wechseln zwischen Tabs aktivieren</string>
     <plurals name="poll_info_people">
@@ -421,7 +421,7 @@
     <string name="pref_main_nav_position_option_bottom">Unten</string>
     <string name="pref_main_nav_position_option_top">Oben</string>
     <string name="action_unmute_domain">%1$s nicht mehr stummschalten</string>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one">%1$s-mal geteilt</item>
         <item quantity="other">%1$s-mal geteilt</item>
     </plurals>
@@ -577,7 +577,7 @@
     <string name="action_refresh">Aktualisieren</string>
     <string name="socket_timeout_exception">Kontaktaufnahme mit dem Server dauerte zu lange</string>
     <string name="ui_error_bookmark">Beitrag konnte nicht als Lesezeichen gespeichert werden: %1$s</string>
-    <string name="ui_error_reblog">Beitrag konnte nicht geteilt werden: %1$s</string>
+    <string name="ui_error_retweet">Beitrag konnte nicht geteilt werden: %1$s</string>
     <string name="ui_error_like">Beitrag konnte nicht favorisiert werden: %1$s</string>
     <string name="ui_error_vote">Abstimmen bei der Umfrage schlug fehl: %1$s</string>
     <string name="ui_error_accept_follow_request">Akzeptieren der Follower-Anfrage schlug fehl: %1$s</string>
@@ -643,8 +643,8 @@
     <string name="list_reply_policy_followed">Alle gefolgten Profile</string>
     <string name="list_reply_policy_list">Mitglieder der Liste</string>
     <string name="list_reply_policy_none">Niemanden</string>
-    <string name="pref_title_show_self_boosts">Eigene geteilte Beiträge anzeigen</string>
-    <string name="pref_title_show_self_boosts_description">Die Person teilt ihre eigenen Beiträge</string>
+    <string name="pref_title_show_self_retweets">Eigene geteilte Beiträge anzeigen</string>
+    <string name="pref_title_show_self_retweets_description">Die Person teilt ihre eigenen Beiträge</string>
     <string name="pref_title_per_timeline_preferences">Einstellungen pro Timeline</string>
     <string name="reply_sending">Wird gesendet …</string>
     <string name="reply_sending_long">Deine Antwort wird gesendet.</string>
@@ -703,8 +703,8 @@
     <string name="relationship_severance_event_domain_block">Ein Admin von %1$s hat %2$s blockiert – darunter %3$s deiner Follower und %4$s, denen du folgst.</string>
     <string name="relationship_severance_event_user_domain_block">Du hast %1$s blockiert – %2$s deiner Follower und %3$s, denen du folgst, wurden entfernt.</string>
     <string name="poll">Umfrage</string>
-    <string name="action_reblog_private">Boost nur für Folgende</string>
-    <string name="action_reblog_public">Öffentlicher Boost</string>
+    <string name="action_retweet_private">Retweet nur für Folgende</string>
+    <string name="action_retweet_public">Öffentlicher Retweet</string>
     <plurals name="accounts">
         <item quantity="one">%1$s Konto</item>
         <item quantity="other">%1$s Konten</item>
@@ -725,7 +725,7 @@
     <string name="post_replied">Antwortete</string>
     <string name="post_replied_format">Antwort an %1$s</string>
     <string name="notification_channel_admin_description">Administrationsbenachrichtigungen wie neue Meldungen und Accounts</string>
-    <string name="action_reblog_unlisted">Ungelisteter Boost</string>
+    <string name="action_retweet_unlisted">Ungelisteter Retweet</string>
     <string name="relationship_severance_event_account_suspension">Ein Admin von %1$s hat %2$s gesperrt. Du wirst von diesem Profil keine Updates mehr erhalten und auch nicht mit ihm interagieren können.</string>
     <string name="unknown_notification_type_explanation">Dieser Benachrichtigungstyp ist Warpnet unbekannt, weshalb er nicht angezeigt werden kann. Möglicherweise ist er in der Webansicht sichtbar. Bitte gib den Entwickler*innen von Warpnet Bescheid, damit der Benachrichtigungstyp in Zukunft unterstützt werden kann!</string>
     <string name="notification_info_reply">Antwort</string>
@@ -749,11 +749,11 @@
     <string name="unmute_failure">Failed beim Aufheben der Stummschalteung von %1$s: %2$s</string>
     <string name="accept_follow_request_failure">Fehler beim Annehmen der Folgeanfrage von %1$s: %2$s</string>
     <string name="reject_follow_request_failure">Fehler beim Ablehnen der Folgeanfrage von %1$s: %2$s</string>
-    <string name="reblog_privacy_unlisted_description">Gleich wie Öffentlich, ohne in öffentlichen Timelines angezeigt zu werden</string>
-    <string name="reblog_confirm">Diesen Beitrag teilen?</string>
+    <string name="retweet_privacy_unlisted_description">Gleich wie Öffentlich, ohne in öffentlichen Timelines angezeigt zu werden</string>
+    <string name="retweet_confirm">Diesen Beitrag teilen?</string>
     <string name="like_confirm">Diesen Beitrag favorisieren?</string>
-    <string name="reblog_privacy_public_description">Alle können sehen dass du den Beitrag teilst</string>
-    <string name="reblog_privacy_followers_only_description">Nur deine Follower können sehen dass du den Beitrag teilst</string>
+    <string name="retweet_privacy_public_description">Alle können sehen dass du den Beitrag teilst</string>
+    <string name="retweet_privacy_followers_only_description">Nur deine Follower können sehen dass du den Beitrag teilst</string>
     <string name="action_remove_account">Account entfernen</string>
     <string name="action_remove_account_confirm">Möchtest duden Account %1$s wirklich aus Warpnet entfernen? Dadurch werden alle lokalen Daten des Profils, wie Entwürfe und Einstellungen, gelöscht.</string>
     <string name="report_category_legal_description">Du glaubst, dass es gegen die Gesetze deines Landes oder des Landes des Servers verstößt</string>

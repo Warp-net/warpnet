@@ -22,9 +22,9 @@ class AccountPreferenceDataStore @Inject constructor(
             PrefKeys.ALWAYS_SHOW_SENSITIVE_MEDIA -> account.alwaysShowSensitiveMedia
             PrefKeys.ALWAYS_OPEN_SPOILER -> account.alwaysOpenSpoiler
             PrefKeys.MEDIA_PREVIEW_ENABLED -> account.mediaPreviewEnabled
-            PrefKeys.TAB_FILTER_HOME_BOOSTS -> account.isShowHomeBoosts
+            PrefKeys.TAB_FILTER_HOME_RETWEETS -> account.isShowHomeRetweets
             PrefKeys.TAB_FILTER_HOME_REPLIES -> account.isShowHomeReplies
-            PrefKeys.TAB_SHOW_HOME_SELF_BOOSTS -> account.isShowHomeSelfBoosts
+            PrefKeys.TAB_SHOW_HOME_SELF_RETWEETS -> account.isShowHomeSelfRetweets
             else -> defValue
         }
     }
@@ -36,9 +36,9 @@ class AccountPreferenceDataStore @Inject constructor(
                     PrefKeys.ALWAYS_SHOW_SENSITIVE_MEDIA -> copy(alwaysShowSensitiveMedia = value)
                     PrefKeys.ALWAYS_OPEN_SPOILER -> copy(alwaysOpenSpoiler = value)
                     PrefKeys.MEDIA_PREVIEW_ENABLED -> copy(mediaPreviewEnabled = value)
-                    PrefKeys.TAB_FILTER_HOME_BOOSTS -> copy(isShowHomeBoosts = value)
+                    PrefKeys.TAB_FILTER_HOME_RETWEETS -> copy(isShowHomeRetweets = value)
                     PrefKeys.TAB_FILTER_HOME_REPLIES -> copy(isShowHomeReplies = value)
-                    PrefKeys.TAB_SHOW_HOME_SELF_BOOSTS -> copy(isShowHomeSelfBoosts = value)
+                    PrefKeys.TAB_SHOW_HOME_SELF_RETWEETS -> copy(isShowHomeSelfRetweets = value)
                     else -> this
                 }
             }

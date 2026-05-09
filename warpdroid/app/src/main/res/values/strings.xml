@@ -85,7 +85,7 @@
     <string name="follow_hashtag_success">Followed hashtag %1$s</string>
 
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s boosted</string>
+    <string name="post_retweeted_format">%1$s retweeted</string>
     <string name="post_replied">Replied</string>
     <string name="post_replied_format">In reply to %1$s</string>
     <string name="post_replied_self">Continued thread</string>
@@ -101,7 +101,7 @@
 
     <string name="message_empty">Nothing here.</string>
 
-    <string name="notification_reblog_format">%1$s boosted your post</string>
+    <string name="notification_retweet_format">%1$s retweeted your post</string>
     <string name="notification_like_format">%1$s liked your post</string>
     <string name="notification_pleroma_reaction_format">%1$s reacted to your post</string>
     <string name="notification_follow_format">%1$s followed you</string>
@@ -121,11 +121,11 @@
 
     <string name="action_quick_reply">Quick Reply</string>
     <string name="action_reply">Reply</string>
-    <string name="action_reblog">Boost</string>
-    <string name="action_reblog_private">Followers-Only Boost</string>
-    <string name="action_reblog_public">Public Boost</string>
-    <string name="action_reblog_unlisted">Unlisted Boost</string>
-    <string name="action_unreblog">Remove boost</string>
+    <string name="action_retweet">Retweet</string>
+    <string name="action_retweet_private">Followers-Only Retweet</string>
+    <string name="action_retweet_public">Public Retweet</string>
+    <string name="action_retweet_unlisted">Unlisted Retweet</string>
+    <string name="action_unretweet">Remove retweet</string>
     <string name="action_like">Like</string>
     <string name="action_unlike">Remove like</string>
     <string name="action_bookmark">Bookmark</string>
@@ -151,10 +151,10 @@
     <string name="action_unblock">Unblock</string>
     <string name="action_share_account_link">Share link to account</string>
     <string name="action_share_account_username">Share username of account</string>
-    <string name="action_hide_reblogs">Hide boosts</string>
-    <string name="action_show_reblogs">Show boosts</string>
-    <string name="pref_title_show_self_boosts">Show self-boosts</string>
-    <string name="pref_title_show_self_boosts_description">Someone boosting their own post</string>
+    <string name="action_hide_retweets">Hide retweets</string>
+    <string name="action_show_retweets">Show retweets</string>
+    <string name="pref_title_show_self_retweets">Show self-retweets</string>
+    <string name="pref_title_show_self_retweets_description">Someone retweeting their own post</string>
     <string name="action_report">Report</string>
     <string name="action_edit">Edit</string>
     <string name="action_delete">Delete</string>
@@ -208,8 +208,8 @@
     <string name="action_reset_schedule">Reset</string>
     <string name="action_add_tab">Add Tab</string>
     <string name="action_follow_hashtag">Follow a new hashtag</string>
-    <string name="action_open_reblogger">Open boost author</string>
-    <string name="action_open_reblogged_by">Show boosts</string>
+    <string name="action_open_retweetger">Open retweet author</string>
+    <string name="action_open_retweeted_by">Show retweets</string>
     <string name="action_open_faved_by">Show likes</string>
     <string name="action_dismiss">Dismiss</string>
     <string name="action_details">Details</string>
@@ -320,7 +320,7 @@
 
     <string name="pref_title_post_filter">Timeline filtering</string>
     <string name="pref_title_post_tabs">Home timeline</string>
-    <string name="pref_title_show_boosts">Show boosts</string>
+    <string name="pref_title_show_retweets">Show retweets</string>
     <string name="pref_title_show_replies">Show replies</string>
     <string name="pref_title_show_media_preview">Download media previews</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -376,8 +376,8 @@
     <string name="notification_follow_description">Notifications about new followers</string>
     <string name="notification_follow_request_name">Follow requests</string>
     <string name="notification_follow_request_description">Notifications about follow requests</string>
-    <string name="notification_boost_name">Boosts</string>
-    <string name="notification_boost_description">Notifications when your posts get boosted</string>
+    <string name="notification_retweet_name">Retweets</string>
+    <string name="notification_retweet_description">Notifications when your posts get retweeted</string>
     <string name="notification_like_name">Likes</string>
     <string name="notification_like_description">Notifications when your posts get marked as like</string>
     <string name="notification_poll_name">Poll results</string>
@@ -542,8 +542,8 @@
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s has moved to:</string>
 
-    <string name="reblog_private">Boost to original audience</string>
-    <string name="unreblog_private">Unboost</string>
+    <string name="retweet_private">Retweet to original audience</string>
+    <string name="unretweet_private">Unretweet</string>
 
     <string name="license_description">Warpdroid contains code and assets from the following open source projects:</string>
     <string name="license_apache_2">Licensed under the Apache License (copy below)</string>
@@ -574,9 +574,9 @@
         <item quantity="other">%1$s Likes</item>
     </plurals>
 
-    <plurals name="reblogs">
-        <item quantity="one">%1$s Boost</item>
-        <item quantity="other">%1$s Boosts</item>
+    <plurals name="retweets">
+        <item quantity="one">%1$s Retweet</item>
+        <item quantity="other">%1$s Retweets</item>
     </plurals>
 
     <plurals name="quotes">
@@ -592,7 +592,7 @@
     <string name="label_translating">Translating…</string>
     <string name="label_translated">Translated from %1$s with %2$s</string>
 
-    <string name="title_reblogged_by">Boosted by</string>
+    <string name="title_retweeted_by">Retweeted by</string>
     <string name="title_liked_by">Liked by</string>
 
     <string name="conversation_1_recipients">%1$s</string>
@@ -611,8 +611,8 @@
     <string name="description_post_edited">
         Edited
     </string>
-    <string name="description_post_reblogged">
-        Reblogged
+    <string name="description_post_retweeted">
+        Retweeted
     </string>
     <string name="description_post_liked">
         Liked
@@ -749,7 +749,7 @@
     <string name="warning_scheduling_interval">Scheduled posts have a minimum interval of 5 minutes.</string>
     <string name="pref_title_show_self_username">Show username in toolbars</string>
     <string name="pref_title_show_cards_in_timelines">Show link previews in timelines</string>
-    <string name="pref_title_confirm_reblogs">Show confirmation before boosting</string>
+    <string name="pref_title_confirm_retweets">Show confirmation before retweeting</string>
     <string name="pref_title_confirm_likes">Show confirmation before favoriting</string>
     <string name="pref_title_confirm_follows">Show confirmation before following</string>
     <string name="pref_title_hide_top_toolbar">Hide the title of the top toolbar</string>
@@ -758,8 +758,8 @@
     <string name="account_note_saved">Saved!</string>
 
     <string name="wellbeing_mode_notice">Some information that might affect your mental wellbeing will be hidden. This includes:
-\n\n- Like/Boost/Follow notifications
-\n- Like/Boost count on posts
+\n\n- Like/Retweet/Follow notifications
+\n- Like/Retweet count on posts
 \n- Follower/Post stats on profiles
 \n\nPush-notifications will not be affected, but you can review your notification preferences manually.</string>
     <string name="review_notifications">Review Notifications</string>
@@ -826,7 +826,7 @@
     <string name="ui_error_bookmark">Bookmarking post failed: %1$s</string>
     <string name="ui_error_clear_notifications">Clearing notifications failed: %1$s</string>
     <string name="ui_error_like">Favoriting post failed: %1$s</string>
-    <string name="ui_error_reblog">Boosting post failed: %1$s</string>
+    <string name="ui_error_retweet">Retweeting post failed: %1$s</string>
     <string name="ui_error_vote">Voting in poll failed: %1$s</string>
     <string name="ui_error_accept_follow_request">Accepting follow request failed: %1$s</string>
     <string name="ui_error_reject_follow_request">Rejecting follow request failed: %1$s</string>
@@ -950,11 +950,11 @@
     <string name="accept_follow_request_failure">Failed accepting follow request from %1$s: %2$s</string>
     <string name="reject_follow_request_failure">Failed rejecting follow request from %1$s: %2$s</string>
 
-    <string name="reblog_privacy_public_description">Everyone can see your boost</string>
-    <string name="reblog_privacy_unlisted_description">Same as public but it will never be shown in public timelines</string>
-    <string name="reblog_privacy_followers_only_description">Only your followers can see your boost</string>
+    <string name="retweet_privacy_public_description">Everyone can see your retweet</string>
+    <string name="retweet_privacy_unlisted_description">Same as public but it will never be shown in public timelines</string>
+    <string name="retweet_privacy_followers_only_description">Only your followers can see your retweet</string>
 
-    <string name="reblog_confirm">Boost this post?</string>
+    <string name="retweet_confirm">Retweet this post?</string>
     <string name="like_confirm">Like this post?</string>
 
     <string name="edit_image_rotate">Rotate</string>

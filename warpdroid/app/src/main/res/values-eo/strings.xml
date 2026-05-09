@@ -37,7 +37,7 @@
     <string name="title_drafts">Malnetoj</string>
     <string name="title_licenses">Permesiloj</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s diskonigis</string>
+    <string name="post_retweeted_format">%1$s diskonigis</string>
     <string name="post_sensitive_media_title">Tikla enhavo</string>
     <string name="post_media_hidden_title">Kaŝitaj aŭdovidaĵoj</string>
     <string name="post_sensitive_media_directions">Alklaki por vidi</string>
@@ -46,15 +46,15 @@
     <string name="post_content_show_more">Pligrandigi</string>
     <string name="post_content_show_less">Malgrandigi</string>
     <string name="message_empty">Nenio tie ĉi.</string>
-    <string name="notification_reblog_format">%1$s diskonigis vian mesaĝon</string>
+    <string name="notification_retweet_format">%1$s diskonigis vian mesaĝon</string>
     <string name="notification_like_format">%1$s stelumis vian mesaĝon</string>
     <string name="notification_follow_format">%1$s eksekvis vin</string>
     <string name="report_username_format">Signali @%1$s</string>
     <string name="report_comment_hint">Ĉu pliaj komentoj?</string>
     <string name="action_quick_reply">Rapida respondo</string>
     <string name="action_reply">Respondi</string>
-    <string name="action_reblog">Diskonigi</string>
-    <string name="action_unreblog">Nuligi diskonigon</string>
+    <string name="action_retweet">Diskonigi</string>
+    <string name="action_unretweet">Nuligi diskonigon</string>
     <string name="action_like">Stelumi</string>
     <string name="action_unlike">Nuligi stelumon</string>
     <string name="action_more">Pli</string>
@@ -66,8 +66,8 @@
     <string name="action_unfollow">Ne plu sekvi</string>
     <string name="action_block">Bloki</string>
     <string name="action_unblock">Malbloki</string>
-    <string name="action_hide_reblogs">Kaŝi diskonigojn</string>
-    <string name="action_show_reblogs">Montri diskonigojn</string>
+    <string name="action_hide_retweets">Kaŝi diskonigojn</string>
+    <string name="action_show_retweets">Montri diskonigojn</string>
     <string name="action_report">Signali</string>
     <string name="action_delete">Forigi</string>
     <string name="action_send">HUP</string>
@@ -103,8 +103,8 @@
     <string name="action_content_warning">Enhava averto</string>
     <string name="action_emoji_keyboard">Klavaro de emoĝioj</string>
     <string name="action_add_tab">Aldoni langeton</string>
-    <string name="action_open_reblogger">Montri la aŭtoron de la diskonigo</string>
-    <string name="action_open_reblogged_by">Montri diskonigojn</string>
+    <string name="action_open_retweetger">Montri la aŭtoron de la diskonigo</string>
+    <string name="action_open_retweeted_by">Montri diskonigojn</string>
     <string name="action_open_faved_by">Montri stelumojn</string>
     <string name="title_hashtags_dialog">Kradvortoj</string>
     <string name="title_mentions_dialog">Mencioj</string>
@@ -166,7 +166,7 @@
     <string name="pref_title_language">Lingvo</string>
     <string name="pref_title_post_filter">Filtrado de tempolinioj</string>
     <string name="pref_title_post_tabs">Langetoj</string>
-    <string name="pref_title_show_boosts">Montri diskonigojn</string>
+    <string name="pref_title_show_retweets">Montri diskonigojn</string>
     <string name="pref_title_show_replies">Montri la respondojn</string>
     <string name="pref_title_show_media_preview">Elŝuti antaŭvidojn de aŭdovidaĵoj</string>
     <string name="pref_title_proxy_settings">Prokurilo</string>
@@ -191,8 +191,8 @@
     <string name="notification_mention_descriptions">Sciigoj pri novaj mencioj</string>
     <string name="notification_follow_name">Novaj sekvantoj</string>
     <string name="notification_follow_description">Sciigoj pri novaj sekvantoj</string>
-    <string name="notification_boost_name">Diskonigoj</string>
-    <string name="notification_boost_description">Sciigoj, kiam viaj mesaĝoj estas diskonigitaj</string>
+    <string name="notification_retweet_name">Diskonigoj</string>
+    <string name="notification_retweet_description">Sciigoj, kiam viaj mesaĝoj estas diskonigitaj</string>
     <string name="notification_like_name">Stelumoj</string>
     <string name="notification_like_description">Sciigoj, kiam viaj mesaĝoj estas stelumitaj</string>
     <string name="notification_mention_format">%1$s menciis vin</string>
@@ -283,8 +283,8 @@
     <string name="download_failed">Elŝuto malsukcesis</string>
     <string name="profile_badge_bot_text">Roboto</string>
     <string name="account_moved_description">%1$s moviĝis al:</string>
-    <string name="reblog_private">Diskonigi al la originala atentaro</string>
-    <string name="unreblog_private">Maldiskonigi</string>
+    <string name="retweet_private">Diskonigi al la originala atentaro</string>
+    <string name="unretweet_private">Maldiskonigi</string>
     <string name="license_description">Warpnet enhavas kodon kaj risurcojn el la sekvantaj malfermitkodaj projetkoj:</string>
     <string name="license_apache_2">Laŭ la permesilo «Apache» (kopio sube)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -301,11 +301,11 @@
         <item quantity="one"><b>%1$s</b> Stelumo</item>
         <item quantity="other"><b>%1$s</b> Stelumoj</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> Diskonigo</item>
         <item quantity="other"><b>%1$s</b> Diskonigoj</item>
     </plurals>
-    <string name="title_reblogged_by">Diskonigita de</string>
+    <string name="title_retweeted_by">Diskonigita de</string>
     <string name="title_liked_by">Stelumita de</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s kaj %2$s</string>
@@ -313,7 +313,7 @@
     <string name="description_post_media">Aŭdovidaĵo: %1$s</string>
     <string name="description_post_cw">Enhava averto: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Neniu priskribo</string>
-    <string name="description_post_reblogged">Diskonigita</string>
+    <string name="description_post_retweeted">Diskonigita</string>
     <string name="description_post_liked">Stelumita</string>
     <string name="description_visibility_public">Publika</string>
     <string name="description_visibility_unlisted">Nelistigita</string>
@@ -436,7 +436,7 @@
     <string name="account_note_hint">Via privata noto pri ĉi tiu konto</string>
     <string name="pref_title_hide_top_toolbar">Kaŝi la titolon de la supra ilobreto</string>
     <string name="pref_title_show_cards_in_timelines">Montri antaŭvidojn de ligiloj en tempolinioj</string>
-    <string name="pref_title_confirm_reblogs">Montri konfirman fenestron antaŭ ol diskonigi</string>
+    <string name="pref_title_confirm_retweets">Montri konfirman fenestron antaŭ ol diskonigi</string>
     <string name="no_announcements">Estas neniu anonco.</string>
     <string name="pref_title_enable_swipe_for_tabs">Ebligi ŝovumadon por ŝanĝi inter la langetoj</string>
     <string name="warning_scheduling_interval">Warpnet havas minimuman intervalon de planado de 5 minutoj.</string>

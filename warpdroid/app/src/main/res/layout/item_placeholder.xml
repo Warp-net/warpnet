@@ -73,7 +73,7 @@
         android:clickable="false"
         android:importantForAccessibility="no"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/reblogButtonPlaceholder"
+        app:layout_constraintEnd_toStartOf="@id/retweetButtonPlaceholder"
         app:layout_constraintHorizontal_chainStyle="spread_inside"
         app:layout_constraintStart_toStartOf="@id/namePlaceholder"
         app:layout_constraintTop_toBottomOf="@id/contentPlaceholder"
@@ -82,7 +82,7 @@
         tools:ignore="NegativeMargin" />
 
     <ImageButton
-        android:id="@+id/reblogButtonPlaceholder"
+        android:id="@+id/retweetButtonPlaceholder"
         style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
@@ -102,8 +102,8 @@
         android:clickable="false"
         android:importantForAccessibility="no"
         app:layout_constraintEnd_toStartOf="@id/status_bookmark"
-        app:layout_constraintStart_toEndOf="@id/reblogButtonPlaceholder"
-        app:layout_constraintTop_toTopOf="@id/reblogButtonPlaceholder"
+        app:layout_constraintStart_toEndOf="@id/retweetButtonPlaceholder"
+        app:layout_constraintTop_toTopOf="@id/retweetButtonPlaceholder"
         app:srcCompat="@drawable/ic_star_24dp"
         app:tint="?attr/placeholderColor" />
 

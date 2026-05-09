@@ -11,7 +11,7 @@
     android:paddingVertical="6dp">
 
     <ImageView
-        android:id="@+id/reblogOptionIcon"
+        android:id="@+id/retweetOptionIcon"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerVertical="true"
@@ -26,11 +26,11 @@
         android:layout_height="wrap_content"
         android:layout_alignParentEnd="true"
         android:layout_centerVertical="true"
-        android:layout_toEndOf="@id/reblogOptionIcon"
+        android:layout_toEndOf="@id/retweetOptionIcon"
         android:orientation="vertical">
 
         <TextView
-            android:id="@+id/reblogOptionName"
+            android:id="@+id/retweetOptionName"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
@@ -41,7 +41,7 @@
             tools:text="Public" />
 
         <TextView
-            android:id="@+id/reblogOptionDescription"
+            android:id="@+id/retweetOptionDescription"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"

@@ -78,8 +78,8 @@ fun Context.showFavs(viewData: StatusViewData.Concrete) {
     startActivityWithSlideInAnimation(intent)
 }
 
-fun Context.showReblogs(viewData: StatusViewData.Concrete) {
-    val intent = AccountListActivity.newIntent(this, AccountListActivity.Type.REBLOGGED, viewData.actionableId)
+fun Context.showRetweets(viewData: StatusViewData.Concrete) {
+    val intent = AccountListActivity.newIntent(this, AccountListActivity.Type.RETWEETED, viewData.actionableId)
     startActivityWithSlideInAnimation(intent)
 }
 

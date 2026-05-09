@@ -43,8 +43,8 @@ data class Notification(
         /** Someone mentioned you */
         object Mention : Type("mention")
 
-        /** Someone boosted one of your statuses */
-        object Reblog : Type("reblog")
+        /** Someone retweeted one of your statuses */
+        object Retweet : Type("retweet")
 
         /** Someone liked one of your statuses */
         object Like : Type("like")
@@ -111,7 +111,7 @@ data class Notification(
  * which leds to crash since those subclasses are referenced here */
 val visibleNotificationTypes = listOf(
     Type.Mention,
-    Type.Reblog,
+    Type.Retweet,
     Type.Like,
     Type.PleromaEmojiReaction,
     Type.Follow,

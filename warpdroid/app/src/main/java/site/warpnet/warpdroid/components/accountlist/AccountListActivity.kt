@@ -34,7 +34,7 @@ class AccountListActivity : BottomSheetActivity() {
         BLOCKS,
         MUTES,
         FOLLOW_REQUESTS,
-        REBLOGGED,
+        RETWEETED,
         LIKED
     }
 
@@ -54,7 +54,7 @@ class AccountListActivity : BottomSheetActivity() {
                 Type.FOLLOW_REQUESTS -> setTitle(R.string.title_follow_requests)
                 Type.FOLLOWERS -> setTitle(R.string.title_followers)
                 Type.FOLLOWS -> setTitle(R.string.title_follows)
-                Type.REBLOGGED -> setTitle(R.string.title_reblogged_by)
+                Type.RETWEETED -> setTitle(R.string.title_retweeted_by)
                 Type.LIKED -> setTitle(R.string.title_liked_by)
             }
             setDisplayHomeAsUpEnabled(true)

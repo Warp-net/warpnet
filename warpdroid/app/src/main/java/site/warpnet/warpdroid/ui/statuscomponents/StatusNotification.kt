@@ -66,7 +66,7 @@ import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 
 /**
- * Notification when someone liked or boosted a post
+ * Notification when someone liked or retweeted a post
  */
 @Composable
 fun StatusNotification(
@@ -95,8 +95,8 @@ fun StatusNotification(
                 url = status.account.avatar,
                 staticUrl = status.account.staticAvatar,
                 isBot = status.account.bot,
-                boostedAvatarUrl = notificationViewData.account.avatar,
-                staticBoostedAvatarUrl = notificationViewData.account.staticAvatar,
+                retweetedAvatarUrl = notificationViewData.account.avatar,
+                staticRetweetedAvatarUrl = notificationViewData.account.staticAvatar,
                 onOpenProfile = {
                     listener.onViewAccount(status.account.id)
                 },

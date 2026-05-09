@@ -31,7 +31,7 @@
     <string name="title_edit_profile">Modificar lo perfil</string>
     <string name="title_drafts">Borrolhons</string>
     <string name="title_licenses">Licéncias</string>
-    <string name="post_boosted_format">%1$s a partejat</string>
+    <string name="post_retweeted_format">%1$s a partejat</string>
     <string name="post_sensitive_media_title">Contengut sensible</string>
     <string name="post_media_hidden_title">Mèdia amagat</string>
     <string name="post_sensitive_media_directions">Clicar per mostrar</string>
@@ -39,14 +39,14 @@
     <string name="post_content_warning_show_less">Mostrar mens</string>
     <string name="post_content_show_more">Desplegar</string>
     <string name="post_content_show_less">Replegar</string>
-    <string name="notification_reblog_format">%1$s a partejat vòstra publicacion</string>
+    <string name="notification_retweet_format">%1$s a partejat vòstra publicacion</string>
     <string name="notification_like_format">%1$s a aimat vòstra publicacion</string>
     <string name="notification_follow_format">%1$s vos sèc</string>
     <string name="report_username_format">Denonciar @%1$s</string>
     <string name="report_comment_hint">Cap comentari addicional ?</string>
     <string name="action_quick_reply">Responsa rapida</string>
     <string name="action_reply">Respondre</string>
-    <string name="action_reblog">Partejar</string>
+    <string name="action_retweet">Partejar</string>
     <string name="action_like">Aimar</string>
     <string name="action_more">Mai</string>
     <string name="action_compose">Redactar</string>
@@ -57,8 +57,8 @@
     <string name="action_unfollow">Quitar de seguir</string>
     <string name="action_block">Blocar</string>
     <string name="action_unblock">Quitar de blocar</string>
-    <string name="action_hide_reblogs">Rescondre los partatges</string>
-    <string name="action_show_reblogs">Mostrar los retuts</string>
+    <string name="action_hide_retweets">Rescondre los partatges</string>
+    <string name="action_show_retweets">Mostrar los retuts</string>
     <string name="action_report">Senhalar</string>
     <string name="action_delete">Escafar</string>
     <string name="action_send">TUT</string>
@@ -139,7 +139,7 @@
     <string name="pref_title_custom_tabs">Onglets personalizats de Chrome</string>
     <string name="pref_title_post_filter">Filtre de la cronologia</string>
     <string name="pref_title_post_tabs">Fil principal</string>
-    <string name="pref_title_show_boosts">Mostrar los retuts</string>
+    <string name="pref_title_show_retweets">Mostrar los retuts</string>
     <string name="pref_title_show_replies">Mostrar las responsas</string>
     <string name="pref_title_show_media_preview">Mostrar los apercebuts</string>
     <string name="pref_title_http_proxy_settings">Proxy HTTP</string>
@@ -161,8 +161,8 @@
     <string name="notification_mention_descriptions">Notificacions de mencions noves</string>
     <string name="notification_follow_name">Seguidors nòus</string>
     <string name="notification_follow_description">Notificacions de nòus seguidors</string>
-    <string name="notification_boost_name">Retuts</string>
-    <string name="notification_boost_description">Notificacions de compartiment de vòstras publicacions</string>
+    <string name="notification_retweet_name">Retuts</string>
+    <string name="notification_retweet_description">Notificacions de compartiment de vòstras publicacions</string>
     <string name="notification_like_name">Preferits</string>
     <string name="notification_like_description">Notificacions s’agradan vòstres tuts</string>
     <string name="notification_mention_format">%1$s vos mencionan</string>
@@ -231,8 +231,8 @@
     <string name="download_failed">Fracàs del telecargament</string>
     <string name="profile_badge_bot_text">Robòt</string>
     <string name="account_moved_description">%1$s mudèt los catons a :</string>
-    <string name="reblog_private">Partejar al public d’origina</string>
-    <string name="unreblog_private">Quitar de partejar</string>
+    <string name="retweet_private">Partejar al public d’origina</string>
+    <string name="unretweet_private">Quitar de partejar</string>
     <string name="license_description">Warpnet content de còdis e compausants dels projèctes liures seguents :</string>
     <string name="license_apache_2">Licéncia Apache License (còpia çai-jos)</string>
     <string name="profile_metadata_label">Metadonada del perfil</string>
@@ -250,12 +250,12 @@
     <string name="title_posts_pinned">Penjats</string>
     <string name="post_username_format">\@%1$s</string>
     <string name="message_empty">Pas res aicí.</string>
-    <string name="action_unreblog">Suprimir lo partatge</string>
+    <string name="action_unretweet">Suprimir lo partatge</string>
     <string name="action_unlike">Suprimir lo favorit</string>
     <string name="action_view_account_preferences">Preferéncias del compte</string>
     <string name="action_add_tab">Ajustar un onglet</string>
-    <string name="action_open_reblogger">Dobrir l’autor del partatge</string>
-    <string name="action_open_reblogged_by">Mostrar los retuts</string>
+    <string name="action_open_retweetger">Dobrir l’autor del partatge</string>
+    <string name="action_open_retweeted_by">Mostrar los retuts</string>
     <string name="action_open_faved_by">Mostrar los favorits</string>
     <string name="title_hashtags_dialog">Etiquetas</string>
     <string name="title_mentions_dialog">Mencions</string>
@@ -300,11 +300,11 @@
         <item quantity="one"><b>%1$s</b> Favorit</item>
         <item quantity="other"><b>%1$s</b> Favorits</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> Partatge</item>
         <item quantity="other"><b>%1$s</b> Partatges</item>
     </plurals>
-    <string name="title_reblogged_by">Partejat per</string>
+    <string name="title_retweeted_by">Partejat per</string>
     <string name="title_liked_by">Aimat per</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s e %2$s</string>
@@ -312,7 +312,7 @@
     <string name="description_post_media">Mèdia : %1$s</string>
     <string name="description_post_cw">Avertiment : %1$s</string>
     <string name="description_post_media_no_description_placeholder">Cap de descripcion</string>
-    <string name="description_post_reblogged">Repartajat</string>
+    <string name="description_post_retweeted">Repartajat</string>
     <string name="description_post_liked">Mes en favorit</string>
     <string name="description_visibility_public">Publica</string>
     <string name="description_visibility_unlisted">Pas listada</string>
@@ -462,7 +462,7 @@
     <string name="wellbeing_hide_stats_posts">Amagar las estatisticas dels tuts</string>
     <string name="limit_notifications">Limitar las notificacions de la cronologia</string>
     <string name="pref_title_hide_top_toolbar">Amagar lo títol ennaut de la barra</string>
-    <string name="pref_title_confirm_reblogs">Afichar una confirmacion abans de partejar</string>
+    <string name="pref_title_confirm_retweets">Afichar una confirmacion abans de partejar</string>
     <string name="action_unbookmark">Tirar dels marcapaginas</string>
     <string name="action_add_reaction">apondre una reaccion</string>
     <string name="notification_sign_up_name">Comptes novèls</string>
@@ -601,7 +601,7 @@
     <string name="post_media_image">Imatge</string>
     <string name="select_list_manage">Gerir las listas</string>
     <string name="ui_error_like">Fracàs de la mes en favorit : %1$s</string>
-    <string name="ui_error_reblog">Fracàs en partejant : %1$s</string>
+    <string name="ui_error_retweet">Fracàs en partejant : %1$s</string>
     <string name="ui_error_vote">Fracàs del vòt : %1$s</string>
     <string name="ui_error_accept_follow_request">Fracàs de l’acceptacion de la demanda : %1$s</string>
     <string name="ui_error_reject_follow_request">Fracàs del refús de la demanda : %1$s</string>
@@ -636,8 +636,8 @@
     <string name="action_view_filter">Veire filtre</string>
     <string name="app_theme_system_black">Utilizar lo design sistèma (negre)</string>
     <string name="error_unblocking_domain">Impossible de tornar mostrar %1$s : %2$s</string>
-    <string name="pref_title_show_self_boosts">Mostrar los pròpris partatges</string>
-    <string name="pref_title_show_self_boosts_description">Qualqu’un parteja son pròpri messatge</string>
+    <string name="pref_title_show_self_retweets">Mostrar los pròpris partatges</string>
+    <string name="pref_title_show_self_retweets_description">Qualqu’un parteja son pròpri messatge</string>
     <string name="reply_sending">Mandadís…</string>
     <string name="reply_sending_long">Responsa enviada.</string>
     <string name="action_translate">Traduire</string>
@@ -689,9 +689,9 @@
         <item quantity="other">%1$s comptes</item>
     </plurals>
     <string name="notification_info_private_reply">Responsa en privat</string>
-    <string name="action_reblog_private">Partatge pels seguidors solament</string>
-    <string name="action_reblog_public">Partatge public</string>
-    <string name="action_reblog_unlisted">Partatge non listat</string>
+    <string name="action_retweet_private">Partatge pels seguidors solament</string>
+    <string name="action_retweet_public">Partatge public</string>
+    <string name="action_retweet_unlisted">Partatge non listat</string>
     <string name="notification_policies_filter_not_following_title">Personas que vos seguisson pas</string>
     <string name="poll">Sondatge</string>
     <string name="notification_info_reply">Respondre</string>

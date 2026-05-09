@@ -40,16 +40,16 @@ fun fakeStatusViewData(
         account = account,
         inReplyToId = null,
         inReplyToAccountId = null,
-        reblog = null,
+        retweet = null,
         content = content,
         createdAt = Date(),
         editedAt = null,
         emojis = emptyList(),
-        reblogsCount = 2,
+        retweetsCount = 2,
         likesCount = 3,
         repliesCount = 4,
         quotesCount = 1,
-        reblogged = false,
+        retweeted = false,
         liked = false,
         bookmarked = false,
         sensitive = false,
@@ -172,7 +172,7 @@ val pollWithFourOptions = Poll(
 )
 
 val noopListener = object : StatusActionListener {
-    override fun onReblog(viewData: StatusViewData.Concrete, reblog: Boolean, visibility: Status.Visibility?, state: SparkButtonState?) {}
+    override fun onRetweet(viewData: StatusViewData.Concrete, retweet: Boolean, visibility: Status.Visibility?, state: SparkButtonState?) {}
     override fun onLike(viewData: StatusViewData.Concrete, like: Boolean, state: SparkButtonState?) { }
     override fun onBookmark(viewData: StatusViewData.Concrete, bookmark: Boolean) { }
     override fun onViewMedia(viewData: StatusViewData.Concrete, attachmentIndex: Int) { }

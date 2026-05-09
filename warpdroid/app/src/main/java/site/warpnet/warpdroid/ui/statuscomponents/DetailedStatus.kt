@@ -75,7 +75,7 @@ import site.warpnet.warpdroid.ui.statuscomponents.text.toInlineContent
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.showFavs
 import site.warpnet.warpdroid.util.showQuotes
-import site.warpnet.warpdroid.util.showReblogs
+import site.warpnet.warpdroid.util.showRetweets
 import site.warpnet.warpdroid.viewdata.StatusViewData
 import java.text.DateFormat
 import java.text.NumberFormat
@@ -116,8 +116,8 @@ fun DetailedStatus(
                         url = status.account.avatar,
                         staticUrl = status.account.staticAvatar,
                         isBot = status.account.bot,
-                        boostedAvatarUrl = statusViewData.rebloggedAvatar,
-                        staticBoostedAvatarUrl = statusViewData.staticRebloggedAvatar,
+                        retweetedAvatarUrl = statusViewData.retweetedAvatar,
+                        staticRetweetedAvatarUrl = statusViewData.staticRetweetedAvatar,
                         onOpenProfile = {
                             listener.onViewAccount(status.account.id)
                         },
@@ -295,12 +295,12 @@ private fun DetailedStatistics(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = getMetaDataText(R.plurals.reblogs, statusViewData.status.reblogsCount),
+            text = getMetaDataText(R.plurals.retweets, statusViewData.status.retweetsCount),
             style = LocalPreferences.current.statusTextStyles.medium,
             color = warpdroidColors.tertiaryTextColor,
             modifier = Modifier
                 .clickable {
-                    context.showReblogs(statusViewData)
+                    context.showRetweets(statusViewData)
                 }
         )
         Text(

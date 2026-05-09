@@ -101,22 +101,22 @@ sealed class StatusViewData {
         val actionableId: String
             get() = status.actionableStatus.id
 
-        val rebloggedAvatar: String?
-            get() = if (status.reblog != null) {
+        val retweetedAvatar: String?
+            get() = if (status.retweet != null) {
                 status.account.avatar
             } else {
                 null
             }
 
-        val staticRebloggedAvatar: String?
-            get() = if (status.reblog != null) {
+        val staticRetweetedAvatar: String?
+            get() = if (status.retweet != null) {
                 status.account.staticAvatar
             } else {
                 null
             }
 
-        val rebloggingStatus: Status?
-            get() = if (status.reblog != null) status else null
+        val retweetgingStatus: Status?
+            get() = if (status.retweet != null) status else null
 
         val isReply: Boolean
             get() = status.inReplyToAccountId != null

@@ -166,7 +166,7 @@ class WarpnetRepository @Inject constructor(
         val stats = runCatching { getTweetStats(tweetId = tweet.id, userId = userId) }.getOrNull()
         return if (stats == null) base else base.copy(
             likesCount = stats.likesCount.clampToInt(),
-            reblogsCount = stats.retweetsCount.clampToInt(),
+            retweetsCount = stats.retweetsCount.clampToInt(),
             repliesCount = stats.repliesCount.clampToInt(),
             viewsCount = stats.viewsCount.clampToInt(),
         )
@@ -304,7 +304,7 @@ class WarpnetRepository @Inject constructor(
 
     // Warpnet's NewRetweetEvent is domain.Tweet, so the payload is the
     // retweeter's copy of the tweet rather than a (tweet_id, user_id) pair.
-    suspend fun reblogStatus(tweetId: String, retweeterId: String, retweeterUsername: String): Long {
+    suspend fun retweetStatus(tweetId: String, retweeterId: String, retweeterUsername: String): Long {
         // createdAt left null for the same reason as postStatus.
         val payload = WarpnetTweet(
             id = tweetId,
@@ -321,7 +321,7 @@ class WarpnetRepository @Inject constructor(
         return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
     }
 
-    suspend fun unreblogStatus(tweetId: String, retweeterId: String): Long {
+    suspend fun unretweetStatus(tweetId: String, retweeterId: String): Long {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_UNRETWEET,
             unretweetAdapter.toJson(UnretweetEvent(tweetId = tweetId, retweeterId = retweeterId)),
@@ -466,7 +466,7 @@ class WarpnetRepository @Inject constructor(
             val s = stats[t.id]?.await() ?: return@map base
             base.copy(
                 likesCount = s.likesCount.clampToInt(),
-                reblogsCount = s.retweetsCount.clampToInt(),
+                retweetsCount = s.retweetsCount.clampToInt(),
                 repliesCount = s.repliesCount.clampToInt(),
                 viewsCount = s.viewsCount.clampToInt(),
             )

@@ -43,15 +43,15 @@
     <string name="post_content_show_more">Razširi</string>
     <string name="post_content_show_less">Strni</string>
     <string name="message_empty">Tukaj ni ničesar.</string>
-    <string name="notification_reblog_format">%1$s je spodbudil tvoj tut</string>
+    <string name="notification_retweet_format">%1$s je spodbudil tvoj tut</string>
     <string name="notification_like_format">%1$s je vzljubil vaš tut</string>
     <string name="notification_follow_format">%1$s vam sledi</string>
     <string name="report_username_format">Prijavi @%1$s</string>
     <string name="report_comment_hint">Dodatni komentarji?</string>
     <string name="action_quick_reply">Hiter odgovor</string>
     <string name="action_reply">Odgovori</string>
-    <string name="action_reblog">Spodbudi</string>
-    <string name="action_unreblog">Odstrani spodbudo</string>
+    <string name="action_retweet">Spodbudi</string>
+    <string name="action_unretweet">Odstrani spodbudo</string>
     <string name="action_like">Vzljubi</string>
     <string name="action_more">Več</string>
     <string name="action_compose">Sestavi</string>
@@ -62,8 +62,8 @@
     <string name="action_unfollow">Prenehaj slediti</string>
     <string name="action_block">Blokiraj</string>
     <string name="action_unblock">Odblokiraj</string>
-    <string name="action_hide_reblogs">Skirj spodbude</string>
-    <string name="action_show_reblogs">Prikaži spodbude</string>
+    <string name="action_hide_retweets">Skirj spodbude</string>
+    <string name="action_show_retweets">Prikaži spodbude</string>
     <string name="action_report">Prijavi</string>
     <string name="action_delete">Izbriši</string>
     <string name="action_send">TUTNI</string>
@@ -98,8 +98,8 @@
     <string name="action_content_warning">Opozorilo o vsebini</string>
     <string name="action_emoji_keyboard">Tipkovnica z emotikoni</string>
     <string name="action_add_tab">Dodaj zavihek</string>
-    <string name="action_open_reblogger">Odpri spodbujenega avtorja</string>
-    <string name="action_open_reblogged_by">Prikaži spodbude</string>
+    <string name="action_open_retweetger">Odpri spodbujenega avtorja</string>
+    <string name="action_open_retweeted_by">Prikaži spodbude</string>
     <string name="action_open_faved_by">Prikaži priljubljene</string>
     <string name="title_mentions_dialog">Omembe</string>
     <string name="title_links_dialog">Povezave</string>
@@ -160,7 +160,7 @@
     <string name="pref_title_language">Jezik</string>
     <string name="pref_title_post_filter">Filtriranje časovnice</string>
     <string name="pref_title_post_tabs">Zavihki</string>
-    <string name="pref_title_show_boosts">Pokaži spodbude</string>
+    <string name="pref_title_show_retweets">Pokaži spodbude</string>
     <string name="pref_title_show_replies">Pokaži odgovore</string>
     <string name="pref_title_show_media_preview">Prenesi predoglede medijev</string>
     <string name="pref_title_proxy_settings">Posredniški strežnik</string>
@@ -177,8 +177,8 @@
     <string name="notification_mention_descriptions">Obvestila o novih omembah</string>
     <string name="notification_follow_name">Novi sledilci</string>
     <string name="notification_follow_description">Obvestila o novih sledilcih</string>
-    <string name="notification_boost_name">Spodbude</string>
-    <string name="notification_boost_description">Obvestila, ko so vaši tuti spodbujeni</string>
+    <string name="notification_retweet_name">Spodbude</string>
+    <string name="notification_retweet_description">Obvestila, ko so vaši tuti spodbujeni</string>
     <string name="notification_like_name">Priljubljene</string>
     <string name="notification_like_description">Obvestila, ko so vaši tuti vzljubljeni</string>
     <string name="notification_mention_format">%1$s vas je omenil-a</string>
@@ -264,8 +264,8 @@
     <string name="download_failed">Prenos ni uspel</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="account_moved_description">%1$s se je prestavil/a na:</string>
-    <string name="reblog_private">Spodbudi izvirnemu občinstvu</string>
-    <string name="unreblog_private">Prekini spodbudo</string>
+    <string name="retweet_private">Spodbudi izvirnemu občinstvu</string>
+    <string name="unretweet_private">Prekini spodbudo</string>
     <string name="license_description">Warpnet vsebuje kodo in sredstva iz naslednjih odprtokodnih projektov:</string>
     <string name="license_apache_2">Licencirano pod licenco Apache (spodaj)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -278,13 +278,13 @@
     <string name="label_remote_account">Spodnje informacije lahko nepopolno odražajo profil uporabnika. Pritisnite, da odprete polni profil v brskalniku.</string>
     <string name="unpin_action">Odpni</string>
     <string name="pin_action">Pripni</string>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> Spodbuda</item>
         <item quantity="two"><b>%1$s</b> Spodbudi</item>
         <item quantity="few"><b>%1$s</b> Spodbude</item>
         <item quantity="other"><b>%1$s</b> Spodbud</item>
     </plurals>
-    <string name="title_reblogged_by">Spodbudil/a</string>
+    <string name="title_retweeted_by">Spodbudil/a</string>
     <string name="title_liked_by">Vzljubil/a</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s in %2$s</string>
@@ -292,7 +292,7 @@
     <string name="description_post_media">Mediji: %1$s</string>
     <string name="description_post_cw">Opozorila o vsebini: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Brez opisa</string>
-    <string name="description_post_reblogged">Ponovno objavljen</string>
+    <string name="description_post_retweeted">Ponovno objavljen</string>
     <string name="description_post_liked">Priljubljene</string>
     <string name="description_visibility_public">Javno</string>
     <string name="description_visibility_unlisted">Ni prikazano</string>
@@ -405,7 +405,7 @@
     <string name="action_schedule_post">Napovej tut</string>
     <string name="post_lookup_error_format">Napaka pri iskanju objave %1$s</string>
     <string name="about_powered_by_tusky">Poganja ga Warpnet</string>
-    <string name="post_boosted_format">%1$s spodbudil</string>
+    <string name="post_retweeted_format">%1$s spodbudil</string>
     <string name="hashtags">Ključniki</string>
     <string name="notification_follow_request_name">Zahteve za Sledenje</string>
     <plurals name="favs">

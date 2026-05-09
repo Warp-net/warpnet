@@ -37,15 +37,15 @@
     <string name="action_delete_and_redraft">Sguab às is dèan dreachd ùr air</string>
     <string name="action_report">Dèan gearan</string>
     <string name="action_unblock">Dì-bhac</string>
-    <string name="action_hide_reblogs">Falaich na brosnachaidhean</string>
-    <string name="action_show_reblogs">Seall na brosnachaidhean</string>
+    <string name="action_hide_retweets">Falaich na brosnachaidhean</string>
+    <string name="action_show_retweets">Seall na brosnachaidhean</string>
     <string name="action_block">Bac</string>
     <string name="action_compose">Sgrìobh</string>
     <string name="action_content_warning">Rabhadh susbaint</string>
     <string name="action_compose_shortcut">Sgrìobh</string>
     <string name="compose_shortcut_short_label">Sgrìobh</string>
-    <string name="pref_title_show_boosts">Seall na brosnachaidhean</string>
-    <string name="action_open_reblogged_by">Seall na brosnachaidhean</string>
+    <string name="pref_title_show_retweets">Seall na brosnachaidhean</string>
+    <string name="action_open_retweeted_by">Seall na brosnachaidhean</string>
     <string name="action_access_drafts">Dreachdan</string>
     <string name="action_view_likes">Annsachdan</string>
     <string name="pref_title_notifications_enabled">Brathan</string>
@@ -91,7 +91,7 @@
     <string name="account_note_hint">Nòta prìobhaideach agad mun chunntas seo</string>
     <string name="pref_title_hide_top_toolbar">Falaich tiotal a’ bhàir-inneal aig a’ bhàrr</string>
     <string name="dialog_mute_hide_notifications">Falaich na brathan</string>
-    <string name="pref_title_confirm_reblogs">Seall dearbhadh mus dèan thu brosnachadh</string>
+    <string name="pref_title_confirm_retweets">Seall dearbhadh mus dèan thu brosnachadh</string>
     <string name="pref_title_show_cards_in_timelines">Seall ro-sheallaidhean air ceanglaichean sna loidhnichean-ama</string>
     <string name="warning_scheduling_interval">Feumaidh co-dhiù 5 mionaidean a bhith eadar postaichean sgeidealaichte air Warpnet.</string>
     <string name="no_scheduled_posts">Chan eil post sam bith air an sgeideal agad.</string>
@@ -171,15 +171,15 @@
     <string name="description_visibility_direct">Dìreach</string>
     <string name="description_post_bookmarked">’Na chomharra-lìn</string>
     <string name="description_post_liked">’Na annsachd</string>
-    <string name="description_post_reblogged">Air ath-bhlogadh</string>
+    <string name="description_post_retweeted">Air ath-bhlogadh</string>
     <string name="description_post_media_no_description_placeholder">Gun tuairisgeul</string>
     <string name="description_post_cw">Rabhadh susbainte: %1$s</string>
     <string name="description_post_media">Meadhan: %1$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s ’s %3$d eile</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="title_liked_by">’Na annsachd aig</string>
-    <string name="title_reblogged_by">’Ga brosnachadh le</string>
-    <plurals name="reblogs">
+    <string name="title_retweeted_by">’Ga brosnachadh le</string>
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> bhrosnachadh</item>
         <item quantity="two"><b>%1$s</b> bhrosnachadh</item>
         <item quantity="few"><b>%1$s</b> brosnachaidhean</item>
@@ -203,8 +203,8 @@
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_apache_2">Fo cheadachas Apache License (chì thu lethbhreac dheth gu h-ìosal)</string>
     <string name="license_description">Tha còs is maoin o na pròiseactan open source seo am broinn Warpnet:</string>
-    <string name="unreblog_private">Na brosnaich tuilleadh</string>
-    <string name="reblog_private">Brosnaich dhan èisteachd thùsail</string>
+    <string name="unretweet_private">Na brosnaich tuilleadh</string>
+    <string name="retweet_private">Brosnaich dhan èisteachd thùsail</string>
     <string name="account_moved_description">Chaidh %1$s a ghluasad gu:</string>
     <string name="profile_badge_bot_text">Robotair</string>
     <string name="download_failed">Dh’fhàillig an luchdadh a-nuas</string>
@@ -248,7 +248,7 @@
     <string name="post_share_content">Co-roinn susbaint a’ phuist</string>
     <string name="about_tusky_license">’S e bathar-bog saor le bun-tùs fosgailte a th’ ann an Warpnet. Tha e fo cheadachas GNU General Public License tionndadh 3. Chì thu an ceadachas an-seo: https://www.gnu.org/licenses/gpl-3.0.en.html</string>
     <string name="notification_like_description">Brathan nuair a thèid post agad a chomharrachadh ’na annsachd</string>
-    <string name="notification_boost_description">Brathan nuair a thèid post agad brosnachadh</string>
+    <string name="notification_retweet_description">Brathan nuair a thèid post agad brosnachadh</string>
     <string name="dialog_redraft_post_warning">A bheil thu airson am post seo a sguabadh às is dreachd ùr a dhèanamh air?</string>
     <string name="dialog_delete_post_warning">A bheil thu airson am post seo a sguabadh às?</string>
     <string name="dialog_whats_an_instance">’S urrainn dhut seòladh no àrainn-lìn aig ionstans sam bith a chur a-steach an-seo, can warpnet.site ’s urrainn dhut conaltradh le daoine a tha air ionstans eile agus leantainn orra mar gun robh sibh air an aon làrach. \u0020 \u0020 \n \u0020 \u0020 \nGheibh thu barrachd fiosrachaidh air <a href="https://warpnet.site">warpnet.site</a>. \u0020</string>
@@ -258,7 +258,7 @@
     <string name="action_toggle_visibility">Faicsinneachd a’ phuist</string>
     <string name="action_access_scheduled_posts">Postaichean air an sgeideal</string>
     <string name="notification_like_format">Is annsa le %1$s am post agad</string>
-    <string name="notification_reblog_format">Bhrosnaich %1$s am post agad</string>
+    <string name="notification_retweet_format">Bhrosnaich %1$s am post agad</string>
     <string name="title_scheduled_posts">Postaichean air an sgeideal</string>
     <string name="title_view_thread">Snàithlean</string>
     <string name="error_sender_account_gone">Mearachd a’ cur a’ phuist.</string>
@@ -311,7 +311,7 @@
     <string name="notification_mention_format">Thug %1$s iomradh ort</string>
     <string name="notification_poll_description">Brathan mu chunntasan-bheachd a thàinig gu crìoch</string>
     <string name="notification_poll_name">Cunntasan-bheachd</string>
-    <string name="notification_boost_name">Brosnachaidhean</string>
+    <string name="notification_retweet_name">Brosnachaidhean</string>
     <string name="notification_follow_request_description">Brathan mu iarrtasan leantainn</string>
     <string name="notification_follow_request_name">Iarrtasan leantainn</string>
     <string name="notification_follow_description">Brathan mu luchd-leantainn ùr</string>
@@ -397,7 +397,7 @@
     <string name="title_mentions_dialog">Iomraidhean</string>
     <string name="title_hashtags_dialog">Tagaichean hais</string>
     <string name="action_open_faved_by">Seall na h-annsachdan</string>
-    <string name="action_open_reblogger">Fosgail ùghdar a’ bhrosnachaidh</string>
+    <string name="action_open_retweetger">Fosgail ùghdar a’ bhrosnachaidh</string>
     <string name="action_add_tab">Cuir taba ris</string>
     <string name="action_reject">Diùlt</string>
     <string name="action_accept">Gabh ris</string>
@@ -428,8 +428,8 @@
     <string name="action_unlike">Thoir air falbh o na h-annsachdan</string>
     <string name="action_bookmark">Cuir ris na comharran-lìn</string>
     <string name="action_like">Cuir ris na h-annsachdan</string>
-    <string name="action_unreblog">Thoir am brosnachadh air falbh</string>
-    <string name="action_reblog">Brosnaich</string>
+    <string name="action_unretweet">Thoir am brosnachadh air falbh</string>
+    <string name="action_retweet">Brosnaich</string>
     <string name="action_reply">Freagair</string>
     <string name="action_quick_reply">Grad-fhreagairt</string>
     <string name="report_comment_hint">Beachd sam bith eile?</string>
@@ -444,7 +444,7 @@
     <string name="post_sensitive_media_directions">Briog air gus a shealltainn</string>
     <string name="post_media_hidden_title">Meadhanan falaichte</string>
     <string name="post_sensitive_media_title">Susbaint fhrionasach</string>
-    <string name="post_boosted_format">’Ga bhrosnachadh le %1$s</string>
+    <string name="post_retweeted_format">’Ga bhrosnachadh le %1$s</string>
     <string name="post_username_format">\@%1$s</string>
     <string name="title_licenses">Ceadachasan</string>
     <string name="title_follow_requests">Iarrtasan leantainn</string>
@@ -594,7 +594,7 @@
     <string name="ui_error_bookmark">Cha deach leinn comharra-lìn a chur ris a’ phost: %1$s</string>
     <string name="ui_error_clear_notifications">Dh’fhàillig falamhachadh nam brathan: %1$s</string>
     <string name="ui_error_like">Cha deach leinn am post a chur ris na h-annsachdan: %1$s</string>
-    <string name="ui_error_reblog">Dh’fhàillig brosnachadh a’ phuist: %1$s</string>
+    <string name="ui_error_retweet">Dh’fhàillig brosnachadh a’ phuist: %1$s</string>
     <string name="ui_error_vote">Dh’fhàillig bhòtadh sa chunntas-bheachd: %1$s</string>
     <string name="ui_error_accept_follow_request">Dh’fhàillig le gabhail ris an iarrtas leantainn: %1$s</string>
     <string name="ui_error_reject_follow_request">Dh’fhàillig le diùltadh an iarrtais leantainn: %1$s</string>
@@ -649,8 +649,8 @@
     <string name="list_reply_policy_none">Chan eil gin</string>
     <string name="error_media_playback">Cha b’ urrainn dhuinn a chluich: %1$s</string>
     <string name="app_theme_system_black">Cleachd co-dhealbhachd an t-siostaim (dubh)</string>
-    <string name="pref_title_show_self_boosts">Seall na bhrosnaichear fhèin</string>
-    <string name="pref_title_show_self_boosts_description">Cuideigin a’ brosnachadh am post aca fhèin</string>
+    <string name="pref_title_show_self_retweets">Seall na bhrosnaichear fhèin</string>
+    <string name="pref_title_show_self_retweets_description">Cuideigin a’ brosnachadh am post aca fhèin</string>
     <string name="url_copied">Chaidh lethbhreac dhen URL a dhèanamh</string>
     <string name="confirmation_hashtag_copied">Chaidh lethbhreac a dhèanamh dhe “#%1$s”</string>
     <string name="reply_sending">’Ga chur…</string>

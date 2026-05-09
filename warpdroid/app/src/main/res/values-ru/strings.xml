@@ -37,7 +37,7 @@
     <string name="title_drafts">Черновики</string>
     <string name="title_licenses">Лицензии</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s продвинул(а)</string>
+    <string name="post_retweeted_format">%1$s продвинул(а)</string>
     <string name="post_sensitive_media_title">Содержание, которое может быть неприятным или нежелательным</string>
     <string name="post_media_hidden_title">Медиа скрыто</string>
     <string name="post_sensitive_media_directions">Нажмите для просмотра</string>
@@ -46,15 +46,15 @@
     <string name="post_content_show_more">Еще</string>
     <string name="post_content_show_less">Свернуть</string>
     <string name="message_empty">Тут ничего нет.</string>
-    <string name="notification_reblog_format">%1$s продвинул(а) ваш пост</string>
+    <string name="notification_retweet_format">%1$s продвинул(а) ваш пост</string>
     <string name="notification_like_format">%1$s добавил(а) ваш пост в избранное</string>
     <string name="notification_follow_format">%1$s подписался(-лась) на вас</string>
     <string name="report_username_format">Пожаловаться на @%1$s</string>
     <string name="report_comment_hint">Дополнительные замечания?</string>
     <string name="action_quick_reply">Быстрый ответ</string>
     <string name="action_reply">Ответить</string>
-    <string name="action_reblog">Продвинуть</string>
-    <string name="action_unreblog">Отменить продвижение</string>
+    <string name="action_retweet">Продвинуть</string>
+    <string name="action_unretweet">Отменить продвижение</string>
     <string name="action_like">Нравится</string>
     <string name="action_unlike">Убрать из избранного</string>
     <string name="action_more">Больше</string>
@@ -66,8 +66,8 @@
     <string name="action_unfollow">Отписаться</string>
     <string name="action_block">Заблокировать</string>
     <string name="action_unblock">Разблокировать</string>
-    <string name="action_hide_reblogs">Скрывать продвижения</string>
-    <string name="action_show_reblogs">Показывать продвижения</string>
+    <string name="action_hide_retweets">Скрывать продвижения</string>
+    <string name="action_show_retweets">Показывать продвижения</string>
     <string name="action_report">Пожаловаться</string>
     <string name="action_delete">Удалить</string>
     <string name="action_delete_and_redraft">Удалить и пересоздать</string>
@@ -104,8 +104,8 @@
     <string name="action_content_warning">Предупреждение о содержании</string>
     <string name="action_emoji_keyboard">Эмодзи-клавиатура</string>
     <string name="action_add_tab">Добавить вкладку</string>
-    <string name="action_open_reblogger">Перейти к продвинувшему пост</string>
-    <string name="action_open_reblogged_by">Показать продвижения</string>
+    <string name="action_open_retweetger">Перейти к продвинувшему пост</string>
+    <string name="action_open_retweeted_by">Показать продвижения</string>
     <string name="action_open_faved_by">Показать избранное</string>
     <string name="title_hashtags_dialog">Хэштеги</string>
     <string name="title_mentions_dialog">Упоминания</string>
@@ -168,7 +168,7 @@
     <string name="pref_title_language">Язык</string>
     <string name="pref_title_post_filter">Фильтрование ленты</string>
     <string name="pref_title_post_tabs">Главная лента</string>
-    <string name="pref_title_show_boosts">Показывать продвижения</string>
+    <string name="pref_title_show_retweets">Показывать продвижения</string>
     <string name="pref_title_show_replies">Показать ответы</string>
     <string name="pref_title_show_media_preview">Загрузить предпросмотр медиа</string>
     <string name="pref_title_proxy_settings">Прокси</string>
@@ -193,8 +193,8 @@
     <string name="notification_mention_descriptions">Уведомлять о новых упоминаниях</string>
     <string name="notification_follow_name">Новые подписчики</string>
     <string name="notification_follow_description">Уведомлять о новых подписчиках</string>
-    <string name="notification_boost_name">Продвижения</string>
-    <string name="notification_boost_description">Уведомлять, когда кто-то продвигает ваши посты</string>
+    <string name="notification_retweet_name">Продвижения</string>
+    <string name="notification_retweet_description">Уведомлять, когда кто-то продвигает ваши посты</string>
     <string name="notification_like_name">Избранное</string>
     <string name="notification_like_description">Уведомлять, когда ваши сообщения добавляют в «избранное»</string>
     <string name="notification_poll_name">Результаты опросов</string>
@@ -309,8 +309,8 @@
     <string name="download_failed">Загрузка не удалась</string>
     <string name="profile_badge_bot_text">Бот</string>
     <string name="account_moved_description">%1$s переехал(а) на:</string>
-    <string name="reblog_private">Продвинуть для изначальной аудитории</string>
-    <string name="unreblog_private">Отменить продвижение</string>
+    <string name="retweet_private">Продвинуть для изначальной аудитории</string>
+    <string name="unretweet_private">Отменить продвижение</string>
     <string name="license_description">Warpnet использует код и материалы из следующих проектов с открытым исходным кодом:</string>
     <string name="license_apache_2">Используется лицензия Apache License (копия ниже)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -329,13 +329,13 @@
         <item quantity="many"><b>%1$s</b> оценили</item>
         <item quantity="other"><b>%1$s</b> оценили</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> продвижение</item>
         <item quantity="few"><b>%1$s</b> продвижения</item>
         <item quantity="many"><b>%1$s</b> продвижений</item>
         <item quantity="other"><b>%1$s</b> продвижений</item>
     </plurals>
-    <string name="title_reblogged_by">Продвинули</string>
+    <string name="title_retweeted_by">Продвинули</string>
     <string name="title_liked_by">Добавили в избранное</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s и %2$s</string>
@@ -343,7 +343,7 @@
     <string name="description_post_media">Медиа: %1$s</string>
     <string name="description_post_cw">Предупреждение о содержании: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Без описания</string>
-    <string name="description_post_reblogged">Перезалито</string>
+    <string name="description_post_retweeted">Перезалито</string>
     <string name="description_post_liked">Понравилось</string>
     <string name="description_visibility_public">Публичный</string>
     <string name="description_visibility_unlisted">Скрытый</string>
@@ -424,7 +424,7 @@
     <string name="no_drafts">У вас нет никаких черновиков.</string>
     <string name="no_scheduled_posts">У вас нет запланированных постов.</string>
     <string name="warning_scheduling_interval">Минимальный интервал планирования в Warpnet составляет 5 минут.</string>
-    <string name="pref_title_confirm_reblogs">Запрашивать подтверждение перед продвижением</string>
+    <string name="pref_title_confirm_retweets">Запрашивать подтверждение перед продвижением</string>
     <string name="pref_title_show_cards_in_timelines">Показывать предпросмотр ссылок в ленте</string>
     <string name="pref_title_enable_swipe_for_tabs">Включить жест пролистывания для переключения между вкладками</string>
     <plurals name="poll_info_people">
@@ -542,7 +542,7 @@
     <string name="about_device_info">%1$s %2$s \nВерсия Android: %3$s \nВерсия SDK: %4$d</string>
     <string name="pref_show_self_username_always">Всегда</string>
     <string name="pref_title_show_self_username">Показывать имя пользователя на панели инструментов</string>
-    <string name="ui_error_reblog">Не удалось продвинуть пост: %1$s</string>
+    <string name="ui_error_retweet">Не удалось продвинуть пост: %1$s</string>
     <string name="hint_filter_title">Мой фильтр</string>
     <string name="label_filter_title">Название</string>
     <string name="filter_action_warn">Предупреждение</string>
@@ -648,8 +648,8 @@
     <string name="list_reply_policy_list">Члены списка</string>
     <string name="list_reply_policy_followed">Любой пользователь на которого вы подписаны</string>
     <string name="list_reply_policy_label">Показать ответы</string>
-    <string name="pref_title_show_self_boosts">Показывать самопродвижения</string>
-    <string name="pref_title_show_self_boosts_description">Кто-то продвигает свой собственный пост</string>
+    <string name="pref_title_show_self_retweets">Показывать самопродвижения</string>
+    <string name="pref_title_show_self_retweets_description">Кто-то продвигает свой собственный пост</string>
     <string name="pref_show_self_username_never">Никогда</string>
     <string name="notification_prune_cache">Осматриваю кэш…</string>
     <string name="list_exclusive_label">Скрыть с главной ленты</string>
@@ -745,9 +745,9 @@
     <string name="moderation_warning_action_silence">Ваша учетная запись была ограничена.</string>
     <string name="moderation_warning_action_delete_statuses">Некоторые ваши посты были удалены.</string>
     <string name="moderation_warning_action_mark_statuses_as_sensitive">Некоторые из ваших сообщений были помечены как чувствительные.</string>
-    <string name="action_reblog_private">Продвинуть для подписчиков</string>
-    <string name="action_reblog_public">Продвинуть публично</string>
-    <string name="action_reblog_unlisted">Скрытое продвижение</string>
+    <string name="action_retweet_private">Продвинуть для подписчиков</string>
+    <string name="action_retweet_public">Продвинуть публично</string>
+    <string name="action_retweet_unlisted">Скрытое продвижение</string>
     <string name="notification_severed_relationship_name">Утраченные связи</string>
     <string name="notification_moderation_warning_name">Предупреждения модерации</string>
     <string name="notification_unknown_description">Неизвестный тип уведомлений</string>

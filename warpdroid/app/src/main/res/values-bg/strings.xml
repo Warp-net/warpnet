@@ -70,7 +70,7 @@
     <string name="description_visibility_public">Публично</string>
     <string name="description_post_bookmarked">Отметнато</string>
     <string name="description_post_liked">Поставено в любими</string>
-    <string name="description_post_reblogged">Реблог</string>
+    <string name="description_post_retweeted">Реблог</string>
     <string name="description_post_media_no_description_placeholder">Няма описание</string>
     <string name="description_post_cw">Предупреждение за съдържание: %1$s</string>
     <string name="description_post_media">Мултимедия: %1$s</string>
@@ -78,8 +78,8 @@
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s и %2$s</string>
     <string name="title_liked_by">Поставено в любими от</string>
-    <string name="title_reblogged_by">Споделено от</string>
-    <plurals name="reblogs">
+    <string name="title_retweeted_by">Споделено от</string>
+    <plurals name="retweets">
         <item quantity="one">%1$s Споделяне</item>
         <item quantity="other">%1$s Споделяния</item>
     </plurals>
@@ -99,8 +99,8 @@
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_apache_2">Лицензиран под лиценза Apache (копие по-долу)</string>
     <string name="license_description">Warpnet съдържа код и активи от следните проекти с отворен код:</string>
-    <string name="unreblog_private">Отсподеляне</string>
-    <string name="reblog_private">Споделяне с оригиналната аудитория</string>
+    <string name="unretweet_private">Отсподеляне</string>
+    <string name="retweet_private">Споделяне с оригиналната аудитория</string>
     <string name="account_moved_description">%1$s се премести в:</string>
     <string name="profile_badge_bot_text">Бот</string>
     <string name="download_failed">Изтеглянето се провали</string>
@@ -195,7 +195,7 @@
     <string name="notification_poll_name">Резултати от анкети</string>
     <string name="notification_like_description">Известия, когато публикациите ви бъдат означени като любими</string>
     <string name="notification_like_name">Любими</string>
-    <string name="notification_boost_description">Известия, когато публикациите ви се споделят</string>
+    <string name="notification_retweet_description">Известия, когато публикациите ви се споделят</string>
     <string name="post_text_size_smallest">Най-малък</string>
     <string name="description_visibility_unlisted">Скрито</string>
     <string name="pref_title_post_tabs">Начална емисия</string>
@@ -269,8 +269,8 @@
     <string name="title_mentions_dialog">Споменавания</string>
     <string name="title_hashtags_dialog">Хаштагове</string>
     <string name="action_open_faved_by">Показване на любими</string>
-    <string name="action_open_reblogged_by">Показване на споделяния</string>
-    <string name="action_open_reblogger">Отваряне на споделилия автор</string>
+    <string name="action_open_retweeted_by">Показване на споделяния</string>
+    <string name="action_open_retweetger">Отваряне на споделилия автор</string>
     <string name="action_add_tab">Добавяне на раздел</string>
     <string name="action_reset_schedule">Нулиране</string>
     <string name="action_schedule_post">Планиране на публикация</string>
@@ -319,8 +319,8 @@
     <string name="action_delete">Изтриване</string>
     <string name="action_edit">Редакция</string>
     <string name="action_report">Докладване</string>
-    <string name="action_show_reblogs">Показване на споделяния</string>
-    <string name="action_hide_reblogs">Скриване на споделяния</string>
+    <string name="action_show_retweets">Показване на споделяния</string>
+    <string name="action_hide_retweets">Скриване на споделяния</string>
     <string name="action_unblock">Деблокиране</string>
     <string name="action_block">Блокиране</string>
     <string name="action_unfollow">Отследване</string>
@@ -333,8 +333,8 @@
     <string name="action_unlike">Премахване от любими</string>
     <string name="action_bookmark">Отмятане</string>
     <string name="action_like">Поставяне в любими</string>
-    <string name="action_unreblog">Премахване на споделяне</string>
-    <string name="action_reblog">Споделяне</string>
+    <string name="action_unretweet">Премахване на споделяне</string>
+    <string name="action_retweet">Споделяне</string>
     <string name="action_reply">Отговор</string>
     <string name="action_quick_reply">Бърз отговор</string>
     <string name="report_comment_hint">Допълнителни коментари?</string>
@@ -343,7 +343,7 @@
     <string name="notification_follow_request_format">%1$s поиска да ви последва</string>
     <string name="notification_follow_format">%1$s ви последва</string>
     <string name="notification_like_format">%1$s постави вашата публикация в любими</string>
-    <string name="notification_reblog_format">%1$s сподели вашата публикация</string>
+    <string name="notification_retweet_format">%1$s сподели вашата публикация</string>
     <string name="message_empty">Нищо тук.</string>
     <string name="post_content_show_less">Сгъване</string>
     <string name="post_content_show_more">Разгъване</string>
@@ -352,7 +352,7 @@
     <string name="post_sensitive_media_directions">Щракнете за преглед</string>
     <string name="post_media_hidden_title">Мултимедията е скрита</string>
     <string name="post_sensitive_media_title">Чувствително съдържание</string>
-    <string name="post_boosted_format">%1$s сподели</string>
+    <string name="post_retweeted_format">%1$s сподели</string>
     <string name="post_username_format">\@%1$s</string>
     <string name="title_licenses">Лицензи</string>
     <string name="title_announcements">Оповестявания</string>
@@ -409,7 +409,7 @@
     <string name="account_note_hint">Вашата лична бележка за този акаунт</string>
     <string name="pref_title_wellbeing_mode">Благосъстояние</string>
     <string name="pref_title_hide_top_toolbar">Скриване на заглавието на горната лента с инструменти</string>
-    <string name="pref_title_confirm_reblogs">Питане за потвърждение преди споделяне</string>
+    <string name="pref_title_confirm_retweets">Питане за потвърждение преди споделяне</string>
     <string name="pref_title_show_cards_in_timelines">Показване на визуализации на връзки в емисии</string>
     <string name="warning_scheduling_interval">Warpnet има минимален интервал за планиране от 5 минути.</string>
     <string name="no_announcements">Няма оповестявания.</string>
@@ -424,7 +424,7 @@
     <string name="duration_3_days">3 дни</string>
     <string name="duration_1_day">1 ден</string>
     <string name="duration_6_hours">6 часа</string>
-    <string name="notification_boost_name">Споделяния</string>
+    <string name="notification_retweet_name">Споделяния</string>
     <string name="notification_follow_request_description">Известия за заявки за последване</string>
     <string name="notification_follow_request_name">Заявки за последване</string>
     <string name="notification_follow_description">Известия за нови последователи</string>
@@ -454,7 +454,7 @@
     <string name="pref_title_proxy_settings">Прокси</string>
     <string name="pref_title_show_media_preview">Изтегляне на визуализации за мултимедии</string>
     <string name="pref_title_show_replies">Показване на отговори</string>
-    <string name="pref_title_show_boosts">Показване на споделяния</string>
+    <string name="pref_title_show_retweets">Показване на споделяния</string>
     <string name="error_multimedia_size_limit">Видео и аудио файловете не може да превишават %1$s МБ в размер.</string>
     <string name="error_image_edit_failed">Изображението не може да бъде редактирано.</string>
     <string name="a11y_label_loading_thread">Зареждане на нишка</string>

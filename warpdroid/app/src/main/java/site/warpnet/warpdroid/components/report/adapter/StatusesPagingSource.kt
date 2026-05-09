@@ -89,7 +89,7 @@ class StatusesPagingSource(
             sinceId = null,
             minId = minId,
             limit = limit,
-            excludeReblogs = true
+            excludeRetweets = true
         )
         val responseBody = response.body()
         if (response.isSuccessful && responseBody != null) {

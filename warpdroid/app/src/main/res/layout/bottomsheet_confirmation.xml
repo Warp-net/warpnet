@@ -18,7 +18,7 @@
         app:drawableStartCompat="@drawable/ic_repeat_24dp"
         app:drawableTint="?attr/colorPrimary"
         app:layout_constraintTop_toTopOf="parent"
-        tools:text="@string/reblog_confirm" />
+        tools:text="@string/retweet_confirm" />
 
     <com.google.android.material.bottomsheet.BottomSheetDragHandleView
         android:id="@+id/dragHandle"
@@ -27,7 +27,7 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/reblogPrivacyLayout"
+        android:id="@+id/retweetPrivacyLayout"
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -36,7 +36,7 @@
         app:layout_constraintTop_toBottomOf="@id/confirmTextView">
 
         <com.google.android.material.textfield.MaterialAutoCompleteTextView
-            android:id="@+id/reblogPrivacyDropdown"
+            android:id="@+id/retweetPrivacyDropdown"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:dropDownHeight="wrap_content"
@@ -54,7 +54,7 @@
         android:text="@android:string/cancel"
         app:layout_constraintEnd_toStartOf="@id/confirm_button"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/reblogPrivacyLayout" />
+        app:layout_constraintTop_toBottomOf="@id/retweetPrivacyLayout" />
 
     <Button
         android:id="@+id/confirm_button"
@@ -65,7 +65,7 @@
         android:layout_marginTop="8dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/cancelButton"
-        app:layout_constraintTop_toBottomOf="@id/reblogPrivacyLayout"
-        tools:text="@string/action_reblog" />
+        app:layout_constraintTop_toBottomOf="@id/retweetPrivacyLayout"
+        tools:text="@string/action_retweet" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -219,7 +219,7 @@ class NotificationHelper @Inject constructor(
             Notification.Type.Status -> account.notificationsSubscriptions
             Notification.Type.Follow -> account.notificationsFollowed
             Notification.Type.FollowRequest -> account.notificationsFollowRequested
-            Notification.Type.Reblog -> account.notificationsReblogged
+            Notification.Type.Retweet -> account.notificationsRetweeted
             Notification.Type.PleromaEmojiReaction,
             Notification.Type.Like -> account.notificationsLiked
             Notification.Type.Poll -> account.notificationsPolls
@@ -497,7 +497,7 @@ class NotificationHelper @Inject constructor(
             Notification.Type.FollowRequest -> context.getString(R.string.notification_follow_request_format, accountName)
             Notification.Type.Like -> context.getString(R.string.notification_like_format, accountName)
             Notification.Type.PleromaEmojiReaction -> context.getString(R.string.notification_pleroma_reaction_format, accountName)
-            Notification.Type.Reblog -> context.getString(R.string.notification_reblog_format, accountName)
+            Notification.Type.Retweet -> context.getString(R.string.notification_retweet_format, accountName)
             Notification.Type.Poll -> if (notification.status!!.account.id == account.accountId) {
                 context.getString(R.string.poll_ended_created)
             } else {
@@ -523,7 +523,7 @@ class NotificationHelper @Inject constructor(
             Notification.Type.SignUp -> return "@" + notification.account.username
             Notification.Type.Mention,
             Notification.Type.Like,
-            Notification.Type.Reblog,
+            Notification.Type.Retweet,
             Notification.Type.Status -> return if (!notification.status?.spoilerText.isNullOrEmpty() && !alwaysOpenSpoiler) {
                 notification.status.spoilerText
             } else {

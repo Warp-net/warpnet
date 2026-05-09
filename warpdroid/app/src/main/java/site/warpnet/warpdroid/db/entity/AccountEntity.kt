@@ -39,7 +39,7 @@ data class AccountEntity(
     val notificationsMentioned: Boolean = true,
     val notificationsFollowed: Boolean = true,
     val notificationsFollowRequested: Boolean = true,
-    val notificationsReblogged: Boolean = true,
+    val notificationsRetweeted: Boolean = true,
     val notificationsLiked: Boolean = true,
     val notificationsPolls: Boolean = true,
     val notificationsSubscriptions: Boolean = true,
@@ -68,9 +68,9 @@ data class AccountEntity(
     val firstVisibleHomeTimelineItemOffset: Int = 0,
     val locked: Boolean = false,
     val hasDirectMessageBadge: Boolean = false,
-    val isShowHomeBoosts: Boolean = true,
+    val isShowHomeRetweets: Boolean = true,
     val isShowHomeReplies: Boolean = true,
-    val isShowHomeSelfBoosts: Boolean = true,
+    val isShowHomeSelfRetweets: Boolean = true,
 ) {
     val identifier: String
         get() = "$domain:$accountId"

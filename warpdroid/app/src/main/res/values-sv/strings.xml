@@ -37,7 +37,7 @@
     <string name="title_drafts">Utkast</string>
     <string name="title_licenses">Licenser</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s knuffade</string>
+    <string name="post_retweeted_format">%1$s knuffade</string>
     <string name="post_sensitive_media_title">Känsligt innehåll</string>
     <string name="post_media_hidden_title">Dold media</string>
     <string name="post_sensitive_media_directions">Tryck för att visa</string>
@@ -46,15 +46,15 @@
     <string name="post_content_show_more">Expandera</string>
     <string name="post_content_show_less">Dölj</string>
     <string name="message_empty">Ingenting här.</string>
-    <string name="notification_reblog_format">%1$s puffade ditt inlägg</string>
+    <string name="notification_retweet_format">%1$s puffade ditt inlägg</string>
     <string name="notification_like_format">%1$s favoritmarkerade ditt inlägg</string>
     <string name="notification_follow_format">%1$s följer dig</string>
     <string name="report_username_format">Rapportera @%1$s</string>
     <string name="report_comment_hint">Ytterligare kommentarer?</string>
     <string name="action_quick_reply">Snabbsvar</string>
     <string name="action_reply">Svara</string>
-    <string name="action_reblog">Knuffa</string>
-    <string name="action_unreblog">Ta bort knuff</string>
+    <string name="action_retweet">Knuffa</string>
+    <string name="action_unretweet">Ta bort knuff</string>
     <string name="action_like">Favorit</string>
     <string name="action_unlike">Ta bort favorit</string>
     <string name="action_more">Mer</string>
@@ -66,8 +66,8 @@
     <string name="action_unfollow">Avfölj</string>
     <string name="action_block">Blockera</string>
     <string name="action_unblock">Avblockera</string>
-    <string name="action_hide_reblogs">Dölj knuffar</string>
-    <string name="action_show_reblogs">Visa knuffar</string>
+    <string name="action_hide_retweets">Dölj knuffar</string>
+    <string name="action_show_retweets">Visa knuffar</string>
     <string name="action_report">Rapportera</string>
     <string name="action_delete">Radera</string>
     <string name="action_send">TOOT</string>
@@ -103,8 +103,8 @@
     <string name="action_content_warning">Innehållsvarning</string>
     <string name="action_emoji_keyboard">Emoji-tangentbord</string>
     <string name="action_add_tab">Lägg till flik</string>
-    <string name="action_open_reblogger">Öppna knuff författare</string>
-    <string name="action_open_reblogged_by">Visa knuffar</string>
+    <string name="action_open_retweetger">Öppna knuff författare</string>
+    <string name="action_open_retweeted_by">Visa knuffar</string>
     <string name="action_open_faved_by">Visa liker</string>
     <string name="title_hashtags_dialog">Hashtaggar</string>
     <string name="title_mentions_dialog">Omnämnanden</string>
@@ -164,7 +164,7 @@
     <string name="pref_title_language">Språk</string>
     <string name="pref_title_post_filter">Filtrering av tidslinje</string>
     <string name="pref_title_post_tabs">Hem tidslinje</string>
-    <string name="pref_title_show_boosts">Visa knuffar</string>
+    <string name="pref_title_show_retweets">Visa knuffar</string>
     <string name="pref_title_show_replies">Visa svar</string>
     <string name="pref_title_show_media_preview">Visa en förhandsgranskning</string>
     <string name="pref_title_proxy_settings">Proxyserver</string>
@@ -189,8 +189,8 @@
     <string name="notification_mention_descriptions">Aviseringar om nya omnämnanden</string>
     <string name="notification_follow_name">Nya följare</string>
     <string name="notification_follow_description">Aviseringar på nya följare</string>
-    <string name="notification_boost_name">Knuffar</string>
-    <string name="notification_boost_description">Aviseringar när dina inlägg blir puffade</string>
+    <string name="notification_retweet_name">Knuffar</string>
+    <string name="notification_retweet_description">Aviseringar när dina inlägg blir puffade</string>
     <string name="notification_like_name">Liker</string>
     <string name="notification_like_description">Aviseringar när dina inlägg blir favoritmarkerade</string>
     <string name="notification_mention_format">%1$s omnämnde dig</string>
@@ -281,8 +281,8 @@
     <string name="download_failed">Nedladdning misslyckad</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="account_moved_description">%1$s har flyttat till:</string>
-    <string name="reblog_private">Knuffa till ursprunglig målgrupp</string>
-    <string name="unreblog_private">Ta bort knuff</string>
+    <string name="retweet_private">Knuffa till ursprunglig målgrupp</string>
+    <string name="unretweet_private">Ta bort knuff</string>
     <string name="license_description">Warpnet innehåller kod och tillgångar från följande öppen källkodsprojekt:</string>
     <string name="license_apache_2">Licensierad under the Apache License (kopia nedanför)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -299,11 +299,11 @@
         <item quantity="one"><b>%1$s</b> Favorit</item>
         <item quantity="other"><b>%1$s</b> Liker</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> Knuff</item>
         <item quantity="other"><b>%1$s</b> Knuffar</item>
     </plurals>
-    <string name="title_reblogged_by">Knuffad av</string>
+    <string name="title_retweeted_by">Knuffad av</string>
     <string name="title_liked_by">Favoritmarkerad av</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s och %2$s</string>
@@ -311,7 +311,7 @@
     <string name="description_post_media">Media: %1$s</string>
     <string name="description_post_cw">Innehållsvarning: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Ingen beskrivning</string>
-    <string name="description_post_reblogged">Knuffad</string>
+    <string name="description_post_retweeted">Knuffad</string>
     <string name="description_post_liked">Favoritmarkerat</string>
     <string name="description_visibility_public">Publik</string>
     <string name="description_visibility_unlisted">Olistad</string>
@@ -413,7 +413,7 @@
     <string name="no_drafts">Du har inga utkast.</string>
     <string name="warning_scheduling_interval">Warpnet har ett minimalt schemaläggningsintervall på 5 minuter.</string>
     <string name="action_mute_conversation">Tysta konversation</string>
-    <string name="pref_title_confirm_reblogs">Visa bekräftelse innan knuff</string>
+    <string name="pref_title_confirm_retweets">Visa bekräftelse innan knuff</string>
     <string name="pref_title_show_cards_in_timelines">Visa förhandsvisning av länkar i tidslinjen</string>
     <string name="pref_title_enable_swipe_for_tabs">Aktivera sveprörelser för att växla mellan flikar</string>
     <plurals name="poll_info_people">
@@ -602,7 +602,7 @@
     <string name="notification_notification_worker">Hämtar aviseringar…</string>
     <string name="notification_prune_cache">Cacheunderhåll…</string>
     <string name="action_refresh">Uppdatera</string>
-    <string name="ui_error_reblog">Att knuffa inlägg misslyckades: %1$s</string>
+    <string name="ui_error_retweet">Att knuffa inlägg misslyckades: %1$s</string>
     <string name="ui_error_vote">Rösta i omröstning misslyckades: %1$s</string>
     <string name="ui_error_accept_follow_request">Acceptera följarförfrågan misslyckades: %1$s</string>
     <string name="pref_title_reading_order">Läsordning</string>
@@ -643,8 +643,8 @@
     <string name="list_reply_policy_list">Medlemmar av listan</string>
     <string name="list_reply_policy_followed">Alla följda användare</string>
     <string name="list_reply_policy_label">Visa svar till</string>
-    <string name="pref_title_show_self_boosts">Visa egna-knuffar</string>
-    <string name="pref_title_show_self_boosts_description">Någon knuffar sitt egna inlägg</string>
+    <string name="pref_title_show_self_retweets">Visa egna-knuffar</string>
+    <string name="pref_title_show_self_retweets_description">Någon knuffar sitt egna inlägg</string>
     <string name="reply_sending_long">Ditt svar skickas.</string>
     <string name="reply_sending">Skickar…</string>
     <string name="pref_title_show_notifications_filter">Visa aviseringsfiltret</string>
@@ -679,15 +679,15 @@
     <string name="post_replied_self">Fortsatt tråd</string>
     <string name="notification_quote_format">%1$s citerade ditt inlägg</string>
     <string name="action_rehide_status">Dölj filtrerat status på nytt</string>
-    <string name="action_reblog_private">Knuffa endast för följare</string>
+    <string name="action_retweet_private">Knuffa endast för följare</string>
     <string name="action_remove_account_confirm">Är du säker på att du vill ta bort kontot %1$s från Warpnet? Detta kommer radera all lokal data från kontot, inklusive utkast och inställningar.</string>
     <string name="follow_hashtag_success">Följde hashtag %1$s</string>
     <string name="post_replied">Svarade</string>
     <string name="post_replied_format">I svar till %1$s</string>
     <string name="notification_quoted_update_format">%1$s redigerade ett inlägg du har citerat</string>
     <string name="action_remove_account">Ta bort konto</string>
-    <string name="action_reblog_unlisted">Olistad knuff</string>
-    <string name="action_reblog_public">Publik knuff</string>
+    <string name="action_retweet_unlisted">Olistad knuff</string>
+    <string name="action_retweet_public">Publik knuff</string>
     <string name="action_reveal_media">Visa media</string>
     <string name="pref_default_quote_policy">Policy för citat (synas med server)</string>
     <string name="quote_policy_public">Vem som helst</string>
