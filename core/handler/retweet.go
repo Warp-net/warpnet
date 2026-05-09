@@ -91,7 +91,8 @@ func StreamNewReTweetHandler(
 			return nil, err
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
 		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
 		if isOwnerRetweeter {
 			// owner retweeted it
@@ -125,6 +126,10 @@ func StreamNewReTweetHandler(
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		if ownNodeInfo.ID.String() == tweetOwner.NodeId {
+			return retweet, nil
 		}
 
 		retweetDataResp, err := streamer.GenericStream(
@@ -179,7 +184,8 @@ func StreamUnretweetHandler(
 			return nil, err
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
 		isOwnTweetUnretweet := tweet.UserId == ownerId
 		if isOwnTweetUnretweet {
 			// tweet belongs to owner, unretweet themself
@@ -192,6 +198,10 @@ func StreamUnretweetHandler(
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		if ownNodeInfo.ID.String() == tweetOwner.NodeId {
+			return event.Accepted, nil
 		}
 
 		unretweetDataResp, err := streamer.GenericStream(

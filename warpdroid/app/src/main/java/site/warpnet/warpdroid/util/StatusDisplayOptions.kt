@@ -92,7 +92,7 @@ data class StatusDisplayOptions(
             useBlurhash = preferences.getBoolean(PrefKeys.USE_BLURHASH, true),
             cardViewMode = CardViewMode.NONE,
             hideStats = preferences.getBoolean(PrefKeys.WELLBEING_HIDE_STATS_POSTS, false),
-            showStatsInline = preferences.getBoolean(PrefKeys.SHOW_STATS_INLINE, false),
+            showStatsInline = preferences.getBoolean(PrefKeys.SHOW_STATS_INLINE, true),
             showSensitiveMedia = account.alwaysShowSensitiveMedia,
             openSpoiler = account.alwaysOpenSpoiler
         )

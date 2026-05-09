@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -61,7 +62,14 @@ func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer) warp
 		}); err != nil {
 			return nil, err
 		}
-		log.Infof("pair: device added: %s", clientInfo.ID)
+
+		println()
+		fmt.Printf(
+			"\033[1mPAIR ADDED %s\033[0m\n",
+			clientInfo.ID,
+		)
+		println()
+
 		return event.Accepted, nil
 	}
 }

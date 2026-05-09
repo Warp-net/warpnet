@@ -96,7 +96,7 @@ class PreferencesProviderViewModel @Inject constructor(
             animateCustomEmojis = this.getBoolean(PrefKeys.ANIMATE_CUSTOM_EMOJIS, false),
             animateAvatars = this.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false),
             useAbsoluteTime = this.getBoolean(PrefKeys.ABSOLUTE_TIME_VIEW, false),
-            showStatsInline = this.getBoolean(PrefKeys.SHOW_STATS_INLINE, false),
+            showStatsInline = this.getBoolean(PrefKeys.SHOW_STATS_INLINE, true),
             showLinkPreviews = this.getBoolean(PrefKeys.SHOW_CARDS_IN_TIMELINES, false),
             readingOrder = ReadingOrder.from(
                 this.getString(PrefKeys.READING_ORDER, null)

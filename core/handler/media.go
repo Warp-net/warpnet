@@ -236,10 +236,12 @@ func StreamGetImageHandler(
 			return nil, fmt.Errorf("get image: %w", ErrEmptyImageKey)
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
 		if ev.UserId == "" {
 			ev.UserId = ownerId
 		}
+
 		isOwnImageRequest := ownerId == ev.UserId
 
 		if isOwnImageRequest {
@@ -261,6 +263,11 @@ func StreamGetImageHandler(
 		}
 		if err != nil {
 			return nil, fmt.Errorf("get image: fetching user: %w", err)
+		}
+
+		isOwnAlias := ownNodeInfo.ID.String() == u.NodeId
+		if isOwnAlias {
+			return event.GetImageResponse{File: ""}, nil
 		}
 
 		resp, err := streamer.GenericStream(u.NodeId, event.PUBLIC_GET_IMAGE, ev)

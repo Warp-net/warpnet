@@ -67,6 +67,7 @@ import site.warpnet.warpdroid.warpnet.WarpnetRepository
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -339,11 +340,22 @@ class WarpnetApi @Inject constructor(
         status: NewStatus,
     ): NetworkResult<Status> {
         val active = accountManager.activeAccount ?: return stubFailure("createStatus")
+        // The Warpnet `Tweet.Username` field is the human-readable display
+        // name (e.g. "Vadim") — desktop renders it verbatim as the author
+        // line. WarpnetMapper.toAccount maps WarpnetUser.id → Account.username
+        // (the @-handle, peer-derived ULID) and WarpnetUser.username →
+        // Account.displayName (the real name), to match Mastodon's
+        // username-vs-displayName split. So the tweet's authorUsername has
+        // to be sourced from displayName, not username, otherwise the post
+        // shows up authored by the ULID. Fall back to the @-handle if
+        // displayName isn't populated yet (e.g. accountVerifyCredentials
+        // hasn't finished).
+        val authorName = active.displayName.ifBlank { active.username }
         return result {
             warpnet.postStatus(
                 text = status.status,
                 authorUserId = active.accountId,
-                authorUsername = active.username,
+                authorUsername = authorName,
                 parentId = status.inReplyToId,
             )
         }
@@ -419,11 +431,14 @@ class WarpnetApi @Inject constructor(
         visibility: String?,
     ): NetworkResult<Status> {
         val active = accountManager.activeAccount ?: return stubFailure("reblogStatus")
+        // Same reasoning as createStatus: the wire-level username field is
+        // the display name, not the @-handle.
+        val retweeterName = active.displayName.ifBlank { active.username }
         return result {
             warpnet.reblogStatus(
                 tweetId = statusId,
                 retweeterId = active.accountId,
-                retweeterUsername = active.username,
+                retweeterUsername = retweeterName,
             )
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
@@ -502,15 +517,29 @@ class WarpnetApi @Inject constructor(
     // ---------------------------------------------------------------
 
     // Warpdroid has no login flow — the stub account stands in for what
-    // OAuth login would normally populate. Resolve locally from the
-    // AccountEntity instead of calling Warpnet (which may be offline /
-    // uninitialised at app start).
+    // OAuth login would normally populate. Resolve from Warpnet so the
+    // username/displayName/avatar reflect the paired identity instead of
+    // the AccountManager stub ("me"); MainActivity only syncs accountId
+    // from PairedNodeStore and would otherwise leave username at "me",
+    // which would be sent verbatim by createStatus and stored in the
+    // tweet author field on the fat node. If the lookup fails (offline,
+    // not yet paired) fall back to the local stub so callers still get
+    // a non-null Account.
     suspend fun accountVerifyCredentials(
         domain: String? = null,
         auth: String? = null,
     ): NetworkResult<Account> {
         val active = accountManager.activeAccount
             ?: return stubFailure("accountVerifyCredentials")
+        if (active.accountId.isNotEmpty() && active.accountId != AccountManager.STUB_USERNAME) {
+            try {
+                return NetworkResult.success(warpnet.getAccount(active.accountId))
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                Log.w(TAG, "accountVerifyCredentials: getAccount(${active.accountId}) failed, falling back to stub", t)
+            }
+        }
         return NetworkResult.success(
             Account(
                 id = active.accountId,

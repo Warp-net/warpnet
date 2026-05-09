@@ -35,7 +35,7 @@ data class WarpdroidPreferences(
     val animateCustomEmojis: Boolean = false,
     val animateAvatars: Boolean = false,
     val useAbsoluteTime: Boolean = false,
-    val showStatsInline: Boolean = false,
+    val showStatsInline: Boolean = true,
     val showLinkPreviews: Boolean = false,
     val readingOrder: PreferencesFragment.ReadingOrder = PreferencesFragment.ReadingOrder.NEWEST_FIRST,
     val wellbeing: WellbeingSettings = WellbeingSettings()

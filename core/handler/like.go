@@ -92,22 +92,15 @@ func StreamLikeHandler(
 			log.Errorf("like handler failed: %v", err)
 			return nil, err
 		}
+		ownNodeInfo := streamer.NodeInfo()
 
 		isOwnTweetLike := ev.OwnerId == ev.UserId
 		if isOwnTweetLike { // own tweet like
 			return event.LikesCountResponse{Count: num}, nil
 		}
 
-		likedUser, err := userRepo.Get(ev.UserId)
-		if errors.Is(err, database.ErrUserNotFound) {
-			return event.LikesCountResponse{Count: num}, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		isSomeoneLiked := ev.OwnerId != streamer.NodeInfo().OwnerId
-		if isSomeoneLiked { // likes exchange finished
+		isSomeoneLikedMe := ev.OwnerId != ownNodeInfo.OwnerId
+		if isSomeoneLikedMe { // likes exchange finished
 			notifyUsername := ev.OwnerId
 			liker, likerErr := userRepo.Get(ev.OwnerId)
 			if likerErr == nil {
@@ -120,6 +113,18 @@ func StreamLikeHandler(
 			}); err != nil {
 				log.Errorf("like handler: adding notification: %v", err)
 			}
+			return event.LikesCountResponse{Count: num}, nil
+		}
+
+		likedUser, err := userRepo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return event.LikesCountResponse{Count: num}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if likedUser.NodeId == ownNodeInfo.ID.String() {
 			return event.LikesCountResponse{Count: num}, nil
 		}
 
@@ -170,13 +175,14 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 			return nil, err
 		}
 
+		ownNodeInfo := streamer.NodeInfo()
 		isOwnTweetDislike := ev.OwnerId == ev.UserId
 		if isOwnTweetDislike { // own tweet like
 			return event.LikesCountResponse{Count: num}, nil
 		}
 
-		isSomeoneDisliked := ev.OwnerId != streamer.NodeInfo().OwnerId
-		if isSomeoneDisliked { // likes exchange finished
+		isSomeoneDislikedMe := ev.OwnerId != ownNodeInfo.OwnerId
+		if isSomeoneDislikedMe { // likes exchange finished
 			return event.LikesCountResponse{Count: num}, nil
 		}
 
@@ -186,6 +192,10 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 		}
 		if err != nil {
 			return nil, err
+		}
+		
+		if unlikedUser.NodeId == ownNodeInfo.ID.String() {
+			return event.LikesCountResponse{Count: num}, nil
 		}
 
 		unlikeDataResp, err := streamer.GenericStream(
