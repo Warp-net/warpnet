@@ -71,7 +71,7 @@ object WarpnetMapper {
             inReplyToAccountId = null,
             reblog = null,
             content = text,
-            createdAt = parseDate(createdAt),
+            createdAt = parseDate(createdAt.orEmpty()),
             editedAt = updatedAt?.let(::parseDate),
             emojis = emptyList(),
             reblogsCount = 0,
