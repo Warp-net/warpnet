@@ -261,7 +261,8 @@ func tweetsRefreshBackground(
 	ev event.GetAllTweetsEvent,
 	streamer TweetStreamer,
 ) {
-	if streamer.NodeInfo().OwnerId == ev.UserId {
+	ownNodeInfo := streamer.NodeInfo()
+	if ownNodeInfo.OwnerId == ev.UserId {
 		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
@@ -270,6 +271,9 @@ func tweetsRefreshBackground(
 	}
 	if err != nil {
 		log.Errorf("get tweets handler: get user: %v", err)
+		return
+	}
+	if ownNodeInfo.ID.String() == otherUser.NodeId {
 		return
 	}
 
@@ -411,7 +415,9 @@ func StreamGetTweetStatsHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		isMyOwnTweet := ev.UserId == streamer.NodeInfo().OwnerId
+		ownNodeInfo := streamer.NodeInfo()
+
+		isMyOwnTweet := ev.UserId == ownNodeInfo.OwnerId
 		if !isMyOwnTweet { //nolint:nestif
 			u, err := userRepo.Get(ev.UserId)
 			if errors.Is(err, database.ErrUserNotFound) {
@@ -419,6 +425,10 @@ func StreamGetTweetStatsHandler(
 			}
 			if err != nil {
 				return nil, err
+			}
+
+			if ownNodeInfo.ID.String() == u.NodeId {
+				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
 			}
 
 			statsResp, err := streamer.GenericStream(

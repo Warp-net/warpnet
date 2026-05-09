@@ -90,7 +90,8 @@ func StreamFollowHandler(
 			return event.Accepted, nil
 		}
 
-		ownerUserId := authRepo.GetOwner().UserId
+		owner := authRepo.GetOwner()
+		ownerUserId := owner.UserId
 
 		followingUser, err := userRepo.Get(ev.FollowingId)
 		if errors.Is(err, database.ErrUserNotFound) {
@@ -126,21 +127,24 @@ func StreamFollowHandler(
 			return event.Accepted, nil
 		}
 
-		// inform about me following someone now
-		followDataResp, err := streamer.GenericStream(
-			followingUser.NodeId,
-			event.PUBLIC_POST_FOLLOW,
-			event.NewFollowEvent{
-				FollowingId: ev.FollowingId,
-				FollowerId:  ev.FollowerId,
-			},
-		)
-		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return nil, warpnet.ErrUserIsOffline
-		}
-		if err != nil {
-			log.Errorf("follow: stream: %s", err.Error())
-			return nil, err
+		followDataResp := []byte(event.Accepted)
+		if owner.NodeId != followingUser.NodeId {
+			// inform about me following someone now
+			followDataResp, err = streamer.GenericStream(
+				followingUser.NodeId,
+				event.PUBLIC_POST_FOLLOW,
+				event.NewFollowEvent{
+					FollowingId: ev.FollowingId,
+					FollowerId:  ev.FollowerId,
+				},
+			)
+			if errors.Is(err, warpnet.ErrNodeIsOffline) {
+				return nil, warpnet.ErrUserIsOffline
+			}
+			if err != nil {
+				log.Errorf("follow: stream: %s", err.Error())
+				return nil, err
+			}
 		}
 
 		// I follow someone
@@ -222,7 +226,8 @@ func StreamUnfollowHandler(
 			return event.Accepted, nil
 		}
 
-		ownerUserId := authRepo.GetOwner().UserId
+		owner := authRepo.GetOwner()
+		ownerUserId := owner.UserId
 		isMeUnfollowed := ownerUserId == ev.FollowingId
 
 		if isMeUnfollowed {
@@ -241,20 +246,23 @@ func StreamUnfollowHandler(
 			return nil, err
 		}
 
-		unfollowDataResp, err := streamer.GenericStream(
-			followingUser.NodeId,
-			event.PUBLIC_POST_UNFOLLOW,
-			event.NewUnfollowEvent{
-				FollowingId: followingUser.Id,
-				FollowerId:  ownerUserId,
-			},
-		)
-		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return nil, warpnet.ErrUserIsOffline
-		}
-		if err != nil {
-			log.Errorf("unfollow: stream: %s", err.Error())
-			return nil, err
+		unfollowDataResp := []byte(event.Accepted)
+		if owner.NodeId != followingUser.NodeId {
+			unfollowDataResp, err = streamer.GenericStream(
+				followingUser.NodeId,
+				event.PUBLIC_POST_UNFOLLOW,
+				event.NewUnfollowEvent{
+					FollowingId: followingUser.Id,
+					FollowerId:  ownerUserId,
+				},
+			)
+			if errors.Is(err, warpnet.ErrNodeIsOffline) {
+				return nil, warpnet.ErrUserIsOffline
+			}
+			if err != nil {
+				log.Errorf("unfollow: stream: %s", err.Error())
+				return nil, err
+			}
 		}
 
 		err = followRepo.Unfollow(ownerUserId, ev.FollowingId)
@@ -330,6 +338,12 @@ func StreamGetFollowersHandler(
 			return nil, err
 		}
 
+		if owner.NodeId == user.NodeId {
+			return event.FollowersResponse{
+				FollowingId: ev.UserId,
+			}, nil
+		}
+
 		// get someone's followers
 		followersData, err := streamer.GenericStream(user.NodeId, event.PUBLIC_GET_FOLLOWERS, buf)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
@@ -399,6 +413,13 @@ func StreamGetFollowingsHandler(
 		if err != nil {
 			return nil, err
 		}
+
+		if owner.NodeId == user.NodeId {
+			return event.FollowingsResponse{
+				FollowerId: ev.UserId,
+			}, nil
+		}
+
 		// get someone's followings
 		followingsData, err := streamer.GenericStream(user.NodeId, event.PUBLIC_GET_FOLLOWINGS, buf)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {

@@ -90,7 +90,8 @@ func StreamGetUserHandler(
 			return nil, errEmptyUserId
 		}
 
-		ownerId := authRepo.GetOwner().UserId
+		owner := authRepo.GetOwner()
+		ownerId := owner.UserId
 		isMe := ev.UserId == ownerId
 		if isMe {
 			u, err := repo.Get(ownerId)
@@ -123,6 +124,9 @@ func StreamGetUserHandler(
 		}
 		if otherUser.NodeId == "" {
 			return otherUser, fmt.Errorf("get user: node id is not found") //nolint:err113
+		}
+		if otherUser.NodeId == owner.NodeId {
+			return otherUser, nil
 		}
 		go func() {
 			updatedUser := updateOtherUser(ev, otherUser, streamer)
@@ -203,7 +207,8 @@ func refreshUsers(
 	ev event.GetAllUsersEvent,
 	streamer UserStreamer,
 ) {
-	if streamer.NodeInfo().OwnerId == ev.UserId {
+	ownNodeInfo := streamer.NodeInfo()
+	if ownNodeInfo.OwnerId == ev.UserId {
 		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
@@ -212,6 +217,9 @@ func refreshUsers(
 	}
 	if err != nil {
 		log.Errorf("get users handler: get user %v", err)
+		return
+	}
+	if ownNodeInfo.ID.String() == otherUser.NodeId {
 		return
 	}
 
@@ -301,7 +309,7 @@ func StreamGetWhoToFollowHandler(
 
 		whotofollow := make([]domain.User, 0, len(users))
 		for _, user := range users {
-			if user.Id == owner.UserId {
+			if user.Id == owner.UserId || user.NodeId == owner.NodeId {
 				continue
 			}
 			// if profile from Warpnet - don't show other network recommendations
