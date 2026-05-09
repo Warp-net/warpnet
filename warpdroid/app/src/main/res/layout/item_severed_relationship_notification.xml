@@ -28,7 +28,7 @@
         android:hyphenationFrequency="full"
         android:lineSpacingMultiplier="1.1"
         android:textColor="?android:textColorSecondary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/severed_relationship_icon"
         app:layout_constraintTop_toTopOf="parent"

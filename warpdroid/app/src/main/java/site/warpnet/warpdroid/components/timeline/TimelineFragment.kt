@@ -95,7 +95,7 @@ import site.warpnet.warpdroid.interfaces.RefreshableFragment
 import site.warpnet.warpdroid.interfaces.ReselectableFragment
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.ErrorSnackbars
-import site.warpnet.warpdroid.ui.FilteredStatus
+import site.warpnet.warpdroid.ui.FilteredTweet
 import site.warpnet.warpdroid.ui.LoadMorePlaceholder
 import site.warpnet.warpdroid.ui.MessageViewMode
 import site.warpnet.warpdroid.ui.WarpdroidMessageView
@@ -104,9 +104,9 @@ import site.warpnet.warpdroid.ui.WarpdroidTheme
 import site.warpnet.warpdroid.ui.preferences.LocalAccount
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 import site.warpnet.warpdroid.ui.preferences.textStyle
-import site.warpnet.warpdroid.ui.tweetcomponents.Tweet
+import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.ui.tweetcomponents.TweetPlaceholder
-import site.warpnet.warpdroid.ui.tweetcomponents.TimelineStatusInfo
+import site.warpnet.warpdroid.ui.tweetcomponents.TimelineTweetInfo
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.addIconAnnotations
 import site.warpnet.warpdroid.util.iconInlineContent
@@ -375,7 +375,7 @@ class TimelineFragment :
 
                                 is TweetViewData.Concrete -> {
                                     if (viewData.filterActive && viewData.filter?.action == Filter.Action.WARN) {
-                                        FilteredStatus(
+                                        FilteredTweet(
                                             filterTitle = viewData.filter.title,
                                             onReveal = {
                                                 viewModel.changeFilter(false, viewData)
@@ -383,11 +383,11 @@ class TimelineFragment :
                                             modifier = Modifier.widthIn(max = 640.dp)
                                         )
                                     } else {
-                                        Tweet(
+                                        TweetCard(
                                             statusViewData = viewData,
                                             listener = this@TimelineFragment,
                                             statusInfo = {
-                                                TimelineStatusInfo(
+                                                TimelineTweetInfo(
                                                     statusViewData = viewData,
                                                     listener = this@TimelineFragment
                                                 )

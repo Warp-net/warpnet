@@ -17,6 +17,6 @@
         android:paddingVertical="24dp"
         android:text="@string/performing_lookup_title"
         android:textColor="?android:textColorPrimary"
-        android:textSize="?attr/status_text_medium" />
+        android:textSize="?attr/tweet_text_medium" />
 
 </LinearLayout>

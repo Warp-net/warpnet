@@ -20,7 +20,7 @@
         android:layout_height="wrap_content"
         android:lineSpacingMultiplier="1.1"
         android:textColor="?android:textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="@id/barrierEnd"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
@@ -41,7 +41,7 @@
         android:paddingTop="4dp"
         android:paddingRight="16dp"
         android:paddingBottom="4dp"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
         app:layout_constraintTop_toBottomOf="@id/tweetContentWarningDescription"
@@ -55,7 +55,7 @@
         android:layout_marginEnd="8dp"
         android:layout_weight="1"
         android:textColor="?android:textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintEnd_toStartOf="@id/barrierEnd"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
         app:layout_constraintTop_toBottomOf="@id/tweetContentWarningButton" />
@@ -73,7 +73,7 @@
         android:paddingTop="4dp"
         android:paddingRight="16dp"
         android:paddingBottom="4dp"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
         app:layout_constraintTop_toBottomOf="@id/tweetContent"
@@ -81,10 +81,10 @@
         tools:visibility="visible" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/status_media_preview_container"
+        android:id="@+id/tweet_media_preview_container"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/status_media_preview_margin_top"
+        android:layout_marginTop="@dimen/tweet_media_preview_margin_top"
         android:layout_marginEnd="8dp"
         android:background="@drawable/media_preview_outline"
         app:layout_constraintEnd_toStartOf="@id/barrierEnd"
@@ -93,115 +93,115 @@
         tools:visibility="visible">
 
         <site.warpnet.warpdroid.view.MediaPreviewImageView
-            android:id="@+id/status_media_preview_0"
+            android:id="@+id/tweet_media_preview_0"
             android:layout_width="0dp"
-            android:layout_height="@dimen/status_media_preview_height"
+            android:layout_height="@dimen/tweet_media_preview_height"
             android:scaleType="centerCrop"
-            app:layout_constraintEnd_toStartOf="@+id/status_media_preview_1"
+            app:layout_constraintEnd_toStartOf="@+id/tweet_media_preview_1"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             tools:ignore="ContentDescription" />
 
         <site.warpnet.warpdroid.view.MediaPreviewImageView
-            android:id="@+id/status_media_preview_1"
+            android:id="@+id/tweet_media_preview_1"
             android:layout_width="0dp"
-            android:layout_height="@dimen/status_media_preview_height"
+            android:layout_height="@dimen/tweet_media_preview_height"
             android:layout_marginStart="4dp"
             android:scaleType="centerCrop"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/status_media_preview_0"
+            app:layout_constraintStart_toEndOf="@+id/tweet_media_preview_0"
             app:layout_constraintTop_toTopOf="parent"
             tools:ignore="ContentDescription" />
 
 
         <site.warpnet.warpdroid.view.MediaPreviewImageView
-            android:id="@+id/status_media_preview_2"
+            android:id="@+id/tweet_media_preview_2"
             android:layout_width="0dp"
-            android:layout_height="@dimen/status_media_preview_height"
+            android:layout_height="@dimen/tweet_media_preview_height"
             android:layout_marginTop="4dp"
             android:scaleType="centerCrop"
-            app:layout_constraintEnd_toStartOf="@+id/status_media_preview_3"
+            app:layout_constraintEnd_toStartOf="@+id/tweet_media_preview_3"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/status_media_preview_0"
+            app:layout_constraintTop_toBottomOf="@+id/tweet_media_preview_0"
             tools:ignore="ContentDescription" />
 
         <site.warpnet.warpdroid.view.MediaPreviewImageView
-            android:id="@+id/status_media_preview_3"
+            android:id="@+id/tweet_media_preview_3"
             android:layout_width="0dp"
-            android:layout_height="@dimen/status_media_preview_height"
+            android:layout_height="@dimen/tweet_media_preview_height"
             android:layout_marginStart="4dp"
             android:layout_marginTop="4dp"
             android:scaleType="centerCrop"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/status_media_preview_2"
-            app:layout_constraintTop_toBottomOf="@+id/status_media_preview_1"
+            app:layout_constraintStart_toEndOf="@+id/tweet_media_preview_2"
+            app:layout_constraintTop_toBottomOf="@+id/tweet_media_preview_1"
             tools:ignore="ContentDescription" />
 
         <ImageView
-            android:id="@+id/status_media_overlay_0"
+            android:id="@+id/tweet_media_overlay_0"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:scaleType="center"
-            app:layout_constraintBottom_toBottomOf="@+id/status_media_preview_0"
-            app:layout_constraintEnd_toEndOf="@+id/status_media_preview_0"
-            app:layout_constraintStart_toStartOf="@+id/status_media_preview_0"
-            app:layout_constraintTop_toTopOf="@+id/status_media_preview_0"
+            app:layout_constraintBottom_toBottomOf="@+id/tweet_media_preview_0"
+            app:layout_constraintEnd_toEndOf="@+id/tweet_media_preview_0"
+            app:layout_constraintStart_toStartOf="@+id/tweet_media_preview_0"
+            app:layout_constraintTop_toTopOf="@+id/tweet_media_preview_0"
             app:srcCompat="@drawable/play_indicator"
             tools:ignore="ContentDescription" />
 
         <ImageView
-            android:id="@+id/status_media_overlay_1"
+            android:id="@+id/tweet_media_overlay_1"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:scaleType="center"
-            app:layout_constraintBottom_toBottomOf="@+id/status_media_preview_1"
-            app:layout_constraintEnd_toEndOf="@+id/status_media_preview_1"
-            app:layout_constraintStart_toStartOf="@+id/status_media_preview_1"
-            app:layout_constraintTop_toTopOf="@+id/status_media_preview_1"
+            app:layout_constraintBottom_toBottomOf="@+id/tweet_media_preview_1"
+            app:layout_constraintEnd_toEndOf="@+id/tweet_media_preview_1"
+            app:layout_constraintStart_toStartOf="@+id/tweet_media_preview_1"
+            app:layout_constraintTop_toTopOf="@+id/tweet_media_preview_1"
             app:srcCompat="@drawable/play_indicator"
             tools:ignore="ContentDescription" />
 
         <ImageView
-            android:id="@+id/status_media_overlay_2"
+            android:id="@+id/tweet_media_overlay_2"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:scaleType="center"
-            app:layout_constraintBottom_toBottomOf="@+id/status_media_preview_2"
-            app:layout_constraintEnd_toEndOf="@+id/status_media_preview_2"
-            app:layout_constraintStart_toStartOf="@+id/status_media_preview_2"
-            app:layout_constraintTop_toTopOf="@+id/status_media_preview_2"
+            app:layout_constraintBottom_toBottomOf="@+id/tweet_media_preview_2"
+            app:layout_constraintEnd_toEndOf="@+id/tweet_media_preview_2"
+            app:layout_constraintStart_toStartOf="@+id/tweet_media_preview_2"
+            app:layout_constraintTop_toTopOf="@+id/tweet_media_preview_2"
             app:srcCompat="@drawable/play_indicator"
             tools:ignore="ContentDescription" />
 
         <ImageView
-            android:id="@+id/status_media_overlay_3"
+            android:id="@+id/tweet_media_overlay_3"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:scaleType="center"
-            app:layout_constraintBottom_toBottomOf="@+id/status_media_preview_3"
-            app:layout_constraintEnd_toEndOf="@+id/status_media_preview_3"
-            app:layout_constraintStart_toStartOf="@+id/status_media_preview_3"
-            app:layout_constraintTop_toTopOf="@+id/status_media_preview_3"
+            app:layout_constraintBottom_toBottomOf="@+id/tweet_media_preview_3"
+            app:layout_constraintEnd_toEndOf="@+id/tweet_media_preview_3"
+            app:layout_constraintStart_toStartOf="@+id/tweet_media_preview_3"
+            app:layout_constraintTop_toTopOf="@+id/tweet_media_preview_3"
             app:srcCompat="@drawable/play_indicator"
             tools:ignore="ContentDescription" />
 
         <ImageView
-            android:id="@+id/status_sensitive_media_button"
+            android:id="@+id/tweet_sensitive_media_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_margin="3dp"
             android:background="@drawable/media_warning_bg"
             android:contentDescription="@null"
-            android:padding="@dimen/status_sensitive_media_button_padding"
+            android:padding="@dimen/tweet_sensitive_media_button_padding"
             android:visibility="gone"
-            app:layout_constraintLeft_toLeftOf="@+id/status_media_preview_container"
-            app:layout_constraintTop_toTopOf="@+id/status_media_preview_container"
+            app:layout_constraintLeft_toLeftOf="@+id/tweet_media_preview_container"
+            app:layout_constraintTop_toTopOf="@+id/tweet_media_preview_container"
             app:srcCompat="@drawable/ic_visibility_24dp"
             app:tint="?android:attr/textColorSecondary"
             tools:visibility="visible" />
 
         <TextView
-            android:id="@+id/status_sensitive_media_warning"
+            android:id="@+id/tweet_sensitive_media_warning"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/media_warning_bg"
@@ -214,7 +214,7 @@
             android:paddingBottom="8dp"
             android:textAlignment="center"
             android:textColor="?android:attr/textColorSecondary"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
@@ -222,13 +222,13 @@
             app:layout_constraintTop_toTopOf="parent" />
 
         <TextView
-            android:id="@+id/status_media_label"
+            android:id="@+id/tweet_media_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackground"
             android:drawablePadding="4dp"
             android:gravity="center_vertical"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             android:visibility="gone"
             app:drawableTint="?android:attr/textColorTertiary"
             app:layout_constraintStart_toStartOf="parent"
@@ -237,7 +237,7 @@
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <TextView
-        android:id="@+id/status_poll_option_result_0"
+        android:id="@+id/tweet_poll_option_result_0"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
@@ -250,14 +250,14 @@
         android:paddingEnd="6dp"
         android:paddingBottom="2dp"
         android:textColor="?android:attr/textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintEnd_toStartOf="@id/barrierEnd"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
-        app:layout_constraintTop_toBottomOf="@id/status_media_preview_container"
+        app:layout_constraintTop_toBottomOf="@id/tweet_media_preview_container"
         tools:text="40%" />
 
     <TextView
-        android:id="@+id/status_poll_option_result_1"
+        android:id="@+id/tweet_poll_option_result_1"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
@@ -270,14 +270,14 @@
         android:paddingEnd="6dp"
         android:paddingBottom="2dp"
         android:textColor="?android:attr/textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintEnd_toStartOf="@id/barrierEnd"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
-        app:layout_constraintTop_toBottomOf="@id/status_poll_option_result_0"
+        app:layout_constraintTop_toBottomOf="@id/tweet_poll_option_result_0"
         tools:text="10%" />
 
     <TextView
-        android:id="@+id/status_poll_option_result_2"
+        android:id="@+id/tweet_poll_option_result_2"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
@@ -290,14 +290,14 @@
         android:paddingEnd="6dp"
         android:paddingBottom="2dp"
         android:textColor="?android:attr/textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintEnd_toStartOf="@id/barrierEnd"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
-        app:layout_constraintTop_toBottomOf="@id/status_poll_option_result_1"
+        app:layout_constraintTop_toBottomOf="@id/tweet_poll_option_result_1"
         tools:text="20%" />
 
     <TextView
-        android:id="@+id/status_poll_option_result_3"
+        android:id="@+id/tweet_poll_option_result_3"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
@@ -310,21 +310,21 @@
         android:paddingEnd="6dp"
         android:paddingBottom="2dp"
         android:textColor="?android:attr/textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintEnd_toStartOf="@id/barrierEnd"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
-        app:layout_constraintTop_toBottomOf="@id/status_poll_option_result_2"
+        app:layout_constraintTop_toBottomOf="@id/tweet_poll_option_result_2"
         tools:text="30%" />
 
     <TextView
-        android:id="@+id/status_poll_description"
+        android:id="@+id/tweet_poll_description"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:layout_marginEnd="8dp"
         app:layout_constraintEnd_toEndOf="@id/barrierEnd"
         app:layout_constraintStart_toStartOf="@id/guideBegin"
-        app:layout_constraintTop_toBottomOf="@id/status_poll_option_result_3"
+        app:layout_constraintTop_toBottomOf="@id/tweet_poll_option_result_3"
         tools:text="7 votes • 7 hours remaining" />
 
 
@@ -342,7 +342,7 @@
         android:layout_marginEnd="16dp"
         android:importantForAccessibility="no"
         android:textColor="?android:textColorTertiary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="@id/barrierEnd"
         app:layout_constraintTop_toTopOf="parent"

@@ -19,7 +19,7 @@ import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import site.warpnet.warpdroid.viewdata.TweetViewData
 
-class SearchStatusPagingSource(
+class SearchTweetPagingSource(
     private val items: List<TweetViewData.Concrete>,
     private val nextKey: Int?
 ) : PagingSource<Int, TweetViewData.Concrete>() {

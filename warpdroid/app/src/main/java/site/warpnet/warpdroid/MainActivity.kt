@@ -79,7 +79,7 @@ import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.Companion.canHandleMimeType
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.preference.PreferencesActivity
-import site.warpnet.warpdroid.components.scheduled.ScheduledStatusActivity
+import site.warpnet.warpdroid.components.scheduled.ScheduledTweetActivity
 import site.warpnet.warpdroid.components.search.SearchActivity
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.components.trending.TrendingActivity
@@ -678,7 +678,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     nameRes = R.string.action_access_scheduled_posts
                     iconRes = R.drawable.ic_schedule_24dp
                     onClick = {
-                        startActivityWithSlideInAnimation(ScheduledStatusActivity.newIntent(context))
+                        startActivityWithSlideInAnimation(ScheduledTweetActivity.newIntent(context))
                     }
                 },
                 primaryDrawerItem {

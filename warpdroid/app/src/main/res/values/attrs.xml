@@ -40,8 +40,8 @@
     <attr name="toolbarIconBackgroundColor" format="reference|color" />
     <attr name="placeholderColor" format="reference|color" />
 
-    <attr name="status_text_small" format="dimension" />
-    <attr name="status_text_medium" format="dimension" />
-    <attr name="status_text_large" format="dimension" />
+    <attr name="tweet_text_small" format="dimension" />
+    <attr name="tweet_text_medium" format="dimension" />
+    <attr name="tweet_text_large" format="dimension" />
 
 </resources>

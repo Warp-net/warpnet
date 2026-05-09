@@ -84,12 +84,12 @@ import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.settings.PrefKeys
-import site.warpnet.warpdroid.ui.FilteredStatus
+import site.warpnet.warpdroid.ui.FilteredTweet
 import site.warpnet.warpdroid.ui.WarpdroidMessageView
 import site.warpnet.warpdroid.ui.WarpdroidPullToRefreshBox
 import site.warpnet.warpdroid.ui.WarpdroidTheme
-import site.warpnet.warpdroid.ui.tweetcomponents.DetailedStatus
-import site.warpnet.warpdroid.ui.tweetcomponents.Tweet
+import site.warpnet.warpdroid.ui.tweetcomponents.DetailedTweet
+import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.openLink
 import site.warpnet.warpdroid.util.reply
@@ -276,7 +276,7 @@ class ViewThreadFragment :
                     key = { _, viewData -> viewData.id },
                 ) { position, viewData ->
                     if (viewData.isDetailed) {
-                        DetailedStatus(
+                        DetailedTweet(
                             viewData,
                             listener = this@ViewThreadFragment,
                             translationEnabled = instanceInfo.translationEnabled,
@@ -304,7 +304,7 @@ class ViewThreadFragment :
                                 }
                         )
                     } else if (viewData.filterActive && viewData.filter?.action == Filter.Action.WARN) {
-                        FilteredStatus(
+                        FilteredTweet(
                             filterTitle = viewData.filter.title,
                             onReveal = {
                                 viewModel.changeFilter(false, viewData)
@@ -312,7 +312,7 @@ class ViewThreadFragment :
                             modifier = Modifier.widthIn(max = 640.dp)
                         )
                     } else {
-                        Tweet(
+                        TweetCard(
                             viewData,
                             listener = this@ViewThreadFragment,
                             translationEnabled = instanceInfo.translationEnabled,

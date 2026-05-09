@@ -502,7 +502,7 @@
     <string name="pref_title_animate_custom_emojis">Animera skräddarsydda emojis</string>
     <string name="post_media_audio">Ljud</string>
     <string name="post_media_attachments">Bilagor</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_dismiss">Avvisa</string>
     <string name="action_details">Detaljer</string>
     <string name="error_loading_account_details">Kunde inte ladda kontodetaljer</string>
@@ -518,7 +518,7 @@
     <string name="failed_to_remove_from_list">Kunde inte ta bort kontot från listan</string>
     <string name="no_lists">Du har inga listor.</string>
     <string name="action_unfollow_hashtag_format">Sluta följa #%1$s?</string>
-    <string name="status_created_at_now">nu</string>
+    <string name="tweet_created_at_now">nu</string>
     <string name="notification_report_format">Ny rapport för %1$s</string>
     <string name="notification_header_report_format">%1$s rapporterade %2$s</string>
     <string name="notification_summary_report_format">%1$s · %2$d inlägg bifogade</string>
@@ -542,13 +542,13 @@
     <string name="a11y_label_loading_thread">Laddar tråd</string>
     <string name="mute_notifications_switch">Tysta notiser</string>
     <string name="title_edits">Redigeringar</string>
-    <string name="status_edit_info">%1$s redigerade</string>
+    <string name="tweet_edit_info">%1$s redigerade</string>
     <string name="action_share_account_link">Dela länk med konto</string>
     <string name="action_share_account_username">Dela användarnamn för konto</string>
     <string name="send_account_link_to">Dela konto-URL med…</string>
     <string name="send_account_username_to">Dela kontots användarnamn med…</string>
     <string name="account_username_copied">Kopierade användarnamn</string>
-    <string name="status_created_info">%1$s skapade</string>
+    <string name="tweet_created_info">%1$s skapade</string>
     <string name="action_discard">Förkasta ändringar</string>
     <string name="action_continue_edit">Fortsätt redigera</string>
     <string name="compose_unsaved_changes">Du har ändringar som inte sparats.</string>
@@ -581,8 +581,8 @@
     <string name="ui_success_accepted_follow_request">Följ begäran accepterad</string>
     <string name="ui_success_rejected_follow_request">Följ begäran blockerad</string>
     <string name="select_list_manage">Hantera listor</string>
-    <string name="status_filtered_show_anyway">Visa allafall</string>
-    <string name="status_filter_placeholder_label_format">Filtrerad: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Visa allafall</string>
+    <string name="tweet_filter_placeholder_label_format">Filtrerad: %1$s</string>
     <string name="pref_title_account_filter_keywords">Profiler</string>
     <string name="label_filter_action">Filteråtgärd</string>
     <string name="label_filter_keywords">Nyckelord eller fraser att filtrera</string>

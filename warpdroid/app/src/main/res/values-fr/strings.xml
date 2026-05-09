@@ -497,7 +497,7 @@
     <string name="account_date_joined">Ici depuis %1$s</string>
     <string name="action_details">Détails</string>
     <string name="saving_draft">Sauvegarde du brouillon …</string>
-    <string name="status_count_one_plus">&gt;1</string>
+    <string name="tweet_count_one_plus">&gt;1</string>
     <string name="error_could_not_load_login_page">La page de connexion ne peut être chargée.</string>
     <string name="action_edit_image">Retoucher l’image</string>
     <string name="action_dismiss">Fermer</string>
@@ -553,11 +553,11 @@
     <string name="action_share_account_username">Partager le nom du compte</string>
     <string name="title_followed_hashtags">Hashtags suivis</string>
     <string name="pref_title_account_filter_keywords">Profils</string>
-    <string name="status_filtered_show_anyway">Montrer quand même</string>
-    <string name="status_filter_placeholder_label_format">Caché : %1$s</string>
+    <string name="tweet_filtered_show_anyway">Montrer quand même</string>
+    <string name="tweet_filter_placeholder_label_format">Caché : %1$s</string>
     <string name="title_public_trending_hashtags">Hashtags tendance</string>
     <string name="send_account_username_to">Partager le nom du compte avec…</string>
-    <string name="status_created_at_now">maintenant</string>
+    <string name="tweet_created_at_now">maintenant</string>
     <string name="error_loading_account_details">Les détails du compte n\'ont pas pu être chargés</string>
     <string name="instance_rule_info">En vous connectant vous acceptez de vous tenir aux règles de %1$s.</string>
     <string name="pref_title_reading_order">Ordre de lecture</string>
@@ -565,8 +565,8 @@
     <string name="pref_reading_order_newest_first">Les plus récents en premier</string>
     <string name="action_unfollow_hashtag_format">Arrêter de suivre #%1$s ?</string>
     <string name="failed_to_pin">Échec de l\'épinglage</string>
-    <string name="status_edit_info">Modification : %1$s</string>
-    <string name="status_created_info">Création : %1$s</string>
+    <string name="tweet_edit_info">Modification : %1$s</string>
+    <string name="tweet_created_info">Création : %1$s</string>
     <string name="compose_save_draft_loses_media">Enregistrer comme brouillon ? (Les pièces jointes seront à nouveau téléchargées lorsque le brouillon sera réouvert.)</string>
     <string name="no_lists">Vous n\'avez aucune liste.</string>
     <string name="language_display_name_format">%1$s (%2$s)</string>

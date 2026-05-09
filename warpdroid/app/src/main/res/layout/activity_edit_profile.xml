@@ -119,7 +119,7 @@
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
                     android:text="@string/lock_account_label"
-                    android:textSize="?attr/status_text_medium" />
+                    android:textSize="?attr/tweet_text_medium" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -130,7 +130,7 @@
                     android:paddingStart="40dp"
                     android:paddingEnd="0dp"
                     android:text="@string/lock_account_label_description"
-                    android:textSize="?attr/status_text_small" />
+                    android:textSize="?attr/tweet_text_small" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -139,7 +139,7 @@
                     android:layout_marginEnd="16dp"
                     android:layout_marginBottom="8dp"
                     android:text="@string/profile_metadata_label"
-                    android:textSize="?attr/status_text_small" />
+                    android:textSize="?attr/tweet_text_small" />
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/fieldList"

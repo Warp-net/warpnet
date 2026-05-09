@@ -68,9 +68,9 @@ class ViewEditsAdapter(
         val typedValue = TypedValue()
         val context = binding.root.context
         val displayMetrics = context.resources.displayMetrics
-        context.theme.resolveAttribute(R.attr.status_text_large, typedValue, true)
+        context.theme.resolveAttribute(R.attr.tweet_text_large, typedValue, true)
         largeTextSizePx = typedValue.getDimension(displayMetrics)
-        context.theme.resolveAttribute(R.attr.status_text_medium, typedValue, true)
+        context.theme.resolveAttribute(R.attr.tweet_text_medium, typedValue, true)
         mediumTextSizePx = typedValue.getDimension(displayMetrics)
 
         return BindingHolder(binding)

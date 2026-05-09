@@ -67,7 +67,7 @@
                     android:paddingBottom="@dimen/media_description_sheet_bottom_padding"
                     android:textColor="?android:textColorPrimary"
                     android:textIsSelectable="true"
-                    android:textSize="?attr/status_text_medium"
+                    android:textSize="?attr/tweet_text_medium"
                     tools:text="Some media description which might get quite long so that it won't easily fit in one line" />
             </androidx.core.widget.NestedScrollView>
         </LinearLayout>

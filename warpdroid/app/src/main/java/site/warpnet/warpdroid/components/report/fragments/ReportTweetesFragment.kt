@@ -41,7 +41,7 @@ import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.report.ReportViewModel
 import site.warpnet.warpdroid.components.report.adapter.AdapterHandler
 import site.warpnet.warpdroid.components.report.adapter.StatusesAdapter
-import site.warpnet.warpdroid.databinding.FragmentReportStatusesBinding
+import site.warpnet.warpdroid.databinding.FragmentReportTweetsBinding
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Tweet
@@ -72,7 +72,7 @@ class ReportStatusesFragment :
 
     private val viewModel: ReportViewModel by activityViewModels()
 
-    private val binding by viewBinding(FragmentReportStatusesBinding::bind)
+    private val binding by viewBinding(FragmentReportTweetsBinding::bind)
 
     private var adapter: StatusesAdapter? = null
 

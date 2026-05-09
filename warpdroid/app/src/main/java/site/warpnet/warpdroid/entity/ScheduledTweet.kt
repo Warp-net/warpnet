@@ -47,6 +47,6 @@ data class TweetParams(
 // minimal class to avoid json parsing errors with servers that don't support scheduling
 // https://github.com/tuskyapp/Tusky/issues/4703
 @JsonClass(generateAdapter = true)
-data class ScheduledStatusReply(
+data class ScheduledTweetReply(
     val id: String,
 )

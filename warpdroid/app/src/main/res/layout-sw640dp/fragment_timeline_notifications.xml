@@ -47,7 +47,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/notifications_clear"
-                    android:textSize="?attr/status_text_medium" />
+                    android:textSize="?attr/tweet_text_medium" />
 
                 <Button
                     android:id="@+id/buttonFilter"
@@ -56,7 +56,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/notifications_apply_filter"
-                    android:textSize="?attr/status_text_medium" />
+                    android:textSize="?attr/tweet_text_medium" />
 
             </LinearLayout>
 

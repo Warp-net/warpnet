@@ -472,7 +472,7 @@
     <string name="action_dismiss">Bỏ qua</string>
     <string name="action_details">Chi tiết</string>
     <string name="account_date_joined">Tham gia %1$s</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_edit_image">Sửa ảnh</string>
     <string name="error_image_edit_failed">Hình ảnh này không thể sửa.</string>
     <string name="error_loading_account_details">Không thể tải thông tin tài khoản</string>
@@ -500,7 +500,7 @@
     <string name="failed_to_add_to_list">Không thể thêm tài khoản này vào danh sách</string>
     <string name="failed_to_remove_from_list">Không thể xóa tài khoản này khỏi danh sách</string>
     <string name="action_unfollow_hashtag_format">Bỏ theo dõi #%1$s?</string>
-    <string name="status_created_at_now">vừa xong</string>
+    <string name="tweet_created_at_now">vừa xong</string>
     <string name="notification_report_format">Báo cáo mới trên %1$s</string>
     <string name="notification_header_report_format">%1$s báo cáo %2$s</string>
     <string name="notification_summary_report_format">%1$s trước · %2$d tút</string>
@@ -526,8 +526,8 @@
     <string name="action_continue_edit">Tiếp tục sửa</string>
     <string name="compose_unsaved_changes">Thay đổi chưa được lưu.</string>
     <string name="mute_notifications_switch">Phớt lờ thông báo</string>
-    <string name="status_edit_info">Sửa %1$s</string>
-    <string name="status_created_info">Đăng %1$s</string>
+    <string name="tweet_edit_info">Sửa %1$s</string>
+    <string name="tweet_created_info">Đăng %1$s</string>
     <string name="title_edits">Lịch sử sửa tút</string>
     <string name="a11y_label_loading_thread">Đang tải thảo luận</string>
     <string name="action_share_account_link">Liên kết trang hồ sơ</string>
@@ -568,8 +568,8 @@
     <string name="ui_error_reject_follow_request">Từ chối theo dõi không thành công: %1$s</string>
     <string name="ui_success_accepted_follow_request">Đã chấp nhận yêu cầu theo dõi</string>
     <string name="ui_success_rejected_follow_request">Đã từ chối yêu cầu theo dõi</string>
-    <string name="status_filtered_show_anyway">Vẫn hiện</string>
-    <string name="status_filter_placeholder_label_format">Đã lọc: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Vẫn hiện</string>
+    <string name="tweet_filter_placeholder_label_format">Đã lọc: %1$s</string>
     <string name="pref_title_account_filter_keywords">Trang hồ sơ</string>
     <string name="hint_filter_title">Bộ lọc của tôi</string>
     <string name="label_filter_title">Tên bộ lọc</string>

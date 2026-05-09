@@ -343,12 +343,12 @@
     <string name="action_post_failed">Lataaminen ylös epäonnistui</string>
     <string name="action_post_failed_show_drafts">Näytä luonnokset</string>
     <string name="action_dismiss">Peru</string>
-    <string name="status_created_at_now">nyt</string>
+    <string name="tweet_created_at_now">nyt</string>
     <string name="notification_unknown_name">Tuntematon</string>
     <string name="action_discard">Hylkää muutokset</string>
     <string name="send_post_content_to">Jaa julkaisu…</string>
     <string name="dialog_message_uploading_media">Ladataan…</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="pref_title_http_proxy_enable">Käytä HTTP-välityspalvelinta</string>
     <string name="replying_to">Vastaus käyttäjälle @%1$s</string>
     <string name="abbreviated_seconds_ago">%1$d s</string>
@@ -356,7 +356,7 @@
     <string name="error_status_source_load">Statuksen lataaminen palvelimelta epäonnistui.</string>
     <string name="confirmation_unblocked">Käyttäjän esto poistettu</string>
     <string name="confirmation_unmuted">Käyttäjän mykistys poistettu</string>
-    <string name="status_filtered_show_anyway">Näytä kuitenkin</string>
+    <string name="tweet_filtered_show_anyway">Näytä kuitenkin</string>
     <string name="error_following_hashtag_format">Aihetunnisteen #%1$s seuraaminen epäonnistui</string>
     <string name="error_unfollowing_hashtag_format">Virhe lopettaessa aihetunnisteen #%1$s seuraaminen</string>
     <string name="pref_default_reply_privacy_explanation">Vastauksen oletusyksityisyysasetus riippuu julkaisusta, johon olet vastaamassa.</string>
@@ -380,7 +380,7 @@
     <string name="about_project_site">Projektin sivusto: https://warpnet.site</string>
     <string name="post_share_content">Jaa julkaisun sisältö</string>
     <string name="post_media_image">Kuva</string>
-    <string name="status_filter_placeholder_label_format">Suodatettu: %1$s</string>
+    <string name="tweet_filter_placeholder_label_format">Suodatettu: %1$s</string>
     <string name="abbreviated_in_seconds">%1$d s päästä</string>
     <string name="abbreviated_years_ago">%1$d v</string>
     <string name="abbreviated_days_ago">%1$d pv</string>

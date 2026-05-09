@@ -44,7 +44,7 @@ import site.warpnet.warpdroid.viewdata.TweetViewData
 import kotlin.collections.orEmpty
 
 @Composable
-fun TimelineStatusInfo(
+fun TimelineTweetInfo(
     statusViewData: TweetViewData.Concrete,
     listener: TweetActionListener,
 ) {

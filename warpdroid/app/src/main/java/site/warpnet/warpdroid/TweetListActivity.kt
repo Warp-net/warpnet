@@ -38,7 +38,7 @@ import site.warpnet.warpdroid.components.filters.FilterExpiration
 import site.warpnet.warpdroid.components.filters.FiltersActivity
 import site.warpnet.warpdroid.components.timeline.TimelineFragment
 import site.warpnet.warpdroid.components.timeline.viewmodel.TimelineViewModel.Kind
-import site.warpnet.warpdroid.databinding.ActivityStatuslistBinding
+import site.warpnet.warpdroid.databinding.ActivityTweetlistBinding
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.viewBinding
@@ -52,8 +52,8 @@ class TweetListActivity : BottomSheetActivity() {
     @Inject
     lateinit var eventHub: EventHub
 
-    private val binding: ActivityStatuslistBinding by viewBinding(
-        ActivityStatuslistBinding::inflate
+    private val binding: ActivityTweetlistBinding by viewBinding(
+        ActivityTweetlistBinding::inflate
     )
     private lateinit var kind: Kind
     private var hashtag: String? = null

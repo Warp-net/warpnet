@@ -36,7 +36,7 @@ import site.warpnet.warpdroid.databinding.ItemModerationWarningNotificationBindi
 import site.warpnet.warpdroid.databinding.ItemPlaceholderBinding
 import site.warpnet.warpdroid.databinding.ItemReportNotificationBinding
 import site.warpnet.warpdroid.databinding.ItemSeveredRelationshipNotificationBinding
-import site.warpnet.warpdroid.databinding.ItemStatusFilteredBinding
+import site.warpnet.warpdroid.databinding.ItemTweetFilteredBinding
 import site.warpnet.warpdroid.databinding.ItemUnknownNotificationBinding
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Notification
@@ -45,7 +45,7 @@ import site.warpnet.warpdroid.interfaces.LoadMoreActionListener
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.WarpdroidTheme
 import site.warpnet.warpdroid.ui.tweetcomponents.NotificationInfo
-import site.warpnet.warpdroid.ui.tweetcomponents.Status
+import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.ui.tweetcomponents.TweetNotification
 import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.viewdata.NotificationViewData
@@ -129,7 +129,7 @@ class NotificationsPagingAdapter(
                 }
             )
             VIEW_TYPE_STATUS_FILTERED -> FilteredNotificationViewHolder(
-                ItemStatusFilteredBinding.inflate(inflater, parent, false),
+                ItemTweetFilteredBinding.inflate(inflater, parent, false),
                 statusListener
             )
             VIEW_TYPE_STATUS_NOTIFICATION -> ComposeViewHolder(

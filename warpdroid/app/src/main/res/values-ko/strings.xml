@@ -532,10 +532,10 @@
     <string name="pref_title_account_filter_keywords">프로필</string>
     <string name="post_media_audio">오디오</string>
     <string name="post_media_attachments">첨부파일</string>
-    <string name="status_count_one_plus">1+</string>
-    <string name="status_created_at_now">지금</string>
-    <string name="status_filtered_show_anyway">그래도 보기</string>
-    <string name="status_filter_placeholder_label_format">필터됨: %1$s</string>
+    <string name="tweet_count_one_plus">1+</string>
+    <string name="tweet_created_at_now">지금</string>
+    <string name="tweet_filtered_show_anyway">그래도 보기</string>
+    <string name="tweet_filter_placeholder_label_format">필터됨: %1$s</string>
     <string name="filter_expiration_format">%1$s (%2$s)</string>
     <string name="message_filters_empty">필터가 없습니다.</string>
     <string name="action_add_or_remove_from_list">리스트에 추가 또는 삭제</string>
@@ -616,8 +616,8 @@
     <string name="action_unfollow_hashtag_format">#%1$s(을)를 언팔로우할까요?</string>
     <string name="action_refresh">새로고침</string>
     <string name="mute_notifications_switch">알림 뮤트</string>
-    <string name="status_edit_info">수정함: %1$s</string>
-    <string name="status_created_info">생성함: %1$s</string>
+    <string name="tweet_edit_info">수정함: %1$s</string>
+    <string name="tweet_created_info">생성함: %1$s</string>
     <string name="a11y_label_loading_thread">타래 로딩 중</string>
     <string name="accessibility_talking_about_tag">해시태그 %2$s에 대해 %1$d명이 얘기하고 있습니다</string>
     <string name="total_usage">총 사용량</string>

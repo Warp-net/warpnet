@@ -12,10 +12,10 @@ import site.warpnet.warpdroid.util.HttpHeaderLink
 import retrofit2.HttpException
 
 @OptIn(ExperimentalPagingApi::class)
-class ScheduledStatusRemoteMediator(
+class ScheduledTweetRemoteMediator(
     private val api: WarpnetApi,
     private val accountManager: AccountManager,
-    private val viewModel: ScheduledStatusViewModel
+    private val viewModel: ScheduledTweetViewModel
 ) : RemoteMediator<String, ScheduledTweetViewData>() {
 
     override suspend fun load(

@@ -420,7 +420,7 @@
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="action_delete_list">Dileu rhestr</string>
     <string name="add_hashtag_title">Ychwanegu hashnod</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="post_media_audio">Sain</string>
     <string name="compose_shortcut_long_label">Ysgrifennu neges</string>
     <string name="drafts_post_failed_to_send">Methodd anfon y neges hon!</string>
@@ -502,7 +502,7 @@
     <string name="description_poll">Pôl gyda dewisiadau: %1$s, %2$s, %3$s, %4$s; %5$s</string>
     <string name="list">Rhestr</string>
     <string name="action_set_focus">Gosod pwynt ffocws</string>
-    <string name="status_created_at_now">nawr</string>
+    <string name="tweet_created_at_now">nawr</string>
     <string name="error_delete_list">Methu dileu\'r rhestr</string>
     <string name="action_add_to_list">Ychwanegu cyfrif at y rhestr</string>
     <string name="action_remove_from_list">Tynnu cyfrif o\'r rhestr</string>
@@ -579,8 +579,8 @@
     </plurals>
     <string name="hint_describe_for_visually_impaired">Disgrifiwch y cynnwys ar gyfer pobl â nam ar eu golwg</string>
     <string name="action_continue_edit">Parhau i olygu</string>
-    <string name="status_edit_info">Golygwyd: %1$s</string>
-    <string name="status_created_info">Crëwyd: %1$s</string>
+    <string name="tweet_edit_info">Golygwyd: %1$s</string>
+    <string name="tweet_created_info">Crëwyd: %1$s</string>
     <string name="title_edits">Golygiadau</string>
     <string name="post_media_alt">DISGRIFIAD</string>
     <string name="action_discard">Cael gwared ar newidiadau</string>
@@ -619,8 +619,8 @@
     <string name="dialog_follow_hashtag_title">Dilyn hashnod</string>
     <string name="action_refresh">Adnewyddu</string>
     <string name="notification_unknown_name">Anhysbys</string>
-    <string name="status_filtered_show_anyway">Dangos beth bynnag</string>
-    <string name="status_filter_placeholder_label_format">Hidlwyd: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Dangos beth bynnag</string>
+    <string name="tweet_filter_placeholder_label_format">Hidlwyd: %1$s</string>
     <string name="pref_title_account_filter_keywords">Proffiliau</string>
     <string name="socket_timeout_exception">Cymrodd hi\'n rhy hir i gysylltu â\'ch weinydd</string>
     <string name="ui_error_unknown">rheswm anhysbys</string>

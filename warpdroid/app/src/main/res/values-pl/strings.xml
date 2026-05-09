@@ -506,7 +506,7 @@
     <string name="notification_update_name">Edycje wpisów</string>
     <string name="saving_draft">Zapisywanie szkicu…</string>
     <string name="error_could_not_load_login_page">Nie można załadować strony logowania.</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="account_date_joined">Dołączył/-a %1$s</string>
     <string name="action_edit_image">Edytuj obraz</string>
     <string name="error_image_edit_failed">Obrazek nie mógł być zmodyfikowany.</string>
@@ -528,7 +528,7 @@
     <string name="pref_show_self_username_never">Nigdy</string>
     <string name="pref_show_self_username_always">Zawsze</string>
     <string name="pref_show_self_username_disambiguate">Gdy wiele kont jest zalogowanych</string>
-    <string name="status_created_at_now">teraz</string>
+    <string name="tweet_created_at_now">teraz</string>
     <string name="action_add_reaction">dodaj reakcję</string>
     <string name="notification_header_report_format">%1$s zgłosił/a %2$s</string>
     <string name="confirmation_hashtag_unfollowed">Odobserwowano #%1$s</string>
@@ -544,8 +544,8 @@
     <string name="pref_reading_order_newest_first">Najpierw najnowsze</string>
     <string name="no_lists">Nie masz żadnych list.</string>
     <string name="mute_notifications_switch">Wycisz powiadomienia</string>
-    <string name="status_edit_info">%1$s edytował</string>
-    <string name="status_created_info">%1$s stworzył</string>
+    <string name="tweet_edit_info">%1$s edytował</string>
+    <string name="tweet_created_info">%1$s stworzył</string>
     <string name="title_edits">Edycje</string>
     <string name="compose_unsaved_changes">Masz niezapisane zmiany.</string>
     <string name="instance_rule_title">%1$s regulamin</string>

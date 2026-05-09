@@ -477,7 +477,7 @@
     <string name="error_image_edit_failed">La imatge no s\'ha pogut editar.</string>
     <string name="action_dismiss">Descartar</string>
     <string name="pref_title_http_proxy_port_message">El port hauria d\'estar entre %1$d i %2$d</string>
-    <string name="status_count_one_plus">+1</string>
+    <string name="tweet_count_one_plus">+1</string>
     <string name="title_edits">Edicions</string>
     <string name="pref_summary_http_proxy_disabled">Inhabilitat</string>
     <string name="pref_summary_http_proxy_missing">&lt;no definit&gt;</string>
@@ -514,7 +514,7 @@
     <string name="pref_default_post_language">Idioma de publicació per defecte</string>
     <string name="notification_update_description">Les notificacions quan s\'editen les publicacions amb les quals has interaccionat</string>
     <string name="notification_report_description">Notificacions sobre informes de moderació</string>
-    <string name="status_created_at_now">ara</string>
+    <string name="tweet_created_at_now">ara</string>
     <string name="action_browser_login">Inicieu sessió amb el navegador</string>
     <string name="action_add_reaction">afegir reacció</string>
     <string name="action_share_account_link">Comparteix l\'enllaç al compte</string>
@@ -568,12 +568,12 @@
     <string name="account_date_joined">S\'ha unit el %1$s</string>
     <string name="saving_draft">Desant l\'esborrany…</string>
     <string name="description_post_edited">Editat</string>
-    <string name="status_edit_info">%1$s ha editat</string>
+    <string name="tweet_edit_info">%1$s ha editat</string>
     <string name="action_subscribe_account">Subscriu-te</string>
     <string name="action_unsubscribe_account">Cancel·la la subscripció</string>
     <string name="instance_rule_title">%1$s regles</string>
     <string name="mute_notifications_switch">Silencia les notificacions</string>
-    <string name="status_created_info">%1$s ha creat</string>
+    <string name="tweet_created_info">%1$s ha creat</string>
     <string name="title_public_trending_hashtags">Hashtags populars</string>
     <string name="accessibility_talking_about_tag">%1$d persones parlen del hashtag %2$s</string>
     <string name="total_usage">Ús total</string>
@@ -581,9 +581,9 @@
     <string name="dialog_follow_hashtag_title">Segueix hashtag</string>
     <string name="action_refresh">Actualitzar</string>
     <string name="notification_unknown_name">Desconegut</string>
-    <string name="status_filter_placeholder_label_format">Filtrat: %1$s</string>
+    <string name="tweet_filter_placeholder_label_format">Filtrat: %1$s</string>
     <string name="pref_title_account_filter_keywords">Perfils</string>
-    <string name="status_filtered_show_anyway">Mostra de totes maneres</string>
+    <string name="tweet_filtered_show_anyway">Mostra de totes maneres</string>
     <string name="socket_timeout_exception">El contacte amb el teu servidor ha trigat massa</string>
     <string name="ui_error_unknown">motiu desconegut</string>
 </resources>

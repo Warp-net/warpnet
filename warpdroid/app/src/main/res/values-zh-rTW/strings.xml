@@ -484,7 +484,7 @@
     <string name="saving_draft">正在儲存草稿…</string>
     <string name="action_set_focus">設置關注點</string>
     <string name="error_multimedia_size_limit">影片和音訊檔案大小不能超過 %1$s MB。</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_add_reaction">添加反應</string>
     <string name="action_edit_image">編輯圖片</string>
     <string name="duration_30_days">30 天</string>

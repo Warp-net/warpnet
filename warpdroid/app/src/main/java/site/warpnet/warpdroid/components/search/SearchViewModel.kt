@@ -31,8 +31,8 @@ import site.warpnet.warpdroid.appstore.PollVoteEvent
 import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.components.search.paging.SearchPagingSource
-import site.warpnet.warpdroid.components.search.paging.SearchStatusPagingSource
-import site.warpnet.warpdroid.components.search.paging.SearchStatusRemoteMediator
+import site.warpnet.warpdroid.components.search.paging.SearchTweetPagingSource
+import site.warpnet.warpdroid.components.search.paging.SearchTweetRemoteMediator
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Filter
@@ -75,7 +75,7 @@ class SearchViewModel @Inject constructor(
     val loadedStatuses: MutableList<TweetViewData.Concrete> = mutableListOf()
 
     val statusesPagingSourceFactory = InvalidatingPagingSourceFactory {
-        SearchStatusPagingSource(loadedStatuses, loadedStatuses.size)
+        SearchTweetPagingSource(loadedStatuses, loadedStatuses.size)
     }
 
     /**
@@ -91,7 +91,7 @@ class SearchViewModel @Inject constructor(
                 initialLoadSize = DEFAULT_LOAD_SIZE
             ),
             pagingSourceFactory = statusesPagingSourceFactory,
-            remoteMediator = SearchStatusRemoteMediator(
+            remoteMediator = SearchTweetRemoteMediator(
                 api = warpnetApi,
                 searchRequest = query,
                 onPageLoaded = { searchResult ->

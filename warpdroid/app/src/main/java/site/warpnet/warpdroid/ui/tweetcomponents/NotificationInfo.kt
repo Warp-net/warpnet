@@ -42,10 +42,10 @@ fun NotificationInfo(
 ) {
     when (notificationViewData.type) {
         Notification.Type.Mention -> {
-            MentionNotificationStatusInfo(notificationViewData)
+            MentionNotificationTweetInfo(notificationViewData)
         }
         Notification.Type.Poll -> {
-            PollNotificationStatusInfo(notificationViewData)
+            PollNotificationTweetInfo(notificationViewData)
         }
         Notification.Type.Status -> {
             NotificationInfo(
@@ -152,7 +152,7 @@ fun NotificationInfo(
 }
 
 @Composable
-private fun MentionNotificationStatusInfo(
+private fun MentionNotificationTweetInfo(
     notificationViewData: NotificationViewData.Concrete
 ) {
     val activeAccount = LocalAccount.current
@@ -191,7 +191,7 @@ private fun MentionNotificationStatusInfo(
 }
 
 @Composable
-private fun PollNotificationStatusInfo(
+private fun PollNotificationTweetInfo(
     notificationViewData: NotificationViewData.Concrete
 ) {
     val activeAccount = LocalAccount.current

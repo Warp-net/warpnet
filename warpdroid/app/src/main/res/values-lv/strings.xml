@@ -319,8 +319,8 @@
     <string name="pref_main_nav_position_option_top">Augšā</string>
     <string name="pref_main_nav_position_option_bottom">Apakšā</string>
     <string name="pref_title_show_retweets">Parādīt pastiprinājumus</string>
-    <string name="status_count_one_plus">1+</string>
-    <string name="status_created_at_now">tikko</string>
+    <string name="tweet_count_one_plus">1+</string>
+    <string name="tweet_created_at_now">tikko</string>
     <string name="error_retrieving_oauth_token">Neizdevās iegūt pieteikšanās pilnvaru. Ja tas atkārtojas, izmantojot izvēlni, mēģiniet pieslēgties pārlūkā.</string>
     <string name="error_media_upload_permission">Nepieciešama atļauja lasīt multividi.</string>
     <string name="error_media_download_permission">Nepieciešama atļauja saglabāt multividi.</string>
@@ -486,7 +486,7 @@
     </plurals>
     <string name="pref_reading_order_oldest_first">Vecākos vispirms</string>
     <string name="pref_reading_order_newest_first">Jaunākos vispirms</string>
-    <string name="status_created_info">%1$s izveidoja</string>
+    <string name="tweet_created_info">%1$s izveidoja</string>
     <plurals name="poll_info_people">
         <item quantity="zero">%1$s personas</item>
         <item quantity="one">%1$s persona</item>
@@ -516,7 +516,7 @@
     <string name="action_post_failed_show_drafts">Rādīt melnrakstus</string>
     <string name="action_post_failed_do_nothing">Aizvākt</string>
     <string name="pick_hashtag_hint">Tēmturis bez #</string>
-    <string name="status_edit_info">%1$s laboja</string>
+    <string name="tweet_edit_info">%1$s laboja</string>
     <string name="action_browser_login">Pieslēgties ar pārlūku</string>
     <string name="description_login">Strādā vairumā gadījumu. Dati netiek nopludināti uz citām lietotnēm.</string>
     <string name="poll_info_time_absolute">beidzas %1$s</string>

@@ -53,7 +53,7 @@ import site.warpnet.warpdroid.entity.NotificationSubscribeResult
 import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.ScheduledTweet
-import site.warpnet.warpdroid.entity.ScheduledStatusReply
+import site.warpnet.warpdroid.entity.ScheduledTweetReply
 import site.warpnet.warpdroid.entity.SearchResult
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TweetContext
@@ -363,7 +363,7 @@ class WarpnetApi @Inject constructor(
         domain: String,
         idempotencyKey: String,
         status: NewTweet,
-    ): NetworkResult<ScheduledStatusReply> = stubFailure("createScheduledStatus")
+    ): NetworkResult<ScheduledTweetReply> = stubFailure("createScheduledStatus")
 
     suspend fun status(statusId: String): NetworkResult<Tweet> = stubFailure("status")
 

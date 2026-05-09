@@ -31,7 +31,7 @@ import site.warpnet.warpdroid.components.instanceinfo.InstanceInfo
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.interfaces.TweetActionListener
-import site.warpnet.warpdroid.ui.tweetcomponents.Tweet
+import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.util.reply
 import site.warpnet.warpdroid.util.report
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
@@ -67,7 +67,7 @@ class SearchStatusesFragment :
             // key = result.itemKey { viewData -> viewData.id },
             itemContent = { index ->
                 result[index]?.let { viewData ->
-                    Tweet(
+                    TweetCard(
                         viewData,
                         this@SearchStatusesFragment,
                         translationEnabled = instanceInfo.translationEnabled,

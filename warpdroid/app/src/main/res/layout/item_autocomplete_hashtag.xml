@@ -8,6 +8,6 @@
     android:maxLines="1"
     android:paddingHorizontal="16dp"
     android:paddingVertical="12dp"
-    android:textSize="?attr/status_text_medium"
+    android:textSize="?attr/tweet_text_medium"
     android:textStyle="normal|bold"
     tools:text="#Warpdroid" />

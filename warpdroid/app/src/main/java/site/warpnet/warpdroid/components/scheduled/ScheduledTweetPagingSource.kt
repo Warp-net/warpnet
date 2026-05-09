@@ -18,8 +18,8 @@ package site.warpnet.warpdroid.components.scheduled
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 
-class ScheduledStatusPagingSource(
-    private val viewModel: ScheduledStatusViewModel
+class ScheduledTweetPagingSource(
+    private val viewModel: ScheduledTweetViewModel
 ) : PagingSource<String, ScheduledTweetViewData>() {
 
     override fun getRefreshKey(state: PagingState<String, ScheduledTweetViewData>): String? = null

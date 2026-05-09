@@ -27,7 +27,7 @@
                 android:lineSpacingMultiplier="1.1"
                 android:text="@string/report_which_rules_violated"
                 android:textColor="?android:textColorPrimary"
-                android:textSize="?attr/status_text_medium"
+                android:textSize="?attr/tweet_text_medium"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <androidx.recyclerview.widget.RecyclerView

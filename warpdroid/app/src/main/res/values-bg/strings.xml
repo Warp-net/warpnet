@@ -502,11 +502,11 @@
     <string name="post_media_alt">Алт текст</string>
     <string name="description_post_language">Езика на публикация</string>
     <string name="action_browser_login">Вписване с Браузър</string>
-    <string name="status_created_at_now">сега</string>
+    <string name="tweet_created_at_now">сега</string>
     <string name="description_post_edited">Редактирано</string>
     <string name="action_refresh">Опресняване</string>
     <string name="action_add_reaction">добавяне на реакция</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="account_username_copied">Потребителското име бе копирано</string>
     <string name="failed_to_pin">Неуспешно закачане</string>
     <string name="failed_to_unpin">Неуспешно разкачане</string>
@@ -527,7 +527,7 @@
     <string name="duration_30_days">30 дни</string>
     <string name="title_public_trending_statuses">Налагащи се публикации</string>
     <string name="filter_action_warn">Предупреди</string>
-    <string name="status_edit_info">Редактирано: %1$s</string>
+    <string name="tweet_edit_info">Редактирано: %1$s</string>
     <string name="action_add">Добавяне</string>
     <string name="filter_keyword_addition_title">Добавяне на ключова дума</string>
     <string name="filter_edit_keyword_title">Редакция на ключова дума</string>
@@ -583,7 +583,7 @@
     <string name="scheduled_post_reply">Отговор</string>
     <string name="pref_default_reply_privacy">Поверителност на отговор (не е синхр. със сървъра)</string>
     <string name="quote_policy_followers">Само последователи</string>
-    <string name="status_filtered_show_anyway">Покажи въпреки това</string>
+    <string name="tweet_filtered_show_anyway">Покажи въпреки това</string>
     <string name="action_add_or_remove_from_list">Добавяне или премахване от списък</string>
     <string name="label_translating">Превежда се…</string>
     <string name="notification_policy_accept">Приемане</string>

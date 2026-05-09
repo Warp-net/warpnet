@@ -508,7 +508,7 @@
     <string name="drafts_post_failed_to_send">Bu yayın gönderilemedi!</string>
     <string name="limit_notifications">Ağ akışı bildirimlerini sınırla</string>
     <string name="wellbeing_hide_stats_posts">Yayınların niceliksel istatistikleri gizle</string>
-    <string name="status_created_at_now">şimdi</string>
+    <string name="tweet_created_at_now">şimdi</string>
     <string name="drafts_post_reply_removed">Hazırladığınız yanıtınız yayından kaldırıldı</string>
     <string name="language_display_name_format">%1$s (%2$s)</string>
     <string name="report_category_violation">Kural ihlali</string>
@@ -534,7 +534,7 @@
     <string name="notification_update_format">%1$s gönderilerini düzenledi</string>
     <string name="draft_deleted">Taslak Silindi</string>
     <string name="error_unfollowing_hashtag_format">Takip etmeyi bırakırken hata #%1$s</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="label_duration">Süre</string>
     <string name="error_status_source_load">Sunucudan kaynak durumu yüklenemedi.</string>
     <string name="pref_title_http_proxy_port_message">Bağlantı noktası %1$d ile %2$d arasında olmalıdır</string>
@@ -547,10 +547,10 @@
     <string name="pref_summary_http_proxy_missing">&lt;ayarlanmadı&gt;</string>
     <string name="pref_summary_http_proxy_invalid">&lt;geçersiz&gt;</string>
     <string name="pref_summary_http_proxy_disabled">Etkisizleştirildi</string>
-    <string name="status_created_info">%1$s oluşturdu</string>
+    <string name="tweet_created_info">%1$s oluşturdu</string>
     <string name="dialog_follow_hashtag_title">Etiketi takip et</string>
     <string name="compose_unsaved_changes">Kaydedilmemiş değişikliklerin var.</string>
-    <string name="status_edit_info">%1$s düzenledi</string>
+    <string name="tweet_edit_info">%1$s düzenledi</string>
     <string name="action_refresh">Yenile</string>
     <string name="title_edits">Düzenlemeler</string>
     <string name="post_media_image">Görsel</string>
@@ -598,8 +598,8 @@
     <string name="filter_action_warn">Uyarı</string>
     <string name="filter_action_hide">Gizle</string>
     <string name="filter_description_warn">Bir uyarı ile gizle</string>
-    <string name="status_filtered_show_anyway">Yine de göster</string>
-    <string name="status_filter_placeholder_label_format">Süzgeçlendi: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Yine de göster</string>
+    <string name="tweet_filter_placeholder_label_format">Süzgeçlendi: %1$s</string>
     <string name="filter_edit_keyword_title">Anahtar kelimeyi düzenle</string>
     <string name="filter_description_format">%1$s: %2$s</string>
     <string name="pref_title_show_stat_inline">Yayın istatistiklerini sağ akışında göster</string>

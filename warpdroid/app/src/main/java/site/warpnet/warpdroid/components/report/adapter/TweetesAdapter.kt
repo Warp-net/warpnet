@@ -21,7 +21,7 @@ import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.components.report.model.TweetViewState
-import site.warpnet.warpdroid.databinding.ItemReportStatusBinding
+import site.warpnet.warpdroid.databinding.ItemReportTweetBinding
 import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.viewdata.TweetViewData
 
@@ -36,7 +36,7 @@ class StatusesAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TweetViewHolder {
-        val binding = ItemReportStatusBinding.inflate(
+        val binding = ItemReportTweetBinding.inflate(
             LayoutInflater.from(parent.context),
             parent,
             false

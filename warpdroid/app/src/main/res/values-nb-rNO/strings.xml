@@ -482,7 +482,7 @@
     <string name="action_details">Detaljer</string>
     <string name="account_date_joined">Ble med %1$s</string>
     <string name="saving_draft">Lagrer utkast…</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_edit_image">Rediger bilde</string>
     <string name="error_image_edit_failed">Bildet kunne ikke redigeres.</string>
     <string name="error_loading_account_details">Lasting av kontodetaljer feilet</string>
@@ -511,7 +511,7 @@
     <string name="pref_default_post_language">Standardspråk på innlegg</string>
     <string name="no_lists">Du har ingen lister.</string>
     <string name="language_display_name_format">%1$s (%2$s)</string>
-    <string name="status_created_at_now">nå</string>
+    <string name="tweet_created_at_now">nå</string>
     <string name="post_edited">Redigert %1$s</string>
     <string name="notification_summary_report_format">%1$s · %2$d innlegg vedlagt</string>
     <string name="notification_report_format">Ny rapport på %1$s</string>
@@ -545,8 +545,8 @@
     <string name="notification_prune_cache">Cache-vedlikehold…</string>
     <string name="mute_notifications_switch">Demp varsler</string>
     <string name="title_edits">Endringer</string>
-    <string name="status_created_info">Skapt: %1$s</string>
-    <string name="status_edit_info">Endret: %1$s</string>
+    <string name="tweet_created_info">Skapt: %1$s</string>
+    <string name="tweet_edit_info">Endret: %1$s</string>
     <string name="hint_media_description_missing">Media bør ha en beskrivelse.</string>
     <string name="action_refresh">Oppdater</string>
     <string name="post_media_image">Bilde</string>
@@ -592,8 +592,8 @@
     <string name="send_account_username_to">Del kontoens brukernavn med…</string>
     <string name="account_username_copied">Brukernavn kopiert</string>
     <string name="error_status_source_load">Kunne ikke laste status fra tjeneren.</string>
-    <string name="status_filtered_show_anyway">Vis likevel</string>
-    <string name="status_filter_placeholder_label_format">Filtrert: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Vis likevel</string>
+    <string name="tweet_filter_placeholder_label_format">Filtrert: %1$s</string>
     <string name="pref_title_account_filter_keywords">Profiler</string>
     <string name="action_add">Legg til</string>
     <string name="filter_keyword_display_format">%1$s (helt ord)</string>

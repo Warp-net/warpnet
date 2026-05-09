@@ -212,7 +212,7 @@
     <string name="post_media_video">動画</string>
     <string name="state_follow_requested">フォローリクエスト中</string>
     <!--These are for timestamps on statuses. For example: "16s" or "2d"-->
-    <string name="status_created_at_now">現在</string>
+    <string name="tweet_created_at_now">現在</string>
     <string name="abbreviated_in_years">%1$d年後</string>
     <string name="abbreviated_in_days">%1$d日後</string>
     <string name="abbreviated_in_hours">%1$d時間後</string>
@@ -485,7 +485,7 @@
     <string name="notification_report_name">報告</string>
     <string name="notification_report_description">モデレーション報告に関する通知</string>
     <string name="post_media_attachments">添付ファイル</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="failed_to_add_to_list">アカウントのリストへの追加に失敗しました</string>
     <string name="failed_to_remove_from_list">アカウントのリストからの削除に失敗しました</string>
     <string name="no_announcements">アナウンスはありません。</string>
@@ -536,8 +536,8 @@
     <string name="set_focus_description">サムネイル画像で常に表示される中心点を設定するには、円をタップまたはドラッグして中してくだだい。</string>
     <string name="mute_notifications_switch">通知のミュート</string>
     <string name="account_date_joined">%1$s に参加</string>
-    <string name="status_edit_info">%1$s 編集</string>
-    <string name="status_created_info">%1$s の投稿</string>
+    <string name="tweet_edit_info">%1$s 編集</string>
+    <string name="tweet_created_info">%1$s の投稿</string>
     <string name="post_lookup_error_format">投稿 %1$s の検索エラー</string>
     <string name="follow_requests_info">アカウントがロックされていなかったとしても、%1$s のスタッフは以下のアカウントのフォローリクエストを確認した方がいいと判断しました。</string>
     <string name="action_set_focus">中心点の設定</string>
@@ -561,7 +561,7 @@
     <string name="post_media_image">画像</string>
     <string name="notification_unknown_name">不明</string>
     <string name="select_list_manage">リストを管理する</string>
-    <string name="status_filtered_show_anyway">とにかく表示する</string>
+    <string name="tweet_filtered_show_anyway">とにかく表示する</string>
     <string name="pref_title_account_filter_keywords">プロフィール</string>
     <string name="title_public_trending_hashtags">トレンドのハッシュタグ</string>
     <string name="pref_title_show_stat_inline">タイムラインに投稿の統計情報を表示する</string>
@@ -617,7 +617,7 @@
     <string name="notification_summary_report_format">%1$s · %2$d 個の投稿を添付</string>
     <string name="unmuting_hashtag_success_format">ハッシュタグ #%1$s のミュートを解除</string>
     <string name="action_view_filter">フィルタを表示</string>
-    <string name="status_filter_placeholder_label_format">フィルタ済み: %1$s</string>
+    <string name="tweet_filter_placeholder_label_format">フィルタ済み: %1$s</string>
     <string name="error_unblocking_domain">%1$s のミュート解除に失敗しました: %2$s</string>
     <string name="error_blocking_domain">%1$s のミュートに失敗しました: %2$s</string>
     <string name="label_image">画像</string>

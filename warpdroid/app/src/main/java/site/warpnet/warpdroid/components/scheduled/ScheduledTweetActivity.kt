@@ -115,9 +115,9 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
 @AndroidEntryPoint
-class ScheduledStatusActivity : BaseActivity() {
+class ScheduledTweetActivity : BaseActivity() {
 
-    private val viewModel: ScheduledStatusViewModel by viewModels()
+    private val viewModel: ScheduledTweetViewModel by viewModels()
 
     private val dateTimeFormat = SimpleDateFormat("d MMM yyyy, H:mm", Locale.getDefault())
 
@@ -426,7 +426,7 @@ class ScheduledStatusActivity : BaseActivity() {
                             isRevealed = true
                         )
                     }
-                    val intent = ViewMediaActivity.newIntent(this@ScheduledStatusActivity, attachmentViewData, index)
+                    val intent = ViewMediaActivity.newIntent(this@ScheduledTweetActivity, attachmentViewData, index)
                     startActivity(intent)
                 },
                 onMediaHiddenChanged = {
@@ -548,7 +548,7 @@ class ScheduledStatusActivity : BaseActivity() {
     }
 
     companion object {
-        fun newIntent(context: Context) = Intent(context, ScheduledStatusActivity::class.java)
+        fun newIntent(context: Context) = Intent(context, ScheduledTweetActivity::class.java)
     }
 
     @PreviewLightDark

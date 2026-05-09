@@ -480,7 +480,7 @@
     <string name="notification_sign_up_description">Meldingen over nieuwe gebruikers</string>
     <string name="notification_update_name">Bewerkingen van berichten</string>
     <string name="notification_update_description">Meldingen wanneer berichten waarmee je interactie had werden bewerkt</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_edit_image">Afbeelding bewerken</string>
     <string name="duration_30_days">30 dagen</string>
     <string name="duration_60_days">60 dagen</string>
@@ -520,8 +520,8 @@
     <string name="pref_default_post_language">Taal van je berichten (gesynchroniseerd met de server)</string>
     <string name="notification_report_name">Rapporten</string>
     <string name="description_post_edited">Bewerkt</string>
-    <string name="status_edit_info">Bewerkt: %1$s</string>
-    <string name="status_created_info">Gemaakt: %1$s</string>
+    <string name="tweet_edit_info">Bewerkt: %1$s</string>
+    <string name="tweet_created_info">Gemaakt: %1$s</string>
     <string name="instance_rule_info">Door in te loggen ben je het eens met de regels van %1$s.</string>
     <string name="report_category_spam">Spam</string>
     <string name="report_category_other">Overig</string>
@@ -531,7 +531,7 @@
     <string name="language_display_name_format">%1$s (%2$s)</string>
     <string name="report_category_violation">Regelovertreding</string>
     <string name="no_lists">Je hebt geen lijsten.</string>
-    <string name="status_created_at_now">nu</string>
+    <string name="tweet_created_at_now">nu</string>
     <string name="post_media_alt">ALT</string>
     <string name="action_unfollow_hashtag_format">#%1$s ontvolgen?</string>
     <string name="error_muting_hashtag_format">Fout bij negeren #%1$s</string>
@@ -574,8 +574,8 @@
     <string name="ui_success_accepted_follow_request">Volgverzoek geaccepteerd</string>
     <string name="select_list_manage">Lijsten beheren</string>
     <string name="pref_title_account_filter_keywords">Profielen</string>
-    <string name="status_filtered_show_anyway">Toch tonen</string>
-    <string name="status_filter_placeholder_label_format">Gefilterd: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Toch tonen</string>
+    <string name="tweet_filter_placeholder_label_format">Gefilterd: %1$s</string>
     <string name="hint_filter_title">Mijn filter</string>
     <string name="label_filter_action">Filteractie</string>
     <string name="filter_action_warn">Waarschuwen</string>

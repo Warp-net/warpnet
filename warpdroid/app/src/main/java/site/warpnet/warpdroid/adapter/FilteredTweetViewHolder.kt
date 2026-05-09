@@ -17,7 +17,7 @@ package site.warpnet.warpdroid.adapter
 import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.notifications.NotificationsViewHolder
-import site.warpnet.warpdroid.databinding.ItemStatusFilteredBinding
+import site.warpnet.warpdroid.databinding.ItemTweetFilteredBinding
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.FilterResult
 import site.warpnet.warpdroid.interfaces.TweetActionListener
@@ -26,7 +26,7 @@ import site.warpnet.warpdroid.viewdata.NotificationViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
 
 open class FilteredTweetViewHolder(
-    private val binding: ItemStatusFilteredBinding,
+    private val binding: ItemTweetFilteredBinding,
     private val listener: TweetActionListener
 ) : RecyclerView.ViewHolder(binding.root) {
 
@@ -48,7 +48,7 @@ open class FilteredTweetViewHolder(
 }
 
 class FilteredNotificationViewHolder(
-    binding: ItemStatusFilteredBinding,
+    binding: ItemTweetFilteredBinding,
     listener: TweetActionListener
 ) : FilteredTweetViewHolder(binding, listener), NotificationsViewHolder {
 

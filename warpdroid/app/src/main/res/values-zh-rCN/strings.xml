@@ -481,7 +481,7 @@
     <string name="action_dismiss">不理会</string>
     <string name="action_details">详情</string>
     <string name="account_date_joined">加入于%1$s</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_edit_image">编辑图片</string>
     <string name="error_image_edit_failed">无法编辑图片。</string>
     <string name="error_loading_account_details">加载账户详情失败</string>
@@ -512,7 +512,7 @@
     <string name="failed_to_remove_from_list">未能从列表中删除账户</string>
     <string name="no_lists">你没有任何列表。</string>
     <string name="action_unfollow_hashtag_format">取关 #%1$s 吗？</string>
-    <string name="status_created_at_now">立即</string>
+    <string name="tweet_created_at_now">立即</string>
     <string name="notification_summary_report_format">附上了 %1$s · %2$d 个嘟文</string>
     <string name="confirmation_hashtag_unfollowed">取关了 #%1$s</string>
     <string name="notification_report_description">审核报告的通知</string>
@@ -534,10 +534,10 @@
     <string name="action_discard">放弃更改</string>
     <string name="action_continue_edit">继续编辑</string>
     <string name="compose_unsaved_changes">你有未保存的更改。</string>
-    <string name="status_created_info">%1$s 创建了</string>
+    <string name="tweet_created_info">%1$s 创建了</string>
     <string name="mute_notifications_switch">将通知静音</string>
     <string name="title_edits">编辑</string>
-    <string name="status_edit_info">%1$s 编辑了</string>
+    <string name="tweet_edit_info">%1$s 编辑了</string>
     <string name="a11y_label_loading_thread">加载系列嘟文</string>
     <string name="action_share_account_link">分享账户链接</string>
     <string name="action_share_account_username">分享账户用户名</string>
@@ -577,8 +577,8 @@
     <string name="ui_error_reject_follow_request">未能拒绝关注请求：%1$s</string>
     <string name="ui_success_accepted_follow_request">关注请求被接受</string>
     <string name="ui_success_rejected_follow_request">关注请求被拦截</string>
-    <string name="status_filtered_show_anyway">仍要显示</string>
-    <string name="status_filter_placeholder_label_format">已过滤：%1$s</string>
+    <string name="tweet_filtered_show_anyway">仍要显示</string>
+    <string name="tweet_filter_placeholder_label_format">已过滤：%1$s</string>
     <string name="pref_title_account_filter_keywords">个人资料</string>
     <string name="hint_filter_title">我的筛选器</string>
     <string name="label_filter_title">标题</string>

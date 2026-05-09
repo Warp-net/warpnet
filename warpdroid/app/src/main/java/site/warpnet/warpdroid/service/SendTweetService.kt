@@ -45,7 +45,7 @@ import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.MediaAttribute
 import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.NewTweet
-import site.warpnet.warpdroid.entity.ScheduledStatusReply
+import site.warpnet.warpdroid.entity.ScheduledTweetReply
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.getParcelableExtraCompat
@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
 
 @AndroidEntryPoint
-class SendStatusService : Service() {
+class SendTweetService : Service() {
 
     @Inject
     lateinit var warpnetApi: WarpnetApi
@@ -92,7 +92,7 @@ class SendStatusService : Service() {
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
         if (intent.hasExtra(KEY_STATUS)) {
             val statusToSend: TweetToSend = intent.getParcelableExtraCompat(KEY_STATUS)
-                ?: throw IllegalStateException("SendStatusService started without $KEY_STATUS extra")
+                ?: throw IllegalStateException("SendTweetService started without $KEY_STATUS extra")
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel =
@@ -281,7 +281,7 @@ class SendStatusService : Service() {
                 mediaUploader.cancelUploadScope(*statusToSend.media.map { it.localId }.toIntArray())
 
                 if (scheduled) {
-                    eventHub.dispatch(TweetScheduledEvent((sentStatus as ScheduledStatusReply).id))
+                    eventHub.dispatch(TweetScheduledEvent((sentStatus as ScheduledTweetReply).id))
                 } else if (!isNew) {
                     eventHub.dispatch(TweetChangedEvent(sentStatus as Tweet))
                 } else {
@@ -332,7 +332,7 @@ class SendStatusService : Service() {
     private fun stopSelfWhenDone() {
         if (statusesToSend.isEmpty()) {
             ServiceCompat.stopForeground(
-                this@SendStatusService,
+                this@SendTweetService,
                 ServiceCompat.STOP_FOREGROUND_REMOVE
             )
             stopSelf()
@@ -392,7 +392,7 @@ class SendStatusService : Service() {
     }
 
     private fun cancelSendingIntent(statusId: Int): PendingIntent {
-        val intent = Intent(this, SendStatusService::class.java)
+        val intent = Intent(this, SendTweetService::class.java)
         intent.putExtra(KEY_CANCEL, statusId)
         return PendingIntent.getService(
             this,
@@ -417,7 +417,7 @@ class SendStatusService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        return NotificationCompat.Builder(this@SendStatusService, CHANNEL_ID)
+        return NotificationCompat.Builder(this@SendTweetService, CHANNEL_ID)
             .setSmallIcon(R.drawable.warpdroid_notification_icon)
             .setContentTitle(getString(title))
             .setContentText(getString(content))
@@ -434,7 +434,7 @@ class SendStatusService : Service() {
     }
 
     companion object {
-        private const val TAG = "SendStatusService"
+        private const val TAG = "SendTweetService"
 
         private const val KEY_STATUS = "status"
         private const val KEY_CANCEL = "cancel_id"
@@ -447,7 +447,7 @@ class SendStatusService : Service() {
         private var errorNotificationId = Int.MIN_VALUE // use even more negative ids to not clash with other notis
 
         fun sendTweetIntent(context: Context, statusToSend: TweetToSend): Intent {
-            val intent = Intent(context, SendStatusService::class.java)
+            val intent = Intent(context, SendTweetService::class.java)
             intent.putExtra(KEY_STATUS, statusToSend)
 
             if (statusToSend.media.isNotEmpty()) {

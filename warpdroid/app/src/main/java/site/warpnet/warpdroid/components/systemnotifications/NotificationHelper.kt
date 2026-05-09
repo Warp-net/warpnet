@@ -56,7 +56,7 @@ import site.warpnet.warpdroid.entity.NotificationSubscribeResult
 import site.warpnet.warpdroid.entity.RelationshipSeveranceEvent
 import site.warpnet.warpdroid.entity.visibleNotificationTypes
 import site.warpnet.warpdroid.network.WarpnetApi
-import site.warpnet.warpdroid.receiver.SendStatusBroadcastReceiver
+import site.warpnet.warpdroid.receiver.SendTweetBroadcastReceiver
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.unicodeWrap
@@ -657,7 +657,7 @@ class NotificationHelper @Inject constructor(
             remove(account.username)
         }
 
-        val replyIntent = Intent(context, SendStatusBroadcastReceiver::class.java)
+        val replyIntent = Intent(context, SendTweetBroadcastReceiver::class.java)
             .setAction(REPLY_ACTION)
             .putExtra(KEY_SENDER_ACCOUNT_ID, account.id)
             .putExtra(KEY_SENDER_ACCOUNT_IDENTIFIER, account.identifier)

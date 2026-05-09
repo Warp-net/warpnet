@@ -17,6 +17,6 @@
         android:layout_height="wrap_content"
         android:layout_weight="0"
         android:text="@string/filter_apply"
-        android:textSize="?attr/status_text_medium" />
+        android:textSize="?attr/tweet_text_medium" />
 
 </LinearLayout>

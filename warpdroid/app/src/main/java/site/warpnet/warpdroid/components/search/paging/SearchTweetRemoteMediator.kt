@@ -27,7 +27,7 @@ import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.viewdata.TweetViewData
 
 @OptIn(ExperimentalPagingApi::class)
-class SearchStatusRemoteMediator(
+class SearchTweetRemoteMediator(
     private val api: WarpnetApi,
     private val searchRequest: String,
     private val onPageLoaded: (SearchResult) -> Boolean,

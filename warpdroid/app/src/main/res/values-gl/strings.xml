@@ -482,7 +482,7 @@
     <string name="action_details">Detalles</string>
     <string name="error_could_not_load_login_page">Non se puido cargar a páxina de inicio.</string>
     <string name="saving_draft">Gardando borrador…</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_edit_image">Editar imaxe</string>
     <string name="error_loading_account_details">Fallou a carga dos detalles da conta</string>
     <string name="error_image_edit_failed">A imaxe non puido ser editada.</string>
@@ -519,7 +519,7 @@
     <string name="report_category_other">Outra</string>
     <string name="error_following_hashtags_unsupported">Esta instancia non é compatible co seguimento de cancelos.</string>
     <string name="title_followed_hashtags">Cancelos seguidos</string>
-    <string name="status_created_at_now">agora</string>
+    <string name="tweet_created_at_now">agora</string>
     <string name="notification_report_format">Nova denuncia sobre %1$s</string>
     <string name="notification_header_report_format">%1$s denunciou a %2$s</string>
     <string name="notification_summary_report_format">%1$s · %2$d publicacións anexadas</string>
@@ -535,8 +535,8 @@
     <string name="a11y_label_loading_thread">Cargando fío</string>
     <string name="mute_notifications_switch">Acalar notificacións</string>
     <string name="title_edits">Edicións</string>
-    <string name="status_edit_info">Editada: %1$s</string>
-    <string name="status_created_info">Creado por %1$s</string>
+    <string name="tweet_edit_info">Editada: %1$s</string>
+    <string name="tweet_created_info">Creado por %1$s</string>
     <string name="action_discard">Desbotar cambios</string>
     <string name="action_continue_edit">Continuar a edición</string>
     <string name="compose_unsaved_changes">Hai cambios non gardados.</string>
@@ -582,8 +582,8 @@
     <string name="ui_error_reject_follow_request">Fallou o rexeitamento da solicitude de seguimento: %1$s</string>
     <string name="ui_success_accepted_follow_request">Aceptado o seguimento</string>
     <string name="ui_success_rejected_follow_request">Bloqueada a solicitude de seguimento</string>
-    <string name="status_filtered_show_anyway">Mostrar igualmente</string>
-    <string name="status_filter_placeholder_label_format">Filtro: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Mostrar igualmente</string>
+    <string name="tweet_filter_placeholder_label_format">Filtro: %1$s</string>
     <string name="pref_title_account_filter_keywords">Perfís</string>
     <string name="label_filter_title">Título</string>
     <string name="filter_action_warn">Aviso</string>

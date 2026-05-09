@@ -36,7 +36,7 @@ import site.warpnet.warpdroid.R
 
 /** Shown in timelines for posts that have a warning filter set. **/
 @Composable
-fun FilteredStatus(
+fun FilteredTweet(
     filterTitle: String,
     onReveal: () -> Unit,
     modifier: Modifier = Modifier
@@ -75,7 +75,7 @@ fun FilteredStatus(
 @Composable
 fun FilteredTweetPreview() {
     WarpdroidPreviewTheme {
-        FilteredStatus(
+        FilteredTweet(
             filterTitle = "#HorribleHashtag",
             onReveal = { },
             modifier = Modifier.background(colorScheme.background)

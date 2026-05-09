@@ -22,7 +22,7 @@ import javax.inject.Inject
 
 class ServiceClient @Inject constructor(@ApplicationContext private val context: Context) {
     fun sendTweet(tweetToSend: TweetToSend) {
-        val intent = SendStatusService.sendTweetIntent(context, tweetToSend)
+        val intent = SendTweetService.sendTweetIntent(context, tweetToSend)
         ContextCompat.startForegroundService(context, intent)
     }
 }

@@ -81,7 +81,7 @@ import java.text.DateFormat
 import java.text.NumberFormat
 
 @Composable
-fun DetailedStatus(
+fun DetailedTweet(
     statusViewData: TweetViewData.Concrete,
     listener: TweetActionListener,
     translationEnabled: Boolean,
@@ -377,7 +377,7 @@ private fun getVisibilityIcon(visibility: Tweet.Visibility): Int? {
 @Composable
 fun DetailedTweetPreview() {
     WarpdroidPreviewTheme {
-        DetailedStatus(
+        DetailedTweet(
             statusViewData = fakeTweetViewData().copy(isDetailed = true),
             listener = noopListener,
             translationEnabled = false,

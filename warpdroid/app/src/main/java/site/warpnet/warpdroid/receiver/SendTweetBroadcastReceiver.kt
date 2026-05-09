@@ -28,7 +28,7 @@ import site.warpnet.warpdroid.components.systemnotifications.NotificationChannel
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Tweet
-import site.warpnet.warpdroid.service.SendStatusService
+import site.warpnet.warpdroid.service.SendTweetService
 import site.warpnet.warpdroid.service.TweetToSend
 import site.warpnet.warpdroid.util.getSerializableExtraCompat
 import site.warpnet.warpdroid.util.randomAlphanumericString
@@ -36,7 +36,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class SendStatusBroadcastReceiver : BroadcastReceiver() {
+class SendTweetBroadcastReceiver : BroadcastReceiver() {
 
     @Inject
     lateinit var accountManager: AccountManager
@@ -87,7 +87,7 @@ class SendStatusBroadcastReceiver : BroadcastReceiver() {
             } else {
                 val text = mentions.joinToString(" ", postfix = " ") { "@$it" } + message.toString()
 
-                val sendIntent = SendStatusService.sendTweetIntent(
+                val sendIntent = SendTweetService.sendTweetIntent(
                     context,
                     TweetToSend(
                         text = text,
@@ -141,6 +141,6 @@ class SendStatusBroadcastReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        const val TAG = "SendStatusBroadcastReceiver"
+        const val TAG = "SendTweetBroadcastReceiver"
     }
 }

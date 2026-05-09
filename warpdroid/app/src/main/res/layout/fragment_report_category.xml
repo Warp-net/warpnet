@@ -27,7 +27,7 @@
                 android:lineSpacingMultiplier="1.1"
                 android:text="@string/report_problem_with_post"
                 android:textColor="?android:textColorPrimary"
-                android:textSize="?attr/status_text_medium" />
+                android:textSize="?attr/tweet_text_medium" />
 
             <site.warpnet.warpdroid.components.report.view.ReportCategoryRadioButton
                 android:id="@+id/report_category_spam"

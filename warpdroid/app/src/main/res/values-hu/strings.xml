@@ -487,7 +487,7 @@
     <string name="action_details">Részletek</string>
     <string name="account_date_joined">Csatlakozva %1$s</string>
     <string name="title_login">Bejelentkezés</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="error_could_not_load_login_page">Nem tudtuk betölteni a bejelentkező oldalt.</string>
     <string name="saving_draft">Vázlat mentése…</string>
     <string name="action_edit_image">Kép szerkesztése</string>
@@ -520,7 +520,7 @@
     <string name="language_display_name_format">%1$s (%2$s)</string>
     <string name="report_category_violation">Szabálysértés</string>
     <string name="pref_title_http_proxy_port_message">A portnak %1$d és %2$d között kell lennie</string>
-    <string name="status_created_at_now">most</string>
+    <string name="tweet_created_at_now">most</string>
     <string name="description_post_edited">Szerkesztve</string>
     <string name="error_following_hashtags_unsupported">Ez a kiszolgáló nem támogatja a hashtagek követését.</string>
     <string name="error_muting_hashtag_format">Hiba a(z) #%1$s némításakor</string>
@@ -547,8 +547,8 @@
     <string name="pref_summary_http_proxy_missing">&lt;nincs beállítva&gt;</string>
     <string name="pref_summary_http_proxy_invalid">&lt;érvénytelen&gt;</string>
     <string name="title_edits">Szerkesztések</string>
-    <string name="status_created_info">%1$s-kor létrehozta</string>
-    <string name="status_edit_info">%1$s-kor szerkesztette</string>
+    <string name="tweet_created_info">%1$s-kor létrehozta</string>
+    <string name="tweet_edit_info">%1$s-kor szerkesztette</string>
     <string name="post_media_alt">ALT</string>
     <string name="action_discard">Változtatások elvetése</string>
     <string name="action_continue_edit">Szerkesztés folytatása</string>
@@ -579,8 +579,8 @@
     <string name="ui_error_retweet">Bejegyzés megtolása sikertelen: %1$s</string>
     <string name="ui_error_vote">Szavazat leadása sikertelen: %1$s</string>
     <string name="ui_error_accept_follow_request">Követési kérés elfogadása sikertelen: %1$s</string>
-    <string name="status_filtered_show_anyway">Mutatás mindenképpen</string>
-    <string name="status_filter_placeholder_label_format">Szűrve: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Mutatás mindenképpen</string>
+    <string name="tweet_filter_placeholder_label_format">Szűrve: %1$s</string>
     <string name="pref_title_account_filter_keywords">Profil</string>
     <string name="socket_timeout_exception">A kapcsolatfelvétel a kiszolgálóddal túl sokáig tartott</string>
     <string name="ui_error_unknown">ismeretlen ok</string>

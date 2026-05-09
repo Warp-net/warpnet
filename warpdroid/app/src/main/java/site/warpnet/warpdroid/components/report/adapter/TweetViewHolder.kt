@@ -21,7 +21,7 @@ import android.view.View
 import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.report.model.TweetViewState
-import site.warpnet.warpdroid.databinding.ItemReportStatusBinding
+import site.warpnet.warpdroid.databinding.ItemReportTweetBinding
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.HashTag
 import site.warpnet.warpdroid.entity.Tweet
@@ -44,7 +44,7 @@ import site.warpnet.warpdroid.viewdata.toViewData
 import java.util.Date
 
 class TweetViewHolder(
-    private val binding: ItemReportStatusBinding,
+    private val binding: ItemReportTweetBinding,
     private val statusDisplayOptions: TweetDisplayOptions,
     private val viewState: TweetViewState,
     private val adapterHandler: AdapterHandler,

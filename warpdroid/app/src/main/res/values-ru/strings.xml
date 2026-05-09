@@ -489,8 +489,8 @@
     <string name="a11y_label_loading_thread">Загрузка обсуждения</string>
     <string name="pref_reading_order_newest_first">Сначала новые</string>
     <string name="title_edits">Правки</string>
-    <string name="status_edit_info">Пост изменён: %1$s</string>
-    <string name="status_created_info">Пост создан: %1$s</string>
+    <string name="tweet_edit_info">Пост изменён: %1$s</string>
+    <string name="tweet_created_info">Пост создан: %1$s</string>
     <string name="title_login">Войти</string>
     <string name="action_browser_login">Вход через Браузер</string>
     <string name="error_image_edit_failed">Изображение не удалось отредактировать.</string>
@@ -507,7 +507,7 @@
     <string name="instance_rule_title">Правила %1$s</string>
     <string name="pref_reading_order_oldest_first">Сначала старые</string>
     <string name="pref_title_reading_order">Порядок чтения</string>
-    <string name="status_created_at_now">сейчас</string>
+    <string name="tweet_created_at_now">сейчас</string>
     <string name="pref_ui_text_size">Размер текста пользовательского интерфейса</string>
     <string name="filter_expiration_format">%1$s (%2$s)</string>
     <string name="label_image">Изображение</string>
@@ -517,8 +517,8 @@
     <string name="action_unfollow_hashtag_format">Отменить подписку на #%1$s?</string>
     <string name="failed_to_pin">Не удалось закрепить</string>
     <string name="post_media_image">Изображение</string>
-    <string name="status_filtered_show_anyway">Показать в любом случае</string>
-    <string name="status_filter_placeholder_label_format">Отфильтровано: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Показать в любом случае</string>
+    <string name="tweet_filter_placeholder_label_format">Отфильтровано: %1$s</string>
     <string name="mute_notifications_switch">Скрыть из уведомлений</string>
     <string name="dialog_follow_hashtag_title">Подписаться на хэштег</string>
     <string name="notification_update_format">%1$s изменил(а) свой пост</string>
@@ -631,7 +631,7 @@
     <string name="help_empty_conversations">Здесь находятся ваши <b>частные сообщения</b>; иногда их называют беседами или прямыми сообщениями (DM). \u0020 \n \u0020 \u0020 \nЛичные сообщения создаются путем установки видимости {{public}} поста на {{mail}} <i>Личное упоминание</i> и упоминания одного или нескольких пользователей в тексте. \u0020 \u0020 \n \u0020 \u0020 \nНапример, вы можете зайти в профиль пользователя, нажать кнопку создания поста [iconics gmd_edit] и изменить видимость.</string>
     <string name="help_empty_lists">Это ваш <b>раздел списков</b>. Вы можете создавать личные списки и добавлять в них пользователей. \u0020 \n \u0020 \nОбратите внимание, что в списки можно добавлять только тех пользователей, на которых вы подписаны. \u0020 \n \u0020 \nЭти списки можно использовать в качестве вкладки в меню Настройки учетной записи {{manage_accounts}} {{chevron_right}} Вкладки.</string>
     <string name="compose_unsaved_changes">У вас есть несохраненные изменения.</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="compose_save_draft_loses_media">Сохранить черновик? (Вложения будут загружены снова при восстановлении черновика).</string>
     <string name="title_public_trending_hashtags">Популярные хэштеги</string>
     <string name="notification_sign_up_format">%1$s зарегистрировался(-лась)</string>

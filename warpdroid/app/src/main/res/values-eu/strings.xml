@@ -509,7 +509,7 @@
     <string name="pref_title_show_self_username">Erakutsi erabiltzaile-izena tresna-barretan</string>
     <string name="pref_title_confirm_follows">Erakutsi berrespena jarraitu aurretik</string>
     <string name="tusky_compose_post_quicksetting_label">Idatzi tuta</string>
-    <string name="status_edit_info">Editatua: %1$s</string>
+    <string name="tweet_edit_info">Editatua: %1$s</string>
     <string name="ui_error_unknown">arrazoi ezezaguna</string>
     <string name="ui_error_translate">Ezin izan da itzuli: %1$s</string>
     <string name="filter_action_hide">Ezkutatu</string>
@@ -519,7 +519,7 @@
     <string name="dialog_save_profile_changes_message">Zure profilaren aldaketak gorde nahi dituzu?</string>
     <string name="label_filter_keywords">Iragazi beharreko gako-hitz edo esaldiak</string>
     <string name="failed_to_remove_from_list">Huts egin du kontua zerrendatik kentzean</string>
-    <string name="status_created_info">Sortua: %1$s</string>
+    <string name="tweet_created_info">Sortua: %1$s</string>
     <string name="action_add_reaction">Gehitu erreakzioa</string>
     <string name="action_share_account_link">Partekatu kontuaren esteka</string>
     <string name="action_share_account_username">Partekatu kontuaren erabiltzaile-izena</string>

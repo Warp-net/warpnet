@@ -474,7 +474,7 @@
     <string name="pref_show_self_username_always">Totjorn</string>
     <string name="pref_show_self_username_never">Jamai</string>
     <string name="notification_update_name">Publicacions modificadas</string>
-    <string name="status_count_one_plus">&gt;1</string>
+    <string name="tweet_count_one_plus">&gt;1</string>
     <string name="duration_14_days">14 jorns</string>
     <string name="duration_30_days">30 jorns</string>
     <string name="error_following_hashtag_format">Error en seguissent #%1$s</string>
@@ -512,7 +512,7 @@
     <string name="drafts_post_reply_removed">La publicacion a la quala respondiá lo borrolhon foguèt suprimida</string>
     <string name="instance_rule_info">En vos connectant acceptatz las règlas de %1$s.</string>
     <string name="action_unfollow_hashtag_format">Quitar de seguir #%1$s ?</string>
-    <string name="status_created_at_now">ara</string>
+    <string name="tweet_created_at_now">ara</string>
     <string name="notification_report_format">Senhalament novèl sus %1$s</string>
     <string name="notification_header_report_format">%1$s a senhalat %2$s</string>
     <string name="notification_report_name">Senhalaments</string>
@@ -539,9 +539,9 @@
     <string name="description_post_edited">Modificada</string>
     <string name="error_status_source_load">Fracàs del cargament de l’estatut a partir del servidor.</string>
     <string name="mute_notifications_switch">Amudir las notificacions</string>
-    <string name="status_created_info">%1$s creèt</string>
+    <string name="tweet_created_info">%1$s creèt</string>
     <string name="title_edits">Modificacions</string>
-    <string name="status_edit_info">%1$s modifiquèt</string>
+    <string name="tweet_edit_info">%1$s modifiquèt</string>
     <string name="post_media_alt">ALT</string>
     <string name="action_discard">Ignorar las modificacions</string>
     <string name="action_continue_edit">Téner de modificar</string>
@@ -580,8 +580,8 @@
     <string name="ui_error_clear_notifications">Netejatge de las notificacions fracassat : %1$s</string>
     <string name="ui_success_accepted_follow_request">Demanda d’abonament acceptada</string>
     <string name="ui_success_rejected_follow_request">Demanda d’abonament blocada</string>
-    <string name="status_filtered_show_anyway">Afichar ça que la</string>
-    <string name="status_filter_placeholder_label_format">Filtrat : %1$s</string>
+    <string name="tweet_filtered_show_anyway">Afichar ça que la</string>
+    <string name="tweet_filter_placeholder_label_format">Filtrat : %1$s</string>
     <string name="pref_title_account_filter_keywords">Perfils</string>
     <string name="ui_error_unknown">rason desconeguda</string>
     <string name="hint_filter_title">Mon filtre</string>

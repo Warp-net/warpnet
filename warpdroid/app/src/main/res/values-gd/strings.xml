@@ -502,7 +502,7 @@
     <string name="action_dismiss">Leig seachad</string>
     <string name="action_details">Fiosrachadh</string>
     <string name="account_date_joined">Air ballrachd fhaighinn %1$s</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_edit_image">Deasaich an dealbh</string>
     <string name="error_following_hashtag_format">Mearachd a’ leantainn air #%1$s</string>
     <string name="error_multimedia_size_limit">Chan fhaod na faidhlichean video ’ fuaime a bhith nas motha na %1$s MB.</string>
@@ -540,10 +540,10 @@
     <string name="pref_summary_http_proxy_invalid">&lt;mì-dhligheach&gt;</string>
     <string name="failed_to_remove_from_list">Cha deach leinn an cunntas a thoirt air falbh on liosta</string>
     <string name="title_edits">Deasachaidhean</string>
-    <string name="status_created_at_now">an-dràsta</string>
+    <string name="tweet_created_at_now">an-dràsta</string>
     <string name="pref_default_post_language">Cànan nam post (’ga shioncronachadh leis an fhrithealaiche)</string>
-    <string name="status_created_info">Chruthaich %1$s</string>
-    <string name="status_edit_info">Dheasaich %1$s</string>
+    <string name="tweet_created_info">Chruthaich %1$s</string>
+    <string name="tweet_edit_info">Dheasaich %1$s</string>
     <string name="no_lists">Chan eil liosta sam bith agad.</string>
     <string name="language_display_name_format">%1$s (%2$s)</string>
     <string name="pref_title_http_proxy_port_message">Bu chòir dhan phort a bhith eadar %1$d is %2$d</string>
@@ -601,8 +601,8 @@
     <string name="ui_success_accepted_follow_request">Chaidh gabhail ris an iarrtas leantainn</string>
     <string name="ui_success_rejected_follow_request">Chaidh iarrtas leantainn a bhacadh</string>
     <string name="select_list_manage">Stiùirich na liostaichean</string>
-    <string name="status_filtered_show_anyway">Seall e co-dhiù</string>
-    <string name="status_filter_placeholder_label_format">Criathraichte: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Seall e co-dhiù</string>
+    <string name="tweet_filter_placeholder_label_format">Criathraichte: %1$s</string>
     <string name="pref_title_account_filter_keywords">Pròifilean</string>
     <string name="hint_filter_title">A’ chriathrag agam</string>
     <string name="filter_description_warn">Falaich le rabhadh</string>

@@ -40,7 +40,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class ScheduledStatusViewModel @Inject constructor(
+class ScheduledTweetViewModel @Inject constructor(
     private val warpnetApi: WarpnetApi,
     private val eventHub: EventHub,
     accountManager: AccountManager
@@ -48,7 +48,7 @@ class ScheduledStatusViewModel @Inject constructor(
 
     private val refreshTrigger = MutableStateFlow(0)
 
-    private var currentPagingSource: ScheduledStatusPagingSource? = null
+    private var currentPagingSource: ScheduledTweetPagingSource? = null
 
     val scheduledStatuses: MutableList<ScheduledTweetViewData> = mutableListOf()
     var nextKey: String? = null
@@ -61,11 +61,11 @@ class ScheduledStatusViewModel @Inject constructor(
                 initialLoadSize = 20
             ),
             pagingSourceFactory = {
-                ScheduledStatusPagingSource(this).also { newPagingSource ->
+                ScheduledTweetPagingSource(this).also { newPagingSource ->
                     this.currentPagingSource = newPagingSource
                 }
             },
-            remoteMediator = ScheduledStatusRemoteMediator(warpnetApi, accountManager, this)
+            remoteMediator = ScheduledTweetRemoteMediator(warpnetApi, accountManager, this)
         ).flow
             .cachedIn(viewModelScope)
     }
@@ -134,7 +134,7 @@ class ScheduledStatusViewModel @Inject constructor(
                     invalidate()
                 },
                 { throwable ->
-                    Log.w("ScheduledStatusViewModel", "Error deleting scheduled status", throwable)
+                    Log.w("ScheduledTweetViewModel", "Error deleting scheduled status", throwable)
                     _error.emit(throwable)
                 }
             )
