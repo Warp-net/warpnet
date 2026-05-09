@@ -18,6 +18,7 @@ Always start to explore the codebase from the files:
 ## Code Changes
 - Make the smallest possible changes required to solve the task.
 - Avoid refactoring or unrelated edits.
+- Do not add fat comment blocks
 
 ## AI-generated Comments
 - Validate all comments and suggestions from Codex and Copilot:

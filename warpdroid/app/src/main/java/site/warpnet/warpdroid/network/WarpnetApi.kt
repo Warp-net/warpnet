@@ -83,10 +83,7 @@ class WarpnetApi @Inject constructor(
 
     companion object {
         private const val TAG = "WarpnetApi"
-
-        const val ENDPOINT_AUTHORIZE = "oauth/authorize"
-        const val DOMAIN_HEADER = "domain"
-        const val PLACEHOLDER_DOMAIN = "dummy.placeholder"
+        const val PLACEHOLDER_DOMAIN = "warpnet.site"
 
         // Instance stub values — no Warpnet endpoint reports these, so we
         // hard-code the compose / onboarding UX against known node limits.
@@ -230,7 +227,7 @@ class WarpnetApi @Inject constructor(
         sinceId: String? = null,
         limit: Int? = null,
     ): Response<List<Status>> = paginated {
-        warpnet.getHomeTimeline(cursor = maxId.orEmpty(), limit = limit ?: 40)
+        warpnet.getHomeTimeline(cursor = maxId.orEmpty(), limit = limit ?: 20)
     }
 
     /**
@@ -247,7 +244,7 @@ class WarpnetApi @Inject constructor(
         val userId = accountManager.activeAccount?.accountId.orEmpty()
         if (userId.isEmpty()) return stubList()
         return paginated {
-            warpnet.getUserTimeline(userId = userId, cursor = maxId.orEmpty(), limit = limit ?: 40)
+            warpnet.getUserTimeline(userId = userId, cursor = maxId.orEmpty(), limit = limit ?: 20)
         }
     }
 
@@ -284,7 +281,7 @@ class WarpnetApi @Inject constructor(
         val userId = accountManager.activeAccount?.accountId.orEmpty()
         if (userId.isEmpty()) return stubList()
         return paginated {
-            warpnet.getNotifications(userId = userId, cursor = maxId.orEmpty(), limit = limit ?: 40)
+            warpnet.getNotifications(userId = userId, cursor = maxId.orEmpty(), limit = limit ?: 20)
         }
     }
 
