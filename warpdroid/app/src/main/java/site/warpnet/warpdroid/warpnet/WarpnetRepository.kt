@@ -225,9 +225,12 @@ class WarpnetRepository @Inject constructor(
     // -----------------------------------------------------------------
 
     suspend fun postStatus(text: String, authorUserId: String, authorUsername: String, parentId: String? = null): Status {
+        // createdAt is left null so the backend stamps the creation time
+        // (database/tweet-repo.go:152). Emitting "" instead fails the
+        // server-side time.Time decode before the zero-value fallback
+        // runs, so the post would silently disappear.
         val draft = WarpnetTweet(
             id = "",
-            createdAt = "",
             rootId = parentId ?: "",
             text = text,
             userId = authorUserId,
@@ -302,9 +305,9 @@ class WarpnetRepository @Inject constructor(
     // Warpnet's NewRetweetEvent is domain.Tweet, so the payload is the
     // retweeter's copy of the tweet rather than a (tweet_id, user_id) pair.
     suspend fun reblogStatus(tweetId: String, retweeterId: String, retweeterUsername: String): Long {
+        // createdAt left null for the same reason as postStatus.
         val payload = WarpnetTweet(
             id = tweetId,
-            createdAt = "",
             rootId = "",
             text = "",
             userId = retweeterId,
