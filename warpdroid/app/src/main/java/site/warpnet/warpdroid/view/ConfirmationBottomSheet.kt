@@ -26,7 +26,7 @@ import com.google.android.material.color.MaterialColors
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.BottomsheetConfirmationBinding
 import site.warpnet.warpdroid.databinding.ItemRetweetOptionBinding
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.util.getNonNullString
 import site.warpnet.warpdroid.util.getSerializableCompat
@@ -43,14 +43,14 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
 
     private val binding by viewBinding(BottomsheetConfirmationBinding::bind)
 
-    private var selectedOption = Status.Visibility.PUBLIC
+    private var selectedOption = Tweet.Visibility.PUBLIC
 
     @SuppressLint("UseCompatTextViewDrawableApis")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val mode: Mode = requireArguments().getSerializableCompat(ARG_MODE)!!
         if (mode == Mode.RETWEET) {
-            selectedOption = Status.Visibility.valueOf(
-                prefs.getNonNullString(PrefKeys.RETWEET_PRIVACY, Status.Visibility.PUBLIC.name)
+            selectedOption = Tweet.Visibility.valueOf(
+                prefs.getNonNullString(PrefKeys.RETWEET_PRIVACY, Tweet.Visibility.PUBLIC.name)
             )
 
             binding.confirmTextView.setText(R.string.retweet_confirm)
@@ -75,7 +75,7 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
             binding.retweetPrivacyDropdown.setText(selectedOption.getName())
 
             binding.retweetPrivacyDropdown.setOnItemClickListener { _, _, position, _ ->
-                selectedOption = retweetOptions.getOrElse(position) { Status.Visibility.PUBLIC }
+                selectedOption = retweetOptions.getOrElse(position) { Tweet.Visibility.PUBLIC }
                 binding.retweetPrivacyLayout.setStartIconDrawable(selectedOption.getIcon())
                 binding.retweetPrivacyDropdown.setText(selectedOption.getName())
             }
@@ -100,7 +100,7 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
         }
     }
 
-    inner class OptionsAdapter(context: Context) : ArrayAdapter<Status.Visibility>(
+    inner class OptionsAdapter(context: Context) : ArrayAdapter<Tweet.Visibility>(
         context,
         R.layout.item_retweet_option,
         retweetOptions
@@ -154,9 +154,9 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
         private const val ARG_MODE = "mode"
         private const val RESULT_VISIBILITY = "visibility"
 
-        private val retweetOptions = listOf(Status.Visibility.PUBLIC, Status.Visibility.UNLISTED, Status.Visibility.PRIVATE)
+        private val retweetOptions = listOf(Tweet.Visibility.PUBLIC, Tweet.Visibility.UNLISTED, Tweet.Visibility.PRIVATE)
 
-        fun Fragment.confirmRetweet(preferences: SharedPreferences, onConfirmed: (Status.Visibility) -> Unit) {
+        fun Fragment.confirmRetweet(preferences: SharedPreferences, onConfirmed: (Tweet.Visibility) -> Unit) {
             if (preferences.getBoolean(PrefKeys.CONFIRM_RETWEETS, true)) {
                 val bottomSheet = ConfirmationBottomSheet()
                 bottomSheet.arguments = bundleOf(
@@ -164,10 +164,10 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
                 )
                 bottomSheet.show(childFragmentManager, TAG)
                 childFragmentManager.setFragmentResultListener(KEY_CONFIRM, this) { requestKey, result ->
-                    onConfirmed(Status.Visibility.valueOf(result.getString(RESULT_VISIBILITY)!!))
+                    onConfirmed(Tweet.Visibility.valueOf(result.getString(RESULT_VISIBILITY)!!))
                 }
             } else {
-                onConfirmed(Status.Visibility.PUBLIC)
+                onConfirmed(Tweet.Visibility.PUBLIC)
             }
         }
 
@@ -187,28 +187,28 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
         }
 
         @StringRes
-        private fun Status.Visibility?.getName(): Int {
+        private fun Tweet.Visibility?.getName(): Int {
             return when (this) {
-                Status.Visibility.PUBLIC -> R.string.post_privacy_public
-                Status.Visibility.UNLISTED -> R.string.post_privacy_unlisted
+                Tweet.Visibility.PUBLIC -> R.string.post_privacy_public
+                Tweet.Visibility.UNLISTED -> R.string.post_privacy_unlisted
                 else -> R.string.post_privacy_followers_only
             }
         }
 
         @StringRes
-        private fun Status.Visibility?.getDescription(): Int {
+        private fun Tweet.Visibility?.getDescription(): Int {
             return when (this) {
-                Status.Visibility.PUBLIC -> R.string.retweet_privacy_public_description
-                Status.Visibility.UNLISTED -> R.string.retweet_privacy_unlisted_description
+                Tweet.Visibility.PUBLIC -> R.string.retweet_privacy_public_description
+                Tweet.Visibility.UNLISTED -> R.string.retweet_privacy_unlisted_description
                 else -> R.string.retweet_privacy_followers_only_description
             }
         }
 
         @DrawableRes
-        private fun Status.Visibility?.getIcon(): Int {
+        private fun Tweet.Visibility?.getIcon(): Int {
             return when (this) {
-                Status.Visibility.PUBLIC -> R.drawable.ic_public_24dp
-                Status.Visibility.UNLISTED -> R.drawable.ic_lock_open_24dp
+                Tweet.Visibility.PUBLIC -> R.drawable.ic_public_24dp
+                Tweet.Visibility.UNLISTED -> R.drawable.ic_lock_open_24dp
                 else -> R.drawable.ic_lock_24dp
             }
         }

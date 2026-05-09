@@ -28,8 +28,8 @@ import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.settings.PrefKeys
-import site.warpnet.warpdroid.viewdata.StatusViewData
-import site.warpnet.warpdroid.viewmodel.StatusActionsViewModel
+import site.warpnet.warpdroid.viewdata.TweetViewData
+import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
@@ -38,12 +38,12 @@ abstract class TimelineViewModel(
     private val eventHub: EventHub,
     val accountManager: AccountManager,
     private val sharedPreferences: SharedPreferences
-) : StatusActionsViewModel(api, eventHub) {
+) : TweetActionsViewModel(api, eventHub) {
 
     val activeAccountFlow = accountManager.activeAccount(viewModelScope)
     protected val accountId: Long = activeAccountFlow.value!!.id
 
-    abstract val statuses: Flow<PagingData<StatusViewData>>
+    abstract val statuses: Flow<PagingData<TweetViewData>>
 
     var kind: Kind = Kind.HOME
         private set
@@ -94,15 +94,15 @@ abstract class TimelineViewModel(
         }
     }
 
-    fun showPollResults(status: StatusViewData.Concrete) = viewModelScope.launch {
+    fun showPollResults(status: TweetViewData.Concrete) = viewModelScope.launch {
         eventHub.dispatch(PollShowResultsEvent(status.actionableId))
     }
 
-    abstract fun changeExpanded(expanded: Boolean, status: StatusViewData.Concrete)
+    abstract fun changeExpanded(expanded: Boolean, status: TweetViewData.Concrete)
 
-    abstract fun changeContentShowing(isShowing: Boolean, status: StatusViewData.Concrete)
+    abstract fun changeContentShowing(isShowing: Boolean, status: TweetViewData.Concrete)
 
-    abstract fun changeContentCollapsed(isCollapsed: Boolean, status: StatusViewData.Concrete)
+    abstract fun changeContentCollapsed(isCollapsed: Boolean, status: TweetViewData.Concrete)
 
     abstract fun removeStatusWithId(id: String)
 
@@ -110,14 +110,14 @@ abstract class TimelineViewModel(
 
     abstract fun fullReload()
 
-    abstract fun changeFilter(filtered: Boolean, status: StatusViewData.Concrete)
+    abstract fun changeFilter(filtered: Boolean, status: TweetViewData.Concrete)
 
-    abstract fun showQuote(status: StatusViewData.Concrete)
+    abstract fun showQuote(status: TweetViewData.Concrete)
 
     /** Triggered when currently displayed data must be reloaded. */
     protected abstract suspend fun invalidate()
 
-    protected fun shouldHideStatus(statusViewData: StatusViewData): Boolean {
+    protected fun shouldHideStatus(statusViewData: TweetViewData): Boolean {
         val concrete = statusViewData.asStatusOrNull() ?: return false
         val status = concrete.status
         return if (
@@ -176,8 +176,8 @@ abstract class TimelineViewModel(
         }
     }
 
-    abstract suspend fun translate(status: StatusViewData.Concrete): NetworkResult<Unit>
-    abstract fun untranslate(status: StatusViewData.Concrete)
+    abstract suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit>
+    abstract fun untranslate(status: TweetViewData.Concrete)
     abstract fun saveHomeTimelinePosition(firstVisibleIndex: Int, firstVisibleOffset: Int)
 
     companion object {

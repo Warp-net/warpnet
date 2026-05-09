@@ -61,13 +61,13 @@ data class PollConfiguration(
 
 @JsonClass(generateAdapter = true)
 data class InstanceConfiguration(
-    val statuses: StatusConfiguration? = null,
+    val statuses: TweetConfiguration? = null,
     @Json(name = "media_attachments") val mediaAttachments: MediaAttachmentConfiguration? = null,
     val polls: PollConfiguration? = null
 )
 
 @JsonClass(generateAdapter = true)
-data class StatusConfiguration(
+data class TweetConfiguration(
     @Json(name = "max_characters") val maxCharacters: Int? = null,
     @Json(name = "max_media_attachments") val maxMediaAttachments: Int? = null,
     @Json(name = "characters_reserved_per_url") val charactersReservedPerUrl: Int? = null

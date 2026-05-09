@@ -55,7 +55,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfo
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
@@ -263,7 +263,7 @@ abstract class SearchFragment<T : Any> :
 
     override fun onViewTag(tag: String) {
         bottomSheetActivity?.startActivityWithSlideInAnimation(
-            StatusListActivity.newHashtagIntent(requireContext(), tag)
+            TweetListActivity.newHashtagIntent(requireContext(), tag)
         )
     }
 

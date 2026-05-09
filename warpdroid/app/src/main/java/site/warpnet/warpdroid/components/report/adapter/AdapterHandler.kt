@@ -16,12 +16,12 @@
 package site.warpnet.warpdroid.components.report.adapter
 
 import android.view.View
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.interfaces.LinkListener
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 
 interface AdapterHandler : LinkListener {
-    fun showMedia(v: View?, status: StatusViewData.Concrete, idx: Int)
-    fun setStatusChecked(status: Status, isChecked: Boolean)
+    fun showMedia(v: View?, status: TweetViewData.Concrete, idx: Int)
+    fun setStatusChecked(status: Tweet, isChecked: Boolean)
     fun isStatusChecked(id: String): Boolean
 }

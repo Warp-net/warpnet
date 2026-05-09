@@ -1,7 +1,7 @@
 package site.warpnet.warpdroid.util
 
 import android.content.Context
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.ViewMediaActivity
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
@@ -12,17 +12,17 @@ import site.warpnet.warpdroid.components.viewthread.ViewThreadActivity
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import kotlin.collections.map
 
-fun Context.viewThread(viewData: StatusViewData.Concrete) {
+fun Context.viewThread(viewData: TweetViewData.Concrete) {
     // the url of a actionable status is never null
     val intent = ViewThreadActivity.newIntent(this, viewData.actionableId, viewData.actionable.url!!)
     startActivityWithSlideInAnimation(intent)
 }
 
 fun Context.viewTag(tag: String) {
-    val intent = StatusListActivity.newHashtagIntent(this, tag)
+    val intent = TweetListActivity.newHashtagIntent(this, tag)
     startActivityWithSlideInAnimation(intent)
 }
 
@@ -31,7 +31,7 @@ fun Context.viewAccount(accountId: String) {
     startActivityWithSlideInAnimation(intent)
 }
 
-fun Context.reply(viewData: StatusViewData.Concrete, activeAccount: AccountEntity) {
+fun Context.reply(viewData: TweetViewData.Concrete, activeAccount: AccountEntity) {
     val actionableStatus = viewData.actionable
 
     val mentionedUsernames = buildSet {
@@ -51,7 +51,7 @@ fun Context.reply(viewData: StatusViewData.Concrete, activeAccount: AccountEntit
             contentWarning = actionableStatus.spoilerText,
             mentionedUsernames = mentionedUsernames,
             replyingStatusAuthor = actionableStatus.account.localUsername,
-            replyingStatusContent = actionableStatus.content.parseAsWarpnetHtml().toString(),
+            replyingTweetContent = actionableStatus.content.parseAsWarpnetHtml().toString(),
             language = actionableStatus.language,
             kind = ComposeActivity.ComposeKind.NEW
         )
@@ -73,22 +73,22 @@ fun Context.viewMedia(index: Int, attachments: List<AttachmentViewData>) {
     }
 }
 
-fun Context.showFavs(viewData: StatusViewData.Concrete) {
+fun Context.showFavs(viewData: TweetViewData.Concrete) {
     val intent = AccountListActivity.newIntent(this, AccountListActivity.Type.LIKED, viewData.actionableId)
     startActivityWithSlideInAnimation(intent)
 }
 
-fun Context.showRetweets(viewData: StatusViewData.Concrete) {
+fun Context.showRetweets(viewData: TweetViewData.Concrete) {
     val intent = AccountListActivity.newIntent(this, AccountListActivity.Type.RETWEETED, viewData.actionableId)
     startActivityWithSlideInAnimation(intent)
 }
 
-fun Context.showQuotes(viewData: StatusViewData.Concrete) {
-    val intent = StatusListActivity.newQuotesIntent(this, viewData.actionableId)
+fun Context.showQuotes(viewData: TweetViewData.Concrete) {
+    val intent = TweetListActivity.newQuotesIntent(this, viewData.actionableId)
     startActivityWithSlideInAnimation(intent)
 }
 
-fun Context.report(viewData: StatusViewData.Concrete) {
+fun Context.report(viewData: TweetViewData.Concrete) {
     val account = viewData.actionable.account
     val intent = ReportActivity.getIntent(this, account.id, account.username, viewData.id)
     startActivityWithSlideInAnimation(intent)

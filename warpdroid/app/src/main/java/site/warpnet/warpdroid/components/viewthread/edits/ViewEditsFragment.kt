@@ -34,7 +34,7 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.databinding.FragmentViewEditsBinding
 import site.warpnet.warpdroid.interfaces.LinkListener
@@ -187,7 +187,7 @@ class ViewEditsFragment :
 
     override fun onViewTag(tag: String) {
         bottomSheetActivity?.startActivityWithSlideInAnimation(
-            StatusListActivity.newHashtagIntent(requireContext(), tag)
+            TweetListActivity.newHashtagIntent(requireContext(), tag)
         )
     }
 

@@ -21,7 +21,7 @@ import android.view.View
 
 open class NoUnderlineURLSpan(val url: String) : URLSpan(url) {
 
-    // This should not be necessary. But if you don't do this the [StatusLengthTest] tests
+    // This should not be necessary. But if you don't do this the [TweetLengthTest] tests
     // fail. Without this, accessing the `url` property, or calling `getUrl()` (which should
     // automatically call through to [UrlSpan.getURL]) returns null.
     override fun getURL(): String {

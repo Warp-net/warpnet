@@ -3,9 +3,9 @@ package site.warpnet.warpdroid.util
 import android.content.Context
 import android.content.Intent
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 
-fun Context.shareStatusContent(viewData: StatusViewData.Concrete) {
+fun Context.shareTweetContent(viewData: TweetViewData.Concrete) {
     val statusToShare = viewData.actionable
     val sendIntent = Intent().apply {
         action = Intent.ACTION_SEND
@@ -24,7 +24,7 @@ fun Context.shareStatusContent(viewData: StatusViewData.Concrete) {
     )
 }
 
-fun Context.shareStatusLink(viewData: StatusViewData.Concrete) {
+fun Context.shareStatusLink(viewData: TweetViewData.Concrete) {
     val urlToShare = viewData.actionable.url
     val sendIntent = Intent().apply {
         action = Intent.ACTION_SEND

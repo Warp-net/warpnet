@@ -23,8 +23,8 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.sp
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.ui.statuscomponents.text.INLINE_CONTENT_TAG
-import site.warpnet.warpdroid.ui.statuscomponents.text.htmlToAnnotatedString
+import site.warpnet.warpdroid.ui.tweetcomponents.text.INLINE_CONTENT_TAG
+import site.warpnet.warpdroid.ui.tweetcomponents.text.htmlToAnnotatedString
 import site.warpnet.warpdroid.util.twittertext.Regex
 import java.util.regex.Pattern
 

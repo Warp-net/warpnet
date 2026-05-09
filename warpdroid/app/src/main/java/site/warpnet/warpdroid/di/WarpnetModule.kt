@@ -9,7 +9,7 @@ import android.content.Context
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Notification
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.json.GuardedAdapter
 import site.warpnet.warpdroid.json.NotificationTypeAdapter
 import site.warpnet.warpdroid.json.StringOrBooleanAdapter
@@ -52,9 +52,9 @@ object WarpnetModule {
         )
         .add(Notification.Type::class.java, NotificationTypeAdapter())
         .add(
-            Status.Visibility::class.java,
-            EnumJsonAdapter.create(Status.Visibility::class.java)
-                .withUnknownFallback(Status.Visibility.UNKNOWN),
+            Tweet.Visibility::class.java,
+            EnumJsonAdapter.create(Tweet.Visibility::class.java)
+                .withUnknownFallback(Tweet.Visibility.UNKNOWN),
         )
         .build()
 

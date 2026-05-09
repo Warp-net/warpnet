@@ -28,8 +28,8 @@ import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
 import site.warpnet.warpdroid.appstore.PollVoteEvent
-import site.warpnet.warpdroid.appstore.StatusChangedEvent
-import site.warpnet.warpdroid.appstore.StatusDeletedEvent
+import site.warpnet.warpdroid.appstore.TweetChangedEvent
+import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.components.search.paging.SearchPagingSource
 import site.warpnet.warpdroid.components.search.paging.SearchStatusPagingSource
 import site.warpnet.warpdroid.components.search.paging.SearchStatusRemoteMediator
@@ -38,12 +38,12 @@ import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Quote
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.toViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import site.warpnet.warpdroid.viewdata.TranslationViewData
-import site.warpnet.warpdroid.viewmodel.StatusActionsViewModel
+import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Locale
 import javax.inject.Inject
@@ -58,7 +58,7 @@ class SearchViewModel @Inject constructor(
     private val warpnetApi: WarpnetApi,
     eventHub: EventHub,
     private val accountManager: AccountManager
-) : StatusActionsViewModel(warpnetApi, eventHub) {
+) : TweetActionsViewModel(warpnetApi, eventHub) {
 
     private val _currentQuery: MutableStateFlow<String> = MutableStateFlow("")
     val currentQuery = _currentQuery.asStateFlow()
@@ -72,7 +72,7 @@ class SearchViewModel @Inject constructor(
     val alwaysShowSensitiveMedia = activeAccount?.alwaysShowSensitiveMedia == true
     val alwaysOpenSpoiler = activeAccount?.alwaysOpenSpoiler == true
 
-    val loadedStatuses: MutableList<StatusViewData.Concrete> = mutableListOf()
+    val loadedStatuses: MutableList<TweetViewData.Concrete> = mutableListOf()
 
     val statusesPagingSourceFactory = InvalidatingPagingSourceFactory {
         SearchStatusPagingSource(loadedStatuses, loadedStatuses.size)
@@ -163,11 +163,11 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             eventHub.events.collect { event ->
                 when (event) {
-                    is StatusChangedEvent -> handleStatusChangedEvent(event.status)
+                    is TweetChangedEvent -> handleTweetChangedEvent(event.status)
                     is PollVoteEvent -> handlePollVotedEvent(event.statusId, event.poll)
                     is BlockEvent -> removeAllByAccountId(event.accountId)
                     is MuteEvent -> removeAllByAccountId(event.accountId)
-                    is StatusDeletedEvent -> removeStatus(event.statusId)
+                    is TweetDeletedEvent -> removeStatus(event.statusId)
                 }
             }
         }
@@ -178,23 +178,23 @@ class SearchViewModel @Inject constructor(
         _currentQuery.value = query
     }
 
-    fun expandedChange(statusViewData: StatusViewData.Concrete, expanded: Boolean) {
-        updateStatusViewData(statusViewData.copy(isExpanded = expanded))
+    fun expandedChange(statusViewData: TweetViewData.Concrete, expanded: Boolean) {
+        updateTweetViewData(statusViewData.copy(isExpanded = expanded))
     }
 
-    fun contentHiddenChange(statusViewData: StatusViewData.Concrete, isShowing: Boolean) {
-        updateStatusViewData(statusViewData.copy(isShowingContent = isShowing))
+    fun contentHiddenChange(statusViewData: TweetViewData.Concrete, isShowing: Boolean) {
+        updateTweetViewData(statusViewData.copy(isShowingContent = isShowing))
     }
 
-    fun collapsedChange(statusViewData: StatusViewData.Concrete, collapsed: Boolean) {
-        updateStatusViewData(statusViewData.copy(isCollapsed = collapsed))
+    fun collapsedChange(statusViewData: TweetViewData.Concrete, collapsed: Boolean) {
+        updateTweetViewData(statusViewData.copy(isCollapsed = collapsed))
     }
 
-    suspend fun translate(statusViewData: StatusViewData.Concrete): NetworkResult<Unit> {
-        updateStatusViewData(statusViewData.copy(translation = TranslationViewData.Loading))
+    suspend fun translate(statusViewData: TweetViewData.Concrete): NetworkResult<Unit> {
+        updateTweetViewData(statusViewData.copy(translation = TranslationViewData.Loading))
         return warpnetApi.translate(statusViewData.actionableId, Locale.getDefault().language)
             .map { translation ->
-                updateStatusViewData(
+                updateTweetViewData(
                     statusViewData.copy(
                         translation = TranslationViewData.Loaded(
                             translation
@@ -203,16 +203,16 @@ class SearchViewModel @Inject constructor(
                 )
             }
             .onFailure {
-                updateStatusViewData(statusViewData.copy(translation = null))
+                updateTweetViewData(statusViewData.copy(translation = null))
             }
     }
 
-    fun untranslate(statusViewData: StatusViewData.Concrete) {
-        updateStatusViewData(statusViewData.copy(translation = null))
+    fun untranslate(statusViewData: TweetViewData.Concrete) {
+        updateTweetViewData(statusViewData.copy(translation = null))
     }
 
-    fun showPollResults(viewData: StatusViewData.Concrete) {
-        updateStatusViewData(
+    fun showPollResults(viewData: TweetViewData.Concrete) {
+        updateTweetViewData(
             viewData.copy(
                 status = viewData.status.copy(
                     poll = viewData.status.poll?.copy(voted = true)
@@ -221,12 +221,12 @@ class SearchViewModel @Inject constructor(
         )
     }
 
-    fun changeFilter(filtered: Boolean, status: StatusViewData.Concrete) {
-        updateStatusViewData(status.copy(filterActive = filtered))
+    fun changeFilter(filtered: Boolean, status: TweetViewData.Concrete) {
+        updateTweetViewData(status.copy(filterActive = filtered))
     }
 
-    fun showQuote(viewData: StatusViewData.Concrete) {
-        updateStatusViewData(
+    fun showQuote(viewData: TweetViewData.Concrete) {
+        updateTweetViewData(
             viewData.copy(
                 quote = viewData.quote?.copy(
                     quoteShown = true
@@ -235,9 +235,9 @@ class SearchViewModel @Inject constructor(
         )
     }
 
-    private fun handleStatusChangedEvent(status: Status) {
-        updateStatusViewData(status.id) { viewData ->
-            val oldQuoteViewData = viewData.quote?.quotedStatusViewData
+    private fun handleTweetChangedEvent(status: Tweet) {
+        updateTweetViewData(status.id) { viewData ->
+            val oldQuoteViewData = viewData.quote?.quotedTweetViewData
             status.toViewData(
                 isShowingContent = viewData.isShowingContent,
                 isExpanded = viewData.isExpanded,
@@ -274,17 +274,17 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun updateStatusViewData(newStatusViewData: StatusViewData.Concrete) {
-        val idx = loadedStatuses.indexOfFirst { it.id == newStatusViewData.id }
+    private fun updateTweetViewData(newTweetViewData: TweetViewData.Concrete) {
+        val idx = loadedStatuses.indexOfFirst { it.id == newTweetViewData.id }
         if (idx >= 0) {
-            loadedStatuses[idx] = newStatusViewData
+            loadedStatuses[idx] = newTweetViewData
             statusesPagingSourceFactory.invalidate()
         }
     }
 
-    private fun updateStatusViewData(
+    private fun updateTweetViewData(
         statusId: String,
-        updater: (StatusViewData.Concrete) -> StatusViewData.Concrete
+        updater: (TweetViewData.Concrete) -> TweetViewData.Concrete
     ) {
         val idx = loadedStatuses.indexOfFirst { it.id == statusId }
         if (idx >= 0) {
@@ -294,8 +294,8 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun updateStatus(statusId: String, updater: (Status) -> Status) {
-        updateStatusViewData(statusId) { viewData ->
+    private fun updateStatus(statusId: String, updater: (Tweet) -> Tweet) {
+        updateTweetViewData(statusId) { viewData ->
             viewData.copy(
                 status = updater(viewData.status)
             )

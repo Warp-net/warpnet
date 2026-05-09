@@ -32,11 +32,11 @@ import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.NewPoll
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.service.MediaToSend
 import site.warpnet.warpdroid.service.ServiceClient
-import site.warpnet.warpdroid.service.StatusToSend
+import site.warpnet.warpdroid.service.TweetToSend
 import site.warpnet.warpdroid.util.randomAlphanumericString
 import site.warpnet.warpdroid.util.savedstateflow.SavedStateFlow
 import dagger.assisted.Assisted
@@ -91,12 +91,12 @@ class ComposeViewModel @AssistedInject constructor(
     )
     val markMediaAsSensitive: StateFlow<Boolean> = _markMediaAsSensitive.asStateFlow()
 
-    private val _statusVisibility: SavedStateFlow<Status.Visibility> = SavedStateFlow(
+    private val _statusVisibility: SavedStateFlow<Tweet.Visibility> = SavedStateFlow(
         savedStateHandle = state,
         key = "STATUS_VISIBILITY",
         initialValue = startingVisibility()
     )
-    val statusVisibility: StateFlow<Status.Visibility> = _statusVisibility.asStateFlow()
+    val statusVisibility: StateFlow<Tweet.Visibility> = _statusVisibility.asStateFlow()
 
     private val _showContentWarning: SavedStateFlow<Boolean> = SavedStateFlow(
         savedStateHandle = state,
@@ -196,21 +196,21 @@ class ComposeViewModel @AssistedInject constructor(
         updateCloseConfirmation()
     }
 
-    fun startingVisibility(): Status.Visibility {
+    fun startingVisibility(): Tweet.Visibility {
         val tootVisibility = composeOptions?.visibility
         if (tootVisibility != null) {
             return tootVisibility
         }
 
-        val activeAccount = accountManager.activeAccount ?: return Status.Visibility.UNKNOWN
+        val activeAccount = accountManager.activeAccount ?: return Tweet.Visibility.UNKNOWN
         val preferredVisibility = if (inReplyToId != null) {
             activeAccount.defaultReplyPrivacy.toVisibilityOr(activeAccount.defaultPostPrivacy)
         } else {
             activeAccount.defaultPostPrivacy
         }
 
-        val replyVisibility = composeOptions?.replyVisibility ?: Status.Visibility.UNKNOWN
-        return Status.Visibility.fromInt(
+        val replyVisibility = composeOptions?.replyVisibility ?: Tweet.Visibility.UNKNOWN
+        return Tweet.Visibility.fromInt(
             preferredVisibility.int.coerceAtLeast(replyVisibility.int)
         )
     }
@@ -309,7 +309,7 @@ class ComposeViewModel @AssistedInject constructor(
         return mediaItem
     }
 
-    fun changeStatusVisibility(visibility: Status.Visibility) {
+    fun changeStatusVisibility(visibility: Tweet.Visibility) {
         _statusVisibility.value = visibility
     }
 
@@ -433,7 +433,7 @@ class ComposeViewModel @AssistedInject constructor(
                 processed = item.state == QueuedMedia.State.PROCESSED || item.state == QueuedMedia.State.PUBLISHED
             )
         }
-        val tootToSend = StatusToSend(
+        val tootToSend = TweetToSend(
             text = content,
             warningText = spoilerText,
             visibility = _statusVisibility.value.stringValue,
@@ -442,7 +442,7 @@ class ComposeViewModel @AssistedInject constructor(
             scheduledAt = _scheduledAt.value,
             inReplyToId = inReplyToId,
             poll = _poll.value,
-            replyingStatusContent = null,
+            replyingTweetContent = null,
             replyingStatusAuthorUsername = null,
             accountId = accountId,
             draftId = composeOptions?.draftId ?: 0,

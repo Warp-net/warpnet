@@ -65,7 +65,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.EditProfileActivity
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.ViewMediaActivity
 import site.warpnet.warpdroid.components.account.list.ListSelectionFragment
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
@@ -938,7 +938,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     }
 
     override fun onViewTag(tag: String) {
-        val intent = StatusListActivity.newHashtagIntent(this, tag)
+        val intent = TweetListActivity.newHashtagIntent(this, tag)
         startActivityWithSlideInAnimation(intent)
     }
 

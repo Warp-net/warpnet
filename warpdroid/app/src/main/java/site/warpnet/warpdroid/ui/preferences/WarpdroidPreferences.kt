@@ -28,7 +28,7 @@ import site.warpnet.warpdroid.settings.AppTheme
 data class WarpdroidPreferences(
     val theme: AppTheme = AppTheme.DEFAULT,
 
-    val statusTextStyles: StatusTextStyles = StatusTextStyles(),
+    val statusTextStyles: TweetTextStyles = TweetTextStyles(),
 
     val useBlurhash: Boolean = false,
     val showBotBadge: Boolean = true,
@@ -42,7 +42,7 @@ data class WarpdroidPreferences(
 )
 
 @Immutable
-data class StatusTextStyles(
+data class TweetTextStyles(
     val small: TextStyle = textStyle(fontSize = 14.sp),
     val medium: TextStyle = textStyle(fontSize = 16.sp),
     val large: TextStyle = textStyle(fontSize = 18.sp)

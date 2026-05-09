@@ -37,14 +37,14 @@ package site.warpnet.warpdroid.util
 import androidx.paging.CombinedLoadStates
 import androidx.paging.LoadState
 import site.warpnet.warpdroid.entity.Filter
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TrendingTag
 import site.warpnet.warpdroid.viewdata.QuoteViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import site.warpnet.warpdroid.viewdata.TranslationViewData
 import site.warpnet.warpdroid.viewdata.TrendingViewData
 
-fun Status.toViewData(
+fun Tweet.toViewData(
     isShowingContent: Boolean,
     isExpanded: Boolean,
     isCollapsed: Boolean,
@@ -56,7 +56,7 @@ fun Status.toViewData(
     isQuoteExpanded: Boolean,
     isQuoteCollapsed: Boolean,
     isQuoteShown: Boolean
-): StatusViewData.Concrete = StatusViewData.Concrete(
+): TweetViewData.Concrete = TweetViewData.Concrete(
     status = this,
     isShowingContent = isShowingContent,
     isCollapsed = isCollapsed,
@@ -68,7 +68,7 @@ fun Status.toViewData(
     quote = quote?.let {
         QuoteViewData(
             state = quote.state,
-            quotedStatusViewData = quote.quotedStatus?.toViewData(
+            quotedTweetViewData = quote.quotedStatus?.toViewData(
                 isShowingContent = isQuoteShowingContent,
                 isExpanded = isQuoteExpanded,
                 isCollapsed = isQuoteCollapsed,

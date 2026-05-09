@@ -30,7 +30,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.viewmodel.StatusActionsViewModel
+import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 
 sealed class SnackbarError {
 
@@ -58,7 +58,7 @@ sealed class SnackbarError {
 
 @Composable
 fun Fragment.ErrorSnackbars(
-    viewModel: StatusActionsViewModel,
+    viewModel: TweetActionsViewModel,
     legacyFallback: Boolean,
     modifier: Modifier = Modifier
 ) {

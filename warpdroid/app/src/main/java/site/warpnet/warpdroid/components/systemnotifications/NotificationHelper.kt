@@ -700,7 +700,7 @@ class NotificationHelper @Inject constructor(
             replyVisibility = replyVisibility,
             contentWarning = contentWarning,
             replyingStatusAuthor = citedLocalAuthor,
-            replyingStatusContent = citedText,
+            replyingTweetContent = citedText,
             mentionedUsernames = mentionedUsernames,
             modifiedInitialState = true,
             language = actionableStatus.language,

@@ -19,7 +19,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.widget.RadioGroup
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 
 class ComposeOptionsView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : RadioGroup(
     context,
@@ -34,29 +34,29 @@ class ComposeOptionsView @JvmOverloads constructor(context: Context, attrs: Attr
         setOnCheckedChangeListener { _, checkedId ->
             val visibility = when (checkedId) {
                 R.id.publicRadioButton ->
-                    Status.Visibility.PUBLIC
+                    Tweet.Visibility.PUBLIC
                 R.id.unlistedRadioButton ->
-                    Status.Visibility.UNLISTED
+                    Tweet.Visibility.UNLISTED
                 R.id.privateRadioButton ->
-                    Status.Visibility.PRIVATE
+                    Tweet.Visibility.PRIVATE
                 R.id.directRadioButton ->
-                    Status.Visibility.DIRECT
+                    Tweet.Visibility.DIRECT
                 else ->
-                    Status.Visibility.PUBLIC
+                    Tweet.Visibility.PUBLIC
             }
             listener?.onVisibilityChanged(visibility)
         }
     }
 
-    fun setStatusVisibility(visibility: Status.Visibility) {
+    fun setStatusVisibility(visibility: Tweet.Visibility) {
         val selectedButton = when (visibility) {
-            Status.Visibility.PUBLIC ->
+            Tweet.Visibility.PUBLIC ->
                 R.id.publicRadioButton
-            Status.Visibility.UNLISTED ->
+            Tweet.Visibility.UNLISTED ->
                 R.id.unlistedRadioButton
-            Status.Visibility.PRIVATE ->
+            Tweet.Visibility.PRIVATE ->
                 R.id.privateRadioButton
-            Status.Visibility.DIRECT ->
+            Tweet.Visibility.DIRECT ->
                 R.id.directRadioButton
             else ->
                 R.id.directRadioButton
@@ -67,5 +67,5 @@ class ComposeOptionsView @JvmOverloads constructor(context: Context, attrs: Attr
 }
 
 interface ComposeOptionsListener {
-    fun onVisibilityChanged(visibility: Status.Visibility)
+    fun onVisibilityChanged(visibility: Tweet.Visibility)
 }

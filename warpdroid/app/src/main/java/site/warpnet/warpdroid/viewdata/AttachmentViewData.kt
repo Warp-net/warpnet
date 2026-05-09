@@ -35,7 +35,7 @@ data class AttachmentViewData(
     companion object {
         @JvmStatic
         fun list(
-            status: StatusViewData.Concrete,
+            status: TweetViewData.Concrete,
             alwaysShowSensitiveMedia: Boolean = false
         ): List<AttachmentViewData> {
             return status.attachments.map { attachment ->

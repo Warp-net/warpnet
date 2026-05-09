@@ -21,7 +21,7 @@ import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ItemReportNotificationBinding
 import site.warpnet.warpdroid.interfaces.AccountActionListener
-import site.warpnet.warpdroid.util.StatusDisplayOptions
+import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.util.getRelativeTimeSpanString
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.unicodeWrap
@@ -37,7 +37,7 @@ class ReportNotificationViewHolder(
     override fun bind(
         viewData: NotificationViewData.Concrete,
         payloads: List<*>,
-        statusDisplayOptions: StatusDisplayOptions
+        statusDisplayOptions: TweetDisplayOptions
     ) {
         if (payloads.isNotEmpty()) {
             return

@@ -40,13 +40,13 @@ import site.warpnet.warpdroid.components.notifications.NotificationActionListene
 import site.warpnet.warpdroid.components.notifications.NotificationsPagingAdapter
 import site.warpnet.warpdroid.databinding.FragmentNotificationRequestDetailsBinding
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LoadMoreActionListener
-import site.warpnet.warpdroid.interfaces.StatusActionListener
+import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.util.CardViewMode
-import site.warpnet.warpdroid.util.StatusDisplayOptions
+import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.util.getErrorString
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.openLink
@@ -64,7 +64,7 @@ import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmRetweet
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
 import site.warpnet.warpdroid.viewdata.NotificationViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.flow.collectLatest
@@ -73,7 +73,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class NotificationRequestDetailsFragment :
     Fragment(R.layout.fragment_notification_request_details),
-    StatusActionListener,
+    TweetActionListener,
     LoadMoreActionListener<NotificationViewData.LoadMore>,
     NotificationActionListener,
     AccountActionListener {
@@ -137,7 +137,7 @@ class NotificationRequestDetailsFragment :
 
     private fun setupAdapter(): NotificationsPagingAdapter {
         val activeAccount = accountManager.activeAccount!!
-        val statusDisplayOptions = StatusDisplayOptions(
+        val statusDisplayOptions = TweetDisplayOptions(
             animateAvatars = preferences.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false),
             mediaPreviewEnabled = activeAccount.mediaPreviewEnabled,
             useAbsoluteTime = preferences.getBoolean(PrefKeys.ABSOLUTE_TIME_VIEW, false),
@@ -188,9 +188,9 @@ class NotificationRequestDetailsFragment :
     }
 
     override fun onRetweet(
-        viewData: StatusViewData.Concrete,
+        viewData: TweetViewData.Concrete,
         retweet: Boolean,
-        visibility: Status.Visibility?,
+        visibility: Tweet.Visibility?,
         state: SparkButtonState?
     ) {
         if (retweet && visibility == null) {
@@ -199,7 +199,7 @@ class NotificationRequestDetailsFragment :
                 state?.animate()
             }
         } else {
-            viewModel.retweet(viewData.id, retweet, visibility ?: Status.Visibility.PUBLIC)
+            viewModel.retweet(viewData.id, retweet, visibility ?: Tweet.Visibility.PUBLIC)
             if (retweet) {
                 state?.animate()
             }
@@ -207,7 +207,7 @@ class NotificationRequestDetailsFragment :
     }
 
     override fun onLike(
-        viewData: StatusViewData.Concrete,
+        viewData: TweetViewData.Concrete,
         like: Boolean,
         state: SparkButtonState?
     ) {
@@ -221,35 +221,35 @@ class NotificationRequestDetailsFragment :
         }
     }
 
-    override fun onBookmark(viewData: StatusViewData.Concrete, bookmark: Boolean) {
+    override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
         viewModel.bookmark(viewData.id, bookmark)
     }
 
-    override fun onExpandedChange(viewData: StatusViewData.Concrete, expanded: Boolean) {
+    override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {
         viewModel.changeExpanded(expanded, viewData)
     }
 
-    override fun onContentHiddenChange(viewData: StatusViewData.Concrete, isShowing: Boolean) {
+    override fun onContentHiddenChange(viewData: TweetViewData.Concrete, isShowing: Boolean) {
         viewModel.changeContentShowing(isShowing, viewData)
     }
 
-    override fun onContentCollapsedChange(viewData: StatusViewData.Concrete, isCollapsed: Boolean) {
+    override fun onContentCollapsedChange(viewData: TweetViewData.Concrete, isCollapsed: Boolean) {
         viewModel.changeContentCollapsed(isCollapsed, viewData)
     }
 
-    override fun onVoteInPoll(viewData: StatusViewData.Concrete, pollId: String, choices: List<Int>) {
+    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) {
         viewModel.voteInPoll(viewData.id, pollId, choices)
     }
 
-    override fun onShowPollResults(viewData: StatusViewData.Concrete) {
+    override fun onShowPollResults(viewData: TweetViewData.Concrete) {
         viewModel.showPollResults(viewData)
     }
 
-    override fun changeFilter(viewData: StatusViewData.Concrete, filtered: Boolean) {
+    override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
     }
 
-    override fun onTranslate(viewData: StatusViewData.Concrete) {
+    override fun onTranslate(viewData: TweetViewData.Concrete) {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.translate(viewData)
                 .onFailure {
@@ -262,7 +262,7 @@ class NotificationRequestDetailsFragment :
         }
     }
 
-    override fun onUntranslate(viewData: StatusViewData.Concrete) {
+    override fun onUntranslate(viewData: TweetViewData.Concrete) {
         viewModel.untranslate(viewData)
     }
 
@@ -282,39 +282,39 @@ class NotificationRequestDetailsFragment :
         viewModel.mute(accountId, hideNotifications, duration)
     }
 
-    override fun onMuteConversation(viewData: StatusViewData.Concrete, mute: Boolean) {
+    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
         viewModel.muteConversation(viewData.id, mute)
     }
 
-    override fun onDelete(viewData: StatusViewData.Concrete) {
+    override fun onDelete(viewData: TweetViewData.Concrete) {
         viewModel.delete(viewData.id)
     }
 
-    override fun onRedraft(viewData: StatusViewData.Concrete) {
+    override fun onRedraft(viewData: TweetViewData.Concrete) {
         viewModel.redraftStatus(viewData.status)
     }
 
-    override fun onPin(viewData: StatusViewData.Concrete, pin: Boolean) {
+    override fun onPin(viewData: TweetViewData.Concrete, pin: Boolean) {
         viewModel.pin(viewData.id, pin)
     }
 
-    override fun onViewMedia(viewData: StatusViewData.Concrete, attachmentIndex: Int) {
+    override fun onViewMedia(viewData: TweetViewData.Concrete, attachmentIndex: Int) {
         requireContext().viewMedia(attachmentIndex, AttachmentViewData.list(viewData))
     }
 
-    override fun onViewThread(viewData: StatusViewData.Concrete) {
+    override fun onViewThread(viewData: TweetViewData.Concrete) {
         requireContext().viewThread(viewData)
     }
 
-    override fun onEdit(viewData: StatusViewData.Concrete) {
+    override fun onEdit(viewData: TweetViewData.Concrete) {
         viewModel.editStatus(viewData.status)
     }
 
-    override fun onReply(viewData: StatusViewData.Concrete) {
+    override fun onReply(viewData: TweetViewData.Concrete) {
         requireContext().reply(viewData, accountManager.activeAccount!!)
     }
 
-    override fun onReport(viewData: StatusViewData.Concrete) {
+    override fun onReport(viewData: TweetViewData.Concrete) {
         requireContext().report(viewData)
     }
 
@@ -341,11 +341,11 @@ class NotificationRequestDetailsFragment :
         viewModel.respondToFollowRequest(accept, accountId = accountIdRequestingFollow, notification = notification)
     }
 
-    override fun onShowQuote(viewData: StatusViewData.Concrete) {
+    override fun onShowQuote(viewData: TweetViewData.Concrete) {
         viewModel.showQuote(viewData)
     }
 
-    override fun removeQuote(viewData: StatusViewData.Concrete) {
+    override fun removeQuote(viewData: TweetViewData.Concrete) {
         viewModel.removeQuote(viewData.status)
     }
 

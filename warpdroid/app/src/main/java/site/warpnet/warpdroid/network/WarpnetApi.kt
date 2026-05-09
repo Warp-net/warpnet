@@ -33,7 +33,7 @@ import site.warpnet.warpdroid.entity.Announcement
 import site.warpnet.warpdroid.entity.AppCredentials
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Conversation
-import site.warpnet.warpdroid.entity.DeletedStatus
+import site.warpnet.warpdroid.entity.DeletedTweet
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.FilterKeyword
@@ -41,24 +41,24 @@ import site.warpnet.warpdroid.entity.HashTag
 import site.warpnet.warpdroid.entity.Instance
 import site.warpnet.warpdroid.entity.InstanceConfiguration
 import site.warpnet.warpdroid.entity.InstanceV1
-import site.warpnet.warpdroid.entity.StatusConfiguration
+import site.warpnet.warpdroid.entity.TweetConfiguration
 import site.warpnet.warpdroid.entity.Marker
 import site.warpnet.warpdroid.entity.MastoList
 import site.warpnet.warpdroid.entity.MediaUploadResult
-import site.warpnet.warpdroid.entity.NewStatus
+import site.warpnet.warpdroid.entity.NewTweet
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.NotificationPolicy
 import site.warpnet.warpdroid.entity.NotificationRequest
 import site.warpnet.warpdroid.entity.NotificationSubscribeResult
 import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Relationship
-import site.warpnet.warpdroid.entity.ScheduledStatus
+import site.warpnet.warpdroid.entity.ScheduledTweet
 import site.warpnet.warpdroid.entity.ScheduledStatusReply
 import site.warpnet.warpdroid.entity.SearchResult
-import site.warpnet.warpdroid.entity.Status
-import site.warpnet.warpdroid.entity.StatusContext
-import site.warpnet.warpdroid.entity.StatusEdit
-import site.warpnet.warpdroid.entity.StatusSource
+import site.warpnet.warpdroid.entity.Tweet
+import site.warpnet.warpdroid.entity.TweetContext
+import site.warpnet.warpdroid.entity.TweetEdit
+import site.warpnet.warpdroid.entity.TweetSource
 import site.warpnet.warpdroid.entity.TimelineAccount
 import site.warpnet.warpdroid.entity.Translation
 import site.warpnet.warpdroid.entity.TrendingTag
@@ -162,7 +162,7 @@ class WarpnetApi @Inject constructor(
             maxMediaAttachments = 0,
             uploadLimit = 0,
             configuration = InstanceConfiguration(
-                statuses = StatusConfiguration(
+                statuses = TweetConfiguration(
                     maxCharacters = WARPNET_MAX_TWEET_CHARS,
                     maxMediaAttachments = 0,
                     charactersReservedPerUrl = 23,
@@ -229,7 +229,7 @@ class WarpnetApi @Inject constructor(
         minId: String? = null,
         sinceId: String? = null,
         limit: Int? = null,
-    ): Response<List<Status>> = paginated {
+    ): Response<List<Tweet>> = paginated {
         warpnet.getHomeTimeline(cursor = maxId.orEmpty(), limit = limit ?: 40)
     }
 
@@ -243,7 +243,7 @@ class WarpnetApi @Inject constructor(
         minId: String? = null,
         sinceId: String? = null,
         limit: Int? = null,
-    ): Response<List<Status>> {
+    ): Response<List<Tweet>> {
         val userId = accountManager.activeAccount?.accountId.orEmpty()
         if (userId.isEmpty()) return stubList()
         return paginated {
@@ -259,7 +259,7 @@ class WarpnetApi @Inject constructor(
         minId: String? = null,
         sinceId: String?,
         limit: Int?,
-    ): Response<List<Status>> = stubList()
+    ): Response<List<Tweet>> = stubList()
 
     suspend fun listTimeline(
         listId: String,
@@ -267,7 +267,7 @@ class WarpnetApi @Inject constructor(
         minId: String? = null,
         sinceId: String?,
         limit: Int?,
-    ): Response<List<Status>> = stubList()
+    ): Response<List<Tweet>> = stubList()
 
     // ---------------------------------------------------------------
     // notifications
@@ -337,8 +337,8 @@ class WarpnetApi @Inject constructor(
         auth: String,
         domain: String,
         idempotencyKey: String,
-        status: NewStatus,
-    ): NetworkResult<Status> {
+        status: NewTweet,
+    ): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("createStatus")
         // The Warpnet `Tweet.Username` field is the human-readable display
         // name (e.g. "Vadim") — desktop renders it verbatim as the author
@@ -365,30 +365,30 @@ class WarpnetApi @Inject constructor(
         auth: String,
         domain: String,
         idempotencyKey: String,
-        status: NewStatus,
+        status: NewTweet,
     ): NetworkResult<ScheduledStatusReply> = stubFailure("createScheduledStatus")
 
-    suspend fun status(statusId: String): NetworkResult<Status> = stubFailure("status")
+    suspend fun status(statusId: String): NetworkResult<Tweet> = stubFailure("status")
 
     suspend fun editStatus(
         statusId: String,
         auth: String,
         domain: String,
         idempotencyKey: String,
-        editedStatus: NewStatus,
-    ): NetworkResult<Status> = stubFailure("editStatus")
+        editedStatus: NewTweet,
+    ): NetworkResult<Tweet> = stubFailure("editStatus")
 
-    suspend fun statusSource(statusId: String): NetworkResult<StatusSource> = stubFailure("statusSource")
+    suspend fun statusSource(statusId: String): NetworkResult<TweetSource> = stubFailure("statusSource")
 
-    suspend fun statusContext(statusId: String): NetworkResult<StatusContext> = result {
+    suspend fun statusContext(statusId: String): NetworkResult<TweetContext> = result {
         val userId = accountManager.activeAccount?.accountId.orEmpty()
-        StatusContext(
+        TweetContext(
             ancestors = warpnet.getAncestors(tweetId = statusId, userId = userId),
             descendants = warpnet.getReplies(rootId = statusId),
         )
     }
 
-    suspend fun statusEdits(statusId: String): NetworkResult<List<StatusEdit>> =
+    suspend fun statusEdits(statusId: String): NetworkResult<List<TweetEdit>> =
         NetworkResult.success(emptyList())
 
     suspend fun statusRetweetedBy(
@@ -404,19 +404,19 @@ class WarpnetApi @Inject constructor(
     suspend fun deleteStatus(
         statusId: String,
         deleteMedia: Boolean? = null,
-    ): NetworkResult<DeletedStatus> {
+    ): NetworkResult<DeletedTweet> {
         val userId = accountManager.activeAccount?.accountId.orEmpty()
         if (userId.isEmpty()) return stubFailure("deleteStatus")
         return result {
             warpnet.deleteStatus(tweetId = statusId, userId = userId)
             // Warpnet's delete returns no body; the Warpnet shape expects a
-            // draftable DeletedStatus. Hand back an empty one — callers use
-            // `DeletedStatus.isEmpty` to skip reopening a draft.
-            DeletedStatus(
+            // draftable DeletedTweet. Hand back an empty one — callers use
+            // `DeletedTweet.isEmpty` to skip reopening a draft.
+            DeletedTweet(
                 text = null,
                 inReplyToId = null,
                 spoilerText = "",
-                visibility = Status.Visibility.PUBLIC,
+                visibility = Tweet.Visibility.PUBLIC,
                 sensitive = false,
                 attachments = emptyList(),
                 poll = null,
@@ -429,7 +429,7 @@ class WarpnetApi @Inject constructor(
     suspend fun retweetStatus(
         statusId: String,
         visibility: String?,
-    ): NetworkResult<Status> {
+    ): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("retweetStatus")
         // Same reasoning as createStatus: the wire-level username field is
         // the display name, not the @-handle.
@@ -444,7 +444,7 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun unretweetStatus(statusId: String): NetworkResult<Status> {
+    suspend fun unretweetStatus(statusId: String): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("unretweetStatus")
         return result {
             warpnet.unretweetStatus(tweetId = statusId, retweeterId = active.accountId)
@@ -452,7 +452,7 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun likeStatus(statusId: String): NetworkResult<Status> {
+    suspend fun likeStatus(statusId: String): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("likeStatus")
         return result {
             warpnet.likeStatus(tweetId = statusId, userId = active.accountId)
@@ -460,7 +460,7 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun unlikeStatus(statusId: String): NetworkResult<Status> {
+    suspend fun unlikeStatus(statusId: String): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("unlikeStatus")
         return result {
             warpnet.unlikeStatus(tweetId = statusId, userId = active.accountId)
@@ -472,8 +472,8 @@ class WarpnetApi @Inject constructor(
      * Record a tweet-view event when a status comes on screen.
      *
      * Side-effect-only: the post-increment count is dropped because
-     * existing [Status] view models don't have a slot for it, and the
-     * timeline already shows the count via [Status.viewsCount] from
+     * existing [Tweet] view models don't have a slot for it, and the
+     * timeline already shows the count via [Tweet.viewsCount] from
      * the periodic stats refresh. Failures are logged at WARN level
      * (so offline / misconfigured nodes are diagnosable) but never
      * propagate to the UI.
@@ -492,22 +492,22 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun bookmarkStatus(statusId: String): NetworkResult<Status> = stubFailure("bookmarkStatus")
+    suspend fun bookmarkStatus(statusId: String): NetworkResult<Tweet> = stubFailure("bookmarkStatus")
 
-    suspend fun unbookmarkStatus(statusId: String): NetworkResult<Status> = stubFailure("unbookmarkStatus")
+    suspend fun unbookmarkStatus(statusId: String): NetworkResult<Tweet> = stubFailure("unbookmarkStatus")
 
-    suspend fun pinStatus(statusId: String): NetworkResult<Status> = stubFailure("pinStatus")
+    suspend fun pinStatus(statusId: String): NetworkResult<Tweet> = stubFailure("pinStatus")
 
-    suspend fun unpinStatus(statusId: String): NetworkResult<Status> = stubFailure("unpinStatus")
+    suspend fun unpinStatus(statusId: String): NetworkResult<Tweet> = stubFailure("unpinStatus")
 
-    suspend fun muteConversation(statusId: String): NetworkResult<Status> = stubFailure("muteConversation")
+    suspend fun muteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("muteConversation")
 
-    suspend fun unmuteConversation(statusId: String): NetworkResult<Status> = stubFailure("unmuteConversation")
+    suspend fun unmuteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("unmuteConversation")
 
     suspend fun scheduledStatuses(
         limit: Int? = null,
         maxId: String? = null,
-    ): Response<List<ScheduledStatus>> = stubList()
+    ): Response<List<ScheduledTweet>> = stubList()
 
     suspend fun deleteScheduledStatus(scheduledStatusId: String): NetworkResult<Unit> =
         NetworkResult.success(Unit)
@@ -611,7 +611,7 @@ class WarpnetApi @Inject constructor(
         excludeRetweets: Boolean? = null,
         onlyMedia: Boolean? = null,
         pinned: Boolean? = null,
-    ): Response<List<Status>> = paginated {
+    ): Response<List<Tweet>> = paginated {
         warpnet.getUserTimeline(userId = accountId, cursor = maxId.orEmpty(), limit = limit ?: 40)
     }
 
@@ -682,14 +682,14 @@ class WarpnetApi @Inject constructor(
         minId: String? = null,
         sinceId: String?,
         limit: Int?,
-    ): Response<List<Status>> = stubList()
+    ): Response<List<Tweet>> = stubList()
 
     suspend fun bookmarks(
         maxId: String?,
         minId: String? = null,
         sinceId: String?,
         limit: Int?,
-    ): Response<List<Status>> = stubList()
+    ): Response<List<Tweet>> = stubList()
 
     suspend fun followRequests(maxId: String?): Response<List<TimelineAccount>> = stubList()
 
@@ -872,13 +872,13 @@ class WarpnetApi @Inject constructor(
     suspend fun trendingStatuses(
         limit: Int? = null,
         offset: String? = null,
-    ): Response<List<Status>> = stubList()
+    ): Response<List<Tweet>> = stubList()
 
     suspend fun quotingStatuses(
         statusId: String,
         limit: Int? = null,
         offset: String? = null,
-    ): Response<List<Status>> = stubList()
+    ): Response<List<Tweet>> = stubList()
 
     suspend fun translate(
         statusId: String,
@@ -919,5 +919,5 @@ class WarpnetApi @Inject constructor(
     suspend fun removeQuote(
         id: String,
         quotingStatusId: String,
-    ): NetworkResult<Status> = stubFailure("removeQuote")
+    ): NetworkResult<Tweet> = stubFailure("removeQuote")
 }

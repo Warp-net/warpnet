@@ -32,7 +32,7 @@ import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.PostLookupFallbackBehavior
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.adapter.LoadStateFooterAdapter
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity.Type
@@ -181,7 +181,7 @@ class AccountListFragment :
 
     override fun onViewTag(tag: String) {
         activity?.startActivityWithSlideInAnimation(
-            StatusListActivity.newHashtagIntent(requireContext(), tag)
+            TweetListActivity.newHashtagIntent(requireContext(), tag)
         )
     }
 

@@ -20,9 +20,9 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.adapter.PollAdapter
 import site.warpnet.warpdroid.adapter.PollAdapter.Companion.MULTIPLE
 import site.warpnet.warpdroid.adapter.PollAdapter.Companion.SINGLE
-import site.warpnet.warpdroid.databinding.ItemStatusEditBinding
+import site.warpnet.warpdroid.databinding.ItemTweetEditBinding
 import site.warpnet.warpdroid.entity.Attachment.Focus
-import site.warpnet.warpdroid.entity.StatusEdit
+import site.warpnet.warpdroid.entity.TweetEdit
 import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.util.AbsoluteTimeFormatter
 import site.warpnet.warpdroid.util.BindingHolder
@@ -39,11 +39,11 @@ import site.warpnet.warpdroid.viewdata.toViewData
 import org.xml.sax.XMLReader
 
 class ViewEditsAdapter(
-    private val edits: List<StatusEdit>,
+    private val edits: List<TweetEdit>,
     private val animateEmojis: Boolean,
     private val useBlurhash: Boolean,
     private val listener: LinkListener
-) : RecyclerView.Adapter<BindingHolder<ItemStatusEditBinding>>() {
+) : RecyclerView.Adapter<BindingHolder<ItemTweetEditBinding>>() {
 
     private val absoluteTimeFormatter = AbsoluteTimeFormatter()
 
@@ -56,8 +56,8 @@ class ViewEditsAdapter(
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int
-    ): BindingHolder<ItemStatusEditBinding> {
-        val binding = ItemStatusEditBinding.inflate(
+    ): BindingHolder<ItemTweetEditBinding> {
+        val binding = ItemTweetEditBinding.inflate(
             LayoutInflater.from(parent.context),
             parent,
             false
@@ -76,7 +76,7 @@ class ViewEditsAdapter(
         return BindingHolder(binding)
     }
 
-    override fun onBindViewHolder(holder: BindingHolder<ItemStatusEditBinding>, position: Int) {
+    override fun onBindViewHolder(holder: BindingHolder<ItemTweetEditBinding>, position: Int) {
         val edit = edits[position]
 
         val binding = holder.binding

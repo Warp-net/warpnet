@@ -647,7 +647,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     isSelectable = false
                     iconRes = R.drawable.ic_star_24dp
                     onClick = {
-                        val intent = StatusListActivity.newLikesIntent(context)
+                        val intent = TweetListActivity.newLikesIntent(context)
                         startActivityWithSlideInAnimation(intent)
                     }
                 },
@@ -655,7 +655,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     nameRes = R.string.action_view_bookmarks
                     iconRes = R.drawable.ic_bookmark_24dp
                     onClick = {
-                        val intent = StatusListActivity.newBookmarksIntent(context)
+                        val intent = TweetListActivity.newBookmarksIntent(context)
                         startActivityWithSlideInAnimation(intent)
                     }
                 },
@@ -758,7 +758,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                         nameRes = R.string.title_public_trending_statuses
                         iconRes = R.drawable.ic_local_fire_department_24dp
                         onClick = {
-                            startActivityWithSlideInAnimation(StatusListActivity.newTrendingIntent(context))
+                            startActivityWithSlideInAnimation(TweetListActivity.newTrendingIntent(context))
                         }
                     }
                 )

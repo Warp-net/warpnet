@@ -9,7 +9,7 @@ import site.warpnet.warpdroid.TabData
 import site.warpnet.warpdroid.components.systemnotifications.NotificationChannelData
 import site.warpnet.warpdroid.defaultTabs
 import site.warpnet.warpdroid.entity.Emoji
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.settings.DefaultReplyVisibility
 import site.warpnet.warpdroid.settings.QuotePolicy
 
@@ -49,7 +49,7 @@ data class AccountEntity(
     val notificationSound: Boolean = true,
     val notificationVibration: Boolean = true,
     val notificationLight: Boolean = true,
-    val defaultPostPrivacy: Status.Visibility = Status.Visibility.PUBLIC,
+    val defaultPostPrivacy: Tweet.Visibility = Tweet.Visibility.PUBLIC,
     val defaultReplyPrivacy: DefaultReplyVisibility = DefaultReplyVisibility.MATCH_DEFAULT_POST_VISIBILITY,
     val defaultMediaSensitivity: Boolean = false,
     val defaultPostLanguage: String = "",

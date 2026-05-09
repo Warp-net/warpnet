@@ -28,14 +28,14 @@ import at.connyduck.calladapter.networkresult.onFailure
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
-import site.warpnet.warpdroid.appstore.StatusChangedEvent
+import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.viewdata.NotificationViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import site.warpnet.warpdroid.viewdata.TranslationViewData
-import site.warpnet.warpdroid.viewmodel.StatusActionsViewModel
+import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -54,7 +54,7 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
     val eventHub: EventHub,
     @Assisted("notificationRequestId") val notificationRequestId: String,
     @Assisted("accountId") val accountId: String
-) : StatusActionsViewModel(api, eventHub) {
+) : TweetActionsViewModel(api, eventHub) {
 
     var currentSource: NotificationRequestDetailsPagingSource? = null
 
@@ -99,7 +99,7 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
             eventHub.events
                 .collect { event ->
                     when (event) {
-                        is StatusChangedEvent -> updateStatus(event.status)
+                        is TweetChangedEvent -> updateStatus(event.status)
                         is BlockEvent -> removeIfAccount(event.accountId)
                         is MuteEvent -> removeIfAccount(event.accountId)
                     }
@@ -132,19 +132,19 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
         }
     }
 
-    fun changeFilter(filtered: Boolean, status: StatusViewData.Concrete) {
-        updateStatusViewData(status.id) { it.copy(filterActive = filtered) }
+    fun changeFilter(filtered: Boolean, status: TweetViewData.Concrete) {
+        updateTweetViewData(status.id) { it.copy(filterActive = filtered) }
     }
 
-    fun showQuote(viewData: StatusViewData.Concrete) {
-        updateStatusViewData(viewData.id) {
+    fun showQuote(viewData: TweetViewData.Concrete) {
+        updateTweetViewData(viewData.id) {
             it.copy(
                 quote = it.quote?.copy(quoteShown = true)
             )
         }
     }
 
-    private fun updateStatus(status: Status) {
+    private fun updateStatus(status: Tweet) {
         val position = notificationData.indexOfFirst { it.asStatusOrNull()?.id == status.id }
         if (position == -1) {
             return
@@ -168,20 +168,20 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
         currentSource?.invalidate()
     }
 
-    fun changeExpanded(expanded: Boolean, status: StatusViewData.Concrete) {
-        updateStatusViewData(status.id) { it.copy(isExpanded = expanded) }
+    fun changeExpanded(expanded: Boolean, status: TweetViewData.Concrete) {
+        updateTweetViewData(status.id) { it.copy(isExpanded = expanded) }
     }
 
-    fun changeContentShowing(isShowing: Boolean, status: StatusViewData.Concrete) {
-        updateStatusViewData(status.id) { it.copy(isShowingContent = isShowing) }
+    fun changeContentShowing(isShowing: Boolean, status: TweetViewData.Concrete) {
+        updateTweetViewData(status.id) { it.copy(isShowingContent = isShowing) }
     }
 
-    fun changeContentCollapsed(isCollapsed: Boolean, status: StatusViewData.Concrete) {
-        updateStatusViewData(status.id) { it.copy(isCollapsed = isCollapsed) }
+    fun changeContentCollapsed(isCollapsed: Boolean, status: TweetViewData.Concrete) {
+        updateTweetViewData(status.id) { it.copy(isCollapsed = isCollapsed) }
     }
 
-    fun showPollResults(viewData: StatusViewData.Concrete) {
-        updateStatusViewData(viewData.id) { viewData ->
+    fun showPollResults(viewData: TweetViewData.Concrete) {
+        updateTweetViewData(viewData.id) { viewData ->
             viewData.copy(
                 status = viewData.status.copy(
                     poll = viewData.status.poll?.copy(voted = true)
@@ -190,25 +190,25 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun translate(status: StatusViewData.Concrete): NetworkResult<Unit> {
-        updateStatusViewData(status.id) { viewData ->
+    suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit> {
+        updateTweetViewData(status.id) { viewData ->
             viewData.copy(translation = TranslationViewData.Loading)
         }
         return api.translate(status.actionableId, Locale.getDefault().language)
             .map { translation ->
-                updateStatusViewData(status.id) { viewData ->
+                updateTweetViewData(status.id) { viewData ->
                     viewData.copy(translation = TranslationViewData.Loaded(translation))
                 }
             }
             .onFailure {
-                updateStatusViewData(status.id) { viewData ->
+                updateTweetViewData(status.id) { viewData ->
                     viewData.copy(translation = null)
                 }
             }
     }
 
-    fun untranslate(status: StatusViewData.Concrete) {
-        updateStatusViewData(status.id) { it.copy(translation = null) }
+    fun untranslate(status: TweetViewData.Concrete) {
+        updateTweetViewData(status.id) { it.copy(translation = null) }
     }
 
     fun respondToFollowRequest(accept: Boolean, accountId: String, notification: NotificationViewData) {
@@ -229,9 +229,9 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
         }
     }
 
-    private fun updateStatusViewData(
+    private fun updateTweetViewData(
         statusId: String,
-        updater: (StatusViewData.Concrete) -> StatusViewData.Concrete
+        updater: (TweetViewData.Concrete) -> TweetViewData.Concrete
     ) {
         val position =
             notificationData.indexOfFirst { viewData -> viewData.asStatusOrNull()?.id == statusId }
@@ -241,13 +241,13 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
         } else {
             val position =
                 notificationData.indexOfFirst { viewData ->
-                    viewData.asStatusOrNull()?.quote?.quotedStatusViewData?.id == statusId
+                    viewData.asStatusOrNull()?.quote?.quotedTweetViewData?.id == statusId
                 }
             val statusViewData = notificationData.getOrNull(position)?.statusViewData ?: return
             notificationData[position] = notificationData[position].copy(
                 statusViewData = statusViewData.copy(
                     quote = statusViewData.quote?.copy(
-                        quotedStatusViewData = statusViewData.quote.quotedStatusViewData?.let { quotedStatus ->
+                        quotedTweetViewData = statusViewData.quote.quotedTweetViewData?.let { quotedStatus ->
                             updater(quotedStatus)
                         }
                     )

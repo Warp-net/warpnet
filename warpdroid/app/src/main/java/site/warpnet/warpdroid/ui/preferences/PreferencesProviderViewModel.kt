@@ -56,32 +56,32 @@ class PreferencesProviderViewModel @Inject constructor(
         val warpdroidTheme = this.getNonNullString(APP_THEME, AppTheme.DEFAULT.value)
 
         val statusTextStyles = when (this.getString(PrefKeys.STATUS_TEXT_SIZE, "medium")) {
-            "smallest" -> StatusTextStyles(
+            "smallest" -> TweetTextStyles(
                 small = textStyle(fontSize = 10.sp),
                 medium = textStyle(fontSize = 12.sp),
                 large = textStyle(fontSize = 14.sp)
             )
-            "small" -> StatusTextStyles(
+            "small" -> TweetTextStyles(
                 small = textStyle(fontSize = 12.sp),
                 medium = textStyle(fontSize = 14.sp),
                 large = textStyle(fontSize = 16.sp)
             )
-            "medium" -> StatusTextStyles(
+            "medium" -> TweetTextStyles(
                 small = textStyle(fontSize = 14.sp),
                 medium = textStyle(fontSize = 16.sp),
                 large = textStyle(fontSize = 18.sp)
             )
-            "large" -> StatusTextStyles(
+            "large" -> TweetTextStyles(
                 small = textStyle(fontSize = 16.sp),
                 medium = textStyle(fontSize = 18.sp),
                 large = textStyle(fontSize = 20.sp)
             )
-            "largest" -> StatusTextStyles(
+            "largest" -> TweetTextStyles(
                 small = textStyle(fontSize = 18.sp),
                 medium = textStyle(fontSize = 20.sp),
                 large = textStyle(fontSize = 22.sp)
             )
-            else -> StatusTextStyles(
+            else -> TweetTextStyles(
                 small = textStyle(fontSize = 14.sp),
                 medium = textStyle(fontSize = 16.sp),
                 large = textStyle(fontSize = 18.sp)

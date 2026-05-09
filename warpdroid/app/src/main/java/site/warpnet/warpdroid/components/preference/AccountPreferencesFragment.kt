@@ -36,7 +36,7 @@ import site.warpnet.warpdroid.components.followedtags.FollowedTagsActivity
 import site.warpnet.warpdroid.components.preference.notificationpolicies.NotificationPoliciesActivity
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Account
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.settings.AccountPreferenceDataStore
 import site.warpnet.warpdroid.settings.DefaultReplyVisibility
@@ -142,12 +142,12 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
                     setEntryValues(R.array.post_privacy_values)
                     key = PrefKeys.DEFAULT_POST_PRIVACY
                     setSummaryProvider { entry }
-                    val visibility = accountManager.activeAccount?.defaultPostPrivacy ?: Status.Visibility.PUBLIC
+                    val visibility = accountManager.activeAccount?.defaultPostPrivacy ?: Tweet.Visibility.PUBLIC
                     value = visibility.stringValue
                     icon = getIconForVisibility(visibility)
                     isPersistent = false // its saved to the account and shouldn't be in shared preferences
                     setOnPreferenceChangeListener { _, newValue ->
-                        icon = getIconForVisibility(Status.Visibility.fromStringValue(newValue as String))
+                        icon = getIconForVisibility(Tweet.Visibility.fromStringValue(newValue as String))
                         if (accountManager.activeAccount?.defaultReplyPrivacy == DefaultReplyVisibility.MATCH_DEFAULT_POST_VISIBILITY) {
                             findPreference<ListPreference>(PrefKeys.DEFAULT_REPLY_PRIVACY)?.icon = icon
                         }
@@ -320,7 +320,7 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
                         accountManager.updateAccount(it) {
                             copy(
                                 defaultPostPrivacy = account.source?.privacy
-                                    ?: Status.Visibility.PUBLIC,
+                                    ?: Tweet.Visibility.PUBLIC,
                                 defaultMediaSensitivity = account.source?.sensitive == true,
                                 defaultPostLanguage = language.orEmpty(),
                                 defaultQuotePolicy = quotePolicy?.let { QuotePolicy.forValue(it) } ?: QuotePolicy.FOLLOWERS,
@@ -342,11 +342,11 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
         }
     }
 
-    private fun getIconForVisibility(visibility: Status.Visibility): Drawable? {
+    private fun getIconForVisibility(visibility: Tweet.Visibility): Drawable? {
         val iconRes = when (visibility) {
-            Status.Visibility.PRIVATE -> R.drawable.ic_lock_24dp
-            Status.Visibility.UNLISTED -> R.drawable.ic_lock_open_24dp
-            Status.Visibility.DIRECT -> R.drawable.ic_mail_24dp
+            Tweet.Visibility.PRIVATE -> R.drawable.ic_lock_24dp
+            Tweet.Visibility.UNLISTED -> R.drawable.ic_lock_open_24dp
+            Tweet.Visibility.DIRECT -> R.drawable.ic_mail_24dp
             else -> R.drawable.ic_public_24dp
         }
         return icon(iconRes)

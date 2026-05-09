@@ -26,7 +26,7 @@ data class Notification(
     val type: Type,
     val id: String,
     val account: TimelineAccount,
-    val status: Status? = null,
+    val status: Tweet? = null,
     val report: Report? = null,
     val filtered: Boolean = false,
     val event: RelationshipSeveranceEvent? = null,

@@ -9,7 +9,7 @@ import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.entity.Account
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineAccount
 import site.warpnet.warpdroid.warpnet.WarpnetMapper.toAccount
 import site.warpnet.warpdroid.warpnet.WarpnetMapper.toNotification
@@ -131,7 +131,7 @@ class WarpnetRepository @Inject constructor(
     // -----------------------------------------------------------------
 
     /** Aggregated home feed. Second element is the next-page cursor, empty when exhausted. */
-    suspend fun getHomeTimeline(cursor: String = "", limit: Int = 40): Pair<List<Status>, String> {
+    suspend fun getHomeTimeline(cursor: String = "", limit: Int = 40): Pair<List<Tweet>, String> {
         // The fat-node timeline handler rejects an empty user id; scope the
         // request to the user we paired with so the server can build the
         // "home" feed for that identity.
@@ -141,21 +141,21 @@ class WarpnetRepository @Inject constructor(
             ProtocolIds.PRIVATE_GET_TIMELINE,
             getAllTweetsAdapter.toJson(GetAllTweetsEvent(userId = userId, cursor = cursor, limit = limit)),
         )
-        val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList<Status>() to ""
+        val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList<Tweet>() to ""
         return hydrateStatuses(page.tweets) to page.cursor
     }
 
     /** Public per-user feed. Second element is the next-page cursor, empty when exhausted. */
-    suspend fun getUserTimeline(userId: String, cursor: String = "", limit: Int = 40): Pair<List<Status>, String> {
+    suspend fun getUserTimeline(userId: String, cursor: String = "", limit: Int = 40): Pair<List<Tweet>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEETS,
             getAllTweetsAdapter.toJson(GetAllTweetsEvent(userId = userId, cursor = cursor, limit = limit)),
         )
-        val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList<Status>() to ""
+        val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList<Tweet>() to ""
         return hydrateStatuses(page.tweets) to page.cursor
     }
 
-    suspend fun getStatus(tweetId: String, userId: String): Status {
+    suspend fun getStatus(tweetId: String, userId: String): Tweet {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET,
             getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId)),
@@ -180,7 +180,7 @@ class WarpnetRepository @Inject constructor(
         return tweetStatsRespAdapter.fromJson(raw) ?: TweetStatsResponse(tweetId = tweetId)
     }
 
-    suspend fun getReplies(rootId: String, parentId: String = "", cursor: String = ""): List<Status> {
+    suspend fun getReplies(rootId: String, parentId: String = "", cursor: String = ""): List<Tweet> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_REPLIES,
             getRepliesAdapter.toJson(GetAllRepliesEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
@@ -197,8 +197,8 @@ class WarpnetRepository @Inject constructor(
      * [maxDepth] bounds the walk to defend against malformed cycles and
      * runaway threads; beyond it the chain is silently truncated.
      */
-    suspend fun getAncestors(tweetId: String, userId: String, maxDepth: Int = 32): List<Status> {
-        val chain = mutableListOf<Status>()
+    suspend fun getAncestors(tweetId: String, userId: String, maxDepth: Int = 32): List<Tweet> {
+        val chain = mutableListOf<Tweet>()
         var current = runCatching { fetchTweetRaw(tweetId, userId) }.getOrNull() ?: return emptyList()
         val cache = mutableMapOf<String, WarpnetUser>()
         var steps = 0
@@ -224,7 +224,7 @@ class WarpnetRepository @Inject constructor(
     // Posting
     // -----------------------------------------------------------------
 
-    suspend fun postStatus(text: String, authorUserId: String, authorUsername: String, parentId: String? = null): Status {
+    suspend fun postStatus(text: String, authorUserId: String, authorUsername: String, parentId: String? = null): Tweet {
         // createdAt is left null so the backend stamps the creation time
         // (database/tweet-repo.go:152). Emitting "" instead fails the
         // server-side time.Time decode before the zero-value fallback
@@ -446,7 +446,7 @@ class WarpnetRepository @Inject constructor(
         return userIds.mapNotNull { id -> resolveUser(id, cache)?.toTimelineAccount() }
     }
 
-    private suspend fun hydrateStatuses(tweets: List<WarpnetTweet>): List<Status> = coroutineScope {
+    private suspend fun hydrateStatuses(tweets: List<WarpnetTweet>): List<Tweet> = coroutineScope {
         if (tweets.isEmpty()) return@coroutineScope emptyList()
         val cache = mutableMapOf<String, WarpnetUser>()
         // Stats are fetched per tweet in parallel so a 30-tweet timeline

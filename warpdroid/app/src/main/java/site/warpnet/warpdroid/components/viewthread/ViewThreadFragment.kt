@@ -81,15 +81,15 @@ import site.warpnet.warpdroid.components.viewthread.edits.ViewEditsFragment
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.entity.Filter
-import site.warpnet.warpdroid.entity.Status
-import site.warpnet.warpdroid.interfaces.StatusActionListener
+import site.warpnet.warpdroid.entity.Tweet
+import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.ui.FilteredStatus
 import site.warpnet.warpdroid.ui.WarpdroidMessageView
 import site.warpnet.warpdroid.ui.WarpdroidPullToRefreshBox
 import site.warpnet.warpdroid.ui.WarpdroidTheme
-import site.warpnet.warpdroid.ui.statuscomponents.DetailedStatus
-import site.warpnet.warpdroid.ui.statuscomponents.Status
+import site.warpnet.warpdroid.ui.tweetcomponents.DetailedStatus
+import site.warpnet.warpdroid.ui.tweetcomponents.Tweet
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.openLink
 import site.warpnet.warpdroid.util.reply
@@ -102,7 +102,7 @@ import site.warpnet.warpdroid.util.viewThread
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmRetweet
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import javax.inject.Inject
@@ -112,7 +112,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class ViewThreadFragment :
     Fragment(),
-    StatusActionListener,
+    TweetActionListener,
     MenuProvider {
 
     @Inject
@@ -312,7 +312,7 @@ class ViewThreadFragment :
                             modifier = Modifier.widthIn(max = 640.dp)
                         )
                     } else {
-                        Status(
+                        Tweet(
                             viewData,
                             listener = this@ViewThreadFragment,
                             translationEnabled = instanceInfo.translationEnabled,
@@ -471,9 +471,9 @@ class ViewThreadFragment :
     }
 
     override fun onRetweet(
-        viewData: StatusViewData.Concrete,
+        viewData: TweetViewData.Concrete,
         retweet: Boolean,
-        visibility: Status.Visibility?,
+        visibility: Tweet.Visibility?,
         state: SparkButtonState?
     ) {
         if (retweet && visibility == null) {
@@ -482,7 +482,7 @@ class ViewThreadFragment :
                 state?.animate()
             }
         } else {
-            viewModel.retweet(viewData.id, retweet, visibility ?: Status.Visibility.PUBLIC)
+            viewModel.retweet(viewData.id, retweet, visibility ?: Tweet.Visibility.PUBLIC)
             if (retweet) {
                 state?.animate()
             }
@@ -490,7 +490,7 @@ class ViewThreadFragment :
     }
 
     override fun onLike(
-        viewData: StatusViewData.Concrete,
+        viewData: TweetViewData.Concrete,
         like: Boolean,
         state: SparkButtonState?
     ) {
@@ -504,35 +504,35 @@ class ViewThreadFragment :
         }
     }
 
-    override fun onBookmark(viewData: StatusViewData.Concrete, bookmark: Boolean) {
+    override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
         viewModel.bookmark(viewData.id, bookmark)
     }
 
-    override fun onExpandedChange(viewData: StatusViewData.Concrete, expanded: Boolean) {
+    override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {
         viewModel.changeExpanded(expanded, viewData)
     }
 
-    override fun onContentHiddenChange(viewData: StatusViewData.Concrete, isShowing: Boolean) {
+    override fun onContentHiddenChange(viewData: TweetViewData.Concrete, isShowing: Boolean) {
         viewModel.changeContentShowing(isShowing, viewData)
     }
 
-    override fun onContentCollapsedChange(viewData: StatusViewData.Concrete, isCollapsed: Boolean) {
+    override fun onContentCollapsedChange(viewData: TweetViewData.Concrete, isCollapsed: Boolean) {
         viewModel.changeContentCollapsed(isCollapsed, viewData)
     }
 
-    override fun onVoteInPoll(viewData: StatusViewData.Concrete, pollId: String, choices: List<Int>) {
+    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) {
         viewModel.voteInPoll(viewData.actionableId, pollId, choices)
     }
 
-    override fun onShowPollResults(viewData: StatusViewData.Concrete) {
+    override fun onShowPollResults(viewData: TweetViewData.Concrete) {
         viewModel.showPollResults(viewData)
     }
 
-    override fun changeFilter(viewData: StatusViewData.Concrete, filtered: Boolean) {
+    override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
     }
 
-    override fun onTranslate(viewData: StatusViewData.Concrete) {
+    override fun onTranslate(viewData: TweetViewData.Concrete) {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.translate(viewData)
                 .onFailure {
@@ -545,7 +545,7 @@ class ViewThreadFragment :
         }
     }
 
-    override fun onUntranslate(viewData: StatusViewData.Concrete) {
+    override fun onUntranslate(viewData: TweetViewData.Concrete) {
         viewModel.untranslate(viewData)
     }
 
@@ -557,30 +557,30 @@ class ViewThreadFragment :
         viewModel.mute(accountId, hideNotifications, duration)
     }
 
-    override fun onMuteConversation(viewData: StatusViewData.Concrete, mute: Boolean) {
+    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
         viewModel.muteConversation(viewData.id, mute)
     }
 
-    override fun onDelete(viewData: StatusViewData.Concrete) {
+    override fun onDelete(viewData: TweetViewData.Concrete) {
         viewModel.delete(viewData.id)
     }
 
-    override fun onRedraft(viewData: StatusViewData.Concrete) {
+    override fun onRedraft(viewData: TweetViewData.Concrete) {
         viewModel.redraftStatus(viewData.actionable)
     }
 
-    override fun onPin(viewData: StatusViewData.Concrete, pin: Boolean) {
+    override fun onPin(viewData: TweetViewData.Concrete, pin: Boolean) {
         viewModel.pin(viewData.id, pin)
     }
 
-    override fun onViewMedia(viewData: StatusViewData.Concrete, attachmentIndex: Int) {
+    override fun onViewMedia(viewData: TweetViewData.Concrete, attachmentIndex: Int) {
         requireContext().viewMedia(
             attachmentIndex,
             AttachmentViewData.list(viewData, preferences.getBoolean(PrefKeys.ALWAYS_SHOW_SENSITIVE_MEDIA, false))
         )
     }
 
-    override fun onViewThread(viewData: StatusViewData.Concrete) {
+    override fun onViewThread(viewData: TweetViewData.Concrete) {
         if (viewModel.threadId == viewData.id) {
             // If already viewing this thread, don't reopen it.
             return
@@ -588,20 +588,20 @@ class ViewThreadFragment :
         requireContext().viewThread(viewData)
     }
 
-    override fun onEdit(viewData: StatusViewData.Concrete) {
+    override fun onEdit(viewData: TweetViewData.Concrete) {
         viewModel.editStatus(viewData.actionable)
     }
 
-    override fun onReply(viewData: StatusViewData.Concrete) {
+    override fun onReply(viewData: TweetViewData.Concrete) {
         requireContext().reply(viewData, accountManager.activeAccount!!)
     }
 
-    override fun onReport(viewData: StatusViewData.Concrete) {
+    override fun onReport(viewData: TweetViewData.Concrete) {
         requireContext().report(viewData)
     }
 
     override fun onViewUrl(url: String) {
-        val status: StatusViewData.Concrete? = (viewModel.uiState.value as? ThreadUiState.Success)?.detailedStatus
+        val status: TweetViewData.Concrete? = (viewModel.uiState.value as? ThreadUiState.Success)?.detailedStatus
         if (status != null && status.status.url == url) {
             // already viewing the status with this url
             // probably just a preview federated and the user is clicking again to view more -> open the browser
@@ -620,15 +620,15 @@ class ViewThreadFragment :
         requireContext().viewAccount(accountId)
     }
 
-    override fun onShowQuote(viewData: StatusViewData.Concrete) {
+    override fun onShowQuote(viewData: TweetViewData.Concrete) {
         viewModel.showQuote(viewData)
     }
 
-    override fun removeQuote(viewData: StatusViewData.Concrete) {
+    override fun removeQuote(viewData: TweetViewData.Concrete) {
         viewModel.removeQuote(viewData.status)
     }
 
-    private fun onShowEdits(viewData: StatusViewData.Concrete) {
+    private fun onShowEdits(viewData: TweetViewData.Concrete) {
         val viewEditsFragment = ViewEditsFragment.newInstance(viewData.actionableId)
 
         parentFragmentManager.commit {

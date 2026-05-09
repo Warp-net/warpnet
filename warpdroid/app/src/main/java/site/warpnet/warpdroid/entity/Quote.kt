@@ -23,7 +23,7 @@ import com.squareup.moshi.JsonClass
 @JsonClass(generateAdapter = true)
 data class Quote(
     val state: State,
-    @Json(name = "quoted_status") val quotedStatus: Status?
+    @Json(name = "quoted_status") val quotedStatus: Tweet?
 ) {
 
     /** The state of the quote. Unknown values should be treated as unauthorized. */

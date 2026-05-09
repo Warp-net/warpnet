@@ -59,7 +59,7 @@ data class Account(
 
 @JsonClass(generateAdapter = true)
 data class AccountSource(
-    val privacy: Status.Visibility = Status.Visibility.PUBLIC,
+    val privacy: Tweet.Visibility = Tweet.Visibility.PUBLIC,
     val sensitive: Boolean? = null,
     val note: String? = null,
     val fields: List<StringField> = emptyList(),

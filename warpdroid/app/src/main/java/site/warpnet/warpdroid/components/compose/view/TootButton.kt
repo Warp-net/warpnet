@@ -20,7 +20,7 @@ import android.util.AttributeSet
 import androidx.appcompat.content.res.AppCompatResources
 import com.google.android.material.button.MaterialButton
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 
 class TootButton
 @JvmOverloads constructor(
@@ -42,19 +42,19 @@ class TootButton
         setPadding(padding, 0, padding, 0)
     }
 
-    fun setStatusVisibility(visibility: Status.Visibility) {
+    fun setStatusVisibility(visibility: Tweet.Visibility) {
         if (!smallStyle) {
             icon = when (visibility) {
-                Status.Visibility.PUBLIC -> {
+                Tweet.Visibility.PUBLIC -> {
                     setText(R.string.action_send_public)
                     null
                 }
-                Status.Visibility.UNLISTED -> {
+                Tweet.Visibility.UNLISTED -> {
                     setText(R.string.action_send)
                     null
                 }
-                Status.Visibility.PRIVATE,
-                Status.Visibility.DIRECT -> {
+                Tweet.Visibility.PRIVATE,
+                Tweet.Visibility.DIRECT -> {
                     setText(R.string.action_send)
                     AppCompatResources.getDrawable(context, R.drawable.ic_lock_24dp)
                 }

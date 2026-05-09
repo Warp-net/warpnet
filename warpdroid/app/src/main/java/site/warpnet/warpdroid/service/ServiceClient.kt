@@ -21,7 +21,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
 class ServiceClient @Inject constructor(@ApplicationContext private val context: Context) {
-    fun sendToot(tootToSend: StatusToSend) {
+    fun sendToot(tootToSend: TweetToSend) {
         val intent = SendStatusService.sendStatusIntent(context, tootToSend)
         ContextCompat.startForegroundService(context, intent)
     }
