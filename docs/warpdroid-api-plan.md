@@ -572,17 +572,20 @@ images before posting.
 These need design discussion *before* implementation. Each is sketched
 to show the route shape but the data model is non-trivial.
 
-### B1. Federated public timeline — `publicTimeline`
+### B1. ~~Federated public timeline~~ — moved to Tier C
 
-Today falls back to user's own timeline. A real federated timeline =
-union of the timelines of every node this node has ever connected to,
-deduplicated, sorted by `created_at`.
+`publicTimeline` was originally drafted here on the assumption a
+"recent tweets" gossip topic could synthesise a Mastodon-style
+Federated tab. **This is wrong for Warpnet.** Warpnet is intentionally
+scoped to direct follows + per-tweet pull on demand; a network-wide
+firehose contradicts the privacy and bandwidth model (every node
+would receive every tweet from every peer it's ever met). The home
+timeline (`homeTimeline → PRIVATE_GET_TIMELINE`) is the only timeline
+concept Warpnet has.
 
-Mechanism: extend `core/pubsub/gossip.go` with a "recent tweets" topic
-periodically pruned to N=200 per peer. Local `database/feed-repo.go`
-ingests these. Route: `PUBLIC_GET_TIMELINE_FEDERATED`. Cursor = ULID.
-
-Risk: gossip explosion. Pre-design: per-peer rate-limit, max-fanout.
+`publicTimeline` therefore has no Warpnet equivalent and is moved
+to **Tier C / §12 deletion list**. Today's fallback (returning the
+caller's own feed) is meaningless and should go.
 
 ### B2. Hashtag timeline + tag follow — `hashtagTimeline`, `tag`,
 `followTag`, `unfollowTag`, `followedTags`
@@ -714,7 +717,10 @@ notificationPolicy / updateNotificationPolicy (no central policy;
 pre-filter on the node via A10/A4 instead);
 getCustomEmojis / getInstanceV1 / getInstance / getInstanceRules
 (stub-fixed values are fine);
-followedTags only when B2 lands.
+followedTags only when B2 lands;
+publicTimeline (Mastodon-style federated tab — no Warpnet equivalent;
+contradicts the no-firehose privacy model. The today's fallback to
+the caller's own feed is meaningless. Slated for deletion in §12).
 ```
 
 Action: **none**. The current stubs already return success-with-empty
@@ -757,7 +763,7 @@ There is **no** store layer to wire — the existing pattern of
 | 4 | A7, A8, A10 | Search-users, engagement lists, subscribe-user: pure read APIs once A1's index is in. |
 | 5 | B6, B8, B12 | Conversations, filters, reports: small adaptations, no new domain. |
 | 6 | B2, B3 | Hashtags + trending: depend on tweet-tokenizer change. |
-| 7 | B1, B5, B7, B9, B10 | Federated timeline, quotes, scheduled, lists, follow requests: each ≥1 week design + impl. |
+| 7 | B5, B7, B9, B10 | Quotes, scheduled, lists, follow requests: each ≥1 week design + impl. |
 | 8 | B4 | Polls: largest single feature. |
 
 Each phase is one or more PRs targeting `claude/analyze-warpdroid-api-TpEE4`'s
@@ -865,7 +871,7 @@ no testify, `package handler` (white-box), file starts with
 | notifications / notificationsWithAuth | ✅ | done |
 | notificationPolicy / updateNotificationPolicy | ❌ | C |
 | pinStatus / unpinStatus | ❌ | **A6** |
-| publicTimeline | ✅ falls back to user feed | B1 (real federated) |
+| publicTimeline | falls back to user feed (meaningless) | **§12 delete** — no Warpnet equivalent |
 | pushNotificationSubscription / subscribe/update/unsubscribe | ❌ | C |
 | quotingStatuses / removeQuote | empty stub | B5 |
 | recordView | ✅ | done |
@@ -954,8 +960,9 @@ Line numbers refer to the current file (920 lines).
 | Read markers | `markersWithAuth`, `updateMarkersWithAuth` | 290–301 | No server-side scroll-position sync; Tusky already remembers locally. |
 | Notification housekeeping | `clearNotifications`, `notificationPolicy`, `updateNotificationPolicy`, `getNotificationRequests`, `acceptNotificationRequest`, `dismissNotificationRequest` | 315, 889–910 | Warpnet notifications are derived from events (no read-acknowledge); per-user filtering happens via **A4** mute + **A10** subscribe, not via a central policy. |
 | Translation | `translate` | 880–883 | No translator on the node and no privacy-acceptable way to add one. Decision in **B11**: skip. |
+| Public/federated timeline | `publicTimeline` | 237–249 | No Warpnet equivalent — Warpnet is direct-follows-only by design; a network-wide firehose contradicts the privacy/bandwidth model. Today's fallback to the caller's own feed is meaningless. Tusky's "Public" / "Federated" tab goes with it. |
 
-**Total: 26 methods to delete.**
+**Total: 27 methods to delete.**
 
 ### 12.2 Tusky UI surface to delete alongside
 
@@ -973,6 +980,7 @@ warpdroid for callers — typical removal targets:
 | Read markers | `NotificationsViewModel.markAs*`, `TimelineRepository.saveReadingPosition` — leave Tusky's local `SharedPreferences`-backed scroll restore, drop the network call. |
 | Notification housekeeping | "Clear notifications" menu item, "Notification policy" preference screen, `NotificationRequestsActivity`. |
 | Translation | "Translate" item in the status overflow menu. |
+| Public timeline | The "Public" / "Federated" tab in Tusky's bottom navigation (`MainActivity` tab adapter, `TimelineFragment` instantiated with `Kind.PUBLIC_FEDERATED` / `Kind.PUBLIC_LOCAL`). Drop the tab entirely — only the Home tab keeps a Warpnet meaning. |
 
 For each removed entry point, also remove the route registration in
 the navigation graph / preference XML so the feature does not appear
