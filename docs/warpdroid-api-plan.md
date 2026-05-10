@@ -170,25 +170,43 @@ account, accountStatuses, accountFollowers, accountFollowing,
 followAccount, unfollowAccount, relationships
 ```
 
-### 3.2 Soft-stubs that can stay stubs forever (29 methods)
+### 3.2 Currently soft-stub, but **only Tier C** stays forever
 
-These have no Warpnet equivalent and Tusky tolerates an empty/Unit
-success. **Action: none.** Keep returning success-with-empty.
+These return empty-success / `Unit`-success today and Tusky tolerates
+that. The list below is the **strict Tier C subset** (full rationale
+in §6) — items that have no Warpnet equivalent and never will.
+**Action: none, keep stubbed.**
 
 ```
 getCustomEmojis, getInstanceV1, getInstance, getInstanceRules,
 markersWithAuth, updateMarkersWithAuth, clearNotifications,
-getFilters, deleteFilter, deleteFilterKeyword, statusEdits,
 announcements, dismissAnnouncement, addAnnouncementReaction,
-removeAnnouncementReaction, report, scheduledTweets,
-deleteScheduledStatus, blockDomain, unblockDomain, domainBlocks,
-followedTags, trendingTags, trendingStatuses, quotingStatuses,
-followRequests, getNotificationRequests, acceptNotificationRequest,
-dismissNotificationRequest, getLists, getListsIncludesAccount,
-deleteList, getAccountsInList, deleteAccountFromList,
-addAccountToList, getConversations, deleteConversation,
-revokeOAuthToken, unsubscribePushNotifications, removeAnnouncementReaction
+removeAnnouncementReaction, blockDomain, unblockDomain, domainBlocks,
+revokeOAuthToken, unsubscribePushNotifications, notificationPolicy,
+updateNotificationPolicy
 ```
+
+### 3.2.1 Currently soft-stub, but **Tier A or B will replace them**
+
+The earlier draft of this document mistakenly grouped these with
+forever-stubs. They each map to a real Warpnet feature and the stub
+should be replaced when the corresponding tier item lands. Until then
+the empty-success behaviour is harmless — but treat the stub as
+*temporary*, not architectural.
+
+| Currently stubbed method(s) | Will be replaced by |
+|---|---|
+| `statusEdits` | **A2** — status edit / source / edits |
+| `getFilters`, `deleteFilter`, `deleteFilterKeyword` | **B8** — filters |
+| `report` | **B12** — user-side reports |
+| `scheduledTweets`, `deleteScheduledStatus` | **B7** — scheduled tweets |
+| `followedTags`, `trendingTags`, `trendingStatuses` | **B2** / **B3** — hashtags + trends |
+| `quotingStatuses` | **B5** — quote tweets |
+| `followRequests` | **B10** — follow requests for locked accounts |
+| `getNotificationRequests`, `acceptNotificationRequest`, `dismissNotificationRequest` | **B13** — filtered-notifications tray (built on **A4** mute/block) |
+| `getLists`, `getListsIncludesAccount`, `deleteList`, `getAccountsInList`, `deleteAccountFromList`, `addAccountToList` | **B9** — custom lists / list timelines |
+| `getConversations`, `deleteConversation` | **B6** — conversations |
+| `unsubscribeAccount` (when called against a non-subscribed) | **A10** — subscribe / unsubscribe |
 
 ### 3.3 Hard stubs blocking real UX (57 methods) — Tier A / B / C below
 
@@ -207,48 +225,55 @@ For each: **client method → route → DTO → repo → handler → registratio
 
 ### A1. Single status fetch by id alone — `status(statusId)`
 
-**Why**: Tusky's "open status from URL", "view edit", "view source",
-"jump from notification", and offline-cache rehydration all call
-`status(id)` *without* a userId. Today this stub-fails, so deep
-linking and notification taps land on a blank screen.
+**Why**: Tusky's `status(statusId)` is the Mastodon-style
+"GET /api/v1/statuses/:id" — author-less by design. In Warpnet
+`PUBLIC_GET_TWEET` requires `{user_id, tweet_id}` both, because the
+owner determines which node owns the canonical record. This mismatch
+is a *client-side* problem, not a backend one — every Tusky call
+site already knows the author.
 
-**Current backend**: `PUBLIC_GET_TWEET` (`StreamGetTweetHandler`)
-requires `{user_id, tweet_id}` — both fields are mandatory (handler
-rejects empty user_id). The owner is needed because it determines the
-node to forward to.
+**No backend changes.** The fix is entirely in warpdroid:
 
-**Plan**:
+1. Change the signature on the warpdroid side to carry the author.
+   Two layered edits:
+   * `WarpnetRepository.getStatus(tweetId, userId)` already exists
+     and already calls `PUBLIC_GET_TWEET` — keep as-is.
+   * `WarpnetApi.kt::status(statusId)` becomes
+     `status(statusId: String, authorId: String)` — the second
+     argument is mandatory.
+1. Audit Tusky callers and pass the author at every call site. The
+   author is in scope at all of them:
+   * **Timeline / notification taps**: the surrounding `Status` /
+     `Notification` object carries `account.id`. Pass it.
+   * **`AccountActivity` / "open this status" overflow**: same.
+   * **Deep links from a URL** (`/users/<userId>/tweets/<tweetId>`):
+     the warpdroid URL parser already extracts both — wire `userId`
+     into the intent extras alongside `tweetId`.
+   * **Notification deep links from push**: not applicable — Web
+     Push is **Tier C** (§6) and goes away in §12.
+1. If a future caller genuinely cannot supply the author (none today),
+   it is a Tusky-side bug — surface it as an `IllegalArgumentException`
+   at `WarpnetApi.status` rather than papering over with a server
+   round-trip.
+1. Update `WarpnetApi.kt::statusContext(statusId)` similarly: today
+   it sources `userId` from `accountManager.activeAccount`, which is
+   wrong for a status whose author is *not* the active account. Pass
+   the author explicitly.
 
-1. Resolve owner from id. Tweet IDs in Warpnet (`domain.ID`) are ULIDs
-   that *do not* embed the owner. Two options:
-   * **A1a (preferred)**: extend `tweetRepo` with a global secondary
-     index `tweet:owner -> userID` populated on `New`/`Delete`. Lookup
-     becomes O(1) local. New repo method: `OwnerOfTweet(id) (string, error)`.
-   * **A1b (fallback)**: gossip a "find tweet by id" query. Heavy.
-1. New route: `PUBLIC_GET_TWEET_BY_ID = "/public/get/tweetbyid/0.0.0"`.
-1. DTO in `event/event.go`:
-   ```go
-   // GetTweetByIdEvent defines model for GetTweetByIdEvent.
-   type GetTweetByIdEvent struct {
-       TweetId domain.ID `json:"tweet_id"`
-   }
-   ```
-   Response reuses `domain.Tweet` (already the response type for
-   `PUBLIC_GET_TWEET`).
-1. Repo change: add `OwnerOfTweet(id string) (string, error)` to
-   `database/tweet-repo.go`. Backfill existing tweets via a one-shot
-   migration in `member-node.go`'s startup path.
-1. Handler `core/handler/tweet.go`:
-   `StreamGetTweetByIdHandler(repo TweetByIdStorer, streamer GenericStreamer) WarpHandlerFunc`
-   that resolves owner locally and, if not local, forwards via
-   `GenericStream(ownerNodeId, PUBLIC_GET_TWEET_BY_ID, ev)`.
-1. Register in `member-node.go` next to `PUBLIC_GET_TWEET`.
-1. Vue: `frontend/src/service/service.js` add `PUBLIC_GET_TWEET_BY_ID`
-   constant + `getTweetById(tweetId)` method. Used by deep-link router
-   guard.
-1. warpdroid: `ProtocolIds.kt` constant + `WarpnetRepository.getStatusById(id)`
-   that calls the new path.
-1. `WarpnetApi.kt::status(statusId)` → `result { warpnet.getStatusById(statusId) }`.
+**No new path constant**, no new DTO, no new handler, no new repo
+method. Drop the previous A1 plan's `PUBLIC_GET_TWEET_BY_ID` route,
+the `OwnerOfTweet` index, the migration step in `member-node.go`,
+and the corresponding Vue method — none of them are needed.
+
+**warpdroid touch points**:
+* `warpdroid/app/src/main/java/site/warpnet/warpdroid/network/WarpnetApi.kt`:
+  add the `authorId` parameter to `status` and `statusContext`.
+* All Tusky view-models / fragments that call `status(id)` — pass
+  the author.
+* The deep-link intent handling code (likely in
+  `com.keylesspalace.tusky.ViewMediaActivity` or the `MainActivity`
+  intent dispatcher) must extract author id from the URL and stash
+  it in the intent extras.
 
 ### A2. Status edit — `editStatus`, `statusSource`, `statusEdits`
 
@@ -261,32 +286,37 @@ view triggers `statusSource` which fails, so the edit button is dead.
    `database/tweet-edit-repo.go`. On `editTweet`, push a new
    `domain.TweetEdit{ID, OriginalTweetID, Text, EditedAt}` record and
    update the canonical tweet's `text` + `edited_at`.
-1. Routes:
+1. Routes (only **two** new ones, not three):
    * `PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"`
-   * `PUBLIC_GET_TWEET_SOURCE = "/public/get/tweet/source/0.0.0"`
-     (returns plaintext source — distinct from the rendered tweet
-     because Warpnet stores plain text but Mastodon shows pre-render
-     `text` + post-render `content`)
    * `PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"`
+1. **No `PUBLIC_GET_TWEET_SOURCE` route.** Mastodon needs that
+   endpoint because its `Status.content` is rendered HTML and the
+   plaintext `Status.text` source is *only* served on this separate
+   path. Warpnet has no rendering step — `domain.Tweet.text` already
+   *is* the plaintext source. `WarpnetApi.kt::statusSource(statusId)`
+   should be satisfied client-side by re-using the already-fetched
+   `Tweet`: add `WarpnetMapper.toTweetSource(tweet)` returning
+   `TweetSource(id, text, spoilerText="")`. No network round-trip,
+   no DTO, no handler, no Vue method.
 1. DTOs: `EditTweetEvent {tweet_id, user_id, text}`,
-   `GetTweetSourceEvent`, `GetTweetEditsEvent`,
-   `TweetSourceResponse {tweet_id, text, spoiler_text}`,
+   `GetTweetEditsEvent`,
    `TweetEditsResponse {edits []domain.TweetEdit}`.
 1. Handlers in `core/handler/tweet.go`:
-   `StreamEditTweetHandler`, `StreamGetTweetSourceHandler`,
-   `StreamGetTweetEditsHandler`. Edit must validate
-   `userId == tweet.UserId` (only author can edit).
+   `StreamEditTweetHandler`, `StreamGetTweetEditsHandler`. Edit must
+   validate `userId == tweet.UserId` (only author can edit).
 1. Registration grouped with the existing tweet routes.
-1. Vue: add `editTweet({tweetId, text})`, `getTweetSource(tweetId)`,
-   `getTweetEdits(tweetId)`. `Home.vue` compose overlay extended with
-   an "edit" mode (existing prop wiring).
-1. warpdroid: `ProtocolIds.kt` + DTOs + `WarpnetRepository`:
-   `editStatus(tweetId, text)` returning a re-fetched
-   `Status` via the existing `getStatus`.
-1. `WarpnetApi.kt::editStatus` → real path; `statusSource` → real path;
+1. Vue: add `editTweet({tweetId, text})` and `getTweetEdits(tweetId)`.
+   `Home.vue` compose overlay extended with an "edit" mode (existing
+   prop wiring). The Vue side never needs a `getTweetSource` method —
+   the compose textarea repopulates from the in-memory tweet object.
+1. warpdroid: `ProtocolIds.kt` (two new constants) + DTOs +
+   `WarpnetRepository`: `editStatus(tweetId, text)` returning a
+   re-fetched `Status` via the existing `getStatus`.
+1. `WarpnetApi.kt::editStatus` → real path; `statusSource` →
+   client-side construction from `getStatus` (no path);
    `statusEdits` → real path (replacing the empty-list stub).
 
-### A3. Account update / preferences — `accountUpdateCredentials`, `accountUpdateSource`, `updateAccountNote`
+### A3. Account update / tweet defaults / private notes — `accountUpdateCredentials`, `accountUpdateSource`, `updateAccountNote`
 
 **Why**: profile screen "edit profile" today fails on save (write-only
 calls all stub-fail). Avatar/header upload fails. Note-on-other-account
@@ -299,7 +329,7 @@ two server-side concerns:
 | Tusky call | Maps to |
 |---|---|
 | accountUpdateCredentials(displayName, note, locked, avatar, header, fields) | extend PRIVATE_POST_USER body; reuse PRIVATE_POST_UPLOAD_IMAGE for avatar/header |
-| accountUpdateSource(privacy, sensitive, language, quotePolicy) | new PRIVATE_POST_USER_PREFS |
+| accountUpdateSource(privacy, sensitive, language, quotePolicy) | new PRIVATE_POST_TWEET_SETTINGS — *despite the misleading Mastodon name `source`, this is the user's **default tweet settings** that the compose screen preselects, not anything about a "profile source"* |
 | updateAccountNote(accountId, note) | new PRIVATE_POST_USER_NOTE (stored locally only — like a private memo) |
 
 **Plan**:
@@ -309,12 +339,22 @@ two server-side concerns:
    (audit `domain/user.go`). Extend
    `event.UpdateUserEvent` (today's payload) accordingly. No new path —
    reuse `PRIVATE_POST_USER`.
-1. **Source/preferences**:
-   * new path `PRIVATE_POST_USER_PREFS = "/private/post/user/prefs/0.0.0"`
-   * DTO `UpdateUserPrefsEvent {privacy, sensitive, language, quote_policy}`
-   * Repo: `database/user-prefs-repo.go` keyed by self user-id.
-   * Handler `StreamUpdatePrefsHandler` in
-     `core/handler/user.go` (next to `StreamUpdateProfileHandler`).
+1. **Tweet settings** (Mastodon's `Account.source` block — defaults
+   the compose screen preselects for new tweets):
+   * new path `PRIVATE_POST_TWEET_SETTINGS = "/private/post/tweet/settings/0.0.0"`
+   * DTO `TweetSettingsEvent {user_id, default_visibility, default_sensitive, default_language, quote_policy}`
+   * Repo: `database/tweet-settings-repo.go` keyed by self user-id;
+     single record per user.
+   * Handler `StreamUpdateTweetSettingsHandler` in
+     `core/handler/tweet.go` (next to `StreamUpdateProfileHandler`,
+     because it's per-user state read at compose time).
+   * The four fields land on `domain.Tweet` as per-tweet metadata too
+     (visibility, sensitive, language, quote_policy) when actual
+     tweets are created — these settings are only the *defaults*, not
+     a global enforcement; per-tweet overrides happen at compose
+     time. Audit `domain/tweet.go` and add the fields if missing.
+   * `accountVerifyCredentials` reads the settings record and surfaces
+     it as `Account.source` so Tusky can preselect the compose UI.
 1. **Account note** (private memo about another user):
    * new path `PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"`
    * DTO `UpdateAccountNoteEvent {target_user_id, note}`
@@ -322,14 +362,18 @@ two server-side concerns:
      `SetNote(selfId, targetId, note string) error`
    * `relationshipFor` (existing) extended to read the note and surface
      it as `Relationship.note`.
-1. Vue: `editMyProfile` already exists. Add `editMyPrefs(prefs)` and
-   `setAccountNote(targetId, note)`. UI: extend
-   `EditProfileOverlay.vue` with a Preferences tab; add a "private
-   note" inline editor on `Profile.vue` for non-self profiles.
+1. Vue: `editMyProfile` already exists. Add `updateTweetSettings(settings)`
+   and `setAccountNote(targetId, note)`. UI: extend
+   `EditProfileOverlay.vue` with a "Tweet defaults" tab (visibility,
+   sensitive, language, quote policy); add a "private note" inline
+   editor on `Profile.vue` for non-self profiles.
 1. warpdroid: `ProtocolIds.kt`, DTOs, repo methods
-   `updateCredentials(...)`, `updatePrefs(...)`, `setAccountNote(...)`.
-1. `WarpnetApi.kt::accountUpdateCredentials/Source` and
-   `updateAccountNote` → real paths.
+   `updateCredentials(...)`, `updateTweetSettings(...)`,
+   `setAccountNote(...)`.
+1. `WarpnetApi.kt::accountUpdateCredentials` → real path
+   (extended `PRIVATE_POST_USER`); `accountUpdateSource` → real path
+   (`PRIVATE_POST_TWEET_SETTINGS`); `updateAccountNote` → real path
+   (`PRIVATE_POST_USER_NOTE`).
 
 ### A4. Block / Unblock — 4 methods
 
@@ -718,6 +762,48 @@ for *moderator-side* receipt. Add the *client-side* submission:
 target user/tweet + reason; the local node forwards to the
 moderation network.
 
+### B13. Filtered-notifications tray — `getNotificationRequests`,
+`acceptNotificationRequest`, `dismissNotificationRequest`
+
+In Mastodon, when a server-side notification policy filters an
+incoming notification (e.g. "from non-followers"), it lands in a
+pending tray rather than disappearing. The user can later **accept**
+(promote into the main notification list) or **dismiss** (drop).
+
+Warpnet has no central notification policy (Mastodon's
+`notificationPolicy` itself is **C**), but the same UX maps cleanly
+onto **A4** (mute / block):
+
+* a notification whose source is muted or blocked, instead of being
+  silently dropped, is enqueued under a separate prefix
+  `notifreq:<userId>` — the same shape as `Notification` but
+  delivered out-of-band of the main feed;
+* the user opens the requests tray, sees the queued items, accepts
+  (move into `notif:<userId>`) or dismisses (delete).
+
+**Plan**:
+
+1. Routes:
+   * `PRIVATE_GET_NOTIFICATION_REQUESTS = "/private/get/notification/requests/0.0.0"`
+   * `PRIVATE_POST_NOTIFICATION_REQUEST_ACCEPT = "/private/post/notification/request/accept/0.0.0"`
+   * `PRIVATE_POST_NOTIFICATION_REQUEST_DISMISS = "/private/post/notification/request/dismiss/0.0.0"`
+1. DTOs: `GetNotificationRequestsEvent {user_id, cursor, limit}`,
+   reuse the existing `Notification` shape for items;
+   `NotificationRequestActionEvent {user_id, notification_id}`.
+1. Repo: extend `database/notification-repo.go` with a parallel
+   `notifreq` keyspace + `MoveToMain(id)` and `Drop(id)` ops.
+1. The notification-emitter side (touched in **A10** subscribe-user)
+   consults `blocksRepo.IsBlocked`/`mutesRepo.IsMuted` once; if true
+   and the source is *not* an explicit subscription, write to
+   `notifreq:` instead of `notif:`.
+1. Vue: 3 methods + a "Requests" tab on `views/Notifications.vue`.
+1. warpdroid: 3 ProtocolIds + DTOs + Repository methods. Tusky's UI
+   for filtered-notifications already exists and is currently dead;
+   wiring it makes it live.
+
+**Depends on**: A4 (mute/block) and ideally A10 (subscribe). Land
+after them.
+
 ## 6. Tier C — keep stubbed, no plan
 
 These have no Warpnet equivalent and will not get one:
@@ -735,10 +821,10 @@ markersWithAuth / updateMarkersWithAuth (per-timeline read markers —
 Tusky's own scroll restoration suffices);
 clearNotifications (Warpnet notifs are derived; nothing to clear);
 notificationPolicy / updateNotificationPolicy (no central policy;
-pre-filter on the node via A10/A4 instead);
+per-source filtering happens via A4 mute/block, and the resulting
+filtered-tray is B13);
 getCustomEmojis / getInstanceV1 / getInstance / getInstanceRules
 (stub-fixed values are fine);
-followedTags only when B2 lands;
 publicTimeline (Mastodon-style federated tab — no Warpnet equivalent;
 contradicts the no-firehose privacy model. The today's fallback to
 the caller's own feed is meaningless. Slated for deletion in §12).
@@ -777,12 +863,11 @@ There is **no** store layer to wire — the existing pattern of
 
 | Phase | Items | Why this order |
 |---|---|---|
-| 0 | none — repo prerequisites | Land `tweetRepo.OwnerOfTweet` index + backfill so A1 has a substrate. |
-| 1 | A1, A9 | Single-status / single-notification: unblocks deep-linking and notification taps. Smallest possible PRs to shake out the mid-air pieces (DTO + path + handler + repo + Vue + warpdroid). |
+| 1 | A1, A9 | Single-status / single-notification: unblocks deep-linking and notification taps. A1 is **warpdroid-only** (no backend work — see §A1). A9 adds one new path. Smallest possible PRs to shake out the mid-air pieces (DTO + path + handler + repo + Vue + warpdroid). |
 | 2 | A4, A5, A6 | Block/mute/bookmark/pin: discrete, no cross-cutting design. Block has the cross-cutting filter middleware — land it once, reuse. |
 | 3 | A2, A3, A11 | Status edit, profile edit, media meta: all hit the *write* path, all expose `EnvelopeSigner` issue on Android. Group so the binding-extension PR (signing) reviews against multiple consumers. |
 | 4 | A7, A8, A10 | Search-users, engagement lists, subscribe-user: pure read APIs once A1's index is in. |
-| 5 | B6, B8, B12 | Conversations, filters, reports: small adaptations, no new domain. |
+| 5 | B6, B8, B12, B13 | Conversations, filters, reports, filtered-notifications tray: small adaptations on existing infrastructure (B13 piggy-backs on A4 from phase 2). |
 | 6 | B2, B3 | Hashtags + trending: depend on tweet-tokenizer change. |
 | 7 | B5, B7, B9, B10 | Quotes, scheduled, lists, follow requests: each ≥1 week design + impl. |
 | 8 | B4 | Polls: largest single feature. |
@@ -860,7 +945,7 @@ no testify, `package handler` (white-box), file starts with
 | accountVerifyCredentials | ✅ uses getAccount fallback to stub | done |
 | account / accountStatuses / accountFollowers / accountFollowing | ✅ | done |
 | accountUpdateCredentials | ❌ | **A3** |
-| accountUpdateSource | ❌ | **A3** |
+| accountUpdateSource | ❌ | **A3** (Mastodon's `source` block = Warpnet **tweet settings** — default visibility / sensitive / language / quote-policy for compose) |
 | addAccountToList / addFilterKeyword / authorizeFollowRequest | ❌ | B9 / B8 / B10 |
 | announcements / dismissAnnouncement / addAnnouncementReaction / removeAnnouncementReaction | empty stub | C |
 | authenticateApp / fetchOAuthToken / revokeOAuthToken | ❌ | C |
@@ -880,7 +965,7 @@ no testify, `package handler` (white-box), file starts with
 | getCustomEmojis / getInstance(V1) / getInstanceRules | empty stub | C |
 | getConversations / deleteConversation | ❌ | B6 |
 | getMedia / updateMedia | ❌ | **A11** |
-| getNotificationRequests / acceptNotificationRequest / dismissNotificationRequest | empty stub | C |
+| getNotificationRequests / acceptNotificationRequest / dismissNotificationRequest | empty stub | **B13** |
 | homeTimeline | ✅ | done |
 | likeStatus / unlikeStatus | ✅ | done |
 | likes (own likes list) | empty stub | A8 (via likers index can derive own — phase 4) |
@@ -902,11 +987,11 @@ no testify, `package handler` (white-box), file starts with
 | retweetStatus / unretweetStatus | ✅ | done |
 | search (unified) | ❌ | A7 (accounts) + B2 (hashtags) + future tweets |
 | searchAccounts | ✅ client-side filter | **A7** (server-side) |
-| status(id) | ❌ | **A1** |
+| status(id) | ❌ | **A1** (warpdroid-only refactor — pass author id) |
 | statusContext | ✅ | done |
 | statusEdits | empty list stub | **A2** |
 | statusLikedBy / statusRetweetedBy | empty stub | **A8** |
-| statusSource | ❌ | **A2** |
+| statusSource | ❌ | **A2** (warpdroid-only — synthesise from the in-memory `Tweet`; no backend route) |
 | subscribeAccount / unsubscribeAccount | ❌ | **A10** |
 | translate | ❌ | B11 (skip) |
 | trendingTags / trendingStatuses | empty stub | B3 |
@@ -979,7 +1064,7 @@ Line numbers refer to the current file (920 lines).
 | Instance metadata | `getInstanceV1`, `getInstance`, `getInstanceRules`, `getCustomEmojis` | 145–186 | No "instance" concept; the only fact Tusky actually consumes (max chars) belongs in a local constant, not a network call. |
 | Announcements | `announcements`, `dismissAnnouncement`, `addAnnouncementReaction`, `removeAnnouncementReaction` | 783–796 | No central admin to broadcast announcements. |
 | Read markers | `markersWithAuth`, `updateMarkersWithAuth` | 290–301 | No server-side scroll-position sync; Tusky already remembers locally. |
-| Notification housekeeping | `clearNotifications`, `notificationPolicy`, `updateNotificationPolicy`, `getNotificationRequests`, `acceptNotificationRequest`, `dismissNotificationRequest` | 315, 889–910 | Warpnet notifications are derived from events (no read-acknowledge); per-user filtering happens via **A4** mute + **A10** subscribe, not via a central policy. |
+| Notification housekeeping | `clearNotifications`, `notificationPolicy`, `updateNotificationPolicy` | 315, 889–897 | Warpnet notifications are derived from events (no read-acknowledge); per-user filtering happens via **A4** mute + **A10** subscribe, not via a central policy. **Note**: `getNotificationRequests` / `acceptNotificationRequest` / `dismissNotificationRequest` look like they belong here, but they are now scheduled as **B13** (filtered-notifications tray) — do **not** delete them. |
 | Translation | `translate` | 880–883 | No translator on the node and no privacy-acceptable way to add one. Decision in **B11**: skip. |
 | Public/federated timeline | `publicTimeline` | 237–249 | No Warpnet equivalent — Warpnet is direct-follows-only by design; a network-wide firehose contradicts the privacy/bandwidth model. Today's fallback to the caller's own feed is meaningless. Tusky's "Public" / "Federated" tab goes with it. |
 
