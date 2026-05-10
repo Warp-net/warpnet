@@ -170,25 +170,43 @@ account, accountStatuses, accountFollowers, accountFollowing,
 followAccount, unfollowAccount, relationships
 ```
 
-### 3.2 Soft-stubs that can stay stubs forever (29 methods)
+### 3.2 Currently soft-stub, but **only Tier C** stays forever
 
-These have no Warpnet equivalent and Tusky tolerates an empty/Unit
-success. **Action: none.** Keep returning success-with-empty.
+These return empty-success / `Unit`-success today and Tusky tolerates
+that. The list below is the **strict Tier C subset** (full rationale
+in §6) — items that have no Warpnet equivalent and never will.
+**Action: none, keep stubbed.**
 
 ```
 getCustomEmojis, getInstanceV1, getInstance, getInstanceRules,
 markersWithAuth, updateMarkersWithAuth, clearNotifications,
-getFilters, deleteFilter, deleteFilterKeyword, statusEdits,
 announcements, dismissAnnouncement, addAnnouncementReaction,
-removeAnnouncementReaction, report, scheduledTweets,
-deleteScheduledStatus, blockDomain, unblockDomain, domainBlocks,
-followedTags, trendingTags, trendingStatuses, quotingStatuses,
-followRequests, getNotificationRequests, acceptNotificationRequest,
-dismissNotificationRequest, getLists, getListsIncludesAccount,
-deleteList, getAccountsInList, deleteAccountFromList,
-addAccountToList, getConversations, deleteConversation,
-revokeOAuthToken, unsubscribePushNotifications, removeAnnouncementReaction
+removeAnnouncementReaction, blockDomain, unblockDomain, domainBlocks,
+revokeOAuthToken, unsubscribePushNotifications, notificationPolicy,
+updateNotificationPolicy
 ```
+
+### 3.2.1 Currently soft-stub, but **Tier A or B will replace them**
+
+The earlier draft of this document mistakenly grouped these with
+forever-stubs. They each map to a real Warpnet feature and the stub
+should be replaced when the corresponding tier item lands. Until then
+the empty-success behaviour is harmless — but treat the stub as
+*temporary*, not architectural.
+
+| Currently stubbed method(s) | Will be replaced by |
+|---|---|
+| `statusEdits` | **A2** — status edit / source / edits |
+| `getFilters`, `deleteFilter`, `deleteFilterKeyword` | **B8** — filters |
+| `report` | **B12** — user-side reports |
+| `scheduledTweets`, `deleteScheduledStatus` | **B7** — scheduled tweets |
+| `followedTags`, `trendingTags`, `trendingStatuses` | **B2** / **B3** — hashtags + trends |
+| `quotingStatuses` | **B5** — quote tweets |
+| `followRequests` | **B10** — follow requests for locked accounts |
+| `getNotificationRequests`, `acceptNotificationRequest`, `dismissNotificationRequest` | **B13** — filtered-notifications tray (built on **A4** mute/block) |
+| `getLists`, `getListsIncludesAccount`, `deleteList`, `getAccountsInList`, `deleteAccountFromList`, `addAccountToList` | **B9** — custom lists / list timelines |
+| `getConversations`, `deleteConversation` | **B6** — conversations |
+| `unsubscribeAccount` (when called against a non-subscribed) | **A10** — subscribe / unsubscribe |
 
 ### 3.3 Hard stubs blocking real UX (57 methods) — Tier A / B / C below
 
@@ -718,6 +736,48 @@ for *moderator-side* receipt. Add the *client-side* submission:
 target user/tweet + reason; the local node forwards to the
 moderation network.
 
+### B13. Filtered-notifications tray — `getNotificationRequests`,
+`acceptNotificationRequest`, `dismissNotificationRequest`
+
+In Mastodon, when a server-side notification policy filters an
+incoming notification (e.g. "from non-followers"), it lands in a
+pending tray rather than disappearing. The user can later **accept**
+(promote into the main notification list) or **dismiss** (drop).
+
+Warpnet has no central notification policy (Mastodon's
+`notificationPolicy` itself is **C**), but the same UX maps cleanly
+onto **A4** (mute / block):
+
+* a notification whose source is muted or blocked, instead of being
+  silently dropped, is enqueued under a separate prefix
+  `notifreq:<userId>` — the same shape as `Notification` but
+  delivered out-of-band of the main feed;
+* the user opens the requests tray, sees the queued items, accepts
+  (move into `notif:<userId>`) or dismisses (delete).
+
+**Plan**:
+
+1. Routes:
+   * `PRIVATE_GET_NOTIFICATION_REQUESTS = "/private/get/notification/requests/0.0.0"`
+   * `PRIVATE_POST_NOTIFICATION_REQUEST_ACCEPT = "/private/post/notification/request/accept/0.0.0"`
+   * `PRIVATE_POST_NOTIFICATION_REQUEST_DISMISS = "/private/post/notification/request/dismiss/0.0.0"`
+1. DTOs: `GetNotificationRequestsEvent {user_id, cursor, limit}`,
+   reuse the existing `Notification` shape for items;
+   `NotificationRequestActionEvent {user_id, notification_id}`.
+1. Repo: extend `database/notification-repo.go` with a parallel
+   `notifreq` keyspace + `MoveToMain(id)` and `Drop(id)` ops.
+1. The notification-emitter side (touched in **A10** subscribe-user)
+   consults `blocksRepo.IsBlocked`/`mutesRepo.IsMuted` once; if true
+   and the source is *not* an explicit subscription, write to
+   `notifreq:` instead of `notif:`.
+1. Vue: 3 methods + a "Requests" tab on `views/Notifications.vue`.
+1. warpdroid: 3 ProtocolIds + DTOs + Repository methods. Tusky's UI
+   for filtered-notifications already exists and is currently dead;
+   wiring it makes it live.
+
+**Depends on**: A4 (mute/block) and ideally A10 (subscribe). Land
+after them.
+
 ## 6. Tier C — keep stubbed, no plan
 
 These have no Warpnet equivalent and will not get one:
@@ -735,10 +795,10 @@ markersWithAuth / updateMarkersWithAuth (per-timeline read markers —
 Tusky's own scroll restoration suffices);
 clearNotifications (Warpnet notifs are derived; nothing to clear);
 notificationPolicy / updateNotificationPolicy (no central policy;
-pre-filter on the node via A10/A4 instead);
+per-source filtering happens via A4 mute/block, and the resulting
+filtered-tray is B13);
 getCustomEmojis / getInstanceV1 / getInstance / getInstanceRules
 (stub-fixed values are fine);
-followedTags only when B2 lands;
 publicTimeline (Mastodon-style federated tab — no Warpnet equivalent;
 contradicts the no-firehose privacy model. The today's fallback to
 the caller's own feed is meaningless. Slated for deletion in §12).
@@ -782,7 +842,7 @@ There is **no** store layer to wire — the existing pattern of
 | 2 | A4, A5, A6 | Block/mute/bookmark/pin: discrete, no cross-cutting design. Block has the cross-cutting filter middleware — land it once, reuse. |
 | 3 | A2, A3, A11 | Status edit, profile edit, media meta: all hit the *write* path, all expose `EnvelopeSigner` issue on Android. Group so the binding-extension PR (signing) reviews against multiple consumers. |
 | 4 | A7, A8, A10 | Search-users, engagement lists, subscribe-user: pure read APIs once A1's index is in. |
-| 5 | B6, B8, B12 | Conversations, filters, reports: small adaptations, no new domain. |
+| 5 | B6, B8, B12, B13 | Conversations, filters, reports, filtered-notifications tray: small adaptations on existing infrastructure (B13 piggy-backs on A4 from phase 2). |
 | 6 | B2, B3 | Hashtags + trending: depend on tweet-tokenizer change. |
 | 7 | B5, B7, B9, B10 | Quotes, scheduled, lists, follow requests: each ≥1 week design + impl. |
 | 8 | B4 | Polls: largest single feature. |
@@ -880,7 +940,7 @@ no testify, `package handler` (white-box), file starts with
 | getCustomEmojis / getInstance(V1) / getInstanceRules | empty stub | C |
 | getConversations / deleteConversation | ❌ | B6 |
 | getMedia / updateMedia | ❌ | **A11** |
-| getNotificationRequests / acceptNotificationRequest / dismissNotificationRequest | empty stub | C |
+| getNotificationRequests / acceptNotificationRequest / dismissNotificationRequest | empty stub | **B13** |
 | homeTimeline | ✅ | done |
 | likeStatus / unlikeStatus | ✅ | done |
 | likes (own likes list) | empty stub | A8 (via likers index can derive own — phase 4) |
@@ -979,7 +1039,7 @@ Line numbers refer to the current file (920 lines).
 | Instance metadata | `getInstanceV1`, `getInstance`, `getInstanceRules`, `getCustomEmojis` | 145–186 | No "instance" concept; the only fact Tusky actually consumes (max chars) belongs in a local constant, not a network call. |
 | Announcements | `announcements`, `dismissAnnouncement`, `addAnnouncementReaction`, `removeAnnouncementReaction` | 783–796 | No central admin to broadcast announcements. |
 | Read markers | `markersWithAuth`, `updateMarkersWithAuth` | 290–301 | No server-side scroll-position sync; Tusky already remembers locally. |
-| Notification housekeeping | `clearNotifications`, `notificationPolicy`, `updateNotificationPolicy`, `getNotificationRequests`, `acceptNotificationRequest`, `dismissNotificationRequest` | 315, 889–910 | Warpnet notifications are derived from events (no read-acknowledge); per-user filtering happens via **A4** mute + **A10** subscribe, not via a central policy. |
+| Notification housekeeping | `clearNotifications`, `notificationPolicy`, `updateNotificationPolicy` | 315, 889–897 | Warpnet notifications are derived from events (no read-acknowledge); per-user filtering happens via **A4** mute + **A10** subscribe, not via a central policy. **Note**: `getNotificationRequests` / `acceptNotificationRequest` / `dismissNotificationRequest` look like they belong here, but they are now scheduled as **B13** (filtered-notifications tray) — do **not** delete them. |
 | Translation | `translate` | 880–883 | No translator on the node and no privacy-acceptable way to add one. Decision in **B11**: skip. |
 | Public/federated timeline | `publicTimeline` | 237–249 | No Warpnet equivalent — Warpnet is direct-follows-only by design; a network-wide firehose contradicts the privacy/bandwidth model. Today's fallback to the caller's own feed is meaningless. Tusky's "Public" / "Federated" tab goes with it. |
 
