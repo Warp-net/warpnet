@@ -922,3 +922,118 @@ A Tier A item is "done" when **all** of the following hold (skill §8):
 - [ ] `./gradlew :app:assembleDebug` succeeds.
 - [ ] `WarpnetApi.kt` switched from stub to real call.
 - [ ] PR description names the path so reviewers can grep all three sources.
+
+## 12. To delete from warpdroid (no Warpnet equivalent)
+
+The methods below carry no Warpnet meaning and never will — implementing
+them would require introducing concepts that contradict Warpnet's
+architecture (no instance / no central admin / no domain federation /
+no Web Push gateway / no OAuth server / no read-marker sync). Today
+they live in `WarpnetApi.kt` only because Tusky was a Mastodon client
+and its view-models call them by default. They are dead weight on the
+client surface and should be removed in a single coordinated PR
+together with the Tusky UI that calls them.
+
+**Important** — this list is **strictly Tier C from §6**. The methods
+in §3.2 that map to a Tier B item (filters, lists, conversations,
+follow-requests, scheduled tweets, hashtags, trends, quotes, polls,
+reports) **must stay as soft-stubs** until their Tier B lands; do not
+delete them.
+
+### 12.1 Methods to delete from `WarpnetApi.kt`
+
+Line numbers refer to the current file (920 lines).
+
+| Group | Methods | Lines | Why removable |
+|---|---|---|---|
+| OAuth | `authenticateApp`, `fetchOAuthToken`, `revokeOAuthToken` | 703–724 | Warpnet pairs nodes via QR + challenge (`PRIVATE_POST_PAIR` / `PUBLIC_POST_NODE_CHALLENGE`); no OAuth server exists, none planned. |
+| Web Push | `pushNotificationSubscription`, `subscribePushNotifications`, `updatePushNotificationSubscription`, `unsubscribePushNotifications` | 825–849 | Warpnet has no push gateway; notifications are 2 s polling against `PRIVATE_GET_NOTIFICATIONS`. |
+| Domain blocks | `blockDomain`, `unblockDomain`, `domainBlocks` | 668–675 | No "domain" concept in P2P; per-user block is covered by **A4**. |
+| Instance metadata | `getInstanceV1`, `getInstance`, `getInstanceRules`, `getCustomEmojis` | 145–186 | No "instance" concept; the only fact Tusky actually consumes (max chars) belongs in a local constant, not a network call. |
+| Announcements | `announcements`, `dismissAnnouncement`, `addAnnouncementReaction`, `removeAnnouncementReaction` | 783–796 | No central admin to broadcast announcements. |
+| Read markers | `markersWithAuth`, `updateMarkersWithAuth` | 290–301 | No server-side scroll-position sync; Tusky already remembers locally. |
+| Notification housekeeping | `clearNotifications`, `notificationPolicy`, `updateNotificationPolicy`, `getNotificationRequests`, `acceptNotificationRequest`, `dismissNotificationRequest` | 315, 889–910 | Warpnet notifications are derived from events (no read-acknowledge); per-user filtering happens via **A4** mute + **A10** subscribe, not via a central policy. |
+| Translation | `translate` | 880–883 | No translator on the node and no privacy-acceptable way to add one. Decision in **B11**: skip. |
+
+**Total: 26 methods to delete.**
+
+### 12.2 Tusky UI surface to delete alongside
+
+Removing the methods will break compilation in any Tusky view-model
+or fragment that imports them. Before the deletion PR opens, audit
+warpdroid for callers — typical removal targets:
+
+| Method group | Likely Tusky surface |
+|---|---|
+| OAuth | the entire login activity / `LoginActivity*`, `OauthLogin` flow. Warpdroid's pairing flow (QR scan, `PairedNodeStore`) replaces it; the OAuth screens are unreachable already. |
+| Web Push | `PushNotificationHelper`, `UnifiedPushBroadcastReceiver`, settings entry "Push notifications". |
+| Domain blocks | "Blocked domains" preference screen + adapter. |
+| Instance metadata | `InstanceInfoRepository` callers — replace `getInstanceV1().maxTootChars` reads with a single `WarpnetLimits.MAX_TWEET_CHARS = 2000` constant in `site.warpnet.transport`. The compose-screen char counter is the only consumer that matters. |
+| Announcements | `AnnouncementsActivity`, the "Announcements" badge in the main menu. |
+| Read markers | `NotificationsViewModel.markAs*`, `TimelineRepository.saveReadingPosition` — leave Tusky's local `SharedPreferences`-backed scroll restore, drop the network call. |
+| Notification housekeeping | "Clear notifications" menu item, "Notification policy" preference screen, `NotificationRequestsActivity`. |
+| Translation | "Translate" item in the status overflow menu. |
+
+For each removed entry point, also remove the route registration in
+the navigation graph / preference XML so the feature does not appear
+in the UI before the user clicks a dead button.
+
+### 12.3 Entity classes that become unused
+
+After the methods above are deleted, these `site.warpnet.warpdroid.entity.*`
+classes are referenced nowhere and can be deleted in the same PR (verify
+with `grep -r '<ClassName>' warpdroid/`):
+
+```
+AccessToken
+Announcement
+AppCredentials
+Emoji                   // unless retained for Tusky's local-only emoji support
+Instance
+InstanceConfiguration
+InstanceV1
+Marker
+NotificationPolicy      // keep if B-tier filtering re-uses the shape
+NotificationRequest     // keep if B-tier filtering re-uses the shape
+NotificationSubscribeResult
+Translation
+TweetConfiguration      // see "Instance metadata" row above
+```
+
+**Do not delete** these entities even though they appear in current
+stubs — they are Tier B placeholders and will be wired in:
+
+```
+Filter, FilterKeyword          → B8
+MastoList                      → B9
+Conversation                   → B6
+ScheduledTweet,                → B7
+ScheduledTweetReply            → B7
+Poll                           → B4
+HashTag, TrendingTag           → B2 / B3
+TweetEdit, TweetSource         → A2
+DeletedTweet                   → already used by deleteStatus (A done)
+```
+
+### 12.4 Suggested PR shape
+
+One PR titled `warpdroid: drop Mastodon-only API surface`:
+
+1. Delete the 26 methods from `WarpnetApi.kt`.
+2. Delete the entity classes from §12.3.
+3. Delete unreachable Tusky activities/fragments/preferences from §12.2.
+4. Remove the now-orphaned imports at the top of `WarpnetApi.kt`
+   (`Announcement`, `AppCredentials`, `Emoji`, `Instance`, `InstanceV1`,
+   `InstanceConfiguration`, `TweetConfiguration`, `Marker`,
+   `NotificationPolicy`, `NotificationRequest`,
+   `NotificationSubscribeResult`, `Translation`, `AccessToken`).
+5. Drop helpers that become unused (`stubFailure`, `stubError`,
+   `stubList`, the `unsupported(name)` builder) **only if** no
+   remaining Tier B placeholder still references them — most likely
+   the helpers stay, just with fewer call sites.
+6. `./gradlew :app:assembleDebug` must pass before the PR opens.
+
+This is a destructive, deliberately large diff. Land it after Tier A
+phases 1–4 are done so the UI gaps left behind (login screen,
+notifications drawer) are filled with Warpnet-native equivalents
+already, not with empty stubs.
