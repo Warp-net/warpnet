@@ -316,7 +316,7 @@ view triggers `statusSource` which fails, so the edit button is dead.
    client-side construction from `getStatus` (no path);
    `statusEdits` → real path (replacing the empty-list stub).
 
-### A3. Account update / preferences — `accountUpdateCredentials`, `accountUpdateSource`, `updateAccountNote`
+### A3. Account update / tweet defaults / private notes — `accountUpdateCredentials`, `accountUpdateSource`, `updateAccountNote`
 
 **Why**: profile screen "edit profile" today fails on save (write-only
 calls all stub-fail). Avatar/header upload fails. Note-on-other-account
@@ -329,7 +329,7 @@ two server-side concerns:
 | Tusky call | Maps to |
 |---|---|
 | accountUpdateCredentials(displayName, note, locked, avatar, header, fields) | extend PRIVATE_POST_USER body; reuse PRIVATE_POST_UPLOAD_IMAGE for avatar/header |
-| accountUpdateSource(privacy, sensitive, language, quotePolicy) | new PRIVATE_POST_USER_PREFS |
+| accountUpdateSource(privacy, sensitive, language, quotePolicy) | new PRIVATE_POST_TWEET_SETTINGS — *despite the misleading Mastodon name `source`, this is the user's **default tweet settings** that the compose screen preselects, not anything about a "profile source"* |
 | updateAccountNote(accountId, note) | new PRIVATE_POST_USER_NOTE (stored locally only — like a private memo) |
 
 **Plan**:
@@ -339,12 +339,22 @@ two server-side concerns:
    (audit `domain/user.go`). Extend
    `event.UpdateUserEvent` (today's payload) accordingly. No new path —
    reuse `PRIVATE_POST_USER`.
-1. **Source/preferences**:
-   * new path `PRIVATE_POST_USER_PREFS = "/private/post/user/prefs/0.0.0"`
-   * DTO `UpdateUserPrefsEvent {privacy, sensitive, language, quote_policy}`
-   * Repo: `database/user-prefs-repo.go` keyed by self user-id.
-   * Handler `StreamUpdatePrefsHandler` in
-     `core/handler/user.go` (next to `StreamUpdateProfileHandler`).
+1. **Tweet settings** (Mastodon's `Account.source` block — defaults
+   the compose screen preselects for new tweets):
+   * new path `PRIVATE_POST_TWEET_SETTINGS = "/private/post/tweet/settings/0.0.0"`
+   * DTO `TweetSettingsEvent {user_id, default_visibility, default_sensitive, default_language, quote_policy}`
+   * Repo: `database/tweet-settings-repo.go` keyed by self user-id;
+     single record per user.
+   * Handler `StreamUpdateTweetSettingsHandler` in
+     `core/handler/tweet.go` (next to `StreamUpdateProfileHandler`,
+     because it's per-user state read at compose time).
+   * The four fields land on `domain.Tweet` as per-tweet metadata too
+     (visibility, sensitive, language, quote_policy) when actual
+     tweets are created — these settings are only the *defaults*, not
+     a global enforcement; per-tweet overrides happen at compose
+     time. Audit `domain/tweet.go` and add the fields if missing.
+   * `accountVerifyCredentials` reads the settings record and surfaces
+     it as `Account.source` so Tusky can preselect the compose UI.
 1. **Account note** (private memo about another user):
    * new path `PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"`
    * DTO `UpdateAccountNoteEvent {target_user_id, note}`
@@ -352,14 +362,18 @@ two server-side concerns:
      `SetNote(selfId, targetId, note string) error`
    * `relationshipFor` (existing) extended to read the note and surface
      it as `Relationship.note`.
-1. Vue: `editMyProfile` already exists. Add `editMyPrefs(prefs)` and
-   `setAccountNote(targetId, note)`. UI: extend
-   `EditProfileOverlay.vue` with a Preferences tab; add a "private
-   note" inline editor on `Profile.vue` for non-self profiles.
+1. Vue: `editMyProfile` already exists. Add `updateTweetSettings(settings)`
+   and `setAccountNote(targetId, note)`. UI: extend
+   `EditProfileOverlay.vue` with a "Tweet defaults" tab (visibility,
+   sensitive, language, quote policy); add a "private note" inline
+   editor on `Profile.vue` for non-self profiles.
 1. warpdroid: `ProtocolIds.kt`, DTOs, repo methods
-   `updateCredentials(...)`, `updatePrefs(...)`, `setAccountNote(...)`.
-1. `WarpnetApi.kt::accountUpdateCredentials/Source` and
-   `updateAccountNote` → real paths.
+   `updateCredentials(...)`, `updateTweetSettings(...)`,
+   `setAccountNote(...)`.
+1. `WarpnetApi.kt::accountUpdateCredentials` → real path
+   (extended `PRIVATE_POST_USER`); `accountUpdateSource` → real path
+   (`PRIVATE_POST_TWEET_SETTINGS`); `updateAccountNote` → real path
+   (`PRIVATE_POST_USER_NOTE`).
 
 ### A4. Block / Unblock — 4 methods
 
@@ -931,7 +945,7 @@ no testify, `package handler` (white-box), file starts with
 | accountVerifyCredentials | ✅ uses getAccount fallback to stub | done |
 | account / accountStatuses / accountFollowers / accountFollowing | ✅ | done |
 | accountUpdateCredentials | ❌ | **A3** |
-| accountUpdateSource | ❌ | **A3** |
+| accountUpdateSource | ❌ | **A3** (Mastodon's `source` block = Warpnet **tweet settings** — default visibility / sensitive / language / quote-policy for compose) |
 | addAccountToList / addFilterKeyword / authorizeFollowRequest | ❌ | B9 / B8 / B10 |
 | announcements / dismissAnnouncement / addAnnouncementReaction / removeAnnouncementReaction | empty stub | C |
 | authenticateApp / fetchOAuthToken / revokeOAuthToken | ❌ | C |
