@@ -39,6 +39,25 @@ repo with `NewTxn` / `defer Rollback` / `Commit`, handler under
 registration in `cmd/node/member/node/member-node.go` next to related
 routes with `//nolint:govet`.
 
+## 0.1 Terminology — `home` vs `timeline`
+
+Warpnet and Mastodon use the same words for different things. Throughout
+this document:
+
+* **Warpnet "home"** = the user's own tweets feed (`PUBLIC_GET_TWEETS`
+  called with `user_id == self`). In Mastodon vocabulary this is
+  `accountStatuses(selfId)`.
+* **Warpnet "timeline"** = the user's friends-plus-recommendations feed
+  (`PRIVATE_GET_TIMELINE`). In Mastodon vocabulary this is what Tusky
+  calls `homeTimeline`.
+
+So Tusky's `homeTimeline` is *not* the Warpnet home — it is the Warpnet
+timeline. And Tusky's `accountStatuses(self)` is the Warpnet home. The
+existing wires already do the right mapping; the naming inside Tusky
+stays Mastodon-shaped, but every comment / docstring on the Warpnet
+side should reach for **timeline** when meaning friends+recs and
+**home** when meaning own-tweets.
+
 ## 1. Implementation patterns observed
 
 ### 1.1 Backend (Go)
@@ -111,8 +130,8 @@ them.
 | Domain | Backend | Vue (`service.js`) | warpdroid (`WarpnetRepository`) |
 |---|---|---|---|
 | auth (login/logout/pair) | ✅ | ✅ login | pairing only (separate path) |
-| timeline (own) | ✅ PRIVATE_GET_TIMELINE | ✅ getMyTimeline | ✅ getHomeTimeline |
-| user timeline | ✅ PUBLIC_GET_TWEETS | ✅ getTweets | ✅ getUserTimeline |
+| **timeline** (friends + recs; = Tusky `homeTimeline`) | ✅ PRIVATE_GET_TIMELINE | ✅ getMyTimeline | ✅ getHomeTimeline |
+| **home** / per-user feed (own tweets when self; = Tusky `accountStatuses`) | ✅ PUBLIC_GET_TWEETS | ✅ getTweets | ✅ getUserTimeline |
 | single tweet | ✅ PUBLIC_GET_TWEET | ✅ getTweet | ✅ getStatus |
 | tweet stats | ✅ PUBLIC_GET_TWEET_STATS | ✅ getTweetStats | ✅ getTweetStats |
 | post tweet | ✅ PRIVATE_POST_TWEET | ✅ createTweet | ✅ postStatus |
@@ -579,9 +598,11 @@ to show the route shape but the data model is non-trivial.
 Federated tab. **This is wrong for Warpnet.** Warpnet is intentionally
 scoped to direct follows + per-tweet pull on demand; a network-wide
 firehose contradicts the privacy and bandwidth model (every node
-would receive every tweet from every peer it's ever met). The home
-timeline (`homeTimeline → PRIVATE_GET_TIMELINE`) is the only timeline
-concept Warpnet has.
+would receive every tweet from every peer it's ever met). The two
+timeline concepts Warpnet has — **timeline** (friends+recs,
+`PRIVATE_GET_TIMELINE`) and **home** (own tweets,
+`PUBLIC_GET_TWEETS` with `user_id=self`) — already cover everything a
+Warpnet user reads; there is no third "everyone" feed.
 
 `publicTimeline` therefore has no Warpnet equivalent and is moved
 to **Tier C / §12 deletion list**. Today's fallback (returning the
@@ -980,7 +1001,7 @@ warpdroid for callers — typical removal targets:
 | Read markers | `NotificationsViewModel.markAs*`, `TimelineRepository.saveReadingPosition` — leave Tusky's local `SharedPreferences`-backed scroll restore, drop the network call. |
 | Notification housekeeping | "Clear notifications" menu item, "Notification policy" preference screen, `NotificationRequestsActivity`. |
 | Translation | "Translate" item in the status overflow menu. |
-| Public timeline | The "Public" / "Federated" tab in Tusky's bottom navigation (`MainActivity` tab adapter, `TimelineFragment` instantiated with `Kind.PUBLIC_FEDERATED` / `Kind.PUBLIC_LOCAL`). Drop the tab entirely — only the Home tab keeps a Warpnet meaning. |
+| Public timeline | The "Public" / "Federated" tab in Tusky's bottom navigation (`MainActivity` tab adapter, `TimelineFragment` instantiated with `Kind.PUBLIC_FEDERATED` / `Kind.PUBLIC_LOCAL`). Drop the tab entirely — Warpnet has only **timeline** (friends+recs) and **home** (own tweets); a third "everyone" tab has no source. |
 
 For each removed entry point, also remove the route registration in
 the navigation graph / preference XML so the feature does not appear
