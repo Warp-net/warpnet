@@ -20,7 +20,7 @@
             android:layout_marginVertical="4dp"
             android:paddingStart="4dp"
             android:textColor="?android:attr/textColorSecondary"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             tools:text="No racism, sexism, discrimination against gender and sexual minorities, ableism, fatmisia, xenophobia and/or violent nationalism." />
 
     </com.google.android.material.card.MaterialCardView>

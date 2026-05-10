@@ -91,7 +91,7 @@ import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.NewPoll
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.settings.PrefKeys.APP_THEME
@@ -330,10 +330,10 @@ class ComposeActivity :
             binding.composeUsernameView.hide()
         }
 
-        setupReplyViews(composeOptions?.replyingStatusAuthor, composeOptions?.replyingStatusContent)
-        val statusContent = composeOptions?.content
-        if (!statusContent.isNullOrEmpty()) {
-            binding.composeEditField.setText(statusContent)
+        setupReplyViews(composeOptions?.replyingStatusAuthor, composeOptions?.replyingTweetContent)
+        val tweetContent = composeOptions?.content
+        if (!tweetContent.isNullOrEmpty()) {
+            binding.composeEditField.setText(tweetContent)
         }
 
         if (!composeOptions?.scheduledAt.isNullOrEmpty()) {
@@ -406,7 +406,7 @@ class ComposeActivity :
         }
     }
 
-    private fun setupReplyViews(replyingStatusAuthor: String?, replyingStatusContent: String?) {
+    private fun setupReplyViews(replyingStatusAuthor: String?, replyingTweetContent: String?) {
         if (replyingStatusAuthor != null) {
             binding.composeReplyView.show()
             binding.composeReplyView.text = getString(R.string.replying_to, replyingStatusAuthor)
@@ -447,7 +447,7 @@ class ComposeActivity :
                 }
             }
         }
-        replyingStatusContent?.let { binding.composeReplyContentView.text = it }
+        replyingTweetContent?.let { binding.composeReplyContentView.text = it }
     }
 
     private fun setupContentWarningField(startingContentWarning: String?) {
@@ -625,7 +625,7 @@ class ComposeActivity :
         enableButton(binding.composeEmojiButton, clickable = false, colorActive = false)
 
         // Setup the interface buttons.
-        binding.composeTootButton.setOnClickListener { onSendClicked() }
+        binding.composeTweetButton.setOnClickListener { onSendClicked() }
         binding.composeAddMediaButton.setOnClickListener { openPickDialog() }
         binding.composeToggleVisibilityButton.setOnClickListener { showComposeOptions() }
         binding.composeContentWarningButton.setOnClickListener { onContentWarningChanged() }
@@ -863,18 +863,18 @@ class ComposeActivity :
         binding.composeEmojiButton.isClickable = enable
         binding.composeHideMediaButton.isClickable = enable
         binding.composeScheduleButton.isClickable = enable && !editing
-        binding.composeTootButton.isEnabled = enable
+        binding.composeTweetButton.isEnabled = enable
     }
 
-    private fun setStatusVisibility(visibility: Status.Visibility) {
+    private fun setStatusVisibility(visibility: Tweet.Visibility) {
         binding.composeOptionsBottomSheet.setStatusVisibility(visibility)
-        binding.composeTootButton.setStatusVisibility(visibility)
+        binding.composeTweetButton.setStatusVisibility(visibility)
 
         val iconRes = when (visibility) {
-            Status.Visibility.PUBLIC -> R.drawable.ic_public_24dp
-            Status.Visibility.PRIVATE -> R.drawable.ic_lock_24dp
-            Status.Visibility.DIRECT -> R.drawable.ic_mail_24dp
-            Status.Visibility.UNLISTED -> R.drawable.ic_lock_open_24dp
+            Tweet.Visibility.PUBLIC -> R.drawable.ic_public_24dp
+            Tweet.Visibility.PRIVATE -> R.drawable.ic_lock_24dp
+            Tweet.Visibility.DIRECT -> R.drawable.ic_mail_24dp
+            Tweet.Visibility.UNLISTED -> R.drawable.ic_lock_open_24dp
             else -> R.drawable.ic_lock_open_24dp
         }
         binding.composeToggleVisibilityButton.setImageResource(iconRes)
@@ -1009,7 +1009,7 @@ class ComposeActivity :
         binding.pollPreview.hide()
     }
 
-    override fun onVisibilityChanged(visibility: Status.Visibility) {
+    override fun onVisibilityChanged(visibility: Tweet.Visibility) {
         composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         viewModel.changeStatusVisibility(visibility)
     }
@@ -1229,7 +1229,7 @@ class ComposeActivity :
         if (event.action == KeyEvent.ACTION_DOWN) {
             if (event.isCtrlPressed) {
                 if (keyCode == KeyEvent.KEYCODE_ENTER) {
-                    // send toot by pressing CTRL + ENTER
+                    // send tweet by pressing CTRL + ENTER
                     this.onSendClicked()
                     return true
                 }
@@ -1393,11 +1393,11 @@ class ComposeActivity :
     }
 
     /**
-     * Status' kind. This particularly affects how the status is handled if the user
+     * Tweet' kind. This particularly affects how the status is handled if the user
      * backs out of the edit.
      */
     enum class ComposeKind {
-        /** Status is new */
+        /** Tweet is new */
         NEW,
 
         /** Editing a posted status */
@@ -1419,11 +1419,11 @@ class ComposeActivity :
         val mediaDescriptions: List<String>? = null,
         val mentionedUsernames: Set<String>? = null,
         val inReplyToId: String? = null,
-        val replyVisibility: Status.Visibility? = null,
-        val visibility: Status.Visibility? = null,
+        val replyVisibility: Tweet.Visibility? = null,
+        val visibility: Tweet.Visibility? = null,
         val contentWarning: String? = null,
         val replyingStatusAuthor: String? = null,
-        val replyingStatusContent: String? = null,
+        val replyingTweetContent: String? = null,
         val mediaAttachments: List<Attachment>? = null,
         val scheduledAt: String? = null,
         val sensitive: Boolean? = null,

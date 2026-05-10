@@ -13,7 +13,7 @@ import at.connyduck.calladapter.networkresult.fold
 import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BaseActivity
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.databinding.ActivityFollowedTagsBinding
 import site.warpnet.warpdroid.interfaces.HashtagActionListener
 import site.warpnet.warpdroid.network.WarpnetApi
@@ -166,7 +166,7 @@ class FollowedTagsActivity :
     }
 
     override fun viewTag(tagName: String) {
-        startActivity(StatusListActivity.newHashtagIntent(this, tagName))
+        startActivity(TweetListActivity.newHashtagIntent(this, tagName))
     }
 
     override fun copyTagName(tagName: String) {

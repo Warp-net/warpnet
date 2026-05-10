@@ -17,15 +17,15 @@ package site.warpnet.warpdroid.components.timeline.viewmodel
 
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 
 class NetworkTimelinePagingSource(
     private val viewModel: NetworkTimelineViewModel
-) : PagingSource<String, StatusViewData>() {
+) : PagingSource<String, TweetViewData>() {
 
-    override fun getRefreshKey(state: PagingState<String, StatusViewData>): String? = null
+    override fun getRefreshKey(state: PagingState<String, TweetViewData>): String? = null
 
-    override suspend fun load(params: LoadParams<String>): LoadResult<String, StatusViewData> {
+    override suspend fun load(params: LoadParams<String>): LoadResult<String, TweetViewData> {
         return if (params is LoadParams.Refresh) {
             val list = viewModel.statusData.toList()
             LoadResult.Page(list, null, viewModel.nextKey)

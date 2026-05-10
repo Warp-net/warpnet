@@ -8,7 +8,7 @@ package site.warpnet.warpdroid.warpnet
 import site.warpnet.warpdroid.entity.Account
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineAccount
 import site.warpnet.warpdroid.entity.notificationTypeFromString
 import java.util.Date
@@ -21,7 +21,7 @@ import site.warpnet.transport.dto.WarpnetUser
  *
  * Most Warpnet concepts have no direct Warpnet equivalent (rich HTML content,
  * media attachment metadata, visibility enums, filter matches, emojis beyond
- * what [Status] requires). Where the translation is lossy, this mapper picks
+ * what [Tweet] requires). Where the translation is lossy, this mapper picks
  * the safest default — public visibility, no attachments, empty emoji list —
  * so the rest of the UI keeps working without special-casing the bridged
  * account. See [FAKE_BASE_URL] for how remote-origin URLs are synthesised.
@@ -61,29 +61,29 @@ object WarpnetMapper {
         note = bio,
     )
 
-    fun WarpnetTweet.toStatus(author: WarpnetUser?): Status {
+    fun WarpnetTweet.toTweet(author: WarpnetUser?): Tweet {
         val account = author?.toTimelineAccount() ?: stubTimelineAccount(userId, username)
-        return Status(
+        return Tweet(
             id = id,
             url = "$FAKE_BASE_URL/tweets/$id",
             account = account,
             inReplyToId = parentId,
             inReplyToAccountId = null,
-            reblog = null,
+            retweet = null,
             content = text,
             createdAt = parseDate(createdAt.orEmpty()),
             editedAt = updatedAt?.let(::parseDate),
             emojis = emptyList(),
-            reblogsCount = 0,
-            favouritesCount = 0,
+            retweetsCount = 0,
+            likesCount = 0,
             repliesCount = 0,
             viewsCount = 0,
-            reblogged = false,
-            favourited = false,
+            retweeted = false,
+            liked = false,
             bookmarked = false,
             sensitive = false,
             spoilerText = "",
-            visibility = Status.Visibility.PUBLIC,
+            visibility = Tweet.Visibility.PUBLIC,
             attachments = emptyList(),
             mentions = emptyList(),
             quote = null,
@@ -104,7 +104,7 @@ object WarpnetMapper {
             muting = false,
             mutingNotifications = false,
             requested = false,
-            showingReblogs = true,
+            showingRetweets = true,
             blockingDomain = false,
         )
 

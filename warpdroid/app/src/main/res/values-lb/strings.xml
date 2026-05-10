@@ -51,7 +51,7 @@
     <string name="title_posts_pinned">Ugespéngelt</string>
     <string name="title_follows">Verfollegen ech</string>
     <string name="title_followers">Verfollege mech</string>
-    <string name="title_favourites">Favoritten</string>
+    <string name="title_likes">Favoritten</string>
     <string name="title_bookmarks">Lieszeechen</string>
     <string name="title_mutes">Stommgeschalt Profiller</string>
     <string name="title_blocks">Blockéiert Profiller</string>
@@ -64,7 +64,7 @@
     <string name="title_followed_hashtags">Verfollegt Hashtags</string>
     <string name="title_edits">Beaarbechtungen</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s huet gedeelt</string>
+    <string name="post_retweeted_format">%1$s huet gedeelt</string>
     <string name="post_sensitive_media_title">Inhaltswarnung</string>
     <string name="post_media_hidden_title">Mediendateien ausgeblent</string>
     <string name="post_media_alt">ALT</string>

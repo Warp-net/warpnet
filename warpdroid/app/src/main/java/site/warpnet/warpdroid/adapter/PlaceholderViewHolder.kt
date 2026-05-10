@@ -30,10 +30,10 @@ class PlaceholderViewHolder(
     init {
         val res = binding.root.context.resources
         binding.topPlaceholder.visible(mode != Mode.STATUS)
-        binding.reblogButtonPlaceholder.visible(mode != Mode.CONVERSATION)
+        binding.retweetButtonPlaceholder.visible(mode != Mode.CONVERSATION)
         if (mode == Mode.NOTIFICATION) {
             binding.topPlaceholder.updatePaddingRelative(
-                start = res.getDimensionPixelSize(R.dimen.status_info_padding_large)
+                start = res.getDimensionPixelSize(R.dimen.tweet_info_padding_large)
             )
         }
         if (mode == Mode.CONVERSATION) {

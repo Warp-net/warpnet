@@ -28,8 +28,8 @@ import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.settings.PrefKeys
-import site.warpnet.warpdroid.viewdata.StatusViewData
-import site.warpnet.warpdroid.viewmodel.StatusActionsViewModel
+import site.warpnet.warpdroid.viewdata.TweetViewData
+import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
@@ -38,12 +38,12 @@ abstract class TimelineViewModel(
     private val eventHub: EventHub,
     val accountManager: AccountManager,
     private val sharedPreferences: SharedPreferences
-) : StatusActionsViewModel(api, eventHub) {
+) : TweetActionsViewModel(api, eventHub) {
 
     val activeAccountFlow = accountManager.activeAccount(viewModelScope)
     protected val accountId: Long = activeAccountFlow.value!!.id
 
-    abstract val statuses: Flow<PagingData<StatusViewData>>
+    abstract val statuses: Flow<PagingData<TweetViewData>>
 
     var kind: Kind = Kind.HOME
         private set
@@ -55,8 +55,8 @@ abstract class TimelineViewModel(
     protected var alwaysShowSensitiveMedia = false
     private var alwaysOpenSpoilers = false
     private var filterRemoveReplies = false
-    private var filterRemoveReblogs = false
-    private var filterRemoveSelfReblogs = false
+    private var filterRemoveRetweets = false
+    private var filterRemoveSelfRetweets = false
     protected var readingOrder: ReadingOrder = ReadingOrder.OLDEST_FIRST
 
     fun init(kind: Kind, id: String?, tags: List<String>) {
@@ -69,8 +69,8 @@ abstract class TimelineViewModel(
         if (kind == Kind.HOME) {
             // Note the variable is "true if filter" but the underlying preference/settings text is "true if show"
             filterRemoveReplies = !activeAccount.isShowHomeReplies
-            filterRemoveReblogs = !activeAccount.isShowHomeBoosts
-            filterRemoveSelfReblogs = !activeAccount.isShowHomeSelfBoosts
+            filterRemoveRetweets = !activeAccount.isShowHomeRetweets
+            filterRemoveSelfRetweets = !activeAccount.isShowHomeSelfRetweets
         }
         readingOrder = ReadingOrder.from(sharedPreferences.getString(PrefKeys.READING_ORDER, null))
 
@@ -94,15 +94,15 @@ abstract class TimelineViewModel(
         }
     }
 
-    fun showPollResults(status: StatusViewData.Concrete) = viewModelScope.launch {
+    fun showPollResults(status: TweetViewData.Concrete) = viewModelScope.launch {
         eventHub.dispatch(PollShowResultsEvent(status.actionableId))
     }
 
-    abstract fun changeExpanded(expanded: Boolean, status: StatusViewData.Concrete)
+    abstract fun changeExpanded(expanded: Boolean, status: TweetViewData.Concrete)
 
-    abstract fun changeContentShowing(isShowing: Boolean, status: StatusViewData.Concrete)
+    abstract fun changeContentShowing(isShowing: Boolean, status: TweetViewData.Concrete)
 
-    abstract fun changeContentCollapsed(isCollapsed: Boolean, status: StatusViewData.Concrete)
+    abstract fun changeContentCollapsed(isCollapsed: Boolean, status: TweetViewData.Concrete)
 
     abstract fun removeStatusWithId(id: String)
 
@@ -110,20 +110,20 @@ abstract class TimelineViewModel(
 
     abstract fun fullReload()
 
-    abstract fun changeFilter(filtered: Boolean, status: StatusViewData.Concrete)
+    abstract fun changeFilter(filtered: Boolean, status: TweetViewData.Concrete)
 
-    abstract fun showQuote(status: StatusViewData.Concrete)
+    abstract fun showQuote(status: TweetViewData.Concrete)
 
     /** Triggered when currently displayed data must be reloaded. */
     protected abstract suspend fun invalidate()
 
-    protected fun shouldHideStatus(statusViewData: StatusViewData): Boolean {
+    protected fun shouldHideStatus(statusViewData: TweetViewData): Boolean {
         val concrete = statusViewData.asStatusOrNull() ?: return false
         val status = concrete.status
         return if (
             (status.isReply && filterRemoveReplies) ||
-            (status.reblog != null && filterRemoveReblogs) ||
-            (status.account.id == status.reblog?.account?.id && filterRemoveSelfReblogs)
+            (status.retweet != null && filterRemoveRetweets) ||
+            (status.account.id == status.retweet?.account?.id && filterRemoveSelfRetweets)
         ) {
             true
         } else if (status.actionableStatus.account.id == activeAccountFlow.value?.accountId) {
@@ -146,20 +146,20 @@ abstract class TimelineViewModel(
                     }
                 }
 
-                PrefKeys.TAB_FILTER_HOME_BOOSTS -> {
-                    val filter = !activeAccount.isShowHomeBoosts
-                    val oldRemoveReblogs = filterRemoveReblogs
-                    filterRemoveReblogs = kind == Kind.HOME && !filter
-                    if (oldRemoveReblogs != filterRemoveReblogs) {
+                PrefKeys.TAB_FILTER_HOME_RETWEETS -> {
+                    val filter = !activeAccount.isShowHomeRetweets
+                    val oldRemoveRetweets = filterRemoveRetweets
+                    filterRemoveRetweets = kind == Kind.HOME && !filter
+                    if (oldRemoveRetweets != filterRemoveRetweets) {
                         fullReload()
                     }
                 }
 
-                PrefKeys.TAB_SHOW_HOME_SELF_BOOSTS -> {
-                    val filter = !activeAccount.isShowHomeSelfBoosts
-                    val oldRemoveSelfReblogs = filterRemoveSelfReblogs
-                    filterRemoveSelfReblogs = kind == Kind.HOME && !filter
-                    if (oldRemoveSelfReblogs != filterRemoveSelfReblogs) {
+                PrefKeys.TAB_SHOW_HOME_SELF_RETWEETS -> {
+                    val filter = !activeAccount.isShowHomeSelfRetweets
+                    val oldRemoveSelfRetweets = filterRemoveSelfRetweets
+                    filterRemoveSelfRetweets = kind == Kind.HOME && !filter
+                    if (oldRemoveSelfRetweets != filterRemoveSelfRetweets) {
                         fullReload()
                     }
                 }
@@ -176,8 +176,8 @@ abstract class TimelineViewModel(
         }
     }
 
-    abstract suspend fun translate(status: StatusViewData.Concrete): NetworkResult<Unit>
-    abstract fun untranslate(status: StatusViewData.Concrete)
+    abstract suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit>
+    abstract fun untranslate(status: TweetViewData.Concrete)
     abstract fun saveHomeTimelinePosition(firstVisibleIndex: Int, firstVisibleOffset: Int)
 
     companion object {
@@ -200,7 +200,7 @@ abstract class TimelineViewModel(
         USER(isOrdered = true),
         USER_PINNED(isOrdered = false),
         USER_WITH_REPLIES(isOrdered = true),
-        FAVOURITES(isOrdered = false),
+        LIKES(isOrdered = false),
         LIST(isOrdered = true),
         BOOKMARKS(isOrdered = false),
         PUBLIC_TRENDING_STATUSES(isOrdered = false),
@@ -209,7 +209,7 @@ abstract class TimelineViewModel(
         fun toFilterKind(): Filter.Kind {
             return when (valueOf(name)) {
                 HOME, LIST -> Filter.Kind.HOME
-                PUBLIC_FEDERATED, PUBLIC_LOCAL, TAG, FAVOURITES, PUBLIC_TRENDING_STATUSES -> Filter.Kind.PUBLIC
+                PUBLIC_FEDERATED, PUBLIC_LOCAL, TAG, LIKES, PUBLIC_TRENDING_STATUSES -> Filter.Kind.PUBLIC
                 USER, USER_WITH_REPLIES, USER_PINNED -> Filter.Kind.ACCOUNT
                 else -> Filter.Kind.PUBLIC
             }

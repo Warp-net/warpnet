@@ -36,18 +36,18 @@ import site.warpnet.warpdroid.databinding.ItemModerationWarningNotificationBindi
 import site.warpnet.warpdroid.databinding.ItemPlaceholderBinding
 import site.warpnet.warpdroid.databinding.ItemReportNotificationBinding
 import site.warpnet.warpdroid.databinding.ItemSeveredRelationshipNotificationBinding
-import site.warpnet.warpdroid.databinding.ItemStatusFilteredBinding
+import site.warpnet.warpdroid.databinding.ItemTweetFilteredBinding
 import site.warpnet.warpdroid.databinding.ItemUnknownNotificationBinding
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LoadMoreActionListener
-import site.warpnet.warpdroid.interfaces.StatusActionListener
+import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.WarpdroidTheme
-import site.warpnet.warpdroid.ui.statuscomponents.NotificationInfo
-import site.warpnet.warpdroid.ui.statuscomponents.Status
-import site.warpnet.warpdroid.ui.statuscomponents.StatusNotification
-import site.warpnet.warpdroid.util.StatusDisplayOptions
+import site.warpnet.warpdroid.ui.tweetcomponents.NotificationInfo
+import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
+import site.warpnet.warpdroid.ui.tweetcomponents.TweetNotification
+import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 
 interface NotificationActionListener {
@@ -58,13 +58,13 @@ interface NotificationsViewHolder {
     fun bind(
         viewData: NotificationViewData.Concrete,
         payloads: List<*>,
-        statusDisplayOptions: StatusDisplayOptions
+        statusDisplayOptions: TweetDisplayOptions
     )
 }
 
 class NotificationsPagingAdapter(
-    private var statusDisplayOptions: StatusDisplayOptions,
-    private val statusListener: StatusActionListener,
+    private var statusDisplayOptions: TweetDisplayOptions,
+    private val statusListener: TweetActionListener,
     private val loadMoreListener: LoadMoreActionListener<NotificationViewData.LoadMore>,
     private val notificationActionListener: NotificationActionListener,
     private val accountActionListener: AccountActionListener,
@@ -101,8 +101,8 @@ class NotificationsPagingAdapter(
                         VIEW_TYPE_STATUS
                     }
                     Notification.Type.PleromaEmojiReaction,
-                    Notification.Type.Favourite,
-                    Notification.Type.Reblog -> VIEW_TYPE_STATUS_NOTIFICATION
+                    Notification.Type.Like,
+                    Notification.Type.Retweet -> VIEW_TYPE_STATUS_NOTIFICATION
                     Notification.Type.Follow,
                     Notification.Type.SignUp -> VIEW_TYPE_FOLLOW
                     Notification.Type.FollowRequest -> VIEW_TYPE_FOLLOW_REQUEST
@@ -129,7 +129,7 @@ class NotificationsPagingAdapter(
                 }
             )
             VIEW_TYPE_STATUS_FILTERED -> FilteredNotificationViewHolder(
-                ItemStatusFilteredBinding.inflate(inflater, parent, false),
+                ItemTweetFilteredBinding.inflate(inflater, parent, false),
                 statusListener
             )
             VIEW_TYPE_STATUS_NOTIFICATION -> ComposeViewHolder(
@@ -187,7 +187,7 @@ class NotificationsPagingAdapter(
                                     // unfortunately servers sometimes send null statuses for notification types where they should not
                                     if (notification.statusViewData != null) {
                                         val accounts by accountManager.accountsFlow.collectAsStateWithLifecycle()
-                                        Status(
+                                        TweetCard(
                                             notification.statusViewData,
                                             statusListener,
                                             statusInfo = {
@@ -207,7 +207,7 @@ class NotificationsPagingAdapter(
                         VIEW_TYPE_STATUS_NOTIFICATION -> {
                             (viewHolder as ComposeViewHolder).composeView.setContent {
                                 WarpdroidTheme {
-                                    StatusNotification(
+                                    TweetNotification(
                                         notificationViewData = notification,
                                         listener = statusListener
                                     )

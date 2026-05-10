@@ -28,7 +28,7 @@ data class Relationship(
     val muting: Boolean,
     @Json(name = "muting_notifications") val mutingNotifications: Boolean,
     val requested: Boolean,
-    @Json(name = "showing_reblogs") val showingReblogs: Boolean,
+    @Json(name = "showing_retweets") val showingRetweets: Boolean,
     /* Pleroma extension, same as 'notifying' on Warpnet.
      * Some instances like qoto.org have a custom subscription feature where 'subscribing' is a json object,
      * so we use GuardedAdapter to ignore the field if it is not a boolean.

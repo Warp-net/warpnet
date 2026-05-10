@@ -20,9 +20,9 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.adapter.PollAdapter
 import site.warpnet.warpdroid.adapter.PollAdapter.Companion.MULTIPLE
 import site.warpnet.warpdroid.adapter.PollAdapter.Companion.SINGLE
-import site.warpnet.warpdroid.databinding.ItemStatusEditBinding
+import site.warpnet.warpdroid.databinding.ItemTweetEditBinding
 import site.warpnet.warpdroid.entity.Attachment.Focus
-import site.warpnet.warpdroid.entity.StatusEdit
+import site.warpnet.warpdroid.entity.TweetEdit
 import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.util.AbsoluteTimeFormatter
 import site.warpnet.warpdroid.util.BindingHolder
@@ -39,11 +39,11 @@ import site.warpnet.warpdroid.viewdata.toViewData
 import org.xml.sax.XMLReader
 
 class ViewEditsAdapter(
-    private val edits: List<StatusEdit>,
+    private val edits: List<TweetEdit>,
     private val animateEmojis: Boolean,
     private val useBlurhash: Boolean,
     private val listener: LinkListener
-) : RecyclerView.Adapter<BindingHolder<ItemStatusEditBinding>>() {
+) : RecyclerView.Adapter<BindingHolder<ItemTweetEditBinding>>() {
 
     private val absoluteTimeFormatter = AbsoluteTimeFormatter()
 
@@ -56,27 +56,27 @@ class ViewEditsAdapter(
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int
-    ): BindingHolder<ItemStatusEditBinding> {
-        val binding = ItemStatusEditBinding.inflate(
+    ): BindingHolder<ItemTweetEditBinding> {
+        val binding = ItemTweetEditBinding.inflate(
             LayoutInflater.from(parent.context),
             parent,
             false
         )
 
-        binding.statusEditMediaPreview.clipToOutline = true
+        binding.tweetEditMediaPreview.clipToOutline = true
 
         val typedValue = TypedValue()
         val context = binding.root.context
         val displayMetrics = context.resources.displayMetrics
-        context.theme.resolveAttribute(R.attr.status_text_large, typedValue, true)
+        context.theme.resolveAttribute(R.attr.tweet_text_large, typedValue, true)
         largeTextSizePx = typedValue.getDimension(displayMetrics)
-        context.theme.resolveAttribute(R.attr.status_text_medium, typedValue, true)
+        context.theme.resolveAttribute(R.attr.tweet_text_medium, typedValue, true)
         mediumTextSizePx = typedValue.getDimension(displayMetrics)
 
         return BindingHolder(binding)
     }
 
-    override fun onBindViewHolder(holder: BindingHolder<ItemStatusEditBinding>, position: Int) {
+    override fun onBindViewHolder(holder: BindingHolder<ItemTweetEditBinding>, position: Int) {
         val edit = edits[position]
 
         val binding = holder.binding
@@ -84,9 +84,9 @@ class ViewEditsAdapter(
         val context = binding.root.context
 
         val infoStringRes = if (position == edits.lastIndex) {
-            R.string.status_created_info
+            R.string.tweet_created_info
         } else {
-            R.string.status_edit_info
+            R.string.tweet_edit_info
         }
 
         // Show the most recent version of the status using large text to make it clearer for
@@ -96,26 +96,26 @@ class ViewEditsAdapter(
         } else {
             largeTextSizePx
         }
-        binding.statusEditContentWarningDescription.setTextSize(
+        binding.tweetEditContentWarningDescription.setTextSize(
             TypedValue.COMPLEX_UNIT_PX,
             variableTextSize
         )
-        binding.statusEditContent.setTextSize(TypedValue.COMPLEX_UNIT_PX, variableTextSize)
-        binding.statusEditMediaSensitivity.setTextSize(TypedValue.COMPLEX_UNIT_PX, variableTextSize)
+        binding.tweetEditContent.setTextSize(TypedValue.COMPLEX_UNIT_PX, variableTextSize)
+        binding.tweetEditMediaSensitivity.setTextSize(TypedValue.COMPLEX_UNIT_PX, variableTextSize)
 
         val timestamp = absoluteTimeFormatter.format(edit.createdAt, false)
 
-        binding.statusEditInfo.text = context.getString(infoStringRes, timestamp)
+        binding.tweetEditInfo.text = context.getString(infoStringRes, timestamp)
 
         if (edit.spoilerText.isEmpty()) {
-            binding.statusEditContentWarningDescription.hide()
-            binding.statusEditContentWarningSeparator.hide()
+            binding.tweetEditContentWarningDescription.hide()
+            binding.tweetEditContentWarningSeparator.hide()
         } else {
-            binding.statusEditContentWarningDescription.show()
-            binding.statusEditContentWarningSeparator.show()
-            binding.statusEditContentWarningDescription.text = edit.spoilerText.emojify(
+            binding.tweetEditContentWarningDescription.show()
+            binding.tweetEditContentWarningSeparator.show()
+            binding.tweetEditContentWarningDescription.text = edit.spoilerText.emojify(
                 edit.emojis,
-                binding.statusEditContentWarningDescription,
+                binding.tweetEditContentWarningDescription,
                 animateEmojis
             )
         }
@@ -123,10 +123,10 @@ class ViewEditsAdapter(
         val emojifiedText = edit
             .content
             .parseAsWarpnetHtml(EditsTagHandler(context))
-            .emojify(edit.emojis, binding.statusEditContent, animateEmojis)
+            .emojify(edit.emojis, binding.tweetEditContent, animateEmojis)
 
         setClickableText(
-            binding.statusEditContent,
+            binding.tweetEditContent,
             emojifiedText,
             emptyList(),
             emptyList(),
@@ -134,18 +134,18 @@ class ViewEditsAdapter(
         )
 
         if (edit.poll == null) {
-            binding.statusEditPollOptions.hide()
-            binding.statusEditPollDescription.hide()
+            binding.tweetEditPollOptions.hide()
+            binding.tweetEditPollDescription.hide()
         } else {
-            binding.statusEditPollOptions.show()
+            binding.tweetEditPollOptions.show()
 
             // not used for now since not reported by the api
             // https://github.com/mastodon/mastodon/issues/22571
-            // binding.statusEditPollDescription.show()
+            // binding.tweetEditPollDescription.show()
 
             val pollAdapter = PollAdapter()
-            binding.statusEditPollOptions.adapter = pollAdapter
-            binding.statusEditPollOptions.layoutManager = LinearLayoutManager(context)
+            binding.tweetEditPollOptions.adapter = pollAdapter
+            binding.tweetEditPollOptions.layoutManager = LinearLayoutManager(context)
 
             pollAdapter.setup(
                 options = edit.poll.options.map { it.toViewData(false) },
@@ -164,13 +164,13 @@ class ViewEditsAdapter(
         }
 
         if (edit.mediaAttachments.isEmpty()) {
-            binding.statusEditMediaPreview.hide()
-            binding.statusEditMediaSensitivity.hide()
+            binding.tweetEditMediaPreview.hide()
+            binding.tweetEditMediaSensitivity.hide()
         } else {
-            binding.statusEditMediaPreview.show()
-            binding.statusEditMediaPreview.aspectRatios = edit.mediaAttachments.aspectRatios()
+            binding.tweetEditMediaPreview.show()
+            binding.tweetEditMediaPreview.aspectRatios = edit.mediaAttachments.aspectRatios()
 
-            binding.statusEditMediaPreview.forEachIndexed { index, imageView, descriptionIndicator ->
+            binding.tweetEditMediaPreview.forEachIndexed { index, imageView, descriptionIndicator ->
 
                 val attachment = edit.mediaAttachments[index]
                 val hasDescription = !attachment.description.isNullOrBlank()
@@ -218,7 +218,7 @@ class ViewEditsAdapter(
                     }
                 }
             }
-            binding.statusEditMediaSensitivity.visible(edit.sensitive)
+            binding.tweetEditMediaSensitivity.visible(edit.sensitive)
         }
     }
 

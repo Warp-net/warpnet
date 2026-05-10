@@ -18,16 +18,16 @@ enum class NotificationChannelData(
         R.string.notification_mention_descriptions,
     ),
 
-    REBLOG(
-        listOf(Notification.Type.Reblog),
-        R.string.notification_boost_name,
-        R.string.notification_boost_description
+    RETWEET(
+        listOf(Notification.Type.Retweet),
+        R.string.notification_retweet_name,
+        R.string.notification_retweet_description
     ),
 
-    FAVOURITE(
-        listOf(Notification.Type.Favourite, Notification.Type.PleromaEmojiReaction),
-        R.string.notification_favourite_name,
-        R.string.notification_favourite_description
+    LIKE(
+        listOf(Notification.Type.Like, Notification.Type.PleromaEmojiReaction),
+        R.string.notification_like_name,
+        R.string.notification_like_description
     ),
 
     FOLLOW(

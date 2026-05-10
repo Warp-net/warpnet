@@ -35,7 +35,7 @@
                 android:contentDescription="@string/description_post_language"
                 android:padding="0dp"
                 android:textColor="?android:attr/textColorTertiary"
-                android:textSize="?attr/status_text_large"
+                android:textSize="?attr/tweet_text_large"
                 android:textStyle="bold"
                 app:tooltipText="@string/description_post_language" />
 
@@ -97,7 +97,7 @@
                 android:layout_marginLeft="16dp"
                 android:layout_marginRight="16dp"
                 android:layout_marginBottom="0dp"
-                android:textSize="?attr/status_text_small"
+                android:textSize="?attr/tweet_text_small"
                 android:textStyle="bold"
                 android:visibility="gone"
                 tools:text="Posting as @username@domain"
@@ -111,7 +111,7 @@
                 android:layout_marginRight="16dp"
                 android:layout_marginBottom="6dp"
                 android:drawablePadding="6dp"
-                android:textSize="?attr/status_text_small"
+                android:textSize="?attr/tweet_text_small"
                 android:textStyle="bold"
                 android:visibility="gone"
                 tools:text="Reply to @username"
@@ -128,7 +128,7 @@
                 android:paddingTop="4dp"
                 android:paddingRight="16dp"
                 android:paddingBottom="4dp"
-                android:textSize="?attr/status_text_small"
+                android:textSize="?attr/tweet_text_small"
                 android:visibility="gone"
                 tools:text="Post content which may be preeettyy long, so please, make sure there's enough room for everything, okay? Not kidding. I wish Eugen answered me more often, sigh."
                 tools:visibility="visible" />
@@ -153,7 +153,7 @@
                     android:paddingLeft="16dp"
                     android:paddingRight="16dp"
                     android:textColorHint="?android:attr/textColorTertiary"
-                    android:textSize="?attr/status_text_medium" />
+                    android:textSize="?attr/tweet_text_medium" />
 
                 <View
                     android:layout_width="match_parent"
@@ -179,7 +179,7 @@
                 android:paddingRight="16dp"
                 android:paddingBottom="8dp"
                 android:textColorHint="?android:attr/textColorTertiary"
-                android:textSize="?attr/status_text_large" />
+                android:textSize="?attr/tweet_text_large" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/composeMediaPreviewBar"
@@ -222,7 +222,7 @@
             android:drawablePadding="8dp"
             android:padding="8dp"
             android:text="@string/action_photo_take"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             app:drawableStartCompat="@drawable/ic_photo_camera_24dp"
             app:drawableTint="?android:attr/textColorTertiary" />
 
@@ -233,7 +233,7 @@
             android:drawablePadding="8dp"
             android:padding="8dp"
             android:text="@string/action_add_media"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             app:drawableStartCompat="@drawable/ic_image_24dp"
             app:drawableTint="?android:attr/textColorTertiary" />
 
@@ -244,7 +244,7 @@
             android:drawablePadding="8dp"
             android:padding="8dp"
             android:text="@string/action_add_poll"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             app:drawableStartCompat="@drawable/ic_insert_chart_24dp"
             app:drawableTint="?android:attr/textColorTertiary" />
 
@@ -381,17 +381,17 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="?android:textColorTertiary"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             android:textStyle="bold"
             tools:text="500" />
 
-        <site.warpnet.warpdroid.components.compose.view.TootButton
-            android:id="@+id/composeTootButton"
+        <site.warpnet.warpdroid.components.compose.view.TweetButton
+            android:id="@+id/composeTweetButton"
             style="@style/WarpdroidButton"
-            android:layout_width="@dimen/toot_button_width"
+            android:layout_width="@dimen/tweet_button_width"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             app:iconGravity="textStart"
             app:iconSize="24dp" />
 

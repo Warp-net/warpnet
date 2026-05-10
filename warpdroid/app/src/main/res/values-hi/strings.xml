@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="action_login">हिंदी</string>
-    <string name="title_favourites">पसंदीदा</string>
+    <string name="title_likes">पसंदीदा</string>
     <string name="title_drafts">प्रारूप</string>
     <string name="action_logout">लॉग आउट</string>
     <string name="action_view_preferences">प्राथमिकताएं</string>
@@ -16,8 +16,8 @@
     <string name="action_unfollow">अनफ़ॉलो</string>
     <string name="action_block">ब्लॉक</string>
     <string name="action_unblock">अनब्लॉक</string>
-    <string name="action_hide_reblogs">बूस्ट छिपाएं</string>
-    <string name="action_show_reblogs">बूस्ट दिखाएं</string>
+    <string name="action_hide_retweets">बूस्ट छिपाएं</string>
+    <string name="action_show_retweets">बूस्ट दिखाएं</string>
     <string name="action_report">रिपोर्ट करें</string>
     <string name="action_edit">एडिट करें</string>
     <string name="action_delete">डिलीट करें</string>
@@ -71,7 +71,7 @@
     <string name="notification_summary_medium">%1$s, %2$s, तथा %3$s</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s तथा %4$d अन्य लोग</string>
     <string name="notification_poll_name">जनमत</string>
-    <string name="notification_favourite_name">पसंदीदा</string>
+    <string name="notification_like_name">पसंदीदा</string>
     <string name="post_text_size_largest">सबसे बड़ा</string>
     <string name="post_text_size_large">बड़ा</string>
     <string name="post_text_size_medium">मध्यम</string>
@@ -159,12 +159,12 @@
     <string name="action_view_media">मीडिया</string>
     <string name="error_sender_account_gone">टोट भेजने में त्रुटि।</string>
     <string name="action_bookmark">बुकमार्क</string>
-    <string name="action_reblog">बढ़ावा दें</string>
+    <string name="action_retweet">बढ़ावा दें</string>
     <string name="action_quick_reply">तुरंत जवाब</string>
     <string name="report_comment_hint">अतिरिक्त टिप्पणियां?</string>
     <string name="report_username_format">रिपोर्ट @%1$s</string>
-    <string name="notification_favourite_format">%1$s ने आपके टूट को पसंद किया</string>
-    <string name="notification_reblog_format">%1$s ने आपके टूट को बढावा दिया</string>
+    <string name="notification_like_format">%1$s ने आपके टूट को पसंद किया</string>
+    <string name="notification_retweet_format">%1$s ने आपके टूट को बढावा दिया</string>
     <string name="message_empty">यहाँ कुछ नहीं।</string>
     <string name="post_content_warning_show_less">कम दिखाएं</string>
     <string name="post_content_warning_show_more">और दिखाओ</string>
@@ -267,7 +267,7 @@
     <string name="conversation_more_recipients">%1$s, %2$s तथा %3$d अन्य लोग</string>
     <string name="conversation_2_recipients">%1$s तथा %2$s</string>
     <string name="conversation_1_recipients">%1$s</string>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> ने बढ़ावा दिया</item>
         <item quantity="other"><b>%1$s</b> ने बढ़ावा दिया</item>
     </plurals>
@@ -316,7 +316,7 @@
     <string name="post_share_content">टूट की विषय वस्तु साझा करें</string>
     <string name="notification_mention_format">%1$s ने आपका जिक्र किया</string>
     <string name="notification_poll_description">जनमत खत्म होने के बारे में सूचनाएं</string>
-    <string name="notification_favourite_description">सूचनाएं जब आपके टूट पसंद किये जाये</string>
+    <string name="notification_like_description">सूचनाएं जब आपके टूट पसंद किये जाये</string>
     <string name="notification_follow_request_description">फ़ॉलो अनुरोध के बारे में सूचनाएं</string>
     <string name="notification_follow_request_name">फ़ॉलो अनुरोध</string>
     <string name="notification_mention_descriptions">नए ज़िक्र के बारे में सूचनाएं</string>
@@ -347,11 +347,11 @@
     <string name="action_view_domain_mutes">छिपे हुए डोमेन</string>
     <string name="action_view_blocks">रोके गए उपयोगकर्ता</string>
     <string name="action_view_mutes">म्यूट किए गए उपयोगकर्ता</string>
-    <string name="action_view_favourites">पसंदीदा</string>
+    <string name="action_view_likes">पसंदीदा</string>
     <string name="action_logout_confirm">क्या आप %1$s खाते से लॉग आउट करना चाहते हैं?</string>
     <string name="action_compose">लिखें</string>
-    <string name="action_unfavourite">नापसन्द</string>
-    <string name="action_favourite">पसंद</string>
+    <string name="action_unlike">नापसन्द</string>
+    <string name="action_like">पसंद</string>
     <string name="title_edit_profile">अपनी प्रोफाइल एडिट करें</string>
     <string name="title_follow_requests">फ़ॉलो अनुरोध</string>
     <string name="title_blocks">रोके गए उपयोगकर्ता</string>
@@ -363,8 +363,8 @@
     <string name="action_view_follow_requests">फ़ॉलो अनुरोध</string>
     <string name="notification_follow_request_format">%1$s ने आपको फ़ॉलो करने का अनुरोध किया</string>
     <string name="notification_follow_format">%1$s ने आपको फ़ॉलो किया</string>
-    <string name="pref_title_show_boosts">बूस्ट दिखाएं</string>
-    <string name="action_open_reblogged_by">बूस्ट दिखाएं</string>
+    <string name="pref_title_show_retweets">बूस्ट दिखाएं</string>
+    <string name="action_open_retweeted_by">बूस्ट दिखाएं</string>
     <plurals name="favs">
         <item quantity="one"><b>%1$s</b> ने पसंद किया</item>
         <item quantity="other"><b>%1$s</b> ने पसंद किया</item>

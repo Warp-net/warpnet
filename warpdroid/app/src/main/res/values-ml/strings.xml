@@ -2,7 +2,7 @@
 <resources>
     <string name="action_login">മസ്റ്റഡോൺ വഴി പ്രവേശിക്കുക</string>
     <string name="link_whats_an_instance">എന്താണ് ഒരു ഇൻസ്റ്റൻസ്?</string>
-    <string name="title_favourites">പ്രിയപ്പെട്ടവ</string>
+    <string name="title_likes">പ്രിയപ്പെട്ടവ</string>
     <string name="title_drafts">കരടുകൾ</string>
     <string name="action_logout">പുറത്തിറങ്ങുക</string>
     <string name="action_view_preferences">മുൻഗണനകൾ</string>
@@ -46,10 +46,10 @@
     <string name="title_follow_requests">പിന്തുടാനുള്ള അപേക്ഷകൾ</string>
     <string name="title_edit_profile">പ്രൊഫൈൽ തിരുത്തുക</string>
     <string name="action_reply">മറുപടി</string>
-    <string name="action_reblog">ബൂസ്റ്റ്</string>
-    <string name="action_unreblog">ബൂസ്റ്റ് പിൻവലിക്കുക</string>
-    <string name="action_favourite">ഇഷ്ടപ്പെട്ടവ</string>
-    <string name="action_unfavourite">ഇഷ്ടപ്പെട്ടവയിൽ നിന്നും കളയുക</string>
+    <string name="action_retweet">ബൂസ്റ്റ്</string>
+    <string name="action_unretweet">ബൂസ്റ്റ് പിൻവലിക്കുക</string>
+    <string name="action_like">ഇഷ്ടപ്പെട്ടവ</string>
+    <string name="action_unlike">ഇഷ്ടപ്പെട്ടവയിൽ നിന്നും കളയുക</string>
     <string name="action_more">കൂടുതൽ</string>
     <string name="action_follow">പിന്തുടരുക</string>
     <string name="action_unfollow">പിന്‍തുടരുന്നത് അവസാനിപ്പിക്കുക</string>
@@ -75,7 +75,7 @@
     <string name="action_view_blocks">നിരോധിച്ച ഉപയോഗതാക്കൾ</string>
     <string name="action_view_mutes">നിശ്ശബ്ദമാക്കിയ ഉപയോഗതാക്കൾ</string>
     <string name="action_view_bookmarks">ബൂക്കമാർക്ക്</string>
-    <string name="action_view_favourites">ഇഷ്ടപ്പെട്ടത്</string>
+    <string name="action_view_likes">ഇഷ്ടപ്പെട്ടത്</string>
     <string name="action_view_profile">പ്രൊഫൈൽ</string>
     <string name="action_close">നിർത്തുക</string>
     <string name="action_send_public">ടൂട്ട്!</string>
@@ -84,8 +84,8 @@
     <string name="action_delete">നീക്കം ചെയ്യുക</string>
     <string name="action_edit">തിരുത്ത്</string>
     <string name="action_report">അറിയിക്കുക</string>
-    <string name="action_show_reblogs">ബൂട്ട്‌സ് കാണിക്കുക</string>
-    <string name="action_hide_reblogs">ബൂട്ട്‌സ് മറയ്‌ക്കുക</string>
+    <string name="action_show_retweets">ബൂട്ട്‌സ് കാണിക്കുക</string>
+    <string name="action_hide_retweets">ബൂട്ട്‌സ് മറയ്‌ക്കുക</string>
     <string name="action_unblock">നിരോധനം നീക്കുക</string>
     <string name="action_block">നിരോധിക്കുക</string>
     <string name="action_logout_confirm">ഈ അക്കൗണ്ടിൽ നിന്നും പുറത്തു പോകാൻ ഉറപ്പിച്ചോ %1$s?</string>
@@ -94,14 +94,14 @@
     <string name="report_comment_hint">കൂടുതൽ പറയാൻ ഉണ്ടോ?</string>
     <string name="report_username_format">അറിയിക്കുക @%1$s</string>
     <string name="notification_follow_format">%1$s നിങ്ങളെ പിന്തുടരുന്നു</string>
-    <string name="notification_favourite_name">പ്രിയപ്പെട്ടവ</string>
+    <string name="notification_like_name">പ്രിയപ്പെട്ടവ</string>
     <string name="title_media">മാധ്യമം</string>
-    <string name="action_open_reblogged_by">ബൂട്ട്‌സ് കാണിക്കുക</string>
+    <string name="action_open_retweeted_by">ബൂട്ട്‌സ് കാണിക്കുക</string>
     <string name="edit_poll">തിരുത്ത്</string>
     <string name="compose_shortcut_short_label">എഴുതുക</string>
     <string name="action_compose_shortcut">എഴുതുക</string>
     <string name="notification_follow_request_name">പിന്തുടാനുള്ള അപേക്ഷകൾ</string>
-    <string name="pref_title_show_boosts">ബൂട്ട്‌സ് കാണിക്കുക</string>
+    <string name="pref_title_show_retweets">ബൂട്ട്‌സ് കാണിക്കുക</string>
     <string name="action_access_scheduled_posts">മുന്‍നിശ്ചയിച്ച ടൂറ്റ്‌സ്</string>
     <string name="action_access_drafts">കരടുകൾ</string>
     <string name="action_edit_own_profile">തിരുത്ത്</string>
@@ -110,13 +110,13 @@
     <string name="pref_title_notifications_enabled">അറിയിപ്പുകൾ</string>
     <string name="title_announcements">പ്രഖ്യാപനങ്ങൾ</string>
     <string name="account_note_saved">സംരക്ഷിച്ചു!</string>
-    <string name="post_boosted_format">%1$s ബൂസ്റ്റ് ചെയ്തു</string>
+    <string name="post_retweeted_format">%1$s ബൂസ്റ്റ് ചെയ്തു</string>
     <string name="search_no_results">ഫലങ്ങൾ ഒന്നും ഇല്ല</string>
     <string name="confirmation_reported">അയച്ചൂ!</string>
     <string name="action_share">പങ്കിടുക</string>
     <string name="pref_title_browser_settings">ബ്രൗസർ</string>
     <string name="notification_mention_name">പുതിയ സൂചനകൾ</string>
-    <string name="unreblog_private">ബൂസ്റ്റ് ചെയ്യേണ്ട</string>
+    <string name="unretweet_private">ബൂസ്റ്റ് ചെയ്യേണ്ട</string>
     <string name="filter_apply">പ്രയോഗിക്കുക</string>
     <string name="add_account_name">അക്കൗണ്ട് ചേർക്കുക</string>
     <string name="profile_badge_bot_text">യന്ത്രം‍</string>
@@ -139,7 +139,7 @@
     <string name="pref_title_notification_alerts">മുന്നറിയിപ്പുകൾ</string>
     <string name="notifications_clear">മായ്ക്കുക</string>
     <string name="action_remove">നീക്കം ചെയ്യുക</string>
-    <string name="notification_boost_name">ബൂസ്റ്റുകൾ</string>
+    <string name="notification_retweet_name">ബൂസ്റ്റുകൾ</string>
     <string name="action_add_media">മീഡിയ ചേർ‍ക്കുക</string>
     <string name="title_accounts">അക്കൗണ്ടുകൾ</string>
     <string name="pref_title_show_replies">മറുപടികൾ കാണിക്കൂ</string>

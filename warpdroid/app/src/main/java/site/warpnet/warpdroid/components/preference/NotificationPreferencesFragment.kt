@@ -84,23 +84,23 @@ class NotificationPreferencesFragment : BasePreferencesFragment() {
                 }
 
                 switchPreference {
-                    setTitle(R.string.notification_boost_name)
-                    setSummary(R.string.notification_boost_description)
+                    setTitle(R.string.notification_retweet_name)
+                    setSummary(R.string.notification_retweet_description)
                     isIconSpaceReserved = false
-                    isChecked = activeAccount.notificationsReblogged
+                    isChecked = activeAccount.notificationsRetweeted
                     setOnPreferenceChangeListener { _, newValue ->
-                        updateAccount { copy(notificationsReblogged = newValue as Boolean) }
+                        updateAccount { copy(notificationsRetweeted = newValue as Boolean) }
                         true
                     }
                 }
 
                 switchPreference {
-                    setTitle(R.string.notification_favourite_name)
-                    setSummary(R.string.notification_favourite_description)
+                    setTitle(R.string.notification_like_name)
+                    setSummary(R.string.notification_like_description)
                     isIconSpaceReserved = false
-                    isChecked = activeAccount.notificationsFavorited
+                    isChecked = activeAccount.notificationsLiked
                     setOnPreferenceChangeListener { _, newValue ->
-                        updateAccount { copy(notificationsFavorited = newValue as Boolean) }
+                        updateAccount { copy(notificationsLiked = newValue as Boolean) }
                         true
                     }
                 }

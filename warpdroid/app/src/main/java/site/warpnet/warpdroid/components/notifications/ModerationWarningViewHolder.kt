@@ -19,7 +19,7 @@ import android.content.Intent
 import androidx.core.net.toUri
 import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.databinding.ItemModerationWarningNotificationBinding
-import site.warpnet.warpdroid.util.StatusDisplayOptions
+import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 
 class ModerationWarningViewHolder(
@@ -30,7 +30,7 @@ class ModerationWarningViewHolder(
     override fun bind(
         viewData: NotificationViewData.Concrete,
         payloads: List<*>,
-        statusDisplayOptions: StatusDisplayOptions
+        statusDisplayOptions: TweetDisplayOptions
     ) {
         if (payloads.isNotEmpty()) {
             return

@@ -65,7 +65,7 @@
                         android:layout_marginTop="6dp"
                         android:ellipsize="end"
                         android:maxLines="1"
-                        android:textSize="?attr/status_text_medium"
+                        android:textSize="?attr/tweet_text_medium"
                         app:layout_constrainedWidth="true"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintHorizontal_bias="1"
@@ -121,7 +121,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="62dp"
                         android:textColor="?android:textColorPrimary"
-                        android:textSize="?attr/status_text_large"
+                        android:textSize="?attr/tweet_text_large"
                         android:textStyle="normal|bold"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
@@ -133,7 +133,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_horizontal"
                         android:textColor="?android:textColorSecondary"
-                        android:textSize="?attr/status_text_medium"
+                        android:textSize="?attr/tweet_text_medium"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@id/accountDisplayNameTextView"
                         tools:text="\@Warpdroid" />
@@ -161,7 +161,7 @@
                         android:focusable="false"
                         android:minHeight="@dimen/profile_badge_min_height"
                         android:text="@string/follows_you"
-                        android:textSize="?attr/status_text_small"
+                        android:textSize="?attr/tweet_text_small"
                         android:visibility="gone"
                         app:chipBackgroundColor="#0000"
                         app:chipMinHeight="@dimen/profile_badge_min_height"
@@ -228,7 +228,7 @@
                         android:textColor="?android:textColorTertiary"
                         android:textDirection="firstStrong"
                         android:textIsSelectable="true"
-                        android:textSize="?attr/status_text_medium"
+                        android:textSize="?attr/tweet_text_medium"
                         app:layout_constraintTop_toBottomOf="@id/saveNoteInfo"
                         app:layout_goneMarginTop="8dp"
                         tools:text="This is a test description. Descriptions can be quite looooong." />
@@ -282,7 +282,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
                             android:drawablePadding="6dp"
-                            android:textSize="?attr/status_text_medium"
+                            android:textSize="?attr/tweet_text_medium"
                             app:drawableStartCompat="@drawable/ic_trip_24dp"
                             app:layout_constraintStart_toStartOf="parent"
                             app:layout_constraintTop_toTopOf="parent"
@@ -310,7 +310,7 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textColor="?android:textColorPrimary"
-                            android:textSize="?attr/status_text_large"
+                            android:textSize="?attr/tweet_text_large"
                             android:textStyle="normal|bold"
                             app:layout_constraintBottom_toTopOf="@id/accountMovedUsername"
                             app:layout_constraintStart_toEndOf="@id/accountMovedAvatar"
@@ -325,7 +325,7 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textColor="?android:textColorSecondary"
-                            android:textSize="?attr/status_text_medium"
+                            android:textSize="?attr/tweet_text_medium"
                             app:layout_constraintBottom_toBottomOf="@id/accountMovedAvatar"
                             app:layout_constraintStart_toEndOf="@id/accountMovedAvatar"
                             app:layout_constraintTop_toBottomOf="@id/accountMovedDisplayName"
@@ -351,7 +351,7 @@
                             android:layout_marginTop="8dp"
                             android:fontFamily="sans-serif-medium"
                             android:textColor="@color/account_tab_font_color"
-                            android:textSize="?attr/status_text_medium"
+                            android:textSize="?attr/tweet_text_medium"
                             tools:text="3000" />
 
                         <TextView
@@ -360,7 +360,7 @@
                             android:paddingBottom="6dp"
                             android:text="@string/title_posts"
                             android:textColor="@color/account_tab_font_color"
-                            android:textSize="?attr/status_text_medium" />
+                            android:textSize="?attr/tweet_text_medium" />
 
                     </LinearLayout>
 
@@ -382,7 +382,7 @@
                             android:layout_marginTop="8dp"
                             android:fontFamily="sans-serif-medium"
                             android:textColor="@color/account_tab_font_color"
-                            android:textSize="?attr/status_text_medium"
+                            android:textSize="?attr/tweet_text_medium"
                             tools:text="500" />
 
                         <TextView
@@ -391,7 +391,7 @@
                             android:paddingBottom="6dp"
                             android:text="@string/title_follows"
                             android:textColor="@color/account_tab_font_color"
-                            android:textSize="?attr/status_text_medium" />
+                            android:textSize="?attr/tweet_text_medium" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -412,7 +412,7 @@
                             android:layout_marginTop="8dp"
                             android:fontFamily="sans-serif-medium"
                             android:textColor="@color/account_tab_font_color"
-                            android:textSize="?attr/status_text_medium"
+                            android:textSize="?attr/tweet_text_medium"
                             tools:text="1234" />
 
                         <TextView
@@ -421,7 +421,7 @@
                             android:paddingBottom="6dp"
                             android:text="@string/title_followers"
                             android:textColor="@color/account_tab_font_color"
-                            android:textSize="?attr/status_text_medium" />
+                            android:textSize="?attr/tweet_text_medium" />
                     </LinearLayout>
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
@@ -477,7 +477,7 @@
             app:srcCompat="@drawable/ic_edit_24dp_filled"
             app:tint="?attr/colorOnPrimary" />
 
-        <include layout="@layout/item_status_bottom_sheet" />
+        <include layout="@layout/item_tweet_bottom_sheet" />
 
         <ImageView
             android:id="@+id/accountAvatarImageView"

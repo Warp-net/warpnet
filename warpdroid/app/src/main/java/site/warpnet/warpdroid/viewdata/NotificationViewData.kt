@@ -26,7 +26,7 @@ sealed class NotificationViewData {
 
     abstract val id: String
 
-    abstract fun asStatusOrNull(): StatusViewData.Concrete?
+    abstract fun asStatusOrNull(): TweetViewData.Concrete?
     abstract fun asPlaceholderOrNull(): LoadMore?
 
     @Immutable
@@ -34,7 +34,7 @@ sealed class NotificationViewData {
         override val id: String,
         val type: Notification.Type,
         val account: TimelineAccount,
-        val statusViewData: StatusViewData.Concrete?,
+        val statusViewData: TweetViewData.Concrete?,
         val report: Report?,
         val event: RelationshipSeveranceEvent?,
         val moderationWarning: AccountWarning?,

@@ -45,7 +45,7 @@ import com.google.android.material.R as materialR
 import com.google.android.material.color.MaterialColors
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.entity.HashTag
-import site.warpnet.warpdroid.entity.Status.Mention
+import site.warpnet.warpdroid.entity.Tweet.Mention
 import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.settings.PrefKeys
 import java.net.URI

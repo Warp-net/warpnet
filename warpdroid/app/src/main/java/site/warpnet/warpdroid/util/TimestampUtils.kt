@@ -34,7 +34,7 @@ fun getRelativeTimeSpanString(context: Context, then: Long, now: Long): String {
     var span = now - then
     var future = false
     if (abs(span) < SECOND_IN_MILLIS) {
-        return context.getString(R.string.status_created_at_now)
+        return context.getString(R.string.tweet_created_at_now)
     } else if (span < 0) {
         future = true
         span = -span

@@ -83,9 +83,9 @@ class PollAdapter : RecyclerView.Adapter<BindingHolder<ItemPollBinding>>() {
     override fun onBindViewHolder(holder: BindingHolder<ItemPollBinding>, position: Int) {
         val option = pollOptions[position]
 
-        val resultTextView = holder.binding.statusPollOptionResult
-        val radioButton = holder.binding.statusPollRadioButton
-        val checkBox = holder.binding.statusPollCheckbox
+        val resultTextView = holder.binding.tweetPollOptionResult
+        val radioButton = holder.binding.tweetPollRadioButton
+        val checkBox = holder.binding.tweetPollCheckbox
 
         resultTextView.visible(mode == RESULT)
         radioButton.visible(mode == SINGLE)

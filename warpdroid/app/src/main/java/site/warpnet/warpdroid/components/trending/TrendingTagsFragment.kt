@@ -31,7 +31,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.components.trending.viewmodel.TrendingTagsViewModel
 import site.warpnet.warpdroid.databinding.FragmentTrendingTagsBinding
 import site.warpnet.warpdroid.interfaces.ActionButtonActivity
@@ -138,7 +138,7 @@ class TrendingTagsFragment :
 
     fun onViewTag(tag: String) {
         requireActivity().startActivityWithSlideInAnimation(
-            StatusListActivity.newHashtagIntent(requireContext(), tag)
+            TweetListActivity.newHashtagIntent(requireContext(), tag)
         )
     }
 

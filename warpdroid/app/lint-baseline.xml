@@ -18,7 +18,7 @@
         errorLine1="            sb.append(language.toUpperCase());"
         errorLine2="                               ~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/warpdroid/adapter/StatusDetailedViewHolder.java"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/TweetDetailedViewHolder.java"
             line="102"
             column="32"/>
     </issue>
@@ -592,7 +592,7 @@
         errorLine1="                    cardMetadata.setText(providerName + metadataJoiner + TimestampUtils.getRelativeTimeSpanString(context, card.getPublishedAt().getTime(), System.currentTimeMillis()));"
         errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/keylesspalace/warpdroid/adapter/StatusBaseViewHolder.java"
+            file="src/main/java/com/keylesspalace/warpdroid/adapter/TweetBaseViewHolder.java"
             line="1135"
             column="42"/>
     </issue>

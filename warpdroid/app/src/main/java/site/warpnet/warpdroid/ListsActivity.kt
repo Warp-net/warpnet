@@ -223,7 +223,7 @@ class ListsActivity : BaseActivity() {
 
     private fun onListSelected(list: MastoList) {
         startActivityWithSlideInAnimation(
-            StatusListActivity.newListIntent(this, list.id, list.title)
+            TweetListActivity.newListIntent(this, list.id, list.title)
         )
     }
 

@@ -17,7 +17,7 @@
         android:background="@drawable/text_placeholder"
         android:lines="1"
         android:textColor="?android:textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
@@ -42,7 +42,7 @@
         android:background="@drawable/text_placeholder"
         android:lines="1"
         android:textColor="?android:textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constrainedWidth="true"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/avatarPlaceholder"
@@ -58,7 +58,7 @@
         android:background="@drawable/text_placeholder"
         android:lines="3"
         android:textColor="?android:textColorPrimary"
-        android:textSize="?attr/status_text_medium"
+        android:textSize="?attr/tweet_text_medium"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/avatarPlaceholder"
         app:layout_constraintTop_toBottomOf="@id/namePlaceholder" />
@@ -73,7 +73,7 @@
         android:clickable="false"
         android:importantForAccessibility="no"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/reblogButtonPlaceholder"
+        app:layout_constraintEnd_toStartOf="@id/retweetButtonPlaceholder"
         app:layout_constraintHorizontal_chainStyle="spread_inside"
         app:layout_constraintStart_toStartOf="@id/namePlaceholder"
         app:layout_constraintTop_toBottomOf="@id/contentPlaceholder"
@@ -82,33 +82,33 @@
         tools:ignore="NegativeMargin" />
 
     <ImageButton
-        android:id="@+id/reblogButtonPlaceholder"
+        android:id="@+id/retweetButtonPlaceholder"
         style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
         android:clickable="false"
         android:importantForAccessibility="no"
-        app:layout_constraintEnd_toStartOf="@id/favouriteButtonPlaceholder"
+        app:layout_constraintEnd_toStartOf="@id/likeButtonPlaceholder"
         app:layout_constraintStart_toEndOf="@id/replyButtonPlaceholder"
         app:layout_constraintTop_toTopOf="@id/replyButtonPlaceholder"
         app:srcCompat="@drawable/ic_repeat_24dp"
         app:tint="?attr/placeholderColor" />
 
     <ImageButton
-        android:id="@+id/favouriteButtonPlaceholder"
+        android:id="@+id/likeButtonPlaceholder"
         style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
         android:clickable="false"
         android:importantForAccessibility="no"
-        app:layout_constraintEnd_toStartOf="@id/status_bookmark"
-        app:layout_constraintStart_toEndOf="@id/reblogButtonPlaceholder"
-        app:layout_constraintTop_toTopOf="@id/reblogButtonPlaceholder"
+        app:layout_constraintEnd_toStartOf="@id/tweet_bookmark"
+        app:layout_constraintStart_toEndOf="@id/retweetButtonPlaceholder"
+        app:layout_constraintTop_toTopOf="@id/retweetButtonPlaceholder"
         app:srcCompat="@drawable/ic_star_24dp"
         app:tint="?attr/placeholderColor" />
 
     <ImageButton
-        android:id="@+id/status_bookmark"
+        android:id="@+id/tweet_bookmark"
         style="@style/WarpdroidImageButton"
         android:layout_width="52dp"
         android:layout_height="48dp"
@@ -116,7 +116,7 @@
         android:clipToPadding="false"
         android:importantForAccessibility="no"
         app:layout_constraintEnd_toStartOf="@id/moreButtonPlaceHolder"
-        app:layout_constraintStart_toEndOf="@id/favouriteButtonPlaceholder"
+        app:layout_constraintStart_toEndOf="@id/likeButtonPlaceholder"
         app:layout_constraintTop_toTopOf="@id/replyButtonPlaceholder"
         app:srcCompat="@drawable/ic_bookmark_24dp"
         app:tint="?attr/placeholderColor" />
@@ -130,7 +130,7 @@
         android:importantForAccessibility="no"
         app:layout_constraintBottom_toBottomOf="@id/replyButtonPlaceholder"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@id/status_bookmark"
+        app:layout_constraintStart_toEndOf="@id/tweet_bookmark"
         app:layout_constraintTop_toTopOf="@id/replyButtonPlaceholder"
         app:srcCompat="@drawable/ic_more_horiz_24dp"
         app:tint="?attr/placeholderColor" />

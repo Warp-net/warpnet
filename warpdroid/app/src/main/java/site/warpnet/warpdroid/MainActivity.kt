@@ -79,7 +79,7 @@ import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.Companion.canHandleMimeType
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.preference.PreferencesActivity
-import site.warpnet.warpdroid.components.scheduled.ScheduledStatusActivity
+import site.warpnet.warpdroid.components.scheduled.ScheduledTweetActivity
 import site.warpnet.warpdroid.components.search.SearchActivity
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.components.trending.TrendingActivity
@@ -315,7 +315,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             savedInstanceState,
             addSearchButton = hideTopToolbar,
             addTrendingTagsButton = false,
-            addTrendingStatusesButton = false,
+            addTrendingTweetsButton = false,
         )
 
         lifecycleScope.launch {
@@ -550,7 +550,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         savedInstanceState: Bundle?,
         addSearchButton: Boolean,
         addTrendingTagsButton: Boolean,
-        addTrendingStatusesButton: Boolean
+        addTrendingTweetsButton: Boolean
     ) {
         val drawerOpenClickListener = View.OnClickListener { binding.mainDrawerLayout.open() }
 
@@ -619,7 +619,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             refreshMainDrawerItems(
                 addSearchButton = addSearchButton,
                 addTrendingTagsButton = addTrendingTagsButton,
-                addTrendingStatusesButton = addTrendingStatusesButton
+                addTrendingTweetsButton = addTrendingTweetsButton
             )
             setSavedInstance(savedInstanceState)
         }
@@ -628,7 +628,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     private fun refreshMainDrawerItems(
         addSearchButton: Boolean,
         addTrendingTagsButton: Boolean,
-        addTrendingStatusesButton: Boolean
+        addTrendingTweetsButton: Boolean
     ) {
         binding.mainDrawer.apply {
             itemAdapter.clear()
@@ -643,11 +643,11 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     }
                 },
                 primaryDrawerItem {
-                    nameRes = R.string.action_view_favourites
+                    nameRes = R.string.action_view_likes
                     isSelectable = false
                     iconRes = R.drawable.ic_star_24dp
                     onClick = {
-                        val intent = StatusListActivity.newFavouritesIntent(context)
+                        val intent = TweetListActivity.newLikesIntent(context)
                         startActivityWithSlideInAnimation(intent)
                     }
                 },
@@ -655,7 +655,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     nameRes = R.string.action_view_bookmarks
                     iconRes = R.drawable.ic_bookmark_24dp
                     onClick = {
-                        val intent = StatusListActivity.newBookmarksIntent(context)
+                        val intent = TweetListActivity.newBookmarksIntent(context)
                         startActivityWithSlideInAnimation(intent)
                     }
                 },
@@ -678,7 +678,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     nameRes = R.string.action_access_scheduled_posts
                     iconRes = R.drawable.ic_schedule_24dp
                     onClick = {
-                        startActivityWithSlideInAnimation(ScheduledStatusActivity.newIntent(context))
+                        startActivityWithSlideInAnimation(ScheduledTweetActivity.newIntent(context))
                     }
                 },
                 primaryDrawerItem {
@@ -751,14 +751,14 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 )
             }
 
-            if (addTrendingStatusesButton) {
+            if (addTrendingTweetsButton) {
                 binding.mainDrawer.addItemsAtPosition(
                     6,
                     primaryDrawerItem {
                         nameRes = R.string.title_public_trending_statuses
                         iconRes = R.drawable.ic_local_fire_department_24dp
                         onClick = {
-                            startActivityWithSlideInAnimation(StatusListActivity.newTrendingIntent(context))
+                            startActivityWithSlideInAnimation(TweetListActivity.newTrendingIntent(context))
                         }
                     }
                 )

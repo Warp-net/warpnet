@@ -37,9 +37,9 @@ import site.warpnet.warpdroid.components.instanceinfo.InstanceInfo
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.TimelineAccount
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
-import site.warpnet.warpdroid.ui.statuscomponents.Avatar
-import site.warpnet.warpdroid.ui.statuscomponents.text.emojify
-import site.warpnet.warpdroid.ui.statuscomponents.text.toInlineContent
+import site.warpnet.warpdroid.ui.tweetcomponents.Avatar
+import site.warpnet.warpdroid.ui.tweetcomponents.text.emojify
+import site.warpnet.warpdroid.ui.tweetcomponents.text.toInlineContent
 import site.warpnet.warpdroid.ui.warpdroidColors
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -77,8 +77,8 @@ class SearchAccountsFragment : SearchFragment<TimelineAccount>() {
                                 url = account.avatar,
                                 staticUrl = account.staticAvatar,
                                 isBot = account.bot,
-                                boostedAvatarUrl = null,
-                                staticBoostedAvatarUrl = null,
+                                retweetedAvatarUrl = null,
+                                staticRetweetedAvatarUrl = null,
                                 onOpenProfile = null,
                             )
                             Spacer(modifier = Modifier.width(8.dp))

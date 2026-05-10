@@ -19,7 +19,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="?android:attr/textColorSecondary"
-        android:textSize="?attr/status_text_small"
+        android:textSize="?attr/tweet_text_small"
         android:background="@drawable/media_warning_bg"
         android:contentDescription="@null"
         android:paddingLeft="5dp"

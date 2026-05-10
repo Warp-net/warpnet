@@ -1,6 +1,6 @@
 package site.warpnet.warpdroid.settings
 
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 
 enum class DefaultReplyVisibility(val int: Int) {
     MATCH_DEFAULT_POST_VISIBILITY(0),
@@ -18,12 +18,12 @@ enum class DefaultReplyVisibility(val int: Int) {
             DIRECT -> "direct"
         }
 
-    fun toVisibilityOr(default: Status.Visibility): Status.Visibility {
+    fun toVisibilityOr(default: Tweet.Visibility): Tweet.Visibility {
         return when (this) {
-            PUBLIC -> Status.Visibility.PUBLIC
-            UNLISTED -> Status.Visibility.UNLISTED
-            PRIVATE -> Status.Visibility.PRIVATE
-            DIRECT -> Status.Visibility.DIRECT
+            PUBLIC -> Tweet.Visibility.PUBLIC
+            UNLISTED -> Tweet.Visibility.UNLISTED
+            PRIVATE -> Tweet.Visibility.PRIVATE
+            DIRECT -> Tweet.Visibility.DIRECT
             else -> default
         }
     }

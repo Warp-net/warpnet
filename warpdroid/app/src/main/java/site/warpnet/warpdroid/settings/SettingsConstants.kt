@@ -72,8 +72,8 @@ object PrefKeys {
     const val USE_BLURHASH = "useBlurhash"
     const val SHOW_SELF_USERNAME = "showSelfUsername"
     const val SHOW_CARDS_IN_TIMELINES = "showCardsInTimelines"
-    const val CONFIRM_REBLOGS = "confirmReblogs"
-    const val CONFIRM_FAVOURITES = "confirmFavourites"
+    const val CONFIRM_RETWEETS = "confirmRetweets"
+    const val CONFIRM_LIKES = "confirmLikes"
     const val CONFIRM_FOLLOWS = "confirmFollows"
     const val ENABLE_SWIPE_FOR_TABS = "enableSwipeForTabs"
     const val ANIMATE_CUSTOM_EMOJIS = "animateCustomEmojis"
@@ -105,14 +105,14 @@ object PrefKeys {
     // This was changed once to reset an unintentionally set default.
     const val TAB_FILTER_HOME_REPLIES = "tabFilterHomeReplies_v2"
 
-    const val TAB_FILTER_HOME_BOOSTS = "tabFilterHomeBoosts"
-    const val TAB_SHOW_HOME_SELF_BOOSTS = "tabShowHomeSelfBoosts"
+    const val TAB_FILTER_HOME_RETWEETS = "tabFilterHomeRetweets"
+    const val TAB_SHOW_HOME_SELF_RETWEETS = "tabShowHomeSelfRetweets"
 
     /** UI text scaling factor, stored as float, 100 = 100% = no scaling */
     const val UI_TEXT_SCALE_RATIO = "uiTextScaleRatio"
 
     /** UI text scaling factor, stored as float, 100 = 100% = no scaling */
-    const val REBLOG_PRIVACY = "reblogPrivacy"
+    const val RETWEET_PRIVACY = "retweetPrivacy"
 
     object Deprecated {
         const val FAB_HIDE = "fabHide"

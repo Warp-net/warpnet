@@ -16,7 +16,7 @@
 package site.warpnet.warpdroid.components.search
 
 enum class SearchType(val apiParameter: String) {
-    Status("statuses"),
+    Tweet("statuses"),
     Account("accounts"),
     Hashtag("hashtags")
 }

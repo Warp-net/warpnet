@@ -67,7 +67,7 @@
                 android:paddingEnd="8dp"
                 android:text="@string/action_add_tab"
                 android:textColor="?attr/colorOnPrimary"
-                android:textSize="?attr/status_text_large"
+                android:textSize="?attr/tweet_text_large"
                 app:drawableStartCompat="@drawable/ic_add_24dp"
                 app:drawableTint="?attr/colorOnPrimary" />
         </LinearLayout>

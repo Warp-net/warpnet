@@ -187,8 +187,8 @@ class AccountViewModel @Inject constructor(
         }
     }
 
-    fun changeShowReblogsState() {
-        if (_relationshipData.value?.data?.showingReblogs == true) {
+    fun changeShowRetweetsState() {
+        if (_relationshipData.value?.data?.showingRetweets == true) {
             changeRelationship(RelationShipAction.FOLLOW, false)
         } else {
             changeRelationship(RelationShipAction.FOLLOW, true)
@@ -196,7 +196,7 @@ class AccountViewModel @Inject constructor(
     }
 
     /**
-     * @param parameter showReblogs if RelationShipAction.FOLLOW, notifications if MUTE
+     * @param parameter showRetweets if RelationShipAction.FOLLOW, notifications if MUTE
      */
     private fun changeRelationship(
         relationshipAction: RelationShipAction,
@@ -244,7 +244,7 @@ class AccountViewModel @Inject constructor(
         val relationshipCall = when (relationshipAction) {
             RelationShipAction.FOLLOW -> warpnetApi.followAccount(
                 accountId,
-                showReblogs = parameter ?: true
+                showRetweets = parameter ?: true
             )
             RelationShipAction.UNFOLLOW -> warpnetApi.unfollowAccount(accountId)
             RelationShipAction.BLOCK -> warpnetApi.blockAccount(accountId)

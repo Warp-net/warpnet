@@ -39,7 +39,7 @@
     <string name="title_posts_with_replies">З адказамі</string>
     <string name="title_follows">Падпіскі</string>
     <string name="title_followers">Падпісчыкі</string>
-    <string name="title_favourites">Абраныя</string>
+    <string name="title_likes">Абраныя</string>
     <string name="title_bookmarks">Закладкі</string>
     <string name="title_domain_mutes">Схаваныя дамены</string>
     <string name="title_follow_requests">Запыты на падпіску</string>
@@ -53,7 +53,7 @@
     <string name="title_licenses">Ліцэнзіі</string>
     <string name="title_followed_hashtags">Падпіскі на хэштэгі</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s пашырыў(-ла)</string>
+    <string name="post_retweeted_format">%1$s пашырыў(-ла)</string>
     <string name="post_sensitive_media_title">Далікатнае змесціва</string>
     <string name="post_media_hidden_title">Медыя схаванае</string>
     <string name="post_content_show_more">Разгарнуць</string>
@@ -64,8 +64,8 @@
     <string name="post_content_show_less">Згарнуць</string>
     <string name="post_edited">Рэдагаваны %1$s</string>
     <string name="message_empty">Тут нічога няма.</string>
-    <string name="notification_reblog_format">%1$s пашырыў(-ла) ваш допіс</string>
-    <string name="notification_favourite_format">%1$s падабаўся ваш допіс</string>
+    <string name="notification_retweet_format">%1$s пашырыў(-ла) ваш допіс</string>
+    <string name="notification_like_format">%1$s падабаўся ваш допіс</string>
     <string name="notification_follow_format">%1$s падпісаўся(-лася) на вас</string>
     <string name="notification_follow_request_format">%1$s запытаў(-ла) падпіску на вас</string>
     <string name="notification_sign_up_format">%1$s зарэгістраваўся(-лася)</string>
@@ -78,10 +78,10 @@
     <string name="action_quick_reply">Хуткі адказ</string>
     <string name="action_reply">Адказаць</string>
     <string name="post_media_alt">ALT</string>
-    <string name="action_reblog">Пашырыць</string>
-    <string name="action_unreblog">Скасаваць пашырэнне</string>
-    <string name="action_favourite">Упадабаць</string>
-    <string name="action_unfavourite">Выдаліць з абраных</string>
+    <string name="action_retweet">Пашырыць</string>
+    <string name="action_unretweet">Скасаваць пашырэнне</string>
+    <string name="action_like">Упадабаць</string>
+    <string name="action_unlike">Выдаліць з абраных</string>
     <string name="action_bookmark">Дадаць у закладкі</string>
     <string name="action_delete">Выдаліць</string>
     <string name="action_search">Пошук</string>
@@ -90,8 +90,8 @@
     <string name="action_access_drafts">Чарнавікі</string>
     <string name="action_access_scheduled_posts">Запланаваныя допісы</string>
     <string name="action_toggle_visibility">Бачнасць допісаў</string>
-    <string name="action_open_reblogger">Адкрыць аўтара пашырэння</string>
-    <string name="action_open_reblogged_by">Паказаць пашырэнні</string>
+    <string name="action_open_retweeter">Адкрыць аўтара пашырэння</string>
+    <string name="action_open_retweeted_by">Паказаць пашырэнні</string>
     <string name="action_open_faved_by">Паказаць абраныя</string>
     <string name="title_hashtags_dialog">Хэштэгі</string>
     <string name="title_mentions_dialog">Згадкі</string>
@@ -158,9 +158,9 @@
     <string name="pref_show_self_username_always">Заўсёды</string>
     <string name="notification_follow_request_name">Запыты на падпіску</string>
     <string name="notification_follow_request_description">Апавяшчаць аб запытах на падпіску</string>
-    <string name="notification_boost_name">Пашырэнні</string>
-    <string name="notification_boost_description">Апавяшчаць аб пашырэнні Вашых допісаў</string>
-    <string name="notification_favourite_name">Упадабаныя</string>
+    <string name="notification_retweet_name">Пашырэнні</string>
+    <string name="notification_retweet_description">Апавяшчаць аб пашырэнні Вашых допісаў</string>
+    <string name="notification_like_name">Упадабаныя</string>
     <string name="notification_report_name">Скаргі</string>
     <string name="notification_report_description">Апавяшчаць аб мадэрацыйных скаргах</string>
     <string name="notification_sign_up_name">Рэгістрацыі</string>
@@ -185,8 +185,8 @@
     <string name="action_unfollow">Адпісацца</string>
     <string name="action_block">Заблакаваць</string>
     <string name="action_unblock">Разблакаваць</string>
-    <string name="action_hide_reblogs">Схаваць пашырэнні</string>
-    <string name="action_show_reblogs">Паказаць пашырэнні</string>
+    <string name="action_hide_retweets">Схаваць пашырэнні</string>
+    <string name="action_show_retweets">Паказаць пашырэнні</string>
     <string name="action_report">Паскардзіцца</string>
     <string name="action_edit">Рэдагаваць</string>
     <string name="action_delete_conversation">Выдаліць размову</string>
@@ -198,7 +198,7 @@
     <string name="action_view_profile">Профіль</string>
     <string name="action_view_preferences">Налады</string>
     <string name="action_view_account_preferences">Налады ўліковага запісу</string>
-    <string name="action_view_favourites">Абраныя</string>
+    <string name="action_view_likes">Абраныя</string>
     <string name="action_view_bookmarks">Закладкі</string>
     <string name="action_view_mutes">Ігнаруемыя карыстальнікі</string>
     <string name="action_view_blocks">Заблакаваныя карыстальнікі</string>
@@ -263,7 +263,7 @@
     <string name="pref_title_appearance_settings">Выгляд</string>
     <string name="pref_title_app_theme">Тэма</string>
     <string name="pref_title_timelines">Стужкі</string>
-    <string name="pref_title_show_boosts">Паказаць пашырэнні</string>
+    <string name="pref_title_show_retweets">Паказаць пашырэнні</string>
     <string name="pref_title_http_proxy_port">HTTP проксі порт</string>
     <string name="pref_title_http_proxy_port_message">Порт павінен быць паміж %1$d і %2$d</string>
     <string name="pref_default_post_privacy">Прыватнасць допісаў па змаўчанні</string>
@@ -275,7 +275,7 @@
     <string name="notification_mention_descriptions">Апавяшчаць аб новых згадках</string>
     <string name="notification_follow_name">Новыя падпісчыкі</string>
     <string name="notification_follow_description">Апавяшчаць аб новых падпісчыках</string>
-    <string name="notification_favourite_description">Паведамляць, калі вашыя допісы ўпадабаюць</string>
+    <string name="notification_like_description">Паведамляць, калі вашыя допісы ўпадабаюць</string>
     <string name="notification_poll_name">Апытанні</string>
     <string name="notification_poll_description">Апавяшчаць аб заканчэнні апытанняў</string>
     <string name="notification_subscription_name">Новыя допісы</string>
@@ -295,8 +295,8 @@
     <string name="post_media_video">Відэа</string>
     <string name="post_media_audio">Аўдыё</string>
     <string name="post_media_attachments">Далучэнні</string>
-    <string name="status_count_one_plus">1+</string>
-    <string name="status_created_at_now">зараз</string>
+    <string name="tweet_count_one_plus">1+</string>
+    <string name="tweet_created_at_now">зараз</string>
     <string name="state_follow_requested">Запыт на падпіску</string>
     <string name="abbreviated_in_years">праз %1$dг</string>
     <string name="abbreviated_in_days">праз %1$dд</string>
@@ -337,7 +337,7 @@
     <string name="caption_notoemoji">Бягучы набор эмодзі ад Google</string>
     <string name="caption_twemoji">Тыповы набор эмодзі Warpnet</string>
     <string name="download_failed">Не атрымалася спампаваць</string>
-    <string name="unreblog_private">Скасаваць пашырэнне</string>
+    <string name="unretweet_private">Скасаваць пашырэнне</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="pin_action">Замацаваць</string>
     <string name="unpin_action">Адмацаваць</string>
@@ -362,9 +362,9 @@
         <item quantity="many"><b>%1$s</b> абраных</item>
         <item quantity="other"><b>%1$s</b> абраных</item>
     </plurals>
-    <string name="title_reblogged_by">Пашырылі</string>
+    <string name="title_retweeted_by">Пашырылі</string>
     <string name="profile_metadata_label">Метазвесткі профілю</string>
-    <string name="title_favourited_by">Упадабалі</string>
+    <string name="title_liked_by">Упадабалі</string>
     <string name="add_account_description">Дадаць уліковы запіс Warpnet</string>
     <string name="action_lists">Спісы</string>
     <string name="title_lists">Спісы</string>
@@ -395,7 +395,7 @@
     <string name="profile_metadata_content_label">Змест</string>
     <string name="pref_title_absolute_time">Паказваць абсалютны час</string>
     <string name="label_remote_account">Інфармацыя ніжэй можа не паказваць поўны профіль карыстальніка. Націсніце, каб адкрыць поўны профіль у браўзеры.</string>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one"><b>%1$s</b> пашыраны</item>
         <item quantity="few"><b>%1$s</b> пашырана</item>
         <item quantity="many"><b>%1$s</b> пашыраных</item>
@@ -406,7 +406,7 @@
     <string name="action_open_post">Адкрыць допіс</string>
     <string name="profile_badge_bot_text">Бот</string>
     <string name="account_moved_description">%1$s пераехаў(-ла) да:</string>
-    <string name="reblog_private">Пашырыць для пачатковай аўдыторыі</string>
+    <string name="retweet_private">Пашырыць для пачатковай аўдыторыі</string>
     <string name="license_description">Warpnet змяшчае код і рэсурсы з наступных праграм з адкрытым зыходным кодам:</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s і %2$s</string>
@@ -419,12 +419,12 @@
     <string name="hashtags">Хэштэгі</string>
     <string name="hint_list_name">Назва спіса</string>
     <string name="add_hashtag_title">Дадаць хэштэг</string>
-    <string name="description_post_reblogged">Пашырана</string>
+    <string name="description_post_retweeted">Пашырана</string>
     <string name="description_poll">Апытанне з варыянтамі: %1$s, %2$s, %3$s, %4$s; %5$s</string>
     <string name="pick_hashtag_hint">Хэштэг без #</string>
     <string name="description_post_edited">Зменена</string>
     <string name="description_post_bookmarked">Дададзена ў закладкі</string>
-    <string name="description_post_favourited">Упадабана</string>
+    <string name="description_post_liked">Упадабана</string>
     <string name="description_visibility_public">Публічны</string>
     <string name="description_post_language">Мова допісу</string>
     <string name="select_list_title">Выбраць спіс</string>
@@ -521,12 +521,12 @@
     <string name="post_lookup_error_format">Памылка пошуку допісу %1$s</string>
     <string name="account_date_joined">Далучыўся(-лася) %1$s</string>
     <string name="account_note_saved">Захавана!</string>
-    <string name="status_edit_info">%1$s адрэдагаваў(-ла)</string>
-    <string name="status_created_info">%1$s стварыў(-ла)</string>
+    <string name="tweet_edit_info">%1$s адрэдагаваў(-ла)</string>
+    <string name="tweet_created_info">%1$s стварыў(-ла)</string>
     <string name="pref_title_hide_top_toolbar">Схаваць загаловак верхняй панэлі інструментаў</string>
     <string name="account_note_hint">Ваша асабістая нататка пра гэты ўліковы запіс</string>
-    <string name="pref_title_confirm_favourites">Патрабаваць пацвярджэнне перад упадабаннем</string>
-    <string name="pref_title_confirm_reblogs">Патрабаваць пацвярджэнне перад пашырэннем</string>
+    <string name="pref_title_confirm_likes">Патрабаваць пацвярджэнне перад упадабаннем</string>
+    <string name="pref_title_confirm_retweets">Патрабаваць пацвярджэнне перад пашырэннем</string>
     <string name="pref_title_wellbeing_mode">Дабрабыт</string>
     <string name="drafts_failed_loading_reply">Немагчыма атрымаць інфармацыю пра адказ</string>
     <string name="draft_deleted">Чарнавік выдалены</string>
@@ -584,8 +584,8 @@
     <string name="description_login">Працуе амаль заўсёды. Даныя не ўцякаюць у іншыя праграмы.</string>
     <string name="action_browser_login">Увайсці з браўзера</string>
     <string name="notification_unknown_name">Невядома</string>
-    <string name="status_filtered_show_anyway">Усё роўна паказаць</string>
-    <string name="status_filter_placeholder_label_format">Адфільтрована: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Усё роўна паказаць</string>
+    <string name="tweet_filter_placeholder_label_format">Адфільтрована: %1$s</string>
     <string name="pref_title_account_filter_keywords">Профілі</string>
     <string name="title_public_trending_hashtags">Папулярныя хэштэгі</string>
     <string name="description_browser_login">Можа падтрымліваць дадатковыя метады праверкі сапраўднасці, але для гэтага патрэбны адпаведны браузер.</string>
@@ -596,7 +596,7 @@
     <string name="total_accounts">Усяго ўліковых запісаў</string>
     <string name="accessibility_talking_about_tag">%1$d людзей кажуць пра хэштэг %2$s</string>
     <string name="pref_title_show_stat_inline">Паказваць статыстыку допісаў у стужцы</string>
-    <string name="ui_error_reblog">Не атрымалася пашырыць допіс: %1$s</string>
+    <string name="ui_error_retweet">Не атрымалася пашырыць допіс: %1$s</string>
     <string name="hint_filter_title">Мой фільтр</string>
     <string name="filter_description_format">%1$s: %2$s</string>
     <string name="ui_error_bookmark">Не атрымалася дадаць допіс да закладак: %1$s</string>
@@ -623,6 +623,6 @@
     <string name="error_blocking_domain">Не атрымалася заблакіраваць %1$s: %2$s</string>
     <string name="error_unblocking_domain">Не атрымалася разблакіраваць %1$s: %2$s</string>
     <string name="pref_title_per_timeline_preferences">Налады па стужкам</string>
-    <string name="pref_title_show_self_boosts">Паказаць самацытаванне</string>
-    <string name="pref_title_show_self_boosts_description">Нехта цытуе ўласныя допісы</string>
+    <string name="pref_title_show_self_retweets">Паказаць самацытаванне</string>
+    <string name="pref_title_show_self_retweets_description">Нехта цытуе ўласныя допісы</string>
 </resources>

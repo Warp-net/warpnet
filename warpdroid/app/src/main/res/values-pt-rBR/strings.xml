@@ -27,30 +27,30 @@
     <string name="title_posts_with_replies">Com respostas</string>
     <string name="title_follows">Segue</string>
     <string name="title_followers">Seguidores</string>
-    <string name="title_favourites">Favoritos</string>
+    <string name="title_likes">Favoritos</string>
     <string name="title_mutes">Usuários silenciados</string>
     <string name="title_blocks">Usuários bloqueados</string>
     <string name="title_follow_requests">Seguidores pendentes</string>
     <string name="title_edit_profile">Editar seu perfil</string>
     <string name="title_drafts">Rascunhos</string>
     <string name="title_licenses">Licenças</string>
-    <string name="post_boosted_format">%1$s impulsionou</string>
+    <string name="post_retweeted_format">%1$s impulsionou</string>
     <string name="post_sensitive_media_title">Conteúdo sensível</string>
     <string name="post_media_hidden_title">Mídia ocultada</string>
     <string name="post_sensitive_media_directions">Toque para ver</string>
     <string name="post_content_warning_show_more">Mostrar mais</string>
     <string name="post_content_warning_show_less">Mostrar menos</string>
-    <string name="notification_reblog_format">%1$s impulsionou seu post</string>
-    <string name="notification_favourite_format">%1$s favoritou seu post</string>
+    <string name="notification_retweet_format">%1$s impulsionou seu post</string>
+    <string name="notification_like_format">%1$s favoritou seu post</string>
     <string name="notification_follow_format">%1$s seguiu você</string>
     <string name="report_username_format">Denunciar @%1$s</string>
     <string name="report_comment_hint">Comentários adicionais?</string>
     <string name="action_quick_reply">Resposta rápida</string>
     <string name="action_reply">Responder</string>
-    <string name="action_reblog">Impulsionar</string>
-    <string name="action_unreblog">Remover impulso</string>
-    <string name="action_favourite">Favoritar</string>
-    <string name="action_unfavourite">Desfavoritar</string>
+    <string name="action_retweet">Impulsionar</string>
+    <string name="action_unretweet">Remover impulso</string>
+    <string name="action_like">Favoritar</string>
+    <string name="action_unlike">Desfavoritar</string>
     <string name="action_more">Mais</string>
     <string name="action_compose">Escrever</string>
     <string name="action_login">Entrar com Warpnet</string>
@@ -60,8 +60,8 @@
     <string name="action_unfollow">Deixar de seguir</string>
     <string name="action_block">Bloquear</string>
     <string name="action_unblock">Desbloquear</string>
-    <string name="action_hide_reblogs">Ocultar impulsos</string>
-    <string name="action_show_reblogs">Mostrar impulsos</string>
+    <string name="action_hide_retweets">Ocultar impulsos</string>
+    <string name="action_show_retweets">Mostrar impulsos</string>
     <string name="action_report">Denunciar</string>
     <string name="action_delete">Excluir</string>
     <string name="action_send">ENVIAR</string>
@@ -70,7 +70,7 @@
     <string name="action_close">Fechar</string>
     <string name="action_view_profile">Perfil</string>
     <string name="action_view_preferences">Preferências</string>
-    <string name="action_view_favourites">Favoritos</string>
+    <string name="action_view_likes">Favoritos</string>
     <string name="action_view_mutes">Usuários silenciados</string>
     <string name="action_view_blocks">Usuários bloqueados</string>
     <string name="action_view_follow_requests">Seguidores pendentes</string>
@@ -96,7 +96,7 @@
     <string name="action_content_warning">Aviso de conteúdo</string>
     <string name="action_emoji_keyboard">Teclado de emojis</string>
     <string name="action_add_tab">Adicionar aba</string>
-    <string name="action_open_reblogged_by">Mostrar impulsos</string>
+    <string name="action_open_retweeted_by">Mostrar impulsos</string>
     <string name="action_open_faved_by">Mostrar favoritos</string>
     <string name="title_mentions_dialog">Menções</string>
     <string name="title_links_dialog">Links</string>
@@ -152,7 +152,7 @@
     <string name="pref_title_custom_tabs">Usar abas personalizadas do Chrome</string>
     <string name="pref_title_post_filter">Filtragem da linha do tempo</string>
     <string name="pref_title_post_tabs">Linha do tempo inicial</string>
-    <string name="pref_title_show_boosts">Mostrar impulsos</string>
+    <string name="pref_title_show_retweets">Mostrar impulsos</string>
     <string name="pref_title_show_replies">Mostrar respostas</string>
     <string name="pref_title_show_media_preview">Baixar pré-visualizações de mídia</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -176,10 +176,10 @@
     <string name="notification_mention_descriptions">Notificações sobre novas menções</string>
     <string name="notification_follow_name">Novos seguidores</string>
     <string name="notification_follow_description">Notificações sobre novos seguidores</string>
-    <string name="notification_boost_name">Impulsos</string>
-    <string name="notification_boost_description">Notificações quando seus posts são impulsionados</string>
-    <string name="notification_favourite_name">Favoritos</string>
-    <string name="notification_favourite_description">Notificações quando seus posts forem marcados como favoritos</string>
+    <string name="notification_retweet_name">Impulsos</string>
+    <string name="notification_retweet_description">Notificações quando seus posts são impulsionados</string>
+    <string name="notification_like_name">Favoritos</string>
+    <string name="notification_like_description">Notificações quando seus posts forem marcados como favoritos</string>
     <string name="notification_mention_format">%1$s mencionou você</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s e %4$d outros</string>
     <string name="notification_summary_medium">%1$s, %2$s e %3$s</string>
@@ -252,8 +252,8 @@
     <string name="download_failed">Falha ao baixar</string>
     <string name="profile_badge_bot_text">Robô</string>
     <string name="account_moved_description">%1$s mudou-se para:</string>
-    <string name="reblog_private">Impulsionar para a audiência original</string>
-    <string name="unreblog_private">Desimpulsionar</string>
+    <string name="retweet_private">Impulsionar para a audiência original</string>
+    <string name="unretweet_private">Desimpulsionar</string>
     <string name="license_description">O Warpnet contém código e recursos dos seguintes projetos de código aberto:</string>
     <string name="license_apache_2">Licenciado sob a licença Apache (cópia abaixo)</string>
     <string name="profile_metadata_label">Metadados do perfil</string>
@@ -261,8 +261,8 @@
     <string name="profile_metadata_label_label">Rótulo</string>
     <string name="profile_metadata_content_label">Conteúdo</string>
     <string name="pref_title_absolute_time">Usar tempo absoluto</string>
-    <string name="title_reblogged_by">Impulsionado por</string>
-    <string name="title_favourited_by">Favoritado por</string>
+    <string name="title_retweeted_by">Impulsionado por</string>
+    <string name="title_liked_by">Favoritado por</string>
     <string name="description_visibility_public">Público</string>
     <string name="description_visibility_private">Seguidores</string>
     <string name="error_network">Ocorreu um erro de rede. Por favor, verifique sua conexão e tente novamente.</string>
@@ -273,7 +273,7 @@
     <string name="message_empty">Nada aqui.</string>
     <string name="action_delete_and_redraft">Excluir e rascunhar</string>
     <string name="action_view_account_preferences">Preferências da conta</string>
-    <string name="action_open_reblogger">Ver quem impulsionou</string>
+    <string name="action_open_retweeter">Ver quem impulsionou</string>
     <string name="title_hashtags_dialog">Hashtags</string>
     <string name="action_open_media_n">Abrir mídia #%1$d</string>
     <string name="download_media">Baixar mídia</string>
@@ -311,7 +311,7 @@
         <item quantity="many">%1$s de favoritos</item>
         <item quantity="other">%1$s favoritos</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one">%1$s impulso</item>
         <item quantity="many">%1$s de impulsos</item>
         <item quantity="other">%1$s impulsos</item>
@@ -322,8 +322,8 @@
     <string name="description_post_media">Mídia: %1$s</string>
     <string name="description_post_cw">Aviso de conteúdo: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Sem descrição</string>
-    <string name="description_post_reblogged">Impulsionado</string>
-    <string name="description_post_favourited">Favoritado</string>
+    <string name="description_post_retweeted">Impulsionado</string>
+    <string name="description_post_liked">Favoritado</string>
     <string name="description_visibility_unlisted">Não-listado</string>
     <string name="description_visibility_direct">Direto</string>
     <string name="hint_list_name">Nome da lista</string>
@@ -434,7 +434,7 @@
     </plurals>
     <string name="pref_title_enable_swipe_for_tabs">Ativar deslizar para alternar entre abas</string>
     <string name="pref_title_show_cards_in_timelines">Mostrar pré-visualizações de links nas linhas do tempo</string>
-    <string name="pref_title_confirm_reblogs">Mostrar confirmação antes de impulsionar</string>
+    <string name="pref_title_confirm_retweets">Mostrar confirmação antes de impulsionar</string>
     <string name="hashtags">Hashtags</string>
     <string name="add_hashtag_title">Adicionar hashtag</string>
     <string name="pref_title_gradient_for_media">Mostrar gradientes coloridos para mídias ocultas</string>
@@ -479,7 +479,7 @@
     <string name="action_delete_conversation">Excluir conversa</string>
     <string name="dialog_delete_list_warning">Deseja excluir a lista %1$s?</string>
     <string name="action_unbookmark">Remover marcador</string>
-    <string name="pref_title_confirm_favourites">Mostrar confirmação antes de favoritar</string>
+    <string name="pref_title_confirm_likes">Mostrar confirmação antes de favoritar</string>
     <string name="duration_30_days">30 dias</string>
     <string name="duration_60_days">60 dias</string>
     <string name="duration_90_days">90 dias</string>
@@ -513,7 +513,7 @@
     <string name="failed_to_pin">Falha ao fixar</string>
     <string name="failed_to_unpin">Falha ao desafixar</string>
     <string name="compose_save_draft_loses_media">Salvar rascunho? (Os anexos serão reenviados assim que você restaurar o rascunho.)</string>
-    <string name="status_created_info">Criado: %1$s</string>
+    <string name="tweet_created_info">Criado: %1$s</string>
     <string name="title_edits">Edições</string>
     <string name="pref_default_post_language">Idioma dos posts (sincronizado com o servidor)</string>
     <string name="description_post_language">Idioma do post</string>
@@ -524,8 +524,8 @@
     <string name="report_category_other">Outros</string>
     <string name="pref_show_self_username_disambiguate">Quando várias contas estão conectadas</string>
     <string name="pref_title_http_proxy_port_message">A porta deve estar entre %1$d e %2$d</string>
-    <string name="status_count_one_plus">1+</string>
-    <string name="status_created_at_now">agora</string>
+    <string name="tweet_count_one_plus">1+</string>
+    <string name="tweet_created_at_now">agora</string>
     <string name="action_post_failed">O upload falhou</string>
     <string name="action_post_failed_show_drafts">Mostrar rascunhos</string>
     <string name="pref_reading_order_newest_first">Mais recentes primeiro</string>
@@ -536,7 +536,7 @@
     <string name="description_login">Funciona na maioria dos casos. Nenhum dado é vazado para outros aplicativos.</string>
     <string name="description_browser_login">Pode oferecer suporte a métodos de autenticação adicionais, mas requer um navegador compatível.</string>
     <string name="failed_to_remove_from_list">Falha ao remover a conta da lista</string>
-    <string name="status_edit_info">Editado: %1$s</string>
+    <string name="tweet_edit_info">Editado: %1$s</string>
     <string name="action_continue_edit">Continuar editando</string>
     <string name="compose_unsaved_changes">Você tem alterações não salvas.</string>
     <string name="description_post_edited">Editado</string>
@@ -572,7 +572,7 @@
     <string name="dialog_delete_filter_positive_action">Excluir</string>
     <string name="dialog_save_profile_changes_message">Você deseja salvar as alterações do seu perfil?</string>
     <string name="about_copied">Versão e informações do dispositivo copiadas</string>
-    <string name="status_filter_placeholder_label_format">Filtrado: %1$s</string>
+    <string name="tweet_filter_placeholder_label_format">Filtrado: %1$s</string>
     <string name="pref_title_account_filter_keywords">Perfis</string>
     <string name="post_media_image">Imagem</string>
     <string name="muting_hashtag_success_format">Silenciando a hashtag #%1$s como um aviso</string>
@@ -593,10 +593,10 @@
     <string name="help_empty_home">Esta é a sua <b>linha do tempo inicial</b>. Ela mostra os posts recentes das contas que você segue.\n\nPara explorar contas, você pode descobri-las em uma das outras linhas do tempo. Por exemplo, a linha do tempo local da sua instância {{group}}. Ou você pode pesquisá-las por nome {{search}}; por exemplo, pesquise por Warpnet para encontrar nossa conta no Warpnet.</string>
     <string name="moderation_warning">Você recebeu um aviso de moderação.</string>
     <string name="confirm_dismiss_caption">Descartar alterações da legenda?</string>
-    <string name="reblog_confirm">Impulsionar este post?</string>
+    <string name="retweet_confirm">Impulsionar este post?</string>
     <string name="error_missing_edits">Seu servidor sabe que este post foi editado, mas não possui uma cópia das edições, portanto elas não podem ser exibidas para você.\n\nEste é <a href="https://github.com/Warp-net/warpnet/issues">o problema nº 25398 do Warpnet</a>.</string>
     <string name="unblock_failure">Falha ao desbloquear %1$s: %2$s</string>
-    <string name="reblog_privacy_unlisted_description">Igual a público, mas nunca será exibido nas linhas do tempo públicas</string>
+    <string name="retweet_privacy_unlisted_description">Igual a público, mas nunca será exibido nas linhas do tempo públicas</string>
     <string name="accept_follow_request_failure">Falha ao aceitar a solicitação para seguir de %1$s: %2$s</string>
     <string name="moderation_warning_action_mark_statuses_as_sensitive">Alguns dos seus posts foram marcados como sensíveis.</string>
     <string name="dialog_follow_warning">Seguir esta conta?</string>
@@ -624,20 +624,20 @@
     <string name="follow_hashtag_success">Seguiu hashtag %1$s</string>
     <string name="post_replied">Respondeu</string>
     <string name="post_replied_self">Continuação do fio</string>
-    <string name="ui_error_reblog">Falha ao impulsionar o post: %1$s</string>
+    <string name="ui_error_retweet">Falha ao impulsionar o post: %1$s</string>
     <string name="filtered_notifications">Notificações filtradas</string>
     <string name="notification_summary_report_format">%1$s · %2$d posts anexados</string>
     <string name="notification_quote_format">%1$s citou seu post</string>
     <string name="notification_quoted_update_format">%1$s editou um post que você citou</string>
     <string name="notification_sign_up_format">%1$s se cadastrou</string>
     <string name="notification_report_format">Nova denúncia de %1$s</string>
-    <string name="action_reblog_private">Impulso só para seguidores</string>
-    <string name="action_reblog_public">Impulso público</string>
-    <string name="action_reblog_unlisted">Impulso não listado</string>
+    <string name="action_retweet_private">Impulso só para seguidores</string>
+    <string name="action_retweet_public">Impulso público</string>
+    <string name="action_retweet_unlisted">Impulso não listado</string>
     <string name="action_remove_account">Remover conta</string>
     <string name="action_post_failed_do_nothing">Descartar</string>
-    <string name="pref_title_show_self_boosts">Mostrar impulsos da própria conta</string>
-    <string name="pref_title_show_self_boosts_description">Alguém impulsionando seu próprio post</string>
+    <string name="pref_title_show_self_retweets">Mostrar impulsos da própria conta</string>
+    <string name="pref_title_show_self_retweets_description">Alguém impulsionando seu próprio post</string>
     <string name="action_discard">Descartar alterações</string>
     <string name="action_reveal_media">Revelar mídia</string>
     <string name="action_follow_hashtag">Seguir uma nova hashtag</string>
@@ -677,7 +677,7 @@
     <string name="notification_channel_admin">Administrativas</string>
     <string name="notification_report_description">Notificações sobre denúncias à moderação</string>
     <string name="notification_prune_cache">Manutenção de cache…</string>
-    <string name="status_filtered_show_anyway">Mostrar mesmo assim</string>
+    <string name="tweet_filtered_show_anyway">Mostrar mesmo assim</string>
     <string name="message_filters_empty">Você não tem filtros.</string>
     <plurals name="replies">
         <item quantity="one">%1$s resposta</item>
@@ -708,7 +708,7 @@
     <string name="socket_timeout_exception">O contato com o seu servidor demorou muito tempo</string>
     <string name="ui_error_unknown">razão desconhecida</string>
     <string name="ui_error_clear_notifications">Falha ao limpar notificações: %1$s</string>
-    <string name="ui_error_favourite">Falha ao favoritar posts: %1$s</string>
+    <string name="ui_error_like">Falha ao favoritar posts: %1$s</string>
     <string name="ui_error_vote">Falha ao votar na enquete: %1$s</string>
     <string name="ui_error_accept_follow_request">Falha ao aceitar a solicitação para seguir: %1$s</string>
     <string name="ui_error_reject_follow_request">Falha ao rejeitar a solicitação para seguir: %1$s</string>
@@ -768,7 +768,7 @@
     </plurals>
     <string name="notification_info_reply">Resposta</string>
     <string name="action_accept_notification_request">Aceitar</string>
-    <string name="favourite_confirm">Favoritar este post?</string>
+    <string name="like_confirm">Favoritar este post?</string>
     <string name="report_problem_with_post">Qual é o problema com este post?</string>
     <string name="notification_info_private_mention">Menção privada</string>
     <string name="notification_info_mention">Menção</string>
@@ -781,8 +781,8 @@
     <string name="block_failure">Falha ao bloquear %1$s: %2$s</string>
     <string name="mute_failure">Falha ao silenciar %1$s: %2$s</string>
     <string name="unmute_failure">Falha ao dessilenciar %1$s: %2$s</string>
-    <string name="reblog_privacy_public_description">Todo mundo pode ver o seu impulso</string>
-    <string name="reblog_privacy_followers_only_description">Somente seus seguidores podem ver o seu impulso</string>
+    <string name="retweet_privacy_public_description">Todo mundo pode ver o seu impulso</string>
+    <string name="retweet_privacy_followers_only_description">Somente seus seguidores podem ver o seu impulso</string>
     <string name="edit_image_rotate">Girar</string>
     <string name="edit_image_flip">Inverter</string>
     <string name="edit_image_flip_horizontally">Inverter horizontalmente</string>

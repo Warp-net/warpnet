@@ -23,7 +23,7 @@
             android:layout_margin="16dp"
             android:lineSpacingMultiplier="1.1"
             android:textColor="@color/textColorPrimary"
-            android:textSize="?attr/status_text_medium"
+            android:textSize="?attr/tweet_text_medium"
             tools:text="@string/help_empty_home" />
 
     </com.google.android.material.card.MaterialCardView>
@@ -55,7 +55,7 @@
             android:paddingRight="16dp"
             android:text="@string/error_network"
             android:textAlignment="center"
-            android:textSize="?attr/status_text_medium" />
+            android:textSize="?attr/tweet_text_medium" />
 
         <Button
             android:id="@+id/button"

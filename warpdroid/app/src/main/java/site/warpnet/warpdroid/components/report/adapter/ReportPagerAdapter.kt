@@ -24,7 +24,7 @@ import site.warpnet.warpdroid.components.report.fragments.ReportCategoryFragment
 import site.warpnet.warpdroid.components.report.fragments.ReportDoneFragment
 import site.warpnet.warpdroid.components.report.fragments.ReportNoteFragment
 import site.warpnet.warpdroid.components.report.fragments.ReportRulesFragment
-import site.warpnet.warpdroid.components.report.fragments.ReportStatusesFragment
+import site.warpnet.warpdroid.components.report.fragments.ReportTweetsFragment
 
 class ReportPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
@@ -43,8 +43,8 @@ class ReportPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(acti
     override fun createFragment(position: Int): Fragment {
         return when (position) {
             0 -> ReportCategoryFragment.newInstance()
-            1 -> if (showRules) ReportRulesFragment.newInstance() else ReportStatusesFragment.newInstance()
-            2 -> if (showRules) ReportStatusesFragment.newInstance() else ReportNoteFragment.newInstance()
+            1 -> if (showRules) ReportRulesFragment.newInstance() else ReportTweetsFragment.newInstance()
+            2 -> if (showRules) ReportTweetsFragment.newInstance() else ReportNoteFragment.newInstance()
             3 -> if (showRules) ReportNoteFragment.newInstance() else ReportDoneFragment.newInstance()
             4 -> if (showRules) ReportDoneFragment.newInstance() else throw IllegalArgumentException("Unknown page index: $position")
             else -> throw IllegalArgumentException("Unknown page index: $position")

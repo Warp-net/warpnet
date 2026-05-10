@@ -21,7 +21,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ItemUnknownNotificationBinding
-import site.warpnet.warpdroid.util.StatusDisplayOptions
+import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 
 internal class UnknownNotificationViewHolder(
@@ -31,7 +31,7 @@ internal class UnknownNotificationViewHolder(
     override fun bind(
         viewData: NotificationViewData.Concrete,
         payloads: List<*>,
-        statusDisplayOptions: StatusDisplayOptions
+        statusDisplayOptions: TweetDisplayOptions
     ) {
         binding.unknownNotificationType.text = viewData.type.name
 

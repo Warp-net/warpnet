@@ -1,33 +1,33 @@
 <resources>
 
     <style name="TextSizeSmallest">
-        <item name="status_text_small">10sp</item>
-        <item name="status_text_medium">12sp</item>
-        <item name="status_text_large">14sp</item>
+        <item name="tweet_text_small">10sp</item>
+        <item name="tweet_text_medium">12sp</item>
+        <item name="tweet_text_large">14sp</item>
     </style>
 
     <style name="TextSizeSmall">
-        <item name="status_text_small">12sp</item>
-        <item name="status_text_medium">14sp</item>
-        <item name="status_text_large">16sp</item>
+        <item name="tweet_text_small">12sp</item>
+        <item name="tweet_text_medium">14sp</item>
+        <item name="tweet_text_large">16sp</item>
     </style>
 
     <style name="TextSizeMedium">
-        <item name="status_text_small">14sp</item>
-        <item name="status_text_medium">16sp</item>
-        <item name="status_text_large">18sp</item>
+        <item name="tweet_text_small">14sp</item>
+        <item name="tweet_text_medium">16sp</item>
+        <item name="tweet_text_large">18sp</item>
     </style>
 
     <style name="TextSizeLarge">
-        <item name="status_text_small">16sp</item>
-        <item name="status_text_medium">18sp</item>
-        <item name="status_text_large">20sp</item>
+        <item name="tweet_text_small">16sp</item>
+        <item name="tweet_text_medium">18sp</item>
+        <item name="tweet_text_large">20sp</item>
     </style>
 
     <style name="TextSizeLargest">
-        <item name="status_text_small">18sp</item>
-        <item name="status_text_medium">20sp</item>
-        <item name="status_text_large">22sp</item>
+        <item name="tweet_text_small">18sp</item>
+        <item name="tweet_text_medium">20sp</item>
+        <item name="tweet_text_large">22sp</item>
     </style>
 
     <style name="SplashTheme" parent="Theme.SplashScreen">
@@ -43,9 +43,9 @@
         <!-- Provide default text sizes. These are overwritten in BaseActivity, but
              if they are missing then the Android Studio layout preview crashes
              with java.lang.reflect.InvocationTargetException -->
-        <item name="status_text_small">14sp</item>
-        <item name="status_text_medium">16sp</item>
-        <item name="status_text_large">18sp</item>
+        <item name="tweet_text_small">14sp</item>
+        <item name="tweet_text_medium">16sp</item>
+        <item name="tweet_text_large">18sp</item>
 
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
@@ -83,7 +83,7 @@
         <item name="colorOutline">@color/iconColor</item>
         <item name="colorOutlineVariant">@color/dividerColor</item>
 
-        <item name="android:listDivider">@drawable/status_divider</item>
+        <item name="android:listDivider">@drawable/tweet_divider</item>
         <item name="dividerColor">@color/dividerColor</item>
 
         <item name="textColorDisabled">@color/textColorDisabled</item>

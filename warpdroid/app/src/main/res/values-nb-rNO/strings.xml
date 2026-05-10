@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Festet</string>
     <string name="title_follows">Følger</string>
     <string name="title_followers">Følgere</string>
-    <string name="title_favourites">Favoritter</string>
+    <string name="title_likes">Favoritter</string>
     <string name="title_mutes">Dempede brukere</string>
     <string name="title_blocks">Blokkerte brukere</string>
     <string name="title_follow_requests">Følgeforespørsler</string>
@@ -37,7 +37,7 @@
     <string name="title_drafts">Utkast</string>
     <string name="title_licenses">Lisenser</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s delte</string>
+    <string name="post_retweeted_format">%1$s delte</string>
     <string name="post_sensitive_media_title">Sensitivt innhold</string>
     <string name="post_media_hidden_title">Media skjult</string>
     <string name="post_sensitive_media_directions">Trykk for å vise</string>
@@ -46,17 +46,17 @@
     <string name="post_content_show_more">Utvid</string>
     <string name="post_content_show_less">Skjul</string>
     <string name="message_empty">Ingenting her.</string>
-    <string name="notification_reblog_format">%1$s delte innlegget ditt</string>
-    <string name="notification_favourite_format">%1$s favoriserte innlegget ditt</string>
+    <string name="notification_retweet_format">%1$s delte innlegget ditt</string>
+    <string name="notification_like_format">%1$s favoriserte innlegget ditt</string>
     <string name="notification_follow_format">%1$s følger deg</string>
     <string name="report_username_format">Rapporter @%1$s</string>
     <string name="report_comment_hint">Ytterligere kommentarer?</string>
     <string name="action_quick_reply">Hurtigsvar</string>
     <string name="action_reply">Svar</string>
-    <string name="action_reblog">Del</string>
-    <string name="action_unreblog">Fjern deling</string>
-    <string name="action_favourite">Legg til i favoritter</string>
-    <string name="action_unfavourite">Fjern favoritt</string>
+    <string name="action_retweet">Del</string>
+    <string name="action_unretweet">Fjern deling</string>
+    <string name="action_like">Legg til i favoritter</string>
+    <string name="action_unlike">Fjern favoritt</string>
     <string name="action_more">Mer</string>
     <string name="action_compose">Skriv</string>
     <string name="action_login">Logg inn med Warpnet</string>
@@ -66,8 +66,8 @@
     <string name="action_unfollow">Slutt å følge</string>
     <string name="action_block">Blokkér</string>
     <string name="action_unblock">Fjern blokkering</string>
-    <string name="action_hide_reblogs">Skjul delinger</string>
-    <string name="action_show_reblogs">Vis delte inlegg</string>
+    <string name="action_hide_retweets">Skjul delinger</string>
+    <string name="action_show_retweets">Vis delte inlegg</string>
     <string name="action_report">Rapporter</string>
     <string name="action_delete">Slett</string>
     <string name="action_send">TUT</string>
@@ -77,7 +77,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Innstillinger</string>
     <string name="action_view_account_preferences">Kontoinnstillinger</string>
-    <string name="action_view_favourites">Favoritter</string>
+    <string name="action_view_likes">Favoritter</string>
     <string name="action_view_mutes">Dempede brukere</string>
     <string name="action_view_blocks">Blokkerte brukere</string>
     <string name="action_view_follow_requests">Følgeforespørsler</string>
@@ -103,8 +103,8 @@
     <string name="action_content_warning">Innholdsadvarsel</string>
     <string name="action_emoji_keyboard">Emoji-tastatur</string>
     <string name="action_add_tab">Legg til fane</string>
-    <string name="action_open_reblogger">Åpne deler</string>
-    <string name="action_open_reblogged_by">Vis delinger</string>
+    <string name="action_open_retweeter">Åpne deler</string>
+    <string name="action_open_retweeted_by">Vis delinger</string>
     <string name="action_open_faved_by">Vis favoritter</string>
     <string name="title_hashtags_dialog">Stikkord</string>
     <string name="title_mentions_dialog">Nevnelser</string>
@@ -161,7 +161,7 @@
     <string name="pref_title_language">Språk</string>
     <string name="pref_title_post_filter">Tidslinjefiltrering</string>
     <string name="pref_title_post_tabs">Faner</string>
-    <string name="pref_title_show_boosts">Vis delinger</string>
+    <string name="pref_title_show_retweets">Vis delinger</string>
     <string name="pref_title_show_replies">Vis svar</string>
     <string name="pref_title_show_media_preview">Last ned forhåndsvisning av media</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -175,10 +175,10 @@
     <string name="pref_post_text_size">Størrelse på statustekst</string>
     <string name="notification_follow_name">Nye følgere</string>
     <string name="notification_follow_description">Varsler om nye følgere</string>
-    <string name="notification_boost_name">Delte innlegg</string>
-    <string name="notification_boost_description">Varsler når innleggene dine blir delt</string>
-    <string name="notification_favourite_name">Favoritter</string>
-    <string name="notification_favourite_description">Varsler når innleggene dine blir favorisert</string>
+    <string name="notification_retweet_name">Delte innlegg</string>
+    <string name="notification_retweet_description">Varsler når innleggene dine blir delt</string>
+    <string name="notification_like_name">Favoritter</string>
+    <string name="notification_like_description">Varsler når innleggene dine blir favorisert</string>
     <string name="notification_mention_format">%1$s nevnte deg</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s og %4$d andre</string>
     <string name="notification_summary_medium">%1$s, %2$s, og %3$s</string>
@@ -263,8 +263,8 @@
     <string name="download_failed">Nedlasting feilet</string>
     <string name="profile_badge_bot_text">Robot</string>
     <string name="account_moved_description">%1$s har flyttet til:</string>
-    <string name="reblog_private">Del til opprinnelig publikum</string>
-    <string name="unreblog_private">Fjern deling</string>
+    <string name="retweet_private">Del til opprinnelig publikum</string>
+    <string name="unretweet_private">Fjern deling</string>
     <string name="license_description">Warpnet inneholder programkode og elementer fra følgende åpen kildekode-prosjekter:</string>
     <string name="license_apache_2">Lisensiert under Apache License (kopi under)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
@@ -281,20 +281,20 @@
         <item quantity="one"><b>%1$s</b> Favoritt</item>
         <item quantity="other"><b>%1$s</b> Favoritter</item>
     </plurals>
-    <plurals name="reblogs">
+    <plurals name="retweets">
         <item quantity="one">Delt <b>%1$s</b> gang</item>
         <item quantity="other">Delt <b>%1$s</b> ganger</item>
     </plurals>
-    <string name="title_reblogged_by">Delt av</string>
-    <string name="title_favourited_by">Favorisert av</string>
+    <string name="title_retweeted_by">Delt av</string>
+    <string name="title_liked_by">Favorisert av</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s og %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s og %3$d fler</string>
     <string name="description_post_media">Media: %1$s</string>
     <string name="description_post_cw">Innholdsadvarsel: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Ingen beskrivelse</string>
-    <string name="description_post_reblogged">Reblogget</string>
-    <string name="description_post_favourited">Favorisert</string>
+    <string name="description_post_retweeted">Retweetget</string>
+    <string name="description_post_liked">Favorisert</string>
     <string name="description_visibility_public">Offentlig</string>
     <string name="description_visibility_unlisted">Ikke listet</string>
     <string name="description_visibility_private">Følgere</string>
@@ -406,7 +406,7 @@
     <string name="no_drafts">Du har ikke lagret noen utkast.</string>
     <string name="warning_scheduling_interval">Warpnet har et minimums planleggingsinterval på 5 minutter.</string>
     <string name="pref_title_show_cards_in_timelines">Vis forhåndsvisning av linker i tidslinjer</string>
-    <string name="pref_title_confirm_reblogs">Vis bekreftelser før deling</string>
+    <string name="pref_title_confirm_retweets">Vis bekreftelser før deling</string>
     <string name="pref_title_enable_swipe_for_tabs">Skru på sveiping for å bytte mellom faner</string>
     <plurals name="poll_info_people">
         <item quantity="one">%1$s person</item>
@@ -462,7 +462,7 @@
     <string name="dialog_delete_conversation_warning">Slett denne samtalen?</string>
     <string name="action_delete_conversation">Slett samtale</string>
     <string name="action_unbookmark">Fjern bokmerke</string>
-    <string name="pref_title_confirm_favourites">Vis bekreftelser når favoritt skal legges til</string>
+    <string name="pref_title_confirm_likes">Vis bekreftelser når favoritt skal legges til</string>
     <string name="duration_30_days">30 dager</string>
     <string name="duration_60_days">60 dager</string>
     <string name="duration_90_days">90 dager</string>
@@ -482,7 +482,7 @@
     <string name="action_details">Detaljer</string>
     <string name="account_date_joined">Ble med %1$s</string>
     <string name="saving_draft">Lagrer utkast…</string>
-    <string name="status_count_one_plus">1+</string>
+    <string name="tweet_count_one_plus">1+</string>
     <string name="action_edit_image">Rediger bilde</string>
     <string name="error_image_edit_failed">Bildet kunne ikke redigeres.</string>
     <string name="error_loading_account_details">Lasting av kontodetaljer feilet</string>
@@ -511,7 +511,7 @@
     <string name="pref_default_post_language">Standardspråk på innlegg</string>
     <string name="no_lists">Du har ingen lister.</string>
     <string name="language_display_name_format">%1$s (%2$s)</string>
-    <string name="status_created_at_now">nå</string>
+    <string name="tweet_created_at_now">nå</string>
     <string name="post_edited">Redigert %1$s</string>
     <string name="notification_summary_report_format">%1$s · %2$d innlegg vedlagt</string>
     <string name="notification_report_format">Ny rapport på %1$s</string>
@@ -545,8 +545,8 @@
     <string name="notification_prune_cache">Cache-vedlikehold…</string>
     <string name="mute_notifications_switch">Demp varsler</string>
     <string name="title_edits">Endringer</string>
-    <string name="status_created_info">Skapt: %1$s</string>
-    <string name="status_edit_info">Endret: %1$s</string>
+    <string name="tweet_created_info">Skapt: %1$s</string>
+    <string name="tweet_edit_info">Endret: %1$s</string>
     <string name="hint_media_description_missing">Media bør ha en beskrivelse.</string>
     <string name="action_refresh">Oppdater</string>
     <string name="post_media_image">Bilde</string>
@@ -578,9 +578,9 @@
     <string name="action_continue_edit">Fortsett endring</string>
     <string name="compose_unsaved_changes">Du har ulagrede endringer.</string>
     <string name="select_list_manage">Forvalte lister</string>
-    <string name="ui_error_reblog">Deling av innlegget feilet: %1$s</string>
+    <string name="ui_error_retweet">Deling av innlegget feilet: %1$s</string>
     <string name="ui_error_unknown">ukjent grunn</string>
-    <string name="ui_error_favourite">Favorisering av innlegg feilet: %1$s</string>
+    <string name="ui_error_like">Favorisering av innlegg feilet: %1$s</string>
     <string name="ui_error_vote">Stemming mislykkes: %1$s</string>
     <string name="filter_description_hide">Gjem helt</string>
     <string name="label_filter_action">Filterhandling</string>
@@ -592,8 +592,8 @@
     <string name="send_account_username_to">Del kontoens brukernavn med…</string>
     <string name="account_username_copied">Brukernavn kopiert</string>
     <string name="error_status_source_load">Kunne ikke laste status fra tjeneren.</string>
-    <string name="status_filtered_show_anyway">Vis likevel</string>
-    <string name="status_filter_placeholder_label_format">Filtrert: %1$s</string>
+    <string name="tweet_filtered_show_anyway">Vis likevel</string>
+    <string name="tweet_filter_placeholder_label_format">Filtrert: %1$s</string>
     <string name="pref_title_account_filter_keywords">Profiler</string>
     <string name="action_add">Legg til</string>
     <string name="filter_keyword_display_format">%1$s (helt ord)</string>
@@ -608,7 +608,7 @@
     <string name="load_newest_notifications">Last de nyeste varslene</string>
     <string name="compose_delete_draft">Del utkast?</string>
     <string name="error_missing_edits">Serveren din vet at denne posten ble endret, men har ingen kopi av entringene så de kann ikke vises. \u0020 \n \u0020 \nDette er <a href="https://github.com/Warp-net/warpnet/issues">Warpnet issue #25398</a>.</string>
-    <string name="pref_title_show_self_boosts">Vis selvompostinger</string>
+    <string name="pref_title_show_self_retweets">Vis selvompostinger</string>
     <string name="error_media_upload_sending_fmt">Opplasting feilet: %1$s</string>
     <string name="error_blocking_domain">Kunne ikke dempe %1$s: %2$s</string>
     <string name="error_unblocking_domain">Kunne ikke skru av dempingen av %1$s: %2$s</string>

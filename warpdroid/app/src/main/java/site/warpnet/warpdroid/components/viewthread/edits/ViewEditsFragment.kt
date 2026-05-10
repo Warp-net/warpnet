@@ -34,7 +34,7 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.databinding.FragmentViewEditsBinding
 import site.warpnet.warpdroid.interfaces.LinkListener
@@ -93,7 +93,7 @@ class ViewEditsFragment :
                     EditsUiState.Initial -> {}
                     EditsUiState.Loading -> {
                         binding.recyclerView.hide()
-                        binding.statusView.hide()
+                        binding.tweetView.hide()
                         binding.initialProgressBar.show()
                     }
                     EditsUiState.Refreshing -> {}
@@ -102,18 +102,18 @@ class ViewEditsFragment :
 
                         binding.swipeRefreshLayout.isRefreshing = false
                         binding.recyclerView.hide()
-                        binding.statusView.show()
+                        binding.tweetView.show()
                         binding.initialProgressBar.hide()
 
                         when (uiState.throwable) {
                             is ViewEditsViewModel.MissingEditsException -> {
-                                binding.statusView.setup(
+                                binding.tweetView.setup(
                                     R.drawable.elephant_friend_empty,
                                     R.string.error_missing_edits
                                 )
                             }
                             else -> {
-                                binding.statusView.setup(uiState.throwable) {
+                                binding.tweetView.setup(uiState.throwable) {
                                     viewModel.loadEdits(statusId, force = true)
                                 }
                             }
@@ -122,7 +122,7 @@ class ViewEditsFragment :
                     is EditsUiState.Success -> {
                         binding.swipeRefreshLayout.isRefreshing = false
                         binding.recyclerView.show()
-                        binding.statusView.hide()
+                        binding.tweetView.hide()
                         binding.initialProgressBar.hide()
 
                         binding.recyclerView.adapter = ViewEditsAdapter(
@@ -140,13 +140,13 @@ class ViewEditsFragment :
                         val account = uiState.edits.first().account
                         loadAvatar(
                             account.avatar,
-                            binding.statusAvatar,
+                            binding.tweetAvatar,
                             avatarRadius,
                             animateAvatars
                         )
 
-                        binding.statusDisplayName.text = account.name.unicodeWrap().emojify(account.emojis, binding.statusDisplayName, animateEmojis)
-                        binding.statusUsername.text = account.username
+                        binding.tweetDisplayName.text = account.name.unicodeWrap().emojify(account.emojis, binding.tweetDisplayName, animateEmojis)
+                        binding.tweetUsername.text = account.username
                     }
                 }
             }
@@ -187,7 +187,7 @@ class ViewEditsFragment :
 
     override fun onViewTag(tag: String) {
         bottomSheetActivity?.startActivityWithSlideInAnimation(
-            StatusListActivity.newHashtagIntent(requireContext(), tag)
+            TweetListActivity.newHashtagIntent(requireContext(), tag)
         )
     }
 

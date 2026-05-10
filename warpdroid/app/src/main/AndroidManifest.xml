@@ -111,7 +111,7 @@
         <activity android:name=".components.account.AccountActivity" />
         <activity android:name=".EditProfileActivity"/>
         <activity android:name=".components.preference.PreferencesActivity" />
-        <activity android:name=".StatusListActivity" />
+        <activity android:name=".TweetListActivity" />
         <activity android:name=".components.accountlist.AccountListActivity" />
         <activity android:name=".AboutActivity" />
         <activity android:name=".components.editimage.EditImageActivity" />
@@ -136,7 +136,7 @@
             android:name=".components.report.ReportActivity"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".components.domainblocks.DomainBlocksActivity" />
-        <activity android:name=".components.scheduled.ScheduledStatusActivity" />
+        <activity android:name=".components.scheduled.ScheduledTweetActivity" />
         <activity android:name=".components.announcements.AnnouncementsActivity" />
         <activity android:name="site.warpnet.warpdroid.components.filters.EditFilterActivity"
             android:windowSoftInputMode="adjustResize" />
@@ -149,7 +149,7 @@
         <activity android:name=".components.notifications.requests.details.NotificationRequestDetailsActivity"/>
 
         <receiver
-            android:name=".receiver.SendStatusBroadcastReceiver"
+            android:name=".receiver.SendTweetBroadcastReceiver"
             android:enabled="true"
             android:exported="false" />
         <service android:name=".receiver.UnifiedPushService"
@@ -180,7 +180,7 @@
             </intent-filter>
         </service>
 
-        <service android:name=".service.SendStatusService"
+        <service android:name=".service.SendTweetService"
             android:foregroundServiceType="shortService"
             android:exported="false" />
 

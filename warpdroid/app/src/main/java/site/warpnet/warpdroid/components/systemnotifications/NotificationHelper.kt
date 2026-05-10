@@ -56,7 +56,7 @@ import site.warpnet.warpdroid.entity.NotificationSubscribeResult
 import site.warpnet.warpdroid.entity.RelationshipSeveranceEvent
 import site.warpnet.warpdroid.entity.visibleNotificationTypes
 import site.warpnet.warpdroid.network.WarpnetApi
-import site.warpnet.warpdroid.receiver.SendStatusBroadcastReceiver
+import site.warpnet.warpdroid.receiver.SendTweetBroadcastReceiver
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.unicodeWrap
@@ -219,9 +219,9 @@ class NotificationHelper @Inject constructor(
             Notification.Type.Status -> account.notificationsSubscriptions
             Notification.Type.Follow -> account.notificationsFollowed
             Notification.Type.FollowRequest -> account.notificationsFollowRequested
-            Notification.Type.Reblog -> account.notificationsReblogged
+            Notification.Type.Retweet -> account.notificationsRetweeted
             Notification.Type.PleromaEmojiReaction,
-            Notification.Type.Favourite -> account.notificationsFavorited
+            Notification.Type.Like -> account.notificationsLiked
             Notification.Type.Poll -> account.notificationsPolls
             Notification.Type.SignUp -> account.notificationsAdmin
             Notification.Type.Update -> account.notificationsUpdates
@@ -495,9 +495,9 @@ class NotificationHelper @Inject constructor(
             Notification.Type.Status -> context.getString(R.string.notification_subscription_format, accountName)
             Notification.Type.Follow -> context.getString(R.string.notification_follow_format, accountName)
             Notification.Type.FollowRequest -> context.getString(R.string.notification_follow_request_format, accountName)
-            Notification.Type.Favourite -> context.getString(R.string.notification_favourite_format, accountName)
+            Notification.Type.Like -> context.getString(R.string.notification_like_format, accountName)
             Notification.Type.PleromaEmojiReaction -> context.getString(R.string.notification_pleroma_reaction_format, accountName)
-            Notification.Type.Reblog -> context.getString(R.string.notification_reblog_format, accountName)
+            Notification.Type.Retweet -> context.getString(R.string.notification_retweet_format, accountName)
             Notification.Type.Poll -> if (notification.status!!.account.id == account.accountId) {
                 context.getString(R.string.poll_ended_created)
             } else {
@@ -522,8 +522,8 @@ class NotificationHelper @Inject constructor(
             Notification.Type.FollowRequest,
             Notification.Type.SignUp -> return "@" + notification.account.username
             Notification.Type.Mention,
-            Notification.Type.Favourite,
-            Notification.Type.Reblog,
+            Notification.Type.Like,
+            Notification.Type.Retweet,
             Notification.Type.Status -> return if (!notification.status?.spoilerText.isNullOrEmpty() && !alwaysOpenSpoiler) {
                 notification.status.spoilerText
             } else {
@@ -657,7 +657,7 @@ class NotificationHelper @Inject constructor(
             remove(account.username)
         }
 
-        val replyIntent = Intent(context, SendStatusBroadcastReceiver::class.java)
+        val replyIntent = Intent(context, SendTweetBroadcastReceiver::class.java)
             .setAction(REPLY_ACTION)
             .putExtra(KEY_SENDER_ACCOUNT_ID, account.id)
             .putExtra(KEY_SENDER_ACCOUNT_IDENTIFIER, account.identifier)
@@ -700,7 +700,7 @@ class NotificationHelper @Inject constructor(
             replyVisibility = replyVisibility,
             contentWarning = contentWarning,
             replyingStatusAuthor = citedLocalAuthor,
-            replyingStatusContent = citedText,
+            replyingTweetContent = citedText,
             mentionedUsernames = mentionedUsernames,
             modifiedInitialState = true,
             language = actionableStatus.language,

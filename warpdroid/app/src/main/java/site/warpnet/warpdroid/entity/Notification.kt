@@ -26,7 +26,7 @@ data class Notification(
     val type: Type,
     val id: String,
     val account: TimelineAccount,
-    val status: Status? = null,
+    val status: Tweet? = null,
     val report: Report? = null,
     val filtered: Boolean = false,
     val event: RelationshipSeveranceEvent? = null,
@@ -43,11 +43,11 @@ data class Notification(
         /** Someone mentioned you */
         object Mention : Type("mention")
 
-        /** Someone boosted one of your statuses */
-        object Reblog : Type("reblog")
+        /** Someone retweeted one of your statuses */
+        object Retweet : Type("retweet")
 
-        /** Someone favourited one of your statuses */
-        object Favourite : Type("favourite")
+        /** Someone liked one of your statuses */
+        object Like : Type("like")
 
         /** Someone followed you */
         object Follow : Type("follow")
@@ -111,8 +111,8 @@ data class Notification(
  * which leds to crash since those subclasses are referenced here */
 val visibleNotificationTypes = listOf(
     Type.Mention,
-    Type.Reblog,
-    Type.Favourite,
+    Type.Retweet,
+    Type.Like,
     Type.PleromaEmojiReaction,
     Type.Follow,
     Type.FollowRequest,

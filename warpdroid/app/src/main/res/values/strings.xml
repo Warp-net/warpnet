@@ -67,7 +67,7 @@
     <string name="title_posts_pinned">Pinned</string>
     <string name="title_follows">Follows</string>
     <string name="title_followers">Followers</string>
-    <string name="title_favourites">Favorites</string>
+    <string name="title_likes">Likes</string>
     <string name="title_bookmarks">Bookmarks</string>
     <string name="title_mutes">Muted users</string>
     <string name="title_blocks">Blocked users</string>
@@ -85,7 +85,7 @@
     <string name="follow_hashtag_success">Followed hashtag %1$s</string>
 
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s boosted</string>
+    <string name="post_retweeted_format">%1$s retweeted</string>
     <string name="post_replied">Replied</string>
     <string name="post_replied_format">In reply to %1$s</string>
     <string name="post_replied_self">Continued thread</string>
@@ -101,8 +101,8 @@
 
     <string name="message_empty">Nothing here.</string>
 
-    <string name="notification_reblog_format">%1$s boosted your post</string>
-    <string name="notification_favourite_format">%1$s favorited your post</string>
+    <string name="notification_retweet_format">%1$s retweeted your post</string>
+    <string name="notification_like_format">%1$s liked your post</string>
     <string name="notification_pleroma_reaction_format">%1$s reacted to your post</string>
     <string name="notification_follow_format">%1$s followed you</string>
     <string name="notification_follow_request_format">%1$s requested to follow you</string>
@@ -121,13 +121,13 @@
 
     <string name="action_quick_reply">Quick Reply</string>
     <string name="action_reply">Reply</string>
-    <string name="action_reblog">Boost</string>
-    <string name="action_reblog_private">Followers-Only Boost</string>
-    <string name="action_reblog_public">Public Boost</string>
-    <string name="action_reblog_unlisted">Unlisted Boost</string>
-    <string name="action_unreblog">Remove boost</string>
-    <string name="action_favourite">Favorite</string>
-    <string name="action_unfavourite">Remove favorite</string>
+    <string name="action_retweet">Retweet</string>
+    <string name="action_retweet_private">Followers-Only Retweet</string>
+    <string name="action_retweet_public">Public Retweet</string>
+    <string name="action_retweet_unlisted">Unlisted Retweet</string>
+    <string name="action_unretweet">Remove retweet</string>
+    <string name="action_like">Like</string>
+    <string name="action_unlike">Remove like</string>
     <string name="action_bookmark">Bookmark</string>
     <string name="action_unbookmark">Remove bookmark</string>
     <string name="action_more">More</string>
@@ -151,10 +151,10 @@
     <string name="action_unblock">Unblock</string>
     <string name="action_share_account_link">Share link to account</string>
     <string name="action_share_account_username">Share username of account</string>
-    <string name="action_hide_reblogs">Hide boosts</string>
-    <string name="action_show_reblogs">Show boosts</string>
-    <string name="pref_title_show_self_boosts">Show self-boosts</string>
-    <string name="pref_title_show_self_boosts_description">Someone boosting their own post</string>
+    <string name="action_hide_retweets">Hide retweets</string>
+    <string name="action_show_retweets">Show retweets</string>
+    <string name="pref_title_show_self_retweets">Show self-retweets</string>
+    <string name="pref_title_show_self_retweets_description">Someone retweeting their own post</string>
     <string name="action_report">Report</string>
     <string name="action_edit">Edit</string>
     <string name="action_delete">Delete</string>
@@ -162,14 +162,14 @@
     <string name="action_delete_and_redraft">Delete and re-draft</string>
     <string name="action_discard">Discard changes</string>
     <string name="action_continue_edit">Continue editing</string>
-    <string name="action_send">TOOT</string>
-    <string name="action_send_public">TOOT!</string>
+    <string name="action_send">TWEET</string>
+    <string name="action_send_public">TWEET!</string>
     <string name="action_retry">Retry</string>
     <string name="action_close">Close</string>
     <string name="action_view_profile">Profile</string>
     <string name="action_view_preferences">Preferences</string>
     <string name="action_view_account_preferences">Account preferences</string>
-    <string name="action_view_favourites">Favorites</string>
+    <string name="action_view_likes">Likes</string>
     <string name="action_view_bookmarks">Bookmarks</string>
     <string name="action_view_mutes">Muted users</string>
     <string name="action_view_blocks">Blocked users</string>
@@ -208,9 +208,9 @@
     <string name="action_reset_schedule">Reset</string>
     <string name="action_add_tab">Add Tab</string>
     <string name="action_follow_hashtag">Follow a new hashtag</string>
-    <string name="action_open_reblogger">Open boost author</string>
-    <string name="action_open_reblogged_by">Show boosts</string>
-    <string name="action_open_faved_by">Show favorites</string>
+    <string name="action_open_retweeter">Open retweet author</string>
+    <string name="action_open_retweeted_by">Show retweets</string>
+    <string name="action_open_faved_by">Show likes</string>
     <string name="action_dismiss">Dismiss</string>
     <string name="action_details">Details</string>
     <string name="action_add_reaction">add reaction</string>
@@ -320,7 +320,7 @@
 
     <string name="pref_title_post_filter">Timeline filtering</string>
     <string name="pref_title_post_tabs">Home timeline</string>
-    <string name="pref_title_show_boosts">Show boosts</string>
+    <string name="pref_title_show_retweets">Show retweets</string>
     <string name="pref_title_show_replies">Show replies</string>
     <string name="pref_title_show_media_preview">Download media previews</string>
     <string name="pref_title_proxy_settings">Proxy</string>
@@ -376,10 +376,10 @@
     <string name="notification_follow_description">Notifications about new followers</string>
     <string name="notification_follow_request_name">Follow requests</string>
     <string name="notification_follow_request_description">Notifications about follow requests</string>
-    <string name="notification_boost_name">Boosts</string>
-    <string name="notification_boost_description">Notifications when your posts get boosted</string>
-    <string name="notification_favourite_name">Favorites</string>
-    <string name="notification_favourite_description">Notifications when your posts get marked as favorite</string>
+    <string name="notification_retweet_name">Retweets</string>
+    <string name="notification_retweet_description">Notifications when your posts get retweeted</string>
+    <string name="notification_like_name">Likes</string>
+    <string name="notification_like_description">Notifications when your posts get a like</string>
     <string name="notification_poll_name">Poll results</string>
     <string name="notification_poll_description">Notifications about polls that have ended</string>
     <string name="notification_subscription_name">New posts</string>
@@ -447,10 +447,10 @@
     <string name="post_media_video">Video</string>
     <string name="post_media_audio">Audio</string>
     <string name="post_media_attachments">Attachments</string>
-    <string name="status_count_one_plus">1+</string>
-    <string name="status_created_at_now">now</string>
-    <string name="status_filtered_show_anyway">Show anyway</string>
-    <string name="status_filter_placeholder_label_format">Filtered: %1$s</string>
+    <string name="tweet_count_one_plus">1+</string>
+    <string name="tweet_created_at_now">now</string>
+    <string name="tweet_filtered_show_anyway">Show anyway</string>
+    <string name="tweet_filter_placeholder_label_format">Filtered: %1$s</string>
 
     <string name="state_follow_requested">Follow requested</string>
 
@@ -542,8 +542,8 @@
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s has moved to:</string>
 
-    <string name="reblog_private">Boost to original audience</string>
-    <string name="unreblog_private">Unboost</string>
+    <string name="retweet_private">Retweet to original audience</string>
+    <string name="unretweet_private">Unretweet</string>
 
     <string name="license_description">Warpdroid contains code and assets from the following open source projects:</string>
     <string name="license_apache_2">Licensed under the Apache License (copy below)</string>
@@ -570,13 +570,13 @@
     </plurals>
 
     <plurals name="favs">
-        <item quantity="one">%1$s Favorite</item>
-        <item quantity="other">%1$s Favorites</item>
+        <item quantity="one">%1$s Like</item>
+        <item quantity="other">%1$s Likes</item>
     </plurals>
 
-    <plurals name="reblogs">
-        <item quantity="one">%1$s Boost</item>
-        <item quantity="other">%1$s Boosts</item>
+    <plurals name="retweets">
+        <item quantity="one">%1$s Retweet</item>
+        <item quantity="other">%1$s Retweets</item>
     </plurals>
 
     <plurals name="quotes">
@@ -592,8 +592,8 @@
     <string name="label_translating">Translating…</string>
     <string name="label_translated">Translated from %1$s with %2$s</string>
 
-    <string name="title_reblogged_by">Boosted by</string>
-    <string name="title_favourited_by">Favorited by</string>
+    <string name="title_retweeted_by">Retweeted by</string>
+    <string name="title_liked_by">Liked by</string>
 
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s and %2$s</string>
@@ -611,11 +611,11 @@
     <string name="description_post_edited">
         Edited
     </string>
-    <string name="description_post_reblogged">
-        Reblogged
+    <string name="description_post_retweeted">
+        Retweeted
     </string>
-    <string name="description_post_favourited">
-        Favorited
+    <string name="description_post_liked">
+        Liked
     </string>
     <string name="description_post_bookmarked">
         Bookmarked
@@ -749,8 +749,8 @@
     <string name="warning_scheduling_interval">Scheduled posts have a minimum interval of 5 minutes.</string>
     <string name="pref_title_show_self_username">Show username in toolbars</string>
     <string name="pref_title_show_cards_in_timelines">Show link previews in timelines</string>
-    <string name="pref_title_confirm_reblogs">Show confirmation before boosting</string>
-    <string name="pref_title_confirm_favourites">Show confirmation before favoriting</string>
+    <string name="pref_title_confirm_retweets">Show confirmation before retweeting</string>
+    <string name="pref_title_confirm_likes">Show confirmation before liking</string>
     <string name="pref_title_confirm_follows">Show confirmation before following</string>
     <string name="pref_title_hide_top_toolbar">Hide the title of the top toolbar</string>
     <string name="pref_title_wellbeing_mode">Wellbeing</string>
@@ -758,8 +758,8 @@
     <string name="account_note_saved">Saved!</string>
 
     <string name="wellbeing_mode_notice">Some information that might affect your mental wellbeing will be hidden. This includes:
-\n\n- Favorite/Boost/Follow notifications
-\n- Favorite/Boost count on posts
+\n\n- Like/Retweet/Follow notifications
+\n- Like/Retweet count on posts
 \n- Follower/Post stats on profiles
 \n\nPush-notifications will not be affected, but you can review your notification preferences manually.</string>
     <string name="review_notifications">Review Notifications</string>
@@ -808,8 +808,8 @@
     <string name="pref_reading_order_oldest_first">Oldest first</string>
     <string name="pref_reading_order_newest_first">Newest first</string>
 
-    <string name="status_edit_info">Edited: %1$s</string>
-    <string name="status_created_info">Created: %1$s</string>
+    <string name="tweet_edit_info">Edited: %1$s</string>
+    <string name="tweet_created_info">Created: %1$s</string>
     <string name="error_missing_edits">Your server knows that this post was edited, but does not have a copy of the edits, so they can\'t be shown to you.\n\nThis is <a href="https://github.com/warpnet/warpnet/issues/25398">an upstream protocol limitation</a>.</string>
     <string name="a11y_label_loading_thread">Loading thread</string>
 
@@ -825,8 +825,8 @@
     <string name="ui_error_unknown">unknown reason</string>
     <string name="ui_error_bookmark">Bookmarking post failed: %1$s</string>
     <string name="ui_error_clear_notifications">Clearing notifications failed: %1$s</string>
-    <string name="ui_error_favourite">Favoriting post failed: %1$s</string>
-    <string name="ui_error_reblog">Boosting post failed: %1$s</string>
+    <string name="ui_error_like">Liking post failed: %1$s</string>
+    <string name="ui_error_retweet">Retweeting post failed: %1$s</string>
     <string name="ui_error_vote">Voting in poll failed: %1$s</string>
     <string name="ui_error_accept_follow_request">Accepting follow request failed: %1$s</string>
     <string name="ui_error_reject_follow_request">Rejecting follow request failed: %1$s</string>
@@ -950,12 +950,12 @@
     <string name="accept_follow_request_failure">Failed accepting follow request from %1$s: %2$s</string>
     <string name="reject_follow_request_failure">Failed rejecting follow request from %1$s: %2$s</string>
 
-    <string name="reblog_privacy_public_description">Everyone can see your boost</string>
-    <string name="reblog_privacy_unlisted_description">Same as public but it will never be shown in public timelines</string>
-    <string name="reblog_privacy_followers_only_description">Only your followers can see your boost</string>
+    <string name="retweet_privacy_public_description">Everyone can see your retweet</string>
+    <string name="retweet_privacy_unlisted_description">Same as public but it will never be shown in public timelines</string>
+    <string name="retweet_privacy_followers_only_description">Only your followers can see your retweet</string>
 
-    <string name="reblog_confirm">Boost this post?</string>
-    <string name="favourite_confirm">Favorite this post?</string>
+    <string name="retweet_confirm">Retweet this post?</string>
+    <string name="like_confirm">Like this post?</string>
 
     <string name="edit_image_rotate">Rotate</string>
     <string name="edit_image_flip">Flip</string>

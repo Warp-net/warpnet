@@ -65,7 +65,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.EditProfileActivity
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.ViewMediaActivity
 import site.warpnet.warpdroid.components.account.list.ListSelectionFragment
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
@@ -123,7 +123,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private var blocking: Boolean = false
     private var muting: Boolean = false
     private var blockingDomain: Boolean = false
-    private var showingReblogs: Boolean = false
+    private var showingRetweets: Boolean = false
     private var subscribing: Boolean = false
     private var loadedAccount: Account? = null
 
@@ -687,7 +687,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         blocking = relation.blocking
         muting = relation.muting
         blockingDomain = relation.blockingDomain
-        showingReblogs = relation.showingReblogs
+        showingRetweets = relation.showingRetweets
 
         binding.accountFollowsYouTextView.visible(relation.followedBy)
 
@@ -834,21 +834,21 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             }
 
             if (followState == FollowState.FOLLOWING) {
-                val showReblogs = menu.findItem(R.id.action_show_reblogs)
-                showReblogs.title = if (showingReblogs) {
-                    getString(R.string.action_hide_reblogs)
+                val showRetweets = menu.findItem(R.id.action_show_retweets)
+                showRetweets.title = if (showingRetweets) {
+                    getString(R.string.action_hide_retweets)
                 } else {
-                    getString(R.string.action_show_reblogs)
+                    getString(R.string.action_show_retweets)
                 }
             } else {
-                menu.removeItem(R.id.action_show_reblogs)
+                menu.removeItem(R.id.action_show_retweets)
             }
         } else {
             // It shouldn't be possible to block, mute or report yourself.
             menu.removeItem(R.id.action_block)
             menu.removeItem(R.id.action_mute)
             menu.removeItem(R.id.action_mute_domain)
-            menu.removeItem(R.id.action_show_reblogs)
+            menu.removeItem(R.id.action_show_retweets)
             menu.removeItem(R.id.action_report)
         }
 
@@ -938,7 +938,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     }
 
     override fun onViewTag(tag: String) {
-        val intent = StatusListActivity.newHashtagIntent(this, tag)
+        val intent = TweetListActivity.newHashtagIntent(this, tag)
         startActivityWithSlideInAnimation(intent)
     }
 
@@ -1024,8 +1024,8 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                 toggleBlockDomain(domain)
                 return true
             }
-            R.id.action_show_reblogs -> {
-                viewModel.changeShowReblogsState()
+            R.id.action_show_retweets -> {
+                viewModel.changeShowRetweetsState()
                 return true
             }
             R.id.action_refresh -> {

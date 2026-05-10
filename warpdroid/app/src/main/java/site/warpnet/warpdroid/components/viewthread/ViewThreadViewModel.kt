@@ -26,19 +26,19 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.PollVoteEvent
-import site.warpnet.warpdroid.appstore.StatusChangedEvent
-import site.warpnet.warpdroid.appstore.StatusComposedEvent
-import site.warpnet.warpdroid.appstore.StatusDeletedEvent
+import site.warpnet.warpdroid.appstore.TweetChangedEvent
+import site.warpnet.warpdroid.appstore.TweetComposedEvent
+import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Poll
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.ui.SnackbarError
 import site.warpnet.warpdroid.util.toViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import site.warpnet.warpdroid.viewdata.TranslationViewData
-import site.warpnet.warpdroid.viewmodel.StatusActionsViewModel
+import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -60,7 +60,7 @@ class ViewThreadViewModel @AssistedInject constructor(
     private val eventHub: EventHub,
     accountManager: AccountManager,
     @Assisted("threadId") val threadId: String
-) : StatusActionsViewModel(api, eventHub) {
+) : TweetActionsViewModel(api, eventHub) {
 
     private val activeAccount = accountManager.activeAccount!!
 
@@ -78,11 +78,11 @@ class ViewThreadViewModel @AssistedInject constructor(
             eventHub.events
                 .collect { event ->
                     when (event) {
-                        is StatusChangedEvent -> handleStatusChangedEvent(event.status)
+                        is TweetChangedEvent -> handleTweetChangedEvent(event.status)
                         is PollVoteEvent -> handlePollVotedEvent(event.statusId, event.poll)
                         is BlockEvent -> removeAllByAccountId(event.accountId)
-                        is StatusComposedEvent -> handleStatusComposedEvent(event)
-                        is StatusDeletedEvent -> removeStatus(event.statusId)
+                        is TweetComposedEvent -> handleTweetComposedEvent(event)
+                        is TweetDeletedEvent -> removeStatus(event.statusId)
                     }
                 }
         }
@@ -141,7 +141,7 @@ class ViewThreadViewModel @AssistedInject constructor(
             }
 
             // let other views know about possible changes to the loaded status
-            eventHub.dispatch(StatusChangedEvent(detailedStatus.status))
+            eventHub.dispatch(TweetChangedEvent(detailedStatus.status))
 
             val contextResult = contextCall.await()
 
@@ -186,7 +186,7 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    fun showPollResults(status: StatusViewData.Concrete) = viewModelScope.launch {
+    fun showPollResults(status: TweetViewData.Concrete) = viewModelScope.launch {
         updateStatus(status.id) { it.copy(poll = it.poll?.copy(voted = true)) }
     }
 
@@ -198,16 +198,16 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    fun changeExpanded(expanded: Boolean, status: StatusViewData.Concrete) {
+    fun changeExpanded(expanded: Boolean, status: TweetViewData.Concrete) {
         updateSuccess { uiState ->
             val statuses = uiState.statusViewData.map { viewData ->
                 if (viewData.id == status.id) {
                     viewData.copy(isExpanded = expanded)
                 } else {
-                    if (viewData.quote?.quotedStatusViewData?.id == status.id) {
+                    if (viewData.quote?.quotedTweetViewData?.id == status.id) {
                         viewData.copy(
                             quote = viewData.quote.copy(
-                                quotedStatusViewData = viewData.quote.quotedStatusViewData.copy(isExpanded = expanded)
+                                quotedTweetViewData = viewData.quote.quotedTweetViewData.copy(isExpanded = expanded)
                             )
                         )
                     } else {
@@ -222,44 +222,44 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    fun changeContentShowing(isShowing: Boolean, status: StatusViewData.Concrete) {
-        updateStatusViewData(status.id) { viewData ->
+    fun changeContentShowing(isShowing: Boolean, status: TweetViewData.Concrete) {
+        updateTweetViewData(status.id) { viewData ->
             viewData.copy(isShowingContent = isShowing)
         }
     }
 
-    fun changeContentCollapsed(isCollapsed: Boolean, status: StatusViewData.Concrete) {
-        updateStatusViewData(status.id) { viewData ->
+    fun changeContentCollapsed(isCollapsed: Boolean, status: TweetViewData.Concrete) {
+        updateTweetViewData(status.id) { viewData ->
             viewData.copy(isCollapsed = isCollapsed)
         }
     }
 
-    suspend fun translate(status: StatusViewData.Concrete): NetworkResult<Unit> {
-        updateStatusViewData(status.id) { viewData ->
+    suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit> {
+        updateTweetViewData(status.id) { viewData ->
             viewData.copy(translation = TranslationViewData.Loading)
         }
         return api.translate(status.id, Locale.getDefault().language)
             .map { translation ->
-                updateStatusViewData(status.id) { viewData ->
+                updateTweetViewData(status.id) { viewData ->
                     viewData.copy(translation = TranslationViewData.Loaded(translation))
                 }
             }
             .onFailure {
-                updateStatusViewData(status.id) { viewData ->
+                updateTweetViewData(status.id) { viewData ->
                     viewData.copy(translation = null)
                 }
             }
     }
 
-    fun untranslate(status: StatusViewData.Concrete) {
-        updateStatusViewData(status.id) { viewData ->
+    fun untranslate(status: TweetViewData.Concrete) {
+        updateTweetViewData(status.id) { viewData ->
             viewData.copy(translation = null)
         }
     }
 
-    private fun handleStatusChangedEvent(status: Status) {
-        updateStatusViewData(status.id) { viewData ->
-            val oldQuoteViewData = viewData.quote?.quotedStatusViewData
+    private fun handleTweetChangedEvent(status: Tweet) {
+        updateTweetViewData(status.id) { viewData ->
+            val oldQuoteViewData = viewData.quote?.quotedTweetViewData
             status.toViewData(
                 isShowingContent = viewData.isShowingContent,
                 isExpanded = viewData.isExpanded,
@@ -294,7 +294,7 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    private fun handleStatusComposedEvent(event: StatusComposedEvent) {
+    private fun handleTweetComposedEvent(event: TweetComposedEvent) {
         val eventStatus = event.status
         updateSuccess { uiState ->
             val statuses = uiState.statusViewData
@@ -335,7 +335,7 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    private fun StatusViewData.Concrete.getRevealButtonState(): RevealButtonState {
+    private fun TweetViewData.Concrete.getRevealButtonState(): RevealButtonState {
         val hasWarnings = status.spoilerText.isNotEmpty()
 
         return if (hasWarnings) {
@@ -356,7 +356,7 @@ class ViewThreadViewModel @AssistedInject constructor(
      * - If no status sets it to REVEAL, but at least one uses HIDE, use HIDE
      * - Otherwise use NO_BUTTON
      */
-    private fun List<StatusViewData.Concrete>.getRevealButtonState(): RevealButtonState {
+    private fun List<TweetViewData.Concrete>.getRevealButtonState(): RevealButtonState {
         var seenHide = false
 
         forEach {
@@ -374,7 +374,7 @@ class ViewThreadViewModel @AssistedInject constructor(
         return RevealButtonState.NO_BUTTON
     }
 
-    private fun List<StatusViewData.Concrete>.filter(): List<StatusViewData.Concrete> {
+    private fun List<TweetViewData.Concrete>.filter(): List<TweetViewData.Concrete> {
         return filter { status ->
             if (status.isDetailed || status.status.account.id == activeAccount.accountId) {
                 true
@@ -384,11 +384,11 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    private fun Status.toViewData(isDetailed: Boolean = false): StatusViewData.Concrete {
+    private fun Tweet.toViewData(isDetailed: Boolean = false): TweetViewData.Concrete {
         val oldStatus = (_uiState.value as? ThreadUiState.Success)?.statusViewData?.find {
             it.id == this.id
         }
-        val oldQuoteViewData = oldStatus?.quote?.quotedStatusViewData
+        val oldQuoteViewData = oldStatus?.quote?.quotedTweetViewData
         return toViewData(
             isShowingContent = oldStatus?.isShowingContent ?: actionableStatus.shouldShowContent(alwaysShowSensitiveMedia, Filter.Kind.THREAD),
             isExpanded = oldStatus?.isExpanded ?: alwaysOpenSpoiler,
@@ -415,9 +415,9 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    private fun updateStatusViewData(
+    private fun updateTweetViewData(
         statusId: String,
-        updater: (StatusViewData.Concrete) -> StatusViewData.Concrete
+        updater: (TweetViewData.Concrete) -> TweetViewData.Concrete
     ) {
         updateSuccess { uiState ->
             uiState.copy(
@@ -425,10 +425,10 @@ class ViewThreadViewModel @AssistedInject constructor(
                     if (viewData.id == statusId) {
                         updater(viewData)
                     } else {
-                        if (viewData.quote?.quotedStatusViewData?.id == statusId) {
+                        if (viewData.quote?.quotedTweetViewData?.id == statusId) {
                             viewData.copy(
                                 quote = viewData.quote.copy(
-                                    quotedStatusViewData = updater(viewData.quote.quotedStatusViewData)
+                                    quotedTweetViewData = updater(viewData.quote.quotedTweetViewData)
                                 )
                             )
                         } else {
@@ -440,24 +440,24 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    private fun updateStatus(statusId: String, updater: (Status) -> Status) {
-        updateStatusViewData(statusId) { viewData ->
+    private fun updateStatus(statusId: String, updater: (Tweet) -> Tweet) {
+        updateTweetViewData(statusId) { viewData ->
             viewData.copy(
                 status = updater(viewData.status)
             )
         }
     }
 
-    fun changeFilter(filtered: Boolean, viewData: StatusViewData.Concrete) {
-        updateStatusViewData(viewData.id) { viewData ->
+    fun changeFilter(filtered: Boolean, viewData: TweetViewData.Concrete) {
+        updateTweetViewData(viewData.id) { viewData ->
             viewData.copy(
                 filterActive = filtered
             )
         }
     }
 
-    fun showQuote(viewData: StatusViewData.Concrete) {
-        updateStatusViewData(viewData.id) {
+    fun showQuote(viewData: TweetViewData.Concrete) {
+        updateTweetViewData(viewData.id) {
             it.copy(
                 quote = it.quote?.copy(quoteShown = true)
             )
@@ -494,13 +494,13 @@ sealed interface ThreadUiState {
 
     /** Successfully loaded the full thread */
     data class Success(
-        val statusViewData: List<StatusViewData.Concrete>,
+        val statusViewData: List<TweetViewData.Concrete>,
         val isRefreshing: Boolean,
         val isloadingThread: Boolean,
         override val revealButton: RevealButtonState
     ) : ThreadUiState {
-        val ancestors: List<StatusViewData.Concrete>
-            get(): List<StatusViewData.Concrete> {
+        val ancestors: List<TweetViewData.Concrete>
+            get(): List<TweetViewData.Concrete> {
                 val indexOfDetailed = statusViewData.indexOfFirst { it.isDetailed }
                 return if (indexOfDetailed > 0) {
                     statusViewData.take(indexOfDetailed)
@@ -508,8 +508,8 @@ sealed interface ThreadUiState {
                     emptyList()
                 }
             }
-        val descendants: List<StatusViewData.Concrete>
-            get(): List<StatusViewData.Concrete> {
+        val descendants: List<TweetViewData.Concrete>
+            get(): List<TweetViewData.Concrete> {
                 val indexOfDetailed = statusViewData.indexOfFirst { it.isDetailed }
                 return if (indexOfDetailed < statusViewData.size - 1) {
                     statusViewData.takeLast(statusViewData.size - indexOfDetailed - 1)
@@ -517,7 +517,7 @@ sealed interface ThreadUiState {
                     emptyList()
                 }
             }
-        val detailedStatus: StatusViewData.Concrete
+        val detailedStatus: TweetViewData.Concrete
             get() = statusViewData.first { it.isDetailed }
     }
 }

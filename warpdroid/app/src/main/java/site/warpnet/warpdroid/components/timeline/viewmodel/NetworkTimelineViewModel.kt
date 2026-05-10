@@ -33,8 +33,8 @@ import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
 import site.warpnet.warpdroid.appstore.PollShowResultsEvent
 import site.warpnet.warpdroid.appstore.PollVoteEvent
-import site.warpnet.warpdroid.appstore.StatusChangedEvent
-import site.warpnet.warpdroid.appstore.StatusDeletedEvent
+import site.warpnet.warpdroid.appstore.TweetChangedEvent
+import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.appstore.UnfollowEvent
 import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingOrder.NEWEST_FIRST
 import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingOrder.OLDEST_FIRST
@@ -42,13 +42,13 @@ import site.warpnet.warpdroid.components.timeline.util.ifExpected
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Quote
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.getDomain
 import site.warpnet.warpdroid.util.isLessThan
 import site.warpnet.warpdroid.util.isLessThanOrEqual
 import site.warpnet.warpdroid.util.toViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import site.warpnet.warpdroid.viewdata.TranslationViewData
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.IOException
@@ -80,7 +80,7 @@ class NetworkTimelineViewModel @Inject constructor(
 
     var currentSource: NetworkTimelinePagingSource? = null
 
-    val statusData: MutableList<StatusViewData> = mutableListOf()
+    val statusData: MutableList<TweetViewData> = mutableListOf()
 
     var nextKey: String? = null
 
@@ -115,7 +115,7 @@ class NetworkTimelineViewModel @Inject constructor(
 
     private fun handleEvent(event: Event) {
         when (event) {
-            is StatusChangedEvent -> handleStatusChangedEvent(event.status)
+            is TweetChangedEvent -> handleTweetChangedEvent(event.status)
             is PollVoteEvent -> handlePollVote(event.statusId, event.poll)
             is PollShowResultsEvent -> handlePollShowResults(event.statusId)
             is UnfollowEvent -> {
@@ -142,7 +142,7 @@ class NetworkTimelineViewModel @Inject constructor(
                     removeAllByInstance(instance)
                 }
             }
-            is StatusDeletedEvent -> {
+            is TweetDeletedEvent -> {
                 if (kind != Kind.USER && kind != Kind.USER_WITH_REPLIES && kind != Kind.USER_PINNED) {
                     removeStatusWithId(event.statusId)
                 }
@@ -150,19 +150,19 @@ class NetworkTimelineViewModel @Inject constructor(
         }
     }
 
-    override fun changeExpanded(expanded: Boolean, status: StatusViewData.Concrete) {
+    override fun changeExpanded(expanded: Boolean, status: TweetViewData.Concrete) {
         status.copy(
             isExpanded = expanded
         ).update()
     }
 
-    override fun changeContentShowing(isShowing: Boolean, status: StatusViewData.Concrete) {
+    override fun changeContentShowing(isShowing: Boolean, status: TweetViewData.Concrete) {
         status.copy(
             isShowingContent = isShowing
         ).update()
     }
 
-    override fun changeContentCollapsed(isCollapsed: Boolean, status: StatusViewData.Concrete) {
+    override fun changeContentCollapsed(isCollapsed: Boolean, status: TweetViewData.Concrete) {
         status.copy(
             isCollapsed = isCollapsed
         ).update()
@@ -187,7 +187,7 @@ class NetworkTimelineViewModel @Inject constructor(
     override fun removeStatusWithId(id: String) {
         statusData.removeAll { vd ->
             val status = vd.asStatusOrNull()?.status ?: return@removeAll false
-            status.id == id || status.reblog?.id == id
+            status.id == id || status.retweet?.id == id
         }
         currentSource?.invalidate()
     }
@@ -196,9 +196,9 @@ class NetworkTimelineViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val placeholderIndex =
-                    statusData.indexOfFirst { it is StatusViewData.LoadMore && it.id == placeholderId }
+                    statusData.indexOfFirst { it is TweetViewData.LoadMore && it.id == placeholderId }
                 statusData[placeholderIndex] =
-                    StatusViewData.LoadMore(placeholderId, isLoading = true)
+                    TweetViewData.LoadMore(placeholderId, isLoading = true)
                 currentSource?.invalidate()
 
                 val idAbovePlaceholder = statusData.getOrNull(placeholderIndex - 1)?.id
@@ -218,7 +218,7 @@ class NetworkTimelineViewModel @Inject constructor(
                 statusData.removeAt(placeholderIndex)
 
                 val activeAccount = accountManager.activeAccount!!
-                val data: MutableList<StatusViewData> = statuses.map { status ->
+                val data: MutableList<TweetViewData> = statuses.map { status ->
                     status.toViewData(
                         isShowingContent = status.shouldShowContent(activeAccount.alwaysShowSensitiveMedia, kind.toFilterKind()),
                         isExpanded = activeAccount.alwaysOpenSpoiler,
@@ -266,10 +266,10 @@ class NetworkTimelineViewModel @Inject constructor(
                     } else {
                         when (readingOrder) {
                             OLDEST_FIRST -> {
-                                data[0] = StatusViewData.LoadMore(statuses.first().id, isLoading = false)
+                                data[0] = TweetViewData.LoadMore(statuses.first().id, isLoading = false)
                             }
                             NEWEST_FIRST -> {
-                                data[data.size - 1] = StatusViewData.LoadMore(statuses.last().id, isLoading = false)
+                                data[data.size - 1] = TweetViewData.LoadMore(statuses.last().id, isLoading = false)
                             }
                         }
                         statusData.addAll(placeholderIndex, data)
@@ -289,13 +289,13 @@ class NetworkTimelineViewModel @Inject constructor(
         Log.w("NetworkTimelineVM", "failed loading statuses", e)
 
         val index =
-            statusData.indexOfFirst { it is StatusViewData.LoadMore && it.id == placeholderId }
-        statusData[index] = StatusViewData.LoadMore(placeholderId, isLoading = false)
+            statusData.indexOfFirst { it is TweetViewData.LoadMore && it.id == placeholderId }
+        statusData[index] = TweetViewData.LoadMore(placeholderId, isLoading = false)
 
         currentSource?.invalidate()
     }
 
-    private fun handleStatusChangedEvent(status: Status) {
+    private fun handleTweetChangedEvent(status: Tweet) {
         updateStatusByActionableId(status.id) { status }
     }
 
@@ -312,16 +312,16 @@ class NetworkTimelineViewModel @Inject constructor(
     }
 
     override fun fullReload() {
-        nextKey = statusData.firstOrNull { it is StatusViewData.Concrete }?.asStatusOrNull()?.id
+        nextKey = statusData.firstOrNull { it is TweetViewData.Concrete }?.asStatusOrNull()?.id
         statusData.clear()
         currentSource?.invalidate()
     }
 
-    override fun changeFilter(filtered: Boolean, status: StatusViewData.Concrete) {
+    override fun changeFilter(filtered: Boolean, status: TweetViewData.Concrete) {
         status.copy(filterActive = filtered).update()
     }
 
-    override fun showQuote(status: StatusViewData.Concrete) {
+    override fun showQuote(status: TweetViewData.Concrete) {
         status.copy(
             quote = status.quote?.copy(
                 quoteShown = true
@@ -337,7 +337,7 @@ class NetworkTimelineViewModel @Inject constructor(
         currentSource?.invalidate()
     }
 
-    override suspend fun translate(status: StatusViewData.Concrete): NetworkResult<Unit> {
+    override suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit> {
         status.copy(translation = TranslationViewData.Loading).update()
         return api.translate(status.actionableId, Locale.getDefault().language)
             .map { translation ->
@@ -348,7 +348,7 @@ class NetworkTimelineViewModel @Inject constructor(
             }
     }
 
-    override fun untranslate(status: StatusViewData.Concrete) {
+    override fun untranslate(status: TweetViewData.Concrete) {
         status.copy(translation = null).update()
     }
 
@@ -358,7 +358,7 @@ class NetworkTimelineViewModel @Inject constructor(
         minId: String? = null,
         sinceId: String? = null,
         limit: Int = LOAD_AT_ONCE
-    ): Response<List<Status>> {
+    ): Response<List<Tweet>> {
         return when (kind) {
             Kind.HOME -> api.homeTimeline(
                 maxId = maxId,
@@ -427,7 +427,7 @@ class NetworkTimelineViewModel @Inject constructor(
                 pinned = null
             )
 
-            Kind.FAVOURITES -> api.favourites(
+            Kind.LIKES -> api.likes(
                 maxId = maxId,
                 minId = minId,
                 sinceId = sinceId,
@@ -458,7 +458,7 @@ class NetworkTimelineViewModel @Inject constructor(
         }
     }
 
-    private fun StatusViewData.Concrete.update() {
+    private fun TweetViewData.Concrete.update() {
         val position =
             statusData.indexOfFirst { viewData -> viewData.asStatusOrNull()?.id == this.id }
         if (position >= 0) {
@@ -466,13 +466,13 @@ class NetworkTimelineViewModel @Inject constructor(
         } else {
             val position =
                 statusData.indexOfFirst { viewData ->
-                    viewData.asStatusOrNull()?.quote?.quotedStatusViewData?.id == this.id
+                    viewData.asStatusOrNull()?.quote?.quotedTweetViewData?.id == this.id
                 }
             if (position != -1) {
                 statusData[position].asStatusOrNull()?.let { viewData ->
                     statusData[position] = viewData.copy(
                         quote = viewData.quote?.copy(
-                            quotedStatusViewData = this
+                            quotedTweetViewData = this
                         )
                     )
                 }
@@ -481,32 +481,32 @@ class NetworkTimelineViewModel @Inject constructor(
         currentSource?.invalidate()
     }
 
-    private inline fun updateStatusByActionableId(id: String, updater: (Status) -> Status) {
-        // posts can be multiple times in the timeline, e.g. once the original and once as boost
+    private inline fun updateStatusByActionableId(id: String, updater: (Tweet) -> Tweet) {
+        // posts can be multiple times in the timeline, e.g. once the original and once as retweet
         statusData.forEachIndexed { index, viewData ->
             val status = viewData.asStatusOrNull()
             if (status?.actionableId == id) {
                 updateViewDataAt(index) { vd ->
-                    if (vd.status.reblog != null) {
-                        vd.copy(status = vd.status.copy(reblog = updater(vd.status.reblog)))
+                    if (vd.status.retweet != null) {
+                        vd.copy(status = vd.status.copy(retweet = updater(vd.status.retweet)))
                     } else {
                         vd.copy(status = updater(vd.status))
                     }
                 }
-            } else if (status?.quote?.quotedStatusViewData?.id == id) {
+            } else if (status?.quote?.quotedTweetViewData?.id == id) {
                 updateViewDataAt(index) { vd ->
-                    if (vd.status.reblog != null) {
+                    if (vd.status.retweet != null) {
                         vd.copy(
                             status = vd.status.copy(
-                                reblog = vd.status.reblog.copy(
-                                    quote = vd.status.reblog.quote?.copy(
-                                        quotedStatus = vd.status.reblog.quote.quotedStatus?.let { updater(it) }
+                                retweet = vd.status.retweet.copy(
+                                    quote = vd.status.retweet.quote?.copy(
+                                        quotedStatus = vd.status.retweet.quote.quotedStatus?.let { updater(it) }
                                     )
                                 )
                             ),
                             quote = vd.quote?.copy(
-                                quotedStatusViewData = vd.quote.quotedStatusViewData?.copy(
-                                    status = updater(vd.quote.quotedStatusViewData.status)
+                                quotedTweetViewData = vd.quote.quotedTweetViewData?.copy(
+                                    status = updater(vd.quote.quotedTweetViewData.status)
                                 )
                             )
                         )
@@ -518,8 +518,8 @@ class NetworkTimelineViewModel @Inject constructor(
                                 )
                             ),
                             quote = vd.quote?.copy(
-                                quotedStatusViewData = vd.quote.quotedStatusViewData?.copy(
-                                    status = updater(vd.quote.quotedStatusViewData.status)
+                                quotedTweetViewData = vd.quote.quotedTweetViewData?.copy(
+                                    status = updater(vd.quote.quotedTweetViewData.status)
                                 )
                             )
                         )
@@ -531,7 +531,7 @@ class NetworkTimelineViewModel @Inject constructor(
 
     private inline fun updateViewDataAt(
         position: Int,
-        updater: (StatusViewData.Concrete) -> StatusViewData.Concrete
+        updater: (TweetViewData.Concrete) -> TweetViewData.Concrete
     ) {
         val status = statusData.getOrNull(position)?.asStatusOrNull() ?: return
         statusData[position] = updater(status)

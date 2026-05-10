@@ -26,7 +26,7 @@ import site.warpnet.warpdroid.databinding.ItemFollowRequestBinding
 import site.warpnet.warpdroid.entity.TimelineAccount
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LinkListener
-import site.warpnet.warpdroid.util.StatusDisplayOptions
+import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.loadAvatar
@@ -47,7 +47,7 @@ class FollowRequestViewHolder(
     override fun bind(
         viewData: NotificationViewData.Concrete,
         payloads: List<*>,
-        statusDisplayOptions: StatusDisplayOptions
+        statusDisplayOptions: TweetDisplayOptions
     ) {
         if (payloads.isNotEmpty()) {
             return

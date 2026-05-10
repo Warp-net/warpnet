@@ -1,4 +1,4 @@
 <resources>
-    <dimen name="status_media_preview_height">160dp</dimen>
-    <dimen name="status_detail_media_preview_height">180dp</dimen>
+    <dimen name="tweet_media_preview_height">160dp</dimen>
+    <dimen name="tweet_detail_media_preview_height">180dp</dimen>
 </resources>

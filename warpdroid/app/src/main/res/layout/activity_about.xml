@@ -211,6 +211,6 @@
         </androidx.core.widget.NestedScrollView>
     </FrameLayout>
 
-    <include layout="@layout/item_status_bottom_sheet" />
+    <include layout="@layout/item_tweet_bottom_sheet" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

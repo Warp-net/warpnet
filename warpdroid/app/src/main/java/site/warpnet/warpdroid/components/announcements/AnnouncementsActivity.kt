@@ -30,7 +30,7 @@ import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.StatusListActivity
+import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.adapter.EmojiAdapter
 import site.warpnet.warpdroid.adapter.OnEmojiSelectedListener
 import site.warpnet.warpdroid.databinding.ActivityAnnouncementsBinding
@@ -186,7 +186,7 @@ class AnnouncementsActivity :
     }
 
     override fun onViewTag(tag: String) {
-        val intent = StatusListActivity.newHashtagIntent(this, tag)
+        val intent = TweetListActivity.newHashtagIntent(this, tag)
         startActivityWithSlideInAnimation(intent)
     }
 

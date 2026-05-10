@@ -28,7 +28,7 @@ import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Notification
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.ShareShortcutHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -135,7 +135,7 @@ class MainViewModel @Inject constructor(
                             val hasDirectMessageNotification =
                                 event.notifications.any {
                                     it.type == Notification.Type.Mention &&
-                                        it.status?.visibility == Status.Visibility.DIRECT
+                                        it.status?.visibility == Tweet.Visibility.DIRECT
                                 }
 
                             if (hasDirectMessageNotification) {

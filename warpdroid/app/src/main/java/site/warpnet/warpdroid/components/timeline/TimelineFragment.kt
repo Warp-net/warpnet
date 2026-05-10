@@ -82,7 +82,7 @@ import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.appstore.EventHub
-import site.warpnet.warpdroid.appstore.StatusComposedEvent
+import site.warpnet.warpdroid.appstore.TweetComposedEvent
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
 import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingOrder
@@ -90,12 +90,12 @@ import site.warpnet.warpdroid.components.timeline.viewmodel.NetworkTimelineViewM
 import site.warpnet.warpdroid.components.timeline.viewmodel.TimelineViewModel
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Filter
-import site.warpnet.warpdroid.entity.Status
+import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.interfaces.RefreshableFragment
 import site.warpnet.warpdroid.interfaces.ReselectableFragment
-import site.warpnet.warpdroid.interfaces.StatusActionListener
+import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.ErrorSnackbars
-import site.warpnet.warpdroid.ui.FilteredStatus
+import site.warpnet.warpdroid.ui.FilteredTweet
 import site.warpnet.warpdroid.ui.LoadMorePlaceholder
 import site.warpnet.warpdroid.ui.MessageViewMode
 import site.warpnet.warpdroid.ui.WarpdroidMessageView
@@ -104,9 +104,9 @@ import site.warpnet.warpdroid.ui.WarpdroidTheme
 import site.warpnet.warpdroid.ui.preferences.LocalAccount
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 import site.warpnet.warpdroid.ui.preferences.textStyle
-import site.warpnet.warpdroid.ui.statuscomponents.Status
-import site.warpnet.warpdroid.ui.statuscomponents.StatusPlaceholder
-import site.warpnet.warpdroid.ui.statuscomponents.TimelineStatusInfo
+import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
+import site.warpnet.warpdroid.ui.tweetcomponents.TweetPlaceholder
+import site.warpnet.warpdroid.ui.tweetcomponents.TimelineTweetInfo
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.addIconAnnotations
 import site.warpnet.warpdroid.util.iconInlineContent
@@ -119,10 +119,10 @@ import site.warpnet.warpdroid.util.viewAccount
 import site.warpnet.warpdroid.util.viewMedia
 import site.warpnet.warpdroid.util.viewTag
 import site.warpnet.warpdroid.util.viewThread
-import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmFavourite
-import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmReblog
+import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
+import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmRetweet
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -132,7 +132,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class TimelineFragment :
     Fragment(),
-    StatusActionListener,
+    TweetActionListener,
     ReselectableFragment,
     RefreshableFragment,
     MenuProvider {
@@ -249,7 +249,7 @@ class TimelineFragment :
                 }
             }
 
-            StatusCreatedEffect(statuses)
+            TweetCreatedEffect(statuses)
 
             if (statuses.itemCount == 0) {
                 Box(
@@ -295,7 +295,7 @@ class TimelineFragment :
                     }
                 }
             } else {
-                StatusTopLoadedEffect(listState, statuses)
+                TweetTopLoadedEffect(listState, statuses)
 
                 var idOfItemBelow: String? by remember { mutableStateOf(null) }
 
@@ -339,7 +339,7 @@ class TimelineFragment :
                         for (idx in 0 until statuses.itemCount) {
                             val item = statuses.peek(idx) ?: continue
                             if (item.id !in visibleStatusIds) continue
-                            if (item !is StatusViewData.Concrete) continue
+                            if (item !is TweetViewData.Concrete) continue
                             val actionable = item.status.actionableStatus
                             viewModel.recordView(
                                 statusId = actionable.id,
@@ -358,7 +358,7 @@ class TimelineFragment :
                         items(
                             count = statuses.itemCount,
                             contentType = statuses.itemContentType { viewData ->
-                                if (viewData is StatusViewData.Concrete) {
+                                if (viewData is TweetViewData.Concrete) {
                                     "concrete"
                                 } else {
                                     "loadMore"
@@ -368,14 +368,14 @@ class TimelineFragment :
                         ) { index ->
                             when (val viewData = statuses[index]) {
                                 null -> {
-                                    StatusPlaceholder(
+                                    TweetPlaceholder(
                                         modifier = Modifier.widthIn(max = 640.dp)
                                     )
                                 }
 
-                                is StatusViewData.Concrete -> {
+                                is TweetViewData.Concrete -> {
                                     if (viewData.filterActive && viewData.filter?.action == Filter.Action.WARN) {
-                                        FilteredStatus(
+                                        FilteredTweet(
                                             filterTitle = viewData.filter.title,
                                             onReveal = {
                                                 viewModel.changeFilter(false, viewData)
@@ -383,11 +383,11 @@ class TimelineFragment :
                                             modifier = Modifier.widthIn(max = 640.dp)
                                         )
                                     } else {
-                                        Status(
+                                        TweetCard(
                                             statusViewData = viewData,
                                             listener = this@TimelineFragment,
                                             statusInfo = {
-                                                TimelineStatusInfo(
+                                                TimelineTweetInfo(
                                                     statusViewData = viewData,
                                                     listener = this@TimelineFragment
                                                 )
@@ -399,7 +399,7 @@ class TimelineFragment :
                                     }
                                 }
 
-                                is StatusViewData.LoadMore -> {
+                                is TweetViewData.LoadMore -> {
                                     LoadMorePlaceholder(
                                         loading = viewData.isLoading,
                                         onLoadMore = {
@@ -459,7 +459,7 @@ class TimelineFragment :
 
     @Composable
     private fun OptionalPullToRefreshBox(
-        statuses: LazyPagingItems<StatusViewData>,
+        statuses: LazyPagingItems<TweetViewData>,
         modifier: Modifier = Modifier,
         content: @Composable () -> Unit,
     ) {
@@ -497,10 +497,10 @@ class TimelineFragment :
 
     /** makes the timeline refresh when a new post was created **/
     @Composable
-    private fun StatusCreatedEffect(statuses: LazyPagingItems<StatusViewData>) {
+    private fun TweetCreatedEffect(statuses: LazyPagingItems<TweetViewData>) {
         LaunchedEffect(Unit) {
             eventHub.events
-                .filterIsInstance<StatusComposedEvent>()
+                .filterIsInstance<TweetComposedEvent>()
                 .collect { event ->
                     val status = event.status
                     when (kind) {
@@ -515,7 +515,7 @@ class TimelineFragment :
                         }
 
                         TimelineViewModel.Kind.TAG,
-                        TimelineViewModel.Kind.FAVOURITES,
+                        TimelineViewModel.Kind.LIKES,
                         TimelineViewModel.Kind.LIST,
                         TimelineViewModel.Kind.BOOKMARKS,
                         TimelineViewModel.Kind.USER_PINNED,
@@ -527,7 +527,7 @@ class TimelineFragment :
 
     /** move the timeline down slightly when new posts at the top have been loaded **/
     @Composable
-    private fun StatusTopLoadedEffect(listState: LazyListState, statuses: LazyPagingItems<StatusViewData>) {
+    private fun TweetTopLoadedEffect(listState: LazyListState, statuses: LazyPagingItems<TweetViewData>) {
         val jumpUpDistance = with(LocalDensity.current) { -32.dp.toPx() }
 
         var previousTopId: String? by remember { mutableStateOf(null) }
@@ -549,7 +549,7 @@ class TimelineFragment :
         }
     }
 
-    fun LazyPagingItems<StatusViewData>.getOptId(pos: Int): String? {
+    fun LazyPagingItems<TweetViewData>.getOptId(pos: Int): String? {
         return if (pos >= 0 && this.itemCount > pos) {
             this.peek(pos)?.id
         } else {
@@ -589,70 +589,70 @@ class TimelineFragment :
         }
     }
 
-    override fun onReblog(
-        viewData: StatusViewData.Concrete,
-        reblog: Boolean,
-        visibility: Status.Visibility?,
+    override fun onRetweet(
+        viewData: TweetViewData.Concrete,
+        retweet: Boolean,
+        visibility: Tweet.Visibility?,
         state: SparkButtonState?
     ) {
-        if (reblog && visibility == null) {
-            confirmReblog(preferences) { visibility ->
-                viewModel.reblog(viewData.actionableId, reblog, visibility)
+        if (retweet && visibility == null) {
+            confirmRetweet(preferences) { visibility ->
+                viewModel.retweet(viewData.actionableId, retweet, visibility)
                 state?.animate()
             }
         } else {
-            viewModel.reblog(viewData.actionableId, reblog, visibility ?: Status.Visibility.PUBLIC)
-            if (reblog) {
+            viewModel.retweet(viewData.actionableId, retweet, visibility ?: Tweet.Visibility.PUBLIC)
+            if (retweet) {
                 state?.animate()
             }
         }
     }
 
-    override fun onFavourite(
-        viewData: StatusViewData.Concrete,
-        favourite: Boolean,
+    override fun onLike(
+        viewData: TweetViewData.Concrete,
+        like: Boolean,
         state: SparkButtonState?
     ) {
-        if (favourite) {
-            confirmFavourite(preferences) {
-                viewModel.favorite(viewData.actionableId, true)
+        if (like) {
+            confirmLike(preferences) {
+                viewModel.like(viewData.actionableId, true)
                 state?.animate()
             }
         } else {
-            viewModel.favorite(viewData.actionableId, false)
+            viewModel.like(viewData.actionableId, false)
         }
     }
 
-    override fun onBookmark(viewData: StatusViewData.Concrete, bookmark: Boolean) {
+    override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
         viewModel.bookmark(viewData.actionableId, bookmark)
     }
 
-    override fun onExpandedChange(viewData: StatusViewData.Concrete, expanded: Boolean) {
+    override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {
         viewModel.changeExpanded(expanded, viewData)
     }
 
-    override fun onContentHiddenChange(viewData: StatusViewData.Concrete, isShowing: Boolean) {
+    override fun onContentHiddenChange(viewData: TweetViewData.Concrete, isShowing: Boolean) {
         viewModel.changeContentShowing(isShowing, viewData)
     }
 
-    override fun onContentCollapsedChange(viewData: StatusViewData.Concrete, isCollapsed: Boolean) {
+    override fun onContentCollapsedChange(viewData: TweetViewData.Concrete, isCollapsed: Boolean) {
         val status = viewData.asStatusOrNull() ?: return
         viewModel.changeContentCollapsed(isCollapsed, status)
     }
 
-    override fun onVoteInPoll(viewData: StatusViewData.Concrete, pollId: String, choices: List<Int>) {
+    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) {
         viewModel.voteInPoll(viewData.actionableId, pollId, choices)
     }
 
-    override fun onShowPollResults(viewData: StatusViewData.Concrete) {
+    override fun onShowPollResults(viewData: TweetViewData.Concrete) {
         viewModel.showPollResults(viewData)
     }
 
-    override fun changeFilter(viewData: StatusViewData.Concrete, filtered: Boolean) {
+    override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
     }
 
-    override fun onTranslate(viewData: StatusViewData.Concrete) {
+    override fun onTranslate(viewData: TweetViewData.Concrete) {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.translate(viewData)
                 .onFailure {
@@ -665,7 +665,7 @@ class TimelineFragment :
         }
     }
 
-    override fun onUntranslate(viewData: StatusViewData.Concrete) {
+    override fun onUntranslate(viewData: TweetViewData.Concrete) {
         viewModel.untranslate(viewData)
     }
 
@@ -677,42 +677,42 @@ class TimelineFragment :
         viewModel.mute(accountId, hideNotifications, duration)
     }
 
-    override fun onMuteConversation(viewData: StatusViewData.Concrete, mute: Boolean) {
+    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
         viewModel.muteConversation(viewData.id, mute)
     }
 
-    override fun onDelete(viewData: StatusViewData.Concrete) {
+    override fun onDelete(viewData: TweetViewData.Concrete) {
         viewModel.delete(viewData.id)
     }
 
-    override fun onRedraft(viewData: StatusViewData.Concrete) {
+    override fun onRedraft(viewData: TweetViewData.Concrete) {
         viewModel.redraftStatus(viewData.status)
     }
 
-    override fun onPin(viewData: StatusViewData.Concrete, pin: Boolean) {
+    override fun onPin(viewData: TweetViewData.Concrete, pin: Boolean) {
         viewModel.pin(viewData.id, pin)
     }
 
-    override fun onViewMedia(viewData: StatusViewData.Concrete, attachmentIndex: Int) {
+    override fun onViewMedia(viewData: TweetViewData.Concrete, attachmentIndex: Int) {
         requireContext().viewMedia(
             attachmentIndex,
             AttachmentViewData.list(viewData),
         )
     }
 
-    override fun onViewThread(viewData: StatusViewData.Concrete) {
+    override fun onViewThread(viewData: TweetViewData.Concrete) {
         requireContext().viewThread(viewData)
     }
 
-    override fun onEdit(viewData: StatusViewData.Concrete) {
+    override fun onEdit(viewData: TweetViewData.Concrete) {
         viewModel.editStatus(viewData.actionable)
     }
 
-    override fun onReply(viewData: StatusViewData.Concrete) {
+    override fun onReply(viewData: TweetViewData.Concrete) {
         requireContext().reply(viewData, viewModel.activeAccountFlow.value!!)
     }
 
-    override fun onReport(viewData: StatusViewData.Concrete) {
+    override fun onReport(viewData: TweetViewData.Concrete) {
         requireContext().report(viewData)
     }
 
@@ -745,11 +745,11 @@ class TimelineFragment :
         (requireActivity() as BottomSheetActivity).viewUrl(url)
     }
 
-    override fun onShowQuote(viewData: StatusViewData.Concrete) {
+    override fun onShowQuote(viewData: TweetViewData.Concrete) {
         viewModel.showQuote(viewData)
     }
 
-    override fun removeQuote(viewData: StatusViewData.Concrete) {
+    override fun removeQuote(viewData: TweetViewData.Concrete) {
         viewModel.removeQuote(viewData.status)
     }
 

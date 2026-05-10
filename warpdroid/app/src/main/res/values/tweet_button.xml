@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <bool name="show_small_tweet_button">true</bool>
+    <dimen name="tweet_button_width">48dp</dimen>
+    <dimen name="tweet_button_horizontal_padding">12dp</dimen>
+
+</resources>

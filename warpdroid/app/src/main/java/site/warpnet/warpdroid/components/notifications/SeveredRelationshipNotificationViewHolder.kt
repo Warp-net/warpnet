@@ -18,7 +18,7 @@ package site.warpnet.warpdroid.components.notifications
 import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.databinding.ItemSeveredRelationshipNotificationBinding
-import site.warpnet.warpdroid.util.StatusDisplayOptions
+import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 
 class SeveredRelationshipNotificationViewHolder(
@@ -29,7 +29,7 @@ class SeveredRelationshipNotificationViewHolder(
     override fun bind(
         viewData: NotificationViewData.Concrete,
         payloads: List<*>,
-        statusDisplayOptions: StatusDisplayOptions
+        statusDisplayOptions: TweetDisplayOptions
     ) {
         if (payloads.isNotEmpty()) {
             return

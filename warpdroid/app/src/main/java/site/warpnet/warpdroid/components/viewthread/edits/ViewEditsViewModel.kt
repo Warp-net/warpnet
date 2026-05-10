@@ -20,7 +20,7 @@ import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.getOrElse
 import site.warpnet.warpdroid.components.viewthread.edits.EditsTagHandler.Companion.DELETED_TEXT_EL
 import site.warpnet.warpdroid.components.viewthread.edits.EditsTagHandler.Companion.INSERTED_TEXT_EL
-import site.warpnet.warpdroid.entity.StatusEdit
+import site.warpnet.warpdroid.entity.TweetEdit
 import site.warpnet.warpdroid.network.WarpnetApi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -142,7 +142,7 @@ sealed interface EditsUiState {
     data object Refreshing : EditsUiState
     class Error(val throwable: Throwable) : EditsUiState
     data class Success(
-        val edits: List<StatusEdit>
+        val edits: List<TweetEdit>
     ) : EditsUiState
 }
 

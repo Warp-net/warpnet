@@ -107,11 +107,20 @@ class WarpdroidApplication :
                 workManager.cancelAllWorkByTag("pullNotifications")
             }
             if (oldVersion < 2025032401 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // delete old now unused notification channels
+                // delete old now unused notification channels. CHANNEL_BOOST*
+                // and CHANNEL_FAVOURITE* are the on-device names from installs
+                // that predate the Mastodon -> Warpnet vocabulary rename;
+                // CHANNEL_RETWEET / CHANNEL_LIKE are the renamed forms that
+                // this same migration block deletes for installs that
+                // registered channels under the new names before the category
+                // was retired.
                 for (channel in notificationManager.notificationChannels) {
                     if (channel.id.startsWith("CHANNEL_SIGN_UP") ||
                         channel.id.startsWith("CHANNEL_REPORT") ||
-                        channel.id.startsWith("CHANNEL_BOOST")
+                        channel.id.startsWith("CHANNEL_RETWEET") ||
+                        channel.id.startsWith("CHANNEL_BOOST") ||
+                        channel.id.startsWith("CHANNEL_LIKE") ||
+                        channel.id.startsWith("CHANNEL_FAVOURITE")
                     ) {
                         notificationManager.deleteNotificationChannel(channel.id)
                     }
@@ -193,8 +202,8 @@ class WarpdroidApplication :
 
             if (oldVersion < 2023112001) {
                 remove(PrefKeys.TAB_FILTER_HOME_REPLIES)
-                remove(PrefKeys.TAB_FILTER_HOME_BOOSTS)
-                remove(PrefKeys.TAB_SHOW_HOME_SELF_BOOSTS)
+                remove(PrefKeys.TAB_FILTER_HOME_RETWEETS)
+                remove(PrefKeys.TAB_SHOW_HOME_SELF_RETWEETS)
             }
 
             if (oldVersion < 2024060201) {

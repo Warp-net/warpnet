@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="report_description_remote_instance">The account is from another server. Send an anonymised copy of the report there as well?</string>
-    <string name="description_post_favourited">Favourited</string>
-    <string name="title_favourited_by">Favourited by</string>
+    <string name="description_post_liked">Liked</string>
+    <string name="title_liked_by">Liked by</string>
     <plurals name="favs">
-        <item quantity="one"><b>%1$s</b> Favourite</item>
-        <item quantity="other"><b>%1$s</b> Favourites</item>
+        <item quantity="one"><b>%1$s</b> Like</item>
+        <item quantity="other"><b>%1$s</b> Likes</item>
     </plurals>
-    <string name="notification_favourite_description">Notifications when your posts get marked as favourite</string>
-    <string name="notification_favourite_name">Favourites</string>
-    <string name="action_open_faved_by">Show favourites</string>
-    <string name="action_view_favourites">Favourites</string>
-    <string name="action_unfavourite">Remove favourite</string>
-    <string name="action_favourite">Favourite</string>
-    <string name="notification_favourite_format">%1$s favourited your post</string>
-    <string name="title_favourites">Favourites</string>
+    <string name="notification_like_description">Notifications when your posts get a like</string>
+    <string name="notification_like_name">Likes</string>
+    <string name="action_open_faved_by">Show likes</string>
+    <string name="action_view_likes">Likes</string>
+    <string name="action_unlike">Remove like</string>
+    <string name="action_like">Like</string>
+    <string name="notification_like_format">%1$s liked your post</string>
+    <string name="title_likes">Likes</string>
     <string name="error_authorization_denied">Authorisation was denied. If you\'re sure that you supplied the correct credentials, try Login in Browser from the menu.</string>
     <string name="error_authorization_unknown">An unidentified authorisation error occurred.</string>
     <string name="pref_title_gradient_for_media">Show colourful gradients for hidden media</string>
@@ -76,13 +76,13 @@
     <string name="notification_follow_format">%1$s followed you</string>
     <string name="notification_sign_up_format">%1$s signed up</string>
     <string name="title_drafts">Drafts</string>
-    <string name="notification_reblog_format">%1$s boosted your post</string>
+    <string name="notification_retweet_format">%1$s retweeted your post</string>
     <string name="title_login">Login</string>
     <string name="title_announcements">Announcements</string>
     <string name="error_could_not_load_login_page">Could not load the login page.</string>
     <string name="title_scheduled_posts">Scheduled posts</string>
     <string name="post_username_format">\@%1$s</string>
-    <string name="post_boosted_format">%1$s boosted</string>
+    <string name="post_retweeted_format">%1$s retweeted</string>
     <string name="error_network">A network error occurred. Please check your connection and try again.</string>
     <string name="error_failed_app_registration">Failed authenticating with that instance. If this persists, try Login in Browser from the menu.</string>
     <string name="error_no_web_browser_found">Couldn\'t find a web browser to use.</string>
@@ -96,12 +96,12 @@
     <string name="action_post_failed">Upload failed</string>
     <string name="report_comment_hint">Additional comments?</string>
     <string name="action_quick_reply">Quick Reply</string>
-    <string name="action_reblog">Boost</string>
+    <string name="action_retweet">Retweet</string>
     <string name="action_reply">Reply</string>
-    <string name="action_unreblog">Remove boost</string>
+    <string name="action_unretweet">Remove retweet</string>
     <string name="action_logout_confirm">Are you sure you want to log out of %1$s? This will delete all local data of the account, including drafts and preferences.</string>
     <string name="action_share_account_link">Share a link to this account</string>
-    <string name="favourite_confirm">Favourite this post?</string>
-    <string name="pref_title_confirm_favourites">Show confirmation before favouriting</string>
-    <string name="ui_error_favourite">Favouriting post failed: %1$s</string>
+    <string name="like_confirm">Like this post?</string>
+    <string name="pref_title_confirm_likes">Show confirmation before liking</string>
+    <string name="ui_error_like">Favouriting post failed: %1$s</string>
 </resources>

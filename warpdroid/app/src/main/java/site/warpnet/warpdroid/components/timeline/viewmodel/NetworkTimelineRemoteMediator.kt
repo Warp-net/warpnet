@@ -24,17 +24,17 @@ import site.warpnet.warpdroid.components.timeline.util.ifExpected
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.util.HttpHeaderLink
 import site.warpnet.warpdroid.util.toViewData
-import site.warpnet.warpdroid.viewdata.StatusViewData
+import site.warpnet.warpdroid.viewdata.TweetViewData
 import retrofit2.HttpException
 
 @OptIn(ExperimentalPagingApi::class)
 class NetworkTimelineRemoteMediator(
     private val viewModel: NetworkTimelineViewModel
-) : RemoteMediator<String, StatusViewData>() {
+) : RemoteMediator<String, TweetViewData>() {
 
     override suspend fun load(
         loadType: LoadType,
-        state: PagingState<String, StatusViewData>
+        state: PagingState<String, TweetViewData>
     ): MediatorResult {
         try {
             val statusResponse = when (loadType) {
@@ -72,7 +72,7 @@ class NetworkTimelineRemoteMediator(
                     s.asStatusOrNull()?.id == status.id
                 }?.asStatusOrNull()
 
-                val oldQuoteViewData = oldStatus?.quote?.quotedStatusViewData
+                val oldQuoteViewData = oldStatus?.quote?.quotedTweetViewData
 
                 val contentShowing = oldStatus?.isShowingContent
                     ?: status.shouldShowContent(activeAccount.alwaysShowSensitiveMedia, viewModel.kind.toFilterKind())
@@ -111,7 +111,7 @@ class NetworkTimelineRemoteMediator(
                 viewModel.statusData.addAll(0, data)
 
                 if (insertPlaceholder) {
-                    viewModel.statusData[statuses.size - 1] = StatusViewData.LoadMore(statuses.last().id, false)
+                    viewModel.statusData[statuses.size - 1] = TweetViewData.LoadMore(statuses.last().id, false)
                 }
             } else {
                 val linkHeader = statusResponse.headers()["Link"]

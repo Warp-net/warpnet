@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="16dp"
-    tools:context=".components.report.fragments.ReportStatusesFragment">
+    tools:context=".components.report.fragments.ReportTweetsFragment">
 
     <View
         android:id="@+id/checkMark"
@@ -42,7 +42,7 @@
         android:lineSpacingMultiplier="1.1"
         android:padding="24dp"
         android:textColor="?android:textColorPrimary"
-        android:textSize="?attr/status_text_large"
+        android:textSize="?attr/tweet_text_large"
         app:layout_constraintBottom_toTopOf="@id/buttonMute"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
