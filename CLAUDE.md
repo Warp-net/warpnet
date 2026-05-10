@@ -5,6 +5,10 @@ Before making any code changes, you must read the relevant backend code https://
 Requirements:
 - First find and read the relevant codebase, then act.
 
+## Glossary
+- "thin client", "thin node", "alias", "mobile client", "mobile node", "device" - Android or IOS implementations of Warpnet
+- "fat node", "backend", "server node" - main node of Warpnet hosted on computer serving pairing with devices
+
 ## Code exploration
 Always start to explore the codebase from the files:
   - cmd/node/member/main.go
