@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0, fetch-tags: true }
@@ -72,9 +73,27 @@ jobs:
             -o "$cache_dir/gradle-9.0.0-bin.zip" \
             https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
 
+      - name: Environment dump
+        run: |
+          echo "=== ANDROID_HOME / ANDROID_SDK_ROOT ==="
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+          echo "=== PATH ==="
+          echo "$PATH"
+          echo "=== which apksigner zipalign keytool ==="
+          which apksigner zipalign keytool || true
+          echo "=== build-tools listing ==="
+          ls -la "$ANDROID_HOME/build-tools" || true
+          echo "=== java -version ==="
+          java -version
+          echo "=== gradle wrapper ==="
+          ls -la warpdroid/gradlew
+
       - name: Assemble release APK
         working-directory: warpdroid
-        run: ./gradlew :app:assembleRelease --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleRelease --stacktrace 2>&1 | tee assemble-release.log
 
       # Build an ephemeral signing key on the fly. APK installs cleanly on
       # Android (no debug-build install warnings, no debuggable=true flag),
@@ -84,39 +103,47 @@ jobs:
       - name: Generate ephemeral keystore
         working-directory: warpdroid
         run: |
+          set -o pipefail
           keytool -genkeypair -v \
             -keystore release.jks \
             -storepass changeit -keypass changeit \
             -alias warpdroid \
             -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Warpdroid Release, OU=CI, O=Warpnet, L=NA, S=NA, C=NA"
+            -dname "CN=Warpdroid Release, OU=CI, O=Warpnet, L=NA, S=NA, C=NA" 2>&1 | tee keystore.log
 
       - name: Sign release APK
         working-directory: warpdroid
         run: |
-          set -euxo pipefail
-          # Show what assembleRelease produced — invaluable when the path
-          # changes (e.g. multi-variant flavour outputs).
-          ls -la app/build/outputs/apk/release/
-          which apksigner zipalign
+          set -uxo pipefail
+          {
+            echo "=== outputs ==="
+            find app/build/outputs -type f 2>/dev/null | sort
+            echo "=== tooling ==="
+            which apksigner zipalign
+            apksigner --version || true
+          } | tee sign.log
           unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
           aligned=app/build/outputs/apk/release/app-release-aligned.apk
-          signed=warpdroid_${{ env.RELEASE_TAG }}.apk
-          zipalign -p 4 "$unsigned" "$aligned"
+          signed=warpdroid_${RELEASE_TAG}.apk
+          if [ ! -f "$unsigned" ]; then
+            echo "FATAL: $unsigned not found" | tee -a sign.log
+            exit 11
+          fi
+          set -e
+          zipalign -p 4 "$unsigned" "$aligned" 2>&1 | tee -a sign.log
           apksigner sign \
             --ks release.jks \
             --ks-pass pass:changeit \
             --key-pass pass:changeit \
             --ks-key-alias warpdroid \
             --out "$signed" \
-            "$aligned"
-          apksigner verify --print-certs "$signed"
-          shasum -a 256 "$signed" > "warpdroid_${{ env.RELEASE_TAG }}_checksums.txt"
+            "$aligned" 2>&1 | tee -a sign.log
+          apksigner verify --print-certs "$signed" 2>&1 | tee -a sign.log
+          shasum -a 256 "$signed" > "warpdroid_${RELEASE_TAG}_checksums.txt"
 
-      # Always upload as a workflow artifact so PR runs are testable.
-      # On dispatch runs this is a convenience copy of what also lands
-      # on the GitHub Release.
+      # Upload signed APK as a workflow artifact on success.
       - name: Upload APK as workflow artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: warpdroid-${{ env.RELEASE_TAG }}
@@ -125,10 +152,73 @@ jobs:
             warpdroid/warpdroid_${{ env.RELEASE_TAG }}_checksums.txt
           if-no-files-found: error
 
+      # Always upload diagnostic artifacts (logs + outputs directory)
+      # so failures can be triaged without re-running the workflow.
+      - name: Upload diagnostic artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warpdroid-diagnostics-${{ env.RELEASE_TAG }}-${{ github.run_attempt }}
+          path: |
+            warpdroid/*.log
+            warpdroid/app/build/outputs/**
+            warpdroid/app/build/reports/**
+          if-no-files-found: warn
+
+      # Mirror the build-warpdroid.yml UX: post the tail of the failing
+      # log as a PR comment so reviewers can see the failure reason
+      # without leaving the PR page.
+      - name: Post failure as PR comment
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const tail = (p, bytes = 30000) => {
+              if (!fs.existsSync(p)) return `(no ${p} produced)`;
+              const stat = fs.statSync(p);
+              const start = Math.max(0, stat.size - bytes);
+              const fd = fs.openSync(p, 'r');
+              const buf = Buffer.alloc(stat.size - start);
+              fs.readSync(fd, buf, 0, buf.length, start);
+              fs.closeSync(fd);
+              return buf.toString('utf8');
+            };
+            const assembleLog = tail(path.join('warpdroid', 'assemble-release.log'));
+            const signLog = tail(path.join('warpdroid', 'sign.log'));
+            const body = [
+              `## release-warpdroid failure (\`${context.sha.substring(0, 7)}\`)`,
+              '',
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              '<details><summary><code>:app:assembleRelease</code> tail (30 KB)</summary>',
+              '',
+              '```',
+              assembleLog,
+              '```',
+              '',
+              '</details>',
+              '',
+              '<details><summary>Sign step tail (30 KB)</summary>',
+              '',
+              '```',
+              signLog,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
       # Production publish — only on workflow_dispatch (tag input).
       # PR runs skip this so they don't mutate releases.
       - name: Publish APK to GitHub Release
-        if: github.event_name == 'workflow_dispatch'
+        if: success() && github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
