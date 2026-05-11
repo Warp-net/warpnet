@@ -75,18 +75,22 @@ jobs:
         working-directory: warpdroid
         run: |
           set -o pipefail
-          # The app has two product flavors: `blue` (production, no
-          # applicationId suffix) and `green` (dev/test, applicationId
-          # suffix `.test`, version-name with git sha). Ship the
-          # production flavor — `:app:assembleBlueDebug` instead of the
-          # umbrella `:app:assembleDebug` which would build both.
-          ./gradlew :app:assembleBlueDebug --stacktrace 2>&1 | tee assemble.log
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee assemble.log
 
-      - name: Rename APK + checksum
+      - name: Locate APK + checksum
         working-directory: warpdroid
         run: |
           set -euo pipefail
-          src=app/build/outputs/apk/blue/debug/app-blue-debug.apk
+          # The build still uses splits.abi (arm64-v8a / armeabi-v7a /
+          # x86_64) and a custom outputFileName template, so the APK is
+          # not at the default path. Pick arm64-v8a (~99% of modern
+          # Android devices) as the primary release artifact.
+          ls -la app/build/outputs/apk/debug/
+          src=$(find app/build/outputs/apk/debug -name '*_arm64-v8a.apk' -type f | head -1)
+          if [ -z "$src" ]; then
+            echo "FATAL: no arm64-v8a APK produced" >&2
+            exit 1
+          fi
           dst=warpdroid_${RELEASE_TAG}.apk
           cp "$src" "$dst"
           shasum -a 256 "$dst" > "warpdroid_${RELEASE_TAG}_checksums.txt"
