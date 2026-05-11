@@ -458,7 +458,6 @@ func StreamGetTweetStatsHandler(
 		}
 
 		var (
-			tweetsCount   uint64
 			retweetsCount uint64
 			likesCount    uint64
 			repliesCount  uint64
@@ -469,13 +468,6 @@ func StreamGetTweetStatsHandler(
 		)
 		defer cancelF()
 
-		g.Go(func() (tweetsErr error) {
-			tweetsCount, tweetsErr = tweetRepo.TweetsCount(ev.UserId)
-			if errors.Is(tweetsErr, database.ErrTweetNotFound) {
-				return nil
-			}
-			return tweetsErr
-		})
 		g.Go(func() (retweetsErr error) {
 			retweetsCount, retweetsErr = retweetRepo.RetweetsCount(tweetId)
 			if errors.Is(retweetsErr, database.ErrTweetNotFound) {
@@ -509,7 +501,6 @@ func StreamGetTweetStatsHandler(
 		}
 		return event.TweetStatsResponse{
 			TweetId:       ev.TweetId,
-			TweetsCount:   tweetsCount,
 			ViewsCount:    viewsCount,
 			RetweetsCount: retweetsCount,
 			LikeCount:     likesCount,
