@@ -146,16 +146,21 @@ jobs:
               body,
             });
 
-      # Production publish — only on workflow_dispatch (tag input).
-      # PR runs skip this so they don't mutate releases.
+      # Publish to GitHub Release. On workflow_dispatch (tag input)
+      # a normal release is created/updated for that tag. On PR runs
+      # we still publish — marked as prerelease, tagged `pr-<sha>` —
+      # so the full pipeline including the upload step is exercised
+      # before merge. PR-tagged prereleases can be deleted manually
+      # after testing.
       - name: Publish APK to GitHub Release
-        if: success() && github.event_name == 'workflow_dispatch'
+        if: success()
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.RELEASE_TAG || 'no_tag' }}
           name: ${{ env.RELEASE_TAG }}
+          prerelease: ${{ github.event_name == 'pull_request' }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
             warpdroid/warpdroid_${{ env.RELEASE_TAG }}.apk
