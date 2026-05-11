@@ -75,13 +75,18 @@ jobs:
         working-directory: warpdroid
         run: |
           set -o pipefail
-          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee assemble.log
+          # The app has two product flavors: `blue` (production, no
+          # applicationId suffix) and `green` (dev/test, applicationId
+          # suffix `.test`, version-name with git sha). Ship the
+          # production flavor — `:app:assembleBlueDebug` instead of the
+          # umbrella `:app:assembleDebug` which would build both.
+          ./gradlew :app:assembleBlueDebug --stacktrace 2>&1 | tee assemble.log
 
       - name: Rename APK + checksum
         working-directory: warpdroid
         run: |
           set -euo pipefail
-          src=app/build/outputs/apk/debug/app-debug.apk
+          src=app/build/outputs/apk/blue/debug/app-blue-debug.apk
           dst=warpdroid_${RELEASE_TAG}.apk
           cp "$src" "$dst"
           shasum -a 256 "$dst" > "warpdroid_${RELEASE_TAG}_checksums.txt"
