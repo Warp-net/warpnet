@@ -46,6 +46,15 @@ jobs:
         with:
           build-root-directory: warpdroid
 
+      # Install Android SDK + a known build-tools version explicitly so
+      # apksigner / zipalign are on PATH regardless of the runner's
+      # pre-baked Android layout. v34.0.0 is the floor for Tusky's
+      # compileSdk; bump together with app/build.gradle.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'build-tools;34.0.0 platform-tools'
+
       # services.gradle.org redirects to github.com/gradle/gradle-distributions,
       # which intermittently returns 504. Same workaround as build-warpdroid.yml.
       - name: Pre-fetch Gradle distribution
@@ -85,22 +94,23 @@ jobs:
       - name: Sign release APK
         working-directory: warpdroid
         run: |
-          set -euo pipefail
-          build_tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
-          apksigner="${build_tools}apksigner"
-          zipalign="${build_tools}zipalign"
+          set -euxo pipefail
+          # Show what assembleRelease produced — invaluable when the path
+          # changes (e.g. multi-variant flavour outputs).
+          ls -la app/build/outputs/apk/release/
+          which apksigner zipalign
           unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
           aligned=app/build/outputs/apk/release/app-release-aligned.apk
           signed=warpdroid_${{ env.RELEASE_TAG }}.apk
-          "$zipalign" -p 4 "$unsigned" "$aligned"
-          "$apksigner" sign \
+          zipalign -p 4 "$unsigned" "$aligned"
+          apksigner sign \
             --ks release.jks \
             --ks-pass pass:changeit \
             --key-pass pass:changeit \
             --ks-key-alias warpdroid \
             --out "$signed" \
             "$aligned"
-          "$apksigner" verify --print-certs "$signed"
+          apksigner verify --print-certs "$signed"
           shasum -a 256 "$signed" > "warpdroid_${{ env.RELEASE_TAG }}_checksums.txt"
 
       # Always upload as a workflow artifact so PR runs are testable.
