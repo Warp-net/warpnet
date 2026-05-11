@@ -54,7 +54,7 @@ jobs:
         id: build
         run: |
           set -o pipefail
-          ./gradlew build -x test -x lint -x lintAnalyzeGreenDebug -x lintReportGreenDebug -x lintAnalyzeDebug -x lintReportDebug --stacktrace 2>&1 | tee assemble.log
+          ./gradlew build -x test -x lint -x lintAnalyzeDebug -x lintReportDebug --stacktrace 2>&1 | tee assemble.log
 
       - name: Assemble debug APK
         id: assemble

@@ -1,0 +1,167 @@
+name: Warpdroid Release
+
+# Standalone workflow so the APK release can be dispatched and tested
+# independently of the desktop matrix in release.yaml. Same tag input
+# semantics — the published asset is attached to the GitHub Release
+# identified by `tag`.
+#
+# We ship the debug-variant APK. Gradle signs it automatically with
+# the Android SDK debug keystore so it installs cleanly on any device
+# via "Install from unknown sources"; there is no end-user-visible
+# debug warning at install time. Going to a properly signed release
+# variant would require a stable keystore stored in GitHub Secrets —
+# defer that until the project leaves alpha.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Specify a Git tag to attach the APK to (e.g., v1.0.0)"
+        required: true
+        type: string
+  # PR trigger is for testing the build pipeline before merging.
+  # On PR runs the GitHub Release publish step is skipped and the
+  # APK is uploaded as a workflow artifact instead so reviewers
+  # can sideload it from the Actions run page.
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'warpdroid/**'
+      - '.github/workflows/release-warpdroid.yaml'
+
+env:
+  # Falls back to `pr-<sha>` on PR runs where no tag input exists.
+  RELEASE_TAG: ${{ github.event.inputs.tag || format('pr-{0}', github.sha) }}
+
+jobs:
+  release-warpdroid:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, fetch-tags: true }
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: warpdroid
+
+      # services.gradle.org redirects to github.com/gradle/gradle-distributions,
+      # which intermittently returns 504. Same workaround as build-warpdroid.yml.
+      - name: Pre-fetch Gradle distribution
+        run: |
+          set -euo pipefail
+          cache_dir="$HOME/.gradle/wrapper/dists/gradle-9.0.0-bin/d6wjpkvcgsg3oed0qlfss3wgl"
+          mkdir -p "$cache_dir"
+          if [ -s "$cache_dir/gradle-9.0.0-bin.zip" ]; then
+            echo "Gradle distribution already cached at $cache_dir."
+            exit 0
+          fi
+          curl --fail --location --show-error \
+            --retry 8 --retry-all-errors --retry-delay 15 \
+            --connect-timeout 30 --max-time 300 \
+            -o "$cache_dir/gradle-9.0.0-bin.zip" \
+            https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
+
+      - name: Assemble debug APK
+        working-directory: warpdroid
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee assemble.log
+
+      - name: Locate APK + checksum
+        working-directory: warpdroid
+        run: |
+          set -euo pipefail
+          # The build still uses splits.abi (arm64-v8a / armeabi-v7a /
+          # x86_64) and a custom outputFileName template, so the APK is
+          # not at the default path. Pick arm64-v8a (~99% of modern
+          # Android devices) as the primary release artifact.
+          ls -la app/build/outputs/apk/debug/
+          src=$(find app/build/outputs/apk/debug -name '*_arm64-v8a.apk' -type f | head -1)
+          if [ -z "$src" ]; then
+            echo "FATAL: no arm64-v8a APK produced" >&2
+            exit 1
+          fi
+          dst=warpdroid_${RELEASE_TAG}.apk
+          cp "$src" "$dst"
+          shasum -a 256 "$dst" > "warpdroid_${RELEASE_TAG}_checksums.txt"
+          ls -la "$dst" "warpdroid_${RELEASE_TAG}_checksums.txt"
+
+      - name: Upload APK as workflow artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warpdroid-${{ env.RELEASE_TAG }}
+          path: |
+            warpdroid/warpdroid_${{ env.RELEASE_TAG }}.apk
+            warpdroid/warpdroid_${{ env.RELEASE_TAG }}_checksums.txt
+          if-no-files-found: error
+
+      # Mirror build-warpdroid.yml's UX so failures are visible without
+      # diving into Actions logs.
+      - name: Post failure as PR comment
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const tail = (p, bytes = 60000) => {
+              if (!fs.existsSync(p)) return `(no ${p} produced)`;
+              const stat = fs.statSync(p);
+              const start = Math.max(0, stat.size - bytes);
+              const fd = fs.openSync(p, 'r');
+              const buf = Buffer.alloc(stat.size - start);
+              fs.readSync(fd, buf, 0, buf.length, start);
+              fs.closeSync(fd);
+              return buf.toString('utf8');
+            };
+            const assembleLog = tail(path.join('warpdroid', 'assemble.log'));
+            const body = [
+              `## release-warpdroid failure (\`${context.sha.substring(0, 7)}\`)`,
+              '',
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              '<details><summary><code>:app:assembleDebug</code> tail (60 KB)</summary>',
+              '',
+              '```',
+              assembleLog,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+      # Publish to GitHub Release. On workflow_dispatch (tag input)
+      # a normal release is created/updated for that tag. On PR runs
+      # we still publish — marked as prerelease, tagged `pr-<sha>` —
+      # so the full pipeline including the upload step is exercised
+      # before merge. PR-tagged prereleases can be deleted manually
+      # after testing.
+      - name: Publish APK to GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_TAG || 'no_tag' }}
+          name: ${{ env.RELEASE_TAG }}
+          prerelease: ${{ github.event_name == 'pull_request' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            warpdroid/warpdroid_${{ env.RELEASE_TAG }}.apk
+            warpdroid/warpdroid_${{ env.RELEASE_TAG }}_checksums.txt

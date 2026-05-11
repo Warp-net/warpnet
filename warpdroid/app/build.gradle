@@ -69,18 +69,6 @@ android {
         }
     }
 
-    flavorDimensions += "color"
-    productFlavors {
-        blue {
-        }
-        green {
-            resValue "string", "app_name", APP_NAME + " Test"
-            applicationIdSuffix ".test"
-            versionNameSuffix "-" + gitSha
-            isDefault true
-        }
-    }
-
     kotlin {
         compilerOptions {
             freeCompilerArgs = ["-Xannotation-default-target=param-property"]
@@ -134,19 +122,10 @@ android {
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
             // Splits produce one APK per ABI per variant; include the ABI filter
-            // in the name so the four outputs don't collide on the same path.
+            // in the name so the outputs don't collide on the same path.
             def abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
             outputFileName = "Warpdroid_${variant.versionName}_${variant.versionCode}_${gitSha}_" +
-                "${variant.flavorName}_${buildType.name}_${abi}.apk"
-        }
-    }
-
-    playConfigs {
-        register("green") {
-            track.set("production")
-        }
-        register("blue") {
-            track.set("internal")
+                "${buildType.name}_${abi}.apk"
         }
     }
 }
