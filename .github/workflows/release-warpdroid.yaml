@@ -12,9 +12,19 @@ on:
         description: "Specify a Git tag to attach the APK to (e.g., v1.0.0)"
         required: true
         type: string
+  # PR trigger is for testing the build+sign pipeline before merging.
+  # On PR runs the GitHub Release publish step is skipped and the
+  # signed APK is uploaded as a workflow artifact instead so reviewers
+  # can sideload it from the Actions run page.
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'warpdroid/**'
+      - '.github/workflows/release-warpdroid.yaml'
 
 env:
-  RELEASE_TAG: ${{ github.event.inputs.tag }}
+  # Falls back to `pr-<sha>` on PR runs where no tag input exists.
+  RELEASE_TAG: ${{ github.event.inputs.tag || format('pr-{0}', github.sha) }}
 
 jobs:
   release-warpdroid:
@@ -93,7 +103,22 @@ jobs:
           "$apksigner" verify --print-certs "$signed"
           shasum -a 256 "$signed" > "warpdroid_${{ env.RELEASE_TAG }}_checksums.txt"
 
+      # Always upload as a workflow artifact so PR runs are testable.
+      # On dispatch runs this is a convenience copy of what also lands
+      # on the GitHub Release.
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: warpdroid-${{ env.RELEASE_TAG }}
+          path: |
+            warpdroid/warpdroid_${{ env.RELEASE_TAG }}.apk
+            warpdroid/warpdroid_${{ env.RELEASE_TAG }}_checksums.txt
+          if-no-files-found: error
+
+      # Production publish — only on workflow_dispatch (tag input).
+      # PR runs skip this so they don't mutate releases.
       - name: Publish APK to GitHub Release
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
