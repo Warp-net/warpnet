@@ -1,4 +1,4 @@
-name: Member Node Release
+name: Release
 
 on:
   workflow_dispatch:
@@ -126,3 +126,91 @@ jobs:
             warpnet_${{ env.RELEASE_TAG }}_darwin_checksums.txt
             warpnet_${{ env.RELEASE_TAG }}_windows_amd64.zip
             warpnet_${{ env.RELEASE_TAG }}_windows_amd64_checksums.txt
+
+  release-warpdroid:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, fetch-tags: true }
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: warpdroid
+
+      # services.gradle.org redirects to github.com/gradle/gradle-distributions,
+      # which intermittently returns 504. Same workaround as build-warpdroid.yml.
+      - name: Pre-fetch Gradle distribution
+        run: |
+          set -euo pipefail
+          cache_dir="$HOME/.gradle/wrapper/dists/gradle-9.0.0-bin/d6wjpkvcgsg3oed0qlfss3wgl"
+          mkdir -p "$cache_dir"
+          if [ -s "$cache_dir/gradle-9.0.0-bin.zip" ]; then
+            echo "Gradle distribution already cached at $cache_dir."
+            exit 0
+          fi
+          curl --fail --location --show-error \
+            --retry 8 --retry-all-errors --retry-delay 15 \
+            --connect-timeout 30 --max-time 300 \
+            -o "$cache_dir/gradle-9.0.0-bin.zip" \
+            https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
+
+      - name: Assemble release APK
+        working-directory: warpdroid
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      # Build an ephemeral signing key on the fly. APK installs cleanly on
+      # Android (no debug-build install warnings, no debuggable=true flag),
+      # but the key changes every release — users must uninstall the old
+      # version before installing a newer release. Promote to a stable
+      # keystore stored in GitHub Secrets when the project leaves alpha.
+      - name: Generate ephemeral keystore
+        working-directory: warpdroid
+        run: |
+          keytool -genkeypair -v \
+            -keystore release.jks \
+            -storepass changeit -keypass changeit \
+            -alias warpdroid \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Warpdroid Release, OU=CI, O=Warpnet, L=NA, S=NA, C=NA"
+
+      - name: Sign release APK
+        working-directory: warpdroid
+        run: |
+          set -euo pipefail
+          build_tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          apksigner="${build_tools}apksigner"
+          zipalign="${build_tools}zipalign"
+          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
+          aligned=app/build/outputs/apk/release/app-release-aligned.apk
+          signed=warpdroid_${{ env.RELEASE_TAG }}.apk
+          "$zipalign" -p 4 "$unsigned" "$aligned"
+          "$apksigner" sign \
+            --ks release.jks \
+            --ks-pass pass:changeit \
+            --key-pass pass:changeit \
+            --ks-key-alias warpdroid \
+            --out "$signed" \
+            "$aligned"
+          "$apksigner" verify --print-certs "$signed"
+          shasum -a 256 "$signed" > "warpdroid_${{ env.RELEASE_TAG }}_checksums.txt"
+
+      - name: Publish APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_TAG || 'no_tag' }}
+          name: ${{ env.RELEASE_TAG }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            warpdroid/warpdroid_${{ env.RELEASE_TAG }}.apk
+            warpdroid/warpdroid_${{ env.RELEASE_TAG }}_checksums.txt
