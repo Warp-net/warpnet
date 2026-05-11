@@ -4,6 +4,13 @@ name: Warpdroid Release
 # independently of the desktop matrix in release.yaml. Same tag input
 # semantics — the published asset is attached to the GitHub Release
 # identified by `tag`.
+#
+# We ship the debug-variant APK. Gradle signs it automatically with
+# the Android SDK debug keystore so it installs cleanly on any device
+# via "Install from unknown sources"; there is no end-user-visible
+# debug warning at install time. Going to a properly signed release
+# variant would require a stable keystore stored in GitHub Secrets —
+# defer that until the project leaves alpha.
 
 on:
   workflow_dispatch:
@@ -12,9 +19,9 @@ on:
         description: "Specify a Git tag to attach the APK to (e.g., v1.0.0)"
         required: true
         type: string
-  # PR trigger is for testing the build+sign pipeline before merging.
+  # PR trigger is for testing the build pipeline before merging.
   # On PR runs the GitHub Release publish step is skipped and the
-  # signed APK is uploaded as a workflow artifact instead so reviewers
+  # APK is uploaded as a workflow artifact instead so reviewers
   # can sideload it from the Actions run page.
   pull_request:
     branches: [main, develop]
@@ -47,15 +54,6 @@ jobs:
         with:
           build-root-directory: warpdroid
 
-      # Install Android SDK + a known build-tools version explicitly so
-      # apksigner / zipalign are on PATH regardless of the runner's
-      # pre-baked Android layout. v34.0.0 is the floor for Tusky's
-      # compileSdk; bump together with app/build.gradle.
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'build-tools;34.0.0 platform-tools'
-
       # services.gradle.org redirects to github.com/gradle/gradle-distributions,
       # which intermittently returns 504. Same workaround as build-warpdroid.yml.
       - name: Pre-fetch Gradle distribution
@@ -73,75 +71,22 @@ jobs:
             -o "$cache_dir/gradle-9.0.0-bin.zip" \
             https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
 
-      - name: Environment dump
-        run: |
-          echo "=== ANDROID_HOME / ANDROID_SDK_ROOT ==="
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
-          echo "=== PATH ==="
-          echo "$PATH"
-          echo "=== which apksigner zipalign keytool ==="
-          which apksigner zipalign keytool || true
-          echo "=== build-tools listing ==="
-          ls -la "$ANDROID_HOME/build-tools" || true
-          echo "=== java -version ==="
-          java -version
-          echo "=== gradle wrapper ==="
-          ls -la warpdroid/gradlew
-
-      - name: Assemble release APK
+      - name: Assemble debug APK
         working-directory: warpdroid
         run: |
           set -o pipefail
-          ./gradlew :app:assembleRelease --stacktrace 2>&1 | tee assemble-release.log
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee assemble.log
 
-      # Build an ephemeral signing key on the fly. APK installs cleanly on
-      # Android (no debug-build install warnings, no debuggable=true flag),
-      # but the key changes every release — users must uninstall the old
-      # version before installing a newer release. Promote to a stable
-      # keystore stored in GitHub Secrets when the project leaves alpha.
-      - name: Generate ephemeral keystore
+      - name: Rename APK + checksum
         working-directory: warpdroid
         run: |
-          set -o pipefail
-          keytool -genkeypair -v \
-            -keystore release.jks \
-            -storepass changeit -keypass changeit \
-            -alias warpdroid \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Warpdroid Release, OU=CI, O=Warpnet, L=NA, S=NA, C=NA" 2>&1 | tee keystore.log
+          set -euo pipefail
+          src=app/build/outputs/apk/debug/app-debug.apk
+          dst=warpdroid_${RELEASE_TAG}.apk
+          cp "$src" "$dst"
+          shasum -a 256 "$dst" > "warpdroid_${RELEASE_TAG}_checksums.txt"
+          ls -la "$dst" "warpdroid_${RELEASE_TAG}_checksums.txt"
 
-      - name: Sign release APK
-        working-directory: warpdroid
-        run: |
-          set -uxo pipefail
-          {
-            echo "=== outputs ==="
-            find app/build/outputs -type f 2>/dev/null | sort
-            echo "=== tooling ==="
-            which apksigner zipalign
-            apksigner --version || true
-          } | tee sign.log
-          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
-          aligned=app/build/outputs/apk/release/app-release-aligned.apk
-          signed=warpdroid_${RELEASE_TAG}.apk
-          if [ ! -f "$unsigned" ]; then
-            echo "FATAL: $unsigned not found" | tee -a sign.log
-            exit 11
-          fi
-          set -e
-          zipalign -p 4 "$unsigned" "$aligned" 2>&1 | tee -a sign.log
-          apksigner sign \
-            --ks release.jks \
-            --ks-pass pass:changeit \
-            --key-pass pass:changeit \
-            --ks-key-alias warpdroid \
-            --out "$signed" \
-            "$aligned" 2>&1 | tee -a sign.log
-          apksigner verify --print-certs "$signed" 2>&1 | tee -a sign.log
-          shasum -a 256 "$signed" > "warpdroid_${RELEASE_TAG}_checksums.txt"
-
-      # Upload signed APK as a workflow artifact on success.
       - name: Upload APK as workflow artifact
         if: success()
         uses: actions/upload-artifact@v4
@@ -152,22 +97,8 @@ jobs:
             warpdroid/warpdroid_${{ env.RELEASE_TAG }}_checksums.txt
           if-no-files-found: error
 
-      # Always upload diagnostic artifacts (logs + outputs directory)
-      # so failures can be triaged without re-running the workflow.
-      - name: Upload diagnostic artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: warpdroid-diagnostics-${{ env.RELEASE_TAG }}-${{ github.run_attempt }}
-          path: |
-            warpdroid/*.log
-            warpdroid/app/build/outputs/**
-            warpdroid/app/build/reports/**
-          if-no-files-found: warn
-
-      # Mirror the build-warpdroid.yml UX: post the tail of the failing
-      # log as a PR comment so reviewers can see the failure reason
-      # without leaving the PR page.
+      # Mirror build-warpdroid.yml's UX so failures are visible without
+      # diving into Actions logs.
       - name: Post failure as PR comment
         if: failure() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -175,7 +106,7 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            const tail = (p, bytes = 30000) => {
+            const tail = (p, bytes = 60000) => {
               if (!fs.existsSync(p)) return `(no ${p} produced)`;
               const stat = fs.statSync(p);
               const start = Math.max(0, stat.size - bytes);
@@ -185,25 +116,16 @@ jobs:
               fs.closeSync(fd);
               return buf.toString('utf8');
             };
-            const assembleLog = tail(path.join('warpdroid', 'assemble-release.log'));
-            const signLog = tail(path.join('warpdroid', 'sign.log'));
+            const assembleLog = tail(path.join('warpdroid', 'assemble.log'));
             const body = [
               `## release-warpdroid failure (\`${context.sha.substring(0, 7)}\`)`,
               '',
               `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
-              '<details><summary><code>:app:assembleRelease</code> tail (30 KB)</summary>',
+              '<details><summary><code>:app:assembleDebug</code> tail (60 KB)</summary>',
               '',
               '```',
               assembleLog,
-              '```',
-              '',
-              '</details>',
-              '',
-              '<details><summary>Sign step tail (30 KB)</summary>',
-              '',
-              '```',
-              signLog,
               '```',
               '',
               '</details>',
