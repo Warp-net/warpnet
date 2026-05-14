@@ -77,9 +77,6 @@ func NewApp() *App {
 	return &App{}
 }
 
-// IsFirstRun reports whether the local database has never been opened
-// before. The frontend uses it to decide between the sign-up and the
-// login screen on startup.
 func (a *App) IsFirstRun() bool {
 	if a == nil || a.mx == nil {
 		return false
