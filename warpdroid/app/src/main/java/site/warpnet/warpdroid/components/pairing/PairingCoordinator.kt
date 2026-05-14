@@ -7,6 +7,8 @@ package site.warpnet.warpdroid.components.pairing
 
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import site.warpnet.transport.ConnectionState
 import site.warpnet.transport.Ed25519IdentityStore
 import site.warpnet.transport.WarpnetClient
@@ -74,7 +76,10 @@ class PairingCoordinator @Inject constructor(
             client.initialise(config)
             val dialed = client.connectAny(candidates)
             client.pair(rawJson)
-            pairedNodeStore.save(paired, rawJson)
+            // EncryptedSharedPreferences open / write touches disk and the
+            // KeyStore; hop to IO so a first-ever scan doesn't initialise
+            // the lazy prefs on the main thread.
+            withContext(Dispatchers.IO) { pairedNodeStore.save(paired, rawJson) }
             PairingOutcome.Success(paired, dialed)
         } catch (e: WarpnetException.ProtocolError) {
             PairingOutcome.Rejected(e.code, e.serverMessage)
