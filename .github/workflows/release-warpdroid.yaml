@@ -11,6 +11,10 @@ name: Warpdroid Release
 # debug warning at install time. Going to a properly signed release
 # variant would require a stable keystore stored in GitHub Secrets —
 # defer that until the project leaves alpha.
+#
+# Manual-only. PR-time build verification is handled by
+# build-warpdroid.yml; this workflow only fires when explicitly
+# dispatched with a tag.
 
 on:
   workflow_dispatch:
@@ -19,26 +23,15 @@ on:
         description: "Specify a Git tag to attach the APK to (e.g., v1.0.0)"
         required: true
         type: string
-  # PR trigger is for testing the build pipeline before merging.
-  # On PR runs the GitHub Release publish step is skipped and the
-  # APK is uploaded as a workflow artifact instead so reviewers
-  # can sideload it from the Actions run page.
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'warpdroid/**'
-      - '.github/workflows/release-warpdroid.yaml'
 
 env:
-  # Falls back to `pr-<sha>` on PR runs where no tag input exists.
-  RELEASE_TAG: ${{ github.event.inputs.tag || format('pr-{0}', github.sha) }}
+  RELEASE_TAG: ${{ github.event.inputs.tag }}
 
 jobs:
   release-warpdroid:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0, fetch-tags: true }
@@ -106,61 +99,14 @@ jobs:
             warpdroid/warpdroid_${{ env.RELEASE_TAG }}_checksums.txt
           if-no-files-found: error
 
-      # Mirror build-warpdroid.yml's UX so failures are visible without
-      # diving into Actions logs.
-      - name: Post failure as PR comment
-        if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            const tail = (p, bytes = 60000) => {
-              if (!fs.existsSync(p)) return `(no ${p} produced)`;
-              const stat = fs.statSync(p);
-              const start = Math.max(0, stat.size - bytes);
-              const fd = fs.openSync(p, 'r');
-              const buf = Buffer.alloc(stat.size - start);
-              fs.readSync(fd, buf, 0, buf.length, start);
-              fs.closeSync(fd);
-              return buf.toString('utf8');
-            };
-            const assembleLog = tail(path.join('warpdroid', 'assemble.log'));
-            const body = [
-              `## release-warpdroid failure (\`${context.sha.substring(0, 7)}\`)`,
-              '',
-              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              '',
-              '<details><summary><code>:app:assembleDebug</code> tail (60 KB)</summary>',
-              '',
-              '```',
-              assembleLog,
-              '```',
-              '',
-              '</details>',
-            ].join('\n');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body,
-            });
-
-      # Publish to GitHub Release. On workflow_dispatch (tag input)
-      # a normal release is created/updated for that tag. On PR runs
-      # we still publish — marked as prerelease, tagged `pr-<sha>` —
-      # so the full pipeline including the upload step is exercised
-      # before merge. PR-tagged prereleases can be deleted manually
-      # after testing.
       - name: Publish APK to GitHub Release
         if: success()
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.RELEASE_TAG || 'no_tag' }}
+          tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_TAG }}
-          prerelease: ${{ github.event_name == 'pull_request' }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
             warpdroid/warpdroid_${{ env.RELEASE_TAG }}.apk
