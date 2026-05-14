@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 vi.mock('@/service/service', () => ({
   warpnetService: {
     signInUser: vi.fn(),
+    isFirstRun: vi.fn(),
   },
 }));
 
@@ -13,7 +14,7 @@ import { warpnetService } from '@/service/service';
 const routerPush = vi.fn();
 
 const renderRoot = ({ firstRun = true } = {}) => {
-  window.isFirstRun = firstRun;
+  warpnetService.isFirstRun.mockResolvedValue(firstRun);
   return render(Root, {
     global: {
       mocks: {
@@ -36,13 +37,13 @@ beforeAll(() => {
 afterAll(() => {
   logSpy.mockRestore();
   errSpy.mockRestore();
-  delete window.isFirstRun;
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
   routerPush.mockClear();
   warpnetService.signInUser.mockResolvedValue(undefined);
+  warpnetService.isFirstRun.mockResolvedValue(true);
 });
 
 describe('Root.vue', () => {
@@ -119,9 +120,11 @@ describe('Root.vue', () => {
       await screen.findByRole('button', { name: 'Next' })
     );
 
-    // Step 3: password
-    const passwordField = await screen.findByLabelText(/Password/i);
+    // Step 3: password + confirm
+    const passwordField = await screen.findByLabelText('Password');
+    const passwordConfirmField = await screen.findByLabelText('Confirm password');
     await fireEvent.update(passwordField, 's3cret');
+    await fireEvent.update(passwordConfirmField, 's3cret');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     // Step 4: final Sign up (two "Sign up" buttons exist now — the landing one
@@ -158,7 +161,11 @@ describe('Root.vue', () => {
 
     // Step 3
     await fireEvent.update(
-      await screen.findByLabelText(/Password/i),
+      await screen.findByLabelText('Password'),
+      's3cret'
+    );
+    await fireEvent.update(
+      await screen.findByLabelText('Confirm password'),
       's3cret'
     );
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
@@ -173,6 +180,42 @@ describe('Root.vue', () => {
     expect(routerPush).not.toHaveBeenCalled();
   });
 
+  it('keeps step 3 Next disabled while password and confirm-password differ', async () => {
+    renderRoot({ firstRun: true });
+
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /^Sign up$/ })
+    );
+    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
+    await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    const checkboxes = await screen.findAllByRole('checkbox');
+    for (const cb of checkboxes) await fireEvent.click(cb);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+
+    const passwordField = await screen.findByLabelText('Password');
+    const passwordConfirmField = await screen.findByLabelText('Confirm password');
+    await fireEvent.update(passwordField, 's3cret');
+    await fireEvent.update(passwordConfirmField, 'mismatch');
+
+    const nextBtn = await screen.findByRole('button', { name: 'Next' });
+    expect(nextBtn).toBeDisabled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/do not match/i);
+
+    await fireEvent.update(passwordConfirmField, 's3cret');
+    expect(nextBtn).not.toBeDisabled();
+  });
+
+  it('falls back to the log-in component when isFirstRun rejects', async () => {
+    warpnetService.isFirstRun.mockRejectedValueOnce(new Error('boom'));
+    renderRoot({ firstRun: true });
+
+    expect(await screen.findByTestId('login-stub')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Sign up$/ })
+    ).not.toBeInTheDocument();
+  });
+
   it('toggles the password reveal button between password and text input', async () => {
     renderRoot({ firstRun: true });
 
@@ -185,10 +228,13 @@ describe('Root.vue', () => {
     for (const cb of checkboxes) await fireEvent.click(cb);
     await fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
 
-    const passwordField = await screen.findByLabelText(/Password/i);
+    const passwordField = await screen.findByLabelText('Password');
+    const passwordConfirmField = await screen.findByLabelText('Confirm password');
     expect(passwordField).toHaveAttribute('type', 'password');
+    expect(passwordConfirmField).toHaveAttribute('type', 'password');
 
     await fireEvent.click(screen.getByRole('button', { name: /Reveal password/i }));
     expect(passwordField).toHaveAttribute('type', 'text');
+    expect(passwordConfirmField).toHaveAttribute('type', 'text');
   });
 });

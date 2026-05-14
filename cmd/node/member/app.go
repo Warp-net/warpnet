@@ -77,6 +77,18 @@ func NewApp() *App {
 	return &App{}
 }
 
+func (a *App) IsFirstRun() bool {
+	if a == nil || a.mx == nil {
+		return false
+	}
+	a.mx.RLock()
+	defer a.mx.RUnlock()
+	if a.db == nil {
+		return false
+	}
+	return a.db.IsFirstRun()
+}
+
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {

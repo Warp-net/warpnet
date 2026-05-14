@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call} from "../../wailsjs/go/main/App";
+import {Call, IsFirstRun} from "../../wailsjs/go/main/App";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -129,6 +129,10 @@ export const warpnetService = {
     getOwnerProfile() {
         const key = `owner`;
         return stateMap.get(key)
+    },
+
+    async isFirstRun() {
+        return Boolean(await IsFirstRun());
     },
 
     async signInUser(form) {
