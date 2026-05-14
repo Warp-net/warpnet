@@ -37,6 +37,11 @@ class PairedNodeStore @Inject constructor(
     private val ref = AtomicReference<PairedNode?>(null)
 
     private val prefs: SharedPreferences? by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        // The previous on-disk pairing schema lived in `warpnet_pairing`
+        // and used a different value layout. Wipe it on first access of
+        // the new file so legacy encrypted entries don't linger after an
+        // upgrade past the in-memory-only build.
+        runCatching { context.deleteSharedPreferences(LEGACY_PREFS_FILE) }
         openPrefs() ?: run {
             // Best-effort wipe and retry once. The most common failure mode
             // is a KeyStore key invalidated by a lock-screen-credential
@@ -67,8 +72,22 @@ class PairedNodeStore @Inject constructor(
         prefs?.edit()?.putString(KEY_RAW_QR, rawQrJson)?.apply()
     }
 
-    /** Returns the raw QR JSON payload persisted on the last successful pair, or null. */
-    fun loadRawQr(): String? = prefs?.getString(KEY_RAW_QR, null)
+    /**
+     * Returns the raw QR JSON payload persisted on the last successful pair,
+     * or null when nothing is stored or decryption fails. A decrypt failure
+     * means the keyset got out of sync with the stored value (the prefs file
+     * survived a key-invalidating event the [openPrefs] retry path didn't
+     * catch); wipe the entry so the next launch lands on a clean scanner.
+     */
+    fun loadRawQr(): String? {
+        val handle = prefs ?: return null
+        return runCatching { handle.getString(KEY_RAW_QR, null) }
+            .onFailure {
+                Log.w(TAG, "loadRawQr decrypt failed; clearing", it)
+                runCatching { handle.edit().remove(KEY_RAW_QR).apply() }
+            }
+            .getOrNull()
+    }
 
     /** "Forget this node" — invoked from Settings and on failed re-auth. */
     fun clear() {
@@ -77,7 +96,8 @@ class PairedNodeStore @Inject constructor(
     }
 
     private companion object {
-        const val PREFS_FILE = "warpnet_pairing"
+        const val PREFS_FILE = "warpnet_pairing_v2"
+        const val LEGACY_PREFS_FILE = "warpnet_pairing"
         const val KEY_RAW_QR = "paired_fat_node_qr"
         const val TAG = "PairedNodeStore"
     }
