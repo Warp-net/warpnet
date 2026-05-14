@@ -77,6 +77,21 @@ func NewApp() *App {
 	return &App{}
 }
 
+// IsFirstRun reports whether the local database has never been opened
+// before. The frontend uses it to decide between the sign-up and the
+// login screen on startup.
+func (a *App) IsFirstRun() bool {
+	if a == nil || a.mx == nil {
+		return false
+	}
+	a.mx.RLock()
+	defer a.mx.RUnlock()
+	if a.db == nil {
+		return false
+	}
+	return a.db.IsFirstRun()
+}
+
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {

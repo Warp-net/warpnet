@@ -73,7 +73,8 @@ if (process.env.NODE_ENV === 'development') {
                 Call: (arg1) => {
                     const body = generateResponse(arg1);
                     return Promise.resolve({body:body});
-                }
+                },
+                IsFirstRun: () => Promise.resolve(true),
             }
         }
     };

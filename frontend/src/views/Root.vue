@@ -178,6 +178,8 @@ resulting from the use or misuse of this software.
             <button
               @click="setSignUpStep('step4')"
               class="rounded-full bg-blue font-bold text-white mt-2 p-1 pl-3 pr-3 relative right-0 float-right hover:bg-darkblue"
+              :class="!isPasswordPairValid ? 'opacity-50 cursor-not-allowed' : ''"
+              :disabled="!isPasswordPairValid"
             >
               Next
             </button>
@@ -201,6 +203,25 @@ resulting from the use or misuse of this software.
                 autocomplete="new-password"
               />
             </div>
+
+            <div class="w-full bg-lightblue border-b-2 border-dark p-2 mt-4">
+              <label for="signup-password-confirm" class="leading-tight text-dark">Confirm password</label>
+              <input
+                id="signup-password-confirm"
+                v-model="passwordConfirm"
+                class="w-full bg-lightblue text-lg"
+                :type="`${revealPassword ? 'text' : 'password'}`"
+                autocomplete="new-password"
+              />
+            </div>
+
+            <p
+              v-if="password && passwordConfirm && password !== passwordConfirm"
+              class="mt-2 text-red-600 text-sm font-medium"
+              role="alert"
+            >
+              Passwords do not match.
+            </p>
 
             <button
               @click="revealPassword = !revealPassword"
@@ -266,6 +287,7 @@ export default {
     return {
       username: "",
       password: "",
+      passwordConfirm: "",
       revealPassword: false,
       isFirstRun: false,
       isLoading: false,
@@ -277,8 +299,22 @@ export default {
       signUpError: "",
     };
   },
-  mounted() {
-    this.isFirstRun = window.isFirstRun || false;
+  computed: {
+    isPasswordPairValid() {
+      return (
+        this.password.length > 0 &&
+        this.passwordConfirm.length > 0 &&
+        this.password === this.passwordConfirm
+      );
+    },
+  },
+  async mounted() {
+    try {
+      this.isFirstRun = await warpnetService.isFirstRun();
+    } catch (err) {
+      console.error("failed to determine first-run state:", err);
+      this.isFirstRun = false;
+    }
     console.log("Is first run:", this.isFirstRun);
   },
   methods: {
@@ -311,6 +347,9 @@ export default {
           }
           break;
         case "step4":
+          if (!this.isPasswordPairValid) {
+            return;
+          }
           break;
       }
       this.setStep(step);
