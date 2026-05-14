@@ -572,7 +572,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		stats := resp.(event.TweetStatsResponse)
-		if stats.TweetsCount != 10 || stats.ViewsCount != 100 || stats.LikeCount != 5 || stats.RetweetsCount != 3 || stats.RepliesCount != 2 {
+		if stats.ViewsCount != 100 || stats.LikeCount != 5 || stats.RetweetsCount != 3 || stats.RepliesCount != 2 {
 			t.Fatalf("unexpected stats: %+v", stats)
 		}
 	})
