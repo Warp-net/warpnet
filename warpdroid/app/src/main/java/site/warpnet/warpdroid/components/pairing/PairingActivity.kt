@@ -31,7 +31,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import site.warpnet.transport.dto.AuthNodeInfo
 
 /**
@@ -88,32 +90,35 @@ class PairingActivity : AppCompatActivity() {
         // the last successful pair. On success we hand straight off to
         // MainActivity without showing the camera. On auth-level failure
         // (server rejection or peer-id mismatch) the stored QR is wiped
-        // so the user lands on a fresh scan.
-        val storedQr = pairedNodeStore.loadRawQr()
-        if (storedQr != null) {
-            tryAutoPair(storedQr)
-            return
+        // so the user lands on a fresh scan. The lazy EncryptedSharedPreferences
+        // open happens on Dispatchers.IO so the keystore init + file I/O
+        // never blocks the first frame.
+        scanPrompt.visibility = View.GONE
+        previewView.visibility = View.GONE
+        progress.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            val storedQr = withContext(Dispatchers.IO) { pairedNodeStore.loadRawQr() }
+            if (storedQr != null) {
+                tryAutoPair(storedQr)
+            } else {
+                progress.visibility = View.GONE
+                startCameraOrManual()
+            }
         }
-
-        startCameraOrManual()
     }
 
-    private fun tryAutoPair(rawJson: String) {
+    private suspend fun tryAutoPair(rawJson: String) {
         when (val result = validator.validate(rawJson)) {
             is ValidationResult.Valid -> {
-                scanPrompt.visibility = View.GONE
-                previewView.visibility = View.GONE
-                progress.visibility = View.VISIBLE
-                lifecycleScope.launch {
-                    val outcome = pairingCoordinator.pair(result.authNodeInfo, result.rawJson)
-                    progress.visibility = View.GONE
-                    handleAutoPairOutcome(outcome)
-                }
+                val outcome = pairingCoordinator.pair(result.authNodeInfo, result.rawJson)
+                progress.visibility = View.GONE
+                handleAutoPairOutcome(outcome)
             }
             is ValidationResult.Invalid -> {
                 // Stored payload no longer parses; treat as a hard failure
                 // and drop it so the next launch starts clean.
-                pairedNodeStore.clear()
+                withContext(Dispatchers.IO) { pairedNodeStore.clear() }
+                progress.visibility = View.GONE
                 startCameraOrManual()
             }
         }
