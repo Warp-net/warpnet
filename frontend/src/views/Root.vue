@@ -53,13 +53,13 @@ resulting from the use or misuse of this software.
             Dive deep into the Warp and see what happens...
           </p>
           <p>Join Warpnet today.</p>
-          <button v-if="isFirstRun"
+          <button v-if="isFirstRun === true"
             @click.prevent="setSignUpStep('step1')"
             class="rounded-full bg-blue font-bold text-lg text-white mt-4 p-3 hover:bg-darkblue"
           >
             Sign up
           </button>
-          <LogInComponent v-else></LogInComponent>
+          <LogInComponent v-else-if="isFirstRun === false"></LogInComponent>
         </div>
       </div>
     </div>
@@ -289,7 +289,7 @@ export default {
       password: "",
       passwordConfirm: "",
       revealPassword: false,
-      isFirstRun: false,
+      isFirstRun: null,
       isLoading: false,
       showModal: "",
 

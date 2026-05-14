@@ -132,12 +132,7 @@ export const warpnetService = {
     },
 
     async isFirstRun() {
-        try {
-            return Boolean(await IsFirstRun());
-        } catch (err) {
-            console.error("failed to read first-run flag:", err);
-            return false;
-        }
+        return Boolean(await IsFirstRun());
     },
 
     async signInUser(form) {
