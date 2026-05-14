@@ -74,7 +74,7 @@ class PairingCoordinator @Inject constructor(
             client.initialise(config)
             val dialed = client.connectAny(candidates)
             client.pair(rawJson)
-            pairedNodeStore.save(paired)
+            pairedNodeStore.save(paired, rawJson)
             PairingOutcome.Success(paired, dialed)
         } catch (e: WarpnetException.ProtocolError) {
             PairingOutcome.Rejected(e.code, e.serverMessage)

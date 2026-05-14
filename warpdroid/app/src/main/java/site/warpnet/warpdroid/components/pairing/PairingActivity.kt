@@ -46,6 +46,8 @@ class PairingActivity : AppCompatActivity() {
 
     @Inject lateinit var pairingCoordinator: PairingCoordinator
 
+    @Inject lateinit var pairedNodeStore: PairedNodeStore
+
     private lateinit var previewView: PreviewView
     private lateinit var progress: View
     private lateinit var messagePanel: View
@@ -82,14 +84,82 @@ class PairingActivity : AppCompatActivity() {
         cancelButton = findViewById(R.id.cancelButton)
         scanPrompt = findViewById(R.id.scanPrompt)
 
-        // The manifest marks camera hardware as optional, so the scanner must
-        // handle cameraless devices too. Skip the permission dance and jump
-        // straight to manual input when there is nothing to point at.
+        // Try to re-authenticate using the keystore-backed QR payload from
+        // the last successful pair. On success we hand straight off to
+        // MainActivity without showing the camera. On auth-level failure
+        // (server rejection or peer-id mismatch) the stored QR is wiped
+        // so the user lands on a fresh scan.
+        val storedQr = pairedNodeStore.loadRawQr()
+        if (storedQr != null) {
+            tryAutoPair(storedQr)
+            return
+        }
+
+        startCameraOrManual()
+    }
+
+    private fun tryAutoPair(rawJson: String) {
+        when (val result = validator.validate(rawJson)) {
+            is ValidationResult.Valid -> {
+                scanPrompt.visibility = View.GONE
+                previewView.visibility = View.GONE
+                progress.visibility = View.VISIBLE
+                lifecycleScope.launch {
+                    val outcome = pairingCoordinator.pair(result.authNodeInfo, result.rawJson)
+                    progress.visibility = View.GONE
+                    handleAutoPairOutcome(outcome)
+                }
+            }
+            is ValidationResult.Invalid -> {
+                // Stored payload no longer parses; treat as a hard failure
+                // and drop it so the next launch starts clean.
+                pairedNodeStore.clear()
+                startCameraOrManual()
+            }
+        }
+    }
+
+    private fun handleAutoPairOutcome(outcome: PairingOutcome) {
+        when (outcome) {
+            is PairingOutcome.Success -> {
+                startActivity(
+                    Intent(this, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                finish()
+            }
+            is PairingOutcome.Rejected,
+            is PairingOutcome.PeerIdMismatch -> {
+                // Auth was refused by the fat node, so the stored credentials
+                // will not work again. Wipe them and fall back to a fresh scan.
+                pairedNodeStore.clear()
+                Toast.makeText(
+                    this,
+                    R.string.warpnet_pair_auto_failed,
+                    Toast.LENGTH_LONG,
+                ).show()
+                startCameraOrManual()
+            }
+            is PairingOutcome.TransportError -> {
+                // Likely network / firewall; keep the stored QR so the next
+                // launch can retry, but still let the user scan a new one now.
+                Toast.makeText(
+                    this,
+                    getString(R.string.warpnet_pair_error_transport, outcome.message),
+                    Toast.LENGTH_LONG,
+                ).show()
+                startCameraOrManual()
+            }
+        }
+    }
+
+    private fun startCameraOrManual() {
+        scanPrompt.visibility = View.VISIBLE
+        previewView.visibility = View.VISIBLE
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
             showManualInput()
             return
         }
-
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         ) {

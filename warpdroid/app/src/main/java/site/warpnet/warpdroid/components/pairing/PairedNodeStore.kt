@@ -6,18 +6,21 @@
 package site.warpnet.warpdroid.components.pairing
 
 import android.content.Context
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * In-memory store for the active pairing.
- *
- * Auth state never touches disk: every cold start lands the user back at
- * the QR scanner. The previously-persisted EncryptedSharedPreferences
- * file is deleted on first construction so any pairing left over from
- * an older build of the app is wiped.
+ * Persists the raw QR pairing payload in Android Keystore-backed
+ * EncryptedSharedPreferences so the app can re-authenticate after a
+ * cold start without forcing the user to re-scan. The parsed
+ * [PairedNode] itself is held in memory for the lifetime of the
+ * process — every cold start re-derives it from the stored QR JSON
+ * via [PairingCoordinator].
  */
 @Singleton
 class PairedNodeStore @Inject constructor(
@@ -25,25 +28,34 @@ class PairedNodeStore @Inject constructor(
 ) {
     private val ref = AtomicReference<PairedNode?>(null)
 
-    init {
-        // Best-effort: drop the legacy encrypted-prefs file from earlier
-        // builds. If anything in androidx.security failed to initialise
-        // the master key, deleteSharedPreferences just no-ops.
-        runCatching { context.deleteSharedPreferences(LEGACY_PREFS_FILE) }
-    }
+    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
+        context,
+        PREFS_FILE,
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
 
     fun load(): PairedNode? = ref.get()
 
-    fun save(node: PairedNode) {
+    fun save(node: PairedNode, rawQrJson: String) {
         ref.set(node)
+        prefs.edit().putString(KEY_RAW_QR, rawQrJson).apply()
     }
 
-    /** "Forget this node" — invoked from Settings. */
+    /** Returns the raw QR JSON payload persisted on the last successful pair, or null. */
+    fun loadRawQr(): String? = prefs.getString(KEY_RAW_QR, null)
+
+    /** "Forget this node" — invoked from Settings and on failed re-auth. */
     fun clear() {
         ref.set(null)
+        prefs.edit().remove(KEY_RAW_QR).apply()
     }
 
     private companion object {
-        const val LEGACY_PREFS_FILE = "warpnet_pairing"
+        const val PREFS_FILE = "warpnet_pairing"
+        const val KEY_RAW_QR = "paired_fat_node_qr"
     }
 }
