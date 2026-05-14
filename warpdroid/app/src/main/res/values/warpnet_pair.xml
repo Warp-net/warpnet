@@ -18,4 +18,5 @@
     <string name="warpnet_pair_error_peer_mismatch">Peer identity does not match the QR; refusing to pair.</string>
     <string name="warpnet_pair_session_expired">Session expired, please re-pair with your node.</string>
     <string name="warpnet_pair_forget">Forget paired node</string>
+    <string name="warpnet_pair_auto_failed">Saved pairing is no longer accepted; please scan again.</string>
 </resources>
