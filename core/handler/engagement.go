@@ -36,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 )
 
 // LikersLister is the narrow surface the likers handler needs.
@@ -75,8 +76,12 @@ func forwardToOwner(
 		return event.UsersResponse{}, false, nil
 	}
 	owner, err := userRepo.Get(ownerUserId)
-	if errors.Is(err, database.ErrUserNotFound) || err != nil {
+	if errors.Is(err, database.ErrUserNotFound) {
+		// Owner is not yet known locally — fall through to the local index.
 		return event.UsersResponse{}, false, nil
+	}
+	if err != nil {
+		return event.UsersResponse{}, false, err
 	}
 	if owner.NodeId == ownNode.ID.String() {
 		return event.UsersResponse{}, false, nil
@@ -91,6 +96,9 @@ func forwardToOwner(
 	}
 	var out event.UsersResponse
 	if uerr := json.Unmarshal(resp, &out); uerr != nil {
+		// Remote answered with something we can't parse — degrade to the
+		// local index rather than failing the read.
+		log.Warnf("engagement: forward to %s: unmarshal response: %v", owner.NodeId, uerr)
 		return event.UsersResponse{}, false, nil
 	}
 	if out.Cursor == "" && len(out.Users) == 0 {
