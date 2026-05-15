@@ -132,6 +132,7 @@ class ViewThreadFragment :
             defaultViewModelCreationExtras.withCreationCallback<ViewThreadViewModel.Factory> { factory ->
                 factory.create(
                     threadId = requireArguments().getString(ID_EXTRA)!!,
+                    authorId = requireArguments().getString(AUTHOR_ID_EXTRA).orEmpty(),
                 )
             }
         }
@@ -646,12 +647,14 @@ class ViewThreadFragment :
     companion object {
         private const val ID_EXTRA = "id"
         private const val URL_EXTRA = "url"
+        private const val AUTHOR_ID_EXTRA = "author_id"
 
-        fun newInstance(id: String, url: String): ViewThreadFragment {
-            val arguments = Bundle(2)
+        fun newInstance(id: String, url: String, authorId: String): ViewThreadFragment {
+            val arguments = Bundle(3)
             val fragment = ViewThreadFragment()
             arguments.putString(ID_EXTRA, id)
             arguments.putString(URL_EXTRA, url)
+            arguments.putString(AUTHOR_ID_EXTRA, authorId)
             fragment.arguments = arguments
             return fragment
         }

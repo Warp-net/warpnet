@@ -17,7 +17,12 @@ import kotlin.collections.map
 
 fun Context.viewThread(viewData: TweetViewData.Concrete) {
     // the url of a actionable status is never null
-    val intent = ViewThreadActivity.newIntent(this, viewData.actionableId, viewData.actionable.url!!)
+    val intent = ViewThreadActivity.newIntent(
+        this,
+        viewData.actionableId,
+        viewData.actionable.url!!,
+        viewData.actionable.account.id,
+    )
     startActivityWithSlideInAnimation(intent)
 }
 

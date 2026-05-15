@@ -199,7 +199,7 @@ class SearchStatusesFragment :
     }
 
     override fun onViewThread(viewData: TweetViewData.Concrete) {
-        bottomSheetActivity?.viewThread(viewData.id, viewData.status.url)
+        bottomSheetActivity?.viewThread(viewData.id, viewData.status.url, viewData.status.account.id)
     }
 
     override fun onEdit(viewData: TweetViewData.Concrete) {

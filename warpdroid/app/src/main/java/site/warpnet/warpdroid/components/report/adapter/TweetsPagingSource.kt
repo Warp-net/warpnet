@@ -75,7 +75,7 @@ class TweetsPagingSource(
     }
 
     private suspend fun getSingleStatus(statusId: String): Tweet {
-        return warpnetApi.status(statusId).getOrThrow()
+        return warpnetApi.status(statusId, accountId).getOrThrow()
     }
 
     private suspend fun getStatusList(

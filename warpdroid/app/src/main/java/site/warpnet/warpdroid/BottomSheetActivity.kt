@@ -98,7 +98,7 @@ abstract class BottomSheetActivity : BaseActivity() {
                     onEndSearch(url)
 
                     if (statuses.isNotEmpty()) {
-                        viewThread(statuses[0].id, statuses[0].url)
+                        viewThread(statuses[0].id, statuses[0].url, statuses[0].account.id)
                         return@launch
                     }
                     accounts.firstOrNull { it.url.equals(url, ignoreCase = true) }?.let { account ->
@@ -122,11 +122,12 @@ abstract class BottomSheetActivity : BaseActivity() {
         onBeginSearch(url)
     }
 
-    open fun viewThread(statusId: String, url: String?) {
+    open fun viewThread(statusId: String, url: String?, authorId: String = "") {
         if (!isSearching()) {
             val intent = Intent(this, ViewThreadActivity::class.java)
             intent.putExtra("id", statusId)
             intent.putExtra("url", url)
+            intent.putExtra("author_id", authorId)
             startActivityWithSlideInAnimation(intent)
         }
     }

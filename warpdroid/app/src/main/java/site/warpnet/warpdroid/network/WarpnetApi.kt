@@ -368,7 +368,20 @@ class WarpnetApi @Inject constructor(
         status: NewTweet,
     ): NetworkResult<ScheduledTweetReply> = stubFailure("createScheduledStatus")
 
-    suspend fun status(statusId: String): NetworkResult<Tweet> = stubFailure("status")
+    /**
+     * Fetch a single status. Warpnet's wire requires the tweet's author, since
+     * the canonical record lives on the author's node — every call site must
+     * supply [authorId]; passing the active account's id for someone else's
+     * status will fail.
+     */
+    suspend fun status(statusId: String, authorId: String): NetworkResult<Tweet> {
+        if (authorId.isEmpty()) {
+            return NetworkResult.failure(IllegalArgumentException("status($statusId): authorId is required"))
+        }
+        return result {
+            warpnet.getStatus(tweetId = statusId, userId = authorId)
+        }
+    }
 
     suspend fun editStatus(
         statusId: String,
@@ -380,12 +393,20 @@ class WarpnetApi @Inject constructor(
 
     suspend fun statusSource(statusId: String): NetworkResult<TweetSource> = stubFailure("statusSource")
 
-    suspend fun statusContext(statusId: String): NetworkResult<TweetContext> = result {
-        val userId = accountManager.activeAccount?.accountId.orEmpty()
-        TweetContext(
-            ancestors = warpnet.getAncestors(tweetId = statusId, userId = userId),
-            descendants = warpnet.getReplies(rootId = statusId),
-        )
+    /**
+     * Ancestors + descendants for a single status. Like [status], the author
+     * is required because the ancestor walk lives on the author's node.
+     */
+    suspend fun statusContext(statusId: String, authorId: String): NetworkResult<TweetContext> {
+        if (authorId.isEmpty()) {
+            return NetworkResult.failure(IllegalArgumentException("statusContext($statusId): authorId is required"))
+        }
+        return result {
+            TweetContext(
+                ancestors = warpnet.getAncestors(tweetId = statusId, userId = authorId),
+                descendants = warpnet.getReplies(rootId = statusId),
+            )
+        }
     }
 
     suspend fun statusEdits(statusId: String): NetworkResult<List<TweetEdit>> =

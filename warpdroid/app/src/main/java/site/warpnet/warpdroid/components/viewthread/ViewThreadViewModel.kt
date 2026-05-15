@@ -59,7 +59,8 @@ class ViewThreadViewModel @AssistedInject constructor(
     private val api: WarpnetApi,
     private val eventHub: EventHub,
     accountManager: AccountManager,
-    @Assisted("threadId") val threadId: String
+    @Assisted("threadId") val threadId: String,
+    @Assisted("authorId") val authorId: String,
 ) : TweetActionsViewModel(api, eventHub) {
 
     private val activeAccount = accountManager.activeAccount!!
@@ -113,11 +114,11 @@ class ViewThreadViewModel @AssistedInject constructor(
 
     private fun loadThread() {
         viewModelScope.launch {
-            val contextCall = async { api.statusContext(threadId) }
+            val contextCall = async { api.statusContext(threadId, authorId) }
 
             // Warpdroid: no local timeline cache — always load detailed status from network.
             Log.d(TAG, "Loaded status from network")
-            val result = api.status(threadId).getOrElse { exception ->
+            val result = api.status(threadId, authorId).getOrElse { exception ->
                 _uiState.value = ThreadUiState.Error(exception)
                 return@launch
             }
@@ -467,7 +468,8 @@ class ViewThreadViewModel @AssistedInject constructor(
     @AssistedFactory
     interface Factory {
         fun create(
-            @Assisted("threadId") threadId: String
+            @Assisted("threadId") threadId: String,
+            @Assisted("authorId") authorId: String,
         ): ViewThreadViewModel
     }
 
