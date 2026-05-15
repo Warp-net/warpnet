@@ -122,6 +122,8 @@ class WarpnetRepository @Inject constructor(
     private val getConvosAdapter = moshi.adapter<site.warpnet.transport.dto.GetConversationsEvent>()
     private val getConvosRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetConversationsResponse>()
     private val deleteConvoAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteConversationEvent>()
+    private val deleteQuoteAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteQuoteEvent>()
+    private val getQuotingAdapter = moshi.adapter<site.warpnet.transport.dto.GetQuotingEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -424,6 +426,58 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Quote tweets — author commentary referencing another tweet.
+    // -----------------------------------------------------------------
+
+    suspend fun quoteTweet(
+        quotedTweetId: String,
+        quotedUserId: String,
+        userId: String,
+        username: String,
+        text: String,
+    ): WarpnetTweet {
+        val q = WarpnetTweet(
+            id = "",
+            text = text,
+            userId = userId,
+            username = username,
+            quotedTweetId = quotedTweetId,
+            quotedUserId = quotedUserId,
+        )
+        val raw = client.request(
+            ProtocolIds.PUBLIC_POST_QUOTE,
+            newTweetAdapter.toJson(q),
+        )
+        return tweetAdapter.fromJson(raw)
+            ?: throw IllegalStateException("quoteTweet returned empty body")
+    }
+
+    suspend fun deleteQuote(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PUBLIC_DELETE_QUOTE,
+            deleteQuoteAdapter.toJson(
+                site.warpnet.transport.dto.DeleteQuoteEvent(tweetId = tweetId, userId = userId),
+            ),
+        )
+    }
+
+    suspend fun getQuoting(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<Tweet>, String> {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_QUOTING,
+            getQuotingAdapter.toJson(
+                site.warpnet.transport.dto.GetQuotingEvent(
+                    tweetId = tweetId,
+                    ownerUserId = ownerUserId,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            ),
+        )
+        val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList<Tweet>() to ""
+        return hydrateTweets(page.tweets) to page.cursor
     }
 
     // -----------------------------------------------------------------

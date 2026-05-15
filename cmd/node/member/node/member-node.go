@@ -527,6 +527,18 @@ func (m *MemberNode) tweetHandlers(
 			event.PUBLIC_POST_UNRETWEET,
 			handler.StreamUnretweetHandler(r.tweetRepo, userRepo, m),
 		},
+		{
+			event.PUBLIC_POST_QUOTE,
+			handler.StreamNewQuoteHandler(r.tweetRepo),
+		},
+		{
+			event.PUBLIC_DELETE_QUOTE,
+			handler.StreamDeleteQuoteHandler(r.tweetRepo),
+		},
+		{
+			event.PUBLIC_GET_QUOTING,
+			handler.StreamGetQuotingHandler(r.tweetRepo),
+		},
 	}
 }
 

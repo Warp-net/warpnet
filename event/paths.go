@@ -109,4 +109,8 @@ const (
 
 	PRIVATE_GET_CONVERSATIONS    = "/private/get/conversations/0.0.0"
 	PRIVATE_DELETE_CONVERSATION  = "/private/delete/conversation/0.0.0"
+
+	PUBLIC_POST_QUOTE   = "/public/post/quote/0.0.0"
+	PUBLIC_GET_QUOTING  = "/public/get/quoting/0.0.0"
+	PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"
 )

@@ -1148,7 +1148,17 @@ class WarpnetApi @Inject constructor(
         statusId: String,
         limit: Int? = null,
         offset: String? = null,
-    ): Response<List<Tweet>> = stubList()
+    ): Response<List<Tweet>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return paginated {
+            warpnet.getQuoting(
+                tweetId = statusId,
+                ownerUserId = active.accountId,
+                cursor = offset.orEmpty(),
+                limit = limit ?: 40,
+            )
+        }
+    }
 
     suspend fun translate(
         statusId: String,
@@ -1189,5 +1199,13 @@ class WarpnetApi @Inject constructor(
     suspend fun removeQuote(
         id: String,
         quotingStatusId: String,
-    ): NetworkResult<Tweet> = stubFailure("removeQuote")
+    ): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("removeQuote")
+        return result {
+            warpnet.deleteQuote(userId = active.accountId, tweetId = quotingStatusId)
+            // Return the quoting tweet shape Tusky expects — we don't
+            // re-fetch (it's gone), so synthesise a deleted-marker.
+            warpnet.getStatus(tweetId = id, userId = active.accountId)
+        }
+    }
 }

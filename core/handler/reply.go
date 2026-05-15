@@ -69,6 +69,30 @@ type ReplyConvoTouch interface {
 	Touch(userId, rootTweetId string, at time.Time) error
 }
 
+// touchConvos records both participants in the conversation index.
+// Errors are non-fatal — a missing convo entry is a UX degradation,
+// not a write failure for the reply itself.
+func touchConvos(repo ReplyConvoTouch, rootId string, ev event.NewReplyEvent) {
+	if repo == nil {
+		return
+	}
+	now := ev.CreatedAt
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if ev.UserId != "" {
+		if err := repo.Touch(ev.UserId, rootId, now); err != nil {
+			log.Warnf("reply: convo touch (replier): %v", err)
+		}
+	}
+	if ev.ParentUserId == "" || ev.ParentUserId == ev.UserId {
+		return
+	}
+	if err := repo.Touch(ev.ParentUserId, rootId, now); err != nil {
+		log.Warnf("reply: convo touch (parent): %v", err)
+	}
+}
+
 func StreamNewReplyHandler(
 	replyRepo ReplyStorer,
 	userRepo ReplyUserFetcher,
@@ -92,25 +116,7 @@ func StreamNewReplyHandler(
 		rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
 		parentId := strings.TrimPrefix(*ev.ParentId, domain.RetweetPrefix)
 
-		// Both participants — the replier and the parent's author — see
-		// this thread in their conversations list. Errors are non-fatal:
-		// a missing index entry is a UX degradation, not a write failure.
-		if convoRepo != nil {
-			now := ev.CreatedAt
-			if now.IsZero() {
-				now = time.Now()
-			}
-			if ev.UserId != "" {
-				if err := convoRepo.Touch(ev.UserId, rootId, now); err != nil {
-					log.Warnf("reply: convo touch (replier): %v", err)
-				}
-			}
-			if ev.ParentUserId != "" && ev.ParentUserId != ev.UserId {
-				if err := convoRepo.Touch(ev.ParentUserId, rootId, now); err != nil {
-					log.Warnf("reply: convo touch (parent): %v", err)
-				}
-			}
-		}
+		touchConvos(convoRepo, rootId, ev)
 
 		reply, err := replyRepo.AddReply(domain.Tweet{
 			CreatedAt: ev.CreatedAt,

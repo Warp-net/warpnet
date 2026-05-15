@@ -674,6 +674,31 @@ type DeleteConversationEvent struct {
 	RootTweetId domain.ID `json:"root_tweet_id"`
 }
 
+// NewQuoteEvent defines model for NewQuoteEvent.
+// Same wire shape as NewTweetEvent — a quote *is* a tweet, with the
+// QuotedTweetId / QuotedUserId fields referencing the quoted source.
+// Flat (not {quote: Tweet}) so service.js and the cross-language API
+// sync test can extract the field names from the request body.
+type NewQuoteEvent = domain.Tweet
+
+// DeleteQuoteEvent defines model for DeleteQuoteEvent.
+type DeleteQuoteEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+}
+
+// GetQuotingEvent defines model for GetQuotingEvent.
+// "Show me the tweets that quote this tweet."
+type GetQuotingEvent struct {
+	TweetId     domain.ID `json:"tweet_id"`
+	OwnerUserId domain.ID `json:"owner_user_id"`
+	Cursor      *string   `json:"cursor,omitempty"`
+	Limit       *uint64   `json:"limit,omitempty"`
+}
+
+// GetQuotingResponse defines model for GetQuotingResponse.
+type GetQuotingResponse = TweetsResponse
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

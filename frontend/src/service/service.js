@@ -59,6 +59,9 @@ export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
 export const PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"
 export const PRIVATE_GET_CONVERSATIONS = "/private/get/conversations/0.0.0"
 export const PRIVATE_DELETE_CONVERSATION = "/private/delete/conversation/0.0.0"
+export const PUBLIC_POST_QUOTE = "/public/post/quote/0.0.0"
+export const PUBLIC_GET_QUOTING = "/public/get/quoting/0.0.0"
+export const PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -503,6 +506,48 @@ export const warpnetService = {
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
         return resp;
+    },
+
+    async quoteTweet(quotedTweetId, quotedUserId, text) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PUBLIC_POST_QUOTE,
+            body: {
+                user_id: owner.user_id,
+                username: owner.username || '',
+                text: text,
+                quoted_tweet_id: quotedTweetId,
+                quoted_user_id: quotedUserId,
+                created_at: new Date().toISOString(),
+                root_id: '',
+            },
+        });
+    },
+
+    async deleteQuote(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PUBLIC_DELETE_QUOTE,
+            body: {
+                tweet_id: tweetId,
+                user_id: owner.user_id,
+            },
+        });
+    },
+
+    async getQuoting(tweetId, ownerUserId, cursor) {
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_QUOTING,
+            body: {
+                tweet_id: tweetId,
+                owner_user_id: ownerUserId,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { tweets: [], cursor: 'end' };
     },
 
     async getConversations(cursor) {

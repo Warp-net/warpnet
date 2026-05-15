@@ -41,6 +41,9 @@ data class WarpnetTweet(
     val username: String,
     @Json(name = "image_keys") val imageKeys: List<String>? = null,
     val network: String = "",
+    val pinned: Boolean = false,
+    @Json(name = "quoted_tweet_id") val quotedTweetId: String? = null,
+    @Json(name = "quoted_user_id") val quotedUserId: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -346,6 +349,25 @@ data class GetConversationsResponse(
 data class DeleteConversationEvent(
     @Json(name = "user_id") val userId: String,
     @Json(name = "root_tweet_id") val rootTweetId: String,
+)
+
+// NewQuoteEvent is a flat WarpnetTweet — the wire shape mirrors
+// PRIVATE_POST_TWEET (which is also a flat Tweet). The Quote-specific
+// fields are quotedTweetId / quotedUserId carried by WarpnetTweet.
+typealias NewQuoteEvent = WarpnetTweet
+
+@JsonClass(generateAdapter = true)
+data class DeleteQuoteEvent(
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "user_id") val userId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetQuotingEvent(
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "owner_user_id") val ownerUserId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
 )
 
 @JsonClass(generateAdapter = true)

@@ -158,8 +158,10 @@ type Tweet struct {
 	Username    string           `json:"username"`
 	ImageKeys   []string         `json:"image_keys,omitempty"`
 	Network     string           `json:"network"`
-	Moderation  *TweetModeration `json:"moderation,omitempty"`
-	Pinned      bool             `json:"pinned,omitempty"`
+	Moderation     *TweetModeration `json:"moderation,omitempty"`
+	Pinned         bool             `json:"pinned,omitempty"`
+	QuotedTweetId  *string          `json:"quoted_tweet_id,omitempty"`
+	QuotedUserId   *string          `json:"quoted_user_id,omitempty"`
 }
 
 func (t *Tweet) IsModerated() bool {
