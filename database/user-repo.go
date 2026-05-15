@@ -392,6 +392,73 @@ func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string
 	return users, cur, nil
 }
 
+// Search returns users whose Username, Bio, or NodeId contains the
+// (lower-cased) query. This is a server-side scan-and-filter — it
+// preserves the cursor for incremental pages but still touches every
+// matching record in the prefix range. A true substring index belongs
+// here later; the API shape is forward-compatible.
+func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]domain.User, string, error) {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return nil, "", local_store.DBError("empty search query")
+	}
+
+	prefix := local_store.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace).
+		AddRootID("None").
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	// Use a generous page size for the underlying scan so the caller's
+	// `limit` is satisfied by matches, not by the raw page; we still
+	// honour the returned cursor for resumability.
+	scanLimit := uint64(200)
+	if limit != nil && *limit*4 > scanLimit {
+		scanLimit = *limit * 4
+	}
+	items, cur, err := txn.List(prefix, &scanLimit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	if err = txn.Commit(); err != nil {
+		return nil, "", err
+	}
+
+	hits := make([]domain.User, 0)
+	for _, item := range items {
+		var u domain.User
+		if err := json.Unmarshal(item.Value, &u); err != nil {
+			return nil, "", err
+		}
+		if !matchesUserQuery(u, q) {
+			continue
+		}
+		hits = append(hits, u)
+		if limit != nil && uint64(len(hits)) >= *limit {
+			break
+		}
+	}
+	return hits, cur, nil
+}
+
+func matchesUserQuery(u domain.User, q string) bool {
+	if strings.Contains(strings.ToLower(u.Username), q) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(u.Bio), q) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(u.NodeId), q) {
+		return true
+	}
+	return false
+}
+
 func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	users, cur, err := repo.List(limit, cursor)
 	if err != nil {

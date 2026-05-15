@@ -101,4 +101,6 @@ const (
 
 	PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
 	PRIVATE_GET_USER_NOTE  = "/private/get/user/note/0.0.0"
+
+	PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 )

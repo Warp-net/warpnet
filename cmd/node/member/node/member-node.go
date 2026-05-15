@@ -462,6 +462,10 @@ func (m *MemberNode) setupHandlers(
 				handler.StreamGetUsersHandler(userRepo, m),
 			},
 			{
+				event.PUBLIC_GET_USERS_SEARCH,
+				handler.StreamSearchUsersHandler(userRepo),
+			},
+			{
 				event.PUBLIC_GET_WHOTOFOLLOW,
 				handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo),
 			},

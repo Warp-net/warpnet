@@ -147,6 +147,52 @@ func (s *UserRepoTestSuite) TestListAndGetBatch() {
 	s.Len(usersBatch, 2)
 }
 
+func (s *UserRepoTestSuite) TestSearch() {
+	u1 := domain.User{Id: "u-alice", Username: "alice", Bio: "loves cats"}
+	u2 := domain.User{Id: "u-bob", Username: "bob", Bio: "rust enthusiast"}
+	u3 := domain.User{Id: "u-carol", Username: "carol", Bio: "alice's friend"}
+
+	_, err := s.repo.Create(u1)
+	s.Require().NoError(err)
+	_, err = s.repo.Create(u2)
+	s.Require().NoError(err)
+	_, err = s.repo.Create(u3)
+	s.Require().NoError(err)
+
+	limit := uint64(50)
+	hits, _, err := s.repo.Search("alice", &limit, nil)
+	s.Require().NoError(err)
+	// Matches by username (u1) and by bio (u3).
+	ids := map[string]bool{}
+	for _, u := range hits {
+		ids[u.Id] = true
+	}
+	s.True(ids["u-alice"], "should match by username")
+	s.True(ids["u-carol"], "should match by bio substring")
+	s.False(ids["u-bob"], "should not match unrelated user")
+}
+
+func (s *UserRepoTestSuite) TestSearch_CaseInsensitive() {
+	_, err := s.repo.Create(domain.User{Id: "u-mixed", Username: "MixedCase"})
+	s.Require().NoError(err)
+
+	hits, _, err := s.repo.Search("MIXED", nil, nil)
+	s.Require().NoError(err)
+	found := false
+	for _, u := range hits {
+		if u.Id == "u-mixed" {
+			found = true
+			break
+		}
+	}
+	s.True(found, "search should be case-insensitive")
+}
+
+func (s *UserRepoTestSuite) TestSearch_EmptyQuery() {
+	_, _, err := s.repo.Search("", nil, nil)
+	s.Error(err)
+}
+
 func TestUserRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 

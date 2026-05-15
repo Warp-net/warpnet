@@ -622,6 +622,16 @@ type GetAccountNoteResponse struct {
 	Note string `json:"note"`
 }
 
+// SearchUsersEvent defines model for SearchUsersEvent.
+type SearchUsersEvent struct {
+	Query  string  `json:"query"`
+	Cursor *string `json:"cursor,omitempty"`
+	Limit  *uint64 `json:"limit,omitempty"`
+}
+
+// SearchUsersResponse defines model for SearchUsersResponse.
+type SearchUsersResponse = UsersResponse
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

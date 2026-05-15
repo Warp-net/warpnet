@@ -294,6 +294,13 @@ data class GetAccountNoteResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class SearchUsersEvent(
+    val query: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",

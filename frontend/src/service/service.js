@@ -54,6 +54,7 @@ export const PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
 export const PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
 export const PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
 export const PRIVATE_GET_USER_NOTE = "/private/get/user/note/0.0.0"
+export const PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -498,6 +499,19 @@ export const warpnetService = {
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
         return resp;
+    },
+
+    async searchUsers(query, cursor) {
+        if (!query) return { users: [], cursor: 'end' };
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_USERS_SEARCH,
+            body: {
+                query: query,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { users: [], cursor: 'end' };
     },
 
     async setAccountNote(targetUserId, note) {

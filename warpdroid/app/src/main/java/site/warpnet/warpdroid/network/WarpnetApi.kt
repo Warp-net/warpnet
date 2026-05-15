@@ -715,15 +715,13 @@ class WarpnetApi @Inject constructor(
         limit: Int? = null,
         following: Boolean? = null,
     ): NetworkResult<List<TimelineAccount>> {
-        val me = accountManager.activeAccount?.accountId.orEmpty()
-        if (me.isEmpty() || query.isBlank()) return NetworkResult.success(emptyList())
+        if (query.isBlank()) return NetworkResult.success(emptyList())
         return result {
-            val (users, _) = warpnet.listUsers(requesterUserId = me, limit = (limit ?: 40).coerceAtLeast(1))
-            val needle = query.trim().lowercase()
-            users.filter { acc ->
-                acc.username.lowercase().contains(needle) ||
-                    acc.displayName.orEmpty().lowercase().contains(needle)
-            }
+            val (hits, _) = warpnet.searchAccounts(
+                query = query,
+                limit = (limit ?: 40).coerceAtLeast(1),
+            )
+            hits
         }
     }
 

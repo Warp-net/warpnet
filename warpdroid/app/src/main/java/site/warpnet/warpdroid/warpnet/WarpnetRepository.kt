@@ -115,6 +115,7 @@ class WarpnetRepository @Inject constructor(
     private val updateAccountNoteAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateAccountNoteEvent>()
     private val getAccountNoteAdapter = moshi.adapter<site.warpnet.transport.dto.GetAccountNoteEvent>()
     private val getAccountNoteRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetAccountNoteResponse>()
+    private val searchUsersAdapter = moshi.adapter<site.warpnet.transport.dto.SearchUsersEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -417,6 +418,23 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Server-side user search (replaces the previous client-side
+    // listUsers + filter dance — the fat node runs the substring scan).
+    // -----------------------------------------------------------------
+
+    suspend fun searchAccounts(query: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+        if (query.isBlank()) return emptyList<TimelineAccount>() to ""
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_USERS_SEARCH,
+            searchUsersAdapter.toJson(
+                site.warpnet.transport.dto.SearchUsersEvent(query = query, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        return page.users.map { it.toTimelineAccount() } to page.cursor
     }
 
     // -----------------------------------------------------------------
