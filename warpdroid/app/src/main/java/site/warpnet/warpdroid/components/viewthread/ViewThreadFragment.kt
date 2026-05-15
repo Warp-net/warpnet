@@ -496,11 +496,11 @@ class ViewThreadFragment :
     ) {
         if (like) {
             confirmLike(preferences) {
-                viewModel.like(viewData.id, true)
+                viewModel.like(viewData.id, viewData.accountId, true)
                 state?.animate()
             }
         } else {
-            viewModel.like(viewData.id, false)
+            viewModel.like(viewData.id, viewData.accountId, false)
         }
     }
 

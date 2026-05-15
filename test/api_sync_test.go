@@ -20,18 +20,27 @@
 //  2. Payload completeness. For each protocol that has a stream handler
 //     registered in member-node.go and whose handler unmarshals a typed
 //     body, the test walks the alias chain from event.X (possibly into
-//     domain.Y) to a concrete struct, then for each client that declares
-//     the path constant:
-//       a) requires a discovered mapping (orphan client constant = fail);
-//       b) asserts the client's keys are a subset of the backend struct
-//          (typos and renames = fail);
-//       c) asserts that every backend field without `omitempty` is
-//          present in the client body (missing required field = fail).
-//          Required-coverage is enforced only for types that resolve
-//          inside the event package; types that alias domain objects
-//          (e.g. NewTweetEvent = domain.Tweet) carry storage fields the
-//          server stamps server-side, so only the subset check applies
-//          to them.
+//     domain.Y) to a concrete struct. Then, for each client that wires
+//     the protocol:
+//       a) the client's keys must be a subset of the backend struct's
+//          JSON tags (typos / renames = fail);
+//       b) every Go field the handler explicitly validates as non-empty
+//          (`if ev.X == ""` / `if ev.X == nil`) must be present on the
+//          wire (missing required field = fail). The required set is
+//          read directly from handler code, not derived from
+//          `omitempty`, so server-stamped fields like
+//          domain.Tweet.Id and domain.Tweet.CreatedAt — which lack
+//          `omitempty` but are absent from request bodies on purpose —
+//          do not produce false positives.
+//     If a routed body-decoding handler is wired by neither client, the
+//     subtest fails unless the path is allowlisted in
+//     protocolsWithoutClient (node-only protocols or documented
+//     client-TODOs).
+//
+// Constants declared in clients but never wired into a request/DTO are
+// not flagged — see the protocolsWithoutClient comment for the rationale,
+// which boils down to warpdroid's ProtocolIds.kt being a deliberate
+// mirror of event/paths.go rather than a usage manifest.
 package apisync_test
 
 import (
@@ -246,16 +255,12 @@ func resolveStruct(pkgs map[string]map[string]*ast.TypeSpec, currentPkg, name st
 // backendFields is everything the test wants to know about one wire shape:
 //
 //   - All:           every JSON wire key the struct declares.
-//   - Required:      keys whose `json:` tag lacks `,omitempty`.
-//   - EnforceReq:    whether to demand client coverage of Required. False
-//     when the struct lives in the domain package, because
-//     domain types double as storage objects and many of
-//     their non-`omitempty` fields are server-stamped (e.g.
-//     domain.Tweet.Id, domain.Tweet.CreatedAt).
+//   - GoToJson:      Go field name → JSON wire key, so handler-AST
+//     validations (which name fields by their Go identifiers)
+//     can be translated to wire keys.
 type backendFields struct {
-	All        []string
-	Required   []string
-	EnforceReq bool
+	All      []string
+	GoToJson map[string]string
 }
 
 func backendStructKeys(t *testing.T) map[string]backendFields {
@@ -267,17 +272,14 @@ func backendStructKeys(t *testing.T) map[string]backendFields {
 		if res == nil || res.st.Fields == nil {
 			continue
 		}
-		all, required := jsonKeysOfStruct(res.st)
-		out[name] = backendFields{
-			All:        all,
-			Required:   required,
-			EnforceReq: res.pkg == "event",
-		}
+		all, goToJson := jsonKeysOfStruct(res.st)
+		out[name] = backendFields{All: all, GoToJson: goToJson}
 	}
 	return out
 }
 
-func jsonKeysOfStruct(st *ast.StructType) (all, required []string) {
+func jsonKeysOfStruct(st *ast.StructType) (all []string, goToJson map[string]string) {
+	goToJson = map[string]string{}
 	seen := map[string]bool{}
 	for _, f := range st.Fields.List {
 		for _, n := range f.Names {
@@ -288,43 +290,38 @@ func jsonKeysOfStruct(st *ast.StructType) (all, required []string) {
 			if f.Tag != nil {
 				tag = strings.Trim(f.Tag.Value, "`")
 			}
-			key, omitempty, drop := jsonKeyFromStructTag(tag, n.Name)
-			if drop || seen[key] {
+			key, drop := jsonKeyFromStructTag(tag, n.Name)
+			if drop {
+				continue
+			}
+			goToJson[n.Name] = key
+			if seen[key] {
 				continue
 			}
 			seen[key] = true
 			all = append(all, key)
-			if !omitempty {
-				required = append(required, key)
-			}
 		}
 	}
 	sort.Strings(all)
-	sort.Strings(required)
-	return all, required
+	return all, goToJson
 }
 
 // jsonKeyFromStructTag mirrors encoding/json's tag interpretation: explicit
-// names win, an absent tag falls back to the (lower-cased) field name, and
-// `json:"-"` suppresses the field. The second return reports whether the tag
-// carries `,omitempty`.
-func jsonKeyFromStructTag(rawTag, fieldName string) (name string, omitempty bool, drop bool) {
+// names win, an absent tag falls back to the exported field name as-is
+// (encoding/json does not lower-case it), and `json:"-"` suppresses the
+// field.
+func jsonKeyFromStructTag(rawTag, fieldName string) (name string, drop bool) {
 	st := reflect.StructTag(rawTag)
 	tag := st.Get("json")
 	if tag == "-" {
-		return "", false, true
+		return "", true
 	}
 	parts := strings.Split(tag, ",")
 	name = parts[0]
 	if name == "" {
-		name = strings.ToLower(fieldName)
+		name = fieldName
 	}
-	for _, p := range parts[1:] {
-		if p == "omitempty" {
-			omitempty = true
-		}
-	}
-	return name, omitempty, false
+	return name, false
 }
 
 // ----------------------------------------------------------------------------
@@ -373,36 +370,51 @@ func routeMap(t *testing.T) map[string]string {
 	return out
 }
 
+// handlerInfo is the Go-side contract for one handler: the event type it
+// unmarshals and the Go field names it explicitly validates as non-zero
+// (e.g. `if ev.OwnerId == ""` or `if ev.ParentId == nil` returning an error).
+// These are the fields a client MUST supply on the wire, derived directly
+// from handler code rather than the indirect `omitempty` heuristic.
+type handlerInfo struct {
+	EventType        string
+	RequiredGoFields []string
+	VarName          string
+}
+
 // handlerEventTypes walks core/handler/*.go and for every FuncDecl returns
-// the first `event.X` referenced in a `var ev event.X` declaration anywhere
-// inside that function's body. Handlers that don't unmarshal a typed body
-// (pairing, challenge) drop out and are skipped by callers.
-func handlerEventTypes(t *testing.T) map[string]string {
+// the first `var <name> event.X` declaration inside the handler plus the
+// Go field names checked against the empty string or nil within the same
+// function body. Handlers that don't unmarshal a typed body (pairing,
+// challenge) drop out and are skipped by callers.
+func handlerEventTypes(t *testing.T) map[string]handlerInfo {
 	t.Helper()
 	files := parsePackageFiles(t, filepath.Join(repoRoot(t), "core/handler"))
 	require.NotEmpty(t, files, "no .go files in core/handler/")
 
-	out := map[string]string{}
+	out := map[string]handlerInfo{}
 	for _, f := range files {
 		for _, d := range f.Decls {
 			fd, ok := d.(*ast.FuncDecl)
 			if !ok || fd.Body == nil {
 				continue
 			}
-			et := firstEventVarType(fd.Body)
+			varName, et := firstEventVar(fd.Body)
 			if et == "" {
 				continue
 			}
-			out[fd.Name.Name] = et
+			req := handlerRequiredGoFields(fd.Body, varName)
+			out[fd.Name.Name] = handlerInfo{EventType: et, RequiredGoFields: req, VarName: varName}
 		}
 	}
 	return out
 }
 
-func firstEventVarType(body *ast.BlockStmt) string {
-	var found string
+// firstEventVar returns the variable name and event type of the first
+// `var <name> event.X` declaration anywhere inside body, or ("", "") if
+// none is found.
+func firstEventVar(body *ast.BlockStmt) (varName, eventType string) {
 	ast.Inspect(body, func(n ast.Node) bool {
-		if found != "" {
+		if eventType != "" {
 			return false
 		}
 		gd, ok := n.(*ast.GenDecl)
@@ -411,7 +423,7 @@ func firstEventVarType(body *ast.BlockStmt) string {
 		}
 		for _, s := range gd.Specs {
 			vs, ok := s.(*ast.ValueSpec)
-			if !ok || vs.Type == nil {
+			if !ok || vs.Type == nil || len(vs.Names) == 0 {
 				continue
 			}
 			sel, ok := vs.Type.(*ast.SelectorExpr)
@@ -422,12 +434,61 @@ func firstEventVarType(body *ast.BlockStmt) string {
 			if !ok || pkg.Name != "event" {
 				continue
 			}
-			found = sel.Sel.Name
+			varName = vs.Names[0].Name
+			eventType = sel.Sel.Name
 			return false
 		}
 		return true
 	})
-	return found
+	return varName, eventType
+}
+
+// handlerRequiredGoFields scans body for `<varName>.<Field> == ""` and
+// `<varName>.<Field> == nil` comparisons — the Warpnet handler convention
+// for "this field must be present on the wire". The result is the set of
+// Go field names. Heterogeneous checks like `ev.OwnerId == ev.UserId`
+// (business logic, not nullability) are ignored because they don't match
+// the empty-string/nil literal pattern.
+func handlerRequiredGoFields(body *ast.BlockStmt, varName string) []string {
+	if varName == "" {
+		return nil
+	}
+	fields := map[string]bool{}
+	matchEmptyOrNil := func(sel, lit ast.Expr) {
+		s, ok := sel.(*ast.SelectorExpr)
+		if !ok {
+			return
+		}
+		id, ok := s.X.(*ast.Ident)
+		if !ok || id.Name != varName {
+			return
+		}
+		switch l := lit.(type) {
+		case *ast.BasicLit:
+			if l.Kind == token.STRING && (l.Value == `""` || l.Value == "``") {
+				fields[s.Sel.Name] = true
+			}
+		case *ast.Ident:
+			if l.Name == "nil" {
+				fields[s.Sel.Name] = true
+			}
+		}
+	}
+	ast.Inspect(body, func(n ast.Node) bool {
+		bin, ok := n.(*ast.BinaryExpr)
+		if !ok || bin.Op != token.EQL {
+			return true
+		}
+		matchEmptyOrNil(bin.X, bin.Y)
+		matchEmptyOrNil(bin.Y, bin.X)
+		return true
+	})
+	out := make([]string, 0, len(fields))
+	for k := range fields {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ----------------------------------------------------------------------------
@@ -650,6 +711,13 @@ func assertRequiredCovered(t *testing.T, proto, clientName string, required, cli
 //
 // Anything routed that's not in this map and isn't wired by at least one
 // client makes TestAPISync_Payloads fail with a precise pointer.
+//
+// Note on orphan client constants: warpdroid's ProtocolIds.kt is documented
+// as a deliberate mirror of event/paths.go and declares many constants
+// without using them in WarpnetRepository.kt. The test does not flag these
+// "declared but not wired" entries; it only enforces the routed-protocol
+// side of the contract (every routed handler must be reachable from at
+// least one client unless allowlisted here).
 var protocolsWithoutClient = map[string]string{
 	"PRIVATE_POST_PAIR":             "node-only: node↔node pairing handshake",
 	"PUBLIC_POST_NODE_CHALLENGE":    "node-only: proof-of-source-tree challenge",
@@ -659,39 +727,32 @@ var protocolsWithoutClient = map[string]string{
 	"PRIVATE_DELETE_MESSAGE": "client-TODO: single-message delete is unimplemented on both clients",
 }
 
-// effectiveRequired narrows backend's required (non-omitempty) keys to those
-// that at least one client actually sends. This avoids false positives on
-// fields the backend stamps server-side (e.g. domain.Tweet.Id) that have no
-// `omitempty` tag because their absence matters on response marshal — not on
-// request unmarshal. If one client sends a key the other must too, so the
-// resulting set still catches LikeEvent.owner_id-style drift.
-func effectiveRequired(backendReq, jsKeys, ktKeys []string) []string {
-	used := map[string]bool{}
-	for _, k := range jsKeys {
-		used[k] = true
-	}
-	for _, k := range ktKeys {
-		used[k] = true
-	}
-	var out []string
-	for _, k := range backendReq {
-		if used[k] {
+// requiredWireKeys translates Go field names that the handler explicitly
+// checks for emptiness/nilness into the corresponding JSON wire keys, using
+// the struct's tag map. Fields without a tag entry (defensive — shouldn't
+// happen for routed handlers) drop out so the test never asserts against an
+// unknown wire name.
+func requiredWireKeys(info handlerInfo, fields backendFields) []string {
+	out := make([]string, 0, len(info.RequiredGoFields))
+	for _, g := range info.RequiredGoFields {
+		if k, ok := fields.GoToJson[g]; ok {
 			out = append(out, k)
 		}
 	}
+	sort.Strings(out)
 	return out
 }
 
 func TestAPISync_Payloads(t *testing.T) {
 	backend := backendStructKeys(t)
-	handlerToEvent := handlerEventTypes(t)
+	handlerByName := handlerEventTypes(t)
 	routes := routeMap(t)
 	jsBodies := jsBodyKeys(t)
 	ktDtos := kotlinDtoKeys(t)
 	ktPaths := kotlinPathToDTO(t, ktDtos)
 
 	require.NotEmpty(t, backend, "no event/domain structs parsed")
-	require.NotEmpty(t, handlerToEvent, "no handler→event mappings parsed")
+	require.NotEmpty(t, handlerByName, "no handler→event mappings parsed")
 	require.NotEmpty(t, routes, "no stream routes parsed")
 	require.NotEmpty(t, jsBodies, "no frontend bodies parsed")
 	require.NotEmpty(t, ktDtos, "no warpdroid DTOs parsed")
@@ -699,12 +760,12 @@ func TestAPISync_Payloads(t *testing.T) {
 
 	checked := 0
 	for pathConst, handlerName := range routes {
-		eventType, ok := handlerToEvent[handlerName]
+		info, ok := handlerByName[handlerName]
 		if !ok {
 			// Handler doesn't unmarshal a typed body (e.g. pairing, challenge).
 			continue
 		}
-		bk, ok := backend[eventType]
+		bk, ok := backend[info.EventType]
 		if !ok || len(bk.All) == 0 {
 			// Resolver couldn't find a struct (interface, map, missing pkg).
 			continue
@@ -717,10 +778,11 @@ func TestAPISync_Payloads(t *testing.T) {
 		if ktHas {
 			ktKeys = ktDtos[ktDto]
 		}
+		required := requiredWireKeys(info, bk)
 
 		t.Run(pathConst, func(t *testing.T) {
-			t.Logf("backend: handler=%s event=%s all=%v required=%v enforceReq=%v",
-				handlerName, eventType, bk.All, bk.Required, bk.EnforceReq)
+			t.Logf("backend: handler=%s event=%s all=%v handler-required=%v",
+				handlerName, info.EventType, bk.All, required)
 
 			if !jsHas && !ktHas {
 				if reason, ok := protocolsWithoutClient[pathConst]; ok {
@@ -731,22 +793,13 @@ func TestAPISync_Payloads(t *testing.T) {
 				return
 			}
 
-			var effReq []string
-			if bk.EnforceReq {
-				effReq = effectiveRequired(bk.Required, jsKeys, ktKeys)
-			}
-
 			if jsHas {
 				assertSubset(t, pathConst, "frontend", bk.All, jsKeys)
-				if bk.EnforceReq {
-					assertRequiredCovered(t, pathConst, "frontend", effReq, jsKeys)
-				}
+				assertRequiredCovered(t, pathConst, "frontend", required, jsKeys)
 			}
 			if ktHas {
 				assertSubset(t, pathConst, "warpdroid", bk.All, ktKeys)
-				if bk.EnforceReq {
-					assertRequiredCovered(t, pathConst, "warpdroid", effReq, ktKeys)
-				}
+				assertRequiredCovered(t, pathConst, "warpdroid", required, ktKeys)
 			}
 		})
 	}

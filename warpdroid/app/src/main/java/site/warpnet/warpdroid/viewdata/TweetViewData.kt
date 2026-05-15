@@ -101,6 +101,12 @@ sealed class TweetViewData {
         val actionableId: String
             get() = status.actionableStatus.id
 
+        val accountId: String
+            get() = status.account.id
+
+        val actionableAccountId: String
+            get() = status.actionableStatus.account.id
+
         val retweetedAvatar: String?
             get() = if (status.retweet != null) {
                 status.account.avatar

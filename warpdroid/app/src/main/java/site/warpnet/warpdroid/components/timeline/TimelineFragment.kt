@@ -615,11 +615,11 @@ class TimelineFragment :
     ) {
         if (like) {
             confirmLike(preferences) {
-                viewModel.like(viewData.actionableId, true)
+                viewModel.like(viewData.actionableId, viewData.actionableAccountId, true)
                 state?.animate()
             }
         } else {
-            viewModel.like(viewData.actionableId, false)
+            viewModel.like(viewData.actionableId, viewData.actionableAccountId, false)
         }
     }
 
