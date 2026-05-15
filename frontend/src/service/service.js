@@ -55,6 +55,8 @@ export const PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
 export const PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
 export const PRIVATE_GET_USER_NOTE = "/private/get/user/note/0.0.0"
 export const PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
+export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
+export const PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -499,6 +501,31 @@ export const warpnetService = {
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
         return resp;
+    },
+
+    async editTweet(tweetId, text) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_TWEET_EDIT,
+            body: {
+                tweet_id: tweetId,
+                user_id: owner.user_id,
+                text: text,
+            },
+        });
+    },
+
+    async getTweetEdits(tweetId, cursor) {
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_TWEET_EDITS,
+            body: {
+                tweet_id: tweetId,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { edits: [], cursor: 'end' };
     },
 
     async searchUsers(query, cursor) {

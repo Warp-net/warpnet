@@ -82,6 +82,8 @@ object ProtocolIds {
     const val PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
     const val PRIVATE_GET_USER_NOTE = "/private/get/user/note/0.0.0"
     const val PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
+    const val PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
+    const val PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"
     const val PRIVATE_GET_CHAT = "/private/get/chat/0.0.0"
     const val PRIVATE_GET_CHATS = "/private/get/chats/0.0.0"
     const val PRIVATE_GET_MESSAGE = "/private/get/message/0.0.0"

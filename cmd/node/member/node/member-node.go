@@ -395,6 +395,7 @@ func (m *MemberNode) setupHandlers(
 	convMutesRepo := database.NewConvMutesRepo(db)
 	subsRepo := database.NewSubscriptionsRepo(db)
 	userNoteRepo := database.NewUserNoteRepo(db)
+	tweetEditsRepo := database.NewTweetEditsRepo(db)
 
 	token := authRepo.SessionToken()
 
@@ -464,6 +465,14 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PUBLIC_GET_USERS_SEARCH,
 				handler.StreamSearchUsersHandler(userRepo),
+			},
+			{
+				event.PRIVATE_POST_TWEET_EDIT,
+				handler.StreamEditTweetHandler(tweetRepo, tweetEditsRepo),
+			},
+			{
+				event.PUBLIC_GET_TWEET_EDITS,
+				handler.StreamGetTweetEditsHandler(tweetEditsRepo),
 			},
 			{
 				event.PUBLIC_GET_WHOTOFOLLOW,

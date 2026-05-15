@@ -116,6 +116,9 @@ class WarpnetRepository @Inject constructor(
     private val getAccountNoteAdapter = moshi.adapter<site.warpnet.transport.dto.GetAccountNoteEvent>()
     private val getAccountNoteRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetAccountNoteResponse>()
     private val searchUsersAdapter = moshi.adapter<site.warpnet.transport.dto.SearchUsersEvent>()
+    private val editTweetAdapter = moshi.adapter<site.warpnet.transport.dto.EditTweetEvent>()
+    private val getTweetEditsAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetEditsEvent>()
+    private val tweetEditsRespAdapter = moshi.adapter<site.warpnet.transport.dto.TweetEditsResponse>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -418,6 +421,42 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Tweet edits — mutate Tweet.text in place + append an immutable
+    // revision to the per-tweet edit history.
+    // -----------------------------------------------------------------
+
+    suspend fun editTweet(tweetId: String, userId: String, text: String): WarpnetTweet {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_TWEET_EDIT,
+            editTweetAdapter.toJson(
+                site.warpnet.transport.dto.EditTweetEvent(
+                    tweetId = tweetId,
+                    userId = userId,
+                    text = text,
+                ),
+            ),
+        )
+        return tweetAdapter.fromJson(raw)
+            ?: throw IllegalStateException("editTweet returned empty body for $tweetId")
+    }
+
+    suspend fun getTweetEdits(tweetId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetTweetEdit>, String> {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_TWEET_EDITS,
+            getTweetEditsAdapter.toJson(
+                site.warpnet.transport.dto.GetTweetEditsEvent(
+                    tweetId = tweetId,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            ),
+        )
+        val page = tweetEditsRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.transport.dto.WarpnetTweetEdit>() to ""
+        return page.edits to page.cursor
     }
 
     // -----------------------------------------------------------------

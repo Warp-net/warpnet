@@ -214,6 +214,9 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	if updateTweet.Moderation != nil {
 		existedTweet.Moderation = updateTweet.Moderation
 	}
+	if updateTweet.Text != "" && updateTweet.Text != existedTweet.Text {
+		existedTweet.Text = updateTweet.Text
+	}
 	existedTweet.UpdatedAt = &now
 
 	expiration := time.Unix(int64(expiresAt), 0) //#nosec

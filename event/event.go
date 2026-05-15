@@ -632,6 +632,29 @@ type SearchUsersEvent struct {
 // SearchUsersResponse defines model for SearchUsersResponse.
 type SearchUsersResponse = UsersResponse
 
+// EditTweetEvent defines model for EditTweetEvent.
+type EditTweetEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+	Text    string    `json:"text"`
+}
+
+// EditTweetResponse defines model for EditTweetResponse.
+type EditTweetResponse = domain.Tweet
+
+// GetTweetEditsEvent defines model for GetTweetEditsEvent.
+type GetTweetEditsEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	Cursor  *string   `json:"cursor,omitempty"`
+	Limit   *uint64   `json:"limit,omitempty"`
+}
+
+// TweetEditsResponse defines model for TweetEditsResponse.
+type TweetEditsResponse struct {
+	Edits  []domain.TweetEdit `json:"edits"`
+	Cursor string             `json:"cursor"`
+}
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

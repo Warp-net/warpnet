@@ -431,9 +431,31 @@ class WarpnetApi @Inject constructor(
         domain: String,
         idempotencyKey: String,
         editedStatus: NewTweet,
-    ): NetworkResult<Tweet> = stubFailure("editStatus")
+    ): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("editStatus")
+        return result {
+            warpnet.editTweet(
+                tweetId = statusId,
+                userId = active.accountId,
+                text = editedStatus.status,
+            )
+            warpnet.getStatus(tweetId = statusId, userId = active.accountId)
+        }
+    }
 
-    suspend fun statusSource(statusId: String): NetworkResult<TweetSource> = stubFailure("statusSource")
+    /**
+     * Mastodon serves the plaintext source on a separate endpoint because its
+     * Status.content is rendered HTML. Warpnet has no rendering step —
+     * domain.Tweet.text already *is* the plaintext source — so this is
+     * synthesised client-side from the current status fetch. No wire call.
+     */
+    suspend fun statusSource(statusId: String): NetworkResult<TweetSource> {
+        val active = accountManager.activeAccount ?: return stubFailure("statusSource")
+        return result {
+            val t = warpnet.getStatus(tweetId = statusId, userId = active.accountId)
+            TweetSource(id = t.id, text = t.content.toString(), spoilerText = t.spoilerText)
+        }
+    }
 
     /**
      * Ancestors + descendants for a single status. Like [status], the author
@@ -451,8 +473,37 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun statusEdits(statusId: String): NetworkResult<List<TweetEdit>> =
-        NetworkResult.success(emptyList())
+    suspend fun statusEdits(statusId: String): NetworkResult<List<TweetEdit>> {
+        val active = accountManager.activeAccount ?: return NetworkResult.success(emptyList())
+        return result {
+            val (raws, _) = warpnet.getTweetEdits(tweetId = statusId)
+            // We need a TimelineAccount for the edit author — fetch once and
+            // reuse for every revision (edits are author-scoped).
+            val author = runCatching {
+                warpnet.getTimelineAccount(active.accountId)
+            }.getOrNull()
+            raws.mapNotNull { e ->
+                if (author == null) return@mapNotNull null
+                TweetEdit(
+                    content = e.text,
+                    spoilerText = "",
+                    sensitive = false,
+                    createdAt = parseRfc3339OrNow(e.editedAt),
+                    account = author,
+                    poll = null,
+                    mediaAttachments = emptyList(),
+                    emojis = emptyList(),
+                )
+            }
+        }
+    }
+
+    private fun parseRfc3339OrNow(s: String): java.util.Date {
+        if (s.isBlank()) return java.util.Date()
+        return runCatching {
+            java.util.Date.from(java.time.Instant.parse(s))
+        }.getOrElse { java.util.Date() }
+    }
 
     suspend fun statusRetweetedBy(
         statusId: String,

@@ -170,6 +170,18 @@ type ModelType string
 
 const LLAMA2 ModelType = "llama2"
 
+// TweetEdit is an immutable revision row. Tweets are mutated in-place
+// (Tweet.Text rewritten) and a TweetEdit is appended for each edit so
+// the client can show "edited at X" history. EditedAt = the moment the
+// edit was committed; the original tweet's CreatedAt stays untouched.
+type TweetEdit struct {
+	Id              string    `json:"id"`
+	OriginalTweetId string    `json:"original_tweet_id"`
+	UserId          string    `json:"user_id"`
+	Text            string    `json:"text"`
+	EditedAt        time.Time `json:"edited_at"`
+}
+
 type TweetModeration struct {
 	ModeratorID ID               `json:"moderator_id"`
 	Model       ModelType        `json:"model"`

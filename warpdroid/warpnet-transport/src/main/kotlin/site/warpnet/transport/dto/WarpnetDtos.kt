@@ -301,6 +301,35 @@ data class SearchUsersEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class EditTweetEvent(
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "user_id") val userId: String,
+    val text: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetTweetEditsEvent(
+    @Json(name = "tweet_id") val tweetId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class WarpnetTweetEdit(
+    val id: String = "",
+    @Json(name = "original_tweet_id") val originalTweetId: String = "",
+    @Json(name = "user_id") val userId: String = "",
+    val text: String = "",
+    @Json(name = "edited_at") val editedAt: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class TweetEditsResponse(
+    val edits: List<WarpnetTweetEdit> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",
