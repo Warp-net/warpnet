@@ -63,18 +63,6 @@ func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer Lik
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
-		// Author's own views are not counted.
-		if ev.ViewerId == ev.UserId {
-			count, err := repo.GetViewsCount(tweetId)
-			if errors.Is(err, database.ErrViewsNotFound) {
-				return event.ViewsCountResponse{Count: 0}, nil
-			}
-			if err != nil {
-				return nil, err
-			}
-			return event.ViewsCountResponse{Count: count}, nil
-		}
-
 		// Author's node is the sole authority for incrementing the view
 		// counter. The CRDT stats store replicates the value to every
 		// other node, so non-author nodes only forward the event and
