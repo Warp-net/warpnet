@@ -7,7 +7,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 )
@@ -57,38 +56,23 @@ func TestStreamViewHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("author views own tweet - not counted", func(t *testing.T) {
-		recorded := false
+	t.Run("author views own tweet - counted", func(t *testing.T) {
+		var capturedViewerId string
 		h := StreamViewHandler(stubViewRepo{
 			recordFn: func(tweetId, viewerId string) (uint64, error) {
-				recorded = true
-				return 0, nil
+				capturedViewerId = viewerId
+				return 1, nil
 			},
-			getFn: func(tweetId string) (uint64, error) { return 7, nil },
 		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
 		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: author}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if recorded {
-			t.Fatal("RecordView must not be called for author")
+		if capturedViewerId != author {
+			t.Fatalf("expected RecordView with viewerId=%q, got %q", author, capturedViewerId)
 		}
-		if resp.(event.ViewsCountResponse).Count != 7 {
-			t.Fatalf("unexpected response: %v", resp)
-		}
-	})
-
-	t.Run("author views own tweet - missing views returns zero", func(t *testing.T) {
-		h := StreamViewHandler(stubViewRepo{
-			getFn: func(tweetId string) (uint64, error) { return 0, database.ErrViewsNotFound },
-		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
-
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: author}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if resp.(event.ViewsCountResponse).Count != 0 {
+		if resp.(event.ViewsCountResponse).Count != 1 {
 			t.Fatalf("unexpected response: %v", resp)
 		}
 	})
