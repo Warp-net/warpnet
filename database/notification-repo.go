@@ -90,6 +90,57 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 	return txn.Commit()
 }
 
+func (repo *NotificationsRepo) Get(userId, notificationId string) (domain.Notification, error) {
+	if userId == "" {
+		return domain.Notification{}, local_store.DBError("missing user id")
+	}
+	if notificationId == "" {
+		return domain.Notification{}, local_store.DBError("missing notification id")
+	}
+
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.Notification{}, err
+	}
+	defer txn.Rollback()
+
+	var (
+		cursor string
+		limit  uint64 = 100
+	)
+	for {
+		items, cur, err := txn.List(prefix, &limit, &cursor)
+		if err != nil {
+			return domain.Notification{}, err
+		}
+		for _, item := range items {
+			var not domain.Notification
+			if err := json.Unmarshal(item.Value, &not); err != nil {
+				return domain.Notification{}, err
+			}
+			if not.Id == notificationId {
+				if err := txn.Commit(); err != nil {
+					return domain.Notification{}, err
+				}
+				return not, nil
+			}
+		}
+		if cur == "" || cur == "end" || uint64(len(items)) < limit {
+			break
+		}
+		cursor = cur
+	}
+
+	if err := txn.Commit(); err != nil {
+		return domain.Notification{}, err
+	}
+	return domain.Notification{}, ErrNotificationsNotFound
+}
+
 func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
 	if userId == "" {
 		return nil, "", local_store.DBError("missing user id")

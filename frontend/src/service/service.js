@@ -32,6 +32,7 @@ export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
 export const PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
 export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
+export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -390,6 +391,18 @@ export const warpnetService = {
             cb(latestNotifications);
         }
         return resp;
+    },
+
+    async getNotification(notificationId) {
+        if (!notificationId) return null;
+        const request = {
+            path: PRIVATE_GET_NOTIFICATION,
+            body: {
+                notification_id: notificationId,
+            },
+        }
+        const resp = await this.sendToNode(request);
+        return resp || null;
     },
 
     subscribeNotifications(callback) {

@@ -462,6 +462,14 @@ type GetNotificationsEvent struct {
 	Limit  *uint64 `json:"limit,omitempty"`
 }
 
+// GetNotificationEvent defines model for GetNotificationEvent.
+type GetNotificationEvent struct {
+	NotificationId domain.ID `json:"notification_id"`
+}
+
+// GetNotificationResponse defines model for GetNotificationResponse.
+type GetNotificationResponse = domain.Notification
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

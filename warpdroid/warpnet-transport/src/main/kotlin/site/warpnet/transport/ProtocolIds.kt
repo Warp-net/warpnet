@@ -59,6 +59,7 @@ object ProtocolIds {
     // private reads (require pairing)
     const val PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
     const val PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
+    const val PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
     const val PRIVATE_GET_CHAT = "/private/get/chat/0.0.0"
     const val PRIVATE_GET_CHATS = "/private/get/chats/0.0.0"
     const val PRIVATE_GET_MESSAGE = "/private/get/message/0.0.0"

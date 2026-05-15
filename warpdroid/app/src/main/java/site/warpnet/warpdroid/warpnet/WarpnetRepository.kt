@@ -80,6 +80,7 @@ class WarpnetRepository @Inject constructor(
     private val tweetsRespAdapter = moshi.adapter<TweetsResponse>()
     private val repliesRespAdapter = moshi.adapter<RepliesResponse>()
     private val notificationsRespAdapter = moshi.adapter<GetNotificationsResponse>()
+    private val notificationRespAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetNotification>()
     private val likesCountAdapter = moshi.adapter<LikesCountResponse>()
     private val tweetStatsRespAdapter = moshi.adapter<TweetStatsResponse>()
     private val usersRespAdapter = moshi.adapter<UsersResponse>()
@@ -95,6 +96,7 @@ class WarpnetRepository @Inject constructor(
     private val getTweetStatsAdapter = moshi.adapter<GetTweetStatsEvent>()
     private val getRepliesAdapter = moshi.adapter<GetAllRepliesEvent>()
     private val getNotifsAdapter = moshi.adapter<GetNotificationsEvent>()
+    private val getNotifAdapter = moshi.adapter<site.warpnet.transport.dto.GetNotificationEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -383,6 +385,20 @@ class WarpnetRepository @Inject constructor(
             n.toNotification(author)
         }
         return mapped to page.cursor
+    }
+
+    /**
+     * Fetch a single notification by id. The fat node resolves the recipient
+     * from the paired session; only the notification id travels on the wire.
+     */
+    suspend fun getNotification(notificationId: String): Notification? {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_NOTIFICATION,
+            getNotifAdapter.toJson(site.warpnet.transport.dto.GetNotificationEvent(notificationId = notificationId)),
+        )
+        val wire = notificationRespAdapter.fromJson(raw) ?: return null
+        val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
+        return wire.toNotification(author)
     }
 
     // -----------------------------------------------------------------

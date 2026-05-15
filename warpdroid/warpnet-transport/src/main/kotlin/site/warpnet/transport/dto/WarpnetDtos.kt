@@ -163,6 +163,11 @@ data class GetNotificationsEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class GetNotificationEvent(
+    @Json(name = "notification_id") val notificationId: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",

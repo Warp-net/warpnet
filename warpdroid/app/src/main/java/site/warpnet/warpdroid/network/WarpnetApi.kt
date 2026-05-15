@@ -285,7 +285,10 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun notification(id: String): Response<Notification> = stubError()
+    suspend fun notification(id: String): Response<Notification> = response {
+        warpnet.getNotification(notificationId = id)
+            ?: throw NoSuchElementException("notification $id not found")
+    }
 
     suspend fun markersWithAuth(
         auth: String,

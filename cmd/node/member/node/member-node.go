@@ -559,6 +559,10 @@ func (m *MemberNode) setupHandlers(
 				event.PRIVATE_GET_NOTIFICATIONS,
 				handler.StreamGetNotificationsHandler(notificationRepo, authRepo),
 			},
+			{
+				event.PRIVATE_GET_NOTIFICATION,
+				handler.StreamGetNotificationHandler(notificationRepo, authRepo),
+			},
 		}...,
 	)
 }
