@@ -353,11 +353,19 @@ class WarpnetRepository @Inject constructor(
     // Notifications
     // -----------------------------------------------------------------
 
-    /** Caller's own notifications feed. Second element is the next-page cursor, empty when exhausted. */
+    /**
+     * Caller's own notifications feed. Second element is the next-page cursor,
+     * empty when exhausted.
+     *
+     * The fat node resolves the recipient from the paired session, so the
+     * wire DTO carries only cursor/limit; [userId] is accepted purely to keep
+     * the existing call sites in [site.warpnet.warpdroid.network.WarpnetApi]
+     * compiling and to surface the resolved-from-pairing identity to callers.
+     */
     suspend fun getNotifications(userId: String, cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {
         val raw = client.request(
             ProtocolIds.PRIVATE_GET_NOTIFICATIONS,
-            getNotifsAdapter.toJson(GetNotificationsEvent(userId = userId, cursor = cursor, limit = limit)),
+            getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
         val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
         if (page.notifications.isEmpty()) return emptyList<Notification>() to page.cursor
