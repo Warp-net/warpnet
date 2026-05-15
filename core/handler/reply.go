@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -61,11 +62,19 @@ type ReplyStorer interface {
 	DeleteReply(rootID, parentID, replyID string) error
 }
 
+// ReplyConvoTouch is the conversation-index touch hook for the reply
+// handler. Implemented by ConversationsRepo; injected so the reply
+// handler doesn't depend on its concrete type.
+type ReplyConvoTouch interface {
+	Touch(userId, rootTweetId string, at time.Time) error
+}
+
 func StreamNewReplyHandler(
 	replyRepo ReplyStorer,
 	userRepo ReplyUserFetcher,
 	notifyRepo ModerationNotifier,
 	streamer ReplyStreamer,
+	convoRepo ReplyConvoTouch,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewReplyEvent
@@ -82,6 +91,26 @@ func StreamNewReplyHandler(
 
 		rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
 		parentId := strings.TrimPrefix(*ev.ParentId, domain.RetweetPrefix)
+
+		// Both participants — the replier and the parent's author — see
+		// this thread in their conversations list. Errors are non-fatal:
+		// a missing index entry is a UX degradation, not a write failure.
+		if convoRepo != nil {
+			now := ev.CreatedAt
+			if now.IsZero() {
+				now = time.Now()
+			}
+			if ev.UserId != "" {
+				if err := convoRepo.Touch(ev.UserId, rootId, now); err != nil {
+					log.Warnf("reply: convo touch (replier): %v", err)
+				}
+			}
+			if ev.ParentUserId != "" && ev.ParentUserId != ev.UserId {
+				if err := convoRepo.Touch(ev.ParentUserId, rootId, now); err != nil {
+					log.Warnf("reply: convo touch (parent): %v", err)
+				}
+			}
+		}
 
 		reply, err := replyRepo.AddReply(domain.Tweet{
 			CreatedAt: ev.CreatedAt,

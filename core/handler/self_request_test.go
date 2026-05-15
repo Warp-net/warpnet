@@ -285,7 +285,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			UserId:       "stranger",
 			Username:     "stranger",
 		}
-		h := StreamNewReplyHandler(stubReplyRepo{}, userRepo, stubModerationNotifier{}, streamer)
+		h := StreamNewReplyHandler(stubReplyRepo{}, userRepo, stubModerationNotifier{}, streamer, nil)
 		if _, err := h(marshal(t, ev), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -405,7 +405,7 @@ func TestStreamNewReplyHandler_OwnTweet_NodeIdFormatDrift(t *testing.T) {
 		Username:     "stranger",
 	}
 
-	h := StreamNewReplyHandler(stubReplyRepo{}, userRepo, stubModerationNotifier{}, streamer)
+	h := StreamNewReplyHandler(stubReplyRepo{}, userRepo, stubModerationNotifier{}, streamer, nil)
 	if _, err := h(marshal(t, ev), nil); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

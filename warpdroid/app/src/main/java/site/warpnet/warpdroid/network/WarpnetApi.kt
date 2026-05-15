@@ -1009,10 +1009,37 @@ class WarpnetApi @Inject constructor(
     suspend fun getConversations(
         maxId: String? = null,
         limit: Int? = null,
-    ): Response<List<Conversation>> = stubList()
+    ): Response<List<Conversation>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return response {
+            val (rootIds, _) = warpnet.getConversations(
+                userId = active.accountId,
+                cursor = maxId.orEmpty(),
+                limit = limit ?: 40,
+            )
+            // Each conversation surfaces as the root tweet of the thread.
+            // We don't yet track the participant list — the lastStatus's
+            // author + the active user are the best approximation.
+            rootIds.mapNotNull { rootId ->
+                runCatching {
+                    val last = warpnet.getStatus(tweetId = rootId, userId = active.accountId)
+                    Conversation(
+                        id = rootId,
+                        accounts = listOf(last.account),
+                        lastStatus = last,
+                        unread = false,
+                    )
+                }.getOrNull()
+            }
+        }
+    }
 
-    suspend fun deleteConversation(conversationId: String): NetworkResult<Unit> =
-        NetworkResult.success(Unit)
+    suspend fun deleteConversation(conversationId: String): NetworkResult<Unit> {
+        val active = accountManager.activeAccount ?: return NetworkResult.success(Unit)
+        return result {
+            warpnet.deleteConversation(userId = active.accountId, rootTweetId = conversationId)
+        }
+    }
 
     // ---------------------------------------------------------------
     // polls, announcements, reports, search
