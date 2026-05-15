@@ -158,6 +158,44 @@ func (s *UserSetRepoTestSuite) TestConvMutes() {
 	s.Require().NoError(repo.Unmute(user, tweet))
 }
 
+func (s *UserSetRepoTestSuite) TestUserNotes() {
+	repo := NewUserNoteRepo(s.db)
+	self := uuid.New().String()
+	target := uuid.New().String()
+
+	// empty fetch returns zero, no error
+	note, err := repo.GetNote(self, target)
+	s.Require().NoError(err)
+	s.Empty(note)
+
+	// set + read
+	s.Require().NoError(repo.SetNote(self, target, "lovely person"))
+	note, err = repo.GetNote(self, target)
+	s.Require().NoError(err)
+	s.Equal("lovely person", note)
+
+	// overwrite
+	s.Require().NoError(repo.SetNote(self, target, "actually annoying"))
+	note, err = repo.GetNote(self, target)
+	s.Require().NoError(err)
+	s.Equal("actually annoying", note)
+
+	// empty clears (no error)
+	s.Require().NoError(repo.SetNote(self, target, ""))
+	note, err = repo.GetNote(self, target)
+	s.Require().NoError(err)
+	s.Empty(note)
+
+	// validation
+	s.Error(repo.SetNote("", target, "x"))
+	s.Error(repo.SetNote(self, "", "x"))
+
+	// empty input on Get is soft (return zero, no error)
+	note, err = repo.GetNote("", target)
+	s.NoError(err)
+	s.Empty(note)
+}
+
 func TestUserSetRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(UserSetRepoTestSuite))

@@ -52,6 +52,8 @@ export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
 export const PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
 export const PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
 export const PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
+export const PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
+export const PRIVATE_GET_USER_NOTE = "/private/get/user/note/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -496,6 +498,31 @@ export const warpnetService = {
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
         return resp;
+    },
+
+    async setAccountNote(targetUserId, note) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_USER_NOTE,
+            body: {
+                self_id: owner.user_id,
+                target_user_id: targetUserId,
+                note: note || '',
+            },
+        });
+    },
+
+    async getAccountNote(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_GET_USER_NOTE,
+            body: {
+                self_id: owner.user_id,
+                target_user_id: targetUserId,
+            },
+        });
     },
 
     async updateMediaMeta(key, description, focusX, focusY) {

@@ -394,6 +394,7 @@ func (m *MemberNode) setupHandlers(
 	mutesRepo := database.NewMutesRepo(db)
 	convMutesRepo := database.NewConvMutesRepo(db)
 	subsRepo := database.NewSubscriptionsRepo(db)
+	userNoteRepo := database.NewUserNoteRepo(db)
 
 	token := authRepo.SessionToken()
 
@@ -643,6 +644,14 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PRIVATE_GET_MEDIA,
 				handler.StreamGetMediaHandler(mediaRepo),
+			},
+			{
+				event.PRIVATE_POST_USER_NOTE,
+				handler.StreamUpdateAccountNoteHandler(userNoteRepo),
+			},
+			{
+				event.PRIVATE_GET_USER_NOTE,
+				handler.StreamGetAccountNoteHandler(userNoteRepo),
 			},
 		}...,
 	)

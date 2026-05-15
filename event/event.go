@@ -602,6 +602,26 @@ type GetMediaResponse struct {
 	FocusY      float32 `json:"focus_y"`
 }
 
+// UpdateAccountNoteEvent defines model for UpdateAccountNoteEvent.
+// Per-target private note: the local-only annotation a user can write
+// against another account (Mastodon's "Edit profile note about <user>").
+type UpdateAccountNoteEvent struct {
+	SelfId       domain.ID `json:"self_id"`
+	TargetUserId domain.ID `json:"target_user_id"`
+	Note         string    `json:"note"`
+}
+
+// GetAccountNoteEvent defines model for GetAccountNoteEvent.
+type GetAccountNoteEvent struct {
+	SelfId       domain.ID `json:"self_id"`
+	TargetUserId domain.ID `json:"target_user_id"`
+}
+
+// GetAccountNoteResponse defines model for GetAccountNoteResponse.
+type GetAccountNoteResponse struct {
+	Note string `json:"note"`
+}
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

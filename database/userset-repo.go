@@ -47,6 +47,7 @@ const (
 	MutesRepoName         = "/MUTES"
 	SubscriptionsRepoName = "/SUBSCRIPTIONS" // local watchlist: which users I want notifications about
 	ConvMutesRepo         = "/CONV_MUTES"    // muted conversations: user -> tweetId
+	UserNotesRepoName     = "/USER_NOTES"    // private notes: (self, target) -> string note
 )
 
 type UserSetStorer interface {
@@ -187,6 +188,77 @@ func (repo *UserSetRepo) List(ownerId string, limit *uint64, cursor *string) ([]
 		ids = append(ids, string(item.Value))
 	}
 	return ids, cur, nil
+}
+
+// UserNoteRepo persists per-target private notes (Mastodon's
+// "Edit profile note about <user>"). Stored locally only, never
+// surfaced to the target or any peer.
+type UserNoteRepo struct {
+	db UserSetStorer
+}
+
+func NewUserNoteRepo(db UserSetStorer) *UserNoteRepo {
+	return &UserNoteRepo{db: db}
+}
+
+func (repo *UserNoteRepo) SetNote(selfId, targetId, note string) error {
+	if selfId == "" {
+		return local_store.DBError("empty self id")
+	}
+	if targetId == "" {
+		return local_store.DBError("empty target id")
+	}
+	key := local_store.NewPrefixBuilder(UserNotesRepoName).
+		AddRootID(selfId).
+		AddParentId(targetId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	// Empty note clears the entry — kept as an explicit delete so List
+	// scans don't trip on stale blank values.
+	if note == "" {
+		if err := txn.Delete(key); err != nil && !local_store.IsNotFoundError(err) {
+			return err
+		}
+		return txn.Commit()
+	}
+	if err := txn.Set(key, []byte(note)); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+func (repo *UserNoteRepo) GetNote(selfId, targetId string) (string, error) {
+	if selfId == "" || targetId == "" {
+		return "", nil
+	}
+	key := local_store.NewPrefixBuilder(UserNotesRepoName).
+		AddRootID(selfId).
+		AddParentId(targetId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return "", err
+	}
+	defer txn.Rollback()
+
+	bt, err := txn.Get(key)
+	if local_store.IsNotFoundError(err) {
+		return "", txn.Commit()
+	}
+	if err != nil {
+		return "", err
+	}
+	if err := txn.Commit(); err != nil {
+		return "", err
+	}
+	return string(bt), nil
 }
 
 // ConvMuteRepo persists muted conversations (user -> tweet id set).

@@ -98,4 +98,7 @@ const (
 
 	PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
 	PRIVATE_GET_MEDIA       = "/private/get/media/0.0.0"
+
+	PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
+	PRIVATE_GET_USER_NOTE  = "/private/get/user/note/0.0.0"
 )

@@ -1007,7 +1007,13 @@ class WarpnetApi @Inject constructor(
     suspend fun updateAccountNote(
         accountId: String,
         note: String,
-    ): NetworkResult<Relationship> = stubFailure("updateAccountNote")
+    ): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("updateAccountNote")
+        return result {
+            warpnet.setAccountNote(selfId = active.accountId, targetUserId = accountId, note = note)
+            warpnet.relationshipFor(accountId).copy(note = note)
+        }
+    }
 
     // ---------------------------------------------------------------
     // push subscription

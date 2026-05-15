@@ -112,6 +112,9 @@ class WarpnetRepository @Inject constructor(
     private val updateMediaMetaAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateMediaMetaEvent>()
     private val getMediaAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaEvent>()
     private val getMediaRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaResponse>()
+    private val updateAccountNoteAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateAccountNoteEvent>()
+    private val getAccountNoteAdapter = moshi.adapter<site.warpnet.transport.dto.GetAccountNoteEvent>()
+    private val getAccountNoteRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetAccountNoteResponse>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -414,6 +417,36 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Private account note (Tusky's "edit note about <user>")
+    // -----------------------------------------------------------------
+
+    suspend fun setAccountNote(selfId: String, targetUserId: String, note: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_USER_NOTE,
+            updateAccountNoteAdapter.toJson(
+                site.warpnet.transport.dto.UpdateAccountNoteEvent(
+                    selfId = selfId,
+                    targetUserId = targetUserId,
+                    note = note,
+                ),
+            ),
+        )
+    }
+
+    suspend fun getAccountNote(selfId: String, targetUserId: String): String {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_USER_NOTE,
+            getAccountNoteAdapter.toJson(
+                site.warpnet.transport.dto.GetAccountNoteEvent(
+                    selfId = selfId,
+                    targetUserId = targetUserId,
+                ),
+            ),
+        )
+        return getAccountNoteRespAdapter.fromJson(raw)?.note.orEmpty()
     }
 
     // -----------------------------------------------------------------

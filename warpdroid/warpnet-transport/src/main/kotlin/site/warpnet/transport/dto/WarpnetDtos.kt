@@ -276,6 +276,24 @@ data class GetMediaResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class UpdateAccountNoteEvent(
+    @Json(name = "self_id") val selfId: String,
+    @Json(name = "target_user_id") val targetUserId: String,
+    val note: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetAccountNoteEvent(
+    @Json(name = "self_id") val selfId: String,
+    @Json(name = "target_user_id") val targetUserId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetAccountNoteResponse(
+    val note: String = "",
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",

@@ -79,6 +79,8 @@ object ProtocolIds {
     const val PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
     const val PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
     const val PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
+    const val PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
+    const val PRIVATE_GET_USER_NOTE = "/private/get/user/note/0.0.0"
     const val PRIVATE_GET_CHAT = "/private/get/chat/0.0.0"
     const val PRIVATE_GET_CHATS = "/private/get/chats/0.0.0"
     const val PRIVATE_GET_MESSAGE = "/private/get/message/0.0.0"
