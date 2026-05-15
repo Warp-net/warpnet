@@ -415,7 +415,10 @@ export const warpnetService = {
         if (!owner) return null;
         return await this.sendToNode({
             path: PRIVATE_POST_BLOCK,
-            body: { blocker_id: owner.user_id, blockee_id: targetUserId },
+            body: {
+                blocker_id: owner.user_id,
+                blockee_id: targetUserId,
+            },
         });
     },
 
@@ -424,7 +427,10 @@ export const warpnetService = {
         if (!owner) return null;
         return await this.sendToNode({
             path: PRIVATE_POST_UNBLOCK,
-            body: { blocker_id: owner.user_id, blockee_id: targetUserId },
+            body: {
+                blocker_id: owner.user_id,
+                blockee_id: targetUserId,
+            },
         });
     },
 
@@ -436,7 +442,11 @@ export const warpnetService = {
         if (!owner) return { ids: [], cursor: endCursor };
         const resp = await this.sendToNode({
             path: PRIVATE_GET_BLOCKS,
-            body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor,
+            },
         });
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('blocks', resp.cursor || 'end')
@@ -448,7 +458,10 @@ export const warpnetService = {
         if (!owner) return null;
         return await this.sendToNode({
             path: PRIVATE_POST_MUTE,
-            body: { muter_id: owner.user_id, mutee_id: targetUserId },
+            body: {
+                muter_id: owner.user_id,
+                mutee_id: targetUserId,
+            },
         });
     },
 
@@ -457,7 +470,10 @@ export const warpnetService = {
         if (!owner) return null;
         return await this.sendToNode({
             path: PRIVATE_POST_UNMUTE,
-            body: { muter_id: owner.user_id, mutee_id: targetUserId },
+            body: {
+                muter_id: owner.user_id,
+                mutee_id: targetUserId,
+            },
         });
     },
 
@@ -469,7 +485,11 @@ export const warpnetService = {
         if (!owner) return { ids: [], cursor: endCursor };
         const resp = await this.sendToNode({
             path: PRIVATE_GET_MUTES,
-            body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor,
+            },
         });
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
@@ -481,7 +501,10 @@ export const warpnetService = {
         if (!owner) return null;
         return await this.sendToNode({
             path: PRIVATE_POST_SUBSCRIBE_USER,
-            body: { self_id: owner.user_id, target_id: targetId },
+            body: {
+                self_id: owner.user_id,
+                target_id: targetId,
+            },
         });
     },
 
@@ -490,7 +513,10 @@ export const warpnetService = {
         if (!owner) return null;
         return await this.sendToNode({
             path: PRIVATE_POST_UNSUBSCRIBE_USER,
-            body: { self_id: owner.user_id, target_id: targetId },
+            body: {
+                self_id: owner.user_id,
+                target_id: targetId,
+            },
         });
     },
 
@@ -525,7 +551,10 @@ export const warpnetService = {
         if (!owner) return null;
         return await this.sendToNode({
             path: PRIVATE_POST_MUTE_CONVERSATION,
-            body: { user_id: owner.user_id, tweet_id: tweetId },
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+            },
         });
     },
 
@@ -534,7 +563,10 @@ export const warpnetService = {
         if (!owner) return null;
         return await this.sendToNode({
             path: PRIVATE_POST_UNMUTE_CONVERSATION,
-            body: { user_id: owner.user_id, tweet_id: tweetId },
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+            },
         });
     },
 

@@ -422,6 +422,7 @@ class ScheduledTweetActivity : BaseActivity() {
                             attachment = attachment,
                             statusId = null,
                             statusUrl = null,
+                            statusAuthorId = null,
                             sensitive = status.sensitive,
                             isRevealed = true
                         )

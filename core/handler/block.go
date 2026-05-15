@@ -28,14 +28,14 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"errors"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
-
-	"errors"
 )
 
 // UserSetStorer is the narrow surface block / mute handlers need from the
