@@ -76,6 +76,53 @@ func (s *TweetRepoTestSuite) TestCreateAndGetTweet() {
 	s.Equal(created.Text, fetched.Text)
 }
 
+func (s *TweetRepoTestSuite) TestPinAndUnpin() {
+	userId := ulid.Make().String()
+	tweet := domain.Tweet{UserId: userId, Text: "pin me"}
+
+	created, err := s.repo.Create(userId, tweet)
+	s.Require().NoError(err)
+	s.False(created.Pinned)
+
+	pinned, err := s.repo.Pin(userId, created.Id)
+	s.Require().NoError(err)
+	s.True(pinned.Pinned)
+	s.Equal(created.Id, pinned.Id)
+
+	// Re-pin is a no-op: same state, no error.
+	pinned2, err := s.repo.Pin(userId, created.Id)
+	s.Require().NoError(err)
+	s.True(pinned2.Pinned)
+
+	fetched, err := s.repo.Get(userId, created.Id)
+	s.Require().NoError(err)
+	s.True(fetched.Pinned)
+
+	unpinned, err := s.repo.Unpin(userId, created.Id)
+	s.Require().NoError(err)
+	s.False(unpinned.Pinned)
+
+	fetched, err = s.repo.Get(userId, created.Id)
+	s.Require().NoError(err)
+	s.False(fetched.Pinned)
+}
+
+func (s *TweetRepoTestSuite) TestPinEmptyValidation() {
+	_, err := s.repo.Pin("", "t")
+	s.Error(err)
+	_, err = s.repo.Pin("u", "")
+	s.Error(err)
+	_, err = s.repo.Unpin("", "t")
+	s.Error(err)
+	_, err = s.repo.Unpin("u", "")
+	s.Error(err)
+}
+
+func (s *TweetRepoTestSuite) TestPinNonexistent() {
+	_, err := s.repo.Pin(ulid.Make().String(), ulid.Make().String())
+	s.Error(err)
+}
+
 func (s *TweetRepoTestSuite) TestDeleteTweet() {
 	userId := ulid.Make().String()
 	tweet := domain.Tweet{UserId: userId, Text: "to delete"}

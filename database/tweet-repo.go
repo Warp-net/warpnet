@@ -265,10 +265,7 @@ func (repo *TweetRepo) setPinned(userId, tweetId string, pinned bool) (domain.Tw
 	existing.UpdatedAt = &now
 
 	expiration := time.Unix(int64(expiresAt), 0) //#nosec
-	ttl := expiration.Sub(now)
-	if ttl <= 0 {
-		ttl = 0
-	}
+	ttl := max(expiration.Sub(now), 0)
 	if _, err := storeTweet(txn, existing.UserId, existing, ttl, true); err != nil {
 		return domain.Tweet{}, err
 	}

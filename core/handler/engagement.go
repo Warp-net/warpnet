@@ -56,6 +56,49 @@ type EngagementStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
+// forwardToOwner attempts to fetch the engagement list from the tweet
+// author's node when the caller isn't the owner. Returns (remote response,
+// true) when the remote answered with a non-empty page, (zero, false)
+// otherwise — caller then falls through to the local index.
+func forwardToOwner(
+	ownerUserId string,
+	streamer EngagementStreamer,
+	userRepo LikedUserFetcher,
+	path stream.WarpRoute,
+	ev any,
+) (event.UsersResponse, bool, error) {
+	if ownerUserId == "" || streamer == nil {
+		return event.UsersResponse{}, false, nil
+	}
+	ownNode := streamer.NodeInfo()
+	if ownerUserId == ownNode.OwnerId {
+		return event.UsersResponse{}, false, nil
+	}
+	owner, err := userRepo.Get(ownerUserId)
+	if errors.Is(err, database.ErrUserNotFound) || err != nil {
+		return event.UsersResponse{}, false, nil
+	}
+	if owner.NodeId == ownNode.ID.String() {
+		return event.UsersResponse{}, false, nil
+	}
+
+	resp, ferr := streamer.GenericStream(owner.NodeId, path, ev)
+	switch {
+	case errors.Is(ferr, warpnet.ErrNodeIsOffline):
+		return event.UsersResponse{}, false, nil
+	case ferr != nil:
+		return event.UsersResponse{}, false, ferr
+	}
+	var out event.UsersResponse
+	if uerr := json.Unmarshal(resp, &out); uerr != nil {
+		return event.UsersResponse{}, false, nil
+	}
+	if out.Cursor == "" && len(out.Users) == 0 {
+		return event.UsersResponse{}, false, nil
+	}
+	return out, true, nil
+}
+
 func StreamGetTweetLikersHandler(
 	repo LikersLister,
 	userRepo LikedUserFetcher,
@@ -70,25 +113,10 @@ func StreamGetTweetLikersHandler(
 			return nil, warpnet.WarpError("likers: empty tweet id")
 		}
 
-		// If the canonical record lives on the owner's node, forward the call.
-		if ev.OwnerUserId != "" && streamer != nil {
-			ownNode := streamer.NodeInfo()
-			if ev.OwnerUserId != ownNode.OwnerId {
-				owner, err := userRepo.Get(ev.OwnerUserId)
-				if !errors.Is(err, database.ErrUserNotFound) && err == nil && owner.NodeId != ownNode.ID.String() {
-					resp, ferr := streamer.GenericStream(owner.NodeId, event.PUBLIC_GET_TWEET_LIKERS, ev)
-					if errors.Is(ferr, warpnet.ErrNodeIsOffline) {
-						// fall through to local
-					} else if ferr != nil {
-						return nil, ferr
-					} else {
-						var out event.UsersResponse
-						if uerr := json.Unmarshal(resp, &out); uerr == nil && out.Cursor != "" || len(out.Users) != 0 {
-							return out, nil
-						}
-					}
-				}
-			}
+		if out, ok, err := forwardToOwner(ev.OwnerUserId, streamer, userRepo, event.PUBLIC_GET_TWEET_LIKERS, ev); err != nil {
+			return nil, err
+		} else if ok {
+			return out, nil
 		}
 
 		ids, cur, err := repo.Likers(ev.TweetId, ev.Limit, ev.Cursor)
@@ -114,24 +142,10 @@ func StreamGetTweetRetweetersHandler(
 			return nil, warpnet.WarpError("retweeters: empty tweet id")
 		}
 
-		if ev.OwnerUserId != "" && streamer != nil {
-			ownNode := streamer.NodeInfo()
-			if ev.OwnerUserId != ownNode.OwnerId {
-				owner, err := userRepo.Get(ev.OwnerUserId)
-				if !errors.Is(err, database.ErrUserNotFound) && err == nil && owner.NodeId != ownNode.ID.String() {
-					resp, ferr := streamer.GenericStream(owner.NodeId, event.PUBLIC_GET_TWEET_RETWEETERS, ev)
-					if errors.Is(ferr, warpnet.ErrNodeIsOffline) {
-						// fall through to local
-					} else if ferr != nil {
-						return nil, ferr
-					} else {
-						var out event.UsersResponse
-						if uerr := json.Unmarshal(resp, &out); uerr == nil && out.Cursor != "" || len(out.Users) != 0 {
-							return out, nil
-						}
-					}
-				}
-			}
+		if out, ok, err := forwardToOwner(ev.OwnerUserId, streamer, userRepo, event.PUBLIC_GET_TWEET_RETWEETERS, ev); err != nil {
+			return nil, err
+		} else if ok {
+			return out, nil
 		}
 
 		ids, cur, err := repo.Retweeters(ev.TweetId, ev.Limit, ev.Cursor)
