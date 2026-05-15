@@ -116,6 +116,7 @@ data class NewUnfollowEvent(
 data class LikeEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
+    @Json(name = "owner_id") val ownerId: String,
 )
 
 /**

@@ -449,10 +449,15 @@ class WarpnetApi @Inject constructor(
         }
     }
 
+    // TODO(warpdroid): plumb the real tweet author id through the view-model
+    // so userId here matches the tweet's actual author (Warpnet's LikeEvent
+    // semantics: user_id = author, owner_id = liker). Passing the local
+    // accountId for both is wrong but preserves prior behaviour and now also
+    // clears the backend's mandatory owner_id check (core/handler/like.go:79).
     suspend fun likeStatus(statusId: String): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("likeStatus")
         return result {
-            warpnet.likeStatus(tweetId = statusId, userId = active.accountId)
+            warpnet.likeStatus(tweetId = statusId, userId = active.accountId, ownerId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }
@@ -460,7 +465,7 @@ class WarpnetApi @Inject constructor(
     suspend fun unlikeStatus(statusId: String): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("unlikeStatus")
         return result {
-            warpnet.unlikeStatus(tweetId = statusId, userId = active.accountId)
+            warpnet.unlikeStatus(tweetId = statusId, userId = active.accountId, ownerId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }

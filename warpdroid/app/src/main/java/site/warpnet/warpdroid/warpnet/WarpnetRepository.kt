@@ -254,18 +254,25 @@ class WarpnetRepository @Inject constructor(
     // Likes
     // -----------------------------------------------------------------
 
-    suspend fun likeStatus(tweetId: String, userId: String): Long {
+    /**
+     * [userId] is the **tweet author's** id (matches Warpnet's
+     * `event.LikeEvent.user_id` semantics); [ownerId] is the **liker's**
+     * id (the paired-node user). The backend handler rejects requests
+     * where either is empty (core/handler/like.go:79-87), so callers
+     * must supply both.
+     */
+    suspend fun likeStatus(tweetId: String, userId: String, ownerId: String): Long {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_LIKE,
-            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId)),
+            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
         )
         return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
     }
 
-    suspend fun unlikeStatus(tweetId: String, userId: String): Long {
+    suspend fun unlikeStatus(tweetId: String, userId: String, ownerId: String): Long {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_UNLIKE,
-            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId)),
+            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
         )
         return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
     }

@@ -4,27 +4,34 @@
 // Package apisync verifies that the three independent Warpnet code bases that
 // speak the same libp2p protocols agree on their wire contract:
 //
-//   - Backend (Go):  event/paths.go + event/event.go + core/handler/*.go
+//   - Backend (Go):  event/paths.go + event/event.go + domain/warpnet.go
+//                  + core/handler/*.go
+//                  + cmd/node/member/node/member-node.go (the route table)
 //   - Frontend (JS): frontend/src/service/service.js
 //   - Warpdroid:     warpdroid/.../ProtocolIds.kt + WarpnetDtos.kt
 //                  + warpdroid/.../WarpnetRepository.kt
 //
-// Two facts are checked:
+// What the test enforces, end to end (no hand-curated table — everything
+// is discovered from the sources themselves):
 //
-//  1. The set of protocol path constants (name → value) is identical across
-//     the three sources.
-//  2. For each protocol that has a Go stream handler registered in
-//     cmd/node/member/node/member-node.go, the JSON keys sent by each client
-//     are a subset of the backend event struct's `json:` tags. The Go side
-//     is derived from AST: routes link path constant → handler function,
-//     handler bodies declare `var ev event.XxxEvent`, and event types in
-//     the event package expose `json:` tags (alias chains are followed).
-//     Clients are parsed from their own sources: service.js for the
-//     frontend body literals, WarpnetRepository.kt for `ProtocolIds.X ↔
-//     DTO class` pairs and WarpnetDtos.kt for the DTO field JSON names.
-//
-// Nothing is hand-curated; adding a new endpoint on either side starts
-// failing here until both clients catch up.
+//  1. Path constants. Every constant that the frontend or warpdroid
+//     declares must exist in event/paths.go with the same value, and
+//     when both clients declare the same name they must agree.
+//  2. Payload completeness. For each protocol that has a stream handler
+//     registered in member-node.go and whose handler unmarshals a typed
+//     body, the test walks the alias chain from event.X (possibly into
+//     domain.Y) to a concrete struct, then for each client that declares
+//     the path constant:
+//       a) requires a discovered mapping (orphan client constant = fail);
+//       b) asserts the client's keys are a subset of the backend struct
+//          (typos and renames = fail);
+//       c) asserts that every backend field without `omitempty` is
+//          present in the client body (missing required field = fail).
+//          Required-coverage is enforced only for types that resolve
+//          inside the event package; types that alias domain objects
+//          (e.g. NewTweetEvent = domain.Tweet) carry storage fields the
+//          server stamps server-side, so only the subset check applies
+//          to them.
 package apisync_test
 
 import (
@@ -107,7 +114,7 @@ func TestAPISync_Protocols(t *testing.T) {
 	require.NotEmpty(t, jsPaths, "no constants parsed from service.js")
 	require.NotEmpty(t, ktPaths, "no constants parsed from ProtocolIds.kt")
 
-	t.Run("frontend_matches_backend", func(t *testing.T) {
+	t.Run("frontend_paths_exist_and_match_backend", func(t *testing.T) {
 		for name, val := range jsPaths {
 			backendVal, ok := goPaths[name]
 			if !assert.Truef(t, ok, "frontend constant %s is not declared in event/paths.go", name) {
@@ -118,7 +125,7 @@ func TestAPISync_Protocols(t *testing.T) {
 		}
 	})
 
-	t.Run("warpdroid_matches_backend", func(t *testing.T) {
+	t.Run("warpdroid_paths_exist_and_match_backend", func(t *testing.T) {
 		for name, val := range ktPaths {
 			backendVal, ok := goPaths[name]
 			if !assert.Truef(t, ok, "warpdroid constant %s is not declared in event/paths.go", name) {
@@ -142,7 +149,7 @@ func TestAPISync_Protocols(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Backend event types (Go AST)
+// Backend struct discovery: AST across event/ and domain/
 // ----------------------------------------------------------------------------
 
 // parsePackageFiles parses every non-test `.go` file in dir into AST and
@@ -165,107 +172,168 @@ func parsePackageFiles(t *testing.T, dir string) []*ast.File {
 	return out
 }
 
-// eventStructKeys returns map[eventTypeName] -> sorted JSON keys, built by
-// parsing every non-test file under event/. Type aliases (`type X = Y`) are
-// resolved transitively; aliases whose target lives outside the event package
-// (e.g. `type NewTweetEvent = domain.Tweet`) are omitted because their fields
-// are out of this test's scope.
-func eventStructKeys(t *testing.T) map[string][]string {
+// pkgDecls collects every TypeSpec across the named go packages. Outer key is
+// package name ("event", "domain"); inner key is the type identifier.
+func pkgDecls(t *testing.T) map[string]map[string]*ast.TypeSpec {
 	t.Helper()
-	files := parsePackageFiles(t, filepath.Join(repoRoot(t), "event"))
-	require.NotEmpty(t, files, "no .go files in event/")
-
-	type spec struct {
-		alias bool
-		expr  ast.Expr
-	}
-	decls := map[string]spec{}
-	for _, f := range files {
-		for _, d := range f.Decls {
-			gd, ok := d.(*ast.GenDecl)
-			if !ok || gd.Tok != token.TYPE {
-				continue
-			}
-			for _, s := range gd.Specs {
-				ts := s.(*ast.TypeSpec)
-				decls[ts.Name.Name] = spec{alias: ts.Assign != token.NoPos, expr: ts.Type}
-			}
-		}
-	}
-
-	var resolve func(name string, seen map[string]bool) *ast.StructType
-	resolve = func(name string, seen map[string]bool) *ast.StructType {
-		if seen[name] {
-			return nil
-		}
-		seen[name] = true
-		d, ok := decls[name]
-		if !ok {
-			return nil
-		}
-		switch x := d.expr.(type) {
-		case *ast.StructType:
-			return x
-		case *ast.Ident:
-			return resolve(x.Name, seen)
-		}
-		return nil // SelectorExpr or other → out of scope
-	}
-
-	out := map[string][]string{}
-	for name := range decls {
-		st := resolve(name, map[string]bool{})
-		if st == nil || st.Fields == nil {
-			continue
-		}
-		seen := map[string]bool{}
-		for _, f := range st.Fields.List {
-			for _, n := range f.Names {
-				if !n.IsExported() {
+	root := repoRoot(t)
+	out := map[string]map[string]*ast.TypeSpec{}
+	for _, p := range []struct{ pkg, dir string }{
+		{"event", "event"},
+		{"domain", "domain"},
+	} {
+		files := parsePackageFiles(t, filepath.Join(root, p.dir))
+		decls := map[string]*ast.TypeSpec{}
+		for _, f := range files {
+			for _, d := range f.Decls {
+				gd, ok := d.(*ast.GenDecl)
+				if !ok || gd.Tok != token.TYPE {
 					continue
 				}
-				tag := ""
-				if f.Tag != nil {
-					tag = strings.Trim(f.Tag.Value, "`")
-				}
-				key, drop := jsonKeyFromStructTag(tag, n.Name)
-				if drop {
-					continue
-				}
-				if !seen[key] {
-					seen[key] = true
-					out[name] = append(out[name], key)
+				for _, s := range gd.Specs {
+					ts := s.(*ast.TypeSpec)
+					decls[ts.Name.Name] = ts
 				}
 			}
 		}
-		sort.Strings(out[name])
+		out[p.pkg] = decls
 	}
 	return out
 }
 
+// resolvedStruct is the outcome of walking an alias chain to a concrete
+// struct, plus the package the struct ended up in. Same struct reached from
+// different starting points yields the same pkg.
+type resolvedStruct struct {
+	st  *ast.StructType
+	pkg string
+}
+
+// resolveStruct walks `type X = Y` and `type X = pkg.Y` aliases until it
+// lands on a `*ast.StructType`, returning the package it landed in. Returns
+// (nil, "") for cycles, unknown packages, or types we can't represent
+// (interfaces, maps, etc. — none of which are wire payloads in this repo).
+func resolveStruct(pkgs map[string]map[string]*ast.TypeSpec, currentPkg, name string, seen map[string]bool) *resolvedStruct {
+	key := currentPkg + "." + name
+	if seen[key] {
+		return nil
+	}
+	seen[key] = true
+
+	pkg, ok := pkgs[currentPkg]
+	if !ok {
+		return nil
+	}
+	ts, ok := pkg[name]
+	if !ok {
+		return nil
+	}
+	switch x := ts.Type.(type) {
+	case *ast.StructType:
+		return &resolvedStruct{st: x, pkg: currentPkg}
+	case *ast.Ident:
+		return resolveStruct(pkgs, currentPkg, x.Name, seen)
+	case *ast.SelectorExpr:
+		ident, ok := x.X.(*ast.Ident)
+		if !ok {
+			return nil
+		}
+		return resolveStruct(pkgs, ident.Name, x.Sel.Name, seen)
+	}
+	return nil
+}
+
+// backendFields is everything the test wants to know about one wire shape:
+//
+//   - All:           every JSON wire key the struct declares.
+//   - Required:      keys whose `json:` tag lacks `,omitempty`.
+//   - EnforceReq:    whether to demand client coverage of Required. False
+//     when the struct lives in the domain package, because
+//     domain types double as storage objects and many of
+//     their non-`omitempty` fields are server-stamped (e.g.
+//     domain.Tweet.Id, domain.Tweet.CreatedAt).
+type backendFields struct {
+	All        []string
+	Required   []string
+	EnforceReq bool
+}
+
+func backendStructKeys(t *testing.T) map[string]backendFields {
+	t.Helper()
+	decls := pkgDecls(t)
+	out := map[string]backendFields{}
+	for name := range decls["event"] {
+		res := resolveStruct(decls, "event", name, map[string]bool{})
+		if res == nil || res.st.Fields == nil {
+			continue
+		}
+		all, required := jsonKeysOfStruct(res.st)
+		out[name] = backendFields{
+			All:        all,
+			Required:   required,
+			EnforceReq: res.pkg == "event",
+		}
+	}
+	return out
+}
+
+func jsonKeysOfStruct(st *ast.StructType) (all, required []string) {
+	seen := map[string]bool{}
+	for _, f := range st.Fields.List {
+		for _, n := range f.Names {
+			if !n.IsExported() {
+				continue
+			}
+			tag := ""
+			if f.Tag != nil {
+				tag = strings.Trim(f.Tag.Value, "`")
+			}
+			key, omitempty, drop := jsonKeyFromStructTag(tag, n.Name)
+			if drop || seen[key] {
+				continue
+			}
+			seen[key] = true
+			all = append(all, key)
+			if !omitempty {
+				required = append(required, key)
+			}
+		}
+	}
+	sort.Strings(all)
+	sort.Strings(required)
+	return all, required
+}
+
 // jsonKeyFromStructTag mirrors encoding/json's tag interpretation: explicit
-// names win, an absent tag falls back to the (lower-cased) field name, and a
-// `json:"-"` tag suppresses the field entirely.
-func jsonKeyFromStructTag(rawTag, fieldName string) (string, bool) {
+// names win, an absent tag falls back to the (lower-cased) field name, and
+// `json:"-"` suppresses the field. The second return reports whether the tag
+// carries `,omitempty`.
+func jsonKeyFromStructTag(rawTag, fieldName string) (name string, omitempty bool, drop bool) {
 	st := reflect.StructTag(rawTag)
 	tag := st.Get("json")
 	if tag == "-" {
-		return "", true
+		return "", false, true
 	}
-	name := strings.Split(tag, ",")[0]
+	parts := strings.Split(tag, ",")
+	name = parts[0]
 	if name == "" {
-		return strings.ToLower(fieldName), false
+		name = strings.ToLower(fieldName)
 	}
-	return name, false
+	for _, p := range parts[1:] {
+		if p == "omitempty" {
+			omitempty = true
+		}
+	}
+	return name, omitempty, false
 }
 
 // ----------------------------------------------------------------------------
-// Stream-handler routing table (Go AST)
+// Stream-handler routing table and handler→event linkage (Go AST)
 // ----------------------------------------------------------------------------
 
-// routeMap returns map[pathConstantName] -> handlerFuncName, sourced from the
-// composite literals inside cmd/node/member/node/member-node.go. The shape it
-// looks for is `{event.PRIVATE_POST_X, handler.StreamYHandler(...)}`.
+// routeMap parses cmd/node/member/node/member-node.go for the
+// `{event.CONST, handler.StreamYHandler(...)}` composite literals registered
+// via SetStreamHandlers. Returns map[pathConstantName]handlerFuncName.
 func routeMap(t *testing.T) map[string]string {
 	t.Helper()
 	path := filepath.Join(repoRoot(t), "cmd/node/member/node/member-node.go")
@@ -305,15 +373,10 @@ func routeMap(t *testing.T) map[string]string {
 	return out
 }
 
-// ----------------------------------------------------------------------------
-// Handler → event type (Go AST)
-// ----------------------------------------------------------------------------
-
-// handlerEventTypes returns map[handlerFuncName] -> eventTypeName by parsing
-// each non-test file under core/handler/ and looking at the first `var x
-// event.Y` declaration anywhere inside the handler function. Handlers that
-// don't unmarshal a body (e.g. node pairing, challenge) drop out and are
-// skipped by the caller.
+// handlerEventTypes walks core/handler/*.go and for every FuncDecl returns
+// the first `event.X` referenced in a `var ev event.X` declaration anywhere
+// inside that function's body. Handlers that don't unmarshal a typed body
+// (pairing, challenge) drop out and are skipped by callers.
 func handlerEventTypes(t *testing.T) map[string]string {
 	t.Helper()
 	files := parsePackageFiles(t, filepath.Join(repoRoot(t), "core/handler"))
@@ -326,19 +389,16 @@ func handlerEventTypes(t *testing.T) map[string]string {
 			if !ok || fd.Body == nil {
 				continue
 			}
-			eventType := firstEventVarType(fd.Body)
-			if eventType == "" {
+			et := firstEventVarType(fd.Body)
+			if et == "" {
 				continue
 			}
-			out[fd.Name.Name] = eventType
+			out[fd.Name.Name] = et
 		}
 	}
 	return out
 }
 
-// firstEventVarType walks a function body and returns the type name of the
-// first `event.X` selector used as a variable type (covers both
-// `var ev event.X` and `var ev event.X = ...`). Returns "" if none found.
 func firstEventVarType(body *ast.BlockStmt) string {
 	var found string
 	ast.Inspect(body, func(n ast.Node) bool {
@@ -374,9 +434,6 @@ func firstEventVarType(body *ast.BlockStmt) string {
 // Frontend bodies (service.js)
 // ----------------------------------------------------------------------------
 
-// jsBodyKeys returns map[pathConstantName] -> body keys for every
-// `path: CONST, body: { … }` literal in service.js. Bodies are always flat
-// object literals so a non-nesting `[^{}]*` group is enough.
 func jsBodyKeys(t *testing.T) map[string][]string {
 	t.Helper()
 	src := readFile(t, "frontend/src/service/service.js")
@@ -409,49 +466,10 @@ func jsBodyKeys(t *testing.T) map[string][]string {
 // Warpdroid DTOs (Kotlin)
 // ----------------------------------------------------------------------------
 
-// kotlinPathToDTO maps each ProtocolIds.X referenced in WarpnetRepository.kt
-// to the data class serialised on the wire. Two shapes are matched:
-//
-//	client.request(ProtocolIds.X, fooAdapter.toJson(DtoClass(...)))
-//	val payload = fooAdapter.toJson(DtoClass(...))
-//	client.request(ProtocolIds.X, payload)
-//
-// Endpoints whose body is empty or built ad-hoc (without a DTO data class)
-// drop out and the caller skips them.
-func kotlinPathToDTO(t *testing.T) map[string]string {
-	t.Helper()
-	src := readFile(t, "warpdroid/app/src/main/java/site/warpnet/warpdroid/warpnet/WarpnetRepository.kt")
-
-	// val NAME = ADAPTER.toJson(DTO(
-	varRe := regexp.MustCompile(`val\s+(\w+)\s*=\s*\w+\.toJson\(\s*(\w+)\s*\(`)
-	varToDto := map[string]string{}
-	for _, m := range varRe.FindAllStringSubmatch(src, -1) {
-		varToDto[m[1]] = m[2]
-	}
-
-	out := map[string]string{}
-
-	inlineRe := regexp.MustCompile(`ProtocolIds\.([A-Z_]+)\s*,\s*\w+\.toJson\(\s*(\w+)\s*\(`)
-	for _, m := range inlineRe.FindAllStringSubmatch(src, -1) {
-		out[m[1]] = m[2]
-	}
-
-	indirectRe := regexp.MustCompile(`ProtocolIds\.([A-Z_]+)\s*,\s*(\w+)\s*[,)]`)
-	for _, m := range indirectRe.FindAllStringSubmatch(src, -1) {
-		if _, ok := out[m[1]]; ok {
-			continue
-		}
-		if dto, ok := varToDto[m[2]]; ok {
-			out[m[1]] = dto
-		}
-	}
-	return out
-}
-
 // kotlinDtoKeys returns map[dataClassName] -> sorted JSON keys for every
 // `data class` declared in WarpnetDtos.kt. The wire name is taken from
-// `@Json(name = "…")` when present, otherwise from the parameter name itself
-// (matches Moshi's default).
+// `@Json(name = "…")` when present, otherwise from the parameter name (Moshi
+// default).
 func kotlinDtoKeys(t *testing.T) map[string][]string {
 	t.Helper()
 	src := readFile(t, "warpdroid/warpnet-transport/src/main/kotlin/site/warpnet/transport/dto/WarpnetDtos.kt")
@@ -462,7 +480,6 @@ func kotlinDtoKeys(t *testing.T) map[string][]string {
 	out := map[string][]string{}
 	for _, loc := range headerRe.FindAllStringSubmatchIndex(src, -1) {
 		name := src[loc[2]:loc[3]]
-		// loc[1] points just past `(`; back up one to enter captureBalanced.
 		body, ok := captureBalanced(src[loc[1]-1:], '(', ')')
 		if !ok {
 			continue
@@ -505,8 +522,76 @@ func captureBalanced(s string, open, closer byte) (string, bool) {
 	return "", false
 }
 
+// kotlinPathToDTO maps each ProtocolIds.X used in WarpnetRepository.kt to the
+// data class serialised on the wire. Four call shapes are handled, in
+// decreasing directness:
+//
+//	client.request(ProtocolIds.X, adapter.toJson(DtoClass(...)))     ← inline
+//	val draft   = DtoClass(...);            adapter.toJson(draft)     ← var instance
+//	val payload = adapter.toJson(DtoClass(...));                      ← precomputed JSON
+//	client.request(ProtocolIds.X, payload) | adapter.toJson(draft)
+//
+// Endpoints that build their body ad-hoc (no DTO data class) drop out.
+func kotlinPathToDTO(t *testing.T, knownDtos map[string][]string) map[string]string {
+	t.Helper()
+	src := readFile(t, "warpdroid/app/src/main/java/site/warpnet/warpdroid/warpnet/WarpnetRepository.kt")
+
+	isDto := func(name string) bool { _, ok := knownDtos[name]; return ok }
+
+	// val NAME = DtoClass(            ← live instance
+	instanceRe := regexp.MustCompile(`val\s+(\w+)\s*=\s*(\w+)\s*\(`)
+	instanceToDTO := map[string]string{}
+	for _, m := range instanceRe.FindAllStringSubmatch(src, -1) {
+		if isDto(m[2]) {
+			instanceToDTO[m[1]] = m[2]
+		}
+	}
+
+	// val NAME = ADAPTER.toJson(DtoClass(   ← precomputed JSON string
+	jsonStringRe := regexp.MustCompile(`val\s+(\w+)\s*=\s*\w+\.toJson\(\s*(\w+)\s*\(`)
+	jsonToDTO := map[string]string{}
+	for _, m := range jsonStringRe.FindAllStringSubmatch(src, -1) {
+		if isDto(m[2]) {
+			jsonToDTO[m[1]] = m[2]
+		}
+	}
+
+	out := map[string]string{}
+
+	// Inline: client.request(ProtocolIds.X, ADAPTER.toJson(DtoClass(
+	inlineRe := regexp.MustCompile(`ProtocolIds\.([A-Z_]+)\s*,\s*\w+\.toJson\(\s*(\w+)\s*\(`)
+	for _, m := range inlineRe.FindAllStringSubmatch(src, -1) {
+		if isDto(m[2]) {
+			out[m[1]] = m[2]
+		}
+	}
+
+	// Variable instance: client.request(ProtocolIds.X, ADAPTER.toJson(varName))
+	toJsonVarRe := regexp.MustCompile(`ProtocolIds\.([A-Z_]+)\s*,\s*\w+\.toJson\(\s*(\w+)\s*\)`)
+	for _, m := range toJsonVarRe.FindAllStringSubmatch(src, -1) {
+		if _, has := out[m[1]]; has {
+			continue
+		}
+		if dto, ok := instanceToDTO[m[2]]; ok {
+			out[m[1]] = dto
+		}
+	}
+
+	// Precomputed JSON string: client.request(ProtocolIds.X, payload[,)])
+	indirectRe := regexp.MustCompile(`ProtocolIds\.([A-Z_]+)\s*,\s*(\w+)\s*[,)]`)
+	for _, m := range indirectRe.FindAllStringSubmatch(src, -1) {
+		if _, has := out[m[1]]; has {
+			continue
+		}
+		if dto, ok := jsonToDTO[m[2]]; ok {
+			out[m[1]] = dto
+		}
+	}
+	return out
+}
+
 // ----------------------------------------------------------------------------
-// The combined assertion
+// Combined assertion
 // ----------------------------------------------------------------------------
 
 func assertSubset(t *testing.T, proto, clientName string, backend, client []string) {
@@ -524,26 +609,93 @@ func assertSubset(t *testing.T, proto, clientName string, backend, client []stri
 	if len(extra) > 0 {
 		sort.Strings(extra)
 		t.Errorf(
-			"%s: %s sends keys not declared by the backend struct: %v\n  backend keys: %v\n  %s keys:    %v",
+			"%s: %s sends keys the backend doesn't accept: %v\n  backend (all):  %v\n  %s keys:        %v",
 			proto, clientName, extra, backend, clientName, client,
 		)
 	}
 }
 
+func assertRequiredCovered(t *testing.T, proto, clientName string, required, client []string) {
+	t.Helper()
+	cset := map[string]bool{}
+	for _, k := range client {
+		cset[k] = true
+	}
+	var missing []string
+	for _, k := range required {
+		if !cset[k] {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf(
+			"%s: %s omits required backend fields: %v\n  backend (req):  %v\n  %s keys:        %v",
+			proto, clientName, missing, required, clientName, client,
+		)
+	}
+}
+
+// protocolsWithoutClient lists routes that legitimately or temporarily lack
+// any client implementation. Two distinct reasons live here:
+//
+//   - node-only: inter-node handshake / consensus protocols that no thin
+//     client should ever invoke (pairing, source-tree challenge,
+//     moderation gossip). These are stable and never expected to gain a
+//     client; the test silently skips them.
+//   - client-TODO: protocols whose backend handler exists but neither
+//     clients have wired up yet. The test still skips so it can stay green,
+//     but a follow-up should either implement the client side or remove the
+//     backend route.
+//
+// Anything routed that's not in this map and isn't wired by at least one
+// client makes TestAPISync_Payloads fail with a precise pointer.
+var protocolsWithoutClient = map[string]string{
+	"PRIVATE_POST_PAIR":             "node-only: node↔node pairing handshake",
+	"PUBLIC_POST_NODE_CHALLENGE":    "node-only: proof-of-source-tree challenge",
+	"PUBLIC_POST_MODERATION_RESULT": "node-only: moderation result gossip",
+
+	"PRIVATE_GET_MESSAGE":    "client-TODO: single-message read is unimplemented on both clients",
+	"PRIVATE_DELETE_MESSAGE": "client-TODO: single-message delete is unimplemented on both clients",
+}
+
+// effectiveRequired narrows backend's required (non-omitempty) keys to those
+// that at least one client actually sends. This avoids false positives on
+// fields the backend stamps server-side (e.g. domain.Tweet.Id) that have no
+// `omitempty` tag because their absence matters on response marshal — not on
+// request unmarshal. If one client sends a key the other must too, so the
+// resulting set still catches LikeEvent.owner_id-style drift.
+func effectiveRequired(backendReq, jsKeys, ktKeys []string) []string {
+	used := map[string]bool{}
+	for _, k := range jsKeys {
+		used[k] = true
+	}
+	for _, k := range ktKeys {
+		used[k] = true
+	}
+	var out []string
+	for _, k := range backendReq {
+		if used[k] {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 func TestAPISync_Payloads(t *testing.T) {
-	eventKeys := eventStructKeys(t)
+	backend := backendStructKeys(t)
 	handlerToEvent := handlerEventTypes(t)
 	routes := routeMap(t)
 	jsBodies := jsBodyKeys(t)
-	ktPaths := kotlinPathToDTO(t)
 	ktDtos := kotlinDtoKeys(t)
+	ktPaths := kotlinPathToDTO(t, ktDtos)
 
-	require.NotEmpty(t, eventKeys, "no event structs parsed")
+	require.NotEmpty(t, backend, "no event/domain structs parsed")
 	require.NotEmpty(t, handlerToEvent, "no handler→event mappings parsed")
 	require.NotEmpty(t, routes, "no stream routes parsed")
 	require.NotEmpty(t, jsBodies, "no frontend bodies parsed")
-	require.NotEmpty(t, ktPaths, "no warpdroid path→DTO mappings parsed")
 	require.NotEmpty(t, ktDtos, "no warpdroid DTOs parsed")
+	require.NotEmpty(t, ktPaths, "no warpdroid path→DTO mappings parsed")
 
 	checked := 0
 	for pathConst, handlerName := range routes {
@@ -552,27 +704,48 @@ func TestAPISync_Payloads(t *testing.T) {
 			// Handler doesn't unmarshal a typed body (e.g. pairing, challenge).
 			continue
 		}
-		backend, ok := eventKeys[eventType]
-		if !ok {
-			// Event type aliases a non-event-package type (e.g. domain.Tweet);
-			// out of scope here, the cross-client contract is checked at the
-			// domain layer instead.
+		bk, ok := backend[eventType]
+		if !ok || len(bk.All) == 0 {
+			// Resolver couldn't find a struct (interface, map, missing pkg).
 			continue
 		}
 		checked++
-		t.Run(pathConst, func(t *testing.T) {
-			t.Logf("backend: handler=%s event=%s keys=%v", handlerName, eventType, backend)
 
-			if js, ok := jsBodies[pathConst]; ok {
-				assertSubset(t, pathConst, "frontend", backend, js)
+		jsKeys, jsHas := jsBodies[pathConst]
+		ktDto, ktHas := ktPaths[pathConst]
+		var ktKeys []string
+		if ktHas {
+			ktKeys = ktDtos[ktDto]
+		}
+
+		t.Run(pathConst, func(t *testing.T) {
+			t.Logf("backend: handler=%s event=%s all=%v required=%v enforceReq=%v",
+				handlerName, eventType, bk.All, bk.Required, bk.EnforceReq)
+
+			if !jsHas && !ktHas {
+				if reason, ok := protocolsWithoutClient[pathConst]; ok {
+					t.Skipf("%s skipped: %s", pathConst, reason)
+				}
+				t.Errorf("%s is routed by the backend but no client (frontend service.js or warpdroid WarpnetRepository.kt) speaks it — either add a client implementation or document it in protocolsWithoutClient",
+					pathConst)
+				return
 			}
 
-			if dto, ok := ktPaths[pathConst]; ok {
-				kt, ok2 := ktDtos[dto]
-				if assert.Truef(t, ok2,
-					"warpdroid uses DTO %s for %s but no `data class %s` found in WarpnetDtos.kt",
-					dto, pathConst, dto) {
-					assertSubset(t, pathConst, "warpdroid", backend, kt)
+			var effReq []string
+			if bk.EnforceReq {
+				effReq = effectiveRequired(bk.Required, jsKeys, ktKeys)
+			}
+
+			if jsHas {
+				assertSubset(t, pathConst, "frontend", bk.All, jsKeys)
+				if bk.EnforceReq {
+					assertRequiredCovered(t, pathConst, "frontend", effReq, jsKeys)
+				}
+			}
+			if ktHas {
+				assertSubset(t, pathConst, "warpdroid", bk.All, ktKeys)
+				if bk.EnforceReq {
+					assertRequiredCovered(t, pathConst, "warpdroid", effReq, ktKeys)
 				}
 			}
 		})
