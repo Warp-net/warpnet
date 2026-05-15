@@ -154,12 +154,12 @@ abstract class TweetActionsViewModel(
         }
     }
 
-    fun bookmark(statusId: String, bookmark: Boolean) {
+    fun bookmark(statusId: String, authorId: String, bookmark: Boolean) {
         viewModelScope.launch {
             if (bookmark) {
-                warpnetApi.bookmarkStatus(statusId)
+                warpnetApi.bookmarkStatus(statusId, authorId)
             } else {
-                warpnetApi.unbookmarkStatus(statusId)
+                warpnetApi.unbookmarkStatus(statusId, authorId)
             }.fold(
                 onSuccess = { status ->
                     eventHub.dispatch(TweetChangedEvent(status))

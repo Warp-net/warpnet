@@ -123,7 +123,7 @@ class SearchStatusesFragment :
     }
 
     override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
-        viewModel.bookmark(viewData.id, bookmark)
+        viewModel.bookmark(viewData.id, viewData.status.account.id, bookmark)
     }
 
     override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {

@@ -470,6 +470,40 @@ type GetNotificationEvent struct {
 // GetNotificationResponse defines model for GetNotificationResponse.
 type GetNotificationResponse = domain.Notification
 
+// BookmarkEvent defines model for BookmarkEvent.
+type BookmarkEvent struct {
+	UserId      domain.ID `json:"user_id"`
+	TweetId     domain.ID `json:"tweet_id"`
+	OwnerUserId domain.ID `json:"owner_user_id"`
+}
+
+// UnbookmarkEvent defines model for UnbookmarkEvent.
+type UnbookmarkEvent struct {
+	UserId  domain.ID `json:"user_id"`
+	TweetId domain.ID `json:"tweet_id"`
+}
+
+// GetBookmarksEvent defines model for GetBookmarksEvent.
+type GetBookmarksEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+}
+
+// BookmarkItem mirrors database.Bookmark on the wire.
+type BookmarkItem struct {
+	UserId      domain.ID `json:"user_id"`
+	TweetId     domain.ID `json:"tweet_id"`
+	OwnerUserId domain.ID `json:"owner_user_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// GetBookmarksResponse defines model for GetBookmarksResponse.
+type GetBookmarksResponse struct {
+	Items  []BookmarkItem `json:"items"`
+	Cursor string         `json:"cursor"`
+}
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

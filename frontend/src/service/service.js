@@ -33,6 +33,9 @@ export const PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
 export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
+export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
+export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
+export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -390,6 +393,57 @@ export const warpnetService = {
         for (const cb of notificationSubscribers) {
             cb(latestNotifications);
         }
+        return resp;
+    },
+
+    async bookmarkTweet(tweetId, ownerUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const request = {
+            path: PRIVATE_POST_BOOKMARK,
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+                owner_user_id: ownerUserId,
+            },
+        }
+        return await this.sendToNode(request);
+    },
+
+    async unbookmarkTweet(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const request = {
+            path: PRIVATE_POST_UNBOOKMARK,
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+            },
+        }
+        return await this.sendToNode(request);
+    },
+
+    async getBookmarks(cursorReset) {
+        let cursor = this.getCursor('bookmarks')
+        if (cursorReset) {
+            cursor = ''
+        }
+        if (cursor === endCursor) {
+            return { items: [], cursor: endCursor };
+        }
+        const owner = this.getOwnerProfile()
+        if (!owner) return { items: [], cursor: endCursor };
+        const request = {
+            path: PRIVATE_GET_BOOKMARKS,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor: cursor,
+            },
+        }
+        const resp = await this.sendToNode(request);
+        if (!resp) return { items: [], cursor: endCursor };
+        this.setCursor('bookmarks', resp.cursor || 'end')
         return resp;
     },
 

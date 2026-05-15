@@ -389,6 +389,7 @@ func (m *MemberNode) setupHandlers(
 	chatRepo := database.NewChatRepo(db)
 	mediaRepo := database.NewMediaRepo(db)
 	notificationRepo := database.NewNotificationsRepo(db)
+	bookmarkRepo := database.NewBookmarkRepo(db)
 
 	token := authRepo.SessionToken()
 
@@ -562,6 +563,18 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PRIVATE_GET_NOTIFICATION,
 				handler.StreamGetNotificationHandler(notificationRepo, authRepo),
+			},
+			{
+				event.PRIVATE_POST_BOOKMARK,
+				handler.StreamBookmarkHandler(bookmarkRepo),
+			},
+			{
+				event.PRIVATE_POST_UNBOOKMARK,
+				handler.StreamUnbookmarkHandler(bookmarkRepo),
+			},
+			{
+				event.PRIVATE_GET_BOOKMARKS,
+				handler.StreamGetBookmarksHandler(bookmarkRepo),
 			},
 		}...,
 	)

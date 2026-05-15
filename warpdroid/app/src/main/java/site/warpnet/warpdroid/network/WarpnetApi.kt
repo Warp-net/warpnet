@@ -517,9 +517,27 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun bookmarkStatus(statusId: String): NetworkResult<Tweet> = stubFailure("bookmarkStatus")
+    suspend fun bookmarkStatus(statusId: String, authorId: String): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("bookmarkStatus")
+        if (authorId.isEmpty()) {
+            return NetworkResult.failure(IllegalArgumentException("bookmarkStatus: authorId required"))
+        }
+        return result {
+            warpnet.bookmarkTweet(userId = active.accountId, tweetId = statusId, ownerUserId = authorId)
+            warpnet.getStatus(tweetId = statusId, userId = authorId)
+        }
+    }
 
-    suspend fun unbookmarkStatus(statusId: String): NetworkResult<Tweet> = stubFailure("unbookmarkStatus")
+    suspend fun unbookmarkStatus(statusId: String, authorId: String): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("unbookmarkStatus")
+        if (authorId.isEmpty()) {
+            return NetworkResult.failure(IllegalArgumentException("unbookmarkStatus: authorId required"))
+        }
+        return result {
+            warpnet.unbookmarkTweet(userId = active.accountId, tweetId = statusId)
+            warpnet.getStatus(tweetId = statusId, userId = authorId)
+        }
+    }
 
     suspend fun pinStatus(statusId: String): NetworkResult<Tweet> = stubFailure("pinStatus")
 
@@ -714,7 +732,16 @@ class WarpnetApi @Inject constructor(
         minId: String? = null,
         sinceId: String?,
         limit: Int?,
-    ): Response<List<Tweet>> = stubList()
+    ): Response<List<Tweet>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return paginated {
+            warpnet.getBookmarks(
+                userId = active.accountId,
+                cursor = maxId.orEmpty(),
+                limit = limit ?: 40,
+            )
+        }
+    }
 
     suspend fun followRequests(maxId: String?): Response<List<TimelineAccount>> = stubList()
 

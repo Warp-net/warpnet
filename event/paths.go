@@ -75,4 +75,7 @@ const (
 	PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 	PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 	PUBLIC_GET_IMAGE          = "/public/get/image/0.0.0"
+	PRIVATE_POST_BOOKMARK     = "/private/post/bookmark/0.0.0"
+	PRIVATE_POST_UNBOOKMARK   = "/private/post/unbookmark/0.0.0"
+	PRIVATE_GET_BOOKMARKS     = "/private/get/bookmarks/0.0.0"
 )

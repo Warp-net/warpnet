@@ -222,7 +222,7 @@ class NotificationRequestDetailsFragment :
     }
 
     override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
-        viewModel.bookmark(viewData.id, bookmark)
+        viewModel.bookmark(viewData.id, viewData.accountId, bookmark)
     }
 
     override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {

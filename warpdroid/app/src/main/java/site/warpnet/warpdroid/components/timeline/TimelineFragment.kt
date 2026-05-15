@@ -624,7 +624,7 @@ class TimelineFragment :
     }
 
     override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
-        viewModel.bookmark(viewData.actionableId, bookmark)
+        viewModel.bookmark(viewData.actionableId, viewData.actionable.account.id, bookmark)
     }
 
     override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {

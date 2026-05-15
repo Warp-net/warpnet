@@ -168,6 +168,40 @@ data class GetNotificationEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class BookmarkEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "owner_user_id") val ownerUserId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class UnbookmarkEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetBookmarksEvent(
+    @Json(name = "user_id") val userId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class BookmarkItem(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "owner_user_id") val ownerUserId: String,
+    @Json(name = "created_at") val createdAt: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetBookmarksResponse(
+    val items: List<BookmarkItem> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",

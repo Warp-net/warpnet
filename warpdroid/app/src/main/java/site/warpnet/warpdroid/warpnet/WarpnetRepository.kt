@@ -97,6 +97,10 @@ class WarpnetRepository @Inject constructor(
     private val getRepliesAdapter = moshi.adapter<GetAllRepliesEvent>()
     private val getNotifsAdapter = moshi.adapter<GetNotificationsEvent>()
     private val getNotifAdapter = moshi.adapter<site.warpnet.transport.dto.GetNotificationEvent>()
+    private val bookmarkEventAdapter = moshi.adapter<site.warpnet.transport.dto.BookmarkEvent>()
+    private val unbookmarkEventAdapter = moshi.adapter<site.warpnet.transport.dto.UnbookmarkEvent>()
+    private val getBookmarksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksEvent>()
+    private val getBookmarksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksResponse>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -399,6 +403,56 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Bookmarks (local-only shelf, no propagation)
+    // -----------------------------------------------------------------
+
+    /** Pin [tweetId] (authored by [ownerUserId]) to the local bookmark shelf. */
+    suspend fun bookmarkTweet(userId: String, tweetId: String, ownerUserId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_BOOKMARK,
+            bookmarkEventAdapter.toJson(
+                site.warpnet.transport.dto.BookmarkEvent(
+                    userId = userId,
+                    tweetId = tweetId,
+                    ownerUserId = ownerUserId,
+                ),
+            ),
+        )
+    }
+
+    /** Remove a previously-bookmarked tweet from the shelf. */
+    suspend fun unbookmarkTweet(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNBOOKMARK,
+            unbookmarkEventAdapter.toJson(
+                site.warpnet.transport.dto.UnbookmarkEvent(userId = userId, tweetId = tweetId),
+            ),
+        )
+    }
+
+    /**
+     * Fetch one page of bookmarked tweets. The wire returns identifiers only —
+     * each tweet body is re-fetched in parallel and surfaced as a Tweet.
+     */
+    suspend fun getBookmarks(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.warpdroid.entity.Tweet>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_BOOKMARKS,
+            getBookmarksEventAdapter.toJson(
+                site.warpnet.transport.dto.GetBookmarksEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getBookmarksRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
+        if (page.items.isEmpty()) {
+            return emptyList<site.warpnet.warpdroid.entity.Tweet>() to page.cursor
+        }
+        val tweets = page.items.mapNotNull { bm ->
+            runCatching { getStatus(tweetId = bm.tweetId, userId = bm.ownerUserId) }.getOrNull()
+        }
+        return tweets to page.cursor
     }
 
     // -----------------------------------------------------------------
