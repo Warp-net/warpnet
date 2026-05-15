@@ -325,9 +325,51 @@ class WarpnetApi @Inject constructor(
         mediaId: String,
         description: String?,
         focus: String?,
-    ): NetworkResult<Attachment> = stubFailure("updateMedia")
+    ): NetworkResult<Attachment> {
+        val active = accountManager.activeAccount ?: return stubFailure("updateMedia")
+        val (fx, fy) = parseFocus(focus)
+        return result {
+            warpnet.updateMediaMeta(
+                userId = active.accountId,
+                key = mediaId,
+                description = description.orEmpty(),
+                focusX = fx,
+                focusY = fy,
+            )
+            // Warpnet's stored attachment isn't surfaced as a separate
+            // record — the next status fetch reads description / focus
+            // alongside the tweet. Return a minimal Attachment so the
+            // compose screen can echo the edit back.
+            Attachment(
+                id = mediaId,
+                url = "",
+                description = description,
+                meta = Attachment.MetaData(
+                    focus = Attachment.Focus(x = fx, y = fy),
+                ),
+                type = Attachment.Type.IMAGE,
+            )
+        }
+    }
 
-    suspend fun getMedia(mediaId: String): Response<MediaUploadResult> = stubError()
+    suspend fun getMedia(mediaId: String): Response<MediaUploadResult> {
+        val active = accountManager.activeAccount ?: return stubError()
+        return response {
+            val meta = warpnet.getMediaMeta(userId = active.accountId, key = mediaId)
+            // MediaUploadResult intentionally only carries the id — see
+            // entity/MediaUploadResult.kt. The descriptive metadata flows
+            // back via the Attachment surface on the next status fetch.
+            MediaUploadResult(id = meta.key)
+        }
+    }
+
+    private fun parseFocus(focus: String?): Pair<Float, Float> {
+        if (focus.isNullOrBlank()) return 0f to 0f
+        val parts = focus.split(',', limit = 2)
+        val x = parts.getOrNull(0)?.toFloatOrNull() ?: 0f
+        val y = parts.getOrNull(1)?.toFloatOrNull() ?: 0f
+        return x to y
+    }
 
     // ---------------------------------------------------------------
     // statuses (CRUD + interactions)

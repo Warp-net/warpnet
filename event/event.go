@@ -579,6 +579,29 @@ type SubscribeUserEvent struct {
 // UnsubscribeUserEvent defines model for UnsubscribeUserEvent.
 type UnsubscribeUserEvent = SubscribeUserEvent
 
+// UpdateMediaMetaEvent defines model for UpdateMediaMetaEvent.
+type UpdateMediaMetaEvent struct {
+	UserId      domain.ID `json:"user_id"`
+	Key         string    `json:"key"`
+	Description string    `json:"description"`
+	FocusX      float32   `json:"focus_x"`
+	FocusY      float32   `json:"focus_y"`
+}
+
+// GetMediaEvent defines model for GetMediaEvent.
+type GetMediaEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Key    string    `json:"key"`
+}
+
+// GetMediaResponse defines model for GetMediaResponse.
+type GetMediaResponse struct {
+	Key         string  `json:"key"`
+	Description string  `json:"description"`
+	FocusX      float32 `json:"focus_x"`
+	FocusY      float32 `json:"focus_y"`
+}
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

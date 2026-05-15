@@ -253,6 +253,29 @@ data class SubscribeUserEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class UpdateMediaMetaEvent(
+    @Json(name = "user_id") val userId: String,
+    val key: String,
+    val description: String = "",
+    @Json(name = "focus_x") val focusX: Float = 0f,
+    @Json(name = "focus_y") val focusY: Float = 0f,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetMediaEvent(
+    @Json(name = "user_id") val userId: String,
+    val key: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetMediaResponse(
+    val key: String = "",
+    val description: String = "",
+    @Json(name = "focus_x") val focusX: Float = 0f,
+    @Json(name = "focus_y") val focusY: Float = 0f,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",

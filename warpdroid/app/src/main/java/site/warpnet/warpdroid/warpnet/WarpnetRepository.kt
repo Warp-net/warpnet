@@ -109,6 +109,9 @@ class WarpnetRepository @Inject constructor(
     private val muteConvAdapter = moshi.adapter<site.warpnet.transport.dto.MuteConversationEvent>()
     private val getTweetLikersAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetLikersEvent>()
     private val subscribeUserAdapter = moshi.adapter<site.warpnet.transport.dto.SubscribeUserEvent>()
+    private val updateMediaMetaAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateMediaMetaEvent>()
+    private val getMediaAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaEvent>()
+    private val getMediaRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaResponse>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -411,6 +414,40 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Media metadata (alt-text + focal point on uploaded images)
+    // -----------------------------------------------------------------
+
+    suspend fun updateMediaMeta(
+        userId: String,
+        key: String,
+        description: String,
+        focusX: Float,
+        focusY: Float,
+    ) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_MEDIA_META,
+            updateMediaMetaAdapter.toJson(
+                site.warpnet.transport.dto.UpdateMediaMetaEvent(
+                    userId = userId,
+                    key = key,
+                    description = description,
+                    focusX = focusX,
+                    focusY = focusY,
+                ),
+            ),
+        )
+    }
+
+    suspend fun getMediaMeta(userId: String, key: String): site.warpnet.transport.dto.GetMediaResponse {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_MEDIA,
+            getMediaAdapter.toJson(site.warpnet.transport.dto.GetMediaEvent(userId = userId, key = key)),
+        )
+        return getMediaRespAdapter.fromJson(raw)
+            ?: throw IllegalStateException("getMediaMeta returned empty body for $key")
     }
 
     // -----------------------------------------------------------------

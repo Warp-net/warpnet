@@ -636,6 +636,14 @@ func (m *MemberNode) setupHandlers(
 				event.PRIVATE_POST_UNSUBSCRIBE_USER,
 				handler.StreamUnsubscribeUserHandler(subsRepo),
 			},
+			{
+				event.PRIVATE_POST_MEDIA_META,
+				handler.StreamUpdateMediaMetaHandler(mediaRepo),
+			},
+			{
+				event.PRIVATE_GET_MEDIA,
+				handler.StreamGetMediaHandler(mediaRepo),
+			},
 		}...,
 	)
 }
