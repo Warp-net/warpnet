@@ -59,7 +59,6 @@ func TestNotificationsDeliveredToRecipient_Reply(t *testing.T) {
 		}},
 		repo,
 		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner, ID: nodeID}},
-		nil,
 	)
 
 	ev := event.NewReplyEvent{
@@ -212,7 +211,6 @@ func TestNotifications_NoSelfNotification(t *testing.T) {
 			}},
 			repo,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}},
-			nil,
 		)
 
 		ev := event.NewReplyEvent{

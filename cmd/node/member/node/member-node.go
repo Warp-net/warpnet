@@ -389,7 +389,6 @@ type memberRepos struct {
 	subsRepo         *database.UserSetRepo
 	userNoteRepo     *database.UserNoteRepo
 	tweetEditsRepo   *database.TweetEditsRepo
-	convoRepo        *database.ConversationsRepo
 }
 
 func (m *MemberNode) setupHandlers(
@@ -419,7 +418,6 @@ func (m *MemberNode) setupHandlers(
 		subsRepo:         database.NewSubscriptionsRepo(db),
 		userNoteRepo:     database.NewUserNoteRepo(db),
 		tweetEditsRepo:   database.NewTweetEditsRepo(db),
-		convoRepo:        database.NewConversationsRepo(db),
 	}
 
 	token := authRepo.SessionToken()
@@ -435,7 +433,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.mediaHandlers(userRepo, r)...)
 	hs = append(hs, m.notificationHandlers(authRepo, r)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
-	hs = append(hs, m.bookmarksAndConvosHandlers(r)...)
+	hs = append(hs, m.bookmarksHandlers(r)...)
 
 	m.node.SetStreamHandlers(hs...)
 }
@@ -551,7 +549,7 @@ func (m *MemberNode) replyHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PUBLIC_POST_REPLY,
-			handler.StreamNewReplyHandler(r.replyRepo, userRepo, r.notificationRepo, m, r.convoRepo),
+			handler.StreamNewReplyHandler(r.replyRepo, userRepo, r.notificationRepo, m),
 		},
 		{
 			event.PUBLIC_DELETE_REPLY,
@@ -805,7 +803,7 @@ func (m *MemberNode) socialFilterHandlers(
 }
 
 //nolint:govet
-func (m *MemberNode) bookmarksAndConvosHandlers(r *memberRepos) []warpnet.WarpStreamHandler {
+func (m *MemberNode) bookmarksHandlers(r *memberRepos) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_BOOKMARK,
@@ -818,14 +816,6 @@ func (m *MemberNode) bookmarksAndConvosHandlers(r *memberRepos) []warpnet.WarpSt
 		{
 			event.PRIVATE_GET_BOOKMARKS,
 			handler.StreamGetBookmarksHandler(r.bookmarkRepo),
-		},
-		{
-			event.PRIVATE_GET_CONVERSATIONS,
-			handler.StreamGetConversationsHandler(r.convoRepo),
-		},
-		{
-			event.PRIVATE_DELETE_CONVERSATION,
-			handler.StreamDeleteConversationHandler(r.convoRepo),
 		},
 	}
 }

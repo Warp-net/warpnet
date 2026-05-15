@@ -655,25 +655,6 @@ type TweetEditsResponse struct {
 	Cursor string             `json:"cursor"`
 }
 
-// GetConversationsEvent defines model for GetConversationsEvent.
-type GetConversationsEvent struct {
-	UserId domain.ID `json:"user_id"`
-	Cursor *string   `json:"cursor,omitempty"`
-	Limit  *uint64   `json:"limit,omitempty"`
-}
-
-// GetConversationsResponse defines model for GetConversationsResponse.
-type GetConversationsResponse struct {
-	RootTweetIds []domain.ID `json:"root_tweet_ids"`
-	Cursor       string      `json:"cursor"`
-}
-
-// DeleteConversationEvent defines model for DeleteConversationEvent.
-type DeleteConversationEvent struct {
-	UserId      domain.ID `json:"user_id"`
-	RootTweetId domain.ID `json:"root_tweet_id"`
-}
-
 // NewQuoteEvent defines model for NewQuoteEvent.
 // Same wire shape as NewTweetEvent — a quote *is* a tweet, with the
 // QuotedTweetId / QuotedUserId fields referencing the quoted source.

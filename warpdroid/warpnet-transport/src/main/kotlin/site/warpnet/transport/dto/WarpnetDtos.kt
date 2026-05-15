@@ -332,25 +332,6 @@ data class TweetEditsResponse(
     val cursor: String = "",
 )
 
-@JsonClass(generateAdapter = true)
-data class GetConversationsEvent(
-    @Json(name = "user_id") val userId: String,
-    val cursor: String = "",
-    val limit: Int = 40,
-)
-
-@JsonClass(generateAdapter = true)
-data class GetConversationsResponse(
-    @Json(name = "root_tweet_ids") val rootTweetIds: List<String> = emptyList(),
-    val cursor: String = "",
-)
-
-@JsonClass(generateAdapter = true)
-data class DeleteConversationEvent(
-    @Json(name = "user_id") val userId: String,
-    @Json(name = "root_tweet_id") val rootTweetId: String,
-)
-
 // NewQuoteEvent is a flat WarpnetTweet — the wire shape mirrors
 // PRIVATE_POST_TWEET (which is also a flat Tweet). The Quote-specific
 // fields are quotedTweetId / quotedUserId carried by WarpnetTweet.

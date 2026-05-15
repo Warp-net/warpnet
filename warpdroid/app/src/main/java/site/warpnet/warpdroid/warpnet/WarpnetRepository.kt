@@ -119,9 +119,6 @@ class WarpnetRepository @Inject constructor(
     private val editTweetAdapter = moshi.adapter<site.warpnet.transport.dto.EditTweetEvent>()
     private val getTweetEditsAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetEditsEvent>()
     private val tweetEditsRespAdapter = moshi.adapter<site.warpnet.transport.dto.TweetEditsResponse>()
-    private val getConvosAdapter = moshi.adapter<site.warpnet.transport.dto.GetConversationsEvent>()
-    private val getConvosRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetConversationsResponse>()
-    private val deleteConvoAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteConversationEvent>()
     private val deleteQuoteAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteQuoteEvent>()
     private val getQuotingAdapter = moshi.adapter<site.warpnet.transport.dto.GetQuotingEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
@@ -478,32 +475,6 @@ class WarpnetRepository @Inject constructor(
         )
         val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList<Tweet>() to ""
         return hydrateTweets(page.tweets) to page.cursor
-    }
-
-    // -----------------------------------------------------------------
-    // Conversations (Tusky's "Conversations" tab): a derived per-user
-    // view over the existing tweet/reply data — populated on the
-    // server when a reply touches you. Local-only, never replicated.
-    // -----------------------------------------------------------------
-
-    suspend fun getConversations(userId: String, cursor: String = "", limit: Int = 40): Pair<List<String>, String> {
-        val raw = client.request(
-            ProtocolIds.PRIVATE_GET_CONVERSATIONS,
-            getConvosAdapter.toJson(
-                site.warpnet.transport.dto.GetConversationsEvent(userId = userId, cursor = cursor, limit = limit),
-            ),
-        )
-        val page = getConvosRespAdapter.fromJson(raw) ?: return emptyList<String>() to ""
-        return page.rootTweetIds to page.cursor
-    }
-
-    suspend fun deleteConversation(userId: String, rootTweetId: String) {
-        client.request(
-            ProtocolIds.PRIVATE_DELETE_CONVERSATION,
-            deleteConvoAdapter.toJson(
-                site.warpnet.transport.dto.DeleteConversationEvent(userId = userId, rootTweetId = rootTweetId),
-            ),
-        )
     }
 
     // -----------------------------------------------------------------

@@ -57,8 +57,6 @@ export const PRIVATE_GET_USER_NOTE = "/private/get/user/note/0.0.0"
 export const PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
 export const PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"
-export const PRIVATE_GET_CONVERSATIONS = "/private/get/conversations/0.0.0"
-export const PRIVATE_DELETE_CONVERSATION = "/private/delete/conversation/0.0.0"
 export const PUBLIC_POST_QUOTE = "/public/post/quote/0.0.0"
 export const PUBLIC_GET_QUOTING = "/public/get/quoting/0.0.0"
 export const PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"
@@ -548,32 +546,6 @@ export const warpnetService = {
             },
         });
         return resp || { tweets: [], cursor: 'end' };
-    },
-
-    async getConversations(cursor) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return { root_tweet_ids: [], cursor: 'end' };
-        const resp = await this.sendToNode({
-            path: PRIVATE_GET_CONVERSATIONS,
-            body: {
-                user_id: owner.user_id,
-                limit: defaultLimit,
-                cursor: cursor || '',
-            },
-        });
-        return resp || { root_tweet_ids: [], cursor: 'end' };
-    },
-
-    async deleteConversation(rootTweetId) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PRIVATE_DELETE_CONVERSATION,
-            body: {
-                user_id: owner.user_id,
-                root_tweet_id: rootTweetId,
-            },
-        });
     },
 
     async editTweet(tweetId, text) {
