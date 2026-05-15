@@ -38,6 +38,14 @@ export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
 export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
 export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
+export const PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
+export const PRIVATE_POST_UNBLOCK = "/private/post/unblock/0.0.0"
+export const PRIVATE_GET_BLOCKS = "/private/get/blocks/0.0.0"
+export const PRIVATE_POST_MUTE = "/private/post/mute/0.0.0"
+export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
+export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
+export const PRIVATE_POST_MUTE_CONVERSATION = "/private/post/mute/conversation/0.0.0"
+export const PRIVATE_POST_UNMUTE_CONVERSATION = "/private/post/unmute/conversation/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -396,6 +404,90 @@ export const warpnetService = {
             cb(latestNotifications);
         }
         return resp;
+    },
+
+    async blockUser(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_BLOCK,
+            body: { blocker_id: owner.user_id, blockee_id: targetUserId },
+        });
+    },
+
+    async unblockUser(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_UNBLOCK,
+            body: { blocker_id: owner.user_id, blockee_id: targetUserId },
+        });
+    },
+
+    async getBlocks(cursorReset) {
+        let cursor = this.getCursor('blocks')
+        if (cursorReset) cursor = '';
+        if (cursor === endCursor) return { ids: [], cursor: endCursor };
+        const owner = this.getOwnerProfile()
+        if (!owner) return { ids: [], cursor: endCursor };
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_BLOCKS,
+            body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+        });
+        if (!resp) return { ids: [], cursor: endCursor };
+        this.setCursor('blocks', resp.cursor || 'end')
+        return resp;
+    },
+
+    async muteUser(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_MUTE,
+            body: { muter_id: owner.user_id, mutee_id: targetUserId },
+        });
+    },
+
+    async unmuteUser(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_UNMUTE,
+            body: { muter_id: owner.user_id, mutee_id: targetUserId },
+        });
+    },
+
+    async getMutes(cursorReset) {
+        let cursor = this.getCursor('mutes')
+        if (cursorReset) cursor = '';
+        if (cursor === endCursor) return { ids: [], cursor: endCursor };
+        const owner = this.getOwnerProfile()
+        if (!owner) return { ids: [], cursor: endCursor };
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_MUTES,
+            body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+        });
+        if (!resp) return { ids: [], cursor: endCursor };
+        this.setCursor('mutes', resp.cursor || 'end')
+        return resp;
+    },
+
+    async muteConversation(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_MUTE_CONVERSATION,
+            body: { user_id: owner.user_id, tweet_id: tweetId },
+        });
+    },
+
+    async unmuteConversation(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_UNMUTE_CONVERSATION,
+            body: { user_id: owner.user_id, tweet_id: tweetId },
+        });
     },
 
     async pinTweet(tweetId) {

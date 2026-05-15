@@ -80,4 +80,13 @@ const (
 	PRIVATE_GET_BOOKMARKS     = "/private/get/bookmarks/0.0.0"
 	PUBLIC_POST_PIN           = "/public/post/pin/0.0.0"
 	PUBLIC_POST_UNPIN         = "/public/post/unpin/0.0.0"
+
+	PRIVATE_POST_BLOCK              = "/private/post/block/0.0.0"
+	PRIVATE_POST_UNBLOCK            = "/private/post/unblock/0.0.0"
+	PRIVATE_GET_BLOCKS              = "/private/get/blocks/0.0.0"
+	PRIVATE_POST_MUTE               = "/private/post/mute/0.0.0"
+	PRIVATE_POST_UNMUTE             = "/private/post/unmute/0.0.0"
+	PRIVATE_GET_MUTES               = "/private/get/mutes/0.0.0"
+	PRIVATE_POST_MUTE_CONVERSATION  = "/private/post/mute/conversation/0.0.0"
+	PRIVATE_POST_UNMUTE_CONVERSATION = "/private/post/unmute/conversation/0.0.0"
 )

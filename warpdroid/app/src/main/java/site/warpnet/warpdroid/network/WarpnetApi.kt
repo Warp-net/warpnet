@@ -555,9 +555,21 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun muteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("muteConversation")
+    suspend fun muteConversation(statusId: String): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("muteConversation")
+        return result {
+            warpnet.muteConversation(userId = active.accountId, tweetId = statusId)
+            warpnet.getStatus(tweetId = statusId, userId = active.accountId)
+        }
+    }
 
-    suspend fun unmuteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("unmuteConversation")
+    suspend fun unmuteConversation(statusId: String): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("unmuteConversation")
+        return result {
+            warpnet.unmuteConversation(userId = active.accountId, tweetId = statusId)
+            warpnet.getStatus(tweetId = statusId, userId = active.accountId)
+        }
+    }
 
     suspend fun scheduledTweets(
         limit: Int? = null,
@@ -700,17 +712,41 @@ class WarpnetApi @Inject constructor(
         return result { warpnet.unfollowAccount(followerId = me, followeeId = accountId) }
     }
 
-    suspend fun blockAccount(accountId: String): NetworkResult<Relationship> = stubFailure("blockAccount")
+    suspend fun blockAccount(accountId: String): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("blockAccount")
+        return result {
+            warpnet.blockUser(blockerId = active.accountId, blockeeId = accountId)
+            warpnet.relationshipFor(accountId).copy(blocking = true)
+        }
+    }
 
-    suspend fun unblockAccount(accountId: String): NetworkResult<Relationship> = stubFailure("unblockAccount")
+    suspend fun unblockAccount(accountId: String): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("unblockAccount")
+        return result {
+            warpnet.unblockUser(blockerId = active.accountId, blockeeId = accountId)
+            warpnet.relationshipFor(accountId).copy(blocking = false)
+        }
+    }
 
     suspend fun muteAccount(
         accountId: String,
         notifications: Boolean? = null,
         duration: Int? = null,
-    ): NetworkResult<Relationship> = stubFailure("muteAccount")
+    ): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("muteAccount")
+        return result {
+            warpnet.muteUser(muterId = active.accountId, muteeId = accountId)
+            warpnet.relationshipFor(accountId).copy(muting = true)
+        }
+    }
 
-    suspend fun unmuteAccount(accountId: String): NetworkResult<Relationship> = stubFailure("unmuteAccount")
+    suspend fun unmuteAccount(accountId: String): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("unmuteAccount")
+        return result {
+            warpnet.unmuteUser(muterId = active.accountId, muteeId = accountId)
+            warpnet.relationshipFor(accountId).copy(muting = false)
+        }
+    }
 
     suspend fun relationships(accountIds: List<String>): NetworkResult<List<Relationship>> = result {
         accountIds.map { warpnet.relationshipFor(it) }
@@ -720,8 +756,21 @@ class WarpnetApi @Inject constructor(
 
     suspend fun unsubscribeAccount(accountId: String): NetworkResult<Relationship> = stubFailure("unsubscribeAccount")
 
-    suspend fun blocks(maxId: String? = null): Response<List<TimelineAccount>> = stubList()
-    suspend fun mutes(maxId: String? = null): Response<List<TimelineAccount>> = stubList()
+    suspend fun blocks(maxId: String? = null): Response<List<TimelineAccount>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return response {
+            val (ids, _) = warpnet.getBlocks(userId = active.accountId, cursor = maxId.orEmpty())
+            ids.mapNotNull { id -> runCatching { warpnet.getTimelineAccount(id) }.getOrNull() }
+        }
+    }
+
+    suspend fun mutes(maxId: String? = null): Response<List<TimelineAccount>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return response {
+            val (ids, _) = warpnet.getMutes(userId = active.accountId, cursor = maxId.orEmpty())
+            ids.mapNotNull { id -> runCatching { warpnet.getTimelineAccount(id) }.getOrNull() }
+        }
+    }
 
     suspend fun domainBlocks(
         maxId: String? = null,

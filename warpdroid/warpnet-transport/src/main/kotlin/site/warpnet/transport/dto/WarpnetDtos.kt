@@ -208,6 +208,37 @@ data class PinTweetEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class BlockEvent(
+    @Json(name = "blocker_id") val blockerId: String,
+    @Json(name = "blockee_id") val blockeeId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class MuteEvent(
+    @Json(name = "muter_id") val muterId: String,
+    @Json(name = "mutee_id") val muteeId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetBlocksEvent(
+    @Json(name = "user_id") val userId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetBlocksResponse(
+    val ids: List<String> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class MuteConversationEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",

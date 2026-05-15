@@ -390,6 +390,9 @@ func (m *MemberNode) setupHandlers(
 	mediaRepo := database.NewMediaRepo(db)
 	notificationRepo := database.NewNotificationsRepo(db)
 	bookmarkRepo := database.NewBookmarkRepo(db)
+	blocksRepo := database.NewBlocksRepo(db)
+	mutesRepo := database.NewMutesRepo(db)
+	convMutesRepo := database.NewConvMutesRepo(db)
 
 	token := authRepo.SessionToken()
 
@@ -583,6 +586,38 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PUBLIC_POST_UNPIN,
 				handler.StreamUnpinTweetHandler(tweetRepo),
+			},
+			{
+				event.PRIVATE_POST_BLOCK,
+				handler.StreamBlockHandler(blocksRepo, userRepo, m.nodeRepo),
+			},
+			{
+				event.PRIVATE_POST_UNBLOCK,
+				handler.StreamUnblockHandler(blocksRepo),
+			},
+			{
+				event.PRIVATE_GET_BLOCKS,
+				handler.StreamGetBlocksHandler(blocksRepo),
+			},
+			{
+				event.PRIVATE_POST_MUTE,
+				handler.StreamMuteHandler(mutesRepo),
+			},
+			{
+				event.PRIVATE_POST_UNMUTE,
+				handler.StreamUnmuteHandler(mutesRepo),
+			},
+			{
+				event.PRIVATE_GET_MUTES,
+				handler.StreamGetMutesHandler(mutesRepo),
+			},
+			{
+				event.PRIVATE_POST_MUTE_CONVERSATION,
+				handler.StreamMuteConversationHandler(convMutesRepo),
+			},
+			{
+				event.PRIVATE_POST_UNMUTE_CONVERSATION,
+				handler.StreamUnmuteConversationHandler(convMutesRepo),
 			},
 		}...,
 	)

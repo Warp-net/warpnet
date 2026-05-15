@@ -513,6 +513,52 @@ type PinTweetEvent struct {
 // UnpinTweetEvent defines model for UnpinTweetEvent.
 type UnpinTweetEvent = PinTweetEvent
 
+// BlockEvent defines model for BlockEvent.
+type BlockEvent struct {
+	BlockerId domain.ID `json:"blocker_id"`
+	BlockeeId domain.ID `json:"blockee_id"`
+}
+
+// UnblockEvent defines model for UnblockEvent.
+type UnblockEvent = BlockEvent
+
+// GetBlocksEvent defines model for GetBlocksEvent.
+type GetBlocksEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+}
+
+// GetBlocksResponse defines model for GetBlocksResponse.
+type GetBlocksResponse struct {
+	Ids    []domain.ID `json:"ids"`
+	Cursor string      `json:"cursor"`
+}
+
+// MuteEvent defines model for MuteEvent.
+type MuteEvent struct {
+	MuterId domain.ID `json:"muter_id"`
+	MuteeId domain.ID `json:"mutee_id"`
+}
+
+// UnmuteEvent defines model for UnmuteEvent.
+type UnmuteEvent = MuteEvent
+
+// GetMutesEvent defines model for GetMutesEvent.
+type GetMutesEvent = GetBlocksEvent
+
+// GetMutesResponse defines model for GetMutesResponse.
+type GetMutesResponse = GetBlocksResponse
+
+// MuteConversationEvent defines model for MuteConversationEvent.
+type MuteConversationEvent struct {
+	UserId  domain.ID `json:"user_id"`
+	TweetId domain.ID `json:"tweet_id"`
+}
+
+// UnmuteConversationEvent defines model for UnmuteConversationEvent.
+type UnmuteConversationEvent = MuteConversationEvent
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

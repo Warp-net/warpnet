@@ -102,6 +102,11 @@ class WarpnetRepository @Inject constructor(
     private val getBookmarksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksEvent>()
     private val getBookmarksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksResponse>()
     private val pinTweetAdapter = moshi.adapter<site.warpnet.transport.dto.PinTweetEvent>()
+    private val blockEventAdapter = moshi.adapter<site.warpnet.transport.dto.BlockEvent>()
+    private val muteEventAdapter = moshi.adapter<site.warpnet.transport.dto.MuteEvent>()
+    private val getBlocksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksEvent>()
+    private val getBlocksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksResponse>()
+    private val muteConvAdapter = moshi.adapter<site.warpnet.transport.dto.MuteConversationEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -404,6 +409,89 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Block / Mute / Conversation-mute (local social-graph filters)
+    //
+    // The fat node also escalates a social block into a peer-level
+    // libp2p blocklist for the target's NodeId — see core/handler/block.go.
+    // -----------------------------------------------------------------
+
+    suspend fun blockUser(blockerId: String, blockeeId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_BLOCK,
+            blockEventAdapter.toJson(
+                site.warpnet.transport.dto.BlockEvent(blockerId = blockerId, blockeeId = blockeeId),
+            ),
+        )
+    }
+
+    suspend fun unblockUser(blockerId: String, blockeeId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNBLOCK,
+            blockEventAdapter.toJson(
+                site.warpnet.transport.dto.BlockEvent(blockerId = blockerId, blockeeId = blockeeId),
+            ),
+        )
+    }
+
+    suspend fun getBlocks(userId: String, cursor: String = "", limit: Int = 40): Pair<List<String>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_BLOCKS,
+            getBlocksEventAdapter.toJson(
+                site.warpnet.transport.dto.GetBlocksEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getBlocksRespAdapter.fromJson(raw) ?: return emptyList<String>() to ""
+        return page.ids to page.cursor
+    }
+
+    suspend fun muteUser(muterId: String, muteeId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_MUTE,
+            muteEventAdapter.toJson(
+                site.warpnet.transport.dto.MuteEvent(muterId = muterId, muteeId = muteeId),
+            ),
+        )
+    }
+
+    suspend fun unmuteUser(muterId: String, muteeId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNMUTE,
+            muteEventAdapter.toJson(
+                site.warpnet.transport.dto.MuteEvent(muterId = muterId, muteeId = muteeId),
+            ),
+        )
+    }
+
+    suspend fun getMutes(userId: String, cursor: String = "", limit: Int = 40): Pair<List<String>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_MUTES,
+            getBlocksEventAdapter.toJson(
+                site.warpnet.transport.dto.GetBlocksEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getBlocksRespAdapter.fromJson(raw) ?: return emptyList<String>() to ""
+        return page.ids to page.cursor
+    }
+
+    suspend fun muteConversation(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_MUTE_CONVERSATION,
+            muteConvAdapter.toJson(
+                site.warpnet.transport.dto.MuteConversationEvent(userId = userId, tweetId = tweetId),
+            ),
+        )
+    }
+
+    suspend fun unmuteConversation(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNMUTE_CONVERSATION,
+            muteConvAdapter.toJson(
+                site.warpnet.transport.dto.MuteConversationEvent(userId = userId, tweetId = tweetId),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------
