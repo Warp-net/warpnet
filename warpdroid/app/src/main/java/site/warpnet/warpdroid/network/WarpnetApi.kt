@@ -449,18 +449,22 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun likeStatus(statusId: String): NetworkResult<Tweet> {
+    // Warpnet's LikeEvent semantics: user_id = tweet author, owner_id = liker
+    // (core/handler/like.go:79-87). [authorId] is the actionable status'
+    // author id (TweetViewData.actionableAccountId); the liker is the
+    // locally active account.
+    suspend fun likeStatus(statusId: String, authorId: String): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("likeStatus")
         return result {
-            warpnet.likeStatus(tweetId = statusId, userId = active.accountId)
+            warpnet.likeStatus(tweetId = statusId, userId = authorId, ownerId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }
 
-    suspend fun unlikeStatus(statusId: String): NetworkResult<Tweet> {
+    suspend fun unlikeStatus(statusId: String, authorId: String): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("unlikeStatus")
         return result {
-            warpnet.unlikeStatus(tweetId = statusId, userId = active.accountId)
+            warpnet.unlikeStatus(tweetId = statusId, userId = authorId, ownerId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }

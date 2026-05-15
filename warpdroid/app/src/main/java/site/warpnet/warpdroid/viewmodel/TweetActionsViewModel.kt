@@ -137,12 +137,12 @@ abstract class TweetActionsViewModel(
         }
     }
 
-    fun like(statusId: String, like: Boolean) {
+    fun like(statusId: String, authorId: String, like: Boolean) {
         viewModelScope.launch {
             if (like) {
-                warpnetApi.likeStatus(statusId)
+                warpnetApi.likeStatus(statusId, authorId)
             } else {
-                warpnetApi.unlikeStatus(statusId)
+                warpnetApi.unlikeStatus(statusId, authorId)
             }.fold(
                 onSuccess = { status ->
                     eventHub.dispatch(TweetChangedEvent(status))

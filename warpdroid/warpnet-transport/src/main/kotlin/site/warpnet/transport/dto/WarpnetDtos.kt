@@ -102,20 +102,21 @@ data class GetAllRepliesEvent(
 
 @JsonClass(generateAdapter = true)
 data class NewFollowEvent(
-    @Json(name = "follower") val followerId: String,
-    @Json(name = "followee") val followeeId: String,
+    @Json(name = "follower_id") val followerId: String,
+    @Json(name = "following_id") val followeeId: String,
 )
 
 @JsonClass(generateAdapter = true)
 data class NewUnfollowEvent(
-    @Json(name = "follower") val followerId: String,
-    @Json(name = "followee") val followeeId: String,
+    @Json(name = "follower_id") val followerId: String,
+    @Json(name = "following_id") val followeeId: String,
 )
 
 @JsonClass(generateAdapter = true)
 data class LikeEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
+    @Json(name = "owner_id") val ownerId: String,
 )
 
 /**
@@ -157,7 +158,6 @@ data class UnretweetEvent(
 
 @JsonClass(generateAdapter = true)
 data class GetNotificationsEvent(
-    @Json(name = "user_id") val userId: String,
     val cursor: String = "",
     val limit: Int = 40,
 )

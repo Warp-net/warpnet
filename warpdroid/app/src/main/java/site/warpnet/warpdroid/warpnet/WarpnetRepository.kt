@@ -254,18 +254,25 @@ class WarpnetRepository @Inject constructor(
     // Likes
     // -----------------------------------------------------------------
 
-    suspend fun likeStatus(tweetId: String, userId: String): Long {
+    /**
+     * [userId] is the **tweet author's** id (matches Warpnet's
+     * `event.LikeEvent.user_id` semantics); [ownerId] is the **liker's**
+     * id (the paired-node user). The backend handler rejects requests
+     * where either is empty (core/handler/like.go:79-87), so callers
+     * must supply both.
+     */
+    suspend fun likeStatus(tweetId: String, userId: String, ownerId: String): Long {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_LIKE,
-            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId)),
+            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
         )
         return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
     }
 
-    suspend fun unlikeStatus(tweetId: String, userId: String): Long {
+    suspend fun unlikeStatus(tweetId: String, userId: String, ownerId: String): Long {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_UNLIKE,
-            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId)),
+            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
         )
         return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
     }
@@ -353,11 +360,19 @@ class WarpnetRepository @Inject constructor(
     // Notifications
     // -----------------------------------------------------------------
 
-    /** Caller's own notifications feed. Second element is the next-page cursor, empty when exhausted. */
+    /**
+     * Caller's own notifications feed. Second element is the next-page cursor,
+     * empty when exhausted.
+     *
+     * The fat node resolves the recipient from the paired session, so the
+     * wire DTO carries only cursor/limit; [userId] is accepted purely to keep
+     * the existing call sites in [site.warpnet.warpdroid.network.WarpnetApi]
+     * compiling and to surface the resolved-from-pairing identity to callers.
+     */
     suspend fun getNotifications(userId: String, cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {
         val raw = client.request(
             ProtocolIds.PRIVATE_GET_NOTIFICATIONS,
-            getNotifsAdapter.toJson(GetNotificationsEvent(userId = userId, cursor = cursor, limit = limit)),
+            getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
         val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
         if (page.notifications.isEmpty()) return emptyList<Notification>() to page.cursor
