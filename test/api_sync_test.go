@@ -145,6 +145,26 @@ func TestAPISync_Protocols(t *testing.T) {
 // Backend event types (Go AST)
 // ----------------------------------------------------------------------------
 
+// parsePackageFiles parses every non-test `.go` file in dir into AST and
+// returns them. Replaces parser.ParseDir (deprecated in Go 1.25).
+func parsePackageFiles(t *testing.T, dir string) []*ast.File {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	require.NoErrorf(t, err, "read dir %s", dir)
+	fset := token.NewFileSet()
+	var out []*ast.File
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.SkipObjectResolution)
+		require.NoErrorf(t, err, "parse %s", name)
+		out = append(out, f)
+	}
+	return out
+}
+
 // eventStructKeys returns map[eventTypeName] -> sorted JSON keys, built by
 // parsing every non-test file under event/. Type aliases (`type X = Y`) are
 // resolved transitively; aliases whose target lives outside the event package
@@ -152,21 +172,15 @@ func TestAPISync_Protocols(t *testing.T) {
 // are out of this test's scope.
 func eventStructKeys(t *testing.T) map[string][]string {
 	t.Helper()
-	dir := filepath.Join(repoRoot(t), "event")
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, parser.SkipObjectResolution)
-	require.NoError(t, err)
-	pkg, ok := pkgs["event"]
-	require.Truef(t, ok, "event package not found under %s", dir)
+	files := parsePackageFiles(t, filepath.Join(repoRoot(t), "event"))
+	require.NotEmpty(t, files, "no .go files in event/")
 
 	type spec struct {
-		alias  bool
-		expr   ast.Expr
+		alias bool
+		expr  ast.Expr
 	}
 	decls := map[string]spec{}
-	for _, f := range pkg.Files {
+	for _, f := range files {
 		for _, d := range f.Decls {
 			gd, ok := d.(*ast.GenDecl)
 			if !ok || gd.Tok != token.TYPE {
@@ -302,17 +316,11 @@ func routeMap(t *testing.T) map[string]string {
 // skipped by the caller.
 func handlerEventTypes(t *testing.T) map[string]string {
 	t.Helper()
-	dir := filepath.Join(repoRoot(t), "core/handler")
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, parser.SkipObjectResolution)
-	require.NoError(t, err)
-	pkg, ok := pkgs["handler"]
-	require.Truef(t, ok, "handler package not found under %s", dir)
+	files := parsePackageFiles(t, filepath.Join(repoRoot(t), "core/handler"))
+	require.NotEmpty(t, files, "no .go files in core/handler/")
 
 	out := map[string]string{}
-	for _, f := range pkg.Files {
+	for _, f := range files {
 		for _, d := range f.Decls {
 			fd, ok := d.(*ast.FuncDecl)
 			if !ok || fd.Body == nil {
