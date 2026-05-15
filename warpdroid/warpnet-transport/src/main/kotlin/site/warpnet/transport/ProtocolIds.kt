@@ -73,6 +73,8 @@ object ProtocolIds {
     const val PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
     const val PRIVATE_POST_MUTE_CONVERSATION = "/private/post/mute/conversation/0.0.0"
     const val PRIVATE_POST_UNMUTE_CONVERSATION = "/private/post/unmute/conversation/0.0.0"
+    const val PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
+    const val PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
     const val PRIVATE_GET_CHAT = "/private/get/chat/0.0.0"
     const val PRIVATE_GET_CHATS = "/private/get/chats/0.0.0"
     const val PRIVATE_GET_MESSAGE = "/private/get/message/0.0.0"

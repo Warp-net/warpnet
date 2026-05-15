@@ -619,6 +619,14 @@ func (m *MemberNode) setupHandlers(
 				event.PRIVATE_POST_UNMUTE_CONVERSATION,
 				handler.StreamUnmuteConversationHandler(convMutesRepo),
 			},
+			{
+				event.PUBLIC_GET_TWEET_LIKERS,
+				handler.StreamGetTweetLikersHandler(likeRepo, userRepo, m),
+			},
+			{
+				event.PUBLIC_GET_TWEET_RETWEETERS,
+				handler.StreamGetTweetRetweetersHandler(tweetRepo, userRepo, m),
+			},
 		}...,
 	)
 }

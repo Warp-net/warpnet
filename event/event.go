@@ -559,6 +559,17 @@ type MuteConversationEvent struct {
 // UnmuteConversationEvent defines model for UnmuteConversationEvent.
 type UnmuteConversationEvent = MuteConversationEvent
 
+// GetTweetLikersEvent defines model for GetTweetLikersEvent.
+type GetTweetLikersEvent struct {
+	TweetId      domain.ID `json:"tweet_id"`
+	OwnerUserId  domain.ID `json:"owner_user_id"`
+	Cursor       *string   `json:"cursor,omitempty"`
+	Limit        *uint64   `json:"limit,omitempty"`
+}
+
+// GetTweetRetweetersEvent defines model for GetTweetRetweetersEvent.
+type GetTweetRetweetersEvent = GetTweetLikersEvent
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

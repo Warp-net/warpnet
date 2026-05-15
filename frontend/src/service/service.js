@@ -46,6 +46,8 @@ export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
 export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
 export const PRIVATE_POST_MUTE_CONVERSATION = "/private/post/mute/conversation/0.0.0"
 export const PRIVATE_POST_UNMUTE_CONVERSATION = "/private/post/unmute/conversation/0.0.0"
+export const PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
+export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -470,6 +472,32 @@ export const warpnetService = {
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
         return resp;
+    },
+
+    async getTweetLikers(tweetId, ownerUserId, cursor) {
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_TWEET_LIKERS,
+            body: {
+                tweet_id: tweetId,
+                owner_user_id: ownerUserId,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { users: [], cursor: 'end' };
+    },
+
+    async getTweetRetweeters(tweetId, ownerUserId, cursor) {
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_TWEET_RETWEETERS,
+            body: {
+                tweet_id: tweetId,
+                owner_user_id: ownerUserId,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { users: [], cursor: 'end' };
     },
 
     async muteConversation(tweetId) {

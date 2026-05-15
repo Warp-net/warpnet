@@ -89,4 +89,7 @@ const (
 	PRIVATE_GET_MUTES               = "/private/get/mutes/0.0.0"
 	PRIVATE_POST_MUTE_CONVERSATION  = "/private/post/mute/conversation/0.0.0"
 	PRIVATE_POST_UNMUTE_CONVERSATION = "/private/post/unmute/conversation/0.0.0"
+
+	PUBLIC_GET_TWEET_LIKERS     = "/public/get/tweet/likers/0.0.0"
+	PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
 )

@@ -415,12 +415,33 @@ class WarpnetApi @Inject constructor(
     suspend fun statusRetweetedBy(
         statusId: String,
         maxId: String?,
-    ): Response<List<TimelineAccount>> = stubList()
+    ): Response<List<TimelineAccount>> {
+        // ownerUserId is unavailable at the AccountList mediator level —
+        // fall back to the active account so the handler returns the
+        // local record (correct for self-engagement, the common case).
+        val active = accountManager.activeAccount ?: return stubList()
+        return paginated {
+            warpnet.getTweetRetweeters(
+                tweetId = statusId,
+                ownerUserId = active.accountId,
+                cursor = maxId.orEmpty(),
+            )
+        }
+    }
 
     suspend fun statusLikedBy(
         statusId: String,
         maxId: String?,
-    ): Response<List<TimelineAccount>> = stubList()
+    ): Response<List<TimelineAccount>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return paginated {
+            warpnet.getTweetLikers(
+                tweetId = statusId,
+                ownerUserId = active.accountId,
+                cursor = maxId.orEmpty(),
+            )
+        }
+    }
 
     suspend fun deleteStatus(
         statusId: String,

@@ -107,6 +107,7 @@ class WarpnetRepository @Inject constructor(
     private val getBlocksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksEvent>()
     private val getBlocksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksResponse>()
     private val muteConvAdapter = moshi.adapter<site.warpnet.transport.dto.MuteConversationEvent>()
+    private val getTweetLikersAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetLikersEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -409,6 +410,42 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Engagement lists (who liked / retweeted a tweet)
+    // -----------------------------------------------------------------
+
+    suspend fun getTweetLikers(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_TWEET_LIKERS,
+            getTweetLikersAdapter.toJson(
+                site.warpnet.transport.dto.GetTweetLikersEvent(
+                    tweetId = tweetId,
+                    ownerUserId = ownerUserId,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            ),
+        )
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        return page.users.map { it.toTimelineAccount() } to page.cursor
+    }
+
+    suspend fun getTweetRetweeters(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_TWEET_RETWEETERS,
+            getTweetLikersAdapter.toJson(
+                site.warpnet.transport.dto.GetTweetLikersEvent(
+                    tweetId = tweetId,
+                    ownerUserId = ownerUserId,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            ),
+        )
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        return page.users.map { it.toTimelineAccount() } to page.cursor
     }
 
     // -----------------------------------------------------------------

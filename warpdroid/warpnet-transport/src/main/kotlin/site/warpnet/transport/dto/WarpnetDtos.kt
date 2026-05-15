@@ -239,6 +239,14 @@ data class MuteConversationEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class GetTweetLikersEvent(
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "owner_user_id") val ownerUserId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",
