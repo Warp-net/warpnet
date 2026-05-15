@@ -228,6 +228,56 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	return txn.Commit()
 }
 
+// Pin / Unpin flip the Pinned flag on the tweet record. Pin must be a no-op
+// after the first call to keep the storage write idempotent; the caller is
+// responsible for ensuring userId is the tweet author (handler-side check).
+func (repo *TweetRepo) Pin(userId, tweetId string) (domain.Tweet, error) {
+	return repo.setPinned(userId, tweetId, true)
+}
+
+func (repo *TweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
+	return repo.setPinned(userId, tweetId, false)
+}
+
+func (repo *TweetRepo) setPinned(userId, tweetId string, pinned bool) (domain.Tweet, error) {
+	if userId == "" {
+		return domain.Tweet{}, local.DBError("no user id")
+	}
+	if tweetId == "" {
+		return domain.Tweet{}, local.DBError("no tweet id")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	defer txn.Rollback()
+
+	existing, expiresAt, err := get(txn, userId, tweetId)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	if existing.Pinned == pinned {
+		return existing, txn.Commit()
+	}
+	existing.Pinned = pinned
+	now := time.Now()
+	existing.UpdatedAt = &now
+
+	expiration := time.Unix(int64(expiresAt), 0) //#nosec
+	ttl := expiration.Sub(now)
+	if ttl <= 0 {
+		ttl = 0
+	}
+	if _, err := storeTweet(txn, existing.UserId, existing, ttl, true); err != nil {
+		return domain.Tweet{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.Tweet{}, err
+	}
+	return existing, nil
+}
+
 func storeTweet(
 	txn local.WarpTransactioner, userId string, tweet domain.Tweet, duration time.Duration, isUpdate bool,
 ) (domain.Tweet, error) {

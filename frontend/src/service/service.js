@@ -36,6 +36,8 @@ export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
+export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
+export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -394,6 +396,32 @@ export const warpnetService = {
             cb(latestNotifications);
         }
         return resp;
+    },
+
+    async pinTweet(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const request = {
+            path: PUBLIC_POST_PIN,
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+            },
+        }
+        return await this.sendToNode(request);
+    },
+
+    async unpinTweet(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const request = {
+            path: PUBLIC_POST_UNPIN,
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+            },
+        }
+        return await this.sendToNode(request);
     },
 
     async bookmarkTweet(tweetId, ownerUserId) {

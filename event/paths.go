@@ -78,4 +78,6 @@ const (
 	PRIVATE_POST_BOOKMARK     = "/private/post/bookmark/0.0.0"
 	PRIVATE_POST_UNBOOKMARK   = "/private/post/unbookmark/0.0.0"
 	PRIVATE_GET_BOOKMARKS     = "/private/get/bookmarks/0.0.0"
+	PUBLIC_POST_PIN           = "/public/post/pin/0.0.0"
+	PUBLIC_POST_UNPIN         = "/public/post/unpin/0.0.0"
 )

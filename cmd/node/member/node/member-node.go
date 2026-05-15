@@ -576,6 +576,14 @@ func (m *MemberNode) setupHandlers(
 				event.PRIVATE_GET_BOOKMARKS,
 				handler.StreamGetBookmarksHandler(bookmarkRepo),
 			},
+			{
+				event.PUBLIC_POST_PIN,
+				handler.StreamPinTweetHandler(tweetRepo),
+			},
+			{
+				event.PUBLIC_POST_UNPIN,
+				handler.StreamUnpinTweetHandler(tweetRepo),
+			},
 		}...,
 	)
 }

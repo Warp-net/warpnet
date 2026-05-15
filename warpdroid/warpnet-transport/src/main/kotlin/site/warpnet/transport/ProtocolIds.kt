@@ -63,6 +63,8 @@ object ProtocolIds {
     const val PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
     const val PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
     const val PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
+    const val PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
+    const val PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
     const val PRIVATE_GET_CHAT = "/private/get/chat/0.0.0"
     const val PRIVATE_GET_CHATS = "/private/get/chats/0.0.0"
     const val PRIVATE_GET_MESSAGE = "/private/get/message/0.0.0"

@@ -101,6 +101,7 @@ class WarpnetRepository @Inject constructor(
     private val unbookmarkEventAdapter = moshi.adapter<site.warpnet.transport.dto.UnbookmarkEvent>()
     private val getBookmarksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksEvent>()
     private val getBookmarksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksResponse>()
+    private val pinTweetAdapter = moshi.adapter<site.warpnet.transport.dto.PinTweetEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -403,6 +404,28 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Pin / Unpin (author-only; the fat node enforces the author check)
+    // -----------------------------------------------------------------
+
+    suspend fun pinTweet(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PUBLIC_POST_PIN,
+            pinTweetAdapter.toJson(
+                site.warpnet.transport.dto.PinTweetEvent(userId = userId, tweetId = tweetId),
+            ),
+        )
+    }
+
+    suspend fun unpinTweet(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PUBLIC_POST_UNPIN,
+            pinTweetAdapter.toJson(
+                site.warpnet.transport.dto.PinTweetEvent(userId = userId, tweetId = tweetId),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------

@@ -504,6 +504,15 @@ type GetBookmarksResponse struct {
 	Cursor string         `json:"cursor"`
 }
 
+// PinTweetEvent defines model for PinTweetEvent.
+type PinTweetEvent struct {
+	UserId  domain.ID `json:"user_id"`
+	TweetId domain.ID `json:"tweet_id"`
+}
+
+// UnpinTweetEvent defines model for UnpinTweetEvent.
+type UnpinTweetEvent = PinTweetEvent
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

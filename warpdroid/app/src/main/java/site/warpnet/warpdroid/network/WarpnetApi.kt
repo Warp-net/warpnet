@@ -539,9 +539,21 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun pinStatus(statusId: String): NetworkResult<Tweet> = stubFailure("pinStatus")
+    suspend fun pinStatus(statusId: String): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("pinStatus")
+        return result {
+            warpnet.pinTweet(userId = active.accountId, tweetId = statusId)
+            warpnet.getStatus(tweetId = statusId, userId = active.accountId)
+        }
+    }
 
-    suspend fun unpinStatus(statusId: String): NetworkResult<Tweet> = stubFailure("unpinStatus")
+    suspend fun unpinStatus(statusId: String): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("unpinStatus")
+        return result {
+            warpnet.unpinTweet(userId = active.accountId, tweetId = statusId)
+            warpnet.getStatus(tweetId = statusId, userId = active.accountId)
+        }
+    }
 
     suspend fun muteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("muteConversation")
 

@@ -202,6 +202,12 @@ data class GetBookmarksResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class PinTweetEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",
