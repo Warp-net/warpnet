@@ -393,6 +393,7 @@ func (m *MemberNode) setupHandlers(
 	blocksRepo := database.NewBlocksRepo(db)
 	mutesRepo := database.NewMutesRepo(db)
 	convMutesRepo := database.NewConvMutesRepo(db)
+	subsRepo := database.NewSubscriptionsRepo(db)
 
 	token := authRepo.SessionToken()
 
@@ -626,6 +627,14 @@ func (m *MemberNode) setupHandlers(
 			{
 				event.PUBLIC_GET_TWEET_RETWEETERS,
 				handler.StreamGetTweetRetweetersHandler(tweetRepo, userRepo, m),
+			},
+			{
+				event.PRIVATE_POST_SUBSCRIBE_USER,
+				handler.StreamSubscribeUserHandler(subsRepo),
+			},
+			{
+				event.PRIVATE_POST_UNSUBSCRIBE_USER,
+				handler.StreamUnsubscribeUserHandler(subsRepo),
 			},
 		}...,
 	)

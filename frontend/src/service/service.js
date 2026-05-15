@@ -48,6 +48,8 @@ export const PRIVATE_POST_MUTE_CONVERSATION = "/private/post/mute/conversation/0
 export const PRIVATE_POST_UNMUTE_CONVERSATION = "/private/post/unmute/conversation/0.0.0"
 export const PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
 export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
+export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
+export const PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -472,6 +474,24 @@ export const warpnetService = {
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
         return resp;
+    },
+
+    async subscribeUser(targetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_SUBSCRIBE_USER,
+            body: { self_id: owner.user_id, target_id: targetId },
+        });
+    },
+
+    async unsubscribeUser(targetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_UNSUBSCRIBE_USER,
+            body: { self_id: owner.user_id, target_id: targetId },
+        });
     },
 
     async getTweetLikers(tweetId, ownerUserId, cursor) {

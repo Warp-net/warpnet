@@ -43,9 +43,10 @@ import (
 // blockAccount UX in Tusky. Both coexist; one operates on transport, the
 // other on social-graph visibility.
 const (
-	BlocksRepoName = "/BLOCKS"
-	MutesRepoName  = "/MUTES"
-	ConvMutesRepo  = "/CONV_MUTES" // muted conversations: user -> tweetId
+	BlocksRepoName        = "/BLOCKS"
+	MutesRepoName         = "/MUTES"
+	SubscriptionsRepoName = "/SUBSCRIPTIONS" // local watchlist: which users I want notifications about
+	ConvMutesRepo         = "/CONV_MUTES"    // muted conversations: user -> tweetId
 )
 
 type UserSetStorer interface {
@@ -59,6 +60,9 @@ type UserSetRepo struct {
 
 func NewBlocksRepo(db UserSetStorer) *UserSetRepo { return &UserSetRepo{db: db, namespace: BlocksRepoName} }
 func NewMutesRepo(db UserSetStorer) *UserSetRepo  { return &UserSetRepo{db: db, namespace: MutesRepoName} }
+func NewSubscriptionsRepo(db UserSetStorer) *UserSetRepo {
+	return &UserSetRepo{db: db, namespace: SubscriptionsRepoName}
+}
 
 // Add records that ownerId added targetId to the set.
 func (repo *UserSetRepo) Add(ownerId, targetId string) error {

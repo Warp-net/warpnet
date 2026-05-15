@@ -570,6 +570,15 @@ type GetTweetLikersEvent struct {
 // GetTweetRetweetersEvent defines model for GetTweetRetweetersEvent.
 type GetTweetRetweetersEvent = GetTweetLikersEvent
 
+// SubscribeUserEvent defines model for SubscribeUserEvent.
+type SubscribeUserEvent struct {
+	SelfId   domain.ID `json:"self_id"`
+	TargetId domain.ID `json:"target_id"`
+}
+
+// UnsubscribeUserEvent defines model for UnsubscribeUserEvent.
+type UnsubscribeUserEvent = SubscribeUserEvent
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

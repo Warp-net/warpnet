@@ -247,6 +247,12 @@ data class GetTweetLikersEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class SubscribeUserEvent(
+    @Json(name = "self_id") val selfId: String,
+    @Json(name = "target_id") val targetId: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",

@@ -108,6 +108,7 @@ class WarpnetRepository @Inject constructor(
     private val getBlocksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksResponse>()
     private val muteConvAdapter = moshi.adapter<site.warpnet.transport.dto.MuteConversationEvent>()
     private val getTweetLikersAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetLikersEvent>()
+    private val subscribeUserAdapter = moshi.adapter<site.warpnet.transport.dto.SubscribeUserEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -410,6 +411,28 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Subscribe / Unsubscribe to a user's posts (local watchlist)
+    // -----------------------------------------------------------------
+
+    suspend fun subscribeUser(selfId: String, targetId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_SUBSCRIBE_USER,
+            subscribeUserAdapter.toJson(
+                site.warpnet.transport.dto.SubscribeUserEvent(selfId = selfId, targetId = targetId),
+            ),
+        )
+    }
+
+    suspend fun unsubscribeUser(selfId: String, targetId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNSUBSCRIBE_USER,
+            subscribeUserAdapter.toJson(
+                site.warpnet.transport.dto.SubscribeUserEvent(selfId = selfId, targetId = targetId),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------

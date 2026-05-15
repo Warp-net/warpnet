@@ -773,9 +773,21 @@ class WarpnetApi @Inject constructor(
         accountIds.map { warpnet.relationshipFor(it) }
     }
 
-    suspend fun subscribeAccount(accountId: String): NetworkResult<Relationship> = stubFailure("subscribeAccount")
+    suspend fun subscribeAccount(accountId: String): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("subscribeAccount")
+        return result {
+            warpnet.subscribeUser(selfId = active.accountId, targetId = accountId)
+            warpnet.relationshipFor(accountId).copy(subscribing = true)
+        }
+    }
 
-    suspend fun unsubscribeAccount(accountId: String): NetworkResult<Relationship> = stubFailure("unsubscribeAccount")
+    suspend fun unsubscribeAccount(accountId: String): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("unsubscribeAccount")
+        return result {
+            warpnet.unsubscribeUser(selfId = active.accountId, targetId = accountId)
+            warpnet.relationshipFor(accountId).copy(subscribing = false)
+        }
+    }
 
     suspend fun blocks(maxId: String? = null): Response<List<TimelineAccount>> {
         val active = accountManager.activeAccount ?: return stubList()

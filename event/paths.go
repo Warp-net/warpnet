@@ -92,4 +92,7 @@ const (
 
 	PUBLIC_GET_TWEET_LIKERS     = "/public/get/tweet/likers/0.0.0"
 	PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
+
+	PRIVATE_POST_SUBSCRIBE_USER   = "/private/post/subscribe/user/0.0.0"
+	PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
 )
