@@ -35,7 +35,7 @@ object WarpnetMapper {
 
     fun WarpnetUser.toAccount(): Account = Account(
         id = id,
-        // Warpnet has no Mastodon-style local handle; the canonical
+        // Warpnet has no instance-local handle; the canonical
         // peer-derived user_id is what the desktop frontend prints after
         // the @ sign, so mirror that here for parity.
         localUsername = id,
@@ -117,11 +117,11 @@ object WarpnetMapper {
     )
 
     /**
-     * Surface a Warpnet 1:1 chat as a Mastodon-shaped [Conversation]. The
-     * Warpnet wire carries only the latest message text and the two
-     * participants, so [Conversation.lastStatus] is left null; the UI shows
-     * the chat row as a single-participant thread with the most recent
-     * timestamp from [WarpnetChat.updatedAt].
+     * Surface a Warpnet 1:1 chat as a [Conversation]. The Warpnet wire
+     * carries only the latest message text and the two participants, so
+     * [Conversation.lastStatus] is left null; the UI shows the chat row
+     * as a single-participant thread with the most recent timestamp
+     * from [WarpnetChat.updatedAt].
      */
     fun chatToConversation(chat: WarpnetChat, otherAccount: TimelineAccount): Conversation = Conversation(
         id = chat.id,

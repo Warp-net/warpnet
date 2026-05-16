@@ -90,10 +90,10 @@ class SearchViewModel @Inject constructor(
                 onPageLoaded = { searchResult ->
                     val statuses = searchResult.statuses.map { status ->
                         status.toViewData(
-                            isShowingContent = status.shouldShowContent(alwaysShowSensitiveMedia, Filter.Kind.PUBLIC),
+                            isShowingContent = status.shouldShowContent(alwaysShowSensitiveMedia, Filter.Kind.HOME),
                             isExpanded = alwaysOpenSpoiler,
                             isCollapsed = true,
-                            filterKind = Filter.Kind.PUBLIC,
+                            filterKind = Filter.Kind.HOME,
                             filterActive = true,
                             isQuoteShowingContent =
                             status.quote?.quotedStatus?.shouldShowContent(alwaysShowSensitiveMedia, Filter.Kind.THREAD)

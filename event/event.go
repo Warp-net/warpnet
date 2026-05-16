@@ -470,6 +470,11 @@ type GetNotificationEvent struct {
 // GetNotificationResponse defines model for GetNotificationResponse.
 type GetNotificationResponse = domain.Notification
 
+// MarkNotificationReadEvent flips a single notification's read flag.
+type MarkNotificationReadEvent struct {
+	NotificationId domain.ID `json:"notification_id"`
+}
+
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
 	UserId      domain.ID `json:"user_id"`

@@ -44,6 +44,10 @@ type NotifierGetter interface {
 	Get(userId, notificationId string) (domain.Notification, error)
 }
 
+type NotifierMarker interface {
+	MarkRead(userId, notificationId string) error
+}
+
 type NotifierAuthStorer interface {
 	GetOwner() domain.Owner
 }
@@ -106,5 +110,25 @@ func StreamGetNotificationHandler(
 			return nil, err
 		}
 		return event.GetNotificationResponse(not), nil
+	}
+}
+
+func StreamMarkNotificationReadHandler(
+	repo NotifierMarker,
+	authRepo NotifierAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.MarkNotificationReadEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.NotificationId == "" {
+			return nil, warpnet.WarpError("notification: empty notification id")
+		}
+		owner := authRepo.GetOwner()
+		if err := repo.MarkRead(owner.UserId, ev.NotificationId); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
 	}
 }

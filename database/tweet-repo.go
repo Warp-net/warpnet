@@ -231,10 +231,10 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	return txn.Commit()
 }
 
-// Quoting returns the tweets that quote the given tweet, newest first.
-// Built from a parallel index written by AppendQuoting whenever a new
+// Quote returns the tweets that quote the given tweet, newest first.
+// Built from a parallel index written by AppendQuote whenever a new
 // quote tweet is created.
-func (repo *TweetRepo) Quoting(tweetId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+func (repo *TweetRepo) Quote(tweetId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if tweetId == "" {
 		return nil, "", local.DBError("empty tweet id")
 	}
@@ -268,10 +268,10 @@ func (repo *TweetRepo) Quoting(tweetId string, limit *uint64, cursor *string) ([
 	return out, cur, nil
 }
 
-// AppendQuoting records that quoteTweet quotes quotedId — written by the
-// quote handler so the Quoting list above can be served without scanning
+// AppendQuote records that quoteTweet quotes quotedId — written by the
+// quote handler so the Quote list above can be served without scanning
 // every tweet.
-func (repo *TweetRepo) AppendQuoting(quotedId string, quoteTweet domain.Tweet) error {
+func (repo *TweetRepo) AppendQuote(quotedId string, quoteTweet domain.Tweet) error {
 	if quotedId == "" {
 		return local.DBError("empty quoted tweet id")
 	}

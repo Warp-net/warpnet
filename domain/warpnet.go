@@ -200,12 +200,13 @@ type TweetModeration struct {
 // FilterContext is where a content filter applies. Closed enum — only
 // these values are accepted on the wire. Note: there is no "account"
 // context in Warpnet — Warpnet has users and nodes, not accounts.
+// Warpnet has no "public" context either — every tweet is public by
+// default, so a filter on a "public" timeline would be redundant.
 type FilterContext string
 
 const (
 	FilterContextHome          FilterContext = "home"
 	FilterContextNotifications FilterContext = "notifications"
-	FilterContextPublic        FilterContext = "public"
 	FilterContextThread        FilterContext = "thread"
 )
 

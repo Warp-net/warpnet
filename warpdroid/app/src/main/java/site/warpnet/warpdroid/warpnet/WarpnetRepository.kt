@@ -875,7 +875,7 @@ class WarpnetRepository @Inject constructor(
     }
 
     // -----------------------------------------------------------------
-    // Chats (1:1 DMs on the fat node — surfaced as Mastodon Conversations)
+    // Chats (1:1 DMs on the fat node)
     // -----------------------------------------------------------------
 
     suspend fun getChats(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetChat>, String> {

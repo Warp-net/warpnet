@@ -39,8 +39,8 @@ type QuoteStorer interface {
 	Get(userID, tweetID string) (domain.Tweet, error)
 	Create(userId string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
-	AppendQuoting(quotedId string, quoteTweet domain.Tweet) error
-	Quoting(tweetId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
+	AppendQuote(quotedId string, quoteTweet domain.Tweet) error
+	Quote(tweetId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 }
 
 func StreamNewQuoteHandler(repo QuoteStorer) warpnet.WarpHandlerFunc {
@@ -66,9 +66,9 @@ func StreamNewQuoteHandler(repo QuoteStorer) warpnet.WarpHandlerFunc {
 		if err != nil {
 			return nil, err
 		}
-		// Index for the Quoting list. Best-effort: a missing index
+		// Index for the Quote list. Best-effort: a missing index
 		// entry only affects discovery, not the created tweet itself.
-		if err := repo.AppendQuoting(*q.QuotedTweetId, created); err != nil {
+		if err := repo.AppendQuote(*q.QuotedTweetId, created); err != nil {
 			return created, err
 		}
 		return created, nil
@@ -111,7 +111,7 @@ func StreamGetQuotingHandler(repo QuoteStorer) warpnet.WarpHandlerFunc {
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("get quoting: empty tweet id")
 		}
-		tweets, cur, err := repo.Quoting(ev.TweetId, ev.Limit, ev.Cursor)
+		tweets, cur, err := repo.Quote(ev.TweetId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
 		}

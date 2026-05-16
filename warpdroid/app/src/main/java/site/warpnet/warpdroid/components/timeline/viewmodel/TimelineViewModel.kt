@@ -195,10 +195,8 @@ abstract class TimelineViewModel(
 
         fun toFilterKind(): Filter.Kind {
             return when (valueOf(name)) {
-                HOME -> Filter.Kind.HOME
-                LIKES -> Filter.Kind.PUBLIC
                 USER, USER_WITH_REPLIES, USER_PINNED -> Filter.Kind.ACCOUNT
-                else -> Filter.Kind.PUBLIC
+                else -> Filter.Kind.HOME
             }
         }
     }

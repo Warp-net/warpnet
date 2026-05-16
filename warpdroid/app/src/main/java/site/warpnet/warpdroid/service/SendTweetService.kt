@@ -243,16 +243,12 @@ class SendTweetService : Service() {
 
             val sendResult = if (isNew) {
                 warpnetApi.createStatus(
-                    "Bearer " + account.accessToken,
-                    account.domain,
                     statusToSend.idempotencyKey,
                     newStatus
                 )
             } else {
                 warpnetApi.editStatus(
                     statusToSend.statusId!!,
-                    "Bearer " + account.accessToken,
-                    account.domain,
                     statusToSend.idempotencyKey,
                     newStatus
                 )
@@ -282,12 +278,6 @@ class SendTweetService : Service() {
     /**
      * Retry any send failure with linear backoff up to MAX_SEND_RETRIES,
      * then surface a user-visible error notification.
-     *
-     * Warpnet never throws HttpException (no HTTP), so the original
-     * Tusky branch on HttpException always fell through to retrySending
-     * which busy-looped silently. Replace it with a bounded retry that
-     * has to either land or fail loudly - "post or throw", no third
-     * option.
      */
     private suspend fun failOrRetry(throwable: Throwable, statusId: Int) {
         val statusToSend = statusesToSend[statusId] ?: return

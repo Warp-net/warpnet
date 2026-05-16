@@ -90,6 +90,67 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 	return txn.Commit()
 }
 
+// MarkRead flips Notification.IsRead to true for the given notification.
+// The record is re-written at its existing key (Notification keys are
+// id-indexed within a per-user prefix, so we have to scan to find the
+// match like Get does — count stays bounded by the per-user notification
+// retention window).
+func (repo *NotificationsRepo) MarkRead(userId, notificationId string) error {
+	if userId == "" {
+		return local_store.DBError("missing user id")
+	}
+	if notificationId == "" {
+		return local_store.DBError("missing notification id")
+	}
+
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	var (
+		cursor string
+		limit  uint64 = 100
+	)
+	for {
+		items, cur, err := txn.List(prefix, &limit, &cursor)
+		if err != nil {
+			return err
+		}
+		for _, item := range items {
+			var not domain.Notification
+			if err := json.Unmarshal(item.Value, &not); err != nil {
+				return err
+			}
+			if not.Id != notificationId {
+				continue
+			}
+			if not.IsRead {
+				return txn.Commit()
+			}
+			not.IsRead = true
+			bt, err := json.Marshal(not)
+			if err != nil {
+				return err
+			}
+			if err := txn.SetWithTTL(local_store.DatabaseKey(item.Key), bt, time.Hour*24); err != nil {
+				return err
+			}
+			return txn.Commit()
+		}
+		if cur == "" || cur == "end" || uint64(len(items)) < limit {
+			break
+		}
+		cursor = cur
+	}
+	return ErrNotificationsNotFound
+}
+
 func (repo *NotificationsRepo) Get(userId, notificationId string) (domain.Notification, error) {
 	if userId == "" {
 		return domain.Notification{}, local_store.DBError("missing user id")

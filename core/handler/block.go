@@ -192,9 +192,12 @@ func StreamGetMutesHandler(repo MutesStorer) warpnet.WarpHandlerFunc {
 }
 
 // escalateToPeerBlocklist makes a best-effort lookup of the blockee's
-// node id and adds it to the libp2p-level blocklist. Failures are
-// logged and swallowed — a missing peer-block doesn't undo the social
-// block.
+// node id and adds it to the libp2p-level blocklist. The peer-level
+// block is *exponential*: NodeRepo.Blocklist bumps a per-peer BlockLevel
+// on every call and writes the entry with the matching TTL, so repeat
+// social-blocks against the same node lengthen the network-layer ban
+// instead of resetting it. Failures are logged and swallowed — a
+// missing peer-block doesn't undo the social block.
 func escalateToPeerBlocklist(userRepo BlockUserFetcher, nodeRepo PeerBlocklister, blockeeId string) {
 	if userRepo == nil || nodeRepo == nil {
 		return

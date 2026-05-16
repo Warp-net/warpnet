@@ -51,9 +51,6 @@ data class Filter(
         @Json(name = "notifications")
         NOTIFICATIONS("notifications"),
 
-        @Json(name = "public")
-        PUBLIC("public"),
-
         @Json(name = "thread")
         THREAD("thread"),
 
@@ -64,7 +61,7 @@ data class Filter(
         override fun toString() = kind
 
         companion object {
-            fun from(kind: String): Kind = entries.firstOrNull { it.kind == kind } ?: PUBLIC
+            fun from(kind: String): Kind = entries.firstOrNull { it.kind == kind } ?: HOME
         }
     }
 }

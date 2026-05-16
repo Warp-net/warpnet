@@ -356,7 +356,7 @@ func (repo *FollowRepo) GetFollowings(userId string, limit *uint64, cursor *stri
 const followRequestSubName = "REQUEST"
 
 // AddFollowRequest records a pending follow request from followerId
-// against targetUserId (locked-account flow). On approval the entry
+// against targetUserId (locked-user flow). On approval the entry
 // should be removed via RemoveFollowRequest and re-recorded via Follow;
 // on reject it's just removed.
 func (repo *FollowRepo) AddFollowRequest(targetUserId, followerId string) error {

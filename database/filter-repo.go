@@ -280,8 +280,9 @@ func (repo *FilterRepo) DeleteKeyword(userId, keywordId string) error {
 }
 
 func (repo *FilterRepo) findFilterForKeyword(userId, keywordId string) (domain.Filter, bool, error) {
-	// Keyword search is O(filters) for the user — filter counts are small
-	// (Mastodon caps at a few dozen), so a flat scan is acceptable.
+	// Keyword search is O(filters) for the user — filter counts are
+	// expected to stay small (a few dozen per user), so a flat scan
+	// is acceptable.
 	var cursor string
 	limit := uint64(100)
 	for {

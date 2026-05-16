@@ -73,7 +73,6 @@ class EditFilterActivity : BaseActivity() {
             contextSwitches = mapOf(
                 filterContextHome to Filter.Kind.HOME,
                 filterContextNotifications to Filter.Kind.NOTIFICATIONS,
-                filterContextPublic to Filter.Kind.PUBLIC,
                 filterContextThread to Filter.Kind.THREAD,
                 filterContextAccount to Filter.Kind.ACCOUNT
             )

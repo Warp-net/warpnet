@@ -87,8 +87,6 @@ class NotificationFetcher @Inject constructor(
      * than the marker.
      */
     private suspend fun fetchNewNotifications(account: AccountEntity): List<Notification> {
-        val authHeader = "Bearer ${account.accessToken}"
-
         // Pick where to read from. Warpnet has no server-side read-marker —
         // local "last seen" + the most recent visited id is the only source.
         val localMarkerId = account.notificationMarkerId
@@ -103,16 +101,11 @@ class NotificationFetcher @Inject constructor(
         // Fetch all outstanding notifications
         val notifications: List<Notification> = buildList {
             while (minId != null) {
-                val response = warpnetApi.notificationsWithAuth(
-                    authHeader,
-                    account.domain,
-                    minId = minId
-                )
+                val response = warpnetApi.notificationsPage(minId = minId)
                 if (!response.isSuccessful) break
 
-                // Notifications are returned in the page in order, newest first,
-                // (https://github.com/mastodon/documentation/issues/1226), insert the
-                // new page at the head of the list.
+                // Notifications are returned in the page in order, newest first;
+                // insert the new page at the head of the list.
                 response.body()?.let { addAll(0, it) }
 
                 // Get the previous page, which will be chronologically newer

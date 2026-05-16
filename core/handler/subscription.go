@@ -33,10 +33,10 @@ import (
 	"github.com/Warp-net/warpnet/json"
 )
 
-// SubscriptionStorer is the slice of UserSetRepo the subscribe handlers
-// need. Subscribe = "tell me about new tweets from this user"; the local
-// node uses this watchlist to elevate the corresponding incoming tweet
-// to a notification.
+// SubscriptionStorer is the slice of SubscriptionsRepo the subscribe
+// handlers need. Subscribe = "tell me about new tweets from this user";
+// the local node uses this watchlist to elevate the corresponding
+// incoming tweet to a notification.
 type SubscriptionStorer interface {
 	Subscribe(selfId, targetUserId string) error
 	Unsubscribe(selfId, targetUserId string) error

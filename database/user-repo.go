@@ -414,14 +414,12 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 	}
 	defer txn.Rollback()
 
-	// Use a generous page size for the underlying scan so the caller's
-	// `limit` is satisfied by matches, not by the raw page; we still
-	// honour the returned cursor for resumability.
-	scanLimit := uint64(200)
-	if limit != nil && *limit*4 > scanLimit {
-		scanLimit = *limit * 4
-	}
-	items, cur, err := txn.List(prefix, &scanLimit, cursor)
+	// Pass the caller's limit straight through. If the page yields
+	// fewer matches than `limit` (or zero), the caller resumes from
+	// the returned cursor — substring search is unavoidably linear in
+	// the scanned window, so we cap the window to what the caller
+	// asked for instead of doing a 4x overscan.
+	items, cur, err := txn.List(prefix, limit, cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -429,7 +427,7 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 		return nil, "", err
 	}
 
-	hits := make([]domain.User, 0)
+	hits := make([]domain.User, 0, len(items))
 	for _, item := range items {
 		var u domain.User
 		if err := json.Unmarshal(item.Value, &u); err != nil {

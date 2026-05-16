@@ -802,6 +802,10 @@ func (m *MemberNode) notificationHandlers(
 			event.PRIVATE_GET_NOTIFICATION,
 			handler.StreamGetNotificationHandler(r.notificationRepo, authRepo),
 		},
+		{
+			event.PRIVATE_POST_NOTIFICATION_READ,
+			handler.StreamMarkNotificationReadHandler(r.notificationRepo, authRepo),
+		},
 	}
 }
 

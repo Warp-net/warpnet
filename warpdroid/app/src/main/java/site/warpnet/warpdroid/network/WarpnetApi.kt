@@ -114,11 +114,7 @@ class WarpnetApi @Inject constructor(
     }
 
     // ---------------------------------------------------------------
-    // instance metadata / custom emojis
-    // ---------------------------------------------------------------
-
-    // ---------------------------------------------------------------
-    // filters (no Warpnet equivalent — server-side filtering doesn't exist)
+    // filters
     // ---------------------------------------------------------------
 
     suspend fun getFilter(filterId: String): NetworkResult<Filter> {
@@ -126,7 +122,7 @@ class WarpnetApi @Inject constructor(
         return result {
             val wf = warpnet.getFilter(userId = active.accountId, filterId = filterId)
                 ?: throw NoSuchElementException("filter $filterId")
-            wf.toTuskyFilter()
+            wf.toWarpnetFilter()
         }
     }
 
@@ -134,7 +130,7 @@ class WarpnetApi @Inject constructor(
         val active = accountManager.activeAccount ?: return NetworkResult.success(emptyList())
         return result {
             val (fs, _) = warpnet.getFilters(userId = active.accountId)
-            fs.map { it.toTuskyFilter() }
+            fs.map { it.toWarpnetFilter() }
         }
     }
 
@@ -154,7 +150,7 @@ class WarpnetApi @Inject constructor(
                     action = filterAction.action,
                 ),
             )
-            wf.toTuskyFilter()
+            wf.toWarpnetFilter()
         }
     }
 
@@ -176,7 +172,7 @@ class WarpnetApi @Inject constructor(
                     action = filterAction?.action.orEmpty(),
                 ),
             )
-            wf.toTuskyFilter()
+            wf.toWarpnetFilter()
         }
     }
 
@@ -228,7 +224,7 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    private fun site.warpnet.transport.dto.WarpnetFilter.toTuskyFilter(): Filter = Filter(
+    private fun site.warpnet.transport.dto.WarpnetFilter.toWarpnetFilter(): Filter = Filter(
         id = id,
         title = title,
         context = context.map { Filter.Kind.from(it) },
@@ -238,7 +234,12 @@ class WarpnetApi @Inject constructor(
     )
 
     // ---------------------------------------------------------------
-    // timelines
+    // timeline
+    //
+    // Warpnet has a single timeline: the local user's own tweets merged
+    // with their followings' tweets (plus recommendations). The
+    // `homeTimeline` name is kept only because the UI layer above
+    // expects this entry point — it maps 1:1 to PRIVATE_GET_TIMELINE.
     // ---------------------------------------------------------------
 
     suspend fun homeTimeline(
@@ -274,9 +275,7 @@ class WarpnetApi @Inject constructor(
             ?: throw NoSuchElementException("notification $id not found")
     }
 
-    suspend fun notificationsWithAuth(
-        auth: String,
-        domain: String,
+    suspend fun notificationsPage(
         minId: String?,
     ): Response<List<Notification>> {
         val userId = accountManager.activeAccount?.accountId.orEmpty()
@@ -345,8 +344,6 @@ class WarpnetApi @Inject constructor(
     // ---------------------------------------------------------------
 
     suspend fun createStatus(
-        auth: String,
-        domain: String,
         idempotencyKey: String,
         status: NewTweet,
     ): NetworkResult<Tweet> {
@@ -355,12 +352,10 @@ class WarpnetApi @Inject constructor(
         // name (e.g. "Vadim") — desktop renders it verbatim as the author
         // line. WarpnetMapper.toAccount maps WarpnetUser.id → Account.username
         // (the @-handle, peer-derived ULID) and WarpnetUser.username →
-        // Account.displayName (the real name), to match Mastodon's
-        // username-vs-displayName split. So the tweet's authorUsername has
-        // to be sourced from displayName, not username, otherwise the post
-        // shows up authored by the ULID. Fall back to the @-handle if
-        // displayName isn't populated yet (e.g. accountVerifyCredentials
-        // hasn't finished).
+        // Account.displayName (the real name). So the tweet's authorUsername
+        // has to be sourced from displayName, not username, otherwise the
+        // post shows up authored by the ULID. Fall back to the @-handle if
+        // displayName isn't populated yet.
         val authorName = active.displayName.ifBlank { active.username }
         return result {
             warpnet.postStatus(
@@ -389,8 +384,6 @@ class WarpnetApi @Inject constructor(
 
     suspend fun editStatus(
         statusId: String,
-        auth: String,
-        domain: String,
         idempotencyKey: String,
         editedStatus: NewTweet,
     ): NetworkResult<Tweet> {
@@ -406,10 +399,9 @@ class WarpnetApi @Inject constructor(
     }
 
     /**
-     * Mastodon serves the plaintext source on a separate endpoint because its
-     * Status.content is rendered HTML. Warpnet has no rendering step —
-     * domain.Tweet.text already *is* the plaintext source — so this is
-     * synthesised client-side from the current status fetch. No wire call.
+     * Warpnet has no rendering step — domain.Tweet.text already *is* the
+     * plaintext source — so this is synthesised client-side from the
+     * current status fetch. No wire call.
      */
     suspend fun statusSource(statusId: String): NetworkResult<TweetSource> {
         val active = accountManager.activeAccount ?: return stubFailure("statusSource")
@@ -853,7 +845,7 @@ class WarpnetApi @Inject constructor(
     }
 
     // ---------------------------------------------------------------
-    // conversations (Warpnet 1:1 chats surfaced as Mastodon conversations)
+    // conversations (Warpnet 1:1 chats)
     // ---------------------------------------------------------------
 
     suspend fun getConversations(
@@ -926,8 +918,8 @@ class WarpnetApi @Inject constructor(
         val active = accountManager.activeAccount ?: return stubFailure("removeQuote")
         return result {
             warpnet.deleteQuote(userId = active.accountId, tweetId = quotingStatusId)
-            // Return the quoting tweet shape Tusky expects — we don't
-            // re-fetch (it's gone), so synthesise a deleted-marker.
+            // We don't re-fetch the deleted quote (it's gone); the
+            // returned tweet is the parent that was being quoted.
             warpnet.getStatus(tweetId = id, userId = active.accountId)
         }
     }

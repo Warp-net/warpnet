@@ -38,12 +38,12 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type UserSetReposTestSuite struct {
+type BlocksRepoTestSuite struct {
 	suite.Suite
 	db *local_store.DB
 }
 
-func (s *UserSetReposTestSuite) SetupSuite() {
+func (s *BlocksRepoTestSuite) SetupSuite() {
 	var err error
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
@@ -51,11 +51,11 @@ func (s *UserSetReposTestSuite) SetupSuite() {
 	s.Require().NoError(authRepo.Authenticate("test", "test"))
 }
 
-func (s *UserSetReposTestSuite) TearDownSuite() {
+func (s *BlocksRepoTestSuite) TearDownSuite() {
 	s.db.Close()
 }
 
-func (s *UserSetReposTestSuite) TestBlocks() {
+func (s *BlocksRepoTestSuite) TestBlockUnblockList() {
 	repo := NewBlocksRepo(s.db)
 	blocker := uuid.New().String()
 	blockee := uuid.New().String()
@@ -80,39 +80,7 @@ func (s *UserSetReposTestSuite) TestBlocks() {
 	s.False(has)
 }
 
-func (s *UserSetReposTestSuite) TestMutes() {
-	repo := NewMutesRepo(s.db)
-	muter := uuid.New().String()
-	mutee := uuid.New().String()
-
-	s.Require().NoError(repo.Mute(muter, mutee))
-	has, err := repo.IsMuted(muter, mutee)
-	s.Require().NoError(err)
-	s.True(has)
-
-	s.Require().NoError(repo.Unmute(muter, mutee))
-	has, err = repo.IsMuted(muter, mutee)
-	s.Require().NoError(err)
-	s.False(has)
-}
-
-func (s *UserSetReposTestSuite) TestSubscriptions() {
-	repo := NewSubscriptionsRepo(s.db)
-	self := uuid.New().String()
-	target := uuid.New().String()
-
-	s.Require().NoError(repo.Subscribe(self, target))
-	has, err := repo.IsSubscribed(self, target)
-	s.Require().NoError(err)
-	s.True(has)
-
-	s.Require().NoError(repo.Unsubscribe(self, target))
-	has, err = repo.IsSubscribed(self, target)
-	s.Require().NoError(err)
-	s.False(has)
-}
-
-func (s *UserSetReposTestSuite) TestValidation() {
+func (s *BlocksRepoTestSuite) TestValidation() {
 	blocks := NewBlocksRepo(s.db)
 	s.Error(blocks.Block("", "x"))
 	s.Error(blocks.Block("x", ""))
@@ -126,12 +94,7 @@ func (s *UserSetReposTestSuite) TestValidation() {
 	s.False(has)
 }
 
-func (s *UserSetReposTestSuite) TestRemoveNonexistentIsNoop() {
-	repo := NewMutesRepo(s.db)
-	s.NoError(repo.Unmute(uuid.New().String(), uuid.New().String()))
-}
-
-func TestUserSetReposTestSuite(t *testing.T) {
+func TestBlocksRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
-	suite.Run(t, new(UserSetReposTestSuite))
+	suite.Run(t, new(BlocksRepoTestSuite))
 }

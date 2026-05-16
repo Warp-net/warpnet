@@ -41,14 +41,14 @@ func (s stubQuoteRepo) Delete(uid, tid string) error {
 	return nil
 }
 
-func (s stubQuoteRepo) AppendQuoting(qid string, q domain.Tweet) error {
+func (s stubQuoteRepo) AppendQuote(qid string, q domain.Tweet) error {
 	if s.appendFn != nil {
 		return s.appendFn(qid, q)
 	}
 	return nil
 }
 
-func (s stubQuoteRepo) Quoting(tid string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+func (s stubQuoteRepo) Quote(tid string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if s.quotingFn != nil {
 		return s.quotingFn(tid, limit, cursor)
 	}
