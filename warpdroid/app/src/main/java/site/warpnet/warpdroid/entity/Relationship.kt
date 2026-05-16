@@ -34,7 +34,6 @@ data class Relationship(
      * so we use GuardedAdapter to ignore the field if it is not a boolean.
      */
     @Guarded val subscribing: Boolean? = null,
-    @Json(name = "domain_blocking") val blockingDomain: Boolean,
     // nullable for backward compatibility / feature detection
     val note: String? = null,
     // since 3.3.0rc

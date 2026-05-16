@@ -74,7 +74,6 @@ import com.google.android.material.tabs.TabLayoutMediator
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
-import site.warpnet.warpdroid.components.announcements.AnnouncementsActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.Companion.canHandleMimeType
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
@@ -100,9 +99,6 @@ import site.warpnet.warpdroid.util.reduceSwipeSensitivity
 import site.warpnet.warpdroid.util.show
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.viewBinding
-import com.mikepenz.materialdrawer.holder.BadgeStyle
-import com.mikepenz.materialdrawer.holder.ColorHolder
-import com.mikepenz.materialdrawer.holder.StringHolder
 import com.mikepenz.materialdrawer.model.AbstractDrawerItem
 import com.mikepenz.materialdrawer.model.DividerDrawerItem
 import com.mikepenz.materialdrawer.model.PrimaryDrawerItem
@@ -320,10 +316,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
         lifecycleScope.launch {
             viewModel.accounts.collect(::updateProfiles)
-        }
-
-        lifecycleScope.launch {
-            viewModel.unreadAnnouncementsCount.collect(::updateAnnouncementsBadge)
         }
 
         // Initialise the tab adapter and set to viewpager. Fragments appear to be leaked if the
@@ -681,18 +673,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                         startActivityWithSlideInAnimation(ScheduledTweetActivity.newIntent(context))
                     }
                 },
-                primaryDrawerItem {
-                    identifier = DRAWER_ITEM_ANNOUNCEMENTS
-                    nameRes = R.string.title_announcements
-                    iconRes = R.drawable.ic_campaign_24dp
-                    onClick = {
-                        startActivityWithSlideInAnimation(AnnouncementsActivity.newIntent(context))
-                    }
-                    badgeStyle = BadgeStyle().apply {
-                        textColor = ColorHolder.fromColor(MaterialColors.getColor(binding.mainDrawer, materialR.attr.colorOnPrimary))
-                        color = ColorHolder.fromColor(MaterialColors.getColor(binding.mainDrawer, appcompatR.attr.colorPrimary))
-                    }
-                },
                 DividerDrawerItem(),
                 secondaryDrawerItem {
                     nameRes = R.string.action_view_account_preferences
@@ -1004,15 +984,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         }
     }
 
-    private fun updateAnnouncementsBadge(unreadAnnouncementsCount: Int) {
-        binding.mainDrawer.updateBadge(
-            DRAWER_ITEM_ANNOUNCEMENTS,
-            StringHolder(
-                if (unreadAnnouncementsCount <= 0) null else unreadAnnouncementsCount.toString()
-            )
-        )
-    }
-
     private fun updateProfiles(accounts: List<AccountViewData>) {
         if (accounts.isEmpty()) {
             return
@@ -1061,7 +1032,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     companion object {
         private const val TAG = "MainActivity" // logging tag
         private const val DRAWER_ITEM_ADD_ACCOUNT: Long = -13
-        private const val DRAWER_ITEM_ANNOUNCEMENTS: Long = 14
         private const val REDIRECT_URL = "redirectUrl"
         private const val OPEN_DRAFTS = "draft"
         private const val WARPDROID_ACCOUNT_ID = "warpdroidAccountId"

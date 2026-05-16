@@ -21,9 +21,6 @@ import androidx.paging.InvalidatingPagingSourceFactory
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.cachedIn
-import at.connyduck.calladapter.networkresult.NetworkResult
-import at.connyduck.calladapter.networkresult.map
-import at.connyduck.calladapter.networkresult.onFailure
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
@@ -40,10 +37,8 @@ import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.toViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
 import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -187,27 +182,6 @@ class SearchViewModel @Inject constructor(
         updateTweetViewData(statusViewData.copy(isCollapsed = collapsed))
     }
 
-    suspend fun translate(statusViewData: TweetViewData.Concrete): NetworkResult<Unit> {
-        updateTweetViewData(statusViewData.copy(translation = TranslationViewData.Loading))
-        return warpnetApi.translate(statusViewData.actionableId, Locale.getDefault().language)
-            .map { translation ->
-                updateTweetViewData(
-                    statusViewData.copy(
-                        translation = TranslationViewData.Loaded(
-                            translation
-                        )
-                    )
-                )
-            }
-            .onFailure {
-                updateTweetViewData(statusViewData.copy(translation = null))
-            }
-    }
-
-    fun untranslate(statusViewData: TweetViewData.Concrete) {
-        updateTweetViewData(statusViewData.copy(translation = null))
-    }
-
     fun changeFilter(filtered: Boolean, status: TweetViewData.Concrete) {
         updateTweetViewData(status.copy(filterActive = filtered))
     }
@@ -230,7 +204,6 @@ class SearchViewModel @Inject constructor(
                 isExpanded = viewData.isExpanded,
                 isCollapsed = viewData.isCollapsed,
                 isDetailed = viewData.isDetailed,
-                translation = viewData.translation,
                 filterKind = Filter.Kind.THREAD,
                 filterActive = viewData.filterActive,
                 isQuoteShowingContent = oldQuoteViewData?.isShowingContent

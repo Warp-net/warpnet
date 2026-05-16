@@ -17,11 +17,8 @@ package site.warpnet.warpdroid.components.viewthread
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
-import at.connyduck.calladapter.networkresult.NetworkResult
 import at.connyduck.calladapter.networkresult.fold
 import at.connyduck.calladapter.networkresult.getOrElse
-import at.connyduck.calladapter.networkresult.map
-import at.connyduck.calladapter.networkresult.onFailure
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
@@ -35,13 +32,11 @@ import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.ui.SnackbarError
 import site.warpnet.warpdroid.util.toViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
 import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.util.Locale
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -228,29 +223,6 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit> {
-        updateTweetViewData(status.id) { viewData ->
-            viewData.copy(translation = TranslationViewData.Loading)
-        }
-        return api.translate(status.id, Locale.getDefault().language)
-            .map { translation ->
-                updateTweetViewData(status.id) { viewData ->
-                    viewData.copy(translation = TranslationViewData.Loaded(translation))
-                }
-            }
-            .onFailure {
-                updateTweetViewData(status.id) { viewData ->
-                    viewData.copy(translation = null)
-                }
-            }
-    }
-
-    fun untranslate(status: TweetViewData.Concrete) {
-        updateTweetViewData(status.id) { viewData ->
-            viewData.copy(translation = null)
-        }
-    }
-
     private fun handleTweetChangedEvent(status: Tweet) {
         updateTweetViewData(status.id) { viewData ->
             val oldQuoteViewData = viewData.quote?.quotedTweetViewData
@@ -259,7 +231,6 @@ class ViewThreadViewModel @AssistedInject constructor(
                 isExpanded = viewData.isExpanded,
                 isCollapsed = viewData.isCollapsed,
                 isDetailed = viewData.isDetailed,
-                translation = viewData.translation,
                 filterKind = Filter.Kind.THREAD,
                 filterActive = viewData.filterActive,
                 isQuoteShowingContent = oldQuoteViewData?.isShowingContent

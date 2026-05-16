@@ -135,16 +135,13 @@
         <activity
             android:name=".components.report.ReportActivity"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
-        <activity android:name=".components.domainblocks.DomainBlocksActivity" />
         <activity android:name=".components.scheduled.ScheduledTweetActivity" />
-        <activity android:name=".components.announcements.AnnouncementsActivity" />
         <activity android:name="site.warpnet.warpdroid.components.filters.EditFilterActivity"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".components.pairing.PairingActivity"
             android:exported="false"
             android:theme="@style/WarpdroidBaseTheme" />
-        <activity android:name=".components.preference.notificationpolicies.NotificationPoliciesActivity"/>
         <activity android:name=".components.notifications.requests.NotificationRequestsActivity"/>
         <activity android:name=".components.notifications.requests.details.NotificationRequestDetailsActivity"/>
 

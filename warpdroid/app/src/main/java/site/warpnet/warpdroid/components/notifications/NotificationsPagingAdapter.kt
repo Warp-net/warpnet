@@ -195,7 +195,6 @@ class NotificationsPagingAdapter(
                                                     listener = statusListener
                                                 )
                                             },
-                                            translationEnabled = false,
                                             accounts = accounts,
                                             showDivider = false
                                         )

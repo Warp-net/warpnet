@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.fold
 import site.warpnet.warpdroid.appstore.BlockEvent
-import site.warpnet.warpdroid.appstore.DomainMuteEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
 import site.warpnet.warpdroid.appstore.ProfileEditedEvent
@@ -157,33 +156,6 @@ class AccountViewModel @Inject constructor(
             changeRelationship(RelationShipAction.UNSUBSCRIBE)
         } else {
             changeRelationship(RelationShipAction.SUBSCRIBE)
-        }
-    }
-
-    fun blockDomain(instance: String) {
-        viewModelScope.launch {
-            warpnetApi.blockDomain(instance).fold({
-                eventHub.dispatch(DomainMuteEvent(instance))
-                val relation = _relationshipData.value?.data
-                if (relation != null) {
-                    _relationshipData.value = Success(relation.copy(blockingDomain = true))
-                }
-            }, { e ->
-                Log.e(TAG, "Error muting $instance", e)
-            })
-        }
-    }
-
-    fun unblockDomain(instance: String) {
-        viewModelScope.launch {
-            warpnetApi.unblockDomain(instance).fold({
-                val relation = _relationshipData.value?.data
-                if (relation != null) {
-                    _relationshipData.value = Success(relation.copy(blockingDomain = false))
-                }
-            }, { e ->
-                Log.e(TAG, "Error unmuting $instance", e)
-            })
         }
     }
 

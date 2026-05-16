@@ -19,7 +19,6 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.fold
-import site.warpnet.warpdroid.appstore.AnnouncementReadEvent
 import site.warpnet.warpdroid.appstore.ConversationsLoadingEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.NewNotificationsEvent
@@ -74,9 +73,6 @@ class MainViewModel @Inject constructor(
         .mapNotNull { account -> account?.tabPreferences }
         .stateIn(viewModelScope, SharingStarted.Eagerly, activeAccount.tabPreferences)
 
-    private val _unreadAnnouncementsCount = MutableStateFlow(0)
-    val unreadAnnouncementsCount: StateFlow<Int> = _unreadAnnouncementsCount.asStateFlow()
-
     val showDirectMessagesBadge: StateFlow<Boolean> = accountManager.activeAccount(viewModelScope)
         .map { account -> account?.hasDirectMessageBadge == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -86,7 +82,6 @@ class MainViewModel @Inject constructor(
 
     init {
         loadAccountData()
-        fetchAnnouncements()
         collectEvents()
     }
 
@@ -109,27 +104,10 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private fun fetchAnnouncements() {
-        viewModelScope.launch {
-            api.announcements()
-                .fold(
-                    { announcements ->
-                        _unreadAnnouncementsCount.value = announcements.count { !it.read }
-                    },
-                    { throwable ->
-                        Log.w(TAG, "Failed to fetch announcements.", throwable)
-                    }
-                )
-        }
-    }
-
     private fun collectEvents() {
         viewModelScope.launch {
             eventHub.events.collect { event ->
                 when (event) {
-                    is AnnouncementReadEvent -> {
-                        _unreadAnnouncementsCount.value--
-                    }
                     is NewNotificationsEvent -> {
                         if (event.accountId == activeAccount.accountId) {
                             val hasDirectMessageNotification =

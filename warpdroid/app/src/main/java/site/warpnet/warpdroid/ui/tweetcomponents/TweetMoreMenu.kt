@@ -38,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,7 +47,6 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Tweet
-import site.warpnet.warpdroid.entity.Translation
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.WarpdroidTextButton
 import site.warpnet.warpdroid.ui.preferences.LocalAccount
@@ -60,14 +58,12 @@ import site.warpnet.warpdroid.util.copyToClipboard
 import site.warpnet.warpdroid.util.shareTweetContent
 import site.warpnet.warpdroid.util.shareTweetLink
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
 
 @Composable
 fun TweetMoreMenu(
     viewData: TweetViewData.Concrete,
     expanded: Boolean,
     onDismissRequest: () -> Unit,
-    translationEnabled: Boolean,
     accounts: List<AccountEntity>,
     listener: TweetActionListener
 ) {
@@ -180,9 +176,6 @@ fun TweetMoreMenu(
             expanded = expanded,
             onDismissRequest = onDismissRequest
         ) {
-            val translation: Translation? = (viewData.translation as? TranslationViewData.Loaded)?.data
-            val locale = Locale.current
-
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.action_share)) },
                 onClick = {
@@ -198,34 +191,11 @@ fun TweetMoreMenu(
                     }
                 )
             }
-            val translateable = translationEnabled &&
-                !status.language.equals(locale.language, ignoreCase = true) &&
-                (status.visibility == Tweet.Visibility.PUBLIC || status.visibility == Tweet.Visibility.UNLISTED)
             val reFilterable = !viewData.filterActive && viewData.filter?.action == Filter.Action.WARN
             val otherAccountsAvailable = accounts.size > 1
 
-            if (translateable || reFilterable || otherAccountsAvailable) {
+            if (reFilterable || otherAccountsAvailable) {
                 HorizontalDivider()
-            }
-
-            if (translateable) {
-                if (translation == null) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_translate)) },
-                        onClick = {
-                            onDismissRequest()
-                            listener.onTranslate(viewData)
-                        }
-                    )
-                } else {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_show_original)) },
-                        onClick = {
-                            onDismissRequest()
-                            listener.onUntranslate(viewData)
-                        }
-                    )
-                }
             }
 
             if (reFilterable) {

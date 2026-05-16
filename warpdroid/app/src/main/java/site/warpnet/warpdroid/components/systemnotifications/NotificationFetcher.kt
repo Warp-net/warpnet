@@ -6,7 +6,6 @@ import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.NewNotificationsEvent
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.entity.AccountEntity
-import site.warpnet.warpdroid.entity.Marker
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.HttpHeaderLink
@@ -90,26 +89,12 @@ class NotificationFetcher @Inject constructor(
     private suspend fun fetchNewNotifications(account: AccountEntity): List<Notification> {
         val authHeader = "Bearer ${account.accessToken}"
 
-        // Figure out where to read from. Choose the most recent notification ID from:
-        //
-        // - The Warpnet marker API (if the server supports it)
-        // - account.notificationMarkerId
-        // - account.lastNotificationId
-        Log.d(TAG, "Getting notification marker for ${account.fullName}.")
-        val remoteMarkerId = fetchMarker(authHeader, account)?.lastReadId ?: "0"
+        // Pick where to read from. Warpnet has no server-side read-marker —
+        // local "last seen" + the most recent visited id is the only source.
         val localMarkerId = account.notificationMarkerId
-        val markerId = if (remoteMarkerId.isLessThan(
-                localMarkerId
-            )
-        ) {
-            localMarkerId
-        } else {
-            remoteMarkerId
-        }
         val readingPosition = account.lastNotificationId
 
-        var minId: String? = if (readingPosition.isLessThan(markerId)) markerId else readingPosition
-        Log.d(TAG, "  remoteMarkerId: $remoteMarkerId")
+        var minId: String? = if (readingPosition.isLessThan(localMarkerId)) localMarkerId else readingPosition
         Log.d(TAG, "  localMarkerId: $localMarkerId")
         Log.d(TAG, "  readingPosition: $readingPosition")
 
@@ -138,37 +123,15 @@ class NotificationFetcher @Inject constructor(
             }
         }
 
-        // Save the newest notification ID in the marker.
+        // Bump the local marker so we don't re-process the same notifications.
         notifications.firstOrNull()?.let {
             val newMarkerId = notifications.first().id
-            Log.d(TAG, "Updating notification marker for ${account.fullName} to: $newMarkerId")
-            warpnetApi.updateMarkersWithAuth(
-                auth = authHeader,
-                domain = account.domain,
-                notificationsLastReadId = newMarkerId
-            )
             accountManager.updateAccount(account) { copy(notificationMarkerId = newMarkerId) }
         }
 
         Log.d(TAG, "Got ${notifications.size} Notifications.")
 
         return notifications
-    }
-
-    private suspend fun fetchMarker(authHeader: String, account: AccountEntity): Marker? {
-        return try {
-            val allMarkers = warpnetApi.markersWithAuth(
-                authHeader,
-                account.domain,
-                listOf("notifications")
-            )
-            val notificationMarker = allMarkers["notifications"]
-            Log.d(TAG, "Fetched marker for ${account.fullName}: $notificationMarker")
-            notificationMarker
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to fetch marker", e)
-            null
-        }
     }
 
     companion object {

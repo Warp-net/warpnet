@@ -58,9 +58,9 @@ fun warpnetHtmlText(
     val actionable = status.actionable
     val quoteColor = warpdroidColors.tertiaryTextColor
 
-    return remember(actionable.content, status.translation, actionable.quote, linkStyles, quoteColor) {
+    return remember(actionable.content, actionable.quote, linkStyles, quoteColor) {
         val html = htmlToAnnotatedString(
-            html = status.translation?.data?.content ?: actionable.content,
+            html = actionable.content,
             removeInlineQuotes = status.quote != null,
             linkStyles = linkStyles,
             quoteColor = quoteColor,

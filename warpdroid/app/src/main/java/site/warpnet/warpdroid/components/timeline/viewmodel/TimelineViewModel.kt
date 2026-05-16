@@ -18,7 +18,6 @@ package site.warpnet.warpdroid.components.timeline.viewmodel
 import android.content.SharedPreferences
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
-import at.connyduck.calladapter.networkresult.NetworkResult
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.FilterUpdatedEvent
 import site.warpnet.warpdroid.appstore.PreferenceChangedEvent
@@ -171,8 +170,6 @@ abstract class TimelineViewModel(
         }
     }
 
-    abstract suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit>
-    abstract fun untranslate(status: TweetViewData.Concrete)
     abstract fun saveHomeTimelinePosition(firstVisibleIndex: Int, firstVisibleOffset: Int)
 
     companion object {

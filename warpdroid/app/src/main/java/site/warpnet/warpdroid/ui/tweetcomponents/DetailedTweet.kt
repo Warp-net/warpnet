@@ -84,7 +84,6 @@ import java.text.NumberFormat
 fun DetailedTweet(
     statusViewData: TweetViewData.Concrete,
     listener: TweetActionListener,
-    translationEnabled: Boolean,
     accounts: List<AccountEntity>,
     showEdits: () -> Unit,
     modifier: Modifier = Modifier
@@ -180,7 +179,6 @@ fun DetailedTweet(
         TweetButtons(
             statusViewData = statusViewData,
             listener = listener,
-            translationEnabled = translationEnabled,
             accounts = accounts,
             showStats = false,
             modifier = Modifier
@@ -380,7 +378,6 @@ fun DetailedTweetPreview() {
         DetailedTweet(
             statusViewData = fakeTweetViewData().copy(isDetailed = true),
             listener = noopListener,
-            translationEnabled = false,
             accounts = emptyList(),
             showEdits = { },
             modifier = Modifier.background(colorScheme.background)

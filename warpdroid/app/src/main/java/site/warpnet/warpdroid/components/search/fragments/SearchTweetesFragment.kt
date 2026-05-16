@@ -22,9 +22,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.lifecycle.lifecycleScope
 import androidx.paging.PagingData
 import androidx.paging.compose.LazyPagingItems
-import at.connyduck.calladapter.networkresult.onFailure
 import at.connyduck.sparkbutton.compose.SparkButtonState
-import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfo
@@ -70,7 +68,6 @@ class SearchStatusesFragment :
                     TweetCard(
                         viewData,
                         this@SearchStatusesFragment,
-                        translationEnabled = instanceInfo.translationEnabled,
                         accounts = accounts
                     )
                 }
@@ -136,23 +133,6 @@ class SearchStatusesFragment :
 
     override fun onContentCollapsedChange(viewData: TweetViewData.Concrete, isCollapsed: Boolean) {
         viewModel.collapsedChange(viewData, isCollapsed)
-    }
-
-    override fun onTranslate(viewData: TweetViewData.Concrete) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.translate(viewData)
-                .onFailure {
-                    Snackbar.make(
-                        requireView(),
-                        getString(R.string.ui_error_translate, it.message),
-                        Snackbar.LENGTH_LONG
-                    ).show()
-                }
-        }
-    }
-
-    override fun onUntranslate(viewData: TweetViewData.Concrete) {
-        viewModel.untranslate(viewData)
     }
 
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {

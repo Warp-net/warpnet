@@ -21,10 +21,7 @@ import androidx.paging.ExperimentalPagingApi
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.cachedIn
-import at.connyduck.calladapter.networkresult.NetworkResult
 import at.connyduck.calladapter.networkresult.fold
-import at.connyduck.calladapter.networkresult.map
-import at.connyduck.calladapter.networkresult.onFailure
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
@@ -34,13 +31,11 @@ import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
 import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.util.Locale
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -178,27 +173,6 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
 
     fun changeContentCollapsed(isCollapsed: Boolean, status: TweetViewData.Concrete) {
         updateTweetViewData(status.id) { it.copy(isCollapsed = isCollapsed) }
-    }
-
-    suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit> {
-        updateTweetViewData(status.id) { viewData ->
-            viewData.copy(translation = TranslationViewData.Loading)
-        }
-        return api.translate(status.actionableId, Locale.getDefault().language)
-            .map { translation ->
-                updateTweetViewData(status.id) { viewData ->
-                    viewData.copy(translation = TranslationViewData.Loaded(translation))
-                }
-            }
-            .onFailure {
-                updateTweetViewData(status.id) { viewData ->
-                    viewData.copy(translation = null)
-                }
-            }
-    }
-
-    fun untranslate(status: TweetViewData.Concrete) {
-        updateTweetViewData(status.id) { it.copy(translation = null) }
     }
 
     fun respondToFollowRequest(accept: Boolean, accountId: String, notification: NotificationViewData) {

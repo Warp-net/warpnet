@@ -36,7 +36,6 @@ class InstanceInfoRepository @Inject constructor() {
         maxFieldNameLength = null,
         maxFieldValueLength = null,
         version = null,
-        translationEnabled = false,
         warpnetApiVersion = null,
         vapidKey = null,
     )

@@ -28,7 +28,6 @@ import androidx.paging.LoadState
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.SimpleItemAnimator
-import at.connyduck.calladapter.networkresult.onFailure
 import at.connyduck.sparkbutton.compose.SparkButtonState
 import com.google.android.material.snackbar.BaseTransientBottomBar.LENGTH_LONG
 import com.google.android.material.snackbar.Snackbar
@@ -239,23 +238,6 @@ class NotificationRequestDetailsFragment :
 
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
-    }
-
-    override fun onTranslate(viewData: TweetViewData.Concrete) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.translate(viewData)
-                .onFailure {
-                    Snackbar.make(
-                        requireView(),
-                        getString(R.string.ui_error_translate, it.message),
-                        LENGTH_LONG
-                    ).show()
-                }
-        }
-    }
-
-    override fun onUntranslate(viewData: TweetViewData.Concrete) {
-        viewModel.untranslate(viewData)
     }
 
     override fun onBlock(block: Boolean, accountId: String, position: Int) {

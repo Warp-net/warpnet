@@ -122,7 +122,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private var followState: FollowState = FollowState.NOT_FOLLOWING
     private var blocking: Boolean = false
     private var muting: Boolean = false
-    private var blockingDomain: Boolean = false
     private var showingRetweets: Boolean = false
     private var subscribing: Boolean = false
     private var loadedAccount: Account? = null
@@ -686,7 +685,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
         blocking = relation.blocking
         muting = relation.muting
-        blockingDomain = relation.blockingDomain
         showingRetweets = relation.showingRetweets
 
         binding.accountFollowsYouTextView.visible(relation.followedBy)
@@ -815,24 +813,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                 getString(R.string.action_mute)
             }
 
-            loadedAccount?.let { loadedAccount ->
-                val muteDomain = menu.findItem(R.id.action_mute_domain)
-                domain = getDomain(loadedAccount.url)
-                when {
-                    // If we can't get the domain, there's no way we can mute it anyway...
-                    // If the account is from our own domain, muting it is no-op
-                    domain.isEmpty() || viewModel.isFromOwnDomain -> {
-                        menu.removeItem(R.id.action_mute_domain)
-                    }
-                    blockingDomain -> {
-                        muteDomain.title = getString(R.string.action_unmute_domain, domain)
-                    }
-                    else -> {
-                        muteDomain.title = getString(R.string.action_mute_domain, domain)
-                    }
-                }
-            }
-
             if (followState == FollowState.FOLLOWING) {
                 val showRetweets = menu.findItem(R.id.action_show_retweets)
                 showRetweets.title = if (showingRetweets) {
@@ -847,7 +827,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             // It shouldn't be possible to block, mute or report yourself.
             menu.removeItem(R.id.action_block)
             menu.removeItem(R.id.action_mute)
-            menu.removeItem(R.id.action_mute_domain)
             menu.removeItem(R.id.action_show_retweets)
             menu.removeItem(R.id.action_report)
         }
@@ -879,20 +858,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             .setPositiveButton(android.R.string.ok) { _, _ -> viewModel.changeFollowState() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
-    }
-
-    private fun toggleBlockDomain(instance: String) {
-        if (blockingDomain) {
-            viewModel.unblockDomain(instance)
-        } else {
-            MaterialAlertDialogBuilder(this)
-                .setMessage(getString(R.string.mute_domain_warning, instance))
-                .setPositiveButton(
-                    getString(R.string.mute_domain_warning_dialog_ok)
-                ) { _, _ -> viewModel.blockDomain(instance) }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
     }
 
     private fun toggleBlock() {
@@ -1018,10 +983,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             }
             R.id.action_add_or_remove_from_list -> {
                 ListSelectionFragment.newInstance(viewModel.accountId).show(supportFragmentManager, null)
-                return true
-            }
-            R.id.action_mute_domain -> {
-                toggleBlockDomain(domain)
                 return true
             }
             R.id.action_show_retweets -> {

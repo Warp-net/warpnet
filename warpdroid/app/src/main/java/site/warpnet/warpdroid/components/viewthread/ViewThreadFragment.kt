@@ -70,9 +70,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import at.connyduck.calladapter.networkresult.onFailure
 import at.connyduck.sparkbutton.compose.SparkButtonState
-import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.compose.ComposeActivity
@@ -280,7 +278,6 @@ class ViewThreadFragment :
                         DetailedTweet(
                             viewData,
                             listener = this@ViewThreadFragment,
-                            translationEnabled = instanceInfo.translationEnabled,
                             accounts = accounts,
                             showEdits = {
                                 onShowEdits(viewData)
@@ -316,7 +313,6 @@ class ViewThreadFragment :
                         TweetCard(
                             viewData,
                             listener = this@ViewThreadFragment,
-                            translationEnabled = instanceInfo.translationEnabled,
                             accounts = accounts,
                             modifier = Modifier
                                 .widthIn(max = 640.dp)
@@ -523,23 +519,6 @@ class ViewThreadFragment :
 
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
-    }
-
-    override fun onTranslate(viewData: TweetViewData.Concrete) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.translate(viewData)
-                .onFailure {
-                    Snackbar.make(
-                        requireView(),
-                        getString(R.string.ui_error_translate, it.message),
-                        Snackbar.LENGTH_LONG
-                    ).show()
-                }
-        }
-    }
-
-    override fun onUntranslate(viewData: TweetViewData.Concrete) {
-        viewModel.untranslate(viewData)
     }
 
     override fun onBlock(accountId: String) {

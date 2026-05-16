@@ -105,7 +105,6 @@ object WarpnetMapper {
             mutingNotifications = false,
             requested = false,
             showingRetweets = true,
-            blockingDomain = false,
         )
 
     fun WarpnetNotification.toNotification(author: WarpnetUser): Notification = Notification(

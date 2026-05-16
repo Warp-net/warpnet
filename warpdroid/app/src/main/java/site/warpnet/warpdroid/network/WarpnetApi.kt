@@ -29,7 +29,6 @@ import site.warpnet.warpdroid.components.filters.FilterExpiration
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.AccessToken
 import site.warpnet.warpdroid.entity.Account
-import site.warpnet.warpdroid.entity.Announcement
 import site.warpnet.warpdroid.entity.AppCredentials
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Conversation
@@ -42,12 +41,10 @@ import site.warpnet.warpdroid.entity.Instance
 import site.warpnet.warpdroid.entity.InstanceConfiguration
 import site.warpnet.warpdroid.entity.InstanceV1
 import site.warpnet.warpdroid.entity.TweetConfiguration
-import site.warpnet.warpdroid.entity.Marker
 import site.warpnet.warpdroid.entity.MastoList
 import site.warpnet.warpdroid.entity.MediaUploadResult
 import site.warpnet.warpdroid.entity.NewTweet
 import site.warpnet.warpdroid.entity.Notification
-import site.warpnet.warpdroid.entity.NotificationPolicy
 import site.warpnet.warpdroid.entity.NotificationRequest
 import site.warpnet.warpdroid.entity.NotificationSubscribeResult
 import site.warpnet.warpdroid.entity.Relationship
@@ -59,7 +56,6 @@ import site.warpnet.warpdroid.entity.TweetContext
 import site.warpnet.warpdroid.entity.TweetEdit
 import site.warpnet.warpdroid.entity.TweetSource
 import site.warpnet.warpdroid.entity.TimelineAccount
-import site.warpnet.warpdroid.entity.Translation
 import site.warpnet.warpdroid.entity.TrendingTag
 import site.warpnet.warpdroid.warpnet.WarpnetMapper
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
@@ -140,8 +136,6 @@ class WarpnetApi @Inject constructor(
     // ---------------------------------------------------------------
     // instance metadata / custom emojis
     // ---------------------------------------------------------------
-
-    suspend fun getCustomEmojis(): NetworkResult<List<Emoji>> = NetworkResult.success(emptyList())
 
     /**
      * Warpnet nodes expose [site.warpnet.transport.ProtocolIds.PUBLIC_GET_INFO]
@@ -377,19 +371,6 @@ class WarpnetApi @Inject constructor(
             ?: throw NoSuchElementException("notification $id not found")
     }
 
-    suspend fun markersWithAuth(
-        auth: String,
-        domain: String,
-        timelines: List<String>,
-    ): Map<String, Marker> = emptyMap()
-
-    suspend fun updateMarkersWithAuth(
-        auth: String,
-        domain: String,
-        homeLastReadId: String? = null,
-        notificationsLastReadId: String? = null,
-    ): NetworkResult<Unit> = NetworkResult.success(Unit)
-
     suspend fun notificationsWithAuth(
         auth: String,
         domain: String,
@@ -401,8 +382,6 @@ class WarpnetApi @Inject constructor(
             warpnet.getNotifications(userId = userId, cursor = minId.orEmpty(), limit = 40)
         }
     }
-
-    suspend fun clearNotifications(): NetworkResult<Unit> = NetworkResult.success(Unit)
 
     // ---------------------------------------------------------------
     // media
@@ -941,14 +920,6 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun domainBlocks(
-        maxId: String? = null,
-        sinceId: String? = null,
-        limit: Int? = null,
-    ): Response<List<String>> = stubList()
-
-    suspend fun blockDomain(domain: String): NetworkResult<Unit> = NetworkResult.success(Unit)
-    suspend fun unblockDomain(domain: String): NetworkResult<Unit> = NetworkResult.success(Unit)
 
     suspend fun likes(
         maxId: String?,
@@ -1081,20 +1052,6 @@ class WarpnetApi @Inject constructor(
     // polls, announcements, reports, search
     // ---------------------------------------------------------------
 
-    suspend fun announcements(): NetworkResult<List<Announcement>> = NetworkResult.success(emptyList())
-
-    suspend fun dismissAnnouncement(announcementId: String): NetworkResult<Unit> =
-        NetworkResult.success(Unit)
-
-    suspend fun addAnnouncementReaction(
-        announcementId: String,
-        name: String,
-    ): NetworkResult<Unit> = NetworkResult.success(Unit)
-
-    suspend fun removeAnnouncementReaction(
-        announcementId: String,
-        name: String,
-    ): NetworkResult<Unit> = NetworkResult.success(Unit)
 
     suspend fun report(
         accountId: String,
@@ -1188,24 +1145,9 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun translate(
-        statusId: String,
-        targetLanguage: String?,
-    ): NetworkResult<Translation> = stubFailure("translate")
-
     // ---------------------------------------------------------------
     // notification policy + requests
     // ---------------------------------------------------------------
-
-    suspend fun notificationPolicy(): NetworkResult<NotificationPolicy> = stubFailure("notificationPolicy")
-
-    suspend fun updateNotificationPolicy(
-        forNotFollowing: String?,
-        forNotFollowers: String?,
-        forNewAccounts: String?,
-        forPrivateMentions: String?,
-        forLimitedAccounts: String?,
-    ): NetworkResult<NotificationPolicy> = stubFailure("updateNotificationPolicy")
 
     suspend fun getNotificationRequests(
         maxId: String? = null,

@@ -28,7 +28,6 @@ import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
 import site.warpnet.warpdroid.entity.NotificationRequest
 import site.warpnet.warpdroid.network.WarpnetApi
-import site.warpnet.warpdroid.usecase.NotificationPolicyUsecase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.channels.BufferOverflow
@@ -41,7 +40,6 @@ import kotlinx.coroutines.launch
 class NotificationRequestsViewModel @Inject constructor(
     private val api: WarpnetApi,
     private val eventHub: EventHub,
-    private val notificationPolicyUsecase: NotificationPolicyUsecase
 ) : ViewModel() {
 
     var currentSource: NotificationRequestsPagingSource? = null
@@ -110,13 +108,6 @@ class NotificationRequestsViewModel @Inject constructor(
     }
 
     fun removeNotificationRequest(id: String) {
-        requestData.forEach { request ->
-            if (request.id == id) {
-                viewModelScope.launch {
-                    notificationPolicyUsecase.updateCounts(request.notificationsCount)
-                }
-            }
-        }
         requestData.removeAll { request -> request.id == id }
         currentSource?.invalidate()
     }

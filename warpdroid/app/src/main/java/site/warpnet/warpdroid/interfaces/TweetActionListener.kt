@@ -56,10 +56,6 @@ interface TweetActionListener : LinkListener {
 
     fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean)
 
-    fun onTranslate(viewData: TweetViewData.Concrete)
-
-    fun onUntranslate(viewData: TweetViewData.Concrete)
-
     fun onBlock(accountId: String)
 
     fun onMute(accountId: String, hideNotifications: Boolean, duration: Int?)

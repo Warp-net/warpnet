@@ -64,7 +64,6 @@ import site.warpnet.warpdroid.viewdata.TweetViewData
 fun TweetButtons(
     statusViewData: TweetViewData.Concrete,
     listener: TweetActionListener,
-    translationEnabled: Boolean,
     accounts: List<AccountEntity>,
     modifier: Modifier = Modifier,
     showStats: Boolean = !statusViewData.isDetailed && LocalPreferences.current.showStatsInline
@@ -348,7 +347,6 @@ fun TweetButtons(
                 onDismissRequest = {
                     moreVisible = !moreVisible
                 },
-                translationEnabled = translationEnabled,
                 accounts = accounts,
                 listener = listener
             )
@@ -363,7 +361,6 @@ fun TweetButtonsPreview() {
         TweetButtons(
             statusViewData = fakeTweetViewData(),
             listener = noopListener,
-            translationEnabled = false,
             accounts = emptyList(),
             modifier = Modifier
                 .width(320.dp)
@@ -380,7 +377,6 @@ fun TweetButtonsWithStatsPreview() {
         TweetButtons(
             statusViewData = fakeTweetViewData(),
             listener = noopListener,
-            translationEnabled = false,
             accounts = emptyList(),
             modifier = Modifier
                 .width(320.dp)

@@ -41,7 +41,6 @@ import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TrendingTag
 import site.warpnet.warpdroid.viewdata.QuoteViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
 import site.warpnet.warpdroid.viewdata.TrendingViewData
 
 fun Tweet.toViewData(
@@ -50,7 +49,6 @@ fun Tweet.toViewData(
     isCollapsed: Boolean,
     isDetailed: Boolean = false,
     filterKind: Filter.Kind,
-    translation: TranslationViewData? = null,
     filterActive: Boolean,
     isQuoteShowingContent: Boolean,
     isQuoteExpanded: Boolean,
@@ -62,7 +60,6 @@ fun Tweet.toViewData(
     isCollapsed = isCollapsed,
     isExpanded = isExpanded,
     isDetailed = isDetailed,
-    translation = translation,
     filter = this.getApplicableFilter(filterKind),
     filterActive = filterActive,
     quote = quote?.let {
@@ -74,7 +71,6 @@ fun Tweet.toViewData(
                 isCollapsed = isQuoteCollapsed,
                 isDetailed = false,
                 filterKind = filterKind,
-                translation = null,
                 filterActive = true,
                 isQuoteShowingContent = false,
                 isQuoteExpanded = false,

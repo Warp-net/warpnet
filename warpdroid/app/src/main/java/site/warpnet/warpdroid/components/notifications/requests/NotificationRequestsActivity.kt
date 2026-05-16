@@ -35,7 +35,6 @@ import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BaseActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.notifications.requests.details.NotificationRequestDetailsActivity
-import site.warpnet.warpdroid.components.preference.notificationpolicies.NotificationPoliciesActivity
 import site.warpnet.warpdroid.databinding.ActivityNotificationRequestsBinding
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.NotificationRequest
@@ -139,16 +138,7 @@ class NotificationRequestsActivity : BaseActivity(), MenuProvider {
         menuInflater.inflate(R.menu.activity_notification_requests, menu)
     }
 
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        return when (menuItem.itemId) {
-            R.id.open_settings -> {
-                val intent = NotificationPoliciesActivity.newIntent(this)
-                startActivityWithSlideInAnimation(intent)
-                true
-            }
-            else -> false
-        }
-    }
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean = false
 
     private fun onOpenRequestDetails(reqeuest: NotificationRequest) {
         notificationRequestDetails.launch(
