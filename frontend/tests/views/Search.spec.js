@@ -37,15 +37,11 @@ beforeEach(() => {
 });
 
 describe('Search.vue', () => {
-  it('renders the search input and tab buttons', () => {
+  it('renders the search input and the People tab', () => {
     renderSearch();
 
     expect(screen.getByPlaceholderText(/Search Warpnet/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Top' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'People' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Photos' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Videos' })).toBeInTheDocument();
   });
 
   it('prefills the search input from the route query', () => {
@@ -54,16 +50,14 @@ describe('Search.vue', () => {
     expect(screen.getByPlaceholderText(/Search Warpnet/i)).toHaveValue('vitest');
   });
 
-  it('defaults the active tab to Latest when no mode is in the route', () => {
+  it('marks the People tab active by default', () => {
     renderSearch();
 
-    const latest = screen.getByRole('button', { name: 'Latest' });
     const people = screen.getByRole('button', { name: 'People' });
-    expect(latest.className).toMatch(/border-blue/);
-    expect(people.className).not.toMatch(/border-blue/);
+    expect(people.className).toMatch(/border-blue/);
   });
 
-  it('uses the mode from the route query when provided', () => {
+  it('keeps People active when route query selects it', () => {
     renderSearch({ query: { m: 'People' } });
 
     const people = screen.getByRole('button', { name: 'People' });

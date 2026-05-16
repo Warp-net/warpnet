@@ -525,14 +525,27 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	if tweet.RetweetedBy == nil {
 		return tweet, local.DBError("retweet: by unknown")
 	}
+
+	// A retweet either echoes the source verbatim (plain retweet) or
+	// carries the retweeter's commentary (quote-style retweet, marked
+	// by a non-empty QuotedTweetId). The retweet-count / retweeters
+	// indexes always key off the *source* tweet id so the source can
+	// surface "X people retweeted me" regardless of which flavour was
+	// used.
+	isQuoteStyle := tweet.QuotedTweetId != nil && *tweet.QuotedTweetId != ""
+	sourceTweetId := tweet.Id
+	if isQuoteStyle {
+		sourceTweetId = *tweet.QuotedTweetId
+	}
+
 	retweetCountKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
-		AddRootID(tweet.Id).
+		AddRootID(sourceTweetId).
 		Build()
 
 	retweetersKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetersSubspace).
-		AddRootID(tweet.Id).
+		AddRootID(sourceTweetId).
 		AddRange(local.NoneRangeKey).
 		AddParentId(*tweet.RetweetedBy).
 		Build()
@@ -547,7 +560,14 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		return tweet, err
 	}
 
-	if tweet.UserId == *tweet.RetweetedBy {
+	// A quote-style retweet is its own tweet record (so the
+	// retweeter's commentary doesn't clobber the source under the
+	// retweeter's namespace). Mint a fresh id; the QuotedTweetId /
+	// QuotedUserId fields already point at the source.
+	switch {
+	case isQuoteStyle:
+		tweet.Id = ulid.Make().String()
+	case tweet.UserId == *tweet.RetweetedBy:
 		tweet.Id = domain.RetweetPrefix + tweet.Id
 	}
 
