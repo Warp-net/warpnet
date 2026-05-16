@@ -20,8 +20,6 @@ import site.warpnet.warpdroid.util.Success
 import site.warpnet.warpdroid.util.getDomain
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,8 +38,6 @@ class AccountViewModel @Inject constructor(
     private val _relationshipData = MutableStateFlow(null as Resource<Relationship>?)
     val relationshipData: StateFlow<Resource<Relationship>?> = _relationshipData.asStateFlow()
 
-    private val _noteSaved = MutableStateFlow(false)
-    val noteSaved: StateFlow<Boolean> = _noteSaved.asStateFlow()
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
@@ -54,8 +50,6 @@ class AccountViewModel @Inject constructor(
 
     /** True if the viewed account has the same domain as the active account */
     var isFromOwnDomain = false
-
-    private var noteUpdateJob: Job? = null
 
     private val activeAccount = accountManager.activeAccount!!
 
@@ -259,25 +253,6 @@ class AccountViewModel @Inject constructor(
                 _relationshipData.value = Error(relation, cause = t)
             }
         )
-    }
-
-    fun noteChanged(newNote: String) {
-        _noteSaved.value = false
-        noteUpdateJob?.cancel()
-        noteUpdateJob = viewModelScope.launch {
-            delay(1500)
-            warpnetApi.updateAccountNote(accountId, newNote)
-                .fold(
-                    {
-                        _noteSaved.value = true
-                        delay(4000)
-                        _noteSaved.value = false
-                    },
-                    { t ->
-                        Log.w(TAG, "Error updating note", t)
-                    }
-                )
-        }
     }
 
     fun refresh() {

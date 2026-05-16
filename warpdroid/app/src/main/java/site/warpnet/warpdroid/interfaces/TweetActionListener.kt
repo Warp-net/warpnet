@@ -60,8 +60,6 @@ interface TweetActionListener : LinkListener {
 
     fun onMute(accountId: String, hideNotifications: Boolean, duration: Int?)
 
-    fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean)
-
     fun onDelete(viewData: TweetViewData.Concrete)
 
     fun onRedraft(viewData: TweetViewData.Concrete)

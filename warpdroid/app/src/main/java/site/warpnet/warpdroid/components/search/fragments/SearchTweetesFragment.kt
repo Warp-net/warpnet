@@ -147,9 +147,6 @@ class SearchStatusesFragment :
         viewModel.mute(accountId, hideNotifications, duration)
     }
 
-    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
-        viewModel.muteConversation(viewData.id, !viewData.status.muted)
-    }
 
     override fun onDelete(viewData: TweetViewData.Concrete) {
         viewModel.delete(viewData.id)

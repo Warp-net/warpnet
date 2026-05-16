@@ -256,9 +256,6 @@ class NotificationRequestDetailsFragment :
         viewModel.mute(accountId, hideNotifications, duration)
     }
 
-    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
-        viewModel.muteConversation(viewData.id, mute)
-    }
 
     override fun onDelete(viewData: TweetViewData.Concrete) {
         viewModel.delete(viewData.id)

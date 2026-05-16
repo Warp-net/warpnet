@@ -24,7 +24,6 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.text.SpannableStringBuilder
-import android.text.TextWatcher
 import android.text.style.StyleSpan
 import android.view.Menu
 import android.view.MenuInflater
@@ -46,7 +45,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
-import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewpager2.widget.MarginPageTransformer
@@ -154,8 +152,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     }
 
     private lateinit var adapter: AccountPagerAdapter
-
-    private var noteWatcher: TextWatcher? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -425,12 +421,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                 }
             }
         }
-        lifecycleScope.launch {
-            viewModel.noteSaved.collect {
-                binding.saveNoteInfo.visible(it, View.INVISIBLE)
-            }
-        }
-
         // "Post failed" dialog should display in this activity
         draftsAlert.observeInContext(this, true)
     }
@@ -706,15 +696,9 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             }
         }
 
-        // remove the listener so it doesn't fire on non-user changes
-        binding.accountNoteTextInputLayout.editText?.removeTextChangedListener(noteWatcher)
-
-        binding.accountNoteTextInputLayout.visible(relation.note != null)
-        binding.accountNoteTextInputLayout.editText?.setText(relation.note)
-
-        noteWatcher = binding.accountNoteTextInputLayout.editText?.doAfterTextChanged { s ->
-            viewModel.noteChanged(s.toString())
-        }
+        // Warpnet has no per-target private note (Mastodon's "edit note
+        // about <user>") — the input layout stays hidden.
+        binding.accountNoteTextInputLayout.visible(false)
 
         updateButtons()
     }

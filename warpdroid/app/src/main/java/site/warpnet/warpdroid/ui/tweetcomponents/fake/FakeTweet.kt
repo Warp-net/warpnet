@@ -152,7 +152,6 @@ val noopListener = object : TweetActionListener {
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) { }
     override fun onBlock(accountId: String) { }
     override fun onMute(accountId: String, hideNotifications: Boolean, duration: Int?) { }
-    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) { }
     override fun onEdit(viewData: TweetViewData.Concrete) { }
     override fun onDelete(viewData: TweetViewData.Concrete) { }
     override fun onRedraft(viewData: TweetViewData.Concrete) { }

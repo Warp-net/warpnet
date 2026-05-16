@@ -41,7 +41,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import site.warpnet.warpdroid.BaseActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.db.entity.AccountEntity
@@ -271,22 +270,6 @@ fun TweetMoreMenu(
                     )
                 }
             }
-            if (isOwnStatus || accountIsInMentions(activeAccount, status.mentions)) {
-                DropdownMenuItem(
-                    text = {
-                        if (status.muted) {
-                            Text(stringResource(R.string.action_unmute_conversation))
-                        } else {
-                            Text(stringResource(R.string.action_mute_conversation))
-                        }
-                    },
-                    onClick = {
-                        onDismissRequest()
-                        listener.onMuteConversation(viewData, !status.muted)
-                    }
-                )
-            }
-
             if (!isOwnStatus) {
                 status.quote?.quotedStatus?.let { quotedStatus ->
                     if (quotedStatus.account.id == activeAccount?.accountId) {
@@ -357,14 +340,5 @@ fun TweetMoreMenu(
                 )
             }
         }
-    }
-}
-
-private fun accountIsInMentions(
-    account: AccountEntity?,
-    mentions: List<Tweet.Mention>
-): Boolean {
-    return mentions.any { mention ->
-        account?.username == mention.username && account.domain == mention.url.toUri().host
     }
 }

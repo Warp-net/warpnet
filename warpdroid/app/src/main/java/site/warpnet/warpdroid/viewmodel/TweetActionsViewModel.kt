@@ -170,23 +170,6 @@ abstract class TweetActionsViewModel(
         }
     }
 
-    fun muteConversation(statusId: String, mute: Boolean) {
-        viewModelScope.launch {
-            if (mute) {
-                warpnetApi.muteConversation(statusId)
-            } else {
-                warpnetApi.unmuteConversation(statusId)
-            }.fold(
-                onSuccess = { status ->
-                    eventHub.dispatch(TweetChangedEvent(status))
-                },
-                onFailure = { e ->
-                    Log.w(TAG, "Failed to mute conversation", e)
-                }
-            )
-        }
-    }
-
     fun mute(accountId: String, notifications: Boolean, duration: Int?) {
         viewModelScope.launch {
             warpnetApi.muteAccount(accountId, notifications, duration)

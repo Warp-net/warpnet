@@ -75,7 +75,6 @@ import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
-import site.warpnet.warpdroid.components.viewthread.edits.ViewEditsFragment
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.entity.Filter
@@ -279,9 +278,6 @@ class ViewThreadFragment :
                             viewData,
                             listener = this@ViewThreadFragment,
                             accounts = accounts,
-                            showEdits = {
-                                onShowEdits(viewData)
-                            },
                             modifier = Modifier
                                 .widthIn(max = 640.dp)
                                 .drawBehind {
@@ -529,10 +525,6 @@ class ViewThreadFragment :
         viewModel.mute(accountId, hideNotifications, duration)
     }
 
-    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
-        viewModel.muteConversation(viewData.id, mute)
-    }
-
     override fun onDelete(viewData: TweetViewData.Concrete) {
         viewModel.delete(viewData.id)
     }
@@ -598,21 +590,6 @@ class ViewThreadFragment :
 
     override fun removeQuote(viewData: TweetViewData.Concrete) {
         viewModel.removeQuote(viewData.status)
-    }
-
-    private fun onShowEdits(viewData: TweetViewData.Concrete) {
-        val viewEditsFragment = ViewEditsFragment.newInstance(viewData.actionableId)
-
-        parentFragmentManager.commit {
-            setCustomAnimations(
-                R.anim.activity_open_enter,
-                R.anim.activity_open_exit,
-                R.anim.activity_close_enter,
-                R.anim.activity_close_exit
-            )
-            replace(R.id.fragment_container, viewEditsFragment, "ViewEditsFragment_$id")
-            addToBackStack(null)
-        }
     }
 
     companion object {

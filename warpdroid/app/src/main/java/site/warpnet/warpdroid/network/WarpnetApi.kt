@@ -46,7 +46,6 @@ import site.warpnet.warpdroid.entity.ScheduledTweetReply
 import site.warpnet.warpdroid.entity.SearchResult
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TweetContext
-import site.warpnet.warpdroid.entity.TweetEdit
 import site.warpnet.warpdroid.entity.TweetSource
 import site.warpnet.warpdroid.entity.TimelineAccount
 import site.warpnet.warpdroid.entity.TrendingTag
@@ -467,9 +466,6 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun statusEdits(statusId: String): NetworkResult<List<TweetEdit>> =
-        NetworkResult.success(emptyList())
-
     suspend fun statusRetweetedBy(
         statusId: String,
         maxId: String?,
@@ -632,10 +628,6 @@ class WarpnetApi @Inject constructor(
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }
-
-    suspend fun muteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("muteConversation")
-
-    suspend fun unmuteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("unmuteConversation")
 
     suspend fun scheduledTweets(
         limit: Int? = null,
@@ -972,10 +964,6 @@ class WarpnetApi @Inject constructor(
         following: Boolean? = null,
     ): NetworkResult<SearchResult> = stubFailure("search")
 
-    suspend fun updateAccountNote(
-        accountId: String,
-        note: String,
-    ): NetworkResult<Relationship> = stubFailure("updateAccountNote")
 
     // ---------------------------------------------------------------
     // tags + trends
