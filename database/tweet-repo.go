@@ -526,18 +526,19 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		return tweet, local.DBError("retweet: by unknown")
 	}
 
-	// A retweet is keyed by the *source* tweet id. Whether the
-	// retweeter left a comment (Text non-empty == quote-style) or
-	// not (Text empty == plain retweet) is a presentation detail the
-	// client decides from the stored Text; storage doesn't care.
+	// A retweet is keyed by the *source* tweet id (which the wire
+	// puts in tweet.Id). Whether or not the retweeter attached a
+	// comment is a frontend concern — see below for how a comment
+	// turns the retweet record into a quote.
+	sourceTweetId := tweet.Id
 	retweetCountKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
-		AddRootID(tweet.Id).
+		AddRootID(sourceTweetId).
 		Build()
 
 	retweetersKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetersSubspace).
-		AddRootID(tweet.Id).
+		AddRootID(sourceTweetId).
 		AddRange(local.NoneRangeKey).
 		AddParentId(*tweet.RetweetedBy).
 		Build()
@@ -552,7 +553,20 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		return tweet, err
 	}
 
-	if tweet.UserId == *tweet.RetweetedBy {
+	// A quote — a regular tweet that *references* another tweet —
+	// is signalled by a non-empty QuotedTweetId on the wire. Store
+	// it as its own tweet under the retweeter's namespace with a
+	// fresh ULID so it lives alongside the retweeter's other
+	// posts (and a retweeter can quote the same source more than
+	// once with different commentary). The retweet count above
+	// still increments for the source so quotes show up in the
+	// source's "X people retweeted me" count. The reader decides
+	// from QuotedTweetId whether to render an embedded preview.
+	isQuote := tweet.QuotedTweetId != nil && *tweet.QuotedTweetId != ""
+	switch {
+	case isQuote:
+		tweet.Id = ulid.Make().String()
+	case tweet.UserId == *tweet.RetweetedBy:
 		tweet.Id = domain.RetweetPrefix + tweet.Id
 	}
 

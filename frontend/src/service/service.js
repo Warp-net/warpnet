@@ -1288,23 +1288,29 @@ export const warpnetService = {
     async retweetTweet({tweetId, userId, username, text, comment}) {
         const owner = this.getOwnerProfile()
 
-        // A retweet always references the source via id + user_id.
-        // The optional `comment` (when present) turns it into a quote:
-        // the retweeter's commentary lands in `text`. Without a
-        // comment, `text` echoes the source so the reader doesn't
-        // need a second hop to display it.
+        // The optional `comment` (when non-empty) turns the retweet
+        // into a quote — a regular tweet authored by the retweeter
+        // whose text is the comment and which carries quoted_tweet_id
+        // / quoted_user_id pointing at the source. Without a comment
+        // it's a plain retweet and we just echo the source so the
+        // reader doesn't need a second hop.
         const hasComment = !!comment && !!comment.trim();
+        const body = {
+            id: tweetId,
+            user_id: userId,
+            username: username,
+            text: hasComment ? comment.trim() : text,
+            retweeted_by: owner.user_id,
+            created_at: new Date().toISOString(),
+            root_id: "",
+        };
+        if (hasComment) {
+            body.quoted_tweet_id = tweetId;
+            body.quoted_user_id = userId;
+        }
         return await this.sendToNode({
             path: PUBLIC_POST_RETWEET,
-            body: {
-                id: tweetId,
-                user_id: userId,
-                username: username,
-                text: hasComment ? comment.trim() : text,
-                retweeted_by: owner.user_id,
-                created_at: new Date().toISOString(),
-                root_id: "",
-            },
+            body,
         });
     },
 
