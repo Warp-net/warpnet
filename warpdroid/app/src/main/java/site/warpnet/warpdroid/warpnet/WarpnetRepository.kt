@@ -137,6 +137,9 @@ class WarpnetRepository @Inject constructor(
     private val viewsCountAdapter = moshi.adapter<ViewsCountResponse>()
     private val newTweetAdapter = moshi.adapter<WarpnetTweet>()
     private val deleteTweetAdapter = moshi.adapter<DeleteTweetEvent>()
+    private val getChatsAdapter = moshi.adapter<site.warpnet.transport.dto.GetChatsEvent>()
+    private val getChatsRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetChatsResponse>()
+    private val deleteChatAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteChatEvent>()
     private val unretweetAdapter = moshi.adapter<UnretweetEvent>()
 
     // -----------------------------------------------------------------
@@ -869,6 +872,31 @@ class WarpnetRepository @Inject constructor(
             runCatching { getStatus(tweetId = bm.tweetId, userId = bm.ownerUserId) }.getOrNull()
         }
         return tweets to page.cursor
+    }
+
+    // -----------------------------------------------------------------
+    // Chats (1:1 DMs on the fat node — surfaced as Mastodon Conversations)
+    // -----------------------------------------------------------------
+
+    suspend fun getChats(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetChat>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_CHATS,
+            getChatsAdapter.toJson(
+                site.warpnet.transport.dto.GetChatsEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getChatsRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.transport.dto.WarpnetChat>() to ""
+        return page.chats to page.cursor
+    }
+
+    suspend fun deleteChat(userId: String, chatId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_DELETE_CHAT,
+            deleteChatAdapter.toJson(
+                site.warpnet.transport.dto.DeleteChatEvent(userId = userId, chatId = chatId),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------

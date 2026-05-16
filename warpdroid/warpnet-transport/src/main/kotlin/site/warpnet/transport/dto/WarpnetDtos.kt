@@ -511,3 +511,38 @@ data class TweetStatsResponse(
     @Json(name = "replies_count") val repliesCount: Long = 0,
     @Json(name = "views_count") val viewsCount: Long = 0,
 )
+
+@JsonClass(generateAdapter = true)
+data class GetChatsEvent(
+    @Json(name = "user_id") val userId: String,
+    val limit: Int = 40,
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetChatsResponse(
+    val chats: List<WarpnetChat> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class WarpnetChat(
+    val id: String = "",
+    @Json(name = "owner_id") val ownerId: String = "",
+    @Json(name = "other_user_id") val otherUserId: String = "",
+    @Json(name = "last_message") val lastMessage: String = "",
+    @Json(name = "created_at") val createdAt: String = "",
+    @Json(name = "updated_at") val updatedAt: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetChatEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "chat_id") val chatId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class DeleteChatEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "chat_id") val chatId: String,
+)

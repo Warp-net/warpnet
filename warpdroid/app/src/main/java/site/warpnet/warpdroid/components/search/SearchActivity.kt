@@ -93,7 +93,6 @@ class SearchActivity : BottomSheetActivity(), MenuProvider, SearchView.OnQueryTe
         return when (position) {
             0 -> getString(R.string.title_posts)
             1 -> getString(R.string.title_accounts)
-            2 -> getString(R.string.title_hashtags_dialog)
             else -> throw IllegalArgumentException("Unknown page index: $position")
         }
     }

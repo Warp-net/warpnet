@@ -853,16 +853,35 @@ class WarpnetApi @Inject constructor(
     }
 
     // ---------------------------------------------------------------
-    // conversations (Warpnet DMs; Warpnet chat has different shape)
+    // conversations (Warpnet 1:1 chats surfaced as Mastodon conversations)
     // ---------------------------------------------------------------
 
     suspend fun getConversations(
         maxId: String? = null,
         limit: Int? = null,
-    ): Response<List<Conversation>> = stubList()
+    ): Response<List<Conversation>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return paginated {
+            val (chats, cursor) = warpnet.getChats(
+                userId = active.accountId,
+                cursor = maxId.orEmpty(),
+                limit = limit ?: 40,
+            )
+            val conversations = chats.mapNotNull { chat ->
+                runCatching {
+                    val other = warpnet.getTimelineAccount(chat.otherUserId)
+                    WarpnetMapper.chatToConversation(chat, other)
+                }.getOrNull()
+            }
+            conversations to cursor
+        }
+    }
 
-    suspend fun deleteConversation(conversationId: String): NetworkResult<Unit> =
-        NetworkResult.success(Unit)
+    suspend fun deleteConversation(conversationId: String): NetworkResult<Unit> = result {
+        val active = accountManager.activeAccount
+            ?: throw IllegalStateException("No active account")
+        warpnet.deleteChat(userId = active.accountId, chatId = conversationId)
+    }
 
     // ---------------------------------------------------------------
     // polls, announcements, reports, search

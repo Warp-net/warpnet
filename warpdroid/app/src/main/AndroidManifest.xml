@@ -129,17 +129,12 @@
         </activity>
         <activity android:name=".LicenseActivity" />
         <activity android:name=".components.filters.FiltersActivity" />
-        <activity
-            android:name=".components.report.ReportActivity"
-            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name="site.warpnet.warpdroid.components.filters.EditFilterActivity"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".components.pairing.PairingActivity"
             android:exported="false"
             android:theme="@style/WarpdroidBaseTheme" />
-        <activity android:name=".components.notifications.requests.NotificationRequestsActivity"/>
-        <activity android:name=".components.notifications.requests.details.NotificationRequestDetailsActivity"/>
 
         <receiver
             android:name=".receiver.SendTweetBroadcastReceiver"
