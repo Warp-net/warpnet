@@ -104,13 +104,6 @@ class ComposeViewModel @AssistedInject constructor(
     )
     val showContentWarning: StateFlow<Boolean> = _showContentWarning.asStateFlow()
 
-    private val _scheduledAt: SavedStateFlow<String?> = SavedStateFlow(
-        savedStateHandle = state,
-        key = "SCHEDULED_AT",
-        initialValue = composeOptions?.scheduledAt
-    )
-    val scheduledAt: StateFlow<String?> = _scheduledAt.asStateFlow()
-
     private val _media: SavedStateFlow<List<QueuedMedia>> = SavedStateFlow(
         savedStateHandle = state,
         key = MEDIA_KEY,
@@ -378,9 +371,8 @@ class ComposeViewModel @AssistedInject constructor(
         val textChanged = content.orEmpty() != startingText.orEmpty()
         val contentWarningChanged = contentWarning.orEmpty() != startingContentWarning
         val mediaChanged = _media.value.isNotEmpty()
-        val didScheduledTimeChange = _scheduledAt.isChanged()
 
-        return modifiedInitialState || textChanged || contentWarningChanged || mediaChanged || didScheduledTimeChange
+        return modifiedInitialState || textChanged || contentWarningChanged || mediaChanged
     }
 
     private fun isEmpty(content: String?, contentWarning: String?): Boolean {
@@ -410,10 +402,6 @@ class ComposeViewModel @AssistedInject constructor(
      * Uses current state plus provided arguments.
      */
     suspend fun sendStatus(content: String, spoilerText: String, accountId: Long) {
-        if (!composeOptions?.scheduledTootId.isNullOrEmpty()) {
-            api.deleteScheduledStatus(composeOptions.scheduledTootId)
-        }
-
         val attachedMedia = _media.value.map { item ->
             MediaToSend(
                 localId = item.localId,
@@ -430,7 +418,6 @@ class ComposeViewModel @AssistedInject constructor(
             visibility = _statusVisibility.value.stringValue,
             sensitive = attachedMedia.isNotEmpty() && (_markMediaAsSensitive.value || _showContentWarning.value),
             media = attachedMedia,
-            scheduledAt = _scheduledAt.value,
             inReplyToId = inReplyToId,
             replyingTweetContent = null,
             replyingStatusAuthorUsername = null,
@@ -512,10 +499,6 @@ class ComposeViewModel @AssistedInject constructor(
                 emptyList()
             }
         }
-    }
-
-    fun updateScheduledAt(newScheduledAt: String?) {
-        _scheduledAt.value = newScheduledAt
     }
 
     private companion object {

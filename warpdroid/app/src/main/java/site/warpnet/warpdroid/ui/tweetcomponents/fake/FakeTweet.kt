@@ -160,7 +160,6 @@ val noopListener = object : TweetActionListener {
     override fun onViewAccount(accountId: String) { }
     override fun onViewUrl(url: String) { }
     override fun onReply(viewData: TweetViewData.Concrete) { }
-    override fun onReport(viewData: TweetViewData.Concrete) { }
     override fun onShowQuote(viewData: TweetViewData.Concrete) { }
     override fun removeQuote(viewData: TweetViewData.Concrete) { }
 }

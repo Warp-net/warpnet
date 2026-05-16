@@ -11,7 +11,6 @@ data class BlockEvent(val accountId: String) : Event
 data class MuteEvent(val accountId: String) : Event
 data class TweetDeletedEvent(val statusId: String) : Event
 data class TweetComposedEvent(val status: Tweet) : Event
-data class TweetScheduledEvent(val scheduledStatusId: String) : Event
 data class ProfileEditedEvent(val newProfileData: Account) : Event
 data class PreferenceChangedEvent(val preferenceKey: String) : Event
 data class FilterUpdatedEvent(val filterContext: List<Filter.Kind>) : Event

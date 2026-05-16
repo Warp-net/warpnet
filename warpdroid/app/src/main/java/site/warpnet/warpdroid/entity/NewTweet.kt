@@ -29,7 +29,6 @@ data class NewTweet(
     val sensitive: Boolean,
     @Json(name = "media_ids") val mediaIds: List<String> = emptyList(),
     @Json(name = "media_attributes") val mediaAttributes: List<MediaAttribute> = emptyList(),
-    @Json(name = "scheduled_at") val scheduledAt: String? = null,
     val language: String? = null
 )
 

@@ -313,20 +313,6 @@ class NetworkTimelineViewModel @Inject constructor(
                 sinceId = sinceId,
                 limit = limit
             )
-            Kind.TAG -> {
-                val firstHashtag = tags[0]
-                val additionalHashtags = tags.subList(1, tags.size)
-                api.hashtagTimeline(
-                    hashtag = firstHashtag,
-                    any = additionalHashtags,
-                    local = null,
-                    maxId = maxId,
-                    minId = minId,
-                    sinceId = sinceId,
-                    limit = limit
-                )
-            }
-
             Kind.USER -> api.accountStatuses(
                 accountId = id!!,
                 maxId = maxId,
@@ -371,17 +357,6 @@ class NetworkTimelineViewModel @Inject constructor(
                 minId = minId,
                 sinceId = sinceId,
                 limit = limit
-            )
-            Kind.LIST -> api.listTimeline(
-                listId = id!!,
-                maxId = maxId,
-                minId = minId,
-                sinceId = sinceId,
-                limit = limit
-            )
-            Kind.PUBLIC_TRENDING_STATUSES -> api.trendingStatuses(
-                limit = limit,
-                offset = maxId
             )
             Kind.QUOTES -> api.quotingStatuses(
                 statusId = id!!,

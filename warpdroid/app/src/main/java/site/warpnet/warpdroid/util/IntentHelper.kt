@@ -7,7 +7,6 @@ import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.ComposeOptions
-import site.warpnet.warpdroid.components.report.ReportActivity
 import site.warpnet.warpdroid.components.viewthread.ViewThreadActivity
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Attachment
@@ -26,10 +25,13 @@ fun Context.viewThread(viewData: TweetViewData.Concrete) {
     startActivityWithSlideInAnimation(intent)
 }
 
-fun Context.viewTag(tag: String) {
-    val intent = TweetListActivity.newHashtagIntent(this, tag)
-    startActivityWithSlideInAnimation(intent)
-}
+/**
+ * Warpnet has no hashtag timeline (§5 B2 Tier B item without backend),
+ * so any onViewTag arriving here is a deliberate no-op. Hashtag spans
+ * still render in tweet text — they just aren't navigable.
+ */
+@Suppress("UnusedReceiverParameter", "UNUSED_PARAMETER")
+fun Context.viewTag(tag: String) = Unit
 
 fun Context.viewAccount(accountId: String) {
     val intent = AccountActivity.newIntent(this, accountId)
@@ -90,11 +92,5 @@ fun Context.showRetweets(viewData: TweetViewData.Concrete) {
 
 fun Context.showQuotes(viewData: TweetViewData.Concrete) {
     val intent = TweetListActivity.newQuotesIntent(this, viewData.actionableId)
-    startActivityWithSlideInAnimation(intent)
-}
-
-fun Context.report(viewData: TweetViewData.Concrete) {
-    val account = viewData.actionable.account
-    val intent = ReportActivity.getIntent(this, account.id, account.username, viewData.id)
     startActivityWithSlideInAnimation(intent)
 }

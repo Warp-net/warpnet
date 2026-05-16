@@ -61,7 +61,7 @@ enum class NotificationChannelData(
     ),
 
     ADMIN(
-        listOf(Notification.Type.SignUp, Notification.Type.Report),
+        listOf(Notification.Type.SignUp),
         R.string.notification_channel_admin,
         R.string.notification_channel_admin_description
     ),

@@ -205,7 +205,6 @@ class NotificationHelper @Inject constructor(
             Notification.Type.Like -> account.notificationsLiked
             Notification.Type.SignUp -> account.notificationsAdmin
             Notification.Type.Update -> account.notificationsUpdates
-            Notification.Type.Report -> account.notificationsAdmin
             else -> account.notificationsOther
         }
     }
@@ -480,7 +479,6 @@ class NotificationHelper @Inject constructor(
             Notification.Type.Retweet -> context.getString(R.string.notification_retweet_format, accountName)
             Notification.Type.SignUp -> context.getString(R.string.notification_sign_up_format, accountName)
             Notification.Type.Update -> context.getString(R.string.notification_update_format, accountName)
-            Notification.Type.Report -> context.getString(R.string.notification_report_format, account.domain)
             Notification.Type.SeveredRelationship -> context.getString(R.string.relationship_severance_event_title)
             Notification.Type.ModerationWarning -> context.getString(R.string.moderation_warning)
             Notification.Type.Quote -> context.getString(R.string.notification_quote_format, accountName)
@@ -504,11 +502,6 @@ class NotificationHelper @Inject constructor(
             } else {
                 notification.status?.content?.parseAsWarpnetHtml()?.toString()
             }
-            Notification.Type.Report -> return context.getString(
-                R.string.notification_header_report_format,
-                notification.account.name.unicodeWrap(),
-                notification.report!!.targetAccount.name.unicodeWrap()
-            )
             Notification.Type.SeveredRelationship -> return severedRelationShipText(context, notification.event!!, account.domain)
             Notification.Type.ModerationWarning -> return context.getString(notification.moderationWarning!!.action.text)
             else -> return null

@@ -118,19 +118,8 @@ class NetworkTimelineRemoteMediator(
                 val links = HttpHeaderLink.parse(linkHeader)
                 val next = HttpHeaderLink.findByRelationType(links, "next")
 
-                var filteredData = data
-                if (viewModel.kind == TimelineViewModel.Kind.PUBLIC_TRENDING_STATUSES) {
-                    // Trending statuses use offset for paging, not IDs. If a new status has been added to the remote
-                    // feed after we performed the initial fetch, then the feed will have moved, but our offset won't.
-                    // As a result, we'd get repeat statuses. This addresses that.
-                    filteredData = data.filter { new -> viewModel.statusData.none { existing -> new.id == existing.id } }
-
-                    viewModel.nextKey = next?.uri?.getQueryParameter("offset")
-                } else {
-                    viewModel.nextKey = next?.uri?.getQueryParameter("max_id")
-                }
-
-                viewModel.statusData.addAll(filteredData)
+                viewModel.nextKey = next?.uri?.getQueryParameter("max_id")
+                viewModel.statusData.addAll(data)
             }
 
             viewModel.currentSource?.invalidate()

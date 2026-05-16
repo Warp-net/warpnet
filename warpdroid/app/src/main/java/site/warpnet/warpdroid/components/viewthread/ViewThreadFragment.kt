@@ -90,7 +90,6 @@ import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.openLink
 import site.warpnet.warpdroid.util.reply
-import site.warpnet.warpdroid.util.report
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.viewAccount
 import site.warpnet.warpdroid.util.viewMedia
@@ -560,9 +559,6 @@ class ViewThreadFragment :
         requireContext().reply(viewData, accountManager.activeAccount!!)
     }
 
-    override fun onReport(viewData: TweetViewData.Concrete) {
-        requireContext().report(viewData)
-    }
 
     override fun onViewUrl(url: String) {
         val status: TweetViewData.Concrete? = (viewModel.uiState.value as? ThreadUiState.Success)?.detailedStatus

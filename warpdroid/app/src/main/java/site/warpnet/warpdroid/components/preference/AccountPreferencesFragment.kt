@@ -31,7 +31,6 @@ import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.PreferenceChangedEvent
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
 import site.warpnet.warpdroid.components.filters.FiltersActivity
-import site.warpnet.warpdroid.components.followedtags.FollowedTagsActivity
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Account
 import site.warpnet.warpdroid.entity.Tweet
@@ -81,16 +80,6 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
             }
 
             // "Customize tabs" is removed in Warpdroid — the two tabs are fixed.
-
-            preference {
-                setTitle(R.string.title_followed_hashtags)
-                icon = icon(R.drawable.ic_tag_24dp)
-                setOnPreferenceClickListener {
-                    val intent = Intent(context, FollowedTagsActivity::class.java)
-                    activity?.startActivityWithSlideInAnimation(intent)
-                    true
-                }
-            }
 
             preference {
                 setTitle(R.string.action_view_mutes)

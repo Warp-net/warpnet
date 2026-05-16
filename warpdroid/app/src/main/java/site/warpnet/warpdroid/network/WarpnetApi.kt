@@ -34,21 +34,15 @@ import site.warpnet.warpdroid.entity.DeletedTweet
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.FilterKeyword
-import site.warpnet.warpdroid.entity.HashTag
-import site.warpnet.warpdroid.entity.MastoList
 import site.warpnet.warpdroid.entity.MediaUploadResult
 import site.warpnet.warpdroid.entity.NewTweet
 import site.warpnet.warpdroid.entity.Notification
-import site.warpnet.warpdroid.entity.NotificationRequest
 import site.warpnet.warpdroid.entity.Relationship
-import site.warpnet.warpdroid.entity.ScheduledTweet
-import site.warpnet.warpdroid.entity.ScheduledTweetReply
 import site.warpnet.warpdroid.entity.SearchResult
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TweetContext
 import site.warpnet.warpdroid.entity.TweetSource
 import site.warpnet.warpdroid.entity.TimelineAccount
-import site.warpnet.warpdroid.entity.TrendingTag
 import site.warpnet.warpdroid.warpnet.WarpnetMapper
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
 import java.util.Date
@@ -256,24 +250,6 @@ class WarpnetApi @Inject constructor(
         warpnet.getHomeTimeline(cursor = maxId.orEmpty(), limit = limit ?: 20)
     }
 
-    suspend fun hashtagTimeline(
-        hashtag: String,
-        any: List<String>?,
-        local: Boolean?,
-        maxId: String?,
-        minId: String? = null,
-        sinceId: String?,
-        limit: Int?,
-    ): Response<List<Tweet>> = stubList()
-
-    suspend fun listTimeline(
-        listId: String,
-        maxId: String?,
-        minId: String? = null,
-        sinceId: String?,
-        limit: Int?,
-    ): Response<List<Tweet>> = stubList()
-
     // ---------------------------------------------------------------
     // notifications
     // ---------------------------------------------------------------
@@ -395,13 +371,6 @@ class WarpnetApi @Inject constructor(
             )
         }
     }
-
-    suspend fun createScheduledStatus(
-        auth: String,
-        domain: String,
-        idempotencyKey: String,
-        status: NewTweet,
-    ): NetworkResult<ScheduledTweetReply> = stubFailure("createScheduledStatus")
 
     /**
      * Fetch a single status. Warpnet's wire requires the tweet's author, since
@@ -629,13 +598,6 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun scheduledTweets(
-        limit: Int? = null,
-        maxId: String? = null,
-    ): Response<List<ScheduledTweet>> = stubList()
-
-    suspend fun deleteScheduledStatus(scheduledStatusId: String): NetworkResult<Unit> =
-        NetworkResult.success(Unit)
 
     // ---------------------------------------------------------------
     // accounts
@@ -891,45 +853,6 @@ class WarpnetApi @Inject constructor(
     }
 
     // ---------------------------------------------------------------
-    // lists
-    // ---------------------------------------------------------------
-
-    suspend fun getLists(): NetworkResult<List<MastoList>> = NetworkResult.success(emptyList())
-
-    suspend fun getListsIncludesAccount(accountId: String): NetworkResult<List<MastoList>> =
-        NetworkResult.success(emptyList())
-
-    suspend fun createList(
-        title: String,
-        exclusive: Boolean?,
-        replyPolicy: String,
-    ): NetworkResult<MastoList> = stubFailure("createList")
-
-    suspend fun updateList(
-        listId: String,
-        title: String,
-        exclusive: Boolean?,
-        replyPolicy: String,
-    ): NetworkResult<MastoList> = stubFailure("updateList")
-
-    suspend fun deleteList(listId: String): NetworkResult<Unit> = NetworkResult.success(Unit)
-
-    suspend fun getAccountsInList(
-        listId: String,
-        limit: Int,
-    ): NetworkResult<List<TimelineAccount>> = NetworkResult.success(emptyList())
-
-    suspend fun deleteAccountFromList(
-        listId: String,
-        accountIds: List<String>,
-    ): NetworkResult<Unit> = NetworkResult.success(Unit)
-
-    suspend fun addAccountToList(
-        listId: String,
-        accountIds: List<String>,
-    ): NetworkResult<Unit> = NetworkResult.success(Unit)
-
-    // ---------------------------------------------------------------
     // conversations (Warpnet DMs; Warpnet chat has different shape)
     // ---------------------------------------------------------------
 
@@ -946,15 +869,6 @@ class WarpnetApi @Inject constructor(
     // ---------------------------------------------------------------
 
 
-    suspend fun report(
-        accountId: String,
-        statusIds: Set<String>,
-        comment: String,
-        forward: Boolean?,
-        category: String?,
-        ruleIds: Set<String>?,
-    ): NetworkResult<Unit> = NetworkResult.success(Unit)
-
     suspend fun search(
         query: String?,
         type: String? = null,
@@ -964,29 +878,6 @@ class WarpnetApi @Inject constructor(
         following: Boolean? = null,
     ): NetworkResult<SearchResult> = stubFailure("search")
 
-
-    // ---------------------------------------------------------------
-    // tags + trends
-    // ---------------------------------------------------------------
-
-    suspend fun tag(name: String): NetworkResult<HashTag> = stubFailure("tag")
-
-    suspend fun followedTags(
-        minId: String? = null,
-        sinceId: String? = null,
-        maxId: String? = null,
-        limit: Int? = null,
-    ): Response<List<HashTag>> = stubList()
-
-    suspend fun followTag(name: String): NetworkResult<HashTag> = stubFailure("followTag")
-    suspend fun unfollowTag(name: String): NetworkResult<HashTag> = stubFailure("unfollowTag")
-
-    suspend fun trendingTags(): NetworkResult<List<TrendingTag>> = NetworkResult.success(emptyList())
-
-    suspend fun trendingStatuses(
-        limit: Int? = null,
-        offset: String? = null,
-    ): Response<List<Tweet>> = stubList()
 
     suspend fun quotingStatuses(
         statusId: String,
@@ -1004,22 +895,6 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    // ---------------------------------------------------------------
-    // notification policy + requests
-    // ---------------------------------------------------------------
-
-    suspend fun getNotificationRequests(
-        maxId: String? = null,
-        minId: String? = null,
-        sinceId: String? = null,
-        limit: Int? = null,
-    ): Response<List<NotificationRequest>> = stubList()
-
-    suspend fun acceptNotificationRequest(notificationId: String): NetworkResult<Unit> =
-        NetworkResult.success(Unit)
-
-    suspend fun dismissNotificationRequest(notificationId: String): NetworkResult<Unit> =
-        NetworkResult.success(Unit)
 
     // ---------------------------------------------------------------
     // quotes

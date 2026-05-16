@@ -31,7 +31,6 @@ import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.util.reply
-import site.warpnet.warpdroid.util.report
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.viewMedia
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
@@ -179,9 +178,6 @@ class SearchStatusesFragment :
         requireContext().reply(viewData, viewModel.activeAccount!!)
     }
 
-    override fun onReport(viewData: TweetViewData.Concrete) {
-        requireContext().report(viewData)
-    }
 
     override fun onShowQuote(viewData: TweetViewData.Concrete) {
         viewModel.showQuote(viewData)

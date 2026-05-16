@@ -304,13 +304,6 @@ fun TweetMoreMenu(
                         }
                     }
                 )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_report)) },
-                    onClick = {
-                        onDismissRequest()
-                        listener.onReport(viewData)
-                    }
-                )
             } else {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_edit)) },

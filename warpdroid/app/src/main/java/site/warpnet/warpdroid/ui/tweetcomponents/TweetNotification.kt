@@ -281,7 +281,6 @@ fun TweetNotificationPreview() {
                 type = Notification.Type.Like,
                 account = fakeTimelineAccount,
                 statusViewData = fakeTweetViewData(),
-                report = null,
                 event = null,
                 moderationWarning = null,
                 emoji = null,

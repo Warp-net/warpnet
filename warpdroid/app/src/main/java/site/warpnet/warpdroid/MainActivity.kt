@@ -78,10 +78,8 @@ import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.Companion.canHandleMimeType
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.preference.PreferencesActivity
-import site.warpnet.warpdroid.components.scheduled.ScheduledTweetActivity
 import site.warpnet.warpdroid.components.search.SearchActivity
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
-import site.warpnet.warpdroid.components.trending.TrendingActivity
 import site.warpnet.warpdroid.databinding.ActivityMainBinding
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.db.entity.AccountEntity
@@ -310,8 +308,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         setupDrawer(
             savedInstanceState,
             addSearchButton = hideTopToolbar,
-            addTrendingTagsButton = false,
-            addTrendingTweetsButton = false,
         )
 
         lifecycleScope.launch {
@@ -541,8 +537,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     private fun setupDrawer(
         savedInstanceState: Bundle?,
         addSearchButton: Boolean,
-        addTrendingTagsButton: Boolean,
-        addTrendingTweetsButton: Boolean
     ) {
         val drawerOpenClickListener = View.OnClickListener { binding.mainDrawerLayout.open() }
 
@@ -610,8 +604,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         binding.mainDrawer.apply {
             refreshMainDrawerItems(
                 addSearchButton = addSearchButton,
-                addTrendingTagsButton = addTrendingTagsButton,
-                addTrendingTweetsButton = addTrendingTweetsButton
             )
             setSavedInstance(savedInstanceState)
         }
@@ -619,8 +611,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     private fun refreshMainDrawerItems(
         addSearchButton: Boolean,
-        addTrendingTagsButton: Boolean,
-        addTrendingTweetsButton: Boolean
     ) {
         binding.mainDrawer.apply {
             itemAdapter.clear()
@@ -657,20 +647,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     onClick = {
                         val intent = AccountListActivity.newIntent(context, AccountListActivity.Type.FOLLOW_REQUESTS)
                         startActivityWithSlideInAnimation(intent)
-                    }
-                },
-                primaryDrawerItem {
-                    nameRes = R.string.action_lists
-                    iconRes = R.drawable.ic_list_alt_24dp
-                    onClick = {
-                        startActivityWithSlideInAnimation(ListsActivity.newIntent(context))
-                    }
-                },
-                primaryDrawerItem {
-                    nameRes = R.string.action_access_scheduled_posts
-                    iconRes = R.drawable.ic_schedule_24dp
-                    onClick = {
-                        startActivityWithSlideInAnimation(ScheduledTweetActivity.newIntent(context))
                     }
                 },
                 DividerDrawerItem(),
@@ -718,31 +694,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 )
             }
 
-            if (addTrendingTagsButton) {
-                binding.mainDrawer.addItemsAtPosition(
-                    5,
-                    primaryDrawerItem {
-                        nameRes = R.string.title_public_trending_hashtags
-                        iconRes = R.drawable.ic_whatshot_24dp
-                        onClick = {
-                            startActivityWithSlideInAnimation(TrendingActivity.getIntent(context))
-                        }
-                    }
-                )
-            }
-
-            if (addTrendingTweetsButton) {
-                binding.mainDrawer.addItemsAtPosition(
-                    6,
-                    primaryDrawerItem {
-                        nameRes = R.string.title_public_trending_statuses
-                        iconRes = R.drawable.ic_local_fire_department_24dp
-                        onClick = {
-                            startActivityWithSlideInAnimation(TweetListActivity.newTrendingIntent(context))
-                        }
-                    }
-                )
-            }
         }
 
         // Warpdroid: developer tools relied on the removed local timeline cache.

@@ -74,8 +74,6 @@ interface TweetActionListener : LinkListener {
 
     fun onReply(viewData: TweetViewData.Concrete)
 
-    fun onReport(viewData: TweetViewData.Concrete)
-
     /**
      * Show a quote despite the author being blocked or muted.
      * @param viewData The parent status containing the quote.

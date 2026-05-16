@@ -37,14 +37,12 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.appstore.TweetComposedEvent
-import site.warpnet.warpdroid.appstore.TweetScheduledEvent
 import site.warpnet.warpdroid.components.compose.MediaUploader
 import site.warpnet.warpdroid.components.compose.UploadEvent
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.MediaAttribute
 import site.warpnet.warpdroid.entity.NewTweet
-import site.warpnet.warpdroid.entity.ScheduledTweetReply
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.getParcelableExtraCompat
@@ -232,7 +230,6 @@ class SendTweetService : Service() {
                 visibility = statusToSend.visibility,
                 sensitive = statusToSend.sensitive,
                 mediaIds = media.map { it.id!! },
-                scheduledAt = statusToSend.scheduledAt,
                 language = statusToSend.language,
                 mediaAttributes = media.map { mediaItem ->
                     MediaAttribute(
@@ -244,24 +241,13 @@ class SendTweetService : Service() {
                 }
             )
 
-            val scheduled = !statusToSend.scheduledAt.isNullOrEmpty()
-
             val sendResult = if (isNew) {
-                if (!scheduled) {
-                    warpnetApi.createStatus(
-                        "Bearer " + account.accessToken,
-                        account.domain,
-                        statusToSend.idempotencyKey,
-                        newStatus
-                    )
-                } else {
-                    warpnetApi.createScheduledStatus(
-                        "Bearer " + account.accessToken,
-                        account.domain,
-                        statusToSend.idempotencyKey,
-                        newStatus
-                    )
-                }
+                warpnetApi.createStatus(
+                    "Bearer " + account.accessToken,
+                    account.domain,
+                    statusToSend.idempotencyKey,
+                    newStatus
+                )
             } else {
                 warpnetApi.editStatus(
                     statusToSend.statusId!!,
@@ -278,9 +264,7 @@ class SendTweetService : Service() {
 
                 mediaUploader.cancelUploadScope(*statusToSend.media.map { it.localId }.toIntArray())
 
-                if (scheduled) {
-                    eventHub.dispatch(TweetScheduledEvent((sentStatus as ScheduledTweetReply).id))
-                } else if (!isNew) {
+                if (!isNew) {
                     eventHub.dispatch(TweetChangedEvent(sentStatus as Tweet))
                 } else {
                     eventHub.dispatch(TweetComposedEvent(sentStatus as Tweet))
@@ -476,7 +460,6 @@ data class TweetToSend(
     val visibility: String,
     val sensitive: Boolean,
     val media: List<MediaToSend>,
-    val scheduledAt: String?,
     val inReplyToId: String?,
     val replyingTweetContent: String?,
     val replyingStatusAuthorUsername: String?,

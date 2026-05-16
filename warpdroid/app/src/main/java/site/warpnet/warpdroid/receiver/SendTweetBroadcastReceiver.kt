@@ -95,7 +95,6 @@ class SendTweetBroadcastReceiver : BroadcastReceiver() {
                         visibility = visibility.stringValue,
                         sensitive = false,
                         media = emptyList(),
-                        scheduledAt = null,
                         inReplyToId = citedStatusId,
                         replyingTweetContent = null,
                         replyingStatusAuthorUsername = null,

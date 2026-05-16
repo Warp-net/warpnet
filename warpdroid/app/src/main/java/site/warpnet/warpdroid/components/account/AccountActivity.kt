@@ -65,10 +65,8 @@ import site.warpnet.warpdroid.EditProfileActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.ViewMediaActivity
-import site.warpnet.warpdroid.components.account.list.ListSelectionFragment
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity
-import site.warpnet.warpdroid.components.report.ReportActivity
 import site.warpnet.warpdroid.databinding.ActivityAccountBinding
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.db.entity.AccountEntity
@@ -812,7 +810,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             menu.removeItem(R.id.action_block)
             menu.removeItem(R.id.action_mute)
             menu.removeItem(R.id.action_show_retweets)
-            menu.removeItem(R.id.action_report)
         }
 
         if (!viewModel.isSelf && followState != FollowState.FOLLOWING) {
@@ -886,10 +883,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
     }
 
-    override fun onViewTag(tag: String) {
-        val intent = TweetListActivity.newHashtagIntent(this, tag)
-        startActivityWithSlideInAnimation(intent)
-    }
+    override fun onViewTag(tag: String) = Unit
 
     override fun onViewAccount(accountId: String) {
         val intent = Intent(this, AccountActivity::class.java)
@@ -965,24 +959,12 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                 toggleMute()
                 return true
             }
-            R.id.action_add_or_remove_from_list -> {
-                ListSelectionFragment.newInstance(viewModel.accountId).show(supportFragmentManager, null)
-                return true
-            }
             R.id.action_show_retweets -> {
                 viewModel.changeShowRetweetsState()
                 return true
             }
             R.id.action_refresh -> {
                 onRefresh()
-                return true
-            }
-            R.id.action_report -> {
-                loadedAccount?.let { loadedAccount ->
-                    startActivity(
-                        ReportActivity.getIntent(this, viewModel.accountId, loadedAccount.username)
-                    )
-                }
                 return true
             }
         }

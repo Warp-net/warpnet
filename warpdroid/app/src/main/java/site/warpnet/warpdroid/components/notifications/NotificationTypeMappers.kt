@@ -47,7 +47,6 @@ fun Notification.toViewData(
         isQuoteCollapsed = isQuoteCollapsed,
         isQuoteShown = isQuoteShown
     ),
-    report = report,
     moderationWarning = moderationWarning,
     event = event,
     emoji = emoji,
