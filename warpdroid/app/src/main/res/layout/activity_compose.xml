@@ -188,14 +188,6 @@
                 android:scrollbars="none"
                 android:visibility="gone" />
 
-            <site.warpnet.warpdroid.components.compose.view.PollPreviewView
-                android:id="@+id/pollPreview"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="@dimen/poll_preview_min_width"
-                android:visibility="gone"
-                tools:visibility="visible" />
-
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
@@ -235,17 +227,6 @@
             android:text="@string/action_add_media"
             android:textSize="?attr/tweet_text_medium"
             app:drawableStartCompat="@drawable/ic_image_24dp"
-            app:drawableTint="?android:attr/textColorTertiary" />
-
-        <TextView
-            android:id="@+id/addPollTextActionTextView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:drawablePadding="8dp"
-            android:padding="8dp"
-            android:text="@string/action_add_poll"
-            android:textSize="?attr/tweet_text_medium"
-            app:drawableStartCompat="@drawable/ic_insert_chart_24dp"
             app:drawableTint="?android:attr/textColorTertiary" />
 
     </LinearLayout>

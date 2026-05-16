@@ -91,29 +91,4 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tweet_edit_media_preview" />
 
-    <!-- hidden because as of Warpnet 4.0.2 we don't get this info via the api -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/tweet_edit_poll_options"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:nestedScrollingEnabled="false"
-        app:layout_constraintEnd_toEndOf="@+id/tweet_edit_info"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tweet_edit_media_sensitivity" />
-
-    <TextView
-        android:id="@+id/tweet_edit_poll_description"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="14dp"
-        android:layout_marginTop="6dp"
-        android:layout_marginEnd="14dp"
-        android:textSize="?attr/tweet_text_medium"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tweet_edit_poll_options"
-        tools:text="ends at 12:30" />
-
 </androidx.constraintlayout.widget.ConstraintLayout>

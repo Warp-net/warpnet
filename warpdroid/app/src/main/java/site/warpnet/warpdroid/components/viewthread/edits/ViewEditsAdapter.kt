@@ -129,9 +129,6 @@ class ViewEditsAdapter(
             listener,
         )
 
-        binding.tweetEditPollOptions.hide()
-        binding.tweetEditPollDescription.hide()
-
         if (edit.mediaAttachments.isEmpty()) {
             binding.tweetEditMediaPreview.hide()
             binding.tweetEditMediaSensitivity.hide()
