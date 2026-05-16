@@ -102,6 +102,12 @@ export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 const stateMap = new Map();
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
+
+// In-memory mirror of the local block list, populated lazily so
+// the UI can call isUserBlocked() synchronously across tweet
+// renders without hitting the node per row.
+const blockedIdsCache = new Set();
+let blockedCachePrimed = false;
 const defaultLimit = 20
 const endCursor = "end"
 
@@ -444,25 +450,71 @@ export const warpnetService = {
     async blockUser(targetUserId) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
-        return await this.sendToNode({
+        const resp = await this.sendToNode({
             path: PRIVATE_POST_BLOCK,
             body: {
                 blocker_id: owner.user_id,
                 blockee_id: targetUserId,
             },
         });
+        // Mirror the write into the local cache so isUserBlocked
+        // reports the new state immediately, without waiting for a
+        // refetch.
+        blockedIdsCache.add(targetUserId);
+        return resp;
     },
 
     async unblockUser(targetUserId) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
-        return await this.sendToNode({
+        const resp = await this.sendToNode({
             path: PRIVATE_POST_UNBLOCK,
             body: {
                 blocker_id: owner.user_id,
                 blockee_id: targetUserId,
             },
         });
+        blockedIdsCache.delete(targetUserId);
+        return resp;
+    },
+
+    // isUserBlocked answers from the local cache. The first call lazily
+    // pulls the full block list (a single page at a time until exhausted)
+    // so we don't have to roundtrip per-tweet to know whether to hide it.
+    async isUserBlocked(targetUserId) {
+        if (!targetUserId) return false;
+        await this.ensureBlockedCache();
+        return blockedIdsCache.has(targetUserId);
+    },
+
+    async ensureBlockedCache() {
+        if (blockedCachePrimed) return;
+        const owner = this.getOwnerProfile()
+        if (!owner) { blockedCachePrimed = true; return; }
+        let cursor = '';
+        const seen = new Set();
+        try {
+            while (true) {
+                const resp = await this.sendToNode({
+                    path: PRIVATE_GET_BLOCKS,
+                    body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+                });
+                const ids = resp?.ids || [];
+                for (const id of ids) seen.add(id);
+                const next = resp?.cursor || '';
+                if (!next || next === endCursor || ids.length === 0) break;
+                if (next === cursor) break;
+                cursor = next;
+            }
+        } catch (err) {
+            console.warn('failed to prime blocked-users cache:', err);
+        }
+        // Merge with anything blockUser() may have written before the
+        // initial prime completed.
+        for (const id of blockedIdsCache) seen.add(id);
+        blockedIdsCache.clear();
+        for (const id of seen) blockedIdsCache.add(id);
+        blockedCachePrimed = true;
     },
 
     async getBlocks(cursorReset) {
@@ -481,7 +533,18 @@ export const warpnetService = {
         });
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('blocks', resp.cursor || 'end')
+        // Reflect this page into the local cache.
+        for (const id of (resp.ids || [])) blockedIdsCache.add(id);
+        if ((resp.cursor || endCursor) === endCursor) blockedCachePrimed = true;
         return resp;
+    },
+
+    // isUserBlockedSync returns the current cached answer without
+    // touching the network. Callers that haven't awaited
+    // ensureBlockedCache() may get a stale `false` immediately after
+    // app start.
+    isUserBlockedSync(targetUserId) {
+        return !!targetUserId && blockedIdsCache.has(targetUserId);
     },
 
     async muteUser(targetUserId) {

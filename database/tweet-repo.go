@@ -58,10 +58,6 @@ const (
 	reTweetersSubspace      = "RETWEETERS"
 	viewsSubspace           = "VIEWS"
 	viewersSubspace         = "VIEWERS"
-
-	// ViewDedupTTL is the time window during which repeated views of the
-	// same tweet by the same viewer are not counted.
-	ViewDedupTTL = 30 * time.Minute
 )
 
 type TweetsStorer interface {
@@ -712,10 +708,12 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 }
 
 // RecordView increments the view counter for tweetId on behalf of viewerId.
-// Repeated calls from the same viewerId within ViewDedupTTL are no-ops, so
-// rapid re-views do not inflate the count. The increment is atomic via the
-// underlying transaction and replicated through the CRDT stats store, so it
-// is safe under concurrent calls across nodes.
+// The (tweetId, viewerId) pair is recorded permanently, so subsequent
+// views from the same viewer — across sessions, restarts, days — are
+// no-ops. The first call wins; the counter is incremented exactly once
+// per unique viewer. The increment is atomic via the underlying
+// transaction and replicated through the CRDT stats store, so it is
+// safe under concurrent calls across nodes.
 func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("view: empty tweet id")
@@ -749,8 +747,8 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	_, err = txn.Get(viewerKey)
 	switch {
 	case err == nil:
-		// Repeat view within the dedup window: drop the read-only txn
-		// and report the current canonical count.
+		// This viewer has already been counted for this tweet — drop
+		// the read-only txn and report the current canonical count.
 		if err := txn.Commit(); err != nil {
 			return 0, err
 		}
@@ -761,7 +759,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 		return 0, err
 	}
 
-	if err := txn.SetWithTTL(viewerKey, []byte(viewerId), ViewDedupTTL); err != nil {
+	if err := txn.Set(viewerKey, []byte(viewerId)); err != nil {
 		return 0, err
 	}
 	localCount, err := txn.Increment(viewsKey)

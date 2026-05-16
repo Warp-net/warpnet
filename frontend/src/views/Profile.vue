@@ -106,7 +106,12 @@ resulting from the use or misuse of this software.
               </button>
               <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white rounded-md shadow-lg py-1 z-10">
                 <button type="button" @click="muteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Mute @{{ profile.id }}</button>
-                <button type="button" @click="blockFromProfile" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Block @{{ profile.id }}</button>
+                <button
+                  type="button"
+                  @click="askBlockToggle"
+                  class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+                  :class="isBlocked ? 'text-blue' : 'text-red-600'"
+                >{{ isBlocked ? `Unblock @${profile.id}` : `Block @${profile.id}` }}</button>
               </div>
               <button
                 v-if="isFollower()"
@@ -249,7 +254,14 @@ resulting from the use or misuse of this software.
             <i class="fas fa-plus lg:hidden"></i>
           </button>
         </div>
-        <Tweets v-if="!noUser" :tweets="sortedTweets" />
+        <div
+          v-if="isBlocked"
+          class="mx-5 my-4 p-4 border border-lighter rounded bg-lightest text-sm text-dark"
+        >
+          <p class="font-bold">You blocked @{{ profile.id }}.</p>
+          <p class="mt-1">Their tweets are hidden. Use the menu above to unblock if you change your mind.</p>
+        </div>
+        <Tweets v-if="!noUser && !isBlocked" :tweets="sortedTweets" />
       </div>
       <DefaultRightBar
           :profile="profile"
@@ -265,6 +277,18 @@ resulting from the use or misuse of this software.
         v-if="showEditProfileModal"
         :showEditProfileModal="showEditProfileModal"
         @close="onEditProfileClosed"
+      />
+
+      <ConfirmDialog
+        :show="showBlockConfirm"
+        :title="isBlocked ? 'Unblock user' : 'Block user'"
+        :message="isBlocked
+          ? `Unblock @${profile?.id || ''}? They'll be able to follow you and see your tweets again.`
+          : `Block @${profile?.id || ''}? They'll no longer be able to follow you or see your tweets.`"
+        :confirm-label="isBlocked ? 'Unblock' : 'Block'"
+        :destructive="!isBlocked"
+        @cancel="showBlockConfirm = false"
+        @confirm="onBlockConfirmed"
       />
   </div>
 </template>
@@ -284,6 +308,7 @@ export default {
     EditProfileOverlay: defineAsyncComponent(() => import('@/components/EditProfileOverlay.vue')),
     SetUpProfileOverlay: defineAsyncComponent(() => import('@/components/SetUpProfileOverlay.vue')),
     Tweets: defineAsyncComponent(() => import('@/components/Tweets.vue')),
+    ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
   },
   data() {
     return {
@@ -303,6 +328,8 @@ export default {
       followerStatus: new Map(),
       subscribed: false,
       profileMenuOpen: false,
+      isBlocked: false,
+      showBlockConfirm: false,
     };
   },
   computed: {
@@ -418,14 +445,43 @@ export default {
         console.error(`failed to mute [${this.profile.id}]`, err);
       }
     },
-    async blockFromProfile() {
+    // askBlockToggle opens the ConfirmDialog with text that depends on
+    // the current block state; onBlockConfirmed performs the actual
+    // block / unblock and refreshes local UI so the user can't keep
+    // pressing the menu item indefinitely.
+    askBlockToggle() {
       this.profileMenuOpen = false;
-      if (!confirm(`Block @${this.profile.id}? They will no longer be able to follow you or see your tweets.`)) return;
+      this.showBlockConfirm = true;
+    },
+    async onBlockConfirmed() {
+      this.showBlockConfirm = false;
+      const target = this.profile?.id;
+      if (!target) return;
       try {
-        await warpnetService.blockUser(this.profile.id);
-        this.$router.push({ name: 'Home' });
+        if (this.isBlocked) {
+          await warpnetService.unblockUser(target);
+          this.isBlocked = false;
+          // Reload the profile so its tweets reappear.
+          await this.loadProfileBlockState();
+        } else {
+          await warpnetService.blockUser(target);
+          this.isBlocked = true;
+          // Hide the (now blocked) user's tweets immediately so the
+          // page reflects the block without a manual refresh.
+          this.tweets = [];
+        }
       } catch (err) {
-        console.error(`failed to block [${this.profile.id}]`, err);
+        console.error(`failed to toggle block on [${target}]`, err);
+      }
+    },
+    async loadProfileBlockState() {
+      const target = this.profile?.id;
+      if (!target) return;
+      try {
+        this.isBlocked = await warpnetService.isUserBlocked(target);
+      } catch (err) {
+        console.warn(`failed to read block state for [${target}]:`, err);
+        this.isBlocked = false;
       }
     },
     async loadMore() {
@@ -479,6 +535,10 @@ export default {
       )
 
       this.isSelf = this.isMySelf(profileId);
+
+      if (!this.isSelf) {
+        await this.loadProfileBlockState();
+      }
 
       [this.users, this.tweets, this.followers, this.followings] = await Promise.all([
         warpnetService.getUsers({profileId:profileId, cursorReset:true}),

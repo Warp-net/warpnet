@@ -71,7 +71,12 @@ resulting from the use or misuse of this software.
           </button>
           <div v-if="showMenu" class="absolute right-0 top-10 mt-1 w-44 bg-white rounded-md shadow-lg py-1 z-10">
             <button type="button" @click="mute" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Mute @{{ user.id }}</button>
-            <button type="button" @click="block" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Block @{{ user.id }}</button>
+            <button
+              type="button"
+              @click="askBlockToggle"
+              class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+              :class="isBlocked ? 'text-blue' : 'text-red-600'"
+            >{{ isBlocked ? `Unblock @${user.id}` : `Block @${user.id}` }}</button>
           </div>
         </div>
       </div>
@@ -84,10 +89,22 @@ resulting from the use or misuse of this software.
         </p>
       </div>
     </div>
+    <ConfirmDialog
+      :show="showBlockConfirm"
+      :title="isBlocked ? 'Unblock user' : 'Block user'"
+      :message="isBlocked
+        ? `Unblock @${user.id}? They'll be able to follow you and see your tweets again.`
+        : `Block @${user.id}? They'll no longer be able to follow you or see your tweets.`"
+      :confirm-label="isBlocked ? 'Unblock' : 'Block'"
+      :destructive="!isBlocked"
+      @cancel="showBlockConfirm = false"
+      @confirm="onBlockConfirmed"
+    />
   </div>
 </template>
 
 <script>
+import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 
 export default {
@@ -102,12 +119,17 @@ export default {
       following: false,
     }
   },
+  components: {
+    ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
+  },
   data() {
     return {
       followingLabel: "Following",
       profile: {},
       followingStatus: new Map(),
       showMenu: false,
+      isBlocked: false,
+      showBlockConfirm: false,
     };
   },
   methods: {
@@ -140,13 +162,22 @@ export default {
         console.error(`failed to mute [${this.user.id}]`, err);
       }
     },
-    async block() {
+    askBlockToggle() {
       this.showMenu = false;
-      if (!confirm(`Block @${this.user.id}? They will no longer be able to follow you or see your tweets.`)) return;
+      this.showBlockConfirm = true;
+    },
+    async onBlockConfirmed() {
+      this.showBlockConfirm = false;
       try {
-        await warpnetService.blockUser(this.user.id);
+        if (this.isBlocked) {
+          await warpnetService.unblockUser(this.user.id);
+          this.isBlocked = false;
+        } else {
+          await warpnetService.blockUser(this.user.id);
+          this.isBlocked = true;
+        }
       } catch (err) {
-        console.error(`failed to block [${this.user.id}]`, err);
+        console.error(`failed to toggle block on [${this.user.id}]`, err);
       }
     },
     async pushToProfilePage(profileId) {
@@ -165,6 +196,12 @@ export default {
 
     const status = await warpnetService.isFollowing(this.user.id);
     this.followingStatus.set(this.user.id, status);
+
+    try {
+      this.isBlocked = await warpnetService.isUserBlocked(this.user.id);
+    } catch (err) {
+      console.warn(`failed to read block state for [${this.user.id}]:`, err);
+    }
   },
 };
 </script>
