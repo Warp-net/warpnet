@@ -290,27 +290,6 @@ data class EditTweetEvent(
     @Json(name = "user_id") val userId: String,
     val text: String,
 )
-
-
-// NewQuoteEvent is a flat WarpnetTweet — the wire shape mirrors
-// PRIVATE_POST_TWEET (which is also a flat Tweet). The Quote-specific
-// fields are quotedTweetId / quotedUserId carried by WarpnetTweet.
-typealias NewQuoteEvent = WarpnetTweet
-
-@JsonClass(generateAdapter = true)
-data class DeleteQuoteEvent(
-    @Json(name = "tweet_id") val tweetId: String,
-    @Json(name = "user_id") val userId: String,
-)
-
-@JsonClass(generateAdapter = true)
-data class GetQuotingEvent(
-    @Json(name = "tweet_id") val tweetId: String,
-    @Json(name = "owner_user_id") val ownerUserId: String,
-    val cursor: String = "",
-    val limit: Int = 40,
-)
-
 @JsonClass(generateAdapter = true)
 data class GetFollowRequestsEvent(
     @Json(name = "user_id") val userId: String,

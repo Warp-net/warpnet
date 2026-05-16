@@ -196,6 +196,9 @@ export default {
       });
     },
     openNotification(notification) {
+      // Mark this one read so the badge decrements even if the click
+      // ends up not navigating (overlay / unknown type).
+      this.markRead(notification);
       // If the notification points at a tweet, navigate directly.
       // Otherwise show the lightweight overlay (follow / unknown types).
       if (notification?.tweet_id) {
@@ -209,6 +212,24 @@ export default {
       this.overlayNotificationId = notification?.id || '';
       this.overlayOpen = true;
     },
+    async markRead(notification) {
+      if (!notification || !notification.id || notification.is_read) return;
+      try {
+        await warpnetService.markNotificationRead(notification.id);
+        notification.is_read = true;
+      } catch (err) {
+        console.error('Failed to mark notification read:', err);
+      }
+    },
+    async markAllRead() {
+      const unread = this.notifications.filter(n => n && n.id && !n.is_read);
+      if (unread.length === 0) return;
+      await Promise.all(unread.map(n =>
+        warpnetService.markNotificationRead(n.id)
+          .then(() => { n.is_read = true; })
+          .catch(err => console.error('Failed to mark notification read:', err))
+      ));
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
@@ -219,6 +240,9 @@ export default {
       if (resp && resp.notifications) {
         this.notifications = resp.notifications;
       }
+      // Visiting the Notifications view counts as "the user saw them".
+      // Mark every unread item read so the SideNav badge clears.
+      await this.markAllRead();
     } catch (err) {
       console.error('Failed to load notifications:', err);
     } finally {

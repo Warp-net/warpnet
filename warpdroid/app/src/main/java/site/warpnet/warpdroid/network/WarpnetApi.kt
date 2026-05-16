@@ -889,38 +889,21 @@ class WarpnetApi @Inject constructor(
         following: Boolean? = null,
     ): NetworkResult<SearchResult> = stubFailure("search")
 
+    // ---------------------------------------------------------------
+    // quotes — backend route was folded into retweet-with-comment;
+    // these are kept as stubs only to satisfy the warpdroid UI surface
+    // that still calls them. Quote-as-retweet runs through the normal
+    // retweet path with a non-empty comment.
+    // ---------------------------------------------------------------
 
     suspend fun quotingStatuses(
         statusId: String,
         limit: Int? = null,
         offset: String? = null,
-    ): Response<List<Tweet>> {
-        val active = accountManager.activeAccount ?: return stubList()
-        return paginated {
-            warpnet.getQuoting(
-                tweetId = statusId,
-                ownerUserId = active.accountId,
-                cursor = offset.orEmpty(),
-                limit = limit ?: 40,
-            )
-        }
-    }
-
-
-    // ---------------------------------------------------------------
-    // quotes
-    // ---------------------------------------------------------------
+    ): Response<List<Tweet>> = stubList()
 
     suspend fun removeQuote(
         id: String,
         quotingStatusId: String,
-    ): NetworkResult<Tweet> {
-        val active = accountManager.activeAccount ?: return stubFailure("removeQuote")
-        return result {
-            warpnet.deleteQuote(userId = active.accountId, tweetId = quotingStatusId)
-            // We don't re-fetch the deleted quote (it's gone); the
-            // returned tweet is the parent that was being quoted.
-            warpnet.getStatus(tweetId = id, userId = active.accountId)
-        }
-    }
+    ): NetworkResult<Tweet> = stubFailure("removeQuote")
 }

@@ -53,9 +53,6 @@ export const PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
 export const PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
 export const PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
-export const PUBLIC_POST_QUOTE = "/public/post/quote/0.0.0"
-export const PUBLIC_GET_QUOTING = "/public/get/quoting/0.0.0"
-export const PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"
 export const PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
 export const PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
 export const PRIVATE_POST_FOLLOW_REQUEST_REJECT = "/private/post/follow/request/reject/0.0.0"
@@ -679,48 +676,6 @@ export const warpnetService = {
         });
     },
 
-    async quoteTweet(quotedTweetId, quotedUserId, text) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PUBLIC_POST_QUOTE,
-            body: {
-                user_id: owner.user_id,
-                username: owner.username || '',
-                text: text,
-                quoted_tweet_id: quotedTweetId,
-                quoted_user_id: quotedUserId,
-                created_at: new Date().toISOString(),
-                root_id: '',
-            },
-        });
-    },
-
-    async deleteQuote(tweetId) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PUBLIC_DELETE_QUOTE,
-            body: {
-                tweet_id: tweetId,
-                user_id: owner.user_id,
-            },
-        });
-    },
-
-    async getQuoting(tweetId, ownerUserId, cursor) {
-        const resp = await this.sendToNode({
-            path: PUBLIC_GET_QUOTING,
-            body: {
-                tweet_id: tweetId,
-                owner_user_id: ownerUserId,
-                limit: defaultLimit,
-                cursor: cursor || '',
-            },
-        });
-        return resp || { tweets: [], cursor: 'end' };
-    },
-
     async editTweet(tweetId, text) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
@@ -940,7 +895,23 @@ export const warpnetService = {
                 notification_id: notificationId,
             },
         }
-        return await this.sendToNode(request);
+        const resp = await this.sendToNode(request);
+
+        // Optimistic local update so the SideNav badge ticks down
+        // without waiting for the next poll. Flip the matching
+        // notification's is_read and decrement unread_count.
+        const target = latestNotifications.notifications.find(n => n && n.id === notificationId);
+        if (target && !target.is_read) {
+            target.is_read = true;
+            latestNotifications = {
+                unread_count: Math.max(0, (latestNotifications.unread_count || 1) - 1),
+                notifications: latestNotifications.notifications,
+            };
+            for (const cb of notificationSubscribers) {
+                cb(latestNotifications);
+            }
+        }
+        return resp;
     },
 
     subscribeNotifications(callback) {
@@ -1314,23 +1285,31 @@ export const warpnetService = {
         localStorage.removeItem(cacheKey)
     },
 
-    async retweetTweet({tweetId, userId, username, text}) {
+    async retweetTweet({tweetId, userId, username, text, comment}) {
         const owner = this.getOwnerProfile()
 
-        const request = {
-            path: PUBLIC_POST_RETWEET,
-            body: {
-                id: tweetId,
-                user_id: userId,
-                username: username,
-                text: text,
-                retweeted_by: owner.user_id,
-                created_at: new Date().toISOString(),
-                root_id: "",
-            },
+        const body = {
+            id: tweetId,
+            user_id: userId,
+            username: username,
+            text: text,
+            retweeted_by: owner.user_id,
+            created_at: new Date().toISOString(),
+            root_id: "",
+        };
+        // Quote-style retweet: user added a comment. Replace the body
+        // text with the comment and pin the source tweet via the
+        // quoted_* fields so the reader can resolve and render it.
+        if (comment && comment.trim()) {
+            body.text = comment.trim();
+            body.quoted_tweet_id = tweetId;
+            body.quoted_user_id = userId;
         }
 
-        return await this.sendToNode(request);
+        return await this.sendToNode({
+            path: PUBLIC_POST_RETWEET,
+            body,
+        });
     },
 
     async unretweetTweet(tweetId) {

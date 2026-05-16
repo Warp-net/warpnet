@@ -3,7 +3,8 @@
   <div
     v-if="show"
     class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-    @click.self="$emit('close')"
+    @click.self.stop="$emit('close')"
+    @click.stop
   >
     <div class="bg-white rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
       <div class="px-5 py-3 border-b border-lighter flex items-center">

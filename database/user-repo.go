@@ -445,6 +445,9 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 }
 
 func matchesUserQuery(u domain.User, q string) bool {
+	if strings.Contains(strings.ToLower(u.Id), q) {
+		return true
+	}
 	if strings.Contains(strings.ToLower(u.Username), q) {
 		return true
 	}

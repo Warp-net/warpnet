@@ -123,7 +123,7 @@ resulting from the use or misuse of this software.
                 :aria-label="subscribed ? 'Unsubscribe from notifications' : 'Subscribe to notifications'"
                 :title="subscribed ? 'Unsubscribe from new-tweet alerts' : 'Subscribe to new-tweet alerts'"
               >
-                <i class="fas" :class="subscribed ? 'fa-bell' : 'fa-bell-slash'" aria-hidden="true"></i>
+                <i class="fas" :class="subscribed ? 'fa-bell-slash' : 'fa-bell'" aria-hidden="true"></i>
               </button>
               <button
                 v-if="!isFollowing()"

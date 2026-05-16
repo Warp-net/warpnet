@@ -3,11 +3,12 @@
   <div
     v-if="show"
     class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-    @click.self="$emit('close')"
+    @click.self.stop="$emit('close')"
+    @click.stop
   >
-    <div class="bg-white rounded-lg w-full max-w-lg flex flex-col">
+    <div class="bg-white rounded-lg w-full max-w-lg flex flex-col" @click.stop>
       <div class="px-5 py-3 border-b border-lighter flex items-center">
-        <h2 class="font-bold text-lg">Quote tweet</h2>
+        <h2 class="font-bold text-lg">Retweet with comment</h2>
         <button
           @click="$emit('close')"
           class="ml-auto text-dark hover:text-black"
@@ -42,7 +43,7 @@
             @click="submit"
             :disabled="saving || !text.trim()"
             class="text-white bg-blue rounded-full font-semibold px-4 py-1 hover:bg-darkblue disabled:opacity-50"
-          >{{ saving ? 'Posting…' : 'Quote' }}</button>
+          >{{ saving ? 'Posting…' : 'Retweet' }}</button>
         </div>
       </div>
     </div>
@@ -71,11 +72,20 @@ export default {
       if (!body) return;
       this.saving = true;
       try {
-        const result = await warpnetService.quoteTweet(this.tweet.id, this.tweet.user_id, body);
+        // Quote semantics now ride on the regular retweet wire path —
+        // a comment-bearing retweet carries the comment in `text` and
+        // pins the source tweet via `quoted_tweet_id` / `quoted_user_id`.
+        const result = await warpnetService.retweetTweet({
+          tweetId: this.tweet.id,
+          userId: this.tweet.user_id,
+          username: this.tweet.username,
+          text: this.tweet.text,
+          comment: body,
+        });
         this.$emit('posted', result);
         this.$emit('close');
       } catch (err) {
-        console.error('Failed to quote tweet:', err);
+        console.error('Failed to retweet with comment:', err);
       } finally {
         this.saving = false;
       }
