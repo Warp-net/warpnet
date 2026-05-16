@@ -74,6 +74,10 @@ type TweetsStorer interface {
 	Delete(userID, tweetID string) error
 	UnRetweet(retweetedByUserID, tweetId string) error
 	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
+	Update(tweet domain.Tweet) error
+	Pin(userId, tweetId string) (domain.Tweet, error)
+	Unpin(userId, tweetId string) (domain.Tweet, error)
+	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
 }
 
 type TimelineUpdater interface {
@@ -507,4 +511,98 @@ func StreamGetTweetStatsHandler(
 			RepliesCount:  repliesCount,
 		}, nil
 	}
+}
+
+func StreamPinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		return setPinnedFromEvent(buf, repo, true)
+	}
+}
+
+func StreamUnpinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		return setPinnedFromEvent(buf, repo, false)
+	}
+}
+
+func StreamEditTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.EditTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("edit tweet: empty user id")
+		}
+		if ev.TweetId == "" {
+			return nil, warpnet.WarpError("edit tweet: empty tweet id")
+		}
+		if ev.Text == "" {
+			return nil, warpnet.WarpError("edit tweet: empty text")
+		}
+
+		existing, err := repo.Get(ev.UserId, ev.TweetId)
+		if err != nil {
+			return nil, err
+		}
+		if existing.UserId != ev.UserId {
+			return nil, warpnet.WarpError("edit tweet: only the author can edit their own tweet")
+		}
+		if existing.Text == ev.Text {
+			// No-op edit — return the existing tweet without recording a revision.
+			return event.EditTweetResponse(existing), nil
+		}
+
+		// Append the *previous* text as a revision so the user can see what
+		// the tweet looked like before this edit.
+		if _, err := repo.AppendEdit(domain.TweetEdit{
+			OriginalTweetId: existing.Id,
+			UserId:          existing.UserId,
+			Text:            existing.Text,
+		}); err != nil {
+			return nil, err
+		}
+
+		updated := existing
+		updated.Text = ev.Text
+		if err := repo.Update(updated); err != nil {
+			return nil, err
+		}
+		// Re-fetch so the response carries the storage-canonical UpdatedAt.
+		out, err := repo.Get(existing.UserId, existing.Id)
+		if err != nil {
+			return nil, err
+		}
+		return event.EditTweetResponse(out), nil
+	}
+}
+
+// setPinnedFromEvent decodes the pin/unpin payload, enforces author-only
+// pinning, and delegates the write.
+func setPinnedFromEvent(buf []byte, repo TweetsStorer, pin bool) (any, error) {
+	op := "unpin"
+	if pin {
+		op = "pin"
+	}
+	var ev event.PinTweetEvent
+	if err := json.Unmarshal(buf, &ev); err != nil {
+		return nil, err
+	}
+	if ev.UserId == "" {
+		return nil, warpnet.WarpError(op + ": empty user id")
+	}
+	if ev.TweetId == "" {
+		return nil, warpnet.WarpError(op + ": empty tweet id")
+	}
+	tw, err := repo.Get(ev.UserId, ev.TweetId)
+	if err != nil {
+		return nil, err
+	}
+	if tw.UserId != ev.UserId {
+		return nil, warpnet.WarpError(op + ": only the author can " + op + " their own tweet")
+	}
+	if pin {
+		return repo.Pin(ev.UserId, ev.TweetId)
+	}
+	return repo.Unpin(ev.UserId, ev.TweetId)
 }

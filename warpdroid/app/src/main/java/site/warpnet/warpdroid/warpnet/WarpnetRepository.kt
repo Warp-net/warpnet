@@ -113,8 +113,6 @@ class WarpnetRepository @Inject constructor(
     private val getMediaRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaResponse>()
     private val searchUsersAdapter = moshi.adapter<site.warpnet.transport.dto.SearchUsersEvent>()
     private val editTweetAdapter = moshi.adapter<site.warpnet.transport.dto.EditTweetEvent>()
-    private val getTweetEditsAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetEditsEvent>()
-    private val tweetEditsRespAdapter = moshi.adapter<site.warpnet.transport.dto.TweetEditsResponse>()
     private val deleteQuoteAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteQuoteEvent>()
     private val getQuotingAdapter = moshi.adapter<site.warpnet.transport.dto.GetQuotingEvent>()
     private val getFollowReqsAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsEvent>()
@@ -624,22 +622,6 @@ class WarpnetRepository @Inject constructor(
         )
         return tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("editTweet returned empty body for $tweetId")
-    }
-
-    suspend fun getTweetEdits(tweetId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetTweetEdit>, String> {
-        val raw = client.request(
-            ProtocolIds.PUBLIC_GET_TWEET_EDITS,
-            getTweetEditsAdapter.toJson(
-                site.warpnet.transport.dto.GetTweetEditsEvent(
-                    tweetId = tweetId,
-                    cursor = cursor,
-                    limit = limit,
-                ),
-            ),
-        )
-        val page = tweetEditsRespAdapter.fromJson(raw)
-            ?: return emptyList<site.warpnet.transport.dto.WarpnetTweetEdit>() to ""
-        return page.edits to page.cursor
     }
 
     // -----------------------------------------------------------------

@@ -119,6 +119,9 @@ type FollowStorer interface {
 	GetFollowings(userId string, limit *uint64, cursor *string) ([]domain.ID, string, error)
 	IsFollowing(ownerId, otherUserId string) bool
 	IsFollower(ownerId, otherUserId string) bool
+	AddFollowRequest(targetUserId, followerId string) error
+	RemoveFollowRequest(targetUserId, followerId string) error
+	ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]domain.ID, string, error)
 }
 
 type Storer interface {

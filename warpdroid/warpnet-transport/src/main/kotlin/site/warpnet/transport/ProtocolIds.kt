@@ -79,7 +79,6 @@ object ProtocolIds {
     const val PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
     const val PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
     const val PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
-    const val PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"
     const val PUBLIC_POST_QUOTE = "/public/post/quote/0.0.0"
     const val PUBLIC_GET_QUOTING = "/public/get/quoting/0.0.0"
     const val PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"

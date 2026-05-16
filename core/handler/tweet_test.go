@@ -88,6 +88,16 @@ func (s stubTweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 	}
 	return tweet, nil
 }
+func (s stubTweetRepo) Update(tweet domain.Tweet) error { return nil }
+func (s stubTweetRepo) Pin(userId, tweetId string) (domain.Tweet, error) {
+	return domain.Tweet{Id: tweetId, UserId: userId, Pinned: true}, nil
+}
+func (s stubTweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
+	return domain.Tweet{Id: tweetId, UserId: userId}, nil
+}
+func (s stubTweetRepo) AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error) {
+	return edit, nil
+}
 
 type stubTweetBroadcaster struct {
 	publishFn func(ownerId, dest string, bt []byte) error

@@ -560,36 +560,8 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun statusEdits(statusId: String): NetworkResult<List<TweetEdit>> {
-        val active = accountManager.activeAccount ?: return NetworkResult.success(emptyList())
-        return result {
-            val (raws, _) = warpnet.getTweetEdits(tweetId = statusId)
-            // We need a TimelineAccount for the edit author — fetch once and
-            // reuse for every revision (edits are author-scoped).
-            val author = runCatching {
-                warpnet.getTimelineAccount(active.accountId)
-            }.getOrNull()
-            raws.mapNotNull { e ->
-                if (author == null) return@mapNotNull null
-                TweetEdit(
-                    content = e.text,
-                    spoilerText = "",
-                    sensitive = false,
-                    createdAt = parseRfc3339OrNow(e.editedAt),
-                    account = author,
-                    mediaAttachments = emptyList(),
-                    emojis = emptyList(),
-                )
-            }
-        }
-    }
-
-    private fun parseRfc3339OrNow(s: String): java.util.Date {
-        if (s.isBlank()) return java.util.Date()
-        return runCatching {
-            java.util.Date.from(java.time.Instant.parse(s))
-        }.getOrElse { java.util.Date() }
-    }
+    suspend fun statusEdits(statusId: String): NetworkResult<List<TweetEdit>> =
+        NetworkResult.success(emptyList())
 
     suspend fun statusRetweetedBy(
         statusId: String,

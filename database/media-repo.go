@@ -40,7 +40,8 @@ const (
 	MediaRepoName       = "/MEDIA"
 	ImageSubNamespace   = "IMAGES"
 	ImageMetaSubNS      = "IMAGES_META"
-	VideoSubNamespace   = "VIDEOS"
+	// VideoSubNamespace is reserved — videos are not yet supported.
+	VideoSubNamespace = "VIDEOS"
 )
 
 var (

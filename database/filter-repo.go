@@ -31,7 +31,7 @@ import (
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 )
 
 const FilterRepoName = "/FILTERS"
@@ -65,12 +65,12 @@ func (repo *FilterRepo) Create(userId string, f domain.Filter) (domain.Filter, e
 		return domain.Filter{}, local_store.DBError("empty title")
 	}
 	if f.Id == "" {
-		f.Id = uuid.New().String()
+		f.Id = ulid.Make().String()
 	}
 	f.UserId = userId
 	for i := range f.Keywords {
 		if f.Keywords[i].Id == "" {
-			f.Keywords[i].Id = uuid.New().String()
+			f.Keywords[i].Id = ulid.Make().String()
 		}
 	}
 
@@ -220,7 +220,7 @@ func (repo *FilterRepo) AddKeyword(userId, filterId string, kw domain.FilterKeyw
 		return domain.FilterKeyword{}, err
 	}
 	if kw.Id == "" {
-		kw.Id = uuid.New().String()
+		kw.Id = ulid.Make().String()
 	}
 	f.Keywords = append(f.Keywords, kw)
 	if err := repo.saveExact(userId, f); err != nil {

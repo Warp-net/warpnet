@@ -100,7 +100,6 @@ const (
 	PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 
 	PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
-	PUBLIC_GET_TWEET_EDITS  = "/public/get/tweet/edits/0.0.0"
 
 	PUBLIC_POST_QUOTE   = "/public/post/quote/0.0.0"
 	PUBLIC_GET_QUOTING  = "/public/get/quoting/0.0.0"

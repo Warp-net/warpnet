@@ -36,8 +36,8 @@ func (s *FilterRepoTestSuite) TestCreateGetList() {
 	user := uuid.New().String()
 	created, err := s.repo.Create(user, domain.Filter{
 		Title:   "spoilers",
-		Context: []string{"home"},
-		Action:  "hide",
+		Context: []domain.FilterContext{domain.FilterContextHome},
+		Action:  domain.FilterActionHide,
 		Keywords: []domain.FilterKeyword{
 			{Keyword: "season finale", WholeWord: false},
 		},

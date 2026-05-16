@@ -197,12 +197,32 @@ type TweetModeration struct {
 // embedded slice (Mastodon models them as a sub-resource with their own
 // ids — we keep the same shape on the wire but the storage is one record
 // per filter).
+// FilterContext is where a content filter applies. Closed enum — only
+// these values are accepted on the wire. Note: there is no "account"
+// context in Warpnet — Warpnet has users and nodes, not accounts.
+type FilterContext string
+
+const (
+	FilterContextHome          FilterContext = "home"
+	FilterContextNotifications FilterContext = "notifications"
+	FilterContextPublic        FilterContext = "public"
+	FilterContextThread        FilterContext = "thread"
+)
+
+// FilterAction is what happens to a tweet that matches a filter.
+type FilterAction string
+
+const (
+	FilterActionWarn FilterAction = "warn"
+	FilterActionHide FilterAction = "hide"
+)
+
 type Filter struct {
 	Id        string          `json:"id"`
 	UserId    string          `json:"user_id"`
 	Title     string          `json:"title"`
-	Context   []string        `json:"context"` // home, notifications, public, thread, account
-	Action    string          `json:"action"`  // warn | hide
+	Context   []FilterContext `json:"context"`
+	Action    FilterAction    `json:"action"`
 	ExpiresAt *time.Time      `json:"expires_at,omitempty"`
 	Keywords  []FilterKeyword `json:"keywords"`
 }

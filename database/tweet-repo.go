@@ -312,6 +312,54 @@ func (repo *TweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
 	return repo.setPinned(userId, tweetId, false)
 }
 
+// AppendEdit records an immutable edit revision for a tweet. Revisions
+// are append-only — never updated, never deleted (except via the tweet's
+// own delete handler, which removes the tweet from List* but leaves the
+// revisions in place for audit).
+func (repo *TweetRepo) AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error) {
+	if edit.OriginalTweetId == "" {
+		return domain.TweetEdit{}, local.DBError("empty tweet id")
+	}
+	if edit.UserId == "" {
+		return domain.TweetEdit{}, local.DBError("empty user id")
+	}
+	if edit.Text == "" {
+		return domain.TweetEdit{}, local.DBError("empty text")
+	}
+	if edit.Id == "" {
+		edit.Id = ulid.Make().String()
+	}
+	if edit.EditedAt.IsZero() {
+		edit.EditedAt = time.Now()
+	}
+
+	key := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix("EDITS").
+		AddRootID(edit.OriginalTweetId).
+		AddReversedTimestamp(edit.EditedAt).
+		AddParentId(edit.Id).
+		Build()
+
+	bt, err := json.Marshal(edit)
+	if err != nil {
+		return domain.TweetEdit{}, err
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.TweetEdit{}, err
+	}
+	defer txn.Rollback()
+
+	if err := txn.Set(key, bt); err != nil {
+		return domain.TweetEdit{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.TweetEdit{}, err
+	}
+	return edit, nil
+}
+
 func (repo *TweetRepo) setPinned(userId, tweetId string, pinned bool) (domain.Tweet, error) {
 	if userId == "" {
 		return domain.Tweet{}, local.DBError("no user id")

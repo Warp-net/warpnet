@@ -36,6 +36,8 @@ import (
 
 const (
 	BookmarkRepoName = "/BOOKMARKS"
+	bookmarkListSub  = "LIST" // forward index: per-owner cursor of bookmarked tweet ids
+	bookmarkItemSub  = "ITEM" // payload: serialised Bookmark keyed by tweet id
 )
 
 // Bookmark is the local pin a user puts on someone's tweet. The owner id is
@@ -81,14 +83,14 @@ func (repo *BookmarkRepo) Bookmark(userId, tweetId, ownerUserId string) error {
 	// list-key: ordered by creation time (reverse so newest comes first
 	// when iterating); item-key: stable lookup by tweet id for unbookmark.
 	listKey := local_store.NewPrefixBuilder(BookmarkRepoName).
-		AddSubPrefix("LIST").
+		AddSubPrefix(bookmarkListSub).
 		AddRootID(userId).
 		AddReversedTimestamp(bm.CreatedAt).
 		AddParentId(tweetId).
 		Build()
 
 	itemKey := local_store.NewPrefixBuilder(BookmarkRepoName).
-		AddSubPrefix("ITEM").
+		AddSubPrefix(bookmarkItemSub).
 		AddRootID(userId).
 		AddParentId(tweetId).
 		Build()
@@ -125,7 +127,7 @@ func (repo *BookmarkRepo) Unbookmark(userId, tweetId string) error {
 	}
 
 	itemKey := local_store.NewPrefixBuilder(BookmarkRepoName).
-		AddSubPrefix("ITEM").
+		AddSubPrefix(bookmarkItemSub).
 		AddRootID(userId).
 		AddParentId(tweetId).
 		Build()
@@ -160,7 +162,7 @@ func (repo *BookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]
 	}
 
 	prefix := local_store.NewPrefixBuilder(BookmarkRepoName).
-		AddSubPrefix("LIST").
+		AddSubPrefix(bookmarkListSub).
 		AddRootID(userId).
 		Build()
 

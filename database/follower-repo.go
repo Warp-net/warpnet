@@ -352,3 +352,111 @@ func (repo *FollowRepo) GetFollowings(userId string, limit *uint64, cursor *stri
 
 	return followings, cur, nil
 }
+
+const followRequestSubName = "REQUEST"
+
+// AddFollowRequest records a pending follow request from followerId
+// against targetUserId (locked-account flow). On approval the entry
+// should be removed via RemoveFollowRequest and re-recorded via Follow;
+// on reject it's just removed.
+func (repo *FollowRepo) AddFollowRequest(targetUserId, followerId string) error {
+	if targetUserId == "" {
+		return local_store.DBError("empty target user id")
+	}
+	if followerId == "" {
+		return local_store.DBError("empty follower id")
+	}
+	key := local_store.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followRequestSubName).
+		AddRootID(targetUserId).
+		AddParentId(followerId).
+		Build()
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(key, []byte(followerId)); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+// RemoveFollowRequest deletes a pending follow request (idempotent).
+func (repo *FollowRepo) RemoveFollowRequest(targetUserId, followerId string) error {
+	if targetUserId == "" {
+		return local_store.DBError("empty target user id")
+	}
+	if followerId == "" {
+		return local_store.DBError("empty follower id")
+	}
+	key := local_store.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followRequestSubName).
+		AddRootID(targetUserId).
+		AddParentId(followerId).
+		Build()
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Delete(key); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	return txn.Commit()
+}
+
+// HasFollowRequest reports whether followerId has an outstanding pending
+// follow request against targetUserId.
+func (repo *FollowRepo) HasFollowRequest(targetUserId, followerId string) (bool, error) {
+	if targetUserId == "" || followerId == "" {
+		return false, nil
+	}
+	key := local_store.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followRequestSubName).
+		AddRootID(targetUserId).
+		AddParentId(followerId).
+		Build()
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return false, err
+	}
+	defer txn.Rollback()
+	_, err = txn.Get(key)
+	if local_store.IsNotFoundError(err) {
+		return false, txn.Commit()
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, txn.Commit()
+}
+
+// ListFollowRequests returns the follower ids waiting for approval on the
+// given target user, oldest-first.
+func (repo *FollowRepo) ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]string, string, error) {
+	if targetUserId == "" {
+		return nil, "", local_store.DBError("empty target user id")
+	}
+	prefix := local_store.NewPrefixBuilder(FollowRepoName).
+		AddSubPrefix(followRequestSubName).
+		AddRootID(targetUserId).
+		Build()
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+	items, cur, err := txn.List(prefix, limit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := txn.Commit(); err != nil {
+		return nil, "", err
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, string(item.Value))
+	}
+	return ids, cur, nil
+}

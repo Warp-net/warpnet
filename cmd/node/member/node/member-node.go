@@ -386,8 +386,6 @@ type memberRepos struct {
 	blocksRepo       *database.BlocksRepo
 	mutesRepo        *database.MutesRepo
 	subsRepo         *database.SubscriptionsRepo
-	tweetEditsRepo   *database.TweetEditsRepo
-	followReqRepo    *database.FollowRequestsRepo
 	filterRepo       *database.FilterRepo
 }
 
@@ -415,8 +413,6 @@ func (m *MemberNode) setupHandlers(
 		blocksRepo:       database.NewBlocksRepo(db),
 		mutesRepo:        database.NewMutesRepo(db),
 		subsRepo:         database.NewSubscriptionsRepo(db),
-		tweetEditsRepo:   database.NewTweetEditsRepo(db),
-		followReqRepo:    database.NewFollowRequestsRepo(db),
 		filterRepo:       database.NewFilterRepo(db),
 	}
 
@@ -505,11 +501,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_TWEET_EDIT,
-			handler.StreamEditTweetHandler(r.tweetRepo, r.tweetEditsRepo),
-		},
-		{
-			event.PUBLIC_GET_TWEET_EDITS,
-			handler.StreamGetTweetEditsHandler(r.tweetEditsRepo),
+			handler.StreamEditTweetHandler(r.tweetRepo),
 		},
 		{
 			event.PUBLIC_POST_PIN,
@@ -640,15 +632,15 @@ func (m *MemberNode) followRequestHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_GET_FOLLOW_REQUESTS,
-			handler.StreamGetFollowRequestsHandler(r.followReqRepo),
+			handler.StreamGetFollowRequestsHandler(followRepo),
 		},
 		{
 			event.PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE,
-			handler.StreamAuthorizeFollowRequestHandler(r.followReqRepo, followRepo),
+			handler.StreamAuthorizeFollowRequestHandler(followRepo),
 		},
 		{
 			event.PRIVATE_POST_FOLLOW_REQUEST_REJECT,
-			handler.StreamRejectFollowRequestHandler(r.followReqRepo),
+			handler.StreamRejectFollowRequestHandler(followRepo),
 		},
 	}
 }

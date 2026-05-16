@@ -52,7 +52,6 @@ export const PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
 export const PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
 export const PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
-export const PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"
 export const PUBLIC_POST_QUOTE = "/public/post/quote/0.0.0"
 export const PUBLIC_GET_QUOTING = "/public/get/quoting/0.0.0"
 export const PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"
@@ -715,18 +714,6 @@ export const warpnetService = {
                 text: text,
             },
         });
-    },
-
-    async getTweetEdits(tweetId, cursor) {
-        const resp = await this.sendToNode({
-            path: PUBLIC_GET_TWEET_EDITS,
-            body: {
-                tweet_id: tweetId,
-                limit: defaultLimit,
-                cursor: cursor || '',
-            },
-        });
-        return resp || { edits: [], cursor: 'end' };
     },
 
     async searchUsers(query, cursor) {

@@ -57,56 +57,6 @@ type EngagementStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-// forwardToOwner attempts to fetch the engagement list from the tweet
-// author's node when the caller isn't the owner. Returns (remote response,
-// true) when the remote answered with a non-empty page, (zero, false)
-// otherwise — caller then falls through to the local index.
-func forwardToOwner(
-	ownerUserId string,
-	streamer EngagementStreamer,
-	userRepo LikedUserFetcher,
-	path stream.WarpRoute,
-	ev any,
-) (event.UsersResponse, bool, error) {
-	if ownerUserId == "" || streamer == nil {
-		return event.UsersResponse{}, false, nil
-	}
-	ownNode := streamer.NodeInfo()
-	if ownerUserId == ownNode.OwnerId {
-		return event.UsersResponse{}, false, nil
-	}
-	owner, err := userRepo.Get(ownerUserId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		// Owner is not yet known locally — fall through to the local index.
-		return event.UsersResponse{}, false, nil
-	}
-	if err != nil {
-		return event.UsersResponse{}, false, err
-	}
-	if owner.NodeId == ownNode.ID.String() {
-		return event.UsersResponse{}, false, nil
-	}
-
-	resp, ferr := streamer.GenericStream(owner.NodeId, path, ev)
-	switch {
-	case errors.Is(ferr, warpnet.ErrNodeIsOffline):
-		return event.UsersResponse{}, false, nil
-	case ferr != nil:
-		return event.UsersResponse{}, false, ferr
-	}
-	var out event.UsersResponse
-	if uerr := json.Unmarshal(resp, &out); uerr != nil {
-		// Remote answered with something we can't parse — degrade to the
-		// local index rather than failing the read.
-		log.Warnf("engagement: forward to %s: unmarshal response: %v", owner.NodeId, uerr)
-		return event.UsersResponse{}, false, nil
-	}
-	if out.Cursor == "" && len(out.Users) == 0 {
-		return event.UsersResponse{}, false, nil
-	}
-	return out, true, nil
-}
-
 func StreamGetTweetLikersHandler(
 	repo LikersLister,
 	userRepo LikedUserFetcher,
@@ -163,6 +113,56 @@ func StreamGetTweetRetweetersHandler(
 		users := hydrateUsers(userRepo, ids)
 		return event.UsersResponse{Cursor: cur, Users: users}, nil
 	}
+}
+
+// forwardToOwner attempts to fetch the engagement list from the tweet
+// author's node when the caller isn't the owner. Returns (remote response,
+// true) when the remote answered with a non-empty page, (zero, false)
+// otherwise — caller then falls through to the local index.
+func forwardToOwner(
+	ownerUserId string,
+	streamer EngagementStreamer,
+	userRepo LikedUserFetcher,
+	path stream.WarpRoute,
+	ev any,
+) (event.UsersResponse, bool, error) {
+	if ownerUserId == "" || streamer == nil {
+		return event.UsersResponse{}, false, nil
+	}
+	ownNode := streamer.NodeInfo()
+	if ownerUserId == ownNode.OwnerId {
+		return event.UsersResponse{}, false, nil
+	}
+	owner, err := userRepo.Get(ownerUserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		// Owner is not yet known locally — fall through to the local index.
+		return event.UsersResponse{}, false, nil
+	}
+	if err != nil {
+		return event.UsersResponse{}, false, err
+	}
+	if owner.NodeId == ownNode.ID.String() {
+		return event.UsersResponse{}, false, nil
+	}
+
+	resp, fwdErr := streamer.GenericStream(owner.NodeId, path, ev)
+	switch {
+	case errors.Is(fwdErr, warpnet.ErrNodeIsOffline):
+		return event.UsersResponse{}, false, nil
+	case fwdErr != nil:
+		return event.UsersResponse{}, false, fwdErr
+	}
+	var out event.UsersResponse
+	if err := json.Unmarshal(resp, &out); err != nil {
+		// Remote answered with something we can't parse — degrade to the
+		// local index rather than failing the read.
+		log.Warnf("engagement: forward to %s: unmarshal response: %v", owner.NodeId, err)
+		return event.UsersResponse{}, false, nil
+	}
+	if out.Cursor == "" && len(out.Users) == 0 {
+		return event.UsersResponse{}, false, nil
+	}
+	return out, true, nil
 }
 
 func hydrateUsers(userRepo LikedUserFetcher, ids []string) []domain.User {

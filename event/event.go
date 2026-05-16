@@ -613,19 +613,6 @@ type EditTweetEvent struct {
 // EditTweetResponse defines model for EditTweetResponse.
 type EditTweetResponse = domain.Tweet
 
-// GetTweetEditsEvent defines model for GetTweetEditsEvent.
-type GetTweetEditsEvent struct {
-	TweetId domain.ID `json:"tweet_id"`
-	Cursor  *string   `json:"cursor,omitempty"`
-	Limit   *uint64   `json:"limit,omitempty"`
-}
-
-// TweetEditsResponse defines model for TweetEditsResponse.
-type TweetEditsResponse struct {
-	Edits  []domain.TweetEdit `json:"edits"`
-	Cursor string             `json:"cursor"`
-}
-
 // NewQuoteEvent defines model for NewQuoteEvent.
 // Same wire shape as NewTweetEvent — a quote *is* a tweet, with the
 // QuotedTweetId / QuotedUserId fields referencing the quoted source.
