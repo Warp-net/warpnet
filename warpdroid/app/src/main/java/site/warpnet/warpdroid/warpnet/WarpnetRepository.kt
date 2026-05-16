@@ -345,16 +345,42 @@ class WarpnetRepository @Inject constructor(
 
     // Warpnet's NewRetweetEvent is domain.Tweet, so the payload is the
     // retweeter's copy of the tweet rather than a (tweet_id, user_id) pair.
-    suspend fun retweetStatus(tweetId: String, retweeterId: String, retweeterUsername: String): Long {
-        // createdAt left null for the same reason as postStatus.
-        val payload = WarpnetTweet(
-            id = tweetId,
-            rootId = "",
-            text = "",
-            userId = retweeterId,
-            username = retweeterUsername,
-            retweetedBy = retweeterId,
-        )
+    //
+    // [sourceAuthorId] is the user_id of the original tweet's author —
+    // needed for cross-node propagation so the source-author's node
+    // receives the retweet event. When non-null and [comment] is
+    // non-blank, the retweet becomes a quote: a regular tweet
+    // authored by the retweeter (text = comment) that references the
+    // source via quoted_tweet_id / quoted_user_id.
+    suspend fun retweetStatus(
+        tweetId: String,
+        retweeterId: String,
+        retweeterUsername: String,
+        sourceAuthorId: String? = null,
+        comment: String? = null,
+    ): Long {
+        val isQuote = !comment.isNullOrBlank() && !sourceAuthorId.isNullOrBlank()
+        val payload = if (isQuote) {
+            WarpnetTweet(
+                id = tweetId,
+                rootId = "",
+                text = comment!!.trim(),
+                userId = retweeterId,
+                username = retweeterUsername,
+                retweetedBy = retweeterId,
+                quotedTweetId = tweetId,
+                quotedUserId = sourceAuthorId!!,
+            )
+        } else {
+            WarpnetTweet(
+                id = tweetId,
+                rootId = "",
+                text = "",
+                userId = sourceAuthorId ?: retweeterId,
+                username = retweeterUsername,
+                retweetedBy = retweeterId,
+            )
+        }
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_RETWEET,
             newTweetAdapter.toJson(payload),

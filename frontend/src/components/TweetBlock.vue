@@ -23,8 +23,11 @@ resulting from the use or misuse of this software.
 -->
 <template>
   <div v-if="deleted" class="hidden"></div>
-  <div v-if="!deleted && tweet.retweeted_by && tweet.retweeted_by !== ''">
-    <!-- Retweet header -->
+  <div v-if="!deleted && tweet.retweeted_by && tweet.retweeted_by !== '' && !tweet.quoted_tweet_id">
+    <!-- Retweet header. Quote-style retweets (those that carry
+         quoted_tweet_id) render as the retweeter's own tweet with
+         an embedded source preview below, so no "X Retweeted"
+         header. -->
     <div class="pt-4 pl-4 flex flex-row">
       <div class="w-12 mr-4 flex justify-end">
         <i class="text-sm pt-1 fas fa-retweet text-dark"></i>

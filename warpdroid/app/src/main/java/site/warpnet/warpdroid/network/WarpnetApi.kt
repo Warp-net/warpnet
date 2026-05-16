@@ -485,6 +485,8 @@ class WarpnetApi @Inject constructor(
     suspend fun retweetStatus(
         statusId: String,
         visibility: String?,
+        sourceAuthorId: String? = null,
+        comment: String? = null,
     ): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("retweetStatus")
         // Same reasoning as createStatus: the wire-level username field is
@@ -495,6 +497,8 @@ class WarpnetApi @Inject constructor(
                 tweetId = statusId,
                 retweeterId = active.accountId,
                 retweeterUsername = retweeterName,
+                sourceAuthorId = sourceAuthorId,
+                comment = comment,
             )
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
