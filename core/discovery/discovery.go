@@ -294,6 +294,22 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
+	info, err := s.requestNodeInfo(pi)
+	if err != nil {
+		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+		return
+	}
+
+	for _, alias := range info.Aliases {
+		s.aliasCache.Add(alias, pi.ID)
+	}
+
+	s.node.SetNodePriority(pi.ID, info.Reachability)
+
+	if info.IsBootstrap() || info.IsModerator() {
+		return
+	}
+
 	isRepeatable, err := s.challenger.Challenge(
 		s.node.Peerstore().PubKey(pi.ID),
 		s.getChallengeLevel(pi.ID),
@@ -321,22 +337,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	}
 
 	s.m.PushStatusOnline(pi.ID.String())
-
-	info, err := s.requestNodeInfo(pi)
-	if err != nil {
-		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
-		return
-	}
-
-	for _, alias := range info.Aliases {
-		s.aliasCache.Add(alias, pi.ID)
-	}
-
-	s.node.SetNodePriority(pi.ID, info.Reachability)
-
-	if info.IsBootstrap() || info.IsModerator() {
-		return
-	}
 
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
