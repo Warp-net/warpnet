@@ -21,7 +21,6 @@ import androidx.paging.PagingData
 import at.connyduck.calladapter.networkresult.NetworkResult
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.FilterUpdatedEvent
-import site.warpnet.warpdroid.appstore.PollShowResultsEvent
 import site.warpnet.warpdroid.appstore.PreferenceChangedEvent
 import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingOrder
 import site.warpnet.warpdroid.db.AccountManager
@@ -92,10 +91,6 @@ abstract class TimelineViewModel(
                     }
                 }
         }
-    }
-
-    fun showPollResults(status: TweetViewData.Concrete) = viewModelScope.launch {
-        eventHub.dispatch(PollShowResultsEvent(status.actionableId))
     }
 
     abstract fun changeExpanded(expanded: Boolean, status: TweetViewData.Concrete)

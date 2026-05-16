@@ -31,10 +31,6 @@ import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.view.MediaPreviewImageView
-import site.warpnet.warpdroid.viewdata.PollViewData
-import site.warpnet.warpdroid.viewdata.buildDescription
-import site.warpnet.warpdroid.viewdata.calculatePercent
-import java.text.NumberFormat
 import kotlin.math.min
 
 class TweetViewHelper(private val itemView: View) {
@@ -269,104 +265,6 @@ class TweetViewHelper(private val itemView: View) {
         }
     }
 
-    fun setupPollReadonly(
-        poll: PollViewData?,
-        emojis: List<Emoji>,
-        statusDisplayOptions: TweetDisplayOptions
-    ) {
-        val pollResults = listOf<TextView>(
-            itemView.findViewById(R.id.tweet_poll_option_result_0),
-            itemView.findViewById(R.id.tweet_poll_option_result_1),
-            itemView.findViewById(R.id.tweet_poll_option_result_2),
-            itemView.findViewById(R.id.tweet_poll_option_result_3)
-        )
-
-        val pollDescription = itemView.findViewById<TextView>(R.id.tweet_poll_description)
-
-        if (poll == null) {
-            for (pollResult in pollResults) {
-                pollResult.visibility = View.GONE
-            }
-            pollDescription.visibility = View.GONE
-        } else {
-            val timestamp = System.currentTimeMillis()
-
-            setupPollResult(poll, emojis, pollResults, statusDisplayOptions.animateEmojis)
-
-            pollDescription.visibility = View.VISIBLE
-            pollDescription.text = getPollInfoText(timestamp, poll, pollDescription, statusDisplayOptions.useAbsoluteTime)
-        }
-    }
-
-    private fun getPollInfoText(
-        timestamp: Long,
-        poll: PollViewData,
-        pollDescription: TextView,
-        useAbsoluteTime: Boolean
-    ): CharSequence {
-        val context = pollDescription.context
-
-        val votesText = if (poll.votersCount == null) {
-            val votes = NumberFormat.getNumberInstance().format(poll.votesCount.toLong())
-            context.resources.getQuantityString(R.plurals.poll_info_votes, poll.votesCount, votes)
-        } else {
-            val votes = NumberFormat.getNumberInstance().format(poll.votersCount.toLong())
-            context.resources.getQuantityString(R.plurals.poll_info_people, poll.votersCount, votes)
-        }
-        val pollDurationInfo = if (poll.expired) {
-            context.getString(R.string.poll_info_closed)
-        } else {
-            if (useAbsoluteTime) {
-                context.getString(
-                    R.string.poll_info_time_absolute,
-                    absoluteTimeFormatter.format(poll.expiresAt, false)
-                )
-            } else {
-                formatPollDuration(context, poll.expiresAt!!.time, timestamp)
-            }
-        }
-
-        return context.getString(R.string.poll_info_format, votesText, pollDurationInfo)
-    }
-
-    private fun setupPollResult(
-        poll: PollViewData,
-        emojis: List<Emoji>,
-        pollResults: List<TextView>,
-        animateEmojis: Boolean
-    ) {
-        val options = poll.options
-
-        for (i in 0 until Tweet.MAX_POLL_OPTIONS) {
-            if (i < options.size) {
-                val percent =
-                    calculatePercent(options[i].votesCount, poll.votersCount, poll.votesCount)
-
-                val pollOptionText =
-                    buildDescription(
-                        options[i].title,
-                        percent,
-                        options[i].voted,
-                        pollResults[i].context,
-                        pollResults[i]
-                    )
-                pollResults[i].text = pollOptionText.emojify(emojis, pollResults[i], animateEmojis)
-                pollResults[i].visibility = View.VISIBLE
-
-                val level = percent * 100
-                val optionColor = if (options[i].voted) {
-                    R.color.colorBackgroundHighlight
-                } else {
-                    R.color.colorBackgroundAccent
-                }
-
-                pollResults[i].background.level = level
-                pollResults[i].background.setTint(pollResults[i].context.getColor(optionColor))
-            } else {
-                pollResults[i].visibility = View.GONE
-            }
-        }
-    }
 
     companion object {
         val COLLAPSE_INPUT_FILTER = arrayOf<InputFilter>(SmartLengthInputFilter)

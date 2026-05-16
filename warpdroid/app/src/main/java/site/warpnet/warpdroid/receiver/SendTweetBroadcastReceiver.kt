@@ -97,7 +97,6 @@ class SendTweetBroadcastReceiver : BroadcastReceiver() {
                         media = emptyList(),
                         scheduledAt = null,
                         inReplyToId = citedStatusId,
-                        poll = null,
                         replyingTweetContent = null,
                         replyingStatusAuthorUsername = null,
                         accountId = account.id,

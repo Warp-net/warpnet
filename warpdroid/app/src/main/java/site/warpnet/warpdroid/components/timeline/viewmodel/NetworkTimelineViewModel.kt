@@ -31,8 +31,6 @@ import site.warpnet.warpdroid.appstore.DomainMuteEvent
 import site.warpnet.warpdroid.appstore.Event
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
-import site.warpnet.warpdroid.appstore.PollShowResultsEvent
-import site.warpnet.warpdroid.appstore.PollVoteEvent
 import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.appstore.UnfollowEvent
@@ -40,7 +38,6 @@ import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingO
 import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingOrder.OLDEST_FIRST
 import site.warpnet.warpdroid.components.timeline.util.ifExpected
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Quote
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
@@ -116,8 +113,6 @@ class NetworkTimelineViewModel @Inject constructor(
     private fun handleEvent(event: Event) {
         when (event) {
             is TweetChangedEvent -> handleTweetChangedEvent(event.status)
-            is PollVoteEvent -> handlePollVote(event.statusId, event.poll)
-            is PollShowResultsEvent -> handlePollShowResults(event.statusId)
             is UnfollowEvent -> {
                 if (kind == Kind.HOME) {
                     val id = event.accountId
@@ -297,18 +292,6 @@ class NetworkTimelineViewModel @Inject constructor(
 
     private fun handleTweetChangedEvent(status: Tweet) {
         updateStatusByActionableId(status.id) { status }
-    }
-
-    private fun handlePollVote(statusId: String, poll: Poll) {
-        updateStatusByActionableId(statusId) { status ->
-            status.copy(poll = poll)
-        }
-    }
-
-    private fun handlePollShowResults(statusId: String) {
-        updateStatusByActionableId(statusId) { status ->
-            status.copy(poll = status.poll?.copy(voted = true))
-        }
     }
 
     override fun fullReload() {

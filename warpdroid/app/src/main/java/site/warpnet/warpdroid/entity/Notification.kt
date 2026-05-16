@@ -55,9 +55,6 @@ data class Notification(
         /** Someone requested to follow you */
         object FollowRequest : Type("follow_request")
 
-        /** A poll you have voted in or created has ended */
-        object Poll : Type("poll")
-
         /** Someone you enabled notifications for has posted a status */
         object Status : Type("status")
 
@@ -116,7 +113,6 @@ val visibleNotificationTypes = listOf(
     Type.PleromaEmojiReaction,
     Type.Follow,
     Type.FollowRequest,
-    Type.Poll,
     Type.Status,
     Type.SignUp,
     Type.Update,

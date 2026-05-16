@@ -50,7 +50,6 @@ import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.NotificationPolicy
 import site.warpnet.warpdroid.entity.NotificationRequest
 import site.warpnet.warpdroid.entity.NotificationSubscribeResult
-import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.ScheduledTweet
 import site.warpnet.warpdroid.entity.ScheduledTweetReply
@@ -578,7 +577,6 @@ class WarpnetApi @Inject constructor(
                     sensitive = false,
                     createdAt = parseRfc3339OrNow(e.editedAt),
                     account = author,
-                    poll = null,
                     mediaAttachments = emptyList(),
                     emojis = emptyList(),
                 )
@@ -642,7 +640,6 @@ class WarpnetApi @Inject constructor(
                 visibility = Tweet.Visibility.PUBLIC,
                 sensitive = false,
                 attachments = emptyList(),
-                poll = null,
                 createdAt = java.util.Date(),
                 language = null,
             )
@@ -1123,8 +1120,6 @@ class WarpnetApi @Inject constructor(
     // ---------------------------------------------------------------
     // polls, announcements, reports, search
     // ---------------------------------------------------------------
-
-    suspend fun voteInPoll(id: String, choices: List<Int>): NetworkResult<Poll> = stubFailure("voteInPoll")
 
     suspend fun announcements(): NetworkResult<List<Announcement>> = NetworkResult.success(emptyList())
 

@@ -42,12 +42,6 @@ enum class NotificationChannelData(
         R.string.notification_follow_request_description
     ),
 
-    POLL(
-        listOf(Notification.Type.Poll),
-        R.string.notification_poll_name,
-        R.string.notification_poll_description
-    ),
-
     SUBSCRIPTIONS(
         listOf(Notification.Type.Status),
         R.string.notification_subscription_name,

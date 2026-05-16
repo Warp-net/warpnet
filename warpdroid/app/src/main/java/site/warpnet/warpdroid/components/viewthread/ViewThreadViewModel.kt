@@ -25,13 +25,11 @@ import at.connyduck.calladapter.networkresult.onFailure
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
-import site.warpnet.warpdroid.appstore.PollVoteEvent
 import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.appstore.TweetComposedEvent
 import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Filter
-import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.ui.SnackbarError
@@ -80,7 +78,6 @@ class ViewThreadViewModel @AssistedInject constructor(
                 .collect { event ->
                     when (event) {
                         is TweetChangedEvent -> handleTweetChangedEvent(event.status)
-                        is PollVoteEvent -> handlePollVotedEvent(event.statusId, event.poll)
                         is BlockEvent -> removeAllByAccountId(event.accountId)
                         is TweetComposedEvent -> handleTweetComposedEvent(event)
                         is TweetDeletedEvent -> removeStatus(event.statusId)
@@ -187,10 +184,6 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    fun showPollResults(status: TweetViewData.Concrete) = viewModelScope.launch {
-        updateStatus(status.id) { it.copy(poll = it.poll?.copy(voted = true)) }
-    }
-
     fun removeStatus(statusIdToRemove: String) {
         updateSuccess { uiState ->
             uiState.copy(
@@ -279,11 +272,6 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    private fun handlePollVotedEvent(statusId: String, poll: Poll) {
-        updateStatus(statusId) { status ->
-            status.copy(poll = poll)
-        }
-    }
 
     private fun removeAllByAccountId(accountId: String) {
         updateSuccess { uiState ->

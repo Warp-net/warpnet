@@ -17,9 +17,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.google.android.material.color.MaterialColors
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.adapter.PollAdapter
-import site.warpnet.warpdroid.adapter.PollAdapter.Companion.MULTIPLE
-import site.warpnet.warpdroid.adapter.PollAdapter.Companion.SINGLE
 import site.warpnet.warpdroid.databinding.ItemTweetEditBinding
 import site.warpnet.warpdroid.entity.Attachment.Focus
 import site.warpnet.warpdroid.entity.TweetEdit
@@ -133,35 +130,8 @@ class ViewEditsAdapter(
             listener,
         )
 
-        if (edit.poll == null) {
-            binding.tweetEditPollOptions.hide()
-            binding.tweetEditPollDescription.hide()
-        } else {
-            binding.tweetEditPollOptions.show()
-
-            // not used for now since not reported by the api
-            // https://github.com/mastodon/mastodon/issues/22571
-            // binding.tweetEditPollDescription.show()
-
-            val pollAdapter = PollAdapter()
-            binding.tweetEditPollOptions.adapter = pollAdapter
-            binding.tweetEditPollOptions.layoutManager = LinearLayoutManager(context)
-
-            pollAdapter.setup(
-                options = edit.poll.options.map { it.toViewData(false) },
-                voteCount = 0,
-                votersCount = null,
-                emojis = edit.emojis,
-                mode = if (edit.poll.multiple) { // not reported by the api
-                    MULTIPLE
-                } else {
-                    SINGLE
-                },
-                resultClickListener = null,
-                animateEmojis = animateEmojis,
-                enabled = false
-            )
-        }
+        binding.tweetEditPollOptions.hide()
+        binding.tweetEditPollDescription.hide()
 
         if (edit.mediaAttachments.isEmpty()) {
             binding.tweetEditMediaPreview.hide()

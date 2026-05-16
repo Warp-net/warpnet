@@ -25,7 +25,6 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
-import site.warpnet.warpdroid.appstore.PollVoteEvent
 import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.components.compose.ComposeActivity
@@ -248,22 +247,6 @@ abstract class TweetActionsViewModel(
         }
     }
 
-    fun voteInPoll(
-        statusId: String,
-        pollId: String,
-        choices: List<Int>
-    ) {
-        if (choices.isEmpty()) {
-            return
-        }
-        viewModelScope.launch {
-            warpnetApi.voteInPoll(pollId, choices)
-                .onSuccess { poll ->
-                    eventHub.dispatch(PollVoteEvent(statusId, poll))
-                }
-        }
-    }
-
     fun editStatus(status: Tweet) {
         viewModelScope.launch {
             warpnetApi.statusSource(status.id)
@@ -278,7 +261,6 @@ abstract class TweetActionsViewModel(
                             sensitive = status.sensitive,
                             language = status.language,
                             statusId = source.id,
-                            poll = status.poll?.toNewPoll(status.createdAt),
                             kind = ComposeActivity.ComposeKind.EDIT_POSTED
                         )
                         _startComposing.emit(composeOptions)
@@ -311,7 +293,6 @@ abstract class TweetActionsViewModel(
                             sensitive = sourceStatus.sensitive,
                             modifiedInitialState = true,
                             language = sourceStatus.language,
-                            poll = sourceStatus.poll?.toNewPoll(sourceStatus.createdAt),
                             kind = ComposeActivity.ComposeKind.NEW
                         )
                         _startComposing.emit(composeOptions)

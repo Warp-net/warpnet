@@ -78,7 +78,6 @@ import site.warpnet.warpdroid.components.compose.ComposeViewModel.ConfirmationKi
 import site.warpnet.warpdroid.components.compose.ComposeViewModel.QueuedMedia
 import site.warpnet.warpdroid.components.compose.dialog.CaptionDialog
 import site.warpnet.warpdroid.components.compose.dialog.makeFocusDialog
-import site.warpnet.warpdroid.components.compose.dialog.showAddPollDialog
 import site.warpnet.warpdroid.components.compose.view.ComposeOptionsListener
 import site.warpnet.warpdroid.components.compose.view.ComposeScheduleView
 import site.warpnet.warpdroid.components.compose.view.ComposeScheduleView.Companion.parseDate
@@ -90,7 +89,6 @@ import site.warpnet.warpdroid.databinding.ActivityComposeBinding
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Emoji
-import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.PrefKeys
@@ -343,7 +341,6 @@ class ComposeActivity :
         setupLanguageSpinner(getInitialLanguages(composeOptions?.language, activeAccount))
         setupComposeField(preferences, viewModel.startingText)
         setupContentWarningField(composeOptions?.contentWarning)
-        setupPollView()
         applyShareIntent(intent, savedInstanceState)
 
         /* Finally, overwrite state with data from saved instance state. */
@@ -540,13 +537,6 @@ class ComposeActivity :
         }
 
         lifecycleScope.launch {
-            viewModel.poll.collect { poll ->
-                binding.pollPreview.visible(poll != null)
-                poll?.let(binding.pollPreview::setPoll)
-            }
-        }
-
-        lifecycleScope.launch {
             viewModel.scheduledAt.collect { scheduledAt ->
                 if (scheduledAt == null) {
                     binding.composeScheduleView.resetSchedule()
@@ -558,13 +548,11 @@ class ComposeActivity :
         }
 
         lifecycleScope.launch {
-            viewModel.media.combine(viewModel.poll) { media, poll ->
-                val active = poll == null &&
-                    media.size < maxUploadMediaNumber &&
+            viewModel.media.collect { media ->
+                val active = media.size < maxUploadMediaNumber &&
                     (media.isEmpty() || media.first().type == QueuedMedia.Type.IMAGE)
                 enableButton(binding.composeAddMediaButton, active, active)
-                enablePollButton(media.isEmpty())
-            }.collect()
+            }
         }
 
         lifecycleScope.launch {
@@ -646,7 +634,6 @@ class ComposeActivity :
 
         binding.actionPhotoTake.setOnClickListener { initiateCameraApp() }
         binding.actionPhotoPick.setOnClickListener { onMediaPick() }
-        binding.addPollTextActionTextView.setOnClickListener { openPollDialog() }
 
         onBackPressedDispatcher.addCallback(this, onBackPressedCallback)
     }
@@ -960,55 +947,6 @@ class ComposeActivity :
         addMediaBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
     }
 
-    private fun openPollDialog() = lifecycleScope.launch {
-        addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-        val instanceParams = viewModel.instanceInfo.first()
-        showAddPollDialog(
-            context = this@ComposeActivity,
-            poll = viewModel.poll.value,
-            maxOptionCount = instanceParams.pollMaxOptions,
-            maxOptionLength = instanceParams.pollMaxLength,
-            minDuration = instanceParams.pollMinDuration,
-            maxDuration = instanceParams.pollMaxDuration,
-            onUpdatePoll = viewModel::updatePoll
-        )
-    }
-
-    private fun setupPollView() {
-        val margin = resources.getDimensionPixelSize(R.dimen.compose_media_preview_margin)
-        val marginBottom = resources.getDimensionPixelSize(
-            R.dimen.compose_media_preview_margin_bottom
-        )
-
-        val layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        layoutParams.setMargins(margin, margin, margin, marginBottom)
-        binding.pollPreview.layoutParams = layoutParams
-
-        binding.pollPreview.setOnClickListener {
-            val popup = PopupMenu(this, binding.pollPreview)
-            val editId = 1
-            val removeId = 2
-            popup.menu.add(0, editId, 0, R.string.edit_poll)
-            popup.menu.add(0, removeId, 0, R.string.action_remove)
-            popup.setOnMenuItemClickListener { menuItem ->
-                when (menuItem.itemId) {
-                    editId -> openPollDialog()
-                    removeId -> removePoll()
-                }
-                true
-            }
-            popup.show()
-        }
-    }
-
-    private fun removePoll() {
-        viewModel.updatePoll(null)
-        binding.pollPreview.hide()
-    }
-
     override fun onVisibilityChanged(visibility: Tweet.Visibility) {
         composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         viewModel.changeStatusVisibility(visibility)
@@ -1145,20 +1083,6 @@ class ComposeActivity :
                 R.attr.textColorDisabled
             }
         )
-    }
-
-    private fun enablePollButton(enable: Boolean) {
-        binding.addPollTextActionTextView.isEnabled = enable
-        val textColor = MaterialColors.getColor(
-            binding.addPollTextActionTextView,
-            if (enable) {
-                android.R.attr.textColorTertiary
-            } else {
-                R.attr.textColorDisabled
-            }
-        )
-        binding.addPollTextActionTextView.setTextColor(textColor)
-        binding.addPollTextActionTextView.compoundDrawablesRelative[0].setTint(textColor)
     }
 
     private fun editImageInQueue(item: QueuedMedia) {
@@ -1427,7 +1351,6 @@ class ComposeActivity :
         val mediaAttachments: List<Attachment>? = null,
         val scheduledAt: String? = null,
         val sensitive: Boolean? = null,
-        val poll: NewPoll? = null,
         val modifiedInitialState: Boolean? = null,
         val language: String? = null,
         val statusId: String? = null,

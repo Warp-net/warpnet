@@ -3,7 +3,6 @@ package site.warpnet.warpdroid.appstore
 import site.warpnet.warpdroid.entity.Account
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Notification
-import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Tweet
 
 data class TweetChangedEvent(val status: Tweet) : Event
@@ -15,8 +14,6 @@ data class TweetComposedEvent(val status: Tweet) : Event
 data class TweetScheduledEvent(val scheduledStatusId: String) : Event
 data class ProfileEditedEvent(val newProfileData: Account) : Event
 data class PreferenceChangedEvent(val preferenceKey: String) : Event
-data class PollVoteEvent(val statusId: String, val poll: Poll) : Event
-data class PollShowResultsEvent(val statusId: String) : Event
 data class DomainMuteEvent(val instance: String) : Event
 data class AnnouncementReadEvent(val announcementId: String) : Event
 data class FilterUpdatedEvent(val filterContext: List<Filter.Kind>) : Event

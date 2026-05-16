@@ -31,7 +31,6 @@ import site.warpnet.warpdroid.components.search.SearchType
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Emoji
-import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.service.MediaToSend
@@ -104,13 +103,6 @@ class ComposeViewModel @AssistedInject constructor(
         initialValue = !composeOptions?.contentWarning.isNullOrEmpty()
     )
     val showContentWarning: StateFlow<Boolean> = _showContentWarning.asStateFlow()
-
-    private val _poll: SavedStateFlow<NewPoll?> = SavedStateFlow(
-        savedStateHandle = state,
-        key = "POLL",
-        initialValue = composeOptions?.poll
-    )
-    val poll: StateFlow<NewPoll?> = _poll.asStateFlow()
 
     private val _scheduledAt: SavedStateFlow<String?> = SavedStateFlow(
         savedStateHandle = state,
@@ -386,14 +378,13 @@ class ComposeViewModel @AssistedInject constructor(
         val textChanged = content.orEmpty() != startingText.orEmpty()
         val contentWarningChanged = contentWarning.orEmpty() != startingContentWarning
         val mediaChanged = _media.value.isNotEmpty()
-        val pollChanged = _poll.isChanged()
         val didScheduledTimeChange = _scheduledAt.isChanged()
 
-        return modifiedInitialState || textChanged || contentWarningChanged || mediaChanged || pollChanged || didScheduledTimeChange
+        return modifiedInitialState || textChanged || contentWarningChanged || mediaChanged || didScheduledTimeChange
     }
 
     private fun isEmpty(content: String?, contentWarning: String?): Boolean {
-        return !modifiedInitialState && (content.isNullOrBlank() && contentWarning.isNullOrBlank() && _media.value.isEmpty() && _poll.value == null)
+        return !modifiedInitialState && (content.isNullOrBlank() && contentWarning.isNullOrBlank() && _media.value.isEmpty())
     }
 
     fun contentWarningChanged(value: Boolean) {
@@ -441,7 +432,6 @@ class ComposeViewModel @AssistedInject constructor(
             media = attachedMedia,
             scheduledAt = _scheduledAt.value,
             inReplyToId = inReplyToId,
-            poll = _poll.value,
             replyingTweetContent = null,
             replyingStatusAuthorUsername = null,
             accountId = accountId,
@@ -522,11 +512,6 @@ class ComposeViewModel @AssistedInject constructor(
                 emptyList()
             }
         }
-    }
-
-    fun updatePoll(newPoll: NewPoll?) {
-        _poll.value = newPoll
-        updateCloseConfirmation()
     }
 
     fun updateScheduledAt(newScheduledAt: String?) {

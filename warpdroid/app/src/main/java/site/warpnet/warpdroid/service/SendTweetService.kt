@@ -43,7 +43,6 @@ import site.warpnet.warpdroid.components.compose.UploadEvent
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.MediaAttribute
-import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.NewTweet
 import site.warpnet.warpdroid.entity.ScheduledTweetReply
 import site.warpnet.warpdroid.entity.Tweet
@@ -234,7 +233,6 @@ class SendTweetService : Service() {
                 sensitive = statusToSend.sensitive,
                 mediaIds = media.map { it.id!! },
                 scheduledAt = statusToSend.scheduledAt,
-                poll = statusToSend.poll,
                 language = statusToSend.language,
                 mediaAttributes = media.map { mediaItem ->
                     MediaAttribute(
@@ -480,7 +478,6 @@ data class TweetToSend(
     val media: List<MediaToSend>,
     val scheduledAt: String?,
     val inReplyToId: String?,
-    val poll: NewPoll?,
     val replyingTweetContent: String?,
     val replyingStatusAuthorUsername: String?,
     val accountId: Long,

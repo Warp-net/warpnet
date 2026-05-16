@@ -103,7 +103,6 @@ import site.warpnet.warpdroid.ui.WarpdroidTheme
 import site.warpnet.warpdroid.ui.preferences.LocalAccount
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 import site.warpnet.warpdroid.ui.tweetcomponents.MediaAttachments
-import site.warpnet.warpdroid.ui.tweetcomponents.PollPreview
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.ui.warpdroidDefaultCornerShape
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
@@ -441,12 +440,6 @@ class ScheduledTweetActivity : BaseActivity() {
                 filter = null,
                 modifier = Modifier.padding(top = 12.dp, start = 16.dp, end = 16.dp)
             )
-            status.poll?.let { poll ->
-                PollPreview(
-                    poll = poll,
-                    modifier = Modifier.padding(top = 12.dp, start = 16.dp, end = 16.dp)
-                )
-            }
             FlowRow(
                 modifier = Modifier.padding(top = 12.dp, start = 16.dp, end = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -539,7 +532,6 @@ class ScheduledTweetActivity : BaseActivity() {
                 inReplyToId = item.inReplyToId,
                 visibility = item.visibility,
                 language = item.language,
-                poll = item.poll,
                 scheduledAt = formatDate(item.scheduledAt),
                 sensitive = item.sensitive,
                 kind = ComposeActivity.ComposeKind.EDIT_SCHEDULED
@@ -575,7 +567,6 @@ class ScheduledTweetActivity : BaseActivity() {
                             description = "description 1"
                         )
                     ),
-                    poll = null,
                     spoilerExpanded = true,
                     overflowVisible = true,
                     mediaVisible = true,

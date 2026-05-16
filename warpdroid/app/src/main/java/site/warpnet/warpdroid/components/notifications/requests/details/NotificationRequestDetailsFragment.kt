@@ -237,14 +237,6 @@ class NotificationRequestDetailsFragment :
         viewModel.changeContentCollapsed(isCollapsed, viewData)
     }
 
-    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) {
-        viewModel.voteInPoll(viewData.id, pollId, choices)
-    }
-
-    override fun onShowPollResults(viewData: TweetViewData.Concrete) {
-        viewModel.showPollResults(viewData)
-    }
-
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
     }

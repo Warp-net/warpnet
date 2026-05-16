@@ -85,16 +85,6 @@ sealed class TweetViewData {
         val spoilerText: String =
             actionable.spoilerText.translated { translation -> translation.spoilerText ?: this }
 
-        val poll = actionable.poll?.translated { translation ->
-            val translatedOptionsText = translation.poll?.options?.map { option ->
-                option.title
-            } ?: return@translated this
-            val translatedOptions = options.zip(translatedOptionsText) { option, translatedText ->
-                option.copy(title = translatedText)
-            }
-            copy(options = translatedOptions)
-        }
-
         val actionable: Tweet
             get() = status.actionableStatus
 

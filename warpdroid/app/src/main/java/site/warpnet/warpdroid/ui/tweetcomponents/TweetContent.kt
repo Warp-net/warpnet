@@ -169,12 +169,6 @@ fun ColumnScope.TweetContent(
         modifier = Modifier.padding(top = 6.dp)
     )
 
-    Poll(
-        statusViewData = statusViewData,
-        isExpanded = isExpanded,
-        listener = listener
-    )
-
     Quote(
         statusViewData = statusViewData,
         isExpanded = isExpanded,

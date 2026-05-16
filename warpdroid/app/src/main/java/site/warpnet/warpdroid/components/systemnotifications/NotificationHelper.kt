@@ -60,8 +60,6 @@ import site.warpnet.warpdroid.receiver.SendTweetBroadcastReceiver
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.unicodeWrap
-import site.warpnet.warpdroid.viewdata.buildDescription
-import site.warpnet.warpdroid.viewdata.calculatePercent
 import site.warpnet.warpdroid.worker.NotificationWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.text.NumberFormat
@@ -222,7 +220,6 @@ class NotificationHelper @Inject constructor(
             Notification.Type.Retweet -> account.notificationsRetweeted
             Notification.Type.PleromaEmojiReaction,
             Notification.Type.Like -> account.notificationsLiked
-            Notification.Type.Poll -> account.notificationsPolls
             Notification.Type.SignUp -> account.notificationsAdmin
             Notification.Type.Update -> account.notificationsUpdates
             Notification.Type.Report -> account.notificationsAdmin
@@ -298,7 +295,7 @@ class NotificationHelper @Inject constructor(
             .setContentTitle(titleForType(body, account))
             .setContentText(bodyForType(body, account))
 
-        if (body.type == Notification.Type.Mention || body.type == Notification.Type.Poll) {
+        if (body.type == Notification.Type.Mention) {
             builder.setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(bodyForType(body, account))
@@ -498,11 +495,6 @@ class NotificationHelper @Inject constructor(
             Notification.Type.Like -> context.getString(R.string.notification_like_format, accountName)
             Notification.Type.PleromaEmojiReaction -> context.getString(R.string.notification_pleroma_reaction_format, accountName)
             Notification.Type.Retweet -> context.getString(R.string.notification_retweet_format, accountName)
-            Notification.Type.Poll -> if (notification.status!!.account.id == account.accountId) {
-                context.getString(R.string.poll_ended_created)
-            } else {
-                context.getString(R.string.poll_ended_voted)
-            }
             Notification.Type.SignUp -> context.getString(R.string.notification_sign_up_format, accountName)
             Notification.Type.Update -> context.getString(R.string.notification_update_format, accountName)
             Notification.Type.Report -> context.getString(R.string.notification_report_format, account.domain)
@@ -528,28 +520,6 @@ class NotificationHelper @Inject constructor(
                 notification.status.spoilerText
             } else {
                 notification.status?.content?.parseAsWarpnetHtml()?.toString()
-            }
-            Notification.Type.Poll -> if (!notification.status?.spoilerText.isNullOrEmpty() && !alwaysOpenSpoiler) {
-                return notification.status.spoilerText
-            } else {
-                val poll = notification.status?.poll ?: return null
-
-                val builder = StringBuilder(notification.status.content.parseAsWarpnetHtml())
-                builder.append('\n')
-
-                poll.options.forEachIndexed { i, option ->
-                    builder.append(
-                        buildDescription(
-                            option.title,
-                            calculatePercent(option.votesCount, poll.votersCount, poll.votesCount),
-                            poll.ownVotes.contains(i),
-                            context
-                        )
-                    )
-                    builder.append('\n')
-                }
-
-                return builder.toString()
             }
             Notification.Type.Report -> return context.getString(
                 R.string.notification_header_report_format,

@@ -243,25 +243,6 @@ fun TweetNotification(
                         }
                     }
 
-                    if (status.poll != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 8.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_insert_chart_24dp),
-                                tint = warpdroidColors.tertiaryTextColor,
-                                contentDescription = null,
-                                modifier = Modifier.padding(end = 4.dp)
-                            )
-                            Text(
-                                text = stringResource(R.string.poll),
-                                style = LocalPreferences.current.statusTextStyles.medium,
-                                color = warpdroidColors.tertiaryTextColor
-                            )
-                        }
-                    }
-
                     if (status.quote != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

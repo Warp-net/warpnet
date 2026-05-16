@@ -41,7 +41,6 @@ data class TweetParams(
     val language: String,
     // null on GoToSocial when there are no media attachments
     @Json(name = "media_ids") val mediaIds: List<String>?,
-    val poll: NewPoll?
 )
 
 // minimal class to avoid json parsing errors with servers that don't support scheduling

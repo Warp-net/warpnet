@@ -180,16 +180,6 @@ class NotificationRequestDetailsViewModel @AssistedInject constructor(
         updateTweetViewData(status.id) { it.copy(isCollapsed = isCollapsed) }
     }
 
-    fun showPollResults(viewData: TweetViewData.Concrete) {
-        updateTweetViewData(viewData.id) { viewData ->
-            viewData.copy(
-                status = viewData.status.copy(
-                    poll = viewData.status.poll?.copy(voted = true)
-                )
-            )
-        }
-    }
-
     suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit> {
         updateTweetViewData(status.id) { viewData ->
             viewData.copy(translation = TranslationViewData.Loading)

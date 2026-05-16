@@ -17,7 +17,6 @@ package site.warpnet.warpdroid.components.scheduled
 
 import androidx.compose.runtime.Stable
 import site.warpnet.warpdroid.entity.Attachment
-import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.ScheduledTweet
 import site.warpnet.warpdroid.entity.Tweet
 import java.util.Date
@@ -33,7 +32,6 @@ data class ScheduledTweetViewData(
     val inReplyToId: String?,
     val language: String,
     val attachments: List<Attachment>,
-    val poll: NewPoll?,
     val spoilerExpanded: Boolean,
     val overflowVisible: Boolean,
     val mediaVisible: Boolean
@@ -63,7 +61,6 @@ fun ScheduledTweet.toViewData(
         inReplyToId = params.inReplyToId,
         language = params.language,
         attachments = attachments,
-        poll = params.poll,
         spoilerExpanded = spoilerExpanded,
         overflowVisible = overflowVisible,
         mediaVisible = mediaVisible

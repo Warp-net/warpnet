@@ -11,7 +11,6 @@ data class TweetEdit(
     val sensitive: Boolean,
     @Json(name = "created_at") val createdAt: Date,
     val account: TimelineAccount,
-    val poll: Poll? = null,
     @Json(name = "media_attachments") val mediaAttachments: List<Attachment>,
     val emojis: List<Emoji>
 )

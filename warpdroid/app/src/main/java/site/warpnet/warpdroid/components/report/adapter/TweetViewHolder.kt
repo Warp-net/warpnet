@@ -96,11 +96,6 @@ class TweetViewHolder(
             mediaViewHeight
         )
 
-        statusViewHelper.setupPollReadonly(
-            viewData.status.poll.toViewData(),
-            viewData.status.emojis,
-            statusDisplayOptions
-        )
         setCreatedAt(viewData.status.createdAt)
     }
 

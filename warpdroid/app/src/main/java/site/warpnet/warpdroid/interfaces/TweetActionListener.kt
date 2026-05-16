@@ -54,10 +54,6 @@ interface TweetActionListener : LinkListener {
      */
     fun onContentCollapsedChange(viewData: TweetViewData.Concrete, isCollapsed: Boolean)
 
-    fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>)
-
-    fun onShowPollResults(viewData: TweetViewData.Concrete)
-
     fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean)
 
     fun onTranslate(viewData: TweetViewData.Concrete)

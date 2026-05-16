@@ -138,14 +138,6 @@ class SearchStatusesFragment :
         viewModel.collapsedChange(viewData, isCollapsed)
     }
 
-    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) {
-        viewModel.voteInPoll(viewData.id, pollId, choices)
-    }
-
-    override fun onShowPollResults(viewData: TweetViewData.Concrete) {
-        viewModel.showPollResults(viewData)
-    }
-
     override fun onTranslate(viewData: TweetViewData.Concrete) {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.translate(viewData)

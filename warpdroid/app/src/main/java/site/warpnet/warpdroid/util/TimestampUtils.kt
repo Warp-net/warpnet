@@ -79,24 +79,3 @@ fun getRelativeTimeSpanString(context: Context, then: Long, now: Long): String {
     return context.getString(format, span)
 }
 
-fun formatPollDuration(context: Context, then: Long, now: Long): String {
-    var span = then - now
-    if (span < 0) {
-        span = 0
-    }
-    val format: Int
-    if (span < MINUTE_IN_MILLIS) {
-        span /= SECOND_IN_MILLIS
-        format = R.plurals.poll_timespan_seconds
-    } else if (span < HOUR_IN_MILLIS) {
-        span /= MINUTE_IN_MILLIS
-        format = R.plurals.poll_timespan_minutes
-    } else if (span < DAY_IN_MILLIS) {
-        span /= HOUR_IN_MILLIS
-        format = R.plurals.poll_timespan_hours
-    } else {
-        span /= DAY_IN_MILLIS
-        format = R.plurals.poll_timespan_days
-    }
-    return context.resources.getQuantityString(format, span.toInt(), span.toInt())
-}

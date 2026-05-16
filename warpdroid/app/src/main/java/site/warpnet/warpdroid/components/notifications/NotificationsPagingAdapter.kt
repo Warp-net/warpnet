@@ -91,7 +91,6 @@ class NotificationsPagingAdapter(
             is NotificationViewData.Concrete -> {
                 when (notification.type) {
                     Notification.Type.Mention,
-                    Notification.Type.Poll,
                     Notification.Type.Status,
                     Notification.Type.Update,
                     Notification.Type.Quote,

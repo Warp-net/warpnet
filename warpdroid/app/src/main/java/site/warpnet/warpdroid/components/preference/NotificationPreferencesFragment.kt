@@ -106,17 +106,6 @@ class NotificationPreferencesFragment : BasePreferencesFragment() {
                 }
 
                 switchPreference {
-                    setTitle(R.string.notification_poll_name)
-                    setSummary(R.string.notification_poll_description)
-                    isIconSpaceReserved = false
-                    isChecked = activeAccount.notificationsPolls
-                    setOnPreferenceChangeListener { _, newValue ->
-                        updateAccount { copy(notificationsPolls = newValue as Boolean) }
-                        true
-                    }
-                }
-
-                switchPreference {
                     setTitle(R.string.notification_subscription_name)
                     setSummary(R.string.notification_subscription_description)
                     isIconSpaceReserved = false
