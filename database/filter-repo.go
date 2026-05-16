@@ -219,7 +219,7 @@ func (repo *FilterRepo) AddKeyword(userId, filterId string, kw domain.FilterKeyw
 		kw.Id = uuid.New().String()
 	}
 	f.Keywords = append(f.Keywords, kw)
-	if _, err := repo.saveExact(userId, f); err != nil {
+	if err := repo.saveExact(userId, f); err != nil {
 		return domain.FilterKeyword{}, err
 	}
 	return kw, nil
@@ -243,7 +243,7 @@ func (repo *FilterRepo) UpdateKeyword(userId string, kw domain.FilterKeyword) (d
 				f.Keywords[i].Keyword = kw.Keyword
 			}
 			f.Keywords[i].WholeWord = kw.WholeWord
-			if _, err := repo.saveExact(userId, f); err != nil {
+			if err := repo.saveExact(userId, f); err != nil {
 				return domain.FilterKeyword{}, err
 			}
 			return f.Keywords[i], nil
@@ -272,8 +272,7 @@ func (repo *FilterRepo) DeleteKeyword(userId, keywordId string) error {
 		out = append(out, k)
 	}
 	f.Keywords = out
-	_, err = repo.saveExact(userId, f)
-	return err
+	return repo.saveExact(userId, f)
 }
 
 func (repo *FilterRepo) findFilterForKeyword(userId, keywordId string) (domain.Filter, bool, error) {
@@ -303,21 +302,18 @@ func (repo *FilterRepo) findFilterForKeyword(userId, keywordId string) (domain.F
 // saveExact persists the filter without going through Update's
 // merge-with-existing path — used by the keyword sub-CRUD which has
 // already loaded the full record.
-func (repo *FilterRepo) saveExact(userId string, f domain.Filter) (domain.Filter, error) {
+func (repo *FilterRepo) saveExact(userId string, f domain.Filter) error {
 	bt, err := json.Marshal(f)
 	if err != nil {
-		return domain.Filter{}, err
+		return err
 	}
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return domain.Filter{}, err
+		return err
 	}
 	defer txn.Rollback()
 	if err := txn.Set(filterKey(userId, f.Id), bt); err != nil {
-		return domain.Filter{}, err
+		return err
 	}
-	if err := txn.Commit(); err != nil {
-		return domain.Filter{}, err
-	}
-	return f, nil
+	return txn.Commit()
 }
