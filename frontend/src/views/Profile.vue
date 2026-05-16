@@ -95,12 +95,19 @@ resulting from the use or misuse of this software.
               </button>
             </div>
 
-            <div v-if="!noUser && !isSelf && !loading">
+            <div v-if="!noUser && !isSelf && !loading" class="relative">
               <button
+                @click="profileMenuOpen = !profileMenuOpen"
                 class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 text-blue font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border border-blue mb-2 hover:bg-lightblue"
+                :aria-expanded="profileMenuOpen"
+                aria-label="More options"
               >
                 <i class="fas fa-ellipsis-h"></i>
               </button>
+              <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                <button type="button" @click="muteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Mute @{{ profile.id }}</button>
+                <button type="button" @click="blockFromProfile" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Block @{{ profile.id }}</button>
+              </div>
               <button
                 v-if="isFollower()"
                 @click="sendMessage()"
@@ -242,7 +249,7 @@ resulting from the use or misuse of this software.
             <i class="fas fa-plus lg:hidden"></i>
           </button>
         </div>
-        <Tweets v-if="!noUser" :tweets="tweets" />
+        <Tweets v-if="!noUser" :tweets="sortedTweets" />
       </div>
       <DefaultRightBar
           :profile="profile"
@@ -295,7 +302,16 @@ export default {
       followingStatus: new Map(),
       followerStatus: new Map(),
       subscribed: false,
+      profileMenuOpen: false,
     };
+  },
+  computed: {
+    sortedTweets() {
+      // Render pinned tweets at the top of the user's timeline.
+      const pinned = this.tweets.filter(t => t && t.pinned);
+      const rest = this.tweets.filter(t => !(t && t.pinned));
+      return pinned.concat(rest);
+    },
   },
   methods: {
     isMySelf(profileId) {
@@ -392,6 +408,24 @@ export default {
         }
       } catch (err) {
         console.error(`failed to toggle subscribe [${this.profile.id}]`, err);
+      }
+    },
+    async muteFromProfile() {
+      this.profileMenuOpen = false;
+      try {
+        await warpnetService.muteUser(this.profile.id);
+      } catch (err) {
+        console.error(`failed to mute [${this.profile.id}]`, err);
+      }
+    },
+    async blockFromProfile() {
+      this.profileMenuOpen = false;
+      if (!confirm(`Block @${this.profile.id}? They will no longer be able to follow you or see your tweets.`)) return;
+      try {
+        await warpnetService.blockUser(this.profile.id);
+        this.$router.push({ name: 'Home' });
+      } catch (err) {
+        console.error(`failed to block [${this.profile.id}]`, err);
       }
     },
     async loadMore() {

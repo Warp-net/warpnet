@@ -68,6 +68,7 @@ resulting from the use or misuse of this software.
             <button type="button" @click="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
               {{ bookmarked ? 'Remove bookmark' : 'Bookmark' }}
             </button>
+            <button type="button" @click="openQuotes" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">View quotes</button>
             <template v-if="isOwner">
               <button type="button" @click="togglePin" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
                 {{ tweet.pinned ? 'Unpin from profile' : 'Pin to profile' }}
@@ -79,11 +80,23 @@ resulting from the use or misuse of this software.
         </div>
       </div>
       <p v-if="!tweet.moderation || tweet.moderation?.is_ok" class="pb-2">
-        {{ tweet.text }} 
+        {{ tweet.text }}
       </p>
       <p v-else class="pb-2 bg-red-300">
         Moderated: {{ tweet.moderation.reason }}.
       </p>
+      <div
+        v-if="tweet.quoted_tweet_id"
+        class="mb-2 border border-lighter rounded p-3 bg-lightest text-sm hover:bg-lighter cursor-pointer"
+        @click.stop="openQuoted"
+      >
+        <p class="font-bold">
+          {{ tweet.quoted_username || 'Quoted tweet' }}
+          <span class="text-dark font-normal ml-1">@{{ tweet.quoted_user_id }}</span>
+        </p>
+        <p v-if="tweet.quoted_text" class="mt-1 line-clamp-4">{{ tweet.quoted_text }}</p>
+        <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
+      </div>
       <div v-if="tweetImages.length === 1" class="mt-2">
         <img
             :src="tweetImages[0]"
@@ -135,6 +148,15 @@ resulting from the use or misuse of this software.
             class="hover:underline flat-btn"
             @click="showRetweetersOverlay = true"
           >{{ getRetweetsCount(tweet.id) || '?'}}</button>
+          <button
+            @click="showQuoteOverlay = true"
+            type="button"
+            class="ml-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-blue-100 transition-colors"
+            aria-label="Quote tweet"
+            title="Quote tweet"
+          >
+            <i class="fas fa-quote-right text-sm" aria-hidden="true"></i>
+          </button>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <button
@@ -190,6 +212,18 @@ resulting from the use or misuse of this software.
         @close="showEditOverlay = false"
         @saved="onTweetEdited"
     />
+    <QuoteOverlay
+        v-if="showQuoteOverlay"
+        :show="showQuoteOverlay"
+        :tweet="tweet"
+        @close="showQuoteOverlay = false"
+    />
+    <QuotingOverlay
+        :show="showQuotingOverlay"
+        :tweetId="tweet.id"
+        :ownerUserId="tweet.user_id"
+        @close="showQuotingOverlay = false"
+    />
   </div>
 </template>
 
@@ -205,6 +239,8 @@ export default {
     LikersOverlay: defineAsyncComponent(() => import('./LikersOverlay.vue')),
     RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
     EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
+    QuoteOverlay: defineAsyncComponent(() => import('./QuoteOverlay.vue')),
+    QuotingOverlay: defineAsyncComponent(() => import('./QuotingOverlay.vue')),
   },
   data() {
     return {
@@ -213,6 +249,8 @@ export default {
       showLikersOverlay: false,
       showRetweetersOverlay: false,
       showEditOverlay: false,
+      showQuoteOverlay: false,
+      showQuotingOverlay: false,
       showDropdown: false,
       deleted: false,
       isOwner: false,
@@ -291,6 +329,18 @@ export default {
       this.showDropdown = false;
       this.showEditOverlay = true;
     },
+    openQuoted() {
+      if (!this.tweet.quoted_tweet_id) return;
+      this.$router.push({
+        name: 'Tweet',
+        params: { id: this.tweet.quoted_tweet_id },
+        query: { u: this.tweet.quoted_user_id || '' },
+      });
+    },
+    openQuotes() {
+      this.showDropdown = false;
+      this.showQuotingOverlay = true;
+    },
     onTweetEdited(updated) {
       if (updated && updated.text) {
         this.tweet.text = updated.text;
@@ -317,7 +367,11 @@ export default {
     async deleteTweet() {
       this.showDropdown = false;
       try {
-        if (!this.tweet.parent_id || this.tweet.parent_id === '') {
+        if (this.tweet.quoted_tweet_id) {
+          // Quote-tweets live under their own path so the host's
+          // /QUOTING index for the quoted tweet stays consistent.
+          await warpnetService.deleteQuote(this.tweet.id);
+        } else if (!this.tweet.parent_id || this.tweet.parent_id === '') {
           await warpnetService.deleteTweet({
             userId: this.tweet.user_id,
             tweetId: this.tweet.id,

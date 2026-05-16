@@ -43,7 +43,7 @@ resulting from the use or misuse of this software.
           </p>
           <p class="text-dark text-sm">@{{ user.id }}</p>
         </div>
-        <div v-if="profile && profile.user_id !== user.id">
+        <div v-if="profile && profile.user_id !== user.id" class="relative flex items-center">
           <button
             v-if="!isFollowing()"
             @click="follow"
@@ -60,6 +60,19 @@ resulting from the use or misuse of this software.
           >
             {{ followingLabel }}
           </button>
+          <button
+            type="button"
+            @click="showMenu = !showMenu"
+            class="ml-2 mb-2 rounded-full w-8 h-8 flex items-center justify-center hover:bg-lighter flat-btn"
+            :aria-expanded="showMenu"
+            aria-label="More options"
+          >
+            <i class="fas fa-ellipsis-h text-dark text-sm" aria-hidden="true"></i>
+          </button>
+          <div v-if="showMenu" class="absolute right-0 top-10 mt-1 w-44 bg-white rounded-md shadow-lg py-1 z-10">
+            <button type="button" @click="mute" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Mute @{{ user.id }}</button>
+            <button type="button" @click="block" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Block @{{ user.id }}</button>
+          </div>
         </div>
       </div>
       <div>
@@ -94,6 +107,7 @@ export default {
       followingLabel: "Following",
       profile: {},
       followingStatus: new Map(),
+      showMenu: false,
     };
   },
   methods: {
@@ -117,6 +131,23 @@ export default {
         return
       }
       this.followingStatus.set(this.user.id, false);
+    },
+    async mute() {
+      this.showMenu = false;
+      try {
+        await warpnetService.muteUser(this.user.id);
+      } catch (err) {
+        console.error(`failed to mute [${this.user.id}]`, err);
+      }
+    },
+    async block() {
+      this.showMenu = false;
+      if (!confirm(`Block @${this.user.id}? They will no longer be able to follow you or see your tweets.`)) return;
+      try {
+        await warpnetService.blockUser(this.user.id);
+      } catch (err) {
+        console.error(`failed to block [${this.user.id}]`, err);
+      }
     },
     async pushToProfilePage(profileId) {
       this.$router.push({

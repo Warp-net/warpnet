@@ -41,18 +41,28 @@
       </div>
 
       <div v-for="f in filters" :key="f.id" class="border-b border-lighter">
-        <div class="px-5 py-3 flex items-center">
-          <p class="font-bold">{{ f.title || f.id }}</p>
+        <div class="px-5 py-3 flex items-center gap-2">
+          <input
+            v-model="f.title"
+            type="text"
+            class="font-bold bg-transparent flex-1 focus:outline-none focus:bg-white focus:rounded focus:px-1 focus:border focus:border-lighter"
+            @change="renameFilter(f)"
+          />
           <button
             @click="deleteFilter(f.id)"
-            class="ml-auto text-red-600 hover:bg-red-50 rounded-full px-3 py-1"
+            class="text-red-600 hover:bg-red-50 rounded-full px-3 py-1"
           >
             Delete
           </button>
         </div>
         <div class="px-5 pb-3">
           <div v-for="kw in f.keywords || []" :key="kw.id" class="flex items-center text-sm py-1">
-            <span class="bg-lighter rounded-full px-2 py-0.5">{{ kw.keyword }}</span>
+            <input
+              v-model="kw.keyword"
+              type="text"
+              class="bg-lighter rounded-full px-2 py-0.5 focus:outline-none focus:bg-white"
+              @change="renameKeyword(f.id, kw)"
+            />
             <button
               @click="removeKeyword(f.id, kw.id)"
               class="ml-2 text-dark hover:text-red-600"
@@ -138,6 +148,18 @@ export default {
         await warpnetService.deleteFilterKeyword(filterId, keywordId);
         await this.reload();
       } catch (err) { console.error('Failed to remove keyword', err); }
+    },
+    async renameFilter(f) {
+      if (!f.title || !f.title.trim()) return;
+      try {
+        await warpnetService.updateFilter(f.id, { title: f.title.trim(), context: f.context, action: f.action });
+      } catch (err) { console.error('Failed to rename filter', err); }
+    },
+    async renameKeyword(filterId, kw) {
+      if (!kw.keyword || !kw.keyword.trim()) return;
+      try {
+        await warpnetService.updateFilterKeyword(filterId, kw.id, kw.keyword.trim(), kw.whole_word || false);
+      } catch (err) { console.error('Failed to rename keyword', err); }
     },
   },
   async created() {
