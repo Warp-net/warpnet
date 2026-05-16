@@ -413,28 +413,6 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		return
 	}
 
-	_, err = s.challenger.Challenge(
-		s.node.Peerstore().PubKey(pi.ID),
-		s.getChallengeLevel(pi.ID),
-		s.requestChallenge(pi.ID),
-	)
-	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
-		log.Warnf(
-			"discovery: source '%s': bootstrap handle: challenge is invalid for peer: %s",
-			peer.Source, pi.ID.String(),
-		)
-		s.node.Peerstore().RemovePeer(pi.ID)
-		s.node.SetMinNodePriority(pi.ID)
-		s.m.PushStatusOffline(pi.ID.String())
-		return
-	}
-	if err != nil {
-		log.Errorf(
-			"discovery: source '%s': bootstrap handle: request challenge for peer %s: %v",
-			peer.Source, pi.ID, err,
-		)
-		return
-	}
 	s.m.PushStatusOnline(pi.ID.String())
 
 	info, err := s.requestNodeInfo(pi)

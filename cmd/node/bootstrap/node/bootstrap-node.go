@@ -29,10 +29,8 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/cmd/node/bootstrap/socks5"
 	"github.com/Warp-net/warpnet/core/challenge"
 
-	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
@@ -195,17 +193,11 @@ func (bn *BootstrapNode) setupHandlers() {
 		panic("bootstrap: nil bootstrap node")
 	}
 
-	bn.node.Node().SetStreamHandler(socks5.DefaultStreamProtocol, socks5.StreamSocksExitHandler)
-
 	//nolint:govet
 	bn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(bn, bn.discService.DiscoveryHandlerStream),
-		},
-		warpnet.WarpStreamHandler{ //nolint:govet
-			event.PUBLIC_POST_NODE_CHALLENGE,
-			handler.StreamChallengeHandler(root.GetCodeBase(), bn.privKey),
 		},
 	)
 }
