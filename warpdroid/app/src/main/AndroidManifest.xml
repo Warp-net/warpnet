@@ -149,23 +149,6 @@
             android:name=".receiver.SendTweetBroadcastReceiver"
             android:enabled="true"
             android:exported="false" />
-        <service android:name=".receiver.UnifiedPushService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT"/>
-            </intent-filter>
-        </service>
-        <receiver
-            android:exported="true"
-            android:enabled="true"
-            android:name=".receiver.NotificationBlockStateBroadcastReceiver"
-            tools:ignore="ExportedReceiver">
-            <intent-filter>
-                <action android:name="android.app.action.NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED"/>
-                <action android:name="android.app.action.NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED"/>
-            </intent-filter>
-        </receiver>
-
         <service
             android:name=".service.WarpdroidTileService"
             android:icon="@drawable/warpdroid_quicksettings_icon"

@@ -27,9 +27,7 @@ import android.util.Log
 import at.connyduck.calladapter.networkresult.NetworkResult
 import site.warpnet.warpdroid.components.filters.FilterExpiration
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.AccessToken
 import site.warpnet.warpdroid.entity.Account
-import site.warpnet.warpdroid.entity.AppCredentials
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Conversation
 import site.warpnet.warpdroid.entity.DeletedTweet
@@ -37,16 +35,11 @@ import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.FilterKeyword
 import site.warpnet.warpdroid.entity.HashTag
-import site.warpnet.warpdroid.entity.Instance
-import site.warpnet.warpdroid.entity.InstanceConfiguration
-import site.warpnet.warpdroid.entity.InstanceV1
-import site.warpnet.warpdroid.entity.TweetConfiguration
 import site.warpnet.warpdroid.entity.MastoList
 import site.warpnet.warpdroid.entity.MediaUploadResult
 import site.warpnet.warpdroid.entity.NewTweet
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.NotificationRequest
-import site.warpnet.warpdroid.entity.NotificationSubscribeResult
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.ScheduledTweet
 import site.warpnet.warpdroid.entity.ScheduledTweetReply
@@ -78,12 +71,6 @@ class WarpnetApi @Inject constructor(
 
     companion object {
         private const val TAG = "WarpnetApi"
-        const val PLACEHOLDER_DOMAIN = "warpnet.site"
-
-        // Instance stub values — no Warpnet endpoint reports these, so we
-        // hard-code the compose / onboarding UX against known node limits.
-        private const val WARPNET_INSTANCE_VERSION = "0.0.0"
-        private const val WARPNET_MAX_TWEET_CHARS = 2000
 
         private val STUB_BODY = "".toResponseBody("text/plain".toMediaTypeOrNull())
         private fun unsupported(name: String) =
@@ -136,47 +123,6 @@ class WarpnetApi @Inject constructor(
     // ---------------------------------------------------------------
     // instance metadata / custom emojis
     // ---------------------------------------------------------------
-
-    /**
-     * Warpnet nodes expose [site.warpnet.transport.ProtocolIds.PUBLIC_GET_INFO]
-     * which returns libp2p-peer-level metadata (peer id, protocols, start
-     * time) — nothing that lines up with Warpnet's instance descriptor.
-     * Return a static Warpnet-shaped stub so onboarding / compose / settings
-     * screens have the fields they gate on.
-     */
-    suspend fun getInstanceV1(): NetworkResult<InstanceV1> = NetworkResult.success(
-        InstanceV1(
-            uri = PLACEHOLDER_DOMAIN,
-            version = WARPNET_INSTANCE_VERSION,
-            maxTootChars = WARPNET_MAX_TWEET_CHARS,
-            maxMediaAttachments = 0,
-            uploadLimit = 0,
-            configuration = InstanceConfiguration(
-                statuses = TweetConfiguration(
-                    maxCharacters = WARPNET_MAX_TWEET_CHARS,
-                    maxMediaAttachments = 0,
-                    charactersReservedPerUrl = 23,
-                ),
-            ),
-        ),
-    )
-
-    suspend fun getInstance(): NetworkResult<Instance> = NetworkResult.success(
-        Instance(
-            domain = PLACEHOLDER_DOMAIN,
-            version = WARPNET_INSTANCE_VERSION,
-            configuration = Instance.Configuration(
-                statuses = Instance.Configuration.Statuses(
-                    maxCharacters = WARPNET_MAX_TWEET_CHARS,
-                    maxMediaAttachments = 0,
-                    charactersReservedPerUrl = 23,
-                ),
-            ),
-        ),
-    )
-
-    suspend fun getInstanceRules(domain: String? = null): NetworkResult<List<Instance.Rule>> =
-        NetworkResult.success(emptyList())
 
     // ---------------------------------------------------------------
     // filters (no Warpnet equivalent — server-side filtering doesn't exist)
@@ -309,24 +255,6 @@ class WarpnetApi @Inject constructor(
         limit: Int? = null,
     ): Response<List<Tweet>> = paginated {
         warpnet.getHomeTimeline(cursor = maxId.orEmpty(), limit = limit ?: 20)
-    }
-
-    /**
-     * Warpnet's public timeline has no direct Warpnet equivalent. Fall
-     * back to the active account's own feed so the UI stays populated.
-     */
-    suspend fun publicTimeline(
-        local: Boolean? = null,
-        maxId: String? = null,
-        minId: String? = null,
-        sinceId: String? = null,
-        limit: Int? = null,
-    ): Response<List<Tweet>> {
-        val userId = accountManager.activeAccount?.accountId.orEmpty()
-        if (userId.isEmpty()) return stubList()
-        return paginated {
-            warpnet.getUserTimeline(userId = userId, cursor = maxId.orEmpty(), limit = limit ?: 20)
-        }
     }
 
     suspend fun hashtagTimeline(
@@ -971,33 +899,6 @@ class WarpnetApi @Inject constructor(
     }
 
     // ---------------------------------------------------------------
-    // oauth (kept for symmetry — Warpnet pairing is handled elsewhere)
-    // ---------------------------------------------------------------
-
-    suspend fun authenticateApp(
-        domain: String,
-        clientName: String,
-        redirectUris: String,
-        scopes: String,
-        website: String,
-    ): NetworkResult<AppCredentials> = stubFailure("authenticateApp")
-
-    suspend fun fetchOAuthToken(
-        domain: String,
-        clientId: String,
-        clientSecret: String,
-        redirectUri: String,
-        code: String,
-        grantType: String,
-    ): NetworkResult<AccessToken> = stubFailure("fetchOAuthToken")
-
-    suspend fun revokeOAuthToken(
-        clientId: String,
-        clientSecret: String,
-        token: String,
-    ): NetworkResult<Unit> = NetworkResult.success(Unit)
-
-    // ---------------------------------------------------------------
     // lists
     // ---------------------------------------------------------------
 
@@ -1075,36 +976,6 @@ class WarpnetApi @Inject constructor(
         accountId: String,
         note: String,
     ): NetworkResult<Relationship> = stubFailure("updateAccountNote")
-
-    // ---------------------------------------------------------------
-    // push subscription
-    // ---------------------------------------------------------------
-
-    suspend fun pushNotificationSubscription(
-        auth: String,
-        domain: String,
-    ): NetworkResult<NotificationSubscribeResult> = stubFailure("pushNotificationSubscription")
-
-    suspend fun subscribePushNotifications(
-        auth: String,
-        domain: String,
-        standard: Boolean,
-        endpoint: String,
-        keysP256DH: String,
-        keysAuth: String,
-        data: Map<String, Boolean>,
-    ): NetworkResult<NotificationSubscribeResult> = stubFailure("subscribePushNotifications")
-
-    suspend fun updatePushNotificationSubscription(
-        auth: String,
-        domain: String,
-        data: Map<String, Boolean>,
-    ): NetworkResult<NotificationSubscribeResult> = stubFailure("updatePushNotificationSubscription")
-
-    suspend fun unsubscribePushNotifications(
-        auth: String,
-        domain: String,
-    ): NetworkResult<Unit> = NetworkResult.success(Unit)
 
     // ---------------------------------------------------------------
     // tags + trends

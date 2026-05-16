@@ -186,8 +186,6 @@ abstract class TimelineViewModel(
      */
     enum class Kind(val isOrdered: Boolean) {
         HOME(isOrdered = true),
-        PUBLIC_LOCAL(isOrdered = true),
-        PUBLIC_FEDERATED(isOrdered = true),
         TAG(isOrdered = true),
         USER(isOrdered = true),
         USER_PINNED(isOrdered = false),
@@ -201,7 +199,7 @@ abstract class TimelineViewModel(
         fun toFilterKind(): Filter.Kind {
             return when (valueOf(name)) {
                 HOME, LIST -> Filter.Kind.HOME
-                PUBLIC_FEDERATED, PUBLIC_LOCAL, TAG, LIKES, PUBLIC_TRENDING_STATUSES -> Filter.Kind.PUBLIC
+                TAG, LIKES, PUBLIC_TRENDING_STATUSES -> Filter.Kind.PUBLIC
                 USER, USER_WITH_REPLIES, USER_PINNED -> Filter.Kind.ACCOUNT
                 else -> Filter.Kind.PUBLIC
             }

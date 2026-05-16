@@ -23,11 +23,11 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.MaterialColors
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ItemReportRuleBinding
-import site.warpnet.warpdroid.entity.Instance
+import site.warpnet.warpdroid.entity.Rule
 import site.warpnet.warpdroid.util.BindingHolder
 
 class RuleAdapter(
-    private val rules: List<Instance.Rule>,
+    private val rules: List<Rule>,
     private val onRuleToggled: (ruleId: String) -> Unit
 ) : RecyclerView.Adapter<BindingHolder<ItemReportRuleBinding>>() {
 

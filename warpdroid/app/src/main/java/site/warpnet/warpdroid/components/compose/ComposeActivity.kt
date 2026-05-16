@@ -84,6 +84,7 @@ import site.warpnet.warpdroid.components.compose.view.ComposeScheduleView.Compan
 import site.warpnet.warpdroid.components.editimage.EditImageContract
 import site.warpnet.warpdroid.components.editimage.EditImageOptions
 import site.warpnet.warpdroid.components.editimage.EditImageResult
+import site.warpnet.transport.WarpnetLimits
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
 import site.warpnet.warpdroid.databinding.ActivityComposeBinding
 import site.warpnet.warpdroid.db.entity.AccountEntity
@@ -152,7 +153,7 @@ class ComposeActivity :
     var highlightFinders = defaultFinders
 
     @VisibleForTesting
-    var maximumTootCharacters = InstanceInfoRepository.DEFAULT_CHARACTER_LIMIT
+    var maximumTootCharacters = WarpnetLimits.MAX_TWEET_CHARS
     var charactersReservedPerUrl = InstanceInfoRepository.DEFAULT_CHARACTERS_RESERVED_PER_URL
 
     private val viewModel: ComposeViewModel by viewModels(

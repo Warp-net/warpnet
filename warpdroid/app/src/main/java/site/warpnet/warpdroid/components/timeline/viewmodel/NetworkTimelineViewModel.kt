@@ -313,20 +313,6 @@ class NetworkTimelineViewModel @Inject constructor(
                 sinceId = sinceId,
                 limit = limit
             )
-            Kind.PUBLIC_FEDERATED -> api.publicTimeline(
-                local = null,
-                maxId = maxId,
-                minId = minId,
-                sinceId = sinceId,
-                limit = limit
-            )
-            Kind.PUBLIC_LOCAL -> api.publicTimeline(
-                local = true,
-                maxId = maxId,
-                minId = minId,
-                sinceId = sinceId,
-                limit = limit
-            )
             Kind.TAG -> {
                 val firstHashtag = tags[0]
                 val additionalHashtags = tags.subList(1, tags.size)

@@ -39,7 +39,6 @@ import at.connyduck.calladapter.networkresult.onFailure
 import at.connyduck.calladapter.networkresult.onSuccess
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import site.warpnet.warpdroid.BuildConfig
 import site.warpnet.warpdroid.MainActivity
 import site.warpnet.warpdroid.MainActivity.Companion.composeIntent
@@ -52,12 +51,10 @@ import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.di.ApplicationScope
 import site.warpnet.warpdroid.entity.Notification
-import site.warpnet.warpdroid.entity.NotificationSubscribeResult
 import site.warpnet.warpdroid.entity.RelationshipSeveranceEvent
 import site.warpnet.warpdroid.entity.visibleNotificationTypes
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.receiver.SendTweetBroadcastReceiver
-import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.unicodeWrap
 import site.warpnet.warpdroid.worker.NotificationWorker
@@ -68,14 +65,6 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.unifiedpush.android.connector.UnifiedPush
-import org.unifiedpush.android.connector.data.PushEndpoint
-import org.unifiedpush.android.connector.ui.SelectDistributorDialogsBuilder
-import org.unifiedpush.android.connector.ui.UnifiedPushFunctions
-import retrofit2.HttpException
 
 @Singleton
 class NotificationHelper @Inject constructor(
@@ -117,13 +106,7 @@ class NotificationHelper @Inject constructor(
     }
 
     suspend fun setupNotifications(activity: Activity) {
-        resetPushWhenDistributorIsMissing()
-
-        if (arePushNotificationsAvailable()) {
-            setupPushNotifications(activity)
-        }
-
-        // At least as a fallback and otherwise as main source when there are no push distributors installed:
+        // Warpnet uses pull-only notifications (no push gateway).
         enablePullNotifications()
     }
 
@@ -699,13 +682,10 @@ class NotificationHelper @Inject constructor(
     }
 
     suspend fun disableAllNotifications() {
-        disablePushNotificationsForAllAccounts()
         disablePullNotifications()
     }
 
     suspend fun disableNotificationsForAccount(account: AccountEntity) {
-        disablePushNotificationsForAccount(account)
-
         deleteNotificationChannelsForAccount(account)
 
         if (!areNotificationsEnabledBySystem()) {
@@ -715,252 +695,12 @@ class NotificationHelper @Inject constructor(
         }
     }
 
-    //
-    // Push notification section
-    //
+    // Push notifications: Warpnet has no push gateway. Notifications
+    // arrive via the 2 s poll loop in [NotificationFetcher] only;
+    // every UnifiedPush hook is now a no-op.
+    fun arePushNotificationsAvailable(): Boolean = false
 
-    fun arePushNotificationsAvailable(): Boolean =
-        UnifiedPush.getDistributors(context).isNotEmpty()
-
-    private suspend fun setupPushNotifications(activity: Activity) {
-        accountManager.accounts.forEach {
-            val notificationGroupEnabled = Build.VERSION.SDK_INT < 28 ||
-                notificationManager.getNotificationChannelGroup(it.identifier)?.isBlocked == false
-            val shouldEnable = it.notificationsEnabled && notificationGroupEnabled
-
-            if (shouldEnable) {
-                setupPushNotificationsForAccount(activity, it)
-                Log.d(TAG, "Enabled push notifications for account ${it.id}.")
-            } else {
-                disablePushNotificationsForAccount(it)
-                Log.d(TAG, "Disabled push notifications for account ${it.id}.")
-            }
-        }
-    }
-
-    private suspend fun setupPushNotificationsForAccount(activity: Activity, account: AccountEntity) {
-        val currentSubscription = getActiveSubscription(account)
-
-        if (currentSubscription != null) {
-            val alertData = buildAlertsMap(account)
-
-            if (alertData != currentSubscription.alerts) {
-                // Update the subscription to match notification settings
-                updatePushSubscription(account)
-            } else {
-                Log.d(TAG, "Nothing to be done. Current push subscription matches for account ${account.id}.")
-            }
-        } else {
-            Log.d(TAG, "Trying to create a UnifiedPush subscription for account ${account.id}")
-
-            // When changing the local UP distributor this is necessary first to enable the following callbacks (i. e. onNewEndpoint);
-            //   make sure this is done in any inconsistent case (is not too often and doesn't hurt).
-            unregisterPushEndpoint(account)
-
-            val vapid = instanceInfoRepository.getUpdatedInstanceInfoOrFallback().vapidKey
-
-            val builder = SelectDistributorDialogsBuilder(
-                activity,
-                object : UnifiedPushFunctions {
-                    override fun getAckDistributor(): String? =
-                        UnifiedPush.getAckDistributor(activity)
-
-                    override fun getDistributors(): List<String> =
-                        UnifiedPush.getDistributors(activity)
-
-                    override fun register(instance: String) {
-                        try {
-                            UnifiedPush.register(
-                                activity,
-                                instance,
-                                messageForDistributor = account.fullName,
-                                vapid = vapid
-                            )
-                        } catch (e: UnifiedPush.VapidNotValidException) {
-                            Log.w(TAG, "invalid vapid key $vapid", e)
-                            MaterialAlertDialogBuilder(activity)
-                                .setMessage(activity.getString(R.string.unified_push_error_no_vapid_key, account.domain))
-                                .setPositiveButton(R.string.action_dismiss, null)
-                                .show()
-                        }
-                    }
-
-                    override fun saveDistributor(distributor: String) =
-                        UnifiedPush.saveDistributor(activity, distributor)
-
-                    override fun tryUseDefaultDistributor(callback: (Boolean) -> Unit) =
-                        UnifiedPush.tryUseDefaultDistributor(activity, callback)
-                }
-            )
-            builder.instances = listOf(account.id.toString())
-            builder.mayUseDefault = false
-            builder.mayUseCurrent = false
-            builder.run()
-        }
-    }
-
-    private fun resetPushWhenDistributorIsMissing() {
-        val lastUsedPushProvider = preferences.getString(PrefKeys.LAST_USED_PUSH_PROVIDER, null)
-        // NOTE UnifiedPush.getSavedDistributor() cannot be used here as that is already null here if the
-        //   distributor was uninstalled.
-
-        if (lastUsedPushProvider.isNullOrEmpty() || UnifiedPush.getDistributors(context).contains(lastUsedPushProvider)) {
-            return
-        }
-
-        Log.w(TAG, "Previous push provider ($lastUsedPushProvider) uninstalled. Resetting all accounts.")
-
-        preferences.edit {
-            remove(PrefKeys.LAST_USED_PUSH_PROVIDER)
-        }
-
-        applicationScope.launch {
-            accountManager.accounts.forEach {
-                // reset all accounts, also does resetPushSettingsInAccount()
-                unregisterPushEndpoint(it)
-            }
-        }
-    }
-
-    private suspend fun getActiveSubscription(account: AccountEntity): NotificationSubscribeResult? {
-        api.pushNotificationSubscription(
-            "Bearer ${account.accessToken}",
-            account.domain
-        ).fold(
-            onSuccess = {
-                if (!account.matchesPushSubscription(it.endpoint)) {
-                    Log.w(TAG, "Server push endpoint does not match previously registered one: ${it.endpoint} vs. ${account.unifiedPushUrl}")
-
-                    return null
-                }
-
-                return it
-            },
-            onFailure = { throwable ->
-                if (throwable is HttpException && throwable.code() == 404) {
-                    // this is alright; there is no subscription on the server
-                    return null
-                }
-
-                Log.e(TAG, "Cannot get push subscription for account " + account.id + ": " + throwable.message, throwable)
-                return null
-            }
-        )
-    }
-
-    private suspend fun disablePushNotificationsForAllAccounts() {
-        accountManager.accounts.forEach {
-            disablePushNotificationsForAccount(it)
-        }
-    }
-
-    private suspend fun disablePushNotificationsForAccount(account: AccountEntity) {
-        if (!account.isPushNotificationsEnabled()) {
-            return
-        }
-
-        unregisterPushEndpoint(account)
-
-        // this probably does nothing (distributor to handle this is missing)
-        UnifiedPush.unregister(context, account.id.toString())
-    }
-
-    fun fetchNotificationsOnPushMessage(account: AccountEntity) {
-        // TODO should there be a rate limit here? Ie. we could be silent (can we?) for another notification in a short timeframe.
-
-        Log.d(TAG, "Fetching notifications because of push for account ${account.id}")
-
-        enqueueOneTimeWorker(account)
-    }
-
-    private fun buildAlertsMap(account: AccountEntity): Map<String, Boolean> =
-        buildMap {
-            visibleNotificationTypes.forEach {
-                put(it.name, filterNotification(account, it))
-            }
-        }
-
-    private fun buildAlertSubscriptionData(account: AccountEntity): Map<String, Boolean> =
-        buildAlertsMap(account).mapKeys { "data[alerts][${it.key}]" }
-
-    // Called by UnifiedPush callback in UnifiedPushService
-    suspend fun registerPushEndpoint(
-        account: AccountEntity,
-        endpoint: PushEndpoint
-    ) = withContext(Dispatchers.IO) {
-        val pubKeySet = endpoint.pubKeySet
-        if (pubKeySet == null) {
-            Log.w(TAG, "cannot register push endpoint without public key")
-            return@withContext
-        }
-
-        api.subscribePushNotifications(
-            auth = "Bearer ${account.accessToken}",
-            domain = account.domain,
-            standard = true,
-            endpoint = endpoint.url,
-            keysP256DH = pubKeySet.pubKey,
-            keysAuth = pubKeySet.auth,
-            data = buildAlertSubscriptionData(account)
-        ).onFailure { throwable ->
-            Log.w(TAG, "Error setting push endpoint for account ${account.id}", throwable)
-            disablePushNotificationsForAccount(account)
-        }.onSuccess {
-            Log.d(TAG, "UnifiedPush registration succeeded for account ${account.id}")
-
-            accountManager.updateAccount(account) {
-                copy(
-                    unifiedPushUrl = endpoint.url
-                )
-            }
-
-            UnifiedPush.getAckDistributor(context)?.let {
-                Log.d(TAG, "Saving distributor to preferences: $it")
-
-                preferences.edit {
-                    putString(PrefKeys.LAST_USED_PUSH_PROVIDER, it)
-                }
-
-                // TODO once this is selected it cannot be changed (except by wiping the application or uninstalling the provider)
-            }
-        }
-    }
-
-    // Synchronize the enabled / disabled state of notifications with server-side subscription (also NotificationBlockStateBroadcastReceiver).
-    suspend fun updatePushSubscription(account: AccountEntity) {
-        withContext(Dispatchers.IO) {
-            api.updatePushNotificationSubscription(
-                "Bearer ${account.accessToken}",
-                account.domain,
-                buildAlertSubscriptionData(account)
-            ).onSuccess {
-                Log.d(TAG, "UnifiedPush subscription updated for account ${account.id}")
-            }.onFailure { throwable ->
-                Log.e(TAG, "Could not update subscription ${throwable.message}")
-            }
-        }
-    }
-
-    suspend fun unregisterPushEndpoint(account: AccountEntity) {
-        withContext(Dispatchers.IO) {
-            api.unsubscribePushNotifications("Bearer ${account.accessToken}", account.domain)
-                .onFailure { throwable ->
-                    Log.w(TAG, "Error unregistering push endpoint for account " + account.id, throwable)
-                }
-                .onSuccess {
-                    Log.d(TAG, "UnifiedPush unregistration succeeded for account " + account.id)
-                    resetPushSettingsInAccount(account)
-                }
-        }
-    }
-
-    private suspend fun resetPushSettingsInAccount(account: AccountEntity) {
-        accountManager.updateAccount(account) {
-            copy(
-                unifiedPushUrl = ""
-            )
-        }
-    }
+    fun fetchNotificationsOnPushMessage(account: AccountEntity) = Unit
 
     companion object {
         const val TAG = "NotificationHelper"

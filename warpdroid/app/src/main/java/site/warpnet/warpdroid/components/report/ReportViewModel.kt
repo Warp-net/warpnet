@@ -28,7 +28,7 @@ import site.warpnet.warpdroid.appstore.MuteEvent
 import site.warpnet.warpdroid.components.report.adapter.TweetsPagingSource
 import site.warpnet.warpdroid.components.report.model.TweetViewState
 import site.warpnet.warpdroid.entity.Filter
-import site.warpnet.warpdroid.entity.Instance
+import site.warpnet.warpdroid.entity.Rule
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
@@ -36,7 +36,6 @@ import site.warpnet.warpdroid.util.Error
 import site.warpnet.warpdroid.util.Loading
 import site.warpnet.warpdroid.util.Resource
 import site.warpnet.warpdroid.util.Success
-import site.warpnet.warpdroid.util.isHttpNotFound
 import site.warpnet.warpdroid.util.toViewData
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -70,8 +69,8 @@ class ReportViewModel @AssistedInject constructor(
         selectedCategory == ReportCategory.VIOLATION
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _rules: MutableStateFlow<Resource<List<Instance.Rule>>> = MutableStateFlow(Loading(null))
-    val rules: StateFlow<Resource<List<Instance.Rule>>?> = _rules.asStateFlow()
+    private val _rules: MutableStateFlow<Resource<List<Rule>>> = MutableStateFlow(Loading(null))
+    val rules: StateFlow<Resource<List<Rule>>?> = _rules.asStateFlow()
 
     private val _selectedRules: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet())
     val selectedRules: StateFlow<Set<String>> = _selectedRules.asStateFlow()
@@ -171,21 +170,10 @@ class ReportViewModel @AssistedInject constructor(
     }
 
     fun loadInstanceRules() {
-        viewModelScope.launch {
-            warpnetApi.getInstanceRules().fold(
-                { rules ->
-                    _rules.value = Success(rules)
-                },
-                { e ->
-                    if (e.isHttpNotFound()) {
-                        // instance does not support rules
-                        _rules.value = Success(emptyList())
-                    } else {
-                        _rules.value = Error(cause = e)
-                    }
-                }
-            )
-        }
+        // Warpnet has no per-instance rules concept — there's no central
+        // admin to author them. Surface an empty list so report-flow
+        // screens that gate on rules availability still render.
+        _rules.value = Success(emptyList())
     }
 
     private fun obtainRelationship() {

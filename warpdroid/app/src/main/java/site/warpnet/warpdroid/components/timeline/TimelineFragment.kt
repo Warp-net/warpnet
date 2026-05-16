@@ -502,8 +502,6 @@ class TimelineFragment :
                     val status = event.status
                     when (kind) {
                         TimelineViewModel.Kind.HOME,
-                        TimelineViewModel.Kind.PUBLIC_FEDERATED,
-                        TimelineViewModel.Kind.PUBLIC_LOCAL,
                         TimelineViewModel.Kind.PUBLIC_TRENDING_STATUSES -> statuses.refresh()
 
                         TimelineViewModel.Kind.USER,
