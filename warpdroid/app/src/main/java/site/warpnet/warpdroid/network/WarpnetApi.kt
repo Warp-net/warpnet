@@ -189,33 +189,121 @@ class WarpnetApi @Inject constructor(
     // filters (no Warpnet equivalent — server-side filtering doesn't exist)
     // ---------------------------------------------------------------
 
-    suspend fun getFilter(filterId: String): NetworkResult<Filter> = stubFailure("getFilter")
-    suspend fun getFilters(): NetworkResult<List<Filter>> = NetworkResult.success(emptyList())
+    suspend fun getFilter(filterId: String): NetworkResult<Filter> {
+        val active = accountManager.activeAccount ?: return stubFailure("getFilter")
+        return result {
+            val wf = warpnet.getFilter(userId = active.accountId, filterId = filterId)
+                ?: throw NoSuchElementException("filter $filterId")
+            wf.toTuskyFilter()
+        }
+    }
+
+    suspend fun getFilters(): NetworkResult<List<Filter>> {
+        val active = accountManager.activeAccount ?: return NetworkResult.success(emptyList())
+        return result {
+            val (fs, _) = warpnet.getFilters(userId = active.accountId)
+            fs.map { it.toTuskyFilter() }
+        }
+    }
+
     suspend fun createFilter(
         title: String,
         context: List<Filter.Kind>,
         filterAction: Filter.Action,
         expiresIn: FilterExpiration?,
-    ): NetworkResult<Filter> = stubFailure("createFilter")
+    ): NetworkResult<Filter> {
+        val active = accountManager.activeAccount ?: return stubFailure("createFilter")
+        return result {
+            val wf = warpnet.createFilter(
+                site.warpnet.transport.dto.WarpnetFilter(
+                    userId = active.accountId,
+                    title = title,
+                    context = context.map { it.kind },
+                    action = filterAction.action,
+                ),
+            )
+            wf.toTuskyFilter()
+        }
+    }
+
     suspend fun updateFilter(
         id: String,
         title: String? = null,
         context: List<Filter.Kind>? = null,
         filterAction: Filter.Action? = null,
         expires: FilterExpiration? = null,
-    ): NetworkResult<Filter> = stubFailure("updateFilter")
-    suspend fun deleteFilter(id: String): NetworkResult<Unit> = NetworkResult.success(Unit)
+    ): NetworkResult<Filter> {
+        val active = accountManager.activeAccount ?: return stubFailure("updateFilter")
+        return result {
+            val wf = warpnet.updateFilter(
+                site.warpnet.transport.dto.WarpnetFilter(
+                    id = id,
+                    userId = active.accountId,
+                    title = title.orEmpty(),
+                    context = context?.map { it.kind } ?: emptyList(),
+                    action = filterAction?.action.orEmpty(),
+                ),
+            )
+            wf.toTuskyFilter()
+        }
+    }
+
+    suspend fun deleteFilter(id: String): NetworkResult<Unit> {
+        val active = accountManager.activeAccount ?: return NetworkResult.success(Unit)
+        return result {
+            warpnet.deleteFilter(userId = active.accountId, filterId = id)
+        }
+    }
+
     suspend fun addFilterKeyword(
         filterId: String,
         keyword: String,
         wholeWord: Boolean,
-    ): NetworkResult<FilterKeyword> = stubFailure("addFilterKeyword")
+    ): NetworkResult<FilterKeyword> {
+        val active = accountManager.activeAccount ?: return stubFailure("addFilterKeyword")
+        return result {
+            val kw = warpnet.addFilterKeyword(
+                userId = active.accountId,
+                filterId = filterId,
+                keyword = keyword,
+                wholeWord = wholeWord,
+            )
+            FilterKeyword(id = kw.id, keyword = kw.keyword, wholeWord = kw.wholeWord)
+        }
+    }
+
     suspend fun updateFilterKeyword(
         keywordId: String,
         keyword: String,
         wholeWord: Boolean,
-    ): NetworkResult<FilterKeyword> = stubFailure("updateFilterKeyword")
-    suspend fun deleteFilterKeyword(keywordId: String): NetworkResult<Unit> = NetworkResult.success(Unit)
+    ): NetworkResult<FilterKeyword> {
+        val active = accountManager.activeAccount ?: return stubFailure("updateFilterKeyword")
+        return result {
+            val kw = warpnet.updateFilterKeyword(
+                userId = active.accountId,
+                keywordId = keywordId,
+                keyword = keyword,
+                wholeWord = wholeWord,
+            )
+            FilterKeyword(id = kw.id, keyword = kw.keyword, wholeWord = kw.wholeWord)
+        }
+    }
+
+    suspend fun deleteFilterKeyword(keywordId: String): NetworkResult<Unit> {
+        val active = accountManager.activeAccount ?: return NetworkResult.success(Unit)
+        return result {
+            warpnet.deleteFilterKeyword(userId = active.accountId, keywordId = keywordId)
+        }
+    }
+
+    private fun site.warpnet.transport.dto.WarpnetFilter.toTuskyFilter(): Filter = Filter(
+        id = id,
+        title = title,
+        context = context.map { Filter.Kind.from(it) },
+        expiresAt = expiresAt?.let { runCatching { java.util.Date.from(java.time.Instant.parse(it)) }.getOrNull() },
+        action = Filter.Action.from(action),
+        keywords = keywords.map { FilterKeyword(id = it.id, keyword = it.keyword, wholeWord = it.wholeWord) },
+    )
 
     // ---------------------------------------------------------------
     // timelines

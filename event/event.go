@@ -700,6 +700,62 @@ type FollowRequestActionEvent struct {
 	FollowerId domain.ID `json:"follower_id"`
 }
 
+// GetFilterEvent defines model for GetFilterEvent.
+type GetFilterEvent struct {
+	UserId   domain.ID `json:"user_id"`
+	FilterId domain.ID `json:"filter_id"`
+}
+
+// GetFilterResponse defines model for GetFilterResponse.
+type GetFilterResponse = domain.Filter
+
+// GetFiltersEvent defines model for GetFiltersEvent.
+type GetFiltersEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+}
+
+// GetFiltersResponse defines model for GetFiltersResponse.
+type GetFiltersResponse struct {
+	Filters []domain.Filter `json:"filters"`
+	Cursor  string          `json:"cursor"`
+}
+
+// NewFilterEvent defines model for NewFilterEvent.
+type NewFilterEvent = domain.Filter
+
+// UpdateFilterEvent defines model for UpdateFilterEvent.
+type UpdateFilterEvent = domain.Filter
+
+// DeleteFilterEvent defines model for DeleteFilterEvent.
+type DeleteFilterEvent struct {
+	UserId   domain.ID `json:"user_id"`
+	FilterId domain.ID `json:"filter_id"`
+}
+
+// AddFilterKeywordEvent defines model for AddFilterKeywordEvent.
+type AddFilterKeywordEvent struct {
+	UserId    domain.ID `json:"user_id"`
+	FilterId  domain.ID `json:"filter_id"`
+	Keyword   string    `json:"keyword"`
+	WholeWord bool      `json:"whole_word"`
+}
+
+// UpdateFilterKeywordEvent defines model for UpdateFilterKeywordEvent.
+type UpdateFilterKeywordEvent struct {
+	UserId    domain.ID `json:"user_id"`
+	KeywordId domain.ID `json:"keyword_id"`
+	Keyword   string    `json:"keyword"`
+	WholeWord bool      `json:"whole_word"`
+}
+
+// DeleteFilterKeywordEvent defines model for DeleteFilterKeywordEvent.
+type DeleteFilterKeywordEvent struct {
+	UserId    domain.ID `json:"user_id"`
+	KeywordId domain.ID `json:"keyword_id"`
+}
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

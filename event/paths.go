@@ -114,4 +114,13 @@ const (
 	PRIVATE_GET_FOLLOW_REQUESTS           = "/private/get/follow/requests/0.0.0"
 	PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
 	PRIVATE_POST_FOLLOW_REQUEST_REJECT    = "/private/post/follow/request/reject/0.0.0"
+
+	PRIVATE_GET_FILTER             = "/private/get/filter/0.0.0"
+	PRIVATE_GET_FILTERS            = "/private/get/filters/0.0.0"
+	PRIVATE_POST_FILTER            = "/private/post/filter/0.0.0"
+	PRIVATE_POST_FILTER_UPDATE     = "/private/post/filter/update/0.0.0"
+	PRIVATE_DELETE_FILTER          = "/private/delete/filter/0.0.0"
+	PRIVATE_POST_FILTER_KEYWORD    = "/private/post/filter/keyword/0.0.0"
+	PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/update/0.0.0"
+	PRIVATE_DELETE_FILTER_KEYWORD  = "/private/delete/filter/keyword/0.0.0"
 )

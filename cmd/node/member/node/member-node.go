@@ -390,6 +390,7 @@ type memberRepos struct {
 	userNoteRepo     *database.UserNoteRepo
 	tweetEditsRepo   *database.TweetEditsRepo
 	followReqRepo    *database.FollowRequestsRepo
+	filterRepo       *database.FilterRepo
 }
 
 func (m *MemberNode) setupHandlers(
@@ -420,6 +421,7 @@ func (m *MemberNode) setupHandlers(
 		userNoteRepo:     database.NewUserNoteRepo(db),
 		tweetEditsRepo:   database.NewTweetEditsRepo(db),
 		followReqRepo:    database.NewFollowRequestsRepo(db),
+		filterRepo:       database.NewFilterRepo(db),
 	}
 
 	token := authRepo.SessionToken()
@@ -431,6 +433,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
 	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
 	hs = append(hs, m.followRequestHandlers(followRepo, r)...)
+	hs = append(hs, m.filterHandlers(r)...)
 	hs = append(hs, m.userHandlers(authRepo, userRepo, followRepo, r)...)
 	hs = append(hs, m.chatHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.mediaHandlers(userRepo, r)...)
@@ -650,6 +653,44 @@ func (m *MemberNode) followRequestHandlers(
 		{
 			event.PRIVATE_POST_FOLLOW_REQUEST_REJECT,
 			handler.StreamRejectFollowRequestHandler(r.followReqRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_FILTER,
+			handler.StreamGetFilterHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_GET_FILTERS,
+			handler.StreamGetFiltersHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_POST_FILTER,
+			handler.StreamNewFilterHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_POST_FILTER_UPDATE,
+			handler.StreamUpdateFilterHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_DELETE_FILTER,
+			handler.StreamDeleteFilterHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_POST_FILTER_KEYWORD,
+			handler.StreamAddFilterKeywordHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+			handler.StreamUpdateFilterKeywordHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_DELETE_FILTER_KEYWORD,
+			handler.StreamDeleteFilterKeywordHandler(r.filterRepo),
 		},
 	}
 }

@@ -371,6 +371,71 @@ data class FollowRequestActionEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class WarpnetFilterKeyword(
+    val id: String = "",
+    val keyword: String = "",
+    @Json(name = "whole_word") val wholeWord: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class WarpnetFilter(
+    val id: String = "",
+    @Json(name = "user_id") val userId: String = "",
+    val title: String = "",
+    val context: List<String> = emptyList(),
+    val action: String = "warn",
+    @Json(name = "expires_at") val expiresAt: String? = null,
+    val keywords: List<WarpnetFilterKeyword> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class GetFilterEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "filter_id") val filterId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetFiltersEvent(
+    @Json(name = "user_id") val userId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetFiltersResponse(
+    val filters: List<WarpnetFilter> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class DeleteFilterEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "filter_id") val filterId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class AddFilterKeywordEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "filter_id") val filterId: String,
+    val keyword: String,
+    @Json(name = "whole_word") val wholeWord: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class UpdateFilterKeywordEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "keyword_id") val keywordId: String,
+    val keyword: String = "",
+    @Json(name = "whole_word") val wholeWord: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class DeleteFilterKeywordEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "keyword_id") val keywordId: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",

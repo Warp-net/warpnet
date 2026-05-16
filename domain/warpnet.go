@@ -192,6 +192,28 @@ type TweetModeration struct {
 	TimeAt      time.Time        `json:"time_at"`
 }
 
+// Filter is a per-user keyword/regex filter. Filters apply at timeline-read
+// time; they're never replicated to peers. Keywords are stored as an
+// embedded slice (Mastodon models them as a sub-resource with their own
+// ids — we keep the same shape on the wire but the storage is one record
+// per filter).
+type Filter struct {
+	Id        string          `json:"id"`
+	UserId    string          `json:"user_id"`
+	Title     string          `json:"title"`
+	Context   []string        `json:"context"` // home, notifications, public, thread, account
+	Action    string          `json:"action"`  // warn | hide
+	ExpiresAt *time.Time      `json:"expires_at,omitempty"`
+	Keywords  []FilterKeyword `json:"keywords"`
+}
+
+// FilterKeyword is a single match rule on a filter.
+type FilterKeyword struct {
+	Id        string `json:"id"`
+	Keyword   string `json:"keyword"`
+	WholeWord bool   `json:"whole_word"`
+}
+
 // User defines model for User.
 type User struct {
 	// Avatar mime type + "," + base64

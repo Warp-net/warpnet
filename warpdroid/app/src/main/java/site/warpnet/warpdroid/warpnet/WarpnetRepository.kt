@@ -124,6 +124,15 @@ class WarpnetRepository @Inject constructor(
     private val getFollowReqsAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsEvent>()
     private val getFollowReqsRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsResponse>()
     private val followReqActionAdapter = moshi.adapter<site.warpnet.transport.dto.FollowRequestActionEvent>()
+    private val filterAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetFilter>()
+    private val getFilterAdapter = moshi.adapter<site.warpnet.transport.dto.GetFilterEvent>()
+    private val getFiltersAdapter = moshi.adapter<site.warpnet.transport.dto.GetFiltersEvent>()
+    private val getFiltersRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetFiltersResponse>()
+    private val deleteFilterAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteFilterEvent>()
+    private val addFilterKwAdapter = moshi.adapter<site.warpnet.transport.dto.AddFilterKeywordEvent>()
+    private val updateFilterKwAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateFilterKeywordEvent>()
+    private val deleteFilterKwAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteFilterKeywordEvent>()
+    private val filterKeywordAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetFilterKeyword>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -426,6 +435,94 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Filters (local keyword/regex hiding rules)
+    // -----------------------------------------------------------------
+
+    suspend fun getFilter(userId: String, filterId: String): site.warpnet.transport.dto.WarpnetFilter? {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_FILTER,
+            getFilterAdapter.toJson(
+                site.warpnet.transport.dto.GetFilterEvent(userId = userId, filterId = filterId),
+            ),
+        )
+        return filterAdapter.fromJson(raw)
+    }
+
+    suspend fun getFilters(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetFilter>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_FILTERS,
+            getFiltersAdapter.toJson(
+                site.warpnet.transport.dto.GetFiltersEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getFiltersRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.transport.dto.WarpnetFilter>() to ""
+        return page.filters to page.cursor
+    }
+
+    suspend fun createFilter(filter: site.warpnet.transport.dto.WarpnetFilter): site.warpnet.transport.dto.WarpnetFilter {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_FILTER,
+            filterAdapter.toJson(filter),
+        )
+        return filterAdapter.fromJson(raw)
+            ?: throw IllegalStateException("createFilter returned empty body")
+    }
+
+    suspend fun updateFilter(filter: site.warpnet.transport.dto.WarpnetFilter): site.warpnet.transport.dto.WarpnetFilter {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_FILTER_UPDATE,
+            filterAdapter.toJson(filter),
+        )
+        return filterAdapter.fromJson(raw)
+            ?: throw IllegalStateException("updateFilter returned empty body")
+    }
+
+    suspend fun deleteFilter(userId: String, filterId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_DELETE_FILTER,
+            deleteFilterAdapter.toJson(
+                site.warpnet.transport.dto.DeleteFilterEvent(userId = userId, filterId = filterId),
+            ),
+        )
+    }
+
+    suspend fun addFilterKeyword(userId: String, filterId: String, keyword: String, wholeWord: Boolean): site.warpnet.transport.dto.WarpnetFilterKeyword {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_FILTER_KEYWORD,
+            addFilterKwAdapter.toJson(
+                site.warpnet.transport.dto.AddFilterKeywordEvent(
+                    userId = userId, filterId = filterId, keyword = keyword, wholeWord = wholeWord,
+                ),
+            ),
+        )
+        return filterKeywordAdapter.fromJson(raw)
+            ?: throw IllegalStateException("addFilterKeyword returned empty body")
+    }
+
+    suspend fun updateFilterKeyword(userId: String, keywordId: String, keyword: String, wholeWord: Boolean): site.warpnet.transport.dto.WarpnetFilterKeyword {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+            updateFilterKwAdapter.toJson(
+                site.warpnet.transport.dto.UpdateFilterKeywordEvent(
+                    userId = userId, keywordId = keywordId, keyword = keyword, wholeWord = wholeWord,
+                ),
+            ),
+        )
+        return filterKeywordAdapter.fromJson(raw)
+            ?: throw IllegalStateException("updateFilterKeyword returned empty body")
+    }
+
+    suspend fun deleteFilterKeyword(userId: String, keywordId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_DELETE_FILTER_KEYWORD,
+            deleteFilterKwAdapter.toJson(
+                site.warpnet.transport.dto.DeleteFilterKeywordEvent(userId = userId, keywordId = keywordId),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------

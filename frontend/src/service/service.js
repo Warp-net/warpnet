@@ -63,6 +63,14 @@ export const PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"
 export const PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
 export const PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
 export const PRIVATE_POST_FOLLOW_REQUEST_REJECT = "/private/post/follow/request/reject/0.0.0"
+export const PRIVATE_GET_FILTER = "/private/get/filter/0.0.0"
+export const PRIVATE_GET_FILTERS = "/private/get/filters/0.0.0"
+export const PRIVATE_POST_FILTER = "/private/post/filter/0.0.0"
+export const PRIVATE_POST_FILTER_UPDATE = "/private/post/filter/update/0.0.0"
+export const PRIVATE_DELETE_FILTER = "/private/delete/filter/0.0.0"
+export const PRIVATE_POST_FILTER_KEYWORD = "/private/post/filter/keyword/0.0.0"
+export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/update/0.0.0"
+export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -507,6 +515,117 @@ export const warpnetService = {
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
         return resp;
+    },
+
+    async getFilter(filterId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_GET_FILTER,
+            body: {
+                user_id: owner.user_id,
+                filter_id: filterId,
+            },
+        });
+    },
+
+    async getFilters(cursor) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return { filters: [], cursor: 'end' };
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_FILTERS,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { filters: [], cursor: 'end' };
+    },
+
+    async createFilter(filter) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FILTER,
+            body: {
+                user_id: owner.user_id,
+                title: filter.title || '',
+                context: filter.context || [],
+                action: filter.action || 'warn',
+                expires_at: filter.expires_at || null,
+                keywords: filter.keywords || [],
+            },
+        });
+    },
+
+    async updateFilter(filter) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FILTER_UPDATE,
+            body: {
+                user_id: owner.user_id,
+                id: filter.id,
+                title: filter.title || '',
+                context: filter.context || [],
+                action: filter.action || '',
+                expires_at: filter.expires_at || null,
+                keywords: [],
+            },
+        });
+    },
+
+    async deleteFilter(filterId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_DELETE_FILTER,
+            body: {
+                user_id: owner.user_id,
+                filter_id: filterId,
+            },
+        });
+    },
+
+    async addFilterKeyword(filterId, keyword, wholeWord) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FILTER_KEYWORD,
+            body: {
+                user_id: owner.user_id,
+                filter_id: filterId,
+                keyword: keyword,
+                whole_word: !!wholeWord,
+            },
+        });
+    },
+
+    async updateFilterKeyword(keywordId, keyword, wholeWord) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+            body: {
+                user_id: owner.user_id,
+                keyword_id: keywordId,
+                keyword: keyword,
+                whole_word: !!wholeWord,
+            },
+        });
+    },
+
+    async deleteFilterKeyword(keywordId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_DELETE_FILTER_KEYWORD,
+            body: {
+                user_id: owner.user_id,
+                keyword_id: keywordId,
+            },
+        });
     },
 
     async getFollowRequests(cursor) {
