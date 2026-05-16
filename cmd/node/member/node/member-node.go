@@ -424,7 +424,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.replyHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
 	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
-	hs = append(hs, m.followRequestHandlers(followRepo, r)...)
+	hs = append(hs, m.followRequestHandlers(followRepo)...)
 	hs = append(hs, m.filterHandlers(r)...)
 	hs = append(hs, m.userHandlers(authRepo, userRepo, followRepo, r)...)
 	hs = append(hs, m.chatHandlers(authRepo, userRepo, r)...)
@@ -627,7 +627,6 @@ func (m *MemberNode) followHandlers(
 //nolint:govet
 func (m *MemberNode) followRequestHandlers(
 	followRepo FollowStorer,
-	r *memberRepos,
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
