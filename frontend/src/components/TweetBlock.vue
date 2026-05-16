@@ -35,10 +35,11 @@ resulting from the use or misuse of this software.
   <div
       v-if="!deleted"
       ref="tweetRoot"
-      class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
+      class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex cursor-pointer"
+      @click="onBodyClick"
   >
     <div class="flex-none mr-2 md:mr-4 pt-1">
-      <button type="button" @click="gotoProfile(tweet.user_id)" class="flat-btn" aria-label="View profile">
+      <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn" aria-label="View profile">
         <img
           :src="profile.avatar || '/default_profile.png'"
           class="h-12 w-12 rounded-full flex-none object-cover bg-transparent"
@@ -48,7 +49,7 @@ resulting from the use or misuse of this software.
     </div>
     <div class="w-full">
       <div class="flex items-center w-full">
-        <button type="button" @click="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn">
+        <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn">
           {{ tweet.username || 'Anonymous' }}
         </button>
         <p class="hidden md:block text-sm text-dark ml-2">
@@ -60,21 +61,20 @@ resulting from the use or misuse of this software.
           <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
         </span>
         <div class="relative ml-auto">
-          <button type="button" @click="showDropdown = !showDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
+          <button type="button" @click.stop="showDropdown = !showDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
             <i class="fas fa-angle-down text-sm text-dark" aria-hidden="true"></i>
           </button>
           <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white rounded-md shadow-lg py-1 z-10">
-            <button type="button" @click="openTweetPage" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Open tweet</button>
-            <button type="button" @click="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
+            <button type="button" @click.stop="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
               {{ bookmarked ? 'Remove bookmark' : 'Bookmark' }}
             </button>
-            <button type="button" @click="openQuotes" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">View quotes</button>
+            <button type="button" @click.stop="openQuotes" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">View quotes</button>
             <template v-if="isOwner">
-              <button type="button" @click="togglePin" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
+              <button type="button" @click.stop="togglePin" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
                 {{ tweet.pinned ? 'Unpin from profile' : 'Pin to profile' }}
               </button>
-              <button type="button" @click="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
-              <button type="button" @click="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
+              <button type="button" @click.stop="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
+              <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
             </template>
           </div>
         </div>
@@ -118,7 +118,7 @@ resulting from the use or misuse of this software.
       <div class="flex w-full mt-1">
         <div class="flex items-center text-sm text-dark w-1/4">
           <button
-            @click="replyToTweet"
+            @click.stop="replyToTweet"
             type="button"
             class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lighter hover:text-blue transition-colors"
             aria-label="Reply"
@@ -130,7 +130,7 @@ resulting from the use or misuse of this software.
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <button
-            @click="retweet()"
+            @click.stop="retweet()"
             type="button"
             class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-green-100 transition-colors"
             :aria-label="retweeted ? 'Undo retweet' : 'Retweet'"
@@ -146,10 +146,10 @@ resulting from the use or misuse of this software.
             v-if="getRetweetsCount(tweet.id) > 0"
             type="button"
             class="hover:underline flat-btn"
-            @click="showRetweetersOverlay = true"
+            @click.stop="showRetweetersOverlay = true"
           >{{ getRetweetsCount(tweet.id) || '?'}}</button>
           <button
-            @click="showQuoteOverlay = true"
+            @click.stop="showQuoteOverlay = true"
             type="button"
             class="ml-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-blue-100 transition-colors"
             aria-label="Quote tweet"
@@ -160,7 +160,7 @@ resulting from the use or misuse of this software.
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <button
-            @click="like()"
+            @click.stop="like()"
             type="button"
             class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-red-100 transition-colors"
             :aria-label="liked ? 'Unlike' : 'Like'"
@@ -172,7 +172,7 @@ resulting from the use or misuse of this software.
             v-if="getLikesCount(tweet.id) > 0"
             type="button"
             class="hover:underline flat-btn"
-            @click="showLikersOverlay = true"
+            @click.stop="showLikersOverlay = true"
           >{{ getLikesCount(tweet.id) }}</button>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
@@ -290,12 +290,18 @@ export default {
       });
     },
     openTweetPage() {
-      this.showDropdown = false;
       this.$router.push({
         name: 'Tweet',
         params: { id: this.tweet.id },
         query: { u: this.tweet.user_id },
       });
+    },
+    onBodyClick() {
+      if (this.showDropdown) {
+        this.showDropdown = false;
+        return;
+      }
+      this.openTweetPage();
     },
     async toggleBookmark() {
       this.showDropdown = false;
@@ -565,6 +571,12 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     console.log("loading tweet:", JSON.stringify(this.tweet));
+    if (!this.tweet || !this.tweet.id || !this.tweet.user_id) {
+      // Defensive: nothing to render against. Avoid firing
+      // getProfile/getTweetStats with empty ids — the backend rejects
+      // those and logs spurious errors.
+      return;
+    }
     this.profile = await warpnetService.getProfile(this.tweet.user_id);
 
     if (this.tweet.retweeted_by && this.tweet.retweeted_by !== this.profile.id) {

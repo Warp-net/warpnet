@@ -29,17 +29,9 @@
         </p>
       </div>
 
-      <div v-for="b in bookmarks" :key="b.tweet_id || b.id">
-        <TweetBlock v-if="b.tweet" :tweet="b.tweet" />
-        <div v-else-if="b.tweet_id" class="px-5 py-3 border-b text-sm text-dark">
-          <button
-            class="hover:underline"
-            @click="$router.push({ name: 'Tweet', params: { id: b.tweet_id }, query: { u: b.owner_user_id || '' } })"
-          >
-            View bookmarked tweet
-          </button>
-        </div>
-      </div>
+      <template v-for="b in bookmarks" :key="b.tweet_id || b.tweet?.id">
+        <TweetBlock v-if="b.tweet && b.tweet.id" :tweet="b.tweet" />
+      </template>
     </div>
     <DefaultRightBar :profile="ownerProfile" />
   </div>

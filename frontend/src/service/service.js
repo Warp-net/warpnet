@@ -899,7 +899,25 @@ export const warpnetService = {
         const resp = await this.sendToNode(request);
         if (!resp) return { items: [], cursor: endCursor };
         this.setCursor('bookmarks', resp.cursor || 'end')
-        return resp;
+
+        // Backend returns the bookmark index entries (tweet_id +
+        // owner_user_id). Hydrate each into the full Tweet so the view
+        // can render it inline like a timeline tweet.
+        const rawItems = resp.items || [];
+        const hydrated = await Promise.all(rawItems.map(async (b) => {
+            if (!b || !b.tweet_id) return null;
+            try {
+                const tweet = await this.getTweet({
+                    userId: b.owner_user_id || owner.user_id,
+                    tweetId: b.tweet_id,
+                });
+                return tweet ? { ...b, tweet } : null;
+            } catch (e) {
+                console.warn('bookmark hydrate failed:', b, e);
+                return null;
+            }
+        }));
+        return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
     },
 
     async getNotification(notificationId) {
@@ -1175,7 +1193,13 @@ export const warpnetService = {
         if (!repliesResp.replies || repliesResp.replies.length === 0) {
             return []
         }
-        return repliesResp.replies;
+        // Backend ships a ReplyNode tree (`{ children, reply }`); the UI
+        // wants plain Tweet records. Flatten one level — the top-level
+        // replies are what's rendered; nested children would need a
+        // dedicated thread view.
+        return repliesResp.replies
+            .map(node => (node && node.reply) ? node.reply : node)
+            .filter(t => t && t.id);
     },
 
     async getReply({rootId, replyId, userId}) {
