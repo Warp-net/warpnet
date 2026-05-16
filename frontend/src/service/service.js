@@ -96,6 +96,7 @@ export const PRIVATE_DELETE_MESSAGE = "/private/delete/message/0.0.0"
 export const PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 export const PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
+export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
 export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
@@ -221,6 +222,22 @@ export const warpnetService = {
         warpnetService.setQR(qrCode)
 
         startRefreshNotifications()
+    },
+
+    async logoutUser() {
+        // Tell the node to drop the session, then wipe local state so any
+        // refresh lands back on the login screen. We swallow network errors
+        // so a stuck session can still be cleared client-side.
+        try {
+            await this.sendToNode({ path: PRIVATE_POST_LOGOUT, body: {} })
+        } catch (err) {
+            console.error("Logout request failed (clearing local state anyway):", err)
+        }
+        stopRefreshNotifications()
+        stateMap.clear()
+        try {
+            localStorage.removeItem(`first_run_seen`)
+        } catch (e) {}
     },
 
     async getProfile(userId) {

@@ -256,6 +256,12 @@ resulting from the use or misuse of this software.
         >
           Sign in by QR-code
         </button>
+        <button
+          @click="signOut"
+          class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm text-red-600"
+        >
+          Sign out
+        </button>
       </div>
     </div>
   </nav>
@@ -326,6 +332,15 @@ export default {
     },
     async closeQR() {
       this.qrModalOpen = false
+    },
+    async signOut() {
+      this.dropdown = false;
+      try {
+        await warpnetService.logoutUser();
+      } catch (err) {
+        console.error('Failed to sign out:', err);
+      }
+      this.$router.push({ name: 'Root' });
     },
   },
   async created() {
