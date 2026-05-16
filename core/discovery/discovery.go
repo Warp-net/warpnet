@@ -318,6 +318,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
 		if isRepeatable {
+			// TODO block only private nodes.
 			_ = s.nodeRepo.Blocklist(pi.ID.String())
 		} else {
 			// reset block time
