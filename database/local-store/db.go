@@ -597,7 +597,13 @@ func increment(txn *badger.Txn, key []byte, incType int8) (uint64, error) {
 	return newValue, txn.Set(key, encodeUint64(newValue))
 }
 
-const endCursor = "end"
+// EndCursor is the sentinel value that List/IterateKeys return when
+// the underlying iterator has exhausted all matching keys. Callers
+// compare against this to know they don't need to issue another page
+// request.
+const EndCursor = "end"
+
+const endCursor = EndCursor
 
 type IterKeysFunc func(key string) error
 

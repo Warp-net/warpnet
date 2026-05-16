@@ -297,7 +297,7 @@ func (repo *FilterRepo) findFilterForKeyword(userId, keywordId string) (domain.F
 				}
 			}
 		}
-		if cur == "" || cur == "end" || uint64(len(filters)) < limit {
+		if cur == "" || cur == local_store.EndCursor || uint64(len(filters)) < limit {
 			return domain.Filter{}, false, nil
 		}
 		cursor = cur

@@ -33,6 +33,7 @@ export const PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
 export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
+export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -911,6 +912,17 @@ export const warpnetService = {
         }
         const resp = await this.sendToNode(request);
         return resp || null;
+    },
+
+    async markNotificationRead(notificationId) {
+        if (!notificationId) return null;
+        const request = {
+            path: PRIVATE_POST_NOTIFICATION_READ,
+            body: {
+                notification_id: notificationId,
+            },
+        }
+        return await this.sendToNode(request);
     },
 
     subscribeNotifications(callback) {

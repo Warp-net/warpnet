@@ -143,7 +143,7 @@ func (repo *NotificationsRepo) MarkRead(userId, notificationId string) error {
 			}
 			return txn.Commit()
 		}
-		if cur == "" || cur == "end" || uint64(len(items)) < limit {
+		if cur == "" || cur == local_store.EndCursor || uint64(len(items)) < limit {
 			break
 		}
 		cursor = cur
@@ -190,7 +190,7 @@ func (repo *NotificationsRepo) Get(userId, notificationId string) (domain.Notifi
 				return not, nil
 			}
 		}
-		if cur == "" || cur == "end" || uint64(len(items)) < limit {
+		if cur == "" || cur == local_store.EndCursor || uint64(len(items)) < limit {
 			break
 		}
 		cursor = cur

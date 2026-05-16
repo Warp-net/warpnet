@@ -97,6 +97,7 @@ class WarpnetRepository @Inject constructor(
     private val getRepliesAdapter = moshi.adapter<GetAllRepliesEvent>()
     private val getNotifsAdapter = moshi.adapter<GetNotificationsEvent>()
     private val getNotifAdapter = moshi.adapter<site.warpnet.transport.dto.GetNotificationEvent>()
+    private val markNotifReadAdapter = moshi.adapter<site.warpnet.transport.dto.MarkNotificationReadEvent>()
     private val bookmarkEventAdapter = moshi.adapter<site.warpnet.transport.dto.BookmarkEvent>()
     private val unbookmarkEventAdapter = moshi.adapter<site.warpnet.transport.dto.UnbookmarkEvent>()
     private val getBookmarksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksEvent>()
@@ -432,6 +433,16 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    /** Mark a single notification as read on the fat node. */
+    suspend fun markNotificationRead(notificationId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_NOTIFICATION_READ,
+            markNotifReadAdapter.toJson(
+                site.warpnet.transport.dto.MarkNotificationReadEvent(notificationId = notificationId),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------

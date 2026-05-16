@@ -171,6 +171,11 @@ data class GetNotificationEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class MarkNotificationReadEvent(
+    @Json(name = "notification_id") val notificationId: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class BookmarkEvent(
     @Json(name = "user_id") val userId: String,
     @Json(name = "tweet_id") val tweetId: String,
