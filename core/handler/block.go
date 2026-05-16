@@ -38,27 +38,34 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// UserSetStorer is the narrow surface block / mute handlers need from the
-// owner-keyed user-id set repo (database/userset-repo.go).
-type UserSetStorer interface {
-	Add(ownerId, targetId string) error
-	Remove(ownerId, targetId string) error
-	List(ownerId string, limit *uint64, cursor *string) ([]string, string, error)
+// BlocksStorer is the narrow surface block handlers need from BlocksRepo.
+type BlocksStorer interface {
+	Block(blockerId, blockeeId string) error
+	Unblock(blockerId, blockeeId string) error
+	List(blockerId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
-// BlockUserResolver looks up the target user so the handler can escalate
-// the social block into a network-layer peer blocklist.
-type BlockUserResolver interface {
+// MutesStorer is the narrow surface mute handlers need from MutesRepo.
+type MutesStorer interface {
+	Mute(muterId, muteeId string) error
+	Unmute(muterId, muteeId string) error
+	List(muterId string, limit *uint64, cursor *string) ([]string, string, error)
+}
+
+// BlockUserFetcher looks up the blockee so the handler can escalate the
+// social block into a network-layer peer blocklist.
+type BlockUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 }
 
-// PeerBlocklister talks to NodeRepo's libp2p-level blocklist (database/node-repo.go)
-// so that blocking a user disconnects and refuses traffic from their node.
+// PeerBlocklister talks to NodeRepo's libp2p-level blocklist
+// (database/node-repo.go) so blocking a user disconnects and refuses
+// traffic from their node.
 type PeerBlocklister interface {
 	Blocklist(peerId string) error
 }
 
-func StreamBlockHandler(repo UserSetStorer, userRepo BlockUserResolver, nodeRepo PeerBlocklister) warpnet.WarpHandlerFunc {
+func StreamBlockHandler(repo BlocksStorer, userRepo BlockUserFetcher, nodeRepo PeerBlocklister) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.BlockEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -73,35 +80,16 @@ func StreamBlockHandler(repo UserSetStorer, userRepo BlockUserResolver, nodeRepo
 		if ev.BlockerId == ev.BlockeeId {
 			return nil, warpnet.WarpError("block: cannot block yourself")
 		}
-		if err := repo.Add(ev.BlockerId, ev.BlockeeId); err != nil {
+		if err := repo.Block(ev.BlockerId, ev.BlockeeId); err != nil {
 			return nil, err
 		}
 
-		// Escalate the social block to a peer-level blocklist so libp2p
-		// refuses traffic from the blockee's node. Best-effort: if the
-		// blockee's user record is missing or has no NodeId yet (e.g. they
-		// are a discovered-but-unresolved peer), the social block still
-		// stands.
-		if userRepo != nil && nodeRepo != nil {
-			u, uerr := userRepo.Get(ev.BlockeeId)
-			switch {
-			case errors.Is(uerr, database.ErrUserNotFound):
-				log.Warnf("block: target user %s not yet known locally, peer block skipped", ev.BlockeeId)
-			case uerr != nil:
-				log.Warnf("block: lookup user %s: %v", ev.BlockeeId, uerr)
-			case u.NodeId == "":
-				log.Warnf("block: target user %s has no node id, peer block skipped", ev.BlockeeId)
-			default:
-				if err := nodeRepo.Blocklist(u.NodeId); err != nil {
-					log.Warnf("block: peer blocklist for %s (%s): %v", ev.BlockeeId, u.NodeId, err)
-				}
-			}
-		}
+		escalateToPeerBlocklist(userRepo, nodeRepo, ev.BlockeeId)
 		return event.Accepted, nil
 	}
 }
 
-func StreamUnblockHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
+func StreamUnblockHandler(repo BlocksStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UnblockEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -113,14 +101,14 @@ func StreamUnblockHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
 		if ev.BlockeeId == "" {
 			return nil, warpnet.WarpError("unblock: empty blockee id")
 		}
-		if err := repo.Remove(ev.BlockerId, ev.BlockeeId); err != nil {
+		if err := repo.Unblock(ev.BlockerId, ev.BlockeeId); err != nil {
 			return nil, err
 		}
 		return event.Accepted, nil
 	}
 }
 
-func StreamGetBlocksHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
+func StreamGetBlocksHandler(repo BlocksStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetBlocksEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -141,7 +129,7 @@ func StreamGetBlocksHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
 	}
 }
 
-func StreamMuteHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
+func StreamMuteHandler(repo MutesStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.MuteEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -156,14 +144,14 @@ func StreamMuteHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
 		if ev.MuterId == ev.MuteeId {
 			return nil, warpnet.WarpError("mute: cannot mute yourself")
 		}
-		if err := repo.Add(ev.MuterId, ev.MuteeId); err != nil {
+		if err := repo.Mute(ev.MuterId, ev.MuteeId); err != nil {
 			return nil, err
 		}
 		return event.Accepted, nil
 	}
 }
 
-func StreamUnmuteHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
+func StreamUnmuteHandler(repo MutesStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UnmuteEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -175,14 +163,14 @@ func StreamUnmuteHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
 		if ev.MuteeId == "" {
 			return nil, warpnet.WarpError("unmute: empty mutee id")
 		}
-		if err := repo.Remove(ev.MuterId, ev.MuteeId); err != nil {
+		if err := repo.Unmute(ev.MuterId, ev.MuteeId); err != nil {
 			return nil, err
 		}
 		return event.Accepted, nil
 	}
 }
 
-func StreamGetMutesHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
+func StreamGetMutesHandler(repo MutesStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetMutesEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -203,45 +191,27 @@ func StreamGetMutesHandler(repo UserSetStorer) warpnet.WarpHandlerFunc {
 	}
 }
 
-type ConvMuteStorer interface {
-	Mute(userId, tweetId string) error
-	Unmute(userId, tweetId string) error
-}
-
-func StreamMuteConversationHandler(repo ConvMuteStorer) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.MuteConversationEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("mute conversation: empty user id")
-		}
-		if ev.TweetId == "" {
-			return nil, warpnet.WarpError("mute conversation: empty tweet id")
-		}
-		if err := repo.Mute(ev.UserId, ev.TweetId); err != nil {
-			return nil, err
-		}
-		return event.Accepted, nil
+// escalateToPeerBlocklist makes a best-effort lookup of the blockee's
+// node id and adds it to the libp2p-level blocklist. Failures are
+// logged and swallowed — a missing peer-block doesn't undo the social
+// block.
+func escalateToPeerBlocklist(userRepo BlockUserFetcher, nodeRepo PeerBlocklister, blockeeId string) {
+	if userRepo == nil || nodeRepo == nil {
+		return
 	}
-}
-
-func StreamUnmuteConversationHandler(repo ConvMuteStorer) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.UnmuteConversationEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("unmute conversation: empty user id")
-		}
-		if ev.TweetId == "" {
-			return nil, warpnet.WarpError("unmute conversation: empty tweet id")
-		}
-		if err := repo.Unmute(ev.UserId, ev.TweetId); err != nil {
-			return nil, err
-		}
-		return event.Accepted, nil
+	u, err := userRepo.Get(blockeeId)
+	switch {
+	case errors.Is(err, database.ErrUserNotFound):
+		log.Warnf("block: target user %s not yet known locally, peer block skipped", blockeeId)
+		return
+	case err != nil:
+		log.Warnf("block: lookup user %s: %v", blockeeId, err)
+		return
+	case u.NodeId == "":
+		log.Warnf("block: target user %s has no node id, peer block skipped", blockeeId)
+		return
+	}
+	if err := nodeRepo.Blocklist(u.NodeId); err != nil {
+		log.Warnf("block: peer blocklist for %s (%s): %v", blockeeId, u.NodeId, err)
 	}
 }

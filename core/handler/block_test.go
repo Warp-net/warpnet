@@ -33,93 +33,101 @@ func (s *stubPeerBlocklister) Blocklist(peerId string) error {
 	return nil
 }
 
-type stubUserSetRepo struct {
-	addFn    func(ownerId, targetId string) error
-	removeFn func(ownerId, targetId string) error
-	listFn   func(ownerId string, limit *uint64, cursor *string) ([]string, string, error)
+type stubBlocksRepo struct {
+	blockFn   func(blockerId, blockeeId string) error
+	unblockFn func(blockerId, blockeeId string) error
+	listFn    func(blockerId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
-func (s stubUserSetRepo) Add(ownerId, targetId string) error {
-	if s.addFn != nil {
-		return s.addFn(ownerId, targetId)
+func (s stubBlocksRepo) Block(b, e string) error {
+	if s.blockFn != nil {
+		return s.blockFn(b, e)
 	}
 	return nil
 }
 
-func (s stubUserSetRepo) Remove(ownerId, targetId string) error {
-	if s.removeFn != nil {
-		return s.removeFn(ownerId, targetId)
+func (s stubBlocksRepo) Unblock(b, e string) error {
+	if s.unblockFn != nil {
+		return s.unblockFn(b, e)
 	}
 	return nil
 }
 
-func (s stubUserSetRepo) List(ownerId string, limit *uint64, cursor *string) ([]string, string, error) {
+func (s stubBlocksRepo) List(b string, l *uint64, c *string) ([]string, string, error) {
 	if s.listFn != nil {
-		return s.listFn(ownerId, limit, cursor)
+		return s.listFn(b, l, c)
 	}
 	return nil, "end", nil
 }
 
-type stubConvMuteRepo struct {
-	muteFn   func(userId, tweetId string) error
-	unmuteFn func(userId, tweetId string) error
+type stubMutesRepo struct {
+	muteFn   func(muterId, muteeId string) error
+	unmuteFn func(muterId, muteeId string) error
+	listFn   func(muterId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
-func (s stubConvMuteRepo) Mute(userId, tweetId string) error {
+func (s stubMutesRepo) Mute(m, e string) error {
 	if s.muteFn != nil {
-		return s.muteFn(userId, tweetId)
+		return s.muteFn(m, e)
 	}
 	return nil
 }
 
-func (s stubConvMuteRepo) Unmute(userId, tweetId string) error {
+func (s stubMutesRepo) Unmute(m, e string) error {
 	if s.unmuteFn != nil {
-		return s.unmuteFn(userId, tweetId)
+		return s.unmuteFn(m, e)
 	}
 	return nil
+}
+
+func (s stubMutesRepo) List(m string, l *uint64, c *string) ([]string, string, error) {
+	if s.listFn != nil {
+		return s.listFn(m, l, c)
+	}
+	return nil, "end", nil
 }
 
 func TestStreamBlockHandler(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
-		_, err := StreamBlockHandler(stubUserSetRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})([]byte("{"), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty blocker", func(t *testing.T) {
-		_, err := StreamBlockHandler(stubUserSetRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockeeId: "b"}), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockeeId: "b"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty blockee", func(t *testing.T) {
-		_, err := StreamBlockHandler(stubUserSetRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a"}), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("self block", func(t *testing.T) {
-		_, err := StreamBlockHandler(stubUserSetRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "a"}), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "a"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("boom")
-		_, err := StreamBlockHandler(stubUserSetRepo{addFn: func(_, _ string) error { return repoErr }}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{blockFn: func(_, _ string) error { return repoErr }}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
 	})
 	t.Run("happy path escalates to peer blocklist", func(t *testing.T) {
-		var gotOwner, gotTarget string
+		var gotBlocker, gotBlockee string
 		userResolver := stubBlockUserResolver{getFn: func(uid string) (domain.User, error) {
 			return domain.User{Id: uid, NodeId: "node-b"}, nil
 		}}
 		peerBl := &stubPeerBlocklister{}
-		resp, err := StreamBlockHandler(stubUserSetRepo{addFn: func(o, tg string) error {
-			gotOwner = o
-			gotTarget = tg
+		resp, err := StreamBlockHandler(stubBlocksRepo{blockFn: func(blocker, blockee string) error {
+			gotBlocker = blocker
+			gotBlockee = blockee
 			return nil
 		}}, userResolver, peerBl)(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
 		if err != nil {
@@ -128,8 +136,8 @@ func TestStreamBlockHandler(t *testing.T) {
 		if resp != event.Accepted {
 			t.Fatal("expected Accepted")
 		}
-		if gotOwner != "a" || gotTarget != "b" {
-			t.Fatalf("bad repo args: %s/%s", gotOwner, gotTarget)
+		if gotBlocker != "a" || gotBlockee != "b" {
+			t.Fatalf("bad repo args: %s/%s", gotBlocker, gotBlockee)
 		}
 		if len(peerBl.captured) != 1 || peerBl.captured[0] != "node-b" {
 			t.Fatalf("expected peer block for node-b, got %v", peerBl.captured)
@@ -139,19 +147,19 @@ func TestStreamBlockHandler(t *testing.T) {
 
 func TestStreamUnblockHandler(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
-		_, err := StreamUnblockHandler(stubUserSetRepo{})([]byte("{"), nil)
+		_, err := StreamUnblockHandler(stubBlocksRepo{})([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty blocker", func(t *testing.T) {
-		_, err := StreamUnblockHandler(stubUserSetRepo{})(marshal(t, event.BlockEvent{BlockeeId: "b"}), nil)
+		_, err := StreamUnblockHandler(stubBlocksRepo{})(marshal(t, event.BlockEvent{BlockeeId: "b"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("happy path", func(t *testing.T) {
-		resp, err := StreamUnblockHandler(stubUserSetRepo{})(marshal(t, event.UnblockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
+		resp, err := StreamUnblockHandler(stubBlocksRepo{})(marshal(t, event.UnblockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
@@ -163,19 +171,19 @@ func TestStreamUnblockHandler(t *testing.T) {
 
 func TestStreamGetBlocksHandler(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
-		_, err := StreamGetBlocksHandler(stubUserSetRepo{})([]byte("{"), nil)
+		_, err := StreamGetBlocksHandler(stubBlocksRepo{})([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty user id", func(t *testing.T) {
-		_, err := StreamGetBlocksHandler(stubUserSetRepo{})(marshal(t, event.GetBlocksEvent{}), nil)
+		_, err := StreamGetBlocksHandler(stubBlocksRepo{})(marshal(t, event.GetBlocksEvent{}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("happy path", func(t *testing.T) {
-		resp, err := StreamGetBlocksHandler(stubUserSetRepo{listFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
+		resp, err := StreamGetBlocksHandler(stubBlocksRepo{listFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
 			return []string{"x", "y"}, "end", nil
 		}})(marshal(t, event.GetBlocksEvent{UserId: "a"}), nil)
 		if err != nil {
@@ -193,19 +201,19 @@ func TestStreamGetBlocksHandler(t *testing.T) {
 
 func TestStreamMuteHandler(t *testing.T) {
 	t.Run("empty muter", func(t *testing.T) {
-		_, err := StreamMuteHandler(stubUserSetRepo{})(marshal(t, event.MuteEvent{MuteeId: "b"}), nil)
+		_, err := StreamMuteHandler(stubMutesRepo{})(marshal(t, event.MuteEvent{MuteeId: "b"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("self mute", func(t *testing.T) {
-		_, err := StreamMuteHandler(stubUserSetRepo{})(marshal(t, event.MuteEvent{MuterId: "a", MuteeId: "a"}), nil)
+		_, err := StreamMuteHandler(stubMutesRepo{})(marshal(t, event.MuteEvent{MuterId: "a", MuteeId: "a"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("happy path", func(t *testing.T) {
-		resp, err := StreamMuteHandler(stubUserSetRepo{})(marshal(t, event.MuteEvent{MuterId: "a", MuteeId: "b"}), nil)
+		resp, err := StreamMuteHandler(stubMutesRepo{})(marshal(t, event.MuteEvent{MuterId: "a", MuteeId: "b"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
@@ -217,49 +225,13 @@ func TestStreamMuteHandler(t *testing.T) {
 
 func TestStreamUnmuteHandler(t *testing.T) {
 	t.Run("empty muter", func(t *testing.T) {
-		_, err := StreamUnmuteHandler(stubUserSetRepo{})(marshal(t, event.MuteEvent{MuteeId: "b"}), nil)
+		_, err := StreamUnmuteHandler(stubMutesRepo{})(marshal(t, event.MuteEvent{MuteeId: "b"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("happy path", func(t *testing.T) {
-		resp, err := StreamUnmuteHandler(stubUserSetRepo{})(marshal(t, event.UnmuteEvent{MuterId: "a", MuteeId: "b"}), nil)
-		if err != nil {
-			t.Fatalf("unexpected: %v", err)
-		}
-		if resp != event.Accepted {
-			t.Fatal("expected Accepted")
-		}
-	})
-}
-
-func TestStreamMuteConversationHandler(t *testing.T) {
-	t.Run("empty user id", func(t *testing.T) {
-		_, err := StreamMuteConversationHandler(stubConvMuteRepo{})(marshal(t, event.MuteConversationEvent{TweetId: "t"}), nil)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-	t.Run("empty tweet id", func(t *testing.T) {
-		_, err := StreamMuteConversationHandler(stubConvMuteRepo{})(marshal(t, event.MuteConversationEvent{UserId: "u"}), nil)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-	t.Run("happy path", func(t *testing.T) {
-		resp, err := StreamMuteConversationHandler(stubConvMuteRepo{})(marshal(t, event.MuteConversationEvent{UserId: "u", TweetId: "t"}), nil)
-		if err != nil {
-			t.Fatalf("unexpected: %v", err)
-		}
-		if resp != event.Accepted {
-			t.Fatal("expected Accepted")
-		}
-	})
-}
-
-func TestStreamUnmuteConversationHandler(t *testing.T) {
-	t.Run("happy path", func(t *testing.T) {
-		resp, err := StreamUnmuteConversationHandler(stubConvMuteRepo{})(marshal(t, event.UnmuteConversationEvent{UserId: "u", TweetId: "t"}), nil)
+		resp, err := StreamUnmuteHandler(stubMutesRepo{})(marshal(t, event.UnmuteEvent{MuterId: "a", MuteeId: "b"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}

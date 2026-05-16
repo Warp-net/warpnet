@@ -87,8 +87,6 @@ const (
 	PRIVATE_POST_MUTE               = "/private/post/mute/0.0.0"
 	PRIVATE_POST_UNMUTE             = "/private/post/unmute/0.0.0"
 	PRIVATE_GET_MUTES               = "/private/get/mutes/0.0.0"
-	PRIVATE_POST_MUTE_CONVERSATION  = "/private/post/mute/conversation/0.0.0"
-	PRIVATE_POST_UNMUTE_CONVERSATION = "/private/post/unmute/conversation/0.0.0"
 
 	PUBLIC_GET_TWEET_LIKERS     = "/public/get/tweet/likers/0.0.0"
 	PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
@@ -98,9 +96,6 @@ const (
 
 	PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
 	PRIVATE_GET_MEDIA       = "/private/get/media/0.0.0"
-
-	PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
-	PRIVATE_GET_USER_NOTE  = "/private/get/user/note/0.0.0"
 
 	PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 

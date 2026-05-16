@@ -39,11 +39,15 @@ const FollowRequestsRepoName = "/FOLLOW_REQUESTS"
 // FollowRequestsRepo holds pending follow requests for locked accounts.
 // Once the target user authorizes a request, the entry is moved to the
 // normal follow-repo and the request is removed; on reject, just removed.
-type FollowRequestsRepo struct {
-	db UserSetStorer
+type FollowRequestsStorer interface {
+	NewTxn() (local_store.WarpTransactioner, error)
 }
 
-func NewFollowRequestsRepo(db UserSetStorer) *FollowRequestsRepo {
+type FollowRequestsRepo struct {
+	db FollowRequestsStorer
+}
+
+func NewFollowRequestsRepo(db FollowRequestsStorer) *FollowRequestsRepo {
 	return &FollowRequestsRepo{db: db}
 }
 

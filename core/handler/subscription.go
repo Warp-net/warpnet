@@ -38,8 +38,8 @@ import (
 // node uses this watchlist to elevate the corresponding incoming tweet
 // to a notification.
 type SubscriptionStorer interface {
-	Add(ownerId, targetId string) error
-	Remove(ownerId, targetId string) error
+	Subscribe(selfId, targetUserId string) error
+	Unsubscribe(selfId, targetUserId string) error
 }
 
 func StreamSubscribeUserHandler(repo SubscriptionStorer) warpnet.WarpHandlerFunc {
@@ -57,7 +57,7 @@ func StreamSubscribeUserHandler(repo SubscriptionStorer) warpnet.WarpHandlerFunc
 		if ev.SelfId == ev.TargetId {
 			return nil, warpnet.WarpError("subscribe: cannot subscribe to yourself")
 		}
-		if err := repo.Add(ev.SelfId, ev.TargetId); err != nil {
+		if err := repo.Subscribe(ev.SelfId, ev.TargetId); err != nil {
 			return nil, err
 		}
 		return event.Accepted, nil
@@ -76,7 +76,7 @@ func StreamUnsubscribeUserHandler(repo SubscriptionStorer) warpnet.WarpHandlerFu
 		if ev.TargetId == "" {
 			return nil, warpnet.WarpError("unsubscribe: empty target id")
 		}
-		if err := repo.Remove(ev.SelfId, ev.TargetId); err != nil {
+		if err := repo.Unsubscribe(ev.SelfId, ev.TargetId); err != nil {
 			return nil, err
 		}
 		return event.Accepted, nil

@@ -754,21 +754,9 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun muteConversation(statusId: String): NetworkResult<Tweet> {
-        val active = accountManager.activeAccount ?: return stubFailure("muteConversation")
-        return result {
-            warpnet.muteConversation(userId = active.accountId, tweetId = statusId)
-            warpnet.getStatus(tweetId = statusId, userId = active.accountId)
-        }
-    }
+    suspend fun muteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("muteConversation")
 
-    suspend fun unmuteConversation(statusId: String): NetworkResult<Tweet> {
-        val active = accountManager.activeAccount ?: return stubFailure("unmuteConversation")
-        return result {
-            warpnet.unmuteConversation(userId = active.accountId, tweetId = statusId)
-            warpnet.getStatus(tweetId = statusId, userId = active.accountId)
-        }
-    }
+    suspend fun unmuteConversation(statusId: String): NetworkResult<Tweet> = stubFailure("unmuteConversation")
 
     suspend fun scheduledTweets(
         limit: Int? = null,
@@ -1157,13 +1145,7 @@ class WarpnetApi @Inject constructor(
     suspend fun updateAccountNote(
         accountId: String,
         note: String,
-    ): NetworkResult<Relationship> {
-        val active = accountManager.activeAccount ?: return stubFailure("updateAccountNote")
-        return result {
-            warpnet.setAccountNote(selfId = active.accountId, targetUserId = accountId, note = note)
-            warpnet.relationshipFor(accountId).copy(note = note)
-        }
-    }
+    ): NetworkResult<Relationship> = stubFailure("updateAccountNote")
 
     // ---------------------------------------------------------------
     // push subscription

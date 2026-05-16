@@ -32,7 +32,6 @@ import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.setClickableText
 import site.warpnet.warpdroid.util.show
 import site.warpnet.warpdroid.util.visible
-import site.warpnet.warpdroid.viewdata.toViewData
 import org.xml.sax.XMLReader
 
 class ViewEditsAdapter(

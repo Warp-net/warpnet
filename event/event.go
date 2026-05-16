@@ -550,15 +550,6 @@ type GetMutesEvent = GetBlocksEvent
 // GetMutesResponse defines model for GetMutesResponse.
 type GetMutesResponse = GetBlocksResponse
 
-// MuteConversationEvent defines model for MuteConversationEvent.
-type MuteConversationEvent struct {
-	UserId  domain.ID `json:"user_id"`
-	TweetId domain.ID `json:"tweet_id"`
-}
-
-// UnmuteConversationEvent defines model for UnmuteConversationEvent.
-type UnmuteConversationEvent = MuteConversationEvent
-
 // GetTweetLikersEvent defines model for GetTweetLikersEvent.
 type GetTweetLikersEvent struct {
 	TweetId      domain.ID `json:"tweet_id"`
@@ -600,26 +591,6 @@ type GetMediaResponse struct {
 	Description string  `json:"description"`
 	FocusX      float32 `json:"focus_x"`
 	FocusY      float32 `json:"focus_y"`
-}
-
-// UpdateAccountNoteEvent defines model for UpdateAccountNoteEvent.
-// Per-target private note: the local-only annotation a user can write
-// against another account (Mastodon's "Edit profile note about <user>").
-type UpdateAccountNoteEvent struct {
-	SelfId       domain.ID `json:"self_id"`
-	TargetUserId domain.ID `json:"target_user_id"`
-	Note         string    `json:"note"`
-}
-
-// GetAccountNoteEvent defines model for GetAccountNoteEvent.
-type GetAccountNoteEvent struct {
-	SelfId       domain.ID `json:"self_id"`
-	TargetUserId domain.ID `json:"target_user_id"`
-}
-
-// GetAccountNoteResponse defines model for GetAccountNoteResponse.
-type GetAccountNoteResponse struct {
-	Note string `json:"note"`
 }
 
 // SearchUsersEvent defines model for SearchUsersEvent.

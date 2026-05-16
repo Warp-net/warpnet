@@ -236,12 +236,6 @@ data class GetBlocksResponse(
 )
 
 @JsonClass(generateAdapter = true)
-data class MuteConversationEvent(
-    @Json(name = "user_id") val userId: String,
-    @Json(name = "tweet_id") val tweetId: String,
-)
-
-@JsonClass(generateAdapter = true)
 data class GetTweetLikersEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "owner_user_id") val ownerUserId: String,
@@ -276,24 +270,6 @@ data class GetMediaResponse(
     val description: String = "",
     @Json(name = "focus_x") val focusX: Float = 0f,
     @Json(name = "focus_y") val focusY: Float = 0f,
-)
-
-@JsonClass(generateAdapter = true)
-data class UpdateAccountNoteEvent(
-    @Json(name = "self_id") val selfId: String,
-    @Json(name = "target_user_id") val targetUserId: String,
-    val note: String = "",
-)
-
-@JsonClass(generateAdapter = true)
-data class GetAccountNoteEvent(
-    @Json(name = "self_id") val selfId: String,
-    @Json(name = "target_user_id") val targetUserId: String,
-)
-
-@JsonClass(generateAdapter = true)
-data class GetAccountNoteResponse(
-    val note: String = "",
 )
 
 @JsonClass(generateAdapter = true)

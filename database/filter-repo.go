@@ -38,11 +38,15 @@ const FilterRepoName = "/FILTERS"
 
 var ErrFilterNotFound = local_store.DBError("filter not found")
 
-type FilterRepo struct {
-	db UserSetStorer
+type FilterStorer interface {
+	NewTxn() (local_store.WarpTransactioner, error)
 }
 
-func NewFilterRepo(db UserSetStorer) *FilterRepo {
+type FilterRepo struct {
+	db FilterStorer
+}
+
+func NewFilterRepo(db FilterStorer) *FilterRepo {
 	return &FilterRepo{db: db}
 }
 

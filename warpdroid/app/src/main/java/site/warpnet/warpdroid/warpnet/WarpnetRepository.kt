@@ -106,15 +106,11 @@ class WarpnetRepository @Inject constructor(
     private val muteEventAdapter = moshi.adapter<site.warpnet.transport.dto.MuteEvent>()
     private val getBlocksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksEvent>()
     private val getBlocksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksResponse>()
-    private val muteConvAdapter = moshi.adapter<site.warpnet.transport.dto.MuteConversationEvent>()
     private val getTweetLikersAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetLikersEvent>()
     private val subscribeUserAdapter = moshi.adapter<site.warpnet.transport.dto.SubscribeUserEvent>()
     private val updateMediaMetaAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateMediaMetaEvent>()
     private val getMediaAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaEvent>()
     private val getMediaRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaResponse>()
-    private val updateAccountNoteAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateAccountNoteEvent>()
-    private val getAccountNoteAdapter = moshi.adapter<site.warpnet.transport.dto.GetAccountNoteEvent>()
-    private val getAccountNoteRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetAccountNoteResponse>()
     private val searchUsersAdapter = moshi.adapter<site.warpnet.transport.dto.SearchUsersEvent>()
     private val editTweetAdapter = moshi.adapter<site.warpnet.transport.dto.EditTweetEvent>()
     private val getTweetEditsAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetEditsEvent>()
@@ -664,36 +660,6 @@ class WarpnetRepository @Inject constructor(
     }
 
     // -----------------------------------------------------------------
-    // Private account note (Tusky's "edit note about <user>")
-    // -----------------------------------------------------------------
-
-    suspend fun setAccountNote(selfId: String, targetUserId: String, note: String) {
-        client.request(
-            ProtocolIds.PRIVATE_POST_USER_NOTE,
-            updateAccountNoteAdapter.toJson(
-                site.warpnet.transport.dto.UpdateAccountNoteEvent(
-                    selfId = selfId,
-                    targetUserId = targetUserId,
-                    note = note,
-                ),
-            ),
-        )
-    }
-
-    suspend fun getAccountNote(selfId: String, targetUserId: String): String {
-        val raw = client.request(
-            ProtocolIds.PRIVATE_GET_USER_NOTE,
-            getAccountNoteAdapter.toJson(
-                site.warpnet.transport.dto.GetAccountNoteEvent(
-                    selfId = selfId,
-                    targetUserId = targetUserId,
-                ),
-            ),
-        )
-        return getAccountNoteRespAdapter.fromJson(raw)?.note.orEmpty()
-    }
-
-    // -----------------------------------------------------------------
     // Media metadata (alt-text + focal point on uploaded images)
     // -----------------------------------------------------------------
 
@@ -850,23 +816,6 @@ class WarpnetRepository @Inject constructor(
         return page.ids to page.cursor
     }
 
-    suspend fun muteConversation(userId: String, tweetId: String) {
-        client.request(
-            ProtocolIds.PRIVATE_POST_MUTE_CONVERSATION,
-            muteConvAdapter.toJson(
-                site.warpnet.transport.dto.MuteConversationEvent(userId = userId, tweetId = tweetId),
-            ),
-        )
-    }
-
-    suspend fun unmuteConversation(userId: String, tweetId: String) {
-        client.request(
-            ProtocolIds.PRIVATE_POST_UNMUTE_CONVERSATION,
-            muteConvAdapter.toJson(
-                site.warpnet.transport.dto.MuteConversationEvent(userId = userId, tweetId = tweetId),
-            ),
-        )
-    }
 
     // -----------------------------------------------------------------
     // Pin / Unpin (author-only; the fat node enforces the author check)

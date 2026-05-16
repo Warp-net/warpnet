@@ -44,16 +44,12 @@ export const PRIVATE_GET_BLOCKS = "/private/get/blocks/0.0.0"
 export const PRIVATE_POST_MUTE = "/private/post/mute/0.0.0"
 export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
 export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
-export const PRIVATE_POST_MUTE_CONVERSATION = "/private/post/mute/conversation/0.0.0"
-export const PRIVATE_POST_UNMUTE_CONVERSATION = "/private/post/unmute/conversation/0.0.0"
 export const PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
 export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
 export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
 export const PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
 export const PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
 export const PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
-export const PRIVATE_POST_USER_NOTE = "/private/post/user/note/0.0.0"
-export const PRIVATE_GET_USER_NOTE = "/private/get/user/note/0.0.0"
 export const PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
 export const PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"
@@ -746,31 +742,6 @@ export const warpnetService = {
         return resp || { users: [], cursor: 'end' };
     },
 
-    async setAccountNote(targetUserId, note) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PRIVATE_POST_USER_NOTE,
-            body: {
-                self_id: owner.user_id,
-                target_user_id: targetUserId,
-                note: note || '',
-            },
-        });
-    },
-
-    async getAccountNote(targetUserId) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PRIVATE_GET_USER_NOTE,
-            body: {
-                self_id: owner.user_id,
-                target_user_id: targetUserId,
-            },
-        });
-    },
-
     async updateMediaMeta(key, description, focusX, focusY) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
@@ -848,29 +819,6 @@ export const warpnetService = {
         return resp || { users: [], cursor: 'end' };
     },
 
-    async muteConversation(tweetId) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PRIVATE_POST_MUTE_CONVERSATION,
-            body: {
-                user_id: owner.user_id,
-                tweet_id: tweetId,
-            },
-        });
-    },
-
-    async unmuteConversation(tweetId) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PRIVATE_POST_UNMUTE_CONVERSATION,
-            body: {
-                user_id: owner.user_id,
-                tweet_id: tweetId,
-            },
-        });
-    },
 
     async pinTweet(tweetId) {
         const owner = this.getOwnerProfile()

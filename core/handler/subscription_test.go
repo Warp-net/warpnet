@@ -9,20 +9,20 @@ import (
 )
 
 type stubSubsRepo struct {
-	addFn    func(ownerId, targetId string) error
-	removeFn func(ownerId, targetId string) error
+	subscribeFn    func(ownerId, targetId string) error
+	unsubscribeFn func(ownerId, targetId string) error
 }
 
-func (s stubSubsRepo) Add(o, t string) error {
-	if s.addFn != nil {
-		return s.addFn(o, t)
+func (s stubSubsRepo) Subscribe(o, t string) error {
+	if s.subscribeFn != nil {
+		return s.subscribeFn(o, t)
 	}
 	return nil
 }
 
-func (s stubSubsRepo) Remove(o, t string) error {
-	if s.removeFn != nil {
-		return s.removeFn(o, t)
+func (s stubSubsRepo) Unsubscribe(o, t string) error {
+	if s.unsubscribeFn != nil {
+		return s.unsubscribeFn(o, t)
 	}
 	return nil
 }
@@ -54,7 +54,7 @@ func TestStreamSubscribeUserHandler(t *testing.T) {
 	})
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("boom")
-		_, err := StreamSubscribeUserHandler(stubSubsRepo{addFn: func(_, _ string) error { return repoErr }})(marshal(t, event.SubscribeUserEvent{SelfId: "a", TargetId: "b"}), nil)
+		_, err := StreamSubscribeUserHandler(stubSubsRepo{subscribeFn: func(_, _ string) error { return repoErr }})(marshal(t, event.SubscribeUserEvent{SelfId: "a", TargetId: "b"}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}

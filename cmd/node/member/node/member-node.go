@@ -383,11 +383,9 @@ type memberRepos struct {
 	mediaRepo        *database.MediaRepo
 	notificationRepo *database.NotificationsRepo
 	bookmarkRepo     *database.BookmarkRepo
-	blocksRepo       *database.UserSetRepo
-	mutesRepo        *database.UserSetRepo
-	convMutesRepo    *database.ConvMuteRepo
-	subsRepo         *database.UserSetRepo
-	userNoteRepo     *database.UserNoteRepo
+	blocksRepo       *database.BlocksRepo
+	mutesRepo        *database.MutesRepo
+	subsRepo         *database.SubscriptionsRepo
 	tweetEditsRepo   *database.TweetEditsRepo
 	followReqRepo    *database.FollowRequestsRepo
 	filterRepo       *database.FilterRepo
@@ -416,9 +414,7 @@ func (m *MemberNode) setupHandlers(
 		bookmarkRepo:     database.NewBookmarkRepo(db),
 		blocksRepo:       database.NewBlocksRepo(db),
 		mutesRepo:        database.NewMutesRepo(db),
-		convMutesRepo:    database.NewConvMutesRepo(db),
 		subsRepo:         database.NewSubscriptionsRepo(db),
-		userNoteRepo:     database.NewUserNoteRepo(db),
 		tweetEditsRepo:   database.NewTweetEditsRepo(db),
 		followReqRepo:    database.NewFollowRequestsRepo(db),
 		filterRepo:       database.NewFilterRepo(db),
@@ -731,14 +727,6 @@ func (m *MemberNode) userHandlers(
 			event.PRIVATE_POST_UNSUBSCRIBE_USER,
 			handler.StreamUnsubscribeUserHandler(r.subsRepo),
 		},
-		{
-			event.PRIVATE_POST_USER_NOTE,
-			handler.StreamUpdateAccountNoteHandler(r.userNoteRepo),
-		},
-		{
-			event.PRIVATE_GET_USER_NOTE,
-			handler.StreamGetAccountNoteHandler(r.userNoteRepo),
-		},
 	}
 }
 
@@ -855,14 +843,6 @@ func (m *MemberNode) socialFilterHandlers(
 		{
 			event.PRIVATE_GET_MUTES,
 			handler.StreamGetMutesHandler(r.mutesRepo),
-		},
-		{
-			event.PRIVATE_POST_MUTE_CONVERSATION,
-			handler.StreamMuteConversationHandler(r.convMutesRepo),
-		},
-		{
-			event.PRIVATE_POST_UNMUTE_CONVERSATION,
-			handler.StreamUnmuteConversationHandler(r.convMutesRepo),
 		},
 	}
 }

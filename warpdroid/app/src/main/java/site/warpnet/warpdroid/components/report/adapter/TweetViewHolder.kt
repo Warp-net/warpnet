@@ -40,7 +40,6 @@ import site.warpnet.warpdroid.util.setClickableText
 import site.warpnet.warpdroid.util.shouldTrimStatus
 import site.warpnet.warpdroid.util.show
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.toViewData
 import java.util.Date
 
 class TweetViewHolder(
