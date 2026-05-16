@@ -61,8 +61,13 @@ type BlockUserFetcher interface {
 // PeerBlocklister talks to NodeRepo's libp2p-level blocklist
 // (database/node-repo.go) so blocking a user disconnects and refuses
 // traffic from their node.
+//
+// A social block is permanent until the user undoes it, so we go
+// straight to BlocklistPermanent (no exponential escalation) on
+// Block, and BlocklistRemove on Unblock.
 type PeerBlocklister interface {
-	Blocklist(peerId string) error
+	BlocklistPermanent(peerId string) error
+	BlocklistRemove(peerId string) error
 }
 
 func StreamBlockHandler(repo BlocksStorer, userRepo BlockUserFetcher, nodeRepo PeerBlocklister) warpnet.WarpHandlerFunc {
@@ -89,7 +94,7 @@ func StreamBlockHandler(repo BlocksStorer, userRepo BlockUserFetcher, nodeRepo P
 	}
 }
 
-func StreamUnblockHandler(repo BlocksStorer) warpnet.WarpHandlerFunc {
+func StreamUnblockHandler(repo BlocksStorer, userRepo BlockUserFetcher, nodeRepo PeerBlocklister) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UnblockEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -104,6 +109,8 @@ func StreamUnblockHandler(repo BlocksStorer) warpnet.WarpHandlerFunc {
 		if err := repo.Unblock(ev.BlockerId, ev.BlockeeId); err != nil {
 			return nil, err
 		}
+
+		removePeerBlocklist(userRepo, nodeRepo, ev.BlockeeId)
 		return event.Accepted, nil
 	}
 }
@@ -192,12 +199,11 @@ func StreamGetMutesHandler(repo MutesStorer) warpnet.WarpHandlerFunc {
 }
 
 // escalateToPeerBlocklist makes a best-effort lookup of the blockee's
-// node id and adds it to the libp2p-level blocklist. The peer-level
-// block is *exponential*: NodeRepo.Blocklist bumps a per-peer BlockLevel
-// on every call and writes the entry with the matching TTL, so repeat
-// social-blocks against the same node lengthen the network-layer ban
-// instead of resetting it. Failures are logged and swallowed — a
-// missing peer-block doesn't undo the social block.
+// node id and adds it to the libp2p-level blocklist as a *permanent*
+// entry — the user explicitly decided to block, so the peer ban
+// stays in place until they unblock (which removes both the social
+// and the peer entry). Failures are logged and swallowed — a missing
+// peer-block doesn't undo the social block.
 func escalateToPeerBlocklist(userRepo BlockUserFetcher, nodeRepo PeerBlocklister, blockeeId string) {
 	if userRepo == nil || nodeRepo == nil {
 		return
@@ -214,7 +220,29 @@ func escalateToPeerBlocklist(userRepo BlockUserFetcher, nodeRepo PeerBlocklister
 		log.Warnf("block: target user %s has no node id, peer block skipped", blockeeId)
 		return
 	}
-	if err := nodeRepo.Blocklist(u.NodeId); err != nil {
+	if err := nodeRepo.BlocklistPermanent(u.NodeId); err != nil {
 		log.Warnf("block: peer blocklist for %s (%s): %v", blockeeId, u.NodeId, err)
+	}
+}
+
+// removePeerBlocklist is the unblock counterpart — looks up the now-
+// unblocked user's node id and drops the libp2p-level ban so their
+// peer can reach this node again. Best-effort, like the escalation.
+func removePeerBlocklist(userRepo BlockUserFetcher, nodeRepo PeerBlocklister, blockeeId string) {
+	if userRepo == nil || nodeRepo == nil {
+		return
+	}
+	u, err := userRepo.Get(blockeeId)
+	switch {
+	case errors.Is(err, database.ErrUserNotFound):
+		return
+	case err != nil:
+		log.Warnf("unblock: lookup user %s: %v", blockeeId, err)
+		return
+	case u.NodeId == "":
+		return
+	}
+	if err := nodeRepo.BlocklistRemove(u.NodeId); err != nil {
+		log.Warnf("unblock: peer blocklist remove for %s (%s): %v", blockeeId, u.NodeId, err)
 	}
 }

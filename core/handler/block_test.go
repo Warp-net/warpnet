@@ -23,13 +23,19 @@ func (s stubBlockUserResolver) Get(userId string) (domain.User, error) {
 type stubPeerBlocklister struct {
 	blocklistFn func(peerId string) error
 	captured    []string
+	removed     []string
 }
 
-func (s *stubPeerBlocklister) Blocklist(peerId string) error {
+func (s *stubPeerBlocklister) BlocklistPermanent(peerId string) error {
 	s.captured = append(s.captured, peerId)
 	if s.blocklistFn != nil {
 		return s.blocklistFn(peerId)
 	}
+	return nil
+}
+
+func (s *stubPeerBlocklister) BlocklistRemove(peerId string) error {
+	s.removed = append(s.removed, peerId)
 	return nil
 }
 
@@ -147,24 +153,34 @@ func TestStreamBlockHandler(t *testing.T) {
 
 func TestStreamUnblockHandler(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
-		_, err := StreamUnblockHandler(stubBlocksRepo{})([]byte("{"), nil)
+		_, err := StreamUnblockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty blocker", func(t *testing.T) {
-		_, err := StreamUnblockHandler(stubBlocksRepo{})(marshal(t, event.BlockEvent{BlockeeId: "b"}), nil)
+		_, err := StreamUnblockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockeeId: "b"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
-	t.Run("happy path", func(t *testing.T) {
-		resp, err := StreamUnblockHandler(stubBlocksRepo{})(marshal(t, event.UnblockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
+	t.Run("happy path removes peer blocklist", func(t *testing.T) {
+		peerBl := &stubPeerBlocklister{}
+		resp, err := StreamUnblockHandler(
+			stubBlocksRepo{},
+			stubBlockUserResolver{getFn: func(uid string) (domain.User, error) {
+				return domain.User{Id: uid, NodeId: "node-b"}, nil
+			}},
+			peerBl,
+		)(marshal(t, event.UnblockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
 		if resp != event.Accepted {
 			t.Fatal("expected Accepted")
+		}
+		if len(peerBl.removed) != 1 || peerBl.removed[0] != "node-b" {
+			t.Fatalf("expected peer unblock for node-b, got %v", peerBl.removed)
 		}
 	})
 }

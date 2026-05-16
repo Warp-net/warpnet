@@ -27,6 +27,10 @@ resulting from the use or misuse of this software.
 
 package database
 
+import (
+	"github.com/Warp-net/warpnet/database/local-store"
+)
+
 const (
 	MutesRepoName = "/MUTES"
 
@@ -36,25 +40,136 @@ const (
 	mutersSubName = "MUTERS"
 )
 
-// MutesRepo persists the set of user ids the local owner has muted.
-type MutesRepo struct {
-	db userRelationStorer
+type MutesStorer interface {
+	NewTxn() (local_store.WarpTransactioner, error)
 }
 
-func NewMutesRepo(db userRelationStorer) *MutesRepo { return &MutesRepo{db: db} }
+// MutesRepo persists the set of user ids the local owner has muted.
+type MutesRepo struct {
+	db MutesStorer
+}
+
+func NewMutesRepo(db MutesStorer) *MutesRepo { return &MutesRepo{db: db} }
 
 func (repo *MutesRepo) Mute(muterId, muteeId string) error {
-	return addUserRelation(repo.db, MutesRepoName, muteesSubName, mutersSubName, muterId, muteeId)
+	if muterId == "" {
+		return local_store.DBError("empty muter id")
+	}
+	if muteeId == "" {
+		return local_store.DBError("empty mutee id")
+	}
+
+	muteesKey := local_store.NewPrefixBuilder(MutesRepoName).
+		AddSubPrefix(muteesSubName).
+		AddRootID(muterId).
+		AddParentId(muteeId).
+		Build()
+	mutersKey := local_store.NewPrefixBuilder(MutesRepoName).
+		AddSubPrefix(mutersSubName).
+		AddRootID(muteeId).
+		AddParentId(muterId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if err = txn.Set(muteesKey, []byte(muteeId)); err != nil {
+		return err
+	}
+	if err = txn.Set(mutersKey, []byte(muterId)); err != nil {
+		return err
+	}
+	return txn.Commit()
 }
 
 func (repo *MutesRepo) Unmute(muterId, muteeId string) error {
-	return removeUserRelation(repo.db, MutesRepoName, muteesSubName, mutersSubName, muterId, muteeId)
+	if muterId == "" {
+		return local_store.DBError("empty muter id")
+	}
+	if muteeId == "" {
+		return local_store.DBError("empty mutee id")
+	}
+
+	muteesKey := local_store.NewPrefixBuilder(MutesRepoName).
+		AddSubPrefix(muteesSubName).
+		AddRootID(muterId).
+		AddParentId(muteeId).
+		Build()
+	mutersKey := local_store.NewPrefixBuilder(MutesRepoName).
+		AddSubPrefix(mutersSubName).
+		AddRootID(muteeId).
+		AddParentId(muterId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if err = txn.Delete(muteesKey); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	if err = txn.Delete(mutersKey); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	return txn.Commit()
 }
 
 func (repo *MutesRepo) IsMuted(muterId, muteeId string) (bool, error) {
-	return hasUserRelation(repo.db, MutesRepoName, muteesSubName, muterId, muteeId)
+	if muterId == "" || muteeId == "" {
+		return false, nil
+	}
+	muteesKey := local_store.NewPrefixBuilder(MutesRepoName).
+		AddSubPrefix(muteesSubName).
+		AddRootID(muterId).
+		AddParentId(muteeId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return false, err
+	}
+	defer txn.Rollback()
+
+	_, err = txn.Get(muteesKey)
+	if local_store.IsNotFoundError(err) {
+		return false, txn.Commit()
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, txn.Commit()
 }
 
 func (repo *MutesRepo) List(muterId string, limit *uint64, cursor *string) ([]string, string, error) {
-	return listUserRelations(repo.db, MutesRepoName, muteesSubName, muterId, limit, cursor)
+	if muterId == "" {
+		return nil, "", local_store.DBError("empty muter id")
+	}
+	prefix := local_store.NewPrefixBuilder(MutesRepoName).
+		AddSubPrefix(muteesSubName).
+		AddRootID(muterId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	items, cur, err := txn.List(prefix, limit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	if err = txn.Commit(); err != nil {
+		return nil, "", err
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, string(item.Value))
+	}
+	return ids, cur, nil
 }

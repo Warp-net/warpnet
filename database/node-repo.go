@@ -757,6 +757,53 @@ func (d *NodeRepo) Blocklist(peerId string) error {
 	return txn.Commit()
 }
 
+// BlocklistPermanent puts peerId on the peer-level blocklist with no
+// TTL (PermanentBlock). Unlike Blocklist (which escalates the
+// BlockLevel and writes the matching expiring entry), this is what
+// social blocks resolve to: the user explicitly decided to block,
+// and the ban stays until they unblock.
+func (d *NodeRepo) BlocklistPermanent(peerId string) error {
+	if d == nil {
+		return ErrNilNodeRepo
+	}
+	if peerId == "" {
+		return local_store.DBError("empty peer ID")
+	}
+
+	txn, err := d.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	blocklistUserKey := local_store.NewPrefixBuilder(d.prefix).
+		AddSubPrefix(BlocklistSubNamespace).
+		AddSubPrefix(BlocklistUserSubNamespace).
+		AddRootID(peerId).
+		Build()
+
+	// noExpiryBlockDuration = 0 means no TTL — the entry persists until
+	// BlocklistRemove is called.
+	if err := txn.SetWithTTL(blocklistUserKey, []byte{}, noExpiryBlockDuration); err != nil {
+		return err
+	}
+
+	blocklistTermKey := local_store.NewPrefixBuilder(d.prefix).
+		AddSubPrefix(BlocklistSubNamespace).
+		AddSubPrefix(BlocklistTermSubNamespace).
+		AddRootID(peerId).
+		Build()
+	term := BlocklistTerm{PeerID: peerId, Level: PermanentBlock}
+	bt, err := json.Marshal(term)
+	if err != nil {
+		return err
+	}
+	if err := txn.Set(blocklistTermKey, bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
 func (d *NodeRepo) IsBlocklisted(peerId string) bool {
 	if d == nil {
 		return false

@@ -27,11 +27,15 @@ resulting from the use or misuse of this software.
 
 package database
 
+import (
+	"github.com/Warp-net/warpnet/database/local-store"
+)
+
 // NOT to be confused with NodeRepo.Blocklist (database/node-repo.go),
-// which is a *peer*-level anti-abuse mechanism keyed by libp2p PeerID
-// with escalating TTLs — that one bans misbehaving nodes from the
-// network. BlocksRepo below is the *social* block: permanent,
-// user-scoped "hide this account from me" keyed by domain user id.
+// which is a *peer*-level anti-abuse mechanism keyed by libp2p PeerID.
+// BlocksRepo below is the *social* block: permanent, user-scoped
+// "hide this account from me" keyed by domain user id, kept until
+// the user explicitly unblocks.
 
 const (
 	BlocksRepoName = "/BLOCKS"
@@ -43,27 +47,138 @@ const (
 	blockersSubName = "BLOCKERS"
 )
 
-// BlocksRepo persists the set of user ids the local owner has blocked.
-type BlocksRepo struct {
-	db userRelationStorer
+type BlocksStorer interface {
+	NewTxn() (local_store.WarpTransactioner, error)
 }
 
-func NewBlocksRepo(db userRelationStorer) *BlocksRepo { return &BlocksRepo{db: db} }
+// BlocksRepo persists the set of user ids the local owner has blocked.
+type BlocksRepo struct {
+	db BlocksStorer
+}
+
+func NewBlocksRepo(db BlocksStorer) *BlocksRepo { return &BlocksRepo{db: db} }
 
 // Block records that blockerId has blocked blockeeId.
 func (repo *BlocksRepo) Block(blockerId, blockeeId string) error {
-	return addUserRelation(repo.db, BlocksRepoName, blockeesSubName, blockersSubName, blockerId, blockeeId)
+	if blockerId == "" {
+		return local_store.DBError("empty blocker id")
+	}
+	if blockeeId == "" {
+		return local_store.DBError("empty blockee id")
+	}
+
+	blockeesKey := local_store.NewPrefixBuilder(BlocksRepoName).
+		AddSubPrefix(blockeesSubName).
+		AddRootID(blockerId).
+		AddParentId(blockeeId).
+		Build()
+	blockersKey := local_store.NewPrefixBuilder(BlocksRepoName).
+		AddSubPrefix(blockersSubName).
+		AddRootID(blockeeId).
+		AddParentId(blockerId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if err = txn.Set(blockeesKey, []byte(blockeeId)); err != nil {
+		return err
+	}
+	if err = txn.Set(blockersKey, []byte(blockerId)); err != nil {
+		return err
+	}
+	return txn.Commit()
 }
 
 // Unblock removes a previously-recorded block.
 func (repo *BlocksRepo) Unblock(blockerId, blockeeId string) error {
-	return removeUserRelation(repo.db, BlocksRepoName, blockeesSubName, blockersSubName, blockerId, blockeeId)
+	if blockerId == "" {
+		return local_store.DBError("empty blocker id")
+	}
+	if blockeeId == "" {
+		return local_store.DBError("empty blockee id")
+	}
+
+	blockeesKey := local_store.NewPrefixBuilder(BlocksRepoName).
+		AddSubPrefix(blockeesSubName).
+		AddRootID(blockerId).
+		AddParentId(blockeeId).
+		Build()
+	blockersKey := local_store.NewPrefixBuilder(BlocksRepoName).
+		AddSubPrefix(blockersSubName).
+		AddRootID(blockeeId).
+		AddParentId(blockerId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if err = txn.Delete(blockeesKey); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	if err = txn.Delete(blockersKey); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	return txn.Commit()
 }
 
 func (repo *BlocksRepo) IsBlocked(blockerId, blockeeId string) (bool, error) {
-	return hasUserRelation(repo.db, BlocksRepoName, blockeesSubName, blockerId, blockeeId)
+	if blockerId == "" || blockeeId == "" {
+		return false, nil
+	}
+	blockeesKey := local_store.NewPrefixBuilder(BlocksRepoName).
+		AddSubPrefix(blockeesSubName).
+		AddRootID(blockerId).
+		AddParentId(blockeeId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return false, err
+	}
+	defer txn.Rollback()
+
+	_, err = txn.Get(blockeesKey)
+	if local_store.IsNotFoundError(err) {
+		return false, txn.Commit()
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, txn.Commit()
 }
 
 func (repo *BlocksRepo) List(blockerId string, limit *uint64, cursor *string) ([]string, string, error) {
-	return listUserRelations(repo.db, BlocksRepoName, blockeesSubName, blockerId, limit, cursor)
+	if blockerId == "" {
+		return nil, "", local_store.DBError("empty blocker id")
+	}
+	prefix := local_store.NewPrefixBuilder(BlocksRepoName).
+		AddSubPrefix(blockeesSubName).
+		AddRootID(blockerId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	items, cur, err := txn.List(prefix, limit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	if err = txn.Commit(); err != nil {
+		return nil, "", err
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, string(item.Value))
+	}
+	return ids, cur, nil
 }

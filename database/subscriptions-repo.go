@@ -27,6 +27,10 @@ resulting from the use or misuse of this software.
 
 package database
 
+import (
+	"github.com/Warp-net/warpnet/database/local-store"
+)
+
 const (
 	// SubscriptionsRepoName holds the local watchlist: whose new tweets
 	// I want notifications about.
@@ -40,24 +44,110 @@ const (
 	subscribersSubName = "SUBSCRIBERS"
 )
 
+type SubscriptionsStorer interface {
+	NewTxn() (local_store.WarpTransactioner, error)
+}
+
 // SubscriptionsRepo persists the local "notify me about this user's new
 // posts" watchlist.
 type SubscriptionsRepo struct {
-	db userRelationStorer
+	db SubscriptionsStorer
 }
 
-func NewSubscriptionsRepo(db userRelationStorer) *SubscriptionsRepo {
+func NewSubscriptionsRepo(db SubscriptionsStorer) *SubscriptionsRepo {
 	return &SubscriptionsRepo{db: db}
 }
 
 func (repo *SubscriptionsRepo) Subscribe(selfId, targetUserId string) error {
-	return addUserRelation(repo.db, SubscriptionsRepoName, subscribedToSubName, subscribersSubName, selfId, targetUserId)
+	if selfId == "" {
+		return local_store.DBError("empty subscriber id")
+	}
+	if targetUserId == "" {
+		return local_store.DBError("empty target user id")
+	}
+
+	subscribedKey := local_store.NewPrefixBuilder(SubscriptionsRepoName).
+		AddSubPrefix(subscribedToSubName).
+		AddRootID(selfId).
+		AddParentId(targetUserId).
+		Build()
+	subscribersKey := local_store.NewPrefixBuilder(SubscriptionsRepoName).
+		AddSubPrefix(subscribersSubName).
+		AddRootID(targetUserId).
+		AddParentId(selfId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if err = txn.Set(subscribedKey, []byte(targetUserId)); err != nil {
+		return err
+	}
+	if err = txn.Set(subscribersKey, []byte(selfId)); err != nil {
+		return err
+	}
+	return txn.Commit()
 }
 
 func (repo *SubscriptionsRepo) Unsubscribe(selfId, targetUserId string) error {
-	return removeUserRelation(repo.db, SubscriptionsRepoName, subscribedToSubName, subscribersSubName, selfId, targetUserId)
+	if selfId == "" {
+		return local_store.DBError("empty subscriber id")
+	}
+	if targetUserId == "" {
+		return local_store.DBError("empty target user id")
+	}
+
+	subscribedKey := local_store.NewPrefixBuilder(SubscriptionsRepoName).
+		AddSubPrefix(subscribedToSubName).
+		AddRootID(selfId).
+		AddParentId(targetUserId).
+		Build()
+	subscribersKey := local_store.NewPrefixBuilder(SubscriptionsRepoName).
+		AddSubPrefix(subscribersSubName).
+		AddRootID(targetUserId).
+		AddParentId(selfId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if err = txn.Delete(subscribedKey); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	if err = txn.Delete(subscribersKey); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	return txn.Commit()
 }
 
 func (repo *SubscriptionsRepo) IsSubscribed(selfId, targetUserId string) (bool, error) {
-	return hasUserRelation(repo.db, SubscriptionsRepoName, subscribedToSubName, selfId, targetUserId)
+	if selfId == "" || targetUserId == "" {
+		return false, nil
+	}
+	subscribedKey := local_store.NewPrefixBuilder(SubscriptionsRepoName).
+		AddSubPrefix(subscribedToSubName).
+		AddRootID(selfId).
+		AddParentId(targetUserId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return false, err
+	}
+	defer txn.Rollback()
+
+	_, err = txn.Get(subscribedKey)
+	if local_store.IsNotFoundError(err) {
+		return false, txn.Commit()
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, txn.Commit()
 }

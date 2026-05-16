@@ -821,7 +821,7 @@ func (m *MemberNode) socialFilterHandlers(
 		},
 		{
 			event.PRIVATE_POST_UNBLOCK,
-			handler.StreamUnblockHandler(r.blocksRepo),
+			handler.StreamUnblockHandler(r.blocksRepo, userRepo, m.nodeRepo),
 		},
 		{
 			event.PRIVATE_GET_BLOCKS,

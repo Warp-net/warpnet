@@ -77,6 +77,8 @@ type DistributedHashTableCloser interface {
 type NodeProvider interface {
 	datastore.Datastore
 	Blocklist(peerId string) error
+	BlocklistPermanent(peerId string) error
+	BlocklistRemove(peerId string) error
 }
 
 type StatsProvider interface {
