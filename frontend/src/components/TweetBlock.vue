@@ -71,7 +71,6 @@ resulting from the use or misuse of this software.
             <button type="button" @click.stop="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
               {{ bookmarked ? 'Remove bookmark' : 'Bookmark' }}
             </button>
-            <button type="button" @click.stop="openQuoteOverlay" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Retweet with comment</button>
             <template v-if="isOwner">
               <button type="button" @click.stop="togglePin" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
                 {{ tweet.pinned ? 'Unpin from profile' : 'Pin to profile' }}
@@ -90,15 +89,22 @@ resulting from the use or misuse of this software.
       </p>
       <div
         v-if="tweet.quoted_tweet_id"
-        class="mb-2 border border-lighter rounded p-3 bg-lightest text-sm hover:bg-lighter cursor-pointer"
-        @click.stop="openQuoted"
+        class="mb-2 border border-lighter rounded p-3 bg-lightest text-sm"
+        :class="quotedUnavailable ? 'opacity-60' : 'hover:bg-lighter cursor-pointer'"
+        @click.stop="onQuotedClick"
       >
-        <p class="font-bold">
-          {{ tweet.quoted_username || 'Quoted tweet' }}
-          <span class="text-dark font-normal ml-1">@{{ tweet.quoted_user_id }}</span>
-        </p>
-        <p v-if="tweet.quoted_text" class="mt-1 line-clamp-4">{{ tweet.quoted_text }}</p>
-        <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
+        <template v-if="quotedUnavailable">
+          <p class="font-bold text-dark italic">Quoted tweet unavailable</p>
+          <p class="text-xs text-dark mt-1">The original tweet was edited after this quote was posted.</p>
+        </template>
+        <template v-else>
+          <p class="font-bold">
+            {{ quotedSourceUsername || 'Quoted tweet' }}
+            <span class="text-dark font-normal ml-1">@{{ tweet.quoted_user_id }}</span>
+          </p>
+          <p v-if="quotedSourceText" class="mt-1 line-clamp-4">{{ quotedSourceText }}</p>
+          <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
+        </template>
       </div>
       <div v-if="tweetImages.length === 1" class="mt-2">
         <img
@@ -130,19 +136,36 @@ resulting from the use or misuse of this software.
           <p v-if="getRepliesCount(tweet.id) > 0">{{ getRepliesCount(tweet.id) || '?' }}</p>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
-          <button
-            @click.stop="retweet()"
-            type="button"
-            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-green-100 transition-colors"
-            :aria-label="retweeted ? 'Undo retweet' : 'Retweet'"
-            :title="retweeted ? 'Undo retweet' : 'Retweet'"
-          >
-            <i
-              class="fas fa-retweet"
-              :class="retweeted ? 'text-green-500' : ''"
-              aria-hidden="true"
-            ></i>
-          </button>
+          <div class="relative">
+            <button
+              @click.stop="onRetweetClick"
+              type="button"
+              class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-green-100 transition-colors"
+              :aria-label="retweeted ? 'Undo retweet' : 'Retweet'"
+              :title="retweeted ? 'Undo retweet' : 'Retweet'"
+            >
+              <i
+                class="fas fa-retweet"
+                :class="retweeted ? 'text-green-500' : ''"
+                aria-hidden="true"
+              ></i>
+            </button>
+            <div
+              v-if="showRetweetMenu"
+              class="absolute left-0 mt-2 w-40 bg-white rounded-md shadow-lg py-1 z-10"
+            >
+              <button
+                type="button"
+                @click.stop="plainRetweet"
+                class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+              >Retweet</button>
+              <button
+                type="button"
+                @click.stop="openQuoteOverlay"
+                class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+              >Quote</button>
+            </div>
+          </div>
           <button
             v-if="getRetweetsCount(tweet.id) > 0"
             type="button"
@@ -236,6 +259,10 @@ export default {
       showEditOverlay: false,
       showQuoteOverlay: false,
       showDropdown: false,
+      showRetweetMenu: false,
+      quotedSourceText: '',
+      quotedSourceUsername: '',
+      quotedUnavailable: false,
       deleted: false,
       isOwner: false,
       bookmarked: false,
@@ -288,11 +315,30 @@ export default {
       });
     },
     onBodyClick() {
-      if (this.showDropdown) {
+      if (this.showDropdown || this.showRetweetMenu) {
         this.showDropdown = false;
+        this.showRetweetMenu = false;
         return;
       }
       this.openTweetPage();
+    },
+    // Retweet button drives a small popover that offers a plain
+    // retweet vs. a quote retweet. When the user already retweeted
+    // (or quoted) this tweet, clicking the button just toggles the
+    // retweet off without showing the menu.
+    onRetweetClick() {
+      this.showDropdown = false;
+      if (this.retweeted) {
+        this.retweet();
+        return;
+      }
+      this.showRetweetMenu = !this.showRetweetMenu;
+    },
+    async plainRetweet() {
+      this.showRetweetMenu = false;
+      if (!this.retweeted) {
+        await this.retweet();
+      }
     },
     async toggleBookmark() {
       this.showDropdown = false;
@@ -334,8 +380,44 @@ export default {
         query: { u: this.tweet.quoted_user_id || '' },
       });
     },
+    // Clicking an "unavailable" quoted preview is a no-op so the user
+    // doesn't get bounced to a tweet that's been edited out from
+    // under them.
+    onQuotedClick() {
+      if (this.quotedUnavailable) return;
+      this.openQuoted();
+    },
+    async loadQuotedSource() {
+      if (!this.tweet.quoted_tweet_id || !this.tweet.quoted_user_id) return;
+      try {
+        const src = await warpnetService.getTweet({
+          tweetId: this.tweet.quoted_tweet_id,
+          userId: this.tweet.quoted_user_id,
+        });
+        if (!src || !src.id) {
+          this.quotedUnavailable = true;
+          return;
+        }
+        // If the source has been edited *after* this quote was
+        // posted, the quote no longer reflects what the user
+        // actually quoted — mark it as unavailable.
+        const sourceEdited = src.updated_at
+          && this.tweet.created_at
+          && new Date(src.updated_at) > new Date(this.tweet.created_at);
+        if (sourceEdited) {
+          this.quotedUnavailable = true;
+          return;
+        }
+        this.quotedSourceText = src.text || '';
+        this.quotedSourceUsername = src.username || '';
+      } catch (err) {
+        console.warn('failed to load quoted source:', err);
+        this.quotedUnavailable = true;
+      }
+    },
     openQuoteOverlay() {
       this.showDropdown = false;
+      this.showRetweetMenu = false;
       this.showQuoteOverlay = true;
     },
     onTweetEdited(updated) {
@@ -588,6 +670,10 @@ export default {
     await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
 
     await this.refreshInteractionState();
+
+    if (this.tweet.quoted_tweet_id) {
+      await this.loadQuotedSource();
+    }
   },
   mounted() {
     this.$nextTick(() => this.setupViewObserver());

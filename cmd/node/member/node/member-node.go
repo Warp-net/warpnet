@@ -501,7 +501,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_TWEET_EDIT,
-			handler.StreamEditTweetHandler(r.tweetRepo),
+			handler.StreamEditTweetHandler(r.tweetRepo, r.timelineRepo),
 		},
 		{
 			event.PUBLIC_POST_PIN,

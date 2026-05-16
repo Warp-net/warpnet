@@ -73,6 +73,7 @@ type TweetsStorer interface {
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
 	UnRetweet(retweetedByUserID, tweetId string) error
+	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
 	Update(tweet domain.Tweet) error
 	Pin(userId, tweetId string) (domain.Tweet, error)
@@ -525,7 +526,7 @@ func StreamUnpinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 	}
 }
 
-func StreamEditTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.EditTweetEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -573,7 +574,53 @@ func StreamEditTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
 		if err != nil {
 			return nil, err
 		}
+
+		// Refresh the author's own timeline copy. The timeline stores
+		// a snapshot of the tweet at the time it was added, so without
+		// this refresh the Home feed would keep serving the pre-edit
+		// text until the timeline entry is naturally rewritten.
+		if timelineRepo != nil {
+			if err := timelineRepo.AddTweetToTimeline(out.UserId, out); err != nil {
+				log.Warnf("edit tweet: timeline refresh failed: %v", err)
+			}
+		}
+
+		// Cancel every plain retweet of this tweet — they were
+		// retweeting the *original* content, and on an edit that
+		// consent shouldn't carry over. Quote-style retweets live as
+		// their own tweets and aren't enumerated here; the reader
+		// detects an edited source via the comparison of source
+		// UpdatedAt and the quote's CreatedAt and surfaces the source
+		// as "unavailable".
+		cancelRetweetsForEditedTweet(repo, existing.Id)
+
 		return event.EditTweetResponse(out), nil
+	}
+}
+
+// cancelRetweetsForEditedTweet iterates the retweeters index for
+// tweetId on the local node and unretweets each one. Failures are
+// logged and swallowed — a stuck retweet is not worth failing the
+// edit response over. Cross-node propagation of the cancellation is
+// out of scope.
+func cancelRetweetsForEditedTweet(repo TweetsStorer, tweetId string) {
+	var cursor string
+	limit := uint64(100)
+	for {
+		retweeters, cur, err := repo.Retweeters(tweetId, &limit, &cursor)
+		if err != nil {
+			log.Warnf("edit tweet: list retweeters of %s: %v", tweetId, err)
+			return
+		}
+		for _, retweeterId := range retweeters {
+			if err := repo.UnRetweet(retweeterId, tweetId); err != nil {
+				log.Warnf("edit tweet: cancel retweet by %s of %s: %v", retweeterId, tweetId, err)
+			}
+		}
+		if cur == "" || uint64(len(retweeters)) < limit {
+			return
+		}
+		cursor = cur
 	}
 }
 
