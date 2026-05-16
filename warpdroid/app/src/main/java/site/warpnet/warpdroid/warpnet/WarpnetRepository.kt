@@ -121,6 +121,9 @@ class WarpnetRepository @Inject constructor(
     private val tweetEditsRespAdapter = moshi.adapter<site.warpnet.transport.dto.TweetEditsResponse>()
     private val deleteQuoteAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteQuoteEvent>()
     private val getQuotingAdapter = moshi.adapter<site.warpnet.transport.dto.GetQuotingEvent>()
+    private val getFollowReqsAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsEvent>()
+    private val getFollowReqsRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsResponse>()
+    private val followReqActionAdapter = moshi.adapter<site.warpnet.transport.dto.FollowRequestActionEvent>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -423,6 +426,39 @@ class WarpnetRepository @Inject constructor(
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
         val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
         return wire.toNotification(author)
+    }
+
+    // -----------------------------------------------------------------
+    // Follow requests (pending follows on locked accounts)
+    // -----------------------------------------------------------------
+
+    suspend fun getFollowRequests(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_FOLLOW_REQUESTS,
+            getFollowReqsAdapter.toJson(
+                site.warpnet.transport.dto.GetFollowRequestsEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getFollowReqsRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        return hydrateAccounts(page.followerIds) to page.cursor
+    }
+
+    suspend fun authorizeFollowRequest(userId: String, followerId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE,
+            followReqActionAdapter.toJson(
+                site.warpnet.transport.dto.FollowRequestActionEvent(userId = userId, followerId = followerId),
+            ),
+        )
+    }
+
+    suspend fun rejectFollowRequest(userId: String, followerId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_FOLLOW_REQUEST_REJECT,
+            followReqActionAdapter.toJson(
+                site.warpnet.transport.dto.FollowRequestActionEvent(userId = userId, followerId = followerId),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------

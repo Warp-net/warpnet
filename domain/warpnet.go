@@ -215,6 +215,10 @@ type User struct {
 	Website            *string           `json:"website,omitempty"`
 	Moderation         *UserModeration   `json:"moderation"`
 	Metadata           map[string]string `json:"metadata"`
+	// Locked is the "manually-approve followers" flag. When true, an
+	// inbound follow lands in the follow-request queue instead of being
+	// accepted automatically.
+	Locked bool `json:"locked,omitempty"`
 }
 
 type UserModeration struct {

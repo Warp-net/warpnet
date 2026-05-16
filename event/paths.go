@@ -110,4 +110,8 @@ const (
 	PUBLIC_POST_QUOTE   = "/public/post/quote/0.0.0"
 	PUBLIC_GET_QUOTING  = "/public/get/quoting/0.0.0"
 	PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"
+
+	PRIVATE_GET_FOLLOW_REQUESTS           = "/private/get/follow/requests/0.0.0"
+	PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
+	PRIVATE_POST_FOLLOW_REQUEST_REJECT    = "/private/post/follow/request/reject/0.0.0"
 )

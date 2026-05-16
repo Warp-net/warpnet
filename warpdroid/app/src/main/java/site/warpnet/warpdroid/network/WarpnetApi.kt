@@ -928,13 +928,31 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun followRequests(maxId: String?): Response<List<TimelineAccount>> = stubList()
+    suspend fun followRequests(maxId: String?): Response<List<TimelineAccount>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return paginated {
+            warpnet.getFollowRequests(
+                userId = active.accountId,
+                cursor = maxId.orEmpty(),
+            )
+        }
+    }
 
-    suspend fun authorizeFollowRequest(accountId: String): NetworkResult<Relationship> =
-        stubFailure("authorizeFollowRequest")
+    suspend fun authorizeFollowRequest(accountId: String): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("authorizeFollowRequest")
+        return result {
+            warpnet.authorizeFollowRequest(userId = active.accountId, followerId = accountId)
+            warpnet.relationshipFor(accountId).copy(followedBy = true)
+        }
+    }
 
-    suspend fun rejectFollowRequest(accountId: String): NetworkResult<Relationship> =
-        stubFailure("rejectFollowRequest")
+    suspend fun rejectFollowRequest(accountId: String): NetworkResult<Relationship> {
+        val active = accountManager.activeAccount ?: return stubFailure("rejectFollowRequest")
+        return result {
+            warpnet.rejectFollowRequest(userId = active.accountId, followerId = accountId)
+            warpnet.relationshipFor(accountId)
+        }
+    }
 
     // ---------------------------------------------------------------
     // oauth (kept for symmetry — Warpnet pairing is handled elsewhere)

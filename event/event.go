@@ -680,6 +680,26 @@ type GetQuotingEvent struct {
 // GetQuotingResponse defines model for GetQuotingResponse.
 type GetQuotingResponse = TweetsResponse
 
+// GetFollowRequestsEvent defines model for GetFollowRequestsEvent.
+type GetFollowRequestsEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+}
+
+// GetFollowRequestsResponse defines model for GetFollowRequestsResponse.
+type GetFollowRequestsResponse struct {
+	FollowerIds []domain.ID `json:"follower_ids"`
+	Cursor      string      `json:"cursor"`
+}
+
+// FollowRequestActionEvent defines model for FollowRequestActionEvent.
+// Used for both authorize and reject — the verb is in the path.
+type FollowRequestActionEvent struct {
+	UserId     domain.ID `json:"user_id"`
+	FollowerId domain.ID `json:"follower_id"`
+}
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

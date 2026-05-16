@@ -389,6 +389,7 @@ type memberRepos struct {
 	subsRepo         *database.UserSetRepo
 	userNoteRepo     *database.UserNoteRepo
 	tweetEditsRepo   *database.TweetEditsRepo
+	followReqRepo    *database.FollowRequestsRepo
 }
 
 func (m *MemberNode) setupHandlers(
@@ -418,6 +419,7 @@ func (m *MemberNode) setupHandlers(
 		subsRepo:         database.NewSubscriptionsRepo(db),
 		userNoteRepo:     database.NewUserNoteRepo(db),
 		tweetEditsRepo:   database.NewTweetEditsRepo(db),
+		followReqRepo:    database.NewFollowRequestsRepo(db),
 	}
 
 	token := authRepo.SessionToken()
@@ -428,6 +430,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.replyHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
 	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
+	hs = append(hs, m.followRequestHandlers(followRepo, r)...)
 	hs = append(hs, m.userHandlers(authRepo, userRepo, followRepo, r)...)
 	hs = append(hs, m.chatHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.mediaHandlers(userRepo, r)...)
@@ -626,6 +629,27 @@ func (m *MemberNode) followHandlers(
 		{
 			event.PUBLIC_GET_FOLLOWINGS,
 			handler.StreamGetFollowingsHandler(authRepo, userRepo, followRepo, m),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) followRequestHandlers(
+	followRepo FollowStorer,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_FOLLOW_REQUESTS,
+			handler.StreamGetFollowRequestsHandler(r.followReqRepo),
+		},
+		{
+			event.PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE,
+			handler.StreamAuthorizeFollowRequestHandler(r.followReqRepo, followRepo),
+		},
+		{
+			event.PRIVATE_POST_FOLLOW_REQUEST_REJECT,
+			handler.StreamRejectFollowRequestHandler(r.followReqRepo),
 		},
 	}
 }

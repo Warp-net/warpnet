@@ -60,6 +60,9 @@ export const PUBLIC_GET_TWEET_EDITS = "/public/get/tweet/edits/0.0.0"
 export const PUBLIC_POST_QUOTE = "/public/post/quote/0.0.0"
 export const PUBLIC_GET_QUOTING = "/public/get/quoting/0.0.0"
 export const PUBLIC_DELETE_QUOTE = "/public/delete/quote/0.0.0"
+export const PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
+export const PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
+export const PRIVATE_POST_FOLLOW_REQUEST_REJECT = "/private/post/follow/request/reject/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -504,6 +507,44 @@ export const warpnetService = {
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
         return resp;
+    },
+
+    async getFollowRequests(cursor) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return { follower_ids: [], cursor: 'end' };
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_FOLLOW_REQUESTS,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { follower_ids: [], cursor: 'end' };
+    },
+
+    async authorizeFollowRequest(followerId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE,
+            body: {
+                user_id: owner.user_id,
+                follower_id: followerId,
+            },
+        });
+    },
+
+    async rejectFollowRequest(followerId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FOLLOW_REQUEST_REJECT,
+            body: {
+                user_id: owner.user_id,
+                follower_id: followerId,
+            },
+        });
     },
 
     async quoteTweet(quotedTweetId, quotedUserId, text) {

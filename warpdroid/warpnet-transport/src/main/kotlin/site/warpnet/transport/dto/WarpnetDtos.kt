@@ -352,6 +352,25 @@ data class GetQuotingEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class GetFollowRequestsEvent(
+    @Json(name = "user_id") val userId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetFollowRequestsResponse(
+    @Json(name = "follower_ids") val followerIds: List<String> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class FollowRequestActionEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "follower_id") val followerId: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",
