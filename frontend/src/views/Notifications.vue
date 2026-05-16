@@ -69,8 +69,10 @@ resulting from the use or misuse of this software.
           </div>
 
           <div v-for="notification in notifications" :key="notification.id">
-            <div
-              class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
+            <button
+              type="button"
+              class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
+              @click="openNotification(notification)"
             >
               <div class="w-full">
                 <div class="flex flex-row mr-2 md:mr-4 pt-1 text-2xl">
@@ -91,12 +93,10 @@ resulting from the use or misuse of this software.
                     class="pt-1 fas fa-user-plus text-blue"
                   ></i>
 
-                  <a :href="`#/${notification.user_id}`">
-                    <img
-                      :src="'/default_profile.png'"
-                      class="h-8 w-8 ml-2 rounded-full flex-none"
-                    />
-                  </a>
+                  <img
+                    :src="'/default_profile.png'"
+                    class="h-8 w-8 ml-2 rounded-full flex-none"
+                  />
                 </div>
                 <div class="flex items-center w-full">
                   <p class="font-sm">{{ notification.text }}</p>
@@ -105,7 +105,7 @@ resulting from the use or misuse of this software.
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
         <div v-if="mode === 'Mentions'">
@@ -145,10 +145,17 @@ resulting from the use or misuse of this software.
 
       <!-- default right bar -->
       <DefaultRightBar :profile="ownerProfile" />
+
+      <NotificationOverlay
+        :show="overlayOpen"
+        :notificationId="overlayNotificationId"
+        @close="overlayOpen = false"
+      />
   </div>
 </template>
 
 <script>
+import {defineAsyncComponent} from "vue";
 import SideNav from "../components/SideNav.vue";
 import DefaultRightBar from "../components/DefaultRightBar.vue";
 import {warpnetService} from "@/service/service";
@@ -158,6 +165,7 @@ export default {
   components: {
     SideNav,
     DefaultRightBar,
+    NotificationOverlay: defineAsyncComponent(() => import('@/components/NotificationOverlay.vue')),
   },
   data() {
     return {
@@ -165,6 +173,8 @@ export default {
       notifications: [],
       ownerProfile: {},
       mode: this.$route.query.m || "All",
+      overlayOpen: false,
+      overlayNotificationId: '',
     };
   },
   computed: {
@@ -184,6 +194,20 @@ export default {
         name: "Notifications",
         query: { m: m, hash: Date.now() },
       });
+    },
+    openNotification(notification) {
+      // If the notification points at a tweet, navigate directly.
+      // Otherwise show the lightweight overlay (follow / unknown types).
+      if (notification?.tweet_id) {
+        this.$router.push({
+          name: 'Tweet',
+          params: { id: notification.tweet_id },
+          query: { u: notification.user_id || '' },
+        });
+        return;
+      }
+      this.overlayNotificationId = notification?.id || '';
+      this.overlayOpen = true;
     },
   },
   async created() {

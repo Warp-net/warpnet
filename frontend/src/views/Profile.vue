@@ -110,6 +110,15 @@ resulting from the use or misuse of this software.
                 <i class="fas fa-envelope" aria-hidden="true"></i>
               </button>
               <button
+                @click="toggleSubscribe()"
+                class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border mb-2"
+                :class="subscribed ? 'text-white bg-blue border-blue hover:bg-darkblue' : 'text-blue border-blue hover:bg-lightblue'"
+                :aria-label="subscribed ? 'Unsubscribe from notifications' : 'Subscribe to notifications'"
+                :title="subscribed ? 'Unsubscribe from new-tweet alerts' : 'Subscribe to new-tweet alerts'"
+              >
+                <i class="fas" :class="subscribed ? 'fa-bell' : 'fa-bell-slash'" aria-hidden="true"></i>
+              </button>
+              <button
                 v-if="!isFollowing()"
                 @click="follow()"
                 class="text-xs md:text-base md:ml-auto text-blue font-bold px-2 py-1 md:px-4 md:py-2 rounded-full border border-blue mb-2 hover:bg-lightblue w-24 md:w-28"
@@ -285,6 +294,7 @@ export default {
       followings: [],
       followingStatus: new Map(),
       followerStatus: new Map(),
+      subscribed: false,
     };
   },
   methods: {
@@ -370,6 +380,19 @@ export default {
         return
       }
       this.followingStatus.set(this.profile.id, false)
+    },
+    async toggleSubscribe() {
+      try {
+        if (this.subscribed) {
+          await warpnetService.unsubscribeUser(this.profile.id);
+          this.subscribed = false;
+        } else {
+          await warpnetService.subscribeUser(this.profile.id);
+          this.subscribed = true;
+        }
+      } catch (err) {
+        console.error(`failed to toggle subscribe [${this.profile.id}]`, err);
+      }
     },
     async loadMore() {
       const tweets = await warpnetService.getTweets({userId:this.profile.id, cursorReset:false});

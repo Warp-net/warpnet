@@ -56,12 +56,25 @@ resulting from the use or misuse of this software.
         </p>
         <p class="text-sm text-dark ml-2">·</p>
         <p class="text-sm text-dark ml-2">{{ $filters.timeago(tweet.created_at) }}</p>
-        <div v-if="isOwner" class="relative ml-auto">
+        <span v-if="tweet.pinned" class="ml-2 text-xs text-blue" title="Pinned tweet">
+          <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
+        </span>
+        <div class="relative ml-auto">
           <button type="button" @click="showDropdown = !showDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
             <i class="fas fa-angle-down text-sm text-dark" aria-hidden="true"></i>
           </button>
-          <div v-if="showDropdown" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
-            <button type="button" @click="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
+          <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white rounded-md shadow-lg py-1 z-10">
+            <button type="button" @click="openTweetPage" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Open tweet</button>
+            <button type="button" @click="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
+              {{ bookmarked ? 'Remove bookmark' : 'Bookmark' }}
+            </button>
+            <template v-if="isOwner">
+              <button type="button" @click="togglePin" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
+                {{ tweet.pinned ? 'Unpin from profile' : 'Pin to profile' }}
+              </button>
+              <button type="button" @click="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
+              <button type="button" @click="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
+            </template>
           </div>
         </div>
       </div>
@@ -116,7 +129,12 @@ resulting from the use or misuse of this software.
               aria-hidden="true"
             ></i>
           </button>
-          <p v-if="getRetweetsCount(tweet.id) > 0">{{ getRetweetsCount(tweet.id) || '?'}}</p>
+          <button
+            v-if="getRetweetsCount(tweet.id) > 0"
+            type="button"
+            class="hover:underline flat-btn"
+            @click="showRetweetersOverlay = true"
+          >{{ getRetweetsCount(tweet.id) || '?'}}</button>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <button
@@ -128,7 +146,12 @@ resulting from the use or misuse of this software.
           >
             <i class="fas fa-heart" :class="liked ? 'text-red-600' : ''" aria-hidden="true"></i>
           </button>
-          <p v-if="getLikesCount(tweet.id) > 0">{{ getLikesCount(tweet.id) }}</p>
+          <button
+            v-if="getLikesCount(tweet.id) > 0"
+            type="button"
+            class="hover:underline flat-btn"
+            @click="showLikersOverlay = true"
+          >{{ getLikesCount(tweet.id) }}</button>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <span
@@ -148,6 +171,25 @@ resulting from the use or misuse of this software.
         :showReplyOverlay="showReplyOverlay"
         @close="showReplyOverlay = false"
     />
+    <LikersOverlay
+        :show="showLikersOverlay"
+        :tweetId="tweet.id"
+        :ownerUserId="tweet.user_id"
+        @close="showLikersOverlay = false"
+    />
+    <RetweetersOverlay
+        :show="showRetweetersOverlay"
+        :tweetId="tweet.id"
+        :ownerUserId="tweet.user_id"
+        @close="showRetweetersOverlay = false"
+    />
+    <EditTweetOverlay
+        v-if="showEditOverlay"
+        :show="showEditOverlay"
+        :tweet="tweet"
+        @close="showEditOverlay = false"
+        @saved="onTweetEdited"
+    />
   </div>
 </template>
 
@@ -159,15 +201,22 @@ export default {
   name: "Tweet",
   props: ["tweet"],
   components: {
-    ReplyOverlay: defineAsyncComponent(() => import('./ReplyOverlay.vue'))
+    ReplyOverlay: defineAsyncComponent(() => import('./ReplyOverlay.vue')),
+    LikersOverlay: defineAsyncComponent(() => import('./LikersOverlay.vue')),
+    RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
+    EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
   },
   data() {
     return {
       profile: {},
       showReplyOverlay: false,
+      showLikersOverlay: false,
+      showRetweetersOverlay: false,
+      showEditOverlay: false,
       showDropdown: false,
       deleted: false,
       isOwner: false,
+      bookmarked: false,
       label: "You Retweeted",
       liked: false,
       retweeted: false,
@@ -201,6 +250,51 @@ export default {
           id: tweetUserId,
         },
       });
+    },
+    openTweetPage() {
+      this.showDropdown = false;
+      this.$router.push({
+        name: 'Tweet',
+        params: { id: this.tweet.id },
+        query: { u: this.tweet.user_id },
+      });
+    },
+    async toggleBookmark() {
+      this.showDropdown = false;
+      try {
+        if (this.bookmarked) {
+          await warpnetService.unbookmarkTweet(this.tweet.id);
+          this.bookmarked = false;
+        } else {
+          await warpnetService.bookmarkTweet(this.tweet.id, this.tweet.user_id);
+          this.bookmarked = true;
+        }
+      } catch (err) {
+        console.error(`failed to toggle bookmark on [${this.tweet.id}]`, err);
+      }
+    },
+    async togglePin() {
+      this.showDropdown = false;
+      try {
+        if (this.tweet.pinned) {
+          await warpnetService.unpinTweet(this.tweet.id);
+          this.tweet.pinned = false;
+        } else {
+          await warpnetService.pinTweet(this.tweet.id);
+          this.tweet.pinned = true;
+        }
+      } catch (err) {
+        console.error(`failed to toggle pin on [${this.tweet.id}]`, err);
+      }
+    },
+    openEdit() {
+      this.showDropdown = false;
+      this.showEditOverlay = true;
+    },
+    onTweetEdited(updated) {
+      if (updated && updated.text) {
+        this.tweet.text = updated.text;
+      }
     },
     async get() {
       let t = undefined
