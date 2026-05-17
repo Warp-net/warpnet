@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
 	"strings"
 	"sync/atomic"
@@ -101,10 +102,15 @@ func NewWarpNode(
 		return nil, err
 	}
 
+	ya := yamux.DefaultTransport
+	ya.KeepAliveInterval = 15 * time.Second
+	ya.ConnectionWriteTimeout = 30 * time.Second
+
 	managersOpts := []libp2p.Option{
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(manager),
 		libp2p.DisableMetrics(), // TODO move to settings
+		libp2p.Muxer(yamux.ID, ya),
 	}
 
 	opts = append(opts, managersOpts...)

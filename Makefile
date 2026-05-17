@@ -68,4 +68,4 @@ gen-aar:
 .PHONY: generate
 generate:
 	cd frontend && make rebuild && cd -
-	cd warpdroid && make aar && make build && cd -
+	cd warpdroid && make aar && cd -

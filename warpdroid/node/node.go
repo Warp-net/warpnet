@@ -82,6 +82,11 @@ func newClient(
 		128,
 	))
 	rm, _ := rcmgr.NewResourceManager(limiter)
+
+	ya := yamux.DefaultTransport
+	ya.KeepAliveInterval = 15 * time.Second
+	ya.ConnectionWriteTimeout = 30 * time.Second
+
 	// Build libp2p options matching thin client requirements
 	opts := []libp2p.Option{
 		libp2p.DisableMetrics(), // Lightweight
@@ -95,7 +100,7 @@ func newClient(
 		libp2p.Transport(camouflage.NewCamouflageTransport), // TCP transport
 		libp2p.UserAgent("warpdroid"),                       // Custom user agent
 		libp2p.ForceReachabilityPrivate(),
-		libp2p.Muxer(yamux.ID, yamux.DefaultTransport),
+		libp2p.Muxer(yamux.ID, ya),
 		libp2p.ConnectionManager(connManager),
 		libp2p.ResourceManager(rm),
 	}
