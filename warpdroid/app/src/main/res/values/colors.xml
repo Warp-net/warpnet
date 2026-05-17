@@ -52,7 +52,9 @@
     <color name="elephant_friend_light_color_1">#CAD4E0</color>
     <color name="elephant_friend_light_color_2">#d9e1e8</color>
 
-    <!-- Warpnet brand: solid pink behind the adaptive-icon foreground and the splash. -->
-    <color name="icon_background">#e82771</color>
+    <!-- Warpnet brand: cream backplate that matches the cream behind the W in
+         the launcher PNG, so launcher masks that crop the foreground corners
+         reveal the same colour seamlessly. -->
+    <color name="icon_background">#e7e5d8</color>
     <color name="icon_highlight">#ff6ba0</color>
 </resources>
