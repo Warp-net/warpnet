@@ -439,14 +439,7 @@ class WarpnetRepository @Inject constructor(
             getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
         val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
-        if (page.notifications.isEmpty()) return emptyList<Notification>() to page.cursor
-
-        val cache = mutableMapOf<String, WarpnetUser>()
-        val mapped = page.notifications.mapNotNull { n ->
-            val author = resolveUser(n.fromUserId, cache) ?: return@mapNotNull null
-            n.toNotification(author)
-        }
-        return mapped to page.cursor
+        return page.notifications.map { it.toNotification() } to page.cursor
     }
 
     /**
@@ -459,8 +452,7 @@ class WarpnetRepository @Inject constructor(
             getNotifAdapter.toJson(site.warpnet.transport.dto.GetNotificationEvent(notificationId = notificationId)),
         )
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
-        val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
-        return wire.toNotification(author)
+        return wire.toNotification()
     }
 
     /** Mark a single notification as read on the fat node. */

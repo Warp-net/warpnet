@@ -65,14 +65,17 @@ data class WarpnetUser(
     val website: String? = null,
 )
 
+// Wire shape mirrors domain.Notification on the fat node. The actor is
+// already embedded in [text] ("Alice liked your tweet"); the wire does not
+// carry a separate from_user_id or tweet_id.
 @JsonClass(generateAdapter = true)
 data class WarpnetNotification(
     val id: String,
     @Json(name = "created_at") val createdAt: String,
     val type: String,
-    @Json(name = "from_user_id") val fromUserId: String,
-    @Json(name = "tweet_id") val tweetId: String? = null,
-    val text: String? = null,
+    val text: String = "",
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "is_read") val isRead: Boolean = false,
 )
 
 // -----------------------------------------------------------------------------
