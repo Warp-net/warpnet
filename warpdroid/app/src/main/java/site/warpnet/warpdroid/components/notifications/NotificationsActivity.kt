@@ -195,13 +195,12 @@ class NotificationsActivity : BaseActivity() {
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
+                // The backend pre-composes the actor + verb into [text]
+                // (e.g. "Echo liked your tweet"), surfaced via account.name.
                 Text(
-                    text = "${n.account.name} ${verb(n)}",
+                    text = n.account.name,
                     fontWeight = FontWeight.SemiBold,
                 )
-                n.status?.content?.takeIf { it.isNotBlank() }?.let { body ->
-                    Text(text = body, maxLines = 2)
-                }
             }
         }
     }
@@ -270,16 +269,6 @@ class NotificationsActivity : BaseActivity() {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(text = message)
         }
-    }
-
-    private fun verb(n: Notification): String = when (n.type) {
-        is Notification.Type.Mention -> getString(R.string.notification_verb_mention)
-        is Notification.Type.Retweet -> getString(R.string.notification_verb_retweet)
-        is Notification.Type.Like -> getString(R.string.notification_verb_like)
-        is Notification.Type.Follow -> getString(R.string.notification_verb_follow)
-        is Notification.Type.FollowRequest -> getString(R.string.notification_verb_follow_request)
-        is Notification.Type.Quote -> getString(R.string.notification_verb_quote)
-        else -> ""
     }
 
     private fun onNotificationClick(n: Notification) {

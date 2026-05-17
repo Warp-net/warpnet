@@ -224,7 +224,17 @@ class WarpnetRepository @Inject constructor(
             getRepliesAdapter.toJson(GetAllRepliesEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
         )
         val page = repliesRespAdapter.fromJson(raw) ?: return emptyList()
-        return hydrateTweets(page.replies)
+        // Backend returns a ReplyNode tree ({reply, children}); flatten
+        // depth-first into the flat List<WarpnetTweet> the UI expects.
+        val flat = mutableListOf<site.warpnet.transport.dto.WarpnetTweet>()
+        fun walk(nodes: List<site.warpnet.transport.dto.WarpnetReplyNode>) {
+            for (n in nodes) {
+                flat += n.reply
+                if (n.children.isNotEmpty()) walk(n.children)
+            }
+        }
+        walk(page.replies)
+        return hydrateTweets(flat)
     }
 
     /**
@@ -439,14 +449,7 @@ class WarpnetRepository @Inject constructor(
             getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
         val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
-        if (page.notifications.isEmpty()) return emptyList<Notification>() to page.cursor
-
-        val cache = mutableMapOf<String, WarpnetUser>()
-        val mapped = page.notifications.mapNotNull { n ->
-            val author = resolveUser(n.fromUserId, cache) ?: return@mapNotNull null
-            n.toNotification(author)
-        }
-        return mapped to page.cursor
+        return page.notifications.map { it.toNotification() } to page.cursor
     }
 
     /**
@@ -459,8 +462,7 @@ class WarpnetRepository @Inject constructor(
             getNotifAdapter.toJson(site.warpnet.transport.dto.GetNotificationEvent(notificationId = notificationId)),
         )
         val wire = notificationRespAdapter.fromJson(raw) ?: return null
-        val author = resolveUser(wire.fromUserId, mutableMapOf()) ?: return null
-        return wire.toNotification(author)
+        return wire.toNotification()
     }
 
     /** Mark a single notification as read on the fat node. */

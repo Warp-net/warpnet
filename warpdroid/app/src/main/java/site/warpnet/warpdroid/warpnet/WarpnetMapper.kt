@@ -46,7 +46,7 @@ object WarpnetMapper {
         url = "$FAKE_BASE_URL/users/$id",
         avatar = avatarKey.orEmpty(),
         header = backgroundImageKey,
-        locked = false,
+        locked = locked,
         followersCount = followersCount.toInt(),
         followingCount = followingsCount.toInt(),
         statusesCount = tweetsCount.toInt(),
@@ -109,10 +109,13 @@ object WarpnetMapper {
             showingRetweets = true,
         )
 
-    fun WarpnetNotification.toNotification(author: WarpnetUser): Notification = Notification(
+    // The wire shape (domain.Notification) embeds the actor in [text]
+    // ("Alice liked your tweet") and exposes only the recipient's user_id,
+    // so the UI gets a stub account; the visible content is text + type.
+    fun WarpnetNotification.toNotification(): Notification = Notification(
         id = id,
         type = notificationTypeFromString(type),
-        account = author.toTimelineAccount(),
+        account = stubTimelineAccount(userId, text),
         status = null,
     )
 

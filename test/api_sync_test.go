@@ -657,6 +657,15 @@ func kotlinPathToDTO(t *testing.T, knownDtos map[string][]string) map[string]str
 
 func assertSubset(t *testing.T, proto, clientName string, backend, client []string) {
 	t.Helper()
+	assertSubsetWithVerb(t, proto, clientName, "sends", "accept", backend, client)
+}
+
+// assertSubsetWithVerb is the directional flavour of assertSubset. The
+// request-side caller wants "sends keys the backend doesn't accept";
+// response-side wants "reads keys the backend doesn't emit". The
+// underlying set arithmetic is identical.
+func assertSubsetWithVerb(t *testing.T, proto, clientName, clientVerb, backendVerb string, backend, client []string) {
+	t.Helper()
 	bset := map[string]bool{}
 	for _, k := range backend {
 		bset[k] = true
@@ -670,8 +679,8 @@ func assertSubset(t *testing.T, proto, clientName string, backend, client []stri
 	if len(extra) > 0 {
 		sort.Strings(extra)
 		t.Errorf(
-			"%s: %s sends keys the backend doesn't accept: %v\n  backend (all):  %v\n  %s keys:        %v",
-			proto, clientName, extra, backend, clientName, client,
+			"%s: %s %s keys the backend doesn't %s: %v\n  backend (all):  %v\n  %s keys:        %v",
+			proto, clientName, clientVerb, backendVerb, extra, backend, clientName, client,
 		)
 	}
 }
@@ -805,3 +814,317 @@ func TestAPISync_Payloads(t *testing.T) {
 	}
 	require.Greaterf(t, checked, 0, "no routes covered — discovery is broken")
 }
+
+// ----------------------------------------------------------------------------
+// Response-side audit
+//
+// The request-side test above only catches "client sends a key the backend
+// rejects". The mirror failure — "client reads a key the backend never
+// emits" — has been the most expensive class of bug for this repo
+// (WarpnetNotification's bogus from_user_id / tweet_id silently dropped
+// every notification; RepliesResponse's List<Tweet> Moshi-defaulted every
+// reply node). This second pass closes that gap for warpdroid by walking
+// each handler's `return event.X{...}` / `return event.X(y)` / `return
+// <var>, nil` site, resolving the response struct via the same alias
+// chain used elsewhere in this file, and asserting the warpdroid parse
+// DTO's keys are a subset of the backend's response wire keys.
+//
+// Frontend isn't covered here: service.js reads dot-paths off the parsed
+// response object without a declared schema, so the equivalent check
+// would be regex against arbitrary JS — flaky and out of scope.
+// ----------------------------------------------------------------------------
+
+// handlerReturnType is one (package, type) pair pulled from a handler's
+// return statements.
+type handlerReturnType struct {
+	Pkg  string // "event" or "domain"
+	Type string
+}
+
+// typeRefFromQualified extracts (pkg, type) from `<pkg>.<Type>` if pkg is
+// event or domain; nil otherwise. Used both for composite-literal types
+// and type-conversion call functions.
+func typeRefFromQualified(e ast.Expr) *handlerReturnType {
+	sel, ok := e.(*ast.SelectorExpr)
+	if !ok {
+		return nil
+	}
+	id, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+	if id.Name != "event" && id.Name != "domain" {
+		return nil
+	}
+	return &handlerReturnType{Pkg: id.Name, Type: sel.Sel.Name}
+}
+
+// handlerVarTypes scans body for local variable declarations whose type
+// can be derived from a qualified `event.X` / `domain.X` reference —
+// either as the declared type (`var x event.X`) or as a composite-literal
+// / type-conversion RHS of a := assignment. Returns map[varName]type.
+// Variables assigned from opaque function calls (e.g. `r := repo.Get()`)
+// are not tracked.
+func handlerVarTypes(body *ast.BlockStmt) map[string]handlerReturnType {
+	out := map[string]handlerReturnType{}
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.GenDecl:
+			if x.Tok != token.VAR {
+				return true
+			}
+			for _, s := range x.Specs {
+				vs, ok := s.(*ast.ValueSpec)
+				if !ok || vs.Type == nil {
+					continue
+				}
+				if t := typeRefFromQualified(vs.Type); t != nil {
+					for _, name := range vs.Names {
+						out[name.Name] = *t
+					}
+				}
+			}
+		case *ast.AssignStmt:
+			if x.Tok != token.DEFINE || len(x.Lhs) == 0 || len(x.Rhs) == 0 {
+				return true
+			}
+			id, ok := x.Lhs[0].(*ast.Ident)
+			if !ok {
+				return true
+			}
+			switch rhs := x.Rhs[0].(type) {
+			case *ast.CompositeLit:
+				if t := typeRefFromQualified(rhs.Type); t != nil {
+					out[id.Name] = *t
+				}
+			case *ast.CallExpr:
+				if t := typeRefFromQualified(rhs.Fun); t != nil {
+					out[id.Name] = *t
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// handlerReturnTypes collects every distinct successful response type
+// referenced by `return …, nil` (or `return …, <unused error>`) inside the
+// handler factory. Returns are inspected in three forms:
+//
+//   - composite literal:  `return event.X{...}, nil`
+//   - type conversion:    `return event.X(y), nil`
+//   - identifier:         `return resp, nil` — resolved via [handlerVarTypes]
+//
+// String/constant returns like `event.Accepted` are ignored (they have no
+// JSON schema to validate). Returns whose type can't be resolved (opaque
+// repository calls etc.) drop out and surface as "no response type
+// inferable" in the test report.
+func handlerReturnTypes(body *ast.BlockStmt) []handlerReturnType {
+	varTypes := handlerVarTypes(body)
+	seen := map[string]bool{}
+	var out []handlerReturnType
+	ast.Inspect(body, func(n ast.Node) bool {
+		ret, ok := n.(*ast.ReturnStmt)
+		if !ok || len(ret.Results) == 0 {
+			return true
+		}
+		expr := ret.Results[0]
+		var t *handlerReturnType
+		switch v := expr.(type) {
+		case *ast.CompositeLit:
+			t = typeRefFromQualified(v.Type)
+		case *ast.CallExpr:
+			// `event.X(value)` — type conversion to alias. Functions like
+			// `event.NewRetweetEvent(retweet)` have the same syntactic
+			// shape but are distinguished by whether the qualified name
+			// resolves to a known struct (the caller does that check).
+			t = typeRefFromQualified(v.Fun)
+		case *ast.Ident:
+			if vt, ok := varTypes[v.Name]; ok {
+				t = &vt
+			}
+		}
+		if t == nil {
+			return true
+		}
+		key := t.Pkg + "." + t.Type
+		if seen[key] {
+			return true
+		}
+		seen[key] = true
+		out = append(out, *t)
+		return true
+	})
+	return out
+}
+
+// handlerSuccessReturn resolves a handler's response wire shape. It picks
+// the first return type whose alias chain lands on a struct in event/ or
+// domain/, ignoring constants (event.Accepted) and unresolvable identifier
+// returns. Returns nil if nothing resolves — the route is then skipped in
+// the response audit.
+func handlerSuccessReturn(
+	pkgs map[string]map[string]*ast.TypeSpec,
+	body *ast.BlockStmt,
+) *resolvedStruct {
+	for _, r := range handlerReturnTypes(body) {
+		if res := resolveStruct(pkgs, r.Pkg, r.Type, map[string]bool{}); res != nil {
+			return res
+		}
+	}
+	return nil
+}
+
+// handlerBodies walks core/handler/*.go and returns map[FuncDecl name] ->
+// body. The existing handlerEventTypes only exposes the unmarshal type;
+// the response audit needs the body itself to scan return statements.
+func handlerBodies(t *testing.T) map[string]*ast.BlockStmt {
+	t.Helper()
+	files := parsePackageFiles(t, filepath.Join(repoRoot(t), "core/handler"))
+	out := map[string]*ast.BlockStmt{}
+	for _, f := range files {
+		for _, d := range f.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok || fd.Body == nil {
+				continue
+			}
+			out[fd.Name.Name] = fd.Body
+		}
+	}
+	return out
+}
+
+// kotlinAdapterDTOs scans WarpnetRepository.kt for `private val <name> =
+// moshi.adapter<...DtoType>()` and returns map[adapterName]dtoTypeName.
+// The DTO name is the rightmost identifier inside the generic, with any
+// `site.warpnet.transport.dto.` prefix stripped.
+func kotlinAdapterDTOs(t *testing.T) map[string]string {
+	t.Helper()
+	src := readFile(t, "warpdroid/app/src/main/java/site/warpnet/warpdroid/warpnet/WarpnetRepository.kt")
+	re := regexp.MustCompile(`val\s+(\w+)\s*=\s*moshi\.adapter<\s*(?:[\w.]+\.)?(\w+)\s*>\(\s*\)`)
+	out := map[string]string{}
+	for _, m := range re.FindAllStringSubmatch(src, -1) {
+		out[m[1]] = m[2]
+	}
+	return out
+}
+
+// kotlinResponseDtoForPath ties each PRIVATE/PUBLIC ProtocolIds constant
+// used in WarpnetRepository.kt to the DTO that parses the corresponding
+// response. The pattern is local and predictable:
+//
+//	val raw = client.request(ProtocolIds.X, …)
+//	val page = <adapter>.fromJson(raw) ?: …
+//
+// so the discovery is "find the first .fromJson(raw) call after each
+// client.request(ProtocolIds.X, …) within ~500 chars". Adapters that
+// don't appear in [kotlinAdapterDTOs] are ignored (e.g. error-shape
+// fallbacks that aren't response payloads).
+func kotlinResponseDtoForPath(t *testing.T, adapters map[string]string) map[string]string {
+	t.Helper()
+	src := readFile(t, "warpdroid/app/src/main/java/site/warpnet/warpdroid/warpnet/WarpnetRepository.kt")
+	// Greedy enough to span the few lines between request and fromJson,
+	// short enough to not skip into the next function.
+	re := regexp.MustCompile(`ProtocolIds\.([A-Z_]+)[\s\S]{0,500}?(\w+)\.fromJson\(\s*raw\s*\)`)
+	out := map[string]string{}
+	for _, m := range re.FindAllStringSubmatch(src, -1) {
+		if _, has := out[m[1]]; has {
+			continue
+		}
+		dto, ok := adapters[m[2]]
+		if !ok {
+			continue
+		}
+		out[m[1]] = dto
+	}
+	return out
+}
+
+// protocolsWithoutResponseDTO documents routes where warpdroid intentionally
+// doesn't parse a response struct, or where the response is a string
+// constant (event.Accepted) with no JSON schema to check.
+var protocolsWithoutResponseDTO = map[string]string{
+	// Acks: handlers return event.Accepted (a string constant) so there's
+	// nothing to compare against on the wire.
+	"PRIVATE_POST_BLOCK":                     "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_UNBLOCK":                   "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_MUTE":                      "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_UNMUTE":                    "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_BOOKMARK":                  "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_UNBOOKMARK":                "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_NOTIFICATION_READ":         "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_CHAT":                    "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_MESSAGE":                 "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_FILTER":                  "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_FILTER_KEYWORD":          "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE":  "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_FOLLOW_REQUEST_REJECT":     "ack-only: handler returns event.Accepted",
+	"PUBLIC_POST_PIN":                        "ack-only: handler returns event.Accepted",
+	"PUBLIC_POST_UNPIN":                      "ack-only: handler returns event.Accepted",
+	"PUBLIC_POST_VIEW":                       "ack-only: handler returns event.Accepted",
+	"PUBLIC_DELETE_REPLY":                    "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_TWEET":                   "ack-only: handler returns event.Accepted",
+}
+
+func TestAPISync_ResponsePayloads(t *testing.T) {
+	backend := backendStructKeys(t)
+	bodies := handlerBodies(t)
+	routes := routeMap(t)
+	pkgs := pkgDecls(t)
+	ktAdapters := kotlinAdapterDTOs(t)
+	ktDtos := kotlinDtoKeys(t)
+	ktRespByPath := kotlinResponseDtoForPath(t, ktAdapters)
+
+	require.NotEmpty(t, backend, "no event/domain structs parsed")
+	require.NotEmpty(t, bodies, "no handler bodies parsed")
+	require.NotEmpty(t, routes, "no stream routes parsed")
+	require.NotEmpty(t, ktAdapters, "no warpdroid adapters parsed")
+	require.NotEmpty(t, ktDtos, "no warpdroid DTOs parsed")
+	require.NotEmpty(t, ktRespByPath, "no warpdroid response-dto bindings parsed")
+
+	checked := 0
+	for pathConst, handlerName := range routes {
+		body, ok := bodies[handlerName]
+		if !ok {
+			continue
+		}
+		res := handlerSuccessReturn(pkgs, body)
+		if res == nil {
+			// Variable return whose type isn't statically inferable
+			// (e.g. repository call result). Skipped; not a failure
+			// because the alternative is false positives.
+			continue
+		}
+		// Walk all the way down through any nested aliases that
+		// resolveStruct already followed; collect the wire keys of the
+		// concrete struct.
+		bk, _ := jsonKeysOfStruct(res.st)
+		if len(bk) == 0 {
+			continue
+		}
+
+		dto, ok := ktRespByPath[pathConst]
+		if !ok {
+			// Route returns a typed body but warpdroid doesn't parse it.
+			// Either fire-and-forget (ack-only handler) or a deliberate
+			// no-op on the client side. Neither is a contract mismatch,
+			// so we silently skip; protocolsWithoutResponseDTO and
+			// protocolsWithoutClient document the known cases.
+			continue
+		}
+		ktKeys, ok := ktDtos[dto]
+		if !ok {
+			t.Errorf("%s: warpdroid response adapter points at unknown DTO %q", pathConst, dto)
+			continue
+		}
+		checked++
+		t.Run(pathConst, func(t *testing.T) {
+			t.Logf("backend response: handler=%s wire-keys=%v\nwarpdroid DTO=%s keys=%v",
+				handlerName, bk, dto, ktKeys)
+			assertSubsetWithVerb(t, pathConst, "warpdroid", "reads", "emit", bk, ktKeys)
+		})
+	}
+	require.Greaterf(t, checked, 0, "no response payloads compared — discovery is broken")
+}
+
