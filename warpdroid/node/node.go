@@ -193,18 +193,18 @@ func (c *clientNode) connect(peerInfo string) error {
 }
 
 func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.desktopPeerID == "" {
+	c.mu.RLock()
+	desktopPeerID := c.desktopPeerID
+	c.mu.RUnlock()
+	if desktopPeerID == "" {
 		return nil, fmt.Errorf("not connected to desktop node")
 	}
-	desktopPeerID := c.desktopPeerID
 
 	if protocolID == "" {
 		return nil, fmt.Errorf("empty protocol ID")
 	}
 
-	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
 	defer cancel()
 
 	connectedness := c.host.Network().Connectedness(desktopPeerID)
