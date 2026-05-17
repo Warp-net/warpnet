@@ -67,6 +67,9 @@ type FollowingStorer interface {
 	GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error)
 	IsFollowing(ownerId, otherUserId string) bool
 	IsFollower(ownerId, otherUserId string) bool
+	AddFollowRequest(targetUserId, followerId string) error
+	RemoveFollowRequest(targetUserId, followerId string) error
+	ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 func StreamFollowHandler(
@@ -443,5 +446,70 @@ func StreamGetFollowingsHandler(
 			return nil, err
 		}
 		return followingsResp, nil
+	}
+}
+
+func StreamGetFollowRequestsHandler(repo FollowingStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetFollowRequestsEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("follow requests: empty user id")
+		}
+		ids, cur, err := repo.ListFollowRequests(ev.UserId, ev.Limit, ev.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]domain.ID, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, domain.ID(id))
+		}
+		return event.GetFollowRequestsResponse{FollowerIds: out, Cursor: cur}, nil
+	}
+}
+
+func StreamAuthorizeFollowRequestHandler(repo FollowingStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.FollowRequestActionEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("authorize follow: empty user id")
+		}
+		if ev.FollowerId == "" {
+			return nil, warpnet.WarpError("authorize follow: empty follower id")
+		}
+		// Promote the request into a real follow. The follower's identity
+		// was vetted on the inbound follow handler; authorization only
+		// flips the locked-account gate.
+		if err := repo.Follow(ev.FollowerId, ev.UserId); err != nil {
+			return nil, err
+		}
+		if err := repo.RemoveFollowRequest(ev.UserId, ev.FollowerId); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
+	}
+}
+
+func StreamRejectFollowRequestHandler(repo FollowingStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.FollowRequestActionEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("reject follow: empty user id")
+		}
+		if ev.FollowerId == "" {
+			return nil, warpnet.WarpError("reject follow: empty follower id")
+		}
+		if err := repo.RemoveFollowRequest(ev.UserId, ev.FollowerId); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
 	}
 }

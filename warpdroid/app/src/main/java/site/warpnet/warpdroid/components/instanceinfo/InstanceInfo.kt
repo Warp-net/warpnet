@@ -31,7 +31,6 @@ data class InstanceInfo(
     val maxFieldNameLength: Int?,
     val maxFieldValueLength: Int?,
     val version: String?,
-    val translationEnabled: Boolean,
     val warpnetApiVersion: Int?,
     val vapidKey: String?
 )

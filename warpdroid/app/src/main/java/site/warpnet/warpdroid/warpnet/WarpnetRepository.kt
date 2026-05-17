@@ -80,6 +80,7 @@ class WarpnetRepository @Inject constructor(
     private val tweetsRespAdapter = moshi.adapter<TweetsResponse>()
     private val repliesRespAdapter = moshi.adapter<RepliesResponse>()
     private val notificationsRespAdapter = moshi.adapter<GetNotificationsResponse>()
+    private val notificationRespAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetNotification>()
     private val likesCountAdapter = moshi.adapter<LikesCountResponse>()
     private val tweetStatsRespAdapter = moshi.adapter<TweetStatsResponse>()
     private val usersRespAdapter = moshi.adapter<UsersResponse>()
@@ -95,6 +96,38 @@ class WarpnetRepository @Inject constructor(
     private val getTweetStatsAdapter = moshi.adapter<GetTweetStatsEvent>()
     private val getRepliesAdapter = moshi.adapter<GetAllRepliesEvent>()
     private val getNotifsAdapter = moshi.adapter<GetNotificationsEvent>()
+    private val getNotifAdapter = moshi.adapter<site.warpnet.transport.dto.GetNotificationEvent>()
+    private val markNotifReadAdapter = moshi.adapter<site.warpnet.transport.dto.MarkNotificationReadEvent>()
+    private val bookmarkEventAdapter = moshi.adapter<site.warpnet.transport.dto.BookmarkEvent>()
+    private val unbookmarkEventAdapter = moshi.adapter<site.warpnet.transport.dto.UnbookmarkEvent>()
+    private val getBookmarksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksEvent>()
+    private val getBookmarksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBookmarksResponse>()
+    private val pinTweetAdapter = moshi.adapter<site.warpnet.transport.dto.PinTweetEvent>()
+    private val blockEventAdapter = moshi.adapter<site.warpnet.transport.dto.BlockEvent>()
+    private val muteEventAdapter = moshi.adapter<site.warpnet.transport.dto.MuteEvent>()
+    private val getBlocksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksEvent>()
+    private val getBlocksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksResponse>()
+    private val getTweetLikersAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetLikersEvent>()
+    private val subscribeUserAdapter = moshi.adapter<site.warpnet.transport.dto.SubscribeUserEvent>()
+    private val updateMediaMetaAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateMediaMetaEvent>()
+    private val getMediaAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaEvent>()
+    private val getMediaRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaResponse>()
+    private val getImageEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetImageEvent>()
+    private val getImageRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetImageResponse>()
+    private val searchUsersAdapter = moshi.adapter<site.warpnet.transport.dto.SearchUsersEvent>()
+    private val editTweetAdapter = moshi.adapter<site.warpnet.transport.dto.EditTweetEvent>()
+    private val getFollowReqsAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsEvent>()
+    private val getFollowReqsRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsResponse>()
+    private val followReqActionAdapter = moshi.adapter<site.warpnet.transport.dto.FollowRequestActionEvent>()
+    private val filterAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetFilter>()
+    private val getFilterAdapter = moshi.adapter<site.warpnet.transport.dto.GetFilterEvent>()
+    private val getFiltersAdapter = moshi.adapter<site.warpnet.transport.dto.GetFiltersEvent>()
+    private val getFiltersRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetFiltersResponse>()
+    private val deleteFilterAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteFilterEvent>()
+    private val addFilterKwAdapter = moshi.adapter<site.warpnet.transport.dto.AddFilterKeywordEvent>()
+    private val updateFilterKwAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateFilterKeywordEvent>()
+    private val deleteFilterKwAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteFilterKeywordEvent>()
+    private val filterKeywordAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetFilterKeyword>()
     private val getFollowersAdapter = moshi.adapter<GetFollowersEvent>()
     private val getFollowingsAdapter = moshi.adapter<GetFollowingsEvent>()
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
@@ -105,6 +138,13 @@ class WarpnetRepository @Inject constructor(
     private val viewsCountAdapter = moshi.adapter<ViewsCountResponse>()
     private val newTweetAdapter = moshi.adapter<WarpnetTweet>()
     private val deleteTweetAdapter = moshi.adapter<DeleteTweetEvent>()
+    private val getChatsAdapter = moshi.adapter<site.warpnet.transport.dto.GetChatsEvent>()
+    private val getChatsRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetChatsResponse>()
+    private val deleteChatAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteChatEvent>()
+    private val getMessagesAdapter = moshi.adapter<site.warpnet.transport.dto.GetMessagesEvent>()
+    private val getMessagesRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMessagesResponse>()
+    private val newMessageAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetMessage>()
+    private val deleteMessageAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteMessageEvent>()
     private val unretweetAdapter = moshi.adapter<UnretweetEvent>()
 
     // -----------------------------------------------------------------
@@ -186,7 +226,17 @@ class WarpnetRepository @Inject constructor(
             getRepliesAdapter.toJson(GetAllRepliesEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
         )
         val page = repliesRespAdapter.fromJson(raw) ?: return emptyList()
-        return hydrateTweets(page.replies)
+        // Backend returns a ReplyNode tree ({reply, children}); flatten
+        // depth-first into the flat List<WarpnetTweet> the UI expects.
+        val flat = mutableListOf<site.warpnet.transport.dto.WarpnetTweet>()
+        fun walk(nodes: List<site.warpnet.transport.dto.WarpnetReplyNode>) {
+            for (n in nodes) {
+                flat += n.reply
+                if (n.children.isNotEmpty()) walk(n.children)
+            }
+        }
+        walk(page.replies)
+        return hydrateTweets(flat)
     }
 
     /**
@@ -311,16 +361,42 @@ class WarpnetRepository @Inject constructor(
 
     // Warpnet's NewRetweetEvent is domain.Tweet, so the payload is the
     // retweeter's copy of the tweet rather than a (tweet_id, user_id) pair.
-    suspend fun retweetStatus(tweetId: String, retweeterId: String, retweeterUsername: String): Long {
-        // createdAt left null for the same reason as postStatus.
-        val payload = WarpnetTweet(
-            id = tweetId,
-            rootId = "",
-            text = "",
-            userId = retweeterId,
-            username = retweeterUsername,
-            retweetedBy = retweeterId,
-        )
+    //
+    // [sourceAuthorId] is the user_id of the original tweet's author —
+    // needed for cross-node propagation so the source-author's node
+    // receives the retweet event. When non-null and [comment] is
+    // non-blank, the retweet becomes a quote: a regular tweet
+    // authored by the retweeter (text = comment) that references the
+    // source via quoted_tweet_id / quoted_user_id.
+    suspend fun retweetStatus(
+        tweetId: String,
+        retweeterId: String,
+        retweeterUsername: String,
+        sourceAuthorId: String? = null,
+        comment: String? = null,
+    ): Long {
+        val isQuote = !comment.isNullOrBlank() && !sourceAuthorId.isNullOrBlank()
+        val payload = if (isQuote) {
+            WarpnetTweet(
+                id = tweetId,
+                rootId = "",
+                text = comment!!.trim(),
+                userId = retweeterId,
+                username = retweeterUsername,
+                retweetedBy = retweeterId,
+                quotedTweetId = tweetId,
+                quotedUserId = sourceAuthorId!!,
+            )
+        } else {
+            WarpnetTweet(
+                id = tweetId,
+                rootId = "",
+                text = "",
+                userId = sourceAuthorId ?: retweeterId,
+                username = retweeterUsername,
+                retweetedBy = retweeterId,
+            )
+        }
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_RETWEET,
             newTweetAdapter.toJson(payload),
@@ -375,14 +451,519 @@ class WarpnetRepository @Inject constructor(
             getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
         val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
-        if (page.notifications.isEmpty()) return emptyList<Notification>() to page.cursor
+        return page.notifications.map { it.toNotification() } to page.cursor
+    }
 
-        val cache = mutableMapOf<String, WarpnetUser>()
-        val mapped = page.notifications.mapNotNull { n ->
-            val author = resolveUser(n.fromUserId, cache) ?: return@mapNotNull null
-            n.toNotification(author)
+    /**
+     * Fetch a single notification by id. The fat node resolves the recipient
+     * from the paired session; only the notification id travels on the wire.
+     */
+    suspend fun getNotification(notificationId: String): Notification? {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_NOTIFICATION,
+            getNotifAdapter.toJson(site.warpnet.transport.dto.GetNotificationEvent(notificationId = notificationId)),
+        )
+        val wire = notificationRespAdapter.fromJson(raw) ?: return null
+        return wire.toNotification()
+    }
+
+    /** Mark a single notification as read on the fat node. */
+    suspend fun markNotificationRead(notificationId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_NOTIFICATION_READ,
+            markNotifReadAdapter.toJson(
+                site.warpnet.transport.dto.MarkNotificationReadEvent(notificationId = notificationId),
+            ),
+        )
+    }
+
+    // -----------------------------------------------------------------
+    // Filters (local keyword/regex hiding rules)
+    // -----------------------------------------------------------------
+
+    suspend fun getFilter(userId: String, filterId: String): site.warpnet.transport.dto.WarpnetFilter? {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_FILTER,
+            getFilterAdapter.toJson(
+                site.warpnet.transport.dto.GetFilterEvent(userId = userId, filterId = filterId),
+            ),
+        )
+        return filterAdapter.fromJson(raw)
+    }
+
+    suspend fun getFilters(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetFilter>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_FILTERS,
+            getFiltersAdapter.toJson(
+                site.warpnet.transport.dto.GetFiltersEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getFiltersRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.transport.dto.WarpnetFilter>() to ""
+        return page.filters to page.cursor
+    }
+
+    suspend fun createFilter(filter: site.warpnet.transport.dto.WarpnetFilter): site.warpnet.transport.dto.WarpnetFilter {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_FILTER,
+            filterAdapter.toJson(filter),
+        )
+        return filterAdapter.fromJson(raw)
+            ?: throw IllegalStateException("createFilter returned empty body")
+    }
+
+    suspend fun updateFilter(filter: site.warpnet.transport.dto.WarpnetFilter): site.warpnet.transport.dto.WarpnetFilter {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_FILTER_UPDATE,
+            filterAdapter.toJson(filter),
+        )
+        return filterAdapter.fromJson(raw)
+            ?: throw IllegalStateException("updateFilter returned empty body")
+    }
+
+    suspend fun deleteFilter(userId: String, filterId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_DELETE_FILTER,
+            deleteFilterAdapter.toJson(
+                site.warpnet.transport.dto.DeleteFilterEvent(userId = userId, filterId = filterId),
+            ),
+        )
+    }
+
+    suspend fun addFilterKeyword(userId: String, filterId: String, keyword: String, wholeWord: Boolean): site.warpnet.transport.dto.WarpnetFilterKeyword {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_FILTER_KEYWORD,
+            addFilterKwAdapter.toJson(
+                site.warpnet.transport.dto.AddFilterKeywordEvent(
+                    userId = userId, filterId = filterId, keyword = keyword, wholeWord = wholeWord,
+                ),
+            ),
+        )
+        return filterKeywordAdapter.fromJson(raw)
+            ?: throw IllegalStateException("addFilterKeyword returned empty body")
+    }
+
+    suspend fun updateFilterKeyword(userId: String, keywordId: String, keyword: String, wholeWord: Boolean): site.warpnet.transport.dto.WarpnetFilterKeyword {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+            updateFilterKwAdapter.toJson(
+                site.warpnet.transport.dto.UpdateFilterKeywordEvent(
+                    userId = userId, keywordId = keywordId, keyword = keyword, wholeWord = wholeWord,
+                ),
+            ),
+        )
+        return filterKeywordAdapter.fromJson(raw)
+            ?: throw IllegalStateException("updateFilterKeyword returned empty body")
+    }
+
+    suspend fun deleteFilterKeyword(userId: String, keywordId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_DELETE_FILTER_KEYWORD,
+            deleteFilterKwAdapter.toJson(
+                site.warpnet.transport.dto.DeleteFilterKeywordEvent(userId = userId, keywordId = keywordId),
+            ),
+        )
+    }
+
+    // -----------------------------------------------------------------
+    // Follow requests (pending follows on locked accounts)
+    // -----------------------------------------------------------------
+
+    suspend fun getFollowRequests(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_FOLLOW_REQUESTS,
+            getFollowReqsAdapter.toJson(
+                site.warpnet.transport.dto.GetFollowRequestsEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getFollowReqsRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        return hydrateAccounts(page.followerIds) to page.cursor
+    }
+
+    suspend fun authorizeFollowRequest(userId: String, followerId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE,
+            followReqActionAdapter.toJson(
+                site.warpnet.transport.dto.FollowRequestActionEvent(userId = userId, followerId = followerId),
+            ),
+        )
+    }
+
+    suspend fun rejectFollowRequest(userId: String, followerId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_FOLLOW_REQUEST_REJECT,
+            followReqActionAdapter.toJson(
+                site.warpnet.transport.dto.FollowRequestActionEvent(userId = userId, followerId = followerId),
+            ),
+        )
+    }
+
+    // -----------------------------------------------------------------
+    // Tweet edits — mutate Tweet.text in place + append an immutable
+    // revision to the per-tweet edit history.
+    // -----------------------------------------------------------------
+
+    suspend fun editTweet(tweetId: String, userId: String, text: String): WarpnetTweet {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_TWEET_EDIT,
+            editTweetAdapter.toJson(
+                site.warpnet.transport.dto.EditTweetEvent(
+                    tweetId = tweetId,
+                    userId = userId,
+                    text = text,
+                ),
+            ),
+        )
+        return tweetAdapter.fromJson(raw)
+            ?: throw IllegalStateException("editTweet returned empty body for $tweetId")
+    }
+
+    // -----------------------------------------------------------------
+    // Server-side user search (replaces the previous client-side
+    // listUsers + filter dance — the fat node runs the substring scan).
+    // -----------------------------------------------------------------
+
+    suspend fun searchAccounts(query: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+        if (query.isBlank()) return emptyList<TimelineAccount>() to ""
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_USERS_SEARCH,
+            searchUsersAdapter.toJson(
+                site.warpnet.transport.dto.SearchUsersEvent(query = query, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        return page.users.map { it.toTimelineAccount() } to page.cursor
+    }
+
+    // -----------------------------------------------------------------
+    // Media metadata (alt-text + focal point on uploaded images)
+    // -----------------------------------------------------------------
+
+    suspend fun updateMediaMeta(
+        userId: String,
+        key: String,
+        description: String,
+        focusX: Float,
+        focusY: Float,
+    ) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_MEDIA_META,
+            updateMediaMetaAdapter.toJson(
+                site.warpnet.transport.dto.UpdateMediaMetaEvent(
+                    userId = userId,
+                    key = key,
+                    description = description,
+                    focusX = focusX,
+                    focusY = focusY,
+                ),
+            ),
+        )
+    }
+
+    suspend fun getMediaMeta(userId: String, key: String): site.warpnet.transport.dto.GetMediaResponse {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_MEDIA,
+            getMediaAdapter.toJson(site.warpnet.transport.dto.GetMediaEvent(userId = userId, key = key)),
+        )
+        return getMediaRespAdapter.fromJson(raw)
+            ?: throw IllegalStateException("getMediaMeta returned empty body for $key")
+    }
+
+    // -----------------------------------------------------------------
+    // Subscribe / Unsubscribe to a user's posts (local watchlist)
+    // -----------------------------------------------------------------
+
+    suspend fun subscribeUser(selfId: String, targetId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_SUBSCRIBE_USER,
+            subscribeUserAdapter.toJson(
+                site.warpnet.transport.dto.SubscribeUserEvent(selfId = selfId, targetId = targetId),
+            ),
+        )
+    }
+
+    suspend fun unsubscribeUser(selfId: String, targetId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNSUBSCRIBE_USER,
+            subscribeUserAdapter.toJson(
+                site.warpnet.transport.dto.SubscribeUserEvent(selfId = selfId, targetId = targetId),
+            ),
+        )
+    }
+
+    // -----------------------------------------------------------------
+    // Engagement lists (who liked / retweeted a tweet)
+    // -----------------------------------------------------------------
+
+    suspend fun getTweetLikers(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_TWEET_LIKERS,
+            getTweetLikersAdapter.toJson(
+                site.warpnet.transport.dto.GetTweetLikersEvent(
+                    tweetId = tweetId,
+                    ownerUserId = ownerUserId,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            ),
+        )
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        return page.users.map { it.toTimelineAccount() } to page.cursor
+    }
+
+    suspend fun getTweetRetweeters(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_TWEET_RETWEETERS,
+            getTweetLikersAdapter.toJson(
+                site.warpnet.transport.dto.GetTweetLikersEvent(
+                    tweetId = tweetId,
+                    ownerUserId = ownerUserId,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            ),
+        )
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        return page.users.map { it.toTimelineAccount() } to page.cursor
+    }
+
+    // -----------------------------------------------------------------
+    // Block / Mute / Conversation-mute (local social-graph filters)
+    //
+    // The fat node also escalates a social block into a peer-level
+    // libp2p blocklist for the target's NodeId — see core/handler/block.go.
+    // -----------------------------------------------------------------
+
+    suspend fun blockUser(blockerId: String, blockeeId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_BLOCK,
+            blockEventAdapter.toJson(
+                site.warpnet.transport.dto.BlockEvent(blockerId = blockerId, blockeeId = blockeeId),
+            ),
+        )
+    }
+
+    suspend fun unblockUser(blockerId: String, blockeeId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNBLOCK,
+            blockEventAdapter.toJson(
+                site.warpnet.transport.dto.BlockEvent(blockerId = blockerId, blockeeId = blockeeId),
+            ),
+        )
+    }
+
+    suspend fun getBlocks(userId: String, cursor: String = "", limit: Int = 40): Pair<List<String>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_BLOCKS,
+            getBlocksEventAdapter.toJson(
+                site.warpnet.transport.dto.GetBlocksEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getBlocksRespAdapter.fromJson(raw) ?: return emptyList<String>() to ""
+        return page.ids to page.cursor
+    }
+
+    suspend fun muteUser(muterId: String, muteeId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_MUTE,
+            muteEventAdapter.toJson(
+                site.warpnet.transport.dto.MuteEvent(muterId = muterId, muteeId = muteeId),
+            ),
+        )
+    }
+
+    suspend fun unmuteUser(muterId: String, muteeId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNMUTE,
+            muteEventAdapter.toJson(
+                site.warpnet.transport.dto.MuteEvent(muterId = muterId, muteeId = muteeId),
+            ),
+        )
+    }
+
+    suspend fun getMutes(userId: String, cursor: String = "", limit: Int = 40): Pair<List<String>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_MUTES,
+            getBlocksEventAdapter.toJson(
+                site.warpnet.transport.dto.GetBlocksEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getBlocksRespAdapter.fromJson(raw) ?: return emptyList<String>() to ""
+        return page.ids to page.cursor
+    }
+
+
+    // -----------------------------------------------------------------
+    // Pin / Unpin (author-only; the fat node enforces the author check)
+    // -----------------------------------------------------------------
+
+    suspend fun pinTweet(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PUBLIC_POST_PIN,
+            pinTweetAdapter.toJson(
+                site.warpnet.transport.dto.PinTweetEvent(userId = userId, tweetId = tweetId),
+            ),
+        )
+    }
+
+    suspend fun unpinTweet(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PUBLIC_POST_UNPIN,
+            pinTweetAdapter.toJson(
+                site.warpnet.transport.dto.PinTweetEvent(userId = userId, tweetId = tweetId),
+            ),
+        )
+    }
+
+    // -----------------------------------------------------------------
+    // Bookmarks (local-only shelf, no propagation)
+    // -----------------------------------------------------------------
+
+    /** Pin [tweetId] (authored by [ownerUserId]) to the local bookmark shelf. */
+    suspend fun bookmarkTweet(userId: String, tweetId: String, ownerUserId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_BOOKMARK,
+            bookmarkEventAdapter.toJson(
+                site.warpnet.transport.dto.BookmarkEvent(
+                    userId = userId,
+                    tweetId = tweetId,
+                    ownerUserId = ownerUserId,
+                ),
+            ),
+        )
+    }
+
+    /** Remove a previously-bookmarked tweet from the shelf. */
+    suspend fun unbookmarkTweet(userId: String, tweetId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_POST_UNBOOKMARK,
+            unbookmarkEventAdapter.toJson(
+                site.warpnet.transport.dto.UnbookmarkEvent(userId = userId, tweetId = tweetId),
+            ),
+        )
+    }
+
+    /**
+     * Fetch one page of bookmarked tweets. The wire returns identifiers only —
+     * each tweet body is re-fetched in parallel and surfaced as a Tweet.
+     */
+    suspend fun getBookmarks(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.warpdroid.entity.Tweet>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_BOOKMARKS,
+            getBookmarksEventAdapter.toJson(
+                site.warpnet.transport.dto.GetBookmarksEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getBookmarksRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
+        if (page.items.isEmpty()) {
+            return emptyList<site.warpnet.warpdroid.entity.Tweet>() to page.cursor
         }
-        return mapped to page.cursor
+        val tweets = page.items.mapNotNull { bm ->
+            runCatching { getStatus(tweetId = bm.tweetId, userId = bm.ownerUserId) }.getOrNull()
+        }
+        return tweets to page.cursor
+    }
+
+    // -----------------------------------------------------------------
+    // Chats (1:1 DMs on the fat node)
+    // -----------------------------------------------------------------
+
+    suspend fun getChats(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetChat>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_CHATS,
+            getChatsAdapter.toJson(
+                site.warpnet.transport.dto.GetChatsEvent(userId = userId, cursor = cursor, limit = limit),
+            ),
+        )
+        val page = getChatsRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.transport.dto.WarpnetChat>() to ""
+        return page.chats to page.cursor
+    }
+
+    suspend fun deleteChat(userId: String, chatId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_DELETE_CHAT,
+            deleteChatAdapter.toJson(
+                site.warpnet.transport.dto.DeleteChatEvent(userId = userId, chatId = chatId),
+            ),
+        )
+    }
+
+    suspend fun getMessages(
+        ownerId: String,
+        chatId: String,
+        cursor: String = "",
+        limit: Int = 40,
+    ): Pair<List<site.warpnet.transport.dto.WarpnetMessage>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_MESSAGES,
+            getMessagesAdapter.toJson(
+                site.warpnet.transport.dto.GetMessagesEvent(
+                    ownerId = ownerId,
+                    chatId = chatId,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            ),
+        )
+        val page = getMessagesRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.transport.dto.WarpnetMessage>() to ""
+        return page.messages to page.cursor
+    }
+
+    suspend fun sendMessage(
+        chatId: String,
+        senderId: String,
+        receiverId: String,
+        text: String,
+    ): site.warpnet.transport.dto.WarpnetMessage? {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_POST_MESSAGE,
+            newMessageAdapter.toJson(
+                site.warpnet.transport.dto.WarpnetMessage(
+                    chatId = chatId,
+                    senderId = senderId,
+                    receiverId = receiverId,
+                    text = text,
+                ),
+            ),
+        )
+        return newMessageAdapter.fromJson(raw)
+    }
+
+    suspend fun deleteMessage(chatId: String, messageId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_DELETE_MESSAGE,
+            deleteMessageAdapter.toJson(
+                site.warpnet.transport.dto.DeleteMessageEvent(chatId = chatId, id = messageId),
+            ),
+        )
+    }
+
+    /**
+     * Fetch a Warpnet-stored image blob by (owning user, blob key). The fat
+     * node returns the file as `"<mime>,<base64>"` because the Vue UI inlines
+     * it straight into a data URL — warpdroid splits the prefix off and
+     * base64-decodes the body so [WarpnetAvatarLoader] can hand the raw
+     * bytes to Glide. Returns null on empty key or decode failure; the
+     * Glide pipeline falls back to the placeholder drawable.
+     */
+    suspend fun getImageBytes(userId: String, key: String): ByteArray? {
+        if (userId.isBlank() || key.isBlank()) return null
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_IMAGE,
+            getImageEventAdapter.toJson(
+                site.warpnet.transport.dto.GetImageEvent(userId = userId, key = key),
+            ),
+        )
+        val file = getImageRespAdapter.fromJson(raw)?.file.orEmpty()
+        if (file.isEmpty()) return null
+        // "<mime>,<base64>" — drop the prefix; if no comma is present the
+        // whole payload is treated as base64 to stay forward-compatible.
+        val comma = file.indexOf(',')
+        val b64 = if (comma >= 0) file.substring(comma + 1) else file
+        return runCatching { android.util.Base64.decode(b64, android.util.Base64.DEFAULT) }.getOrNull()
     }
 
     // -----------------------------------------------------------------
@@ -468,8 +1049,29 @@ class WarpnetRepository @Inject constructor(
         // doesn't pay 30x serialised round-trip latency. Failures degrade
         // to zero counts; the toTweet baseline already matches that.
         val viewerId = pairedNodeStore.load()?.userId.orEmpty()
+        // Quoted-source tweets fan out in parallel too. The map keys by
+        // (quotedTweetId, quotedUserId) so two quotes of the same source
+        // collapse to one RPC. Inner getStatus() doesn't recurse into
+        // hydrateTweets, so the nested Tweet comes back with quote=null
+        // and we don't pay an unbounded fetch tree.
+        val quoteJobs = tweets
+            .mapNotNull { t ->
+                val qId = t.quotedTweetId.orEmpty()
+                val qUser = t.quotedUserId.orEmpty()
+                if (qId.isBlank() || qUser.isBlank()) null else (qId to qUser)
+            }
+            .distinct()
+            .associateWith { (qId, qUser) ->
+                async { runCatching { getStatus(tweetId = qId, userId = qUser) }.getOrNull() }
+            }
+
+        val baseTweets: suspend (WarpnetTweet) -> Tweet = { t ->
+            val base = t.toTweet(resolveUser(t.userId, cache))
+            attachQuote(t, base, quoteJobs)
+        }
+
         if (viewerId.isBlank()) {
-            return@coroutineScope tweets.map { it.toTweet(resolveUser(it.userId, cache)) }
+            return@coroutineScope tweets.map { baseTweets(it) }
         }
         // Retweets reuse the original tweet id, so distinct() avoids
         // firing the same stats RPC twice on a single timeline page.
@@ -477,15 +1079,51 @@ class WarpnetRepository @Inject constructor(
             async { runCatching { getTweetStats(tweetId = id, userId = viewerId) }.getOrNull() }
         }
         tweets.map { t ->
-            val base = t.toTweet(resolveUser(t.userId, cache))
-            val s = stats[t.id]?.await() ?: return@map base
-            base.copy(
+            val withQuote = baseTweets(t)
+            val s = stats[t.id]?.await() ?: return@map withQuote
+            withQuote.copy(
                 likesCount = s.likesCount.clampToInt(),
                 retweetsCount = s.retweetsCount.clampToInt(),
                 repliesCount = s.repliesCount.clampToInt(),
                 viewsCount = s.viewsCount.clampToInt(),
             )
         }
+    }
+
+    /**
+     * Attach the quoted-source tweet to the rendered [Tweet] when the
+     * wire row has a quoted_tweet_id. State mirrors what the Vue
+     * frontend produces from the same pair of timestamps:
+     *
+     *  - source fetch failed → DELETED (the row stays visible as a
+     *    placeholder card so the user knows the quote pointed at
+     *    something that's gone).
+     *  - source.editedAt is after the quote's createdAt → REVOKED. The
+     *    quoter snapshotted a particular wording; if the author has
+     *    since rewritten it, the quote no longer represents the live
+     *    text and we render the "unavailable" placeholder.
+     *  - otherwise → ACCEPTED.
+     */
+    private suspend fun attachQuote(
+        wire: WarpnetTweet,
+        base: Tweet,
+        sources: Map<Pair<String, String>, kotlinx.coroutines.Deferred<Tweet?>>,
+    ): Tweet {
+        val key = (wire.quotedTweetId.orEmpty() to wire.quotedUserId.orEmpty())
+        if (key.first.isBlank() || key.second.isBlank()) return base
+        val source = sources[key]?.await()
+        val state = when {
+            source == null -> site.warpnet.warpdroid.entity.Quote.State.DELETED
+            source.editedAt != null && source.editedAt.after(base.createdAt) ->
+                site.warpnet.warpdroid.entity.Quote.State.REVOKED
+            else -> site.warpnet.warpdroid.entity.Quote.State.ACCEPTED
+        }
+        return base.copy(
+            quote = site.warpnet.warpdroid.entity.Quote(
+                state = state,
+                quotedStatus = source,
+            ),
+        )
     }
 
     private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()

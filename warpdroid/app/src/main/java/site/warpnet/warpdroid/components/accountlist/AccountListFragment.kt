@@ -179,11 +179,7 @@ class AccountListFragment :
         }
     }
 
-    override fun onViewTag(tag: String) {
-        activity?.startActivityWithSlideInAnimation(
-            TweetListActivity.newHashtagIntent(requireContext(), tag)
-        )
-    }
+    override fun onViewTag(tag: String) = Unit
 
     override fun onViewAccount(accountId: String) {
         activity?.startActivityWithSlideInAnimation(AccountActivity.newIntent(requireContext(), accountId))

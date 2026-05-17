@@ -54,21 +54,11 @@ interface TweetActionListener : LinkListener {
      */
     fun onContentCollapsedChange(viewData: TweetViewData.Concrete, isCollapsed: Boolean)
 
-    fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>)
-
-    fun onShowPollResults(viewData: TweetViewData.Concrete)
-
     fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean)
-
-    fun onTranslate(viewData: TweetViewData.Concrete)
-
-    fun onUntranslate(viewData: TweetViewData.Concrete)
 
     fun onBlock(accountId: String)
 
     fun onMute(accountId: String, hideNotifications: Boolean, duration: Int?)
-
-    fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean)
 
     fun onDelete(viewData: TweetViewData.Concrete)
 
@@ -83,8 +73,6 @@ interface TweetActionListener : LinkListener {
     fun onEdit(viewData: TweetViewData.Concrete)
 
     fun onReply(viewData: TweetViewData.Concrete)
-
-    fun onReport(viewData: TweetViewData.Concrete)
 
     /**
      * Show a quote despite the author being blocked or muted.

@@ -9,6 +9,7 @@ import com.squareup.moshi.JsonWriter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -177,15 +178,34 @@ class WarpnetClient(
      * of the event payload (e.g. a serialised `GetUserEvent`). The envelope
      * wrapping is done here.
      */
+    /**
+     * Send one request over a fresh libp2p stream and retry transient
+     * transport failures with exponential backoff. Failure modes that
+     * mean "the request never reached the server" — NewStream timeouts,
+     * "not connected to desktop node", context-deadline errors — are
+     * retried up to [STREAM_RETRY_BACKOFFS] entries; the connection
+     * monitor running in parallel typically re-establishes the link
+     * within one or two of those waits. Failure modes that imply the
+     * server may have processed the request (response-read mid-flight)
+     * are NOT retried to avoid double-applying non-idempotent
+     * mutations — see [isRetryableTransportError].
+     *
+     * Protocol-level errors (4xx-style ResponseError) propagate
+     * immediately; retrying them would only annoy the user.
+     */
     suspend fun request(protocolId: String, bodyJson: String): String = withContext(Dispatchers.IO) {
-        // Serialise stream() with every other binding call so pause/resume
-        // can't tear a connection out from under an in-flight request and
-        // race the Go singleton's internal state.
-        mutex.withLock {
+        // No mutex: the Go binding's libp2p host is thread-safe and yamux
+        // multiplexes concurrent streams over the single connection.
+        // Serialising here made every refresh block behind the slowest
+        // in-flight call (timeline stalls behind a 15s stream-open).
+        var lastFailure: WarpnetException.TransportFailure? = null
+        for (attempt in 0..STREAM_RETRY_BACKOFFS.size) {
             if (_state.value !is ConnectionState.Connected) {
                 throw WarpnetException.NotConnected()
             }
-
+            // Rebuild + re-sign the envelope each attempt so the
+            // timestamp matches the wire and the signature stays valid
+            // against the freshly-sent body.
             val envelope = WarpnetEnvelope.unsigned(
                 body = bodyJson,
                 nodeId = signer.peerId,
@@ -196,13 +216,32 @@ class WarpnetClient(
             val requestJson = buildEnvelopeJson(envelope)
             val raw = binding.stream(protocolId, requestJson)
 
-            // The binding returns the error message directly (no JSON wrapping)
-            // when the stream itself fails — e.g. peer disconnected. Distinguish
-            // by attempting to parse a ResponseError; if that fails assume the
-            // string is a ProtocolError body.
-            throwIfErrorResponse(raw)
-            raw
+            try {
+                throwIfErrorResponse(raw)
+                return@withContext raw
+            } catch (e: WarpnetException.TransportFailure) {
+                if (!isRetryableTransportError(e.message.orEmpty()) ||
+                    attempt == STREAM_RETRY_BACKOFFS.size
+                ) {
+                    throw e
+                }
+                lastFailure = e
+                delay(STREAM_RETRY_BACKOFFS[attempt])
+            }
         }
+        throw lastFailure ?: WarpnetException.TransportFailure("retry budget exhausted")
+    }
+
+    private fun isRetryableTransportError(msg: String): Boolean {
+        // Restrict retries to "request never reached the server"
+        // categories. Anything that mentions response-side I/O implies
+        // the handler may have run, which we mustn't double-apply.
+        if (msg.contains("stream: reading response", ignoreCase = true)) return false
+        return msg.contains("failed to open stream", ignoreCase = true) ||
+            msg.contains("not connected to desktop node", ignoreCase = true) ||
+            msg.contains("context deadline exceeded", ignoreCase = true) ||
+            msg.contains("stream reset", ignoreCase = true) ||
+            msg.contains("muxer closed", ignoreCase = true)
     }
 
     /**
@@ -298,6 +337,11 @@ class WarpnetClient(
         const val DIAL_TIMEOUT_MILLIS = 10_000L
         // Matches event.Accepted in warpnet/event/event.go; compared verbatim.
         const val ACCEPTED_RESPONSE = "{\"code\":0,\"message\":\"Accepted\"}"
+        // Backoff between retries on transient transport failures. Total
+        // worst-case wait is ~9s plus the underlying stream timeouts, so
+        // a paged getTimeline still returns within ~30s on a flaky link
+        // before the ViewModel decides to show "an error occurred".
+        val STREAM_RETRY_BACKOFFS = longArrayOf(500L, 1_500L, 4_000L, 8_000L)
     }
 }
 
@@ -311,6 +355,19 @@ interface WarpnetBinding {
     fun stream(protocolId: String, data: String): String
     fun peerId(): String
     fun isConnected(): Boolean
+    /**
+     * Current libp2p Connectedness for the paired desktop peer. Polled
+     * by [ConnectionMonitor]; see [LinkState.fromBinding] for the
+     * mapping of returned strings to UI-level state.
+     *
+     * The default falls back to a binary "Connected" / "NotConnected"
+     * read from [isConnected] so the interface can be added without
+     * requiring an AAR rebuild — once the freshly generated gomobile
+     * binding exposes node.Node.connectedness(), [DefaultBinding]
+     * should override this to return the proper three-state value
+     * including "Limited" (relay-only).
+     */
+    fun connectedness(): String = if (isConnected()) "Connected" else "NotConnected"
     fun disconnect(): String
     fun pause()
     fun resume()
@@ -346,6 +403,12 @@ object DefaultBinding : WarpnetBinding {
     override fun peerId(): String = node.Node.peerID()
 
     override fun isConnected(): Boolean = node.Node.isConnected() == "true"
+
+    // Once the AAR is rebuilt against mobile.go's Connectedness() export
+    // (`make gen-aar`), override this to call node.Node.connectedness()
+    // directly for the three-state Connected / Limited / NotConnected
+    // distinction. Until then the interface default keeps CI green by
+    // collapsing to the two-state isConnected() answer.
 
     override fun disconnect(): String = node.Node.disconnect()
 

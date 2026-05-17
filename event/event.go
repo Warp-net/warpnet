@@ -462,6 +462,238 @@ type GetNotificationsEvent struct {
 	Limit  *uint64 `json:"limit,omitempty"`
 }
 
+// GetNotificationEvent defines model for GetNotificationEvent.
+type GetNotificationEvent struct {
+	NotificationId domain.ID `json:"notification_id"`
+}
+
+// GetNotificationResponse defines model for GetNotificationResponse.
+type GetNotificationResponse = domain.Notification
+
+// MarkNotificationReadEvent flips a single notification's read flag.
+type MarkNotificationReadEvent struct {
+	NotificationId domain.ID `json:"notification_id"`
+}
+
+// BookmarkEvent defines model for BookmarkEvent.
+type BookmarkEvent struct {
+	UserId      domain.ID `json:"user_id"`
+	TweetId     domain.ID `json:"tweet_id"`
+	OwnerUserId domain.ID `json:"owner_user_id"`
+}
+
+// UnbookmarkEvent defines model for UnbookmarkEvent.
+type UnbookmarkEvent struct {
+	UserId  domain.ID `json:"user_id"`
+	TweetId domain.ID `json:"tweet_id"`
+}
+
+// GetBookmarksEvent defines model for GetBookmarksEvent.
+type GetBookmarksEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+}
+
+// BookmarkItem mirrors database.Bookmark on the wire.
+type BookmarkItem struct {
+	UserId      domain.ID `json:"user_id"`
+	TweetId     domain.ID `json:"tweet_id"`
+	OwnerUserId domain.ID `json:"owner_user_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// GetBookmarksResponse defines model for GetBookmarksResponse.
+type GetBookmarksResponse struct {
+	Items  []BookmarkItem `json:"items"`
+	Cursor string         `json:"cursor"`
+}
+
+// PinTweetEvent defines model for PinTweetEvent.
+type PinTweetEvent struct {
+	UserId  domain.ID `json:"user_id"`
+	TweetId domain.ID `json:"tweet_id"`
+}
+
+// UnpinTweetEvent defines model for UnpinTweetEvent.
+type UnpinTweetEvent = PinTweetEvent
+
+// BlockEvent defines model for BlockEvent.
+type BlockEvent struct {
+	BlockerId domain.ID `json:"blocker_id"`
+	BlockeeId domain.ID `json:"blockee_id"`
+}
+
+// UnblockEvent defines model for UnblockEvent.
+type UnblockEvent = BlockEvent
+
+// GetBlocksEvent defines model for GetBlocksEvent.
+type GetBlocksEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+}
+
+// GetBlocksResponse defines model for GetBlocksResponse.
+type GetBlocksResponse struct {
+	Ids    []domain.ID `json:"ids"`
+	Cursor string      `json:"cursor"`
+}
+
+// MuteEvent defines model for MuteEvent.
+type MuteEvent struct {
+	MuterId domain.ID `json:"muter_id"`
+	MuteeId domain.ID `json:"mutee_id"`
+}
+
+// UnmuteEvent defines model for UnmuteEvent.
+type UnmuteEvent = MuteEvent
+
+// GetMutesEvent defines model for GetMutesEvent.
+type GetMutesEvent = GetBlocksEvent
+
+// GetMutesResponse defines model for GetMutesResponse.
+type GetMutesResponse = GetBlocksResponse
+
+// GetTweetLikersEvent defines model for GetTweetLikersEvent.
+type GetTweetLikersEvent struct {
+	TweetId      domain.ID `json:"tweet_id"`
+	OwnerUserId  domain.ID `json:"owner_user_id"`
+	Cursor       *string   `json:"cursor,omitempty"`
+	Limit        *uint64   `json:"limit,omitempty"`
+}
+
+// GetTweetRetweetersEvent defines model for GetTweetRetweetersEvent.
+type GetTweetRetweetersEvent = GetTweetLikersEvent
+
+// SubscribeUserEvent defines model for SubscribeUserEvent.
+type SubscribeUserEvent struct {
+	SelfId   domain.ID `json:"self_id"`
+	TargetId domain.ID `json:"target_id"`
+}
+
+// UnsubscribeUserEvent defines model for UnsubscribeUserEvent.
+type UnsubscribeUserEvent = SubscribeUserEvent
+
+// UpdateMediaMetaEvent defines model for UpdateMediaMetaEvent.
+type UpdateMediaMetaEvent struct {
+	UserId      domain.ID `json:"user_id"`
+	Key         string    `json:"key"`
+	Description string    `json:"description"`
+	FocusX      float32   `json:"focus_x"`
+	FocusY      float32   `json:"focus_y"`
+}
+
+// GetMediaEvent defines model for GetMediaEvent.
+type GetMediaEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Key    string    `json:"key"`
+}
+
+// GetMediaResponse defines model for GetMediaResponse.
+type GetMediaResponse struct {
+	Key         string  `json:"key"`
+	Description string  `json:"description"`
+	FocusX      float32 `json:"focus_x"`
+	FocusY      float32 `json:"focus_y"`
+}
+
+// SearchUsersEvent defines model for SearchUsersEvent.
+type SearchUsersEvent struct {
+	Query  string  `json:"query"`
+	Cursor *string `json:"cursor,omitempty"`
+	Limit  *uint64 `json:"limit,omitempty"`
+}
+
+// SearchUsersResponse defines model for SearchUsersResponse.
+type SearchUsersResponse = UsersResponse
+
+// EditTweetEvent defines model for EditTweetEvent.
+type EditTweetEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+	Text    string    `json:"text"`
+}
+
+// EditTweetResponse defines model for EditTweetResponse.
+type EditTweetResponse = domain.Tweet
+
+// GetFollowRequestsEvent defines model for GetFollowRequestsEvent.
+type GetFollowRequestsEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+}
+
+// GetFollowRequestsResponse defines model for GetFollowRequestsResponse.
+type GetFollowRequestsResponse struct {
+	FollowerIds []domain.ID `json:"follower_ids"`
+	Cursor      string      `json:"cursor"`
+}
+
+// FollowRequestActionEvent defines model for FollowRequestActionEvent.
+// Used for both authorize and reject — the verb is in the path.
+type FollowRequestActionEvent struct {
+	UserId     domain.ID `json:"user_id"`
+	FollowerId domain.ID `json:"follower_id"`
+}
+
+// GetFilterEvent defines model for GetFilterEvent.
+type GetFilterEvent struct {
+	UserId   domain.ID `json:"user_id"`
+	FilterId domain.ID `json:"filter_id"`
+}
+
+// GetFilterResponse defines model for GetFilterResponse.
+type GetFilterResponse = domain.Filter
+
+// GetFiltersEvent defines model for GetFiltersEvent.
+type GetFiltersEvent struct {
+	UserId domain.ID `json:"user_id"`
+	Cursor *string   `json:"cursor,omitempty"`
+	Limit  *uint64   `json:"limit,omitempty"`
+}
+
+// GetFiltersResponse defines model for GetFiltersResponse.
+type GetFiltersResponse struct {
+	Filters []domain.Filter `json:"filters"`
+	Cursor  string          `json:"cursor"`
+}
+
+// NewFilterEvent defines model for NewFilterEvent.
+type NewFilterEvent = domain.Filter
+
+// UpdateFilterEvent defines model for UpdateFilterEvent.
+type UpdateFilterEvent = domain.Filter
+
+// DeleteFilterEvent defines model for DeleteFilterEvent.
+type DeleteFilterEvent struct {
+	UserId   domain.ID `json:"user_id"`
+	FilterId domain.ID `json:"filter_id"`
+}
+
+// AddFilterKeywordEvent defines model for AddFilterKeywordEvent.
+type AddFilterKeywordEvent struct {
+	UserId    domain.ID `json:"user_id"`
+	FilterId  domain.ID `json:"filter_id"`
+	Keyword   string    `json:"keyword"`
+	WholeWord bool      `json:"whole_word"`
+}
+
+// UpdateFilterKeywordEvent defines model for UpdateFilterKeywordEvent.
+type UpdateFilterKeywordEvent struct {
+	UserId    domain.ID `json:"user_id"`
+	KeywordId domain.ID `json:"keyword_id"`
+	Keyword   string    `json:"keyword"`
+	WholeWord bool      `json:"whole_word"`
+}
+
+// DeleteFilterKeywordEvent defines model for DeleteFilterKeywordEvent.
+type DeleteFilterKeywordEvent struct {
+	UserId    domain.ID `json:"user_id"`
+	KeywordId domain.ID `json:"keyword_id"`
+}
+
 type GetNotificationsResponse struct {
 	Cursor        string                `json:"cursor"`
 	UnreadCount   uint64                `json:"unread_count"`

@@ -44,9 +44,6 @@ fun NotificationInfo(
         Notification.Type.Mention -> {
             MentionNotificationTweetInfo(notificationViewData)
         }
-        Notification.Type.Poll -> {
-            PollNotificationTweetInfo(notificationViewData)
-        }
         Notification.Type.Status -> {
             NotificationInfo(
                 icon = R.drawable.ic_notifications_active_24dp,
@@ -185,34 +182,6 @@ private fun MentionNotificationTweetInfo(
                 }
             },
             color = warpdroidColors.tertiaryTextColor,
-            style = LocalPreferences.current.statusTextStyles.medium
-        )
-    }
-}
-
-@Composable
-private fun PollNotificationTweetInfo(
-    notificationViewData: NotificationViewData.Concrete
-) {
-    val activeAccount = LocalAccount.current
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Spacer(modifier = Modifier.width(42.dp))
-        Icon(
-            painter = painterResource(R.drawable.ic_insert_chart_24dp_filled),
-            tint = colorScheme.primary,
-            contentDescription = null
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = if (notificationViewData.statusViewData?.status?.account?.id == activeAccount?.accountId) {
-                stringResource(R.string.poll_ended_created)
-            } else {
-                stringResource(R.string.poll_ended_voted)
-            },
-            color = warpdroidColors.secondaryTextColor,
             style = LocalPreferences.current.statusTextStyles.medium
         )
     }

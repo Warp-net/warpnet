@@ -59,7 +59,6 @@ data class Tweet(
     val application: Application? = null,
     val pinned: Boolean = false,
     val muted: Boolean = false,
-    val poll: Poll? = null,
     /** Preview card for links included within status content. */
     val card: PreviewCard? = null,
     /** ISO 639 language code for this status. */
@@ -143,7 +142,6 @@ data class Tweet(
             visibility = visibility,
             sensitive = sensitive,
             attachments = attachments,
-            poll = poll,
             createdAt = createdAt,
             language = language
         )

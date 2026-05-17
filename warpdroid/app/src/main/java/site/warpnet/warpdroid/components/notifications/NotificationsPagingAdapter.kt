@@ -34,7 +34,6 @@ import site.warpnet.warpdroid.databinding.ItemFollowRequestBinding
 import site.warpnet.warpdroid.databinding.ItemLoadMoreBinding
 import site.warpnet.warpdroid.databinding.ItemModerationWarningNotificationBinding
 import site.warpnet.warpdroid.databinding.ItemPlaceholderBinding
-import site.warpnet.warpdroid.databinding.ItemReportNotificationBinding
 import site.warpnet.warpdroid.databinding.ItemSeveredRelationshipNotificationBinding
 import site.warpnet.warpdroid.databinding.ItemTweetFilteredBinding
 import site.warpnet.warpdroid.databinding.ItemUnknownNotificationBinding
@@ -50,10 +49,6 @@ import site.warpnet.warpdroid.ui.tweetcomponents.TweetNotification
 import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 
-interface NotificationActionListener {
-    fun onViewReport(reportId: String)
-}
-
 interface NotificationsViewHolder {
     fun bind(
         viewData: NotificationViewData.Concrete,
@@ -66,7 +61,6 @@ class NotificationsPagingAdapter(
     private var statusDisplayOptions: TweetDisplayOptions,
     private val statusListener: TweetActionListener,
     private val loadMoreListener: LoadMoreActionListener<NotificationViewData.LoadMore>,
-    private val notificationActionListener: NotificationActionListener,
     private val accountActionListener: AccountActionListener,
     private val instanceName: String,
     private val accountManager: AccountManager
@@ -91,7 +85,6 @@ class NotificationsPagingAdapter(
             is NotificationViewData.Concrete -> {
                 when (notification.type) {
                     Notification.Type.Mention,
-                    Notification.Type.Poll,
                     Notification.Type.Status,
                     Notification.Type.Update,
                     Notification.Type.Quote,
@@ -106,7 +99,6 @@ class NotificationsPagingAdapter(
                     Notification.Type.Follow,
                     Notification.Type.SignUp -> VIEW_TYPE_FOLLOW
                     Notification.Type.FollowRequest -> VIEW_TYPE_FOLLOW_REQUEST
-                    Notification.Type.Report -> VIEW_TYPE_REPORT
                     Notification.Type.SeveredRelationship -> VIEW_TYPE_SEVERED_RELATIONSHIP
                     Notification.Type.ModerationWarning -> VIEW_TYPE_MODERATION_WARNING
                     else -> VIEW_TYPE_UNKNOWN
@@ -152,11 +144,6 @@ class NotificationsPagingAdapter(
                 ItemLoadMoreBinding.inflate(inflater, parent, false),
                 loadMoreListener
             )
-            VIEW_TYPE_REPORT -> ReportNotificationViewHolder(
-                ItemReportNotificationBinding.inflate(inflater, parent, false),
-                notificationActionListener,
-                accountActionListener
-            )
             VIEW_TYPE_SEVERED_RELATIONSHIP -> SeveredRelationshipNotificationViewHolder(
                 ItemSeveredRelationshipNotificationBinding.inflate(inflater, parent, false),
                 instanceName
@@ -196,7 +183,6 @@ class NotificationsPagingAdapter(
                                                     listener = statusListener
                                                 )
                                             },
-                                            translationEnabled = false,
                                             accounts = accounts,
                                             showDivider = false
                                         )
@@ -232,7 +218,6 @@ class NotificationsPagingAdapter(
         private const val VIEW_TYPE_FOLLOW = 4
         private const val VIEW_TYPE_FOLLOW_REQUEST = 5
         private const val VIEW_TYPE_LOAD_MORE = 6
-        private const val VIEW_TYPE_REPORT = 7
         private const val VIEW_TYPE_SEVERED_RELATIONSHIP = 8
         private const val VIEW_TYPE_MODERATION_WARNING = 9
         private const val VIEW_TYPE_UNKNOWN = 10

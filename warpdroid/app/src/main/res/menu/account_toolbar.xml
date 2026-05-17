@@ -35,10 +35,6 @@
         android:title="@string/action_add_or_remove_from_list"
         app:showAsAction="never" />
 
-    <item android:id="@+id/action_mute_domain"
-        android:title="@string/action_mute_domain"
-        app:showAsAction="never" />
-
     <item android:id="@+id/action_show_retweets"
         android:title="@string/action_hide_retweets"
         app:showAsAction="never" />
@@ -48,7 +44,4 @@
         android:title="@string/action_refresh"
         app:showAsAction="never" />
 
-    <item
-        android:id="@+id/action_report"
-        android:title="@string/action_report" />
 </menu>

@@ -77,6 +77,9 @@ class WarpdroidApplication :
     @Inject
     lateinit var warpnetClient: WarpnetClient
 
+    @Inject
+    lateinit var connectionMonitor: site.warpnet.transport.ConnectionMonitor
+
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -150,11 +153,21 @@ class WarpdroidApplication :
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
-                    transportScope.launch { warpnetClient.resume() }
+                    transportScope.launch {
+                        warpnetClient.resume()
+                        // Polling has to come back after the host is
+                        // re-dialled or the very first poll observes
+                        // the still-Disconnected binding and triggers a
+                        // pointless reconnect race against resume().
+                        connectionMonitor.start()
+                    }
                 }
 
                 override fun onStop(owner: LifecycleOwner) {
-                    transportScope.launch { warpnetClient.pause() }
+                    transportScope.launch {
+                        connectionMonitor.stop()
+                        warpnetClient.pause()
+                    }
                 }
             },
         )

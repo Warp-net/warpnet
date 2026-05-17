@@ -19,7 +19,6 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import site.warpnet.warpdroid.components.search.fragments.SearchAccountsFragment
-import site.warpnet.warpdroid.components.search.fragments.SearchHashtagsFragment
 import site.warpnet.warpdroid.components.search.fragments.SearchStatusesFragment
 
 class SearchPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
@@ -28,10 +27,9 @@ class SearchPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(acti
         return when (position) {
             0 -> SearchStatusesFragment.newInstance()
             1 -> SearchAccountsFragment.newInstance()
-            2 -> SearchHashtagsFragment.newInstance()
             else -> throw IllegalArgumentException("Unknown page index: $position")
         }
     }
 
-    override fun getItemCount() = 3
+    override fun getItemCount() = 2
 }

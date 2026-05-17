@@ -215,11 +215,6 @@ private fun LicenseActivityContent(
                     link = "https://github.com/C1710/FileMojiCompat"
                 )
                 licenseCard(
-                    name = "UnifiedPush",
-                    license = R.string.license_apache_2,
-                    link = "https://unifiedpush.org/"
-                )
-                licenseCard(
                     name = "Twemoji",
                     license = R.string.license_cc_by_4,
                     link = "https://github.com/twitter/twemoji"

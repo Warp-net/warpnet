@@ -18,8 +18,6 @@ package site.warpnet.warpdroid.ui.tweetcomponents.fake
 import at.connyduck.sparkbutton.compose.SparkButtonState
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.HashTag
-import site.warpnet.warpdroid.entity.Poll
-import site.warpnet.warpdroid.entity.PollOption
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineAccount
 import site.warpnet.warpdroid.interfaces.TweetActionListener
@@ -32,7 +30,6 @@ fun fakeTweetViewData(
     attachments: List<Attachment> = fourAttachments,
     mentions: List<Tweet.Mention> = emptyList(),
     tags: List<HashTag> = listOf(HashTag("hashtag", "https://example.org/tags/hashtag")),
-    poll: Poll = pollWithFourOptions
 ) = TweetViewData.Concrete(
     status = Tweet(
         id = "456",
@@ -64,7 +61,6 @@ fun fakeTweetViewData(
         ),
         pinned = false,
         muted = false,
-        poll = poll,
         card = null,
         language = "en",
         filtered = null,
@@ -144,33 +140,6 @@ val fourAttachments = listOf(
     )
 )
 
-val pollWithFourOptions = Poll(
-    id = "1",
-    expired = true,
-    expiresAt = Date(1761416541000),
-    multiple = false,
-    votesCount = 120,
-    options = listOf(
-        PollOption(
-            title = "Option 1",
-            votesCount = 12
-        ),
-        PollOption(
-            title = "Option 2 with a super long title to see how the interface handles it",
-            votesCount = 60
-        ),
-        PollOption(
-            title = "Option 3",
-            votesCount = 100
-        ),
-        PollOption(
-            title = "Option 4",
-            votesCount = 3
-        ),
-    ),
-    ownVotes = listOf(2)
-)
-
 val noopListener = object : TweetActionListener {
     override fun onRetweet(viewData: TweetViewData.Concrete, retweet: Boolean, visibility: Tweet.Visibility?, state: SparkButtonState?) {}
     override fun onLike(viewData: TweetViewData.Concrete, like: Boolean, state: SparkButtonState?) { }
@@ -180,14 +149,9 @@ val noopListener = object : TweetActionListener {
     override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) { }
     override fun onContentHiddenChange(viewData: TweetViewData.Concrete, isShowing: Boolean) { }
     override fun onContentCollapsedChange(viewData: TweetViewData.Concrete, isCollapsed: Boolean) { }
-    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) { }
-    override fun onShowPollResults(viewData: TweetViewData.Concrete) { }
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) { }
-    override fun onTranslate(viewData: TweetViewData.Concrete) { }
-    override fun onUntranslate(viewData: TweetViewData.Concrete) { }
     override fun onBlock(accountId: String) { }
     override fun onMute(accountId: String, hideNotifications: Boolean, duration: Int?) { }
-    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) { }
     override fun onEdit(viewData: TweetViewData.Concrete) { }
     override fun onDelete(viewData: TweetViewData.Concrete) { }
     override fun onRedraft(viewData: TweetViewData.Concrete) { }
@@ -196,7 +160,6 @@ val noopListener = object : TweetActionListener {
     override fun onViewAccount(accountId: String) { }
     override fun onViewUrl(url: String) { }
     override fun onReply(viewData: TweetViewData.Concrete) { }
-    override fun onReport(viewData: TweetViewData.Concrete) { }
     override fun onShowQuote(viewData: TweetViewData.Concrete) { }
     override fun removeQuote(viewData: TweetViewData.Concrete) { }
 }

@@ -56,7 +56,6 @@ import site.warpnet.warpdroid.viewdata.TweetViewData
 fun TweetCard(
     statusViewData: TweetViewData.Concrete,
     listener: TweetActionListener,
-    translationEnabled: Boolean,
     accounts: List<AccountEntity>,
     modifier: Modifier = Modifier,
     statusInfo: (@Composable () -> Unit) = {},
@@ -159,7 +158,6 @@ fun TweetCard(
         TweetButtons(
             statusViewData = statusViewData,
             listener = listener,
-            translationEnabled = translationEnabled,
             accounts = accounts,
             modifier = Modifier
                 .fillMaxWidth()
@@ -178,7 +176,6 @@ fun TweetPreview() {
         TweetCard(
             statusViewData = fakeTweetViewData(),
             listener = noopListener,
-            translationEnabled = false,
             accounts = emptyList(),
             modifier = Modifier.background(colorScheme.background)
         )

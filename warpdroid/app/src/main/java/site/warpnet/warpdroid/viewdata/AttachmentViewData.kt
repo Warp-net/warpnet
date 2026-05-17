@@ -25,6 +25,7 @@ data class AttachmentViewData(
     val attachment: Attachment,
     val statusId: String?,
     val statusUrl: String?,
+    val statusAuthorId: String?,
     val sensitive: Boolean,
     val isRevealed: Boolean
 ) : Parcelable {
@@ -43,6 +44,7 @@ data class AttachmentViewData(
                     attachment = attachment,
                     statusId = status.actionableId,
                     statusUrl = status.actionable.url!!,
+                    statusAuthorId = status.actionable.account.id,
                     sensitive = status.actionable.sensitive,
                     isRevealed = alwaysShowSensitiveMedia || !status.actionable.sensitive
                 )

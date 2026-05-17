@@ -70,14 +70,11 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import at.connyduck.calladapter.networkresult.onFailure
 import at.connyduck.sparkbutton.compose.SparkButtonState
-import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
-import site.warpnet.warpdroid.components.viewthread.edits.ViewEditsFragment
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.entity.Filter
@@ -93,7 +90,6 @@ import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.openLink
 import site.warpnet.warpdroid.util.reply
-import site.warpnet.warpdroid.util.report
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.viewAccount
 import site.warpnet.warpdroid.util.viewMedia
@@ -132,6 +128,7 @@ class ViewThreadFragment :
             defaultViewModelCreationExtras.withCreationCallback<ViewThreadViewModel.Factory> { factory ->
                 factory.create(
                     threadId = requireArguments().getString(ID_EXTRA)!!,
+                    authorId = requireArguments().getString(AUTHOR_ID_EXTRA).orEmpty(),
                 )
             }
         }
@@ -279,11 +276,7 @@ class ViewThreadFragment :
                         DetailedTweet(
                             viewData,
                             listener = this@ViewThreadFragment,
-                            translationEnabled = instanceInfo.translationEnabled,
                             accounts = accounts,
-                            showEdits = {
-                                onShowEdits(viewData)
-                            },
                             modifier = Modifier
                                 .widthIn(max = 640.dp)
                                 .drawBehind {
@@ -315,7 +308,6 @@ class ViewThreadFragment :
                         TweetCard(
                             viewData,
                             listener = this@ViewThreadFragment,
-                            translationEnabled = instanceInfo.translationEnabled,
                             accounts = accounts,
                             modifier = Modifier
                                 .widthIn(max = 640.dp)
@@ -505,7 +497,7 @@ class ViewThreadFragment :
     }
 
     override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
-        viewModel.bookmark(viewData.id, bookmark)
+        viewModel.bookmark(viewData.id, viewData.actionable.account.id, bookmark)
     }
 
     override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {
@@ -520,33 +512,8 @@ class ViewThreadFragment :
         viewModel.changeContentCollapsed(isCollapsed, viewData)
     }
 
-    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) {
-        viewModel.voteInPoll(viewData.actionableId, pollId, choices)
-    }
-
-    override fun onShowPollResults(viewData: TweetViewData.Concrete) {
-        viewModel.showPollResults(viewData)
-    }
-
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
-    }
-
-    override fun onTranslate(viewData: TweetViewData.Concrete) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.translate(viewData)
-                .onFailure {
-                    Snackbar.make(
-                        requireView(),
-                        getString(R.string.ui_error_translate, it.message),
-                        Snackbar.LENGTH_LONG
-                    ).show()
-                }
-        }
-    }
-
-    override fun onUntranslate(viewData: TweetViewData.Concrete) {
-        viewModel.untranslate(viewData)
     }
 
     override fun onBlock(accountId: String) {
@@ -555,10 +522,6 @@ class ViewThreadFragment :
 
     override fun onMute(accountId: String, hideNotifications: Boolean, duration: Int?) {
         viewModel.mute(accountId, hideNotifications, duration)
-    }
-
-    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
-        viewModel.muteConversation(viewData.id, mute)
     }
 
     override fun onDelete(viewData: TweetViewData.Concrete) {
@@ -596,9 +559,6 @@ class ViewThreadFragment :
         requireContext().reply(viewData, accountManager.activeAccount!!)
     }
 
-    override fun onReport(viewData: TweetViewData.Concrete) {
-        requireContext().report(viewData)
-    }
 
     override fun onViewUrl(url: String) {
         val status: TweetViewData.Concrete? = (viewModel.uiState.value as? ThreadUiState.Success)?.detailedStatus
@@ -628,30 +588,17 @@ class ViewThreadFragment :
         viewModel.removeQuote(viewData.status)
     }
 
-    private fun onShowEdits(viewData: TweetViewData.Concrete) {
-        val viewEditsFragment = ViewEditsFragment.newInstance(viewData.actionableId)
-
-        parentFragmentManager.commit {
-            setCustomAnimations(
-                R.anim.activity_open_enter,
-                R.anim.activity_open_exit,
-                R.anim.activity_close_enter,
-                R.anim.activity_close_exit
-            )
-            replace(R.id.fragment_container, viewEditsFragment, "ViewEditsFragment_$id")
-            addToBackStack(null)
-        }
-    }
-
     companion object {
         private const val ID_EXTRA = "id"
         private const val URL_EXTRA = "url"
+        private const val AUTHOR_ID_EXTRA = "author_id"
 
-        fun newInstance(id: String, url: String): ViewThreadFragment {
-            val arguments = Bundle(2)
+        fun newInstance(id: String, url: String, authorId: String): ViewThreadFragment {
+            val arguments = Bundle(3)
             val fragment = ViewThreadFragment()
             arguments.putString(ID_EXTRA, id)
             arguments.putString(URL_EXTRA, url)
+            arguments.putString(AUTHOR_ID_EXTRA, authorId)
             fragment.arguments = arguments
             return fragment
         }

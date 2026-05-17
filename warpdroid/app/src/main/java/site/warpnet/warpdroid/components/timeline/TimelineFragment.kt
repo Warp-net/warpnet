@@ -76,9 +76,7 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
-import at.connyduck.calladapter.networkresult.onFailure
 import at.connyduck.sparkbutton.compose.SparkButtonState
-import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.appstore.EventHub
@@ -112,12 +110,10 @@ import site.warpnet.warpdroid.util.addIconAnnotations
 import site.warpnet.warpdroid.util.iconInlineContent
 import site.warpnet.warpdroid.util.isRefreshing
 import site.warpnet.warpdroid.util.reply
-import site.warpnet.warpdroid.util.report
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.unsafeLazy
 import site.warpnet.warpdroid.util.viewAccount
 import site.warpnet.warpdroid.util.viewMedia
-import site.warpnet.warpdroid.util.viewTag
 import site.warpnet.warpdroid.util.viewThread
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmRetweet
@@ -173,7 +169,6 @@ class TimelineFragment :
         val id: String? = if (kind == TimelineViewModel.Kind.USER ||
             kind == TimelineViewModel.Kind.USER_PINNED ||
             kind == TimelineViewModel.Kind.USER_WITH_REPLIES ||
-            kind == TimelineViewModel.Kind.LIST ||
             kind == TimelineViewModel.Kind.QUOTES
         ) {
             arguments.getString(ID_ARG)!!
@@ -181,12 +176,7 @@ class TimelineFragment :
             null
         }
 
-        val tags = if (kind == TimelineViewModel.Kind.TAG) {
-            arguments.getStringArrayList(HASHTAGS_ARG)!!
-        } else {
-            listOf()
-        }
-        viewModel.init(kind, id, tags)
+        viewModel.init(kind, id, emptyList())
 
         isPullToRefreshEnabled = arguments.getBoolean(ARG_ENABLE_SWIPE_TO_REFRESH, true)
     }
@@ -392,7 +382,6 @@ class TimelineFragment :
                                                     listener = this@TimelineFragment
                                                 )
                                             },
-                                            translationEnabled = instanceInfo.translationEnabled,
                                             accounts = accounts,
                                             modifier = Modifier.widthIn(max = 640.dp)
                                         )
@@ -504,19 +493,14 @@ class TimelineFragment :
                 .collect { event ->
                     val status = event.status
                     when (kind) {
-                        TimelineViewModel.Kind.HOME,
-                        TimelineViewModel.Kind.PUBLIC_FEDERATED,
-                        TimelineViewModel.Kind.PUBLIC_LOCAL,
-                        TimelineViewModel.Kind.PUBLIC_TRENDING_STATUSES -> statuses.refresh()
+                        TimelineViewModel.Kind.HOME -> statuses.refresh()
 
                         TimelineViewModel.Kind.USER,
                         TimelineViewModel.Kind.USER_WITH_REPLIES -> if (status.account.id == viewModel.id) {
                             statuses.refresh()
                         }
 
-                        TimelineViewModel.Kind.TAG,
                         TimelineViewModel.Kind.LIKES,
-                        TimelineViewModel.Kind.LIST,
                         TimelineViewModel.Kind.BOOKMARKS,
                         TimelineViewModel.Kind.USER_PINNED,
                         TimelineViewModel.Kind.QUOTES -> return@collect
@@ -624,7 +608,7 @@ class TimelineFragment :
     }
 
     override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
-        viewModel.bookmark(viewData.actionableId, bookmark)
+        viewModel.bookmark(viewData.actionableId, viewData.actionable.account.id, bookmark)
     }
 
     override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {
@@ -640,33 +624,8 @@ class TimelineFragment :
         viewModel.changeContentCollapsed(isCollapsed, status)
     }
 
-    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) {
-        viewModel.voteInPoll(viewData.actionableId, pollId, choices)
-    }
-
-    override fun onShowPollResults(viewData: TweetViewData.Concrete) {
-        viewModel.showPollResults(viewData)
-    }
-
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
-    }
-
-    override fun onTranslate(viewData: TweetViewData.Concrete) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.translate(viewData)
-                .onFailure {
-                    Snackbar.make(
-                        requireView(),
-                        getString(R.string.ui_error_translate, it.message),
-                        Snackbar.LENGTH_LONG
-                    ).show()
-                }
-        }
-    }
-
-    override fun onUntranslate(viewData: TweetViewData.Concrete) {
-        viewModel.untranslate(viewData)
     }
 
     override fun onBlock(accountId: String) {
@@ -677,9 +636,6 @@ class TimelineFragment :
         viewModel.mute(accountId, hideNotifications, duration)
     }
 
-    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
-        viewModel.muteConversation(viewData.id, mute)
-    }
 
     override fun onDelete(viewData: TweetViewData.Concrete) {
         viewModel.delete(viewData.id)
@@ -712,19 +668,10 @@ class TimelineFragment :
         requireContext().reply(viewData, viewModel.activeAccountFlow.value!!)
     }
 
-    override fun onReport(viewData: TweetViewData.Concrete) {
-        requireContext().report(viewData)
-    }
 
     override fun onViewTag(tag: String) {
-        if (viewModel.kind == TimelineViewModel.Kind.TAG &&
-            viewModel.tags.size == 1 &&
-            viewModel.tags.contains(tag)
-        ) {
-            // If already viewing a tag page, then ignore any request to view that tag again.
-            return
-        }
-        requireContext().viewTag(tag)
+        // Warpnet has no hashtag timeline — hashtag spans in tweets stay
+        // decorative.
     }
 
     override fun onViewAccount(accountId: String) {
@@ -769,7 +716,6 @@ class TimelineFragment :
         private const val TAG = "TimelineF" // logging tag
         private const val KIND_ARG = "kind"
         private const val ID_ARG = "id"
-        private const val HASHTAGS_ARG = "hashtags"
 
         /** Time a status must stay composed before a view counts.
          *  Filters out LazyColumn prefetches that the user never
@@ -791,14 +737,5 @@ class TimelineFragment :
             return fragment
         }
 
-        fun newHashtagInstance(hashtags: List<String>): TimelineFragment {
-            val fragment = TimelineFragment()
-            val arguments = Bundle(3)
-            arguments.putString(KIND_ARG, TimelineViewModel.Kind.TAG.name)
-            arguments.putStringArrayList(HASHTAGS_ARG, ArrayList(hashtags))
-            arguments.putBoolean(ARG_ENABLE_SWIPE_TO_REFRESH, true)
-            fragment.arguments = arguments
-            return fragment
-        }
     }
 }

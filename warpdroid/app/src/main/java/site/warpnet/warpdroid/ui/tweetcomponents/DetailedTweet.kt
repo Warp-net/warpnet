@@ -84,9 +84,7 @@ import java.text.NumberFormat
 fun DetailedTweet(
     statusViewData: TweetViewData.Concrete,
     listener: TweetActionListener,
-    translationEnabled: Boolean,
     accounts: List<AccountEntity>,
-    showEdits: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val status = statusViewData.actionable
@@ -162,7 +160,6 @@ fun DetailedTweet(
                 DetailedMetadata(
                     statusViewData = statusViewData,
                     listener = listener,
-                    showEdits = showEdits,
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 if (!LocalPreferences.current.wellbeing.hideQuantitativeStatsOnPosts) {
@@ -180,7 +177,6 @@ fun DetailedTweet(
         TweetButtons(
             statusViewData = statusViewData,
             listener = listener,
-            translationEnabled = translationEnabled,
             accounts = accounts,
             showStats = false,
             modifier = Modifier
@@ -197,7 +193,6 @@ private val dateFormat = DateFormat.getDateTimeInstance(DateFormat.DEFAULT, Date
 private fun DetailedMetadata(
     statusViewData: TweetViewData.Concrete,
     listener: TweetActionListener,
-    showEdits: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val status = statusViewData.actionable
@@ -213,21 +208,10 @@ private fun DetailedMetadata(
         val editedAt = status.editedAt
 
         if (editedAt != null) {
-            val editedAtString = stringResource(R.string.post_edited, dateFormat.format(editedAt))
-
+            // Warpnet has no revision-history endpoint — render the edited
+            // timestamp as plain text instead of a link into a dead viewer.
             append(metadataJoiner)
-
-            withLink(
-                LinkAnnotation.Clickable(
-                    tag = "edited",
-                    styles = linkStyles(),
-                    linkInteractionListener = {
-                        showEdits()
-                    }
-                )
-            ) {
-                append(editedAtString)
-            }
+            append(stringResource(R.string.post_edited, dateFormat.format(editedAt)))
         }
 
         if (status.language != null) {
@@ -380,9 +364,7 @@ fun DetailedTweetPreview() {
         DetailedTweet(
             statusViewData = fakeTweetViewData().copy(isDetailed = true),
             listener = noopListener,
-            translationEnabled = false,
             accounts = emptyList(),
-            showEdits = { },
             modifier = Modifier.background(colorScheme.background)
         )
     }

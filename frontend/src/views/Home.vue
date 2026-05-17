@@ -68,6 +68,15 @@ resulting from the use or misuse of this software.
                   class="w-32 h-32 object-cover rounded border border-lighter"
               />
               <button
+                  v-if="imageKeys[index]"
+                  @click="openAltModal(index)"
+                  type="button"
+                  class="absolute bottom-1 left-1 bg-white bg-opacity-90 rounded px-2 py-0.5 text-xs font-semibold text-dark hover:bg-blue hover:text-white"
+                  title="Edit alt text"
+              >
+                ALT
+              </button>
+              <button
                   @click="removeImageAttachment(index)"
                   type="button"
                   class="absolute top-0 right-0 mt-1 mr-1 bg-white bg-opacity-75 rounded-full p-1 hover:bg-red-500"
@@ -157,6 +166,14 @@ resulting from the use or misuse of this software.
     <DefaultRightBar
         :profile="profile"
     />
+
+    <AltTextModal
+        v-if="altModalIndex >= 0 && imageKeys[altModalIndex]"
+        :show="altModalIndex >= 0"
+        :imageKey="imageKeys[altModalIndex]"
+        :previewUrl="imageAttachments[altModalIndex] || ''"
+        @close="altModalIndex = -1"
+    />
   </div>
 </template>
 
@@ -172,6 +189,7 @@ export default {
     Tweets: defineAsyncComponent(() => import('@/components/Tweets.vue')),
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     InfoOverlay: defineAsyncComponent(() => import('@/components/InfoOverlay.vue')),
+    AltTextModal: defineAsyncComponent(() => import('@/components/AltTextModal.vue')),
   },
   data() {
     return {
@@ -186,7 +204,9 @@ export default {
       infoContent: '',
       infoPosition: { top: '0px', left: '0px' },
       imageAttachments: [],
+      imageKeys: [],
       pendingReads: 0,
+      altModalIndex: -1,
       videoAttachment: undefined,
       toastMessage: '',
       toastType: 'error',
@@ -214,9 +234,18 @@ export default {
         this.pendingReads++;
         const reader = new FileReader();
         reader.readAsDataURL(file);
-        reader.onload = () => {
+        reader.onload = async () => {
           if (this.imageAttachments.length < 4) {
+            const slot = this.imageAttachments.length;
             this.imageAttachments.push(reader.result);
+            this.imageKeys.push('');
+            try {
+              const key = await warpnetService.uploadImage(reader.result);
+              if (key) this.imageKeys[slot] = key;
+            } catch (err) {
+              console.error('Failed to upload image:', err);
+              this.showToast('Failed to upload image. Please try again.', 'error');
+            }
           }
           this.pendingReads--;
         };
@@ -232,17 +261,30 @@ export default {
     },
     removeImageAttachment(index) {
       this.imageAttachments.splice(index, 1);
+      this.imageKeys.splice(index, 1);
+    },
+    openAltModal(index) {
+      this.altModalIndex = index;
     },
     async addNewTweet() {
       if (!this.tweet.text) return;
       const draftText = this.tweet.text;
       const draftImages = this.imageAttachments;
       try {
-        const imageKeys = await warpnetService.uploadImages(draftImages);
+        // Use pre-uploaded keys when available (fresh attachments). Fall
+        // back to a bulk upload for any slots that haven't been uploaded
+        // yet (e.g. attached while offline, retried).
+        let imageKeys = this.imageKeys.filter(k => k);
+        const missing = draftImages.filter((_, i) => !this.imageKeys[i]);
+        if (missing.length > 0) {
+          const extra = await warpnetService.uploadImages(missing);
+          imageKeys = imageKeys.concat(extra);
+        }
         await warpnetService.createTweet({text: draftText, imageKeys});
 
         this.tweet.text = "";
         this.imageAttachments = [];
+        this.imageKeys = [];
 
         this.timeline = await warpnetService.getMyTimeline(true);
       } catch (err) {

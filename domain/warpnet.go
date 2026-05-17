@@ -158,7 +158,10 @@ type Tweet struct {
 	Username    string           `json:"username"`
 	ImageKeys   []string         `json:"image_keys,omitempty"`
 	Network     string           `json:"network"`
-	Moderation  *TweetModeration `json:"moderation,omitempty"`
+	Moderation     *TweetModeration `json:"moderation,omitempty"`
+	Pinned         bool             `json:"pinned,omitempty"`
+	QuotedTweetId  *string          `json:"quoted_tweet_id,omitempty"`
+	QuotedUserId   *string          `json:"quoted_user_id,omitempty"`
 }
 
 func (t *Tweet) IsModerated() bool {
@@ -169,12 +172,67 @@ type ModelType string
 
 const LLAMA2 ModelType = "llama2"
 
+// TweetEdit is an immutable revision row. Tweets are mutated in-place
+// (Tweet.Text rewritten) and a TweetEdit is appended for each edit so
+// the client can show "edited at X" history. EditedAt = the moment the
+// edit was committed; the original tweet's CreatedAt stays untouched.
+type TweetEdit struct {
+	Id              string    `json:"id"`
+	OriginalTweetId string    `json:"original_tweet_id"`
+	UserId          string    `json:"user_id"`
+	Text            string    `json:"text"`
+	EditedAt        time.Time `json:"edited_at"`
+}
+
 type TweetModeration struct {
 	ModeratorID ID               `json:"moderator_id"`
 	Model       ModelType        `json:"model"`
 	IsOk        ModerationResult `json:"is_ok"`
 	Reason      *string          `json:"reason"`
 	TimeAt      time.Time        `json:"time_at"`
+}
+
+// Filter is a per-user keyword/regex filter. Filters apply at timeline-read
+// time; they're never replicated to peers. Keywords are stored as an
+// embedded slice (Mastodon models them as a sub-resource with their own
+// ids — we keep the same shape on the wire but the storage is one record
+// per filter).
+// FilterContext is where a content filter applies. Closed enum — only
+// these values are accepted on the wire. Note: there is no "account"
+// context in Warpnet — Warpnet has users and nodes, not accounts.
+// Warpnet has no "public" context either — every tweet is public by
+// default, so a filter on a "public" timeline would be redundant.
+type FilterContext string
+
+const (
+	FilterContextHome          FilterContext = "home"
+	FilterContextNotifications FilterContext = "notifications"
+	FilterContextThread        FilterContext = "thread"
+)
+
+// FilterAction is what happens to a tweet that matches a filter.
+type FilterAction string
+
+const (
+	FilterActionWarn FilterAction = "warn"
+	FilterActionHide FilterAction = "hide"
+)
+
+type Filter struct {
+	Id        string          `json:"id"`
+	UserId    string          `json:"user_id"`
+	Title     string          `json:"title"`
+	Context   []FilterContext `json:"context"`
+	Action    FilterAction    `json:"action"`
+	ExpiresAt *time.Time      `json:"expires_at,omitempty"`
+	Keywords  []FilterKeyword `json:"keywords"`
+}
+
+// FilterKeyword is a single match rule on a filter.
+type FilterKeyword struct {
+	Id        string `json:"id"`
+	Keyword   string `json:"keyword"`
+	WholeWord bool   `json:"whole_word"`
 }
 
 // User defines model for User.
@@ -200,6 +258,10 @@ type User struct {
 	Website            *string           `json:"website,omitempty"`
 	Moderation         *UserModeration   `json:"moderation"`
 	Metadata           map[string]string `json:"metadata"`
+	// Locked is the "manually-approve followers" flag. When true, an
+	// inbound follow lands in the follow-request queue instead of being
+	// accepted automatically.
+	Locked bool `json:"locked,omitempty"`
 }
 
 type UserModeration struct {

@@ -24,7 +24,6 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.text.SpannableStringBuilder
-import android.text.TextWatcher
 import android.text.style.StyleSpan
 import android.view.Menu
 import android.view.MenuInflater
@@ -46,7 +45,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
-import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewpager2.widget.MarginPageTransformer
@@ -67,10 +65,8 @@ import site.warpnet.warpdroid.EditProfileActivity
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.ViewMediaActivity
-import site.warpnet.warpdroid.components.account.list.ListSelectionFragment
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity
-import site.warpnet.warpdroid.components.report.ReportActivity
 import site.warpnet.warpdroid.databinding.ActivityAccountBinding
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.db.entity.AccountEntity
@@ -122,7 +118,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private var followState: FollowState = FollowState.NOT_FOLLOWING
     private var blocking: Boolean = false
     private var muting: Boolean = false
-    private var blockingDomain: Boolean = false
     private var showingRetweets: Boolean = false
     private var subscribing: Boolean = false
     private var loadedAccount: Account? = null
@@ -155,8 +150,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     }
 
     private lateinit var adapter: AccountPagerAdapter
-
-    private var noteWatcher: TextWatcher? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -426,12 +419,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                 }
             }
         }
-        lifecycleScope.launch {
-            viewModel.noteSaved.collect {
-                binding.saveNoteInfo.visible(it, View.INVISIBLE)
-            }
-        }
-
         // "Post failed" dialog should display in this activity
         draftsAlert.observeInContext(this, true)
     }
@@ -686,7 +673,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
         blocking = relation.blocking
         muting = relation.muting
-        blockingDomain = relation.blockingDomain
         showingRetweets = relation.showingRetweets
 
         binding.accountFollowsYouTextView.visible(relation.followedBy)
@@ -708,15 +694,9 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             }
         }
 
-        // remove the listener so it doesn't fire on non-user changes
-        binding.accountNoteTextInputLayout.editText?.removeTextChangedListener(noteWatcher)
-
-        binding.accountNoteTextInputLayout.visible(relation.note != null)
-        binding.accountNoteTextInputLayout.editText?.setText(relation.note)
-
-        noteWatcher = binding.accountNoteTextInputLayout.editText?.doAfterTextChanged { s ->
-            viewModel.noteChanged(s.toString())
-        }
+        // Warpnet has no per-target private note (Mastodon's "edit note
+        // about <user>") — the input layout stays hidden.
+        binding.accountNoteTextInputLayout.visible(false)
 
         updateButtons()
     }
@@ -815,24 +795,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                 getString(R.string.action_mute)
             }
 
-            loadedAccount?.let { loadedAccount ->
-                val muteDomain = menu.findItem(R.id.action_mute_domain)
-                domain = getDomain(loadedAccount.url)
-                when {
-                    // If we can't get the domain, there's no way we can mute it anyway...
-                    // If the account is from our own domain, muting it is no-op
-                    domain.isEmpty() || viewModel.isFromOwnDomain -> {
-                        menu.removeItem(R.id.action_mute_domain)
-                    }
-                    blockingDomain -> {
-                        muteDomain.title = getString(R.string.action_unmute_domain, domain)
-                    }
-                    else -> {
-                        muteDomain.title = getString(R.string.action_mute_domain, domain)
-                    }
-                }
-            }
-
             if (followState == FollowState.FOLLOWING) {
                 val showRetweets = menu.findItem(R.id.action_show_retweets)
                 showRetweets.title = if (showingRetweets) {
@@ -847,9 +809,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             // It shouldn't be possible to block, mute or report yourself.
             menu.removeItem(R.id.action_block)
             menu.removeItem(R.id.action_mute)
-            menu.removeItem(R.id.action_mute_domain)
             menu.removeItem(R.id.action_show_retweets)
-            menu.removeItem(R.id.action_report)
         }
 
         if (!viewModel.isSelf && followState != FollowState.FOLLOWING) {
@@ -879,20 +839,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             .setPositiveButton(android.R.string.ok) { _, _ -> viewModel.changeFollowState() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
-    }
-
-    private fun toggleBlockDomain(instance: String) {
-        if (blockingDomain) {
-            viewModel.unblockDomain(instance)
-        } else {
-            MaterialAlertDialogBuilder(this)
-                .setMessage(getString(R.string.mute_domain_warning, instance))
-                .setPositiveButton(
-                    getString(R.string.mute_domain_warning_dialog_ok)
-                ) { _, _ -> viewModel.blockDomain(instance) }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
     }
 
     private fun toggleBlock() {
@@ -937,10 +883,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
     }
 
-    override fun onViewTag(tag: String) {
-        val intent = TweetListActivity.newHashtagIntent(this, tag)
-        startActivityWithSlideInAnimation(intent)
-    }
+    override fun onViewTag(tag: String) = Unit
 
     override fun onViewAccount(accountId: String) {
         val intent = Intent(this, AccountActivity::class.java)
@@ -1016,28 +959,12 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                 toggleMute()
                 return true
             }
-            R.id.action_add_or_remove_from_list -> {
-                ListSelectionFragment.newInstance(viewModel.accountId).show(supportFragmentManager, null)
-                return true
-            }
-            R.id.action_mute_domain -> {
-                toggleBlockDomain(domain)
-                return true
-            }
             R.id.action_show_retweets -> {
                 viewModel.changeShowRetweetsState()
                 return true
             }
             R.id.action_refresh -> {
                 onRefresh()
-                return true
-            }
-            R.id.action_report -> {
-                loadedAccount?.let { loadedAccount ->
-                    startActivity(
-                        ReportActivity.getIntent(this, viewModel.accountId, loadedAccount.username)
-                    )
-                }
                 return true
             }
         }

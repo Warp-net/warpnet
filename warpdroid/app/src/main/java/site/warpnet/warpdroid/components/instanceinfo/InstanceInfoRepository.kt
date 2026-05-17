@@ -10,6 +10,7 @@
  */
 package site.warpnet.warpdroid.components.instanceinfo
 
+import site.warpnet.transport.WarpnetLimits
 import site.warpnet.warpdroid.entity.Emoji
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,7 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class InstanceInfoRepository @Inject constructor() {
 
     val defaultInstanceInfo: InstanceInfo = InstanceInfo(
-        maxChars = DEFAULT_CHARACTER_LIMIT,
+        maxChars = WarpnetLimits.MAX_TWEET_CHARS,
         pollMaxOptions = DEFAULT_MAX_OPTION_COUNT,
         pollMaxLength = DEFAULT_MAX_OPTION_LENGTH,
         pollMinDuration = DEFAULT_MIN_POLL_DURATION,
@@ -36,7 +37,6 @@ class InstanceInfoRepository @Inject constructor() {
         maxFieldNameLength = null,
         maxFieldValueLength = null,
         version = null,
-        translationEnabled = false,
         warpnetApiVersion = null,
         vapidKey = null,
     )
@@ -50,7 +50,6 @@ class InstanceInfoRepository @Inject constructor() {
     suspend fun getUpdatedInstanceInfoOrFallback(): InstanceInfo = defaultInstanceInfo
 
     companion object {
-        const val DEFAULT_CHARACTER_LIMIT = 500
         private const val DEFAULT_MAX_OPTION_COUNT = 4
         private const val DEFAULT_MAX_OPTION_LENGTH = 50
         private const val DEFAULT_MIN_POLL_DURATION = 300

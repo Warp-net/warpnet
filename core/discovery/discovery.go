@@ -66,7 +66,7 @@ type DiscoveryChallenger interface {
 type NodeStorer interface {
 	BlocklistRemove(peerId string) error
 	IsBlocklisted(peerId string) bool
-	Blocklist(peerId string) error
+	BlocklistExponential(peerId string) error
 	BlocklistTerm(peerId string) (*database.BlocklistTerm, error)
 }
 
@@ -294,6 +294,22 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
+	info, err := s.requestNodeInfo(pi)
+	if err != nil {
+		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+		return
+	}
+
+	for _, alias := range info.Aliases {
+		s.aliasCache.Add(alias, pi.ID)
+	}
+
+	s.node.SetNodePriority(pi.ID, info.Reachability)
+
+	if info.IsBootstrap() {
+		return
+	}
+
 	isRepeatable, err := s.challenger.Challenge(
 		s.node.Peerstore().PubKey(pi.ID),
 		s.getChallengeLevel(pi.ID),
@@ -301,12 +317,16 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	)
 	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
+		if info.Reachability == warpnet.ReachabilityPublic {
+			// NEVER block relay nodes
+			return
+		}
 		if isRepeatable {
-			_ = s.nodeRepo.Blocklist(pi.ID.String())
+			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
 		} else {
 			// reset block time
 			_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
-			_ = s.nodeRepo.Blocklist(pi.ID.String())
+			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
 		}
 		s.node.Peerstore().RemovePeer(pi.ID)
 		s.node.SetMinNodePriority(pi.ID)
@@ -321,22 +341,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	}
 
 	s.m.PushStatusOnline(pi.ID.String())
-
-	info, err := s.requestNodeInfo(pi)
-	if err != nil {
-		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
-		return
-	}
-
-	for _, alias := range info.Aliases {
-		s.aliasCache.Add(alias, pi.ID)
-	}
-
-	s.node.SetNodePriority(pi.ID, info.Reachability)
-
-	if info.IsBootstrap() || info.IsModerator() {
-		return
-	}
 
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {

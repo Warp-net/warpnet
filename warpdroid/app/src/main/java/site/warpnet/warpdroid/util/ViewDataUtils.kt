@@ -38,11 +38,8 @@ import androidx.paging.CombinedLoadStates
 import androidx.paging.LoadState
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Tweet
-import site.warpnet.warpdroid.entity.TrendingTag
 import site.warpnet.warpdroid.viewdata.QuoteViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
-import site.warpnet.warpdroid.viewdata.TrendingViewData
 
 fun Tweet.toViewData(
     isShowingContent: Boolean,
@@ -50,7 +47,6 @@ fun Tweet.toViewData(
     isCollapsed: Boolean,
     isDetailed: Boolean = false,
     filterKind: Filter.Kind,
-    translation: TranslationViewData? = null,
     filterActive: Boolean,
     isQuoteShowingContent: Boolean,
     isQuoteExpanded: Boolean,
@@ -62,7 +58,6 @@ fun Tweet.toViewData(
     isCollapsed = isCollapsed,
     isExpanded = isExpanded,
     isDetailed = isDetailed,
-    translation = translation,
     filter = this.getApplicableFilter(filterKind),
     filterActive = filterActive,
     quote = quote?.let {
@@ -74,7 +69,6 @@ fun Tweet.toViewData(
                 isCollapsed = isQuoteCollapsed,
                 isDetailed = false,
                 filterKind = filterKind,
-                translation = null,
                 filterActive = true,
                 isQuoteShowingContent = false,
                 isQuoteExpanded = false,
@@ -85,23 +79,6 @@ fun Tweet.toViewData(
         )
     }
 )
-
-fun List<TrendingTag>.toViewData(): List<TrendingViewData.Tag> {
-    val maxTrendingValue = flatMap { tag -> tag.history }
-        .mapNotNull { it.uses.toLongOrNull() }
-        .maxOrNull() ?: 1
-
-    return map { tag ->
-        val reversedHistory = tag.history.asReversed()
-
-        TrendingViewData.Tag(
-            name = tag.name,
-            usage = reversedHistory.mapNotNull { it.uses.toLongOrNull() },
-            accounts = reversedHistory.mapNotNull { it.accounts.toLongOrNull() },
-            maxTrendingValue = maxTrendingValue
-        )
-    }
-}
 
 fun CombinedLoadStates.isAnyLoading(): Boolean {
     return this.refresh == LoadState.Loading || this.append == LoadState.Loading || this.prepend == LoadState.Loading

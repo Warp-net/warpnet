@@ -82,7 +82,6 @@ fun LinkPreviewCard(
 
     if (card == null ||
         (status.spoilerText.isNotEmpty() && !isExpanded) ||
-        status.poll != null ||
         status.attachments.isNotEmpty() ||
         (!LocalPreferences.current.showLinkPreviews && !statusViewData.isDetailed)
     ) {
@@ -310,7 +309,6 @@ fun LinkPreviewCardPreview() {
                             embedUrl = ""
                         ),
                         attachments = emptyList(),
-                        poll = null,
                     ),
                     isDetailed = true
                 ),

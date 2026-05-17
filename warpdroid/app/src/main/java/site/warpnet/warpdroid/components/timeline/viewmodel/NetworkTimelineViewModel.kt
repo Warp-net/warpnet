@@ -23,16 +23,10 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.cachedIn
 import androidx.paging.filter
-import at.connyduck.calladapter.networkresult.NetworkResult
-import at.connyduck.calladapter.networkresult.map
-import at.connyduck.calladapter.networkresult.onFailure
 import site.warpnet.warpdroid.appstore.BlockEvent
-import site.warpnet.warpdroid.appstore.DomainMuteEvent
 import site.warpnet.warpdroid.appstore.Event
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
-import site.warpnet.warpdroid.appstore.PollShowResultsEvent
-import site.warpnet.warpdroid.appstore.PollVoteEvent
 import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.appstore.UnfollowEvent
@@ -40,19 +34,15 @@ import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingO
 import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingOrder.OLDEST_FIRST
 import site.warpnet.warpdroid.components.timeline.util.ifExpected
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Quote
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
-import site.warpnet.warpdroid.util.getDomain
 import site.warpnet.warpdroid.util.isLessThan
 import site.warpnet.warpdroid.util.isLessThanOrEqual
 import site.warpnet.warpdroid.util.toViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.IOException
-import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
@@ -116,8 +106,6 @@ class NetworkTimelineViewModel @Inject constructor(
     private fun handleEvent(event: Event) {
         when (event) {
             is TweetChangedEvent -> handleTweetChangedEvent(event.status)
-            is PollVoteEvent -> handlePollVote(event.statusId, event.poll)
-            is PollShowResultsEvent -> handlePollShowResults(event.statusId)
             is UnfollowEvent -> {
                 if (kind == Kind.HOME) {
                     val id = event.accountId
@@ -134,12 +122,6 @@ class NetworkTimelineViewModel @Inject constructor(
                 if (kind != Kind.USER && kind != Kind.USER_WITH_REPLIES && kind != Kind.USER_PINNED) {
                     val id = event.accountId
                     removeAllByAccountId(id)
-                }
-            }
-            is DomainMuteEvent -> {
-                if (kind != Kind.USER && kind != Kind.USER_WITH_REPLIES && kind != Kind.USER_PINNED) {
-                    val instance = event.instance
-                    removeAllByInstance(instance)
                 }
             }
             is TweetDeletedEvent -> {
@@ -172,14 +154,6 @@ class NetworkTimelineViewModel @Inject constructor(
         statusData.removeAll { vd ->
             val status = vd.asStatusOrNull()?.status ?: return@removeAll false
             status.account.id == accountId || status.actionableStatus.account.id == accountId
-        }
-        currentSource?.invalidate()
-    }
-
-    private fun removeAllByInstance(instance: String) {
-        statusData.removeAll { vd ->
-            val status = vd.asStatusOrNull()?.status ?: return@removeAll false
-            getDomain(status.account.url) == instance
         }
         currentSource?.invalidate()
     }
@@ -299,18 +273,6 @@ class NetworkTimelineViewModel @Inject constructor(
         updateStatusByActionableId(status.id) { status }
     }
 
-    private fun handlePollVote(statusId: String, poll: Poll) {
-        updateStatusByActionableId(statusId) { status ->
-            status.copy(poll = poll)
-        }
-    }
-
-    private fun handlePollShowResults(statusId: String) {
-        updateStatusByActionableId(statusId) { status ->
-            status.copy(poll = status.poll?.copy(voted = true))
-        }
-    }
-
     override fun fullReload() {
         nextKey = statusData.firstOrNull { it is TweetViewData.Concrete }?.asStatusOrNull()?.id
         statusData.clear()
@@ -337,21 +299,6 @@ class NetworkTimelineViewModel @Inject constructor(
         currentSource?.invalidate()
     }
 
-    override suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit> {
-        status.copy(translation = TranslationViewData.Loading).update()
-        return api.translate(status.actionableId, Locale.getDefault().language)
-            .map { translation ->
-                status.copy(translation = TranslationViewData.Loaded(translation)).update()
-            }
-            .onFailure {
-                status.update()
-            }
-    }
-
-    override fun untranslate(status: TweetViewData.Concrete) {
-        status.copy(translation = null).update()
-    }
-
     @Throws(IOException::class, HttpException::class)
     suspend fun fetchStatusesForKind(
         maxId: String? = null,
@@ -366,34 +313,6 @@ class NetworkTimelineViewModel @Inject constructor(
                 sinceId = sinceId,
                 limit = limit
             )
-            Kind.PUBLIC_FEDERATED -> api.publicTimeline(
-                local = null,
-                maxId = maxId,
-                minId = minId,
-                sinceId = sinceId,
-                limit = limit
-            )
-            Kind.PUBLIC_LOCAL -> api.publicTimeline(
-                local = true,
-                maxId = maxId,
-                minId = minId,
-                sinceId = sinceId,
-                limit = limit
-            )
-            Kind.TAG -> {
-                val firstHashtag = tags[0]
-                val additionalHashtags = tags.subList(1, tags.size)
-                api.hashtagTimeline(
-                    hashtag = firstHashtag,
-                    any = additionalHashtags,
-                    local = null,
-                    maxId = maxId,
-                    minId = minId,
-                    sinceId = sinceId,
-                    limit = limit
-                )
-            }
-
             Kind.USER -> api.accountStatuses(
                 accountId = id!!,
                 maxId = maxId,
@@ -438,17 +357,6 @@ class NetworkTimelineViewModel @Inject constructor(
                 minId = minId,
                 sinceId = sinceId,
                 limit = limit
-            )
-            Kind.LIST -> api.listTimeline(
-                listId = id!!,
-                maxId = maxId,
-                minId = minId,
-                sinceId = sinceId,
-                limit = limit
-            )
-            Kind.PUBLIC_TRENDING_STATUSES -> api.trendingStatuses(
-                limit = limit,
-                offset = maxId
             )
             Kind.QUOTES -> api.quotingStatuses(
                 statusId = id!!,

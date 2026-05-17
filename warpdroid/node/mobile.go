@@ -108,6 +108,20 @@ func IsConnected() string {
 	return "false"
 }
 
+// Connectedness returns the current libp2p connectedness to the paired
+// desktop peer as a stringly-typed snapshot. Returned values mirror
+// network.Connectedness#String — "Connected", "Limited", "NotConnected",
+// "CanConnect", "CannotConnect" — plus "Uninitialised" when no client
+// instance exists. The Kotlin ConnectionMonitor polls this every couple
+// of seconds and drives reconnect / UI state from the result; Go owns
+// only the snapshot, never the lifecycle.
+func Connectedness() string {
+	if clientInstance == nil {
+		return "Uninitialised"
+	}
+	return clientInstance.connectedness()
+}
+
 func Disconnect() string {
 	if clientInstance == nil {
 		return ""

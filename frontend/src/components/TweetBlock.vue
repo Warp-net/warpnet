@@ -23,8 +23,11 @@ resulting from the use or misuse of this software.
 -->
 <template>
   <div v-if="deleted" class="hidden"></div>
-  <div v-if="!deleted && tweet.retweeted_by && tweet.retweeted_by !== ''">
-    <!-- Retweet header -->
+  <div v-if="!deleted && tweet.retweeted_by && tweet.retweeted_by !== '' && !tweet.quoted_tweet_id">
+    <!-- Retweet header. Quote-style retweets (those that carry
+         quoted_tweet_id) render as the retweeter's own tweet with
+         an embedded source preview below, so no "X Retweeted"
+         header. -->
     <div class="pt-4 pl-4 flex flex-row">
       <div class="w-12 mr-4 flex justify-end">
         <i class="text-sm pt-1 fas fa-retweet text-dark"></i>
@@ -35,10 +38,11 @@ resulting from the use or misuse of this software.
   <div
       v-if="!deleted"
       ref="tweetRoot"
-      class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
+      class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex cursor-pointer"
+      @click="onBodyClick"
   >
     <div class="flex-none mr-2 md:mr-4 pt-1">
-      <button type="button" @click="gotoProfile(tweet.user_id)" class="flat-btn" aria-label="View profile">
+      <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn" aria-label="View profile">
         <img
           :src="profile.avatar || '/default_profile.png'"
           class="h-12 w-12 rounded-full flex-none object-cover bg-transparent"
@@ -48,7 +52,7 @@ resulting from the use or misuse of this software.
     </div>
     <div class="w-full">
       <div class="flex items-center w-full">
-        <button type="button" @click="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn">
+        <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn">
           {{ tweet.username || 'Anonymous' }}
         </button>
         <p class="hidden md:block text-sm text-dark ml-2">
@@ -56,21 +60,52 @@ resulting from the use or misuse of this software.
         </p>
         <p class="text-sm text-dark ml-2">·</p>
         <p class="text-sm text-dark ml-2">{{ $filters.timeago(tweet.created_at) }}</p>
-        <div v-if="isOwner" class="relative ml-auto">
-          <button type="button" @click="showDropdown = !showDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
+        <span v-if="tweet.pinned" class="ml-2 text-xs text-blue" title="Pinned tweet">
+          <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
+        </span>
+        <div class="relative ml-auto">
+          <button type="button" @click.stop="showDropdown = !showDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
             <i class="fas fa-angle-down text-sm text-dark" aria-hidden="true"></i>
           </button>
-          <div v-if="showDropdown" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
-            <button type="button" @click="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
+          <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white rounded-md shadow-lg py-1 z-10">
+            <button type="button" @click.stop="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
+              {{ bookmarked ? 'Remove bookmark' : 'Bookmark' }}
+            </button>
+            <template v-if="isOwner">
+              <button type="button" @click.stop="togglePin" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
+                {{ tweet.pinned ? 'Unpin from profile' : 'Pin to profile' }}
+              </button>
+              <button type="button" @click.stop="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
+              <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
+            </template>
           </div>
         </div>
       </div>
       <p v-if="!tweet.moderation || tweet.moderation?.is_ok" class="pb-2">
-        {{ tweet.text }} 
+        {{ tweet.text }}
       </p>
       <p v-else class="pb-2 bg-red-300">
         Moderated: {{ tweet.moderation.reason }}.
       </p>
+      <div
+        v-if="tweet.quoted_tweet_id"
+        class="mb-2 border border-lighter rounded p-3 bg-lightest text-sm"
+        :class="quotedUnavailable ? 'opacity-60' : 'hover:bg-lighter cursor-pointer'"
+        @click.stop="onQuotedClick"
+      >
+        <template v-if="quotedUnavailable">
+          <p class="font-bold text-dark italic">Quoted tweet unavailable</p>
+          <p class="text-xs text-dark mt-1">The original tweet was edited after this quote was posted.</p>
+        </template>
+        <template v-else>
+          <p class="font-bold">
+            {{ quotedSourceUsername || 'Quoted tweet' }}
+            <span class="text-dark font-normal ml-1">@{{ tweet.quoted_user_id }}</span>
+          </p>
+          <p v-if="quotedSourceText" class="mt-1 line-clamp-4">{{ quotedSourceText }}</p>
+          <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
+        </template>
+      </div>
       <div v-if="tweetImages.length === 1" class="mt-2">
         <img
             :src="tweetImages[0]"
@@ -91,36 +126,56 @@ resulting from the use or misuse of this software.
       </div>
       <div class="flex w-full mt-1">
         <div class="flex items-center text-sm text-dark w-1/4">
-          <button
-            @click="replyToTweet"
-            type="button"
-            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lighter hover:text-blue transition-colors"
-            aria-label="Reply"
-            title="Reply"
+          <span
+            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center"
+            aria-label="Replies"
+            title="Replies"
           >
             <i class="far fa-comment" aria-hidden="true"></i>
-          </button>
+          </span>
           <p v-if="getRepliesCount(tweet.id) > 0">{{ getRepliesCount(tweet.id) || '?' }}</p>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
+          <div class="relative">
+            <button
+              @click.stop="onRetweetClick"
+              type="button"
+              class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-green-100 transition-colors"
+              :aria-label="retweeted ? 'Undo retweet' : 'Retweet'"
+              :title="retweeted ? 'Undo retweet' : 'Retweet'"
+            >
+              <i
+                class="fas fa-retweet"
+                :class="retweeted ? 'text-green-500' : ''"
+                aria-hidden="true"
+              ></i>
+            </button>
+            <div
+              v-if="showRetweetMenu"
+              class="absolute left-0 mt-2 w-40 bg-white rounded-md shadow-lg py-1 z-10"
+            >
+              <button
+                type="button"
+                @click.stop="plainRetweet"
+                class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+              >Retweet</button>
+              <button
+                type="button"
+                @click.stop="openQuoteOverlay"
+                class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+              >Quote</button>
+            </div>
+          </div>
           <button
-            @click="retweet()"
+            v-if="getRetweetsCount(tweet.id) > 0"
             type="button"
-            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-green-100 transition-colors"
-            :aria-label="retweeted ? 'Undo retweet' : 'Retweet'"
-            :title="retweeted ? 'Undo retweet' : 'Retweet'"
-          >
-            <i
-              class="fas fa-retweet"
-              :class="retweeted ? 'text-green-500' : ''"
-              aria-hidden="true"
-            ></i>
-          </button>
-          <p v-if="getRetweetsCount(tweet.id) > 0">{{ getRetweetsCount(tweet.id) || '?'}}</p>
+            class="hover:underline flat-btn"
+            @click.stop="showRetweetersOverlay = true"
+          >{{ getRetweetsCount(tweet.id) || '?'}}</button>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <button
-            @click="like()"
+            @click.stop="like()"
             type="button"
             class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-red-100 transition-colors"
             :aria-label="liked ? 'Unlike' : 'Like'"
@@ -128,7 +183,12 @@ resulting from the use or misuse of this software.
           >
             <i class="fas fa-heart" :class="liked ? 'text-red-600' : ''" aria-hidden="true"></i>
           </button>
-          <p v-if="getLikesCount(tweet.id) > 0">{{ getLikesCount(tweet.id) }}</p>
+          <button
+            v-if="getLikesCount(tweet.id) > 0"
+            type="button"
+            class="hover:underline flat-btn"
+            @click.stop="showLikersOverlay = true"
+          >{{ getLikesCount(tweet.id) }}</button>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <span
@@ -148,6 +208,31 @@ resulting from the use or misuse of this software.
         :showReplyOverlay="showReplyOverlay"
         @close="showReplyOverlay = false"
     />
+    <LikersOverlay
+        :show="showLikersOverlay"
+        :tweetId="tweet.id"
+        :ownerUserId="tweet.user_id"
+        @close="showLikersOverlay = false"
+    />
+    <RetweetersOverlay
+        :show="showRetweetersOverlay"
+        :tweetId="tweet.id"
+        :ownerUserId="tweet.user_id"
+        @close="showRetweetersOverlay = false"
+    />
+    <EditTweetOverlay
+        v-if="showEditOverlay"
+        :show="showEditOverlay"
+        :tweet="tweet"
+        @close="showEditOverlay = false"
+        @saved="onTweetEdited"
+    />
+    <QuoteOverlay
+        v-if="showQuoteOverlay"
+        :show="showQuoteOverlay"
+        :tweet="tweet"
+        @close="showQuoteOverlay = false"
+    />
   </div>
 </template>
 
@@ -159,15 +244,28 @@ export default {
   name: "Tweet",
   props: ["tweet"],
   components: {
-    ReplyOverlay: defineAsyncComponent(() => import('./ReplyOverlay.vue'))
+    ReplyOverlay: defineAsyncComponent(() => import('./ReplyOverlay.vue')),
+    LikersOverlay: defineAsyncComponent(() => import('./LikersOverlay.vue')),
+    RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
+    EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
+    QuoteOverlay: defineAsyncComponent(() => import('./QuoteOverlay.vue')),
   },
   data() {
     return {
       profile: {},
       showReplyOverlay: false,
+      showLikersOverlay: false,
+      showRetweetersOverlay: false,
+      showEditOverlay: false,
+      showQuoteOverlay: false,
       showDropdown: false,
+      showRetweetMenu: false,
+      quotedSourceText: '',
+      quotedSourceUsername: '',
+      quotedUnavailable: false,
       deleted: false,
       isOwner: false,
+      bookmarked: false,
       label: "You Retweeted",
       liked: false,
       retweeted: false,
@@ -201,6 +299,131 @@ export default {
           id: tweetUserId,
         },
       });
+    },
+    openTweetPage() {
+      this.$router.push({
+        name: 'Tweet',
+        params: { id: this.tweet.id },
+        query: {
+          u: this.tweet.user_id,
+          // Pass parent/root so Tweet.vue can use getReply for non-root
+          // entries (replies aren't stored as standalone tweets under
+          // the user's TWEETS namespace, so getTweet returns 404).
+          parent: this.tweet.parent_id || '',
+          root: this.tweet.root_id || '',
+        },
+      });
+    },
+    onBodyClick() {
+      if (this.showDropdown || this.showRetweetMenu) {
+        this.showDropdown = false;
+        this.showRetweetMenu = false;
+        return;
+      }
+      this.openTweetPage();
+    },
+    // Retweet button drives a small popover that offers a plain
+    // retweet vs. a quote retweet. When the user already retweeted
+    // (or quoted) this tweet, clicking the button just toggles the
+    // retweet off without showing the menu.
+    onRetweetClick() {
+      this.showDropdown = false;
+      if (this.retweeted) {
+        this.retweet();
+        return;
+      }
+      this.showRetweetMenu = !this.showRetweetMenu;
+    },
+    async plainRetweet() {
+      this.showRetweetMenu = false;
+      if (!this.retweeted) {
+        await this.retweet();
+      }
+    },
+    async toggleBookmark() {
+      this.showDropdown = false;
+      try {
+        if (this.bookmarked) {
+          await warpnetService.unbookmarkTweet(this.tweet.id);
+          this.bookmarked = false;
+        } else {
+          await warpnetService.bookmarkTweet(this.tweet.id, this.tweet.user_id);
+          this.bookmarked = true;
+        }
+      } catch (err) {
+        console.error(`failed to toggle bookmark on [${this.tweet.id}]`, err);
+      }
+    },
+    async togglePin() {
+      this.showDropdown = false;
+      try {
+        if (this.tweet.pinned) {
+          await warpnetService.unpinTweet(this.tweet.id);
+          this.tweet.pinned = false;
+        } else {
+          await warpnetService.pinTweet(this.tweet.id);
+          this.tweet.pinned = true;
+        }
+      } catch (err) {
+        console.error(`failed to toggle pin on [${this.tweet.id}]`, err);
+      }
+    },
+    openEdit() {
+      this.showDropdown = false;
+      this.showEditOverlay = true;
+    },
+    openQuoted() {
+      if (!this.tweet.quoted_tweet_id) return;
+      this.$router.push({
+        name: 'Tweet',
+        params: { id: this.tweet.quoted_tweet_id },
+        query: { u: this.tweet.quoted_user_id || '' },
+      });
+    },
+    // Clicking an "unavailable" quoted preview is a no-op so the user
+    // doesn't get bounced to a tweet that's been edited out from
+    // under them.
+    onQuotedClick() {
+      if (this.quotedUnavailable) return;
+      this.openQuoted();
+    },
+    async loadQuotedSource() {
+      if (!this.tweet.quoted_tweet_id || !this.tweet.quoted_user_id) return;
+      try {
+        const src = await warpnetService.getTweet({
+          tweetId: this.tweet.quoted_tweet_id,
+          userId: this.tweet.quoted_user_id,
+        });
+        if (!src || !src.id) {
+          this.quotedUnavailable = true;
+          return;
+        }
+        // If the source has been edited *after* this quote was
+        // posted, the quote no longer reflects what the user
+        // actually quoted — mark it as unavailable.
+        const sourceEdited = src.updated_at
+          && this.tweet.created_at
+          && new Date(src.updated_at) > new Date(this.tweet.created_at);
+        if (sourceEdited) {
+          this.quotedUnavailable = true;
+          return;
+        }
+        this.quotedSourceText = src.text || '';
+        this.quotedSourceUsername = src.username || '';
+      } catch (err) {
+        console.warn('failed to load quoted source:', err);
+        this.quotedUnavailable = true;
+      }
+    },
+    openQuoteOverlay() {
+      this.showDropdown = false;
+      this.showRetweetMenu = false;
+      this.showQuoteOverlay = true;
+    },
+    onTweetEdited(updated) {
+      if (updated && updated.text) {
+        this.tweet.text = updated.text;
+      }
     },
     async get() {
       let t = undefined
@@ -417,6 +640,12 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     console.log("loading tweet:", JSON.stringify(this.tweet));
+    if (!this.tweet || !this.tweet.id || !this.tweet.user_id) {
+      // Defensive: nothing to render against. Avoid firing
+      // getProfile/getTweetStats with empty ids — the backend rejects
+      // those and logs spurious errors.
+      return;
+    }
     this.profile = await warpnetService.getProfile(this.tweet.user_id);
 
     if (this.tweet.retweeted_by && this.tweet.retweeted_by !== this.profile.id) {
@@ -441,6 +670,10 @@ export default {
     await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
 
     await this.refreshInteractionState();
+
+    if (this.tweet.quoted_tweet_id) {
+      await this.loadQuotedSource();
+    }
   },
   mounted() {
     this.$nextTick(() => this.setupViewObserver());

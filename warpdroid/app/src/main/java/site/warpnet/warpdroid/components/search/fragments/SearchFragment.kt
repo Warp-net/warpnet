@@ -261,11 +261,7 @@ abstract class SearchFragment<T : Any> :
         )
     }
 
-    override fun onViewTag(tag: String) {
-        bottomSheetActivity?.startActivityWithSlideInAnimation(
-            TweetListActivity.newHashtagIntent(requireContext(), tag)
-        )
-    }
+    override fun onViewTag(tag: String) = Unit
 
     override fun onViewUrl(url: String) {
         bottomSheetActivity?.viewUrl(url)

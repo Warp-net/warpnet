@@ -16,7 +16,6 @@
 package site.warpnet.warpdroid.entity
 
 import android.os.Parcelable
-import androidx.compose.runtime.Stable
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import kotlinx.parcelize.Parcelize
@@ -30,19 +29,8 @@ data class NewTweet(
     val sensitive: Boolean,
     @Json(name = "media_ids") val mediaIds: List<String> = emptyList(),
     @Json(name = "media_attributes") val mediaAttributes: List<MediaAttribute> = emptyList(),
-    @Json(name = "scheduled_at") val scheduledAt: String? = null,
-    val poll: NewPoll? = null,
     val language: String? = null
 )
-
-@JsonClass(generateAdapter = true)
-@Parcelize
-@Stable
-data class NewPoll(
-    val options: List<String>,
-    @Json(name = "expires_in") val expiresIn: Int,
-    val multiple: Boolean
-) : Parcelable
 
 // It would be nice if we could reuse MediaToSend,
 // but the server requires a different format for focus

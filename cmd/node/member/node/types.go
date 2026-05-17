@@ -76,6 +76,9 @@ type DistributedHashTableCloser interface {
 
 type NodeProvider interface {
 	datastore.Datastore
+	BlocklistExponential(peerId string) error
+	BlocklistPermanent(peerId string) error
+	BlocklistRemove(peerId string) error
 }
 
 type StatsProvider interface {
@@ -92,6 +95,7 @@ type UserProvider interface {
 	GetByNodeID(nodeID string) (user domain.User, err error)
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
+	Search(query string, limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	GetBatch(userIds ...string) (users []domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
@@ -117,6 +121,9 @@ type FollowStorer interface {
 	GetFollowings(userId string, limit *uint64, cursor *string) ([]domain.ID, string, error)
 	IsFollowing(ownerId, otherUserId string) bool
 	IsFollower(ownerId, otherUserId string) bool
+	AddFollowRequest(targetUserId, followerId string) error
+	RemoveFollowRequest(targetUserId, followerId string) error
+	ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]domain.ID, string, error)
 }
 
 type Storer interface {

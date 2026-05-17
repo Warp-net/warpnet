@@ -18,10 +18,8 @@ package site.warpnet.warpdroid.components.timeline.viewmodel
 import android.content.SharedPreferences
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
-import at.connyduck.calladapter.networkresult.NetworkResult
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.FilterUpdatedEvent
-import site.warpnet.warpdroid.appstore.PollShowResultsEvent
 import site.warpnet.warpdroid.appstore.PreferenceChangedEvent
 import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingOrder
 import site.warpnet.warpdroid.db.AccountManager
@@ -92,10 +90,6 @@ abstract class TimelineViewModel(
                     }
                 }
         }
-    }
-
-    fun showPollResults(status: TweetViewData.Concrete) = viewModelScope.launch {
-        eventHub.dispatch(PollShowResultsEvent(status.actionableId))
     }
 
     abstract fun changeExpanded(expanded: Boolean, status: TweetViewData.Concrete)
@@ -176,8 +170,6 @@ abstract class TimelineViewModel(
         }
     }
 
-    abstract suspend fun translate(status: TweetViewData.Concrete): NetworkResult<Unit>
-    abstract fun untranslate(status: TweetViewData.Concrete)
     abstract fun saveHomeTimelinePosition(firstVisibleIndex: Int, firstVisibleOffset: Int)
 
     companion object {
@@ -194,24 +186,17 @@ abstract class TimelineViewModel(
      */
     enum class Kind(val isOrdered: Boolean) {
         HOME(isOrdered = true),
-        PUBLIC_LOCAL(isOrdered = true),
-        PUBLIC_FEDERATED(isOrdered = true),
-        TAG(isOrdered = true),
         USER(isOrdered = true),
         USER_PINNED(isOrdered = false),
         USER_WITH_REPLIES(isOrdered = true),
         LIKES(isOrdered = false),
-        LIST(isOrdered = true),
         BOOKMARKS(isOrdered = false),
-        PUBLIC_TRENDING_STATUSES(isOrdered = false),
         QUOTES(isOrdered = true);
 
         fun toFilterKind(): Filter.Kind {
             return when (valueOf(name)) {
-                HOME, LIST -> Filter.Kind.HOME
-                PUBLIC_FEDERATED, PUBLIC_LOCAL, TAG, LIKES, PUBLIC_TRENDING_STATUSES -> Filter.Kind.PUBLIC
                 USER, USER_WITH_REPLIES, USER_PINNED -> Filter.Kind.ACCOUNT
-                else -> Filter.Kind.PUBLIC
+                else -> Filter.Kind.HOME
             }
         }
     }

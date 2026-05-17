@@ -53,6 +53,14 @@ resulting from the use or misuse of this software.
             >
               Mentions
             </button>
+            <button
+              v-if="locked"
+              @click="submit('Requests')"
+              class="w-full text-dark font-bold border-b-2 p-1 md:px-3 md:py-4 hover:bg-lightblue sm:truncate"
+              :class="`${this.mode === 'Requests' ? 'border-blue' : ''}`"
+            >
+              Requests
+            </button>
           </div>
         </div>
 
@@ -69,8 +77,10 @@ resulting from the use or misuse of this software.
           </div>
 
           <div v-for="notification in notifications" :key="notification.id">
-            <div
-              class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
+            <button
+              type="button"
+              class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
+              @click="openNotification(notification)"
             >
               <div class="w-full">
                 <div class="flex flex-row mr-2 md:mr-4 pt-1 text-2xl">
@@ -91,12 +101,10 @@ resulting from the use or misuse of this software.
                     class="pt-1 fas fa-user-plus text-blue"
                   ></i>
 
-                  <a :href="`#/${notification.user_id}`">
-                    <img
-                      :src="'/default_profile.png'"
-                      class="h-8 w-8 ml-2 rounded-full flex-none"
-                    />
-                  </a>
+                  <img
+                    :src="'/default_profile.png'"
+                    class="h-8 w-8 ml-2 rounded-full flex-none"
+                  />
                 </div>
                 <div class="flex items-center w-full">
                   <p class="font-sm">{{ notification.text }}</p>
@@ -105,7 +113,7 @@ resulting from the use or misuse of this software.
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
         <div v-if="mode === 'Mentions'">
@@ -141,14 +149,54 @@ resulting from the use or misuse of this software.
             </div>
           </div>
         </div>
+        <div v-if="mode === 'Requests' && locked">
+          <div
+            v-if="followRequests.length === 0"
+            class="flex flex-col items-center justify-center pt-10 px-5"
+          >
+            <p class="font-bold text-lg">No follow requests</p>
+            <p class="text-sm text-dark">When your account is locked, requests to follow you appear here.</p>
+          </div>
+          <div
+            v-for="r in followRequests"
+            :key="r.id"
+            class="px-5 py-3 border-b border-lighter flex items-center"
+          >
+            <img :src="r.avatar || '/default_profile.png'" class="h-10 w-10 rounded-full object-cover" alt="" />
+            <button
+              @click="$router.push({ name: 'Profile', params: { id: r.id } })"
+              class="ml-3 text-left flat-btn"
+            >
+              <p class="font-bold">{{ r.username || r.id }}</p>
+              <p class="text-dark text-sm">@{{ r.id }}</p>
+            </button>
+            <div class="ml-auto flex gap-2">
+              <button
+                @click="authorizeRequest(r.id)"
+                class="text-white bg-blue font-bold px-3 py-1 rounded-full hover:bg-darkblue"
+              >Authorize</button>
+              <button
+                @click="rejectRequest(r.id)"
+                class="text-red-600 border border-red-600 font-bold px-3 py-1 rounded-full hover:bg-red-50"
+              >Reject</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- default right bar -->
       <DefaultRightBar :profile="ownerProfile" />
+
+      <NotificationOverlay
+        :show="overlayOpen"
+        :notificationId="overlayNotificationId"
+        @close="overlayOpen = false"
+      />
   </div>
 </template>
 
 <script>
+import {defineAsyncComponent} from "vue";
 import SideNav from "../components/SideNav.vue";
 import DefaultRightBar from "../components/DefaultRightBar.vue";
 import {warpnetService} from "@/service/service";
@@ -158,13 +206,18 @@ export default {
   components: {
     SideNav,
     DefaultRightBar,
+    NotificationOverlay: defineAsyncComponent(() => import('@/components/NotificationOverlay.vue')),
   },
   data() {
     return {
       loading: false,
       notifications: [],
+      followRequests: [],
+      locked: false,
       ownerProfile: {},
       mode: this.$route.query.m || "All",
+      overlayOpen: false,
+      overlayNotificationId: '',
     };
   },
   computed: {
@@ -185,15 +238,99 @@ export default {
         query: { m: m, hash: Date.now() },
       });
     },
+    openNotification(notification) {
+      // Mark this one read so the badge decrements even if the click
+      // ends up not navigating (overlay / unknown type).
+      this.markRead(notification);
+      // If the notification points at a tweet, navigate directly.
+      // Otherwise show the lightweight overlay (follow / unknown types).
+      if (notification?.tweet_id) {
+        this.$router.push({
+          name: 'Tweet',
+          params: { id: notification.tweet_id },
+          query: { u: notification.user_id || '' },
+        });
+        return;
+      }
+      this.overlayNotificationId = notification?.id || '';
+      this.overlayOpen = true;
+    },
+    async markRead(notification) {
+      if (!notification || !notification.id || notification.is_read) return;
+      try {
+        await warpnetService.markNotificationRead(notification.id);
+        notification.is_read = true;
+      } catch (err) {
+        console.error('Failed to mark notification read:', err);
+      }
+    },
+    async markAllRead() {
+      const unread = this.notifications.filter(n => n && n.id && !n.is_read);
+      if (unread.length === 0) return;
+      await Promise.all(unread.map(n =>
+        warpnetService.markNotificationRead(n.id)
+          .then(() => { n.is_read = true; })
+          .catch(err => console.error('Failed to mark notification read:', err))
+      ));
+    },
+    async hydrateRequests(ids) {
+      return Promise.all(
+        (ids || []).map(async (id) => {
+          try {
+            const p = await warpnetService.getProfile(id);
+            if (!p) return { id };
+            if (p.avatar_key) {
+              p.avatar = await warpnetService.getImage({ userId: id, key: p.avatar_key });
+            }
+            return p;
+          } catch (e) { return { id }; }
+        })
+      );
+    },
+    async loadFollowRequests() {
+      try {
+        const resp = await warpnetService.getFollowRequests();
+        const ids = resp?.follower_ids || resp?.ids || [];
+        this.followRequests = await this.hydrateRequests(ids);
+      } catch (err) {
+        console.error('Failed to load follow requests:', err);
+      }
+    },
+    async authorizeRequest(id) {
+      try {
+        await warpnetService.authorizeFollowRequest(id);
+        this.followRequests = this.followRequests.filter(r => r.id !== id);
+      } catch (err) { console.error('Failed to authorize', err); }
+    },
+    async rejectRequest(id) {
+      try {
+        await warpnetService.rejectFollowRequest(id);
+        this.followRequests = this.followRequests.filter(r => r.id !== id);
+      } catch (err) { console.error('Failed to reject', err); }
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
     try {
       this.loading = true;
       this.ownerProfile = warpnetService.getOwnerProfile();
+      // The owner stub in stateMap doesn't carry the `locked` flag, so fetch
+      // the full profile to decide whether to show the Requests tab.
+      try {
+        const me = await warpnetService.getProfile(this.ownerProfile.user_id);
+        this.locked = Boolean(me && me.locked);
+      } catch (err) {
+        console.warn('Failed to read own locked state:', err);
+      }
       const resp = await warpnetService.getNotifications(true);
       if (resp && resp.notifications) {
         this.notifications = resp.notifications;
+      }
+      // Visiting the Notifications view counts as "the user saw them".
+      // Mark every unread item read so the SideNav badge clears.
+      await this.markAllRead();
+      if (this.locked) {
+        await this.loadFollowRequests();
       }
     } catch (err) {
       console.error('Failed to load notifications:', err);

@@ -43,9 +43,7 @@ import site.warpnet.warpdroid.ui.tweetcomponents.text.warpnetHtmlText
 import site.warpnet.warpdroid.ui.tweetcomponents.text.toAnnotatedString
 import site.warpnet.warpdroid.ui.tweetcomponents.text.toInlineContent
 import site.warpnet.warpdroid.ui.warpdroidColors
-import site.warpnet.warpdroid.util.localeNameForUntrustedISO639LangCode
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
 
 @Composable
 fun ColumnScope.TweetContent(
@@ -70,40 +68,8 @@ fun ColumnScope.TweetContent(
         ) to emptyList()
     }
 
-    statusViewData.translation?.let { translation ->
-        when (translation) {
-            TranslationViewData.Loading -> {
-                Text(
-                    text = stringResource(R.string.label_translating),
-                    style = LocalPreferences.current.statusTextStyles.small,
-                    color = warpdroidColors.tertiaryTextColor,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-            }
-
-            is TranslationViewData.Loaded -> {
-                val langName = localeNameForUntrustedISO639LangCode(translation.data.detectedSourceLanguage)
-
-                Text(
-                    text = stringResource(R.string.label_translated, langName, translation.data.provider),
-                    style = LocalPreferences.current.statusTextStyles.small,
-                    color = warpdroidColors.tertiaryTextColor,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-
-                WarpdroidTextButton(
-                    text = stringResource(R.string.action_show_original),
-                    size = WarpdroidButtonSize.Small,
-                    onClick = {
-                        listener.onUntranslate(statusViewData)
-                    }
-                )
-            }
-        }
-    }
-
     if (status.spoilerText.isNotEmpty()) {
-        val spoilerText = statusViewData.translation?.data?.spoilerText ?: status.spoilerText
+        val spoilerText = status.spoilerText
         val spoilerDescription = stringResource(R.string.description_post_cw, spoilerText)
         val contentHiddenDescription = stringResource(R.string.content_hidden_description)
         Text(
@@ -167,12 +133,6 @@ fun ColumnScope.TweetContent(
         showBlurhash = LocalPreferences.current.useBlurhash,
         filter = statusViewData.filter,
         modifier = Modifier.padding(top = 6.dp)
-    )
-
-    Poll(
-        statusViewData = statusViewData,
-        isExpanded = isExpanded,
-        listener = listener
     )
 
     Quote(

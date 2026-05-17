@@ -188,14 +188,6 @@
                 android:scrollbars="none"
                 android:visibility="gone" />
 
-            <site.warpnet.warpdroid.components.compose.view.PollPreviewView
-                android:id="@+id/pollPreview"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="@dimen/poll_preview_min_width"
-                android:visibility="gone"
-                tools:visibility="visible" />
-
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
@@ -237,17 +229,6 @@
             app:drawableStartCompat="@drawable/ic_image_24dp"
             app:drawableTint="?android:attr/textColorTertiary" />
 
-        <TextView
-            android:id="@+id/addPollTextActionTextView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:drawablePadding="8dp"
-            android:padding="8dp"
-            android:text="@string/action_add_poll"
-            android:textSize="?attr/tweet_text_medium"
-            app:drawableStartCompat="@drawable/ic_insert_chart_24dp"
-            app:drawableTint="?android:attr/textColorTertiary" />
-
     </LinearLayout>
 
     <site.warpnet.warpdroid.view.EmojiPicker
@@ -273,20 +254,6 @@
         android:paddingStart="24dp"
         android:paddingTop="12dp"
         android:paddingEnd="24dp"
-        android:paddingBottom="@dimen/compose_bottom_bar_height"
-        app:behavior_hideable="true"
-        app:behavior_peekHeight="0dp"
-        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior" />
-
-    <site.warpnet.warpdroid.components.compose.view.ComposeScheduleView
-        android:id="@+id/composeScheduleView"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
-        android:elevation="12dp"
-        android:paddingStart="16dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="16dp"
         android:paddingBottom="@dimen/compose_bottom_bar_height"
         app:behavior_hideable="true"
         app:behavior_peekHeight="0dp"
@@ -359,17 +326,6 @@
             android:padding="4dp"
             app:srcCompat="@drawable/ic_mood_24dp"
             app:tooltipText="@string/action_emoji_keyboard" />
-
-        <ImageButton
-            android:id="@+id/composeScheduleButton"
-            style="@style/WarpdroidImageButton"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_marginEnd="4dp"
-            android:contentDescription="@string/action_schedule_post"
-            android:padding="4dp"
-            app:srcCompat="@drawable/ic_schedule_24dp"
-            app:tooltipText="@string/action_schedule_post" />
 
         <Space
             android:layout_width="0dp"

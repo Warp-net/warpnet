@@ -63,6 +63,7 @@ type UserFetcher interface {
 	Create(user domain.User) (domain.User, error)
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
+	Search(query string, limit *uint64, cursor *string) ([]domain.User, string, error)
 	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
@@ -161,6 +162,23 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 		log.Errorf("stream: get other user: response unmarshal: %v %s", err, otherUserData)
 	}
 	return user
+}
+
+func StreamSearchUsersHandler(userRepo UserFetcher) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.SearchUsersEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.Query == "" {
+			return nil, warpnet.WarpError("search users: empty query")
+		}
+		users, cur, err := userRepo.Search(ev.Query, ev.Limit, ev.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		return event.SearchUsersResponse{Cursor: cur, Users: users}, nil
+	}
 }
 
 func StreamGetUsersHandler(

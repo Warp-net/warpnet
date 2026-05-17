@@ -64,6 +64,7 @@ class AccountMediaRemoteMediator(
                         attachment = attachment,
                         statusId = status.id,
                         statusUrl = status.url.orEmpty(),
+                        statusAuthorId = status.account.id,
                         sensitive = status.sensitive,
                         isRevealed = activeAccount.alwaysShowSensitiveMedia || !status.sensitive
                     )

@@ -22,9 +22,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.lifecycle.lifecycleScope
 import androidx.paging.PagingData
 import androidx.paging.compose.LazyPagingItems
-import at.connyduck.calladapter.networkresult.onFailure
 import at.connyduck.sparkbutton.compose.SparkButtonState
-import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfo
@@ -33,7 +31,6 @@ import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.util.reply
-import site.warpnet.warpdroid.util.report
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.viewMedia
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
@@ -70,7 +67,6 @@ class SearchStatusesFragment :
                     TweetCard(
                         viewData,
                         this@SearchStatusesFragment,
-                        translationEnabled = instanceInfo.translationEnabled,
                         accounts = accounts
                     )
                 }
@@ -123,7 +119,7 @@ class SearchStatusesFragment :
     }
 
     override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) {
-        viewModel.bookmark(viewData.id, bookmark)
+        viewModel.bookmark(viewData.id, viewData.status.account.id, bookmark)
     }
 
     override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {
@@ -138,31 +134,6 @@ class SearchStatusesFragment :
         viewModel.collapsedChange(viewData, isCollapsed)
     }
 
-    override fun onVoteInPoll(viewData: TweetViewData.Concrete, pollId: String, choices: List<Int>) {
-        viewModel.voteInPoll(viewData.id, pollId, choices)
-    }
-
-    override fun onShowPollResults(viewData: TweetViewData.Concrete) {
-        viewModel.showPollResults(viewData)
-    }
-
-    override fun onTranslate(viewData: TweetViewData.Concrete) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.translate(viewData)
-                .onFailure {
-                    Snackbar.make(
-                        requireView(),
-                        getString(R.string.ui_error_translate, it.message),
-                        Snackbar.LENGTH_LONG
-                    ).show()
-                }
-        }
-    }
-
-    override fun onUntranslate(viewData: TweetViewData.Concrete) {
-        viewModel.untranslate(viewData)
-    }
-
     override fun changeFilter(viewData: TweetViewData.Concrete, filtered: Boolean) {
         viewModel.changeFilter(filtered, viewData)
     }
@@ -175,9 +146,6 @@ class SearchStatusesFragment :
         viewModel.mute(accountId, hideNotifications, duration)
     }
 
-    override fun onMuteConversation(viewData: TweetViewData.Concrete, mute: Boolean) {
-        viewModel.muteConversation(viewData.id, !viewData.status.muted)
-    }
 
     override fun onDelete(viewData: TweetViewData.Concrete) {
         viewModel.delete(viewData.id)
@@ -199,7 +167,7 @@ class SearchStatusesFragment :
     }
 
     override fun onViewThread(viewData: TweetViewData.Concrete) {
-        bottomSheetActivity?.viewThread(viewData.id, viewData.status.url)
+        bottomSheetActivity?.viewThread(viewData.id, viewData.status.url, viewData.status.account.id)
     }
 
     override fun onEdit(viewData: TweetViewData.Concrete) {
@@ -210,9 +178,6 @@ class SearchStatusesFragment :
         requireContext().reply(viewData, viewModel.activeAccount!!)
     }
 
-    override fun onReport(viewData: TweetViewData.Concrete) {
-        requireContext().report(viewData)
-    }
 
     override fun onShowQuote(viewData: TweetViewData.Concrete) {
         viewModel.showQuote(viewData)

@@ -12,6 +12,7 @@ import (
 
 type stubNotificationRepo struct {
 	listFn func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
+	getFn  func(userId, notificationId string) (domain.Notification, error)
 }
 
 func (s stubNotificationRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
@@ -19,6 +20,13 @@ func (s stubNotificationRepo) List(userId string, limit *uint64, cursor *string)
 		return s.listFn(userId, limit, cursor)
 	}
 	return nil, "", nil
+}
+
+func (s stubNotificationRepo) Get(userId, notificationId string) (domain.Notification, error) {
+	if s.getFn != nil {
+		return s.getFn(userId, notificationId)
+	}
+	return domain.Notification{}, nil
 }
 
 func TestStreamGetNotificationsHandler(t *testing.T) {
@@ -151,6 +159,68 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		}
 		if capturedCursor == nil || *capturedCursor != "some-cursor" {
 			t.Fatalf("expected cursor 'some-cursor', got %v", capturedCursor)
+		}
+	})
+}
+
+func TestStreamGetNotificationHandler(t *testing.T) {
+	owner := "owner-1"
+
+	t.Run("invalid payload", func(t *testing.T) {
+		h := StreamGetNotificationHandler(stubNotificationRepo{}, stubAuth{owner: domain.Owner{UserId: owner}})
+		_, err := h([]byte("{"), nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("empty notification id", func(t *testing.T) {
+		h := StreamGetNotificationHandler(stubNotificationRepo{}, stubAuth{owner: domain.Owner{UserId: owner}})
+		_, err := h(marshal(t, event.GetNotificationEvent{}), nil)
+		if err == nil {
+			t.Fatal("expected error for empty notification id")
+		}
+	})
+
+	t.Run("repo error", func(t *testing.T) {
+		repoErr := errors.New("db failed")
+		h := StreamGetNotificationHandler(stubNotificationRepo{getFn: func(userId, notificationId string) (domain.Notification, error) {
+			return domain.Notification{}, repoErr
+		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		_, err := h(marshal(t, event.GetNotificationEvent{NotificationId: "n-1"}), nil)
+		if !errors.Is(err, repoErr) {
+			t.Fatalf("expected repo error: %v", err)
+		}
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		not := domain.Notification{
+			Id:        "n-42",
+			Type:      domain.NotificationLikeType,
+			Text:      "someone liked your tweet",
+			UserId:    owner,
+			IsRead:    false,
+			CreatedAt: time.Now(),
+		}
+		var capturedUser, capturedId string
+		h := StreamGetNotificationHandler(stubNotificationRepo{getFn: func(userId, notificationId string) (domain.Notification, error) {
+			capturedUser = userId
+			capturedId = notificationId
+			return not, nil
+		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		resp, err := h(marshal(t, event.GetNotificationEvent{NotificationId: "n-42"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		got := resp.(event.GetNotificationResponse)
+		if got.Id != "n-42" {
+			t.Fatalf("expected id n-42, got %s", got.Id)
+		}
+		if capturedUser != owner {
+			t.Fatalf("expected user %s, got %s", owner, capturedUser)
+		}
+		if capturedId != "n-42" {
+			t.Fatalf("expected id n-42, got %s", capturedId)
 		}
 	})
 }

@@ -52,6 +52,18 @@ func (s stubFollowRepo) IsFollowing(ownerId, otherUserId string) bool {
 	}
 	return false
 }
+func (s stubFollowRepo) AddFollowRequest(targetUserId, followerId string) error {
+	return nil
+}
+
+func (s stubFollowRepo) RemoveFollowRequest(targetUserId, followerId string) error {
+	return nil
+}
+
+func (s stubFollowRepo) ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]string, string, error) {
+	return nil, "end", nil
+}
+
 func (s stubFollowRepo) IsFollower(ownerId, otherUserId string) bool {
 	if s.isFollowerFn != nil {
 		return s.isFollowerFn(ownerId, otherUserId)

@@ -30,10 +30,7 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.PreferenceChangedEvent
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
-import site.warpnet.warpdroid.components.domainblocks.DomainBlocksActivity
 import site.warpnet.warpdroid.components.filters.FiltersActivity
-import site.warpnet.warpdroid.components.followedtags.FollowedTagsActivity
-import site.warpnet.warpdroid.components.preference.notificationpolicies.NotificationPoliciesActivity
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Account
 import site.warpnet.warpdroid.entity.Tweet
@@ -85,16 +82,6 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
             // "Customize tabs" is removed in Warpdroid — the two tabs are fixed.
 
             preference {
-                setTitle(R.string.title_followed_hashtags)
-                icon = icon(R.drawable.ic_tag_24dp)
-                setOnPreferenceClickListener {
-                    val intent = Intent(context, FollowedTagsActivity::class.java)
-                    activity?.startActivityWithSlideInAnimation(intent)
-                    true
-                }
-            }
-
-            preference {
                 setTitle(R.string.action_view_mutes)
                 icon = icon(R.drawable.ic_volume_off_24dp)
                 setOnPreferenceClickListener {
@@ -111,16 +98,6 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
                 setOnPreferenceClickListener {
                     val intent = Intent(context, AccountListActivity::class.java)
                     intent.putExtra("type", AccountListActivity.Type.BLOCKS)
-                    activity?.startActivityWithSlideInAnimation(intent)
-                    true
-                }
-            }
-
-            preference {
-                setTitle(R.string.title_domain_mutes)
-                icon = icon(R.drawable.ic_volume_off_24dp)
-                setOnPreferenceClickListener {
-                    val intent = Intent(context, DomainBlocksActivity::class.java)
                     activity?.startActivityWithSlideInAnimation(intent)
                     true
                 }
@@ -268,16 +245,6 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
                 preference {
                     setTitle(R.string.pref_title_post_tabs)
                     fragment = TabFilterPreferencesFragment::class.qualifiedName
-                }
-            }
-            preference {
-                setTitle(R.string.notification_policies_title)
-                setOnPreferenceClickListener {
-                    activity?.let {
-                        val intent = NotificationPoliciesActivity.newIntent(it)
-                        it.startActivityWithSlideInAnimation(intent)
-                    }
-                    true
                 }
             }
         }

@@ -82,11 +82,24 @@ func (s stubTweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	}
 	return nil
 }
+func (s stubTweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string) ([]string, string, error) {
+	return nil, "", nil
+}
 func (s stubTweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
 	if s.createWithTTLFn != nil {
 		return s.createWithTTLFn(userId, tweet, duration)
 	}
 	return tweet, nil
+}
+func (s stubTweetRepo) Update(tweet domain.Tweet) error { return nil }
+func (s stubTweetRepo) Pin(userId, tweetId string) (domain.Tweet, error) {
+	return domain.Tweet{Id: tweetId, UserId: userId, Pinned: true}, nil
+}
+func (s stubTweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
+	return domain.Tweet{Id: tweetId, UserId: userId}, nil
+}
+func (s stubTweetRepo) AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error) {
+	return edit, nil
 }
 
 type stubTweetBroadcaster struct {

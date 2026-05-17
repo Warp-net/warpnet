@@ -44,9 +44,10 @@ class ViewThreadActivity : BottomSheetActivity() {
 
         val id = intent.getStringExtra(ID_EXTRA)!!
         val url = intent.getStringExtra(URL_EXTRA)!!
+        val authorId = intent.getStringExtra(AUTHOR_ID_EXTRA).orEmpty()
         val fragment =
             supportFragmentManager.findFragmentByTag(FRAGMENT_TAG + id) as ViewThreadFragment?
-                ?: ViewThreadFragment.newInstance(id, url)
+                ?: ViewThreadFragment.newInstance(id, url, authorId)
 
         supportFragmentManager.commit {
             replace(R.id.fragment_container, fragment, FRAGMENT_TAG + id)
@@ -55,15 +56,17 @@ class ViewThreadActivity : BottomSheetActivity() {
 
     companion object {
 
-        fun newIntent(context: Context, id: String, url: String): Intent {
+        fun newIntent(context: Context, id: String, url: String, authorId: String): Intent {
             val intent = Intent(context, ViewThreadActivity::class.java)
             intent.putExtra(ID_EXTRA, id)
             intent.putExtra(URL_EXTRA, url)
+            intent.putExtra(AUTHOR_ID_EXTRA, authorId)
             return intent
         }
 
         private const val ID_EXTRA = "id"
         private const val URL_EXTRA = "url"
+        private const val AUTHOR_ID_EXTRA = "author_id"
         private const val FRAGMENT_TAG = "ViewThreadFragment_"
     }
 }

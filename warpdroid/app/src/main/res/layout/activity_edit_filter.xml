@@ -143,13 +143,6 @@
                 android:text="@string/title_notifications" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/filter_context_public"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:text="@string/pref_title_public_filter_keywords" />
-
-            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/filter_context_thread"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

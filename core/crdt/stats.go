@@ -173,10 +173,10 @@ func NewCRDTStatsStore(
 	opts := crdt.DefaultOptions()
 	opts.Logger = l
 	opts.PutHook = func(k ds.Key, _ []byte) {
-		l.Infof("crdt: item put: %s", k.String())
+		// l.Infof("crdt: item put: %s", k.String())
 	}
 	opts.DeleteHook = func(k ds.Key) {
-		l.Infof("crdt: item deleted: %s", k.String())
+		// l.Infof("crdt: item deleted: %s", k.String())
 	}
 	opts.RebroadcastInterval = time.Minute
 	opts.DAGSyncerTimeout = time.Minute

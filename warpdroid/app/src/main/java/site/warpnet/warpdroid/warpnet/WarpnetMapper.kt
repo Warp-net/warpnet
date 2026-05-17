@@ -6,12 +6,14 @@
 package site.warpnet.warpdroid.warpnet
 
 import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.Conversation
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineAccount
 import site.warpnet.warpdroid.entity.notificationTypeFromString
 import java.util.Date
+import site.warpnet.transport.dto.WarpnetChat
 import site.warpnet.transport.dto.WarpnetNotification
 import site.warpnet.transport.dto.WarpnetTweet
 import site.warpnet.transport.dto.WarpnetUser
@@ -33,7 +35,7 @@ object WarpnetMapper {
 
     fun WarpnetUser.toAccount(): Account = Account(
         id = id,
-        // Warpnet has no Mastodon-style local handle; the canonical
+        // Warpnet has no instance-local handle; the canonical
         // peer-derived user_id is what the desktop frontend prints after
         // the @ sign, so mirror that here for parity.
         localUsername = id,
@@ -42,9 +44,9 @@ object WarpnetMapper {
         createdAt = parseDate(createdAt),
         note = bio,
         url = "$FAKE_BASE_URL/users/$id",
-        avatar = avatarKey.orEmpty(),
-        header = backgroundImageKey,
-        locked = false,
+        avatar = warpnetImageUrl(id, avatarKey),
+        header = warpnetImageUrl(id, backgroundImageKey),
+        locked = locked,
         followersCount = followersCount.toInt(),
         followingCount = followingsCount.toInt(),
         statusesCount = tweetsCount.toInt(),
@@ -56,10 +58,20 @@ object WarpnetMapper {
         username = id,
         displayName = username,
         url = "$FAKE_BASE_URL/users/$id",
-        avatar = avatarKey.orEmpty(),
-        staticAvatar = avatarKey.orEmpty(),
+        avatar = warpnetImageUrl(id, avatarKey),
+        staticAvatar = warpnetImageUrl(id, avatarKey),
         note = bio,
     )
+
+    /**
+     * Build the synthetic URL that [WarpnetAvatarLoader] recognises and
+     * routes through `PUBLIC_GET_IMAGE`. Empty key → empty string, which
+     * the existing `loadAvatar()` helpers treat as "no avatar" and fall
+     * back to the default drawable without ever hitting Glide.
+     */
+    fun warpnetImageUrl(userId: String, key: String?): String =
+        if (userId.isBlank() || key.isNullOrBlank()) ""
+        else "warpnet://avatar/$userId/$key"
 
     fun WarpnetTweet.toTweet(author: WarpnetUser?): Tweet {
         val account = author?.toTimelineAccount() ?: stubTimelineAccount(userId, username)
@@ -105,14 +117,30 @@ object WarpnetMapper {
             mutingNotifications = false,
             requested = false,
             showingRetweets = true,
-            blockingDomain = false,
         )
 
-    fun WarpnetNotification.toNotification(author: WarpnetUser): Notification = Notification(
+    // The wire shape (domain.Notification) embeds the actor in [text]
+    // ("Alice liked your tweet") and exposes only the recipient's user_id,
+    // so the UI gets a stub account; the visible content is text + type.
+    fun WarpnetNotification.toNotification(): Notification = Notification(
         id = id,
         type = notificationTypeFromString(type),
-        account = author.toTimelineAccount(),
+        account = stubTimelineAccount(userId, text),
         status = null,
+    )
+
+    /**
+     * Surface a Warpnet 1:1 chat as a [Conversation]. The Warpnet wire
+     * carries only the latest message text and the two participants, so
+     * [Conversation.lastStatus] is left null; the UI shows the chat row
+     * as a single-participant thread with the most recent timestamp
+     * from [WarpnetChat.updatedAt].
+     */
+    fun chatToConversation(chat: WarpnetChat, otherAccount: TimelineAccount): Conversation = Conversation(
+        id = chat.id,
+        accounts = listOf(otherAccount),
+        lastStatus = null,
+        unread = false,
     )
 
     private fun parseDate(raw: String): Date =

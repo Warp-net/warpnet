@@ -32,12 +32,15 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 )
 
 const (
-	MediaRepoName     = "/MEDIA"
-	ImageSubNamespace = "IMAGES"
+	MediaRepoName       = "/MEDIA"
+	ImageSubNamespace   = "IMAGES"
+	ImageMetaSubNS      = "IMAGES_META"
+	// VideoSubNamespace is reserved — videos are not yet supported.
 	VideoSubNamespace = "VIDEOS"
 )
 
@@ -104,6 +107,66 @@ func (repo *MediaRepo) SetImage(userId string, img Base64Image) (_ ImageKey, err
 		Build()
 
 	return ImageKey(key), repo.db.Set(mediaKey, []byte(img))
+}
+
+// MediaMeta is the per-image metadata layer: Mastodon's compose alt-text
+// (description) and focal point (focus_x / focus_y in [-1, 1]). Stored under
+// a parallel key from the image blob so updating metadata doesn't rewrite
+// the (potentially MB-sized) base64 payload.
+type MediaMeta struct {
+	Description string  `json:"description"`
+	FocusX      float32 `json:"focus_x"`
+	FocusY      float32 `json:"focus_y"`
+}
+
+func (repo *MediaRepo) SetImageMeta(userId, key string, meta MediaMeta) error {
+	if repo == nil {
+		return ErrMediaRepoNotInit
+	}
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	if key == "" {
+		return local_store.DBError("empty media key")
+	}
+	bt, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	metaKey := local_store.NewPrefixBuilder(MediaRepoName).
+		AddRootID(ImageMetaSubNS).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+	return repo.db.Set(metaKey, bt)
+}
+
+func (repo *MediaRepo) GetImageMeta(userId, key string) (MediaMeta, error) {
+	if repo == nil {
+		return MediaMeta{}, ErrMediaRepoNotInit
+	}
+	if userId == "" || key == "" {
+		return MediaMeta{}, ErrMediaNotFound
+	}
+	metaKey := local_store.NewPrefixBuilder(MediaRepoName).
+		AddRootID(ImageMetaSubNS).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+	bt, err := repo.db.Get(metaKey)
+	if local_store.IsNotFoundError(err) {
+		// No metadata yet — return zero-value MediaMeta without error so
+		// callers can treat "never described" identical to "blank alt-text".
+		return MediaMeta{}, nil
+	}
+	if err != nil {
+		return MediaMeta{}, err
+	}
+	var meta MediaMeta
+	if err := json.Unmarshal(bt, &meta); err != nil {
+		return MediaMeta{}, err
+	}
+	return meta, nil
 }
 
 func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img Base64Image) error {

@@ -58,10 +58,6 @@ const (
 	reTweetersSubspace      = "RETWEETERS"
 	viewsSubspace           = "VIEWS"
 	viewersSubspace         = "VIEWERS"
-
-	// ViewDedupTTL is the time window during which repeated views of the
-	// same tweet by the same viewer are not counted.
-	ViewDedupTTL = 30 * time.Minute
 )
 
 type TweetsStorer interface {
@@ -214,6 +210,9 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	if updateTweet.Moderation != nil {
 		existedTweet.Moderation = updateTweet.Moderation
 	}
+	if updateTweet.Text != "" && updateTweet.Text != existedTweet.Text {
+		existedTweet.Text = updateTweet.Text
+	}
 	existedTweet.UpdatedAt = &now
 
 	expiration := time.Unix(int64(expiresAt), 0) //#nosec
@@ -226,6 +225,101 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 		return err
 	}
 	return txn.Commit()
+}
+
+// Pin / Unpin flip the Pinned flag on the tweet record. Pin must be a no-op
+// after the first call to keep the storage write idempotent; the caller is
+// responsible for ensuring userId is the tweet author (handler-side check).
+func (repo *TweetRepo) Pin(userId, tweetId string) (domain.Tweet, error) {
+	return repo.setPinned(userId, tweetId, true)
+}
+
+func (repo *TweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
+	return repo.setPinned(userId, tweetId, false)
+}
+
+// AppendEdit records an immutable edit revision for a tweet. Revisions
+// are append-only — never updated, never deleted (except via the tweet's
+// own delete handler, which removes the tweet from List* but leaves the
+// revisions in place for audit).
+func (repo *TweetRepo) AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error) {
+	if edit.OriginalTweetId == "" {
+		return domain.TweetEdit{}, local.DBError("empty tweet id")
+	}
+	if edit.UserId == "" {
+		return domain.TweetEdit{}, local.DBError("empty user id")
+	}
+	if edit.Text == "" {
+		return domain.TweetEdit{}, local.DBError("empty text")
+	}
+	if edit.Id == "" {
+		edit.Id = ulid.Make().String()
+	}
+	if edit.EditedAt.IsZero() {
+		edit.EditedAt = time.Now()
+	}
+
+	key := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix("EDITS").
+		AddRootID(edit.OriginalTweetId).
+		AddReversedTimestamp(edit.EditedAt).
+		AddParentId(edit.Id).
+		Build()
+
+	bt, err := json.Marshal(edit)
+	if err != nil {
+		return domain.TweetEdit{}, err
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.TweetEdit{}, err
+	}
+	defer txn.Rollback()
+
+	if err := txn.Set(key, bt); err != nil {
+		return domain.TweetEdit{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.TweetEdit{}, err
+	}
+	return edit, nil
+}
+
+func (repo *TweetRepo) setPinned(userId, tweetId string, pinned bool) (domain.Tweet, error) {
+	if userId == "" {
+		return domain.Tweet{}, local.DBError("no user id")
+	}
+	if tweetId == "" {
+		return domain.Tweet{}, local.DBError("no tweet id")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	defer txn.Rollback()
+
+	existing, expiresAt, err := get(txn, userId, tweetId)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	if existing.Pinned == pinned {
+		return existing, txn.Commit()
+	}
+	existing.Pinned = pinned
+	now := time.Now()
+	existing.UpdatedAt = &now
+
+	expiration := time.Unix(int64(expiresAt), 0) //#nosec
+	ttl := max(expiration.Sub(now), 0)
+	if _, err := storeTweet(txn, existing.UserId, existing, ttl, true); err != nil {
+		return domain.Tweet{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.Tweet{}, err
+	}
+	return existing, nil
 }
 
 func storeTweet(
@@ -427,14 +521,20 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	if tweet.RetweetedBy == nil {
 		return tweet, local.DBError("retweet: by unknown")
 	}
+
+	// A retweet is keyed by the *source* tweet id (which the wire
+	// puts in tweet.Id). Whether or not the retweeter attached a
+	// comment is a frontend concern — see below for how a comment
+	// turns the retweet record into a quote.
+	sourceTweetId := tweet.Id
 	retweetCountKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
-		AddRootID(tweet.Id).
+		AddRootID(sourceTweetId).
 		Build()
 
 	retweetersKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetersSubspace).
-		AddRootID(tweet.Id).
+		AddRootID(sourceTweetId).
 		AddRange(local.NoneRangeKey).
 		AddParentId(*tweet.RetweetedBy).
 		Build()
@@ -449,7 +549,20 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 		return tweet, err
 	}
 
-	if tweet.UserId == *tweet.RetweetedBy {
+	// A quote — a regular tweet that *references* another tweet —
+	// is signalled by a non-empty QuotedTweetId on the wire. Store
+	// it as its own tweet under the retweeter's namespace with a
+	// fresh ULID so it lives alongside the retweeter's other
+	// posts (and a retweeter can quote the same source more than
+	// once with different commentary). The retweet count above
+	// still increments for the source so quotes show up in the
+	// source's "X people retweeted me" count. The reader decides
+	// from QuotedTweetId whether to render an embedded preview.
+	isQuote := tweet.QuotedTweetId != nil && *tweet.QuotedTweetId != ""
+	switch {
+	case isQuote:
+		tweet.Id = ulid.Make().String()
+	case tweet.UserId == *tweet.RetweetedBy:
 		tweet.Id = domain.RetweetPrefix + tweet.Id
 	}
 
@@ -595,10 +708,12 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 }
 
 // RecordView increments the view counter for tweetId on behalf of viewerId.
-// Repeated calls from the same viewerId within ViewDedupTTL are no-ops, so
-// rapid re-views do not inflate the count. The increment is atomic via the
-// underlying transaction and replicated through the CRDT stats store, so it
-// is safe under concurrent calls across nodes.
+// The (tweetId, viewerId) pair is recorded permanently, so subsequent
+// views from the same viewer — across sessions, restarts, days — are
+// no-ops. The first call wins; the counter is incremented exactly once
+// per unique viewer. The increment is atomic via the underlying
+// transaction and replicated through the CRDT stats store, so it is
+// safe under concurrent calls across nodes.
 func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("view: empty tweet id")
@@ -632,8 +747,8 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	_, err = txn.Get(viewerKey)
 	switch {
 	case err == nil:
-		// Repeat view within the dedup window: drop the read-only txn
-		// and report the current canonical count.
+		// This viewer has already been counted for this tweet — drop
+		// the read-only txn and report the current canonical count.
 		if err := txn.Commit(); err != nil {
 			return 0, err
 		}
@@ -644,7 +759,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 		return 0, err
 	}
 
-	if err := txn.SetWithTTL(viewerKey, []byte(viewerId), ViewDedupTTL); err != nil {
+	if err := txn.Set(viewerKey, []byte(viewerId)); err != nil {
 		return 0, err
 	}
 	localCount, err := txn.Increment(viewsKey)

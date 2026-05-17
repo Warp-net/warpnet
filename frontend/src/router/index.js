@@ -107,6 +107,63 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/tweets/:id",
+    name: "Tweet",
+    component: () =>
+      import(/* webpackChunkName: "tweet" */ "../views/Tweet.vue"),
+    props: true,
+    meta: { protected: true },
+  },
+  {
+    path: "/bookmarks",
+    name: "Bookmarks",
+    component: () =>
+      import(/* webpackChunkName: "bookmarks" */ "../views/Bookmarks.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/settings",
+    name: "Settings",
+    component: () =>
+      import(/* webpackChunkName: "settings" */ "../views/Settings.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/settings/blocks",
+    name: "SettingsBlocks",
+    component: () =>
+      import(/* webpackChunkName: "settings-blocks" */ "../views/Settings/Blocks.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/settings/mutes",
+    name: "SettingsMutes",
+    component: () =>
+      import(/* webpackChunkName: "settings-mutes" */ "../views/Settings/Mutes.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/settings/preferences",
+    name: "SettingsPreferences",
+    component: () =>
+      import(/* webpackChunkName: "settings-prefs" */ "../views/Settings/Preferences.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/settings/filters",
+    name: "SettingsFilters",
+    component: () =>
+      import(/* webpackChunkName: "settings-filters" */ "../views/Settings/Filters.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/follow-requests",
+    name: "FollowRequests",
+    component: () =>
+      import(/* webpackChunkName: "follow-requests" */ "../views/FollowRequests.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/:id",
     name: "Profile",
     // route level code-splitting

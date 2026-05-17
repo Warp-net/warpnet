@@ -27,7 +27,6 @@ data class Notification(
     val id: String,
     val account: TimelineAccount,
     val status: Tweet? = null,
-    val report: Report? = null,
     val filtered: Boolean = false,
     val event: RelationshipSeveranceEvent? = null,
     @Json(name = "moderation_warning") val moderationWarning: AccountWarning? = null,
@@ -55,9 +54,6 @@ data class Notification(
         /** Someone requested to follow you */
         object FollowRequest : Type("follow_request")
 
-        /** A poll you have voted in or created has ended */
-        object Poll : Type("poll")
-
         /** Someone you enabled notifications for has posted a status */
         object Status : Type("status")
 
@@ -66,9 +62,6 @@ data class Notification(
 
         /** A status you interacted with has been updated */
         object Update : Type("update")
-
-        /** A new report has been filed */
-        object Report : Type("admin.report")
 
         /**  Some of your follow relationships have been severed as a result of a moderation or block event **/
         object SeveredRelationship : Type("severed_relationships")
@@ -116,11 +109,9 @@ val visibleNotificationTypes = listOf(
     Type.PleromaEmojiReaction,
     Type.Follow,
     Type.FollowRequest,
-    Type.Poll,
     Type.Status,
     Type.SignUp,
     Type.Update,
-    Type.Report,
     Type.SeveredRelationship,
     Type.ModerationWarning,
     Type.Quote,

@@ -82,6 +82,11 @@ func newClient(
 		128,
 	))
 	rm, _ := rcmgr.NewResourceManager(limiter)
+
+	ya := yamux.DefaultTransport
+	ya.KeepAliveInterval = 15 * time.Second
+	ya.ConnectionWriteTimeout = 30 * time.Second
+
 	// Build libp2p options matching thin client requirements
 	opts := []libp2p.Option{
 		libp2p.DisableMetrics(), // Lightweight
@@ -95,7 +100,7 @@ func newClient(
 		libp2p.Transport(camouflage.NewCamouflageTransport), // TCP transport
 		libp2p.UserAgent("warpdroid"),                       // Custom user agent
 		libp2p.ForceReachabilityPrivate(),
-		libp2p.Muxer(yamux.ID, yamux.DefaultTransport),
+		libp2p.Muxer(yamux.ID, ya),
 		libp2p.ConnectionManager(connManager),
 		libp2p.ResourceManager(rm),
 	}
@@ -193,18 +198,18 @@ func (c *clientNode) connect(peerInfo string) error {
 }
 
 func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.desktopPeerID == "" {
+	c.mu.RLock()
+	desktopPeerID := c.desktopPeerID
+	c.mu.RUnlock()
+	if desktopPeerID == "" {
 		return nil, fmt.Errorf("not connected to desktop node")
 	}
-	desktopPeerID := c.desktopPeerID
 
 	if protocolID == "" {
 		return nil, fmt.Errorf("empty protocol ID")
 	}
 
-	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
 	defer cancel()
 
 	connectedness := c.host.Network().Connectedness(desktopPeerID)
@@ -286,6 +291,19 @@ func (c *clientNode) isConnected() bool {
 
 	connectedness := c.host.Network().Connectedness(c.desktopPeerID)
 	return connectedness == network.Connected || connectedness == network.Limited
+}
+
+// connectedness returns the libp2p Connectedness#String for the paired
+// desktop peer. Surface for the Kotlin ConnectionMonitor, which owns the
+// reconnect loop; Go only reports the snapshot. Returns "NotConnected"
+// when no peer is paired yet.
+func (c *clientNode) connectedness() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.desktopPeerID == "" {
+		return network.NotConnected.String()
+	}
+	return c.host.Network().Connectedness(c.desktopPeerID).String()
 }
 
 func (c *clientNode) disconnect() error {

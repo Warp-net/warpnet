@@ -41,6 +41,9 @@ data class WarpnetTweet(
     val username: String,
     @Json(name = "image_keys") val imageKeys: List<String>? = null,
     val network: String = "",
+    val pinned: Boolean = false,
+    @Json(name = "quoted_tweet_id") val quotedTweetId: String? = null,
+    @Json(name = "quoted_user_id") val quotedUserId: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -60,16 +63,21 @@ data class WarpnetUser(
     @Json(name = "node_id") val nodeId: String = "",
     val network: String = "",
     val website: String? = null,
+    // Locked = "manually-approve followers"; gates the follow-request UI.
+    val locked: Boolean = false,
 )
 
+// Wire shape mirrors domain.Notification on the fat node. The actor is
+// already embedded in [text] ("Alice liked your tweet"); the wire does not
+// carry a separate from_user_id or tweet_id.
 @JsonClass(generateAdapter = true)
 data class WarpnetNotification(
     val id: String,
     @Json(name = "created_at") val createdAt: String,
     val type: String,
-    @Json(name = "from_user_id") val fromUserId: String,
-    @Json(name = "tweet_id") val tweetId: String? = null,
-    val text: String? = null,
+    val text: String = "",
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "is_read") val isRead: Boolean = false,
 )
 
 // -----------------------------------------------------------------------------
@@ -163,6 +171,215 @@ data class GetNotificationsEvent(
 )
 
 @JsonClass(generateAdapter = true)
+data class GetNotificationEvent(
+    @Json(name = "notification_id") val notificationId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class MarkNotificationReadEvent(
+    @Json(name = "notification_id") val notificationId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class BookmarkEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "owner_user_id") val ownerUserId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class UnbookmarkEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetBookmarksEvent(
+    @Json(name = "user_id") val userId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class BookmarkItem(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "owner_user_id") val ownerUserId: String,
+    @Json(name = "created_at") val createdAt: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetBookmarksResponse(
+    val items: List<BookmarkItem> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class PinTweetEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "tweet_id") val tweetId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class BlockEvent(
+    @Json(name = "blocker_id") val blockerId: String,
+    @Json(name = "blockee_id") val blockeeId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class MuteEvent(
+    @Json(name = "muter_id") val muterId: String,
+    @Json(name = "mutee_id") val muteeId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetBlocksEvent(
+    @Json(name = "user_id") val userId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetBlocksResponse(
+    val ids: List<String> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetTweetLikersEvent(
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "owner_user_id") val ownerUserId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class SubscribeUserEvent(
+    @Json(name = "self_id") val selfId: String,
+    @Json(name = "target_id") val targetId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class UpdateMediaMetaEvent(
+    @Json(name = "user_id") val userId: String,
+    val key: String,
+    val description: String = "",
+    @Json(name = "focus_x") val focusX: Float = 0f,
+    @Json(name = "focus_y") val focusY: Float = 0f,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetMediaEvent(
+    @Json(name = "user_id") val userId: String,
+    val key: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetMediaResponse(
+    val key: String = "",
+    val description: String = "",
+    @Json(name = "focus_x") val focusX: Float = 0f,
+    @Json(name = "focus_y") val focusY: Float = 0f,
+)
+
+@JsonClass(generateAdapter = true)
+data class SearchUsersEvent(
+    val query: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class EditTweetEvent(
+    @Json(name = "tweet_id") val tweetId: String,
+    @Json(name = "user_id") val userId: String,
+    val text: String,
+)
+@JsonClass(generateAdapter = true)
+data class GetFollowRequestsEvent(
+    @Json(name = "user_id") val userId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetFollowRequestsResponse(
+    @Json(name = "follower_ids") val followerIds: List<String> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class FollowRequestActionEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "follower_id") val followerId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class WarpnetFilterKeyword(
+    val id: String = "",
+    val keyword: String = "",
+    @Json(name = "whole_word") val wholeWord: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class WarpnetFilter(
+    val id: String = "",
+    @Json(name = "user_id") val userId: String = "",
+    val title: String = "",
+    val context: List<String> = emptyList(),
+    val action: String = "warn",
+    @Json(name = "expires_at") val expiresAt: String? = null,
+    val keywords: List<WarpnetFilterKeyword> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class GetFilterEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "filter_id") val filterId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetFiltersEvent(
+    @Json(name = "user_id") val userId: String,
+    val cursor: String = "",
+    val limit: Int = 40,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetFiltersResponse(
+    val filters: List<WarpnetFilter> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class DeleteFilterEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "filter_id") val filterId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class AddFilterKeywordEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "filter_id") val filterId: String,
+    val keyword: String,
+    @Json(name = "whole_word") val wholeWord: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class UpdateFilterKeywordEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "keyword_id") val keywordId: String,
+    val keyword: String = "",
+    @Json(name = "whole_word") val wholeWord: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class DeleteFilterKeywordEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "keyword_id") val keywordId: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class GetFollowersEvent(
     @Json(name = "user_id") val userId: String,
     val cursor: String = "",
@@ -205,9 +422,19 @@ data class TweetsResponse(
     val cursor: String = "",
 )
 
+// Wire shape mirrors domain.ReplyNode on the fat node — each list element is
+// a tree node with the reply payload nested under [reply] and any deeper
+// descendants under [children]. Parsing a reply page straight into
+// List<WarpnetTweet> would Moshi-default every field to blank.
+@JsonClass(generateAdapter = true)
+data class WarpnetReplyNode(
+    val reply: WarpnetTweet,
+    val children: List<WarpnetReplyNode> = emptyList(),
+)
+
 @JsonClass(generateAdapter = true)
 data class RepliesResponse(
-    val replies: List<WarpnetTweet> = emptyList(),
+    val replies: List<WarpnetReplyNode> = emptyList(),
     val cursor: String = "",
 )
 
@@ -274,12 +501,101 @@ data class IsFollowerResponse(
     @Json(name = "is_follower") val isFollower: Boolean = false,
 )
 
+// Wire shape mirrors event.TweetStatsResponse. The wire does NOT carry
+// "tweets_count" — that field only exists on user-level stats, not per
+// tweet, so declaring it here just defaulted the value to 0 forever.
 @JsonClass(generateAdapter = true)
 data class TweetStatsResponse(
     @Json(name = "tweet_id") val tweetId: String = "",
-    @Json(name = "tweets_count") val tweetsCount: Long = 0,
     @Json(name = "retweets_count") val retweetsCount: Long = 0,
     @Json(name = "likes_count") val likesCount: Long = 0,
     @Json(name = "replies_count") val repliesCount: Long = 0,
     @Json(name = "views_count") val viewsCount: Long = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetChatsEvent(
+    @Json(name = "user_id") val userId: String,
+    val limit: Int = 40,
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetChatsResponse(
+    val chats: List<WarpnetChat> = emptyList(),
+    val cursor: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class WarpnetChat(
+    val id: String = "",
+    @Json(name = "owner_id") val ownerId: String = "",
+    @Json(name = "other_user_id") val otherUserId: String = "",
+    @Json(name = "last_message") val lastMessage: String = "",
+    @Json(name = "created_at") val createdAt: String = "",
+    @Json(name = "updated_at") val updatedAt: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetChatEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "chat_id") val chatId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class DeleteChatEvent(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "chat_id") val chatId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetImageEvent(
+    @Json(name = "user_id") val userId: String,
+    val key: String,
+)
+
+// Wire shape mirrors event.GetImageResponse. The fat node returns the
+// image as a single string "<mime>,<base64>" — the Vue front-end shoves
+// the same string directly into an <img src="…"> data-URL slot. Warpdroid
+// splits and base64-decodes the bytes before handing them to Glide.
+@JsonClass(generateAdapter = true)
+data class GetImageResponse(
+    val file: String = "",
+)
+
+// Wire shape mirrors event.GetAllMessagesEvent on the fat node.
+@JsonClass(generateAdapter = true)
+data class GetMessagesEvent(
+    @Json(name = "owner_id") val ownerId: String,
+    @Json(name = "chat_id") val chatId: String,
+    val limit: Int = 40,
+    val cursor: String = "",
+)
+
+// Wire shape mirrors event.ChatMessagesResponse.
+@JsonClass(generateAdapter = true)
+data class GetMessagesResponse(
+    @Json(name = "chat_id") val chatId: String = "",
+    val cursor: String = "",
+    val messages: List<WarpnetMessage> = emptyList(),
+)
+
+// Wire shape mirrors domain.ChatMessage. Send paths populate sender / receiver
+// / chat / text; the server fills id and timestamps.
+@JsonClass(generateAdapter = true)
+data class WarpnetMessage(
+    val id: String = "",
+    @Json(name = "chat_id") val chatId: String = "",
+    @Json(name = "sender_id") val senderId: String = "",
+    @Json(name = "receiver_id") val receiverId: String = "",
+    val text: String = "",
+    @Json(name = "created_at") val createdAt: String = "",
+    val status: String = "",
+)
+
+// Wire shape mirrors event.DeleteMessageEvent = GetMessageEvent.
+@JsonClass(generateAdapter = true)
+data class DeleteMessageEvent(
+    @Json(name = "chat_id") val chatId: String,
+    val id: String,
 )

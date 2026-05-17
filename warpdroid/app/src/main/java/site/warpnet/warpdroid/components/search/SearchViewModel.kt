@@ -21,13 +21,9 @@ import androidx.paging.InvalidatingPagingSourceFactory
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.cachedIn
-import at.connyduck.calladapter.networkresult.NetworkResult
-import at.connyduck.calladapter.networkresult.map
-import at.connyduck.calladapter.networkresult.onFailure
 import site.warpnet.warpdroid.appstore.BlockEvent
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
-import site.warpnet.warpdroid.appstore.PollVoteEvent
 import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.appstore.TweetDeletedEvent
 import site.warpnet.warpdroid.components.search.paging.SearchPagingSource
@@ -36,16 +32,13 @@ import site.warpnet.warpdroid.components.search.paging.SearchTweetRemoteMediator
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Filter
-import site.warpnet.warpdroid.entity.Poll
 import site.warpnet.warpdroid.entity.Quote
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.toViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
-import site.warpnet.warpdroid.viewdata.TranslationViewData
 import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -97,10 +90,10 @@ class SearchViewModel @Inject constructor(
                 onPageLoaded = { searchResult ->
                     val statuses = searchResult.statuses.map { status ->
                         status.toViewData(
-                            isShowingContent = status.shouldShowContent(alwaysShowSensitiveMedia, Filter.Kind.PUBLIC),
+                            isShowingContent = status.shouldShowContent(alwaysShowSensitiveMedia, Filter.Kind.HOME),
                             isExpanded = alwaysOpenSpoiler,
                             isCollapsed = true,
-                            filterKind = Filter.Kind.PUBLIC,
+                            filterKind = Filter.Kind.HOME,
                             filterActive = true,
                             isQuoteShowingContent =
                             status.quote?.quotedStatus?.shouldShowContent(alwaysShowSensitiveMedia, Filter.Kind.THREAD)
@@ -164,7 +157,6 @@ class SearchViewModel @Inject constructor(
             eventHub.events.collect { event ->
                 when (event) {
                     is TweetChangedEvent -> handleTweetChangedEvent(event.status)
-                    is PollVoteEvent -> handlePollVotedEvent(event.statusId, event.poll)
                     is BlockEvent -> removeAllByAccountId(event.accountId)
                     is MuteEvent -> removeAllByAccountId(event.accountId)
                     is TweetDeletedEvent -> removeStatus(event.statusId)
@@ -190,37 +182,6 @@ class SearchViewModel @Inject constructor(
         updateTweetViewData(statusViewData.copy(isCollapsed = collapsed))
     }
 
-    suspend fun translate(statusViewData: TweetViewData.Concrete): NetworkResult<Unit> {
-        updateTweetViewData(statusViewData.copy(translation = TranslationViewData.Loading))
-        return warpnetApi.translate(statusViewData.actionableId, Locale.getDefault().language)
-            .map { translation ->
-                updateTweetViewData(
-                    statusViewData.copy(
-                        translation = TranslationViewData.Loaded(
-                            translation
-                        )
-                    )
-                )
-            }
-            .onFailure {
-                updateTweetViewData(statusViewData.copy(translation = null))
-            }
-    }
-
-    fun untranslate(statusViewData: TweetViewData.Concrete) {
-        updateTweetViewData(statusViewData.copy(translation = null))
-    }
-
-    fun showPollResults(viewData: TweetViewData.Concrete) {
-        updateTweetViewData(
-            viewData.copy(
-                status = viewData.status.copy(
-                    poll = viewData.status.poll?.copy(voted = true)
-                )
-            )
-        )
-    }
-
     fun changeFilter(filtered: Boolean, status: TweetViewData.Concrete) {
         updateTweetViewData(status.copy(filterActive = filtered))
     }
@@ -243,7 +204,6 @@ class SearchViewModel @Inject constructor(
                 isExpanded = viewData.isExpanded,
                 isCollapsed = viewData.isCollapsed,
                 isDetailed = viewData.isDetailed,
-                translation = viewData.translation,
                 filterKind = Filter.Kind.THREAD,
                 filterActive = viewData.filterActive,
                 isQuoteShowingContent = oldQuoteViewData?.isShowingContent
@@ -256,11 +216,6 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun handlePollVotedEvent(statusId: String, poll: Poll) {
-        updateStatus(statusId) { status ->
-            status.copy(poll = poll)
-        }
-    }
 
     private fun removeAllByAccountId(accountId: String) {
         if (loadedStatuses.removeAll { it.status.account.id == accountId }) {

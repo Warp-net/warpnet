@@ -74,15 +74,14 @@ import com.google.android.material.tabs.TabLayoutMediator
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
-import site.warpnet.warpdroid.components.announcements.AnnouncementsActivity
+import site.warpnet.warpdroid.components.chats.ChatsActivity
+import site.warpnet.warpdroid.components.notifications.NotificationsActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.Companion.canHandleMimeType
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.preference.PreferencesActivity
-import site.warpnet.warpdroid.components.scheduled.ScheduledTweetActivity
 import site.warpnet.warpdroid.components.search.SearchActivity
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
-import site.warpnet.warpdroid.components.trending.TrendingActivity
 import site.warpnet.warpdroid.databinding.ActivityMainBinding
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.db.entity.AccountEntity
@@ -100,9 +99,6 @@ import site.warpnet.warpdroid.util.reduceSwipeSensitivity
 import site.warpnet.warpdroid.util.show
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.viewBinding
-import com.mikepenz.materialdrawer.holder.BadgeStyle
-import com.mikepenz.materialdrawer.holder.ColorHolder
-import com.mikepenz.materialdrawer.holder.StringHolder
 import com.mikepenz.materialdrawer.model.AbstractDrawerItem
 import com.mikepenz.materialdrawer.model.DividerDrawerItem
 import com.mikepenz.materialdrawer.model.PrimaryDrawerItem
@@ -314,16 +310,10 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         setupDrawer(
             savedInstanceState,
             addSearchButton = hideTopToolbar,
-            addTrendingTagsButton = false,
-            addTrendingTweetsButton = false,
         )
 
         lifecycleScope.launch {
             viewModel.accounts.collect(::updateProfiles)
-        }
-
-        lifecycleScope.launch {
-            viewModel.unreadAnnouncementsCount.collect(::updateAnnouncementsBadge)
         }
 
         // Initialise the tab adapter and set to viewpager. Fragments appear to be leaked if the
@@ -549,8 +539,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     private fun setupDrawer(
         savedInstanceState: Bundle?,
         addSearchButton: Boolean,
-        addTrendingTagsButton: Boolean,
-        addTrendingTweetsButton: Boolean
     ) {
         val drawerOpenClickListener = View.OnClickListener { binding.mainDrawerLayout.open() }
 
@@ -618,8 +606,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         binding.mainDrawer.apply {
             refreshMainDrawerItems(
                 addSearchButton = addSearchButton,
-                addTrendingTagsButton = addTrendingTagsButton,
-                addTrendingTweetsButton = addTrendingTweetsButton
             )
             setSavedInstance(savedInstanceState)
         }
@@ -627,28 +613,33 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     private fun refreshMainDrawerItems(
         addSearchButton: Boolean,
-        addTrendingTagsButton: Boolean,
-        addTrendingTweetsButton: Boolean
     ) {
         binding.mainDrawer.apply {
             itemAdapter.clear()
             tintStatusBar = true
             addItems(
                 primaryDrawerItem {
-                    nameRes = R.string.action_edit_profile
+                    nameRes = R.string.action_view_profile
                     iconRes = R.drawable.ic_person_24dp
                     onClick = {
-                        val intent = Intent(context, EditProfileActivity::class.java)
-                        startActivityWithSlideInAnimation(intent)
+                        val ownId = accountManager.activeAccount?.accountId
+                        if (!ownId.isNullOrEmpty()) {
+                            startActivityWithSlideInAnimation(AccountActivity.newIntent(context, ownId))
+                        }
                     }
                 },
                 primaryDrawerItem {
-                    nameRes = R.string.action_view_likes
-                    isSelectable = false
-                    iconRes = R.drawable.ic_star_24dp
+                    nameRes = R.string.title_notifications
+                    iconRes = R.drawable.ic_notifications_24dp
                     onClick = {
-                        val intent = TweetListActivity.newLikesIntent(context)
-                        startActivityWithSlideInAnimation(intent)
+                        startActivityWithSlideInAnimation(NotificationsActivity.newIntent(context))
+                    }
+                },
+                primaryDrawerItem {
+                    nameRes = R.string.title_direct_messages
+                    iconRes = R.drawable.ic_mail_24dp
+                    onClick = {
+                        startActivityWithSlideInAnimation(ChatsActivity.newIntent(context))
                     }
                 },
                 primaryDrawerItem {
@@ -657,40 +648,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     onClick = {
                         val intent = TweetListActivity.newBookmarksIntent(context)
                         startActivityWithSlideInAnimation(intent)
-                    }
-                },
-                primaryDrawerItem {
-                    nameRes = R.string.action_view_follow_requests
-                    iconRes = R.drawable.ic_person_add_24dp_mirrored
-                    onClick = {
-                        val intent = AccountListActivity.newIntent(context, AccountListActivity.Type.FOLLOW_REQUESTS)
-                        startActivityWithSlideInAnimation(intent)
-                    }
-                },
-                primaryDrawerItem {
-                    nameRes = R.string.action_lists
-                    iconRes = R.drawable.ic_list_alt_24dp
-                    onClick = {
-                        startActivityWithSlideInAnimation(ListsActivity.newIntent(context))
-                    }
-                },
-                primaryDrawerItem {
-                    nameRes = R.string.action_access_scheduled_posts
-                    iconRes = R.drawable.ic_schedule_24dp
-                    onClick = {
-                        startActivityWithSlideInAnimation(ScheduledTweetActivity.newIntent(context))
-                    }
-                },
-                primaryDrawerItem {
-                    identifier = DRAWER_ITEM_ANNOUNCEMENTS
-                    nameRes = R.string.title_announcements
-                    iconRes = R.drawable.ic_campaign_24dp
-                    onClick = {
-                        startActivityWithSlideInAnimation(AnnouncementsActivity.newIntent(context))
-                    }
-                    badgeStyle = BadgeStyle().apply {
-                        textColor = ColorHolder.fromColor(MaterialColors.getColor(binding.mainDrawer, materialR.attr.colorOnPrimary))
-                        color = ColorHolder.fromColor(MaterialColors.getColor(binding.mainDrawer, appcompatR.attr.colorPrimary))
                     }
                 },
                 DividerDrawerItem(),
@@ -738,31 +695,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 )
             }
 
-            if (addTrendingTagsButton) {
-                binding.mainDrawer.addItemsAtPosition(
-                    5,
-                    primaryDrawerItem {
-                        nameRes = R.string.title_public_trending_hashtags
-                        iconRes = R.drawable.ic_whatshot_24dp
-                        onClick = {
-                            startActivityWithSlideInAnimation(TrendingActivity.getIntent(context))
-                        }
-                    }
-                )
-            }
-
-            if (addTrendingTweetsButton) {
-                binding.mainDrawer.addItemsAtPosition(
-                    6,
-                    primaryDrawerItem {
-                        nameRes = R.string.title_public_trending_statuses
-                        iconRes = R.drawable.ic_local_fire_department_24dp
-                        onClick = {
-                            startActivityWithSlideInAnimation(TweetListActivity.newTrendingIntent(context))
-                        }
-                    }
-                )
-            }
         }
 
         // Warpdroid: developer tools relied on the removed local timeline cache.
@@ -1004,15 +936,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         }
     }
 
-    private fun updateAnnouncementsBadge(unreadAnnouncementsCount: Int) {
-        binding.mainDrawer.updateBadge(
-            DRAWER_ITEM_ANNOUNCEMENTS,
-            StringHolder(
-                if (unreadAnnouncementsCount <= 0) null else unreadAnnouncementsCount.toString()
-            )
-        )
-    }
-
     private fun updateProfiles(accounts: List<AccountViewData>) {
         if (accounts.isEmpty()) {
             return
@@ -1035,7 +958,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     iconUrl = acc.profilePictureUrl
                     isNameShown = true
                     identifier = acc.id
-                    descriptionText = acc.fullName
+                    descriptionText = "@${acc.username}"
                 }
             }.toMutableList()
 
@@ -1061,7 +984,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     companion object {
         private const val TAG = "MainActivity" // logging tag
         private const val DRAWER_ITEM_ADD_ACCOUNT: Long = -13
-        private const val DRAWER_ITEM_ANNOUNCEMENTS: Long = 14
         private const val REDIRECT_URL = "redirectUrl"
         private const val OPEN_DRAFTS = "draft"
         private const val WARPDROID_ACCOUNT_ID = "warpdroidAccountId"

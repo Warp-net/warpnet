@@ -20,24 +20,9 @@ import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Quote
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineAccount
-import site.warpnet.warpdroid.entity.Translation
 
 interface LoadMoreViewData {
     val isLoading: Boolean
-}
-
-@Immutable
-sealed interface TranslationViewData {
-    val data: Translation?
-
-    @Immutable
-    data class Loaded(override val data: Translation) : TranslationViewData
-
-    @Immutable
-    data object Loading : TranslationViewData {
-        override val data: Translation?
-            get() = null
-    }
 }
 
 @Immutable
@@ -71,7 +56,6 @@ sealed class TweetViewData {
         val isCollapsed: Boolean,
         val isDetailed: Boolean = false,
         val repliedToAccount: TimelineAccount? = null,
-        val translation: TranslationViewData? = null,
         val filter: Filter? = null,
         val filterActive: Boolean,
         val quote: QuoteViewData?
@@ -79,21 +63,11 @@ sealed class TweetViewData {
         override val id: String
             get() = status.id
 
-        val attachments: List<Attachment> =
-            actionable.attachments.translated { translation -> map { it.translated(translation) } }
+        val attachments: List<Attachment>
+            get() = actionable.attachments
 
-        val spoilerText: String =
-            actionable.spoilerText.translated { translation -> translation.spoilerText ?: this }
-
-        val poll = actionable.poll?.translated { translation ->
-            val translatedOptionsText = translation.poll?.options?.map { option ->
-                option.title
-            } ?: return@translated this
-            val translatedOptions = options.zip(translatedOptionsText) { option, translatedText ->
-                option.copy(title = translatedText)
-            }
-            copy(options = translatedOptions)
-        }
+        val spoilerText: String
+            get() = actionable.spoilerText
 
         val actionable: Tweet
             get() = status.actionableStatus
@@ -135,20 +109,6 @@ sealed class TweetViewData {
 
         val isFilterHide: Boolean
             get() = filter?.action == Filter.Action.HIDE
-
-        private fun Attachment.translated(translation: Translation): Attachment {
-            val translatedDescription =
-                translation.mediaAttachments.find { it.id == id }?.description
-                    ?: return this
-            return copy(description = translatedDescription)
-        }
-
-        private inline fun <T> T.translated(mapper: T.(Translation) -> T): T =
-            if (translation is TranslationViewData.Loaded) {
-                mapper(translation.data)
-            } else {
-                this
-            }
     }
 
     @Immutable

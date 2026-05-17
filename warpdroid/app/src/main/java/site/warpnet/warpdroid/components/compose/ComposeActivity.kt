@@ -78,19 +78,16 @@ import site.warpnet.warpdroid.components.compose.ComposeViewModel.ConfirmationKi
 import site.warpnet.warpdroid.components.compose.ComposeViewModel.QueuedMedia
 import site.warpnet.warpdroid.components.compose.dialog.CaptionDialog
 import site.warpnet.warpdroid.components.compose.dialog.makeFocusDialog
-import site.warpnet.warpdroid.components.compose.dialog.showAddPollDialog
 import site.warpnet.warpdroid.components.compose.view.ComposeOptionsListener
-import site.warpnet.warpdroid.components.compose.view.ComposeScheduleView
-import site.warpnet.warpdroid.components.compose.view.ComposeScheduleView.Companion.parseDate
 import site.warpnet.warpdroid.components.editimage.EditImageContract
 import site.warpnet.warpdroid.components.editimage.EditImageOptions
 import site.warpnet.warpdroid.components.editimage.EditImageResult
+import site.warpnet.transport.WarpnetLimits
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
 import site.warpnet.warpdroid.databinding.ActivityComposeBinding
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Emoji
-import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.PrefKeys
@@ -137,13 +134,11 @@ class ComposeActivity :
     ComposeAutoCompleteAdapter.AutocompletionProvider,
     OnEmojiSelectedListener,
     OnReceiveContentListener,
-    ComposeScheduleView.OnTimeSetListener,
     CaptionDialog.Listener {
 
     private lateinit var composeOptionsBehavior: BottomSheetBehavior<*>
     private lateinit var addMediaBehavior: BottomSheetBehavior<*>
     private lateinit var emojiBehavior: BottomSheetBehavior<*>
-    private lateinit var scheduleBehavior: BottomSheetBehavior<*>
 
     /** The account that is being used to compose the status */
     private lateinit var activeAccount: AccountEntity
@@ -154,7 +149,7 @@ class ComposeActivity :
     var highlightFinders = defaultFinders
 
     @VisibleForTesting
-    var maximumTootCharacters = InstanceInfoRepository.DEFAULT_CHARACTER_LIMIT
+    var maximumTootCharacters = WarpnetLimits.MAX_TWEET_CHARS
     var charactersReservedPerUrl = InstanceInfoRepository.DEFAULT_CHARACTERS_RESERVED_PER_URL
 
     private val viewModel: ComposeViewModel by viewModels(
@@ -249,13 +244,11 @@ class ComposeActivity :
         override fun handleOnBackPressed() {
             if (composeOptionsBehavior.state == BottomSheetBehavior.STATE_EXPANDED ||
                 addMediaBehavior.state == BottomSheetBehavior.STATE_EXPANDED ||
-                emojiBehavior.state == BottomSheetBehavior.STATE_EXPANDED ||
-                scheduleBehavior.state == BottomSheetBehavior.STATE_EXPANDED
+                emojiBehavior.state == BottomSheetBehavior.STATE_EXPANDED
             ) {
                 composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
                 addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
                 emojiBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-                scheduleBehavior.state = BottomSheetBehavior.STATE_HIDDEN
                 return
             }
 
@@ -282,7 +275,6 @@ class ComposeActivity :
             binding.addMediaBottomSheet.updatePadding(bottom = insets.bottom + bottomBarHeight)
             binding.emojiView.updatePadding(bottom = insets.bottom + bottomBarHeight)
             binding.composeOptionsBottomSheet.updatePadding(bottom = insets.bottom + bottomBarHeight)
-            binding.composeScheduleView.updatePadding(bottom = insets.bottom + bottomBarHeight)
             binding.composeMainScrollView.updateLayoutParams<ViewGroup.MarginLayoutParams> { bottomMargin = insets.bottom + bottomBarHeight }
         }
 
@@ -336,14 +328,9 @@ class ComposeActivity :
             binding.composeEditField.setText(tweetContent)
         }
 
-        if (!composeOptions?.scheduledAt.isNullOrEmpty()) {
-            binding.composeScheduleView.setDateTime(composeOptions.scheduledAt)
-        }
-
         setupLanguageSpinner(getInitialLanguages(composeOptions?.language, activeAccount))
         setupComposeField(preferences, viewModel.startingText)
         setupContentWarningField(composeOptions?.contentWarning)
-        setupPollView()
         applyShareIntent(intent, savedInstanceState)
 
         /* Finally, overwrite state with data from saved instance state. */
@@ -540,31 +527,11 @@ class ComposeActivity :
         }
 
         lifecycleScope.launch {
-            viewModel.poll.collect { poll ->
-                binding.pollPreview.visible(poll != null)
-                poll?.let(binding.pollPreview::setPoll)
-            }
-        }
-
-        lifecycleScope.launch {
-            viewModel.scheduledAt.collect { scheduledAt ->
-                if (scheduledAt == null) {
-                    binding.composeScheduleView.resetSchedule()
-                } else {
-                    binding.composeScheduleView.setDateTime(scheduledAt)
-                }
-                updateScheduleButton()
-            }
-        }
-
-        lifecycleScope.launch {
-            viewModel.media.combine(viewModel.poll) { media, poll ->
-                val active = poll == null &&
-                    media.size < maxUploadMediaNumber &&
+            viewModel.media.collect { media ->
+                val active = media.size < maxUploadMediaNumber &&
                     (media.isEmpty() || media.first().type == QueuedMedia.Type.IMAGE)
                 enableButton(binding.composeAddMediaButton, active, active)
-                enablePollButton(media.isEmpty())
-            }.collect()
+            }
         }
 
         lifecycleScope.launch {
@@ -603,12 +570,10 @@ class ComposeActivity :
 
         composeOptionsBehavior = BottomSheetBehavior.from(binding.composeOptionsBottomSheet)
         addMediaBehavior = BottomSheetBehavior.from(binding.addMediaBottomSheet)
-        scheduleBehavior = BottomSheetBehavior.from(binding.composeScheduleView)
         emojiBehavior = BottomSheetBehavior.from(binding.emojiView)
 
         composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-        scheduleBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         emojiBehavior.state = BottomSheetBehavior.STATE_HIDDEN
 
         val bottomSheetCallback = object : BottomSheetCallback() {
@@ -619,7 +584,6 @@ class ComposeActivity :
         }
         composeOptionsBehavior.addBottomSheetCallback(bottomSheetCallback)
         addMediaBehavior.addBottomSheetCallback(bottomSheetCallback)
-        scheduleBehavior.addBottomSheetCallback(bottomSheetCallback)
         emojiBehavior.addBottomSheetCallback(bottomSheetCallback)
 
         enableButton(binding.composeEmojiButton, clickable = false, colorActive = false)
@@ -631,9 +595,6 @@ class ComposeActivity :
         binding.composeContentWarningButton.setOnClickListener { onContentWarningChanged() }
         binding.composeEmojiButton.setOnClickListener { showEmojis() }
         binding.composeHideMediaButton.setOnClickListener { toggleHideMedia() }
-        binding.composeScheduleButton.setOnClickListener { onScheduleClick() }
-        binding.composeScheduleView.setResetOnClickListener { resetSchedule() }
-        binding.composeScheduleView.setListener(this)
         binding.atButton.setOnClickListener { atButtonClicked() }
         binding.hashButton.setOnClickListener { hashButtonClicked() }
         binding.descriptionMissingWarningButton.setOnClickListener {
@@ -646,7 +607,6 @@ class ComposeActivity :
 
         binding.actionPhotoTake.setOnClickListener { initiateCameraApp() }
         binding.actionPhotoPick.setOnClickListener { onMediaPick() }
-        binding.addPollTextActionTextView.setOnClickListener { openPollDialog() }
 
         onBackPressedDispatcher.addCallback(this, onBackPressedCallback)
     }
@@ -706,8 +666,7 @@ class ComposeActivity :
         onBackPressedCallback.isEnabled = confirmation != ConfirmationKind.NONE ||
             composeOptionsBehavior.state != BottomSheetBehavior.STATE_HIDDEN ||
             addMediaBehavior.state != BottomSheetBehavior.STATE_HIDDEN ||
-            emojiBehavior.state != BottomSheetBehavior.STATE_HIDDEN ||
-            scheduleBehavior.state != BottomSheetBehavior.STATE_HIDDEN
+            emojiBehavior.state != BottomSheetBehavior.STATE_HIDDEN
     }
 
     private fun replaceTextAtCaret(text: CharSequence) {
@@ -839,30 +798,11 @@ class ComposeActivity :
         }
     }
 
-    private fun updateScheduleButton() {
-        if (viewModel.editing) {
-            // Can't reschedule a published status
-            enableButton(binding.composeScheduleButton, clickable = false, colorActive = false)
-        } else {
-            @ColorInt val color =
-                MaterialColors.getColor(
-                    binding.composeScheduleButton,
-                    if (binding.composeScheduleView.time == null) {
-                        android.R.attr.textColorTertiary
-                    } else {
-                        appcompatR.attr.colorPrimary
-                    }
-                )
-            binding.composeScheduleButton.drawable.setTint(color)
-        }
-    }
-
     private fun enableButtons(enable: Boolean, editing: Boolean) {
         binding.composeAddMediaButton.isClickable = enable
         binding.composeToggleVisibilityButton.isClickable = enable && !editing
         binding.composeEmojiButton.isClickable = enable
         binding.composeHideMediaButton.isClickable = enable
-        binding.composeScheduleButton.isClickable = enable && !editing
         binding.composeTweetButton.isEnabled = enable
     }
 
@@ -893,28 +833,8 @@ class ComposeActivity :
             composeOptionsBehavior.state = BottomSheetBehavior.STATE_EXPANDED
             addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
             emojiBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-            scheduleBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
         } else {
             composeOptionsBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
-        }
-    }
-
-    private fun onScheduleClick() {
-        if (viewModel.scheduledAt.value == null) {
-            binding.composeScheduleView.openPickDateDialog()
-        } else {
-            showScheduleView()
-        }
-    }
-
-    private fun showScheduleView() {
-        if (scheduleBehavior.state == BottomSheetBehavior.STATE_HIDDEN || scheduleBehavior.state == BottomSheetBehavior.STATE_COLLAPSED) {
-            scheduleBehavior.state = BottomSheetBehavior.STATE_EXPANDED
-            composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-            addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-            emojiBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
-        } else {
-            scheduleBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
         }
     }
 
@@ -932,7 +852,6 @@ class ComposeActivity :
                     emojiBehavior.state = BottomSheetBehavior.STATE_EXPANDED
                     composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
                     addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-                    scheduleBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
                 } else {
                     emojiBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
                 }
@@ -945,7 +864,6 @@ class ComposeActivity :
             addMediaBehavior.state = BottomSheetBehavior.STATE_EXPANDED
             composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
             emojiBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-            scheduleBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
         } else {
             addMediaBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
         }
@@ -958,55 +876,6 @@ class ComposeActivity :
             pickMediaFileLauncher.launch(true)
         }
         addMediaBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
-    }
-
-    private fun openPollDialog() = lifecycleScope.launch {
-        addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-        val instanceParams = viewModel.instanceInfo.first()
-        showAddPollDialog(
-            context = this@ComposeActivity,
-            poll = viewModel.poll.value,
-            maxOptionCount = instanceParams.pollMaxOptions,
-            maxOptionLength = instanceParams.pollMaxLength,
-            minDuration = instanceParams.pollMinDuration,
-            maxDuration = instanceParams.pollMaxDuration,
-            onUpdatePoll = viewModel::updatePoll
-        )
-    }
-
-    private fun setupPollView() {
-        val margin = resources.getDimensionPixelSize(R.dimen.compose_media_preview_margin)
-        val marginBottom = resources.getDimensionPixelSize(
-            R.dimen.compose_media_preview_margin_bottom
-        )
-
-        val layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        layoutParams.setMargins(margin, margin, margin, marginBottom)
-        binding.pollPreview.layoutParams = layoutParams
-
-        binding.pollPreview.setOnClickListener {
-            val popup = PopupMenu(this, binding.pollPreview)
-            val editId = 1
-            val removeId = 2
-            popup.menu.add(0, editId, 0, R.string.edit_poll)
-            popup.menu.add(0, removeId, 0, R.string.action_remove)
-            popup.setOnMenuItemClickListener { menuItem ->
-                when (menuItem.itemId) {
-                    editId -> openPollDialog()
-                    removeId -> removePoll()
-                }
-                true
-            }
-            popup.show()
-        }
-    }
-
-    private fun removePoll() {
-        viewModel.updatePoll(null)
-        binding.pollPreview.hide()
     }
 
     override fun onVisibilityChanged(visibility: Tweet.Visibility) {
@@ -1048,18 +917,8 @@ class ComposeActivity :
         updateVisibleCharactersLeft()
     }
 
-    private fun verifyScheduledTime(): Boolean {
-        return binding.composeScheduleView.verifyScheduledTime(
-            parseDate(viewModel.scheduledAt.value)
-        )
-    }
-
     private fun onSendClicked() {
-        if (verifyScheduledTime()) {
-            sendStatus()
-        } else {
-            showScheduleView()
-        }
+        sendStatus()
     }
 
     /** This is for the fancy keyboards which can insert images and stuff, and drag&drop etc */
@@ -1145,20 +1004,6 @@ class ComposeActivity :
                 R.attr.textColorDisabled
             }
         )
-    }
-
-    private fun enablePollButton(enable: Boolean) {
-        binding.addPollTextActionTextView.isEnabled = enable
-        val textColor = MaterialColors.getColor(
-            binding.addPollTextActionTextView,
-            if (enable) {
-                android.R.attr.textColorTertiary
-            } else {
-                R.attr.textColorDisabled
-            }
-        )
-        binding.addPollTextActionTextView.setTextColor(textColor)
-        binding.addPollTextActionTextView.compoundDrawablesRelative[0].setTint(textColor)
     }
 
     private fun editImageInQueue(item: QueuedMedia) {
@@ -1374,20 +1219,6 @@ class ComposeActivity :
         }
     }
 
-    override fun onTimeSet(time: String?) {
-        viewModel.updateScheduledAt(time)
-        if (verifyScheduledTime()) {
-            scheduleBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-        } else {
-            showScheduleView()
-        }
-    }
-
-    private fun resetSchedule() {
-        viewModel.updateScheduledAt(null)
-        scheduleBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-    }
-
     override fun onUpdateDescription(localId: Int, description: String) {
         viewModel.updateDescription(localId, description)
     }
@@ -1412,7 +1243,6 @@ class ComposeActivity :
 
     @Parcelize
     data class ComposeOptions(
-        val scheduledTootId: String? = null,
         val draftId: Int? = null,
         val content: String? = null,
         val mediaUrls: List<String>? = null,
@@ -1425,9 +1255,7 @@ class ComposeActivity :
         val replyingStatusAuthor: String? = null,
         val replyingTweetContent: String? = null,
         val mediaAttachments: List<Attachment>? = null,
-        val scheduledAt: String? = null,
         val sensitive: Boolean? = null,
-        val poll: NewPoll? = null,
         val modifiedInitialState: Boolean? = null,
         val language: String? = null,
         val statusId: String? = null,

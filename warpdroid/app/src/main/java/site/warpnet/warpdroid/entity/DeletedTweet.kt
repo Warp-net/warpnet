@@ -27,7 +27,6 @@ data class DeletedTweet(
     val visibility: Tweet.Visibility,
     val sensitive: Boolean,
     @Json(name = "media_attachments") val attachments: List<Attachment>,
-    val poll: Poll? = null,
     @Json(name = "created_at") val createdAt: Date,
     val language: String? = null
 ) {

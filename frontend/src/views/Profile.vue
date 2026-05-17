@@ -95,12 +95,24 @@ resulting from the use or misuse of this software.
               </button>
             </div>
 
-            <div v-if="!noUser && !isSelf && !loading">
+            <div v-if="!noUser && !isSelf && !loading" class="relative">
               <button
+                @click="profileMenuOpen = !profileMenuOpen"
                 class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 text-blue font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border border-blue mb-2 hover:bg-lightblue"
+                :aria-expanded="profileMenuOpen"
+                aria-label="More options"
               >
                 <i class="fas fa-ellipsis-h"></i>
               </button>
+              <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                <button type="button" @click="muteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Mute @{{ profile.id }}</button>
+                <button
+                  type="button"
+                  @click="askBlockToggle"
+                  class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+                  :class="isBlocked ? 'text-blue' : 'text-red-600'"
+                >{{ isBlocked ? `Unblock @${profile.id}` : `Block @${profile.id}` }}</button>
+              </div>
               <button
                 v-if="isFollower()"
                 @click="sendMessage()"
@@ -108,6 +120,15 @@ resulting from the use or misuse of this software.
                 aria-label="Send message"
               >
                 <i class="fas fa-envelope" aria-hidden="true"></i>
+              </button>
+              <button
+                @click="toggleSubscribe()"
+                class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border mb-2"
+                :class="subscribed ? 'text-white bg-blue border-blue hover:bg-darkblue' : 'text-blue border-blue hover:bg-lightblue'"
+                :aria-label="subscribed ? 'Unsubscribe from notifications' : 'Subscribe to notifications'"
+                :title="subscribed ? 'Unsubscribe from new-tweet alerts' : 'Subscribe to new-tweet alerts'"
+              >
+                <i class="fas" :class="subscribed ? 'fa-bell-slash' : 'fa-bell'" aria-hidden="true"></i>
               </button>
               <button
                 v-if="!isFollowing()"
@@ -233,7 +254,14 @@ resulting from the use or misuse of this software.
             <i class="fas fa-plus lg:hidden"></i>
           </button>
         </div>
-        <Tweets v-if="!noUser" :tweets="tweets" />
+        <div
+          v-if="isBlocked"
+          class="mx-5 my-4 p-4 border border-lighter rounded bg-lightest text-sm text-dark"
+        >
+          <p class="font-bold">You blocked @{{ profile.id }}.</p>
+          <p class="mt-1">Their tweets are hidden. Use the menu above to unblock if you change your mind.</p>
+        </div>
+        <Tweets v-if="!noUser && !isBlocked" :tweets="sortedTweets" />
       </div>
       <DefaultRightBar
           :profile="profile"
@@ -249,6 +277,18 @@ resulting from the use or misuse of this software.
         v-if="showEditProfileModal"
         :showEditProfileModal="showEditProfileModal"
         @close="onEditProfileClosed"
+      />
+
+      <ConfirmDialog
+        :show="showBlockConfirm"
+        :title="isBlocked ? 'Unblock user' : 'Block user'"
+        :message="isBlocked
+          ? `Unblock @${profile?.id || ''}? They'll be able to follow you and see your tweets again.`
+          : `Block @${profile?.id || ''}? They'll no longer be able to follow you or see your tweets.`"
+        :confirm-label="isBlocked ? 'Unblock' : 'Block'"
+        :destructive="!isBlocked"
+        @cancel="showBlockConfirm = false"
+        @confirm="onBlockConfirmed"
       />
   </div>
 </template>
@@ -268,6 +308,7 @@ export default {
     EditProfileOverlay: defineAsyncComponent(() => import('@/components/EditProfileOverlay.vue')),
     SetUpProfileOverlay: defineAsyncComponent(() => import('@/components/SetUpProfileOverlay.vue')),
     Tweets: defineAsyncComponent(() => import('@/components/Tweets.vue')),
+    ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
   },
   data() {
     return {
@@ -285,7 +326,19 @@ export default {
       followings: [],
       followingStatus: new Map(),
       followerStatus: new Map(),
+      subscribed: false,
+      profileMenuOpen: false,
+      isBlocked: false,
+      showBlockConfirm: false,
     };
+  },
+  computed: {
+    sortedTweets() {
+      // Render pinned tweets at the top of the user's timeline.
+      const pinned = this.tweets.filter(t => t && t.pinned);
+      const rest = this.tweets.filter(t => !(t && t.pinned));
+      return pinned.concat(rest);
+    },
   },
   methods: {
     isMySelf(profileId) {
@@ -371,6 +424,66 @@ export default {
       }
       this.followingStatus.set(this.profile.id, false)
     },
+    async toggleSubscribe() {
+      try {
+        if (this.subscribed) {
+          await warpnetService.unsubscribeUser(this.profile.id);
+          this.subscribed = false;
+        } else {
+          await warpnetService.subscribeUser(this.profile.id);
+          this.subscribed = true;
+        }
+      } catch (err) {
+        console.error(`failed to toggle subscribe [${this.profile.id}]`, err);
+      }
+    },
+    async muteFromProfile() {
+      this.profileMenuOpen = false;
+      try {
+        await warpnetService.muteUser(this.profile.id);
+      } catch (err) {
+        console.error(`failed to mute [${this.profile.id}]`, err);
+      }
+    },
+    // askBlockToggle opens the ConfirmDialog with text that depends on
+    // the current block state; onBlockConfirmed performs the actual
+    // block / unblock and refreshes local UI so the user can't keep
+    // pressing the menu item indefinitely.
+    askBlockToggle() {
+      this.profileMenuOpen = false;
+      this.showBlockConfirm = true;
+    },
+    async onBlockConfirmed() {
+      this.showBlockConfirm = false;
+      const target = this.profile?.id;
+      if (!target) return;
+      try {
+        if (this.isBlocked) {
+          await warpnetService.unblockUser(target);
+          this.isBlocked = false;
+          // Reload the profile so its tweets reappear.
+          await this.loadProfileBlockState();
+        } else {
+          await warpnetService.blockUser(target);
+          this.isBlocked = true;
+          // Hide the (now blocked) user's tweets immediately so the
+          // page reflects the block without a manual refresh.
+          this.tweets = [];
+        }
+      } catch (err) {
+        console.error(`failed to toggle block on [${target}]`, err);
+      }
+    },
+    async loadProfileBlockState() {
+      const target = this.profile?.id;
+      if (!target) return;
+      try {
+        this.isBlocked = await warpnetService.isUserBlocked(target);
+      } catch (err) {
+        console.warn(`failed to read block state for [${target}]:`, err);
+        this.isBlocked = false;
+      }
+    },
     async loadMore() {
       const tweets = await warpnetService.getTweets({userId:this.profile.id, cursorReset:false});
       this.tweets = this.tweets.concat(tweets);
@@ -422,6 +535,10 @@ export default {
       )
 
       this.isSelf = this.isMySelf(profileId);
+
+      if (!this.isSelf) {
+        await this.loadProfileBlockState();
+      }
 
       [this.users, this.tweets, this.followers, this.followings] = await Promise.all([
         warpnetService.getUsers({profileId:profileId, cursorReset:true}),
