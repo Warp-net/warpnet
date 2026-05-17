@@ -51,7 +51,6 @@ export default {
         { name: 'SettingsBlocks', label: 'Blocked users', hint: 'Users you have blocked', icon: 'fas fa-ban' },
         { name: 'SettingsMutes', label: 'Muted users', hint: 'Users you have muted', icon: 'fas fa-volume-mute' },
         { name: 'SettingsFilters', label: 'Filters', hint: 'Hide tweets matching keywords', icon: 'fas fa-filter' },
-        { name: 'FollowRequests', label: 'Follow requests', hint: 'Pending follow requests', icon: 'fas fa-user-clock' },
       ],
     };
   },

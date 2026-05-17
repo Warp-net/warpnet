@@ -53,6 +53,14 @@ resulting from the use or misuse of this software.
             >
               Mentions
             </button>
+            <button
+              v-if="locked"
+              @click="submit('Requests')"
+              class="w-full text-dark font-bold border-b-2 p-1 md:px-3 md:py-4 hover:bg-lightblue sm:truncate"
+              :class="`${this.mode === 'Requests' ? 'border-blue' : ''}`"
+            >
+              Requests
+            </button>
           </div>
         </div>
 
@@ -141,6 +149,39 @@ resulting from the use or misuse of this software.
             </div>
           </div>
         </div>
+        <div v-if="mode === 'Requests' && locked">
+          <div
+            v-if="followRequests.length === 0"
+            class="flex flex-col items-center justify-center pt-10 px-5"
+          >
+            <p class="font-bold text-lg">No follow requests</p>
+            <p class="text-sm text-dark">When your account is locked, requests to follow you appear here.</p>
+          </div>
+          <div
+            v-for="r in followRequests"
+            :key="r.id"
+            class="px-5 py-3 border-b border-lighter flex items-center"
+          >
+            <img :src="r.avatar || '/default_profile.png'" class="h-10 w-10 rounded-full object-cover" alt="" />
+            <button
+              @click="$router.push({ name: 'Profile', params: { id: r.id } })"
+              class="ml-3 text-left flat-btn"
+            >
+              <p class="font-bold">{{ r.username || r.id }}</p>
+              <p class="text-dark text-sm">@{{ r.id }}</p>
+            </button>
+            <div class="ml-auto flex gap-2">
+              <button
+                @click="authorizeRequest(r.id)"
+                class="text-white bg-blue font-bold px-3 py-1 rounded-full hover:bg-darkblue"
+              >Authorize</button>
+              <button
+                @click="rejectRequest(r.id)"
+                class="text-red-600 border border-red-600 font-bold px-3 py-1 rounded-full hover:bg-red-50"
+              >Reject</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- default right bar -->
@@ -171,6 +212,8 @@ export default {
     return {
       loading: false,
       notifications: [],
+      followRequests: [],
+      locked: false,
       ownerProfile: {},
       mode: this.$route.query.m || "All",
       overlayOpen: false,
@@ -230,12 +273,55 @@ export default {
           .catch(err => console.error('Failed to mark notification read:', err))
       ));
     },
+    async hydrateRequests(ids) {
+      return Promise.all(
+        (ids || []).map(async (id) => {
+          try {
+            const p = await warpnetService.getProfile(id);
+            if (!p) return { id };
+            if (p.avatar_key) {
+              p.avatar = await warpnetService.getImage({ userId: id, key: p.avatar_key });
+            }
+            return p;
+          } catch (e) { return { id }; }
+        })
+      );
+    },
+    async loadFollowRequests() {
+      try {
+        const resp = await warpnetService.getFollowRequests();
+        const ids = resp?.follower_ids || resp?.ids || [];
+        this.followRequests = await this.hydrateRequests(ids);
+      } catch (err) {
+        console.error('Failed to load follow requests:', err);
+      }
+    },
+    async authorizeRequest(id) {
+      try {
+        await warpnetService.authorizeFollowRequest(id);
+        this.followRequests = this.followRequests.filter(r => r.id !== id);
+      } catch (err) { console.error('Failed to authorize', err); }
+    },
+    async rejectRequest(id) {
+      try {
+        await warpnetService.rejectFollowRequest(id);
+        this.followRequests = this.followRequests.filter(r => r.id !== id);
+      } catch (err) { console.error('Failed to reject', err); }
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
     try {
       this.loading = true;
       this.ownerProfile = warpnetService.getOwnerProfile();
+      // The owner stub in stateMap doesn't carry the `locked` flag, so fetch
+      // the full profile to decide whether to show the Requests tab.
+      try {
+        const me = await warpnetService.getProfile(this.ownerProfile.user_id);
+        this.locked = Boolean(me && me.locked);
+      } catch (err) {
+        console.warn('Failed to read own locked state:', err);
+      }
       const resp = await warpnetService.getNotifications(true);
       if (resp && resp.notifications) {
         this.notifications = resp.notifications;
@@ -243,6 +329,9 @@ export default {
       // Visiting the Notifications view counts as "the user saw them".
       // Mark every unread item read so the SideNav badge clears.
       await this.markAllRead();
+      if (this.locked) {
+        await this.loadFollowRequests();
+      }
     } catch (err) {
       console.error('Failed to load notifications:', err);
     } finally {

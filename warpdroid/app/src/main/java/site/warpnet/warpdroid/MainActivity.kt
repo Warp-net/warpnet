@@ -74,6 +74,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
+import site.warpnet.warpdroid.components.notifications.NotificationsActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.Companion.canHandleMimeType
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
@@ -617,20 +618,20 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             tintStatusBar = true
             addItems(
                 primaryDrawerItem {
-                    nameRes = R.string.action_edit_profile
+                    nameRes = R.string.action_view_profile
                     iconRes = R.drawable.ic_person_24dp
                     onClick = {
-                        val intent = Intent(context, EditProfileActivity::class.java)
-                        startActivityWithSlideInAnimation(intent)
+                        val ownId = accountManager.activeAccount?.accountId
+                        if (!ownId.isNullOrEmpty()) {
+                            startActivityWithSlideInAnimation(AccountActivity.newIntent(context, ownId))
+                        }
                     }
                 },
                 primaryDrawerItem {
-                    nameRes = R.string.action_view_likes
-                    isSelectable = false
-                    iconRes = R.drawable.ic_star_24dp
+                    nameRes = R.string.title_notifications
+                    iconRes = R.drawable.ic_notifications_24dp
                     onClick = {
-                        val intent = TweetListActivity.newLikesIntent(context)
-                        startActivityWithSlideInAnimation(intent)
+                        startActivityWithSlideInAnimation(NotificationsActivity.newIntent(context))
                     }
                 },
                 primaryDrawerItem {
@@ -638,14 +639,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     iconRes = R.drawable.ic_bookmark_24dp
                     onClick = {
                         val intent = TweetListActivity.newBookmarksIntent(context)
-                        startActivityWithSlideInAnimation(intent)
-                    }
-                },
-                primaryDrawerItem {
-                    nameRes = R.string.action_view_follow_requests
-                    iconRes = R.drawable.ic_person_add_24dp_mirrored
-                    onClick = {
-                        val intent = AccountListActivity.newIntent(context, AccountListActivity.Type.FOLLOW_REQUESTS)
                         startActivityWithSlideInAnimation(intent)
                     }
                 },
