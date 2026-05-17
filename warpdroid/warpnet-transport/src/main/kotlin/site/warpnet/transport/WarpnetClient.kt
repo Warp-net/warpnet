@@ -359,8 +359,15 @@ interface WarpnetBinding {
      * Current libp2p Connectedness for the paired desktop peer. Polled
      * by [ConnectionMonitor]; see [LinkState.fromBinding] for the
      * mapping of returned strings to UI-level state.
+     *
+     * The default falls back to a binary "Connected" / "NotConnected"
+     * read from [isConnected] so the interface can be added without
+     * requiring an AAR rebuild — once the freshly generated gomobile
+     * binding exposes node.Node.connectedness(), [DefaultBinding]
+     * should override this to return the proper three-state value
+     * including "Limited" (relay-only).
      */
-    fun connectedness(): String
+    fun connectedness(): String = if (isConnected()) "Connected" else "NotConnected"
     fun disconnect(): String
     fun pause()
     fun resume()
@@ -397,7 +404,11 @@ object DefaultBinding : WarpnetBinding {
 
     override fun isConnected(): Boolean = node.Node.isConnected() == "true"
 
-    override fun connectedness(): String = node.Node.connectedness()
+    // Once the AAR is rebuilt against mobile.go's Connectedness() export
+    // (`make gen-aar`), override this to call node.Node.connectedness()
+    // directly for the three-state Connected / Limited / NotConnected
+    // distinction. Until then the interface default keeps CI green by
+    // collapsing to the two-state isConnected() answer.
 
     override fun disconnect(): String = node.Node.disconnect()
 
