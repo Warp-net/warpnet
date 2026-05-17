@@ -530,3 +530,40 @@ data class DeleteChatEvent(
     @Json(name = "user_id") val userId: String,
     @Json(name = "chat_id") val chatId: String,
 )
+
+// Wire shape mirrors event.GetAllMessagesEvent on the fat node.
+@JsonClass(generateAdapter = true)
+data class GetMessagesEvent(
+    @Json(name = "owner_id") val ownerId: String,
+    @Json(name = "chat_id") val chatId: String,
+    val limit: Int = 40,
+    val cursor: String = "",
+)
+
+// Wire shape mirrors event.ChatMessagesResponse.
+@JsonClass(generateAdapter = true)
+data class GetMessagesResponse(
+    @Json(name = "chat_id") val chatId: String = "",
+    val cursor: String = "",
+    val messages: List<WarpnetMessage> = emptyList(),
+)
+
+// Wire shape mirrors domain.ChatMessage. Send paths populate sender / receiver
+// / chat / text; the server fills id and timestamps.
+@JsonClass(generateAdapter = true)
+data class WarpnetMessage(
+    val id: String = "",
+    @Json(name = "chat_id") val chatId: String = "",
+    @Json(name = "sender_id") val senderId: String = "",
+    @Json(name = "receiver_id") val receiverId: String = "",
+    val text: String = "",
+    @Json(name = "created_at") val createdAt: String = "",
+    val status: String = "",
+)
+
+// Wire shape mirrors event.DeleteMessageEvent = GetMessageEvent.
+@JsonClass(generateAdapter = true)
+data class DeleteMessageEvent(
+    @Json(name = "chat_id") val chatId: String,
+    val id: String,
+)

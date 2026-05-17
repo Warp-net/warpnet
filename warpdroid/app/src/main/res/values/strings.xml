@@ -65,6 +65,10 @@
     <string name="notification_verb_follow">followed you</string>
     <string name="notification_verb_follow_request">requested to follow you</string>
     <string name="notification_verb_quote">quoted your tweet</string>
+    <string name="chats_empty">No conversations yet</string>
+    <string name="chat_messages_empty">No messages yet</string>
+    <string name="chat_compose_placeholder">Message</string>
+    <string name="action_chat_send">Send</string>
     <string name="title_public_local">Local</string>
     <string name="title_public_trending_hashtags">Trending hashtags</string>
     <string name="title_public_trending_statuses">Trending posts</string>

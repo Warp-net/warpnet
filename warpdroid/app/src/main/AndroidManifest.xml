@@ -114,6 +114,8 @@
         <activity android:name=".TweetListActivity" />
         <activity android:name=".components.accountlist.AccountListActivity" />
         <activity android:name=".components.notifications.NotificationsActivity" />
+        <activity android:name=".components.chats.ChatsActivity" />
+        <activity android:name=".components.chats.ChatMessagesActivity" />
         <activity android:name=".AboutActivity" />
         <activity android:name=".components.editimage.EditImageActivity" />
         <activity

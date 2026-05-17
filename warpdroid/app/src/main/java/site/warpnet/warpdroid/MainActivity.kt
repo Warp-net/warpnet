@@ -74,6 +74,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
+import site.warpnet.warpdroid.components.chats.ChatsActivity
 import site.warpnet.warpdroid.components.notifications.NotificationsActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.Companion.canHandleMimeType
@@ -632,6 +633,13 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     iconRes = R.drawable.ic_notifications_24dp
                     onClick = {
                         startActivityWithSlideInAnimation(NotificationsActivity.newIntent(context))
+                    }
+                },
+                primaryDrawerItem {
+                    nameRes = R.string.title_direct_messages
+                    iconRes = R.drawable.ic_mail_24dp
+                    onClick = {
+                        startActivityWithSlideInAnimation(ChatsActivity.newIntent(context))
                     }
                 },
                 primaryDrawerItem {

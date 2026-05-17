@@ -139,6 +139,10 @@ class WarpnetRepository @Inject constructor(
     private val getChatsAdapter = moshi.adapter<site.warpnet.transport.dto.GetChatsEvent>()
     private val getChatsRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetChatsResponse>()
     private val deleteChatAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteChatEvent>()
+    private val getMessagesAdapter = moshi.adapter<site.warpnet.transport.dto.GetMessagesEvent>()
+    private val getMessagesRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMessagesResponse>()
+    private val newMessageAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetMessage>()
+    private val deleteMessageAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteMessageEvent>()
     private val unretweetAdapter = moshi.adapter<UnretweetEvent>()
 
     // -----------------------------------------------------------------
@@ -878,6 +882,57 @@ class WarpnetRepository @Inject constructor(
             ProtocolIds.PRIVATE_DELETE_CHAT,
             deleteChatAdapter.toJson(
                 site.warpnet.transport.dto.DeleteChatEvent(userId = userId, chatId = chatId),
+            ),
+        )
+    }
+
+    suspend fun getMessages(
+        ownerId: String,
+        chatId: String,
+        cursor: String = "",
+        limit: Int = 40,
+    ): Pair<List<site.warpnet.transport.dto.WarpnetMessage>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_MESSAGES,
+            getMessagesAdapter.toJson(
+                site.warpnet.transport.dto.GetMessagesEvent(
+                    ownerId = ownerId,
+                    chatId = chatId,
+                    cursor = cursor,
+                    limit = limit,
+                ),
+            ),
+        )
+        val page = getMessagesRespAdapter.fromJson(raw)
+            ?: return emptyList<site.warpnet.transport.dto.WarpnetMessage>() to ""
+        return page.messages to page.cursor
+    }
+
+    suspend fun sendMessage(
+        chatId: String,
+        senderId: String,
+        receiverId: String,
+        text: String,
+    ): site.warpnet.transport.dto.WarpnetMessage? {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_POST_MESSAGE,
+            newMessageAdapter.toJson(
+                site.warpnet.transport.dto.WarpnetMessage(
+                    chatId = chatId,
+                    senderId = senderId,
+                    receiverId = receiverId,
+                    text = text,
+                ),
+            ),
+        )
+        return newMessageAdapter.fromJson(raw)
+    }
+
+    suspend fun deleteMessage(chatId: String, messageId: String) {
+        client.request(
+            ProtocolIds.PRIVATE_DELETE_MESSAGE,
+            deleteMessageAdapter.toJson(
+                site.warpnet.transport.dto.DeleteMessageEvent(chatId = chatId, id = messageId),
             ),
         )
     }
