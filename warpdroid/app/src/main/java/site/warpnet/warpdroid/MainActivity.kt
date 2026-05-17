@@ -958,7 +958,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     iconUrl = acc.profilePictureUrl
                     isNameShown = true
                     identifier = acc.id
-                    descriptionText = "@${acc.accountId}"
+                    descriptionText = "@${acc.username}"
                 }
             }.toMutableList()
 
