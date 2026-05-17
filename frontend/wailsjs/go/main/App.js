@@ -5,3 +5,7 @@
 export function Call(arg1) {
   return window['go']['main']['App']['Call'](arg1);
 }
+
+export function IsFirstRun() {
+  return window['go']['main']['App']['IsFirstRun']();
+}

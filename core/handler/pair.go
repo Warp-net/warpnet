@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -35,22 +36,40 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func StreamNodesPairingHandler(serverAuthInfo domain.AuthNodeInfo) warpnet.WarpHandlerFunc {
+type DeviceStorer interface {
+	SetDevice(ownerNodeId string, device domain.Device) error
+}
+
+func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		// TODO: add devices storage
 		var clientInfo domain.AuthNodeInfo
 		if err := json.Unmarshal(buf, &clientInfo); err != nil {
 			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)
 			return nil, err
 		}
-		if clientInfo.Identity.Token == "" {
+		if clientInfo.Token == "" {
 			return nil, warpnet.WarpError("empty token")
 		}
-		isTokenMatch := serverAuthInfo.Identity.Token == clientInfo.Identity.Token
-		if !isTokenMatch {
+
+		if serverToken != clientInfo.Token {
 			log.Errorf("pair: token does not match server identity")
 			return nil, warpnet.WarpError("token mismatch")
 		}
+
+		if err := deviceRepo.SetDevice(s.Conn().LocalPeer().String(), domain.Device{
+			NodeId: s.Conn().RemotePeer(),
+			Token:  clientInfo.Token,
+		}); err != nil {
+			return nil, err
+		}
+
+		println()
+		fmt.Printf(
+			"\033[1mPAIR ADDED %s\033[0m\n",
+			clientInfo.ID,
+		)
+		println()
+
 		return event.Accepted, nil
 	}
 }

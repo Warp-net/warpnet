@@ -1,0 +1,9 @@
+Tusky 28.0
+
+- Compatibilidade com o Android 15 e o modo de tela de ponta a ponta
+- Melhoria na confiabilidade das notificações push
+- Respostas na linha do tempo agora são claramente identificadas como tal
+- Várias melhorias na forma como as notificações são exibidas na aba de notificações
+- Os cartões de visualização de links receberam um novo design e agora suportam o recurso fediverse:creator
+
+Consulte https://github.com/tuskyapp/Tusky/blob/develop/CHANGELOG.md para ver o changelog completo

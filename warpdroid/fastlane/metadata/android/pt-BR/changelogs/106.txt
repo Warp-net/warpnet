@@ -1,0 +1,5 @@
+Tusky 22.0 beta 4
+
+Correções:
+
+- Corrigida a recuperação repetida de notificações quando configurado com várias contas

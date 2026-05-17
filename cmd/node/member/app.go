@@ -77,6 +77,18 @@ func NewApp() *App {
 	return &App{}
 }
 
+func (a *App) IsFirstRun() bool {
+	if a == nil || a.mx == nil {
+		return false
+	}
+	a.mx.RLock()
+	defer a.mx.RUnlock()
+	if a.db == nil {
+		return false
+	}
+	return a.db.IsFirstRun()
+}
+
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
@@ -143,6 +155,11 @@ func (a *App) runNode(network string, psk security.PSK) {
 		network,
 	)
 
+	infos, err := config.Config().Node.AddrInfos()
+	if err != nil {
+		log.Fatalf("failed to get bootstrap nodes infos: %v", err)
+	}
+
 	a.mx.Lock()
 	a.node, err = member.NewMemberNode(
 		a.ctx,
@@ -153,6 +170,7 @@ func (a *App) runNode(network string, psk security.PSK) {
 		config.Config().Version,
 		a.auth.Storage(),
 		a.db,
+		infos,
 		m,
 	)
 	if err != nil {
@@ -174,8 +192,10 @@ func (a *App) runNode(network string, psk security.PSK) {
 	}
 
 	// report to auth handler - Node set up and running
-	serverNodeAuthInfo.Identity.Owner.NodeId = a.node.NodeInfo().ID.String()
-	serverNodeAuthInfo.NodeInfo = a.node.NodeInfo()
+	serverNodeAuthInfo.ID = ownNodeId.String()
+	serverNodeAuthInfo.Network = network
+	serverNodeAuthInfo.Addresses = a.node.NodeInfo().Addresses
+	serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
 	a.readyChan <- serverNodeAuthInfo
 }
 

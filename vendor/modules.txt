@@ -58,6 +58,9 @@ github.com/ProtonMail/go-crypto/openpgp/x448
 # github.com/StackExchange/wmi v1.2.1
 ## explicit; go 1.13
 github.com/StackExchange/wmi
+# github.com/Warp-net/libp2p-camouflage-transport v0.0.0-20260426205729-375252339458
+## explicit; go 1.26.0
+github.com/Warp-net/libp2p-camouflage-transport
 # github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 ## explicit
 github.com/acarl005/stripansi

@@ -1,0 +1,8 @@
+Tusky 25
+
+- Suporte à API de tradução do Mastodon
+- Exibição do idioma da publicação
+- Transições de tela aprimoradas
+- As configurações de filtro foram transferidas para as preferências da conta
+- As estatísticas das publicações agora têm uma posição fixa
+- Várias melhorias internas de estabilidade e desempenho

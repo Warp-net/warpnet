@@ -8,7 +8,8 @@ echo-android:
 	go run -tags echo -ldflags="-checklinkname=0" cmd/node/member/echo-member.go --node.network testnet
 
 run-main:
-	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
+	go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+	cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
 
 run-second:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
@@ -60,3 +61,12 @@ build-windows:
 
 download-golang-armv6:
 	wget -c https://go.dev/dl/go1.26.0.linux-armv6l.tar.gz
+
+gen-aar:
+	cd warpdroid/node && ./build-native.sh && cd -
+  
+.PHONY: generate
+generate:
+	cd frontend && make rebuild && cd -
+	cd warpdroid && make aar && cd -
+	go mod tidy && go mod vendor

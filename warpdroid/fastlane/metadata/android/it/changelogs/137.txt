@@ -1,0 +1,7 @@
+Tusky 31.0
+
+- La vista per i Post programmati è stata migliorata, ora mostra l'intero post e tutti i metadati disponibili.
+- Ore è possibile nascondere nuovamente i post filtrati con una nuova opzione nel menu dei post.
+- Tusky ora legge il limite di caratteri per il testo alternativo dal server invece di usare il valore predefinito di 1500. Il limite è ora mostrato nel dialogo del testo alternativo.
+
+Vedi https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md per il changelog completo

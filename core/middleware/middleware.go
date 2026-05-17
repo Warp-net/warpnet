@@ -28,19 +28,8 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"errors"
-	"io"
-	"runtime/debug"
-	"sync"
-	"time"
-
-	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/json"
-	"github.com/Warp-net/warpnet/security"
 	"github.com/docker/go-units"
-	log "github.com/sirupsen/logrus"
 )
 
 type middlewareError string
@@ -58,175 +47,27 @@ const (
 	ErrInternalNodeError middlewareError = `["middleware: internal node error"]`
 )
 
-type WarpMiddleware struct {
-	pairedAliases *sync.Map
-}
-
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
-	wm := &WarpMiddleware{new(sync.Map)}
-	wm.pairedAliases.Store(ownNodeId, "")
-	return wm
-}
-
-func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
-	return func(s warpnet.WarpStream) {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Errorf("middleware: panic: %v %s", r, debug.Stack())
-			}
-		}() //#nosec
-
-		log.Debugf("middleware: server stream opened: %s %s\n", s.Protocol(), s.Conn().RemotePeer())
-		before := time.Now()
-		next(s)
-		log.Debugf(
-			"middleware: server stream closed: %s %s, elapsed: %s\n",
-			s.Protocol(),
-			s.Conn().RemotePeer(),
-			time.Since(before).String(),
-		)
-	}
-}
-
-func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
-	return func(s warpnet.WarpStream) {
-		var isAuthSuccess bool
-		defer func() {
-			if isAuthSuccess {
-				return
-			}
-			_ = s.Close()
-		}()
-		if s.Conn() == nil {
-			log.Errorf("middleware: auth: connection is not ready")
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
-		var (
-			route      = stream.FromPrIDToRoute(s.Protocol())
-			remotePeer = s.Conn().RemotePeer()
-		)
-
-		if _, aliasExists := p.pairedAliases.Load(remotePeer); route.IsPrivate() && !aliasExists {
-			log.Errorf("middleware: auth: alias device peer ID not found, ignoring private route: %s", route)
-			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
-			return
-		}
-
-		reader := io.LimitReader(s, MaxLimit) // TODO size limit???
-		data, err := io.ReadAll(reader)
-		if err != nil && !errors.Is(err, io.EOF) {
-			log.Errorf("middleware: auth: reading from stream: %v", err)
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
-
-		var msg event.Message
-		if err := json.Unmarshal(data, &msg); err != nil || msg.MessageId == "" {
-			log.Errorf("middleware: auth: unmarshaling data: %s %s %v", route, data, err)
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
-
-		if msg.Signature == "" {
-			log.Errorf("middleware: auth: signature missing: %s", string(data))
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
-		if remotePeer.Size() == 0 {
-			log.Errorf("middleware: auth: connection is not ready")
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
-
-		pubKey := warpnet.FromIDToPubKey(remotePeer)
-		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
-			log.Errorf("middleware: auth: signature invalid: %v", err)
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
-
-		isAuthSuccess = true
-
-		next(&warpnet.WarpStreamBody{
-			WarpStream: s,
-			Body:       msg.Body,
-		})
-	}
-}
-
 const (
 	MaxLimit              = units.MiB * 5 // TODO size limit???
 	InternalNodeErrorCode = 5000
 )
 
-func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
-	return func(s warpnet.WarpStream) {
-		defer func() {
-			_ = s.Close()
-		}()
+type WarpMiddleware struct {
+	idempotency *idempotencyCache
+}
 
-		var (
-			response any
-			err      error
-			encoder  = json.NewEncoder(s)
-			data     []byte
-		)
+func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
+	wm := &WarpMiddleware{
+		idempotency: newIdempotencyCache(idempotencyTTL),
+	}
+	return wm
+}
 
-		switch typedStream := s.(type) {
-		case *warpnet.WarpStreamBody:
-			data = typedStream.Body
-		default:
-			reader := io.LimitReader(s, MaxLimit)
-			data, err = io.ReadAll(reader)
-			if err != nil && !errors.Is(err, io.EOF) {
-				log.Errorf("middleware: reading from stream: %v", err)
-				response = event.ResponseError{Message: ErrStreamReadError.Error()}
-				_ = encoder.Encode(response)
-				return
-			}
-		}
-
-		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
-
-		switch {
-		case s.Protocol() == event.PRIVATE_POST_PAIR:
-			response, err = handler(data, s)
-			if err == nil {
-				p.pairedAliases.Store(s.Conn().RemotePeer(), "")
-				log.Debugf("middleware: paired alias: %s", s.Conn().RemotePeer())
-			}
-		default:
-			response, err = handler(data, s)
-		}
-		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-			if len(data) > 500 { //nolint:mnd
-				data = data[:500]
-			}
-			log.Errorf("middleware: handling of %s %s message: %s failed: %v\n", s.Protocol(), s.Conn().RemotePeer(), string(data), err)
-			response = event.ResponseError{Code: InternalNodeErrorCode, Message: err.Error()} // TODO errors ranking
-		}
-
-		log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
-		if response == nil {
-			response = event.ResponseError{Message: "empty response"}
-		}
-
-		switch typedResponse := response.(type) {
-		case []byte:
-			if _, err := s.Write(typedResponse); err != nil {
-				log.Errorf("middleware: writing raw bytes to stream: %v", err)
-			}
-			return
-		case string:
-			if _, err := s.Write([]byte(typedResponse)); err != nil {
-				log.Errorf("middleware: writing string to stream: %v", err)
-			}
-			return
-		default:
-			if err := encoder.Encode(response); err != nil {
-				log.Errorf("middleware: failed encoding generic response: %v %v", response, err)
-			}
-		}
+// Close releases background resources owned by the middleware (currently
+// the idempotency cache's expirable-LRU janitor goroutine). Safe to call
+// multiple times.
+func (p *WarpMiddleware) Close() {
+	if p.idempotency != nil {
+		p.idempotency.Close()
 	}
 }

@@ -1,0 +1,6 @@
+Tusky 32.1
+
+- Giờ đây, bạn có thể xóa bài đăng của mình khỏi bài đăng khác đang trích dẫn bài đăng của bạn.
+- Sửa nhiều lỗi khác nhau
+
+Xem https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md để biết đầy đủ

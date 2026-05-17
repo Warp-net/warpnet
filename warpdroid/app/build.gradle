@@ -1,0 +1,236 @@
+import app.cash.licensee.SpdxId
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.google.ksp)
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.parcelize)
+    alias(libs.plugins.licensee)
+    alias(libs.plugins.play.publisher)
+}
+
+apply from: 'getGitSha.gradle'
+
+final def gitSha = ext.getGitSha()
+
+// The app name
+final def APP_NAME = "Warpdroid"
+// The application id. Must be unique, e.g. based on your domain.
+// Warpdroid is a Warpnet Android client forked from Tusky; keep distinct from
+// upstream Tusky so both can be installed side by side on a user device.
+final def APP_ID = "site.warpnet.warpdroid"
+// Internal Gradle/AGP namespace. Drives the R and BuildConfig package
+// names; aligned with APP_ID after the rebrand.
+final def APP_NAMESPACE = "site.warpnet.warpdroid"
+// url of a custom app logo. Recommended size at least 600x600.
+final def CUSTOM_LOGO_URL = ""
+// Unused in Warpdroid. Kept to satisfy
+// existing BuildConfig references during the strip-down.
+final def CUSTOM_INSTANCE = ""
+// Link shown on the About screen.
+final def SUPPORT_ACCOUNT_URL = "https://github.com/Warp-net/warpdroid"
+
+android {
+    compileSdk = 36
+    namespace = APP_NAMESPACE
+    defaultConfig {
+        applicationId = APP_ID
+        minSdk = 24
+        targetSdk = 36
+        versionCode = 142
+        versionName = "32.2"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables.useSupportLibrary = true
+
+        resValue "string", "app_name", APP_NAME
+
+        buildConfigField("String", "CUSTOM_LOGO_URL", "\"$CUSTOM_LOGO_URL\"")
+        buildConfigField("String", "CUSTOM_INSTANCE", "\"$CUSTOM_INSTANCE\"")
+        buildConfigField("String", "SUPPORT_ACCOUNT_URL", "\"$SUPPORT_ACCOUNT_URL\"")
+    }
+    buildTypes {
+        debug {
+            isDefault true
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles 'proguard-rules.pro'
+
+            kotlinOptions {
+                freeCompilerArgs = [
+                    "-Xno-param-assertions",
+                    "-Xno-call-assertions",
+                    "-Xno-receiver-assertions"
+                ]
+            }
+        }
+    }
+
+    kotlin {
+        compilerOptions {
+            freeCompilerArgs = ["-Xannotation-default-target=param-property"]
+        }
+    }
+
+    lint {
+        lintConfig file("lint.xml")
+        // Regenerate by deleting the file and running `./gradlew app:lintGreenDebug`
+        baseline = file("lint-baseline.xml")
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+        resValues true
+        viewBinding true
+    }
+
+    // Exclude unneeded files added by libraries
+    packagingOptions.resources.excludes += [
+        'LICENSE_OFL',
+        'LICENSE_UNICODE',
+        'META-INF/androidx/**',
+        'META-INF/NOTICE.md',
+        'DebugProbesKt.bin',
+        'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
+    ]
+
+    bundle {
+        language {
+            // bundle all languages in every apk so the dynamic language switching works
+            enableSplit = false
+        }
+    }
+
+    // Warpnet ships a Go runtime (via gomobile) for libp2p. Keep only the
+    // ABIs realistic phones actually use so the APK doesn't grow needlessly.
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+            universalApk false
+        }
+    }
+    dependenciesInfo {
+        includeInApk false
+        includeInBundle false
+    }
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach { output ->
+            // Splits produce one APK per ABI per variant; include the ABI filter
+            // in the name so the outputs don't collide on the same path.
+            def abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
+            outputFileName = "Warpdroid_${variant.versionName}_${variant.versionCode}_${gitSha}_" +
+                "${buildType.name}_${abi}.apk"
+        }
+    }
+}
+
+// No androidTest sources exist in this project. Keeping the variant enabled
+// causes AGP 8.13.2 + Gradle 9.2 to serialize the androidTest compile
+// classpath for :app:generateXxxAndroidTestLintModel, tripping a known
+// config-cache serialization bug (aarOrAsar ArtifactCollection). Disable
+// the variant at source.
+androidComponents {
+    beforeVariants(selector().all()) { variantBuilder ->
+        variantBuilder.enableAndroidTest = false
+    }
+}
+
+licensee {
+    allow(SpdxId.Apache_20)
+    allow(SpdxId.MIT)
+    allow(SpdxId.BSD_3_Clause)
+    allowUrl('https://github.com/AOMediaCodec/libavif/blob/master/LICENSE')
+    // Google Play Services (play-services-base/basement/tasks, odml-image)
+    // publish under the Android SDK Terms of Service rather than an SPDX
+    // license. ML Kit artifacts (barcode-scanning and its transitives)
+    // publish under the ML Kit Terms. Both are required for the on-device
+    // QR scanner; allow the canonical URLs rather than fail the build.
+    allowUrl('https://developer.android.com/studio/terms.html')
+    allowUrl('https://developers.google.com/ml-kit/terms')
+}
+
+// ML Kit's barcode scanner pulls the unified com.google.crypto.tink:tink
+// JVM artifact (1.17.0), which fully overlaps with the legacy
+// com.google.crypto.tink:tink-android (1.8.0) that androidx.security-crypto
+// 1.1.0 requires. Only tink-android ships the Android-Keystore integration
+// (AndroidKeysetManager) used by EncryptedSharedPreferences, so keep it and
+// globally drop the unified JVM copy to avoid "Duplicate class" R8 errors.
+configurations.configureEach {
+    exclude group: "com.google.crypto.tink", module: "tink"
+}
+
+// library versions are in PROJECT_ROOT/gradle/libs.versions.toml
+// The warpnet.aar + gomobile rebuild task live in :warpnet-transport, which
+// the app module depends on transitively.
+dependencies {
+    implementation project(":warpnet-transport")
+
+    implementation libs.kotlinx.coroutines.android
+
+    implementation libs.bundles.androidx
+
+    // QR pairing: CameraX preview + on-device ML Kit barcode scanner so the
+    // app degrades to a manual flow rather than hard-failing on devices
+    // without Play Services. The pairing payload is gzip + Base45 — gzip
+    // is decoded via the JDK's java.util.zip.GZIPInputStream, no extra dep.
+    implementation libs.bundles.camerax
+    implementation libs.mlkit.barcode.scanning
+    // Hardware-backed EncryptedSharedPreferences for the persisted
+    // Identity + pinned fat-node peer ID.
+    implementation libs.androidx.security.crypto
+
+    implementation platform(libs.androidx.compose.bom)
+    implementation libs.androidx.compose.material
+    implementation libs.androidx.compose.ui.tooling.preview
+    debugImplementation libs.androidx.compose.ui.tooling
+
+    implementation libs.android.material
+
+    implementation libs.bundles.moshi
+    ksp libs.moshi.kotlin.codegen
+
+    implementation libs.bundles.retrofit
+    implementation libs.networkresult.calladapter
+
+    implementation libs.bundles.okhttp
+    implementation libs.okio
+
+    implementation libs.bundles.coil
+
+    implementation libs.conscrypt.android
+
+    implementation libs.bundles.glide
+    ksp libs.glide.compiler
+
+    implementation libs.hilt.android
+    ksp libs.hilt.compiler
+    implementation libs.androidx.hilt.work
+    ksp libs.androidx.hilt.compiler
+
+    implementation libs.sparkbutton.compose
+
+    implementation libs.touchimageview
+
+    implementation libs.bundles.material.drawer
+
+    implementation libs.image.cropper
+
+    implementation libs.bundles.filemojicompat
+
+    implementation libs.bundles.unifiedpush
+
+    implementation libs.bundles.xmldiff
+
+    implementation(libs.ktxml)
+}
+
+// Retrofit and OkHttp are still listed in libs.versions.toml for now;
+// they will be removed in a follow-up commit once the Warpnet transport has
+// fully replaced their call sites. Leaving them as unused `libs.*` aliases
+// does not bloat the APK (unreferenced aliases are not resolved).

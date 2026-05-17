@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools" >
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
+    <uses-permission android:name="android.permission.VIBRATE" /> <!-- For notifications -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Camera is used only by the QR pairing scanner. Hardware is not
+         required, so the app remains installable on devices without a
+         camera. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+    <application
+        android:name=".WarpdroidApplication"
+        android:appCategory="social"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/WarpdroidTheme"
+        android:localeConfig="@xml/locales_config"
+        android:enableOnBackInvokedCallback="true"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <!--
+          The Warpnet OAuth login flow and its oauth2redirect:// deep link have
+          been removed. Warpdroid pairs with a Warpnet desktop node instead;
+          see Phase 3 (stubbed for now) in docs/warpnet-protocol.md.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:alwaysRetainTaskState="true"
+            android:maxRecents="1"
+            android:theme="@style/SplashTheme">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/share_shortcuts" />
+            <meta-data
+                android:name="android.service.chooser.chooser_target_service"
+                android:value="androidx.sharetarget.ChooserTargetServiceCompat" />
+
+        </activity>
+        <!-- When content is shared to Warpdroid ComposeActivity can be the only active activity,
+             so it must be excluded from recents or the sharing process can be restarted from recents
+             which would be very unexpected -->
+        <activity
+            android:name=".components.compose.ComposeActivity"
+            android:theme="@style/WarpdroidDialogActivityTheme"
+            android:alwaysRetainTaskState="true" />
+        <activity
+            android:name=".components.viewthread.ViewThreadActivity"
+            android:configChanges="orientation|screenSize" />
+        <activity
+            android:name=".ViewMediaActivity"
+            android:theme="@style/WarpdroidBaseTheme"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize" />
+        <activity android:name=".components.account.AccountActivity" />
+        <activity android:name=".EditProfileActivity"/>
+        <activity android:name=".components.preference.PreferencesActivity" />
+        <activity android:name=".TweetListActivity" />
+        <activity android:name=".components.accountlist.AccountListActivity" />
+        <activity android:name=".components.notifications.NotificationsActivity" />
+        <activity android:name=".components.chats.ChatsActivity" />
+        <activity android:name=".components.chats.ChatMessagesActivity" />
+        <activity android:name=".AboutActivity" />
+        <activity android:name=".components.editimage.EditImageActivity" />
+        <activity
+            android:name=".components.search.SearchActivity"
+            android:launchMode="singleTask"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.SEARCH" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.searchable"
+                android:resource="@xml/searchable" />
+        </activity>
+        <activity android:name=".LicenseActivity" />
+        <activity android:name=".components.filters.FiltersActivity" />
+        <activity android:name="site.warpnet.warpdroid.components.filters.EditFilterActivity"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".components.pairing.PairingActivity"
+            android:exported="false"
+            android:theme="@style/WarpdroidBaseTheme" />
+
+        <receiver
+            android:name=".receiver.SendTweetBroadcastReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".service.WarpdroidTileService"
+            android:icon="@drawable/warpdroid_quicksettings_icon"
+            android:label="@string/warpdroid_compose_post_quicksetting_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service android:name=".service.SendTweetService"
+            android:foregroundServiceType="shortService"
+            android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- disable automatic WorkManager initialization -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
+    </application>
+
+</manifest>

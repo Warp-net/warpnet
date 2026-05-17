@@ -91,7 +91,20 @@ func StreamNewReTweetHandler(
 			return nil, err
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
+		// A quote is a regular tweet authored by the retweeter that
+		// references another tweet through QuotedTweetId / QuotedUserId.
+		// For plain retweets the wire's UserId is the source author; for
+		// quotes it's the retweeter (the comment author), and the source
+		// author lives in QuotedUserId. Pick the right id for routing /
+		// notification accordingly.
+		isQuote := retweetEvent.QuotedTweetId != nil && *retweetEvent.QuotedTweetId != ""
+		sourceAuthorId := retweetEvent.UserId
+		if isQuote && retweetEvent.QuotedUserId != nil && *retweetEvent.QuotedUserId != "" {
+			sourceAuthorId = *retweetEvent.QuotedUserId
+		}
+
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
 		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
 		if isOwnerRetweeter {
 			// owner retweeted it
@@ -100,17 +113,21 @@ func StreamNewReTweetHandler(
 			}
 		}
 
-		isOwnTweetRetweet := ownerId == retweetEvent.UserId // my own tweet retweet
-		if isOwnTweetRetweet {                              //nolint:nestif
+		isOwnTweetRetweet := ownerId == sourceAuthorId // my own tweet retweet
+		if isOwnTweetRetweet {                         //nolint:nestif
 			if !isOwnerRetweeter {
 				notifyUsername := *retweetEvent.RetweetedBy
 				retweeter, retweeterErr := userRepo.Get(*retweetEvent.RetweetedBy)
 				if retweeterErr == nil {
 					notifyUsername = retweeter.Username
 				}
+				notifyText := notifyUsername + " retweeted your tweet"
+				if isQuote {
+					notifyText = notifyUsername + " quoted your tweet"
+				}
 				if err := notifyRepo.Add(domain.Notification{
 					Type:   domain.NotificationRetweetType,
-					Text:   notifyUsername + " retweeted your tweet",
+					Text:   notifyText,
 					UserId: ownerId,
 				}); err != nil {
 					log.Errorf("retweet handler: adding notification: %v", err)
@@ -119,12 +136,16 @@ func StreamNewReTweetHandler(
 			return retweet, nil
 		}
 
-		tweetOwner, err := userRepo.Get(retweetEvent.UserId)
+		tweetOwner, err := userRepo.Get(sourceAuthorId)
 		if errors.Is(err, database.ErrUserNotFound) {
 			return retweet, nil
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		if ownNodeInfo.ID.String() == tweetOwner.NodeId {
+			return retweet, nil
 		}
 
 		retweetDataResp, err := streamer.GenericStream(
@@ -179,7 +200,8 @@ func StreamUnretweetHandler(
 			return nil, err
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
 		isOwnTweetUnretweet := tweet.UserId == ownerId
 		if isOwnTweetUnretweet {
 			// tweet belongs to owner, unretweet themself
@@ -192,6 +214,10 @@ func StreamUnretweetHandler(
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		if ownNodeInfo.ID.String() == tweetOwner.NodeId {
+			return event.Accepted, nil
 		}
 
 		unretweetDataResp, err := streamer.GenericStream(

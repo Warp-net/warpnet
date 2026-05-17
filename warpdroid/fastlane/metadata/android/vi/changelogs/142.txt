@@ -1,0 +1,5 @@
+Tusky 32.2
+
+- Sửa lỗi nhỏ và cải thiện
+
+Xem https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md để biết chi tiết

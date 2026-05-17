@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="warpdroid_website" translatable="false">https://warpnet.site</string>
+    <string name="about_app_version">%1$s %2$s</string>
+
+    <string name="preferences_file_key" translatable="false">site.warpnet.warpdroid.PREFERENCES</string>
+
+    <string name="at_symbol" translatable="false">\@</string>
+    <string name="hash_symbol" translatable="false">#</string>
+    <string name="hashtag_format" translatable="false">#%1$s</string>
+
+    <string name="emoji_shortcode_format" translatable="false">:%1$s:</string>
+    <string name="metadata_joiner" translatable="false">" • "</string>
+    <string name="date_range" translatable="false">%1$s — %2$s</string>
+
+    <string-array name="post_privacy_values">
+        <item>public</item>
+        <item>unlisted</item>
+        <item>private</item>
+    </string-array>
+
+    <string-array name="quote_policy_values">
+        <item>public</item>
+        <item>followers</item>
+        <item>nobody</item>
+    </string-array>
+
+    <string-array name="reply_privacy_values">
+        <item>match_default_post_visibility</item>
+        <item>public</item>
+        <item>unlisted</item>
+        <item>private</item>
+        <item>direct</item>
+    </string-array>
+
+    <string-array name="post_text_size_values">
+        <item>smallest</item>
+        <item>small</item>
+        <item>medium</item>
+        <item>large</item>
+        <item>largest</item>
+    </string-array>
+
+    <string-array name="language_entries">
+        <item>@string/system_default</item>
+        <item>Bahasa Indonesia</item>
+        <item>Català</item>
+        <item>Čeština</item>
+        <item>Cymraeg</item>
+        <item>Deutsch</item>
+        <item>English (UK)</item>
+        <item>English (US)</item>
+        <item>Esperanto</item>
+        <item>Español</item>
+        <item>Euskara</item>
+        <item>Français</item>
+        <item>Frysk</item>
+        <item>Gaeilge</item>
+        <item>Gàidhlig</item>
+        <item>Galego</item>
+        <item>íslenska</item>
+        <item>Italiano</item>
+        <item>latviešu valoda</item>
+        <item>Lëtzebuergesch</item>
+        <item>Magyar</item>
+        <item>Nederlands</item>
+        <item>Norsk</item>
+        <item>Occitan</item>
+        <item>Polski</item>
+        <item>Português (Brasil)</item>
+        <item>Português (Portugal)</item>
+        <item>slovenski jezik</item>
+        <item>slovenský jazyk</item>
+        <item>Suomi</item>
+        <item>Svenska</item>
+        <item>Taqbaylit</item>
+        <item>Tiếng Việt</item>
+        <item>Türkçe</item>
+        <item>Беларуская</item>
+        <item>български</item>
+        <item>Русский</item>
+        <item>Українська</item>
+        <item>العربية</item>
+        <item>کوردیی ناوەندی</item>
+        <item>বাংলা (বাংলাদেশ)</item>
+        <item>বাংলা (ভারত)</item>
+        <item>فارسی</item>
+        <item>हिंदी</item>
+        <item>संस्कृतम्</item>
+        <item>ଓଡ଼ିଆ</item> <!-- or: Odia -->
+        <item>தமிழ்</item>
+        <item>ภาษาไทย</item>
+        <item>한국어</item>
+        <item>中文(台灣)</item>
+        <item>中文(新加坡)</item>
+        <item>中文(澳門)</item>
+        <item>中文(简体)</item>
+        <item>中文(香港)</item>
+        <item>日本語</item>
+        <item>ⵜⴰⵎⴰⵣⵉⵖⵜ</item>
+        <item>Ελληνικά</item>
+        <item>മലയാളം</item>
+        <item>සිංහල</item>
+    </string-array>
+
+    <string-array name="language_values">
+        <item>default</item>
+        <item>in</item>
+        <item>ca</item>
+        <item>cs</item>
+        <item>cy</item>
+        <item>de</item>
+        <item>en-GB</item>
+        <item>en</item>
+        <item>eo</item>
+        <item>es</item>
+        <item>eu</item>
+        <item>fr</item>
+        <item>fy</item>
+        <item>ga</item>
+        <item>gd</item>
+        <item>gl</item>
+        <item>is</item>
+        <item>it</item>
+        <item>lv</item>
+        <item>lb</item>
+        <item>hu</item>
+        <item>nl</item>
+        <item>nb-NO</item>
+        <item>oc</item>
+        <item>pl</item>
+        <item>pt-BR</item>
+        <item>pt-PT</item>
+        <item>sl</item>
+        <item>sk</item>
+        <item>fi</item>
+        <item>sv</item>
+        <item>kab</item>
+        <item>vi</item>
+        <item>tr</item>
+        <item>be</item>
+        <item>bg</item>
+        <item>ru</item>
+        <item>uk</item>
+        <item>ar</item>
+        <item>ckb</item>
+        <item>bn-BD</item>
+        <item>bn-IN</item>
+        <item>fa</item>
+        <item>hi</item>
+        <item>sa</item>
+        <item>or</item>
+        <item>ta</item>
+        <item>th</item>
+        <item>ko</item>
+        <item>zh-TW</item>
+        <item>zh-SG</item>
+        <item>zh-MO</item>
+        <item>zh-CN</item>
+        <item>zh-HK</item>
+        <item>ja</item>
+        <item>ber</item>
+        <item>el</item>
+        <item>ml</item>
+        <item>si</item>
+    </string-array>
+
+    <string-array name="pref_main_nav_position_options">
+        <item>@string/pref_main_nav_position_option_top</item>
+        <item>@string/pref_main_nav_position_option_bottom</item>
+    </string-array>
+
+    <string-array name="pref_main_nav_position_values">
+        <item>top</item>
+        <item>bottom</item>
+    </string-array>
+
+    <string-array name="pref_show_self_username_values">
+        <item>always</item>
+        <item>disambiguate</item>
+        <item>never</item>
+    </string-array>
+
+    <string-array name="rick_roll_domains" translatable="false">
+        <item>gab.com</item>
+        <item>gab.ai</item>
+        <item>spinster.xyz</item>
+        <item>truthsocial.com</item>
+    </string-array>
+
+    <string name="rick_roll_url">https://www.youtube.com/watch?v=dQw4w9WgXcQ</string>
+
+
+    <string-array name="poll_duration_names">
+        <item>@string/duration_5_min</item>
+        <item>@string/duration_30_min</item>
+        <item>@string/duration_1_hour</item>
+        <item>@string/duration_6_hours</item>
+        <item>@string/duration_1_day</item>
+        <item>@string/duration_3_days</item>
+        <item>@string/duration_7_days</item>
+        <item>@string/duration_14_days</item>
+        <item>@string/duration_30_days</item>
+        <item>@string/duration_60_days</item>
+        <item>@string/duration_90_days</item>
+        <item>@string/duration_180_days</item>
+        <item>@string/duration_365_days</item>
+    </string-array>
+
+    <integer-array name="poll_duration_values"> <!-- values in seconds, corresponding to poll_duration_names -->
+        <item>300</item>
+        <item>1800</item>
+        <item>3600</item>
+        <item>21600</item>
+        <item>86400</item>
+        <item>259200</item>
+        <item>604800</item>
+        <item>1209600</item>
+        <item>2592000</item>
+        <item>5184000</item>
+        <item>7776000</item>
+        <item>15552000</item>
+        <item>31536000</item>
+    </integer-array>
+
+    <string name="poll_percent_format"><!-- 15% --> &lt;b>%1$d%%&lt;/b></string>
+
+    <string-array name="mute_duration_names">
+        <item>@string/duration_indefinite</item>
+        <item>@string/duration_1_hour</item>
+        <item>@string/duration_6_hours</item>
+        <item>@string/duration_1_day</item>
+        <item>@string/duration_7_days</item>
+        <item>@string/duration_30_days</item>
+        <item>@string/duration_180_days</item>
+    </string-array>
+
+    <integer-array name="mute_duration_values"> <!-- values in seconds, corresponding to mute_duration_names -->
+        <item>0</item>
+        <item>3600</item>
+        <item>21600</item>
+        <item>86400</item>
+        <item>604800</item>
+        <item>2592000</item>
+        <item>15552000</item>
+    </integer-array>
+
+    <string-array name="filter_duration_names">
+        <item>@string/duration_indefinite</item>
+        <item>@string/duration_5_min</item>
+        <item>@string/duration_30_min</item>
+        <item>@string/duration_1_hour</item>
+        <item>@string/duration_6_hours</item>
+        <item>@string/duration_1_day</item>
+        <item>@string/duration_3_days</item>
+        <item>@string/duration_7_days</item>
+    </string-array>
+
+    <integer-array name="filter_duration_values"> <!-- values in seconds, corresponding to mute_duration_names -->
+        <item>0</item>
+        <item>300</item>
+        <item>1800</item>
+        <item>3600</item>
+        <item>21600</item>
+        <item>86400</item>
+        <item>259200</item>
+        <item>604800</item>
+    </integer-array>
+
+    <string-array name="reading_order_names">
+        <item>@string/pref_reading_order_oldest_first</item>
+        <item>@string/pref_reading_order_newest_first</item>
+    </string-array>
+
+    <string-array name="reading_order_values">
+        <item>OLDEST_FIRST</item>
+        <item>NEWEST_FIRST</item>
+    </string-array>
+
+    <string name="url_domain_notifier" translatable="false">(🔗 %1$s)</string>
+
+    <string-array name="notification_policy_value">
+        <item>accept</item>
+        <item>filter</item>
+        <item>drop</item>
+    </string-array>
+
+</resources>

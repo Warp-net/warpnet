@@ -1,0 +1,7 @@
+Tusky 32.0
+
+- Suporte para exibição de publicações com citações
+- Suporte para mais de 4 anexos de mídia nas linhas do tempo
+- Renderização HTML aprimorada
+- Nova preferência de conta: selecione a política padrão de citações para suas publicações
+- Foi adicionado um botão de criação à visualização de hashtags que iniciará uma publicação com a hashtag selecionada.

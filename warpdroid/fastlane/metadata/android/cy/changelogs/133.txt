@@ -1,0 +1,10 @@
+Tusky 29.0
+
+- Eicons newydd
+- Wedi gwella strwythur y polau, wedi ychwanegu botwm "dangos canlyniadau"
+- Defnyddio'r weithred hidlo "anegluro" (nodwedd Mastodon 4.4)
+- Mae ansawdd y tudalen i weld delweddau wedi cael ei gwella
+- Bydd deialog ychwanegol yn atal cau deialog y capsiwn cyfryngau ar ddamwain
+- Mae hybu a ffefrynnau yn cael eu cadarnhau gyda deialog i'r waelod rŵan yn lle drop-down
+
+Gweler https://github.com/tuskyapp/Tusky/blob/develop/CHANGELOG.md am y log newid cyfan

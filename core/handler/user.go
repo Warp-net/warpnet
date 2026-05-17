@@ -63,6 +63,7 @@ type UserFetcher interface {
 	Create(user domain.User) (domain.User, error)
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
+	Search(query string, limit *uint64, cursor *string) ([]domain.User, string, error)
 	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
@@ -90,7 +91,8 @@ func StreamGetUserHandler(
 			return nil, errEmptyUserId
 		}
 
-		ownerId := authRepo.GetOwner().UserId
+		owner := authRepo.GetOwner()
+		ownerId := owner.UserId
 		isMe := ev.UserId == ownerId
 		if isMe {
 			u, err := repo.Get(ownerId)
@@ -123,6 +125,9 @@ func StreamGetUserHandler(
 		}
 		if otherUser.NodeId == "" {
 			return otherUser, fmt.Errorf("get user: node id is not found") //nolint:err113
+		}
+		if otherUser.NodeId == owner.NodeId {
+			return otherUser, nil
 		}
 		go func() {
 			updatedUser := updateOtherUser(ev, otherUser, streamer)
@@ -157,6 +162,23 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 		log.Errorf("stream: get other user: response unmarshal: %v %s", err, otherUserData)
 	}
 	return user
+}
+
+func StreamSearchUsersHandler(userRepo UserFetcher) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.SearchUsersEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.Query == "" {
+			return nil, warpnet.WarpError("search users: empty query")
+		}
+		users, cur, err := userRepo.Search(ev.Query, ev.Limit, ev.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		return event.SearchUsersResponse{Cursor: cur, Users: users}, nil
+	}
 }
 
 func StreamGetUsersHandler(
@@ -203,7 +225,8 @@ func refreshUsers(
 	ev event.GetAllUsersEvent,
 	streamer UserStreamer,
 ) {
-	if streamer.NodeInfo().OwnerId == ev.UserId {
+	ownNodeInfo := streamer.NodeInfo()
+	if ownNodeInfo.OwnerId == ev.UserId {
 		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
@@ -212,6 +235,9 @@ func refreshUsers(
 	}
 	if err != nil {
 		log.Errorf("get users handler: get user %v", err)
+		return
+	}
+	if ownNodeInfo.ID.String() == otherUser.NodeId {
 		return
 	}
 
@@ -237,7 +263,18 @@ func refreshUsers(
 		return
 	}
 
+	selfNodeID := streamer.NodeInfo().ID.String()
+	selfOwnerID := streamer.NodeInfo().OwnerId
 	for _, user := range usersResp.Users {
+		// Skip records pointing back to this node — persisting them would
+		// later route fetches through GenericStream and trigger
+		// node.ErrSelfRequest.
+		if selfNodeID != "" && user.NodeId == selfNodeID {
+			continue
+		}
+		if selfOwnerID != "" && user.Id == selfOwnerID {
+			continue
+		}
 		_, _ = userRepo.Create(user)
 		_, _ = userRepo.Update(user.Id, user)
 	}
@@ -290,7 +327,7 @@ func StreamGetWhoToFollowHandler(
 
 		whotofollow := make([]domain.User, 0, len(users))
 		for _, user := range users {
-			if user.Id == owner.UserId {
+			if user.Id == owner.UserId || user.NodeId == owner.NodeId {
 				continue
 			}
 			// if profile from Warpnet - don't show other network recommendations

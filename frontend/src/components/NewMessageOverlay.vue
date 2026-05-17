@@ -53,8 +53,9 @@ resulting from the use or misuse of this software.
             <i class="fas fa-search absolute mt-3 ml-5 text-m text-light"></i>
             <input
               class="pl-12 rounded-full w-full p-2 bg-lighter text-m focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue"
-              placeholder="Search People (NOT WORKING)"
+              placeholder="Search people"
               type="search"
+              v-model="query"
               v-on:keyup.enter="submitSearch()"
             />
           </div>
@@ -94,18 +95,42 @@ export default {
     return {
       loading: false,
       users: [],
+      query: '',
+      browseUsers: [],
     };
   },
   methods: {
     async openChat(user) {
-      this.$emit("update:showNewMessageModal", false);
+      this.$emit('update:showNewMessageModal', false);
     },
     async submitSearch() {
-      // TODO implement search
+      const q = (this.query || '').trim();
+      if (!q) {
+        this.users = this.browseUsers;
+        return;
+      }
+      this.loading = true;
+      try {
+        const resp = await warpnetService.searchUsers(q);
+        const matches = resp?.users || [];
+        this.users = await Promise.all(matches.map(async (u) => {
+          try {
+            if (u.avatar_key && !u.avatar) {
+              u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key});
+            }
+          } catch (e) {}
+          return u;
+        }));
+      } catch (err) {
+        console.error('Failed to search users:', err);
+        this.users = [];
+      } finally {
+        this.loading = false;
+      }
     },
     selected(user) {
-      console.log("selected new msg overlay user", JSON.stringify(user))
-      this.$emit("selected", user);
+      console.log('selected new msg overlay user', JSON.stringify(user))
+      this.$emit('selected', user);
     },
   },
   async created() {
@@ -123,6 +148,7 @@ export default {
         this.users[i].avatar = image;
       }
     }
+    this.browseUsers = this.users.slice();
     this.loading = false;
   },
   beforeUnmount() {

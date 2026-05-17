@@ -1,0 +1,15 @@
+Tusky 23.0
+
+Novidades:
+
+- Nova opção para ajustar o tamanho do texto
+
+Correções:
+
+- Gravação correta das info. da conta
+- Notificações "pull" em dispositivos com Android <= 11
+- Bug no Android em que os campos de texto "esqueciam" que permitiam a função de copiar/colar
+- A visualização das alterações de edições não se estenderá além da borda da tela
+- Não trava se o servidor não tiver histórico de edições
+- Exibe emojis não quadrados corretamente
+- Possível travamento ao editar campos do perfil

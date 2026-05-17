@@ -57,7 +57,8 @@ import {
     PUBLIC_POST_RETWEET,
     PUBLIC_POST_UNFOLLOW,
     PUBLIC_POST_UNLIKE,
-    PUBLIC_POST_UNRETWEET
+    PUBLIC_POST_UNRETWEET,
+    PUBLIC_POST_VIEW
 } from "@/service/service";
 import {generateUUID} from "@/lib/uuid";
 
@@ -72,7 +73,8 @@ if (process.env.NODE_ENV === 'development') {
                 Call: (arg1) => {
                     const body = generateResponse(arg1);
                     return Promise.resolve({body:body});
-                }
+                },
+                IsFirstRun: () => Promise.resolve(true),
             }
         }
     };
@@ -84,19 +86,18 @@ function generateResponse(arg) {
         case PRIVATE_POST_LOGIN:
             const uid = generateUUID()
 
-            const owner = {
-                username: arg.body.username || "Missing!",
-                node_id: arg.node_id,
-                user_id: uid,
-                created_at: Date.now().toString(),
-            }
-
             const u = newUser()
             u.node_id = arg.node_id
             u.username = arg.body.username || "Missing!"
 
             mockMap.set("user:"+u.id, u)
-            return {identity: {token: generateUUID(), owner: owner}}
+            return {
+                token: generateUUID(),
+                node_id: arg.node_id,
+                user_id: uid,
+                psk: "test",
+                network: "testnet",
+            }
 
         case PRIVATE_POST_TWEET:
             const tweetUid = generateUUID()
@@ -286,6 +287,26 @@ function generateResponse(arg) {
             unlikeStats.likes_count--
             mockMap.set("stats:"+arg.body.tweet_id, unlikeStats)
             return {count: unlikeStats.likes_count};
+
+        case PUBLIC_POST_VIEW: {
+            // NOTE: this mock uses an "infinite" dedup window — once a viewer
+            // has been seen for a tweet, the count never re-increments for
+            // that pair. The real backend uses a TTL (database.ViewDedupTTL),
+            // so re-views beyond the window WILL count there.
+            const viewStats = mockMap.get("stats:"+arg.body.tweet_id)
+            if (!viewStats) return {count: 0};
+            if (arg.body.viewer_id === arg.body.user_id) {
+                return {count: viewStats.views_count};
+            }
+            const dedupKey = "view:"+arg.body.tweet_id+":"+arg.body.viewer_id;
+            if (mockMap.has(dedupKey)) {
+                return {count: viewStats.views_count};
+            }
+            mockMap.set(dedupKey, true);
+            viewStats.views_count++;
+            mockMap.set("stats:"+arg.body.tweet_id, viewStats);
+            return {count: viewStats.views_count};
+        }
 
         case PUBLIC_POST_RETWEET:
             const rtId = arg.body.id || arg.body.tweet_id

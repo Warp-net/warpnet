@@ -1,0 +1,5 @@
+Tusky 32.2
+
+- Pequenas correções e melhorias de estabilidade
+
+Consulte https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md para ver o registro completo de alterações

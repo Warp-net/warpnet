@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Warp-net/warpnet/core/challenge"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"math/rand/v2"
 	"time"
@@ -65,7 +66,7 @@ type DiscoveryChallenger interface {
 type NodeStorer interface {
 	BlocklistRemove(peerId string) error
 	IsBlocklisted(peerId string) bool
-	Blocklist(peerId string) error
+	BlocklistExponential(peerId string) error
 	BlocklistTerm(peerId string) (*database.BlocklistTerm, error)
 }
 
@@ -110,6 +111,8 @@ type discoveryService struct {
 	discoveryTicker *time.Ticker
 	stopChan        chan struct{}
 
+	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
+
 	m MetricsOnlineDiscoverer
 }
 
@@ -123,6 +126,8 @@ func NewDiscoveryService(
 ) *discoveryService {
 	capacity := 32
 	leakPerTenSec := 2
+
+	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
 	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
@@ -132,12 +137,14 @@ func NewDiscoveryService(
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
+		aliasCache:      lru,
 		m:               m,
 	}
 }
 
 func NewBootstrapDiscoveryService(
 	ctx context.Context, challenger DiscoveryChallenger, m MetricsOnlineDiscoverer) *discoveryService {
+	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
 		ctx:             ctx,
 		limiter:         newRateLimiter(32, 2),
@@ -145,6 +152,7 @@ func NewBootstrapDiscoveryService(
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
+		aliasCache:      lru,
 		m:               m,
 	}
 }
@@ -279,6 +287,29 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
+	if s.aliasCache.Contains(peer.ID) {
+		log.Infof("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
+		s.m.PushStatusOnline(pi.ID.String())
+		s.node.SetMaxNodePriority(pi.ID)
+		return
+	}
+
+	info, err := s.requestNodeInfo(pi)
+	if err != nil {
+		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+		return
+	}
+
+	for _, alias := range info.Aliases {
+		s.aliasCache.Add(alias, pi.ID)
+	}
+
+	s.node.SetNodePriority(pi.ID, info.Reachability)
+
+	if info.IsBootstrap() {
+		return
+	}
+
 	isRepeatable, err := s.challenger.Challenge(
 		s.node.Peerstore().PubKey(pi.ID),
 		s.getChallengeLevel(pi.ID),
@@ -286,12 +317,16 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	)
 	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
+		if info.Reachability == warpnet.ReachabilityPublic {
+			// NEVER block relay nodes
+			return
+		}
 		if isRepeatable {
-			_ = s.nodeRepo.Blocklist(pi.ID.String())
+			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
 		} else {
 			// reset block time
 			_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
-			_ = s.nodeRepo.Blocklist(pi.ID.String())
+			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
 		}
 		s.node.Peerstore().RemovePeer(pi.ID)
 		s.node.SetMinNodePriority(pi.ID)
@@ -306,18 +341,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	}
 
 	s.m.PushStatusOnline(pi.ID.String())
-
-	info, err := s.requestNodeInfo(pi)
-	if err != nil {
-		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
-		return
-	}
-
-	s.node.SetNodePriority(pi.ID, info.Reachability)
-
-	if info.IsBootstrap() || info.IsModerator() {
-		return
-	}
 
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
@@ -388,37 +411,23 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 		return
 	}
 
-	_, err = s.challenger.Challenge(
-		s.node.Peerstore().PubKey(pi.ID),
-		s.getChallengeLevel(pi.ID),
-		s.requestChallenge(pi.ID),
-	)
-	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
-		log.Warnf(
-			"discovery: source '%s': bootstrap handle: challenge is invalid for peer: %s",
-			peer.Source, pi.ID.String(),
-		)
-		s.node.Peerstore().RemovePeer(pi.ID)
-		s.node.SetMinNodePriority(pi.ID)
-		s.m.PushStatusOffline(pi.ID.String())
+	if s.aliasCache.Contains(peer.ID) {
+		log.Debugf("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
+		s.m.PushStatusOnline(pi.ID.String())
 		return
 	}
-	if err != nil {
-		log.Errorf(
-			"discovery: source '%s': bootstrap handle: request challenge for peer %s: %v",
-			peer.Source, pi.ID, err,
-		)
-		return
-	}
+
 	s.m.PushStatusOnline(pi.ID.String())
 
-	if rand.IntN(10)/3 == 0 { //nolint:gosec
-		info, err := s.requestNodeInfo(pi)
-		if err != nil {
-			log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
-			return
-		}
-		s.node.SetNodePriority(pi.ID, info.Reachability)
+	info, err := s.requestNodeInfo(pi)
+	if err != nil {
+		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+		return
+	}
+	s.node.SetNodePriority(pi.ID, info.Reachability)
+
+	for _, alias := range info.Aliases {
+		s.aliasCache.Add(alias, pi.ID)
 	}
 }
 

@@ -1,0 +1,203 @@
+/* Copyright 2021 Warpdroid Contributors
+ *
+ * This file is a part of Warpdroid.
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of the
+ * GNU General Public License as published by the Free Software Foundation; either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * Warpdroid is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+ * the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with Warpdroid; if not,
+ * see <http://www.gnu.org/licenses>. */
+
+package site.warpnet.warpdroid.components.timeline.viewmodel
+
+import android.content.SharedPreferences
+import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import site.warpnet.warpdroid.appstore.EventHub
+import site.warpnet.warpdroid.appstore.FilterUpdatedEvent
+import site.warpnet.warpdroid.appstore.PreferenceChangedEvent
+import site.warpnet.warpdroid.components.preference.PreferencesFragment.ReadingOrder
+import site.warpnet.warpdroid.db.AccountManager
+import site.warpnet.warpdroid.entity.Filter
+import site.warpnet.warpdroid.network.WarpnetApi
+import site.warpnet.warpdroid.settings.PrefKeys
+import site.warpnet.warpdroid.viewdata.TweetViewData
+import site.warpnet.warpdroid.viewmodel.TweetActionsViewModel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
+
+abstract class TimelineViewModel(
+    api: WarpnetApi,
+    private val eventHub: EventHub,
+    val accountManager: AccountManager,
+    private val sharedPreferences: SharedPreferences
+) : TweetActionsViewModel(api, eventHub) {
+
+    val activeAccountFlow = accountManager.activeAccount(viewModelScope)
+    protected val accountId: Long = activeAccountFlow.value!!.id
+
+    abstract val statuses: Flow<PagingData<TweetViewData>>
+
+    var kind: Kind = Kind.HOME
+        private set
+    var id: String? = null
+        private set
+    var tags: List<String> = emptyList()
+        private set
+
+    protected var alwaysShowSensitiveMedia = false
+    private var alwaysOpenSpoilers = false
+    private var filterRemoveReplies = false
+    private var filterRemoveRetweets = false
+    private var filterRemoveSelfRetweets = false
+    protected var readingOrder: ReadingOrder = ReadingOrder.OLDEST_FIRST
+
+    fun init(kind: Kind, id: String?, tags: List<String>) {
+        this.kind = kind
+        this.id = id
+        this.tags = tags
+
+        val activeAccount = activeAccountFlow.value!!
+
+        if (kind == Kind.HOME) {
+            // Note the variable is "true if filter" but the underlying preference/settings text is "true if show"
+            filterRemoveReplies = !activeAccount.isShowHomeReplies
+            filterRemoveRetweets = !activeAccount.isShowHomeRetweets
+            filterRemoveSelfRetweets = !activeAccount.isShowHomeSelfRetweets
+        }
+        readingOrder = ReadingOrder.from(sharedPreferences.getString(PrefKeys.READING_ORDER, null))
+
+        this.alwaysShowSensitiveMedia = activeAccount.alwaysShowSensitiveMedia
+        this.alwaysOpenSpoilers = activeAccount.alwaysOpenSpoiler
+
+        viewModelScope.launch {
+            eventHub.events
+                .collect { event ->
+                    when (event) {
+                        is PreferenceChangedEvent -> {
+                            onPreferenceChanged(event.preferenceKey)
+                        }
+                        is FilterUpdatedEvent -> {
+                            if (filterContextMatchesKind(this@TimelineViewModel.kind, event.filterContext)) {
+                                invalidate()
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    abstract fun changeExpanded(expanded: Boolean, status: TweetViewData.Concrete)
+
+    abstract fun changeContentShowing(isShowing: Boolean, status: TweetViewData.Concrete)
+
+    abstract fun changeContentCollapsed(isCollapsed: Boolean, status: TweetViewData.Concrete)
+
+    abstract fun removeStatusWithId(id: String)
+
+    abstract fun loadMore(placeholderId: String)
+
+    abstract fun fullReload()
+
+    abstract fun changeFilter(filtered: Boolean, status: TweetViewData.Concrete)
+
+    abstract fun showQuote(status: TweetViewData.Concrete)
+
+    /** Triggered when currently displayed data must be reloaded. */
+    protected abstract suspend fun invalidate()
+
+    protected fun shouldHideStatus(statusViewData: TweetViewData): Boolean {
+        val concrete = statusViewData.asStatusOrNull() ?: return false
+        val status = concrete.status
+        return if (
+            (status.isReply && filterRemoveReplies) ||
+            (status.retweet != null && filterRemoveRetweets) ||
+            (status.account.id == status.retweet?.account?.id && filterRemoveSelfRetweets)
+        ) {
+            true
+        } else if (status.actionableStatus.account.id == activeAccountFlow.value?.accountId) {
+            // Warpnet filters don't apply for own posts
+            false
+        } else {
+            concrete.isFilterHide
+        }
+    }
+
+    private fun onPreferenceChanged(key: String) {
+        activeAccountFlow.value?.let { activeAccount ->
+            when (key) {
+                PrefKeys.TAB_FILTER_HOME_REPLIES -> {
+                    val filter = !activeAccount.isShowHomeReplies
+                    val oldRemoveReplies = filterRemoveReplies
+                    filterRemoveReplies = kind == Kind.HOME && !filter
+                    if (oldRemoveReplies != filterRemoveReplies) {
+                        fullReload()
+                    }
+                }
+
+                PrefKeys.TAB_FILTER_HOME_RETWEETS -> {
+                    val filter = !activeAccount.isShowHomeRetweets
+                    val oldRemoveRetweets = filterRemoveRetweets
+                    filterRemoveRetweets = kind == Kind.HOME && !filter
+                    if (oldRemoveRetweets != filterRemoveRetweets) {
+                        fullReload()
+                    }
+                }
+
+                PrefKeys.TAB_SHOW_HOME_SELF_RETWEETS -> {
+                    val filter = !activeAccount.isShowHomeSelfRetweets
+                    val oldRemoveSelfRetweets = filterRemoveSelfRetweets
+                    filterRemoveSelfRetweets = kind == Kind.HOME && !filter
+                    if (oldRemoveSelfRetweets != filterRemoveSelfRetweets) {
+                        fullReload()
+                    }
+                }
+
+                PrefKeys.ALWAYS_SHOW_SENSITIVE_MEDIA -> {
+                    // it is ok if only newly loaded statuses are affected, no need to fully refresh
+                    alwaysShowSensitiveMedia = activeAccount.alwaysShowSensitiveMedia
+                }
+
+                PrefKeys.READING_ORDER -> {
+                    readingOrder = ReadingOrder.from(sharedPreferences.getString(PrefKeys.READING_ORDER, null))
+                }
+            }
+        }
+    }
+
+    abstract fun saveHomeTimelinePosition(firstVisibleIndex: Int, firstVisibleOffset: Int)
+
+    companion object {
+        private const val TAG = "TimelineVM"
+        internal const val LOAD_AT_ONCE = 30
+
+        fun filterContextMatchesKind(kind: Kind, filterContext: List<Filter.Kind>): Boolean =
+            filterContext.contains(kind.toFilterKind())
+    }
+
+    /** Types of timelines we can display
+     * @param isOrdered If true, the timeline is ordered by status id, which allows doing custom pagination.
+     * If false, pagination can only be done via link headers.
+     */
+    enum class Kind(val isOrdered: Boolean) {
+        HOME(isOrdered = true),
+        USER(isOrdered = true),
+        USER_PINNED(isOrdered = false),
+        USER_WITH_REPLIES(isOrdered = true),
+        LIKES(isOrdered = false),
+        BOOKMARKS(isOrdered = false),
+        QUOTES(isOrdered = true);
+
+        fun toFilterKind(): Filter.Kind {
+            return when (valueOf(name)) {
+                USER, USER_WITH_REPLIES, USER_PINNED -> Filter.Kind.ACCOUNT
+                else -> Filter.Kind.HOME
+            }
+        }
+    }
+}

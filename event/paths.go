@@ -40,7 +40,9 @@ const (
 	PRIVATE_DELETE_TWEET      = "/private/delete/tweet/0.0.0"
 	PRIVATE_GET_CHAT          = "/private/get/chat/0.0.0"
 	PRIVATE_GET_CHATS         = "/private/get/chats/0.0.0"
-	PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
+	PRIVATE_GET_NOTIFICATION       = "/private/get/notification/0.0.0"
+	PRIVATE_GET_NOTIFICATIONS      = "/private/get/notifications/0.0.0"
+	PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
 	PRIVATE_GET_MESSAGE       = "/private/get/message/0.0.0"
 	PRIVATE_GET_MESSAGES      = "/private/get/messages/0.0.0"
 	PRIVATE_GET_TIMELINE      = "/private/get/timeline/0.0.0"
@@ -71,6 +73,45 @@ const (
 	PUBLIC_POST_UNFOLLOW      = "/public/post/unfollow/0.0.0"
 	PUBLIC_POST_UNLIKE        = "/public/post/unlike/0.0.0"
 	PUBLIC_POST_UNRETWEET     = "/public/post/unretweet/0.0.0"
+	PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 	PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 	PUBLIC_GET_IMAGE          = "/public/get/image/0.0.0"
+	PRIVATE_POST_BOOKMARK     = "/private/post/bookmark/0.0.0"
+	PRIVATE_POST_UNBOOKMARK   = "/private/post/unbookmark/0.0.0"
+	PRIVATE_GET_BOOKMARKS     = "/private/get/bookmarks/0.0.0"
+	PUBLIC_POST_PIN           = "/public/post/pin/0.0.0"
+	PUBLIC_POST_UNPIN         = "/public/post/unpin/0.0.0"
+
+	PRIVATE_POST_BLOCK              = "/private/post/block/0.0.0"
+	PRIVATE_POST_UNBLOCK            = "/private/post/unblock/0.0.0"
+	PRIVATE_GET_BLOCKS              = "/private/get/blocks/0.0.0"
+	PRIVATE_POST_MUTE               = "/private/post/mute/0.0.0"
+	PRIVATE_POST_UNMUTE             = "/private/post/unmute/0.0.0"
+	PRIVATE_GET_MUTES               = "/private/get/mutes/0.0.0"
+
+	PUBLIC_GET_TWEET_LIKERS     = "/public/get/tweet/likers/0.0.0"
+	PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
+
+	PRIVATE_POST_SUBSCRIBE_USER   = "/private/post/subscribe/user/0.0.0"
+	PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
+
+	PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
+	PRIVATE_GET_MEDIA       = "/private/get/media/0.0.0"
+
+	PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
+
+	PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
+
+	PRIVATE_GET_FOLLOW_REQUESTS           = "/private/get/follow/requests/0.0.0"
+	PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
+	PRIVATE_POST_FOLLOW_REQUEST_REJECT    = "/private/post/follow/request/reject/0.0.0"
+
+	PRIVATE_GET_FILTER             = "/private/get/filter/0.0.0"
+	PRIVATE_GET_FILTERS            = "/private/get/filters/0.0.0"
+	PRIVATE_POST_FILTER            = "/private/post/filter/0.0.0"
+	PRIVATE_POST_FILTER_UPDATE     = "/private/post/filter/update/0.0.0"
+	PRIVATE_DELETE_FILTER          = "/private/delete/filter/0.0.0"
+	PRIVATE_POST_FILTER_KEYWORD    = "/private/post/filter/keyword/0.0.0"
+	PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/update/0.0.0"
+	PRIVATE_DELETE_FILTER_KEYWORD  = "/private/delete/filter/keyword/0.0.0"
 )

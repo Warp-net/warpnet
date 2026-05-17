@@ -89,10 +89,11 @@ func StreamCreateChatHandler(
 			return nil, err
 		}
 
+		ownNodeInfo := streamer.NodeInfo()
 		if ev.OwnerId == ev.OtherUserId { // self chat
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
-		if ev.OwnerId != streamer.NodeInfo().OwnerId { // other user created chat
+		if ev.OwnerId != ownNodeInfo.OwnerId { // other user created chat
 			log.Infoln("new chat!")
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
@@ -103,6 +104,10 @@ func StreamCreateChatHandler(
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		if ownNodeInfo.ID.String() == otherUser.NodeId {
+			return event.ChatCreatedResponse(ownerChat), nil
 		}
 
 		otherChatData, err := streamer.GenericStream(
@@ -245,7 +250,8 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 			return nil, warpnet.WarpError("message is too long")
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
 
 		isMeParticipating := ev.SenderId == ownerId || ev.ReceiverId == ownerId
 		if !isMeParticipating {
@@ -301,6 +307,9 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 			return nil, err
 		}
 
+		if ownNodeInfo.ID.String() == otherUser.NodeId {
+			return event.NewMessageResponse(msg), nil
+		}
 		otherMsgData, err := streamer.GenericStream(
 			otherUser.NodeId,
 			event.PUBLIC_POST_MESSAGE,
@@ -314,7 +323,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
 			log.Warnf("chat message sent to offline node: %s", otherUser.NodeId)
-			msg.Status = "undelivered"
+			msg.Status = "undelivered" //nolint:goconst
 			return event.NewMessageResponse(msg), nil
 		}
 		if err != nil {

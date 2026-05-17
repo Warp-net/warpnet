@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <include
+        android:id="@+id/includedToolbar"
+        layout="@layout/toolbar_basic" />
+
+    <com.google.android.material.progressindicator.CircularProgressIndicator
+        android:id="@+id/progressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminate="true" />
+
+    <site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout
+        android:id="@+id/swipeRefreshLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/announcementsList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="@dimen/recyclerview_bottom_padding_no_actionbutton" />
+
+            <site.warpnet.warpdroid.view.BackgroundMessageView
+                android:id="@+id/errorMessageView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:src="@android:color/transparent"
+                android:visibility="gone"
+                tools:src="@drawable/errorphant_error"
+                tools:visibility="visible" />
+        </FrameLayout>
+    </site.warpnet.warpdroid.view.WarpdroidSwipeRefreshLayout>
+
+    <include layout="@layout/item_tweet_bottom_sheet" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

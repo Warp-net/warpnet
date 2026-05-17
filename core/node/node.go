@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
 	"strings"
 	"sync/atomic"
@@ -101,10 +102,15 @@ func NewWarpNode(
 		return nil, err
 	}
 
+	ya := yamux.DefaultTransport
+	ya.KeepAliveInterval = 15 * time.Second
+	ya.ConnectionWriteTimeout = 30 * time.Second
+
 	managersOpts := []libp2p.Option{
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(manager),
 		libp2p.DisableMetrics(), // TODO move to settings
+		libp2p.Muxer(yamux.ID, ya),
 	}
 
 	opts = append(opts, managersOpts...)
@@ -289,9 +295,6 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 	addrs := n.node.Peerstore().Addrs(n.node.ID())
 	addresses := make([]string, 0, len(addrs))
 	for _, ma := range addrs {
-		if !warpnet.IsPublicMultiAddress(ma) {
-			continue
-		}
 		if warpnet.IsRelayMultiaddress(ma) {
 			relayState = warpnet.RelayStatusRunning
 		}
@@ -413,6 +416,10 @@ func (n *WarpNode) StopNode() {
 		log.Errorf("node: failed to close: %v", err)
 	}
 	log.Infoln("node: stopped")
+
+	if n.mw != nil {
+		n.mw.Close()
+	}
 
 	n.isClosed.Store(true)
 	n.node = nil

@@ -1,0 +1,6 @@
+Tusky 32.1
+
+- It is now possible to remove one's own post from another post that quotes it
+- Various bug fixes
+
+See https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md for the full changelog

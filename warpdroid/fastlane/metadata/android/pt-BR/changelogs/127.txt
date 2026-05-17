@@ -1,0 +1,8 @@
+Tusky 27.0
+
+- O Tusky foi redesenhado com o Material 3
+- Suporte para Políticas de Notificação (recurso do Mastodon 4.3)
+- As hashtags no final das postagens agora são exibidas em uma barra separada
+- Suporte completo para dispositivos dobráveis
+
+Consulte https://github.com/tuskyapp/Tusky/blob/develop/CHANGELOG.md para ver o changelog completo

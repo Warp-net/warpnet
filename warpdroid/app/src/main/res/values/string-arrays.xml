@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string-array name="app_theme_names">
+        <item>@string/app_them_dark</item>
+        <item>@string/app_theme_light</item>
+        <item>@string/app_theme_black</item>
+        <item>@string/app_theme_auto</item>
+        <item>@string/app_theme_system</item>
+        <item>@string/app_theme_system_black</item>
+    </string-array>
+
+    <string-array name="post_privacy_names">
+        <item>@string/post_privacy_public</item>
+        <item>@string/post_privacy_unlisted</item>
+        <item>@string/post_privacy_followers_only</item>
+    </string-array>
+
+    <string-array name="quote_policy_names">
+        <item>@string/quote_policy_public</item>
+        <item>@string/quote_policy_followers</item>
+        <item>@string/quote_policy_nobody</item>
+    </string-array>
+
+    <string-array name="reply_privacy_names">
+        <item>@string/pref_match_default_post_privacy</item>
+        <item>@string/post_privacy_public</item>
+        <item>@string/post_privacy_unlisted</item>
+        <item>@string/post_privacy_followers_only</item>
+        <item>@string/post_privacy_direct</item>
+    </string-array>
+
+    <string-array name="post_text_size_names">
+        <item>@string/post_text_size_smallest</item>
+        <item>@string/post_text_size_small</item>
+        <item>@string/post_text_size_medium</item>
+        <item>@string/post_text_size_large</item>
+        <item>@string/post_text_size_largest</item>
+    </string-array>
+
+    <string-array name="pref_show_self_username_names">
+        <item>@string/pref_show_self_username_always</item>
+        <item>@string/pref_show_self_username_disambiguate</item>
+        <item>@string/pref_show_self_username_never</item>
+    </string-array>
+
+    <string-array name="filter_contexts">
+        <item>@string/title_home</item>
+        <item>@string/title_notifications</item>
+        <item>@string/pref_title_public_filter_keywords</item>
+        <item>@string/pref_title_thread_filter_keywords</item>
+        <item>@string/pref_title_account_filter_keywords</item>
+    </string-array>
+
+    <string-array name="filter_actions">
+        <item>@string/filter_action_blur</item>
+        <item>@string/filter_action_warn</item>
+        <item>@string/filter_action_hide</item>
+    </string-array>
+
+    <!-- Order must be synchronized with MastoList.ReplyPolicy -->
+    <string-array name="list_reply_policies_display">
+        <item>@string/list_reply_policy_none</item>
+        <item>@string/list_reply_policy_list</item>
+        <item>@string/list_reply_policy_followed</item>
+    </string-array>
+
+    <string-array name="notification_policy_options">
+        <item>@string/notification_policy_accept</item>
+        <item>@string/notification_policy_filter</item>
+        <item>@string/notification_policy_ignore</item>
+    </string-array>
+</resources>

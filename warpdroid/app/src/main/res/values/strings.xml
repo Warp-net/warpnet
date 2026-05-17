@@ -1,0 +1,1043 @@
+<!--
+  ~ Copyright 2023 Warpdroid Contributors
+  ~
+  ~ This file is a part of Warpdroid.
+  ~
+  ~ This program is free software; you can redistribute it and/or modify it under the terms of the
+  ~ GNU General Public License as published by the Free Software Foundation; either version 3 of the
+  ~ License, or (at your option) any later version.
+  ~
+  ~ Warpdroid is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+  ~ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+  ~ Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License along with Warpdroid; if not,
+  ~ see <http://www.gnu.org/licenses>.
+  -->
+
+<resources>
+
+    <string name="error_generic">An error occurred.</string>
+    <string name="error_network">A network error occurred. Please check your connection and try again.</string>
+    <string name="error_empty">This cannot be empty.</string>
+    <string name="error_invalid_domain">Invalid domain entered</string>
+    <string name="error_failed_app_registration">Failed authenticating with that instance. If this persists, try "Login in Browser" from the menu.</string>
+    <string name="error_no_web_browser_found">Couldn\'t find a web browser to use.</string>
+    <string name="error_authorization_unknown">An unidentified authorization error occurred. If this persists, try "Login in Browser" from the menu.</string>
+    <string name="error_authorization_denied">Authorization was denied. If you\'re sure that you supplied the correct credentials, try "Login in Browser" from the menu.</string>
+    <string name="error_retrieving_oauth_token">Failed getting a login token. If this persists, try "Login in Browser" from the menu.</string>
+    <string name="error_loading_account_details">Failed loading account details</string>
+    <string name="error_could_not_load_login_page">Could not load the login page.</string>
+    <string name="error_compose_character_limit">The post is too long!</string>
+    <string name="error_multimedia_size_limit">Video and audio files cannot exceed %1$s MB in size.</string>
+
+    <string name="error_image_edit_failed">The image could not be edited.</string>
+    <string name="error_media_upload_type">That type of file cannot be uploaded.</string>
+    <string name="error_media_upload_opening">That file could not be opened.</string>
+    <string name="error_media_upload_permission">Permission to read media is required.</string>
+    <string name="error_media_download_permission">Permission to store media is required.</string>
+    <string name="error_media_upload_image_or_video">Images and videos cannot both be attached to the same post.</string>
+    <string name="error_media_upload_sending">The upload failed.</string>
+    <string name="error_media_upload_sending_fmt">The upload failed: %1$s</string>
+    <string name="error_sender_account_gone">Error sending post.</string>
+    <string name="error_following_hashtag_format">Error following #%1$s</string>
+    <string name="error_unfollowing_hashtag_format">Error unfollowing #%1$s</string>
+    <string name="error_following_hashtags_unsupported">This instance does not support following hashtags.</string>
+    <string name="error_muting_hashtag_format">Error muting #%1$s</string>
+    <string name="error_unmuting_hashtag_format">Error unmuting #%1$s</string>
+    <string name="error_blocking_domain">Failed to mute %1$s: %2$s</string>
+    <string name="error_unblocking_domain">Failed to unmute %1$s: %2$s</string>
+    <string name="error_status_source_load">Failed to load the status source from the server.</string>
+    <string name="error_deleting_filter">Error deleting filter \'%1$s\'</string>
+    <string name="error_saving_filter">Error saving filter \'%1$s\'</string>
+    <string name="error_deleting_status">Failed to delete post.</string>
+
+    <string name="title_login">Login</string>
+    <string name="title_home">Home</string>
+    <string name="title_notifications">Notifications</string>
+    <string name="notifications_tab_all">All</string>
+    <string name="notifications_tab_mentions">Mentions</string>
+    <string name="notifications_empty">No notifications yet</string>
+    <string name="follow_requests_empty">No follow requests</string>
+    <string name="notification_verb_mention">mentioned you</string>
+    <string name="notification_verb_retweet">retweeted your tweet</string>
+    <string name="notification_verb_like">liked your tweet</string>
+    <string name="notification_verb_follow">followed you</string>
+    <string name="notification_verb_follow_request">requested to follow you</string>
+    <string name="notification_verb_quote">quoted your tweet</string>
+    <string name="chats_empty">No conversations yet</string>
+    <string name="chat_messages_empty">No messages yet</string>
+    <string name="chat_compose_placeholder">Message</string>
+    <string name="action_chat_send">Send</string>
+    <string name="title_public_local">Local</string>
+    <string name="title_public_trending_hashtags">Trending hashtags</string>
+    <string name="title_public_trending_statuses">Trending posts</string>
+    <string name="title_public_federated">Federated</string>
+    <string name="title_direct_messages">Direct messages</string>
+    <string name="title_tab_preferences">Tabs</string>
+    <string name="title_view_thread">Thread</string>
+    <string name="title_posts">Posts</string>
+    <string name="title_posts_with_replies">With replies</string>
+    <string name="title_posts_pinned">Pinned</string>
+    <string name="title_follows">Follows</string>
+    <string name="title_followers">Followers</string>
+    <string name="title_likes">Likes</string>
+    <string name="title_bookmarks">Bookmarks</string>
+    <string name="title_mutes">Muted users</string>
+    <string name="title_blocks">Blocked users</string>
+    <string name="title_domain_mutes">Hidden domains</string>
+    <string name="title_follow_requests">Follow requests</string>
+    <string name="title_edit_profile">Edit your profile</string>
+    <string name="title_drafts">Drafts</string>
+    <string name="title_scheduled_posts">Scheduled posts</string>
+    <string name="title_announcements">Announcements</string>
+    <string name="title_licenses">Licenses</string>
+    <string name="title_followed_hashtags">Followed hashtags</string>
+    <string name="title_edits">Edits</string>
+
+    <string name="dialog_follow_hashtag_title">Follow hashtag</string>
+    <string name="follow_hashtag_success">Followed hashtag %1$s</string>
+
+    <string name="post_username_format">\@%1$s</string>
+    <string name="post_retweeted_format">%1$s retweeted</string>
+    <string name="post_replied">Replied</string>
+    <string name="post_replied_format">In reply to %1$s</string>
+    <string name="post_replied_self">Continued thread</string>
+    <string name="post_sensitive_media_title">Sensitive content</string>
+    <string name="post_media_hidden_title">Media hidden</string>
+    <string name="post_media_alt">ALT</string>
+    <string name="post_sensitive_media_directions">Click to view</string>
+    <string name="post_content_warning_show_more">Show more</string>
+    <string name="post_content_warning_show_less">Show less</string>
+    <string name="post_content_show_more">Expand</string>
+    <string name="post_content_show_less">Collapse</string>
+    <string name="post_edited">Edited %1$s</string>
+
+    <string name="message_empty">Nothing here.</string>
+
+    <string name="notification_retweet_format">%1$s retweeted your post</string>
+    <string name="notification_like_format">%1$s liked your post</string>
+    <string name="notification_pleroma_reaction_format">%1$s reacted to your post</string>
+    <string name="notification_follow_format">%1$s followed you</string>
+    <string name="notification_follow_request_format">%1$s requested to follow you</string>
+    <string name="notification_sign_up_format">%1$s signed up</string>
+    <string name="notification_subscription_format">%1$s just posted</string>
+    <string name="notification_update_format">%1$s edited their post</string>
+    <string name="notification_report_format">New report on %1$s</string>
+    <string name="notification_header_report_format">%1$s reported %2$s</string>
+    <string name="notification_summary_report_format">%1$s · %2$d posts attached</string>
+
+    <string name="notification_quote_format">%1$s quoted your post</string>
+    <string name="notification_quoted_update_format">%1$s edited a post you have quoted</string>
+
+    <string name="report_username_format">Report @%1$s</string>
+    <string name="report_comment_hint">Additional comments?</string>
+
+    <string name="action_quick_reply">Quick Reply</string>
+    <string name="action_reply">Reply</string>
+    <string name="action_retweet">Retweet</string>
+    <string name="action_retweet_private">Followers-Only Retweet</string>
+    <string name="action_retweet_public">Public Retweet</string>
+    <string name="action_retweet_unlisted">Unlisted Retweet</string>
+    <string name="action_unretweet">Remove retweet</string>
+    <string name="action_like">Like</string>
+    <string name="action_unlike">Remove like</string>
+    <string name="action_bookmark">Bookmark</string>
+    <string name="action_unbookmark">Remove bookmark</string>
+    <string name="action_more">More</string>
+    <string name="action_compose">Compose</string>
+    <string name="action_login">Login with Warpdroid</string>
+    <string name="action_browser_login">Login with Browser</string>
+    <string name="action_logout">Log out</string>
+    <string name="action_logout_confirm">Are you sure you want to log out of %1$s? This will delete all local data of the account, including drafts and preferences.</string>
+    <string name="action_remove_account">Remove account</string>
+    <string name="action_remove_account_confirm">Are you sure you want to remove the account %1$s from Warpdroid? This will delete all local data of the account, including drafts and preferences.</string>
+    <string name="action_post_failed">Upload failed</string>
+    <plurals name="action_post_failed_detail">
+        <item quantity="one">Your post failed to upload and has been saved to drafts.\n\nEither the server could not be contacted, or it rejected the post.</item>
+        <item quantity="other">Your posts failed to upload and have been saved to drafts.\n\nEither the server could not be contacted, or it rejected the posts.</item>
+    </plurals>
+    <string name="action_post_failed_show_drafts">Show drafts</string>
+    <string name="action_post_failed_do_nothing">Dismiss</string>
+    <string name="action_follow">Follow</string>
+    <string name="action_unfollow">Unfollow</string>
+    <string name="action_block">Block</string>
+    <string name="action_unblock">Unblock</string>
+    <string name="action_share_account_link">Share link to account</string>
+    <string name="action_share_account_username">Share username of account</string>
+    <string name="action_hide_retweets">Hide retweets</string>
+    <string name="action_show_retweets">Show retweets</string>
+    <string name="pref_title_show_self_retweets">Show self-retweets</string>
+    <string name="pref_title_show_self_retweets_description">Someone retweeting their own post</string>
+    <string name="action_report">Report</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_delete_conversation">Delete conversation</string>
+    <string name="action_delete_and_redraft">Delete and re-draft</string>
+    <string name="action_discard">Discard changes</string>
+    <string name="action_continue_edit">Continue editing</string>
+    <string name="action_send">TWEET</string>
+    <string name="action_send_public">TWEET!</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_close">Close</string>
+    <string name="action_view_profile">Profile</string>
+    <string name="action_view_preferences">Preferences</string>
+    <string name="action_view_account_preferences">Account preferences</string>
+    <string name="action_view_likes">Likes</string>
+    <string name="action_view_bookmarks">Bookmarks</string>
+    <string name="action_view_mutes">Muted users</string>
+    <string name="action_view_blocks">Blocked users</string>
+    <string name="action_view_domain_mutes">Hidden domains</string>
+    <string name="action_view_follow_requests">Follow requests</string>
+    <string name="action_view_media">Media</string>
+    <string name="action_open_in_web">Open in browser</string>
+    <string name="action_add_media">Add media</string>
+    <string name="action_add_poll">Add poll</string>
+    <string name="action_photo_take">Take photo</string>
+    <string name="action_share">Share</string>
+    <string name="action_mute">Mute</string>
+    <string name="action_unmute">Unmute</string>
+    <string name="action_unmute_desc">Unmute %1$s</string>
+    <string name="action_mute_domain">Mute %1$s</string>
+    <string name="action_unmute_domain">Unmute %1$s</string>
+    <string name="action_mute_conversation">Mute conversation</string>
+    <string name="action_unmute_conversation">Unmute conversation</string>
+    <string name="action_mention">Mention</string>
+    <string name="action_hide_media">Hide media</string>
+    <string name="action_reveal_media">Reveal media</string>
+    <string name="action_open_drawer">Open drawer</string>
+    <string name="action_save">Save</string>
+    <string name="action_edit_profile">Edit profile</string>
+    <string name="action_edit_own_profile">Edit</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_accept">Accept</string>
+    <string name="action_reject">Reject</string>
+    <string name="action_search">Search</string>
+    <string name="action_access_drafts">Drafts</string>
+    <string name="action_access_scheduled_posts">Scheduled posts</string>
+    <string name="action_toggle_visibility">Post visibility</string>
+    <string name="action_content_warning">Content warning</string>
+    <string name="action_emoji_keyboard">Emoji keyboard</string>
+    <string name="action_schedule_post">Schedule Post</string>
+    <string name="action_reset_schedule">Reset</string>
+    <string name="action_add_tab">Add Tab</string>
+    <string name="action_follow_hashtag">Follow a new hashtag</string>
+    <string name="action_open_retweeter">Open retweet author</string>
+    <string name="action_open_retweeted_by">Show retweets</string>
+    <string name="action_open_faved_by">Show likes</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_details">Details</string>
+    <string name="action_add_reaction">add reaction</string>
+    <string name="action_rehide_status">Re-hide filtered status</string>
+
+    <string name="title_hashtags_dialog">Hashtags</string>
+    <string name="title_mentions_dialog">Mentions</string>
+    <string name="title_links_dialog">Links</string>
+    <string name="action_open_media_n">Open media #%1$d</string>
+
+    <string name="download_image">Downloading %1$s</string>
+
+    <string name="action_copy_link">Copy the link</string>
+    <string name="action_open_as">Open as %1$s</string>
+    <string name="action_share_as">Share as …</string>
+    <string name="action_translate">Translate</string>
+    <string name="action_show_original">Show original</string>
+    <string name="download_media">Download media</string>
+    <string name="downloading_media">Downloading media</string>
+
+    <string name="send_post_link_to">Share post URL to…</string>
+    <string name="send_post_content_to">Share post to…</string>
+    <string name="send_account_link_to">Share account URL to…</string>
+    <string name="send_account_username_to">Share account username to…</string>
+    <string name="send_media_to">Share media to…</string>
+    <string name="account_username_copied">Username copied</string>
+    <string name="url_copied">Url copied</string>
+
+    <string name="confirmation_reported">Sent!</string>
+    <string name="confirmation_unblocked">User unblocked</string>
+    <string name="confirmation_unmuted">User unmuted</string>
+    <string name="confirmation_domain_unmuted">%1$s unhidden</string>
+    <string name="confirmation_hashtag_unfollowed">#%1$s unfollowed</string>
+    <string name="confirmation_hashtag_copied">\'#%1$s\' copied</string>
+
+    <string name="reply_sending">Sending…</string>
+    <string name="reply_sending_long">Your reply is being sent.</string>
+
+    <string name="hint_domain">Which instance?</string>
+    <string name="hint_compose">What\'s happening?</string>
+    <string name="hint_content_warning">Content warning</string>
+    <string name="hint_display_name">Display name</string>
+    <string name="hint_note">Bio</string>
+    <string name="hint_search">Search…</string>
+    <string name="hint_media_description_missing">Media should have a description.</string>
+
+    <string name="search_no_results">No results</string>
+
+    <string name="label_quick_reply">Reply…</string>
+    <string name="label_avatar">Avatar</string>
+    <string name="label_header">Header</string>
+    <string name="label_image">Image</string>
+
+    <string name="link_whats_an_instance">What\'s an instance?</string>
+
+    <string name="login_connection">Connecting…</string>
+
+    <string name="dialog_whats_an_instance">In Warpnet, your account lives on the Warpnet node you pair with. Follow the pairing flow to connect this device to a node.</string>
+    <string name="dialog_title_finishing_media_upload">Finishing Media Upload</string>
+    <string name="dialog_message_uploading_media">Uploading…</string>
+    <string name="dialog_download_image">Download</string>
+    <string name="dialog_message_cancel_follow_request">Revoke the follow request?</string>
+    <string name="dialog_unfollow_warning">Unfollow this account?</string>
+    <string name="dialog_follow_warning">Follow this account?</string>
+    <string name="dialog_delete_post_warning">Delete this post?</string>
+    <string name="dialog_redraft_post_warning">Delete and re-draft this post?</string>
+    <string name="dialog_delete_conversation_warning">Delete this conversation?</string>
+    <string name="mute_domain_warning">Are you sure you want to block all of %1$s? You will not see content from that domain in any public timelines or in your notifications. Your followers from that domain will be removed.</string>
+    <string name="mute_domain_warning_dialog_ok">Hide entire domain</string>
+    <string name="dialog_block_warning">Block @%1$s?</string>
+    <string name="dialog_mute_warning">Mute @%1$s?</string>
+    <string name="dialog_mute_hide_notifications">Hide notifications</string>
+
+    <string name="visibility_public">Public: Post to public timelines</string>
+    <string name="visibility_unlisted">Unlisted: Do not show in public timelines</string>
+    <string name="visibility_private">Followers-Only: Post to followers only</string>
+    <string name="visibility_direct">Direct: Post to mentioned users only</string>
+
+    <string name="pref_title_edit_notification_settings">Notifications</string>
+    <string name="pref_title_notifications_enabled">Notifications</string>
+    <string name="pref_title_notification_alerts">Alerts</string>
+    <string name="pref_title_notification_alert_sound">Notify with a sound</string>
+    <string name="pref_title_notification_alert_vibrate">Notify with vibration</string>
+    <string name="pref_title_notification_alert_light">Notify with light</string>
+    <string name="pref_title_notification_filters">Enabled notification types</string>
+
+    <string name="pref_title_appearance_settings">Appearance</string>
+    <string name="pref_title_app_theme">App theme</string>
+    <string name="pref_title_timelines">Timelines</string>
+    <string name="pref_title_timeline_filters">Filters</string>
+    <string name="pref_title_per_timeline_preferences">Per-timeline preferences</string>
+
+    <string name="app_them_dark">Dark</string>
+    <string name="app_theme_light">Light</string>
+    <string name="app_theme_black">Black</string>
+    <string name="app_theme_auto">Automatic at sunset</string>
+    <string name="app_theme_system">Use System Design</string>
+    <string name="app_theme_system_black">Use System Design (black)</string>
+
+    <string name="pref_title_browser_settings">Browser</string>
+    <string name="pref_title_custom_tabs">Use Chrome Custom Tabs</string>
+    <string name="pref_title_language">Language</string>
+    <string name="pref_title_bot_overlay">Show indicator for bots</string>
+    <string name="pref_title_animate_gif_avatars">Animate GIF avatars</string>
+    <string name="pref_title_gradient_for_media">Show colorful gradients for hidden media</string>
+    <string name="pref_title_animate_custom_emojis">Animate custom emojis</string>
+
+    <string name="pref_title_post_filter">Timeline filtering</string>
+    <string name="pref_title_post_tabs">Home timeline</string>
+    <string name="pref_title_show_retweets">Show retweets</string>
+    <string name="pref_title_show_replies">Show replies</string>
+    <string name="pref_title_show_media_preview">Download media previews</string>
+    <string name="pref_title_proxy_settings">Proxy</string>
+    <string name="pref_title_http_proxy_settings">HTTP proxy</string>
+    <string name="pref_title_http_proxy_enable">Enable HTTP proxy</string>
+    <string name="pref_title_http_proxy_server">HTTP proxy server</string>
+    <string name="pref_title_http_proxy_port">HTTP proxy port</string>
+    <string name="pref_title_http_proxy_port_message">Port should be between %1$d and %2$d</string>
+    <string name="pref_summary_http_proxy_disabled">Disabled</string>
+    <string name="pref_summary_http_proxy_missing">&lt;not set></string>
+    <string name="pref_summary_http_proxy_invalid">&lt;invalid></string>
+
+    <string name="pref_default_post_privacy">Post privacy (synced with server)</string>
+    <string name="pref_default_post_language">Posting language (synced with server)</string>
+    <string name="pref_default_quote_policy">Quote policy (synced with server)</string>
+    <string name="pref_default_reply_privacy">Reply privacy (not synced with server)</string>
+    <string name="pref_default_reply_privacy_explanation">The pre-selected privacy will depend on the post you are replying to.</string>
+    <string name="pref_default_media_sensitivity">Always mark media as sensitive (synced with server)</string>
+    <string name="pref_match_default_post_privacy">Match default post privacy</string>
+    <string name="pref_publishing">Posting defaults</string>
+    <string name="pref_failed_to_sync">Failed to sync preferences</string>
+
+    <string name="pref_main_nav_position">Main navigation position</string>
+    <string name="pref_main_nav_position_option_top">Top</string>
+    <string name="pref_main_nav_position_option_bottom">Bottom</string>
+
+
+    <string name="post_privacy_public">Public</string>
+    <string name="post_privacy_unlisted">Unlisted</string>
+    <string name="post_privacy_followers_only">Followers-only</string>
+    <string name="post_privacy_direct">Direct</string>
+
+    <string name="quote_policy_public">Anyone</string>
+    <string name="quote_policy_followers">Followers only</string>
+    <string name="quote_policy_nobody">Just me</string>
+
+    <string name="pref_ui_text_size">UI text size</string>
+    <string name="pref_post_text_size">Post text size</string>
+
+    <string name="post_text_size_smallest">Smallest</string>
+    <string name="post_text_size_small">Small</string>
+    <string name="post_text_size_medium">Medium</string>
+    <string name="post_text_size_large">Large</string>
+    <string name="post_text_size_largest">Largest</string>
+
+    <string name="pref_show_self_username_always">Always</string>
+    <string name="pref_show_self_username_disambiguate">When multiple accounts logged in</string>
+    <string name="pref_show_self_username_never">Never</string>
+
+    <string name="notification_mention_name">New mentions</string>
+    <string name="notification_mention_descriptions">Notifications about new mentions</string>
+    <string name="notification_follow_name">New followers</string>
+    <string name="notification_follow_description">Notifications about new followers</string>
+    <string name="notification_follow_request_name">Follow requests</string>
+    <string name="notification_follow_request_description">Notifications about follow requests</string>
+    <string name="notification_retweet_name">Retweets</string>
+    <string name="notification_retweet_description">Notifications when your posts get retweeted</string>
+    <string name="notification_like_name">Likes</string>
+    <string name="notification_like_description">Notifications when your posts get a like</string>
+    <string name="notification_poll_name">Poll results</string>
+    <string name="notification_poll_description">Notifications about polls that have ended</string>
+    <string name="notification_subscription_name">New posts</string>
+    <string name="notification_subscription_description">Notifications when somebody you\'re subscribed to published a new post</string>
+    <string name="notification_sign_up_name">Sign ups</string>
+    <string name="notification_sign_up_description">Notifications about new users</string>
+    <string name="notification_update_name">Post edits</string>
+    <string name="notification_update_description">Notifications when posts you\'ve interacted with are edited</string>
+    <string name="notification_quote_name">Quotes</string>
+    <string name="notification_quote_description">Notifications when your posts are quoted</string>
+    <string name="notification_report_name">Reports</string>
+    <string name="notification_severed_relationship_name">Lost connections</string>
+    <string name="notification_moderation_warning_name">Moderation warnings</string>
+    <string name="notification_report_description">Notifications about moderation reports</string>
+    <string name="notification_listenable_worker_name">Background activity</string>
+    <string name="notification_listenable_worker_description">Notifications when Warpdroid is working in the background</string>
+    <string name="notification_unknown_name">Unknown</string>
+    <string name="notification_unknown_description">Unknown notification type</string>
+
+    <string name="notification_channel_other">Other</string>
+    <string name="notification_channel_other_description">Other notifications, like lost connections and moderation warnings</string>
+
+    <string name="notification_channel_admin">Admin</string>
+    <string name="notification_channel_admin_description">Admin notifications, like new reports or signups</string>
+
+    <string name="notification_mention_format">%1$s mentioned you</string>
+    <string name="notification_summary_large">%1$s, %2$s, %3$s and %4$d others</string>
+    <string name="notification_summary_medium">%1$s, %2$s, and %3$s</string>
+    <string name="notification_summary_small">%1$s and %2$s</string>
+    <plurals name="notification_title_summary">
+        <item quantity="one">%1$d new interaction</item>
+        <item quantity="other">%1$d new interactions</item>
+    </plurals>
+    <string name="notification_notification_worker">Fetching notifications…</string>
+    <string name="notification_prune_cache">Cache maintenance…</string>
+
+    <string name="description_account_locked">Locked Account</string>
+
+    <string name="about_title_activity">About</string>
+    <string name="about_warpdroid_version">Warpdroid %1$s</string>
+    <string name="about_device_info_title">Your device</string>
+    <string name="about_device_info">%1$s %2$s\nAndroid version: %3$s\nSDK version: %4$d</string>
+    <string name="about_account_info_title">Your account</string>
+    <string name="about_account_info">\@%1$s\@%2$s\nVersion: %3$s</string>
+    <string name="about_powered_by_warpdroid">Powered by Warpdroid</string>
+    <string name="about_warpdroid_license">Warpdroid is free and open-source software.
+        It is a fork of Warpnet (https://warpnet.site, GPL-3.0) with the Warpnet API replaced
+        by the Warpnet peer-to-peer transport, and is distributed under the
+        GNU Affero General Public License Version 3 or later.
+        You can view the license here: https://www.gnu.org/licenses/agpl-3.0.en.html</string>
+    <!-- note to translators:
+         * you should think of “free” as in “free speech,” not as in “free beer”.
+           We sometimes call it “libre software,” borrowing the French or Spanish word for “free” as in freedom,
+           to show we do not mean the software is gratis. Source: https://www.gnu.org/philosophy/free-sw.html
+         * the url can be changed to link to the localized version of the license.
+    -->
+    <string name="about_project_site">Project website: https://warpnet.site</string>
+    <string name="about_bug_feature_request_site">Bug reports &amp; feature requests:\nhttps://github.com/Warp-net/warpdroid/issues</string>
+    <string name="about_warpdroid_account">Warpdroid\'s Profile</string>
+
+    <string name="post_share_content">Share content of post</string>
+    <string name="post_share_link">Share link to post</string>
+    <string name="post_media_image">Image</string>
+    <string name="post_media_images">Images</string>
+    <string name="post_media_video">Video</string>
+    <string name="post_media_audio">Audio</string>
+    <string name="post_media_attachments">Attachments</string>
+    <string name="tweet_count_one_plus">1+</string>
+    <string name="tweet_created_at_now">now</string>
+    <string name="tweet_filtered_show_anyway">Show anyway</string>
+    <string name="tweet_filter_placeholder_label_format">Filtered: %1$s</string>
+
+    <string name="state_follow_requested">Follow requested</string>
+
+    <!--These are for timestamps on posts. For example: "16s" or "2d"-->
+    <string name="abbreviated_in_years">in %1$dy</string>
+    <string name="abbreviated_in_days">in %1$dd</string>
+    <string name="abbreviated_in_hours">in %1$dh</string>
+    <string name="abbreviated_in_minutes">in %1$dm</string>
+    <string name="abbreviated_in_seconds">in %1$ds</string>
+    <string name="abbreviated_years_ago">%1$dy</string>
+    <string name="abbreviated_days_ago">%1$dd</string>
+    <string name="abbreviated_hours_ago">%1$dh</string>
+    <string name="abbreviated_minutes_ago">%1$dm</string>
+    <string name="abbreviated_seconds_ago">%1$ds</string>
+
+    <string name="follows_you">Follows you</string>
+    <string name="pref_title_alway_show_sensitive_media">Always show sensitive media</string>
+    <string name="pref_title_alway_open_spoiler">Always expand posts marked with content warnings</string>
+    <string name="title_media">Media</string>
+    <string name="replying_to">Replying to @%1$s</string>
+    <string name="load_more_placeholder_text">Load more</string>
+
+    <string name="pref_title_public_filter_keywords">Public timelines</string>
+    <string name="pref_title_thread_filter_keywords">Conversations</string>
+    <string name="pref_title_account_filter_keywords">Profiles</string>
+    <string name="filter_addition_title">Add filter</string>
+    <string name="filter_edit_title">Edit filter</string>
+    <string name="filter_dialog_remove_button">Remove</string>
+    <string name="filter_dialog_update_button">Update</string>
+    <string name="filter_dialog_whole_word">Whole word</string>
+    <string name="filter_dialog_whole_word_description">When the keyword or phrase is alphanumeric only, it will only be applied if it matches the whole word</string>
+    <string name="filter_add_description">Phrase to filter</string>
+    <string name="filter_expiration_format">%1$s (%2$s)</string>
+    <string name="message_filters_empty">You have no filters.</string>
+
+    <string name="add_account_name">Add Account</string>
+    <string name="add_account_description">Add new Warpnet Account</string>
+
+    <string name="action_lists">Lists</string>
+    <string name="title_lists">Lists</string>
+    <string name="error_create_list">Could not create list</string>
+    <string name="error_rename_list">Could not update list</string>
+    <string name="error_delete_list">Could not delete list</string>
+    <string name="action_create_list">Create list</string>
+    <string name="action_rename_list">Update list</string>
+    <string name="action_delete_list">Delete list</string>
+    <string name="hint_search_people_list">Search for people you follow</string>
+    <string name="action_add_to_list">Add account to the list</string>
+    <string name="action_remove_from_list">Remove account from the list</string>
+    <string name="action_add_or_remove_from_list">Add or remove from list</string>
+    <string name="failed_to_add_to_list">Failed to add the account to the list</string>
+    <string name="failed_to_remove_from_list">Failed to remove the account from the list</string>
+
+    <string name="compose_active_account_description">Posting as %1$s</string>
+
+    <string name="hint_describe_for_visually_impaired">Describe contents for visually impaired</string>
+    <string name="set_focus_description">Tap or drag the circle to choose the focal point which will always be visible in thumbnails.</string>
+    <string name="action_set_caption">Set caption</string>
+    <string name="action_set_focus">Set focus point</string>
+    <string name="action_edit_image">Edit image</string>
+    <string name="action_remove">Remove</string>
+    <string name="lock_account_label">Lock account</string>
+    <string name="lock_account_label_description">Requires you to manually approve followers</string>
+    <string name="compose_delete_draft">Delete draft?</string>
+    <string name="compose_save_draft">Save draft?</string>
+    <string name="compose_save_draft_loses_media">Save draft? (Attachments will be uploaded again when you restore the draft.)</string>
+    <string name="compose_unsaved_changes">You have unsaved changes.</string>
+    <string name="send_post_notification_title">Sending post…</string>
+    <string name="send_post_notification_error_title">Error sending post</string>
+    <string name="send_post_notification_channel_name">Sending Posts</string>
+    <string name="send_post_notification_cancel_title">Sending cancelled</string>
+    <string name="send_post_notification_saved_content">A copy of the post has been saved to your drafts</string>
+    <string name="action_compose_shortcut">Compose</string>
+
+    <string name="error_no_custom_emojis">Your instance %1$s does not have any custom emojis</string>
+    <string name="emoji_style">Emoji style</string>
+    <string name="system_default">System default</string>
+    <string name="download_fonts">You\'ll need to download these emoji sets first</string>
+    <string name="performing_lookup_title">Performing lookup…</string>
+    <string name="expand_collapse_all_posts">Expand/Collapse all posts</string>
+    <string name="action_open_post">Open post</string>
+    <string name="caption_systememoji">Your device\'s default emoji set</string>
+    <string name="caption_blobmoji">The Blob emojis known from Android 4.4–7.1</string>
+    <string name="caption_twemoji">Warpnet\'s standard emoji set</string>
+    <string name="caption_notoemoji">Google\'s current emoji set</string>
+
+    <string name="download_failed">Download failed</string>
+
+    <string name="profile_badge_bot_text">Bot</string>
+    <string name="account_moved_description">%1$s has moved to:</string>
+
+    <string name="retweet_private">Retweet to original audience</string>
+    <string name="unretweet_private">Unretweet</string>
+
+    <string name="license_description">Warpdroid contains code and assets from the following open source projects:</string>
+    <string name="license_apache_2">Licensed under the Apache License (copy below)</string>
+    <string name="license_cc_by_4">CC-BY 4.0</string>
+    <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
+
+    <string name="profile_metadata_label">Profile metadata</string>
+    <string name="profile_metadata_add">add data</string>
+    <string name="profile_metadata_label_label">Label</string>
+    <string name="profile_metadata_content_label">Content</string>
+
+    <string name="pref_title_absolute_time">Use absolute time</string>
+
+    <string name="label_remote_account">Information below may reflect the user\'s profile incompletely. Press to open full profile in browser.</string>
+
+    <string name="unpin_action">Unpin</string>
+    <string name="pin_action">Pin</string>
+    <string name="failed_to_pin">Failed to Pin</string>
+    <string name="failed_to_unpin">Failed to Unpin</string>
+
+    <plurals name="replies">
+        <item quantity="one">%1$s Reply</item>
+        <item quantity="other">%1$s Replies</item>
+    </plurals>
+
+    <plurals name="favs">
+        <item quantity="one">%1$s Like</item>
+        <item quantity="other">%1$s Likes</item>
+    </plurals>
+
+    <plurals name="retweets">
+        <item quantity="one">%1$s Retweet</item>
+        <item quantity="other">%1$s Retweets</item>
+    </plurals>
+
+    <plurals name="quotes">
+        <item quantity="one">%1$s Quote</item>
+        <item quantity="other">%1$s Quotes</item>
+    </plurals>
+
+    <plurals name="views">
+        <item quantity="one">%1$s View</item>
+        <item quantity="other">%1$s Views</item>
+    </plurals>
+
+    <string name="label_translating">Translating…</string>
+    <string name="label_translated">Translated from %1$s with %2$s</string>
+
+    <string name="title_retweeted_by">Retweeted by</string>
+    <string name="title_liked_by">Liked by</string>
+
+    <string name="conversation_1_recipients">%1$s</string>
+    <string name="conversation_2_recipients">%1$s and %2$s</string>
+    <string name="conversation_more_recipients">%1$s, %2$s and %3$d more</string>
+
+    <string name="description_post_media">
+        Media: %1$s
+    </string>
+    <string name="description_post_cw">
+        Content warning: %1$s
+    </string>
+    <string name="description_post_media_no_description_placeholder">
+        No description
+    </string>
+    <string name="description_post_edited">
+        Edited
+    </string>
+    <string name="description_post_retweeted">
+        Retweeted
+    </string>
+    <string name="description_post_liked">
+        Liked
+    </string>
+    <string name="description_post_bookmarked">
+        Bookmarked
+    </string>
+    <string name="description_visibility_public">
+        Public
+    </string>
+    <string name="description_visibility_unlisted">
+        Unlisted
+    </string>
+    <string name="description_visibility_private">
+        Followers
+    </string>
+    <string name="description_visibility_direct">
+        Direct
+    </string>
+    <string name="description_poll">
+        Poll with choices: %1$s, %2$s, %3$s, %4$s; %5$s
+    </string>
+    <string name="description_post_language">Post language</string>
+    <string name="description_login">Works in most cases. No data is leaked to other apps.</string>
+    <string name="description_browser_login">May support additional authentication methods, but requires a supported browser.</string>
+
+    <string name="hint_list_name">List name</string>
+
+    <string name="add_hashtag_title">Add hashtag</string>
+    <string name="pick_hashtag_hint">Hashtag without #</string>
+    <string name="hashtags">Hashtags</string>
+    <string name="select_list_title">Select list</string>
+    <string name="select_list_manage">Manage lists</string>
+    <string name="list_exclusive_label">Hide from the home timeline</string>
+    <string name="list">List</string>
+    <string name="notifications_clear">Delete</string>
+    <string name="notifications_apply_filter">Filter</string>
+    <string name="filter_apply">Apply</string>
+
+    <string name="muting_hashtag_success_format">Muting hashtag #%1$s as a warning</string>
+    <string name="unmuting_hashtag_success_format">Unmuting hashtag #%1$s</string>
+    <string name="action_view_filter">View filter</string>
+    <string name="following_hashtag_success_format">Now following hashtag #%1$s</string>
+    <string name="unfollowing_hashtag_success_format">No longer following hashtag #%1$s</string>
+
+    <string name="compose_shortcut_long_label">Compose post</string>
+    <string name="compose_shortcut_short_label">Compose</string>
+
+    <string name="notification_clear_text">Are you sure you want to permanently clear all your notifications?</string>
+    <string name="compose_preview_image_description">Actions for image %1$s</string>
+
+    <!-- 15 votes • 1 hour left -->
+    <string name="poll_info_format">%1$s • %2$s</string>
+    <plurals name="poll_info_votes">
+        <item quantity="one">%1$s vote</item>
+        <item quantity="other">%1$s votes</item>
+    </plurals>
+    <plurals name="poll_info_people">
+        <item quantity="one">%1$s person</item>
+        <item quantity="other">%1$s people</item>
+    </plurals>
+    <string name="poll_info_time_absolute">ends at %1$s</string>
+    <string name="poll_info_closed">closed</string>
+
+    <string name="poll_vote">Vote</string>
+    <string name="poll_show_results">Show results</string>
+
+    <string name="poll_ended_voted">A poll you have voted in has ended</string>
+    <string name="poll_ended_created">A poll you created has ended</string>
+
+    <!--These are for timestamps on polls -->
+    <plurals name="poll_timespan_days">
+        <item quantity="one">%1$d day left</item>
+        <item quantity="other">%1$d days left</item>
+    </plurals>
+    <plurals name="poll_timespan_hours">
+        <item quantity="one">%1$d hour left</item>
+        <item quantity="other">%1$d hours left</item>
+    </plurals>
+    <plurals name="poll_timespan_minutes">
+        <item quantity="one">%1$d minute left</item>
+        <item quantity="other">%1$d minutes left</item>
+    </plurals>
+    <plurals name="poll_timespan_seconds">
+        <item quantity="one">%1$d second left</item>
+        <item quantity="other">%1$d seconds left</item>
+    </plurals>
+
+    <string name="button_continue">Continue</string>
+    <string name="button_back">Back</string>
+    <string name="button_done">Done</string>
+    <string name="report_sent_success">Successfully reported @%1$s</string>
+    <string name="hint_additional_info">Additional comments</string>
+    <string name="report_remote_instance">Forward to %1$s</string>
+    <string name="failed_report">Failed to report</string>
+    <string name="failed_fetch_posts">Failed to fetch posts</string>
+    <string name="report_description_1">The report will be sent to your server moderators. You can provide an explanation of why you are reporting this account below:</string>
+    <string name="report_description_remote_instance">The account is from another server. Send an anonymized copy of the report there as well?</string>
+    <string name="title_accounts">Accounts</string>
+    <string name="failed_search">Failed to search</string>
+
+    <string name="pref_title_enable_swipe_for_tabs">Enable swipe gesture to switch between tabs</string>
+    <string name="pref_title_show_stat_inline">Show post statistics in timeline</string>
+    <string name="pref_title_show_notifications_filter">Show Notifications filter</string>
+
+    <string name="create_poll_title">Poll</string>
+    <string name="label_duration">Duration</string>
+    <string name="label_expires_after">Expires after</string>
+    <string name="duration_indefinite">Indefinite</string>
+    <string name="duration_5_min">5 minutes</string>
+    <string name="duration_30_min">30 minutes</string>
+    <string name="duration_1_hour">1 hour</string>
+    <string name="duration_6_hours">6 hours</string>
+    <string name="duration_1_day">1 day</string>
+    <string name="duration_3_days">3 days</string>
+    <string name="duration_7_days">7 days</string>
+    <string name="duration_14_days">14 days</string>
+    <string name="duration_30_days">30 days</string>
+    <string name="duration_60_days">60 days</string>
+    <string name="duration_90_days">90 days</string>
+    <string name="duration_180_days">180 days</string>
+    <string name="duration_365_days">365 days</string>
+    <string name="duration_no_change">(No change)</string>
+    <string name="add_poll_choice">Add choice</string>
+    <string name="poll_allow_multiple_choices">Multiple choices</string>
+    <string name="poll_new_choice_hint">Choice %1$d</string>
+    <string name="edit_poll">Edit</string>
+    <string name="post_lookup_error_format">Error looking up post %1$s</string>
+
+    <string name="no_drafts">You don\'t have any drafts.</string>
+    <string name="no_scheduled_posts">You don\'t have any scheduled posts.</string>
+    <string name="no_announcements">There are no announcements.</string>
+    <string name="no_lists">You don\'t have any lists.</string>
+    <string name="warning_scheduling_interval">Scheduled posts have a minimum interval of 5 minutes.</string>
+    <string name="pref_title_show_self_username">Show username in toolbars</string>
+    <string name="pref_title_show_cards_in_timelines">Show link previews in timelines</string>
+    <string name="pref_title_confirm_retweets">Show confirmation before retweeting</string>
+    <string name="pref_title_confirm_likes">Show confirmation before liking</string>
+    <string name="pref_title_confirm_follows">Show confirmation before following</string>
+    <string name="pref_title_hide_top_toolbar">Hide the title of the top toolbar</string>
+    <string name="pref_title_wellbeing_mode">Wellbeing</string>
+    <string name="account_note_hint">Your private note about this account</string>
+    <string name="account_note_saved">Saved!</string>
+
+    <string name="wellbeing_mode_notice">Some information that might affect your mental wellbeing will be hidden. This includes:
+\n\n- Like/Retweet/Follow notifications
+\n- Like/Retweet count on posts
+\n- Follower/Post stats on profiles
+\n\nPush-notifications will not be affected, but you can review your notification preferences manually.</string>
+    <string name="review_notifications">Review Notifications</string>
+    <string name="limit_notifications">Limit timeline notifications</string>
+    <string name="wellbeing_hide_stats_posts">Hide quantitative stats on posts</string>
+    <string name="wellbeing_hide_stats_profile">Hide quantitative stats on profiles</string>
+    <plurals name="error_upload_max_media_reached">
+        <item quantity="one">You cannot upload more than %1$d media attachment.</item>
+        <item quantity="other">You cannot upload more than %1$d media attachments.</item>
+    </plurals>
+    <string name="dialog_delete_list_warning">Do you really want to delete the list %1$s?</string>
+    <string name="drafts_post_failed_to_send">This post failed to send!</string>
+
+    <string name="drafts_failed_loading_reply">Failed loading Reply information</string>
+    <string name="draft_deleted">Draft deleted</string>
+    <string name="drafts_post_reply_removed">The post you drafted a reply to has been removed</string>
+
+    <string name="follow_requests_info">Even though your account is not locked, the %1$s staff thought you might want to review follow requests from these accounts manually.</string>
+
+    <string name="action_subscribe_account">Subscribe</string>
+    <string name="action_unsubscribe_account">Unsubscribe</string>
+
+    <string name="warpdroid_compose_post_quicksetting_label">Compose Post</string>
+
+    <string name="account_date_joined">Joined %1$s</string>
+
+    <string name="saving_draft">Saving draft…</string>
+
+    <string name="delete_scheduled_post_warning">Delete this scheduled post?</string>
+
+    <string name="instance_rule_info">By logging in you agree to the rules of %1$s.</string>
+    <string name="instance_rule_title">%1$s rules</string>
+    <string name="language_display_name_format">%1$s (%2$s)</string>
+
+    <string name="report_category_violation">Rule violation</string>
+    <string name="report_category_spam">Spam</string>
+    <string name="report_category_legal">Legal</string>
+    <string name="report_category_other">Other</string>
+
+    <string name="action_unfollow_hashtag_format">Unfollow #%1$s?</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="mute_notifications_switch">Mute notifications</string>
+
+    <!-- Reading order preference -->
+    <string name="pref_title_reading_order">Reading order</string>
+    <string name="pref_reading_order_oldest_first">Oldest first</string>
+    <string name="pref_reading_order_newest_first">Newest first</string>
+
+    <string name="tweet_edit_info">Edited: %1$s</string>
+    <string name="tweet_created_info">Created: %1$s</string>
+    <string name="error_missing_edits">Your server knows that this post was edited, but does not have a copy of the edits, so they can\'t be shown to you.\n\nThis is <a href="https://github.com/warpnet/warpnet/issues/25398">an upstream protocol limitation</a>.</string>
+    <string name="a11y_label_loading_thread">Loading thread</string>
+
+    <!--@knossos@fosstodon.org created 2023-01-07 -->
+    <string name="accessibility_talking_about_tag">%1$d people are talking about hashtag %2$s</string>
+    <string name="total_usage">Total usage</string>
+    <string name="total_accounts">Total accounts</string>
+
+    <!-- User friendly error messages for different network errors -->
+    <string name="socket_timeout_exception">Contacting your server took too long</string>
+
+    <!-- Error messages, displayed in snackbars, when something failed -->
+    <string name="ui_error_unknown">unknown reason</string>
+    <string name="ui_error_bookmark">Bookmarking post failed: %1$s</string>
+    <string name="ui_error_clear_notifications">Clearing notifications failed: %1$s</string>
+    <string name="ui_error_like">Liking post failed: %1$s</string>
+    <string name="ui_error_retweet">Retweeting post failed: %1$s</string>
+    <string name="ui_error_vote">Voting in poll failed: %1$s</string>
+    <string name="ui_error_accept_follow_request">Accepting follow request failed: %1$s</string>
+    <string name="ui_error_reject_follow_request">Rejecting follow request failed: %1$s</string>
+    <string name="ui_error_translate">Could not translate: %1$s</string>
+
+    <!-- Success messages, displayed in snackbars, when an action succeeded -->
+    <string name="ui_success_accepted_follow_request">Follow request accepted</string>
+    <string name="ui_success_rejected_follow_request">Follow request blocked</string>
+
+    <string name="hint_filter_title">My filter</string>
+    <string name="label_filter_title">Title</string>
+    <string name="filter_action_blur">Blur</string>
+    <string name="filter_action_warn">Warn</string>
+    <string name="filter_action_hide">Hide</string>
+    <string name="filter_description_blur">Hide media with a warning</string>
+    <string name="filter_description_warn">Hide entire post with a warning</string>
+    <string name="filter_description_hide">Hide completely</string>
+    <string name="label_filter_action">Filter action</string>
+    <string name="label_filter_context">Filter contexts</string>
+    <string name="label_filter_keywords">Keywords or phrases to filter</string>
+    <string name="action_add">Add</string>
+    <string name="filter_keyword_display_format">%1$s (whole word)</string>
+    <string name="filter_keyword_addition_title">Add keyword</string>
+    <string name="filter_edit_keyword_title">Edit keyword</string>
+    <string name="filter_description_format">%1$s: %2$s</string>
+
+    <string name="help_empty_home">This is your &lt;b>home timeline&lt;/b>. It shows the recent posts of the accounts you follow.\n\nTo explore accounts you can either discover them in one of the other timelines. For example the local timeline of your instance {{group}}. Or you can search them by name {{search}}.</string>
+    <string name="help_empty_conversations">Here are your &lt;b>private messages&lt;/b>; sometimes called conversations or direct messages (DM).\n\nPrivate messages are created by setting the visibility {{public}} of a post to {{mail}} <i>Direct</i> and mentioning one or more users in the text.\n\nFor example you can start on the profile view of an account and tap the create button {{edit}} and change the visibility.\n\nNote that messages on the Fediverse are not end-to-end encrypted. Do not share any sensitive information.</string>
+    <string name="help_empty_lists">This is your <b>lists view</b>. You can define a number of private lists and add accounts to that.\n\nNOTE that you can only add accounts you follow to your lists.\n\nThese lists can be used as a tab in Account preferences {{manage_accounts}} {{chevron_right}} Tabs.</string>
+
+    <string name="load_newest_notifications">Load newest notifications</string>
+    <string name="about_copy">Copy version and device information</string>
+    <string name="about_copied">Copied version and device information</string>
+    <string name="error_media_playback">Playback failed: %1$s</string>
+    <string name="dialog_delete_filter_text">Delete filter \'%1$s\'?"</string>
+    <string name="dialog_delete_filter_positive_action">Delete</string>
+    <string name="dialog_save_profile_changes_message">Do you want to save your profile changes?</string>
+
+    <string name="list_reply_policy_none">No one</string>
+    <string name="list_reply_policy_list">Members of the list</string>
+    <string name="list_reply_policy_followed">Any followed user</string>
+    <string name="list_reply_policy_label">Show replies to</string>
+
+    <string name="unknown_notification_type">Unknown notification type</string>
+
+    <string name="preview_card_by_author">By %1$s</string>
+    <string name="preview_card_more_by_author">More by %1$s</string>
+
+    <string name="notification_policies_title">Notification Policies</string>
+    <string name="notification_policies_filter_out">Manage notifications from…</string>
+
+    <string name="notification_policies_filter_dont_follow_title">People you don\'t follow</string>
+    <string name="notification_policies_filter_dont_follow_description">Until you manually approve them</string>
+    <string name="notification_policies_filter_not_following_title">People not following you</string>
+    <string name="notification_policies_filter_not_following_description">Including people who have been following you fewer than 3 days</string>
+    <string name="unknown_notification_filter_new_accounts_title">New accounts</string>
+    <string name="unknown_notification_filter_new_accounts_description">Created within the past 30 days</string>
+    <string name="unknown_notification_filter_unsolicited_private_mentions_title">Unsolicited private mentions</string>
+    <string name="unknown_notification_filter_unsolicited_private_mentions_description">Filtered unless it\'s in reply to your own mention or if you follow the sender</string>
+    <string name="unknown_notification_filter_moderated_accounts">Moderated accounts</string>
+    <string name="unknown_notification_filter_moderated_accounts_description">Limited by server moderators</string>
+
+    <string name="notification_policies_not_supported">This feature is not supported on Warpnet.</string>
+    <string name="filtered_notifications">Filtered notifications</string>
+    <string name="notifications_from_people_you_may_know">Notifications from %1$d people you may know</string>
+
+    <string name="notification_policy_accept">Accept</string>
+    <string name="notification_policy_filter">Filter</string>
+    <string name="notification_policy_ignore">Ignore</string>
+    <string name="filtered_notifications_title">Filtered Notifications</string>
+    <string name="accept_notification_request">Accept notification request</string>
+    <string name="dismiss_notification_request">Dismiss notification request</string>
+    <string name="open_settings">Open preferences</string>
+    <string name="notifications_from">Notifications from %1$s</string>
+    <string name="action_accept_notification_request">Accept</string>
+    <string name="action_dismiss_notification_request">Dismiss</string>
+
+    <string name="relationship_severance_event_title">Connection lost</string>
+    <string name="relationship_severance_event_account_suspension">An admin from %1$s has suspended %2$s, which means you can no longer receive updates from them or interact with them.</string>
+    <string name="relationship_severance_event_domain_block">An admin from %1$s has blocked %2$s, including %3$s of your followers and %4$s you follow.</string>
+    <string name="relationship_severance_event_user_domain_block">You have blocked %1$s, removing %2$s of your followers and %3$s you follow.</string>
+    <plurals name="accounts">
+        <item quantity="one">%1$s account</item>
+        <item quantity="other">%1$s accounts</item>
+    </plurals>
+
+    <string name="moderation_warning">You have received a moderation warning.</string>
+
+    <string name="moderation_warning_action_delete_statuses">Some of your posts have been removed.</string>
+    <string name="moderation_warning_action_disable">Your account has been disabled.</string>
+    <string name="moderation_warning_action_mark_statuses_as_sensitive">Some of your posts have been marked as sensitive.</string>
+    <string name="moderation_warning_action_none">Your account has received a moderation warning.</string>
+    <string name="moderation_warning_action_sensitive">Your posts will be marked as sensitive from now on.</string>
+    <string name="moderation_warning_action_silence">Your account has been limited.</string>
+    <string name="moderation_warning_action_suspend">Your account has been suspended.</string>
+
+    <string name="unknown_notification_type_explanation">Warpdroid does not recognize this notification type and can\'t show it to you. Your server\'s web interface may be able to do so. Please also inform the Warpdroid developers so they can add support for this type! </string>
+
+    <string name="poll">Poll</string>
+    <plurals name="media_attachments">
+        <item quantity="one">%1$s media attachment</item>
+        <item quantity="other">%1$s media attachments</item>
+    </plurals>
+
+    <string name="notification_info_reply">Reply</string>
+    <string name="notification_info_private_mention">Private mention</string>
+    <string name="notification_info_mention">Mention</string>
+    <string name="notification_info_private_reply">Private reply</string>
+
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="confirm_dismiss_caption">Discard caption changes?</string>
+    <string name="confirm_dismiss_poll">Discard poll changes?</string>
+
+    <string name="unblock_success">Unblocked %1$s</string>
+    <string name="unmute_success">Unmuted %1$s</string>
+    <string name="block_failure">Failed blocking %1$s: %2$s</string>
+    <string name="mute_failure">Failed muting %1$s: %2$s</string>
+    <string name="unblock_failure">Failed unblocking %1$s: %2$s</string>
+    <string name="unmute_failure">Failed unmuting %1$s: %2$s</string>
+    <string name="accept_follow_request_failure">Failed accepting follow request from %1$s: %2$s</string>
+    <string name="reject_follow_request_failure">Failed rejecting follow request from %1$s: %2$s</string>
+
+    <string name="retweet_privacy_public_description">Everyone can see your retweet</string>
+    <string name="retweet_privacy_unlisted_description">Same as public but it will never be shown in public timelines</string>
+    <string name="retweet_privacy_followers_only_description">Only your followers can see your retweet</string>
+
+    <string name="retweet_confirm">Retweet this post?</string>
+    <string name="like_confirm">Like this post?</string>
+
+    <string name="edit_image_rotate">Rotate</string>
+    <string name="edit_image_flip">Flip</string>
+    <string name="edit_image_flip_horizontally">Flip horizontally</string>
+    <string name="edit_image_flip_vertically">Flip vertically</string>
+
+    <string name="report_which_rules_violated">Which rules are being violated? Select all that apply.</string>
+    <string name="report_problem_with_post">What is the problem with this post?</string>
+    <string name="report_category_spam_description">Malicious links, fake engagement, or repetitive replies</string>
+    <string name="report_category_spam_title">It\'s spam</string>
+    <string name="report_category_legal_description">You believe it violates the law of your or the server\'s country</string>
+    <string name="report_category_legal_title">It\'s illegal</string>
+    <string name="report_category_violation_description">You are aware that it breaks specific rules</string>
+    <string name="report_category_violation_title">It violates server rules</string>
+    <string name="report_category_other_description">The issue does not fit into other categories</string>
+    <string name="report_category_other_title">It\'s something else</string>
+
+    <string name="action_login_again">Login again</string>
+    <string name="account_disconnected_title">Account disconnected</string>
+    <string name="account_disconnected_message">Warpdroid\'s login for %1$s is no longer valid. This can happen because you changed your password or revoked access for Warpdroid. Please log in again.</string>
+
+    <string name="filter_context_home">Home and Lists</string>
+
+    <plurals name="seconds">
+        <item quantity="one">%1$s second</item>
+        <item quantity="other">%1$s seconds</item>
+    </plurals>
+    <plurals name="minutes">
+        <item quantity="one">%1$s minute</item>
+        <item quantity="other">%1$s minutes</item>
+    </plurals>
+    <plurals name="hours">
+        <item quantity="one">%1$s hour</item>
+        <item quantity="other">%1$s hours</item>
+    </plurals>
+    <plurals name="days">
+        <item quantity="one">%1$s day</item>
+        <item quantity="other">%1$s days</item>
+    </plurals>
+
+    <!-- text shown above a scheduled post to indicate it is a reply -->
+    <string name="scheduled_post_reply">Reply</string>
+
+    <string name="scheduled_posts_not_supported">Your server %1$s does not support scheduled posts</string>
+
+    <string name="scheduled_post_deletion_error">Failed to delete scheduled post.</string>
+
+    <string name="unified_push_error_no_vapid_key">Failed setting up Unified Push: %1$s has invalid vapid key.</string>
+
+    <string name="quote">Quote</string>
+    <string name="title_quotes">Quotes</string>
+
+    <string name="quote_pending">Post pending</string>
+    <string name="quote_unavailable">Post unavailable</string>
+    <string name="quote_revoked">Post removed by author</string>
+
+    <string name="quote_account_blocked">This post is hidden because you\'ve blocked %1$s.</string>
+    <string name="quote_account_muted">This post is hidden because you\'ve muted %1$s.</string>
+    <string name="quote_domain_blocked">This post is hidden because you\'ve blocked %1$s.</string>
+    <string name="quote_hidden_show_anyway">Show anyway</string>
+
+    <!-- Text for the screenreader when content is hidden by a warning -->
+    <string name="content_hidden_description">Content hidden</string>
+
+    <string name="action_remove_quote">Remove quoted post</string>
+    <string name="remove_post_warning">Remove your post from %1$s\'s post? This action cannot be undone.</string>
+    <string name="remove_post">Remove post</string>
+    <string name="error_remove_quote">Failed to remove quote from post.</string>
+
+    <string name="quote_hidden_by_filter">Post hidden due to one of your filters</string>
+</resources>

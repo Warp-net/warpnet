@@ -19,6 +19,18 @@ linters:
           - goconst
           - maintidx
           - dupl
+      # warpdroid/node is the gomobile entry point. It returns errors
+      # as strings (gomobile cannot bind Go's `error` type directly)
+      # and reuses short literals like "false" / "client not
+      # initialized" across exported wrappers, both of which the
+      # repo-wide rules legitimately flag elsewhere. Skip the style
+      # rules here while keeping correctness checks (staticcheck,
+      # govet, etc.) enabled.
+      - path: '^warpdroid/node/'
+        linters:
+          - err113
+          - errcheck
+          - goconst
   disable:
     - mnd
     - interfacebloat

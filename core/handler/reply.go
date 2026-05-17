@@ -105,9 +105,10 @@ func StreamNewReplyHandler(
 			return nil, err
 		}
 
-		isOwnTweetReply := parentUser.NodeId == streamer.NodeInfo().ID.String()
+		ownNodeInfo := streamer.NodeInfo()
+		isOwnTweetReply := ev.ParentUserId == ownNodeInfo.OwnerId
 		if isOwnTweetReply {
-			if ev.UserId != streamer.NodeInfo().OwnerId {
+			if ev.UserId != ownNodeInfo.OwnerId {
 				if err := notifyRepo.Add(domain.Notification{
 					Type:   domain.NotificationReplyType,
 					Text:   ev.Username + " replied to your tweet",
@@ -116,6 +117,9 @@ func StreamNewReplyHandler(
 					log.Errorf("reply handler: adding notification: %v", err)
 				}
 			}
+			return reply, nil
+		}
+		if ownNodeInfo.ID.String() == parentUser.NodeId {
 			return reply, nil
 		}
 
@@ -186,6 +190,10 @@ func StreamGetReplyHandler(
 			return nil, err
 		}
 
+		if owner.NodeId == otherUser.NodeId {
+			return repo.GetReply(rootId, id)
+		}
+
 		getTweetResp, err := streamer.GenericStream(
 			otherUser.NodeId,
 			event.PUBLIC_GET_REPLY,
@@ -253,6 +261,12 @@ func StreamDeleteReplyHandler(
 			}
 		}
 
+		if err = replyRepo.DeleteReply(rootId, parentTweet.Id, ev.ReplyId); err != nil {
+			log.Errorf("delete reply handler failed: %v", err)
+			return nil, err
+		}
+
+		ownNodeInfo := streamer.NodeInfo()
 		parentUser, err := userRepo.Get(parentTweet.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
 			return event.Accepted, nil
@@ -261,9 +275,8 @@ func StreamDeleteReplyHandler(
 			return nil, err
 		}
 
-		if err = replyRepo.DeleteReply(rootId, parentTweet.Id, ev.ReplyId); err != nil {
-			log.Errorf("delete reply handler failed: %v", err)
-			return nil, err
+		if ownNodeInfo.ID.String() == parentUser.NodeId {
+			return event.Accepted, nil
 		}
 
 		replyDataResp, err := streamer.GenericStream(

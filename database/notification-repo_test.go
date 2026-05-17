@@ -174,6 +174,42 @@ func (s *NotificationsRepoTestSuite) TestListNotifications_Pagination() {
 	s.Equal("end", cursor2)
 }
 
+func (s *NotificationsRepoTestSuite) TestGetNotification() {
+	userId := uuid.New().String()
+	not := domain.Notification{
+		Id:        uuid.New().String(),
+		Type:      domain.NotificationLikeType,
+		Text:      "liked",
+		UserId:    userId,
+		CreatedAt: time.Now(),
+	}
+	err := s.repo.Add(not)
+	s.Require().NoError(err)
+
+	got, err := s.repo.Get(userId, not.Id)
+	s.Require().NoError(err)
+	s.Equal(not.Id, got.Id)
+	s.Equal(not.Text, got.Text)
+}
+
+func (s *NotificationsRepoTestSuite) TestGetNotification_NotFound() {
+	userId := uuid.New().String()
+	_, err := s.repo.Get(userId, "missing-id")
+	s.Error(err)
+}
+
+func (s *NotificationsRepoTestSuite) TestGetNotification_MissingUserId() {
+	_, err := s.repo.Get("", "some-id")
+	s.Error(err)
+	s.Contains(err.Error(), "missing user id")
+}
+
+func (s *NotificationsRepoTestSuite) TestGetNotification_MissingNotificationId() {
+	_, err := s.repo.Get("user-id", "")
+	s.Error(err)
+	s.Contains(err.Error(), "missing notification id")
+}
+
 func (s *NotificationsRepoTestSuite) TestNotificationsIsolatedByUser() {
 	userId1 := uuid.New().String()
 	userId2 := uuid.New().String()

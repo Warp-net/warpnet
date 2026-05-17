@@ -46,7 +46,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
@@ -65,21 +64,22 @@ type MemberNode struct {
 	node *node.WarpNode
 	opts []warpnet.WarpOption
 
-	discService          DiscoveryHandler
-	mdnsService          MDNSStarterCloser
-	pubsubService        PubSubProvider
-	dHashTable           DistributedHashTableCloser
-	nodeRepo             NodeProvider
-	statsRepo            StatsProvider
-	authRepo             AuthProvider
-	userRepo             UserProvider
-	followRepo           FollowStorer
-	db                   Storer
-	statsDb              StatsStorer
-	privKey              ed25519.PrivateKey
-	ownerId, selfHashHex string
-	pseudoNode           PseudoStreamer
-	retrier              retrier.Retrier
+	discService                   DiscoveryHandler
+	mdnsService                   MDNSStarterCloser
+	pubsubService                 PubSubProvider
+	dHashTable                    DistributedHashTableCloser
+	nodeRepo                      NodeProvider
+	statsRepo                     StatsProvider
+	authRepo                      AuthProvider
+	userRepo                      UserProvider
+	deviceRepo                    DeviceProvider
+	followRepo                    FollowStorer
+	db                            Storer
+	statsDb                       StatsStorer
+	privKey                       ed25519.PrivateKey
+	ownerId, selfHashHex, network string
+	pseudoNode                    PseudoStreamer
+	retrier                       retrier.Retrier
 }
 
 func NewMemberNode(
@@ -91,6 +91,7 @@ func NewMemberNode(
 	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
+	bootstrapNodes []warpnet.WarpAddrInfo,
 	metrics MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
@@ -105,6 +106,7 @@ func NewMemberNode(
 	statsRepo := database.NewStatsRepo(db)
 	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
+	deviceRepo := database.NewDevicesRepo(db)
 	owner := authRepo.GetOwner()
 
 	challenger := challenge.NewSpoofChallenger(ctx)
@@ -124,17 +126,14 @@ func NewMemberNode(
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		return nil, err
-	}
+	warpNetwork := config.Config().Node.Network
 
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
-		dht.BootstrapNodes(infos...),
-		dht.Network(config.Config().Node.Network),
+		dht.BootstrapNodes(bootstrapNodes...),
+		dht.Network(warpNetwork),
 	)
 
 	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
@@ -157,7 +156,7 @@ func NewMemberNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
+		node.EnableAutoRelayWithStaticRelays(bootstrapNodes, ownNodeId)(),
 	}
 
 	opts = append(opts, node.CommonOptions...)
@@ -174,12 +173,14 @@ func NewMemberNode(
 		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
+		deviceRepo:    deviceRepo,
 		authRepo:      authRepo,
 		db:            db,
 		privKey:       privKey,
 		ownerId:       owner.UserId,
 		selfHashHex:   selfHashHex,
 		pseudoNode:    mastodonPseudoNode,
+		network:       warpNetwork,
 	}
 
 	return mn, nil
@@ -272,6 +273,19 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi := m.node.BaseNodeInfo()
 	bi.OwnerId = m.ownerId
 	bi.Hash = m.selfHashHex
+	bi.Network = m.network
+
+	// Devices are persisted under the fat node's own libp2p peer ID by the
+	// pair handler (s.Conn().LocalPeer()), not under the owner's user ID,
+	// so look them up with the same key here.
+	ownerPeerId := bi.ID.String()
+	devices, err := m.deviceRepo.GetDevices(ownerPeerId)
+	if err != nil {
+		log.Infof("member: failed to get devices for owner %s: %s", ownerPeerId, err)
+	}
+	for _, device := range devices {
+		bi.Aliases = append(bi.Aliases, device.NodeId)
+	}
 	return bi
 }
 
@@ -356,6 +370,25 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 	}
 }
 
+// memberRepos bundles every repo the member node's handlers need.
+// Built once in setupHandlers and threaded through the per-feature
+// handler-list builders below so the registration func itself stays
+// small (golangci-lint maintidx).
+type memberRepos struct {
+	timelineRepo     *database.TimelineRepo
+	tweetRepo        *database.TweetRepo
+	replyRepo        *database.ReplyRepo
+	likeRepo         *database.LikeRepo
+	chatRepo         *database.ChatRepo
+	mediaRepo        *database.MediaRepo
+	notificationRepo *database.NotificationsRepo
+	bookmarkRepo     *database.BookmarkRepo
+	blocksRepo       *database.BlocksRepo
+	mutesRepo        *database.MutesRepo
+	subsRepo         *database.SubscriptionsRepo
+	filterRepo       *database.FilterRepo
+}
+
 func (m *MemberNode) setupHandlers(
 	authRepo AuthProvider,
 	userRepo UserProvider,
@@ -368,184 +401,451 @@ func (m *MemberNode) setupHandlers(
 		panic("member: setup handlers: nil node")
 	}
 
-	timelineRepo := database.NewTimelineRepo(db)
-	tweetRepo := database.NewTweetRepo(db, statsDB)
-	replyRepo := database.NewRepliesRepo(db, statsDB)
-	likeRepo := database.NewLikeRepo(db, statsDB)
-	chatRepo := database.NewChatRepo(db)
-	mediaRepo := database.NewMediaRepo(db)
-	notificationRepo := database.NewNotificationsRepo(db)
-
-	authNodeInfo := domain.AuthNodeInfo{
-		Identity: domain.Identity{Owner: authRepo.GetOwner(), Token: authRepo.SessionToken()},
-		NodeInfo: m.NodeInfo(),
+	r := &memberRepos{
+		timelineRepo:     database.NewTimelineRepo(db),
+		tweetRepo:        database.NewTweetRepo(db, statsDB),
+		replyRepo:        database.NewRepliesRepo(db, statsDB),
+		likeRepo:         database.NewLikeRepo(db, statsDB),
+		chatRepo:         database.NewChatRepo(db),
+		mediaRepo:        database.NewMediaRepo(db),
+		notificationRepo: database.NewNotificationsRepo(db),
+		bookmarkRepo:     database.NewBookmarkRepo(db),
+		blocksRepo:       database.NewBlocksRepo(db),
+		mutesRepo:        database.NewMutesRepo(db),
+		subsRepo:         database.NewSubscriptionsRepo(db),
+		filterRepo:       database.NewFilterRepo(db),
 	}
 
-	//nolint:govet
-	m.node.SetStreamHandlers(
-		[]warpnet.WarpStreamHandler{
-			{
-				event.PRIVATE_POST_PAIR,
-				handler.StreamNodesPairingHandler(authNodeInfo),
-			},
-			{
-				event.PUBLIC_POST_NODE_CHALLENGE,
-				handler.StreamChallengeHandler(root.GetCodeBase(), privKey),
-			},
-			{
-				event.PUBLIC_GET_INFO,
-				handler.StreamGetInfoHandler(m, m.discService.DiscoveryHandlerStream),
-			},
-			{
-				event.PRIVATE_GET_STATS,
-				handler.StreamGetStatsHandler(m, db),
-			},
-			{
-				event.PRIVATE_GET_TIMELINE,
-				handler.StreamTimelineHandler(timelineRepo),
-			},
-			{
-				event.PRIVATE_POST_TWEET,
-				handler.StreamNewTweetHandler(m.pubsubService, authRepo, tweetRepo, timelineRepo),
-			},
-			{
-				event.PRIVATE_DELETE_TWEET,
-				handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, tweetRepo, timelineRepo, likeRepo),
-			},
-			{
-				event.PUBLIC_POST_REPLY,
-				handler.StreamNewReplyHandler(replyRepo, userRepo, notificationRepo, m),
-			},
-			{
-				event.PUBLIC_DELETE_REPLY,
-				handler.StreamDeleteReplyHandler(tweetRepo, userRepo, replyRepo, m),
-			},
-			{
-				event.PUBLIC_POST_FOLLOW,
-				handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, notificationRepo, m),
-			},
-			{
-				event.PUBLIC_POST_IS_FOLLOWING,
-				handler.StreamIsFollowingHandler(followRepo, authRepo),
-			},
-			{
-				event.PUBLIC_POST_IS_FOLLOWER,
-				handler.StreamIsFollowerHandler(followRepo, authRepo),
-			},
-			{
-				event.PUBLIC_POST_UNFOLLOW,
-				handler.StreamUnfollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
-			},
-			{
-				event.PUBLIC_GET_USER,
-				handler.StreamGetUserHandler(tweetRepo, followRepo, userRepo, authRepo, m),
-			},
-			{
-				event.PUBLIC_GET_USERS,
-				handler.StreamGetUsersHandler(userRepo, m),
-			},
-			{
-				event.PUBLIC_GET_WHOTOFOLLOW,
-				handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo),
-			},
-			{
-				event.PUBLIC_GET_TWEETS,
-				handler.StreamGetTweetsHandler(tweetRepo, userRepo, m),
-			},
-			{
-				event.PUBLIC_GET_TWEET,
-				handler.StreamGetTweetHandler(tweetRepo, authRepo, userRepo, m),
-			},
-			{
-				event.PUBLIC_GET_TWEET_STATS,
-				handler.StreamGetTweetStatsHandler(tweetRepo, likeRepo, tweetRepo, replyRepo, userRepo, m),
-			},
-			{
-				event.PUBLIC_GET_REPLY,
-				handler.StreamGetReplyHandler(replyRepo, authRepo, userRepo, m),
-			},
-			{
-				event.PUBLIC_GET_REPLIES,
-				handler.StreamGetRepliesHandler(replyRepo, userRepo, m),
-			},
-			{
-				event.PUBLIC_GET_FOLLOWERS,
-				handler.StreamGetFollowersHandler(authRepo, userRepo, followRepo, m),
-			},
-			{
-				event.PUBLIC_GET_FOLLOWINGS,
-				handler.StreamGetFollowingsHandler(authRepo, userRepo, followRepo, m),
-			},
-			{
-				event.PUBLIC_POST_LIKE,
-				handler.StreamLikeHandler(likeRepo, userRepo, notificationRepo, m),
-			},
-			{
-				event.PUBLIC_POST_UNLIKE,
-				handler.StreamUnlikeHandler(likeRepo, userRepo, m),
-			},
-			{
-				event.PRIVATE_POST_USER,
-				handler.StreamUpdateProfileHandler(authRepo, userRepo),
-			},
-			{
-				event.PUBLIC_POST_RETWEET,
-				handler.StreamNewReTweetHandler(userRepo, tweetRepo, timelineRepo, notificationRepo, m),
-			},
-			{
-				event.PUBLIC_POST_UNRETWEET,
-				handler.StreamUnretweetHandler(tweetRepo, userRepo, m),
-			},
-			{
-				event.PUBLIC_POST_CHAT,
-				handler.StreamCreateChatHandler(chatRepo, userRepo, m),
-			},
-			{
-				event.PRIVATE_DELETE_CHAT,
-				handler.StreamDeleteChatHandler(chatRepo, authRepo),
-			},
-			{
-				event.PRIVATE_GET_CHATS,
-				handler.StreamGetUserChatsHandler(chatRepo, authRepo),
-			},
-			{
-				event.PUBLIC_POST_MESSAGE,
-				handler.StreamNewMessageHandler(chatRepo, userRepo, m),
-			},
-			{
-				event.PRIVATE_DELETE_MESSAGE,
-				handler.StreamDeleteMessageHandler(chatRepo, authRepo),
-			},
-			{
-				event.PRIVATE_GET_MESSAGE,
-				handler.StreamGetMessageHandler(chatRepo, authRepo),
-			},
-			{
-				event.PRIVATE_GET_MESSAGES,
-				handler.StreamGetMessagesHandler(chatRepo, authRepo),
-			},
-			{
-				event.PRIVATE_GET_CHAT,
-				handler.StreamGetUserChatHandler(chatRepo, authRepo),
-			},
-			{
-				event.PRIVATE_POST_UPLOAD_IMAGE,
-				handler.StreamUploadImageHandler(m, mediaRepo, userRepo),
-			},
-			{
-				event.PUBLIC_GET_IMAGE,
-				handler.StreamGetImageHandler(m, mediaRepo, userRepo),
-			},
-			{
-				event.PUBLIC_POST_MODERATION_RESULT,
-				handler.StreamModerationResultHandler(notificationRepo, tweetRepo, authRepo, timelineRepo),
-			},
-			{
-				event.PRIVATE_GET_NOTIFICATIONS,
-				handler.StreamGetNotificationsHandler(notificationRepo, authRepo),
-			},
-		}...,
-	)
+	token := authRepo.SessionToken()
+
+	hs := make([]warpnet.WarpStreamHandler, 0, 80)
+	hs = append(hs, m.adminHandlers(token, privKey, db, authRepo, r)...)
+	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
+	hs = append(hs, m.replyHandlers(authRepo, userRepo, r)...)
+	hs = append(hs, m.engagementHandlers(userRepo, r)...)
+	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
+	hs = append(hs, m.followRequestHandlers(followRepo)...)
+	hs = append(hs, m.filterHandlers(r)...)
+	hs = append(hs, m.userHandlers(authRepo, userRepo, followRepo, r)...)
+	hs = append(hs, m.chatHandlers(authRepo, userRepo, r)...)
+	hs = append(hs, m.mediaHandlers(userRepo, r)...)
+	hs = append(hs, m.notificationHandlers(authRepo, r)...)
+	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
+	hs = append(hs, m.bookmarksHandlers(r)...)
+
+	m.node.SetStreamHandlers(hs...)
+}
+
+//nolint:govet
+func (m *MemberNode) adminHandlers(
+	token string,
+	privKey ed25519.PrivateKey,
+	db Storer,
+	authRepo AuthProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_POST_PAIR,
+			handler.StreamNodesPairingHandler(token, m.deviceRepo),
+		},
+		{
+			event.PUBLIC_POST_NODE_CHALLENGE,
+			handler.StreamChallengeHandler(root.GetCodeBase(), privKey),
+		},
+		{
+			event.PUBLIC_GET_INFO,
+			handler.StreamGetInfoHandler(m, m.discService.DiscoveryHandlerStream),
+		},
+		{
+			event.PRIVATE_GET_STATS,
+			handler.StreamGetStatsHandler(m, db),
+		},
+		{
+			event.PUBLIC_POST_MODERATION_RESULT,
+			handler.StreamModerationResultHandler(r.notificationRepo, r.tweetRepo, authRepo, r.timelineRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) tweetHandlers(
+	authRepo AuthProvider,
+	userRepo UserProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_TIMELINE,
+			handler.StreamTimelineHandler(r.timelineRepo),
+		},
+		{
+			event.PRIVATE_POST_TWEET,
+			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo),
+		},
+		{
+			event.PRIVATE_DELETE_TWEET,
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.likeRepo),
+		},
+		{
+			event.PUBLIC_GET_TWEETS,
+			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_TWEET,
+			handler.StreamGetTweetHandler(r.tweetRepo, authRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_TWEET_STATS,
+			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.likeRepo, r.tweetRepo, r.replyRepo, userRepo, m),
+		},
+		{
+			event.PRIVATE_POST_TWEET_EDIT,
+			handler.StreamEditTweetHandler(r.tweetRepo, r.timelineRepo),
+		},
+		{
+			event.PUBLIC_POST_PIN,
+			handler.StreamPinTweetHandler(r.tweetRepo),
+		},
+		{
+			event.PUBLIC_POST_UNPIN,
+			handler.StreamUnpinTweetHandler(r.tweetRepo),
+		},
+		{
+			event.PUBLIC_POST_RETWEET,
+			handler.StreamNewReTweetHandler(userRepo, r.tweetRepo, r.timelineRepo, r.notificationRepo, m),
+		},
+		{
+			event.PUBLIC_POST_UNRETWEET,
+			handler.StreamUnretweetHandler(r.tweetRepo, userRepo, m),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) replyHandlers(
+	authRepo AuthProvider,
+	userRepo UserProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PUBLIC_POST_REPLY,
+			handler.StreamNewReplyHandler(r.replyRepo, userRepo, r.notificationRepo, m),
+		},
+		{
+			event.PUBLIC_DELETE_REPLY,
+			handler.StreamDeleteReplyHandler(r.tweetRepo, userRepo, r.replyRepo, m),
+		},
+		{
+			event.PUBLIC_GET_REPLY,
+			handler.StreamGetReplyHandler(r.replyRepo, authRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_REPLIES,
+			handler.StreamGetRepliesHandler(r.replyRepo, userRepo, m),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) engagementHandlers(
+	userRepo UserProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PUBLIC_POST_LIKE,
+			handler.StreamLikeHandler(r.likeRepo, userRepo, r.notificationRepo, m),
+		},
+		{
+			event.PUBLIC_POST_UNLIKE,
+			handler.StreamUnlikeHandler(r.likeRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_POST_VIEW,
+			handler.StreamViewHandler(r.tweetRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_TWEET_LIKERS,
+			handler.StreamGetTweetLikersHandler(r.likeRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_TWEET_RETWEETERS,
+			handler.StreamGetTweetRetweetersHandler(r.tweetRepo, userRepo, m),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) followHandlers(
+	authRepo AuthProvider,
+	userRepo UserProvider,
+	followRepo FollowStorer,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PUBLIC_POST_FOLLOW,
+			handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, r.notificationRepo, m),
+		},
+		{
+			event.PUBLIC_POST_IS_FOLLOWING,
+			handler.StreamIsFollowingHandler(followRepo, authRepo),
+		},
+		{
+			event.PUBLIC_POST_IS_FOLLOWER,
+			handler.StreamIsFollowerHandler(followRepo, authRepo),
+		},
+		{
+			event.PUBLIC_POST_UNFOLLOW,
+			handler.StreamUnfollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_FOLLOWERS,
+			handler.StreamGetFollowersHandler(authRepo, userRepo, followRepo, m),
+		},
+		{
+			event.PUBLIC_GET_FOLLOWINGS,
+			handler.StreamGetFollowingsHandler(authRepo, userRepo, followRepo, m),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) followRequestHandlers(
+	followRepo FollowStorer,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_FOLLOW_REQUESTS,
+			handler.StreamGetFollowRequestsHandler(followRepo),
+		},
+		{
+			event.PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE,
+			handler.StreamAuthorizeFollowRequestHandler(followRepo),
+		},
+		{
+			event.PRIVATE_POST_FOLLOW_REQUEST_REJECT,
+			handler.StreamRejectFollowRequestHandler(followRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_FILTER,
+			handler.StreamGetFilterHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_GET_FILTERS,
+			handler.StreamGetFiltersHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_POST_FILTER,
+			handler.StreamNewFilterHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_POST_FILTER_UPDATE,
+			handler.StreamUpdateFilterHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_DELETE_FILTER,
+			handler.StreamDeleteFilterHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_POST_FILTER_KEYWORD,
+			handler.StreamAddFilterKeywordHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+			handler.StreamUpdateFilterKeywordHandler(r.filterRepo),
+		},
+		{
+			event.PRIVATE_DELETE_FILTER_KEYWORD,
+			handler.StreamDeleteFilterKeywordHandler(r.filterRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) userHandlers(
+	authRepo AuthProvider,
+	userRepo UserProvider,
+	followRepo FollowStorer,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PUBLIC_GET_USER,
+			handler.StreamGetUserHandler(r.tweetRepo, followRepo, userRepo, authRepo, m),
+		},
+		{
+			event.PUBLIC_GET_USERS,
+			handler.StreamGetUsersHandler(userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_USERS_SEARCH,
+			handler.StreamSearchUsersHandler(userRepo),
+		},
+		{
+			event.PUBLIC_GET_WHOTOFOLLOW,
+			handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo),
+		},
+		{
+			event.PRIVATE_POST_USER,
+			handler.StreamUpdateProfileHandler(authRepo, userRepo),
+		},
+		{
+			event.PRIVATE_POST_SUBSCRIBE_USER,
+			handler.StreamSubscribeUserHandler(r.subsRepo),
+		},
+		{
+			event.PRIVATE_POST_UNSUBSCRIBE_USER,
+			handler.StreamUnsubscribeUserHandler(r.subsRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) chatHandlers(
+	authRepo AuthProvider,
+	userRepo UserProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PUBLIC_POST_CHAT,
+			handler.StreamCreateChatHandler(r.chatRepo, userRepo, m),
+		},
+		{
+			event.PRIVATE_DELETE_CHAT,
+			handler.StreamDeleteChatHandler(r.chatRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_CHATS,
+			handler.StreamGetUserChatsHandler(r.chatRepo, authRepo),
+		},
+		{
+			event.PUBLIC_POST_MESSAGE,
+			handler.StreamNewMessageHandler(r.chatRepo, userRepo, m),
+		},
+		{
+			event.PRIVATE_DELETE_MESSAGE,
+			handler.StreamDeleteMessageHandler(r.chatRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_MESSAGE,
+			handler.StreamGetMessageHandler(r.chatRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_MESSAGES,
+			handler.StreamGetMessagesHandler(r.chatRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_CHAT,
+			handler.StreamGetUserChatHandler(r.chatRepo, authRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) mediaHandlers(
+	userRepo UserProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_POST_UPLOAD_IMAGE,
+			handler.StreamUploadImageHandler(m, r.mediaRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_IMAGE,
+			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo),
+		},
+		{
+			event.PRIVATE_POST_MEDIA_META,
+			handler.StreamUpdateMediaMetaHandler(r.mediaRepo),
+		},
+		{
+			event.PRIVATE_GET_MEDIA,
+			handler.StreamGetMediaHandler(r.mediaRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) notificationHandlers(
+	authRepo AuthProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_NOTIFICATIONS,
+			handler.StreamGetNotificationsHandler(r.notificationRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_NOTIFICATION,
+			handler.StreamGetNotificationHandler(r.notificationRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_NOTIFICATION_READ,
+			handler.StreamMarkNotificationReadHandler(r.notificationRepo, authRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) socialFilterHandlers(
+	userRepo UserProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_POST_BLOCK,
+			handler.StreamBlockHandler(r.blocksRepo, userRepo, m.nodeRepo),
+		},
+		{
+			event.PRIVATE_POST_UNBLOCK,
+			handler.StreamUnblockHandler(r.blocksRepo, userRepo, m.nodeRepo),
+		},
+		{
+			event.PRIVATE_GET_BLOCKS,
+			handler.StreamGetBlocksHandler(r.blocksRepo),
+		},
+		{
+			event.PRIVATE_POST_MUTE,
+			handler.StreamMuteHandler(r.mutesRepo),
+		},
+		{
+			event.PRIVATE_POST_UNMUTE,
+			handler.StreamUnmuteHandler(r.mutesRepo),
+		},
+		{
+			event.PRIVATE_GET_MUTES,
+			handler.StreamGetMutesHandler(r.mutesRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) bookmarksHandlers(r *memberRepos) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_POST_BOOKMARK,
+			handler.StreamBookmarkHandler(r.bookmarkRepo),
+		},
+		{
+			event.PRIVATE_POST_UNBOOKMARK,
+			handler.StreamUnbookmarkHandler(r.bookmarkRepo),
+		},
+		{
+			event.PRIVATE_GET_BOOKMARKS,
+			handler.StreamGetBookmarksHandler(r.bookmarkRepo),
+		},
+	}
 }
 
 func (m *MemberNode) SetStreamHandlers(hs ...warpnet.WarpStreamHandler) {

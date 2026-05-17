@@ -23,10 +23,10 @@ resulting from the use or misuse of this software.
 -->
 <template>
   <div>
-    <i class="fas fa-search absolute mt-2 ml-5 text-sm text-light cursor-not-allowed"></i>
+    <i class="fas fa-search absolute mt-2 ml-5 text-sm text-light"></i>
     <input
       class="pl-12 rounded-full w-full p-2 bg-lighter text-sm mb-4"
-      placeholder="Search Tweet"
+      placeholder="Search Warpnet"
       v-model="query"
       v-on:keyup.enter="submit()"
     />
@@ -38,14 +38,16 @@ export default {
   name: "SearchBar",
   data() {
     return {
-      query: "Doesn't work for now",
+      query: "",
     };
   },
   methods: {
     submit() {
+      const q = (this.query || '').trim();
+      if (!q) return;
       this.$router.push({
         name: "Search",
-        query: { q: this.query },
+        query: { q },
       });
     },
   },

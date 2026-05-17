@@ -1,0 +1,10 @@
+Tusky 29.0
+
+- Novo conjunto de ícones
+- O layout das enquetes foi aprimorado e foi adicionado "mostrar resultados"
+- Suporte para a ação do filtro "desfoque" (Mastodon 4.4)
+- A qualidade do visualizador de imagens foi aprimorada
+- Uma caixa de diálogo adicional agora impedirá o fechamento da caixa de diálogo de legenda
+- Os boosts e favoritos agora são confirmados em uma janela inferior, em vez de um menu suspenso
+
+Consulte https://github.com/tuskyapp/Tusky/blob/develop/CHANGELOG.md

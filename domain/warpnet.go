@@ -28,17 +28,49 @@ resulting from the use or misuse of this software.
 package domain
 
 import (
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 )
 
 type ID = string
 
+// QRByteModeCapacity is the maximum payload (bytes) that fits in a QR code at
+// version 40 with error correction level 'L' in byte mode. The desktop UI
+// renders the AuthNodeInfo envelope as a pairing QR; JSON payloads larger
+// than this cannot be encoded and the QR modal renders blank.
+const QRByteModeCapacity = 2953
+
 // AuthNodeInfo defines model for AuthNodeInfo.
 type AuthNodeInfo struct {
-	Identity Identity         `json:"identity"`
-	NodeInfo warpnet.NodeInfo `json:"node_info"`
+	UserId         string   `json:"user_id"`
+	Token          string   `json:"token"`
+	PSK            string   `json:"psk"`
+	ID             string   `json:"node_id"`
+	Addresses      []string `json:"addresses"`
+	BootstrapPeers []string `json:"bootstrap_peers"`
+	Network        string   `json:"network,omitempty"`
+}
+
+// LogSize logs the JSON-encoded size of the AuthNodeInfo and warns when it
+// exceeds QRByteModeCapacity, surfacing pairing-QR overflow in node logs
+// before users hit a blank QR modal.
+func (a AuthNodeInfo) LogSize() {
+	data, err := json.Marshal(a)
+	if err != nil {
+		log.Warnf("auth node info: marshal for size check: %v", err)
+		return
+	}
+	size := len(data)
+	log.Infof("auth node info size: %d bytes", size)
+	if size > QRByteModeCapacity {
+		log.Warnf(
+			"auth node info size (%d bytes) exceeds QR byte-mode capacity (%d bytes); pairing QR generation will fail",
+			size, QRByteModeCapacity,
+		)
+	}
 }
 
 // Chat defines model for Chat.
@@ -94,6 +126,15 @@ type Owner struct {
 	Username        string    `json:"username"`
 }
 
+type Device struct {
+	ID         ID                 `json:"id"`
+	CreatedAt  time.Time          `json:"created_at"`
+	NodeId     warpnet.WarpPeerID `json:"node_id"`
+	Token      string             `json:"token"`
+	Platform   string             `json:"platform"`
+	LastActive time.Time          `json:"last_active"`
+}
+
 // ReplyNode defines model for ReplyNode.
 type ReplyNode struct {
 	Children []ReplyNode `json:"children"`
@@ -117,7 +158,10 @@ type Tweet struct {
 	Username    string           `json:"username"`
 	ImageKeys   []string         `json:"image_keys,omitempty"`
 	Network     string           `json:"network"`
-	Moderation  *TweetModeration `json:"moderation,omitempty"`
+	Moderation     *TweetModeration `json:"moderation,omitempty"`
+	Pinned         bool             `json:"pinned,omitempty"`
+	QuotedTweetId  *string          `json:"quoted_tweet_id,omitempty"`
+	QuotedUserId   *string          `json:"quoted_user_id,omitempty"`
 }
 
 func (t *Tweet) IsModerated() bool {
@@ -128,12 +172,67 @@ type ModelType string
 
 const LLAMA2 ModelType = "llama2"
 
+// TweetEdit is an immutable revision row. Tweets are mutated in-place
+// (Tweet.Text rewritten) and a TweetEdit is appended for each edit so
+// the client can show "edited at X" history. EditedAt = the moment the
+// edit was committed; the original tweet's CreatedAt stays untouched.
+type TweetEdit struct {
+	Id              string    `json:"id"`
+	OriginalTweetId string    `json:"original_tweet_id"`
+	UserId          string    `json:"user_id"`
+	Text            string    `json:"text"`
+	EditedAt        time.Time `json:"edited_at"`
+}
+
 type TweetModeration struct {
 	ModeratorID ID               `json:"moderator_id"`
 	Model       ModelType        `json:"model"`
 	IsOk        ModerationResult `json:"is_ok"`
 	Reason      *string          `json:"reason"`
 	TimeAt      time.Time        `json:"time_at"`
+}
+
+// Filter is a per-user keyword/regex filter. Filters apply at timeline-read
+// time; they're never replicated to peers. Keywords are stored as an
+// embedded slice (Mastodon models them as a sub-resource with their own
+// ids — we keep the same shape on the wire but the storage is one record
+// per filter).
+// FilterContext is where a content filter applies. Closed enum — only
+// these values are accepted on the wire. Note: there is no "account"
+// context in Warpnet — Warpnet has users and nodes, not accounts.
+// Warpnet has no "public" context either — every tweet is public by
+// default, so a filter on a "public" timeline would be redundant.
+type FilterContext string
+
+const (
+	FilterContextHome          FilterContext = "home"
+	FilterContextNotifications FilterContext = "notifications"
+	FilterContextThread        FilterContext = "thread"
+)
+
+// FilterAction is what happens to a tweet that matches a filter.
+type FilterAction string
+
+const (
+	FilterActionWarn FilterAction = "warn"
+	FilterActionHide FilterAction = "hide"
+)
+
+type Filter struct {
+	Id        string          `json:"id"`
+	UserId    string          `json:"user_id"`
+	Title     string          `json:"title"`
+	Context   []FilterContext `json:"context"`
+	Action    FilterAction    `json:"action"`
+	ExpiresAt *time.Time      `json:"expires_at,omitempty"`
+	Keywords  []FilterKeyword `json:"keywords"`
+}
+
+// FilterKeyword is a single match rule on a filter.
+type FilterKeyword struct {
+	Id        string `json:"id"`
+	Keyword   string `json:"keyword"`
+	WholeWord bool   `json:"whole_word"`
 }
 
 // User defines model for User.
@@ -159,6 +258,10 @@ type User struct {
 	Website            *string           `json:"website,omitempty"`
 	Moderation         *UserModeration   `json:"moderation"`
 	Metadata           map[string]string `json:"metadata"`
+	// Locked is the "manually-approve followers" flag. When true, an
+	// inbound follow lands in the follow-request queue instead of being
+	// accepted automatically.
+	Locked bool `json:"locked,omitempty"`
 }
 
 type UserModeration struct {

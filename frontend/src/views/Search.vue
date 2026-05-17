@@ -17,7 +17,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
+WarpNet is provided "as is" without warranty of any kind, either expressed or implied.
 Use at your own risk. The maintainers shall not be liable for any damages or data loss
 resulting from the use or misuse of this software.
 -->
@@ -49,21 +49,8 @@ resulting from the use or misuse of this software.
           </div>
         </div>
 
-        <!-- profile details -->
         <div class="flex flex-col">
           <div class="flex flex-row justify-evenly">
-            <button
-              class="w-full text-dark font-bold border-b-2 p-1 md:px-8 md:py-4 hover:bg-lightblue"
-            >
-              Top
-            </button>
-            <button
-              @click="submit('Latest')"
-              class="w-full text-dark font-bold border-b-2 p-1 md:px-5 md:py-4 hover:bg-lightblue"
-              :class="`${this.mode === 'Latest' ? 'border-blue' : ''}`"
-            >
-              Latest
-            </button>
             <button
               @click="submit('People')"
               class="w-full text-dark font-bold border-b-2 p-1 md:px-5 md:py-4 hover:bg-lightblue"
@@ -71,36 +58,24 @@ resulting from the use or misuse of this software.
             >
               People
             </button>
-            <button
-              class="w-full text-dark font-bold border-b-2 p-1 md:px-5 md:py-4 hover:bg-lightblue"
-            >
-              Photos
-            </button>
-            <button
-              class="w-full text-dark font-bold border-b-2 p-1 md:px-5 md:py-4 hover:bg-lightblue"
-            >
-              Videos
-            </button>
           </div>
         </div>
 
-        <!-- tweets -->
         <Loader :loading="loading" />
+
         <div
-          v-if="!loading && results && results.length === 0"
+          v-if="!loading && results.length === 0 && submitted"
           class="flex flex-col items-center justify-center w-full pt-10"
         >
           <div class="w-3/5">
             <p class="font-bold text-lg">No results for "{{ noResults }}"</p>
             <p class="text-sm text-dark">
-              The term you entered did not bring up any results. You may have
-              mistyped your term or your Search settings could be protecting you
-              from some potentially sensitive content.
+              Try a different search term.
             </p>
           </div>
         </div>
 
-        <Results :results="results" />
+        <Users :users="results" :loading="loading" />
       </div>
 
       <div
@@ -112,22 +87,26 @@ resulting from the use or misuse of this software.
 
 <script>
 import SideNav from "../components/SideNav.vue";
-import Results from "../components/Results.vue";
+import Users from "../components/Users.vue";
 import Loader from "../components/Loader.vue";
+import {warpnetService} from "@/service/service";
 
 export default {
   name: "Search",
   components: {
     SideNav,
-    Results,
+    Users,
     Loader,
   },
   data() {
     return {
-      loading: true,
-      query: "" || this.$route.query.q,
+      loading: false,
+      submitted: false,
+      query: this.$route.query.q || "",
       noResults: "",
-      mode: this.$route.query.m || "Latest",
+      mode: this.$route.query.m || "People",
+      results: [],
+      cursor: '',
     };
   },
   methods: {
@@ -136,15 +115,47 @@ export default {
         name: "Home",
       });
     },
-    submit(m = this.mode) {
-
+    async submit(m = this.mode) {
+      this.mode = m;
+      this.submitted = true;
+      this.cursor = '';
+      this.results = [];
+      this.noResults = this.query;
+      await this.runSearch(true);
+    },
+    async runSearch(reset) {
+      if (!this.query) {
+        this.results = [];
+        return;
+      }
+      this.loading = true;
+      try {
+        const resp = await warpnetService.searchUsers(this.query, reset ? '' : this.cursor);
+        const users = resp?.users || [];
+        const hydrated = await Promise.all(users.map(async (u) => {
+          try {
+            if (u.avatar_key && !u.avatar) {
+              u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key});
+            }
+          } catch (e) {}
+          return u;
+        }));
+        this.results = reset ? hydrated : this.results.concat(hydrated);
+        this.cursor = resp?.cursor || 'end';
+      } catch (err) {
+        console.error('Search failed:', err);
+      } finally {
+        this.loading = false;
+      }
     },
     async loadMore() {
-
+      if (this.loading || !this.cursor || this.cursor === 'end') return;
+      await this.runSearch(false);
     },
   },
   async created() {
     console.log("loading component:", this.$options.name);
+    if (this.query) await this.submit();
   },
 };
 </script>

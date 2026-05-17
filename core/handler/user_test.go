@@ -18,6 +18,7 @@ type stubUserFetcher struct {
 	createFn        func(user domain.User) (domain.User, error)
 	getFn           func(userId string) (domain.User, error)
 	listFn          func(limit *uint64, cursor *string) ([]domain.User, string, error)
+	searchFn        func(query string, limit *uint64, cursor *string) ([]domain.User, string, error)
 	whoToFollowFn   func(limit *uint64, cursor *string) ([]domain.User, string, error)
 	updateFn        func(userId string, newUser domain.User) (domain.User, error)
 	createWithTTLFn func(user domain.User, ttl time.Duration) (domain.User, error)
@@ -38,6 +39,12 @@ func (s stubUserFetcher) Get(userId string) (domain.User, error) {
 func (s stubUserFetcher) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	if s.listFn != nil {
 		return s.listFn(limit, cursor)
+	}
+	return nil, "", nil
+}
+func (s stubUserFetcher) Search(query string, limit *uint64, cursor *string) ([]domain.User, string, error) {
+	if s.searchFn != nil {
+		return s.searchFn(query, limit, cursor)
 	}
 	return nil, "", nil
 }

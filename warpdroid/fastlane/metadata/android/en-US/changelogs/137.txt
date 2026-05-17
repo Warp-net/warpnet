@@ -1,0 +1,7 @@
+Tusky 31.0
+
+- The Scheduled Posts view has been improved, it now shows the full posts including all available metadata.
+- It is now possible to re-hide filtered posts with a new option in the three-dot-menu on posts.
+- Tusky now reads the character limit for media descriptions from the server instead of always defaulting to 1500. The limit is now shown in the media description dialog.
+
+See https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md for the full changelog

@@ -1,0 +1,7 @@
+Tusky 32.0
+
+- Compatibilidade coa cita de publicacións
+- Compatibilidade con máis de 4 anexos multimedia nas cronoloxías
+- Melloras ao mostrar HTML
+- Novo axuste na Conta: selección da directiva para as citas das túas publicacións
+- Engadido un botón para publicar na vista de cancelos para comezar unha publicación co cancelo seleccionado.

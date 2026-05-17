@@ -137,13 +137,21 @@ resulting from the use or misuse of this software.
           </p>
         </button>
         <button
-          disabled
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1 opacity-50 cursor-not-allowed"
-          aria-label="Bookmarks (coming soon)"
-          title="Coming soon"
+          @click="$router.push({ name: 'Bookmarks' })"
+          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          aria-label="Bookmarks"
         >
-          <i class="text-xl far fa-bookmark" aria-hidden="true"></i>
-          <p class="text-lg ml-4 text-left hidden xl:block">Bookmarks</p>
+          <i
+            class="fa-bookmark"
+            :class="$route.name === 'Bookmarks' ? 'text-2xl fas' : 'text-xl far'"
+            aria-hidden="true"
+          ></i>
+          <p
+            class="text-lg ml-4 text-left hidden xl:block"
+            :class="$route.name === 'Bookmarks' ? 'font-bold' : ''"
+          >
+            Bookmarks
+          </p>
         </button>
 <!--        <button-->
 <!--          class="focus:outline-none hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"-->
@@ -169,13 +177,21 @@ resulting from the use or misuse of this software.
           </p>
         </button>
         <button
-          disabled
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1 opacity-50 cursor-not-allowed"
-          aria-label="Settings (coming soon)"
-          title="Coming soon"
+          @click="$router.push({ name: 'Settings' })"
+          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          aria-label="Settings"
         >
-          <i class="text-xl fas fa-cog" aria-hidden="true"></i>
-          <p class="text-lg ml-4 text-left hidden xl:block">Settings</p>
+          <i
+            class="text-xl fas fa-cog"
+            :class="$route.name && $route.name.startsWith('Settings') ? 'text-2xl' : 'text-xl'"
+            aria-hidden="true"
+          ></i>
+          <p
+            class="text-lg ml-4 text-left hidden xl:block"
+            :class="$route.name && $route.name.startsWith('Settings') ? 'font-bold' : ''"
+          >
+            Settings
+          </p>
         </button>
       </div>
 
@@ -239,6 +255,12 @@ resulting from the use or misuse of this software.
           class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm"
         >
           Sign in by QR-code
+        </button>
+        <button
+          @click="signOut"
+          class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm text-red-600"
+        >
+          Sign out
         </button>
       </div>
     </div>
@@ -310,6 +332,15 @@ export default {
     },
     async closeQR() {
       this.qrModalOpen = false
+    },
+    async signOut() {
+      this.dropdown = false;
+      try {
+        await warpnetService.logoutUser();
+      } catch (err) {
+        console.error('Failed to sign out:', err);
+      }
+      this.$router.push({ name: 'Root' });
     },
   },
   async created() {

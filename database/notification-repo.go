@@ -33,7 +33,7 @@ import (
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -60,7 +60,7 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 	}
 
 	if not.Id == "" {
-		not.Id = uuid.New().String()
+		not.Id = ulid.Make().String()
 	}
 	if not.CreatedAt.IsZero() {
 		not.CreatedAt = time.Now()
@@ -88,6 +88,153 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 		return err
 	}
 	return txn.Commit()
+}
+
+// MarkRead flips Notification.IsRead to true for the given notification.
+// Notification keys are timestamp-indexed within a per-user prefix, so a
+// scan is unavoidable to locate the row from (userId, notificationId).
+//
+// The scan and the write live in *separate* transactions on purpose.
+// Badger's SSI tracks every key the txn reads; doing the prefix scan
+// inside the same RW txn that later writes one key would add the entire
+// page (~100 sibling notifications) to the read set, and a concurrent
+// MarkRead on any of those siblings would commit-conflict the second
+// writer. Splitting the work means the write txn's read+write sets are
+// both just {targetKey}, so two MarkRead calls on different notifications
+// no longer collide. Two MarkRead calls on the *same* notification can
+// still race, but IsRead is monotonic, so the loser's view-after-commit
+// matches the winner's regardless.
+func (repo *NotificationsRepo) MarkRead(userId, notificationId string) error {
+	if userId == "" {
+		return local_store.DBError("missing user id")
+	}
+	if notificationId == "" {
+		return local_store.DBError("missing notification id")
+	}
+
+	key, err := repo.findNotificationKey(userId, notificationId)
+	if err != nil {
+		return err
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	raw, err := txn.Get(key)
+	if err != nil {
+		return err
+	}
+	var not domain.Notification
+	if err := json.Unmarshal(raw, &not); err != nil {
+		return err
+	}
+	if not.IsRead {
+		return nil
+	}
+	not.IsRead = true
+	bt, err := json.Marshal(not)
+	if err != nil {
+		return err
+	}
+	if err := txn.SetWithTTL(key, bt, time.Hour*24); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+// findNotificationKey scans the per-user prefix in a discardable txn and
+// returns the storage key of the row with the matching notification id.
+// Discarding the txn (Rollback) drops every key from Badger's conflict
+// table for this caller, so the subsequent write txn starts clean.
+func (repo *NotificationsRepo) findNotificationKey(userId, notificationId string) (local_store.DatabaseKey, error) {
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return "", err
+	}
+	defer txn.Rollback()
+
+	var (
+		cursor string
+		limit  uint64 = 100
+	)
+	for {
+		items, cur, err := txn.List(prefix, &limit, &cursor)
+		if err != nil {
+			return "", err
+		}
+		for _, item := range items {
+			var not domain.Notification
+			if err := json.Unmarshal(item.Value, &not); err != nil {
+				return "", err
+			}
+			if not.Id == notificationId {
+				return local_store.DatabaseKey(item.Key), nil
+			}
+		}
+		if cur == "" || cur == local_store.EndCursor || uint64(len(items)) < limit {
+			break
+		}
+		cursor = cur
+	}
+	return "", ErrNotificationsNotFound
+}
+
+func (repo *NotificationsRepo) Get(userId, notificationId string) (domain.Notification, error) {
+	if userId == "" {
+		return domain.Notification{}, local_store.DBError("missing user id")
+	}
+	if notificationId == "" {
+		return domain.Notification{}, local_store.DBError("missing notification id")
+	}
+
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.Notification{}, err
+	}
+	defer txn.Rollback()
+
+	var (
+		cursor string
+		limit  uint64 = 100
+	)
+	for {
+		items, cur, err := txn.List(prefix, &limit, &cursor)
+		if err != nil {
+			return domain.Notification{}, err
+		}
+		for _, item := range items {
+			var not domain.Notification
+			if err := json.Unmarshal(item.Value, &not); err != nil {
+				return domain.Notification{}, err
+			}
+			if not.Id == notificationId {
+				if err := txn.Commit(); err != nil {
+					return domain.Notification{}, err
+				}
+				return not, nil
+			}
+		}
+		if cur == "" || cur == local_store.EndCursor || uint64(len(items)) < limit {
+			break
+		}
+		cursor = cur
+	}
+
+	if err := txn.Commit(); err != nil {
+		return domain.Notification{}, err
+	}
+	return domain.Notification{}, ErrNotificationsNotFound
 }
 
 func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {

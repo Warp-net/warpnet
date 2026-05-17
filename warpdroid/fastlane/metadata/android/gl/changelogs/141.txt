@@ -1,0 +1,6 @@
+Tusky 32.1
+
+- Agora podes eliminar a túa publicación doutra publicación que a cita
+- Varios arranxos de problemas
+
+Mira https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md para ver todos os cambios

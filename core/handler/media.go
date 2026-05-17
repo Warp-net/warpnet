@@ -94,6 +94,62 @@ type MediaStorer interface {
 	SetForeignImageWithTTL(userId, key string, img database.Base64Image) error
 }
 
+// MediaMetaStorer is the slice of MediaRepo the alt-text / focal-point
+// handlers need.
+type MediaMetaStorer interface {
+	SetImageMeta(userId, key string, meta database.MediaMeta) error
+	GetImageMeta(userId, key string) (database.MediaMeta, error)
+}
+
+func StreamUpdateMediaMetaHandler(repo MediaMetaStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.UpdateMediaMetaEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("media meta: empty user id")
+		}
+		if ev.Key == "" {
+			return nil, warpnet.WarpError("media meta: empty media key")
+		}
+		meta := database.MediaMeta{
+			Description: ev.Description,
+			FocusX:      ev.FocusX,
+			FocusY:      ev.FocusY,
+		}
+		if err := repo.SetImageMeta(ev.UserId, ev.Key, meta); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
+	}
+}
+
+func StreamGetMediaHandler(repo MediaMetaStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetMediaEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("get media: empty user id")
+		}
+		if ev.Key == "" {
+			return nil, warpnet.WarpError("get media: empty media key")
+		}
+		meta, err := repo.GetImageMeta(ev.UserId, ev.Key)
+		if err != nil {
+			return nil, err
+		}
+		return event.GetMediaResponse{
+			Key:         ev.Key,
+			Description: meta.Description,
+			FocusX:      meta.FocusX,
+			FocusY:      meta.FocusY,
+		}, nil
+	}
+}
+
 type MediaUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 }
@@ -236,10 +292,12 @@ func StreamGetImageHandler(
 			return nil, fmt.Errorf("get image: %w", ErrEmptyImageKey)
 		}
 
-		ownerId := streamer.NodeInfo().OwnerId
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
 		if ev.UserId == "" {
 			ev.UserId = ownerId
 		}
+
 		isOwnImageRequest := ownerId == ev.UserId
 
 		if isOwnImageRequest {
@@ -261,6 +319,11 @@ func StreamGetImageHandler(
 		}
 		if err != nil {
 			return nil, fmt.Errorf("get image: fetching user: %w", err)
+		}
+
+		isOwnAlias := ownNodeInfo.ID.String() == u.NodeId
+		if isOwnAlias {
+			return event.GetImageResponse{File: ""}, nil
 		}
 
 		resp, err := streamer.GenericStream(u.NodeId, event.PUBLIC_GET_IMAGE, ev)

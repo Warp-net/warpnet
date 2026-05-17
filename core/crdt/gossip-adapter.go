@@ -46,8 +46,8 @@ type GossipBroadcaster struct {
 	topic    string
 	dataChan chan []byte
 
-	once sync.Once
-	mx   sync.Mutex
+	mx     sync.Mutex
+	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 }
 
 const statsTopic = "/warpnet/stats/1.0.0"
@@ -59,8 +59,6 @@ func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBr
 		topic:    statsTopic,
 		dataChan: make(chan []byte, 100),
 		ctx:      ctx,
-		once:     sync.Once{},
-		mx:       sync.Mutex{},
 	}
 	err := gossip.SubscribeRaw(statsTopic, func(data []byte) error {
 		gb.Receive(data)
@@ -69,11 +67,14 @@ func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBr
 	return gb, err
 }
 
-// Broadcast sends data via Gossip
+// Broadcast sends data via Gossip.
+//
+// gb.gossip and gb.topic are set once at construction and never
+// mutated, so this method intentionally does NOT take gb.mx —
+// otherwise a slow PublishRaw (network I/O) would block close() and
+// Receive() through the same lock, defeating the deadlock fix in
+// Receive().
 func (gb *GossipBroadcaster) Broadcast(_ context.Context, data []byte) error {
-	gb.mx.Lock()
-	defer gb.mx.Unlock()
-
 	return gb.gossip.PublishRaw(gb.topic, data)
 }
 
@@ -90,19 +91,41 @@ func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
 	}
 }
 
-// Receive is called by Gossip subscription handler to deliver data
+// Receive is called by Gossip subscription handler to deliver data.
+//
+// All channel operations are non-blocking. If the buffer is full, the
+// oldest pending message is dropped and the new one is enqueued. The
+// previous implementation did `<-gb.dataChan` unconditionally inside the
+// `default` branch, which could deadlock under the held mutex when a
+// concurrent Next() drained the channel between the select decision
+// and the receive.
+//
+// The `closed` flag and `close()` taking the same mutex prevent a
+// "send on closed channel" panic when Next() shuts the broadcaster
+// down concurrently with an in-flight Receive.
 func (gb *GossipBroadcaster) Receive(data []byte) {
 	gb.mx.Lock()
 	defer gb.mx.Unlock()
 
+	if gb.closed {
+		return
+	}
+
 	select {
-	case gb.dataChan <- data:
 	case <-gb.ctx.Done():
-		gb.close()
+		return
+	case gb.dataChan <- data:
 		return
 	default:
-		<-gb.dataChan
-		gb.dataChan <- data
+	}
+
+	select {
+	case <-gb.dataChan:
+	default:
+	}
+	select {
+	case gb.dataChan <- data:
+	default:
 	}
 }
 
@@ -110,7 +133,11 @@ func (gb *GossipBroadcaster) close() {
 	if gb == nil {
 		return
 	}
-	gb.once.Do(func() {
-		close(gb.dataChan)
-	})
+	gb.mx.Lock()
+	defer gb.mx.Unlock()
+	if gb.closed {
+		return
+	}
+	gb.closed = true
+	close(gb.dataChan)
 }

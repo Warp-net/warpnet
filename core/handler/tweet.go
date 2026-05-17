@@ -73,7 +73,12 @@ type TweetsStorer interface {
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
 	UnRetweet(retweetedByUserID, tweetId string) error
+	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
+	Update(tweet domain.Tweet) error
+	Pin(userId, tweetId string) (domain.Tweet, error)
+	Unpin(userId, tweetId string) (domain.Tweet, error)
+	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
 }
 
 type TimelineUpdater interface {
@@ -261,7 +266,8 @@ func tweetsRefreshBackground(
 	ev event.GetAllTweetsEvent,
 	streamer TweetStreamer,
 ) {
-	if streamer.NodeInfo().OwnerId == ev.UserId {
+	ownNodeInfo := streamer.NodeInfo()
+	if ownNodeInfo.OwnerId == ev.UserId {
 		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
@@ -270,6 +276,9 @@ func tweetsRefreshBackground(
 	}
 	if err != nil {
 		log.Errorf("get tweets handler: get user: %v", err)
+		return
+	}
+	if ownNodeInfo.ID.String() == otherUser.NodeId {
 		return
 	}
 
@@ -411,7 +420,9 @@ func StreamGetTweetStatsHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		isMyOwnTweet := ev.UserId == streamer.NodeInfo().OwnerId
+		ownNodeInfo := streamer.NodeInfo()
+
+		isMyOwnTweet := ev.UserId == ownNodeInfo.OwnerId
 		if !isMyOwnTweet { //nolint:nestif
 			u, err := userRepo.Get(ev.UserId)
 			if errors.Is(err, database.ErrUserNotFound) {
@@ -419,6 +430,10 @@ func StreamGetTweetStatsHandler(
 			}
 			if err != nil {
 				return nil, err
+			}
+
+			if ownNodeInfo.ID.String() == u.NodeId {
+				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
 			}
 
 			statsResp, err := streamer.GenericStream(
@@ -448,7 +463,6 @@ func StreamGetTweetStatsHandler(
 		}
 
 		var (
-			tweetsCount   uint64
 			retweetsCount uint64
 			likesCount    uint64
 			repliesCount  uint64
@@ -459,13 +473,6 @@ func StreamGetTweetStatsHandler(
 		)
 		defer cancelF()
 
-		g.Go(func() (tweetsErr error) {
-			tweetsCount, tweetsErr = tweetRepo.TweetsCount(ev.UserId)
-			if errors.Is(tweetsErr, database.ErrTweetNotFound) {
-				return nil
-			}
-			return tweetsErr
-		})
 		g.Go(func() (retweetsErr error) {
 			retweetsCount, retweetsErr = retweetRepo.RetweetsCount(tweetId)
 			if errors.Is(retweetsErr, database.ErrTweetNotFound) {
@@ -499,11 +506,150 @@ func StreamGetTweetStatsHandler(
 		}
 		return event.TweetStatsResponse{
 			TweetId:       ev.TweetId,
-			TweetsCount:   tweetsCount,
 			ViewsCount:    viewsCount,
 			RetweetsCount: retweetsCount,
 			LikeCount:     likesCount,
 			RepliesCount:  repliesCount,
 		}, nil
 	}
+}
+
+func StreamPinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		return setPinnedFromEvent(buf, repo, true)
+	}
+}
+
+func StreamUnpinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		return setPinnedFromEvent(buf, repo, false)
+	}
+}
+
+func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.EditTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("edit tweet: empty user id")
+		}
+		if ev.TweetId == "" {
+			return nil, warpnet.WarpError("edit tweet: empty tweet id")
+		}
+		if ev.Text == "" {
+			return nil, warpnet.WarpError("edit tweet: empty text")
+		}
+
+		existing, err := repo.Get(ev.UserId, ev.TweetId)
+		if err != nil {
+			return nil, err
+		}
+		if existing.UserId != ev.UserId {
+			return nil, warpnet.WarpError("edit tweet: only the author can edit their own tweet")
+		}
+		if existing.Text == ev.Text {
+			// No-op edit — return the existing tweet without recording a revision.
+			return event.EditTweetResponse(existing), nil
+		}
+
+		// Append the *previous* text as a revision so the user can see what
+		// the tweet looked like before this edit.
+		if _, err := repo.AppendEdit(domain.TweetEdit{
+			OriginalTweetId: existing.Id,
+			UserId:          existing.UserId,
+			Text:            existing.Text,
+		}); err != nil {
+			return nil, err
+		}
+
+		updated := existing
+		updated.Text = ev.Text
+		if err := repo.Update(updated); err != nil {
+			return nil, err
+		}
+		// Re-fetch so the response carries the storage-canonical UpdatedAt.
+		out, err := repo.Get(existing.UserId, existing.Id)
+		if err != nil {
+			return nil, err
+		}
+
+		// Refresh the author's own timeline copy. The timeline stores
+		// a snapshot of the tweet at the time it was added, so without
+		// this refresh the Home feed would keep serving the pre-edit
+		// text until the timeline entry is naturally rewritten.
+		if timelineRepo != nil {
+			if err := timelineRepo.AddTweetToTimeline(out.UserId, out); err != nil {
+				log.Warnf("edit tweet: timeline refresh failed: %v", err)
+			}
+		}
+
+		// Cancel every plain retweet of this tweet — they were
+		// retweeting the *original* content, and on an edit that
+		// consent shouldn't carry over. Quote-style retweets live as
+		// their own tweets and aren't enumerated here; the reader
+		// detects an edited source via the comparison of source
+		// UpdatedAt and the quote's CreatedAt and surfaces the source
+		// as "unavailable".
+		cancelRetweetsForEditedTweet(repo, existing.Id)
+
+		return event.EditTweetResponse(out), nil
+	}
+}
+
+// cancelRetweetsForEditedTweet iterates the retweeters index for
+// tweetId on the local node and unretweets each one. Failures are
+// logged and swallowed — a stuck retweet is not worth failing the
+// edit response over. Cross-node propagation of the cancellation is
+// out of scope.
+func cancelRetweetsForEditedTweet(repo TweetsStorer, tweetId string) {
+	var cursor string
+	limit := uint64(100)
+	for {
+		retweeters, cur, err := repo.Retweeters(tweetId, &limit, &cursor)
+		if err != nil {
+			log.Warnf("edit tweet: list retweeters of %s: %v", tweetId, err)
+			return
+		}
+		for _, retweeterId := range retweeters {
+			if err := repo.UnRetweet(retweeterId, tweetId); err != nil {
+				log.Warnf("edit tweet: cancel retweet by %s of %s: %v", retweeterId, tweetId, err)
+			}
+		}
+		if cur == "" || uint64(len(retweeters)) < limit {
+			return
+		}
+		cursor = cur
+	}
+}
+
+// setPinnedFromEvent decodes the pin/unpin payload, enforces author-only
+// pinning, and delegates the write.
+func setPinnedFromEvent(buf []byte, repo TweetsStorer, pin bool) (any, error) {
+	op := "unpin"
+	if pin {
+		op = "pin"
+	}
+	var ev event.PinTweetEvent
+	if err := json.Unmarshal(buf, &ev); err != nil {
+		return nil, err
+	}
+	if ev.UserId == "" {
+		return nil, warpnet.WarpError(op + ": empty user id")
+	}
+	if ev.TweetId == "" {
+		return nil, warpnet.WarpError(op + ": empty tweet id")
+	}
+	tw, err := repo.Get(ev.UserId, ev.TweetId)
+	if err != nil {
+		return nil, err
+	}
+	if tw.UserId != ev.UserId {
+		return nil, warpnet.WarpError(op + ": only the author can " + op + " their own tweet")
+	}
+	if pin {
+		return repo.Pin(ev.UserId, ev.TweetId)
+	}
+	return repo.Unpin(ev.UserId, ev.TweetId)
 }

@@ -1,11 +1,12 @@
 module github.com/Warp-net/warpnet
 
-go 1.26
+go 1.26.0
 
 tool github.com/wailsapp/wails/v2/cmd/wails
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Warp-net/libp2p-camouflage-transport v0.0.0-20260426205729-375252339458
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
@@ -27,7 +28,6 @@ require (
 	github.com/multiformats/go-multiaddr v0.16.1
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/client_golang v1.23.2
-	github.com/refraction-networking/utls v1.8.2
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/pflag v1.0.10
@@ -221,6 +221,7 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
+	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect

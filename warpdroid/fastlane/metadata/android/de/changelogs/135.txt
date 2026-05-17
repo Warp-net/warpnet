@@ -1,0 +1,7 @@
+Tusky 30.0
+
+- Der Ablauf beim Melden wurde überarbeitet. Es können nun Gründe für das Melden ausgewählt werden.
+- Die Optik des Bilder-Editors wurde verbessert
+- Tusky kann jetzt mit Onion-Services verwendet werden
+
+Alle Änderungen findest du auf https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md

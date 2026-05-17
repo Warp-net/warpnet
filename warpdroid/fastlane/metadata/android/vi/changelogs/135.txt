@@ -1,0 +1,7 @@
+Tusky 30.0
+
+- Cho phép chọn một lý do khi báo cáo.
+- Cải thiện trình chỉnh sửa ảnh
+- Tusky giờ có thể dùng cùng dịch vụ onion
+
+Xem https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md để biết thêm chi tiết

@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -73,6 +74,53 @@ func (s *TweetRepoTestSuite) TestCreateAndGetTweet() {
 	s.Require().NoError(err)
 	s.Equal(created.Id, fetched.Id)
 	s.Equal(created.Text, fetched.Text)
+}
+
+func (s *TweetRepoTestSuite) TestPinAndUnpin() {
+	userId := ulid.Make().String()
+	tweet := domain.Tweet{UserId: userId, Text: "pin me"}
+
+	created, err := s.repo.Create(userId, tweet)
+	s.Require().NoError(err)
+	s.False(created.Pinned)
+
+	pinned, err := s.repo.Pin(userId, created.Id)
+	s.Require().NoError(err)
+	s.True(pinned.Pinned)
+	s.Equal(created.Id, pinned.Id)
+
+	// Re-pin is a no-op: same state, no error.
+	pinned2, err := s.repo.Pin(userId, created.Id)
+	s.Require().NoError(err)
+	s.True(pinned2.Pinned)
+
+	fetched, err := s.repo.Get(userId, created.Id)
+	s.Require().NoError(err)
+	s.True(fetched.Pinned)
+
+	unpinned, err := s.repo.Unpin(userId, created.Id)
+	s.Require().NoError(err)
+	s.False(unpinned.Pinned)
+
+	fetched, err = s.repo.Get(userId, created.Id)
+	s.Require().NoError(err)
+	s.False(fetched.Pinned)
+}
+
+func (s *TweetRepoTestSuite) TestPinEmptyValidation() {
+	_, err := s.repo.Pin("", "t")
+	s.Error(err)
+	_, err = s.repo.Pin("u", "")
+	s.Error(err)
+	_, err = s.repo.Unpin("", "t")
+	s.Error(err)
+	_, err = s.repo.Unpin("u", "")
+	s.Error(err)
+}
+
+func (s *TweetRepoTestSuite) TestPinNonexistent() {
+	_, err := s.repo.Pin(ulid.Make().String(), ulid.Make().String())
+	s.Error(err)
 }
 
 func (s *TweetRepoTestSuite) TestDeleteTweet() {
@@ -168,6 +216,92 @@ func (s *TweetRepoTestSuite) TestUnRetweet() {
 	count, err := s.repo.RetweetsCount(original.Id)
 	s.Require().NoError(err)
 	s.Equal(uint64(0), count)
+}
+
+func (s *TweetRepoTestSuite) TestRecordView_IncrementsAndDedupes() {
+	tweetId := ulid.Make().String()
+	viewerA := ulid.Make().String()
+	viewerB := ulid.Make().String()
+
+	count, err := s.repo.RecordView(tweetId, viewerA)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+
+	// Same viewer within TTL is a no-op.
+	count, err = s.repo.RecordView(tweetId, viewerA)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+
+	// Different viewer increments.
+	count, err = s.repo.RecordView(tweetId, viewerB)
+	s.Require().NoError(err)
+	s.Equal(uint64(2), count)
+
+	got, err := s.repo.GetViewsCount(tweetId)
+	s.Require().NoError(err)
+	s.Equal(uint64(2), got)
+}
+
+func (s *TweetRepoTestSuite) TestRecordView_InvalidParams() {
+	_, err := s.repo.RecordView("", "viewer")
+	s.Error(err)
+
+	_, err = s.repo.RecordView("tweet", "")
+	s.Error(err)
+}
+
+func (s *TweetRepoTestSuite) TestGetViewsCount_NotFound() {
+	tweetId := ulid.Make().String()
+	_, err := s.repo.GetViewsCount(tweetId)
+	s.EqualError(err, ErrViewsNotFound.Error())
+}
+
+func (s *TweetRepoTestSuite) TestGetViewsCount_EmptyId() {
+	_, err := s.repo.GetViewsCount("")
+	s.Error(err)
+}
+
+func (s *TweetRepoTestSuite) TestRecordView_ConcurrentSafe() {
+	tweetId := ulid.Make().String()
+	const viewers = 16
+
+	errCh := make(chan error, viewers)
+	var wg sync.WaitGroup
+	wg.Add(viewers)
+	for i := 0; i < viewers; i++ {
+		viewerId := ulid.Make().String()
+		go func() {
+			defer wg.Done()
+			if _, err := s.repo.RecordView(tweetId, viewerId); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		s.Require().NoError(err)
+	}
+
+	count, err := s.repo.GetViewsCount(tweetId)
+	s.Require().NoError(err)
+	s.Equal(uint64(viewers), count)
+}
+
+func (s *TweetRepoTestSuite) TestRecordView_DifferentTweetsLockIndependently() {
+	// Two different tweets should not block each other on the
+	// sharded lock pool; records under each are independent.
+	tweetA := ulid.Make().String()
+	tweetB := ulid.Make().String()
+	viewer := ulid.Make().String()
+
+	a, err := s.repo.RecordView(tweetA, viewer)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), a)
+
+	b, err := s.repo.RecordView(tweetB, viewer)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), b)
 }
 
 func TestTweetRepoTestSuite(t *testing.T) {

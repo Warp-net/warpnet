@@ -1,0 +1,7 @@
+Tusky 30.0
+
+- O fluxo de denúncias foi reformulado. Agora é possível selecionar um motivo para a denúncia.
+- O editor de imagens ganhou um visual aprimorado
+- O Tusky agora pode ser usado com serviços Onion
+
+Consulte https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md para ver o registro completo de alterações

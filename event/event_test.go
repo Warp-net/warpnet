@@ -7,7 +7,7 @@ import (
 )
 
 func TestAcceptedResponse(t *testing.T) {
-	assert.Equal(t, `{"code":0,"message":"Accepted"}`, string(Accepted))
+	assert.Equal(t, `{"code":0,"message":"Accepted"}`, Accepted)
 }
 
 func TestInternalRoutePrefix(t *testing.T) {
@@ -85,6 +85,7 @@ func TestPaths_PublicRoutes(t *testing.T) {
 		PUBLIC_POST_UNFOLLOW,
 		PUBLIC_POST_UNLIKE,
 		PUBLIC_POST_UNRETWEET,
+		PUBLIC_POST_VIEW,
 		PUBLIC_GET_IMAGE,
 	}
 	for _, r := range publicRoutes {

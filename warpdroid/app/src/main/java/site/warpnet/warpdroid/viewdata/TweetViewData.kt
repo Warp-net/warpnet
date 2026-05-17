@@ -1,0 +1,123 @@
+/* Copyright 2017 Andrew Dawson
+ *
+ * This file is a part of Warpdroid.
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of the
+ * GNU General Public License as published by the Free Software Foundation; either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * Warpdroid is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+ * the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with Warpdroid; if not,
+ * see <http://www.gnu.org/licenses>. */
+package site.warpnet.warpdroid.viewdata
+
+import androidx.compose.runtime.Immutable
+import site.warpnet.warpdroid.entity.Attachment
+import site.warpnet.warpdroid.entity.Filter
+import site.warpnet.warpdroid.entity.Quote
+import site.warpnet.warpdroid.entity.Tweet
+import site.warpnet.warpdroid.entity.TimelineAccount
+
+interface LoadMoreViewData {
+    val isLoading: Boolean
+}
+
+@Immutable
+data class QuoteViewData(
+    val state: Quote.State,
+    val quotedTweetViewData: TweetViewData.Concrete?,
+    val quoteShown: Boolean
+)
+
+/**
+ * Created by charlag on 11/07/2017.
+ *
+ * Class to represent data required to display either a notification or a placeholder.
+ * It is either a [TweetViewData.Concrete] or a [TweetViewData.LoadMore].
+ */
+@Immutable
+sealed class TweetViewData {
+    abstract val id: String
+
+    @Immutable
+    data class Concrete(
+        val status: Tweet,
+        val isExpanded: Boolean,
+        val isShowingContent: Boolean,
+        /**
+         * Specifies whether the content of this post is currently limited in visibility to the first
+         * 500 characters or not.
+         *
+         * @return Whether the post is collapsed or fully expanded.
+         */
+        val isCollapsed: Boolean,
+        val isDetailed: Boolean = false,
+        val repliedToAccount: TimelineAccount? = null,
+        val filter: Filter? = null,
+        val filterActive: Boolean,
+        val quote: QuoteViewData?
+    ) : TweetViewData() {
+        override val id: String
+            get() = status.id
+
+        val attachments: List<Attachment>
+            get() = actionable.attachments
+
+        val spoilerText: String
+            get() = actionable.spoilerText
+
+        val actionable: Tweet
+            get() = status.actionableStatus
+
+        val actionableId: String
+            get() = status.actionableStatus.id
+
+        val accountId: String
+            get() = status.account.id
+
+        val actionableAccountId: String
+            get() = status.actionableStatus.account.id
+
+        val retweetedAvatar: String?
+            get() = if (status.retweet != null) {
+                status.account.avatar
+            } else {
+                null
+            }
+
+        val staticRetweetedAvatar: String?
+            get() = if (status.retweet != null) {
+                status.account.staticAvatar
+            } else {
+                null
+            }
+
+        val retweetingStatus: Tweet?
+            get() = if (status.retweet != null) status else null
+
+        val isReply: Boolean
+            get() = status.inReplyToAccountId != null
+
+        val isSelfReply: Boolean
+            get() = status.inReplyToAccountId == status.account.id
+
+        val isFilterWarn: Boolean
+            get() = filterActive && filter?.action == Filter.Action.WARN
+
+        val isFilterHide: Boolean
+            get() = filter?.action == Filter.Action.HIDE
+    }
+
+    @Immutable
+    data class LoadMore(
+        override val id: String,
+        override val isLoading: Boolean
+    ) : TweetViewData(), LoadMoreViewData
+
+    fun asStatusOrNull() = this as? Concrete
+
+    fun asPlaceholderOrNull() = this as? LoadMore
+}

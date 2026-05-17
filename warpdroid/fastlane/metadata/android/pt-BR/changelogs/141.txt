@@ -1,0 +1,6 @@
+Tusky 32.1
+
+- Agora é possível remover o próprio post de outro post que o cite
+- Várias correções de bugs
+
+Consulte https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md para ver o registro completo de alterações

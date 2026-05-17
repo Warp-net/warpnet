@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="193dp"
+    android:height="193dp"
+    android:viewportWidth="580"
+    android:viewportHeight="580">
+    <!-- Intentionally blank: the mammoth/elephant illustration is removed
+         as part of the Warpnet rebrand. Empty-state copy below still
+         conveys the situation. -->
+    <path
+        android:pathData="M0,0L580,0L580,580L0,580z"
+        android:fillColor="@android:color/transparent" />
+</vector>

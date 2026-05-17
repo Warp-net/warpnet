@@ -130,6 +130,7 @@ func main() {
 		config.Config().Version,
 		authRepo,
 		db,
+		[]warpnet.WarpAddrInfo{},
 		m,
 	)
 	if err != nil {
@@ -142,8 +143,9 @@ func main() {
 		log.Fatalf("failed to start member node: %v", err)
 	}
 
-	authInfo.Identity.Owner.NodeId = echoNode.NodeInfo().ID.String()
-	authInfo.NodeInfo = echoNode.NodeInfo()
+	authInfo.ID = nodeId.String()
+	authInfo.Network = network
+	authInfo.Addresses = echoNode.NodeInfo().Addresses
 
 	readyChan <- authInfo
 	eBot := newEchoBot(echoNode, db)

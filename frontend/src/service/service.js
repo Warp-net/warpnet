@@ -23,14 +23,47 @@ resulting from the use or misuse of this software.
 */
 
 import {buildQRCode} from "@/lib/qr";
+import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call} from "../../wailsjs/go/main/App";
+import {Call, IsFirstRun} from "../../wailsjs/go/main/App";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
 export const PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
 export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
+export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
+export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
+export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
+export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
+export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
+export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
+export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
+export const PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
+export const PRIVATE_POST_UNBLOCK = "/private/post/unblock/0.0.0"
+export const PRIVATE_GET_BLOCKS = "/private/get/blocks/0.0.0"
+export const PRIVATE_POST_MUTE = "/private/post/mute/0.0.0"
+export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
+export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
+export const PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
+export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
+export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
+export const PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
+export const PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
+export const PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
+export const PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
+export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
+export const PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
+export const PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
+export const PRIVATE_POST_FOLLOW_REQUEST_REJECT = "/private/post/follow/request/reject/0.0.0"
+export const PRIVATE_GET_FILTER = "/private/get/filter/0.0.0"
+export const PRIVATE_GET_FILTERS = "/private/get/filters/0.0.0"
+export const PRIVATE_POST_FILTER = "/private/post/filter/0.0.0"
+export const PRIVATE_POST_FILTER_UPDATE = "/private/post/filter/update/0.0.0"
+export const PRIVATE_DELETE_FILTER = "/private/delete/filter/0.0.0"
+export const PRIVATE_POST_FILTER_KEYWORD = "/private/post/filter/keyword/0.0.0"
+export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/update/0.0.0"
+export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
@@ -61,14 +94,50 @@ export const PRIVATE_DELETE_MESSAGE = "/private/delete/message/0.0.0"
 export const PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 export const PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
+export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
+export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 
 const stateMap = new Map();
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
+
+// In-memory mirror of the local block list, populated lazily so
+// the UI can call isUserBlocked() synchronously across tweet
+// renders without hitting the node per row.
+const blockedIdsCache = new Set();
+let blockedCachePrimed = false;
 const defaultLimit = 20
 const endCursor = "end"
+
+// Tracks in-flight POST requests so duplicate submissions (e.g. a user
+// double-clicking "Tweet") reuse the original promise and message id,
+// turning duplicates into a single request. The backend additionally
+// caches responses by message id, so any duplicate that still slips
+// through receives the cached response instead of being processed twice.
+const inflightPostRequests = new Map();
+
+// POST routes whose bodies are too large to safely serialize as a Map key
+// (e.g. base64 image uploads). Skipping dedup for them avoids an O(N)
+// JSON.stringify on the hot path; duplicate suppression there is handled
+// by the UI (disabled buttons during upload).
+const dedupSkipPaths = new Set([
+    PRIVATE_POST_UPLOAD_IMAGE,
+]);
+
+function isPostPath(path) {
+    return typeof path === "string" && path.includes("/post/");
+}
+
+function postRequestKey(path, body) {
+    if (dedupSkipPaths.has(path)) return null;
+    try {
+        return path + "|" + JSON.stringify(body ?? {});
+    } catch (_) {
+        return null;
+    }
+}
 
 export const warpnetService = {
     setQR(qrData) {
@@ -101,6 +170,10 @@ export const warpnetService = {
         return stateMap.get(key)
     },
 
+    async isFirstRun() {
+        return Boolean(await IsFirstRun());
+    },
+
     async signInUser(form) {
         let request = {
             path: PRIVATE_POST_LOGIN,
@@ -110,32 +183,65 @@ export const warpnetService = {
             }
         }
         const resp = await this.sendToNode(request);
-        if (!resp || !resp.identity) {
+        if (!resp) {
             throw new Error("Login failed: no response")
         }
         if (resp.code) {
             throw new Error(resp.message)
         }
-
-        if (!resp.identity) {
-            throw new Error("Login failed: no identity")
+        // Seed the owner profile from the flat AuthNodeInfo first so any
+        // sendToNode call below has node_id/user_id available; getProfile
+        // is fetched on a best-effort basis to back-fill the username.
+        warpnetService.setOwnerProfile({
+            user_id: resp.user_id,
+            node_id: resp.node_id,
+        })
+        try {
+            const profile = await this.getProfile(resp.user_id)
+            if (profile && profile.username) {
+                warpnetService.setOwnerProfile({
+                    user_id: resp.user_id,
+                    node_id: resp.node_id,
+                    username: profile.username,
+                })
+            }
+        } catch (err) {
+            console.error("Failed to fetch owner profile:", err)
         }
-        if (!resp.identity.owner) {
-            throw new Error("Login failed: no identity")
+
+        // The QR carries the full AuthNodeInfo envelope, gzip-compressed at
+        // maximum level (9) and Base45-encoded so it fits in a QR alphanumeric
+        // segment. The Android client reverses the same pipeline before the
+        // pair handshake.
+        const fullPayload = JSON.stringify(resp)
+        let qrData = ""
+        try {
+            qrData = await encodeQRPayload(fullPayload)
+        } catch (err) {
+            console.error("Error encoding QR payload:", err)
         }
-
-        warpnetService.setOwnerProfile(resp.identity.owner)
-
-        // The QR carries the full AuthNodeInfo envelope (identity + node_info)
-        // so the mobile pairing client gets both the credentials and the
-        // multiaddrs/peer-id it needs to dial this node.
-        const qrData = JSON.stringify(resp);
-        resp.identity.token = null // for security reasons
+        resp.token = null // for security reasons
 
         const qrCode = await buildQRCode(qrData)
         warpnetService.setQR(qrCode)
 
         startRefreshNotifications()
+    },
+
+    async logoutUser() {
+        // Tell the node to drop the session, then wipe local state so any
+        // refresh lands back on the login screen. We swallow network errors
+        // so a stuck session can still be cleared client-side.
+        try {
+            await this.sendToNode({ path: PRIVATE_POST_LOGOUT, body: {} })
+        } catch (err) {
+            console.error("Logout request failed (clearing local state anyway):", err)
+        }
+        stopRefreshNotifications()
+        stateMap.clear()
+        try {
+            localStorage.removeItem(`first_run_seen`)
+        } catch (e) {}
     },
 
     async getProfile(userId) {
@@ -337,6 +443,536 @@ export const warpnetService = {
         };
         for (const cb of notificationSubscribers) {
             cb(latestNotifications);
+        }
+        return resp;
+    },
+
+    async blockUser(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_BLOCK,
+            body: {
+                blocker_id: owner.user_id,
+                blockee_id: targetUserId,
+            },
+        });
+        // Mirror the write into the local cache so isUserBlocked
+        // reports the new state immediately, without waiting for a
+        // refetch.
+        blockedIdsCache.add(targetUserId);
+        return resp;
+    },
+
+    async unblockUser(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_UNBLOCK,
+            body: {
+                blocker_id: owner.user_id,
+                blockee_id: targetUserId,
+            },
+        });
+        blockedIdsCache.delete(targetUserId);
+        return resp;
+    },
+
+    // isUserBlocked answers from the local cache. The first call lazily
+    // pulls the full block list (a single page at a time until exhausted)
+    // so we don't have to roundtrip per-tweet to know whether to hide it.
+    async isUserBlocked(targetUserId) {
+        if (!targetUserId) return false;
+        await this.ensureBlockedCache();
+        return blockedIdsCache.has(targetUserId);
+    },
+
+    async ensureBlockedCache() {
+        if (blockedCachePrimed) return;
+        const owner = this.getOwnerProfile()
+        if (!owner) { blockedCachePrimed = true; return; }
+        let cursor = '';
+        const seen = new Set();
+        try {
+            while (true) {
+                const resp = await this.sendToNode({
+                    path: PRIVATE_GET_BLOCKS,
+                    body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+                });
+                const ids = resp?.ids || [];
+                for (const id of ids) seen.add(id);
+                const next = resp?.cursor || '';
+                if (!next || next === endCursor || ids.length === 0) break;
+                if (next === cursor) break;
+                cursor = next;
+            }
+        } catch (err) {
+            console.warn('failed to prime blocked-users cache:', err);
+        }
+        // Merge with anything blockUser() may have written before the
+        // initial prime completed.
+        for (const id of blockedIdsCache) seen.add(id);
+        blockedIdsCache.clear();
+        for (const id of seen) blockedIdsCache.add(id);
+        blockedCachePrimed = true;
+    },
+
+    async getBlocks(cursorReset) {
+        let cursor = this.getCursor('blocks')
+        if (cursorReset) cursor = '';
+        if (cursor === endCursor) return { ids: [], cursor: endCursor };
+        const owner = this.getOwnerProfile()
+        if (!owner) return { ids: [], cursor: endCursor };
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_BLOCKS,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor,
+            },
+        });
+        if (!resp) return { ids: [], cursor: endCursor };
+        this.setCursor('blocks', resp.cursor || 'end')
+        // Reflect this page into the local cache.
+        for (const id of (resp.ids || [])) blockedIdsCache.add(id);
+        if ((resp.cursor || endCursor) === endCursor) blockedCachePrimed = true;
+        return resp;
+    },
+
+    // isUserBlockedSync returns the current cached answer without
+    // touching the network. Callers that haven't awaited
+    // ensureBlockedCache() may get a stale `false` immediately after
+    // app start.
+    isUserBlockedSync(targetUserId) {
+        return !!targetUserId && blockedIdsCache.has(targetUserId);
+    },
+
+    async muteUser(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_MUTE,
+            body: {
+                muter_id: owner.user_id,
+                mutee_id: targetUserId,
+            },
+        });
+    },
+
+    async unmuteUser(targetUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_UNMUTE,
+            body: {
+                muter_id: owner.user_id,
+                mutee_id: targetUserId,
+            },
+        });
+    },
+
+    async getMutes(cursorReset) {
+        let cursor = this.getCursor('mutes')
+        if (cursorReset) cursor = '';
+        if (cursor === endCursor) return { ids: [], cursor: endCursor };
+        const owner = this.getOwnerProfile()
+        if (!owner) return { ids: [], cursor: endCursor };
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_MUTES,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor,
+            },
+        });
+        if (!resp) return { ids: [], cursor: endCursor };
+        this.setCursor('mutes', resp.cursor || 'end')
+        return resp;
+    },
+
+    async getFilter(filterId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_GET_FILTER,
+            body: {
+                user_id: owner.user_id,
+                filter_id: filterId,
+            },
+        });
+    },
+
+    async getFilters(cursor) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return { filters: [], cursor: 'end' };
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_FILTERS,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { filters: [], cursor: 'end' };
+    },
+
+    async createFilter(filter) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FILTER,
+            body: {
+                user_id: owner.user_id,
+                title: filter.title || '',
+                context: filter.context || [],
+                action: filter.action || 'warn',
+                expires_at: filter.expires_at || null,
+                keywords: filter.keywords || [],
+            },
+        });
+    },
+
+    async updateFilter(filter) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FILTER_UPDATE,
+            body: {
+                user_id: owner.user_id,
+                id: filter.id,
+                title: filter.title || '',
+                context: filter.context || [],
+                action: filter.action || '',
+                expires_at: filter.expires_at || null,
+                keywords: [],
+            },
+        });
+    },
+
+    async deleteFilter(filterId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_DELETE_FILTER,
+            body: {
+                user_id: owner.user_id,
+                filter_id: filterId,
+            },
+        });
+    },
+
+    async addFilterKeyword(filterId, keyword, wholeWord) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FILTER_KEYWORD,
+            body: {
+                user_id: owner.user_id,
+                filter_id: filterId,
+                keyword: keyword,
+                whole_word: !!wholeWord,
+            },
+        });
+    },
+
+    async updateFilterKeyword(keywordId, keyword, wholeWord) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+            body: {
+                user_id: owner.user_id,
+                keyword_id: keywordId,
+                keyword: keyword,
+                whole_word: !!wholeWord,
+            },
+        });
+    },
+
+    async deleteFilterKeyword(keywordId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_DELETE_FILTER_KEYWORD,
+            body: {
+                user_id: owner.user_id,
+                keyword_id: keywordId,
+            },
+        });
+    },
+
+    async getFollowRequests(cursor) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return { follower_ids: [], cursor: 'end' };
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_FOLLOW_REQUESTS,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { follower_ids: [], cursor: 'end' };
+    },
+
+    async authorizeFollowRequest(followerId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE,
+            body: {
+                user_id: owner.user_id,
+                follower_id: followerId,
+            },
+        });
+    },
+
+    async rejectFollowRequest(followerId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_FOLLOW_REQUEST_REJECT,
+            body: {
+                user_id: owner.user_id,
+                follower_id: followerId,
+            },
+        });
+    },
+
+    async editTweet(tweetId, text) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_TWEET_EDIT,
+            body: {
+                tweet_id: tweetId,
+                user_id: owner.user_id,
+                text: text,
+            },
+        });
+    },
+
+    async searchUsers(query, cursor) {
+        if (!query) return { users: [], cursor: 'end' };
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_USERS_SEARCH,
+            body: {
+                query: query,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { users: [], cursor: 'end' };
+    },
+
+    async updateMediaMeta(key, description, focusX, focusY) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_MEDIA_META,
+            body: {
+                user_id: owner.user_id,
+                key: key,
+                description: description || '',
+                focus_x: focusX || 0,
+                focus_y: focusY || 0,
+            },
+        });
+    },
+
+    async getMediaMeta(key) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_GET_MEDIA,
+            body: {
+                user_id: owner.user_id,
+                key: key,
+            },
+        });
+    },
+
+    async subscribeUser(targetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_SUBSCRIBE_USER,
+            body: {
+                self_id: owner.user_id,
+                target_id: targetId,
+            },
+        });
+    },
+
+    async unsubscribeUser(targetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_UNSUBSCRIBE_USER,
+            body: {
+                self_id: owner.user_id,
+                target_id: targetId,
+            },
+        });
+    },
+
+    async getTweetLikers(tweetId, ownerUserId, cursor) {
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_TWEET_LIKERS,
+            body: {
+                tweet_id: tweetId,
+                owner_user_id: ownerUserId,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { users: [], cursor: 'end' };
+    },
+
+    async getTweetRetweeters(tweetId, ownerUserId, cursor) {
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_TWEET_RETWEETERS,
+            body: {
+                tweet_id: tweetId,
+                owner_user_id: ownerUserId,
+                limit: defaultLimit,
+                cursor: cursor || '',
+            },
+        });
+        return resp || { users: [], cursor: 'end' };
+    },
+
+
+    async pinTweet(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const request = {
+            path: PUBLIC_POST_PIN,
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+            },
+        }
+        return await this.sendToNode(request);
+    },
+
+    async unpinTweet(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const request = {
+            path: PUBLIC_POST_UNPIN,
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+            },
+        }
+        return await this.sendToNode(request);
+    },
+
+    async bookmarkTweet(tweetId, ownerUserId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const request = {
+            path: PRIVATE_POST_BOOKMARK,
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+                owner_user_id: ownerUserId,
+            },
+        }
+        return await this.sendToNode(request);
+    },
+
+    async unbookmarkTweet(tweetId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        const request = {
+            path: PRIVATE_POST_UNBOOKMARK,
+            body: {
+                user_id: owner.user_id,
+                tweet_id: tweetId,
+            },
+        }
+        return await this.sendToNode(request);
+    },
+
+    async getBookmarks(cursorReset) {
+        let cursor = this.getCursor('bookmarks')
+        if (cursorReset) {
+            cursor = ''
+        }
+        if (cursor === endCursor) {
+            return { items: [], cursor: endCursor };
+        }
+        const owner = this.getOwnerProfile()
+        if (!owner) return { items: [], cursor: endCursor };
+        const request = {
+            path: PRIVATE_GET_BOOKMARKS,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor: cursor,
+            },
+        }
+        const resp = await this.sendToNode(request);
+        if (!resp) return { items: [], cursor: endCursor };
+        this.setCursor('bookmarks', resp.cursor || 'end')
+
+        // Backend returns the bookmark index entries (tweet_id +
+        // owner_user_id). Hydrate each into the full Tweet so the view
+        // can render it inline like a timeline tweet.
+        const rawItems = resp.items || [];
+        const hydrated = await Promise.all(rawItems.map(async (b) => {
+            if (!b || !b.tweet_id) return null;
+            try {
+                const tweet = await this.getTweet({
+                    userId: b.owner_user_id || owner.user_id,
+                    tweetId: b.tweet_id,
+                });
+                return tweet ? { ...b, tweet } : null;
+            } catch (e) {
+                console.warn('bookmark hydrate failed:', b, e);
+                return null;
+            }
+        }));
+        return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
+    },
+
+    async getNotification(notificationId) {
+        if (!notificationId) return null;
+        const request = {
+            path: PRIVATE_GET_NOTIFICATION,
+            body: {
+                notification_id: notificationId,
+            },
+        }
+        const resp = await this.sendToNode(request);
+        return resp || null;
+    },
+
+    async markNotificationRead(notificationId) {
+        if (!notificationId) return null;
+        const request = {
+            path: PRIVATE_POST_NOTIFICATION_READ,
+            body: {
+                notification_id: notificationId,
+            },
+        }
+        const resp = await this.sendToNode(request);
+
+        // Optimistic local update so the SideNav badge ticks down
+        // without waiting for the next poll. Flip the matching
+        // notification's is_read and decrement unread_count.
+        const target = latestNotifications.notifications.find(n => n && n.id === notificationId);
+        if (target && !target.is_read) {
+            target.is_read = true;
+            latestNotifications = {
+                unread_count: Math.max(0, (latestNotifications.unread_count || 1) - 1),
+                notifications: latestNotifications.notifications,
+            };
+            for (const cb of notificationSubscribers) {
+                cb(latestNotifications);
+            }
         }
         return resp;
     },
@@ -591,7 +1227,13 @@ export const warpnetService = {
         if (!repliesResp.replies || repliesResp.replies.length === 0) {
             return []
         }
-        return repliesResp.replies;
+        // Backend ships a ReplyNode tree (`{ children, reply }`); the UI
+        // wants plain Tweet records. Flatten one level — the top-level
+        // replies are what's rendered; nested children would need a
+        // dedicated thread view.
+        return repliesResp.replies
+            .map(node => (node && node.reply) ? node.reply : node)
+            .filter(t => t && t.id);
     },
 
     async getReply({rootId, replyId, userId}) {
@@ -652,6 +1294,35 @@ export const warpnetService = {
         return unlikeResp.count;
     },
 
+    // viewTweet returns the new view count on success, or `null` if
+    // the request failed in any way (no owner, network/handler error,
+    // malformed response). `null` is distinct from a legitimate count
+    // of 0 so callers can decide whether to retry.
+    async viewTweet(tweetId, authorId) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+
+        const request = {
+            path: PUBLIC_POST_VIEW,
+            body: {
+                user_id: authorId,
+                tweet_id: tweetId,
+                viewer_id: owner.user_id,
+            },
+        }
+
+        try {
+            const resp = await this.sendToNode(request);
+            if (resp && typeof resp.count === 'number') {
+                return resp.count;
+            }
+            return null;
+        } catch (err) {
+            console.error(`failed to record view for tweet [${tweetId}]`, err);
+            return null;
+        }
+    },
+
     async setLiker(tweetId, profileId, profileObj) {
         const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
         stateMap.set(cacheKey, profileObj)
@@ -677,10 +1348,32 @@ export const warpnetService = {
         localStorage.removeItem(cacheKey)
     },
 
-    async retweetTweet({tweetId, userId, username, text}) {
+    async retweetTweet({tweetId, userId, username, text, comment}) {
         const owner = this.getOwnerProfile()
 
-        const request = {
+        // The optional `comment` (when non-empty) turns the retweet
+        // into a quote — a regular tweet authored by the retweeter
+        // whose text is the comment and which carries quoted_tweet_id
+        // / quoted_user_id pointing at the source. Without a comment
+        // it's a plain retweet that just echoes the source.
+        const hasComment = !!comment && !!comment.trim();
+        if (hasComment) {
+            return await this.sendToNode({
+                path: PUBLIC_POST_RETWEET,
+                body: {
+                    id: tweetId,
+                    user_id: owner.user_id,
+                    username: owner.username || '',
+                    text: comment.trim(),
+                    retweeted_by: owner.user_id,
+                    quoted_tweet_id: tweetId,
+                    quoted_user_id: userId,
+                    created_at: new Date().toISOString(),
+                    root_id: "",
+                },
+            });
+        }
+        return await this.sendToNode({
             path: PUBLIC_POST_RETWEET,
             body: {
                 id: tweetId,
@@ -691,9 +1384,7 @@ export const warpnetService = {
                 created_at: new Date().toISOString(),
                 root_id: "",
             },
-        }
-
-        return await this.sendToNode(request);
+        });
     },
 
     async unretweetTweet(tweetId) {
@@ -880,19 +1571,36 @@ export const warpnetService = {
     async sendToNode(request) {
         const owner = this.getOwnerProfile()
 
+        const dedupKey = isPostPath(request.path)
+            ? postRequestKey(request.path, request.body)
+            : null;
+        if (dedupKey && inflightPostRequests.has(dedupKey)) {
+            return inflightPostRequests.get(dedupKey);
+        }
+
         request.message_id = generateUUID()
         request.node_id = owner?.node_id || "Blank"
         request.timestamp = new Date().toISOString()
 
-        const result = await Call(request);
-        if (!result) {
-            throw new Error(`Unable to send ${request.message_id}`);
+        const promise = (async () => {
+            const result = await Call(request);
+            if (!result) {
+                throw new Error(`Unable to send ${request.message_id}`);
+            }
+            if (!result.body) {
+                console.error(`${result.code}: ${result.message}`);
+                return {};
+            }
+            return result.body;
+        })();
+
+        if (dedupKey) {
+            inflightPostRequests.set(dedupKey, promise);
+            const cleanup = () => inflightPostRequests.delete(dedupKey);
+            promise.then(cleanup, cleanup);
         }
-        if (!result.body) {
-            console.error(`${result.code}: ${result.message}`);
-            return {};
-        }
-        return result.body;
+
+        return promise;
     }
 }
 
