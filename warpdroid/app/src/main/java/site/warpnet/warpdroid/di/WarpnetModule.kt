@@ -23,7 +23,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import java.util.Date
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
 import okhttp3.OkHttpClient
+import site.warpnet.transport.ConnectionMonitor
 import site.warpnet.transport.Ed25519IdentityStore
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.WarpnetTransport
@@ -73,6 +75,28 @@ object WarpnetModule {
     fun providesPairedNodeStore(
         @ApplicationContext context: Context,
     ): PairedNodeStore = PairedNodeStore(context)
+
+    /**
+     * Single live ConnectionMonitor for the process. Dial candidates are
+     * sourced lazily from [PairedNodeStore] so a re-pair propagates
+     * automatically — the closure captures the store by reference, not
+     * its value at injection time.
+     */
+    @Provides
+    @Singleton
+    fun providesConnectionMonitor(
+        client: WarpnetClient,
+        pairedNodeStore: PairedNodeStore,
+        @ApplicationScope scope: CoroutineScope,
+    ): ConnectionMonitor = WarpnetTransport.createConnectionMonitor(
+        client = client,
+        scope = scope,
+        dialAddresses = {
+            pairedNodeStore.load()?.let { paired ->
+                paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
+            } ?: emptyList()
+        },
+    )
 
     // Kept for call-site compatibility: the deleted NetworkModule used to
     // provide this for WarpdroidApplication and PlayerModule. Media playback

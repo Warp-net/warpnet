@@ -293,6 +293,19 @@ func (c *clientNode) isConnected() bool {
 	return connectedness == network.Connected || connectedness == network.Limited
 }
 
+// connectedness returns the libp2p Connectedness#String for the paired
+// desktop peer. Surface for the Kotlin ConnectionMonitor, which owns the
+// reconnect loop; Go only reports the snapshot. Returns "NotConnected"
+// when no peer is paired yet.
+func (c *clientNode) connectedness() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.desktopPeerID == "" {
+		return network.NotConnected.String()
+	}
+	return c.host.Network().Connectedness(c.desktopPeerID).String()
+}
+
 func (c *clientNode) disconnect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

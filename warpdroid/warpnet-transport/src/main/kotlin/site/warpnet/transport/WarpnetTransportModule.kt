@@ -6,6 +6,7 @@
 package site.warpnet.transport
 
 import com.squareup.moshi.Moshi
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Hilt module lives in the `app` module so it can bind app-scoped types. This
@@ -22,4 +23,21 @@ object WarpnetTransport {
      * the store needs no persistence handle.
      */
     fun createIdentityStore(): Ed25519IdentityStore = Ed25519IdentityStore()
+
+    /**
+     * Build the connection monitor that polls the live link state and
+     * runs the reconnect loop. [dialAddresses] is wired by the app
+     * layer so the transport module stays independent of any concrete
+     * paired-node store.
+     */
+    fun createConnectionMonitor(
+        client: WarpnetClient,
+        scope: CoroutineScope,
+        dialAddresses: suspend () -> List<String>,
+    ): ConnectionMonitor = ConnectionMonitor(
+        client = client,
+        binding = DefaultBinding,
+        dialAddresses = dialAddresses,
+        parentScope = scope,
+    )
 }
