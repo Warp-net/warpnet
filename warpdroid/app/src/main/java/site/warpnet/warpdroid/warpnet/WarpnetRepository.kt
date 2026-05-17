@@ -1022,8 +1022,29 @@ class WarpnetRepository @Inject constructor(
         // doesn't pay 30x serialised round-trip latency. Failures degrade
         // to zero counts; the toTweet baseline already matches that.
         val viewerId = pairedNodeStore.load()?.userId.orEmpty()
+        // Quoted-source tweets fan out in parallel too. The map keys by
+        // (quotedTweetId, quotedUserId) so two quotes of the same source
+        // collapse to one RPC. Inner getStatus() doesn't recurse into
+        // hydrateTweets, so the nested Tweet comes back with quote=null
+        // and we don't pay an unbounded fetch tree.
+        val quoteJobs = tweets
+            .mapNotNull { t ->
+                val qId = t.quotedTweetId.orEmpty()
+                val qUser = t.quotedUserId.orEmpty()
+                if (qId.isBlank() || qUser.isBlank()) null else (qId to qUser)
+            }
+            .distinct()
+            .associateWith { (qId, qUser) ->
+                async { runCatching { getStatus(tweetId = qId, userId = qUser) }.getOrNull() }
+            }
+
+        val baseTweets: suspend (WarpnetTweet) -> Tweet = { t ->
+            val base = t.toTweet(resolveUser(t.userId, cache))
+            attachQuote(t, base, quoteJobs)
+        }
+
         if (viewerId.isBlank()) {
-            return@coroutineScope tweets.map { it.toTweet(resolveUser(it.userId, cache)) }
+            return@coroutineScope tweets.map { baseTweets(it) }
         }
         // Retweets reuse the original tweet id, so distinct() avoids
         // firing the same stats RPC twice on a single timeline page.
@@ -1031,15 +1052,51 @@ class WarpnetRepository @Inject constructor(
             async { runCatching { getTweetStats(tweetId = id, userId = viewerId) }.getOrNull() }
         }
         tweets.map { t ->
-            val base = t.toTweet(resolveUser(t.userId, cache))
-            val s = stats[t.id]?.await() ?: return@map base
-            base.copy(
+            val withQuote = baseTweets(t)
+            val s = stats[t.id]?.await() ?: return@map withQuote
+            withQuote.copy(
                 likesCount = s.likesCount.clampToInt(),
                 retweetsCount = s.retweetsCount.clampToInt(),
                 repliesCount = s.repliesCount.clampToInt(),
                 viewsCount = s.viewsCount.clampToInt(),
             )
         }
+    }
+
+    /**
+     * Attach the quoted-source tweet to the rendered [Tweet] when the
+     * wire row has a quoted_tweet_id. State mirrors what the Vue
+     * frontend produces from the same pair of timestamps:
+     *
+     *  - source fetch failed → DELETED (the row stays visible as a
+     *    placeholder card so the user knows the quote pointed at
+     *    something that's gone).
+     *  - source.editedAt is after the quote's createdAt → REVOKED. The
+     *    quoter snapshotted a particular wording; if the author has
+     *    since rewritten it, the quote no longer represents the live
+     *    text and we render the "unavailable" placeholder.
+     *  - otherwise → ACCEPTED.
+     */
+    private suspend fun attachQuote(
+        wire: WarpnetTweet,
+        base: Tweet,
+        sources: Map<Pair<String, String>, kotlinx.coroutines.Deferred<Tweet?>>,
+    ): Tweet {
+        val key = (wire.quotedTweetId.orEmpty() to wire.quotedUserId.orEmpty())
+        if (key.first.isBlank() || key.second.isBlank()) return base
+        val source = sources[key]?.await()
+        val state = when {
+            source == null -> site.warpnet.warpdroid.entity.Quote.State.DELETED
+            source.editedAt != null && source.editedAt.after(base.createdAt) ->
+                site.warpnet.warpdroid.entity.Quote.State.REVOKED
+            else -> site.warpnet.warpdroid.entity.Quote.State.ACCEPTED
+        }
+        return base.copy(
+            quote = site.warpnet.warpdroid.entity.Quote(
+                state = state,
+                quotedStatus = source,
+            ),
+        )
     }
 
     private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
