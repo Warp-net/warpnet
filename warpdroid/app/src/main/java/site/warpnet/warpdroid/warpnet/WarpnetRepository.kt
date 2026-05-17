@@ -112,6 +112,8 @@ class WarpnetRepository @Inject constructor(
     private val updateMediaMetaAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateMediaMetaEvent>()
     private val getMediaAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaEvent>()
     private val getMediaRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaResponse>()
+    private val getImageEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetImageEvent>()
+    private val getImageRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetImageResponse>()
     private val searchUsersAdapter = moshi.adapter<site.warpnet.transport.dto.SearchUsersEvent>()
     private val editTweetAdapter = moshi.adapter<site.warpnet.transport.dto.EditTweetEvent>()
     private val getFollowReqsAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsEvent>()
@@ -937,6 +939,31 @@ class WarpnetRepository @Inject constructor(
                 site.warpnet.transport.dto.DeleteMessageEvent(chatId = chatId, id = messageId),
             ),
         )
+    }
+
+    /**
+     * Fetch a Warpnet-stored image blob by (owning user, blob key). The fat
+     * node returns the file as `"<mime>,<base64>"` because the Vue UI inlines
+     * it straight into a data URL — warpdroid splits the prefix off and
+     * base64-decodes the body so [WarpnetAvatarLoader] can hand the raw
+     * bytes to Glide. Returns null on empty key or decode failure; the
+     * Glide pipeline falls back to the placeholder drawable.
+     */
+    suspend fun getImageBytes(userId: String, key: String): ByteArray? {
+        if (userId.isBlank() || key.isBlank()) return null
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_IMAGE,
+            getImageEventAdapter.toJson(
+                site.warpnet.transport.dto.GetImageEvent(userId = userId, key = key),
+            ),
+        )
+        val file = getImageRespAdapter.fromJson(raw)?.file.orEmpty()
+        if (file.isEmpty()) return null
+        // "<mime>,<base64>" — drop the prefix; if no comma is present the
+        // whole payload is treated as base64 to stay forward-compatible.
+        val comma = file.indexOf(',')
+        val b64 = if (comma >= 0) file.substring(comma + 1) else file
+        return runCatching { android.util.Base64.decode(b64, android.util.Base64.DEFAULT) }.getOrNull()
     }
 
     // -----------------------------------------------------------------

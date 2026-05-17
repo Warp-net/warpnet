@@ -44,8 +44,8 @@ object WarpnetMapper {
         createdAt = parseDate(createdAt),
         note = bio,
         url = "$FAKE_BASE_URL/users/$id",
-        avatar = avatarKey.orEmpty(),
-        header = backgroundImageKey,
+        avatar = warpnetImageUrl(id, avatarKey),
+        header = warpnetImageUrl(id, backgroundImageKey),
         locked = locked,
         followersCount = followersCount.toInt(),
         followingCount = followingsCount.toInt(),
@@ -58,10 +58,20 @@ object WarpnetMapper {
         username = id,
         displayName = username,
         url = "$FAKE_BASE_URL/users/$id",
-        avatar = avatarKey.orEmpty(),
-        staticAvatar = avatarKey.orEmpty(),
+        avatar = warpnetImageUrl(id, avatarKey),
+        staticAvatar = warpnetImageUrl(id, avatarKey),
         note = bio,
     )
+
+    /**
+     * Build the synthetic URL that [WarpnetAvatarLoader] recognises and
+     * routes through `PUBLIC_GET_IMAGE`. Empty key → empty string, which
+     * the existing `loadAvatar()` helpers treat as "no avatar" and fall
+     * back to the default drawable without ever hitting Glide.
+     */
+    fun warpnetImageUrl(userId: String, key: String?): String =
+        if (userId.isBlank() || key.isNullOrBlank()) ""
+        else "warpnet://avatar/$userId/$key"
 
     fun WarpnetTweet.toTweet(author: WarpnetUser?): Tweet {
         val account = author?.toTimelineAccount() ?: stubTimelineAccount(userId, username)

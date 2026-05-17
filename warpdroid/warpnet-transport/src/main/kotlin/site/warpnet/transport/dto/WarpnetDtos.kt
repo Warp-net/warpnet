@@ -548,6 +548,21 @@ data class DeleteChatEvent(
     @Json(name = "chat_id") val chatId: String,
 )
 
+@JsonClass(generateAdapter = true)
+data class GetImageEvent(
+    @Json(name = "user_id") val userId: String,
+    val key: String,
+)
+
+// Wire shape mirrors event.GetImageResponse. The fat node returns the
+// image as a single string "<mime>,<base64>" — the Vue front-end shoves
+// the same string directly into an <img src="…"> data-URL slot. Warpdroid
+// splits and base64-decodes the bytes before handing them to Glide.
+@JsonClass(generateAdapter = true)
+data class GetImageResponse(
+    val file: String = "",
+)
+
 // Wire shape mirrors event.GetAllMessagesEvent on the fat node.
 @JsonClass(generateAdapter = true)
 data class GetMessagesEvent(
