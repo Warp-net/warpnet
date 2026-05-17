@@ -46,7 +46,7 @@ object WarpnetMapper {
         url = "$FAKE_BASE_URL/users/$id",
         avatar = avatarKey.orEmpty(),
         header = backgroundImageKey,
-        locked = false,
+        locked = locked,
         followersCount = followersCount.toInt(),
         followingCount = followingsCount.toInt(),
         statusesCount = tweetsCount.toInt(),

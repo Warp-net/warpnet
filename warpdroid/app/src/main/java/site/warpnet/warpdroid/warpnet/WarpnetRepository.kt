@@ -224,7 +224,17 @@ class WarpnetRepository @Inject constructor(
             getRepliesAdapter.toJson(GetAllRepliesEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
         )
         val page = repliesRespAdapter.fromJson(raw) ?: return emptyList()
-        return hydrateTweets(page.replies)
+        // Backend returns a ReplyNode tree ({reply, children}); flatten
+        // depth-first into the flat List<WarpnetTweet> the UI expects.
+        val flat = mutableListOf<site.warpnet.transport.dto.WarpnetTweet>()
+        fun walk(nodes: List<site.warpnet.transport.dto.WarpnetReplyNode>) {
+            for (n in nodes) {
+                flat += n.reply
+                if (n.children.isNotEmpty()) walk(n.children)
+            }
+        }
+        walk(page.replies)
+        return hydrateTweets(flat)
     }
 
     /**

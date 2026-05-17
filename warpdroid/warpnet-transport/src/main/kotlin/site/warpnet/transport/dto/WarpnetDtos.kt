@@ -63,6 +63,8 @@ data class WarpnetUser(
     @Json(name = "node_id") val nodeId: String = "",
     val network: String = "",
     val website: String? = null,
+    // Locked = "manually-approve followers"; gates the follow-request UI.
+    val locked: Boolean = false,
 )
 
 // Wire shape mirrors domain.Notification on the fat node. The actor is
@@ -420,9 +422,19 @@ data class TweetsResponse(
     val cursor: String = "",
 )
 
+// Wire shape mirrors domain.ReplyNode on the fat node — each list element is
+// a tree node with the reply payload nested under [reply] and any deeper
+// descendants under [children]. Parsing a reply page straight into
+// List<WarpnetTweet> would Moshi-default every field to blank.
+@JsonClass(generateAdapter = true)
+data class WarpnetReplyNode(
+    val reply: WarpnetTweet,
+    val children: List<WarpnetReplyNode> = emptyList(),
+)
+
 @JsonClass(generateAdapter = true)
 data class RepliesResponse(
-    val replies: List<WarpnetTweet> = emptyList(),
+    val replies: List<WarpnetReplyNode> = emptyList(),
     val cursor: String = "",
 )
 
@@ -489,10 +501,12 @@ data class IsFollowerResponse(
     @Json(name = "is_follower") val isFollower: Boolean = false,
 )
 
+// Wire shape mirrors event.TweetStatsResponse. The wire does NOT carry
+// "tweets_count" — that field only exists on user-level stats, not per
+// tweet, so declaring it here just defaulted the value to 0 forever.
 @JsonClass(generateAdapter = true)
 data class TweetStatsResponse(
     @Json(name = "tweet_id") val tweetId: String = "",
-    @Json(name = "tweets_count") val tweetsCount: Long = 0,
     @Json(name = "retweets_count") val retweetsCount: Long = 0,
     @Json(name = "likes_count") val likesCount: Long = 0,
     @Json(name = "replies_count") val repliesCount: Long = 0,
