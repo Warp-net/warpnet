@@ -69,3 +69,4 @@ gen-aar:
 generate:
 	cd frontend && make rebuild && cd -
 	cd warpdroid && make aar && cd -
+	go mod tidy && go mod vendor

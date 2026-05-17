@@ -696,7 +696,7 @@ type BlocklistTerm struct {
 	Level  BlockLevel
 }
 
-func (d *NodeRepo) Blocklist(peerId string) error {
+func (d *NodeRepo) BlocklistExponential(peerId string) error {
 	if d == nil {
 		return ErrNilNodeRepo
 	}

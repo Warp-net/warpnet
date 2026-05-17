@@ -66,7 +66,7 @@ type DiscoveryChallenger interface {
 type NodeStorer interface {
 	BlocklistRemove(peerId string) error
 	IsBlocklisted(peerId string) bool
-	Blocklist(peerId string) error
+	BlocklistExponential(peerId string) error
 	BlocklistTerm(peerId string) (*database.BlocklistTerm, error)
 }
 
@@ -306,7 +306,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	s.node.SetNodePriority(pi.ID, info.Reachability)
 
-	if info.IsBootstrap() || info.IsModerator() {
+	if info.IsBootstrap() {
 		return
 	}
 
@@ -317,13 +317,16 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	)
 	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
 		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
+		if info.Reachability == warpnet.ReachabilityPublic {
+			// NEVER block relay nodes
+			return
+		}
 		if isRepeatable {
-			// TODO block only private nodes.
-			_ = s.nodeRepo.Blocklist(pi.ID.String())
+			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
 		} else {
 			// reset block time
 			_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
-			_ = s.nodeRepo.Blocklist(pi.ID.String())
+			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
 		}
 		s.node.Peerstore().RemovePeer(pi.ID)
 		s.node.SetMinNodePriority(pi.ID)
