@@ -65,6 +65,7 @@ download-golang-armv6:
 gen-aar:
 	cd warpdroid/node && ./build-native.sh && cd -
   
-.PHONY: frontend
-frontend:
+.PHONY: generate
+generate:
 	cd frontend && make rebuild && cd -
+	cd warpdroid && make aar && make build && cd -
