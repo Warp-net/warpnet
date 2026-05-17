@@ -1396,6 +1396,8 @@ golang.org/x/exp/slices
 golang.org/x/image/bmp
 golang.org/x/image/draw
 golang.org/x/image/math/f64
+# golang.org/x/mobile v0.0.0-20190719004257-d2bd2a29d028
+## explicit; go 1.11
 # golang.org/x/mod v0.34.0
 ## explicit; go 1.25.0
 golang.org/x/mod/internal/lazyregexp
