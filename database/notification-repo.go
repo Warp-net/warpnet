@@ -33,7 +33,7 @@ import (
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -60,7 +60,7 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 	}
 
 	if not.Id == "" {
-		not.Id = uuid.New().String()
+		not.Id = ulid.Make().String()
 	}
 	if not.CreatedAt.IsZero() {
 		not.CreatedAt = time.Now()
