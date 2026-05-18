@@ -19,6 +19,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
 import site.warpnet.transport.WarpnetClient
+import site.warpnet.transport.WarpnetException
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 
 /**
@@ -40,6 +41,15 @@ class PairRefreshWorker @AssistedInject constructor(
             ?: return Result.success() // no pairing yet — nothing to refresh
         return try {
             client.pair(rawQr)
+            Result.success()
+        } catch (e: WarpnetException.NotConnected) {
+            // App likely backgrounded; the host is paused and the next
+            // foreground transition will redial. No point retrying with
+            // backoff and burning the radio.
+            Log.d(TAG, "pair refresh skipped: not connected")
+            Result.success()
+        } catch (e: WarpnetException.NotInitialised) {
+            Log.d(TAG, "pair refresh skipped: not initialised")
             Result.success()
         } catch (e: Exception) {
             Log.w(TAG, "pair refresh failed", e)

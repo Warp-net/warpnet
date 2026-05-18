@@ -155,7 +155,10 @@ class WarpnetClient(
                     "unexpected pairing response: $trimmed"
                 )
             if (addrs.isNotEmpty()) {
-                binding.refreshPeerAddrs(addrs.joinToString("\n"))
+                val err = binding.refreshPeerAddrs(addrs.joinToString("\n"))
+                if (err.isNotEmpty()) {
+                    throw WarpnetException.TransportFailure(err)
+                }
             }
         }
     }
