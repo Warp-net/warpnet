@@ -24,7 +24,6 @@ import dagger.hilt.components.SingletonComponent
 import java.util.Date
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
-import okhttp3.OkHttpClient
 import site.warpnet.transport.ConnectionMonitor
 import site.warpnet.transport.Ed25519IdentityStore
 import site.warpnet.transport.WarpnetClient
@@ -97,12 +96,4 @@ object WarpnetModule {
             } ?: emptyList()
         },
     )
-
-    // Kept for call-site compatibility: the deleted NetworkModule used to
-    // provide this for WarpdroidApplication and PlayerModule. Media playback
-    // isn't wired to Warpnet yet, so a vanilla client with no interceptors
-    // is enough to keep the Hilt graph complete.
-    @Provides
-    @Singleton
-    fun providesOkHttpClient(): OkHttpClient = OkHttpClient.Builder().build()
 }

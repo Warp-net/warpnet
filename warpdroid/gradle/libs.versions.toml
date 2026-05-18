@@ -26,7 +26,6 @@ androidx-swiperefresh-layout = "1.1.0"
 androidx-testing = "2.2.0"
 androidx-viewpager2 = "1.1.0"
 androidx-work = "2.11.2"
-coil = "3.3.0"
 conscrypt = "2.5.3"
 coroutines = "1.10.2"
 diffx = "1.2.4"
@@ -116,9 +115,6 @@ androidx-compose-test-manifest = { module = "androidx.compose.ui:ui-test-manifes
 androidx-viewpager2 = { module = "androidx.viewpager2:viewpager2", version.ref = "androidx-viewpager2" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
 androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "androidx-work" }
-coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
-coil-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
-coil-gif = { group = "io.coil-kt.coil3", name = "coil-gif", version.ref = "coil" }
 conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscrypt" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
@@ -165,7 +161,6 @@ androidx = ["androidx-core-ktx", "androidx-appcompat", "androidx-fragment-ktx", 
     "androidx-constraintlayout", "androidx-paging-compose", "androidx-paging-runtime-ktx", "androidx-viewpager2", "androidx-work-runtime-ktx",
     "androidx-core-splashscreen", "androidx-activity", "androidx-activity-compose", "androidx-media3-exoplayer", "androidx-media3-datasource-okhttp",
     "androidx-media3-ui", "androidx-drawerlayout", "androidx-constraintlayout-compose"]
-coil = ["coil-compose", "coil-okhttp", "coil-gif"]
 filemojicompat = ["filemojicompat-core", "filemojicompat-ui", "filemojicompat-defaults"]
 glide = ["glide-core", "glide-okhttp3-integration", "glide-animation-plugin"]
 material-drawer = ["material-drawer-core", "material-drawer-iconics"]

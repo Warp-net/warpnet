@@ -162,10 +162,9 @@ object PlayerModule {
 
     @Provides
     fun provideDataSourceFactory(
-        @ApplicationContext context: Context,
-        okHttpClient: OkHttpClient
+        @ApplicationContext context: Context
     ): DataSource.Factory {
-        return DefaultDataSource.Factory(context, OkHttpDataSource.Factory(okHttpClient))
+        return DefaultDataSource.Factory(context, OkHttpDataSource.Factory(OkHttpClient.Builder().build()))
     }
 
     @Provides

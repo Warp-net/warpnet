@@ -31,8 +31,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.ui.WarpdroidAsyncImage
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.ui.warpdroidDefaultCornerShape
@@ -55,7 +55,7 @@ fun Avatar(
     ) {
         val animateAvatars = LocalPreferences.current.animateAvatars
         val placeholder = painterResource(R.drawable.avatar_default)
-        AsyncImage(
+        WarpdroidAsyncImage(
             model = if (animateAvatars) {
                 url
             } else {
@@ -90,7 +90,7 @@ fun Avatar(
         )
         if (retweetedAvatarUrl != null) {
             val retweetedAvatarPlaceholder = painterResource(R.drawable.avatar_default)
-            AsyncImage(
+            WarpdroidAsyncImage(
                 model = if (animateAvatars) {
                     retweetedAvatarUrl
                 } else {
