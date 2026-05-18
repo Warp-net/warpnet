@@ -95,6 +95,7 @@ import site.warpnet.warpdroid.usecase.LogoutUsecase
 import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.getParcelableExtraCompat
 import site.warpnet.warpdroid.util.hide
+import site.warpnet.warpdroid.util.loadHeader
 import site.warpnet.warpdroid.util.reduceSwipeSensitivity
 import site.warpnet.warpdroid.util.show
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
@@ -576,6 +577,14 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
         DrawerImageLoader.init(object : AbstractDrawerImageLoader() {
             override fun set(imageView: ImageView, uri: Uri, placeholder: Drawable, tag: String?) {
+                // Warpnet has no HTTP URLs for headers/avatars in some
+                // states (newly-paired profile, etc.); skip the Glide
+                // request entirely so logcat isn't spammed with
+                // "Load failed for []" for an empty Uri.
+                if (uri.toString().isBlank()) {
+                    imageView.setImageDrawable(placeholder)
+                    return
+                }
                 if (animateAvatars) {
                     Glide.with(imageView)
                         .load(uri)
@@ -851,6 +860,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     @SuppressLint("CheckResult")
     private fun loadDrawerAvatar(avatarUrl: String, showPlaceholder: Boolean = true) {
+        if (avatarUrl.isBlank()) return
         val hideTopToolbar = preferences.getBoolean(PrefKeys.HIDE_TOP_TOOLBAR, false)
         val animateAvatars = preferences.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false)
 
@@ -944,10 +954,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
         loadDrawerAvatar(activeProfile.profilePictureUrl)
 
-        Glide.with(header.accountHeaderBackground)
-            .asBitmap()
-            .load(activeProfile.profileHeaderUrl)
-            .into(header.accountHeaderBackground)
+        loadHeader(activeProfile.profileHeaderUrl, header.accountHeaderBackground)
 
         val animateEmojis = preferences.getBoolean(PrefKeys.ANIMATE_CUSTOM_EMOJIS, false)
         val profiles: MutableList<IProfile> =

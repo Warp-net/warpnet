@@ -279,11 +279,26 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("empty parent id", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
+	t.Run("empty parent id defaults to root", func(t *testing.T) {
+		// Top-level replies on a thread carry no parent_id from the
+		// client — the handler must fall back to root_id so the
+		// underlying repo lookup runs against the right key.
+		var seenRoot, seenParent string
+		h := StreamGetRepliesHandler(
+			stubReplyRepo{getRepliesTreeFn: func(rootID, parentIdArg string, _ *uint64, _ *string) ([]domain.ReplyNode, string, error) {
+				seenRoot = rootID
+				seenParent = parentIdArg
+				return nil, "", nil
+			}},
+			stubReplyUserRepo{},
+			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: rootId}},
+		)
 		_, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId}), nil)
-		if err == nil || err.Error() != "empty parent id" {
+		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
+		}
+		if seenRoot != rootId || seenParent != rootId {
+			t.Fatalf("expected rootId %q and parentId %q from root fallback, got root=%q parent=%q", rootId, rootId, seenRoot, seenParent)
 		}
 	})
 

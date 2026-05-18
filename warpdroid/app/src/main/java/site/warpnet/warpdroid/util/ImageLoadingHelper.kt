@@ -65,3 +65,21 @@ fun loadAvatar(
         }
     }
 }
+
+/**
+ * Load a banner/header image into [imageView]. Warpnet doesn't expose HTTP
+ * URLs for headers, so the field is almost always blank — short-circuit
+ * with a Glide clear() instead of letting Glide log "Load failed for []"
+ * on every profile view.
+ */
+fun loadHeader(url: String?, imageView: ImageView) {
+    if (url.isNullOrBlank()) {
+        Glide.with(imageView).clear(imageView)
+        return
+    }
+    Glide.with(imageView)
+        .asBitmap()
+        .load(url)
+        .centerCrop()
+        .into(imageView)
+}

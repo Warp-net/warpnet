@@ -315,11 +315,14 @@ func StreamGetRepliesHandler(
 		if err != nil {
 			return nil, err
 		}
-		if ev.ParentId == "" {
-			return nil, warpnet.WarpError("empty parent id")
-		}
 		if ev.RootId == "" {
 			return nil, warpnet.WarpError("empty root id")
+		}
+		// Top-level replies on a thread have no parent — clients send an
+		// empty parent_id in that case. Treat it as the root itself so
+		// the lookup returns the first-tier replies.
+		if ev.ParentId == "" {
+			ev.ParentId = ev.RootId
 		}
 
 		rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)

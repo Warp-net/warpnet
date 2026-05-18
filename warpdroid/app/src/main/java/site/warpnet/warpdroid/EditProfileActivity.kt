@@ -199,7 +199,7 @@ class EditProfileActivity : BaseActivity() {
                             binding.addFieldButton.isVisible =
                                 (me.source?.fields?.size ?: 0) < maxAccountFields
 
-                            if (viewModel.avatarData.value == null) {
+                            if (viewModel.avatarData.value == null && me.avatar.isNotBlank()) {
                                 Glide.with(this@EditProfileActivity)
                                     .load(me.avatar)
                                     .placeholder(R.drawable.avatar_default)
@@ -212,7 +212,7 @@ class EditProfileActivity : BaseActivity() {
                                     .into(binding.avatarPreview)
                             }
 
-                            if (viewModel.headerData.value == null) {
+                            if (viewModel.headerData.value == null && me.header.isNotBlank()) {
                                 Glide.with(this@EditProfileActivity)
                                     .load(me.header)
                                     .into(binding.headerPreview)
