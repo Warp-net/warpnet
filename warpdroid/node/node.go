@@ -38,6 +38,72 @@ type clientNode struct {
 	mu            sync.RWMutex
 	dht           *dht.IpfsDHT
 	privKey       crypto.PrivKey
+
+	// Event ring buffer for libp2p connectedness changes. Notifiee
+	// callbacks push here cheaply; the buffer is drained to log only
+	// when the Kotlin side actually calls a method on the node (so we
+	// don't have a polling goroutine eating the battery).
+	eventsMu sync.Mutex
+	events   []string
+}
+
+// nodeNotifiee is a network.Notifiee that records connection events into
+// the parent clientNode's lazy event buffer. No I/O happens in the
+// callbacks — just an in-memory append.
+type nodeNotifiee struct{ c *clientNode }
+
+func (n *nodeNotifiee) Listen(_ network.Network, _ multiaddr.Multiaddr)      {}
+func (n *nodeNotifiee) ListenClose(_ network.Network, _ multiaddr.Multiaddr) {}
+
+func (n *nodeNotifiee) Connected(_ network.Network, conn network.Conn) {
+	n.c.recordEvent("Connected", conn)
+}
+
+func (n *nodeNotifiee) Disconnected(_ network.Network, conn network.Conn) {
+	n.c.recordEvent("Disconnected", conn)
+}
+
+func (c *clientNode) recordEvent(kind string, conn network.Conn) {
+	dir := "?"
+	switch conn.Stat().Direction {
+	case network.DirInbound:
+		dir = "in"
+	case network.DirOutbound:
+		dir = "out"
+	}
+	transient := ""
+	if conn.Stat().Limited {
+		transient = " (limited)"
+	}
+	line := fmt.Sprintf(
+		"libp2p %s %s peer=%s remote=%s%s",
+		kind, dir, conn.RemotePeer(), conn.RemoteMultiaddr(), transient,
+	)
+	c.eventsMu.Lock()
+	c.events = append(c.events, line)
+	// Cap buffer so a long idle period can't grow it unboundedly.
+	if len(c.events) > 256 {
+		c.events = c.events[len(c.events)-256:]
+	}
+	c.eventsMu.Unlock()
+}
+
+// flushEvents prints any buffered libp2p events through fmt.Printf (which
+// gomobile redirects to adb logcat under the GoLog tag). Called at the top
+// of every public clientNode method so events surface only on real
+// interaction with the binding — no background poller.
+func (c *clientNode) flushEvents() {
+	c.eventsMu.Lock()
+	if len(c.events) == 0 {
+		c.eventsMu.Unlock()
+		return
+	}
+	events := c.events
+	c.events = nil
+	c.eventsMu.Unlock()
+	for _, line := range events {
+		fmt.Println(line)
+	}
 }
 
 // newClient creates a new WarpNet thin client configured as per requirements
@@ -149,6 +215,7 @@ func newClient(
 		dht:     hashTable,
 		privKey: privateKey,
 	}
+	h.Network().Notify(&nodeNotifiee{c: cn})
 
 	for _, addr := range bootstrapNodes {
 		if err := cn.connect(addr); err != nil {
@@ -163,6 +230,7 @@ func newClient(
 // peer and hands them all to host.Connect in one call so libp2p's
 // swarm.DefaultDialRanker can rank and dial them in parallel.
 func (c *clientNode) connect(peerInfo string) error {
+	c.flushEvents()
 	go func() {
 		_ = c.dht.Bootstrap(c.ctx)
 		c.dht.RefreshRoutingTable()
@@ -230,6 +298,7 @@ func (c *clientNode) connect(peerInfo string) error {
 }
 
 func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
+	c.flushEvents()
 	c.mu.RLock()
 	desktopPeerID := c.desktopPeerID
 	c.mu.RUnlock()
@@ -294,6 +363,7 @@ func closeWrite(s network.Stream) {
 // node's auth middleware (warpnet/core/middleware/auth.go) verifies it
 // against the peer ID extracted from the libp2p connection.
 func (c *clientNode) sign(body []byte) (string, error) {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.privKey == nil {
@@ -307,6 +377,7 @@ func (c *clientNode) sign(body []byte) (string, error) {
 }
 
 func (c *clientNode) getPeerID() string {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.host.ID().String()
@@ -314,6 +385,7 @@ func (c *clientNode) getPeerID() string {
 
 // IsConnected checks if connected to the desktop node
 func (c *clientNode) isConnected() bool {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -330,6 +402,7 @@ func (c *clientNode) isConnected() bool {
 // reconnect loop; Go only reports the snapshot. Returns "NotConnected"
 // when no peer is paired yet.
 func (c *clientNode) connectedness() string {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.desktopPeerID == "" {
@@ -339,6 +412,7 @@ func (c *clientNode) connectedness() string {
 }
 
 func (c *clientNode) disconnect() error {
+	c.flushEvents()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -357,6 +431,7 @@ func (c *clientNode) disconnect() error {
 // go to sleep while the app is backgrounded. The host itself stays
 // initialised; resume() re-dials the paired peer.
 func (c *clientNode) pause() {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	for _, conn := range c.host.Network().Conns() {
@@ -371,6 +446,7 @@ func (c *clientNode) pause() {
 // Only the paired peer is dialled; iterating every peerstore entry
 // would burn dial budget on stale DHT routing-table fillers.
 func (c *clientNode) resume() {
+	c.flushEvents()
 	c.mu.RLock()
 	desktopPeerID := c.desktopPeerID
 	c.mu.RUnlock()
@@ -402,6 +478,7 @@ func (c *clientNode) close() error {
 // sync with the fat node's IP / port changes — handy when the desktop
 // moves between networks.
 func (c *clientNode) refreshPeerAddrs(addrs string) error {
+	c.flushEvents()
 	c.mu.RLock()
 	peerID := c.desktopPeerID
 	c.mu.RUnlock()
