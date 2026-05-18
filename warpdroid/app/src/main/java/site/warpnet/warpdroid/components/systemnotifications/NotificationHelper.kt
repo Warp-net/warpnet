@@ -689,11 +689,8 @@ class NotificationHelper @Inject constructor(
     }
 
     // Push notifications: Warpnet has no push gateway. Notifications
-    // arrive via the 2 s poll loop in [NotificationFetcher] only;
-    // every UnifiedPush hook is now a no-op.
+    // arrive via the 2 s poll loop in [NotificationFetcher] only.
     fun arePushNotificationsAvailable(): Boolean = false
-
-    fun fetchNotificationsOnPushMessage(account: AccountEntity) = Unit
 
     companion object {
         const val TAG = "NotificationHelper"

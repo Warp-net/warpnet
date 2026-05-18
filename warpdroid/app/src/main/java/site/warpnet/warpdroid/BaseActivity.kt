@@ -271,7 +271,6 @@ abstract class BaseActivity : AppCompatActivity() {
 
     fun openAsAccount(url: String, account: AccountEntity) {
         lifecycleScope.launch {
-            accountManager.setActiveAccount(account.id)
             val intent = redirectIntent(this@BaseActivity, account.id, url)
 
             startActivity(intent)

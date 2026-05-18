@@ -82,18 +82,6 @@ class AccountManager @Inject constructor() {
     fun getAccountByIdentifier(identifier: String): AccountEntity? =
         accounts.find { it.identifier == identifier }
 
-    /** No-op: single-account model. Preserved for call-site compatibility. */
-    suspend fun setActiveAccount(accountId: Long) {
-        // Warpdroid only ever has the stub account active.
-    }
-
-    /**
-     * No-op: there is nothing to remove. Returns null to signal "no other
-     * account available" so the caller's "last account was logged out" path
-     * runs — except the caller is dead code in Warpdroid.
-     */
-    suspend fun remove(account: AccountEntity): AccountEntity? = null
-
     /** @return true — at least the stub account has notifications enabled. */
     fun areNotificationsEnabled(): Boolean = accounts.any { it.notificationsEnabled }
 

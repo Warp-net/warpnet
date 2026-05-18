@@ -28,6 +28,7 @@ import android.text.SpannableStringBuilder
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.ImageSpan
 import android.text.style.QuoteSpan
 import android.text.style.URLSpan
 import android.util.Log
@@ -126,9 +127,9 @@ internal fun markupHiddenUrls(view: TextView, content: CharSequence): SpannableS
         spannableContent.setSpan(span, start, end + additionalText.length, 0)
 
         val linkDrawable = AppCompatResources.getDrawable(view.context, R.drawable.ic_open_in_new_24dp)!!
-        // ImageSpan does not always align the icon correctly in the line, let's use our custom emoji span for this
-        val linkDrawableSpan = EmojiSpan(view)
-        linkDrawableSpan.imageDrawable = linkDrawable
+        val iconSize = (view.textSize * 1.2f).toInt()
+        linkDrawable.setBounds(0, 0, iconSize, iconSize)
+        val linkDrawableSpan = ImageSpan(linkDrawable, ImageSpan.ALIGN_BASELINE)
 
         val placeholderIndex = end + 2
 

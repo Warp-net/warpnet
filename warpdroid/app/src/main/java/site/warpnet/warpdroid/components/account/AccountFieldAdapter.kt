@@ -24,13 +24,12 @@ import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Field
 import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.util.BindingHolder
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.setClickableText
 
 class AccountFieldAdapter(
     private val linkListener: LinkListener,
-    private val animateEmojis: Boolean
+    @Suppress("UNUSED_PARAMETER") animateEmojis: Boolean
 ) : RecyclerView.Adapter<BindingHolder<ItemAccountFieldBinding>>() {
 
     var emojis: List<Emoji> = emptyList()
@@ -55,15 +54,10 @@ class AccountFieldAdapter(
         val nameTextView = holder.binding.accountFieldName
         val valueTextView = holder.binding.accountFieldValue
 
-        val emojifiedName = field.name.emojify(emojis, nameTextView, animateEmojis)
-        nameTextView.text = emojifiedName
+        nameTextView.text = field.name
 
-        val emojifiedValue = field.value.parseAsWarpnetHtml().emojify(
-            emojis,
-            valueTextView,
-            animateEmojis
-        )
-        setClickableText(valueTextView, emojifiedValue, emptyList(), null, linkListener)
+        val parsedValue = field.value.parseAsWarpnetHtml()
+        setClickableText(valueTextView, parsedValue, emptyList(), null, linkListener)
 
         if (field.verifiedAt != null) {
             valueTextView.setCompoundDrawablesRelativeWithIntrinsicBounds(

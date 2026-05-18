@@ -22,7 +22,6 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ItemMutedUserBinding
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.util.BindingHolder
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.visible
 
@@ -51,12 +50,7 @@ class MutesAdapter(
             val binding = viewHolder.binding
             val context = binding.root.context
 
-            val emojifiedName = account.name.emojify(
-                account.emojis,
-                binding.mutedUserDisplayName,
-                animateEmojis
-            )
-            binding.mutedUserDisplayName.text = emojifiedName
+            binding.mutedUserDisplayName.text = account.name
 
             val formattedUsername = context.getString(R.string.post_username_format, account.username)
             binding.mutedUserUsername.text = formattedUsername

@@ -1,13 +1,11 @@
 package site.warpnet.warpdroid.usecase
 
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
-import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.util.ShareShortcutHelper
 import javax.inject.Inject
 
 class LogoutUsecase @Inject constructor(
-    private val accountManager: AccountManager,
     private val shareShortcutHelper: ShareShortcutHelper,
     private val notificationHelper: NotificationHelper,
 ) {
@@ -22,8 +20,7 @@ class LogoutUsecase @Inject constructor(
      */
     suspend fun logout(account: AccountEntity): Boolean {
         notificationHelper.disableNotificationsForAccount(account)
-        val otherAccountAvailable = accountManager.remove(account) != null
         shareShortcutHelper.removeShortcut(account)
-        return otherAccountAvailable
+        return false
     }
 }
