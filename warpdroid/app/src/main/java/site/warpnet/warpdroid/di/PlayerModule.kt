@@ -56,6 +56,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
 import okhttp3.OkHttpClient
 
 @Module
@@ -160,11 +161,20 @@ object PlayerModule {
         }
     }
 
+    // ExoPlayer's HTTP data source needs an OkHttpClient. Scope to
+    // @Singleton so we reuse one connection pool / thread pool for every
+    // media playback in the process — building a fresh client per
+    // DataSourceFactory instantiation would defeat that pooling.
+    @Provides
+    @Singleton
+    fun providePlayerOkHttpClient(): OkHttpClient = OkHttpClient.Builder().build()
+
     @Provides
     fun provideDataSourceFactory(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        okHttpClient: OkHttpClient,
     ): DataSource.Factory {
-        return DefaultDataSource.Factory(context, OkHttpDataSource.Factory(OkHttpClient.Builder().build()))
+        return DefaultDataSource.Factory(context, OkHttpDataSource.Factory(okHttpClient))
     }
 
     @Provides

@@ -32,3 +32,9 @@ fun String.emojify(emojis: List<Emoji>): AnnotatedString = AnnotatedString(this)
 @Composable
 @Suppress("UNUSED_PARAMETER")
 fun List<Emoji>.toInlineContent(): Map<String, InlineTextContent> = emptyMap()
+
+// internal tag Compose uses to identify inline content. Still referenced
+// by [site.warpnet.warpdroid.util.SpanUtils] and TweetText to wire spans
+// in the HTML pipeline; harmless to keep even though our inline-content
+// map is empty now.
+const val INLINE_CONTENT_TAG = "androidx.compose.foundation.text.inlineContent"

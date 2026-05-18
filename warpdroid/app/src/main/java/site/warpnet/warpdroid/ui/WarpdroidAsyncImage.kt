@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
@@ -48,9 +49,15 @@ fun WarpdroidAsyncImage(
     val context = LocalContext.current
     var bitmap by remember(model) { mutableStateOf<Bitmap?>(null) }
     var failed by remember(model) { mutableStateOf(model == null) }
+    // Layout dimensions are captured once the Image lays out and reused as
+    // the override() size in Glide so it can downsample large media. Until
+    // the first layout pass arrives we keep SIZE_ORIGINAL so a synchronous
+    // first frame stays correct on tiny placeholders (placeholder/error).
+    var layoutWidth by remember(model) { mutableStateOf(0) }
+    var layoutHeight by remember(model) { mutableStateOf(0) }
 
-    DisposableEffect(model) {
-        if (model == null) {
+    DisposableEffect(model, layoutWidth, layoutHeight) {
+        if (model == null || layoutWidth == 0 || layoutHeight == 0) {
             return@DisposableEffect onDispose { }
         }
         val target = object : CustomTarget<Bitmap>() {
@@ -66,7 +73,11 @@ fun WarpdroidAsyncImage(
                 failed = true
             }
         }
-        Glide.with(context).asBitmap().load(model).into(target)
+        Glide.with(context)
+            .asBitmap()
+            .load(model)
+            .override(layoutWidth, layoutHeight)
+            .into(target)
         onDispose {
             Glide.with(context).clear(target)
         }
@@ -79,7 +90,12 @@ fun WarpdroidAsyncImage(
     Image(
         painter = painter,
         contentDescription = contentDescription,
-        modifier = modifier,
+        modifier = modifier.onSizeChanged { size ->
+            if (size.width > 0 && size.height > 0) {
+                layoutWidth = size.width
+                layoutHeight = size.height
+            }
+        },
         contentScale = contentScale,
         alignment = alignment,
     )
