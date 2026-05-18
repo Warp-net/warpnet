@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/multiformats/go-multiaddr"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,6 +159,15 @@ func newClient(
 	return cn, nil
 }
 
+// connect accepts one or more newline-separated multiaddrs for a single
+// peer. All addresses are added to the peerstore in one batch and handed
+// to host.Connect in a single call — libp2p's swarm.DefaultDialRanker
+// then ranks them (LAN before public-direct before circuit-v2 relay,
+// with delays between tiers) and dials in parallel, returning when the
+// first one succeeds. The old per-address loop in WarpnetClient.connectAny
+// fought that ranker by feeding the swarm addresses one at a time, so the
+// public relay always won the race even when the phone was on the same
+// Wi-Fi as the desktop.
 func (c *clientNode) connect(peerInfo string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -170,30 +180,56 @@ func (c *clientNode) connect(peerInfo string) error {
 	if peerInfo == "" {
 		return fmt.Errorf("not connected to desktop node")
 	}
-	addrInfo, err := peer.AddrInfoFromString(peerInfo)
-	if err != nil {
-		return err
+
+	var (
+		peerID peer.ID
+		addrs  []multiaddr.Multiaddr
+	)
+	for _, line := range strings.Split(peerInfo, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		maddr, err := multiaddr.NewMultiaddr(line)
+		if err != nil {
+			// Skip unparseable entries silently so a single typo in
+			// the QR can't kill the whole dial. The caller already
+			// validated structurally before getting here.
+			continue
+		}
+		info, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil || info == nil {
+			continue
+		}
+		if peerID == "" {
+			peerID = info.ID
+		} else if peerID != info.ID {
+			// Mixed peer IDs in one batch — bug on the caller side.
+			// Drop the mismatched entries and keep going.
+			continue
+		}
+		addrs = append(addrs, info.Addrs...)
 	}
-	if addrInfo == nil {
+	if peerID == "" || len(addrs) == 0 {
 		return fmt.Errorf("invalid peer info: %s", peerInfo)
 	}
-	if len(addrInfo.ID) > 52 {
-		return fmt.Errorf("stream: node id is too long: %s", peerInfo)
+	if len(peerID) > 52 {
+		return fmt.Errorf("stream: node id is too long: %s", peerID)
 	}
-	if err := addrInfo.ID.Validate(); err != nil {
+	if err := peerID.Validate(); err != nil {
 		return err
 	}
 
-	c.host.Peerstore().AddAddrs(addrInfo.ID, addrInfo.Addrs, peerstore.PermanentAddrTTL)
+	c.host.Peerstore().AddAddrs(peerID, addrs, peerstore.PermanentAddrTTL)
 
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
 
-	if err := c.host.Connect(ctx, *addrInfo); err != nil {
+	if err := c.host.Connect(ctx, peer.AddrInfo{ID: peerID, Addrs: addrs}); err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}
 
-	c.desktopPeerID = addrInfo.ID
+	c.desktopPeerID = peerID
 	return nil
 }
 

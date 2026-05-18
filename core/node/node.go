@@ -292,11 +292,28 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 
 	relayState := warpnet.RelayStatusWaiting
 
+	// Drop addresses that are obviously unreachable from a remote peer
+	// (loopback, link-local autoconf, multicast, docker default bridges).
+	// libp2p's dial ranker only orders the addresses we give it — it
+	// can't tell that 172.17.0.x is a docker bridge with no route from
+	// outside the host. Filtering at the QR-emission stage saves the
+	// thin client a 5–30 s dial budget per dead address.
+	//
+	// We do NOT sort: libp2p's swarm.DefaultDialRanker already prefers
+	// LAN → public-direct → relay (with delays between tiers) when the
+	// receiver hands a single peer.AddrInfo with all addresses to
+	// host.Connect. The thin client batches addresses in one call now,
+	// so the ranker actually runs.
 	addrs := n.node.Peerstore().Addrs(n.node.ID())
 	addresses := make([]string, 0, len(addrs))
 	for _, ma := range addrs {
 		if warpnet.IsRelayMultiaddress(ma) {
 			relayState = warpnet.RelayStatusRunning
+			addresses = append(addresses, ma.String())
+			continue
+		}
+		if !warpnet.IsRoutableMultiaddress(ma) {
+			continue
 		}
 		addresses = append(addresses, ma.String())
 	}

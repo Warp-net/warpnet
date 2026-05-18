@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Mobile-friendly wrapper types for gomobile compatibility
@@ -145,15 +146,28 @@ func Pause() {
 	}
 }
 
-// Resume foreground transition
+// Resume foreground transition. Kicked from the Android onStart lifecycle
+// callback, which runs on the main thread — host.Connect can block for the
+// full dial budget, so dispatch into a goroutine and bound the wait so a
+// dead peer can't wedge subsequent lifecycle callbacks. Only the paired
+// desktop peer is re-dialled; iterating every peerstore entry would burn
+// dial budget on stale DHT routing-table fillers.
 func Resume() {
 	if clientInstance == nil || clientInstance.host == nil {
 		return
 	}
-	for _, id := range clientInstance.host.Peerstore().PeersWithAddrs() {
-		info := clientInstance.host.Peerstore().PeerInfo(id)
-		_ = clientInstance.host.Connect(context.Background(), info)
+	clientInstance.mu.RLock()
+	desktopPeerID := clientInstance.desktopPeerID
+	clientInstance.mu.RUnlock()
+	if desktopPeerID == "" {
+		return
 	}
+	info := clientInstance.host.Peerstore().PeerInfo(desktopPeerID)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = clientInstance.host.Connect(ctx, info)
+	}()
 }
 
 func Shutdown() string {
