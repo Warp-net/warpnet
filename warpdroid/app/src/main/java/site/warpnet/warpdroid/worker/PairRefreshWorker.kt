@@ -64,8 +64,8 @@ class PairRefreshWorker @AssistedInject constructor(
 
         // Once per 6 h is plenty for picking up fat-node IP changes —
         // anything more aggressive just burns the radio. Constrained to
-        // unmetered networks with charging-or-not-low battery so we
-        // never wake the device into a refresh on cellular or at 5%.
+        // not-low battery so we never wake the device into a refresh
+        // at 5%.
         private val REFRESH_INTERVAL_HOURS = 6L
 
         fun schedule(context: Context) {
@@ -76,7 +76,7 @@ class PairRefreshWorker @AssistedInject constructor(
             )
                 .setConstraints(
                     Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.UNMETERED)
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
                         .setRequiresBatteryNotLow(true)
                         .build()
                 )
