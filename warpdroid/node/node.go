@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/multiformats/go-multiaddr"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,10 +159,10 @@ func newClient(
 	return cn, nil
 }
 
+// connect accepts one or more newline-separated multiaddrs for a single
+// peer and hands them all to host.Connect in one call so libp2p's
+// swarm.DefaultDialRanker can rank and dial them in parallel.
 func (c *clientNode) connect(peerInfo string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	go func() {
 		_ = c.dht.Bootstrap(c.ctx)
 		c.dht.RefreshRoutingTable()
@@ -170,30 +171,61 @@ func (c *clientNode) connect(peerInfo string) error {
 	if peerInfo == "" {
 		return fmt.Errorf("not connected to desktop node")
 	}
-	addrInfo, err := peer.AddrInfoFromString(peerInfo)
-	if err != nil {
-		return err
+
+	var (
+		peerID peer.ID
+		addrs  []multiaddr.Multiaddr
+	)
+	for _, line := range strings.Split(peerInfo, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		maddr, err := multiaddr.NewMultiaddr(line)
+		if err != nil {
+			// Skip unparseable entries silently so a single typo in
+			// the QR can't kill the whole dial. The caller already
+			// validated structurally before getting here.
+			continue
+		}
+		info, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil || info == nil {
+			continue
+		}
+		if peerID == "" {
+			peerID = info.ID
+		} else if peerID != info.ID {
+			// Mixed peer IDs in one batch — bug on the caller side.
+			// Drop the mismatched entries and keep going.
+			continue
+		}
+		addrs = append(addrs, info.Addrs...)
 	}
-	if addrInfo == nil {
+	if peerID == "" || len(addrs) == 0 {
 		return fmt.Errorf("invalid peer info: %s", peerInfo)
 	}
-	if len(addrInfo.ID) > 52 {
-		return fmt.Errorf("stream: node id is too long: %s", peerInfo)
+	if len(peerID) > 52 {
+		return fmt.Errorf("stream: node id is too long: %s", peerID)
 	}
-	if err := addrInfo.ID.Validate(); err != nil {
+	if err := peerID.Validate(); err != nil {
 		return err
 	}
 
-	c.host.Peerstore().AddAddrs(addrInfo.ID, addrInfo.Addrs, peerstore.PermanentAddrTTL)
+	// Peerstore is internally thread-safe and host.Connect can take 30s —
+	// don't hold c.mu across either, or pause/resume/disconnect would
+	// block on the dial.
+	c.host.Peerstore().AddAddrs(peerID, addrs, peerstore.PermanentAddrTTL)
 
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
 
-	if err := c.host.Connect(ctx, *addrInfo); err != nil {
+	if err := c.host.Connect(ctx, peer.AddrInfo{ID: peerID, Addrs: addrs}); err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}
 
-	c.desktopPeerID = addrInfo.ID
+	c.mu.Lock()
+	c.desktopPeerID = peerID
+	c.mu.Unlock()
 	return nil
 }
 
@@ -319,6 +351,41 @@ func (c *clientNode) disconnect() error {
 	}
 
 	return nil
+}
+
+// pause drops all live connections on the libp2p host so the radio can
+// go to sleep while the app is backgrounded. The host itself stays
+// initialised; resume() re-dials the paired peer.
+func (c *clientNode) pause() {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, conn := range c.host.Network().Conns() {
+		_ = conn.Close()
+	}
+}
+
+// resume re-dials the paired desktop peer in the background. Kicked from
+// the Android onStart lifecycle callback, which runs on the main thread,
+// so the actual host.Connect runs in a goroutine bounded by a 10s
+// ceiling — a dead peer can't wedge subsequent lifecycle callbacks.
+// Only the paired peer is dialled; iterating every peerstore entry
+// would burn dial budget on stale DHT routing-table fillers.
+func (c *clientNode) resume() {
+	c.mu.RLock()
+	desktopPeerID := c.desktopPeerID
+	c.mu.RUnlock()
+	if desktopPeerID == "" {
+		return
+	}
+	info := c.host.Peerstore().PeerInfo(desktopPeerID)
+	go func() {
+		// Parent off c.ctx so close() / cancel() reliably tears down
+		// in-flight resume dials instead of letting them outlive the
+		// node.
+		ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
+		defer cancel()
+		_ = c.host.Connect(ctx, info)
+	}()
 }
 
 func (c *clientNode) close() error {

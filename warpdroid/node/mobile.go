@@ -3,7 +3,6 @@
 package node
 
 import (
-	"context"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -137,23 +136,18 @@ func Disconnect() string {
 
 // Pause background transition
 func Pause() {
-	if clientInstance == nil || clientInstance.host == nil {
+	if clientInstance == nil {
 		return
 	}
-	for _, c := range clientInstance.host.Network().Conns() {
-		_ = c.Close()
-	}
+	clientInstance.pause()
 }
 
 // Resume foreground transition
 func Resume() {
-	if clientInstance == nil || clientInstance.host == nil {
+	if clientInstance == nil {
 		return
 	}
-	for _, id := range clientInstance.host.Peerstore().PeersWithAddrs() {
-		info := clientInstance.host.Peerstore().PeerInfo(id)
-		_ = clientInstance.host.Connect(context.Background(), info)
-	}
+	clientInstance.resume()
 }
 
 func Shutdown() string {
