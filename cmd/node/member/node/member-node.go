@@ -447,7 +447,7 @@ func (m *MemberNode) adminHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_PAIR,
-			handler.StreamNodesPairingHandler(token, m.deviceRepo),
+			handler.StreamNodesPairingHandler(token, m.deviceRepo, m),
 		},
 		{
 			event.PUBLIC_POST_NODE_CHALLENGE,
@@ -871,6 +871,20 @@ func (m *MemberNode) Network() warpnet.WarpNetwork {
 		return nil
 	}
 	return m.node.Node().Network()
+}
+
+func (m *MemberNode) PublicAddrs() []warpnet.WarpAddress {
+	if m == nil || m.node == nil {
+		return nil
+	}
+
+	publicAddrs := make([]warpnet.WarpAddress, 0, len(m.node.Node().Addrs()))
+	for _, ma := range m.node.Node().Addrs() {
+		if warpnet.IsPublicMultiAddress(ma) || warpnet.IsRelayMultiaddress(ma) {
+			publicAddrs = append(publicAddrs, ma)
+		}
+	}
+	return publicAddrs
 }
 
 func (m *MemberNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
