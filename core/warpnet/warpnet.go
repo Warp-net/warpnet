@@ -460,54 +460,6 @@ func IsRelayMultiaddress(maddr multiaddr.Multiaddr) bool {
 	return strings.Contains(maddr.String(), "p2p-circuit")
 }
 
-// IsRoutableMultiaddress returns true when the address has any chance of
-// being dialled successfully by a remote peer. libp2p's dial ranker
-// orders the addresses we hand it but won't drop ones that are simply
-// unreachable from outside the host — loopback, link-local autoconf,
-// multicast, the well-known docker default-bridge subnets. Filter those
-// out at the source so a paired thin client doesn't burn dial budget
-// timing them out one by one.
-//
-// Relay multiaddrs (/p2p-circuit) are NOT classified here — callers
-// usually want to keep them as the last-resort fallback and decide that
-// inclusion separately.
-func IsRoutableMultiaddress(maddr multiaddr.Multiaddr) bool {
-	ipStr, err := maddr.ValueForProtocol(P_IP4)
-	if err != nil {
-		if ipStr6, err6 := maddr.ValueForProtocol(P_IP6); err6 == nil {
-			return isRoutableIPv6(gonet.ParseIP(ipStr6))
-		}
-		// dns / wss / other non-ip transports — assume routable; let
-		// the dialer resolve them.
-		return true
-	}
-	return isRoutableIPv4(gonet.ParseIP(ipStr))
-}
-
-func isRoutableIPv4(ip gonet.IP) bool {
-	if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
-		return false
-	}
-	if ip4 := ip.To4(); ip4 != nil {
-		// Docker default bridges live in 172.17/16 and 172.18/16 —
-		// they're RFC1918 by class but only the container host can
-		// route to them. Drop so phones don't dial-timeout on them.
-		if ip4[0] == 172 && (ip4[1] == 17 || ip4[1] == 18) {
-			return false
-		}
-	}
-	return true
-}
-
-func isRoutableIPv6(ip gonet.IP) bool {
-	if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
-		return false
-	}
-	return true
-}
-
 func IsNoAddressesError(err error) bool {
 	return errors.Is(err, routing.ErrNotFound)
 }
