@@ -372,7 +372,7 @@ interface WarpnetBinding {
      * every successful call; periodically re-pairing keeps the peerstore
      * fresh when the fat node moves between networks.
      */
-    fun refreshPeerAddrs(addrs: String): String = ""
+    fun refreshPeerAddrs(addrs: String): String
 }
 
 /**
@@ -413,7 +413,6 @@ object DefaultBinding : WarpnetBinding {
 
     override fun sign(body: String): String = node.Node.sign(body)
 
-    // Once the AAR is rebuilt against mobile.go's RefreshPeerAddrs export,
-    // override with `node.Node.refreshPeerAddrs(addrs)`. Until then the
-    // interface default no-op keeps CI green.
+    override fun refreshPeerAddrs(addrs: String): String =
+        node.Node.refreshPeerAddrs(addrs)
 }
