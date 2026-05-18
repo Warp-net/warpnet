@@ -6,6 +6,7 @@
 package site.warpnet.warpdroid.worker
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.BackoffPolicy
@@ -19,9 +20,12 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.WarpnetException
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
+import site.warpnet.warpdroid.components.pairing.PairingActivity
 
 /**
  * Periodically re-pings the fat node's /private/post/pair handler so the
@@ -54,9 +58,18 @@ class PairRefreshWorker @AssistedInject constructor(
             Result.success()
         } catch (e: WarpnetException.ProtocolError) {
             // The fat node rejected the pairing (token mismatch / no
-            // longer paired). Retrying won't recover; surface as success
-            // so WorkManager doesn't loop, the user re-pairs via QR.
+            // longer paired). The stored identity is unusable — wipe it
+            // and bounce the user to the QR scanner. Returns success so
+            // WorkManager doesn't loop on a non-recoverable failure.
             Log.w(TAG, "pair refresh rejected: code=${e.code} ${e.serverMessage}")
+            withContext(Dispatchers.IO) { pairedNodeStore.clear() }
+            client.shutdown()
+            val intent = Intent(applicationContext, PairingActivity::class.java)
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK,
+                )
+            applicationContext.startActivity(intent)
             Result.success()
         } catch (e: Exception) {
             Log.w(TAG, "pair refresh failed", e)
