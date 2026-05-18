@@ -357,6 +357,38 @@ func (c *clientNode) disconnect() error {
 	return nil
 }
 
+// pause drops all live connections on the libp2p host so the radio can
+// go to sleep while the app is backgrounded. The host itself stays
+// initialised; resume() re-dials the paired peer.
+func (c *clientNode) pause() {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, conn := range c.host.Network().Conns() {
+		_ = conn.Close()
+	}
+}
+
+// resume re-dials the paired desktop peer in the background. Kicked from
+// the Android onStart lifecycle callback, which runs on the main thread,
+// so the actual host.Connect runs in a goroutine bounded by a 10s
+// ceiling — a dead peer can't wedge subsequent lifecycle callbacks.
+// Only the paired peer is dialled; iterating every peerstore entry
+// would burn dial budget on stale DHT routing-table fillers.
+func (c *clientNode) resume() {
+	c.mu.RLock()
+	desktopPeerID := c.desktopPeerID
+	c.mu.RUnlock()
+	if desktopPeerID == "" {
+		return
+	}
+	info := c.host.Peerstore().PeerInfo(desktopPeerID)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = c.host.Connect(ctx, info)
+	}()
+}
+
 func (c *clientNode) close() error {
 	defer func() { recover() }()
 	c.cancel()
