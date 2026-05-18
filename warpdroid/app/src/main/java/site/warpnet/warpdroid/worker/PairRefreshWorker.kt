@@ -77,7 +77,7 @@ class PairRefreshWorker @AssistedInject constructor(
                 .setBackoffCriteria(
                     BackoffPolicy.LINEAR,
                     1L,
-                    TimeUnit.HOURS,
+                    TimeUnit.MINUTES,
                 )
                 .build()
 
