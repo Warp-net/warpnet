@@ -44,7 +44,14 @@ class PairingCoordinator @Inject constructor(
         // Noise handshake verifies the remote peer ID matches what the QR
         // advertised. If they don't match, the dial fails before we open any
         // stream.
-        val candidates = paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
+        //
+        // Defensive filter+sort via [prioritizeDialAddresses]: even though
+        // the fat node sorts its self-addresses now, a phone may be paired
+        // against an older desktop build, and the raw QR order would put a
+        // circuit-v2 relay before the LAN multiaddr — connectAny stops at
+        // the first successful dial, so the relay would win every time.
+        val candidates = prioritizeDialAddresses(paired.addresses)
+            .map { "$it/p2p/${paired.pinnedPeerId}" }
         val bootstrap = paired.bootstrapAddrs.ifEmpty { candidates }
         // Seed the transport with the first syntactically-dialable candidate
         // rather than candidates.first(), which could still be an unusable

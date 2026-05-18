@@ -153,21 +153,21 @@ class WarpdroidApplication :
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
-                    transportScope.launch {
-                        warpnetClient.resume()
-                        // Polling has to come back after the host is
-                        // re-dialled or the very first poll observes
-                        // the still-Disconnected binding and triggers a
-                        // pointless reconnect race against resume().
-                        connectionMonitor.start()
-                    }
+                    // Run monitor.start() and resume() concurrently — the
+                    // older sequential code awaited resume() first, which
+                    // before the Go-side fix could block for tens of
+                    // seconds on a dead peer dial and leave the monitor
+                    // un-started long enough that a user came back to a
+                    // permanently-dead app (PR #184). The monitor is
+                    // idempotent and its first poll picks up the eventual
+                    // result of resume() either way.
+                    transportScope.launch { connectionMonitor.start() }
+                    transportScope.launch { warpnetClient.resume() }
                 }
 
                 override fun onStop(owner: LifecycleOwner) {
-                    transportScope.launch {
-                        connectionMonitor.stop()
-                        warpnetClient.pause()
-                    }
+                    transportScope.launch { connectionMonitor.stop() }
+                    transportScope.launch { warpnetClient.pause() }
                 }
             },
         )

@@ -460,6 +460,79 @@ func IsRelayMultiaddress(maddr multiaddr.Multiaddr) bool {
 	return strings.Contains(maddr.String(), "p2p-circuit")
 }
 
+// DialTier classifies a multiaddr by how preferable it is to dial.
+// Lower-numbered tiers are preferred; DialTierDrop means the address is
+// unreachable from a remote peer and should be filtered out entirely.
+type DialTier int
+
+const (
+	DialTierLAN DialTier = iota
+	DialTierPublicDirect
+	DialTierRelay
+	DialTierDrop
+)
+
+// ClassifyDialAddress decides whether a host-self multiaddr is worth
+// advertising to a paired thin client, and at what priority. The thin
+// client iterates candidate addresses in order and stops at the first
+// successful dial — without a sane priority order, an internet-routed
+// circuit-v2 relay address that succeeds in 200 ms always wins over a
+// LAN address that would have given a sub-millisecond direct path on
+// the same Wi-Fi, leaving every pairing routed through the public relay
+// even when both peers are on the same subnet.
+func ClassifyDialAddress(maddr WarpAddress) DialTier {
+	if IsRelayMultiaddress(maddr) {
+		return DialTierRelay
+	}
+	if ipStr, err := maddr.ValueForProtocol(P_IP4); err == nil {
+		return classifyIPv4Tier(gonet.ParseIP(ipStr))
+	}
+	if ipStr, err := maddr.ValueForProtocol(P_IP6); err == nil {
+		return classifyIPv6Tier(gonet.ParseIP(ipStr))
+	}
+	// DNS / wss / other non-ip transports — treat as public-direct;
+	// the thin client will resolve and decide.
+	return DialTierPublicDirect
+}
+
+func classifyIPv4Tier(ip gonet.IP) DialTier {
+	if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return DialTierDrop
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		// Docker default bridges live in 172.17/16 and 172.18/16 — they
+		// resolve as RFC1918, but only the container host can route to
+		// them. Drop them so phones don't burn a dial timeout on a
+		// hopeless address.
+		if ip4[0] == 172 && (ip4[1] == 17 || ip4[1] == 18) {
+			return DialTierDrop
+		}
+	}
+	for _, block := range privateBlocks {
+		_, cidr, _ := gonet.ParseCIDR(block)
+		if cidr != nil && cidr.Contains(ip) {
+			// privateBlocks includes 127/8 and 169.254/16 which we
+			// already filtered above; surviving entries are real
+			// RFC1918 / CG-NAT LAN ranges.
+			return DialTierLAN
+		}
+	}
+	return DialTierPublicDirect
+}
+
+func classifyIPv6Tier(ip gonet.IP) DialTier {
+	if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return DialTierDrop
+	}
+	// fc00::/7 — IPv6 unique local addresses; treat as LAN.
+	if len(ip) == 16 && (ip[0]&0xfe) == 0xfc {
+		return DialTierLAN
+	}
+	return DialTierPublicDirect
+}
+
 func IsNoAddressesError(err error) bool {
 	return errors.Is(err, routing.ErrNotFound)
 }

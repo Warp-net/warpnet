@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -292,13 +293,37 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 
 	relayState := warpnet.RelayStatusWaiting
 
+	// Stable-sort the host's self-addresses by dial preference so the
+	// pairing QR (which carries this list as-is) leads with addresses a
+	// thin client can actually use on the same network. Without the
+	// sort, a circuit-v2 relay listed first wins every pairing race and
+	// the user pays NAT-traversal latency on a LAN.
 	addrs := n.node.Peerstore().Addrs(n.node.ID())
-	addresses := make([]string, 0, len(addrs))
-	for _, ma := range addrs {
+	type ranked struct {
+		ma   warpnet.WarpAddress
+		tier warpnet.DialTier
+		idx  int
+	}
+	ranks := make([]ranked, 0, len(addrs))
+	for i, ma := range addrs {
+		tier := warpnet.ClassifyDialAddress(ma)
+		if tier == warpnet.DialTierDrop {
+			continue
+		}
 		if warpnet.IsRelayMultiaddress(ma) {
 			relayState = warpnet.RelayStatusRunning
 		}
-		addresses = append(addresses, ma.String())
+		ranks = append(ranks, ranked{ma: ma, tier: tier, idx: i})
+	}
+	sort.SliceStable(ranks, func(i, j int) bool {
+		if ranks[i].tier != ranks[j].tier {
+			return ranks[i].tier < ranks[j].tier
+		}
+		return ranks[i].idx < ranks[j].idx
+	})
+	addresses := make([]string, 0, len(ranks))
+	for _, r := range ranks {
+		addresses = append(addresses, r.ma.String())
 	}
 
 	return warpnet.NodeInfo{

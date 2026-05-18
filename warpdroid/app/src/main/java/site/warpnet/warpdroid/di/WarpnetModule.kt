@@ -93,7 +93,12 @@ object WarpnetModule {
         scope = scope,
         dialAddresses = {
             pairedNodeStore.load()?.let { paired ->
-                paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
+                // Apply the same defensive sort PairingCoordinator uses,
+                // so the post-disconnect reconnect path tries LAN before
+                // relay even if the saved address order is older.
+                site.warpnet.warpdroid.components.pairing.prioritizeDialAddresses(
+                    paired.addresses,
+                ).map { "$it/p2p/${paired.pinnedPeerId}" }
             } ?: emptyList()
         },
     )

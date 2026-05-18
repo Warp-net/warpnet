@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Mobile-friendly wrapper types for gomobile compatibility
@@ -145,15 +146,37 @@ func Pause() {
 	}
 }
 
-// Resume foreground transition
+// Resume re-establishes the paired-desktop connection in the
+// background. The previous implementation walked every peer in the
+// peerstore and called host.Connect with context.Background() — no
+// timeout, no concurrency — so a single dead DHT peer would wedge the
+// whole resume for tens of seconds, and the Kotlin caller (which
+// awaits Resume before starting the ConnectionMonitor poll loop)
+// stayed blocked until the user force-killed the app. Target only the
+// paired desktop peer, run it on a fresh goroutine so the binding
+// returns immediately, and bound the dial with a context timeout so a
+// flaky NAT can never park the caller indefinitely. DHT bootstrap is
+// driven by its own internal refresh loop and doesn't need a manual
+// re-dial.
 func Resume() {
 	if clientInstance == nil || clientInstance.host == nil {
 		return
 	}
-	for _, id := range clientInstance.host.Peerstore().PeersWithAddrs() {
-		info := clientInstance.host.Peerstore().PeerInfo(id)
-		_ = clientInstance.host.Connect(context.Background(), info)
+	clientInstance.mu.RLock()
+	desktopID := clientInstance.desktopPeerID
+	clientInstance.mu.RUnlock()
+	if desktopID == "" {
+		return
 	}
+	go func() {
+		ctx, cancel := context.WithTimeout(clientInstance.ctx, 10*time.Second)
+		defer cancel()
+		info := clientInstance.host.Peerstore().PeerInfo(desktopID)
+		if len(info.Addrs) == 0 {
+			return
+		}
+		_ = clientInstance.host.Connect(ctx, info)
+	}()
 }
 
 func Shutdown() string {
