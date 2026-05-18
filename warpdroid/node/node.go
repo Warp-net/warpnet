@@ -160,14 +160,8 @@ func newClient(
 }
 
 // connect accepts one or more newline-separated multiaddrs for a single
-// peer. All addresses are added to the peerstore in one batch and handed
-// to host.Connect in a single call — libp2p's swarm.DefaultDialRanker
-// then ranks them (LAN before public-direct before circuit-v2 relay,
-// with delays between tiers) and dials in parallel, returning when the
-// first one succeeds. The old per-address loop in WarpnetClient.connectAny
-// fought that ranker by feeding the swarm addresses one at a time, so the
-// public relay always won the race even when the phone was on the same
-// Wi-Fi as the desktop.
+// peer and hands them all to host.Connect in one call so libp2p's
+// swarm.DefaultDialRanker can rank and dial them in parallel.
 func (c *clientNode) connect(peerInfo string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
