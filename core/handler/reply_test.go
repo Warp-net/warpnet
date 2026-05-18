@@ -267,39 +267,52 @@ func TestStreamNewReplyHandler(t *testing.T) {
 }
 
 func TestStreamGetRepliesHandler(t *testing.T) {
-	owner := "owner-1"
 	rootId := "root-1"
 	parentId := "parent-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
+		h := StreamGetRepliesHandler(stubReplyRepo{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 
-	t.Run("empty parent id", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
+	t.Run("empty parent id defaults to root", func(t *testing.T) {
+		// Top-level replies on a thread carry no parent_id from the
+		// client — the handler must fall back to root_id so the repo
+		// lookup runs against the first tier of replies hanging off
+		// the root tweet.
+		var seenRoot, seenParent string
+		h := StreamGetRepliesHandler(
+			stubReplyRepo{getRepliesTreeFn: func(rootID, parentIdArg string, _ *uint64, _ *string) ([]domain.ReplyNode, string, error) {
+				seenRoot = rootID
+				seenParent = parentIdArg
+				return nil, "", nil
+			}},
+		)
 		_, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId}), nil)
-		if err == nil || err.Error() != "empty parent id" {
+		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
+		}
+		if seenRoot != rootId || seenParent != rootId {
+			t.Fatalf("expected rootId %q and parentId %q from root fallback, got root=%q parent=%q", rootId, rootId, seenRoot, seenParent)
 		}
 	})
 
 	t.Run("empty root id", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
+		h := StreamGetRepliesHandler(stubReplyRepo{})
 		_, err := h(marshal(t, event.GetAllRepliesEvent{ParentId: parentId}), nil)
 		if err == nil || err.Error() != "empty root id" {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 
-	t.Run("own tweet replies", func(t *testing.T) {
+	t.Run("serves replies from local repo", func(t *testing.T) {
 		replies := []domain.ReplyNode{{Reply: domain.Tweet{Id: "r1", Text: "reply"}}}
 		h := StreamGetRepliesHandler(stubReplyRepo{getRepliesTreeFn: func(rootID, parentIdArg string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
 			return replies, "end", nil
-		}}, stubReplyUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: parentId}})
+		}})
 		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -308,65 +321,19 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		if len(r.Replies) != 1 {
 			t.Fatalf("expected 1 reply, got %d", len(r.Replies))
 		}
-	})
-
-	t.Run("parent user not found fallback", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
-			return domain.User{}, database.ErrUserNotFound
-		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
+		if r.Cursor != "end" {
+			t.Fatalf("expected cursor 'end', got %q", r.Cursor)
 		}
-		_ = resp.(event.RepliesResponse)
 	})
 
-	t.Run("stream node offline fallback", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				return nil, warpnet.ErrNodeIsOffline
-			},
-		})
-		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		_ = resp.(event.RepliesResponse)
-	})
-
-	t.Run("stream error", func(t *testing.T) {
-		streamErr := errors.New("broken")
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				return nil, streamErr
-			},
-		})
+	t.Run("propagates repo error", func(t *testing.T) {
+		boom := errors.New("db down")
+		h := StreamGetRepliesHandler(stubReplyRepo{getRepliesTreeFn: func(string, string, *uint64, *string) ([]domain.ReplyNode, string, error) {
+			return nil, "", boom
+		}})
 		_, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
-		if !errors.Is(err, streamErr) {
-			t.Fatalf("expected stream error: %v", err)
-		}
-	})
-
-	t.Run("remote successful response", func(t *testing.T) {
-		remoteResp, _ := json.Marshal(event.RepliesResponse{
-			Cursor:  "end",
-			Replies: []domain.ReplyNode{{Reply: domain.Tweet{Id: "r1", Text: "remote reply", RootId: rootId, ParentId: &parentId}}},
-		})
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				return remoteResp, nil
-			},
-		})
-		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		r := resp.(event.RepliesResponse)
-		if len(r.Replies) != 1 {
-			t.Fatalf("expected 1 reply: %v", r)
+		if !errors.Is(err, boom) {
+			t.Fatalf("expected db error, got %v", err)
 		}
 	})
 }

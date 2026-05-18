@@ -3,7 +3,6 @@
 package node
 
 import (
-	"context"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -137,23 +136,32 @@ func Disconnect() string {
 
 // Pause background transition
 func Pause() {
-	if clientInstance == nil || clientInstance.host == nil {
+	if clientInstance == nil {
 		return
 	}
-	for _, c := range clientInstance.host.Network().Conns() {
-		_ = c.Close()
-	}
+	clientInstance.pause()
 }
 
 // Resume foreground transition
 func Resume() {
-	if clientInstance == nil || clientInstance.host == nil {
+	if clientInstance == nil {
 		return
 	}
-	for _, id := range clientInstance.host.Peerstore().PeersWithAddrs() {
-		info := clientInstance.host.Peerstore().PeerInfo(id)
-		_ = clientInstance.host.Connect(context.Background(), info)
+	clientInstance.resume()
+}
+
+// RefreshPeerAddrs merges the supplied newline-separated multiaddrs into
+// the libp2p peerstore for the paired desktop peer. Called by the Kotlin
+// side after parsing a /private/post/pair response, which now carries
+// the fat node's current public addresses on every successful pair.
+func RefreshPeerAddrs(addrs string) string {
+	if clientInstance == nil {
+		return "client not initialized"
 	}
+	if err := clientInstance.refreshPeerAddrs(addrs); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 func Shutdown() string {
