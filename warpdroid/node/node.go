@@ -163,9 +163,6 @@ func newClient(
 // peer and hands them all to host.Connect in one call so libp2p's
 // swarm.DefaultDialRanker can rank and dial them in parallel.
 func (c *clientNode) connect(peerInfo string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	go func() {
 		_ = c.dht.Bootstrap(c.ctx)
 		c.dht.RefreshRoutingTable()
@@ -214,6 +211,9 @@ func (c *clientNode) connect(peerInfo string) error {
 		return err
 	}
 
+	// Peerstore is internally thread-safe and host.Connect can take 30s —
+	// don't hold c.mu across either, or pause/resume/disconnect would
+	// block on the dial.
 	c.host.Peerstore().AddAddrs(peerID, addrs, peerstore.PermanentAddrTTL)
 
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
@@ -223,7 +223,9 @@ func (c *clientNode) connect(peerInfo string) error {
 		return fmt.Errorf("connection failed: %w", err)
 	}
 
+	c.mu.Lock()
 	c.desktopPeerID = peerID
+	c.mu.Unlock()
 	return nil
 }
 
@@ -377,7 +379,10 @@ func (c *clientNode) resume() {
 	}
 	info := c.host.Peerstore().PeerInfo(desktopPeerID)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// Parent off c.ctx so close() / cancel() reliably tears down
+		// in-flight resume dials instead of letting them outlive the
+		// node.
+		ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
 		defer cancel()
 		_ = c.host.Connect(ctx, info)
 	}()

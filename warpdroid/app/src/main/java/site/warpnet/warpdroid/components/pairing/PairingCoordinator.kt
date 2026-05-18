@@ -26,7 +26,7 @@ import site.warpnet.transport.dto.AuthNodeInfo
  * `{"code":0,"message":"Accepted"}`.
  */
 sealed class PairingOutcome {
-    data class Success(val paired: PairedNode, val dialedAddr: String) : PairingOutcome()
+    data class Success(val paired: PairedNode) : PairingOutcome()
     data class TransportError(val message: String) : PairingOutcome()
     data class Rejected(val code: Int, val message: String) : PairingOutcome()
     data class PeerIdMismatch(val expected: String, val errorMessage: String) : PairingOutcome()
@@ -67,13 +67,13 @@ class PairingCoordinator @Inject constructor(
                 client.shutdown()
             }
             client.initialise(config)
-            val dialed = client.connect(candidates)
+            client.connect(candidates)
             client.pair(rawJson)
             // EncryptedSharedPreferences open / write touches disk and the
             // KeyStore; hop to IO so a first-ever scan doesn't initialise
             // the lazy prefs on the main thread.
             withContext(Dispatchers.IO) { pairedNodeStore.save(paired, rawJson) }
-            PairingOutcome.Success(paired, dialed)
+            PairingOutcome.Success(paired)
         } catch (e: WarpnetException.ProtocolError) {
             PairingOutcome.Rejected(e.code, e.serverMessage)
         } catch (e: WarpnetException.TransportFailure) {

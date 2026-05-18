@@ -79,17 +79,12 @@ class WarpnetClient(
 
     /**
      * Hand the full set of [candidateAddrs] to the Go binding in a single
-     * call so libp2p's swarm.DefaultDialRanker can rank them (LAN →
-     * public-direct → /p2p-circuit with delays between tiers) and dial
-     * them in parallel, returning when the first one succeeds. Iterating
-     * here address-by-address would defeat the ranker — the swarm only
-     * sees one candidate at a time and the public-relay always wins the
-     * race against the LAN address that should have been preferred.
-     *
-     * The addresses must all belong to the same peer; the Go side
-     * verifies and drops mismatched p2p suffixes silently.
+     * call so libp2p's swarm.DefaultDialRanker can rank them and dial in
+     * parallel. Which address actually wins isn't surfaced — only the
+     * binding's connectedness() knows after the fact — so this returns
+     * nothing.
      */
-    suspend fun connect(candidateAddrs: List<String>): String = withContext(Dispatchers.IO) {
+    suspend fun connect(candidateAddrs: List<String>) = withContext(Dispatchers.IO) {
         if (candidateAddrs.isEmpty()) {
             throw WarpnetException.TransportFailure("no addresses to dial")
         }
@@ -108,7 +103,6 @@ class WarpnetClient(
                 throw failure
             }
             _state.value = ConnectionState.Connected
-            candidateAddrs.first()
         }
     }
 
