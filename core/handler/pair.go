@@ -69,7 +69,7 @@ func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer, n No
 		println()
 		fmt.Printf(
 			"\033[1mPAIRED %s\033[0m\n",
-			clientInfo.ID,
+			s.Conn().RemotePeer().String(),
 		)
 		println()
 
