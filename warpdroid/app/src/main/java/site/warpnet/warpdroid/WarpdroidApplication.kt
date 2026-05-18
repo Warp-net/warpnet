@@ -52,6 +52,7 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import org.conscrypt.Conscrypt
 import site.warpnet.transport.WarpnetClient
+import site.warpnet.warpdroid.worker.PairRefreshWorker
 
 @HiltAndroidApp
 class WarpdroidApplication :
@@ -145,6 +146,11 @@ class WarpdroidApplication :
         localeManager.setLocale()
 
         // Warpdroid: no local cache to prune — PruneCacheWorker removed with Room.
+
+        // Refresh the fat node's public addresses periodically so the
+        // peerstore stays current when the desktop moves networks. The
+        // worker is a no-op until a pairing exists.
+        PairRefreshWorker.schedule(this)
 
         // Drive the libp2p host through background/foreground transitions so
         // open streams don't hold the radio awake when the user leaves the

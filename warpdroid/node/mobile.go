@@ -150,6 +150,20 @@ func Resume() {
 	clientInstance.resume()
 }
 
+// RefreshPeerAddrs merges the supplied newline-separated multiaddrs into
+// the libp2p peerstore for the paired desktop peer. Called by the Kotlin
+// side after parsing a /private/post/pair response, which now carries
+// the fat node's current public addresses on every successful pair.
+func RefreshPeerAddrs(addrs string) string {
+	if clientInstance == nil {
+		return "client not initialized"
+	}
+	if err := clientInstance.refreshPeerAddrs(addrs); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 func Shutdown() string {
 	if clientInstance == nil {
 		return ""
