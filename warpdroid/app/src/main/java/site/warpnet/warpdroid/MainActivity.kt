@@ -212,7 +212,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             accountManager.updateActiveAccount { copy(accountId = paired.userId) }
         }
 
-        // will be redirected to LoginActivity by BaseActivity
         activeAccount = accountManager.activeAccount ?: return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
