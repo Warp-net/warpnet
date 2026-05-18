@@ -134,6 +134,11 @@ type GetAllMessagesEvent struct {
 }
 
 // GetAllRepliesEvent defines model for GetAllRepliesEvent.
+//
+// ParentId is the parent TWEET id (not a user id) — it selects which
+// subtree of replies inside RootId to return. Empty means "top-level
+// replies of the thread"; the handler treats that as ParentId = RootId.
+// RootId is the root tweet of the thread.
 type GetAllRepliesEvent struct {
 	Cursor   *string   `json:"cursor,omitempty"`
 	Limit    *uint64   `json:"limit,omitempty"`
@@ -284,6 +289,12 @@ type NewMessageEvent = domain.ChatMessage
 type NewMessageResponse = domain.ChatMessage
 
 // NewReplyEvent defines model for NewReplyEvent.
+//
+// ParentId is the parent TWEET id this reply is attached to (nil/empty
+// means the reply hangs directly off RootId). ParentUserId is the user
+// id of the parent tweet's author — that's the routing key the server
+// uses to forward the request to the right node when the parent tweet
+// lives on a remote peer.
 type NewReplyEvent struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	Id           domain.ID  `json:"id"`

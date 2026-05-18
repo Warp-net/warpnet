@@ -20,6 +20,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.os.StrictMode
 import android.util.Log
 import androidx.core.content.edit
 import androidx.hilt.work.HiltWorkerFactory
@@ -84,16 +85,32 @@ class WarpdroidApplication :
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
-        // Uncomment me to get StrictMode violation logs
-//        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-//            StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder()
-//                    .detectDiskReads()
-//                    .detectDiskWrites()
-//                    .detectNetwork()
-//                    .detectUnbufferedIo()
-//                    .penaltyLog()
-//                    .build())
-//        }
+        // Surface main-thread disk/network IO in debug builds so we can
+        // see what's blocking onCreate / Activity lifecycle (bindApplication
+        // currently runs ~2s on cold start). Release builds run with
+        // StrictMode off — penalties are intentionally log-only so a
+        // missed read doesn't crash a user.
+        if (BuildConfig.DEBUG) {
+            val threadPolicy = StrictMode.ThreadPolicy.Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .penaltyLog()
+            // detectUnbufferedIo requires API 26 (O); minSdk is 24 so
+            // guarding it avoids NoSuchMethodError on Android 7.x.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                threadPolicy.detectUnbufferedIo()
+            }
+            StrictMode.setThreadPolicy(threadPolicy.build())
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedClosableObjects()
+                    .detectLeakedRegistrationObjects()
+                    .detectActivityLeaks()
+                    .penaltyLog()
+                    .build()
+            )
+        }
         super.onCreate()
 
         Security.insertProviderAt(Conscrypt.newProvider(), 1)

@@ -48,7 +48,6 @@ import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewpager2.widget.MarginPageTransformer
-import com.bumptech.glide.Glide
 import com.google.android.material.R as materialR
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.chip.Chip
@@ -86,6 +85,7 @@ import site.warpnet.warpdroid.util.ensureBottomMargin
 import site.warpnet.warpdroid.util.getDomain
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.loadAvatar
+import site.warpnet.warpdroid.util.loadHeader
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.reduceSwipeSensitivity
 import site.warpnet.warpdroid.util.setClickableText
@@ -549,11 +549,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                 animateAvatar
             )
 
-            Glide.with(this)
-                .asBitmap()
-                .load(account.header)
-                .centerCrop()
-                .into(binding.accountHeaderImageView)
+            loadHeader(account.header, binding.accountHeaderImageView)
 
             binding.accountAvatarImageView.setOnClickListener { view ->
                 viewImage(view, account.avatar)
