@@ -60,9 +60,6 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 	ownerTweetUserRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: ownerNodeID}, nil
 	}}
-	ownerReplyUserRepo := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
-		return domain.User{Id: userId, NodeId: ownerNodeID}, nil
-	}}
 	ownerLikeUserRepo := stubLikeUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: ownerNodeID}, nil
 	}}
@@ -255,11 +252,9 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 	})
 
 	t.Run("StreamGetRepliesHandler - replies under own tweet", func(t *testing.T) {
-		streamer := stubStreamer{
-			nodeInfo:        ownerInfo,
-			genericStreamFn: failOnStream(t),
-		}
-		h := StreamGetRepliesHandler(stubReplyRepo{}, ownerReplyUserRepo, streamer)
+		// Replies handler is fully local now; no streamer/user repo
+		// involved (see reply.go for why).
+		h := StreamGetRepliesHandler(stubReplyRepo{})
 		if _, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootID, ParentId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

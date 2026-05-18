@@ -26,7 +26,7 @@ import site.warpnet.transport.dto.AuthNodeInfo
  * `{"code":0,"message":"Accepted"}`.
  */
 sealed class PairingOutcome {
-    data class Success(val paired: PairedNode, val dialedAddr: String) : PairingOutcome()
+    data class Success(val paired: PairedNode) : PairingOutcome()
     data class TransportError(val message: String) : PairingOutcome()
     data class Rejected(val code: Int, val message: String) : PairingOutcome()
     data class PeerIdMismatch(val expected: String, val errorMessage: String) : PairingOutcome()
@@ -46,13 +46,6 @@ class PairingCoordinator @Inject constructor(
         // stream.
         val candidates = paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
         val bootstrap = paired.bootstrapAddrs.ifEmpty { candidates }
-        // Seed the transport with the first syntactically-dialable candidate
-        // rather than candidates.first(), which could still be an unusable
-        // multiaddr when only a later entry passed the validator check.
-        val dialable = candidates.firstOrNull { addr ->
-            val bare = addr.substringBeforeLast("/p2p/")
-            bare.startsWith("/") && bare.trim('/').isNotEmpty()
-        } ?: candidates.first()
 
         val config = WarpnetConfig(
             // Derive the libp2p identity from android.os.Build info plus the
@@ -62,7 +55,7 @@ class PairingCoordinator @Inject constructor(
             privKeyHex = identityStore.deriveHex(paired.pinnedPeerId),
             pskHex = paired.psk,
             bootstrapAddrs = bootstrap,
-            desktopPeerAddr = dialable,
+            desktopPeerAddr = candidates.first(),
             network = paired.network,
         )
 
@@ -74,13 +67,13 @@ class PairingCoordinator @Inject constructor(
                 client.shutdown()
             }
             client.initialise(config)
-            val dialed = client.connectAny(candidates)
+            client.connect(candidates)
             client.pair(rawJson)
             // EncryptedSharedPreferences open / write touches disk and the
             // KeyStore; hop to IO so a first-ever scan doesn't initialise
             // the lazy prefs on the main thread.
             withContext(Dispatchers.IO) { pairedNodeStore.save(paired, rawJson) }
-            PairingOutcome.Success(paired, dialed)
+            PairingOutcome.Success(paired)
         } catch (e: WarpnetException.ProtocolError) {
             PairingOutcome.Rejected(e.code, e.serverMessage)
         } catch (e: WarpnetException.TransportFailure) {

@@ -31,16 +31,19 @@ import (
 	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
+
+type NodeAddresser interface {
+	PublicAddrs() []warpnet.WarpAddress
+}
 
 type DeviceStorer interface {
 	SetDevice(ownerNodeId string, device domain.Device) error
 }
 
-func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer) warpnet.WarpHandlerFunc {
+func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer, n NodeAddresser) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var clientInfo domain.AuthNodeInfo
 		if err := json.Unmarshal(buf, &clientInfo); err != nil {
@@ -65,11 +68,16 @@ func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer) warp
 
 		println()
 		fmt.Printf(
-			"\033[1mPAIR ADDED %s\033[0m\n",
-			clientInfo.ID,
+			"\033[1mPAIRED %s\033[0m\n",
+			s.Conn().RemotePeer().String(),
 		)
 		println()
 
-		return event.Accepted, nil
+		addrs := make([]string, 0, len(n.PublicAddrs()))
+		for _, addr := range n.PublicAddrs() {
+			addrs = append(addrs, addr.String())
+		}
+
+		return addrs, nil
 	}
 }

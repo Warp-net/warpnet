@@ -20,6 +20,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.os.StrictMode
 import android.util.Log
 import androidx.core.content.edit
 import androidx.hilt.work.HiltWorkerFactory
@@ -52,6 +53,7 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import org.conscrypt.Conscrypt
 import site.warpnet.transport.WarpnetClient
+import site.warpnet.warpdroid.worker.PairRefreshWorker
 
 @HiltAndroidApp
 class WarpdroidApplication :
@@ -83,16 +85,32 @@ class WarpdroidApplication :
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
-        // Uncomment me to get StrictMode violation logs
-//        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-//            StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder()
-//                    .detectDiskReads()
-//                    .detectDiskWrites()
-//                    .detectNetwork()
-//                    .detectUnbufferedIo()
-//                    .penaltyLog()
-//                    .build())
-//        }
+        // Surface main-thread disk/network IO in debug builds so we can
+        // see what's blocking onCreate / Activity lifecycle (bindApplication
+        // currently runs ~2s on cold start). Release builds run with
+        // StrictMode off — penalties are intentionally log-only so a
+        // missed read doesn't crash a user.
+        if (BuildConfig.DEBUG) {
+            val threadPolicy = StrictMode.ThreadPolicy.Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .penaltyLog()
+            // detectUnbufferedIo requires API 26 (O); minSdk is 24 so
+            // guarding it avoids NoSuchMethodError on Android 7.x.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                threadPolicy.detectUnbufferedIo()
+            }
+            StrictMode.setThreadPolicy(threadPolicy.build())
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedClosableObjects()
+                    .detectLeakedRegistrationObjects()
+                    .detectActivityLeaks()
+                    .penaltyLog()
+                    .build()
+            )
+        }
         super.onCreate()
 
         Security.insertProviderAt(Conscrypt.newProvider(), 1)
@@ -145,6 +163,11 @@ class WarpdroidApplication :
         localeManager.setLocale()
 
         // Warpdroid: no local cache to prune — PruneCacheWorker removed with Room.
+
+        // Refresh the fat node's public addresses periodically so the
+        // peerstore stays current when the desktop moves networks. The
+        // worker is a no-op until a pairing exists.
+        PairRefreshWorker.schedule(this)
 
         // Drive the libp2p host through background/foreground transitions so
         // open streams don't hold the radio awake when the user leaves the

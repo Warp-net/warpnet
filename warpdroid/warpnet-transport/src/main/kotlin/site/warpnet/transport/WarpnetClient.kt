@@ -52,6 +52,7 @@ class WarpnetClient(
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
     private val errorAdapter = moshi.adapter<WarpnetResponseError>()
+    private val addrsAdapter = moshi.adapter<List<String>>()
 
     /** Start the libp2p host. No-op if already initialised. */
     suspend fun initialise(config: WarpnetConfig) = withContext(Dispatchers.IO) {
@@ -77,60 +78,33 @@ class WarpnetClient(
         }
     }
 
-    /** Dial the paired desktop peer. */
-    suspend fun connect(desktopPeerAddr: String) = withContext(Dispatchers.IO) {
+    /**
+     * Hand the full set of [candidateAddrs] to the Go binding in a single
+     * call so libp2p's swarm.DefaultDialRanker can rank them and dial in
+     * parallel. Which address actually wins isn't surfaced — only the
+     * binding's connectedness() knows after the fact — so this returns
+     * nothing.
+     */
+    suspend fun connect(candidateAddrs: List<String>) = withContext(Dispatchers.IO) {
+        if (candidateAddrs.isEmpty()) {
+            throw WarpnetException.TransportFailure("no addresses to dial")
+        }
         mutex.withLock {
             if (_state.value == ConnectionState.Uninitialised) {
                 throw WarpnetException.NotInitialised()
             }
             _state.value = ConnectionState.Connecting
-            val err = binding.connect(desktopPeerAddr)
+            val err = binding.connect(candidateAddrs.joinToString("\n"))
             if (err.isNotEmpty()) {
-                val failure = WarpnetException.TransportFailure(err)
+                val failure = WarpnetException.TransportFailure(
+                    "$err. On LAN this is most often the PC firewall " +
+                        "blocking the libp2p port."
+                )
                 _state.value = ConnectionState.Failed(failure)
                 throw failure
             }
             _state.value = ConnectionState.Connected
         }
-    }
-
-    /**
-     * Walk [candidateAddrs] in order with a per-address 10s cap; the first
-     * address that succeeds becomes the live connection. Underlying Go dial
-     * keeps its own 30s ceiling, so this timeout only bounds how long the
-     * caller waits before moving on to the next address. On LAN the likely
-     * cause of a silent hang is the PC firewall, so surface that hint when
-     * every candidate fails.
-     */
-    suspend fun connectAny(candidateAddrs: List<String>): String = withContext(Dispatchers.IO) {
-        if (candidateAddrs.isEmpty()) {
-            throw WarpnetException.TransportFailure("no addresses to dial")
-        }
-        val errors = mutableListOf<String>()
-        for (addr in candidateAddrs) {
-            val err = runCatching {
-                kotlinx.coroutines.withTimeoutOrNull(DIAL_TIMEOUT_MILLIS) {
-                    mutex.withLock {
-                        if (_state.value == ConnectionState.Uninitialised) {
-                            throw WarpnetException.NotInitialised()
-                        }
-                        _state.value = ConnectionState.Connecting
-                        binding.connect(addr)
-                    }
-                } ?: "timed out after ${DIAL_TIMEOUT_MILLIS}ms"
-            }.getOrElse { it.message ?: it.toString() }
-            if (err.isEmpty()) {
-                _state.value = ConnectionState.Connected
-                return@withContext addr
-            }
-            errors += "$addr: $err"
-        }
-        val failure = WarpnetException.TransportFailure(
-            "could not dial any fat-node address (${errors.joinToString("; ")}). " +
-                "On LAN this is most often the PC firewall blocking the libp2p port."
-        )
-        _state.value = ConnectionState.Failed(failure)
-        throw failure
     }
 
     /**
@@ -142,9 +116,11 @@ class WarpnetClient(
      * server originally produced and the QR carried, so the pair handler's
      * token comparison still matches byte-for-byte.
      *
-     * Expected response is exactly [ACCEPTED_RESPONSE]; anything else is
-     * surfaced as a [WarpnetException.ProtocolError] so the caller can show
-     * the server message to the user without persisting identity.
+     * On success the server returns a JSON array of its current public
+     * multiaddrs; merge them into the peerstore so subsequent reconnects
+     * have fresh addresses. A [WarpnetResponseError]-shaped envelope is
+     * surfaced as [WarpnetException.ProtocolError]; anything else as
+     * [WarpnetException.TransportFailure].
      */
     suspend fun pair(rawAuthNodeInfoJson: String) = withContext(Dispatchers.IO) {
         mutex.withLock {
@@ -162,14 +138,28 @@ class WarpnetClient(
             val requestJson = buildEnvelopeJson(envelope)
             val raw = binding.stream(ProtocolIds.PRIVATE_POST_PAIR, requestJson)
             val trimmed = raw.trim()
-            if (trimmed == ACCEPTED_RESPONSE) return@withLock
-            val parsed = runCatching { errorAdapter.fromJson(trimmed) }.getOrNull()
-            if (parsed != null) {
-                throw WarpnetException.ProtocolError(parsed.code, parsed.message)
+            if (trimmed.isEmpty()) {
+                throw WarpnetException.TransportFailure("empty pairing response")
             }
-            throw WarpnetException.TransportFailure(
-                if (trimmed.isEmpty()) "empty pairing response" else trimmed
-            )
+            // ResponseError envelopes start with `{`; the success path is a
+            // JSON array of multiaddrs starting with `[`.
+            if (trimmed.startsWith("{")) {
+                val parsed = runCatching { errorAdapter.fromJson(trimmed) }.getOrNull()
+                if (parsed != null && (parsed.code != 0 || parsed.message.isNotEmpty())) {
+                    throw WarpnetException.ProtocolError(parsed.code, parsed.message)
+                }
+                throw WarpnetException.TransportFailure(trimmed)
+            }
+            val addrs = runCatching { addrsAdapter.fromJson(trimmed) }.getOrNull()
+                ?: throw WarpnetException.TransportFailure(
+                    "unexpected pairing response: $trimmed"
+                )
+            if (addrs.isNotEmpty()) {
+                val err = binding.refreshPeerAddrs(addrs.joinToString("\n"))
+                if (err.isNotEmpty()) {
+                    throw WarpnetException.TransportFailure(err)
+                }
+            }
         }
     }
 
@@ -334,9 +324,6 @@ class WarpnetClient(
     }
 
     private companion object {
-        const val DIAL_TIMEOUT_MILLIS = 10_000L
-        // Matches event.Accepted in warpnet/event/event.go; compared verbatim.
-        const val ACCEPTED_RESPONSE = "{\"code\":0,\"message\":\"Accepted\"}"
         // Backoff between retries on transient transport failures. Total
         // worst-case wait is ~9s plus the underlying stream timeouts, so
         // a paged getTimeline still returns within ~30s on a flaky link
@@ -380,6 +367,15 @@ interface WarpnetBinding {
      * signing failure (see warpdroid/node/mobile.go:Sign).
      */
     fun sign(body: String): String
+
+    /**
+     * Merge newline-separated [addrs] into the libp2p peerstore for the
+     * paired desktop peer. Empty string on success, error message otherwise.
+     * The pair handler returns the fat node's current public addresses on
+     * every successful call; periodically re-pairing keeps the peerstore
+     * fresh when the fat node moves between networks.
+     */
+    fun refreshPeerAddrs(addrs: String): String
 }
 
 /**
@@ -419,4 +415,7 @@ object DefaultBinding : WarpnetBinding {
     override fun shutdown(): String = node.Node.shutdown()
 
     override fun sign(body: String): String = node.Node.sign(body)
+
+    override fun refreshPeerAddrs(addrs: String): String =
+        node.Node.refreshPeerAddrs(addrs)
 }

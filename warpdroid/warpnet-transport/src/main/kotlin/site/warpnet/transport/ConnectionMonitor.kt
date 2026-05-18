@@ -26,7 +26,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * @param client          live WarpnetClient; the monitor calls connectAny()
+ * @param client          live WarpnetClient; the monitor calls connect()
  *                        on it to drive reconnect attempts.
  * @param binding         the binding to poll; injected so unit tests can
  *                        feed a deterministic sequence of link states.
@@ -121,13 +121,13 @@ class ConnectionMonitor(
                 publish(LinkState.NotConnected)
                 return
             }
-            val outcome = runCatching { client.connectAny(candidates) }
+            val outcome = runCatching { client.connect(candidates) }
             if (outcome.isSuccess) {
                 // Let the next poll cycle observe the binding-level
                 // state and emit Connected/Limited. We don't publish it
-                // ourselves because connectAny returns the dialed addr,
-                // not the connectedness — only the binding knows whether
-                // the resulting connection is direct or relayed.
+                // ourselves because connect returns the seeded addr, not
+                // the connectedness — only the binding knows whether the
+                // resulting connection is direct or relayed.
                 return
             }
             val wait = backoffs.getOrElse(attempt - 1) { backoffs.last() }

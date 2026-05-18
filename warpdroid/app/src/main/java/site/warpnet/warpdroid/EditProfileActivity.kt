@@ -200,19 +200,27 @@ class EditProfileActivity : BaseActivity() {
                                 (me.source?.fields?.size ?: 0) < maxAccountFields
 
                             if (viewModel.avatarData.value == null) {
-                                Glide.with(this@EditProfileActivity)
-                                    .load(me.avatar)
-                                    .placeholder(R.drawable.avatar_default)
-                                    .transform(
-                                        FitCenter(),
-                                        RoundedCorners(
-                                            resources.getDimensionPixelSize(R.dimen.avatar_radius_80dp)
+                                if (me.avatar.isNotBlank()) {
+                                    Glide.with(this@EditProfileActivity)
+                                        .load(me.avatar)
+                                        .placeholder(R.drawable.avatar_default)
+                                        .transform(
+                                            FitCenter(),
+                                            RoundedCorners(
+                                                resources.getDimensionPixelSize(R.dimen.avatar_radius_80dp)
+                                            )
                                         )
-                                    )
-                                    .into(binding.avatarPreview)
+                                        .into(binding.avatarPreview)
+                                } else {
+                                    // Profile has no avatar — fall back to
+                                    // the same default that Glide would have
+                                    // used as a placeholder, otherwise the
+                                    // preview shows an empty ImageView.
+                                    binding.avatarPreview.setImageResource(R.drawable.avatar_default)
+                                }
                             }
 
-                            if (viewModel.headerData.value == null) {
+                            if (viewModel.headerData.value == null && me.header.isNotBlank()) {
                                 Glide.with(this@EditProfileActivity)
                                     .load(me.header)
                                     .into(binding.headerPreview)

@@ -144,6 +144,9 @@ type ReplyNode struct {
 const RetweetPrefix = "RT:"
 
 // Tweet defines model for Tweet.
+//
+// ParentId is the parent TWEET id (not a user id) for replies; nil for
+// top-level tweets and for replies that hang directly off RootId.
 type Tweet struct {
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`

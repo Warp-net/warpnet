@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/multiformats/go-multiaddr"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,6 +38,72 @@ type clientNode struct {
 	mu            sync.RWMutex
 	dht           *dht.IpfsDHT
 	privKey       crypto.PrivKey
+
+	// Event ring buffer for libp2p connectedness changes. Notifiee
+	// callbacks push here cheaply; the buffer is drained to log only
+	// when the Kotlin side actually calls a method on the node (so we
+	// don't have a polling goroutine eating the battery).
+	eventsMu sync.Mutex
+	events   []string
+}
+
+// nodeNotifiee is a network.Notifiee that records connection events into
+// the parent clientNode's lazy event buffer. No I/O happens in the
+// callbacks — just an in-memory append.
+type nodeNotifiee struct{ c *clientNode }
+
+func (n *nodeNotifiee) Listen(_ network.Network, _ multiaddr.Multiaddr)      {}
+func (n *nodeNotifiee) ListenClose(_ network.Network, _ multiaddr.Multiaddr) {}
+
+func (n *nodeNotifiee) Connected(_ network.Network, conn network.Conn) {
+	n.c.recordEvent("Connected", conn)
+}
+
+func (n *nodeNotifiee) Disconnected(_ network.Network, conn network.Conn) {
+	n.c.recordEvent("Disconnected", conn)
+}
+
+func (c *clientNode) recordEvent(kind string, conn network.Conn) {
+	dir := "?"
+	switch conn.Stat().Direction {
+	case network.DirInbound:
+		dir = "in"
+	case network.DirOutbound:
+		dir = "out"
+	}
+	transient := ""
+	if conn.Stat().Limited {
+		transient = " (limited)"
+	}
+	line := fmt.Sprintf(
+		"libp2p %s %s peer=%s remote=%s%s",
+		kind, dir, conn.RemotePeer(), conn.RemoteMultiaddr(), transient,
+	)
+	c.eventsMu.Lock()
+	c.events = append(c.events, line)
+	// Cap buffer so a long idle period can't grow it unboundedly.
+	if len(c.events) > 256 {
+		c.events = c.events[len(c.events)-256:]
+	}
+	c.eventsMu.Unlock()
+}
+
+// flushEvents prints any buffered libp2p events through fmt.Printf (which
+// gomobile redirects to adb logcat under the GoLog tag). Called at the top
+// of every public clientNode method so events surface only on real
+// interaction with the binding — no background poller.
+func (c *clientNode) flushEvents() {
+	c.eventsMu.Lock()
+	if len(c.events) == 0 {
+		c.eventsMu.Unlock()
+		return
+	}
+	events := c.events
+	c.events = nil
+	c.eventsMu.Unlock()
+	for _, line := range events {
+		fmt.Println(line)
+	}
 }
 
 // newClient creates a new WarpNet thin client configured as per requirements
@@ -99,7 +166,6 @@ func newClient(
 		libp2p.Security(noise.ID, noise.New),                // Noise protocol for encryption
 		libp2p.Transport(camouflage.NewCamouflageTransport), // TCP transport
 		libp2p.UserAgent("warpdroid"),                       // Custom user agent
-		libp2p.ForceReachabilityPrivate(),
 		libp2p.Muxer(yamux.ID, ya),
 		libp2p.ConnectionManager(connManager),
 		libp2p.ResourceManager(rm),
@@ -148,6 +214,7 @@ func newClient(
 		dht:     hashTable,
 		privKey: privateKey,
 	}
+	h.Network().Notify(&nodeNotifiee{c: cn})
 
 	for _, addr := range bootstrapNodes {
 		if err := cn.connect(addr); err != nil {
@@ -158,10 +225,11 @@ func newClient(
 	return cn, nil
 }
 
+// connect accepts one or more newline-separated multiaddrs for a single
+// peer and hands them all to host.Connect in one call so libp2p's
+// swarm.DefaultDialRanker can rank and dial them in parallel.
 func (c *clientNode) connect(peerInfo string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	c.flushEvents()
 	go func() {
 		_ = c.dht.Bootstrap(c.ctx)
 		c.dht.RefreshRoutingTable()
@@ -170,34 +238,66 @@ func (c *clientNode) connect(peerInfo string) error {
 	if peerInfo == "" {
 		return fmt.Errorf("not connected to desktop node")
 	}
-	addrInfo, err := peer.AddrInfoFromString(peerInfo)
-	if err != nil {
-		return err
+
+	var (
+		peerID peer.ID
+		addrs  []multiaddr.Multiaddr
+	)
+	for _, line := range strings.Split(peerInfo, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		maddr, err := multiaddr.NewMultiaddr(line)
+		if err != nil {
+			// Skip unparseable entries silently so a single typo in
+			// the QR can't kill the whole dial. The caller already
+			// validated structurally before getting here.
+			continue
+		}
+		info, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil || info == nil {
+			continue
+		}
+		if peerID == "" {
+			peerID = info.ID
+		} else if peerID != info.ID {
+			// Mixed peer IDs in one batch — bug on the caller side.
+			// Drop the mismatched entries and keep going.
+			continue
+		}
+		addrs = append(addrs, info.Addrs...)
 	}
-	if addrInfo == nil {
+	if peerID == "" || len(addrs) == 0 {
 		return fmt.Errorf("invalid peer info: %s", peerInfo)
 	}
-	if len(addrInfo.ID) > 52 {
-		return fmt.Errorf("stream: node id is too long: %s", peerInfo)
+	if len(peerID) > 52 {
+		return fmt.Errorf("stream: node id is too long: %s", peerID)
 	}
-	if err := addrInfo.ID.Validate(); err != nil {
+	if err := peerID.Validate(); err != nil {
 		return err
 	}
 
-	c.host.Peerstore().AddAddrs(addrInfo.ID, addrInfo.Addrs, peerstore.PermanentAddrTTL)
+	// Peerstore is internally thread-safe and host.Connect can take 30s —
+	// don't hold c.mu across either, or pause/resume/disconnect would
+	// block on the dial.
+	c.host.Peerstore().AddAddrs(peerID, addrs, peerstore.PermanentAddrTTL)
 
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
 
-	if err := c.host.Connect(ctx, *addrInfo); err != nil {
+	if err := c.host.Connect(ctx, peer.AddrInfo{ID: peerID, Addrs: addrs}); err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}
 
-	c.desktopPeerID = addrInfo.ID
+	c.mu.Lock()
+	c.desktopPeerID = peerID
+	c.mu.Unlock()
 	return nil
 }
 
 func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
+	c.flushEvents()
 	c.mu.RLock()
 	desktopPeerID := c.desktopPeerID
 	c.mu.RUnlock()
@@ -262,6 +362,7 @@ func closeWrite(s network.Stream) {
 // node's auth middleware (warpnet/core/middleware/auth.go) verifies it
 // against the peer ID extracted from the libp2p connection.
 func (c *clientNode) sign(body []byte) (string, error) {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.privKey == nil {
@@ -275,6 +376,7 @@ func (c *clientNode) sign(body []byte) (string, error) {
 }
 
 func (c *clientNode) getPeerID() string {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.host.ID().String()
@@ -282,6 +384,7 @@ func (c *clientNode) getPeerID() string {
 
 // IsConnected checks if connected to the desktop node
 func (c *clientNode) isConnected() bool {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -298,6 +401,7 @@ func (c *clientNode) isConnected() bool {
 // reconnect loop; Go only reports the snapshot. Returns "NotConnected"
 // when no peer is paired yet.
 func (c *clientNode) connectedness() string {
+	c.flushEvents()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.desktopPeerID == "" {
@@ -307,6 +411,7 @@ func (c *clientNode) connectedness() string {
 }
 
 func (c *clientNode) disconnect() error {
+	c.flushEvents()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -321,9 +426,87 @@ func (c *clientNode) disconnect() error {
 	return nil
 }
 
+// pause drops all live connections on the libp2p host so the radio can
+// go to sleep while the app is backgrounded. The host itself stays
+// initialised; resume() re-dials the paired peer.
+func (c *clientNode) pause() {
+	c.flushEvents()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, conn := range c.host.Network().Conns() {
+		_ = conn.Close()
+	}
+}
+
+// resume re-dials the paired desktop peer in the background. Kicked from
+// the Android onStart lifecycle callback, which runs on the main thread,
+// so the actual host.Connect runs in a goroutine bounded by a 10s
+// ceiling — a dead peer can't wedge subsequent lifecycle callbacks.
+// Only the paired peer is dialled; iterating every peerstore entry
+// would burn dial budget on stale DHT routing-table fillers.
+func (c *clientNode) resume() {
+	c.flushEvents()
+	c.mu.RLock()
+	desktopPeerID := c.desktopPeerID
+	c.mu.RUnlock()
+	if desktopPeerID == "" {
+		return
+	}
+	info := c.host.Peerstore().PeerInfo(desktopPeerID)
+	go func() {
+		// Parent off c.ctx so close() / cancel() reliably tears down
+		// in-flight resume dials instead of letting them outlive the
+		// node.
+		ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
+		defer cancel()
+		_ = c.host.Connect(ctx, info)
+	}()
+}
+
 func (c *clientNode) close() error {
 	defer func() { recover() }()
 	c.cancel()
 	_ = c.dht.Close()
 	return c.host.Close()
+}
+
+// refreshPeerAddrs adds the supplied newline-separated multiaddrs to the
+// paired desktop peer's peerstore entry with a permanent TTL. The pair
+// handler on the fat node returns its current public addresses on every
+// call, so periodically re-pairing keeps the thin client's peerstore in
+// sync with the fat node's IP / port changes — handy when the desktop
+// moves between networks.
+func (c *clientNode) refreshPeerAddrs(addrs string) error {
+	c.flushEvents()
+	c.mu.RLock()
+	peerID := c.desktopPeerID
+	c.mu.RUnlock()
+	if peerID == "" {
+		return fmt.Errorf("no paired peer")
+	}
+	var maddrs []multiaddr.Multiaddr
+	hadInput := false
+	for _, line := range strings.Split(addrs, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		hadInput = true
+		m, err := multiaddr.NewMultiaddr(line)
+		if err != nil {
+			continue
+		}
+		maddrs = append(maddrs, m)
+	}
+	if hadInput && len(maddrs) == 0 {
+		// Non-empty input but every line failed to parse — surface the
+		// contract violation instead of silently leaving the peerstore
+		// stale.
+		return fmt.Errorf("no valid multiaddrs in refresh payload")
+	}
+	if len(maddrs) == 0 {
+		return nil
+	}
+	c.host.Peerstore().AddAddrs(peerID, maddrs, peerstore.PermanentAddrTTL)
+	return nil
 }
