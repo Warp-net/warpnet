@@ -8,6 +8,7 @@ package site.warpnet.warpdroid.worker
 import android.content.Context
 import android.util.Log
 import androidx.hilt.work.HiltWorker
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -61,16 +62,28 @@ class PairRefreshWorker @AssistedInject constructor(
         private const val TAG = "PairRefreshWorker"
         const val UNIQUE_NAME = "pair-refresh"
 
+        // Once per 6 h is plenty for picking up fat-node IP changes —
+        // anything more aggressive just burns the radio. Constrained to
+        // unmetered networks with charging-or-not-low battery so we
+        // never wake the device into a refresh on cellular or at 5%.
+        private val REFRESH_INTERVAL_HOURS = 6L
+
         fun schedule(context: Context) {
             val request = PeriodicWorkRequest.Builder(
                 PairRefreshWorker::class.java,
-                PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS,
-                TimeUnit.MILLISECONDS,
+                REFRESH_INTERVAL_HOURS,
+                TimeUnit.HOURS,
             )
                 .setConstraints(
                     Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .setRequiredNetworkType(NetworkType.UNMETERED)
+                        .setRequiresBatteryNotLow(true)
                         .build()
+                )
+                .setBackoffCriteria(
+                    BackoffPolicy.LINEAR,
+                    1L,
+                    TimeUnit.HOURS,
                 )
                 .build()
 
