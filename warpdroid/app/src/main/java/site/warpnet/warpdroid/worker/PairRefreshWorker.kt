@@ -62,17 +62,11 @@ class PairRefreshWorker @AssistedInject constructor(
         private const val TAG = "PairRefreshWorker"
         const val UNIQUE_NAME = "pair-refresh"
 
-        // Once per 6 h is plenty for picking up fat-node IP changes —
-        // anything more aggressive just burns the radio. Constrained to
-        // not-low battery so we never wake the device into a refresh
-        // at 5%.
-        private val REFRESH_INTERVAL_HOURS = 6L
-
         fun schedule(context: Context) {
             val request = PeriodicWorkRequest.Builder(
                 PairRefreshWorker::class.java,
-                REFRESH_INTERVAL_HOURS,
-                TimeUnit.HOURS,
+                PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS,
+                TimeUnit.MILLISECONDS,
             )
                 .setConstraints(
                     Constraints.Builder()
