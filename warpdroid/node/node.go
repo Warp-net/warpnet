@@ -166,7 +166,6 @@ func newClient(
 		libp2p.Security(noise.ID, noise.New),                // Noise protocol for encryption
 		libp2p.Transport(camouflage.NewCamouflageTransport), // TCP transport
 		libp2p.UserAgent("warpdroid"),                       // Custom user agent
-		libp2p.ForceReachabilityPrivate(),
 		libp2p.Muxer(yamux.ID, ya),
 		libp2p.ConnectionManager(connManager),
 		libp2p.ResourceManager(rm),

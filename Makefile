@@ -9,7 +9,7 @@ echo-android:
 
 run-main:
 	go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
-	cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && GOLOG_LOG_LEVEL="swarm2=debug,autorelay=debug,relay=debug" ./build/bin/warpnet --node.network testnet
+	cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
 
 run-second:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1
@@ -65,8 +65,10 @@ download-golang-armv6:
 gen-aar:
 	cd warpdroid/node && ./build-native.sh && cd -
   
-.PHONY: generate
-generate:
+.PHONY: frontend
+frontend:
 	cd frontend && make rebuild && cd -
+
+aar:
 	cd warpdroid && make aar && cd -
 	go mod tidy && go mod vendor
