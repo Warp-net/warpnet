@@ -91,15 +91,17 @@ class WarpdroidApplication :
         // StrictMode off — penalties are intentionally log-only so a
         // missed read doesn't crash a user.
         if (BuildConfig.DEBUG) {
-            StrictMode.setThreadPolicy(
-                StrictMode.ThreadPolicy.Builder()
-                    .detectDiskReads()
-                    .detectDiskWrites()
-                    .detectNetwork()
-                    .detectUnbufferedIo()
-                    .penaltyLog()
-                    .build()
-            )
+            val threadPolicy = StrictMode.ThreadPolicy.Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .penaltyLog()
+            // detectUnbufferedIo requires API 26 (O); minSdk is 24 so
+            // guarding it avoids NoSuchMethodError on Android 7.x.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                threadPolicy.detectUnbufferedIo()
+            }
+            StrictMode.setThreadPolicy(threadPolicy.build())
             StrictMode.setVmPolicy(
                 StrictMode.VmPolicy.Builder()
                     .detectLeakedClosableObjects()

@@ -63,6 +63,7 @@ import androidx.viewpager2.widget.MarginPageTransformer
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.bumptech.glide.request.target.CustomTarget
+import androidx.core.content.ContextCompat
 import com.bumptech.glide.request.target.FixedSizeDrawable
 import com.bumptech.glide.request.transition.Transition
 import com.google.android.material.R as materialR
@@ -580,8 +581,11 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 // Warpnet has no HTTP URLs for headers/avatars in some
                 // states (newly-paired profile, etc.); skip the Glide
                 // request entirely so logcat isn't spammed with
-                // "Load failed for []" for an empty Uri.
+                // "Load failed for []" for an empty Uri. Cancel any
+                // in-flight request on this recycled ImageView first so
+                // a stale callback can't overwrite the placeholder.
                 if (uri.toString().isBlank()) {
+                    Glide.with(imageView).clear(imageView)
                     imageView.setImageDrawable(placeholder)
                     return
                 }
@@ -860,7 +864,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     @SuppressLint("CheckResult")
     private fun loadDrawerAvatar(avatarUrl: String, showPlaceholder: Boolean = true) {
-        if (avatarUrl.isBlank()) return
         val hideTopToolbar = preferences.getBoolean(PrefKeys.HIDE_TOP_TOOLBAR, false)
         val animateAvatars = preferences.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false)
 
@@ -876,6 +879,16 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         }
 
         val navIconSize = resources.getDimensionPixelSize(R.dimen.avatar_toolbar_nav_icon_size)
+
+        if (avatarUrl.isBlank()) {
+            // No URL to load — set the default avatar on the toolbar
+            // instead of letting Glide log "Load failed for []" or
+            // leaving the nav icon stale from a previous profile.
+            ContextCompat.getDrawable(this, R.drawable.avatar_default)?.let {
+                activeToolbar.navigationIcon = FixedSizeDrawable(it, navIconSize, navIconSize)
+            }
+            return
+        }
 
         if (animateAvatars) {
             Glide.with(this)
