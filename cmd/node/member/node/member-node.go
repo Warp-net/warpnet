@@ -543,7 +543,7 @@ func (m *MemberNode) replyHandlers(
 		},
 		{
 			event.PUBLIC_GET_REPLIES,
-			handler.StreamGetRepliesHandler(r.replyRepo, userRepo, m),
+			handler.StreamGetRepliesHandler(r.replyRepo),
 		},
 	}
 }
