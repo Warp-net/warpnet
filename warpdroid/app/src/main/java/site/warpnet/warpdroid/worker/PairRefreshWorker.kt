@@ -52,6 +52,12 @@ class PairRefreshWorker @AssistedInject constructor(
         } catch (e: WarpnetException.NotInitialised) {
             Log.d(TAG, "pair refresh skipped: not initialised")
             Result.success()
+        } catch (e: WarpnetException.ProtocolError) {
+            // The fat node rejected the pairing (token mismatch / no
+            // longer paired). Retrying won't recover; surface as success
+            // so WorkManager doesn't loop, the user re-pairs via QR.
+            Log.w(TAG, "pair refresh rejected: code=${e.code} ${e.serverMessage}")
+            Result.success()
         } catch (e: Exception) {
             Log.w(TAG, "pair refresh failed", e)
             Result.retry()

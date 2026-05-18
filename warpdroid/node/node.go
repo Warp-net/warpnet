@@ -409,16 +409,24 @@ func (c *clientNode) refreshPeerAddrs(addrs string) error {
 		return fmt.Errorf("no paired peer")
 	}
 	var maddrs []multiaddr.Multiaddr
+	hadInput := false
 	for _, line := range strings.Split(addrs, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
+		hadInput = true
 		m, err := multiaddr.NewMultiaddr(line)
 		if err != nil {
 			continue
 		}
 		maddrs = append(maddrs, m)
+	}
+	if hadInput && len(maddrs) == 0 {
+		// Non-empty input but every line failed to parse — surface the
+		// contract violation instead of silently leaving the peerstore
+		// stale.
+		return fmt.Errorf("no valid multiaddrs in refresh payload")
 	}
 	if len(maddrs) == 0 {
 		return nil
