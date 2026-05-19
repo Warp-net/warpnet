@@ -26,6 +26,7 @@
     <string name="error_loading_account_details">Failed loading account details</string>
     <string name="error_could_not_load_login_page">Could not load the login page.</string>
     <string name="error_compose_character_limit">The post is too long!</string>
+    <string name="error_compose_quote_with_media">Quote retweets can\'t include media. Remove attachments and try again.</string>
     <string name="error_multimedia_size_limit">Video and audio files cannot exceed %1$s MB in size.</string>
 
     <string name="error_image_edit_failed">The image could not be edited.</string>
@@ -133,10 +134,8 @@
     <string name="action_quick_reply">Quick Reply</string>
     <string name="action_reply">Reply</string>
     <string name="action_retweet">Retweet</string>
-    <string name="action_retweet_private">Followers-Only Retweet</string>
-    <string name="action_retweet_public">Public Retweet</string>
-    <string name="action_retweet_unlisted">Unlisted Retweet</string>
     <string name="action_unretweet">Remove retweet</string>
+    <string name="action_quote">Quote</string>
     <string name="action_like">Like</string>
     <string name="action_unlike">Remove like</string>
     <string name="action_bookmark">Bookmark</string>
@@ -548,9 +547,6 @@
 
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s has moved to:</string>
-
-    <string name="retweet_private">Retweet to original audience</string>
-    <string name="unretweet_private">Unretweet</string>
 
     <string name="license_description">Warpdroid contains code and assets from the following open source projects:</string>
     <string name="license_apache_2">Licensed under the Apache License (copy below)</string>

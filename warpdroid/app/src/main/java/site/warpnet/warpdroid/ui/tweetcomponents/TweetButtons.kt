@@ -19,6 +19,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme.colorScheme
@@ -44,7 +46,6 @@ import at.connyduck.sparkbutton.compose.SparkButton
 import at.connyduck.sparkbutton.compose.rememberSparkButtonState
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.db.entity.AccountEntity
-import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.WarpdroidPreviewTheme
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
@@ -158,54 +159,39 @@ fun TweetButtons(
             )
         }
 
-        if (status.visibility == Tweet.Visibility.DIRECT) {
-            Icon(
-                painter = painterResource(R.drawable.ic_mail_24dp),
-                tint = warpdroidColors.disabledTextColor,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp)
-                    .constrainAs(retweetButton) {
-                        start.linkTo(replyButton.end)
-                        end.linkTo(favButton.start)
-                        centerVerticallyTo(parent)
-                    }
-            )
-        } else if (status.visibility == Tweet.Visibility.PRIVATE) {
-            Icon(
-                painter = if (retweeted) {
-                    painterResource(R.drawable.ic_lock_24dp_filled)
-                } else {
-                    painterResource(R.drawable.ic_lock_24dp)
-                },
-                tint = if (retweeted) {
-                    colorScheme.primary
-                } else {
-                    warpdroidColors.disabledTextColor
-                },
-                contentDescription = null,
-                modifier = Modifier.size(24.dp)
-                    .constrainAs(retweetButton) {
-                        start.linkTo(replyButton.end)
-                        end.linkTo(favButton.start)
-                        centerVerticallyTo(parent)
-                    }
-            )
-        } else {
-            val sparkButtonState = rememberSparkButtonState()
+        // Warpnet only emits Tweet.Visibility.PUBLIC (WarpnetMapper.toTweet
+        // hardcodes it), so the DIRECT / PRIVATE Tusky branches that used
+        // to render a mail or lock icon in place of the retweet button
+        // never fired here. Inlining the public path directly.
+        //
+        // Vue desktop UX: tapping retweet on a not-yet-retweeted post
+        // opens a small menu with "Retweet" / "Quote"; tapping on an
+        // already-retweeted post untoggles directly without a menu.
+        // SparkButton's reveal animation is kept for the plain retweet
+        // path because that's where the celebration fires; the quote
+        // path opens a new screen so the animation would never play.
+        val retweetSparkButtonState = rememberSparkButtonState()
+        var showRetweetMenu by remember { mutableStateOf(false) }
+        Box(
+            modifier = Modifier
+                .constrainAs(retweetButton) {
+                    start.linkTo(replyButton.end)
+                    end.linkTo(favButton.start)
+                    centerVerticallyTo(parent)
+                }
+        ) {
             SparkButton(
                 animateOnClick = false,
                 onClick = {
-                    listener.onRetweet(statusViewData, !retweeted, null, state = sparkButtonState)
+                    if (retweeted) {
+                        listener.onRetweet(statusViewData, false, null, state = retweetSparkButtonState)
+                    } else {
+                        showRetweetMenu = true
+                    }
                 },
-                state = sparkButtonState,
+                state = retweetSparkButtonState,
                 primaryColor = warpdroidBlueDark,
                 secondaryColor = warpdroidBlueLight,
-                modifier = Modifier
-                    .constrainAs(retweetButton) {
-                        start.linkTo(replyButton.end)
-                        end.linkTo(favButton.start)
-                        centerVerticallyTo(parent)
-                    }
             ) {
                 if (retweeted) {
                     Icon(
@@ -223,23 +209,42 @@ fun TweetButtons(
                     )
                 }
             }
-
-            if (showStats) {
-                Text(
-                    text = formatNumber(status.retweetsCount.toLong(), 1000),
-                    color = if (retweeted) {
-                        colorScheme.primary
-                    } else {
-                        warpdroidColors.tertiaryTextColor
+            DropdownMenu(
+                expanded = showRetweetMenu,
+                onDismissRequest = { showRetweetMenu = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_retweet)) },
+                    onClick = {
+                        showRetweetMenu = false
+                        listener.onRetweet(statusViewData, true, null, state = retweetSparkButtonState)
                     },
-                    style = LocalPreferences.current.statusTextStyles.medium,
-                    modifier = Modifier
-                        .constrainAs(retweetCount) {
-                            start.linkTo(retweetButton.end, margin = 4.dp)
-                            centerVerticallyTo(parent)
-                        }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_quote)) },
+                    onClick = {
+                        showRetweetMenu = false
+                        listener.onQuote(statusViewData)
+                    },
                 )
             }
+        }
+
+        if (showStats) {
+            Text(
+                text = formatNumber(status.retweetsCount.toLong(), 1000),
+                color = if (retweeted) {
+                    colorScheme.primary
+                } else {
+                    warpdroidColors.tertiaryTextColor
+                },
+                style = LocalPreferences.current.statusTextStyles.medium,
+                modifier = Modifier
+                    .constrainAs(retweetCount) {
+                        start.linkTo(retweetButton.end, margin = 4.dp)
+                        centerVerticallyTo(parent)
+                    }
+            )
         }
 
         val sparkButtonState = rememberSparkButtonState()

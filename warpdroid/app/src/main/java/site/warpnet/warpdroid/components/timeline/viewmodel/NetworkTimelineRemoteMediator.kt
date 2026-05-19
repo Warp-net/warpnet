@@ -64,7 +64,14 @@ class NetworkTimelineRemoteMediator(
                 viewModel.statusData.clear()
             }
 
-            val activeAccount = viewModel.activeAccountFlow.value!!
+            // Same race as TimelineViewModel.init: if the account flow
+            // hasn't propagated its first value yet on a fresh process,
+            // fall back to the AccountManager's eagerly-computed active
+            // account (always non-null thanks to the stub). Treat a fully
+            // missing account as an empty page rather than crash.
+            val activeAccount = viewModel.activeAccountFlow.value
+                ?: viewModel.accountManager.activeAccount
+                ?: return MediatorResult.Success(endOfPaginationReached = true)
 
             val data = statuses.map { status ->
 
