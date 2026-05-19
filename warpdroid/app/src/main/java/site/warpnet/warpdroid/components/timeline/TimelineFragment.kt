@@ -665,7 +665,10 @@ class TimelineFragment :
     }
 
     override fun onReply(viewData: TweetViewData.Concrete) {
-        requireContext().reply(viewData, viewModel.activeAccountFlow.value!!)
+        val activeAccount = viewModel.activeAccountFlow.value
+            ?: viewModel.accountManager.activeAccount
+            ?: return
+        requireContext().reply(viewData, activeAccount)
     }
 
 

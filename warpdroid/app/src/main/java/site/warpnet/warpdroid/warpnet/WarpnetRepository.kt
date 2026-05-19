@@ -73,6 +73,7 @@ import site.warpnet.transport.dto.WarpnetUser
 class WarpnetRepository @Inject constructor(
     private val client: WarpnetClient,
     private val pairedNodeStore: PairedNodeStore,
+    private val accountManager: site.warpnet.warpdroid.db.AccountManager,
     moshi: Moshi,
 ) {
     private val userAdapter = moshi.adapter<WarpnetUser>()
@@ -821,48 +822,67 @@ class WarpnetRepository @Inject constructor(
 
     /** Pin [tweetId] (authored by [ownerUserId]) to the local bookmark shelf. */
     suspend fun bookmarkTweet(userId: String, tweetId: String, ownerUserId: String) {
-        client.request(
-            ProtocolIds.PRIVATE_POST_BOOKMARK,
-            bookmarkEventAdapter.toJson(
-                site.warpnet.transport.dto.BookmarkEvent(
-                    userId = userId,
-                    tweetId = tweetId,
-                    ownerUserId = ownerUserId,
+        if (userId.isBlank() || tweetId.isBlank() || ownerUserId.isBlank()) return
+        runCatching {
+            client.request(
+                ProtocolIds.PRIVATE_POST_BOOKMARK,
+                bookmarkEventAdapter.toJson(
+                    site.warpnet.transport.dto.BookmarkEvent(
+                        userId = userId,
+                        tweetId = tweetId,
+                        ownerUserId = ownerUserId,
+                    ),
                 ),
-            ),
-        )
+            )
+        }.onFailure { e -> android.util.Log.w(TAG, "bookmarkTweet($tweetId) failed", e) }
     }
 
     /** Remove a previously-bookmarked tweet from the shelf. */
     suspend fun unbookmarkTweet(userId: String, tweetId: String) {
-        client.request(
-            ProtocolIds.PRIVATE_POST_UNBOOKMARK,
-            unbookmarkEventAdapter.toJson(
-                site.warpnet.transport.dto.UnbookmarkEvent(userId = userId, tweetId = tweetId),
-            ),
-        )
+        if (userId.isBlank() || tweetId.isBlank()) return
+        runCatching {
+            client.request(
+                ProtocolIds.PRIVATE_POST_UNBOOKMARK,
+                unbookmarkEventAdapter.toJson(
+                    site.warpnet.transport.dto.UnbookmarkEvent(userId = userId, tweetId = tweetId),
+                ),
+            )
+        }.onFailure { e -> android.util.Log.w(TAG, "unbookmarkTweet($tweetId) failed", e) }
     }
 
     /**
      * Fetch one page of bookmarked tweets. The wire returns identifiers only —
      * each tweet body is re-fetched in parallel and surfaced as a Tweet.
+     *
+     * Wrapped in runCatching so a single backend / decode failure surfaces as
+     * an empty page rather than crashing the whole timeline-viewing activity —
+     * the bookmark route hits PRIVATE_GET_BOOKMARKS, which depends on local
+     * state that may not exist pre-pairing or after a fresh install.
      */
     suspend fun getBookmarks(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.warpdroid.entity.Tweet>, String> {
-        val raw = client.request(
-            ProtocolIds.PRIVATE_GET_BOOKMARKS,
-            getBookmarksEventAdapter.toJson(
-                site.warpnet.transport.dto.GetBookmarksEvent(userId = userId, cursor = cursor, limit = limit),
-            ),
-        )
-        val page = getBookmarksRespAdapter.fromJson(raw)
-            ?: return emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
-        if (page.items.isEmpty()) {
-            return emptyList<site.warpnet.warpdroid.entity.Tweet>() to page.cursor
+        if (userId.isBlank()) {
+            return emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
         }
-        val tweets = page.items.mapNotNull { bm ->
-            runCatching { getStatus(tweetId = bm.tweetId, userId = bm.ownerUserId) }.getOrNull()
+        return runCatching {
+            val raw = client.request(
+                ProtocolIds.PRIVATE_GET_BOOKMARKS,
+                getBookmarksEventAdapter.toJson(
+                    site.warpnet.transport.dto.GetBookmarksEvent(userId = userId, cursor = cursor, limit = limit),
+                ),
+            )
+            val page = getBookmarksRespAdapter.fromJson(raw)
+                ?: return@runCatching emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
+            if (page.items.isEmpty()) {
+                return@runCatching emptyList<site.warpnet.warpdroid.entity.Tweet>() to page.cursor
+            }
+            val tweets = page.items.mapNotNull { bm ->
+                runCatching { getStatus(tweetId = bm.tweetId, userId = bm.ownerUserId) }.getOrNull()
+            }
+            tweets to page.cursor
+        }.getOrElse { e ->
+            android.util.Log.w(TAG, "getBookmarks($userId) failed", e)
+            emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
         }
-        return tweets to page.cursor
     }
 
     // -----------------------------------------------------------------
@@ -1049,6 +1069,16 @@ class WarpnetRepository @Inject constructor(
         // doesn't pay 30x serialised round-trip latency. Failures degrade
         // to zero counts; the toTweet baseline already matches that.
         val viewerId = pairedNodeStore.load()?.userId.orEmpty()
+        // Pre-seed the resolveUser cache with the viewer's own
+        // [AccountEntity] so own-user tweets surface with the avatar the
+        // user already set on their profile, instead of falling back to
+        // the empty-avatar stub if the per-tweet getUser() lookup races
+        // the post-pairing profile refresh or returns a stripped wire
+        // shape. The TimelineAccount fields mirror what
+        // WarpnetMapper.toTimelineAccount would produce.
+        if (viewerId.isNotBlank()) {
+            seedOwnUser(viewerId, cache)
+        }
         // Quoted-source tweets fan out in parallel too. The map keys by
         // (quotedTweetId, quotedUserId) so two quotes of the same source
         // collapse to one RPC. Inner getStatus() doesn't recurse into
@@ -1132,5 +1162,47 @@ class WarpnetRepository @Inject constructor(
         if (userId.isBlank()) return null
         cache[userId]?.let { return it }
         return runCatching { getUser(userId) }.getOrNull()?.also { cache[userId] = it }
+    }
+
+    /**
+     * Pre-seed [cache] with a synthesised [WarpnetUser] for the viewer
+     * built from the local [AccountEntity]. Used so own-tweet avatars
+     * render even when getUser() is mid-flight or stripped of
+     * avatar_key — the AccountEntity stores the already-resolved
+     * `warpnet://avatar/{userId}/{key}` URL so we just decompose it.
+     */
+    private fun seedOwnUser(viewerId: String, cache: MutableMap<String, WarpnetUser>) {
+        if (cache.containsKey(viewerId)) return
+        val account = accountManager.activeAccount ?: return
+        // accountId is the wire-level Warpnet user id (set after pairing);
+        // skip seeding when it doesn't match the viewer (eg. stub state
+        // before pairing populated the entity).
+        if (account.accountId != viewerId) return
+        val avatarKey = avatarKeyFromUrl(account.profilePictureUrl, viewerId)
+        val backgroundKey = avatarKeyFromUrl(account.profileHeaderUrl, viewerId)
+        cache[viewerId] = WarpnetUser(
+            id = viewerId,
+            username = account.displayName.ifBlank { account.username },
+            avatarKey = avatarKey,
+            backgroundImageKey = backgroundKey.orEmpty(),
+        )
+    }
+
+    /**
+     * Extract the blob key from a `warpnet://avatar/{userId}/{key}` URL
+     * produced by [site.warpnet.warpdroid.warpnet.WarpnetMapper.warpnetImageUrl].
+     * Returns null for blank URLs or shapes we don't recognise so the
+     * seeded [WarpnetUser] surfaces as "no avatar" rather than garbage.
+     */
+    private fun avatarKeyFromUrl(url: String, viewerId: String): String? {
+        if (url.isBlank()) return null
+        val prefix = "warpnet://avatar/$viewerId/"
+        if (!url.startsWith(prefix)) return null
+        val tail = url.removePrefix(prefix)
+        return tail.takeIf { it.isNotBlank() }
+    }
+
+    private companion object {
+        const val TAG = "WarpnetRepository"
     }
 }

@@ -39,7 +39,14 @@ abstract class TimelineViewModel(
 ) : TweetActionsViewModel(api, eventHub) {
 
     val activeAccountFlow = accountManager.activeAccount(viewModelScope)
-    protected val accountId: Long = activeAccountFlow.value!!.id
+    // ViewModel construction races AccountManager's first emit on some
+    // entry points (notably the BOOKMARKS / LIKES TweetListActivity flow
+    // when the process was just resumed). The stub account is always
+    // present in the underlying flow, so we fall back to it here rather
+    // than NPE on `!!` and tear the whole activity down.
+    protected val accountId: Long = activeAccountFlow.value?.id
+        ?: accountManager.activeAccount?.id
+        ?: AccountManager.STUB_ACCOUNT_ID
 
     abstract val statuses: Flow<PagingData<TweetViewData>>
 
@@ -62,7 +69,9 @@ abstract class TimelineViewModel(
         this.id = id
         this.tags = tags
 
-        val activeAccount = activeAccountFlow.value!!
+        val activeAccount = activeAccountFlow.value
+            ?: accountManager.activeAccount
+            ?: return
 
         if (kind == Kind.HOME) {
             // Note the variable is "true if filter" but the underlying preference/settings text is "true if show"
