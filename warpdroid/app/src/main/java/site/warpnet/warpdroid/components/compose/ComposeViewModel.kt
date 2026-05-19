@@ -30,7 +30,6 @@ import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
 import site.warpnet.warpdroid.components.search.SearchType
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
-import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.service.MediaToSend
@@ -78,9 +77,6 @@ class ComposeViewModel @AssistedInject constructor(
     private var currentContentWarning: String? = ""
 
     val instanceInfo: SharedFlow<InstanceInfo> = instanceInfoRepo::getUpdatedInstanceInfoOrFallback.asFlow()
-        .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
-
-    val emoji: SharedFlow<List<Emoji>> = instanceInfoRepo::getEmojis.asFlow()
         .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
 
     private val _markMediaAsSensitive: SavedStateFlow<Boolean> = SavedStateFlow(
@@ -481,18 +477,7 @@ class ComposeViewModel @AssistedInject constructor(
                     })
             }
 
-            ':' -> {
-                val emojiList = emoji.replayCache.firstOrNull() ?: return emptyList()
-                val incomplete = token.substring(1)
-
-                emojiList.filter { emoji ->
-                    emoji.shortcode.contains(incomplete, ignoreCase = true)
-                }.sortedBy { emoji ->
-                    emoji.shortcode.indexOf(incomplete, ignoreCase = true)
-                }.map { emoji ->
-                    AutocompleteResult.EmojiResult(emoji)
-                }
-            }
+            ':' -> emptyList()
 
             else -> {
                 Log.w(TAG, "Unexpected autocompletion token: $token")

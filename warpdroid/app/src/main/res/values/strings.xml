@@ -23,9 +23,6 @@
     <string name="error_invalid_domain">Invalid domain entered</string>
     <string name="error_failed_app_registration">Failed authenticating with that instance. If this persists, try "Login in Browser" from the menu.</string>
     <string name="error_no_web_browser_found">Couldn\'t find a web browser to use.</string>
-    <string name="error_authorization_unknown">An unidentified authorization error occurred. If this persists, try "Login in Browser" from the menu.</string>
-    <string name="error_authorization_denied">Authorization was denied. If you\'re sure that you supplied the correct credentials, try "Login in Browser" from the menu.</string>
-    <string name="error_retrieving_oauth_token">Failed getting a login token. If this persists, try "Login in Browser" from the menu.</string>
     <string name="error_loading_account_details">Failed loading account details</string>
     <string name="error_could_not_load_login_page">Could not load the login page.</string>
     <string name="error_compose_character_limit">The post is too long!</string>
@@ -146,8 +143,6 @@
     <string name="action_unbookmark">Remove bookmark</string>
     <string name="action_more">More</string>
     <string name="action_compose">Compose</string>
-    <string name="action_login">Login with Warpdroid</string>
-    <string name="action_browser_login">Login with Browser</string>
     <string name="action_logout">Log out</string>
     <string name="action_logout_confirm">Are you sure you want to log out of %1$s? This will delete all local data of the account, including drafts and preferences.</string>
     <string name="action_remove_account">Remove account</string>
@@ -217,7 +212,6 @@
     <string name="action_access_scheduled_posts">Scheduled posts</string>
     <string name="action_toggle_visibility">Post visibility</string>
     <string name="action_content_warning">Content warning</string>
-    <string name="action_emoji_keyboard">Emoji keyboard</string>
     <string name="action_schedule_post">Schedule Post</string>
     <string name="action_reset_schedule">Reset</string>
     <string name="action_add_tab">Add Tab</string>
@@ -539,7 +533,6 @@
     <string name="send_post_notification_saved_content">A copy of the post has been saved to your drafts</string>
     <string name="action_compose_shortcut">Compose</string>
 
-    <string name="error_no_custom_emojis">Your instance %1$s does not have any custom emojis</string>
     <string name="emoji_style">Emoji style</string>
     <string name="system_default">System default</string>
     <string name="download_fonts">You\'ll need to download these emoji sets first</string>
@@ -650,8 +643,6 @@
         Poll with choices: %1$s, %2$s, %3$s, %4$s; %5$s
     </string>
     <string name="description_post_language">Post language</string>
-    <string name="description_login">Works in most cases. No data is leaked to other apps.</string>
-    <string name="description_browser_login">May support additional authentication methods, but requires a supported browser.</string>
 
     <string name="hint_list_name">List name</string>
 
@@ -987,7 +978,6 @@
     <string name="report_category_other_description">The issue does not fit into other categories</string>
     <string name="report_category_other_title">It\'s something else</string>
 
-    <string name="action_login_again">Login again</string>
     <string name="account_disconnected_title">Account disconnected</string>
     <string name="account_disconnected_message">Warpdroid\'s login for %1$s is no longer valid. This can happen because you changed your password or revoked access for Warpdroid. Please log in again.</string>
 

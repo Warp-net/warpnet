@@ -22,7 +22,6 @@ import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.util.TweetDisplayOptions
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
@@ -54,25 +53,18 @@ class FollowViewHolder(
         val wrappedDisplayName = account.name.unicodeWrap()
 
         binding.notificationText.text = messageTemplate.format(wrappedDisplayName)
-            .emojify(account.emojis, binding.notificationText, statusDisplayOptions.animateEmojis)
 
         binding.notificationUsername.text = context.getString(R.string.post_username_format, viewData.account.username)
 
-        val emojifiedDisplayName = wrappedDisplayName.emojify(
-            account.emojis,
-            binding.notificationDisplayName,
-            statusDisplayOptions.animateEmojis
-        )
-        binding.notificationDisplayName.text = emojifiedDisplayName
+        binding.notificationDisplayName.text = wrappedDisplayName
 
         if (account.note.isEmpty()) {
             binding.accountNote.hide()
         } else {
             binding.accountNote.show()
 
-            val emojifiedNote = account.note.parseAsWarpnetHtml()
-                .emojify(account.emojis, binding.accountNote, statusDisplayOptions.animateEmojis)
-            setClickableText(binding.accountNote, emojifiedNote, emptyList(), null, linkListener)
+            val parsedNote = account.note.parseAsWarpnetHtml()
+            setClickableText(binding.accountNote, parsedNote, emptyList(), null, linkListener)
         }
 
         val avatarRadius = context.resources

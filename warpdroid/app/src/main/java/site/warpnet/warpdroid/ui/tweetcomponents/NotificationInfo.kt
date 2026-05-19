@@ -21,8 +21,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.ui.WarpdroidAsyncImage
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineAccount
@@ -286,7 +286,7 @@ private fun NotificationInfoWithEmojiUrl(
                 onViewAccount()
             }
     ) {
-        AsyncImage(
+        WarpdroidAsyncImage(
             model = emojiUrl,
             contentDescription = null,
             contentScale = ContentScale.Fit

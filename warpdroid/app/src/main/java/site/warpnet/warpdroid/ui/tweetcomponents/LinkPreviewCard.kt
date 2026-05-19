@@ -51,8 +51,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import coil3.compose.AsyncImage
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.ui.WarpdroidAsyncImage
 import site.warpnet.warpdroid.ViewMediaActivity
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.PreviewCard
@@ -198,7 +198,7 @@ private fun LinkPreviewImage(
             }
         }
 
-        AsyncImage(
+        WarpdroidAsyncImage(
             model = if (sensitive || blurMedia || !showMedia) null else imageUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,

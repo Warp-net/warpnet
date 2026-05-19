@@ -15,81 +15,26 @@
 
 package site.warpnet.warpdroid.ui.tweetcomponents.text
 
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.Placeholder
-import androidx.compose.ui.text.PlaceholderVerticalAlign
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
 import site.warpnet.warpdroid.entity.Emoji
-import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 
-/**
- * Returns an [AnnotatedString] with the same content as [this] and all contained custom [emojis] marked as inline content.
- * In order for the emojis to be rendered, they must also be set as inlineContent on the [androidx.compose.material3.Text].
- * @see toInlineContent
- */
-@Composable
-fun String.emojify(emojis: List<Emoji>): AnnotatedString {
-    return remember(this, emojis) {
-        buildAnnotatedString {
-            append(this@emojify)
-
-            // Iceshrimp may send duplicate emojis https://codeberg.org/tusky/Tusky/issues/5474
-            emojis
-                .distinctBy { emoji -> emoji.shortcode }
-                .forEach { (shortcode) ->
-                    val pattern = ":$shortcode:"
-                    var start = indexOf(pattern)
-
-                    while (start != -1) {
-                        val end = start + pattern.length
-
-                        addStringAnnotation(
-                            tag = INLINE_CONTENT_TAG,
-                            annotation = shortcode,
-                            start = start,
-                            end = end
-                        )
-
-                        start = indexOf(pattern, end)
-                    }
-                }
-        }
-    }
-}
+// Warpnet has no custom-shortcode emoji concept. The Mastodon-style
+// `:shortcode:` rendering pipeline was the worst offender for transition
+// jank — Compose recomposed AsyncImage per inline emoji on every Text
+// remeasure. The helpers stay as no-ops so call sites keep compiling.
 
 @Composable
-fun List<Emoji>.toInlineContent(): Map<String, InlineTextContent> {
-    val animateCustomEmojis = LocalPreferences.current.animateCustomEmojis
-    return remember(this, animateCustomEmojis) {
-        associate { emoji ->
-            emoji.shortcode to InlineTextContent(
-                placeholder = Placeholder(
-                    width = 22.sp,
-                    height = 22.sp,
-                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
-                ),
-                children = {
-                    AsyncImage(
-                        modifier = Modifier.fillMaxSize(),
-                        model = if (animateCustomEmojis) emoji.url else emoji.staticUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit
-                    )
-                }
-            )
-        }
-    }
-}
+@Suppress("UNUSED_PARAMETER")
+fun String.emojify(emojis: List<Emoji>): AnnotatedString = AnnotatedString(this)
 
-// internal tag used by Compose to identify inline content
-// TODO investigate a better way to do this,
-//  hardcoding an internal androidx identifier is not a good idea
+@Composable
+@Suppress("UNUSED_PARAMETER")
+fun List<Emoji>.toInlineContent(): Map<String, InlineTextContent> = emptyMap()
+
+// internal tag Compose uses to identify inline content. Still referenced
+// by [site.warpnet.warpdroid.util.SpanUtils] and TweetText to wire spans
+// in the HTML pipeline; harmless to keep even though our inline-content
+// map is empty now.
 const val INLINE_CONTENT_TAG = "androidx.compose.foundation.text.inlineContent"

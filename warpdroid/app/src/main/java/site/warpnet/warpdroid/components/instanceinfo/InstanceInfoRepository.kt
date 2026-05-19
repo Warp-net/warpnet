@@ -11,7 +11,6 @@
 package site.warpnet.warpdroid.components.instanceinfo
 
 import site.warpnet.transport.WarpnetLimits
-import site.warpnet.warpdroid.entity.Emoji
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -44,8 +43,6 @@ class InstanceInfoRepository @Inject constructor() {
     private val flow = MutableStateFlow(defaultInstanceInfo)
 
     fun instanceInfoFlow(): Flow<InstanceInfo> = flow.asStateFlow()
-
-    suspend fun getEmojis(): List<Emoji> = emptyList()
 
     suspend fun getUpdatedInstanceInfoOrFallback(): InstanceInfo = defaultInstanceInfo
 

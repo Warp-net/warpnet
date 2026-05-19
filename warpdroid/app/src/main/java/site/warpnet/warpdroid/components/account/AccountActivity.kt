@@ -80,7 +80,6 @@ import site.warpnet.warpdroid.util.Error
 import site.warpnet.warpdroid.util.Loading
 import site.warpnet.warpdroid.util.Success
 import site.warpnet.warpdroid.util.copyToClipboard
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.ensureBottomMargin
 import site.warpnet.warpdroid.util.getDomain
 import site.warpnet.warpdroid.util.hide
@@ -446,7 +445,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
 
         val usernameFormatted = getString(R.string.post_username_format, account.username)
         binding.accountUsernameTextView.text = usernameFormatted
-        binding.accountDisplayNameTextView.text = account.name.emojify(account.emojis, binding.accountDisplayNameTextView, animateEmojis)
+        binding.accountDisplayNameTextView.text = account.name
 
         // Long press on username to copy it to clipboard
         for (view in listOf(binding.accountUsernameTextView, binding.accountDisplayNameTextView)) {
@@ -461,12 +460,8 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             }
         }
 
-        val emojifiedNote = account.note.parseAsWarpnetHtml().emojify(
-            account.emojis,
-            binding.accountNoteTextView,
-            animateEmojis
-        )
-        setClickableText(binding.accountNoteTextView, emojifiedNote, emptyList(), null, this)
+        val parsedNote = account.note.parseAsWarpnetHtml()
+        setClickableText(binding.accountNoteTextView, parsedNote, emptyList(), null, this)
 
         accountFieldAdapter.fields = account.fields
         accountFieldAdapter.emojis = account.emojis
@@ -573,7 +568,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
      */
     private fun updateToolbar() {
         loadedAccount?.let { account ->
-            supportActionBar?.title = account.name.emojify(account.emojis, binding.accountToolbar, animateEmojis)
+            supportActionBar?.title = account.name
             supportActionBar?.subtitle = String.format(getString(R.string.post_username_format), account.username)
         }
     }

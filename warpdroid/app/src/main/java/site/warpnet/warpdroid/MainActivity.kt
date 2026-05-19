@@ -93,7 +93,6 @@ import site.warpnet.warpdroid.interfaces.ReselectableFragment
 import site.warpnet.warpdroid.pager.MainPagerAdapter
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.usecase.LogoutUsecase
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.getParcelableExtraCompat
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.loadHeader
@@ -213,7 +212,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             accountManager.updateActiveAccount { copy(accountId = paired.userId) }
         }
 
-        // will be redirected to LoginActivity by BaseActivity
         activeAccount = accountManager.activeAccount ?: return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -808,10 +806,9 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     }
 
     private fun changeAccount(
-        newSelectedId: Long,
+        @Suppress("UNUSED_PARAMETER") newSelectedId: Long,
         forward: Intent?,
     ) = lifecycleScope.launch {
-        accountManager.setActiveAccount(newSelectedId)
         val intent = Intent(this@MainActivity, MainActivity::class.java)
         if (forward != null) {
             intent.type = forward.type
@@ -969,12 +966,11 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
         loadHeader(activeProfile.profileHeaderUrl, header.accountHeaderBackground)
 
-        val animateEmojis = preferences.getBoolean(PrefKeys.ANIMATE_CUSTOM_EMOJIS, false)
         val profiles: MutableList<IProfile> =
             accounts.map { acc ->
                 ProfileDrawerItem().apply {
                     isSelected = acc == activeProfile
-                    nameText = acc.displayName.emojify(acc.emojis, header, animateEmojis)
+                    nameText = acc.displayName
                     iconUrl = acc.profilePictureUrl
                     isNameShown = true
                     identifier = acc.id

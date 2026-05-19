@@ -231,20 +231,6 @@
 
     </LinearLayout>
 
-    <site.warpnet.warpdroid.view.EmojiPicker
-        android:id="@+id/emojiView"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
-        android:elevation="12dp"
-        android:paddingStart="16dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="@dimen/compose_bottom_bar_height"
-        app:behavior_hideable="true"
-        app:behavior_peekHeight="0dp"
-        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior" />
-
     <site.warpnet.warpdroid.components.compose.view.ComposeOptionsView
         android:id="@+id/composeOptionsBottomSheet"
         android:layout_width="match_parent"
@@ -315,17 +301,6 @@
             android:padding="4dp"
             app:srcCompat="@drawable/ic_feedback_24dp"
             app:tooltipText="@string/action_content_warning" />
-
-        <ImageButton
-            android:id="@+id/composeEmojiButton"
-            style="@style/WarpdroidImageButton"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_marginEnd="4dp"
-            android:contentDescription="@string/action_emoji_keyboard"
-            android:padding="4dp"
-            app:srcCompat="@drawable/ic_mood_24dp"
-            app:tooltipText="@string/action_emoji_keyboard" />
 
         <Space
             android:layout_width="0dp"

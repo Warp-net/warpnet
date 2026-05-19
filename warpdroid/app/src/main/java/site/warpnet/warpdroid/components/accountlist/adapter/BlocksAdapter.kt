@@ -21,7 +21,6 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ItemBlockedUserBinding
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.util.BindingHolder
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.visible
 
@@ -50,12 +49,7 @@ class BlocksAdapter(
             val binding = viewHolder.binding
             val context = binding.root.context
 
-            val emojifiedName = account.name.emojify(
-                account.emojis,
-                binding.blockedUserDisplayName,
-                animateEmojis
-            )
-            binding.blockedUserDisplayName.text = emojifiedName
+            binding.blockedUserDisplayName.text = account.name
             val formattedUsername = context.getString(R.string.post_username_format, account.username)
             binding.blockedUserUsername.text = formattedUsername
 

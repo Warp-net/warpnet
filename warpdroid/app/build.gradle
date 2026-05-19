@@ -201,8 +201,6 @@ dependencies {
     implementation libs.bundles.okhttp
     implementation libs.okio
 
-    implementation libs.bundles.coil
-
     implementation libs.conscrypt.android
 
     implementation libs.bundles.glide
