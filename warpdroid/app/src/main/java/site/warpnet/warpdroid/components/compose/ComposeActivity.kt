@@ -926,12 +926,25 @@ class ComposeActivity :
                 try {
                     viewModel.sendStatus(contentText, spoilerText, activeAccount.id)
                     deleteDraftAndFinish()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Preserve structured cancellation — re-throw so the
+                    // Activity destroy / send-cancel path tears down the
+                    // coroutine cleanly instead of running UI work after.
+                    throw e
+                } catch (e: IllegalStateException) {
+                    // sendStatus check()s for media attached on the
+                    // quote-retweet path; the message describes the
+                    // specific cause so surface it instead of the
+                    // generic error toast.
+                    android.util.Log.w("ComposeActivity", "sendStatus failed", e)
+                    displayTransientMessage(R.string.error_compose_quote_with_media)
+                    enableButtons(true, viewModel.editing)
                 } catch (e: Exception) {
                     // sendStatus throws on the quote-retweet path when the
-                    // backend call fails or media was attached. Keep the
-                    // user's typed text on screen and re-enable the
-                    // button so they can retry instead of losing the
-                    // draft to a silent fire-and-forget failure.
+                    // backend call fails. Keep the user's typed text on
+                    // screen and re-enable the button so they can retry
+                    // instead of losing the draft to a silent fire-and-
+                    // forget failure.
                     android.util.Log.w("ComposeActivity", "sendStatus failed", e)
                     displayTransientMessage(R.string.error_generic)
                     enableButtons(true, viewModel.editing)
