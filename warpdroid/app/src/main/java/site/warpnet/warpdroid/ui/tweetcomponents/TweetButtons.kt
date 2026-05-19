@@ -170,6 +170,15 @@ fun TweetButtons(
         // SparkButton's reveal animation is kept for the plain retweet
         // path because that's where the celebration fires; the quote
         // path opens a new screen so the animation would never play.
+        //
+        // The DropdownMenu is wrapped in an inner Box (not the
+        // ConstraintLayout-anchored one) because Popup's anchor
+        // positioning reads the parent's globally-positioned bounds, and
+        // those are unstable when the parent is also a ConstraintLayout
+        // child — the menu ended up at apparently-random screen
+        // positions on different tweet rows. Anchoring to the inner Box
+        // with .wrapContentSize gives Popup a tight, stable bounding box
+        // right under the icon to position itself against.
         val retweetSparkButtonState = rememberSparkButtonState()
         var showRetweetMenu by remember { mutableStateOf(false) }
         Box(
@@ -180,53 +189,55 @@ fun TweetButtons(
                     centerVerticallyTo(parent)
                 }
         ) {
-            SparkButton(
-                animateOnClick = false,
-                onClick = {
+            Box(modifier = Modifier.wrapContentSize()) {
+                SparkButton(
+                    animateOnClick = false,
+                    onClick = {
+                        if (retweeted) {
+                            listener.onRetweet(statusViewData, false, null, state = retweetSparkButtonState)
+                        } else {
+                            showRetweetMenu = true
+                        }
+                    },
+                    state = retweetSparkButtonState,
+                    primaryColor = warpdroidBlueDark,
+                    secondaryColor = warpdroidBlueLight,
+                ) {
                     if (retweeted) {
-                        listener.onRetweet(statusViewData, false, null, state = retweetSparkButtonState)
+                        Icon(
+                            painter = painterResource(R.drawable.ic_repeat_active_24dp),
+                            tint = colorScheme.primary,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
                     } else {
-                        showRetweetMenu = true
+                        Icon(
+                            painter = painterResource(R.drawable.ic_repeat_24dp),
+                            tint = warpdroidColors.tertiaryTextColor,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
-                },
-                state = retweetSparkButtonState,
-                primaryColor = warpdroidBlueDark,
-                secondaryColor = warpdroidBlueLight,
-            ) {
-                if (retweeted) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_repeat_active_24dp),
-                        tint = colorScheme.primary,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
+                }
+                DropdownMenu(
+                    expanded = showRetweetMenu,
+                    onDismissRequest = { showRetweetMenu = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_retweet)) },
+                        onClick = {
+                            showRetweetMenu = false
+                            listener.onRetweet(statusViewData, true, null, state = retweetSparkButtonState)
+                        },
                     )
-                } else {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_repeat_24dp),
-                        tint = warpdroidColors.tertiaryTextColor,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_quote)) },
+                        onClick = {
+                            showRetweetMenu = false
+                            listener.onQuote(statusViewData)
+                        },
                     )
                 }
-            }
-            DropdownMenu(
-                expanded = showRetweetMenu,
-                onDismissRequest = { showRetweetMenu = false },
-            ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_retweet)) },
-                    onClick = {
-                        showRetweetMenu = false
-                        listener.onRetweet(statusViewData, true, null, state = retweetSparkButtonState)
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_quote)) },
-                    onClick = {
-                        showRetweetMenu = false
-                        listener.onQuote(statusViewData)
-                    },
-                )
             }
         }
 
