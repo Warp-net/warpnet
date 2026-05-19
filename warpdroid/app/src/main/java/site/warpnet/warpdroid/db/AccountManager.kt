@@ -90,7 +90,7 @@ class AccountManager @Inject constructor() {
 
     companion object {
         const val STUB_ACCOUNT_ID: Long = 1L
-        const val STUB_DOMAIN: String = "warpnet.local"
+        const val STUB_DOMAIN: String = "warpnet.site"
         const val STUB_USERNAME: String = "me"
 
         private val STUB_ACCOUNT = AccountEntity(

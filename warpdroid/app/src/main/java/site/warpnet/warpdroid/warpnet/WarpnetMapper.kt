@@ -30,8 +30,10 @@ import site.warpnet.transport.dto.WarpnetUser
  */
 object WarpnetMapper {
 
-    /** Warpnet UIs rely on URLs being present; Warpnet speaks in peer IDs. */
-    const val FAKE_BASE_URL: String = "https://warpnet.local"
+    /** Warpnet UIs rely on URLs being present; Warpnet speaks in peer IDs.
+     *  Use the canonical project domain so synthesised share URLs point
+     *  at the real Warpnet web entry point. */
+    const val FAKE_BASE_URL: String = "https://warpnet.site"
 
     fun WarpnetUser.toAccount(): User = User(
         id = id,
