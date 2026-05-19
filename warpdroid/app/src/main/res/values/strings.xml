@@ -133,9 +133,6 @@
     <string name="action_quick_reply">Quick Reply</string>
     <string name="action_reply">Reply</string>
     <string name="action_retweet">Retweet</string>
-    <string name="action_retweet_private">Followers-Only Retweet</string>
-    <string name="action_retweet_public">Public Retweet</string>
-    <string name="action_retweet_unlisted">Unlisted Retweet</string>
     <string name="action_unretweet">Remove retweet</string>
     <string name="action_quote">Quote</string>
     <string name="action_like">Like</string>
@@ -549,9 +546,6 @@
 
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s has moved to:</string>
-
-    <string name="retweet_private">Retweet to original audience</string>
-    <string name="unretweet_private">Unretweet</string>
 
     <string name="license_description">Warpdroid contains code and assets from the following open source projects:</string>
     <string name="license_apache_2">Licensed under the Apache License (copy below)</string>
