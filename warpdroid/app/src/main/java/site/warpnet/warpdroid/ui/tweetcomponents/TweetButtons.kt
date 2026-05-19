@@ -170,7 +170,7 @@ fun TweetButtons(
         // SparkButton's reveal animation is kept for the plain retweet
         // path because that's where the celebration fires; the quote
         // path opens a new screen so the animation would never play.
-        val sparkButtonState = rememberSparkButtonState()
+        val retweetSparkButtonState = rememberSparkButtonState()
         var showRetweetMenu by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier
@@ -184,12 +184,12 @@ fun TweetButtons(
                 animateOnClick = false,
                 onClick = {
                     if (retweeted) {
-                        listener.onRetweet(statusViewData, false, null, state = sparkButtonState)
+                        listener.onRetweet(statusViewData, false, null, state = retweetSparkButtonState)
                     } else {
                         showRetweetMenu = true
                     }
                 },
-                state = sparkButtonState,
+                state = retweetSparkButtonState,
                 primaryColor = warpdroidBlueDark,
                 secondaryColor = warpdroidBlueLight,
             ) {
@@ -217,7 +217,7 @@ fun TweetButtons(
                     text = { Text(stringResource(R.string.action_retweet)) },
                     onClick = {
                         showRetweetMenu = false
-                        listener.onRetweet(statusViewData, true, null, state = sparkButtonState)
+                        listener.onRetweet(statusViewData, true, null, state = retweetSparkButtonState)
                     },
                 )
                 DropdownMenuItem(
