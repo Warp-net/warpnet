@@ -38,7 +38,7 @@ private val TAG_PATTERN = TAG_PATTERN_STRING.toPattern(Pattern.CASE_INSENSITIVE)
 
 /**
  * @see <a href="https://github.com/tootsuite/mastodon/blob/master/app/models/account.rb">
- *     User#MENTION_RE</a>
+ *     Account#MENTION_RE</a>
  */
 private const val USERNAME_PATTERN_STRING = "[a-z0-9_]+([a-z0-9_.-]+[a-z0-9_]+)?"
 internal const val MENTION_PATTERN_STRING = "(?<![=/\\w])(@($USERNAME_PATTERN_STRING)(?:@[\\w.-]+[\\w]+)?)"

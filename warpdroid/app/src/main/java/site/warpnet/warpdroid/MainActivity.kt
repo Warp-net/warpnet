@@ -800,7 +800,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         if (profile.identifier == DRAWER_ITEM_ADD_ACCOUNT) {
             return false
         }
-        // change User
+        // change Account
         changeAccount(profile.identifier, null)
         return false
     }

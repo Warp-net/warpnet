@@ -65,7 +65,7 @@ class SendTweetBroadcastReceiver : BroadcastReceiver() {
             val message = getReplyMessage(intent)
 
             if (account == null) {
-                Log.w(TAG, "User \"$senderId\" not found in database. Aborting quick reply!")
+                Log.w(TAG, "Account \"$senderId\" not found in database. Aborting quick reply!")
 
                 val notification = NotificationCompat.Builder(
                     context,
