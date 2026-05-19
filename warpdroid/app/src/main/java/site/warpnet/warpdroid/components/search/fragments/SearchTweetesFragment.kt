@@ -178,6 +178,10 @@ class SearchStatusesFragment :
         requireContext().reply(viewData, viewModel.activeAccount!!)
     }
 
+    override fun onQuote(viewData: TweetViewData.Concrete) {
+        viewModel.quote(viewData.actionable)
+    }
+
 
     override fun onShowQuote(viewData: TweetViewData.Concrete) {
         viewModel.showQuote(viewData)

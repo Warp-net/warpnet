@@ -671,6 +671,9 @@ class TimelineFragment :
         requireContext().reply(viewData, activeAccount)
     }
 
+    override fun onQuote(viewData: TweetViewData.Concrete) {
+        viewModel.quote(viewData.actionable)
+    }
 
     override fun onViewTag(tag: String) {
         // Warpnet has no hashtag timeline — hashtag spans in tweets stay

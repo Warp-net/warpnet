@@ -396,8 +396,25 @@ class ComposeViewModel @AssistedInject constructor(
     /**
      * Send status to the server.
      * Uses current state plus provided arguments.
+     *
+     * When [ComposeActivity.ComposeOptions.quotedTweetId] is set the
+     * compose flow is a quote retweet: hit PUBLIC_POST_RETWEET directly
+     * with the typed text as the comment instead of routing through the
+     * SendTweetService draft / retry / media path. Quote retweets carry
+     * no media or scheduling in the Warpnet wire today.
      */
     suspend fun sendStatus(content: String, spoilerText: String, accountId: Long) {
+        val quotedId = composeOptions?.quotedTweetId
+        val quotedUser = composeOptions?.quotedUserId
+        if (!quotedId.isNullOrBlank() && !quotedUser.isNullOrBlank()) {
+            api.retweetStatus(
+                statusId = quotedId,
+                visibility = _statusVisibility.value.stringValue,
+                sourceAuthorId = quotedUser,
+                comment = content,
+            )
+            return
+        }
         val attachedMedia = _media.value.map { item ->
             MediaToSend(
                 localId = item.localId,

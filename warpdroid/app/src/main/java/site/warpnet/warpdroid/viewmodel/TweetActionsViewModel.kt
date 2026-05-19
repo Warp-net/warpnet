@@ -63,6 +63,24 @@ abstract class TweetActionsViewModel(
         }
     }
 
+    /**
+     * Open the composer pre-configured to quote-retweet [status]. Mirrors
+     * the Vue desktop frontend's QuoteOverlay — the user types a comment,
+     * tapping Send routes through ComposeViewModel.sendStatus, which then
+     * calls retweetStatus(comment=...) instead of createStatus.
+     */
+    fun quote(status: Tweet) {
+        viewModelScope.launch {
+            _startComposing.emit(
+                ComposeActivity.ComposeOptions(
+                    quotedTweetId = status.id,
+                    quotedUserId = status.account.id,
+                    visibility = Tweet.Visibility.PUBLIC,
+                ),
+            )
+        }
+    }
+
     fun retweet(statusId: String, retweet: Boolean, visibility: Tweet.Visibility = Tweet.Visibility.PUBLIC) {
         viewModelScope.launch {
             if (retweet) {

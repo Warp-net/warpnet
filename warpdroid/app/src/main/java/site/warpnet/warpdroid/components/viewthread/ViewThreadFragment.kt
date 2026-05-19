@@ -559,6 +559,9 @@ class ViewThreadFragment :
         requireContext().reply(viewData, accountManager.activeAccount!!)
     }
 
+    override fun onQuote(viewData: TweetViewData.Concrete) {
+        viewModel.quote(viewData.actionable)
+    }
 
     override fun onViewUrl(url: String) {
         val status: TweetViewData.Concrete? = (viewModel.uiState.value as? ThreadUiState.Success)?.detailedStatus

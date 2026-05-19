@@ -1204,7 +1204,13 @@ class ComposeActivity :
         val modifiedInitialState: Boolean? = null,
         val language: String? = null,
         val statusId: String? = null,
-        val kind: ComposeKind? = null
+        val kind: ComposeKind? = null,
+        // Quote retweet: when set the composed tweet is sent via the
+        // PUBLIC_POST_RETWEET wire with the typed text used as the
+        // comment instead of a fresh PRIVATE_POST_TWEET. quotedUserId
+        // is the author of the source tweet (needed for the wire DTO).
+        val quotedTweetId: String? = null,
+        val quotedUserId: String? = null
     ) : Parcelable
 
     companion object {

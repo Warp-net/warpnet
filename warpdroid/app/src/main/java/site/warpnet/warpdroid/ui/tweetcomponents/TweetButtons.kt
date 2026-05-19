@@ -19,6 +19,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme.colorScheme
@@ -191,15 +193,15 @@ fun TweetButtons(
                     }
             )
         } else {
+            // Vue desktop UX: tapping retweet on a not-yet-retweeted post
+            // opens a small menu with "Retweet" / "Quote"; tapping on an
+            // already-retweeted post untoggles directly without a menu.
+            // SparkButton's reveal animation is kept for the plain retweet
+            // path because that's where the celebration fires; the quote
+            // path opens a new screen so the animation would never play.
             val sparkButtonState = rememberSparkButtonState()
-            SparkButton(
-                animateOnClick = false,
-                onClick = {
-                    listener.onRetweet(statusViewData, !retweeted, null, state = sparkButtonState)
-                },
-                state = sparkButtonState,
-                primaryColor = warpdroidBlueDark,
-                secondaryColor = warpdroidBlueLight,
+            var showRetweetMenu by remember { mutableStateOf(false) }
+            Box(
                 modifier = Modifier
                     .constrainAs(retweetButton) {
                         start.linkTo(replyButton.end)
@@ -207,19 +209,52 @@ fun TweetButtons(
                         centerVerticallyTo(parent)
                     }
             ) {
-                if (retweeted) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_repeat_active_24dp),
-                        tint = colorScheme.primary,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
+                SparkButton(
+                    animateOnClick = false,
+                    onClick = {
+                        if (retweeted) {
+                            listener.onRetweet(statusViewData, false, null, state = sparkButtonState)
+                        } else {
+                            showRetweetMenu = true
+                        }
+                    },
+                    state = sparkButtonState,
+                    primaryColor = warpdroidBlueDark,
+                    secondaryColor = warpdroidBlueLight,
+                ) {
+                    if (retweeted) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_repeat_active_24dp),
+                            tint = colorScheme.primary,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_repeat_24dp),
+                            tint = warpdroidColors.tertiaryTextColor,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                DropdownMenu(
+                    expanded = showRetweetMenu,
+                    onDismissRequest = { showRetweetMenu = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_retweet)) },
+                        onClick = {
+                            showRetweetMenu = false
+                            listener.onRetweet(statusViewData, true, null, state = sparkButtonState)
+                        },
                     )
-                } else {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_repeat_24dp),
-                        tint = warpdroidColors.tertiaryTextColor,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_quote)) },
+                        onClick = {
+                            showRetweetMenu = false
+                            listener.onQuote(statusViewData)
+                        },
                     )
                 }
             }

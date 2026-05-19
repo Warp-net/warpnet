@@ -137,6 +137,7 @@
     <string name="action_retweet_public">Public Retweet</string>
     <string name="action_retweet_unlisted">Unlisted Retweet</string>
     <string name="action_unretweet">Remove retweet</string>
+    <string name="action_quote">Quote</string>
     <string name="action_like">Like</string>
     <string name="action_unlike">Remove like</string>
     <string name="action_bookmark">Bookmark</string>
