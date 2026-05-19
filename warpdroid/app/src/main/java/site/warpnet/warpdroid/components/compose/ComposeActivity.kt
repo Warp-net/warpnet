@@ -923,8 +923,19 @@ class ComposeActivity :
             enableButtons(true, viewModel.editing)
         } else if (characterCount <= maximumTootCharacters) {
             lifecycleScope.launch {
-                viewModel.sendStatus(contentText, spoilerText, activeAccount.id)
-                deleteDraftAndFinish()
+                try {
+                    viewModel.sendStatus(contentText, spoilerText, activeAccount.id)
+                    deleteDraftAndFinish()
+                } catch (e: Exception) {
+                    // sendStatus throws on the quote-retweet path when the
+                    // backend call fails or media was attached. Keep the
+                    // user's typed text on screen and re-enable the
+                    // button so they can retry instead of losing the
+                    // draft to a silent fire-and-forget failure.
+                    android.util.Log.w("ComposeActivity", "sendStatus failed", e)
+                    displayTransientMessage(R.string.error_generic)
+                    enableButtons(true, viewModel.editing)
+                }
             }
         } else {
             binding.composeEditField.error = getString(R.string.error_compose_character_limit)

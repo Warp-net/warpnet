@@ -401,17 +401,27 @@ class ComposeViewModel @AssistedInject constructor(
      * compose flow is a quote retweet: hit PUBLIC_POST_RETWEET directly
      * with the typed text as the comment instead of routing through the
      * SendTweetService draft / retry / media path. Quote retweets carry
-     * no media or scheduling in the Warpnet wire today.
+     * no media or scheduling in the Warpnet wire today, so media
+     * attachments are rejected up front and the call result is folded
+     * to either propagate the success or throw so the caller can pop a
+     * snackbar instead of silently dropping the user's text. Throws
+     * [IllegalStateException] when media is attached to a quote.
      */
     suspend fun sendStatus(content: String, spoilerText: String, accountId: Long) {
         val quotedId = composeOptions?.quotedTweetId
         val quotedUser = composeOptions?.quotedUserId
         if (!quotedId.isNullOrBlank() && !quotedUser.isNullOrBlank()) {
+            check(_media.value.isEmpty()) {
+                "quote retweets cannot carry media on the Warpnet wire"
+            }
             api.retweetStatus(
                 statusId = quotedId,
                 visibility = _statusVisibility.value.stringValue,
                 sourceAuthorId = quotedUser,
                 comment = content,
+            ).fold(
+                onSuccess = { /* Activity finishes in onSendClicked */ },
+                onFailure = { e -> throw e },
             )
             return
         }

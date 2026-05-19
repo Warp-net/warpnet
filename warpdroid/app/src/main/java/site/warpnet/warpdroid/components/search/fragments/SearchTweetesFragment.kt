@@ -175,7 +175,8 @@ class SearchStatusesFragment :
     }
 
     override fun onReply(viewData: TweetViewData.Concrete) {
-        requireContext().reply(viewData, viewModel.activeAccount!!)
+        val activeAccount = viewModel.activeAccount ?: return
+        requireContext().reply(viewData, activeAccount)
     }
 
     override fun onQuote(viewData: TweetViewData.Concrete) {

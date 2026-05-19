@@ -556,7 +556,8 @@ class ViewThreadFragment :
     }
 
     override fun onReply(viewData: TweetViewData.Concrete) {
-        requireContext().reply(viewData, accountManager.activeAccount!!)
+        val activeAccount = accountManager.activeAccount ?: return
+        requireContext().reply(viewData, activeAccount)
     }
 
     override fun onQuote(viewData: TweetViewData.Concrete) {
