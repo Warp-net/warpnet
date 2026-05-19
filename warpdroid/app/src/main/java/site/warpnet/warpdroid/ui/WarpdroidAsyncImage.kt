@@ -10,6 +10,14 @@
  * avatars or media. This wrapper loads the bitmap via Glide's background
  * pipeline and hands a stable Painter to a plain Compose Image — no
  * recomposition cascade, no main-thread layout work for image requests.
+ *
+ * Static bitmaps only: Warpnet's image transport returns
+ * `data:image/jpeg;base64,...` blobs (see WarpnetRepository.getImageBytes)
+ * and Compose call sites surface static avatars / media previews only, so
+ * decoding to Bitmap is sufficient. If animated formats are ever wired
+ * end-to-end again (GIFs in compose, APNG avatars), this composable will
+ * need a Drawable / Animatable variant — the ANIMATE_GIF_AVATARS
+ * preference is currently a Tusky-era no-op against this pipeline.
  */
 package site.warpnet.warpdroid.ui
 
