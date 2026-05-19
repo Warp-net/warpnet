@@ -69,7 +69,7 @@ import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.databinding.ActivityAccountBinding
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.db.entity.AccountEntity
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.interfaces.AccountSelectionListener
 import site.warpnet.warpdroid.interfaces.ActionButtonActivity
@@ -119,7 +119,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private var muting: Boolean = false
     private var showingRetweets: Boolean = false
     private var subscribing: Boolean = false
-    private var loadedAccount: Account? = null
+    private var loadedAccount: User? = null
 
     private var animateAvatar: Boolean = false
     private var animateEmojis: Boolean = false
@@ -440,7 +440,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
     }
 
-    private fun onAccountChanged(account: Account?) {
+    private fun onAccountChanged(account: User?) {
         loadedAccount = account ?: return
 
         val usernameFormatted = getString(R.string.post_username_format, account.username)
@@ -970,7 +970,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
     }
 
-    private fun getFullUsername(account: Account): String {
+    private fun getFullUsername(account: User): String {
         return if (account.isRemote) {
             "@" + account.username
         } else {

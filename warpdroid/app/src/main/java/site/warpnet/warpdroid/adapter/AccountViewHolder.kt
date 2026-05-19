@@ -3,7 +3,7 @@ package site.warpnet.warpdroid.adapter
 import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ItemAccountBinding
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.util.loadAvatar
@@ -15,7 +15,7 @@ class AccountViewHolder(
     private lateinit var accountId: String
 
     fun setupWithAccount(
-        account: TimelineAccount,
+        account: TimelineUser,
         animateAvatar: Boolean,
         @Suppress("UNUSED_PARAMETER") animateEmojis: Boolean,
         showBotOverlay: Boolean

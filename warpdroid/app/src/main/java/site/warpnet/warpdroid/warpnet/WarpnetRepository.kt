@@ -6,15 +6,15 @@
 package site.warpnet.warpdroid.warpnet
 
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.Tweet
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.warpnet.WarpnetMapper.toAccount
 import site.warpnet.warpdroid.warpnet.WarpnetMapper.toNotification
 import site.warpnet.warpdroid.warpnet.WarpnetMapper.toTweet
-import site.warpnet.warpdroid.warpnet.WarpnetMapper.toTimelineAccount
+import site.warpnet.warpdroid.warpnet.WarpnetMapper.toTimelineUser
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
 import javax.inject.Inject
@@ -152,11 +152,11 @@ class WarpnetRepository @Inject constructor(
     // Users
     // -----------------------------------------------------------------
 
-    suspend fun getAccount(userId: String): Account =
+    suspend fun getAccount(userId: String): User =
         getUser(userId).toAccount()
 
-    suspend fun getTimelineAccount(userId: String): TimelineAccount =
-        getUser(userId).toTimelineAccount()
+    suspend fun getTimelineUser(userId: String): TimelineUser =
+        getUser(userId).toTimelineUser()
 
     private suspend fun getUser(userId: String): WarpnetUser {
         val raw = client.request(
@@ -570,14 +570,14 @@ class WarpnetRepository @Inject constructor(
     // Follow requests (pending follows on locked accounts)
     // -----------------------------------------------------------------
 
-    suspend fun getFollowRequests(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+    suspend fun getFollowRequests(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PRIVATE_GET_FOLLOW_REQUESTS,
             getFollowReqsAdapter.toJson(
                 site.warpnet.transport.dto.GetFollowRequestsEvent(userId = userId, cursor = cursor, limit = limit),
             ),
         )
-        val page = getFollowReqsRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        val page = getFollowReqsRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
         return hydrateAccounts(page.followerIds) to page.cursor
     }
 
@@ -624,16 +624,16 @@ class WarpnetRepository @Inject constructor(
     // listUsers + filter dance — the fat node runs the substring scan).
     // -----------------------------------------------------------------
 
-    suspend fun searchAccounts(query: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
-        if (query.isBlank()) return emptyList<TimelineAccount>() to ""
+    suspend fun searchAccounts(query: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
+        if (query.isBlank()) return emptyList<TimelineUser>() to ""
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_USERS_SEARCH,
             searchUsersAdapter.toJson(
                 site.warpnet.transport.dto.SearchUsersEvent(query = query, cursor = cursor, limit = limit),
             ),
         )
-        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
-        return page.users.map { it.toTimelineAccount() } to page.cursor
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
+        return page.users.map { it.toTimelineUser() } to page.cursor
     }
 
     // -----------------------------------------------------------------
@@ -696,7 +696,7 @@ class WarpnetRepository @Inject constructor(
     // Engagement lists (who liked / retweeted a tweet)
     // -----------------------------------------------------------------
 
-    suspend fun getTweetLikers(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+    suspend fun getTweetLikers(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET_LIKERS,
             getTweetLikersAdapter.toJson(
@@ -708,11 +708,11 @@ class WarpnetRepository @Inject constructor(
                 ),
             ),
         )
-        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
-        return page.users.map { it.toTimelineAccount() } to page.cursor
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
+        return page.users.map { it.toTimelineUser() } to page.cursor
     }
 
-    suspend fun getTweetRetweeters(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+    suspend fun getTweetRetweeters(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET_RETWEETERS,
             getTweetLikersAdapter.toJson(
@@ -724,8 +724,8 @@ class WarpnetRepository @Inject constructor(
                 ),
             ),
         )
-        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
-        return page.users.map { it.toTimelineAccount() } to page.cursor
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
+        return page.users.map { it.toTimelineUser() } to page.cursor
     }
 
     // -----------------------------------------------------------------
@@ -996,21 +996,21 @@ class WarpnetRepository @Inject constructor(
      * Unresolvable IDs (dropped peers, deleted accounts) are skipped rather
      * than surfaced as stub rows.
      */
-    suspend fun getFollowers(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+    suspend fun getFollowers(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_FOLLOWERS,
             getFollowersAdapter.toJson(GetFollowersEvent(userId = userId, cursor = cursor, limit = limit)),
         )
-        val page = followersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        val page = followersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
         return hydrateAccounts(page.followers) to page.cursor
     }
 
-    suspend fun getFollowings(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+    suspend fun getFollowings(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_FOLLOWINGS,
             getFollowingsAdapter.toJson(GetFollowingsEvent(userId = userId, cursor = cursor, limit = limit)),
         )
-        val page = followingsRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
+        val page = followingsRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
         return hydrateAccounts(page.followings) to page.cursor
     }
 
@@ -1043,23 +1043,23 @@ class WarpnetRepository @Inject constructor(
      * The `user_id` field is documented as "default owner" — we forward the
      * caller's id so the server can scope visibility if it chooses to.
      */
-    suspend fun listUsers(requesterUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineAccount>, String> {
+    suspend fun listUsers(requesterUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_USERS,
             getAllUsersAdapter.toJson(GetAllUsersEvent(userId = requesterUserId, cursor = cursor, limit = limit)),
         )
-        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineAccount>() to ""
-        return page.users.map { it.toTimelineAccount() } to page.cursor
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
+        return page.users.map { it.toTimelineUser() } to page.cursor
     }
 
     // -----------------------------------------------------------------
     // Internals
     // -----------------------------------------------------------------
 
-    private suspend fun hydrateAccounts(userIds: List<String>): List<TimelineAccount> {
+    private suspend fun hydrateAccounts(userIds: List<String>): List<TimelineUser> {
         if (userIds.isEmpty()) return emptyList()
         val cache = mutableMapOf<String, WarpnetUser>()
-        return userIds.mapNotNull { id -> resolveUser(id, cache)?.toTimelineAccount() }
+        return userIds.mapNotNull { id -> resolveUser(id, cache)?.toTimelineUser() }
     }
 
     private suspend fun hydrateTweets(tweets: List<WarpnetTweet>): List<Tweet> = coroutineScope {
@@ -1074,8 +1074,8 @@ class WarpnetRepository @Inject constructor(
         // user already set on their profile, instead of falling back to
         // the empty-avatar stub if the per-tweet getUser() lookup races
         // the post-pairing profile refresh or returns a stripped wire
-        // shape. The TimelineAccount fields mirror what
-        // WarpnetMapper.toTimelineAccount would produce.
+        // shape. The TimelineUser fields mirror what
+        // WarpnetMapper.toTimelineUser would produce.
         if (viewerId.isNotBlank()) {
             seedOwnUser(viewerId, cache)
         }

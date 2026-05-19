@@ -122,7 +122,7 @@ class SearchViewModel @Inject constructor(
             pagingSourceFactory = {
                 SearchPagingSource(
                     warpnetApi,
-                    SearchType.Account,
+                    SearchType.User,
                     searchRequest = query
                 ) {
                     it.accounts

@@ -6,7 +6,7 @@
 package site.warpnet.warpdroid.db
 
 import site.warpnet.warpdroid.db.entity.AccountEntity
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -59,10 +59,10 @@ class AccountManager @Inject constructor() {
     }
 
     /**
-     * Mirror-update the stub [AccountEntity] from a Warpnet-sourced [Account]
+     * Mirror-update the stub [AccountEntity] from a Warpnet-sourced [User]
      * DTO (populated in Phase 4 by the Warpnet→Warpnet mapper).
      */
-    suspend fun updateAccount(accountEntity: AccountEntity, account: Account) {
+    suspend fun updateAccount(accountEntity: AccountEntity, account: User) {
         updateAccount(accountEntity) {
             copy(
                 accountId = account.id,

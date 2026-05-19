@@ -20,12 +20,12 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 /**
- * Same as [Account], but only with the attributes required in timelines.
- * Prefer this class over [Account] because it uses way less memory & deserializes faster from json.
+ * Same as [User], but only with the attributes required in timelines.
+ * Prefer this class over [User] because it uses way less memory & deserializes faster from json.
  */
 @Immutable
 @JsonClass(generateAdapter = true)
-data class TimelineAccount(
+data class TimelineUser(
     val id: String,
     @Json(name = "username") val localUsername: String,
     @Json(name = "acct") val username: String,

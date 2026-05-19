@@ -32,7 +32,7 @@ import site.warpnet.warpdroid.appstore.PreferenceChangedEvent
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
 import site.warpnet.warpdroid.components.filters.FiltersActivity
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.settings.AccountPreferenceDataStore
@@ -282,7 +282,7 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             warpnetApi.accountUpdateSource(visibility, sensitive, language, quotePolicy)
-                .fold({ account: Account ->
+                .fold({ account: User ->
                     accountManager.activeAccount?.let {
                         accountManager.updateAccount(it) {
                             copy(

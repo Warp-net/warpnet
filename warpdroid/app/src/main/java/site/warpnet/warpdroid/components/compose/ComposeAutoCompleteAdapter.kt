@@ -28,7 +28,7 @@ import site.warpnet.warpdroid.databinding.ItemAutocompleteAccountBinding
 import site.warpnet.warpdroid.databinding.ItemAutocompleteEmojiBinding
 import site.warpnet.warpdroid.databinding.ItemAutocompleteHashtagBinding
 import site.warpnet.warpdroid.entity.Emoji
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.visible
 
@@ -146,7 +146,7 @@ class ComposeAutoCompleteAdapter(
     }
 
     sealed interface AutocompleteResult {
-        class AccountResult(val account: TimelineAccount) : AutocompleteResult
+        class AccountResult(val account: TimelineUser) : AutocompleteResult
 
         class HashtagResult(val hashtag: String) : AutocompleteResult
 

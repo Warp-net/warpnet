@@ -1,6 +1,6 @@
 package site.warpnet.warpdroid.appstore
 
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Tweet
@@ -11,7 +11,7 @@ data class BlockEvent(val accountId: String) : Event
 data class MuteEvent(val accountId: String) : Event
 data class TweetDeletedEvent(val statusId: String) : Event
 data class TweetComposedEvent(val status: Tweet) : Event
-data class ProfileEditedEvent(val newProfileData: Account) : Event
+data class ProfileEditedEvent(val newProfileData: User) : Event
 data class PreferenceChangedEvent(val preferenceKey: String) : Event
 data class FilterUpdatedEvent(val filterContext: List<Filter.Kind>) : Event
 data class NewNotificationsEvent(

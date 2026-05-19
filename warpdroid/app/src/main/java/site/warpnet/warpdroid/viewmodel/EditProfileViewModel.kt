@@ -30,7 +30,7 @@ import site.warpnet.warpdroid.appstore.ProfileEditedEvent
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfo
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.StringField
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.Error
@@ -76,8 +76,8 @@ class EditProfileViewModel @Inject constructor(
 
     private val activeAccount = accountManager.activeAccount!!
 
-    private val _profileData = MutableStateFlow(null as Resource<Account>?)
-    val profileData: StateFlow<Resource<Account>?> = _profileData.asStateFlow()
+    private val _profileData = MutableStateFlow(null as Resource<User>?)
+    val profileData: StateFlow<Resource<User>?> = _profileData.asStateFlow()
 
     private val _avatarData = MutableStateFlow(null as Uri?)
     val avatarData: StateFlow<Uri?> = _avatarData.asStateFlow()
@@ -94,7 +94,7 @@ class EditProfileViewModel @Inject constructor(
     private val _isChanged = MutableStateFlow(false)
     val isChanged = _isChanged.asStateFlow()
 
-    private var apiProfileAccount: Account? = null
+    private var apiProfileAccount: User? = null
 
     var picking: PickType? = null
 
@@ -209,7 +209,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     private fun getProfileDiff(
-        oldProfileAccount: Account?,
+        oldProfileAccount: User?,
         newProfileData: ProfileDataInUi
     ): DiffProfileData {
         val displayName = if (oldProfileAccount?.displayName == newProfileData.displayName) {

@@ -15,17 +15,17 @@
 
 package site.warpnet.warpdroid.components.accountlist
 
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 
 data class AccountViewData(
-    val account: TimelineAccount,
+    val account: TimelineUser,
     val mutingNotifications: Boolean
 ) {
     val id: String
         get() = account.id
 }
 
-fun TimelineAccount.toViewData(
+fun TimelineUser.toViewData(
     mutingNotifications: Boolean
 ) = AccountViewData(
     account = this,
