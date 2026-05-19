@@ -21,7 +21,7 @@ import com.squareup.moshi.JsonClass
 import java.util.Date
 
 @JsonClass(generateAdapter = true)
-data class Account(
+data class User(
     val id: String,
     @Json(name = "username") val localUsername: String,
     @Json(name = "acct") val username: String,
@@ -42,7 +42,7 @@ data class Account(
     val emojis: List<Emoji> = emptyList(),
     // default value for backward compatibility
     val fields: List<Field> = emptyList(),
-    val moved: Account? = null,
+    val moved: User? = null,
     val roles: List<Role> = emptyList()
 ) {
 

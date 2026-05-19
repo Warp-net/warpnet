@@ -19,13 +19,13 @@ import at.connyduck.sparkbutton.compose.SparkButtonState
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.HashTag
 import site.warpnet.warpdroid.entity.Tweet
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.viewdata.TweetViewData
 import java.util.Date
 
 fun fakeTweetViewData(
-    account: TimelineAccount = fakeTimelineAccount,
+    account: TimelineUser = fakeTimelineUser,
     content: String = "<p>This is a status </p><p><a href=\"https://mastodon.social/tags/nokings\" class=\"mention hashtag\" rel=\"tag\">#<span>hashtag</span></a></p>",
     attachments: List<Attachment> = fourAttachments,
     mentions: List<Tweet.Mention> = emptyList(),
@@ -73,7 +73,7 @@ fun fakeTweetViewData(
     quote = null
 )
 
-val fakeTimelineAccount = TimelineAccount(
+val fakeTimelineUser = TimelineUser(
     id = "01HAWDAG8VXPW2D6PZFA3MQ3FH",
     localUsername = "connyduck",
     username = "connyduck@fosspri.de",

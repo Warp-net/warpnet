@@ -25,7 +25,7 @@ import com.squareup.moshi.JsonClass
 data class Notification(
     val type: Type,
     val id: String,
-    val account: TimelineAccount,
+    val account: TimelineUser,
     val status: Tweet? = null,
     val filtered: Boolean = false,
     val event: RelationshipSeveranceEvent? = null,

@@ -25,7 +25,7 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.ui.WarpdroidAsyncImage
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Tweet
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.interfaces.TweetActionListener
 import site.warpnet.warpdroid.ui.preferences.LocalAccount
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
@@ -192,7 +192,7 @@ private fun NotificationInfo(
     @DrawableRes icon: Int,
     iconColor: Color,
     @StringRes text: Int,
-    account: TimelineAccount,
+    account: TimelineUser,
     onViewAccount: () -> Unit
 ) {
     val displayName = account.name.unicodeWrap()
@@ -234,7 +234,7 @@ private fun NotificationInfo(
 private fun NotificationInfoWithEmojiString(
     iconEmoji: String,
     @StringRes text: Int,
-    account: TimelineAccount,
+    account: TimelineUser,
     onViewAccount: () -> Unit
 ) {
     val displayName = account.name.unicodeWrap()
@@ -272,7 +272,7 @@ private fun NotificationInfoWithEmojiString(
 private fun NotificationInfoWithEmojiUrl(
     emojiUrl: String,
     @StringRes text: Int,
-    account: TimelineAccount,
+    account: TimelineUser,
     onViewAccount: () -> Unit
 ) {
     val displayName = account.name.unicodeWrap()

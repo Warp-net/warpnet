@@ -10,7 +10,7 @@ import site.warpnet.warpdroid.appstore.MuteEvent
 import site.warpnet.warpdroid.appstore.ProfileEditedEvent
 import site.warpnet.warpdroid.appstore.UnfollowEvent
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.Error
@@ -32,8 +32,8 @@ class AccountViewModel @Inject constructor(
     accountManager: AccountManager
 ) : ViewModel() {
 
-    private val _accountData = MutableStateFlow(null as Resource<Account>?)
-    val accountData: StateFlow<Resource<Account>?> = _accountData.asStateFlow()
+    private val _accountData = MutableStateFlow(null as Resource<User>?)
+    val accountData: StateFlow<Resource<User>?> = _accountData.asStateFlow()
 
     private val _relationshipData = MutableStateFlow(null as Resource<Relationship>?)
     val relationshipData: StateFlow<Resource<Relationship>?> = _relationshipData.asStateFlow()

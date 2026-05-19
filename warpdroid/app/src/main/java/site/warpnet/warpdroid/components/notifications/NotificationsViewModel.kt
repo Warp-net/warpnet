@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Notification
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
 @HiltViewModel
@@ -28,7 +28,7 @@ class NotificationsViewModel @Inject constructor(
 
     data class State(
         val notifications: List<Notification> = emptyList(),
-        val followRequests: List<TimelineAccount> = emptyList(),
+        val followRequests: List<TimelineUser> = emptyList(),
         val locked: Boolean = false,
         val loading: Boolean = true,
         val error: Throwable? = null,

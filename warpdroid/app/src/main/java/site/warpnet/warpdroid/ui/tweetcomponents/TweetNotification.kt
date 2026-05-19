@@ -56,7 +56,7 @@ import site.warpnet.warpdroid.ui.WarpdroidOutlinedButton
 import site.warpnet.warpdroid.ui.WarpdroidPreviewTheme
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 import site.warpnet.warpdroid.ui.tweetcomponents.fake.fakeTweetViewData
-import site.warpnet.warpdroid.ui.tweetcomponents.fake.fakeTimelineAccount
+import site.warpnet.warpdroid.ui.tweetcomponents.fake.fakeTimelineUser
 import site.warpnet.warpdroid.ui.tweetcomponents.fake.noopListener
 import site.warpnet.warpdroid.ui.tweetcomponents.text.emojify
 import site.warpnet.warpdroid.ui.tweetcomponents.text.warpnetHtmlText
@@ -279,7 +279,7 @@ fun TweetNotificationPreview() {
             notificationViewData = NotificationViewData.Concrete(
                 id = "1",
                 type = Notification.Type.Like,
-                account = fakeTimelineAccount,
+                account = fakeTimelineUser,
                 statusViewData = fakeTweetViewData(),
                 event = null,
                 moderationWarning = null,
