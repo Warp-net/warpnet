@@ -163,7 +163,7 @@ func main() {
 
 type echoStreamClient interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
-	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
+	WriteOwnTweet(ev event.NewTweetEvent) (event.NewTweetEvent, error)
 	NodeInfo() warpnet.NodeInfo
 }
 
@@ -474,12 +474,13 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 }
 
 func setupHandlers(echo *echoBot, node *member.MemberNode) {
-	// PRIVATE_POST_TWEET is left in place so the default handler stores
-	// every tweet echo sees in its own DB — including echo's own tweets
-	// posted via SelfStream. Foreign tweets received here lose the
-	// immediate auto-react via stream that the prior wrapper did, but
-	// runOwnActivity polls peers every 5 s and reacts via handleTweet
-	// with the same dedup, so the action still fires with a small delay.
+	// PRIVATE_POST_TWEET is replaced with a handleTweet wrapper so echo
+	// can auto-like/retweet/reply to incoming tweets the instant they
+	// arrive over the stream. Echo's own hourly tweets bypass this
+	// handler entirely — they go through MemberNode.WriteOwnTweet which
+	// writes to tweetRepo + publishes via pubsub directly, so the wrapper
+	// here doesn't need to know about own tweets.
+	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_MESSAGE)
@@ -487,6 +488,13 @@ func setupHandlers(echo *echoBot, node *member.MemberNode) {
 	//nolint:govet
 	node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
+			{
+				event.PRIVATE_POST_TWEET,
+				func(msg []byte, s warpnet.WarpStream) (any, error) {
+					echo.handleTweet(msg, requesterNodeID(s))
+					return event.Accepted, nil
+				},
+			},
 			{
 				event.PUBLIC_POST_REPLY,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
@@ -631,11 +639,14 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 		CreatedAt: time.Now(),
 	}
 
-	// Store the tweet in echo's own DB and let the default tweet handler
-	// publish it to followers via pubsub. Followers may also receive it
-	// directly via the GenericStream loop below — tweetRepo.Create is
-	// idempotent on tweet id, so the duplicate is harmless.
-	if _, err := e.node.SelfStream(event.PRIVATE_POST_TWEET, tweet); err != nil {
+	// Store the tweet in echo's own DB so it shows up on echo's profile,
+	// and publish to echo's followers via pubsub. WriteOwnTweet bypasses
+	// echo's own PRIVATE_POST_TWEET stream wrapper (which is the
+	// auto-react path for foreign tweets), so this works even with that
+	// wrapper installed. Followers may also receive the tweet via the
+	// GenericStream loop below — tweetRepo.Create is idempotent on
+	// tweet id, so the duplicate is harmless.
+	if _, err := e.node.WriteOwnTweet(tweet); err != nil {
 		log.Warnf("echo: store own tweet locally: %v", err)
 	}
 

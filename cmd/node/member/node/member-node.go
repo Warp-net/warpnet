@@ -47,6 +47,7 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
@@ -74,6 +75,8 @@ type MemberNode struct {
 	userRepo                      UserProvider
 	deviceRepo                    DeviceProvider
 	followRepo                    FollowStorer
+	tweetRepo                     *database.TweetRepo
+	timelineRepo                  *database.TimelineRepo
 	db                            Storer
 	statsDb                       StatsStorer
 	privKey                       ed25519.PrivateKey
@@ -350,6 +353,60 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	return bt, err
 }
 
+// WriteOwnTweet stores a tweet authored by this node's owner and
+// publishes it to followers via pubsub. It does the same job as
+// handler.StreamNewTweetHandler but bypasses the stream pipeline
+// entirely, so callers (like the echo bot) can post tweets without
+// fighting their own custom PRIVATE_POST_TWEET stream handler.
+func (m *MemberNode) WriteOwnTweet(ev event.NewTweetEvent) (event.NewTweetEvent, error) {
+	if m == nil {
+		return ev, fmt.Errorf("member: write own tweet: nil node")
+	}
+	if m.tweetRepo == nil || m.timelineRepo == nil {
+		return ev, fmt.Errorf("member: write own tweet: repos not initialised")
+	}
+	if ev.UserId == "" {
+		return ev, warpnet.WarpError("empty user id")
+	}
+	if ev.Text == "" {
+		return ev, warpnet.WarpError("empty tweet text")
+	}
+
+	owner := m.authRepo.GetOwner()
+
+	tweet, err := m.tweetRepo.Create(ev.UserId, ev)
+	if err != nil {
+		return ev, err
+	}
+	if tweet.Id == "" {
+		return tweet, warpnet.WarpError("write own tweet: empty tweet id")
+	}
+	if err := m.timelineRepo.AddTweetToTimeline(owner.UserId, tweet); err != nil {
+		log.Infof("write own tweet: timeline add: %v", err)
+	}
+
+	if owner.UserId == ev.UserId && m.pubsubService != nil {
+		respEv := event.NewTweetEvent{
+			CreatedAt: tweet.CreatedAt,
+			Id:        tweet.Id,
+			ParentId:  tweet.ParentId,
+			RootId:    tweet.RootId,
+			Text:      tweet.Text,
+			UserId:    tweet.UserId,
+			Username:  tweet.Username,
+			ImageKeys: tweet.ImageKeys,
+		}
+		bt, jerr := json.Marshal(respEv)
+		if jerr == nil {
+			if perr := m.pubsubService.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); perr != nil {
+				log.Errorf("write own tweet: publish to followers: %v", perr)
+			}
+		}
+	}
+
+	return tweet, nil
+}
+
 func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 	if m == nil {
 		return
@@ -401,9 +458,11 @@ func (m *MemberNode) setupHandlers(
 		panic("member: setup handlers: nil node")
 	}
 
+	m.tweetRepo = database.NewTweetRepo(db, statsDB)
+	m.timelineRepo = database.NewTimelineRepo(db)
 	r := &memberRepos{
-		timelineRepo:     database.NewTimelineRepo(db),
-		tweetRepo:        database.NewTweetRepo(db, statsDB),
+		timelineRepo:     m.timelineRepo,
+		tweetRepo:        m.tweetRepo,
 		replyRepo:        database.NewRepliesRepo(db, statsDB),
 		likeRepo:         database.NewLikeRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
