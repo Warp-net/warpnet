@@ -7,5 +7,6 @@ docs/** linguist-detectable=false
 *.h linguist-detectable=false
 *.cu linguist-detectable=false
 *.cuh linguist-detectable=false
+*.kt linguist-detectable=false
 Makefile linguist-detectable=false
 CMakeLists.txt linguist-detectable=false
