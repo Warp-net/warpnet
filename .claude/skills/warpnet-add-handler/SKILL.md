@@ -295,6 +295,21 @@ warpdroid/app/...tusky/warpnet/ → Tusky-side adapter (WarpnetRepository, Warpn
 
 The thin client connects to **one** desktop peer (the user's paired fat node) over a single libp2p connection, and tunnels every request through `binding.stream(protocolId, json)`. There is no DHT lookup per call, no multi-peer fanout, no local Badger storage on the device — Android is purely a client of the user's own desktop node.
 
+### A0. Performance budget — warpdroid targets low-end devices
+
+warpdroid is designed for budget Android phones (4-core ARM, 2-3 GB RAM, 60 Hz screens, no JIT headroom). Frames have a **16 ms budget**; anything that touches the main thread for >50 ms is a visible jank. The codebase carries Tusky's XML-era legacy plus a Compose migration, and several patterns that look fine on a flagship are not OK on the target hardware. Watch for these when adding or modifying UI/glue code:
+
+- **No `ConstraintLayout` in Compose for trivial layouts.** Solver + double-measure pass is expensive on low-end CPUs and gets multiplied per `LazyList` item. Use `Row` / `Column` / `Box` with `Arrangement` and `Alignment`. Reserve `ConstraintLayout` for genuine constraint graphs (barriers, guidelines, chains across nested groups) — and even then, prefer custom `Layout {}` if it's hot in a list.
+- **No synchronous IO from the main thread.** That includes `EncryptedSharedPreferences` first-read, `ImageView.setImageURI` on custom URI schemes (falls through to `Drawable.createFromPath` → blocking `FileInputStream.open`), `Drawable.createFromPath`, `File.exists` / `listFiles` in `onCreate`. The MaterialDrawer `iconUrl` + `warpnet://` scheme regression (~70 ms per call) is the canonical case. Move to Glide via `WarpdroidAsyncImage` or a registered `ModelLoader`; lazy-init prefs behind a coroutine.
+- **First-compose JIT cost is real.** Compose compiles ~5 KB of bytecode per composable on first invocation, blocking the main thread. `TweetCard` + `TweetButtons` + `LazyList.measure` on first Profile open routinely produces 1.5-2 s `Davey!` frames. Keep composables small, avoid deep nesting, and reuse stateless leaves so JIT amortises. Long-term fix is a Baseline Profile; until then, simplify hot composables.
+- **`SparkButton`, complex `Modifier.graphicsLayer`, and animation-heavy widgets** are not free on these devices. Audit whether the animation actually plays in the warpdroid context (the retweet/quote split path skips it because the animation never fires). Cut what doesn't run.
+- **Don't ship Tusky's Glide+Coil mix.** Glide is the single image loader (see `WarpdroidAsyncImage`, `GlideModule`, `WarpnetAvatarLoader`). Coil3 was migrated out for memory / cold-start reasons. Don't reintroduce a second loader.
+- **Image / avatar URLs are `warpnet://avatar/<userId>/<key>`**, not HTTP. Anything that goes through `Uri` → `ImageView.setImageURI` will block. Only Glide (via the registered `WarpnetAvatarLoader`) can resolve them, and only when the call site uses `Glide.with(applicationContext)` or `Glide.with(imageView)` — not `Glide.with(activity)` (crashes on activity destroy, see the `WarpdroidAsyncImage` crash fix).
+- **Diagnostics workflow when something feels slow.** Enable `StrictMode` (already configured in debug builds). Look in logcat for: `Davey! duration=...ms`, `Choreographer: Skipped N frames`, `StrictMode policy violation; ~duration=N ms`, `Compiler allocated ... KB to compile`, `Quality: stackInfo`. The compile-allocation line names the exact composable JIT spent time on. Pair with `ANR_LOG` blocks to see what message was on the looper at the time.
+- **Comments referencing performance** in MainActivity, `WarpdroidAsyncImage`, `loadDrawerAvatar`, etc. encode hard-won fixes (sync-IO escapes, Glide context lifecycle, ANIMATE_GIF_AVATARS pref split). Don't refactor them away without re-testing on a budget device.
+
+When you add a new UI screen or hot path that touches the main thread, mentally check it against this list before committing. The Pre-flight checklist in Step 8 includes a "no new sync IO / no new ConstraintLayout in lists" verification.
+
 ### A1. Decide if the binding needs to change
 
 The Go binding (`warpdroid/node/`) is a *separate Go module* (`module github.com/Warp-net/android-binding`) with its own `go.mod` and its own dependency tree. It does **not** import anything from the parent `warpnet` module. It exposes only six entry points (`Initialize`, `Connect`, `Stream`, `PeerID`, `IsConnected`, `Disconnect`, `Pause`, `Resume`, `Shutdown`) — all string-in, string-out, because gomobile-bind cannot translate complex types across the JNI.
@@ -444,6 +459,7 @@ Before `git commit`, verify each of these. Missing any one is a real bug, not a 
 - [ ] If `warpdroid/node/*.go` was changed: regenerated `warpnet-transport/libs/warpnet.aar` via `warpdroid/node/build-native.sh` and committed both the .aar and the .jar.
 - [ ] JVM tests added for envelope shape and DTO round-trip; instrumented tests not needed.
 - [ ] `./gradlew :app:assembleDebug` succeeds locally (CI runs the same).
+- [ ] **Performance budget (§A0):** new UI code does not introduce `ConstraintLayout` inside a `LazyList`/`LazyColumn` item, does not do synchronous IO on the main thread (`setImageURI` on `warpnet://`, `SharedPreferences` first-read, `File.exists`/`listFiles` in `onCreate`, etc.), uses Glide via `WarpdroidAsyncImage` for `warpnet://` URIs, and keeps any new composables small enough that first-compose JIT doesn't add a visible Davey frame.
 
 **Always (general):**
 

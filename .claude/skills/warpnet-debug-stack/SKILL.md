@@ -41,6 +41,10 @@ Symptom: "context deadline exceeded" appears intermittently on a specific RPC
 
 Symptom: tests pass but device behaves stale
                                                                           ─→ § Stale .aar OR § Wire contract not covered by tests
+
+Symptom: warpdroid UI feels janky / Davey frames / 1-2 s freeze on a screen
+└─ ANR or true hang? ──── YES ─→ § Stream-call serialisation bottleneck
+                       ──── NO  ─→ § warpdroid UI perf (low-end device budget)
 ```
 
 When in doubt, log into the **fat node** first (`stdout` of the desktop binary). The middleware logs every failed handler call by route, so an empty client list paired with no server-side errors almost always means the client is parsing a successful response wrong (silent zero-values).
@@ -173,6 +177,38 @@ suspend fun request(protocolId: String, bodyJson: String): String =
 ```
 
 **Connect / disconnect** still need the write lock to swap `desktopPeerID`, but they're rare.
+
+## § warpdroid UI perf (low-end device budget)
+
+**Symptom.** warpdroid feels laggy. Opening Profile / Home / a tweet detail takes 1-2 s of frozen UI before the screen renders. `Choreographer: Skipped N frames` and `OpenGLRenderer: Davey! duration=...ms` lines in logcat. Not an ANR, not a network hang — the request and the data are fine, the *rendering* is what's slow. Often worse on a budget phone than on a flagship.
+
+**Context.** warpdroid targets low-end Android: 4-core ARM, 2-3 GB RAM, 60 Hz (16 ms frame budget). Many things that are invisible on a flagship are visible jank here. The codebase carries Tusky's XML-era legacy plus a partial Compose migration — both layers have patterns that get expensive at this hardware tier.
+
+**Where to look (logcat, with the app in debug build — StrictMode is already configured):**
+
+1. `Choreographer: Skipped N frames` — N × 16 ms is the freeze duration. >5 frames is user-visible.
+2. `Davey! duration=Xms` — a frame that took >700 ms. The accompanying `FrameTimelineVsyncId=...` block names the offending render pass.
+3. `StrictMode policy violation; ~duration=N ms: android.os.strictmode.DiskReadViolation` — synchronous IO on the main thread. The full stack names the offender. Common ones in this repo: `MaterialDrawer.ImageHolder.applyTo → ImageView.setImageURI` on `warpnet://` (~70 ms), `EncryptedSharedPreferences` first-read (~300-450 ms at cold start), `EmojiPackList.<init>` (~100 ms).
+4. `Compiler allocated N KB to compile <fully-qualified composable name>` — first-compose JIT cost for a Compose function. Common spikes: `TweetCard` (~5.5 KB), `TweetButtons` (~4.5 KB). Adds 200-500 ms each to the first LazyList measure.
+5. `Quality: stackInfo` lines — periodic main-thread sampling. Names the exact composable / layout pass that was hot when the frame stalled.
+
+**Common causes in this repo:**
+
+- **`ConstraintLayout` in Compose inside a `LazyList` item.** Solver + double-measure pass multiplies per row. `TweetButtons` used to be a 5-button `ConstraintLayout` chain — replaced with `Row + Arrangement.SpaceBetween` cut Profile-open Davey from 2 s to <500 ms. If a new screen uses `ConstraintLayout` and it's measured per LazyList item, that's almost certainly the cause.
+- **`ImageView.setImageURI(warpnet://...)`** via MaterialDrawer's `iconUrl` or any naïve `Uri`-binding call. `setImageURI` ultimately calls `Drawable.createFromPath` → blocking `FileInputStream.open`. Use Glide via `WarpdroidAsyncImage` or load into a known `ImageView` reference manually (`Glide.with(view).load(url).into(view)`).
+- **`Glide.with(activity)` instead of `Glide.with(applicationContext)` or `Glide.with(imageView)`.** Activity-scoped Glide requests crash `IllegalArgumentException` when the activity is destroyed mid-load (back-press during decode). See the `WarpdroidAsyncImage` runCatching wrap.
+- **First-compose JIT.** Inherent to Compose, but cumulative cost grows with composable size and nesting. Mitigations: keep hot composables small, split into smaller leaves so JIT amortises across recompositions, simplify `TweetCard` / `TweetButtons` / `Avatar` if they regress. Long-term fix is a Baseline Profile (not currently set up).
+- **`ANIMATE_GIF_AVATARS` pref ignored on a new Glide call site.** When animated, Glide returns a `Drawable` (heavier); when off, `Bitmap`. Inconsistent behaviour vs the rest of the app is a UX bug, but using `.asDrawable()` everywhere also burns memory on the budget tier. Mirror `loadDrawerAvatar`'s split.
+
+**Diagnostic workflow:**
+
+1. Capture logcat for a 5-10 s window around the slow interaction.
+2. Filter for `Davey|Choreographer|StrictMode|Compiler allocated|Quality.*stackInfo|ANR_LOG`.
+3. Time-correlate the lines. Davey frame at T → look for StrictMode / JIT / stackInfo at T-100ms to T+100ms.
+4. The stack trace in `StrictMode` violations is exact — it names the line. The composable in `Compiler allocated` is exact. Don't guess.
+5. After a fix, re-capture and confirm the relevant line is gone or its duration dropped below the frame budget.
+
+**Don't chase symptoms with cosmetic fixes** (spinners, skeletons) before identifying which of the categories above is the actual cause. A spinner that hides a 2 s freeze means the freeze still happens — battery still drained, scroll still stutters when the LazyList recycles.
 
 ## § Glide can't dial a content-addressed blob
 
