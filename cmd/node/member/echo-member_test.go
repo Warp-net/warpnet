@@ -10,6 +10,7 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,7 @@ func (f *fakeEchoNode) NodeInfo() warpnet.NodeInfo { return f.info }
 
 func TestEchoAutoActionsOnForeignTweet(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
-	bot := newEchoBot(f, nil, nil)
+	bot := newEchoBot(f, nil, nil, nil)
 
 	tweet := event.NewTweetEvent{Id: "tweet-1", RootId: "tweet-1", UserId: "foreign", Username: "alice", Text: "hello", CreatedAt: time.Now()}
 	bt, err := json.Marshal(tweet)
@@ -57,7 +58,7 @@ func TestEchoAutoActionsOnForeignTweet(t *testing.T) {
 
 func TestEchoAutoReplyOnForeignReply(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
-	bot := newEchoBot(f, nil, nil)
+	bot := newEchoBot(f, nil, nil, nil)
 
 	parentID := "tweet-1"
 	rp := event.NewReplyEvent{Id: "reply-1", RootId: "tweet-1", ParentId: &parentID, UserId: "foreign", ParentUserId: "foreign", Text: "reply"}
@@ -71,7 +72,7 @@ func TestEchoAutoReplyOnForeignReply(t *testing.T) {
 
 func TestEchoSkipsReplyOnEchoFormattedReply(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
-	bot := newEchoBot(f, nil, nil)
+	bot := newEchoBot(f, nil, nil, nil)
 
 	parentID := "tweet-1"
 	rp := event.NewReplyEvent{Id: "reply-1", RootId: "tweet-1", ParentId: &parentID, UserId: "foreign", ParentUserId: "foreign", Username: "Echo", Text: echoReplyPrefix + "hello"}
@@ -84,7 +85,7 @@ func TestEchoSkipsReplyOnEchoFormattedReply(t *testing.T) {
 
 func TestEchoAutoFollowBack(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
-	bot := newEchoBot(f, nil, nil)
+	bot := newEchoBot(f, nil, nil, nil)
 
 	bt, err := json.Marshal(event.NewFollowEvent{FollowerId: "foreign", FollowingId: "echo-owner"})
 	require.NoError(t, err)
@@ -111,7 +112,7 @@ func (f *fakeFollowRepo) Follow(from, to string) error {
 func TestEchoFollowBackPersistsBothDirections(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
 	fr := &fakeFollowRepo{}
-	bot := newEchoBot(f, nil, fr)
+	bot := newEchoBot(f, nil, fr, nil)
 
 	bt, err := json.Marshal(event.NewFollowEvent{FollowerId: "foreign", FollowingId: "echo-owner"})
 	require.NoError(t, err)
@@ -129,9 +130,63 @@ func TestEchoFollowBackPersistsBothDirections(t *testing.T) {
 	require.Equal(t, followCall{from: "echo-owner", to: "foreign"}, fr.calls[1])
 }
 
+type tweetCreate struct {
+	userId string
+	tweet  domain.Tweet
+}
+
+type fakeTweetRepo struct {
+	calls []tweetCreate
+	err   error
+}
+
+func (f *fakeTweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, error) {
+	f.calls = append(f.calls, tweetCreate{userId: userId, tweet: tweet})
+	return tweet, f.err
+}
+
+func TestEchoPostOwnTweetPersistsLocally(t *testing.T) {
+	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
+	peerA := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
+
+	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
+	tr := &fakeTweetRepo{}
+	bot := newEchoBot(f, nil, nil, tr)
+
+	tweetID := bot.postOwnTweet([]warpnet.WarpPeerID{peerA}, selfID)
+	require.NotEmpty(t, tweetID)
+
+	// Stored locally first.
+	require.Len(t, tr.calls, 1)
+	require.Equal(t, "echo-owner", tr.calls[0].userId)
+	require.Equal(t, tweetID, tr.calls[0].tweet.Id)
+	require.Equal(t, "echo-owner", tr.calls[0].tweet.UserId)
+	require.Equal(t, "Echo", tr.calls[0].tweet.Username)
+
+	// Then broadcast.
+	require.Len(t, f.calls, 1)
+	require.Equal(t, event.PRIVATE_POST_TWEET, string(f.calls[0].path))
+	require.Equal(t, peerA.String(), f.calls[0].nodeID)
+}
+
+func TestEchoPostOwnTweetSurvivesLocalStoreError(t *testing.T) {
+	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
+	peerA := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
+
+	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
+	tr := &fakeTweetRepo{err: errors.New("repo boom")}
+	bot := newEchoBot(f, nil, nil, tr)
+
+	tweetID := bot.postOwnTweet([]warpnet.WarpPeerID{peerA}, selfID)
+	require.NotEmpty(t, tweetID)
+	// Local-store failure must NOT block the broadcast to peers.
+	require.Len(t, f.calls, 1)
+	require.Equal(t, peerA.String(), f.calls[0].nodeID)
+}
+
 func TestEchoAutoReplyOnChatMessage(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
-	bot := newEchoBot(f, nil, nil)
+	bot := newEchoBot(f, nil, nil, nil)
 
 	msg := event.NewMessageEvent{ChatId: "chat-1", SenderId: "foreign", ReceiverId: "echo-owner", Text: "ping", CreatedAt: time.Now()}
 	bt, err := json.Marshal(msg)
@@ -148,7 +203,7 @@ func TestEchoPostOwnTweetSendsToEveryPeerExceptSelf(t *testing.T) {
 	peerB := warpnet.FromStringToPeerID("12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU")
 
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
-	bot := newEchoBot(f, nil, nil)
+	bot := newEchoBot(f, nil, nil, nil)
 
 	tweetID := bot.postOwnTweet([]warpnet.WarpPeerID{peerA, selfID, peerB}, selfID)
 	require.NotEmpty(t, tweetID)
@@ -172,7 +227,7 @@ func TestEchoPostOwnTweetSendsToEveryPeerExceptSelf(t *testing.T) {
 func TestEchoPostOwnTweetNoPeers(t *testing.T) {
 	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
-	bot := newEchoBot(f, nil, nil)
+	bot := newEchoBot(f, nil, nil, nil)
 
 	tweetID := bot.postOwnTweet(nil, selfID)
 	require.NotEmpty(t, tweetID)
@@ -181,7 +236,7 @@ func TestEchoPostOwnTweetNoPeers(t *testing.T) {
 
 func TestEchoAutoReplyMessageIsTruncatedToLimit(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
-	bot := newEchoBot(f, nil, nil)
+	bot := newEchoBot(f, nil, nil, nil)
 
 	msg := event.NewMessageEvent{
 		ChatId:     "chat-1",
