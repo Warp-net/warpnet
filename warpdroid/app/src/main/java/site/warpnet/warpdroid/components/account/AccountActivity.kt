@@ -244,7 +244,10 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
 
         binding.accountFragmentViewPager.reduceSwipeSensitivity()
         binding.accountFragmentViewPager.adapter = adapter
-        binding.accountFragmentViewPager.offscreenPageLimit = 2
+        // Default offscreen prefetch (-1) instead of 2: opening Profile no longer
+        // composes 3 TimelineFragment LazyLists at once. Trade-off is a small lag
+        // on the first swipe to a not-yet-loaded tab; opening the screen is the
+        // hotter path on a low-end device.
 
         val pageTitles =
             arrayOf(
