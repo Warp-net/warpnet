@@ -163,6 +163,7 @@ func main() {
 
 type echoStreamClient interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
 }
 
@@ -473,7 +474,12 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 }
 
 func setupHandlers(echo *echoBot, node *member.MemberNode) {
-	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
+	// PRIVATE_POST_TWEET is left in place so the default handler stores
+	// every tweet echo sees in its own DB — including echo's own tweets
+	// posted via SelfStream. Foreign tweets received here lose the
+	// immediate auto-react via stream that the prior wrapper did, but
+	// runOwnActivity polls peers every 5 s and reacts via handleTweet
+	// with the same dedup, so the action still fires with a small delay.
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_MESSAGE)
@@ -481,13 +487,6 @@ func setupHandlers(echo *echoBot, node *member.MemberNode) {
 	//nolint:govet
 	node.SetStreamHandlers(
 		[]warpnet.WarpStreamHandler{
-			{
-				event.PRIVATE_POST_TWEET,
-				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleTweet(msg, requesterNodeID(s))
-					return event.Accepted, nil
-				},
-			},
 			{
 				event.PUBLIC_POST_REPLY,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
@@ -609,9 +608,10 @@ func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 	}
 }
 
-// postOwnTweet builds a tweet attributed to echo and sends a
-// PRIVATE_POST_TWEET to each peer except self. Returns the tweet id
-// for logging / tests.
+// postOwnTweet builds a tweet attributed to echo, stores it in echo's
+// own DB via SelfStream (so it shows up on echo's profile), and sends
+// PRIVATE_POST_TWEET to each peer except self for wider distribution.
+// Returns the tweet id for logging / tests.
 func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
 	text, err := getChuckQuote()
 	if err != nil || strings.TrimSpace(text) == "" {
@@ -631,8 +631,16 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 		CreatedAt: time.Now(),
 	}
 
+	// Store the tweet in echo's own DB and let the default tweet handler
+	// publish it to followers via pubsub. Followers may also receive it
+	// directly via the GenericStream loop below — tweetRepo.Create is
+	// idempotent on tweet id, so the duplicate is harmless.
+	if _, err := e.node.SelfStream(event.PRIVATE_POST_TWEET, tweet); err != nil {
+		log.Warnf("echo: store own tweet locally: %v", err)
+	}
+
 	if len(peers) == 0 {
-		log.Warn("echo: own tweet skipped — no peers")
+		log.Infof("echo: own tweet id=%s stored locally, no peers to publish to", tweetID)
 		return tweetID
 	}
 
