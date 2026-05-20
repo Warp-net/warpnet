@@ -7,6 +7,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 )
 
 /*
@@ -38,6 +39,7 @@ resulting from the use or misuse of this software.
 
 type NotifierFetcher interface {
 	List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
+	UnreadCount(userId string) (uint64, error)
 }
 
 type NotifierGetter interface {
@@ -70,11 +72,13 @@ func StreamGetNotificationsHandler(
 			return nil, err
 		}
 
-		var unreadCount uint64
-		for _, n := range notifications {
-			if !n.IsRead {
-				unreadCount++
-			}
+		// Unread count must reflect ALL of the user's notifications,
+		// not just the page returned above; otherwise the SideNav
+		// "N unread" badge flickers between page-local counts as the
+		// front-end re-polls every 2 s.
+		unreadCount, err := repo.UnreadCount(owner.UserId)
+		if err != nil {
+			log.Errorf("notification handler: unread count: %v", err)
 		}
 		sort.SliceStable(notifications, func(i, j int) bool {
 			if notifications[i].IsRead != notifications[j].IsRead {

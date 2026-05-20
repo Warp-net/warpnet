@@ -75,6 +75,45 @@ func (s *NotificationsRepoTestSuite) TestAddAndListNotifications() {
 	s.Equal("end", cursor)
 }
 
+func (s *NotificationsRepoTestSuite) TestUnreadCountWalksAllPages() {
+	userId := uuid.New().String()
+
+	// 7 unread + 3 read, more than the internal page size of 200 only if
+	// expanded later; for now just verify the count is global across the
+	// scan, not bound to the first item batch.
+	for i := 0; i < 7; i++ {
+		s.Require().NoError(s.repo.Add(domain.Notification{
+			Type:   domain.NotificationLikeType,
+			Text:   "unread",
+			UserId: userId,
+			IsRead: false,
+		}))
+	}
+	for i := 0; i < 3; i++ {
+		s.Require().NoError(s.repo.Add(domain.Notification{
+			Type:   domain.NotificationReplyType,
+			Text:   "read",
+			UserId: userId,
+			IsRead: true,
+		}))
+	}
+
+	count, err := s.repo.UnreadCount(userId)
+	s.Require().NoError(err)
+	s.Equal(uint64(7), count)
+}
+
+func (s *NotificationsRepoTestSuite) TestUnreadCount_MissingUserId() {
+	_, err := s.repo.UnreadCount("")
+	s.Require().Error(err)
+}
+
+func (s *NotificationsRepoTestSuite) TestUnreadCount_EmptyUser() {
+	count, err := s.repo.UnreadCount(uuid.New().String())
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+}
+
 func (s *NotificationsRepoTestSuite) TestAddNotification_MissingUserId() {
 	not := domain.Notification{
 		Type: domain.NotificationLikeType,
