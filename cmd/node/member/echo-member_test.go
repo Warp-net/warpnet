@@ -107,6 +107,43 @@ func TestEchoAutoReplyOnChatMessage(t *testing.T) {
 	require.Equal(t, event.PUBLIC_POST_MESSAGE, string(f.calls[0].path))
 }
 
+func TestEchoPostOwnTweetSendsToEveryPeerExceptSelf(t *testing.T) {
+	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
+	peerA := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
+	peerB := warpnet.FromStringToPeerID("12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU")
+
+	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
+	bot := newEchoBot(f, nil)
+
+	tweetID := bot.postOwnTweet([]warpnet.WarpPeerID{peerA, selfID, peerB}, selfID)
+	require.NotEmpty(t, tweetID)
+	require.Len(t, f.calls, 2, "self peer must be filtered out")
+
+	require.Equal(t, event.PRIVATE_POST_TWEET, string(f.calls[0].path))
+	require.Equal(t, event.PRIVATE_POST_TWEET, string(f.calls[1].path))
+	require.Equal(t, peerA.String(), f.calls[0].nodeID)
+	require.Equal(t, peerB.String(), f.calls[1].nodeID)
+
+	ev, ok := f.calls[0].data.(event.NewTweetEvent)
+	require.True(t, ok)
+	require.Equal(t, tweetID, ev.Id)
+	require.Equal(t, tweetID, ev.RootId)
+	require.Equal(t, "echo-owner", ev.UserId)
+	require.Equal(t, "Echo", ev.Username)
+	require.NotEmpty(t, ev.Text)
+	require.LessOrEqual(t, len(ev.Text), ownTweetCharLimit)
+}
+
+func TestEchoPostOwnTweetNoPeers(t *testing.T) {
+	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
+	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
+	bot := newEchoBot(f, nil)
+
+	tweetID := bot.postOwnTweet(nil, selfID)
+	require.NotEmpty(t, tweetID)
+	require.Empty(t, f.calls)
+}
+
 func TestEchoAutoReplyMessageIsTruncatedToLimit(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
 	bot := newEchoBot(f, nil)

@@ -57,12 +57,15 @@ import (
 )
 
 const (
-	echoReplyPrefix = "echo: "
-	echoChatReply   = "echo: received message"
-	messageLimit    = 5000
-	seenTTL         = 999 * time.Minute
-	pruneInterval   = 999 * time.Minute
-	maxSeenKeys     = 10_000
+	echoReplyPrefix   = "echo: "
+	echoChatReply     = "echo: received message"
+	messageLimit      = 5000
+	seenTTL           = 999 * time.Minute
+	pruneInterval     = 999 * time.Minute
+	maxSeenKeys       = 10_000
+	ownTweetInterval  = time.Hour
+	ownTweetFallback  = "echo: hello from the warpnet — random Chuck quote API was unavailable"
+	ownTweetCharLimit = 4096
 )
 
 // run node without GUI
@@ -150,6 +153,7 @@ func main() {
 	readyChan <- authInfo
 	eBot := newEchoBot(echoNode, db)
 	go runOwnActivity(ctx, eBot, echoNode)
+	go runOwnTweets(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)
 
 	log.Infoln("WARPNET STARTED")
@@ -577,6 +581,78 @@ func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode)
 			}
 		}
 	}
+}
+
+// runOwnTweets posts an original tweet from echo to every known peer
+// once per ownTweetInterval. Each peer's PRIVATE_POST_TWEET handler
+// stores the tweet under echo's user id in its local DB so clients
+// paired with that peer see it via PUBLIC_GET_TWEETS. Echo itself does
+// not have the default tweet handler installed (see setupHandlers) so
+// the bot does not keep a local copy — that's intentional, the bot
+// is a thin transmitter.
+func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
+	if node == nil {
+		log.Fatalf("echo: nil node")
+	}
+
+	ticker := time.NewTicker(ownTweetInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			peers := node.Node().Peerstore().PeersWithAddrs()
+			echo.postOwnTweet(peers, node.NodeInfo().ID)
+		}
+	}
+}
+
+// postOwnTweet builds a tweet attributed to echo and sends a
+// PRIVATE_POST_TWEET to each peer except self. Returns the tweet id
+// for logging / tests.
+func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
+	text, err := getChuckQuote()
+	if err != nil || strings.TrimSpace(text) == "" {
+		text = ownTweetFallback
+	}
+	if len(text) > ownTweetCharLimit {
+		text = text[:ownTweetCharLimit]
+	}
+
+	tweetID := ulid.Make().String()
+	tweet := event.NewTweetEvent{
+		Id:        tweetID,
+		RootId:    tweetID,
+		UserId:    e.ownerID(),
+		Username:  "Echo",
+		Text:      text,
+		CreatedAt: time.Now(),
+	}
+
+	if len(peers) == 0 {
+		log.Warn("echo: own tweet skipped — no peers")
+		return tweetID
+	}
+
+	var sent, skipped int
+	for _, peer := range peers {
+		if peer == selfID {
+			continue
+		}
+		if _, err := e.node.GenericStream(peer.String(), event.PRIVATE_POST_TWEET, tweet); err != nil {
+			if strings.Contains(err.Error(), "protocols not supported") {
+				skipped++
+				continue
+			}
+			log.Warnf("echo: publish own tweet to %s: %v", peer.String(), err)
+			continue
+		}
+		sent++
+	}
+	log.Infof("echo: own tweet id=%s peers=%d sent=%d skipped=%d", tweetID, len(peers), sent, skipped)
+	return tweetID
 }
 
 const tweetsLimit uint64 = 20
