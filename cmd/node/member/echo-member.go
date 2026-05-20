@@ -163,7 +163,6 @@ func main() {
 
 type echoStreamClient interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
-	WriteOwnTweet(ev event.NewTweetEvent) (event.NewTweetEvent, error)
 	NodeInfo() warpnet.NodeInfo
 }
 
@@ -616,10 +615,12 @@ func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 	}
 }
 
-// postOwnTweet builds a tweet attributed to echo, stores it in echo's
-// own DB via SelfStream (so it shows up on echo's profile), and sends
-// PRIVATE_POST_TWEET to each peer except self for wider distribution.
-// Returns the tweet id for logging / tests.
+// postOwnTweet builds a tweet attributed to echo and sends
+// PRIVATE_POST_TWEET to each peer except self. Each peer's default
+// tweet handler stores the tweet under echo's user id in its local
+// DB, so any client paired with that peer can see it on echo's
+// profile via PUBLIC_GET_TWEETS. Returns the tweet id for logging
+// and tests.
 func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
 	text, err := getChuckQuote()
 	if err != nil || strings.TrimSpace(text) == "" {
@@ -637,17 +638,6 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 		Username:  "Echo",
 		Text:      text,
 		CreatedAt: time.Now(),
-	}
-
-	// Store the tweet in echo's own DB so it shows up on echo's profile,
-	// and publish to echo's followers via pubsub. WriteOwnTweet bypasses
-	// echo's own PRIVATE_POST_TWEET stream wrapper (which is the
-	// auto-react path for foreign tweets), so this works even with that
-	// wrapper installed. Followers may also receive the tweet via the
-	// GenericStream loop below — tweetRepo.Create is idempotent on
-	// tweet id, so the duplicate is harmless.
-	if _, err := e.node.WriteOwnTweet(tweet); err != nil {
-		log.Warnf("echo: store own tweet locally: %v", err)
 	}
 
 	if len(peers) == 0 {

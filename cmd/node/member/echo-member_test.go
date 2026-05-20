@@ -22,10 +22,8 @@ type streamCall struct {
 }
 
 type fakeEchoNode struct {
-	info       warpnet.NodeInfo
-	calls      []streamCall
-	ownTweets  []event.NewTweetEvent
-	writeErr   error
+	info  warpnet.NodeInfo
+	calls []streamCall
 }
 
 func (f *fakeEchoNode) GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
@@ -34,14 +32,6 @@ func (f *fakeEchoNode) GenericStream(nodeId string, path stream.WarpRoute, data 
 	}
 	f.calls = append(f.calls, streamCall{nodeID: nodeId, path: path, data: data})
 	return []byte(`{"accepted":true}`), nil
-}
-
-func (f *fakeEchoNode) WriteOwnTweet(ev event.NewTweetEvent) (event.NewTweetEvent, error) {
-	if f.writeErr != nil {
-		return ev, f.writeErr
-	}
-	f.ownTweets = append(f.ownTweets, ev)
-	return ev, nil
 }
 
 func (f *fakeEchoNode) NodeInfo() warpnet.NodeInfo { return f.info }
@@ -142,14 +132,9 @@ func TestEchoPostOwnTweetSendsToEveryPeerExceptSelf(t *testing.T) {
 	require.Equal(t, "Echo", ev.Username)
 	require.NotEmpty(t, ev.Text)
 	require.LessOrEqual(t, len(ev.Text), ownTweetCharLimit)
-
-	// WriteOwnTweet must also be invoked so echo's own profile has the tweet.
-	require.Len(t, f.ownTweets, 1)
-	require.Equal(t, tweetID, f.ownTweets[0].Id)
-	require.Equal(t, "echo-owner", f.ownTweets[0].UserId)
 }
 
-func TestEchoPostOwnTweetNoPeersStillStoresLocally(t *testing.T) {
+func TestEchoPostOwnTweetNoPeers(t *testing.T) {
 	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
 	bot := newEchoBot(f, nil)
@@ -157,27 +142,6 @@ func TestEchoPostOwnTweetNoPeersStillStoresLocally(t *testing.T) {
 	tweetID := bot.postOwnTweet(nil, selfID)
 	require.NotEmpty(t, tweetID)
 	require.Empty(t, f.calls)
-	// Even with no peers, the tweet must be saved on echo itself.
-	require.Len(t, f.ownTweets, 1)
-	require.Equal(t, tweetID, f.ownTweets[0].Id)
-}
-
-func TestEchoPostOwnTweetSurvivesWriteError(t *testing.T) {
-	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
-	peerA := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
-
-	f := &fakeEchoNode{
-		info:     warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID},
-		writeErr: errors.New("repo boom"),
-	}
-	bot := newEchoBot(f, nil)
-
-	tweetID := bot.postOwnTweet([]warpnet.WarpPeerID{peerA}, selfID)
-	require.NotEmpty(t, tweetID)
-	// Local-store failure must NOT block the broadcast to peers.
-	require.Len(t, f.calls, 1)
-	require.Equal(t, peerA.String(), f.calls[0].nodeID)
-	require.Empty(t, f.ownTweets)
 }
 
 func TestEchoAutoReplyMessageIsTruncatedToLimit(t *testing.T) {
