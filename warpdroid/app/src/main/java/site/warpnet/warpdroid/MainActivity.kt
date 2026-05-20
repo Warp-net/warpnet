@@ -992,10 +992,19 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         // Load the active profile's real avatar async — ProfileDrawerItem only carries the placeholder.
         if (activeProfile.profilePictureUrl.isNotBlank()) {
             header.currentProfileView?.let { profileImageView ->
-                Glide.with(profileImageView)
-                    .load(activeProfile.profilePictureUrl)
-                    .placeholder(R.drawable.avatar_default)
-                    .into(profileImageView)
+                val animateAvatars = preferences.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false)
+                val manager = Glide.with(profileImageView)
+                if (animateAvatars) {
+                    manager.asDrawable()
+                        .load(activeProfile.profilePictureUrl)
+                        .placeholder(R.drawable.avatar_default)
+                        .into(profileImageView)
+                } else {
+                    manager.asBitmap()
+                        .load(activeProfile.profilePictureUrl)
+                        .placeholder(R.drawable.avatar_default)
+                        .into(profileImageView)
+                }
             }
         }
         binding.mainToolbar.subtitle = if (accountManager.shouldDisplaySelfUsername()) {
