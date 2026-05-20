@@ -360,10 +360,10 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 // fighting their own custom PRIVATE_POST_TWEET stream handler.
 func (m *MemberNode) WriteOwnTweet(ev event.NewTweetEvent) (event.NewTweetEvent, error) {
 	if m == nil {
-		return ev, fmt.Errorf("member: write own tweet: nil node")
+		return ev, warpnet.WarpError("member: write own tweet: nil node")
 	}
 	if m.tweetRepo == nil || m.timelineRepo == nil {
-		return ev, fmt.Errorf("member: write own tweet: repos not initialised")
+		return ev, warpnet.WarpError("member: write own tweet: repos not initialised")
 	}
 	if ev.UserId == "" {
 		return ev, warpnet.WarpError("empty user id")
