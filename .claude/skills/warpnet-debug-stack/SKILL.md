@@ -45,6 +45,10 @@ Symptom: tests pass but device behaves stale
 Symptom: warpdroid UI feels janky / Davey frames / 1-2 s freeze on a screen
 └─ ANR or true hang? ──── YES ─→ § Stream-call serialisation bottleneck
                        ──── NO  ─→ § warpdroid UI perf (low-end device budget)
+
+Symptom: warpdroid drains the battery / device gets warm in pocket / CpuBgTime
+         climbs in BatteryStats / "the app keeps the radio on"
+                                                                          ─→ § warpdroid battery budget
 ```
 
 When in doubt, log into the **fat node** first (`stdout` of the desktop binary). The middleware logs every failed handler call by route, so an empty client list paired with no server-side errors almost always means the client is parsing a successful response wrong (silent zero-values).
@@ -209,6 +213,48 @@ suspend fun request(protocolId: String, bodyJson: String): String =
 5. After a fix, re-capture and confirm the relevant line is gone or its duration dropped below the frame budget.
 
 **Don't chase symptoms with cosmetic fixes** (spinners, skeletons) before identifying which of the categories above is the actual cause. A spinner that hides a 2 s freeze means the freeze still happens — battery still drained, scroll still stutters when the LazyList recycles.
+
+## § warpdroid battery budget
+
+**Symptom.** Users report warpdroid drains the battery noticeably faster than other social apps. Device is warm in the pocket. `BatteryStats` / OEM `AppStats` show high `CpuBgTime`, `WakeLockBgTime`, or `BgWifiRx/TxBytes` for `site.warpnet.warpdroid` over an idle hour. Or: a code review finds a new `ForegroundService`, a polling loop, a `WakeLock`, or a new periodic worker without constraints.
+
+**Context.** warpdroid is a thin client to the user's own desktop fat node. Almost every "always-on" architecture pattern from regular Android social apps is wrong here:
+
+- The fat node is always-on, so the device does not need to be.
+- Notifications come from the fat node via a `WorkManager`-scheduled pull (`NotificationWorker`, 15 min minimum), not from a persistent socket on the device.
+- The libp2p host is paused on `Lifecycle.onStop` and resumed on `onStart` — by design, when the user isn't looking at warpdroid, the radio isn't holding the relay-tunneled keep-alive.
+
+The relay-tunneled libp2p connection is the single most expensive thing the app does. yamux's keep-alive cycle plus the circuit-v2 relay's own pings keep the cellular/wifi radio out of doze. Leaving the host alive in the background is a ~3-5%-per-hour drain on a budget device.
+
+**Logcat fingerprints (OEM AppStats lines, emitted every few minutes by `com.oplus.persist.system` / `com.miui.powerkeeper` / etc.):**
+
+- `CpuFgTime` / `CpuBgTime` — fg should dominate; bg climbing means background work is running.
+- `WakeLockFgTime` / `WakeLockBgTime` — must be 0 across the board. Non-zero = something is holding a `PowerManager.WakeLock`.
+- `JobFgCount` / `JobBgCount` — `NotificationWorker` + `PairRefreshWorker` together should fire ~4 times/hour at most. More = a new periodic worker landed without a 15-min floor.
+- `BgWifiRxBytes` / `BgWifiTxBytes` — if these climb while the device is idle and the screen is off, there's a polling loop still firing.
+- `GpsTime` / `SensorTime` / `BgCameraTime` — must be 0. warpdroid does not use any of these. Non-zero = a leaked listener.
+
+**Common causes in this repo (or things to grep for in a new change):**
+
+- **`ForegroundService` introduced "to keep the connection alive".** Wrong by architecture. The lifecycle pause/resume of `binding.Pause()`/`binding.Resume()` is the design — don't add a service that fights it. Grep `Manifest.xml` for `<service` and any class extending `Service` / `LifecycleService`. The only legitimate service in warpdroid right now is `SendTweetBroadcastReceiver`'s upload, which is single-shot.
+- **`Handler.postDelayed(refresh, 30_000)` or `LaunchedEffect { while(true) { delay(30s); ... } }`.** Polling loops keep the app's process awake. Grep for `postDelayed`, `while (true)`, `repeat(`, `flow.collect` with a hand-rolled `delay`. The Compose `LaunchedEffect` ones are especially insidious because they auto-cancel only on screen leave — if the user keeps the screen open they run forever.
+- **A new `PeriodicWorkRequest` under 15 min or without constraints.** `WorkManager.MIN_PERIODIC_INTERVAL_MILLIS` is 15 min and is the absolute floor — anything shorter is coerced silently. New workers must have `setRequiredNetworkType(NetworkType.CONNECTED)`, `setRequiresBatteryNotLow(true)`, and `BackoffPolicy.LINEAR` (or `EXPONENTIAL`). Match `PairRefreshWorker.kt` and `NotificationWorker.kt`.
+- **A `PowerManager.WakeLock`, `WifiManager.WifiLock`, or `View.setKeepScreenOn(true)` call.** There is no legitimate reason for any of these in warpdroid. Grep `WakeLock`, `WifiLock`, `setKeepScreenOn`, `FLAG_KEEP_SCREEN_ON`. If you find one, remove it and fix the underlying state machine that wanted it.
+- **`AlarmManager.setExactAndAllowWhileIdle` or anything that wakes the device.** warpdroid doesn't need exact-time alarms. The only legitimate batched alarms come from `WorkManager`'s `SystemJobScheduler`. Grep `AlarmManager`.
+- **A leaked `BroadcastReceiver` or `ContentObserver`.** Receivers registered in `Application` or a long-lived singleton without an `unregister` keep their callback's process alive. Grep `registerReceiver` and pair every match with a corresponding `unregisterReceiver`.
+- **A `ConnectivityManager.NetworkCallback` not unregistered.** Same story.
+- **A new permission in `AndroidManifest.xml` for GPS / Bluetooth / mic / camera-always-on.** warpdroid currently uses camera only on `PairingActivity` (QR scan), and that's intentionally torn down after the scan. New permissions need an explicit design discussion — every permission is a battery vector.
+- **`Ed25519IdentityStore.derive` called more than once per process.** It's ~600 ms of single-core CPU. Once is fine (the auto-pair path). A loop, or a per-message call, will both drain battery and block the main thread.
+
+**Diagnostic workflow:**
+
+1. Get a baseline. With a known-good build, leave the device idle for 1 hour with the app installed but not foregrounded. Capture the `Battery AppStats: Uid = <warpdroid uid>` lines from logcat at start and end. Record `CpuBgTime`, `WakeLockBgTime`, `BgWifiRxBytes`, `BgWifiTxBytes`, `JobBgCount`.
+2. Repeat on the suspect build, same conditions.
+3. Compare. Any field rising by more than a few percent is a regression. Find what changed in the last branch that runs in the background or holds a system resource.
+4. Use `adb shell dumpsys batterystats --reset` then `adb shell dumpsys batterystats site.warpnet.warpdroid` after 30+ min to get a structured per-component breakdown if the AppStats lines aren't enough.
+5. For wakelock leaks specifically: `adb shell dumpsys power | grep -A 5 warpdroid` will list any wakelocks currently held.
+
+**Architectural reminder:** warpdroid is a thin client. It does not need to be "alive" between user interactions. Any pattern that fights that — keeping the libp2p host warm, pre-fetching, eager caching, push-via-persistent-socket — is wrong by design. When in doubt, do less in the background.
 
 ## § Glide can't dial a content-addressed blob
 
