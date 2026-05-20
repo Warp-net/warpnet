@@ -92,7 +92,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
+	// Echo is a bot — its state is ephemeral. Run the local store in
+	// memory so the follow / tweet rows it persists for its own
+	// PUBLIC_GET_USER / PUBLIC_GET_TWEETS responses live for the
+	// process lifetime only, no on-disk footprint.
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)

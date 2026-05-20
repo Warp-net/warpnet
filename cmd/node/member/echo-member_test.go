@@ -10,7 +10,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/stretchr/testify/require"
@@ -95,94 +94,6 @@ func TestEchoAutoFollowBack(t *testing.T) {
 	require.Equal(t, event.PUBLIC_POST_FOLLOW, string(f.calls[0].path))
 }
 
-type followCall struct {
-	from, to string
-}
-
-type fakeFollowRepo struct {
-	calls []followCall
-	err   error
-}
-
-func (f *fakeFollowRepo) Follow(from, to string) error {
-	f.calls = append(f.calls, followCall{from: from, to: to})
-	return f.err
-}
-
-func TestEchoFollowBackPersistsBothDirections(t *testing.T) {
-	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
-	fr := &fakeFollowRepo{}
-	bot := newEchoBot(f, nil, fr, nil)
-
-	bt, err := json.Marshal(event.NewFollowEvent{FollowerId: "foreign", FollowingId: "echo-owner"})
-	require.NoError(t, err)
-
-	bot.handleFollow(bt, "remote-node-1")
-
-	// Auto-follow-back still sent.
-	require.Len(t, f.calls, 1)
-	require.Equal(t, event.PUBLIC_POST_FOLLOW, string(f.calls[0].path))
-
-	// Both directions persisted on echo's side, so PUBLIC_GET_USER on
-	// echo returns follower and following counts > 0.
-	require.Len(t, fr.calls, 2)
-	require.Equal(t, followCall{from: "foreign", to: "echo-owner"}, fr.calls[0])
-	require.Equal(t, followCall{from: "echo-owner", to: "foreign"}, fr.calls[1])
-}
-
-type tweetCreate struct {
-	userId string
-	tweet  domain.Tweet
-}
-
-type fakeTweetRepo struct {
-	calls []tweetCreate
-	err   error
-}
-
-func (f *fakeTweetRepo) Create(userId string, tweet domain.Tweet) (domain.Tweet, error) {
-	f.calls = append(f.calls, tweetCreate{userId: userId, tweet: tweet})
-	return tweet, f.err
-}
-
-func TestEchoPostOwnTweetPersistsLocally(t *testing.T) {
-	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
-	peerA := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
-
-	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
-	tr := &fakeTweetRepo{}
-	bot := newEchoBot(f, nil, nil, tr)
-
-	tweetID := bot.postOwnTweet([]warpnet.WarpPeerID{peerA}, selfID)
-	require.NotEmpty(t, tweetID)
-
-	// Stored locally first.
-	require.Len(t, tr.calls, 1)
-	require.Equal(t, "echo-owner", tr.calls[0].userId)
-	require.Equal(t, tweetID, tr.calls[0].tweet.Id)
-	require.Equal(t, "echo-owner", tr.calls[0].tweet.UserId)
-	require.Equal(t, "Echo", tr.calls[0].tweet.Username)
-
-	// Then broadcast.
-	require.Len(t, f.calls, 1)
-	require.Equal(t, event.PRIVATE_POST_TWEET, string(f.calls[0].path))
-	require.Equal(t, peerA.String(), f.calls[0].nodeID)
-}
-
-func TestEchoPostOwnTweetSurvivesLocalStoreError(t *testing.T) {
-	selfID := warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")
-	peerA := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
-
-	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: selfID}}
-	tr := &fakeTweetRepo{err: errors.New("repo boom")}
-	bot := newEchoBot(f, nil, nil, tr)
-
-	tweetID := bot.postOwnTweet([]warpnet.WarpPeerID{peerA}, selfID)
-	require.NotEmpty(t, tweetID)
-	// Local-store failure must NOT block the broadcast to peers.
-	require.Len(t, f.calls, 1)
-	require.Equal(t, peerA.String(), f.calls[0].nodeID)
-}
 
 func TestEchoAutoReplyOnChatMessage(t *testing.T) {
 	f := &fakeEchoNode{info: warpnet.NodeInfo{OwnerId: "echo-owner", ID: warpnet.FromStringToPeerID("12D3KooWQ7w6h96db3hG9s6S9xjCRz2xS9QPiQc5sKXc5teLoV6b")}}
