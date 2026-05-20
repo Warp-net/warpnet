@@ -80,6 +80,10 @@ object WarpnetModule {
      * sourced lazily from [PairedNodeStore] so a re-pair propagates
      * automatically — the closure captures the store by reference, not
      * its value at injection time.
+     *
+     * The dial-candidate list is logged on every reconnect attempt so
+     * stale / missing LAN addresses are visible in logcat without
+     * needing to inspect SharedPreferences. Tag `warpnet-dial`.
      */
     @Provides
     @Singleton
@@ -91,9 +95,14 @@ object WarpnetModule {
         client = client,
         scope = scope,
         dialAddresses = {
-            pairedNodeStore.load()?.let { paired ->
+            val candidates = pairedNodeStore.load()?.let { paired ->
                 paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
             } ?: emptyList()
+            android.util.Log.i(
+                "warpnet-dial",
+                "dial candidates (n=${candidates.size}): $candidates",
+            )
+            candidates
         },
     )
 }
