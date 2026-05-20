@@ -110,7 +110,6 @@ import com.mikepenz.materialdrawer.model.interfaces.IProfile
 import com.mikepenz.materialdrawer.model.interfaces.descriptionRes
 import com.mikepenz.materialdrawer.model.interfaces.descriptionText
 import com.mikepenz.materialdrawer.model.interfaces.iconRes
-import com.mikepenz.materialdrawer.model.interfaces.iconUrl
 import com.mikepenz.materialdrawer.model.interfaces.nameRes
 import com.mikepenz.materialdrawer.model.interfaces.nameText
 import com.mikepenz.materialdrawer.util.AbstractDrawerImageLoader
@@ -971,7 +970,9 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 ProfileDrawerItem().apply {
                     isSelected = acc == activeProfile
                     nameText = acc.displayName
-                    iconUrl = acc.profilePictureUrl
+                    // iconUrl on warpnet:// triggers setImageURI sync IO on main; real avatar is
+                    // Glide-loaded into header.currentProfileView below.
+                    iconRes = R.drawable.avatar_default
                     isNameShown = true
                     identifier = acc.id
                     descriptionText = "@${acc.username}"
@@ -988,6 +989,24 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         header.clear()
         header.profiles = profiles
         header.setActiveProfile(activeProfile.id)
+        // Load the active profile's real avatar async — ProfileDrawerItem only carries the placeholder.
+        if (activeProfile.profilePictureUrl.isNotBlank()) {
+            header.currentProfileView?.let { profileImageView ->
+                val animateAvatars = preferences.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false)
+                val manager = Glide.with(profileImageView)
+                if (animateAvatars) {
+                    manager.asDrawable()
+                        .load(activeProfile.profilePictureUrl)
+                        .placeholder(R.drawable.avatar_default)
+                        .into(profileImageView)
+                } else {
+                    manager.asBitmap()
+                        .load(activeProfile.profilePictureUrl)
+                        .placeholder(R.drawable.avatar_default)
+                        .into(profileImageView)
+                }
+            }
+        }
         binding.mainToolbar.subtitle = if (accountManager.shouldDisplaySelfUsername()) {
             activeProfile.fullName
         } else {
