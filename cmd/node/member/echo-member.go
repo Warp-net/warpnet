@@ -30,6 +30,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -91,7 +92,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
+	// Echo is a bot — its state is ephemeral. Run the local store in
+	// memory so the follow / tweet rows it persists for its own
+	// PUBLIC_GET_USER / PUBLIC_GET_TWEETS responses live for the
+	// process lifetime only, no on-disk footprint.
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)
@@ -151,7 +156,15 @@ func main() {
 	authInfo.Addresses = echoNode.NodeInfo().Addresses
 
 	readyChan <- authInfo
-	eBot := newEchoBot(echoNode, db)
+	// Echo's own FollowRepo and TweetRepo over the shared db so the
+	// bot can persist follow-backs and its hourly tweets without
+	// touching member-node.go internals. TweetRepo takes a nil stats
+	// store — that just disables CRDT cross-node aggregation; the
+	// local writes (tweet body, per-user counter) still happen, which
+	// is what PUBLIC_GET_USER / PUBLIC_GET_TWEETS on echo read from.
+	echoFollowRepo := database.NewFollowRepo(db)
+	echoTweetRepo := database.NewTweetRepo(db, nil)
+	eBot := newEchoBot(echoNode, db, echoFollowRepo, echoTweetRepo)
 	go runOwnActivity(ctx, eBot, echoNode)
 	go runOwnTweets(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)
@@ -171,20 +184,41 @@ type echoPersister interface {
 	Get(key local_store.DatabaseKey) ([]byte, error)
 }
 
+// echoFollowStorer is the slice of database.FollowRepo that the echo
+// bot needs: just enough to record both ends of the follow back so
+// echo's own profile shows correct counts.
+type echoFollowStorer interface {
+	Follow(fromUserId, toUserId string) error
+}
+
+// echoTweetStorer is the slice of database.TweetRepo the echo bot
+// needs to persist its own hourly tweets. Create is enough — it
+// writes the tweet body and increments the per-user count under the
+// same shared db, so PUBLIC_GET_TWEETS(userId=echo) returns them and
+// PUBLIC_GET_USER reports a non-zero tweet count even though the
+// CRDT stats store is unwired (nil) for the bot.
+type echoTweetStorer interface {
+	Create(userId string, tweet domain.Tweet) (domain.Tweet, error)
+}
+
 const echoSeenNamespace = "/ECHO_SEEN/"
 
 type echoBot struct {
 	node         echoStreamClient
 	db           echoPersister
+	followRepo   echoFollowStorer
+	tweetRepo    echoTweetStorer
 	mu           sync.Mutex
 	seen         map[string]time.Time
 	lastPruneRun time.Time
 }
 
-func newEchoBot(node echoStreamClient, db echoPersister) *echoBot {
+func newEchoBot(node echoStreamClient, db echoPersister, followRepo echoFollowStorer, tweetRepo echoTweetStorer) *echoBot {
 	return &echoBot{
 		node:         node,
 		db:           db,
+		followRepo:   followRepo,
+		tweetRepo:    tweetRepo,
 		seen:         make(map[string]time.Time),
 		lastPruneRun: time.Now(),
 	}
@@ -335,6 +369,25 @@ func (e *echoBot) handleFollow(msg []byte, requesterNodeID string) {
 	if requesterNodeID == "" {
 		return
 	}
+
+	// Record both directions in echo's own follow repo so the
+	// PUBLIC_GET_USER handler returns non-zero follower / following
+	// counts on echo's profile. The default PUBLIC_POST_FOLLOW handler
+	// is replaced by this wrapper, so without these writes echo's
+	// followRepo would never see the relationship.
+	if e.followRepo != nil {
+		// X follows echo
+		if err := e.followRepo.Follow(fl.FollowerId, e.ownerID()); err != nil &&
+			!errors.Is(err, database.ErrAlreadyFollowed) {
+			log.Warnf("echo: store inbound follow %s -> echo: %v", fl.FollowerId, err)
+		}
+		// echo follows X (auto-follow-back)
+		if err := e.followRepo.Follow(e.ownerID(), fl.FollowerId); err != nil &&
+			!errors.Is(err, database.ErrAlreadyFollowed) {
+			log.Warnf("echo: store outbound follow echo -> %s: %v", fl.FollowerId, err)
+		}
+	}
+
 	if _, err := e.node.GenericStream(
 		requesterNodeID,
 		event.PUBLIC_POST_FOLLOW,
@@ -617,12 +670,13 @@ func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 	}
 }
 
-// postOwnTweet builds a tweet attributed to echo and sends
-// PRIVATE_POST_TWEET to each peer except self. Each peer's default
-// tweet handler stores the tweet under echo's user id in its local
-// DB, so any client paired with that peer can see it on echo's
-// profile via PUBLIC_GET_TWEETS. Returns the tweet id for logging
-// and tests.
+// postOwnTweet builds a tweet attributed to echo, stores it in echo's
+// own TweetRepo so PUBLIC_GET_USER / PUBLIC_GET_TWEETS on echo return
+// non-zero counts and the tweet body, and sends PRIVATE_POST_TWEET to
+// each peer except self. Each peer's default tweet handler stores its
+// own copy under echo's user id, so any client paired with that peer
+// can also see it via PUBLIC_GET_TWEETS. Returns the tweet id for
+// logging and tests.
 func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
 	text, err := getChuckQuote()
 	if err != nil || strings.TrimSpace(text) == "" {
@@ -642,8 +696,19 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 		CreatedAt: time.Now(),
 	}
 
+	// Write to echo's own TweetRepo before the broadcast so echo's
+	// own profile shows the tweet even when queried directly. The
+	// underlying repo is constructed with a nil stats store, which
+	// only disables CRDT cross-node aggregation — the body and the
+	// per-user counter are still written in the local txn.
+	if e.tweetRepo != nil {
+		if _, err := e.tweetRepo.Create(e.ownerID(), tweet); err != nil {
+			log.Warnf("echo: store own tweet locally id=%s: %v", tweetID, err)
+		}
+	}
+
 	if len(peers) == 0 {
-		log.Warnf("echo: own tweet id=%s dropped — no peers to publish to", tweetID)
+		log.Warnf("echo: own tweet id=%s broadcast skipped — no peers", tweetID)
 		return tweetID
 	}
 
