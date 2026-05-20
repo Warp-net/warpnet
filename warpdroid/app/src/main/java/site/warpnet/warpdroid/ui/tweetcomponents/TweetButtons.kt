@@ -16,7 +16,10 @@
 package site.warpnet.warpdroid.ui.tweetcomponents
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
@@ -31,18 +34,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.tooling.preview.PreviewLightDark
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.constraintlayout.compose.ChainStyle
-import androidx.constraintlayout.compose.ConstraintLayout
 import at.connyduck.sparkbutton.compose.SparkButton
 import at.connyduck.sparkbutton.compose.rememberSparkButtonState
 import site.warpnet.warpdroid.R
@@ -101,63 +101,54 @@ fun TweetButtons(
         }
     }
 
-    ConstraintLayout(
+    // Plain Row instead of ConstraintLayout with a horizontal chain: each
+    // row of TweetButtons gets measured once per LazyList item, and the
+    // chain solver was a measurable cost on first frame of Profile / Home.
+    // LTR/RTL is handled natively by Row.
+    Row(
         modifier = modifier
             .clearAndSetSemantics {
                 contentDescription = description
             },
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // TODO: properly connect these to the confirmation bottom sheet once it is in Compose
         var retweeted by remember(status.retweeted) { mutableStateOf(status.retweeted) }
         var liked by remember(status.liked) { mutableStateOf(status.liked) }
         var bookmarked by remember(status.bookmarked) { mutableStateOf(status.bookmarked) }
 
-        val (replyButton, replyCount, retweetButton, retweetCount, favButton, favCount, bookmarkButton, moreButton) = createRefs()
-
-        // work around for https://issuetracker.google.com/issues/455056601
-        if (LocalLayoutDirection.current == LayoutDirection.Ltr) {
-            createHorizontalChain(replyButton, retweetButton, favButton, bookmarkButton, moreButton, chainStyle = ChainStyle.SpreadInside)
-        } else {
-            createHorizontalChain(moreButton, bookmarkButton, favButton, retweetButton, replyButton, chainStyle = ChainStyle.SpreadInside)
-        }
-        IconButton(
-            onClick = {
-                listener.onReply(statusViewData)
-            },
-            modifier = Modifier.constrainAs(replyButton) {
-                start.linkTo(parent.start)
-                end.linkTo(retweetButton.start)
-                centerVerticallyTo(parent)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = {
+                    listener.onReply(statusViewData)
+                },
+            ) {
+                Icon(
+                    painter = if (status.isReply) {
+                        painterResource(R.drawable.ic_reply_all_24dp)
+                    } else {
+                        painterResource(R.drawable.ic_reply_24dp)
+                    },
+                    tint = warpdroidColors.tertiaryTextColor,
+                    contentDescription = null
+                )
             }
-        ) {
-            Icon(
-                painter = if (status.isReply) {
-                    painterResource(R.drawable.ic_reply_all_24dp)
-                } else {
-                    painterResource(R.drawable.ic_reply_24dp)
-                },
-                tint = warpdroidColors.tertiaryTextColor,
-                contentDescription = null
-            )
-        }
-        if (!statusViewData.isDetailed) {
-            Text(
-                text = if (showStats) {
-                    formatNumber(status.repliesCount.toLong(), 1000)
-                } else if (status.repliesCount == 0) {
-                    "0"
-                } else if (status.repliesCount == 1) {
-                    "1"
-                } else {
-                    stringResource(R.string.tweet_count_one_plus)
-                },
-                color = warpdroidColors.tertiaryTextColor,
-                style = LocalPreferences.current.statusTextStyles.medium,
-                modifier = Modifier.constrainAs(replyCount) {
-                    start.linkTo(replyButton.end)
-                    centerVerticallyTo(parent)
-                }
-            )
+            if (!statusViewData.isDetailed) {
+                Text(
+                    text = if (showStats) {
+                        formatNumber(status.repliesCount.toLong(), 1000)
+                    } else if (status.repliesCount == 0) {
+                        "0"
+                    } else if (status.repliesCount == 1) {
+                        "1"
+                    } else {
+                        stringResource(R.string.tweet_count_one_plus)
+                    },
+                    color = warpdroidColors.tertiaryTextColor,
+                    style = LocalPreferences.current.statusTextStyles.medium,
+                )
+            }
         }
 
         // Warpnet only emits Tweet.Visibility.PUBLIC (WarpnetMapper.toTweet
@@ -172,24 +163,14 @@ fun TweetButtons(
         // path because that's where the celebration fires; the quote
         // path opens a new screen so the animation would never play.
         //
-        // The DropdownMenu is wrapped in an inner Box (not the
-        // ConstraintLayout-anchored one) because Popup's anchor
-        // positioning reads the parent's globally-positioned bounds, and
-        // those are unstable when the parent is also a ConstraintLayout
-        // child — the menu ended up at apparently-random screen
-        // positions on different tweet rows. Anchoring to the inner Box
-        // with .wrapContentSize gives Popup a tight, stable bounding box
-        // right under the icon to position itself against.
+        // The DropdownMenu is wrapped in an inner Box with .wrapContentSize
+        // so Popup's anchor-positioning code reads a tight, stable
+        // bounding box right under the icon. Without that the menu
+        // appeared at apparently-random screen positions on different
+        // tweet rows.
         val retweetSparkButtonState = rememberSparkButtonState()
         var showRetweetMenu by remember { mutableStateOf(false) }
-        Box(
-            modifier = Modifier
-                .constrainAs(retweetButton) {
-                    start.linkTo(replyButton.end)
-                    end.linkTo(favButton.start)
-                    centerVerticallyTo(parent)
-                }
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.wrapContentSize()) {
                 SparkButton(
                     animateOnClick = false,
@@ -240,71 +221,59 @@ fun TweetButtons(
                     )
                 }
             }
-        }
-
-        if (showStats) {
-            Text(
-                text = formatNumber(status.retweetsCount.toLong(), 1000),
-                color = if (retweeted) {
-                    colorScheme.primary
-                } else {
-                    warpdroidColors.tertiaryTextColor
-                },
-                style = LocalPreferences.current.statusTextStyles.medium,
-                modifier = Modifier
-                    .constrainAs(retweetCount) {
-                        start.linkTo(retweetButton.end, margin = 4.dp)
-                        centerVerticallyTo(parent)
-                    }
-            )
+            if (showStats) {
+                Text(
+                    text = formatNumber(status.retweetsCount.toLong(), 1000),
+                    color = if (retweeted) {
+                        colorScheme.primary
+                    } else {
+                        warpdroidColors.tertiaryTextColor
+                    },
+                    style = LocalPreferences.current.statusTextStyles.medium,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
         }
 
         val sparkButtonState = rememberSparkButtonState()
-        SparkButton(
-            animateOnClick = false,
-            onClick = {
-                listener.onLike(statusViewData, !liked, state = sparkButtonState)
-            },
-            state = sparkButtonState,
-            primaryColor = warpdroidOrange,
-            secondaryColor = warpdroidOrangeLight,
-            modifier = Modifier.constrainAs(favButton) {
-                start.linkTo(retweetButton.end)
-                end.linkTo(bookmarkButton.start)
-                centerVerticallyTo(parent)
-            }
-        ) {
-            if (liked) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_star_24dp_filled),
-                    tint = warpdroidColors.likeButtonActiveColor,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-            } else {
-                Icon(
-                    painter = painterResource(R.drawable.ic_star_24dp),
-                    tint = warpdroidColors.tertiaryTextColor,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-        if (showStats) {
-            Text(
-                text = formatNumber(status.likesCount.toLong(), 1000),
-                color = if (liked) {
-                    warpdroidColors.likeButtonActiveColor
-                } else {
-                    warpdroidColors.tertiaryTextColor
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SparkButton(
+                animateOnClick = false,
+                onClick = {
+                    listener.onLike(statusViewData, !liked, state = sparkButtonState)
                 },
-                style = LocalPreferences.current.statusTextStyles.medium,
-                modifier = Modifier
-                    .constrainAs(favCount) {
-                        start.linkTo(favButton.end, margin = 4.dp)
-                        centerVerticallyTo(parent)
-                    }
-            )
+                state = sparkButtonState,
+                primaryColor = warpdroidOrange,
+                secondaryColor = warpdroidOrangeLight,
+            ) {
+                if (liked) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_star_24dp_filled),
+                        tint = warpdroidColors.likeButtonActiveColor,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_star_24dp),
+                        tint = warpdroidColors.tertiaryTextColor,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            if (showStats) {
+                Text(
+                    text = formatNumber(status.likesCount.toLong(), 1000),
+                    color = if (liked) {
+                        warpdroidColors.likeButtonActiveColor
+                    } else {
+                        warpdroidColors.tertiaryTextColor
+                    },
+                    style = LocalPreferences.current.statusTextStyles.medium,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
         }
 
         SparkButton(
@@ -315,11 +284,6 @@ fun TweetButtons(
             },
             primaryColor = warpdroidGreenDark,
             secondaryColor = warpdroidGreenLight,
-            modifier = Modifier.constrainAs(bookmarkButton) {
-                start.linkTo(favButton.end)
-                end.linkTo(moreButton.start)
-                centerVerticallyTo(parent)
-            }
         ) {
             if (bookmarked) {
                 Icon(
@@ -339,14 +303,7 @@ fun TweetButtons(
         }
 
         var moreVisible by remember { mutableStateOf(false) }
-
-        Box(
-            modifier = Modifier.constrainAs(moreButton) {
-                start.linkTo(bookmarkButton.end)
-                end.linkTo(parent.end)
-                centerVerticallyTo(parent)
-            }
-        ) {
+        Box {
             IconButton(
                 onClick = {
                     moreVisible = !moreVisible
