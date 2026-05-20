@@ -696,24 +696,17 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private fun updateButtons() {
         invalidateOptionsMenu()
 
-        if (loadedAccount?.moved == null) {
-            binding.accountFollowButton.show()
-            updateFollowButton()
-            updateSubscribeButton()
+        binding.accountFollowButton.show()
+        updateFollowButton()
+        updateSubscribeButton()
 
-            if (blocking) {
-                binding.accountFloatingActionButton.hide()
-                binding.accountMuteButton.hide()
-            } else {
-                binding.accountFloatingActionButton.show()
-                binding.accountMuteButton.visible(muting)
-                updateMuteButton()
-            }
-        } else {
+        if (blocking) {
             binding.accountFloatingActionButton.hide()
-            binding.accountFollowButton.hide()
             binding.accountMuteButton.hide()
-            binding.accountSubscribeButton.hide()
+        } else {
+            binding.accountFloatingActionButton.show()
+            binding.accountMuteButton.visible(muting)
+            updateMuteButton()
         }
     }
 
