@@ -19,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
@@ -229,6 +230,7 @@ fun TweetButtons(
                         warpdroidColors.tertiaryTextColor
                     },
                     style = LocalPreferences.current.statusTextStyles.medium,
+                    modifier = Modifier.padding(start = 4.dp),
                 )
             }
         }
@@ -269,6 +271,7 @@ fun TweetButtons(
                         warpdroidColors.tertiaryTextColor
                     },
                     style = LocalPreferences.current.statusTextStyles.medium,
+                    modifier = Modifier.padding(start = 4.dp),
                 )
             }
         }
