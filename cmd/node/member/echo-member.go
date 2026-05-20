@@ -473,6 +473,14 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 }
 
 func setupHandlers(echo *echoBot, node *member.MemberNode) {
+	// PRIVATE_POST_TWEET is replaced with a handleTweet wrapper so echo
+	// can auto-like/retweet/reply to incoming tweets the instant they
+	// arrive over the stream. Echo's own hourly tweets are not stored
+	// locally (would require touching member-node.go internals); they
+	// are broadcast to every known peer in postOwnTweet, and each peer
+	// stores its own copy via the default tweet handler. handleTweet
+	// itself filters out events with UserId == echo's own owner id, so
+	// this wrapper never auto-reacts to anything echo published.
 	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
@@ -609,9 +617,12 @@ func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 	}
 }
 
-// postOwnTweet builds a tweet attributed to echo and sends a
-// PRIVATE_POST_TWEET to each peer except self. Returns the tweet id
-// for logging / tests.
+// postOwnTweet builds a tweet attributed to echo and sends
+// PRIVATE_POST_TWEET to each peer except self. Each peer's default
+// tweet handler stores the tweet under echo's user id in its local
+// DB, so any client paired with that peer can see it on echo's
+// profile via PUBLIC_GET_TWEETS. Returns the tweet id for logging
+// and tests.
 func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
 	text, err := getChuckQuote()
 	if err != nil || strings.TrimSpace(text) == "" {
@@ -632,7 +643,7 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 	}
 
 	if len(peers) == 0 {
-		log.Warn("echo: own tweet skipped — no peers")
+		log.Warnf("echo: own tweet id=%s dropped — no peers to publish to", tweetID)
 		return tweetID
 	}
 
