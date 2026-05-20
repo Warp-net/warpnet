@@ -30,6 +30,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -151,7 +152,12 @@ func main() {
 	authInfo.Addresses = echoNode.NodeInfo().Addresses
 
 	readyChan <- authInfo
-	eBot := newEchoBot(echoNode, db)
+	// Echo's own FollowRepo over the shared db so handleFollow can
+	// persist the auto-follow-back relationship — without it, echo's
+	// PUBLIC_GET_USER counts stay at 0 / 0 even when peers see echo
+	// as a follower.
+	echoFollowRepo := database.NewFollowRepo(db)
+	eBot := newEchoBot(echoNode, db, echoFollowRepo)
 	go runOwnActivity(ctx, eBot, echoNode)
 	go runOwnTweets(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)
@@ -171,20 +177,29 @@ type echoPersister interface {
 	Get(key local_store.DatabaseKey) ([]byte, error)
 }
 
+// echoFollowStorer is the slice of database.FollowRepo that the echo
+// bot needs: just enough to record both ends of the follow back so
+// echo's own profile shows correct counts.
+type echoFollowStorer interface {
+	Follow(fromUserId, toUserId string) error
+}
+
 const echoSeenNamespace = "/ECHO_SEEN/"
 
 type echoBot struct {
 	node         echoStreamClient
 	db           echoPersister
+	followRepo   echoFollowStorer
 	mu           sync.Mutex
 	seen         map[string]time.Time
 	lastPruneRun time.Time
 }
 
-func newEchoBot(node echoStreamClient, db echoPersister) *echoBot {
+func newEchoBot(node echoStreamClient, db echoPersister, followRepo echoFollowStorer) *echoBot {
 	return &echoBot{
 		node:         node,
 		db:           db,
+		followRepo:   followRepo,
 		seen:         make(map[string]time.Time),
 		lastPruneRun: time.Now(),
 	}
@@ -335,6 +350,25 @@ func (e *echoBot) handleFollow(msg []byte, requesterNodeID string) {
 	if requesterNodeID == "" {
 		return
 	}
+
+	// Record both directions in echo's own follow repo so the
+	// PUBLIC_GET_USER handler returns non-zero follower / following
+	// counts on echo's profile. The default PUBLIC_POST_FOLLOW handler
+	// is replaced by this wrapper, so without these writes echo's
+	// followRepo would never see the relationship.
+	if e.followRepo != nil {
+		// X follows echo
+		if err := e.followRepo.Follow(fl.FollowerId, e.ownerID()); err != nil &&
+			!errors.Is(err, database.ErrAlreadyFollowed) {
+			log.Warnf("echo: store inbound follow %s -> echo: %v", fl.FollowerId, err)
+		}
+		// echo follows X (auto-follow-back)
+		if err := e.followRepo.Follow(e.ownerID(), fl.FollowerId); err != nil &&
+			!errors.Is(err, database.ErrAlreadyFollowed) {
+			log.Warnf("echo: store outbound follow echo -> %s: %v", fl.FollowerId, err)
+		}
+	}
+
 	if _, err := e.node.GenericStream(
 		requesterNodeID,
 		event.PUBLIC_POST_FOLLOW,
