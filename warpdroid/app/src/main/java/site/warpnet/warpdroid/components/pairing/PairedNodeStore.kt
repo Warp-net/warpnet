@@ -68,6 +68,11 @@ class PairedNodeStore @Inject constructor(
     fun load(): PairedNode? = ref.get()
 
     fun save(node: PairedNode, rawQrJson: String) {
+        Log.i(
+            TAG,
+            "save: pinnedPeer=${node.pinnedPeerId} userId=${node.userId} " +
+                "addresses (n=${node.addresses.size}): ${node.addresses}",
+        )
         ref.set(node)
         prefs?.edit()?.putString(KEY_RAW_QR, rawQrJson)?.apply()
     }
