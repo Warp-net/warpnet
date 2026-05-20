@@ -475,10 +475,12 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 func setupHandlers(echo *echoBot, node *member.MemberNode) {
 	// PRIVATE_POST_TWEET is replaced with a handleTweet wrapper so echo
 	// can auto-like/retweet/reply to incoming tweets the instant they
-	// arrive over the stream. Echo's own hourly tweets bypass this
-	// handler entirely — they go through MemberNode.WriteOwnTweet which
-	// writes to tweetRepo + publishes via pubsub directly, so the wrapper
-	// here doesn't need to know about own tweets.
+	// arrive over the stream. Echo's own hourly tweets are not stored
+	// locally (would require touching member-node.go internals); they
+	// are broadcast to every known peer in postOwnTweet, and each peer
+	// stores its own copy via the default tweet handler. handleTweet
+	// itself filters out events with UserId == echo's own owner id, so
+	// this wrapper never auto-reacts to anything echo published.
 	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
@@ -641,7 +643,7 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 	}
 
 	if len(peers) == 0 {
-		log.Infof("echo: own tweet id=%s stored locally, no peers to publish to", tweetID)
+		log.Warnf("echo: own tweet id=%s dropped — no peers to publish to", tweetID)
 		return tweetID
 	}
 
