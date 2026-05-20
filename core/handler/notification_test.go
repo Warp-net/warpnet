@@ -183,6 +183,35 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("unread count falls back to page-local on repo error", func(t *testing.T) {
+		// 3 unread in the page; UnreadCount fails. Without a fallback
+		// the response would report 0 unread, which would drop the
+		// badge to 0 on every transient db hiccup. Page-local count
+		// is wrong globally but still > 0 when there's unread work.
+		page := []domain.Notification{
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+			{Id: "4", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
+		}
+		h := StreamGetNotificationsHandler(stubNotificationRepo{
+			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+				return page, "next", nil
+			},
+			unreadCountFn: func(userId string) (uint64, error) {
+				return 0, errors.New("db boom")
+			},
+		}, stubAuth{owner: domain.Owner{UserId: owner}})
+		resp, err := h(marshal(t, event.GetNotificationsEvent{}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.GetNotificationsResponse)
+		if r.UnreadCount != 3 {
+			t.Fatalf("expected page-local fallback count 3, got %d", r.UnreadCount)
+		}
+	})
+
 	t.Run("with pagination params", func(t *testing.T) {
 		var capturedLimit *uint64
 		var capturedCursor *string

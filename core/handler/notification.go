@@ -79,6 +79,15 @@ func StreamGetNotificationsHandler(
 		unreadCount, err := repo.UnreadCount(owner.UserId)
 		if err != nil {
 			log.Errorf("notification handler: unread count: %v", err)
+			// Fall back to the page-local count instead of zero so a
+			// transient db hiccup doesn't drop the badge to 0 — it
+			// still lags reality by whatever lives off-page, but a
+			// stale > 0 is closer than a confidently wrong 0.
+			for _, n := range notifications {
+				if !n.IsRead {
+					unreadCount++
+				}
+			}
 		}
 		sort.SliceStable(notifications, func(i, j int) bool {
 			if notifications[i].IsRead != notifications[j].IsRead {

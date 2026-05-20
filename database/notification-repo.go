@@ -273,6 +273,12 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 	return nots, cur, nil
 }
 
+// unreadCountPageSize is the per-iteration batch UnreadCount uses to
+// walk a user's notifications. Exposed as a package var so tests can
+// shrink it to force multiple iterations without having to seed
+// hundreds of rows.
+var unreadCountPageSize uint64 = 200
+
 // UnreadCount scans every notification under the user's prefix and
 // returns the number with IsRead == false. List paginates, so the
 // caller can't count "unread across all pages" without doing the full
@@ -301,7 +307,7 @@ func (repo *NotificationsRepo) UnreadCount(userId string) (uint64, error) {
 	var (
 		count  uint64
 		cursor string
-		page   = uint64(200)
+		page   = unreadCountPageSize
 	)
 	for {
 		items, next, lerr := txn.List(prefix, &page, &cursor)

@@ -78,9 +78,15 @@ func (s *NotificationsRepoTestSuite) TestAddAndListNotifications() {
 func (s *NotificationsRepoTestSuite) TestUnreadCountWalksAllPages() {
 	userId := uuid.New().String()
 
-	// 7 unread + 3 read, more than the internal page size of 200 only if
-	// expanded later; for now just verify the count is global across the
-	// scan, not bound to the first item batch.
+	// Shrink the internal page size so the scan must take multiple
+	// iterations: with 7 items at pageSize=3 the loop runs at least
+	// three times. Without the multi-page walk, the test would still
+	// pass on a "first page only" UnreadCount when the items happen
+	// to fit in one page.
+	origPageSize := unreadCountPageSize
+	unreadCountPageSize = 3
+	defer func() { unreadCountPageSize = origPageSize }()
+
 	for i := 0; i < 7; i++ {
 		s.Require().NoError(s.repo.Add(domain.Notification{
 			Type:   domain.NotificationLikeType,
