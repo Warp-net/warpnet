@@ -32,6 +32,7 @@ import (
 
 type AppStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
+	NewReadTxn() (local_store.WarpTransactioner, error)
 	Get(key local_store.DatabaseKey) ([]byte, error)
 	GetExpiration(key local_store.DatabaseKey) (uint64, error)
 	GetSize(key local_store.DatabaseKey) (int64, error)

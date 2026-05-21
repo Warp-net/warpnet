@@ -478,6 +478,23 @@ func (db *DB) NewTxn() (WarpTransactioner, error) {
 	return wtx, nil
 }
 
+// NewReadTxn opens a read-only Badger transaction. Use it for prefix
+// scans / aggregations that never write — a read-only txn skips
+// Badger's read-conflict tracking, which otherwise grows O(N) with
+// the number of keys touched and is pointless when there's no write
+// to conflict on.
+func (db *DB) NewReadTxn() (WarpTransactioner, error) {
+	if db == nil {
+		return nil, ErrNotRunning
+	}
+	if !db.isRunning.Load() {
+		return nil, ErrNotRunning
+	}
+	wtx := &warpTxn{db.badger.NewTransaction(false)}
+	runtime.SetFinalizer(wtx, func(tx *warpTxn) { tx.Rollback() })
+	return wtx, nil
+}
+
 func (t *warpTxn) Set(key DatabaseKey, value []byte) error {
 	err := t.txn.Set(key.Bytes(), value)
 	if err != nil {

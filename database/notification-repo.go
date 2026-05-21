@@ -44,6 +44,7 @@ var ErrNotificationsNotFound = local_store.DBError("notifications not found")
 
 type NotificationsStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
+	NewReadTxn() (local_store.WarpTransactioner, error)
 }
 
 type NotificationsRepo struct {
@@ -298,7 +299,11 @@ func (repo *NotificationsRepo) UnreadCount(userId string) (uint64, error) {
 		AddRootID(userId).
 		Build()
 
-	txn, err := repo.db.NewTxn()
+	// Read-only txn: this is a pure scan with no writes, so Badger's
+	// read-conflict tracking is pointless overhead — it grows O(N)
+	// with the number of keys touched. NewReadTxn opens
+	// badger.NewTransaction(false), which skips that tracking.
+	txn, err := repo.db.NewReadTxn()
 	if err != nil {
 		return 0, err
 	}
@@ -329,8 +334,7 @@ func (repo *NotificationsRepo) UnreadCount(userId string) (uint64, error) {
 		cursor = next
 	}
 
-	if err := txn.Commit(); err != nil {
-		return 0, err
-	}
+	// No Commit: this is a read-only txn, the deferred Rollback
+	// (Discard under the hood) is the correct close.
 	return count, nil
 }
