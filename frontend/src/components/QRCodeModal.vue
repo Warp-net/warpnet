@@ -44,7 +44,7 @@ resulting from the use or misuse of this software.
 
       <h3 class="text-xl font-semibold text-center mb-1">Pair your phone</h3>
       <p class="text-sm text-gray-600 text-center mb-4">
-        Connect the Warpnet Android client to this node by scanning the QR code below.
+        Connect the Warpnet Android app to this node by scanning the QR code below.
       </p>
 
       <!-- Visual: laptop on the left shows this QR, phone on the right
