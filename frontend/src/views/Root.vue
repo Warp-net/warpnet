@@ -322,10 +322,19 @@ export default {
       try {
         this.isLoading = true;
         this.signUpError = "";
+        // Capture firstRun BEFORE signInUser: by the time the bot has a
+        // session, IsFirstRun() flips to false on the next call.
+        const wasFirstRun = this.isFirstRun === true;
         await warpnetService.signInUser({
           username: this.username,
           password: this.password,
         });
+        if (wasFirstRun) {
+          // SideNav picks this up on mount and opens the pairing
+          // explainer so a brand-new user gets the QR + visual guide
+          // immediately, without having to discover the dropdown.
+          sessionStorage.setItem("warpnet:show-pairing-onboarding", "1");
+        }
         this.setStep("");
         this.$router.push({ name: "Home" });
       } catch (error) {

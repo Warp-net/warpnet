@@ -367,6 +367,16 @@ export default {
     if (resp) {
       this.newNotifications = resp.unread_count;
     }
+
+    // Root.vue sets this flag after a first-run signup. Open the QR
+    // pairing dialog automatically so a brand-new user sees the
+    // visual explainer + scannable code without having to dig
+    // through the side-nav dropdown.
+    if (sessionStorage.getItem("warpnet:show-pairing-onboarding") === "1") {
+      sessionStorage.removeItem("warpnet:show-pairing-onboarding");
+      this.qrCode = await warpnetService.getQR();
+      this.qrModalOpen = true;
+    }
   },
   beforeUnmount() {
     if (this.unsubscribeNotifications) {
