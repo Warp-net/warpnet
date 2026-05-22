@@ -44,7 +44,7 @@ resulting from the use or misuse of this software.
 
       <h3 class="text-xl font-semibold text-center mb-1">Pair your phone</h3>
       <p class="text-sm text-gray-600 text-center mb-4">
-        Connect the Warpnet Android app to this node by scanning the QR code below.
+        Connect the Warpnet mobile app to this node by scanning the QR code below.
       </p>
 
       <!-- Visual: laptop on the left shows this QR, phone on the right
@@ -109,7 +109,7 @@ resulting from the use or misuse of this software.
       <!-- Step-by-step. Kept terse so the modal stays glanceable; the
            SVG above carries most of the "what is happening" message. -->
       <ol class="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-        <li>Install the <strong>Warpnet</strong> Android app on the phone you want to pair.</li>
+        <li>Install the <strong>Warpnet</strong> mobile app on the phone you want to pair.</li>
         <li>Open the app — it starts on the QR scanner screen on first launch.</li>
         <li>Point the phone at this QR code until it focuses; pairing is automatic.</li>
         <li>The phone keeps a reference to <em>this</em> node — keep this app running for it to connect.</li>
