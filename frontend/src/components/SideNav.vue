@@ -347,6 +347,25 @@ export default {
     console.log("loading component:", this.$options.name);
     this.profile = warpnetService.getOwnerProfile();
 
+    // Root.vue sets this flag right after a first-run signup. Open
+    // the QR pairing dialog so a brand-new user sees the visual
+    // explainer without having to dig through the side-nav dropdown.
+    //
+    // Done first and in its own try/catch so a later avatar /
+    // notifications failure can't suppress the onboarding — for a
+    // first-run user the pairing UI is the most important thing this
+    // mount is supposed to surface.
+    try {
+      if (typeof sessionStorage !== "undefined" &&
+          sessionStorage.getItem("warpnet:show-pairing-onboarding") === "1") {
+        sessionStorage.removeItem("warpnet:show-pairing-onboarding");
+        this.qrCode = await warpnetService.getQR();
+        this.qrModalOpen = true;
+      }
+    } catch (error) {
+      console.error("Failed to open pairing onboarding:", error);
+    }
+
     const fullProfile = await warpnetService.getProfile(this.profile.user_id);
     try {
       if (fullProfile && !fullProfile.code && fullProfile.avatar_key) {
@@ -366,16 +385,6 @@ export default {
     const resp = await warpnetService.getNotifications(true)
     if (resp) {
       this.newNotifications = resp.unread_count;
-    }
-
-    // Root.vue sets this flag after a first-run signup. Open the QR
-    // pairing dialog automatically so a brand-new user sees the
-    // visual explainer + scannable code without having to dig
-    // through the side-nav dropdown.
-    if (sessionStorage.getItem("warpnet:show-pairing-onboarding") === "1") {
-      sessionStorage.removeItem("warpnet:show-pairing-onboarding");
-      this.qrCode = await warpnetService.getQR();
-      this.qrModalOpen = true;
     }
   },
   beforeUnmount() {
