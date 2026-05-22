@@ -29,14 +29,16 @@ const renderRoot = ({ firstRun = true } = {}) => {
   });
 };
 
-let logSpy, errSpy;
+let logSpy, errSpy, warnSpy;
 beforeAll(() => {
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterAll(() => {
   logSpy.mockRestore();
   errSpy.mockRestore();
+  warnSpy.mockRestore();
 });
 
 beforeEach(() => {
@@ -44,6 +46,7 @@ beforeEach(() => {
   routerPush.mockClear();
   warpnetService.signInUser.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
+  sessionStorage.clear();
 });
 
 describe('Root.vue', () => {
@@ -204,6 +207,68 @@ describe('Root.vue', () => {
 
     await fireEvent.update(passwordConfirmField, 's3cret');
     expect(nextBtn).not.toBeDisabled();
+  });
+
+  // ----- pairing onboarding flag -----
+  //
+  // Root.vue signals SideNav to auto-open the pairing dialog by
+  // writing a sessionStorage key after a successful first-run signup.
+  // Drive the modal sign-up to the final step so we exercise the
+  // real signMeUp() handler.
+  const completeSignUp = async ({ username = 'alice', password = 's3cret' } = {}) => {
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /^Sign up$/ })
+    );
+    await fireEvent.update(await screen.findByLabelText(/Username/i), username);
+    await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    const checkboxes = await screen.findAllByRole('checkbox');
+    for (const cb of checkboxes) await fireEvent.click(cb);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+
+    await fireEvent.update(await screen.findByLabelText('Password'), password);
+    await fireEvent.update(await screen.findByLabelText('Confirm password'), password);
+    await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    await screen.findByText(/Step 4 of 4/i);
+    const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
+    await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
+  };
+
+  it('writes the pairing-onboarding flag after a first-run signup', async () => {
+    renderRoot({ firstRun: true });
+    await completeSignUp();
+
+    await waitFor(() => {
+      expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
+    });
+    expect(sessionStorage.getItem('warpnet:show-pairing-onboarding')).toBe('1');
+  });
+
+  it('does not write the pairing-onboarding flag when signInUser rejects', async () => {
+    warpnetService.signInUser.mockRejectedValueOnce(new Error('Already taken'));
+    renderRoot({ firstRun: true });
+    await completeSignUp();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Already taken/);
+    expect(sessionStorage.getItem('warpnet:show-pairing-onboarding')).toBeNull();
+  });
+
+  it('completes signup even when sessionStorage.setItem throws (privacy mode)', async () => {
+    const origSetItem = sessionStorage.setItem.bind(sessionStorage);
+    sessionStorage.setItem = vi.fn(() => {
+      throw new Error('storage disabled');
+    });
+    try {
+      renderRoot({ firstRun: true });
+      await completeSignUp();
+
+      await waitFor(() => {
+        expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
+      });
+    } finally {
+      sessionStorage.setItem = origSetItem;
+    }
   });
 
   it('falls back to the log-in component when isFirstRun rejects', async () => {
