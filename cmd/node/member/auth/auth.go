@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package auth
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -46,32 +45,6 @@ import (
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 )
-
-// warpnetEpochMs is the fixed ULID timestamp used by deterministicOwnerID.
-// Any constant value works — we only need the ULID to be parseable; the
-// entropy bytes carry the actual identity. 2025-01-01 UTC.
-const warpnetEpochMs uint64 = 1735689600000
-
-// deterministicOwnerID returns a stable ULID-shaped string derived from
-// the user's ed25519 public key. Same keypair → same UserId across
-// restarts. This matters in two cases:
-//
-//   - Echo bot: it runs with an in-memory store, so its persisted
-//     Owner is wiped on every restart. With the previous random ULID,
-//     each restart spawned a fresh identity that observers cached
-//     forever, accumulating zombie "Echo" entries in Who-to-follow.
-//   - Disk loss / re-pair from seed: a user with the same username +
-//     password + network now recovers not just their libp2p PeerID
-//     (which is already deterministic from the keypair) but also
-//     their application-level UserId.
-//
-// The pubkey is already a public quantity (it's exchanged via NodeInfo
-// during discovery), so deriving the UserId from it does not leak any
-// information that wasn't already public.
-func deterministicOwnerID(pubKey ed25519.PublicKey) string {
-	h := security.ConvertToSHA256(pubKey)
-	return ulid.MustNew(warpnetEpochMs, bytes.NewReader(h[:10])).String()
-}
 
 const (
 	ErrUsernamesMismatch    warpnet.WarpError = "username doesn't exist"
@@ -152,8 +125,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 
 	var user domain.User
 	if owner.UserId == "" {
-		pubKey := as.authPersistence.PrivateKey().Public().(ed25519.PublicKey)
-		id := deterministicOwnerID(pubKey)
+		id := ulid.Make().String()
 		log.Infoln("creating new user:", id)
 		owner, err = as.authPersistence.SetOwner(domain.Owner{
 			CreatedAt:       time.Now(),
