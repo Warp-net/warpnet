@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -104,15 +105,35 @@ func main() {
 	}
 	readyChan := make(chan domain.AuthNodeInfo, 10)
 
+	const echoOwnerID = "01KSGHBHKG0N77T6A3RZV8WSH5"
+
 	authRepo := database.NewAuthRepo(db, network)
 	authRepo.SetOwner(domain.Owner{
 		CreatedAt:       time.Now(),
-		UserId:          "01KSGHBHKG0N77T6A3RZV8WSH5",
-		RedundantUserID: "01KSGHBHKG0N77T6A3RZV8WSH5",
+		UserId:          echoOwnerID,
+		RedundantUserID: echoOwnerID,
 		Username:        "Echo",
 	})
-	
+
 	userRepo := database.NewUserRepo(db)
+	// Pre-create the User row that AuthLogin's cold-start branch would
+	// otherwise create. We pre-set Owner above so AuthLogin sees a
+	// non-empty owner.UserId and skips that whole branch — including
+	// the userRepo.Create call. Without this row, the subsequent
+	// userRepo.Update inside AuthLogin fails with ErrUserNotFound and
+	// every PUBLIC_GET_USER request to Echo responds "user not found",
+	// which means observers can't resolve Echo's profile and Echo's
+	// broadcast tweets render with blank authors / get filtered out.
+	if _, err := userRepo.Create(domain.User{
+		CreatedAt:     time.Now(),
+		Id:            echoOwnerID,
+		NodeId:        "none", // AuthLogin overwrites once libp2p comes up
+		Username:      "Echo",
+		RoundTripTime: math.MaxInt64, // sit at the end of who-to-follow lists
+	}); err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
+		log.Fatalf("failed to pre-create echo user: %v", err)
+	}
+
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
 	go func() {
