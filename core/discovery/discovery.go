@@ -342,6 +342,10 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	s.m.PushStatusOnline(pi.ID.String())
 
+	if info.IsModerator() {
+		return
+	}
+
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
 		return
