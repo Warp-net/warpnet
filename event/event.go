@@ -459,6 +459,12 @@ type ModerationEvent struct {
 	ObjectID *domain.ID                  `json:"object_id,omitempty"`
 }
 
+// ReportsTopic is the global gossip topic that carries Report events
+// from members to moderators. Single source of truth: both
+// cmd/node/member/pubsub and cmd/node/moderator/pubsub must use this
+// constant so they cannot drift.
+const ReportsTopic = "/warpnet/reports/1.0.0"
+
 // ReportEvent is published by a member node on the reports pubsub topic
 // when a user clicks Report in the UI. It carries enough for a moderator
 // to fetch the actual offending content (TargetNodeID is a routing hint
@@ -476,12 +482,18 @@ type ReportEvent struct {
 }
 
 type ModerationResultEvent struct {
-	Type     domain.ModerationObjectType `json:"type"`
-	Result   domain.ModerationResult     `json:"result"`
-	Reason   *string                     `json:"reason,omitempty"`
-	Model    domain.ModelType            `json:"model"`
-	UserID   domain.ID                   `json:"user_id"`
-	ObjectID *domain.ID                  `json:"object_id,omitempty"`
+	Type        domain.ModerationObjectType `json:"type"`
+	Result      domain.ModerationResult     `json:"result"`
+	Reason      *string                     `json:"reason,omitempty"`
+	Model       domain.ModelType            `json:"model"`
+	UserID      domain.ID                   `json:"user_id"`
+	ObjectID    *domain.ID                  `json:"object_id,omitempty"`
+	// ModeratorID is the peer id of the moderator that issued this
+	// verdict. Carried inside the payload (rather than read from the
+	// stream connection) because the verdict reaches the receiver via
+	// pubsub → SelfStream, and the loopback connection's RemotePeer
+	// would be the local node, not the moderator.
+	ModeratorID domain.ID `json:"moderator_id,omitempty"`
 }
 
 type GetNotificationsEvent struct {

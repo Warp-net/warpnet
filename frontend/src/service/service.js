@@ -1325,10 +1325,14 @@ export const warpnetService = {
     },
 
     // Report opens a moderation request to whichever moderator node is
-    // listening on the global reports topic. `type` is the same
-    // ModerationObjectType enum the backend uses (0 = user profile,
-    // 1 = tweet, 2 = reply, 3 = image). `objectId` is required for
-    // tweet/reply reports and ignored for user reports.
+    // listening on the global reports topic. `type` is the
+    // ModerationObjectType enum; the backend currently accepts only
+    // 0 (user profile) and 1 (tweet) — reply (2) and image (3) reports
+    // are not wired end-to-end yet and will be rejected. `objectId` is
+    // required for tweet reports and ignored for user reports.
+    // `reason` is a free-form string capped at 256 chars by the
+    // backend; the UI presents a fixed set of labels as a convenience,
+    // but the server does not enforce that set.
     async report({ type, objectId, targetUserId, targetNodeId, reason }) {
         const request = {
             path: PUBLIC_POST_REPORT,

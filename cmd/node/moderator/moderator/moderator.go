@@ -191,10 +191,17 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 	}
 	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
 
+	// Shadow-ban semantics: only bad verdicts go on the wire. OK
+	// verdicts are dropped silently so we don't flood the followers
+	// topic with no-op gossip and don't poke observer state.
+	if ok {
+		return nil
+	}
+
 	m.isolation.IsolateTweet(&tweet, &domain.TweetModeration{
 		ModeratorID: m.node.ID().String(),
 		Model:       domain.LLAMA2,
-		IsOk:        domain.ModerationResult(ok),
+		IsOk:        domain.FAIL,
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
@@ -236,10 +243,15 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 	}
 	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
 
-	m.isolation.IsolateUser(&user, &domain.UserModeration{
+	// Shadow-ban: only bad verdicts go on the wire.
+	if ok {
+		return nil
+	}
+
+	m.isolation.IsolateUser(m.node.ID().String(), &user, &domain.UserModeration{
 		IsModerated: true,
 		Model:       domain.LLAMA2,
-		IsOk:        ok,
+		IsOk:        false,
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})

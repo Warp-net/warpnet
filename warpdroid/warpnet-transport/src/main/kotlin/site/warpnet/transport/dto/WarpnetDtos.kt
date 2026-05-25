@@ -600,11 +600,14 @@ data class DeleteMessageEvent(
     val id: String,
 )
 
-// Wire shape mirrors event.ReportEvent. type uses the same numeric
-// ModerationObjectType enum the fat node defines (0 = user, 1 = tweet,
-// 2 = reply, 3 = image); reason is one of "spam" / "abuse" / "illegal"
-// / "nsfw". object_id must be a tweet/reply id when type points at one
-// of those; for user reports it is omitted (wire sends "").
+// Wire shape mirrors event.ReportEvent. `type` uses the same numeric
+// ModerationObjectType enum the fat node defines; the backend
+// currently accepts only 0 (user) and 1 (tweet) — reply (2) and image
+// (3) reports are validated out server-side. `reason` is a free-form
+// string capped at 256 chars by the backend (the Android UI offers a
+// fixed set of presets but any non-empty short string is accepted).
+// `object_id` must be the tweet id when type == 1; for user reports
+// it is omitted (wire sends "").
 @JsonClass(generateAdapter = true)
 data class WarpnetReportEvent(
     val type: Int,

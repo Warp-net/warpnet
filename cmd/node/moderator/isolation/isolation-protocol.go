@@ -65,12 +65,13 @@ func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModera
 	}
 
 	result := event.ModerationResultEvent{
-		Type:     domain.ModerationTweetType,
-		UserID:   t.UserId,
-		ObjectID: &t.Id,
-		Reason:   m.Reason,
-		Model:    m.Model,
-		Result:   m.IsOk,
+		Type:        domain.ModerationTweetType,
+		UserID:      t.UserId,
+		ObjectID:    &t.Id,
+		Reason:      m.Reason,
+		Model:       m.Model,
+		Result:      m.IsOk,
+		ModeratorID: m.ModeratorID,
 	}
 
 	if err := ip.pub.PublishUpdateToFollowers(
@@ -87,16 +88,17 @@ func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModera
 // Moderation.IsModerated = true and clients hide bio / name / website /
 // custom fields on the next render. The user row stays on disk;
 // nothing is wiped.
-func (ip *IsolationProtocol) IsolateUser(u *domain.User, m *domain.UserModeration) {
+func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, m *domain.UserModeration) {
 	if u == nil || m == nil {
 		return
 	}
 	result := event.ModerationResultEvent{
-		Type:   domain.ModerationUserType,
-		UserID: u.Id,
-		Reason: m.Reason,
-		Model:  m.Model,
-		Result: domain.ModerationResult(m.IsOk),
+		Type:        domain.ModerationUserType,
+		UserID:      u.Id,
+		Reason:      m.Reason,
+		Model:       m.Model,
+		Result:      domain.ModerationResult(m.IsOk),
+		ModeratorID: moderatorID,
 	}
 
 	if err := ip.pub.PublishUpdateToFollowers(

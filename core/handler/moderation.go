@@ -79,16 +79,16 @@ func StreamModerationResultHandler(
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
 ) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
 
-		moderatorId := ""
-		if s != nil && s.Conn() != nil {
-			moderatorId = s.Conn().RemotePeer().String()
-		}
+		// Verdicts now travel via pubsub → SelfStream, so the stream
+		// connection's RemotePeer is the local node, not the moderator.
+		// Attribution must come from the payload itself.
+		moderatorId := ev.ModeratorID
 
 		log.Infof("moderation: result type=%s user=%s result=%t",
 			ev.Type.String(), ev.UserID, bool(ev.Result))

@@ -369,11 +369,14 @@ class WarpnetRepository @Inject constructor(
      * offender's followers topic. The offender's own node never sees
      * the verdict.
      *
-     * [type] mirrors the fat node's ModerationObjectType enum:
-     *   0 = user profile, 1 = tweet, 2 = reply, 3 = image.
-     * [objectId] is required for tweet/reply reports and is sent as ""
-     * for user reports.
-     * [reason] must be one of "spam" / "abuse" / "illegal" / "nsfw".
+     * [type] mirrors the fat node's ModerationObjectType enum. The
+     * backend currently accepts only 0 (user profile) and 1 (tweet);
+     * reply (2) and image (3) reports are validated out server-side.
+     * [objectId] is required for tweet reports and is sent as "" for
+     * user reports.
+     * [reason] is a free-form string capped at 256 chars by the
+     * backend. The Android UI presents a fixed set of labels as a
+     * convenience but any short non-empty string is accepted.
      */
     suspend fun reportContent(
         type: Int,

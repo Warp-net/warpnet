@@ -44,11 +44,6 @@ import (
 const (
 	// prefixes
 	userUpdateTopicPrefix = "user-update"
-	// reportsTopic is the global gossip topic that carries Report
-	// events from members to moderators. Kept package-private; the
-	// moderator package owns its own copy of the same literal because
-	// importing member→moderator would be circular.
-	reportsTopic = "/warpnet/reports/1.0.0"
 )
 
 type PubsubServerNodeConnector interface {
@@ -157,7 +152,7 @@ func (g *MemberPubSub) PublishReport(ev event.ReportEvent) (err error) {
 		MessageId: uuid.New().String(),
 		Version:   "0.0.0",
 	}
-	return g.pubsub.Publish(msg, reportsTopic)
+	return g.pubsub.Publish(msg, event.ReportsTopic)
 }
 
 // PublishUpdateToFollowers - Publish for followers

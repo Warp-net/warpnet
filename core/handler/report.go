@@ -69,6 +69,11 @@ func StreamReportHandler(publisher ReportPublisher) warpnet.WarpHandlerFunc {
 	}
 }
 
+// maxReasonLen caps the free-form reason string. Reports get gossiped
+// network-wide, so an unbounded reason field would be a cheap way to
+// bloat the topic and spam logs.
+const maxReasonLen = 256
+
 func validateReport(ev event.ReportEvent) error {
 	if ev.TargetUserID == "" {
 		return warpnet.WarpError("report: empty target_user_id")
@@ -78,6 +83,9 @@ func validateReport(ev event.ReportEvent) error {
 	}
 	if ev.Reason == "" {
 		return warpnet.WarpError("report: empty reason")
+	}
+	if len(ev.Reason) > maxReasonLen {
+		return warpnet.WarpError("report: reason too long")
 	}
 	switch ev.Type {
 	case domain.ModerationTweetType:
