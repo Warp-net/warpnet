@@ -36,7 +36,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -93,9 +92,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Echo is a bot — its content state is ephemeral. Run the main
-	// store in memory so the follow / tweet rows it persists for its
-	// own PUBLIC_GET_USER / PUBLIC_GET_TWEETS responses live for the
+	// Echo is a bot — its state is ephemeral. Run the local store in
+	// memory so the follow / tweet rows it persists for its own
+	// PUBLIC_GET_USER / PUBLIC_GET_TWEETS responses live for the
 	// process lifetime only, no on-disk footprint.
 	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	if err != nil {
@@ -103,25 +102,9 @@ func main() {
 		os.Exit(1)
 		return
 	}
-
-	// Identity, on the other hand, must survive restarts. Without a
-	// persistent Owner row, AuthLogin's cold-start branch keeps minting
-	// a fresh ulid.Make() on every boot and observers cache the
-	// resulting "new Echo" as a zombie in Who-to-Follow. Use a tiny
-	// dedicated on-disk store for auth only, sitting in the same data
-	// directory as a regular member but under a separate subdir so it
-	// can't collide with a real member install on the same host.
-	authDBPath := filepath.Join(config.Config().Database.Path, "echo-auth")
-	authDB, err := local_store.New(authDBPath, local_store.DefaultOptions())
-	if err != nil {
-		log.Errorf("failed to init auth db: %v \n", err)
-		os.Exit(1)
-		return
-	}
-	defer authDB.Close()
 	readyChan := make(chan domain.AuthNodeInfo, 10)
 
-	authRepo := database.NewAuthRepo(authDB, network)
+	authRepo := database.NewAuthRepo(db, network)
 	userRepo := database.NewUserRepo(db)
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
