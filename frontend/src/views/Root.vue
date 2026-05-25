@@ -322,10 +322,28 @@ export default {
       try {
         this.isLoading = true;
         this.signUpError = "";
+        // Capture firstRun BEFORE signInUser: by the time the node has
+        // a session, IsFirstRun() flips to false on the next call.
+        const wasFirstRun = this.isFirstRun === true;
         await warpnetService.signInUser({
           username: this.username,
           password: this.password,
         });
+        if (wasFirstRun) {
+          // SideNav picks this up on mount and opens the pairing
+          // explainer so a brand-new user gets the QR + visual guide
+          // immediately, without having to discover the dropdown.
+          // Guarded so privacy modes / disabled storage can't throw
+          // and abort the routing to Home — onboarding is a nice-to-have,
+          // signup completion is not.
+          try {
+            if (typeof sessionStorage !== "undefined") {
+              sessionStorage.setItem("warpnet:show-pairing-onboarding", "1");
+            }
+          } catch (e) {
+            console.warn("sessionStorage write failed, skipping pairing onboarding:", e);
+          }
+        }
         this.setStep("");
         this.$router.push({ name: "Home" });
       } catch (error) {
