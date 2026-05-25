@@ -273,7 +273,7 @@ func (d *distributedHashTable) findPeers(rd *drouting.RoutingDiscovery, ns strin
 			continue
 		}
 		log.Debugf("dht: rendezvous: found peer %s %v", pi.ID, pi.Addrs)
-		d.dht.Host().Peerstore().AddAddrs(pi.ID, pi.Addrs, warpnet.PermanentTTL)
+		d.dht.Host().Peerstore().AddAddrs(pi.ID, pi.Addrs, 8*time.Hour)
 		if d.cfg.addCallbacks != nil {
 			for _, cb := range d.cfg.addCallbacks {
 				if cb != nil {
