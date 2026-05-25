@@ -29,7 +29,6 @@ package handler
 
 import (
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
@@ -48,14 +47,17 @@ type ReportPublisher interface {
 // The handler intentionally does not store reports locally — there's no
 // audit log on the reporter's node. Trust comes from the libp2p
 // signature on the envelope, which the auth middleware already verified
-// before this code runs.
+// before this code runs. Shape-level validation lives in
+// event.ValidateReport so the moderator consumer can re-run the same
+// check against the gossiped message.
 func StreamReportHandler(publisher ReportPublisher) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ReportEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		if err := validateReport(ev); err != nil {
+		event.SanitizeReport(&ev)
+		if err := event.ValidateReport(ev); err != nil {
 			return nil, err
 		}
 
@@ -63,43 +65,8 @@ func StreamReportHandler(publisher ReportPublisher) warpnet.WarpHandlerFunc {
 			log.Errorf("report: publish: %v", err)
 			return nil, err
 		}
-		log.Infof("report: published type=%s target_user=%s reason=%s",
+		log.Infof("report: published type=%s target_user=%s reason=%q",
 			ev.Type.String(), ev.TargetUserID, ev.Reason)
 		return event.Accepted, nil
 	}
-}
-
-// maxReasonLen caps the free-form reason string. Reports get gossiped
-// network-wide, so an unbounded reason field would be a cheap way to
-// bloat the topic and spam logs.
-const maxReasonLen = 256
-
-func validateReport(ev event.ReportEvent) error {
-	if ev.TargetUserID == "" {
-		return warpnet.WarpError("report: empty target_user_id")
-	}
-	if ev.TargetNodeID == "" {
-		return warpnet.WarpError("report: empty target_node_id")
-	}
-	if ev.Reason == "" {
-		return warpnet.WarpError("report: empty reason")
-	}
-	if len(ev.Reason) > maxReasonLen {
-		return warpnet.WarpError("report: reason too long")
-	}
-	switch ev.Type {
-	case domain.ModerationTweetType:
-		if ev.ObjectID == nil || *ev.ObjectID == "" {
-			return warpnet.WarpError("report: empty object_id for tweet")
-		}
-	case domain.ModerationUserType:
-		// object_id is optional / unused for user reports
-	default:
-		// Reply / image reports are not wired end-to-end yet — the
-		// moderator can only fetch top-level tweets and user
-		// profiles. Reject anything else so the caller knows it
-		// won't be acted on.
-		return warpnet.WarpError("report: unsupported moderation object type")
-	}
-	return nil
 }

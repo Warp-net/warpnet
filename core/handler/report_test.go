@@ -69,6 +69,48 @@ func TestStreamReportHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("whitespace-only reason rejected", func(t *testing.T) {
+		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
+			TargetUserID: "user",
+			TargetNodeID: "node",
+			Reason:       "   \t\n  ",
+			Type:         domain.ModerationUserType,
+		}), nil)
+		if err == nil {
+			t.Fatal("expected error: whitespace-only reason should not pass")
+		}
+	})
+
+	t.Run("oversized reason rejected", func(t *testing.T) {
+		long := make([]byte, event.MaxReportReasonLen+1)
+		for i := range long {
+			long[i] = 'a'
+		}
+		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
+			TargetUserID: "user",
+			TargetNodeID: "node",
+			Reason:       string(long),
+			Type:         domain.ModerationUserType,
+		}), nil)
+		if err == nil {
+			t.Fatal("expected error: oversized reason should be rejected")
+		}
+	})
+
+	t.Run("reply type rejected", func(t *testing.T) {
+		objID := domain.ID("some-id")
+		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
+			TargetUserID: "user",
+			TargetNodeID: "node",
+			Reason:       "spam",
+			Type:         domain.ModerationReplyType,
+			ObjectID:     &objID,
+		}), nil)
+		if err == nil {
+			t.Fatal("expected error: reply reports must be rejected end-to-end")
+		}
+	})
+
 	t.Run("tweet report requires object_id", func(t *testing.T) {
 		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
 			TargetUserID: "user",

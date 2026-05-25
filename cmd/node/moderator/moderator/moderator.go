@@ -30,6 +30,7 @@ package moderator
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -136,16 +137,24 @@ func (m *Moderator) Close() {
 // The moderator never trusts the reporter's payload — it always
 // re-fetches the content from the target node directly so a malicious
 // reporter cannot weaponize the moderator.
+//
+// A signature-verified envelope is NOT the same as trusted content:
+// any peer with a valid key can publish a malformed ReportEvent.
+// Re-run the same SanitizeReport/ValidateReport the publisher handler
+// used, so consumers don't drift from publishers.
 func (m *Moderator) handleReport(ev event.ReportEvent) error {
 	if m.isClosed.Load() {
 		return nil
 	}
-	if ev.TargetUserID == "" || ev.TargetNodeID == "" {
-		log.Warnf("moderator: report rejected, missing target")
+	event.SanitizeReport(&ev)
+	if err := event.ValidateReport(ev); err != nil {
+		log.Warnf("moderator: report dropped: %v", err)
 		return nil
 	}
 
-	log.Infof("moderator: report received type=%s target_user=%s reason=%s",
+	// %q quotes and escapes control characters so a reason like
+	// "spam\nfake log line" can't inject log noise.
+	log.Infof("moderator: report received type=%s target_user=%s reason=%q",
 		ev.Type.String(), ev.TargetUserID, ev.Reason)
 
 	switch ev.Type {
@@ -154,7 +163,8 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 	case domain.ModerationUserType:
 		return m.handleUserReport(ev)
 	default:
-		log.Warnf("moderator: report dropped, unsupported type: %s", ev.Type.String())
+		// ValidateReport already rejects unsupported types; this
+		// branch is defensive in case the allowlist grows later.
 		return nil
 	}
 }
@@ -263,8 +273,17 @@ func buildProfileText(u domain.User) string {
 	if u.Website != nil {
 		parts = append(parts, *u.Website)
 	}
-	for k, v := range u.Metadata {
-		parts = append(parts, k+": "+v)
+	// Sort metadata keys so the same profile always serializes to
+	// the same engine input — Go map iteration is randomized, which
+	// would otherwise let the engine return different verdicts for
+	// identical content.
+	keys := make([]string, 0, len(u.Metadata))
+	for k := range u.Metadata {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		parts = append(parts, k+": "+u.Metadata[k])
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
