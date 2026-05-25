@@ -105,6 +105,13 @@ func main() {
 	readyChan := make(chan domain.AuthNodeInfo, 10)
 
 	authRepo := database.NewAuthRepo(db, network)
+	authRepo.SetOwner(domain.Owner{
+		CreatedAt:       time.Now(),
+		UserId:          "01KSGHBHKG0N77T6A3RZV8WSH5",
+		RedundantUserID: "01KSGHBHKG0N77T6A3RZV8WSH5",
+		Username:        "Echo",
+	})
+	
 	userRepo := database.NewUserRepo(db)
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
