@@ -76,8 +76,8 @@ func validateReport(ev event.ReportEvent) error {
 	if ev.TargetNodeID == "" {
 		return warpnet.WarpError("report: empty target_node_id")
 	}
-	if !ev.Reason.IsValid() {
-		return warpnet.WarpError("report: invalid reason")
+	if ev.Reason == "" {
+		return warpnet.WarpError("report: empty reason")
 	}
 	switch ev.Type {
 	case domain.ModerationTweetType, domain.ModerationReplyType:

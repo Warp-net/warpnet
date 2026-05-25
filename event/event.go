@@ -472,7 +472,7 @@ type ReportEvent struct {
 	TargetUserID domain.ID                   `json:"target_user_id"`
 	TargetNodeID domain.ID                   `json:"target_node_id"`
 	ObjectID     *domain.ID                  `json:"object_id,omitempty"`
-	Reason       domain.ReportReason         `json:"reason"`
+	Reason       string                      `json:"reason"`
 }
 
 type ModerationResultEvent struct {

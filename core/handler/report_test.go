@@ -38,7 +38,7 @@ func TestStreamReportHandler(t *testing.T) {
 	t.Run("missing target_user_id", func(t *testing.T) {
 		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
 			TargetNodeID: "node",
-			Reason:       domain.ReportReasonSpam,
+			Reason:       "spam",
 			Type:         domain.ModerationUserType,
 		}), nil)
 		if err == nil {
@@ -49,7 +49,7 @@ func TestStreamReportHandler(t *testing.T) {
 	t.Run("missing target_node_id", func(t *testing.T) {
 		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
 			TargetUserID: "user",
-			Reason:       domain.ReportReasonSpam,
+			Reason:       "spam",
 			Type:         domain.ModerationUserType,
 		}), nil)
 		if err == nil {
@@ -57,11 +57,11 @@ func TestStreamReportHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid reason", func(t *testing.T) {
+	t.Run("empty reason", func(t *testing.T) {
 		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
 			TargetUserID: "user",
 			TargetNodeID: "node",
-			Reason:       domain.ReportReason("bogus"),
+			Reason:       "",
 			Type:         domain.ModerationUserType,
 		}), nil)
 		if err == nil {
@@ -73,7 +73,7 @@ func TestStreamReportHandler(t *testing.T) {
 		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
 			TargetUserID: "user",
 			TargetNodeID: "node",
-			Reason:       domain.ReportReasonAbuse,
+			Reason:       "abuse",
 			Type:         domain.ModerationTweetType,
 		}), nil)
 		if err == nil {
@@ -81,7 +81,9 @@ func TestStreamReportHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("user report happy path", func(t *testing.T) {
+	// Reason is now a free-form string — the moderator engine decides
+	// what to weight, the handler just forwards.
+	t.Run("free-form reason is accepted", func(t *testing.T) {
 		var got event.ReportEvent
 		resp, err := mkHandler(stubReportPublisher{publishFn: func(ev event.ReportEvent) error {
 			got = ev
@@ -89,7 +91,7 @@ func TestStreamReportHandler(t *testing.T) {
 		}})(marshal(t, event.ReportEvent{
 			TargetUserID: "user",
 			TargetNodeID: "node",
-			Reason:       domain.ReportReasonNSFW,
+			Reason:       "something the reporter typed",
 			Type:         domain.ModerationUserType,
 		}), nil)
 		if err != nil {
@@ -98,8 +100,8 @@ func TestStreamReportHandler(t *testing.T) {
 		if resp != event.Accepted {
 			t.Fatalf("expected accepted, got: %v", resp)
 		}
-		if got.TargetUserID != "user" || got.Reason != domain.ReportReasonNSFW {
-			t.Fatalf("publisher received wrong event: %+v", got)
+		if got.Reason != "something the reporter typed" {
+			t.Fatalf("publisher received wrong reason: %+v", got)
 		}
 	})
 
@@ -111,7 +113,7 @@ func TestStreamReportHandler(t *testing.T) {
 		}})(marshal(t, event.ReportEvent{
 			TargetUserID: "user",
 			TargetNodeID: "node",
-			Reason:       domain.ReportReasonIllegal,
+			Reason:       "illegal",
 			Type:         domain.ModerationTweetType,
 			ObjectID:     &tweetID,
 		}), nil)
@@ -133,7 +135,7 @@ func TestStreamReportHandler(t *testing.T) {
 		}})(marshal(t, event.ReportEvent{
 			TargetUserID: "user",
 			TargetNodeID: "node",
-			Reason:       domain.ReportReasonSpam,
+			Reason:       "spam",
 			Type:         domain.ModerationUserType,
 		}), nil)
 		if !errors.Is(err, boom) {

@@ -140,10 +140,6 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 	if m.isClosed.Load() {
 		return nil
 	}
-	if !ev.Reason.IsValid() {
-		log.Warnf("moderator: report rejected, invalid reason: %s", ev.Reason)
-		return nil
-	}
 	if ev.TargetUserID == "" || ev.TargetNodeID == "" {
 		log.Warnf("moderator: report rejected, missing target")
 		return nil

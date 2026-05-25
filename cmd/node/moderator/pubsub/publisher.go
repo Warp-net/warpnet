@@ -43,10 +43,10 @@ import (
 const (
 	// prefixes
 	userUpdateTopicPrefix = "user-update"
-	// ReportsTopic must match cmd/node/member/pubsub.ReportsTopic
-	// exactly. Hard-coding here to avoid a circular member→moderator
-	// import; if you change one, change both.
-	ReportsTopic = "/warpnet/reports/1.0.0"
+	// reportsTopic must match the member side's literal exactly.
+	// Hard-coded here to avoid a circular member→moderator import; if
+	// you change one, change both.
+	reportsTopic = "/warpnet/reports/1.0.0"
 )
 
 type PubsubServerNodeConnector interface {
@@ -105,7 +105,7 @@ func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) e
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
-	return g.pubsub.SubscribeRaw(ReportsTopic, func(data []byte) error {
+	return g.pubsub.SubscribeRaw(reportsTopic, func(data []byte) error {
 		var msg event.Message
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return fmt.Errorf("pubsub: reports: envelope unmarshal: %w", err)
