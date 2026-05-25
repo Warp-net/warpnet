@@ -44,6 +44,10 @@ import (
 const (
 	// prefixes
 	userUpdateTopicPrefix = "user-update"
+	// ReportsTopic is the global gossip topic that carries Report events
+	// from members to moderators. Exported so the moderator package can
+	// subscribe with the exact same string.
+	ReportsTopic = "/warpnet/reports/1.0.0"
 )
 
 type PubsubServerNodeConnector interface {
@@ -131,6 +135,28 @@ func (g *MemberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
 	}
 	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
 	return g.pubsub.Unsubscribe(topicName)
+}
+
+// PublishReport sends a Report event on the global moderator-facing
+// topic. Any moderator node subscribed to ReportsTopic picks it up and
+// runs the engine against the offending object.
+func (g *MemberPubSub) PublishReport(ev event.ReportEvent) (err error) {
+	if g == nil || !g.pubsub.IsGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+
+	bt, err := json.Marshal(ev)
+	if err != nil {
+		return err
+	}
+	msg := event.Message{
+		Body:      json.RawMessage(bt),
+		NodeId:    g.NodeID(),
+		Timestamp: time.Now(),
+		MessageId: uuid.New().String(),
+		Version:   "0.0.0",
+	}
+	return g.pubsub.Publish(msg, ReportsTopic)
 }
 
 // PublishUpdateToFollowers - Publish for followers

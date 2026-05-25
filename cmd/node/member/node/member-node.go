@@ -463,7 +463,11 @@ func (m *MemberNode) adminHandlers(
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
-			handler.StreamModerationResultHandler(r.notificationRepo, r.tweetRepo, authRepo, r.timelineRepo),
+			handler.StreamModerationResultHandler(r.notificationRepo, r.tweetRepo, m.userRepo, authRepo, r.timelineRepo),
+		},
+		{
+			event.PUBLIC_POST_REPORT,
+			handler.StreamReportHandler(m.pubsubService),
 		},
 	}
 }

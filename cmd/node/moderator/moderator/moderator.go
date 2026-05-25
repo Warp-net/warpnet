@@ -1,8 +1,34 @@
+/*
+
+Warpnet - Decentralized Social Network
+Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
+<github.com.mecdy@passmail.net>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+WarpNet is provided "as is" without warranty of any kind, either expressed or implied.
+Use at your own risk. The maintainers shall not be liable for any damages or data loss
+resulting from the use or misuse of this software.
+*/
+
+// Copyright 2025 Vadim Filin
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package moderator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -18,8 +44,7 @@ import (
 )
 
 const (
-	ErrNoTweetsForModeration warpnet.WarpError = "no tweets for moderation found"
-	ErrModeratorInitFailed   warpnet.WarpError = "failed to init moderator engine"
+	ErrModeratorInitFailed warpnet.WarpError = "failed to init moderator engine"
 )
 
 type Engine interface {
@@ -34,11 +59,8 @@ var (
 )
 
 type ModeratorNode interface {
-	Start() error
-	Stop()
 	Node() warpnet.P2PNode
 	ID() warpnet.WarpPeerID
-	ClosestPeers() []warpnet.WarpPeerID
 	NodeInfo() warpnet.NodeInfo
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
@@ -47,11 +69,20 @@ type Publisher interface {
 	PublishUpdateToFollowers(ownerId, dest string, body any) (err error)
 }
 
+// ReportSubscriber is the slice of the moderator pubsub the Moderator
+// needs. It hands out one ReportEvent per gossip message.
+type ReportSubscriber interface {
+	SubscribeReports(h func(ev event.ReportEvent) error) error
+}
+
+// Moderator now runs entirely report-driven: there is no peer-scanning
+// loop. Every Moderate() call originates from a Report published on
+// ReportsTopic by some member node.
 type Moderator struct {
-	ctx        context.Context
-	node       ModeratorNode
-	tweetCache *tweetModerationCache
-	isolation  *isolation.IsolationProtocol
+	ctx       context.Context
+	node      ModeratorNode
+	sub       ReportSubscriber
+	isolation *isolation.IsolationProtocol
 
 	isClosed *atomic.Bool
 }
@@ -60,19 +91,18 @@ func NewModerator(
 	ctx context.Context,
 	node ModeratorNode,
 	pub Publisher,
-) (_ *Moderator, err error) {
-	mn := &Moderator{
-		ctx:        ctx,
-		tweetCache: newTweetModerationCache(),
-		node:       node,
-		isolation:  isolation.NewIsolationProtocol(node, pub),
-		isClosed:   new(atomic.Bool),
-	}
-
-	return mn, nil
+	sub ReportSubscriber,
+) (*Moderator, error) {
+	return &Moderator{
+		ctx:       ctx,
+		node:      node,
+		sub:       sub,
+		isolation: isolation.NewIsolationProtocol(pub),
+		isClosed:  new(atomic.Bool),
+	}, nil
 }
 
-func (m *Moderator) Start() (err error) {
+func (m *Moderator) Start() error {
 	if m == nil {
 		panic("moderator: nil")
 	}
@@ -80,17 +110,17 @@ func (m *Moderator) Start() (err error) {
 	log.Infoln("moderator: wait engine init...")
 
 	engineReadyChan <- struct{}{}
-	// wait until moderator set up
 	<-engineReadyChan
 	if engine == nil {
 		return ErrModeratorInitFailed
 	}
 	log.Infoln("moderator: engine is running")
 
-	go m.runTweetsModeration()
-	go m.lurkUserDescriptions()
-	log.Infoln("moderator: started")
+	if err := m.sub.SubscribeReports(m.handleReport); err != nil {
+		return fmt.Errorf("moderator: subscribe reports: %w", err)
+	}
 
+	log.Infoln("moderator: started (report-driven)")
 	return nil
 }
 
@@ -102,200 +132,131 @@ func (m *Moderator) Close() {
 	}
 }
 
-func (m *Moderator) runTweetsModeration() {
-	if m == nil || m.node == nil {
-		log.Fatalf("moderator: nil node")
-	}
-	if engine == nil {
-		log.Fatalf("moderator: nil moderator")
-	}
-
-	peerStore := m.node.Node().Peerstore()
-
-	ticker := time.NewTicker(time.Second * 10)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		if m.isClosed.Load() {
-			return
-		}
-		peers := peerStore.PeersWithAddrs()
-		if len(peers) == 0 {
-			log.Warn("moderator: peers are not found")
-			continue
-		}
-		for _, peer := range peers {
-			if m.isClosed.Load() {
-				return
-			}
-			if peer == m.node.ID() {
-				continue
-			}
-
-			infoResp, err := m.node.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
-			if err != nil {
-				if strings.Contains(err.Error(), "protocols not supported") {
-					continue
-				}
-				log.Errorf("moderator: no info response from new peer %s, %v", peer.String(), err)
-				continue
-			}
-			if len(infoResp) == 0 {
-				log.Errorf("moderator: no info response from new peer %s", peer.String())
-				continue
-			}
-
-			var info warpnet.NodeInfo
-			err = json.Unmarshal(infoResp, &info)
-			if err != nil {
-				log.Errorf("moderator: failed to unmarshal info from new peer: %s %v", infoResp, err)
-				continue
-			}
-			if info.IsModerator() || info.IsBootstrap() {
-				continue
-			}
-			if info.OwnerId == "" {
-				log.Errorf("moderator: node info %s has no owner", peer.String())
-				continue
-			}
-			log.Infof("moderator: checking peer: %s, owner: %s", peer.String(), info.OwnerId)
-
-			tweet, err := m.pickTweet(peer, info.OwnerId)
-			if errors.Is(err, ErrNoTweetsForModeration) {
-				continue
-			}
-			if err != nil {
-				log.Errorf("moderator: moderation engine failure %s: %v", peer.String(), err)
-				continue
-			}
-
-			moderationResult, err := m.moderateTweet(tweet)
-			if err != nil {
-				log.Errorf("moderator: moderation engine failure %s: %v", peer.String(), err)
-				continue
-			}
-			log.Infoln("moderator: isolate tweet protocol started")
-			m.isolation.IsolateTweet(peer, tweet, moderationResult)
-			log.Infoln("moderator: isolate tweet protocol finished")
-		}
-	}
-}
-
-const tweetsLimit uint64 = 20
-
-func (m *Moderator) pickTweet(peerID warpnet.WarpPeerID, userID string) (*domain.Tweet, error) {
-	var cursor *string
-
-	for {
-		data, err := m.node.GenericStream(
-			peerID.String(),
-			event.PUBLIC_GET_TWEETS,
-			event.GetAllTweetsEvent{
-				Limit:  func(l uint64) *uint64 { return &l }(tweetsLimit),
-				UserId: userID,
-				Cursor: cursor,
-			},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("moderator: get tweets: %w", err)
-		}
-		if len(data) == 0 {
-			return nil, ErrNoTweetsForModeration
-		}
-
-		var tweetsResp event.TweetsResponse
-		if err := json.Unmarshal(data, &tweetsResp); err != nil {
-			return nil, fmt.Errorf("moderator: failed to unmarshal tweets from new peer: %s %w", string(data), err)
-		}
-
-		if len(tweetsResp.Tweets) == 0 {
-			return nil, ErrNoTweetsForModeration
-		}
-
-		log.Infof("moderator: peers %s, got tweets: %d", peerID.String(), len(tweetsResp.Tweets))
-
-		cursor = &tweetsResp.Cursor
-
-		key := CacheKey{
-			Type:   domain.ModerationTweetType,
-			PeerId: peerID.String(),
-			Cursor: cursor,
-		}
-
-		if m.tweetCache.IsModeratedAlready(key) {
-			continue
-		}
-
-		m.tweetCache.SetAsModerated(key)
-
-		for i := range tweetsResp.Tweets {
-			tweet := tweetsResp.Tweets[i]
-
-			if tweet.IsModerated() {
-				continue
-			}
-			if tweet.Text == "" {
-				continue
-			}
-			return &tweet, nil
-		}
-		if tweetsResp.Cursor == event.EndCursor || tweetsResp.Cursor == "" {
-			return nil, ErrNoTweetsForModeration
-		}
-	}
-}
-
-func (m *Moderator) moderateTweet(tweet *domain.Tweet) (*domain.TweetModeration, error) {
-	if tweet == nil {
-		return nil, ErrNoTweetsForModeration
-	}
-	result, reason, err := engine.Moderate(tweet.Text)
-	if err != nil {
-		return nil, err
-	}
-
-	if !result {
-		tweet.Text = ""
-	}
-
-	moderatorId := m.node.ID().String()
-	return &domain.TweetModeration{
-		ModeratorID: moderatorId,
-		Model:       domain.LLAMA2,
-		IsOk:        domain.ModerationResult(result) != domain.FAIL,
-		Reason:      &reason,
-		TimeAt:      time.Now(),
-	}, nil
-}
-func (m *Moderator) lurkUserDescriptions() {
-	// TODO
-}
-
-// TODO
-func (m *Moderator) moderateUser(peerID warpnet.WarpPeerID, userID string) func() error {
-	return func() error {
-		bt, err := m.node.GenericStream(
-			peerID.String(),
-			event.PUBLIC_GET_USER,
-			event.GetUserEvent{UserId: userID},
-		)
-		if err != nil {
-			return err
-		}
-
-		var user domain.User
-		if err := json.Unmarshal(bt, &user); err != nil {
-			return err
-		}
-
-		text := fmt.Sprintf("%s: %s", user.Username, user.Bio)
-		result, reason, err := engine.Moderate(text)
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("%s: %t %s\n", user.Username, result, reason)
-		// TODO
+// handleReport runs the engine against whatever the report points at.
+// The moderator never trusts the reporter's payload — it always
+// re-fetches the content from the target node directly so a malicious
+// reporter cannot weaponize the moderator.
+func (m *Moderator) handleReport(ev event.ReportEvent) error {
+	if m.isClosed.Load() {
 		return nil
 	}
+	if !ev.Reason.IsValid() {
+		log.Warnf("moderator: report rejected, invalid reason: %s", ev.Reason)
+		return nil
+	}
+	if ev.TargetUserID == "" || ev.TargetNodeID == "" {
+		log.Warnf("moderator: report rejected, missing target")
+		return nil
+	}
+
+	log.Infof("moderator: report received type=%s target_user=%s reason=%s",
+		ev.Type.String(), ev.TargetUserID, ev.Reason)
+
+	switch ev.Type {
+	case domain.ModerationTweetType:
+		return m.handleTweetReport(ev)
+	case domain.ModerationUserType:
+		return m.handleUserReport(ev)
+	default:
+		log.Warnf("moderator: report dropped, unsupported type: %s", ev.Type.String())
+		return nil
+	}
+}
+
+func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
+	if ev.ObjectID == nil || *ev.ObjectID == "" {
+		log.Warn("moderator: tweet report missing object_id")
+		return nil
+	}
+
+	data, err := m.node.GenericStream(
+		ev.TargetNodeID,
+		event.PUBLIC_GET_TWEET,
+		event.GetTweetEvent{TweetId: *ev.ObjectID, UserId: ev.TargetUserID},
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "protocols not supported") {
+			return nil
+		}
+		return fmt.Errorf("fetch tweet: %w", err)
+	}
+
+	var tweet domain.Tweet
+	if err := json.Unmarshal(data, &tweet); err != nil {
+		return fmt.Errorf("unmarshal tweet: %w", err)
+	}
+	if tweet.Id == "" || tweet.Text == "" {
+		return nil
+	}
+
+	ok, reason, err := engine.Moderate(tweet.Text)
+	if err != nil {
+		return fmt.Errorf("engine moderate tweet: %w", err)
+	}
+	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
+
+	m.isolation.IsolateTweet(&tweet, &domain.TweetModeration{
+		ModeratorID: m.node.ID().String(),
+		Model:       domain.LLAMA2,
+		IsOk:        domain.ModerationResult(ok),
+		Reason:      &reason,
+		TimeAt:      time.Now(),
+	})
+	return nil
+}
+
+func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
+	data, err := m.node.GenericStream(
+		ev.TargetNodeID,
+		event.PUBLIC_GET_USER,
+		event.GetUserEvent{UserId: ev.TargetUserID},
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "protocols not supported") {
+			return nil
+		}
+		return fmt.Errorf("fetch user: %w", err)
+	}
+
+	var user domain.User
+	if err := json.Unmarshal(data, &user); err != nil {
+		return fmt.Errorf("unmarshal user: %w", err)
+	}
+	if user.Id == "" {
+		return nil
+	}
+
+	// One report covers the whole profile surface a stranger sees:
+	// username, bio, website, custom metadata fields. We concatenate
+	// them so the engine sees the full picture in a single pass.
+	text := buildProfileText(user)
+	if text == "" {
+		return nil
+	}
+
+	ok, reason, err := engine.Moderate(text)
+	if err != nil {
+		return fmt.Errorf("engine moderate user: %w", err)
+	}
+	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
+
+	m.isolation.IsolateUser(&user, &domain.UserModeration{
+		IsModerated: true,
+		Model:       domain.LLAMA2,
+		IsOk:        ok,
+		Reason:      &reason,
+		TimeAt:      time.Now(),
+	})
+	return nil
+}
+
+func buildProfileText(u domain.User) string {
+	parts := []string{u.Username, u.Bio}
+	if u.Website != nil {
+		parts = append(parts, *u.Website)
+	}
+	for k, v := range u.Metadata {
+		parts = append(parts, k+": "+v)
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
 }

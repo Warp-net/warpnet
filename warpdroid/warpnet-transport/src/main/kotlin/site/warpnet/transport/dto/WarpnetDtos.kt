@@ -599,3 +599,17 @@ data class DeleteMessageEvent(
     @Json(name = "chat_id") val chatId: String,
     val id: String,
 )
+
+// Wire shape mirrors event.ReportEvent. type uses the same numeric
+// ModerationObjectType enum the fat node defines (0 = user, 1 = tweet,
+// 2 = reply, 3 = image); reason is one of "spam" / "abuse" / "illegal"
+// / "nsfw". object_id must be a tweet/reply id when type points at one
+// of those; for user reports it is omitted (wire sends "").
+@JsonClass(generateAdapter = true)
+data class WarpnetReportEvent(
+    val type: Int,
+    @Json(name = "object_id") val objectId: String = "",
+    @Json(name = "target_user_id") val targetUserId: String,
+    @Json(name = "target_node_id") val targetNodeId: String,
+    val reason: String,
+)

@@ -43,6 +43,10 @@ import (
 const (
 	// prefixes
 	userUpdateTopicPrefix = "user-update"
+	// ReportsTopic must match cmd/node/member/pubsub.ReportsTopic
+	// exactly. Hard-coding here to avoid a circular member→moderator
+	// import; if you change one, change both.
+	ReportsTopic = "/warpnet/reports/1.0.0"
 )
 
 type PubsubServerNodeConnector interface {
@@ -91,6 +95,27 @@ func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body an
 	}
 
 	return g.pubsub.Publish(msg, topicName)
+}
+
+// SubscribeReports starts listening on the global reports topic. The
+// handler receives one ReportEvent per gossip message; the underlying
+// envelope (event.Message) is unwrapped here so the moderator only deals
+// with domain payloads.
+func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) error {
+	if g == nil || !g.pubsub.IsGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	return g.pubsub.SubscribeRaw(ReportsTopic, func(data []byte) error {
+		var msg event.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return fmt.Errorf("pubsub: reports: envelope unmarshal: %w", err)
+		}
+		var ev event.ReportEvent
+		if err := json.Unmarshal(msg.Body, &ev); err != nil {
+			return fmt.Errorf("pubsub: reports: payload unmarshal: %w", err)
+		}
+		return h(ev)
+	})
 }
 
 func (g *moderatorPubSub) Close() (err error) {

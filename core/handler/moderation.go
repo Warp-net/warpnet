@@ -28,9 +28,11 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"errors"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -50,6 +52,11 @@ type ModerationTweetUpdater interface {
 	Update(tweet domain.Tweet) error
 }
 
+type ModerationUserUpdater interface {
+	Get(userId string) (domain.User, error)
+	Update(userId string, user domain.User) (domain.User, error)
+}
+
 type ModerationTimelelineDeleter interface {
 	DeleteTweetFromTimeline(userID, tweetID string) error
 }
@@ -58,27 +65,41 @@ type ModerationOwnerFetcher interface {
 	GetOwner() domain.Owner
 }
 
+// StreamModerationResultHandler receives a verdict from a moderator and
+// applies it locally so this node's view of the offending object is
+// downgraded. Two design notes:
+//
+//   - Isolation is shadow-style: the offender's own node never receives
+//     this stream (the moderator only publishes the verdict to the
+//     followers/observers pubsub topic, see IsolationProtocol). The
+//     previous "notify the owner" branch was deleted because that defeats
+//     the whole point — the offender would see a moderation notification.
+//
+//   - ModerationUserType marks the user-level moderation flag so clients
+//     hide bio/displayName/url/website on the next render. The user row
+//     stays on disk, only the Moderation sidecar is set.
 func StreamModerationResultHandler(
 	notifyRepo ModerationNotifier,
 	tweetRepo ModerationTweetUpdater,
+	userRepo ModerationUserUpdater,
 	authRepo ModerationOwnerFetcher,
 	timelineRepo ModerationTimelelineDeleter,
 ) warpnet.WarpHandlerFunc {
+	_ = notifyRepo
+	_ = authRepo
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
-		err := json.Unmarshal(buf, &ev)
-		if err != nil {
+		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
 
-		notificationText := "moderation result: "
-		if ev.ObjectID != nil {
-			notificationText += *ev.ObjectID + ": "
+		moderatorId := ""
+		if s != nil && s.Conn() != nil {
+			moderatorId = s.Conn().RemotePeer().String()
 		}
-		if ev.Reason != nil {
-			notificationText += *ev.Reason
-		}
-		log.Infof("moderation: result received: %s", notificationText)
+
+		log.Infof("moderation: result type=%s user=%s result=%t",
+			ev.Type.String(), ev.UserID, bool(ev.Result))
 
 		switch ev.Type {
 		case domain.ModerationTweetType:
@@ -87,11 +108,6 @@ func StreamModerationResultHandler(
 			}
 			if ev.UserID == "" {
 				return nil, ErrNoUserID
-			}
-
-			moderatorId := ""
-			if s.Conn() != nil {
-				moderatorId = s.Conn().RemotePeer().String()
 			}
 
 			tweet := domain.Tweet{
@@ -112,30 +128,45 @@ func StreamModerationResultHandler(
 			if err := timelineRepo.DeleteTweetFromTimeline(ev.UserID, *ev.ObjectID); err != nil {
 				log.Errorf("moderation: failed to delete timeline: %v", err)
 			}
+
+		case domain.ModerationUserType:
+			if ev.UserID == "" {
+				return nil, ErrNoUserID
+			}
+			if userRepo == nil {
+				log.Warn("moderation: no user repo wired")
+				return event.Accepted, nil
+			}
+
+			user, err := userRepo.Get(ev.UserID)
+			if errors.Is(err, database.ErrUserNotFound) {
+				// Nothing local to mark; observers without the user
+				// cached can drop the verdict silently.
+				return event.Accepted, nil
+			}
+			if err != nil {
+				log.Errorf("moderation: failed to fetch user: %v", err)
+				return event.Accepted, nil
+			}
+			user.Moderation = &domain.UserModeration{
+				IsModerated: true,
+				Model:       ev.Model,
+				IsOk:        bool(ev.Result),
+				Reason:      ev.Reason,
+				TimeAt:      time.Now(),
+			}
+			if _, err := userRepo.Update(ev.UserID, user); err != nil {
+				log.Errorf("moderation: failed to update user: %v", err)
+			}
+
 		default:
 			log.Errorf("moderation handler: unknown event type %s", ev.Type.String())
 			return event.Accepted, nil
 		}
 
-		if ev.Result == domain.OK {
-			log.Infof("moderation handler: OK")
-			return event.Accepted, nil
-		}
-
-		owner := authRepo.GetOwner()
-		if ev.UserID == owner.UserId {
-			log.Infoln("moderation handler: adding notification")
-			err := notifyRepo.Add(domain.Notification{
-				Type:   domain.NotificationModerationType,
-				Text:   notificationText,
-				UserId: owner.UserId,
-				IsRead: false,
-			})
-			if err != nil {
-				log.Errorf("moderation handler: adding notification result: %v", err)
-			}
-		}
-
+		// No notification path: the offender must not be informed
+		// (shadow isolation). Followers / observers simply re-render
+		// with the moderation flag set.
 		return event.Accepted, nil
 	}
 }

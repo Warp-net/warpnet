@@ -459,6 +459,22 @@ type ModerationEvent struct {
 	ObjectID *domain.ID                  `json:"object_id,omitempty"`
 }
 
+// ReportEvent is published by a member node on the reports pubsub topic
+// when a user clicks Report in the UI. It carries enough for a moderator
+// to fetch the actual offending content (TargetNodeID is a routing hint
+// so the moderator can hit the owner's node directly instead of looking
+// it up via PUBLIC_GET_USER).
+//
+// ObjectID is the tweet id for Type == ModerationTweetType and is nil
+// when Type == ModerationUserType (the user itself is the target).
+type ReportEvent struct {
+	Type         domain.ModerationObjectType `json:"type"`
+	TargetUserID domain.ID                   `json:"target_user_id"`
+	TargetNodeID domain.ID                   `json:"target_node_id"`
+	ObjectID     *domain.ID                  `json:"object_id,omitempty"`
+	Reason       domain.ReportReason         `json:"reason"`
+}
+
 type ModerationResultEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
 	Result   domain.ModerationResult     `json:"result"`

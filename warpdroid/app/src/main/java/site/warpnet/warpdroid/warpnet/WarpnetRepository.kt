@@ -147,6 +147,7 @@ class WarpnetRepository @Inject constructor(
     private val newMessageAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetMessage>()
     private val deleteMessageAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteMessageEvent>()
     private val unretweetAdapter = moshi.adapter<UnretweetEvent>()
+    private val reportEventAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetReportEvent>()
 
     // -----------------------------------------------------------------
     // Users
@@ -354,6 +355,45 @@ class WarpnetRepository @Inject constructor(
             ),
         )
         return viewsCountAdapter.fromJson(raw)?.count
+    }
+
+    // -----------------------------------------------------------------
+    // Reports
+    // -----------------------------------------------------------------
+
+    /**
+     * Publish a moderation report to the global reports gossip topic.
+     * Moderator nodes subscribed to that topic pick it up, fetch the
+     * offending content directly from [targetNodeId], run the engine,
+     * and (if the verdict is bad) publish a shadow-ban verdict on the
+     * offender's followers topic. The offender's own node never sees
+     * the verdict.
+     *
+     * [type] mirrors the fat node's ModerationObjectType enum:
+     *   0 = user profile, 1 = tweet, 2 = reply, 3 = image.
+     * [objectId] is required for tweet/reply reports and is sent as ""
+     * for user reports.
+     * [reason] must be one of "spam" / "abuse" / "illegal" / "nsfw".
+     */
+    suspend fun reportContent(
+        type: Int,
+        objectId: String,
+        targetUserId: String,
+        targetNodeId: String,
+        reason: String,
+    ) {
+        client.request(
+            ProtocolIds.PUBLIC_POST_REPORT,
+            reportEventAdapter.toJson(
+                site.warpnet.transport.dto.WarpnetReportEvent(
+                    type = type,
+                    objectId = objectId,
+                    targetUserId = targetUserId,
+                    targetNodeId = targetNodeId,
+                    reason = reason,
+                ),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------

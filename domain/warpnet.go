@@ -330,3 +330,22 @@ func (t ModerationObjectType) String() string {
 		return "unknown"
 	}
 }
+
+// ReportReason is the user-selected category attached to a Report so the
+// moderator engine has a hint about what category to weight.
+type ReportReason string
+
+const (
+	ReportReasonSpam    ReportReason = "spam"
+	ReportReasonAbuse   ReportReason = "abuse"
+	ReportReasonIllegal ReportReason = "illegal"
+	ReportReasonNSFW    ReportReason = "nsfw"
+)
+
+func (r ReportReason) IsValid() bool {
+	switch r {
+	case ReportReasonSpam, ReportReasonAbuse, ReportReasonIllegal, ReportReasonNSFW:
+		return true
+	}
+	return false
+}

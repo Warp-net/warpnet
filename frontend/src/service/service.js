@@ -98,6 +98,7 @@ export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
 export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
+export const PUBLIC_POST_REPORT        = "/public/post/report/0.0.0"
 
 const stateMap = new Map();
 const notificationSubscribers = new Set();
@@ -1321,6 +1322,25 @@ export const warpnetService = {
             console.error(`failed to record view for tweet [${tweetId}]`, err);
             return null;
         }
+    },
+
+    // Report opens a moderation request to whichever moderator node is
+    // listening on the global reports topic. `type` is the same
+    // ModerationObjectType enum the backend uses (0 = user profile,
+    // 1 = tweet, 2 = reply, 3 = image). `objectId` is required for
+    // tweet/reply reports and ignored for user reports.
+    async report({ type, objectId, targetUserId, targetNodeId, reason }) {
+        const request = {
+            path: PUBLIC_POST_REPORT,
+            body: {
+                type: type,
+                object_id: objectId || '',
+                target_user_id: targetUserId,
+                target_node_id: targetNodeId,
+                reason: reason,
+            },
+        }
+        return await this.sendToNode(request)
     },
 
     async setLiker(tweetId, profileId, profileObj) {
