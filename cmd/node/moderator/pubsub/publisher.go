@@ -37,7 +37,9 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -91,6 +93,50 @@ func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body an
 	}
 
 	return g.pubsub.Publish(msg, topicName)
+}
+
+// SubscribeReports starts listening on the global reports topic. The
+// handler receives one ReportEvent per gossip message; the underlying
+// envelope (event.Message) is unwrapped here so the moderator only
+// deals with domain payloads.
+//
+// The reports topic is open — anyone can publish — so unlike normal
+// stream traffic this path doesn't go through AuthMiddleware. We
+// verify the envelope's libp2p signature against a public key derived
+// from msg.NodeId before handing the payload on. Anything that fails
+// to verify is dropped silently so a malicious peer cannot make us
+// waste cycles or pollute logs by spamming bogus reports.
+func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) error {
+	if g == nil || !g.pubsub.IsGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	return g.pubsub.SubscribeRaw(event.ReportsTopic, func(data []byte) error {
+		var msg event.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return fmt.Errorf("pubsub: reports: envelope unmarshal: %w", err)
+		}
+
+		peerID := warpnet.FromStringToPeerID(msg.NodeId)
+		if peerID == "" {
+			log.Warnf("pubsub: reports: dropping message with malformed NodeId=%q", msg.NodeId)
+			return nil
+		}
+		pubKey := warpnet.FromIDToPubKey(peerID)
+		if len(pubKey) == 0 {
+			log.Warnf("pubsub: reports: dropping message: cannot derive pubkey from %s", msg.NodeId)
+			return nil
+		}
+		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
+			log.Warnf("pubsub: reports: dropping message from %s: signature invalid: %v", msg.NodeId, err)
+			return nil
+		}
+
+		var ev event.ReportEvent
+		if err := json.Unmarshal(msg.Body, &ev); err != nil {
+			return fmt.Errorf("pubsub: reports: payload unmarshal: %w", err)
+		}
+		return h(ev)
+	})
 }
 
 func (g *moderatorPubSub) Close() (err error) {

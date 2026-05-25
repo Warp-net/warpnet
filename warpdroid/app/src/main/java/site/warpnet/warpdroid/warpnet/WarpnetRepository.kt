@@ -147,6 +147,7 @@ class WarpnetRepository @Inject constructor(
     private val newMessageAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetMessage>()
     private val deleteMessageAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteMessageEvent>()
     private val unretweetAdapter = moshi.adapter<UnretweetEvent>()
+    private val reportEventAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetReportEvent>()
 
     // -----------------------------------------------------------------
     // Users
@@ -354,6 +355,48 @@ class WarpnetRepository @Inject constructor(
             ),
         )
         return viewsCountAdapter.fromJson(raw)?.count
+    }
+
+    // -----------------------------------------------------------------
+    // Reports
+    // -----------------------------------------------------------------
+
+    /**
+     * Publish a moderation report to the global reports gossip topic.
+     * Moderator nodes subscribed to that topic pick it up, fetch the
+     * offending content directly from [targetNodeId], run the engine,
+     * and (if the verdict is bad) publish a shadow-ban verdict on the
+     * offender's followers topic. The offender's own node never sees
+     * the verdict.
+     *
+     * [type] mirrors the fat node's ModerationObjectType enum. The
+     * backend currently accepts only 0 (user profile) and 1 (tweet);
+     * reply (2) and image (3) reports are validated out server-side.
+     * [objectId] is required for tweet reports and is sent as "" for
+     * user reports.
+     * [reason] is a free-form string capped at 256 chars by the
+     * backend. The Android UI presents a fixed set of labels as a
+     * convenience but any short non-empty string is accepted.
+     */
+    suspend fun reportContent(
+        type: Int,
+        objectId: String,
+        targetUserId: String,
+        targetNodeId: String,
+        reason: String,
+    ) {
+        client.request(
+            ProtocolIds.PUBLIC_POST_REPORT,
+            reportEventAdapter.toJson(
+                site.warpnet.transport.dto.WarpnetReportEvent(
+                    type = type,
+                    objectId = objectId,
+                    targetUserId = targetUserId,
+                    targetNodeId = targetNodeId,
+                    reason = reason,
+                ),
+            ),
+        )
     }
 
     // -----------------------------------------------------------------

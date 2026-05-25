@@ -55,6 +55,7 @@ object ProtocolIds {
     const val PUBLIC_POST_CHAT = "/public/post/chat/0.0.0"
     const val PUBLIC_POST_MESSAGE = "/public/post/message/0.0.0"
     const val PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
+    const val PUBLIC_POST_REPORT = "/public/post/report/0.0.0"
 
     // private reads (require pairing)
     const val PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
