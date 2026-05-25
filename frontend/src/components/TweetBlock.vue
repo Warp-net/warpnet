@@ -78,7 +78,7 @@ resulting from the use or misuse of this software.
               <button type="button" @click.stop="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
               <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
             </template>
-            <button v-if="!isOwner" type="button" @click.stop="openReport" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Report tweet</button>
+            <button v-if="!isOwner && !tweet.parent_id" type="button" @click.stop="openReport" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Report tweet</button>
           </div>
         </div>
         <ReportDialog
@@ -458,11 +458,13 @@ export default {
     },
     async submitReport(reason) {
       try {
-        // ModerationObjectType: tweets are type 1, replies type 2.
-        const isReply = !!this.tweet.parent_id;
+        // ModerationObjectType: tweets are type 1. Replies hide the
+        // Report button entirely (the moderator side has no
+        // reply-fetch wiring yet), so this only ever runs for root
+        // tweets.
         const profile = await warpnetService.getProfile(this.tweet.user_id);
         await warpnetService.report({
-          type: isReply ? 2 : 1,
+          type: 1,
           objectId: this.tweet.id,
           targetUserId: this.tweet.user_id,
           targetNodeId: profile?.node_id || '',

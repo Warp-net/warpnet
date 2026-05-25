@@ -30,13 +30,15 @@ package isolation
 import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
 
 // Publisher is the slice of moderator pubsub the isolation protocol
 // needs: publish a verdict onto the offender's followers topic so every
-// observer re-renders the object with the moderation flag set.
+// observer re-renders the object with the moderation flag set. The
+// implementation marshals `body` once on the way out — callers MUST
+// pass a struct (or any non-[]byte value) so the result is a real JSON
+// object on the wire, not a base64-encoded blob.
 type Publisher interface {
 	PublishUpdateToFollowers(ownerId, dest string, body any) (err error)
 }
@@ -71,15 +73,10 @@ func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModera
 		Result:   m.IsOk,
 	}
 
-	body, err := json.Marshal(result)
-	if err != nil {
-		log.Errorf("isolation: marshal tweet result: %v", err)
-		return
-	}
 	if err := ip.pub.PublishUpdateToFollowers(
 		t.UserId,
 		event.PUBLIC_POST_MODERATION_RESULT,
-		body,
+		result,
 	); err != nil {
 		log.Errorf("isolation: publish tweet verdict: %v", err)
 	}
@@ -94,26 +91,19 @@ func (ip *IsolationProtocol) IsolateUser(u *domain.User, m *domain.UserModeratio
 	if u == nil || m == nil {
 		return
 	}
-	isOk := domain.ModerationResult(m.IsOk)
 	result := event.ModerationResultEvent{
 		Type:   domain.ModerationUserType,
 		UserID: u.Id,
 		Reason: m.Reason,
 		Model:  m.Model,
-		Result: isOk,
+		Result: domain.ModerationResult(m.IsOk),
 	}
 
-	body, err := json.Marshal(result)
-	if err != nil {
-		log.Errorf("isolation: marshal user result: %v", err)
-		return
-	}
 	if err := ip.pub.PublishUpdateToFollowers(
 		u.Id,
 		event.PUBLIC_POST_MODERATION_RESULT,
-		body,
+		result,
 	); err != nil {
 		log.Errorf("isolation: publish user verdict: %v", err)
 	}
 }
-

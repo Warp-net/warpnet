@@ -67,13 +67,15 @@ func TestStreamModerationResultHandler(t *testing.T) {
 	tweetId := "tweet-1"
 	target := "target-1"
 
+	_ = owner
 	mkHandler := func(
 		notifier stubModerationNotifier,
 		tweets stubModerationTweetUpdater,
 		users stubModerationUserUpdater,
 		timeline stubModerationTimelineDeleter,
 	) func([]byte, interface{}) (any, error) {
-		h := StreamModerationResultHandler(notifier, tweets, users, stubAuth{owner: domain.Owner{UserId: owner}}, timeline)
+		_ = notifier
+		h := StreamModerationResultHandler(tweets, users, timeline)
 		return func(buf []byte, _ interface{}) (any, error) { return h(buf, s{}) }
 	}
 

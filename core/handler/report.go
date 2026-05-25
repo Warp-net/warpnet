@@ -80,13 +80,17 @@ func validateReport(ev event.ReportEvent) error {
 		return warpnet.WarpError("report: empty reason")
 	}
 	switch ev.Type {
-	case domain.ModerationTweetType, domain.ModerationReplyType:
+	case domain.ModerationTweetType:
 		if ev.ObjectID == nil || *ev.ObjectID == "" {
-			return warpnet.WarpError("report: empty object_id for tweet/reply")
+			return warpnet.WarpError("report: empty object_id for tweet")
 		}
 	case domain.ModerationUserType:
 		// object_id is optional / unused for user reports
 	default:
+		// Reply / image reports are not wired end-to-end yet — the
+		// moderator can only fetch top-level tweets and user
+		// profiles. Reject anything else so the caller knows it
+		// won't be acted on.
 		return warpnet.WarpError("report: unsupported moderation object type")
 	}
 	return nil

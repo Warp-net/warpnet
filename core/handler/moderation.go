@@ -61,10 +61,6 @@ type ModerationTimelelineDeleter interface {
 	DeleteTweetFromTimeline(userID, tweetID string) error
 }
 
-type ModerationOwnerFetcher interface {
-	GetOwner() domain.Owner
-}
-
 // StreamModerationResultHandler receives a verdict from a moderator and
 // applies it locally so this node's view of the offending object is
 // downgraded. Two design notes:
@@ -79,14 +75,10 @@ type ModerationOwnerFetcher interface {
 //     hide bio/displayName/url/website on the next render. The user row
 //     stays on disk, only the Moderation sidecar is set.
 func StreamModerationResultHandler(
-	notifyRepo ModerationNotifier,
 	tweetRepo ModerationTweetUpdater,
 	userRepo ModerationUserUpdater,
-	authRepo ModerationOwnerFetcher,
 	timelineRepo ModerationTimelelineDeleter,
 ) warpnet.WarpHandlerFunc {
-	_ = notifyRepo
-	_ = authRepo
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
