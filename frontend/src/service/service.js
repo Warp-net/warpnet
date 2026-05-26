@@ -318,6 +318,8 @@ export const warpnetService = {
         }
         this.setCursor('whotofollow', followResp.cursor || "")
 
+        followResp.users = followResp.users.filter(user => !user.isOffline);
+
         return followResp.users;
     },
 
