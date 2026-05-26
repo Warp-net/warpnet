@@ -21,7 +21,7 @@ import androidx.paging.PagingState
 import androidx.paging.RemoteMediator
 import at.connyduck.calladapter.networkresult.getOrElse
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity.Type
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.HttpHeaderLink
 import retrofit2.HttpException
@@ -48,7 +48,7 @@ class AccountListRemoteMediator(
         }
     }
 
-    private suspend fun request(loadType: LoadType): Response<List<TimelineAccount>>? {
+    private suspend fun request(loadType: LoadType): Response<List<TimelineUser>>? {
         return when (loadType) {
             LoadType.PREPEND -> null
             LoadType.APPEND -> getFetchCallByListType(fromId = viewModel.nextKey)
@@ -60,7 +60,7 @@ class AccountListRemoteMediator(
         }
     }
 
-    private suspend fun applyResponse(response: Response<List<TimelineAccount>>): MediatorResult {
+    private suspend fun applyResponse(response: Response<List<TimelineUser>>): MediatorResult {
         val accounts = response.body()
         if (!response.isSuccessful || accounts == null) {
             return MediatorResult.Error(HttpException(response))
@@ -93,7 +93,7 @@ class AccountListRemoteMediator(
         return requireNotNull(id) { "id must not be null for type " + type.name }
     }
 
-    private suspend fun getFetchCallByListType(fromId: String?): Response<List<TimelineAccount>> {
+    private suspend fun getFetchCallByListType(fromId: String?): Response<List<TimelineUser>> {
         return when (viewModel.type) {
             Type.FOLLOWS -> {
                 val accountId = requireId(viewModel.type, viewModel.accountId)

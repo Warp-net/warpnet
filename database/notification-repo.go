@@ -44,6 +44,7 @@ var ErrNotificationsNotFound = local_store.DBError("notifications not found")
 
 type NotificationsStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
+	NewReadTxn() (local_store.WarpTransactioner, error)
 }
 
 type NotificationsRepo struct {
@@ -271,4 +272,69 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 	}
 
 	return nots, cur, nil
+}
+
+// unreadCountPageSize is the per-iteration batch UnreadCount uses to
+// walk a user's notifications. Exposed as a package var so tests can
+// shrink it to force multiple iterations without having to seed
+// hundreds of rows.
+var unreadCountPageSize uint64 = 200
+
+// UnreadCount scans every notification under the user's prefix and
+// returns the number with IsRead == false. List paginates, so the
+// caller can't count "unread across all pages" without doing the full
+// scan itself; this method centralises that walk so handlers don't
+// derive the unread count from one page (which gave a flickering
+// "20 unread" badge that mirrored whatever happened to be on page 1).
+//
+// O(N) over the user's stored notifications. The repo's 24 h TTL on
+// every Add() bounds N, so a scan per call is acceptable for now; if
+// volume grows we'll move to a maintained counter mirrored on Add /
+// MarkRead.
+func (repo *NotificationsRepo) UnreadCount(userId string) (uint64, error) {
+	if userId == "" {
+		return 0, local_store.DBError("missing user id")
+	}
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		Build()
+
+	// Read-only txn: this is a pure scan with no writes, so Badger's
+	// read-conflict tracking is pointless overhead — it grows O(N)
+	// with the number of keys touched. NewReadTxn opens
+	// badger.NewTransaction(false), which skips that tracking.
+	txn, err := repo.db.NewReadTxn()
+	if err != nil {
+		return 0, err
+	}
+	defer txn.Rollback()
+
+	var (
+		count  uint64
+		cursor string
+		page   = unreadCountPageSize
+	)
+	for {
+		items, next, lerr := txn.List(prefix, &page, &cursor)
+		if lerr != nil {
+			return 0, lerr
+		}
+		for _, item := range items {
+			var not domain.Notification
+			if uerr := json.Unmarshal(item.Value, &not); uerr != nil {
+				return 0, uerr
+			}
+			if !not.IsRead {
+				count++
+			}
+		}
+		if next == "" || next == local_store.EndCursor || next == cursor || len(items) == 0 {
+			break
+		}
+		cursor = next
+	}
+
+	// No Commit: this is a read-only txn, the deferred Rollback
+	// (Discard under the hood) is the correct close.
+	return count, nil
 }

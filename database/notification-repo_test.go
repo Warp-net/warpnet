@@ -75,6 +75,51 @@ func (s *NotificationsRepoTestSuite) TestAddAndListNotifications() {
 	s.Equal("end", cursor)
 }
 
+func (s *NotificationsRepoTestSuite) TestUnreadCountWalksAllPages() {
+	userId := uuid.New().String()
+
+	// Shrink the internal page size so the scan must take multiple
+	// iterations: with 7 items at pageSize=3 the loop runs at least
+	// three times. Without the multi-page walk, the test would still
+	// pass on a "first page only" UnreadCount when the items happen
+	// to fit in one page.
+	origPageSize := unreadCountPageSize
+	unreadCountPageSize = 3
+	defer func() { unreadCountPageSize = origPageSize }()
+
+	for i := 0; i < 7; i++ {
+		s.Require().NoError(s.repo.Add(domain.Notification{
+			Type:   domain.NotificationLikeType,
+			Text:   "unread",
+			UserId: userId,
+			IsRead: false,
+		}))
+	}
+	for i := 0; i < 3; i++ {
+		s.Require().NoError(s.repo.Add(domain.Notification{
+			Type:   domain.NotificationReplyType,
+			Text:   "read",
+			UserId: userId,
+			IsRead: true,
+		}))
+	}
+
+	count, err := s.repo.UnreadCount(userId)
+	s.Require().NoError(err)
+	s.Equal(uint64(7), count)
+}
+
+func (s *NotificationsRepoTestSuite) TestUnreadCount_MissingUserId() {
+	_, err := s.repo.UnreadCount("")
+	s.Require().Error(err)
+}
+
+func (s *NotificationsRepoTestSuite) TestUnreadCount_EmptyUser() {
+	count, err := s.repo.UnreadCount(uuid.New().String())
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+}
+
 func (s *NotificationsRepoTestSuite) TestAddNotification_MissingUserId() {
 	not := domain.Notification{
 		Type: domain.NotificationLikeType,

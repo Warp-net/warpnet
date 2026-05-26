@@ -27,7 +27,7 @@ import android.util.Log
 import at.connyduck.calladapter.networkresult.NetworkResult
 import site.warpnet.warpdroid.components.filters.FilterExpiration
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Conversation
 import site.warpnet.warpdroid.entity.DeletedTweet
@@ -42,7 +42,7 @@ import site.warpnet.warpdroid.entity.SearchResult
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TweetContext
 import site.warpnet.warpdroid.entity.TweetSource
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.warpnet.WarpnetMapper
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
 import java.util.Date
@@ -350,9 +350,9 @@ class WarpnetApi @Inject constructor(
         val active = accountManager.activeAccount ?: return stubFailure("createStatus")
         // The Warpnet `Tweet.Username` field is the human-readable display
         // name (e.g. "Vadim") — desktop renders it verbatim as the author
-        // line. WarpnetMapper.toAccount maps WarpnetUser.id → Account.username
+        // line. WarpnetMapper.toAccount maps WarpnetUser.id → User.username
         // (the @-handle, peer-derived ULID) and WarpnetUser.username →
-        // Account.displayName (the real name). So the tweet's authorUsername
+        // User.displayName (the real name). So the tweet's authorUsername
         // has to be sourced from displayName, not username, otherwise the
         // post shows up authored by the ULID. Fall back to the @-handle if
         // displayName isn't populated yet.
@@ -430,7 +430,7 @@ class WarpnetApi @Inject constructor(
     suspend fun statusRetweetedBy(
         statusId: String,
         maxId: String?,
-    ): Response<List<TimelineAccount>> {
+    ): Response<List<TimelineUser>> {
         // ownerUserId is unavailable at the AccountList mediator level —
         // fall back to the active account so the handler returns the
         // local record (correct for self-engagement, the common case).
@@ -447,7 +447,7 @@ class WarpnetApi @Inject constructor(
     suspend fun statusLikedBy(
         statusId: String,
         maxId: String?,
-    ): Response<List<TimelineAccount>> {
+    ): Response<List<TimelineUser>> {
         val active = accountManager.activeAccount ?: return stubList()
         return paginated {
             warpnet.getTweetLikers(
@@ -607,11 +607,11 @@ class WarpnetApi @Inject constructor(
     // which would be sent verbatim by createStatus and stored in the
     // tweet author field on the fat node. If the lookup fails (offline,
     // not yet paired) fall back to the local stub so callers still get
-    // a non-null Account.
+    // a non-null User.
     suspend fun accountVerifyCredentials(
         domain: String? = null,
         auth: String? = null,
-    ): NetworkResult<Account> {
+    ): NetworkResult<User> {
         val active = accountManager.activeAccount
             ?: return stubFailure("accountVerifyCredentials")
         if (active.accountId.isNotEmpty() && active.accountId != AccountManager.STUB_USERNAME) {
@@ -624,7 +624,7 @@ class WarpnetApi @Inject constructor(
             }
         }
         return NetworkResult.success(
-            Account(
+            User(
                 id = active.accountId,
                 localUsername = active.username,
                 username = active.username,
@@ -645,7 +645,7 @@ class WarpnetApi @Inject constructor(
         sensitive: Boolean?,
         language: String?,
         quotePolicy: String?,
-    ): NetworkResult<Account> = stubFailure("accountUpdateSource")
+    ): NetworkResult<User> = stubFailure("accountUpdateSource")
 
     suspend fun accountUpdateCredentials(
         displayName: RequestBody?,
@@ -654,7 +654,7 @@ class WarpnetApi @Inject constructor(
         avatar: MultipartBody.Part?,
         header: MultipartBody.Part?,
         fields: Map<String, RequestBody>,
-    ): NetworkResult<Account> = stubFailure("accountUpdateCredentials")
+    ): NetworkResult<User> = stubFailure("accountUpdateCredentials")
 
     /**
      * Warpnet has no server-side text search, so we page through
@@ -667,7 +667,7 @@ class WarpnetApi @Inject constructor(
         resolve: Boolean? = null,
         limit: Int? = null,
         following: Boolean? = null,
-    ): NetworkResult<List<TimelineAccount>> {
+    ): NetworkResult<List<TimelineUser>> {
         if (query.isBlank()) return NetworkResult.success(emptyList())
         return result {
             val (hits, _) = warpnet.searchAccounts(
@@ -678,7 +678,7 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun account(accountId: String): NetworkResult<Account> = result {
+    suspend fun account(accountId: String): NetworkResult<User> = result {
         warpnet.getAccount(accountId)
     }
 
@@ -699,14 +699,14 @@ class WarpnetApi @Inject constructor(
     suspend fun accountFollowers(
         accountId: String,
         maxId: String?,
-    ): Response<List<TimelineAccount>> = paginated {
+    ): Response<List<TimelineUser>> = paginated {
         warpnet.getFollowers(userId = accountId, cursor = maxId.orEmpty(), limit = 40)
     }
 
     suspend fun accountFollowing(
         accountId: String,
         maxId: String?,
-    ): Response<List<TimelineAccount>> = paginated {
+    ): Response<List<TimelineUser>> = paginated {
         warpnet.getFollowings(userId = accountId, cursor = maxId.orEmpty(), limit = 40)
     }
 
@@ -782,19 +782,19 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun blocks(maxId: String? = null): Response<List<TimelineAccount>> {
+    suspend fun blocks(maxId: String? = null): Response<List<TimelineUser>> {
         val active = accountManager.activeAccount ?: return stubList()
         return response {
             val (ids, _) = warpnet.getBlocks(userId = active.accountId, cursor = maxId.orEmpty())
-            ids.mapNotNull { id -> runCatching { warpnet.getTimelineAccount(id) }.getOrNull() }
+            ids.mapNotNull { id -> runCatching { warpnet.getTimelineUser(id) }.getOrNull() }
         }
     }
 
-    suspend fun mutes(maxId: String? = null): Response<List<TimelineAccount>> {
+    suspend fun mutes(maxId: String? = null): Response<List<TimelineUser>> {
         val active = accountManager.activeAccount ?: return stubList()
         return response {
             val (ids, _) = warpnet.getMutes(userId = active.accountId, cursor = maxId.orEmpty())
-            ids.mapNotNull { id -> runCatching { warpnet.getTimelineAccount(id) }.getOrNull() }
+            ids.mapNotNull { id -> runCatching { warpnet.getTimelineUser(id) }.getOrNull() }
         }
     }
 
@@ -822,7 +822,7 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun followRequests(maxId: String?): Response<List<TimelineAccount>> {
+    suspend fun followRequests(maxId: String?): Response<List<TimelineUser>> {
         val active = accountManager.activeAccount ?: return stubList()
         return paginated {
             warpnet.getFollowRequests(
@@ -865,7 +865,7 @@ class WarpnetApi @Inject constructor(
             )
             val conversations = chats.mapNotNull { chat ->
                 runCatching {
-                    val other = warpnet.getTimelineAccount(chat.otherUserId)
+                    val other = warpnet.getTimelineUser(chat.otherUserId)
                     WarpnetMapper.chatToConversation(chat, other)
                 }.getOrNull()
             }

@@ -1,13 +1,13 @@
 <!--
-  ~ Copyright 2023 Warpdroid Contributors
+  ~ Copyright 2023 Warpnet Contributors
   ~
-  ~ This file is a part of Warpdroid.
+  ~ This file is a part of Warpnet.
   ~
   ~ This program is free software; you can redistribute it and/or modify it under the terms of the
   ~ GNU General Public License as published by the Free Software Foundation; either version 3 of the
   ~ License, or (at your option) any later version.
   ~
-  ~ Warpdroid is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+  ~ Warpnet is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
   ~ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
   ~ Public License for more details.
   ~
@@ -26,6 +26,7 @@
     <string name="error_loading_account_details">Failed loading account details</string>
     <string name="error_could_not_load_login_page">Could not load the login page.</string>
     <string name="error_compose_character_limit">The post is too long!</string>
+    <string name="error_compose_quote_with_media">Quote retweets can\'t include media. Remove attachments and try again.</string>
     <string name="error_multimedia_size_limit">Video and audio files cannot exceed %1$s MB in size.</string>
 
     <string name="error_image_edit_failed">The image could not be edited.</string>
@@ -133,10 +134,8 @@
     <string name="action_quick_reply">Quick Reply</string>
     <string name="action_reply">Reply</string>
     <string name="action_retweet">Retweet</string>
-    <string name="action_retweet_private">Followers-Only Retweet</string>
-    <string name="action_retweet_public">Public Retweet</string>
-    <string name="action_retweet_unlisted">Unlisted Retweet</string>
     <string name="action_unretweet">Remove retweet</string>
+    <string name="action_quote">Quote</string>
     <string name="action_like">Like</string>
     <string name="action_unlike">Remove like</string>
     <string name="action_bookmark">Bookmark</string>
@@ -146,7 +145,7 @@
     <string name="action_logout">Log out</string>
     <string name="action_logout_confirm">Are you sure you want to log out of %1$s? This will delete all local data of the account, including drafts and preferences.</string>
     <string name="action_remove_account">Remove account</string>
-    <string name="action_remove_account_confirm">Are you sure you want to remove the account %1$s from Warpdroid? This will delete all local data of the account, including drafts and preferences.</string>
+    <string name="action_remove_account_confirm">Are you sure you want to remove the account %1$s from Warpnet? This will delete all local data of the account, including drafts and preferences.</string>
     <string name="action_post_failed">Upload failed</string>
     <plurals name="action_post_failed_detail">
         <item quantity="one">Your post failed to upload and has been saved to drafts.\n\nEither the server could not be contacted, or it rejected the post.</item>
@@ -403,7 +402,7 @@
     <string name="notification_moderation_warning_name">Moderation warnings</string>
     <string name="notification_report_description">Notifications about moderation reports</string>
     <string name="notification_listenable_worker_name">Background activity</string>
-    <string name="notification_listenable_worker_description">Notifications when Warpdroid is working in the background</string>
+    <string name="notification_listenable_worker_description">Notifications when Warpnet is working in the background</string>
     <string name="notification_unknown_name">Unknown</string>
     <string name="notification_unknown_description">Unknown notification type</string>
 
@@ -427,13 +426,13 @@
     <string name="description_account_locked">Locked Account</string>
 
     <string name="about_title_activity">About</string>
-    <string name="about_warpdroid_version">Warpdroid %1$s</string>
+    <string name="about_warpdroid_version">Warpnet %1$s</string>
     <string name="about_device_info_title">Your device</string>
     <string name="about_device_info">%1$s %2$s\nAndroid version: %3$s\nSDK version: %4$d</string>
     <string name="about_account_info_title">Your account</string>
     <string name="about_account_info">\@%1$s\@%2$s\nVersion: %3$s</string>
-    <string name="about_powered_by_warpdroid">Powered by Warpdroid</string>
-    <string name="about_warpdroid_license">Warpdroid is free and open-source software.
+    <string name="about_powered_by_warpdroid">Powered by Warpnet</string>
+    <string name="about_warpdroid_license">Warpnet is free and open-source software.
         It is a fork of Warpnet (https://warpnet.site, GPL-3.0) with the Warpnet API replaced
         by the Warpnet peer-to-peer transport, and is distributed under the
         GNU Affero General Public License Version 3 or later.
@@ -445,8 +444,8 @@
          * the url can be changed to link to the localized version of the license.
     -->
     <string name="about_project_site">Project website: https://warpnet.site</string>
-    <string name="about_bug_feature_request_site">Bug reports &amp; feature requests:\nhttps://github.com/Warp-net/warpdroid/issues</string>
-    <string name="about_warpdroid_account">Warpdroid\'s Profile</string>
+    <string name="about_bug_feature_request_site">Bug reports &amp; feature requests:\nhttps://github.com/Warp-net/warpnet/issues</string>
+    <string name="about_warpdroid_account">Warpnet\'s Profile</string>
 
     <string name="post_share_content">Share content of post</string>
     <string name="post_share_link">Share link to post</string>
@@ -549,10 +548,7 @@
     <string name="profile_badge_bot_text">Bot</string>
     <string name="account_moved_description">%1$s has moved to:</string>
 
-    <string name="retweet_private">Retweet to original audience</string>
-    <string name="unretweet_private">Unretweet</string>
-
-    <string name="license_description">Warpdroid contains code and assets from the following open source projects:</string>
+    <string name="license_description">Warpnet contains code and assets from the following open source projects:</string>
     <string name="license_apache_2">Licensed under the Apache License (copy below)</string>
     <string name="license_cc_by_4">CC-BY 4.0</string>
     <string name="license_cc_by_sa_4">CC-BY-SA 4.0</string>
@@ -928,7 +924,7 @@
     <string name="moderation_warning_action_silence">Your account has been limited.</string>
     <string name="moderation_warning_action_suspend">Your account has been suspended.</string>
 
-    <string name="unknown_notification_type_explanation">Warpdroid does not recognize this notification type and can\'t show it to you. Your server\'s web interface may be able to do so. Please also inform the Warpdroid developers so they can add support for this type! </string>
+    <string name="unknown_notification_type_explanation">Warpnet does not recognize this notification type and can\'t show it to you. Your server\'s web interface may be able to do so. Please also inform the Warpnet developers so they can add support for this type! </string>
 
     <string name="poll">Poll</string>
     <plurals name="media_attachments">
@@ -979,7 +975,7 @@
     <string name="report_category_other_title">It\'s something else</string>
 
     <string name="account_disconnected_title">Account disconnected</string>
-    <string name="account_disconnected_message">Warpdroid\'s login for %1$s is no longer valid. This can happen because you changed your password or revoked access for Warpdroid. Please log in again.</string>
+    <string name="account_disconnected_message">Warpnet\'s login for %1$s is no longer valid. This can happen because you changed your password or revoked access for Warpnet. Please log in again.</string>
 
     <string name="filter_context_home">Home and Lists</string>
 

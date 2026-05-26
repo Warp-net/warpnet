@@ -59,7 +59,7 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.viewthread.ViewThreadActivity
 import site.warpnet.warpdroid.entity.Notification
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.ui.WarpdroidTheme
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 
@@ -207,7 +207,7 @@ class NotificationsActivity : BaseActivity() {
 
     @Composable
     private fun FollowRequestList(
-        requests: List<TimelineAccount>,
+        requests: List<TimelineUser>,
         onAuthorize: (String) -> Unit,
         onReject: (String) -> Unit,
     ) {
@@ -234,7 +234,7 @@ class NotificationsActivity : BaseActivity() {
 
     @Composable
     private fun FollowRequestRow(
-        account: TimelineAccount,
+        account: TimelineUser,
         onAuthorize: () -> Unit,
         onReject: () -> Unit,
         onOpen: () -> Unit,

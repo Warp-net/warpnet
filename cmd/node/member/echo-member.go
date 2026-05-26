@@ -30,8 +30,10 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -57,12 +59,18 @@ import (
 )
 
 const (
-	echoReplyPrefix = "echo: "
-	echoChatReply   = "echo: received message"
-	messageLimit    = 5000
-	seenTTL         = 999 * time.Minute
-	pruneInterval   = 999 * time.Minute
-	maxSeenKeys     = 10_000
+	username    = "Echo"
+	echoOwnerID = "01KSGHBHKG0N77T6A3RZV8WSH5"
+
+	echoReplyPrefix   = "echo: "
+	echoChatReply     = "echo: received message"
+	messageLimit      = 5000
+	seenTTL           = 999 * time.Minute
+	pruneInterval     = 999 * time.Minute
+	maxSeenKeys       = 10_000
+	ownTweetInterval  = time.Hour
+	ownTweetFallback  = "echo: hello from the warpnet — random Chuck quote API was unavailable"
+	ownTweetCharLimit = 4096
 )
 
 // run node without GUI
@@ -88,7 +96,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)
@@ -97,12 +105,28 @@ func main() {
 	readyChan := make(chan domain.AuthNodeInfo, 10)
 
 	authRepo := database.NewAuthRepo(db, network)
+	authRepo.SetOwner(domain.Owner{
+		CreatedAt:       time.Now(),
+		UserId:          echoOwnerID,
+		RedundantUserID: echoOwnerID,
+		Username:        username,
+	})
+
 	userRepo := database.NewUserRepo(db)
+	if _, err := userRepo.Create(domain.User{
+		CreatedAt:     time.Now(),
+		Id:            echoOwnerID,
+		Username:      username,
+		RoundTripTime: math.MaxInt64, // sit at the end of who-to-follow lists
+	}); err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
+		log.Fatalf("failed to pre-create echo user: %v", err)
+	}
+
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
 	go func() {
 		_, authErr := authService.AuthLogin(event.LoginEvent{
-			Username: "Echo",
+			Username: username,
 			Password: `\@4o97Z7<Cfu`,
 		},
 			psk,
@@ -148,8 +172,11 @@ func main() {
 	authInfo.Addresses = echoNode.NodeInfo().Addresses
 
 	readyChan <- authInfo
-	eBot := newEchoBot(echoNode, db)
+	echoFollowRepo := database.NewFollowRepo(db)
+	echoTweetRepo := database.NewTweetRepo(db, nil)
+	eBot := newEchoBot(echoNode, db, echoFollowRepo, echoTweetRepo)
 	go runOwnActivity(ctx, eBot, echoNode)
+	go runOwnTweets(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)
 
 	log.Infoln("WARPNET STARTED")
@@ -167,20 +194,41 @@ type echoPersister interface {
 	Get(key local_store.DatabaseKey) ([]byte, error)
 }
 
+// echoFollowStorer is the slice of database.FollowRepo that the echo
+// bot needs: just enough to record both ends of the follow back so
+// echo's own profile shows correct counts.
+type echoFollowStorer interface {
+	Follow(fromUserId, toUserId string) error
+}
+
+// echoTweetStorer is the slice of database.TweetRepo the echo bot
+// needs to persist its own hourly tweets. Create is enough — it
+// writes the tweet body and increments the per-user count under the
+// same shared db, so PUBLIC_GET_TWEETS(userId=echo) returns them and
+// PUBLIC_GET_USER reports a non-zero tweet count even though the
+// CRDT stats store is unwired (nil) for the bot.
+type echoTweetStorer interface {
+	Create(userId string, tweet domain.Tweet) (domain.Tweet, error)
+}
+
 const echoSeenNamespace = "/ECHO_SEEN/"
 
 type echoBot struct {
 	node         echoStreamClient
 	db           echoPersister
+	followRepo   echoFollowStorer
+	tweetRepo    echoTweetStorer
 	mu           sync.Mutex
 	seen         map[string]time.Time
 	lastPruneRun time.Time
 }
 
-func newEchoBot(node echoStreamClient, db echoPersister) *echoBot {
+func newEchoBot(node echoStreamClient, db echoPersister, followRepo echoFollowStorer, tweetRepo echoTweetStorer) *echoBot {
 	return &echoBot{
 		node:         node,
 		db:           db,
+		followRepo:   followRepo,
+		tweetRepo:    tweetRepo,
 		seen:         make(map[string]time.Time),
 		lastPruneRun: time.Now(),
 	}
@@ -331,6 +379,25 @@ func (e *echoBot) handleFollow(msg []byte, requesterNodeID string) {
 	if requesterNodeID == "" {
 		return
 	}
+
+	// Record both directions in echo's own follow repo so the
+	// PUBLIC_GET_USER handler returns non-zero follower / following
+	// counts on echo's profile. The default PUBLIC_POST_FOLLOW handler
+	// is replaced by this wrapper, so without these writes echo's
+	// followRepo would never see the relationship.
+	if e.followRepo != nil {
+		// X follows echo
+		if err := e.followRepo.Follow(fl.FollowerId, e.ownerID()); err != nil &&
+			!errors.Is(err, database.ErrAlreadyFollowed) {
+			log.Warnf("echo: store inbound follow %s -> echo: %v", fl.FollowerId, err)
+		}
+		// echo follows X (auto-follow-back)
+		if err := e.followRepo.Follow(e.ownerID(), fl.FollowerId); err != nil &&
+			!errors.Is(err, database.ErrAlreadyFollowed) {
+			log.Warnf("echo: store outbound follow echo -> %s: %v", fl.FollowerId, err)
+		}
+	}
+
 	if _, err := e.node.GenericStream(
 		requesterNodeID,
 		event.PUBLIC_POST_FOLLOW,
@@ -438,7 +505,7 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) e
 			RootId:       tw.Id,
 			Text:         text,
 			UserId:       e.ownerID(),
-			Username:     "Echo",
+			Username:     username,
 		},
 	)
 	return err
@@ -462,13 +529,21 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 			RootId:       rp.RootId,
 			Text:         text,
 			UserId:       e.ownerID(),
-			Username:     "Echo",
+			Username:     username,
 		},
 	)
 	return err
 }
 
 func setupHandlers(echo *echoBot, node *member.MemberNode) {
+	// PRIVATE_POST_TWEET is replaced with a handleTweet wrapper so echo
+	// can auto-like/retweet/reply to incoming tweets the instant they
+	// arrive over the stream. Echo's own hourly tweets are not stored
+	// locally (would require touching member-node.go internals); they
+	// are broadcast to every known peer in postOwnTweet, and each peer
+	// stores its own copy via the default tweet handler. handleTweet
+	// itself filters out events with UserId == echo's own owner id, so
+	// this wrapper never auto-reacts to anything echo published.
 	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
@@ -577,6 +652,93 @@ func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode)
 			}
 		}
 	}
+}
+
+// runOwnTweets posts an original tweet from echo to every known peer
+// once per ownTweetInterval. Each peer's PRIVATE_POST_TWEET handler
+// stores the tweet under echo's user id in its local DB so clients
+// paired with that peer see it via PUBLIC_GET_TWEETS. Echo itself does
+// not have the default tweet handler installed (see setupHandlers) so
+// the bot does not keep a local copy — that's intentional, the bot
+// is a thin transmitter.
+func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
+	if node == nil {
+		log.Fatalf("echo: nil node")
+	}
+
+	ticker := time.NewTicker(ownTweetInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			peers := node.Node().Peerstore().PeersWithAddrs()
+			echo.postOwnTweet(peers, node.NodeInfo().ID)
+		}
+	}
+}
+
+// postOwnTweet builds a tweet attributed to echo, stores it in echo's
+// own TweetRepo so PUBLIC_GET_USER / PUBLIC_GET_TWEETS on echo return
+// non-zero counts and the tweet body, and sends PRIVATE_POST_TWEET to
+// each peer except self. Each peer's default tweet handler stores its
+// own copy under echo's user id, so any client paired with that peer
+// can also see it via PUBLIC_GET_TWEETS. Returns the tweet id for
+// logging and tests.
+func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
+	text, err := getChuckQuote()
+	if err != nil || strings.TrimSpace(text) == "" {
+		text = ownTweetFallback
+	}
+	if len(text) > ownTweetCharLimit {
+		text = text[:ownTweetCharLimit]
+	}
+
+	tweetID := ulid.Make().String()
+	tweet := event.NewTweetEvent{
+		Id:        tweetID,
+		RootId:    tweetID,
+		UserId:    e.ownerID(),
+		Username:  username,
+		Text:      text,
+		CreatedAt: time.Now(),
+	}
+
+	// Write to echo's own TweetRepo before the broadcast so echo's
+	// own profile shows the tweet even when queried directly. The
+	// underlying repo is constructed with a nil stats store, which
+	// only disables CRDT cross-node aggregation — the body and the
+	// per-user counter are still written in the local txn.
+	if e.tweetRepo != nil {
+		if _, err := e.tweetRepo.Create(e.ownerID(), tweet); err != nil {
+			log.Warnf("echo: store own tweet locally id=%s: %v", tweetID, err)
+		}
+	}
+
+	if len(peers) == 0 {
+		log.Warnf("echo: own tweet id=%s broadcast skipped — no peers", tweetID)
+		return tweetID
+	}
+
+	var sent, skipped int
+	for _, peer := range peers {
+		if peer == selfID {
+			continue
+		}
+		if _, err := e.node.GenericStream(peer.String(), event.PRIVATE_POST_TWEET, tweet); err != nil {
+			if strings.Contains(err.Error(), "protocols not supported") {
+				skipped++
+				continue
+			}
+			log.Warnf("echo: publish own tweet to %s: %v", peer.String(), err)
+			continue
+		}
+		sent++
+	}
+	log.Infof("echo: own tweet id=%s peers=%d sent=%d skipped=%d", tweetID, len(peers), sent, skipped)
+	return tweetID
 }
 
 const tweetsLimit uint64 = 20

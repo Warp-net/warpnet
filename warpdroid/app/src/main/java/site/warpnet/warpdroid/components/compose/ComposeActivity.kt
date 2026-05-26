@@ -923,8 +923,32 @@ class ComposeActivity :
             enableButtons(true, viewModel.editing)
         } else if (characterCount <= maximumTootCharacters) {
             lifecycleScope.launch {
-                viewModel.sendStatus(contentText, spoilerText, activeAccount.id)
-                deleteDraftAndFinish()
+                try {
+                    viewModel.sendStatus(contentText, spoilerText, activeAccount.id)
+                    deleteDraftAndFinish()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Preserve structured cancellation — re-throw so the
+                    // Activity destroy / send-cancel path tears down the
+                    // coroutine cleanly instead of running UI work after.
+                    throw e
+                } catch (e: IllegalStateException) {
+                    // sendStatus check()s for media attached on the
+                    // quote-retweet path; the message describes the
+                    // specific cause so surface it instead of the
+                    // generic error toast.
+                    android.util.Log.w("ComposeActivity", "sendStatus failed", e)
+                    displayTransientMessage(R.string.error_compose_quote_with_media)
+                    enableButtons(true, viewModel.editing)
+                } catch (e: Exception) {
+                    // sendStatus throws on the quote-retweet path when the
+                    // backend call fails. Keep the user's typed text on
+                    // screen and re-enable the button so they can retry
+                    // instead of losing the draft to a silent fire-and-
+                    // forget failure.
+                    android.util.Log.w("ComposeActivity", "sendStatus failed", e)
+                    displayTransientMessage(R.string.error_generic)
+                    enableButtons(true, viewModel.editing)
+                }
             }
         } else {
             binding.composeEditField.error = getString(R.string.error_compose_character_limit)
@@ -1204,7 +1228,13 @@ class ComposeActivity :
         val modifiedInitialState: Boolean? = null,
         val language: String? = null,
         val statusId: String? = null,
-        val kind: ComposeKind? = null
+        val kind: ComposeKind? = null,
+        // Quote retweet: when set the composed tweet is sent via the
+        // PUBLIC_POST_RETWEET wire with the typed text used as the
+        // comment instead of a fresh PRIVATE_POST_TWEET. quotedUserId
+        // is the author of the source tweet (needed for the wire DTO).
+        val quotedTweetId: String? = null,
+        val quotedUserId: String? = null
     ) : Parcelable
 
     companion object {

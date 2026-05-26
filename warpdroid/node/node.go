@@ -25,7 +25,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 )
@@ -281,7 +280,7 @@ func (c *clientNode) connect(peerInfo string) error {
 	// Peerstore is internally thread-safe and host.Connect can take 30s —
 	// don't hold c.mu across either, or pause/resume/disconnect would
 	// block on the dial.
-	c.host.Peerstore().AddAddrs(peerID, addrs, peerstore.PermanentAddrTTL)
+	c.host.Peerstore().AddAddrs(peerID, addrs, 8*time.Hour)
 
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
@@ -507,6 +506,6 @@ func (c *clientNode) refreshPeerAddrs(addrs string) error {
 	if len(maddrs) == 0 {
 		return nil
 	}
-	c.host.Peerstore().AddAddrs(peerID, maddrs, peerstore.PermanentAddrTTL)
+	c.host.Peerstore().AddAddrs(peerID, maddrs, 8*time.Hour)
 	return nil
 }

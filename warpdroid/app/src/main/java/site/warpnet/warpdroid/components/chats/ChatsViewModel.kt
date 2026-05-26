@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import site.warpnet.transport.dto.WarpnetChat
 import site.warpnet.warpdroid.db.AccountManager
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
 @HiltViewModel
@@ -28,7 +28,7 @@ class ChatsViewModel @Inject constructor(
 
     data class ChatRow(
         val chat: WarpnetChat,
-        val other: TimelineAccount?,
+        val other: TimelineUser?,
     )
 
     data class State(
@@ -58,7 +58,7 @@ class ChatsViewModel @Inject constructor(
             try {
                 val (chats, _) = repo.getChats(userId)
                 val rows = chats.map { chat ->
-                    val other = runCatching { repo.getTimelineAccount(chat.otherUserId) }.getOrNull()
+                    val other = runCatching { repo.getTimelineUser(chat.otherUserId) }.getOrNull()
                     ChatRow(chat = chat, other = other)
                 }
                 _state.update { it.copy(chats = rows, loading = false) }

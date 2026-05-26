@@ -34,6 +34,7 @@ const (
 	PRIVATE_GET_STATS          = "/private/get/admin/stats/0.0.0"
 	// moderation
 	PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
+	PUBLIC_POST_REPORT            = "/public/post/report/0.0.0"
 	// application
 	PRIVATE_DELETE_CHAT       = "/private/delete/chat/0.0.0"
 	PRIVATE_DELETE_MESSAGE    = "/private/delete/message/0.0.0"

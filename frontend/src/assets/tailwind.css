@@ -251,10 +251,48 @@ button.rounded-full > i.fa {
     background-color: theme("colors.mastodon.card") !important;
   }
 
+  /* Light surfaces used inline (panels, modals, chat header / footer,
+     dropdowns, focused input) need the same card mapping — otherwise
+     they stay glaring white in dark mode and any text on top becomes
+     a contrast failure. */
+  .dark .bg-white,
+  .dark .focus\:bg-white:focus,
+  .dark .bg-gray-100 {
+    background-color: theme("colors.darktheme.card") !important;
+  }
+  .mastodon .bg-white,
+  .mastodon .focus\:bg-white:focus,
+  .mastodon .bg-gray-100 {
+    background-color: theme("colors.mastodon.card") !important;
+  }
+
+  /* bg-lighter is used both as a static surface (incoming chat bubble,
+     pill-shaped input idle state) and as hover state. The hover form
+     already remaps to foreground; map the static form to foreground
+     too so the two stay consistent. */
+  .dark .bg-lighter {
+    background-color: theme("colors.darktheme.foreground") !important;
+  }
+  .mastodon .bg-lighter {
+    background-color: theme("colors.mastodon.foreground") !important;
+  }
+
   .dark .hover\:bg-lighter:hover {
     background-color: theme("colors.darktheme.foreground") !important;
   }
   .mastodon .hover\:bg-lighter:hover {
+    background-color: theme("colors.mastodon.foreground") !important;
+  }
+
+  /* Some templates use hover:bg-lightest / hover:bg-gray-100 instead
+     of bg-lighter (e.g. SideNav dropdown items, Messages row). Keep
+     them on the same hover color. */
+  .dark .hover\:bg-lightest:hover,
+  .dark .hover\:bg-gray-100:hover {
+    background-color: theme("colors.darktheme.foreground") !important;
+  }
+  .mastodon .hover\:bg-lightest:hover,
+  .mastodon .hover\:bg-gray-100:hover {
     background-color: theme("colors.mastodon.foreground") !important;
   }
 
@@ -270,6 +308,28 @@ button.rounded-full > i.fa {
   }
   .mastodon .text-dark {
     color: theme("colors.mastodon.secondary") !important;
+  }
+
+  /* Text classes meant for light backgrounds: black + neutral grays.
+     Map them onto the dark-theme text color so they stay legible on
+     the now-dark surfaces above. text-white is intentionally left
+     alone — it's used on bg-blue / bg-darkblue buttons which keep
+     their colors in every theme. */
+  .dark .text-black,
+  .dark .text-gray-500,
+  .dark .text-gray-600,
+  .dark .text-gray-700,
+  .dark .text-gray-800,
+  .dark .text-gray-900 {
+    color: theme("colors.darktheme.text") !important;
+  }
+  .mastodon .text-black,
+  .mastodon .text-gray-500,
+  .mastodon .text-gray-600,
+  .mastodon .text-gray-700,
+  .mastodon .text-gray-800,
+  .mastodon .text-gray-900 {
+    color: theme("colors.mastodon.text") !important;
   }
 }
 

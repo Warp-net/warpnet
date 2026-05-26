@@ -58,5 +58,5 @@ data class PreviewCard(
 data class PreviewCardAuthor(
     val name: String,
     val url: String,
-    val account: TimelineAccount?
+    val account: TimelineUser?
 )

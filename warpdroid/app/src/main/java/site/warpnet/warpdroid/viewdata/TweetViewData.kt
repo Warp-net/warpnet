@@ -19,7 +19,7 @@ import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.Quote
 import site.warpnet.warpdroid.entity.Tweet
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 
 interface LoadMoreViewData {
     val isLoading: Boolean
@@ -55,7 +55,7 @@ sealed class TweetViewData {
          */
         val isCollapsed: Boolean,
         val isDetailed: Boolean = false,
-        val repliedToAccount: TimelineAccount? = null,
+        val repliedToAccount: TimelineUser? = null,
         val filter: Filter? = null,
         val filterActive: Boolean,
         val quote: QuoteViewData?

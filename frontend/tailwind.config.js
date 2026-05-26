@@ -53,8 +53,14 @@ module.exports = {
           text: "#f6bcdc",
           secondary: "#ffffff",
           accent: "#C5007F",
-          input: "#ea86ac",
-          card: "#ea86ac",
+          // Elevated surfaces (cards, inputs) must be darker than the
+          // text colors, not lighter — the previous #ea86ac put pale
+          // pink under text-darktheme-text (light pink) and white,
+          // both became invisible. #4d0133 sits between background
+          // and foreground so it reads as a subtle elevation without
+          // washing out either text variant.
+          input: "#4d0133",
+          card: "#4d0133",
         },
         mastodon: {
           background: "#2d0136",
@@ -62,8 +68,10 @@ module.exports = {
           text: "#c156f5",
           secondary: "#ffffff",
           accent: "#5d1a98",
-          input: "#c07af5",
-          card: "#d8acea",
+          // Same fix as darktheme: surfaces darker than text, not
+          // paler. Sits between background and foreground.
+          input: "#4a026e",
+          card: "#4a026e",
         },
       },
     },

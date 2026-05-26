@@ -54,7 +54,13 @@ fun WarpdroidAsyncImage(
     contentScale: ContentScale = ContentScale.Fit,
     alignment: Alignment = Alignment.Center,
 ) {
-    val context = LocalContext.current
+    // Bind Glide to the Application context, not the hosting Activity.
+    // Activity-scoped RequestManagers refuse work after onDestroy with
+    // "You cannot start a load for a destroyed activity"; since we own
+    // the load lifecycle via DisposableEffect anyway, the application-
+    // scoped RequestManager is the safe choice and never throws on
+    // teardown.
+    val context = LocalContext.current.applicationContext
     var bitmap by remember(model) { mutableStateOf<Bitmap?>(null) }
     var failed by remember(model) { mutableStateOf(model == null) }
     // Layout dimensions are captured once the Image lays out and reused as
@@ -87,7 +93,11 @@ fun WarpdroidAsyncImage(
             .override(layoutWidth, layoutHeight)
             .into(target)
         onDispose {
-            Glide.with(context).clear(target)
+            // Application-scoped RequestManager survives the host
+            // Activity / Fragment destroy that this effect's onDispose
+            // is racing with. Wrap in runCatching anyway in case the
+            // process is on its way down.
+            runCatching { Glide.with(context).clear(target) }
         }
     }
 

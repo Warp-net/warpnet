@@ -23,7 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.notifications.NotificationsViewHolder
 import site.warpnet.warpdroid.databinding.ItemFollowRequestBinding
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.util.TweetDisplayOptions
@@ -61,7 +61,7 @@ class FollowRequestViewHolder(
     }
 
     fun setupWithAccount(
-        account: TimelineAccount,
+        account: TimelineUser,
         animateAvatar: Boolean,
         @Suppress("UNUSED_PARAMETER") animateEmojis: Boolean,
         showBotOverlay: Boolean
