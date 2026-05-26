@@ -78,6 +78,7 @@ import (
 const (
 	discardRatio     = 0.5
 	firstRunLockFile = "run.lock"
+	version0         = "v0" // protect database state in case of schema changes
 	sequenceKey      = "/SEQUENCE"
 
 	defaultDiscardRatioGC = 0.5
@@ -170,6 +171,7 @@ func New(
 	dbPath string,
 	o *Options,
 ) (*DB, error) {
+	dbPath = filepath.Join(dbPath, version0)
 	badgerOpts := badger.
 		DefaultOptions(dbPath).
 		WithSyncWrites(false).
