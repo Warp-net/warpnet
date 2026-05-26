@@ -476,7 +476,10 @@ func (db *DB) NewTxn() (WarpTransactioner, error) {
 		return nil, ErrNotRunning
 	}
 	wtx := &warpTxn{db.badger.NewTransaction(true)}
-	runtime.SetFinalizer(wtx, func(tx *warpTxn) { tx.Rollback() })
+	runtime.SetFinalizer(wtx, func(tx *warpTxn) {
+		defer func() { recover() }()
+		tx.Rollback()
+	})
 	return wtx, nil
 }
 
