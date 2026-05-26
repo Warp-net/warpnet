@@ -16,19 +16,20 @@
         <p :id="descId" class="text-sm text-dark mb-3">
           Reports are sent to moderators on the network. The reported user is not notified.
         </p>
-        <fieldset class="space-y-2">
-          <legend class="sr-only">Reason</legend>
-          <label v-for="opt in options" :key="opt.value" class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              :name="radioGroupName"
-              v-model="selected"
-              :value="opt.value"
-              class="cursor-pointer"
-            />
-            <span class="text-sm">{{ opt.label }}</span>
-          </label>
-        </fieldset>
+        <label :for="reasonInputId" class="block text-sm font-medium mb-1">
+          Reason
+        </label>
+        <textarea
+          :id="reasonInputId"
+          v-model="reason"
+          :maxlength="maxLen"
+          rows="4"
+          placeholder="Describe why you're reporting this."
+          class="w-full border border-lighter rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+        ></textarea>
+        <p class="text-xs text-dark mt-1 text-right" aria-live="polite">
+          {{ trimmedReason.length }} / {{ maxLen }}
+        </p>
       </div>
       <div class="flex justify-end gap-2 px-5 py-3 border-t border-lighter">
         <button
@@ -36,7 +37,7 @@
           class="px-4 py-1 rounded-full border border-lighter hover:bg-lighter"
         >Cancel</button>
         <button
-          :disabled="!selected || submitting"
+          :disabled="!canSubmit"
           @click.stop="submit"
           class="px-4 py-1 rounded-full font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
         >{{ submitting ? "Sending..." : "Submit report" }}</button>
@@ -46,6 +47,11 @@
 </template>
 
 <script>
+// Backend caps Report.reason at MaxReportReasonLen = 256 (see
+// event/report.go). Keep the UI in sync so the user sees the limit
+// before the server rejects.
+const MAX_REASON_LEN = 256;
+
 export default {
   name: "ReportDialog",
   props: {
@@ -56,26 +62,29 @@ export default {
   data() {
     // Uniqued per instance so multiple report dialogs on the same
     // page (e.g. one in a tweet list, another on a profile) don't
-    // share ARIA ids or a radio-group name.
+    // share ARIA ids.
     const uid = Math.random().toString(36).slice(2, 8);
     return {
-      selected: "",
+      reason: "",
       submitting: false,
       titleId: `report-dialog-title-${uid}`,
       descId: `report-dialog-desc-${uid}`,
-      radioGroupName: `report-reason-${uid}`,
-      options: [
-        { value: "spam", label: "Spam" },
-        { value: "abuse", label: "Abuse or harassment" },
-        { value: "illegal", label: "Illegal content" },
-        { value: "nsfw", label: "NSFW / explicit content" },
-      ],
+      reasonInputId: `report-dialog-reason-${uid}`,
+      maxLen: MAX_REASON_LEN,
     };
+  },
+  computed: {
+    trimmedReason() {
+      return this.reason.trim();
+    },
+    canSubmit() {
+      return !this.submitting && this.trimmedReason.length > 0;
+    },
   },
   watch: {
     show(val) {
       if (val) {
-        this.selected = "";
+        this.reason = "";
         this.submitting = false;
       }
     },
@@ -86,9 +95,9 @@ export default {
       this.$emit("cancel");
     },
     submit() {
-      if (!this.selected) return;
+      if (!this.canSubmit) return;
       this.submitting = true;
-      this.$emit("submit", this.selected);
+      this.$emit("submit", this.trimmedReason);
     },
   },
 };
