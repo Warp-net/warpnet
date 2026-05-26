@@ -59,6 +59,9 @@ import (
 )
 
 const (
+	username    = "Echo"
+	echoOwnerID = "01KSGHBHKG0N77T6A3RZV8WSH5"
+
 	echoReplyPrefix   = "echo: "
 	echoChatReply     = "echo: received message"
 	messageLimit      = 5000
@@ -93,10 +96,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Echo is a bot — its state is ephemeral. Run the local store in
-	// memory so the follow / tweet rows it persists for its own
-	// PUBLIC_GET_USER / PUBLIC_GET_TWEETS responses live for the
-	// process lifetime only, no on-disk footprint.
 	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
@@ -105,30 +104,19 @@ func main() {
 	}
 	readyChan := make(chan domain.AuthNodeInfo, 10)
 
-	const echoOwnerID = "01KSGHBHKG0N77T6A3RZV8WSH5"
-
 	authRepo := database.NewAuthRepo(db, network)
 	authRepo.SetOwner(domain.Owner{
 		CreatedAt:       time.Now(),
 		UserId:          echoOwnerID,
 		RedundantUserID: echoOwnerID,
-		Username:        "Echo",
+		Username:        username,
 	})
 
 	userRepo := database.NewUserRepo(db)
-	// Pre-create the User row that AuthLogin's cold-start branch would
-	// otherwise create. We pre-set Owner above so AuthLogin sees a
-	// non-empty owner.UserId and skips that whole branch — including
-	// the userRepo.Create call. Without this row, the subsequent
-	// userRepo.Update inside AuthLogin fails with ErrUserNotFound and
-	// every PUBLIC_GET_USER request to Echo responds "user not found",
-	// which means observers can't resolve Echo's profile and Echo's
-	// broadcast tweets render with blank authors / get filtered out.
 	if _, err := userRepo.Create(domain.User{
 		CreatedAt:     time.Now(),
 		Id:            echoOwnerID,
-		NodeId:        "none", // AuthLogin overwrites once libp2p comes up
-		Username:      "Echo",
+		Username:      username,
 		RoundTripTime: math.MaxInt64, // sit at the end of who-to-follow lists
 	}); err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
 		log.Fatalf("failed to pre-create echo user: %v", err)
@@ -138,7 +126,7 @@ func main() {
 
 	go func() {
 		_, authErr := authService.AuthLogin(event.LoginEvent{
-			Username: "Echo",
+			Username: username,
 			Password: `\@4o97Z7<Cfu`,
 		},
 			psk,
@@ -184,12 +172,6 @@ func main() {
 	authInfo.Addresses = echoNode.NodeInfo().Addresses
 
 	readyChan <- authInfo
-	// Echo's own FollowRepo and TweetRepo over the shared db so the
-	// bot can persist follow-backs and its hourly tweets without
-	// touching member-node.go internals. TweetRepo takes a nil stats
-	// store — that just disables CRDT cross-node aggregation; the
-	// local writes (tweet body, per-user counter) still happen, which
-	// is what PUBLIC_GET_USER / PUBLIC_GET_TWEETS on echo read from.
 	echoFollowRepo := database.NewFollowRepo(db)
 	echoTweetRepo := database.NewTweetRepo(db, nil)
 	eBot := newEchoBot(echoNode, db, echoFollowRepo, echoTweetRepo)
@@ -523,7 +505,7 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) e
 			RootId:       tw.Id,
 			Text:         text,
 			UserId:       e.ownerID(),
-			Username:     "Echo",
+			Username:     username,
 		},
 	)
 	return err
@@ -547,7 +529,7 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 			RootId:       rp.RootId,
 			Text:         text,
 			UserId:       e.ownerID(),
-			Username:     "Echo",
+			Username:     username,
 		},
 	)
 	return err
@@ -719,7 +701,7 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 		Id:        tweetID,
 		RootId:    tweetID,
 		UserId:    e.ownerID(),
-		Username:  "Echo",
+		Username:  username,
 		Text:      text,
 		CreatedAt: time.Now(),
 	}
