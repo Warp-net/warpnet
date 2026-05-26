@@ -230,6 +230,8 @@ func (m *warpnetMastodonPseudoNode) Route(r stream.WarpRoute, payload any) (_ []
 	case event.PUBLIC_GET_IMAGE:
 		_ = json.Unmarshal(data, &getImage)
 		resp, err = m.getImageHandler(getImage.Key)
+	case event.PUBLIC_POST_VIEW:
+		resp = event.ViewsCountResponse{Count: 1}
 	default:
 		msg := fmt.Sprintf("mastodon: unknown route %s", r.String())
 		return nil, warpnet.WarpError(msg)

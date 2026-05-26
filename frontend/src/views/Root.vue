@@ -140,7 +140,7 @@ resulting from the use or misuse of this software.
                 <p>
                   I acknowledge that I am solely responsible for the content I upload to WarpNet.
                 </p>
-                <input class="mt-1 ml-2 mr-2" type="checkbox" v-model="userResponsibility" />
+                <input class="mt-2 ml-4 mr-4" type="checkbox" v-model="userResponsibility" />
               </div>
             </div>
 
@@ -151,7 +151,7 @@ resulting from the use or misuse of this software.
                   I understand that all my data is stored locally on my device, and if I lose access to this device,
                   my WarpNet account will be permanently lost.
                 </p>
-                <input class="mt-1 ml-2 mr-2" type="checkbox" v-model="localStorageLoss" />
+                <input class="mt-2 ml-4 mr-4" type="checkbox" v-model="localStorageLoss" />
               </div>
             </div>
 
@@ -161,7 +161,7 @@ resulting from the use or misuse of this software.
                 <p>
                   I understand that WarpNet may introduce sponsored content or advertisements in the future.
                 </p>
-                <input class="mt-1 ml-2 mr-2" type="checkbox" v-model="futureAds" />
+                <input class="mt-2 ml-4 mr-4" type="checkbox" v-model="futureAds" />
               </div>
             </div>
           </div>
