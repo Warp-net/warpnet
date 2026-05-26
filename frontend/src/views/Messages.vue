@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div id="app" class="flex h-full w-full">
+  <div id="app" class="flex h-screen w-full">
     <!-- Sidebar -->
     <SideNav />
 
