@@ -236,6 +236,8 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 	}
 
 	select {
+	case <-s.stopChan:
+		return
 	case s.discoveryChan <- discoveredPeer{
 		ID:     pi.ID,
 		Addrs:  pi.Addrs,

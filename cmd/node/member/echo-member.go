@@ -68,7 +68,7 @@ const (
 	seenTTL           = 999 * time.Minute
 	pruneInterval     = 999 * time.Minute
 	maxSeenKeys       = 10_000
-	ownTweetInterval  = time.Hour
+	ownTweetInterval  = 5 * time.Minute
 	ownTweetFallback  = "echo: hello from the warpnet — random Chuck quote API was unavailable"
 	ownTweetCharLimit = 4096
 )
@@ -194,19 +194,10 @@ type echoPersister interface {
 	Get(key local_store.DatabaseKey) ([]byte, error)
 }
 
-// echoFollowStorer is the slice of database.FollowRepo that the echo
-// bot needs: just enough to record both ends of the follow back so
-// echo's own profile shows correct counts.
 type echoFollowStorer interface {
 	Follow(fromUserId, toUserId string) error
 }
 
-// echoTweetStorer is the slice of database.TweetRepo the echo bot
-// needs to persist its own hourly tweets. Create is enough — it
-// writes the tweet body and increments the per-user count under the
-// same shared db, so PUBLIC_GET_TWEETS(userId=echo) returns them and
-// PUBLIC_GET_USER reports a non-zero tweet count even though the
-// CRDT stats store is unwired (nil) for the bot.
 type echoTweetStorer interface {
 	Create(userId string, tweet domain.Tweet) (domain.Tweet, error)
 }
@@ -380,11 +371,6 @@ func (e *echoBot) handleFollow(msg []byte, requesterNodeID string) {
 		return
 	}
 
-	// Record both directions in echo's own follow repo so the
-	// PUBLIC_GET_USER handler returns non-zero follower / following
-	// counts on echo's profile. The default PUBLIC_POST_FOLLOW handler
-	// is replaced by this wrapper, so without these writes echo's
-	// followRepo would never see the relationship.
 	if e.followRepo != nil {
 		// X follows echo
 		if err := e.followRepo.Follow(fl.FollowerId, e.ownerID()); err != nil &&
@@ -536,14 +522,6 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 }
 
 func setupHandlers(echo *echoBot, node *member.MemberNode) {
-	// PRIVATE_POST_TWEET is replaced with a handleTweet wrapper so echo
-	// can auto-like/retweet/reply to incoming tweets the instant they
-	// arrive over the stream. Echo's own hourly tweets are not stored
-	// locally (would require touching member-node.go internals); they
-	// are broadcast to every known peer in postOwnTweet, and each peer
-	// stores its own copy via the default tweet handler. handleTweet
-	// itself filters out events with UserId == echo's own owner id, so
-	// this wrapper never auto-reacts to anything echo published.
 	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
@@ -654,13 +632,6 @@ func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode)
 	}
 }
 
-// runOwnTweets posts an original tweet from echo to every known peer
-// once per ownTweetInterval. Each peer's PRIVATE_POST_TWEET handler
-// stores the tweet under echo's user id in its local DB so clients
-// paired with that peer see it via PUBLIC_GET_TWEETS. Echo itself does
-// not have the default tweet handler installed (see setupHandlers) so
-// the bot does not keep a local copy — that's intentional, the bot
-// is a thin transmitter.
 func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 	if node == nil {
 		log.Fatalf("echo: nil node")
@@ -680,13 +651,6 @@ func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 	}
 }
 
-// postOwnTweet builds a tweet attributed to echo, stores it in echo's
-// own TweetRepo so PUBLIC_GET_USER / PUBLIC_GET_TWEETS on echo return
-// non-zero counts and the tweet body, and sends PRIVATE_POST_TWEET to
-// each peer except self. Each peer's default tweet handler stores its
-// own copy under echo's user id, so any client paired with that peer
-// can also see it via PUBLIC_GET_TWEETS. Returns the tweet id for
-// logging and tests.
 func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
 	text, err := getChuckQuote()
 	if err != nil || strings.TrimSpace(text) == "" {
@@ -706,11 +670,6 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 		CreatedAt: time.Now(),
 	}
 
-	// Write to echo's own TweetRepo before the broadcast so echo's
-	// own profile shows the tweet even when queried directly. The
-	// underlying repo is constructed with a nil stats store, which
-	// only disables CRDT cross-node aggregation — the body and the
-	// per-user counter are still written in the local txn.
 	if e.tweetRepo != nil {
 		if _, err := e.tweetRepo.Create(e.ownerID(), tweet); err != nil {
 			log.Warnf("echo: store own tweet locally id=%s: %v", tweetID, err)
