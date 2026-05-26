@@ -57,7 +57,6 @@ resulting from the use or misuse of this software.
         {{ revealPassword ? "Hide password" : "Reveal password" }}
       </button>
     </div>
-    <PasswordRules :password="password" />
     <div class="flex justify-center mt-6">
       <button
         v-if="!isLoading"
@@ -85,7 +84,6 @@ export default {
   name: "LogInComponent",
   components: {
     ProgressBar: defineAsyncComponent(() => import('./ProgressBar.vue')),
-    PasswordRules: defineAsyncComponent(() => import('./PasswordRules.vue')),
   },
   data() {
     return {
