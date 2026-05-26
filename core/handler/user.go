@@ -30,6 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
@@ -155,12 +156,11 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 
 	var possibleError event.ResponseError
 	if _ = json.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
-		// Peer is reachable but returned a structured error (most
-		// commonly "user not found" — the peer doesn't have this user
-		// cached). Stop here: the next json.Unmarshal into `user` would
-		// silently succeed against the ResponseError JSON and zero out
-		// the cached Id/Username/Bio.
-		log.Errorf("stream: unmarshal other user error response: %v", possibleError)
+		if strings.Contains(possibleError.Message, "user not found") {
+			user.IsOffline = true
+		} else {
+			log.Errorf("stream: unmarshal other user error response: %v", possibleError)
+		}
 		return user
 	}
 
