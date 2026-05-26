@@ -474,7 +474,15 @@ func (db *DB) NewTxn() (WarpTransactioner, error) {
 		return nil, ErrNotRunning
 	}
 	wtx := &warpTxn{db.badger.NewTransaction(true)}
-	runtime.SetFinalizer(wtx, func(tx *warpTxn) { tx.Rollback() })
+	runtime.SetFinalizer(wtx, func(tx *warpTxn) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("warpTxn: finalizer recovered from panic: %v "+
+					"(likely an unclosed iterator on a leaked txn)", r)
+			}
+		}()
+		tx.Rollback()
+	})
 	return wtx, nil
 }
 
