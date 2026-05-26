@@ -124,6 +124,12 @@ func StreamNewTweetHandler(
 		if tweet.Id == "" {
 			return tweet, warpnet.WarpError("tweet handler: empty tweet id")
 		}
+		var remotePeer string
+		if s != nil && s.Conn() != nil {
+			remotePeer = s.Conn().RemotePeer().String()
+		}
+		log.Infof("tweet handler: add to timeline owner=%s author=%s tweetId=%s remotePeer=%s text=%.40q",
+			owner.UserId, tweet.UserId, tweet.Id, remotePeer, tweet.Text)
 		if err = timelineRepo.AddTweetToTimeline(owner.UserId, tweet); err != nil {
 			log.Infof("fail adding tweet to timeline: %v", err)
 		}
