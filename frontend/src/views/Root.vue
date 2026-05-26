@@ -223,6 +223,8 @@ resulting from the use or misuse of this software.
               Passwords do not match.
             </p>
 
+            <PasswordRules :password="password" />
+
             <button
               @click="revealPassword = !revealPassword"
               class="text-blue pl-2"
@@ -282,6 +284,7 @@ export default {
   components: {
     ProgressBar: defineAsyncComponent(() => import('@/components/ProgressBar.vue')),
     LogInComponent: defineAsyncComponent(() => import('@/components/LogInComponent.vue')),
+    PasswordRules: defineAsyncComponent(() => import('@/components/PasswordRules.vue')),
   },
   data() {
     return {
