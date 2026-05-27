@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
 	"github.com/Warp-net/warpnet/core/challenge"
 	"time"
 
@@ -193,6 +194,10 @@ func (m *MemberNode) Start() (err error) {
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to start node: %w", err)
+	}
+
+	if err := camouflage.EnableAlias(m.node.Node(), security.BuildWarpID(m.privKey)); err != nil {
+		return fmt.Errorf("member: failed to enable alias: %w", err)
 	}
 
 	m.pubsubService.Run(m)

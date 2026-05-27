@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
 	"github.com/Warp-net/warpnet/core/challenge"
 
 	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
@@ -67,6 +68,10 @@ type MetricsOnlinePusher interface {
 	PushStatusOffline(nodeId string)
 }
 
+type ResolverStopper interface {
+	Stop()
+}
+
 type BootstrapNode struct {
 	ctx               context.Context
 	node              *node.WarpNode
@@ -74,6 +79,7 @@ type BootstrapNode struct {
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
+	resolver          ResolverStopper
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
@@ -171,6 +177,11 @@ func (bn *BootstrapNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("bootstrap: failed to init node: %w", err)
 	}
+
+	bn.resolver, err = camouflage.EnableAliasService(bn.node.Node())
+	if err != nil {
+		return fmt.Errorf("bootstrap: failed to enable alias service: %w", err)
+	}
 	bn.setupHandlers()
 
 	bn.pubsubService.Run(bn)
@@ -265,10 +276,12 @@ func (bn *BootstrapNode) Stop() {
 	if bn == nil {
 		return
 	}
+	if bn.resolver != nil {
+		bn.resolver.Stop()
+	}
 	if bn.discService != nil {
 		bn.discService.Close()
 	}
-
 	if bn.pubsubService != nil {
 		if err := bn.pubsubService.Close(); err != nil {
 			log.Errorf("bootstrap: failed to close pubsub: %v", err)
@@ -282,6 +295,5 @@ func (bn *BootstrapNode) Stop() {
 			log.Errorf("bootstrap: failed to close memory store: %v", err)
 		}
 	}
-
 	bn.node.StopNode()
 }

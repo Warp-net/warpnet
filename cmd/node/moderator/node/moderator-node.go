@@ -28,6 +28,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
+	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
 	"sync/atomic"
 
 	"github.com/Masterminds/semver/v3"
@@ -137,7 +138,11 @@ func (mn *ModeratorNode) Start() (err error) {
 
 	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
-		return fmt.Errorf("node: failed to init node: %w", err)
+		return fmt.Errorf("moderator: failed to init node: %w", err)
+	}
+
+	if err := camouflage.EnableAlias(mn.node.Node(), security.BuildWarpID(mn.privKey)); err != nil {
+		return fmt.Errorf("moderator: failed to enable alias: %w", err)
 	}
 
 	//nolint:govet
