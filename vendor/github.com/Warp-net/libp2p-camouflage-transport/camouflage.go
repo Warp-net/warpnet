@@ -29,10 +29,17 @@ package camouflage
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/Warp-net/libp2p-camouflage-transport/aliasresolver"
+
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/transport"
@@ -44,22 +51,11 @@ import (
 )
 
 const (
-	// DefaultFragmentSize is the number of bytes per TCP segment during
-	// the handshake phase. Small values (1-3) are most effective at defeating
-	// DPI signature matching on the first segment.
 	DefaultFragmentSize = 2
-
-	// DefaultHandshakeLen is the number of initial bytes subject to
-	// fragmentation. This covers the TLS ClientHello (~500 bytes) with margin.
 	DefaultHandshakeLen = 1024
+	DefaultMaxDelay     = 5 * time.Millisecond
 
-	// DefaultMaxDelay is the upper bound for the random delay inserted
-	// between handshake fragments. Keeping this small avoids noticeable
-	// connection latency.
-	DefaultMaxDelay = 5 * time.Millisecond
-
-	defaultConnectTimeout = 60 * time.Second
-
+	defaultConnectTimeout   = 60 * time.Second
 	defaultSNI              = "www.googleapis.com"
 	defaultHandshakeTimeout = 10 * time.Second
 	defaultBrowserChrome    = "chrome"
@@ -67,8 +63,6 @@ const (
 
 type Option func(*CamouflageTransport) error
 
-// WithFragmentSize sets the number of bytes per TCP segment during the
-// handshake phase.
 func WithFragmentSize(size int) Option {
 	return func(t *CamouflageTransport) error {
 		if size > 0 {
@@ -78,7 +72,6 @@ func WithFragmentSize(size int) Option {
 	}
 }
 
-// WithHandshakeLen sets the total number of bytes subject to fragmentation.
 func WithHandshakeLen(n int) Option {
 	return func(t *CamouflageTransport) error {
 		if n > 0 {
@@ -88,8 +81,6 @@ func WithHandshakeLen(n int) Option {
 	}
 }
 
-// WithMaxDelay sets the upper bound for random inter-fragment delays.
-// Zero disables delays; negative values are ignored.
 func WithMaxDelay(d time.Duration) Option {
 	return func(t *CamouflageTransport) error {
 		if d >= 0 {
@@ -99,8 +90,6 @@ func WithMaxDelay(d time.Duration) Option {
 	}
 }
 
-// WithConnectTimeout sets the TCP connect timeout.
-// Non-positive values are ignored.
 func WithConnectTimeout(d time.Duration) Option {
 	return func(t *CamouflageTransport) error {
 		if d > 0 {
@@ -110,8 +99,6 @@ func WithConnectTimeout(d time.Duration) Option {
 	}
 }
 
-// WithSNI sets the Server Name Indication value used in the TLS
-// ClientHello. Defaults to "www.googleapis.com".
 func WithSNI(sni string) Option {
 	return func(t *CamouflageTransport) error {
 		t.sni = sni
@@ -119,9 +106,6 @@ func WithSNI(sni string) Option {
 	}
 }
 
-// WithBrowserFingerprint selects which browser's TLS fingerprint to
-// mimic. Use the Browser* constants (e.g. BrowserChrome, BrowserFirefox).
-// Defaults to Chrome if empty or unknown.
 func WithBrowserFingerprint(browser string) Option {
 	return func(t *CamouflageTransport) error {
 		t.browserFingerprint = browser
@@ -129,10 +113,6 @@ func WithBrowserFingerprint(browser string) Option {
 	}
 }
 
-// WithHandshakeTimeout sets the maximum duration for the TLS handshake.
-// Connections that do not complete the handshake within this window are
-// closed, defending against slow-handshake active probing. Non-positive
-// values are ignored.
 func WithHandshakeTimeout(d time.Duration) Option {
 	return func(t *CamouflageTransport) error {
 		if d > 0 {
@@ -142,9 +122,6 @@ func WithHandshakeTimeout(d time.Duration) Option {
 	}
 }
 
-// CamouflageTransport is a libp2p transport that wraps TCP connections with
-// real TLS camouflage (uTLS browser fingerprint) and handshake-phase
-// traffic fragmentation to evade DPI.
 type CamouflageTransport struct {
 	inner     *tcp.TcpTransport
 	upgrader  transport.Upgrader
@@ -156,19 +133,17 @@ type CamouflageTransport struct {
 	maxDelay       time.Duration
 	connectTimeout time.Duration
 
-	// TLS camouflage settings.
 	sni                string
 	browserFingerprint string
 	handshakeTimeout   time.Duration
-	camoConfig         *CamouflageConfig // built once in constructor
+	camoConfig         *CamouflageConfig
+
+	aliasMu sync.Mutex
+	alias   *aliasMode
 }
 
 var _ transport.Transport = (*CamouflageTransport)(nil)
 
-// NewCamouflageTransport creates a DPI-evasion transport. The constructor
-// signature is compatible with libp2p.Transport() dependency injection:
-// the framework injects the upgrader, resource manager, and shared TCP
-// manager automatically.
 func NewCamouflageTransport(
 	upgrader transport.Upgrader,
 	rcmgr network.ResourceManager,
@@ -202,22 +177,23 @@ func NewCamouflageTransport(
 	}
 	t.inner = inner
 
-	// Build the TLS camouflage configuration once. The server-side TLS
-	// config (including the generated certificate chain) is reused for
-	// all accepted connections.
 	cfg, err := BuildCamouflageConfig(t.sni, t.browserFingerprint, t.handshakeTimeout)
 	if err != nil {
 		log.Printf("dpi: camouflage config build failed: %v", err)
 		return nil, err
 	}
 	t.camoConfig = cfg
-
 	return t, nil
 }
 
-// Dial dials the remote peer, wrapping the raw TCP connection with
-// SpoofConn + real TLS camouflage before the Noise handshake.
 func (t *CamouflageTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (transport.CapableConn, error) {
+	if hasWarpID(raddr) {
+		a := t.currentAlias()
+		if a == nil {
+			return nil, errors.New("camouflage/alias: /warpid/ dial requested but alias mode is not enabled (call EnableAlias)")
+		}
+		return a.dial(ctx, t, raddr, p)
+	}
 	connScope, err := t.rcmgr.OpenConnection(network.DirOutbound, true, raddr)
 	if err != nil {
 		log.Printf("dpi: resource manager blocked outgoing connection to %s: %v", p, err)
@@ -251,12 +227,7 @@ func (t *CamouflageTransport) dialWithScope(
 	setLinger(rawConn, 0)
 	tryKeepAlive(rawConn, true)
 
-	// Layer 1: TCP fragmentation – fragments the TLS ClientHello into
-	// small TCP segments to defeat first-segment DPI.
 	wrapped := t.wrapConn(rawConn)
-
-	// Layer 2: Real TLS tunnel – uTLS presents a genuine browser
-	// ClientHello fingerprint; all subsequent traffic is encrypted TLS.
 	camouflaged, err := NewCamouflageConn(wrapped, true, t.camoConfig)
 	if err != nil {
 		log.Printf("dpi: camouflage connection failed: %v", err)
@@ -277,8 +248,6 @@ func (t *CamouflageTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (
 		ctx, cancel = context.WithTimeout(ctx, t.connectTimeout)
 		defer cancel()
 	}
-	// When sharedTCP (tcpreuse.ConnMgr) is available, it handles reuseport
-	// dialing internally. When absent, fall back to standard dialing.
 	if t.sharedTCP != nil {
 		return t.sharedTCP.DialContext(ctx, raddr)
 	}
@@ -286,28 +255,10 @@ func (t *CamouflageTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (
 	return d.DialContext(ctx, raddr)
 }
 
-// Listen creates a TCP listener whose accepted connections are wrapped
-// with SpoofConn + real TLS camouflage so that the TLS handshake
-// completes before the Noise upgrade.
-//
-// When sharedTCP is available, we register as DemultiplexedConnType_TLS
-// so that the tcpreuse demultiplexer routes incoming TLS ClientHello
-// connections (first byte 0x16) to this transport. Without this, the
-// shared port cannot dispatch connections to us.
 func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
-	var gated transport.GatedMaListener
-	if t.sharedTCP != nil {
-		var err error
-		gated, err = t.sharedTCP.DemultiplexedListen(laddr, tcpreuse.DemultiplexedConnType_TLS)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		mal, err := manet.Listen(laddr)
-		if err != nil {
-			return nil, err
-		}
-		gated = t.upgrader.GateMaListener(mal)
+	gated, err := t.gateListenerFor(laddr)
+	if err != nil {
+		return nil, err
 	}
 
 	camouflageList := &camouflageGatedMaListener{
@@ -321,19 +272,123 @@ func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, er
 	return t.upgrader.UpgradeGatedMaListener(t, camouflageList), nil
 }
 
-// CanDial returns true if the transport can dial the given multiaddr.
+func (t *CamouflageTransport) currentAlias() *aliasMode {
+	t.aliasMu.Lock()
+	defer t.aliasMu.Unlock()
+	return t.alias
+}
+
+func (t *CamouflageTransport) gateListenerFor(laddr ma.Multiaddr) (transport.GatedMaListener, error) {
+	if hasWarpID(laddr) {
+		a := t.currentAlias()
+		if a == nil {
+			return nil, errors.New("camouflage/alias: /warpid/ listen requested but alias mode is not enabled (call EnableAlias)")
+		}
+		sl, err := a.prepareListener(laddr)
+		if err != nil {
+			return nil, err
+		}
+		return t.upgrader.GateMaListener(sl), nil
+	}
+	if t.sharedTCP != nil {
+		return t.sharedTCP.DemultiplexedListen(laddr, tcpreuse.DemultiplexedConnType_TLS)
+	}
+	mal, err := manet.Listen(laddr)
+	if err != nil {
+		return nil, err
+	}
+	return t.upgrader.GateMaListener(mal), nil
+}
+
 func (t *CamouflageTransport) CanDial(addr ma.Multiaddr) bool {
+	if hasWarpID(addr) {
+		a := t.currentAlias()
+		return a != nil && a.canDial(addr)
+	}
 	return t.inner.CanDial(addr)
 }
 
-// Protocols returns the set of protocols handled by this transport.
+// Protocols claims /warpid/ unconditionally; the swarm reads this once
+// at AddTransport time. CanDial/Dial/Listen guard until EnableAlias.
 func (t *CamouflageTransport) Protocols() []int {
-	return t.inner.Protocols()
+	return append(t.inner.Protocols(), P_WARPID)
 }
 
-// Proxy always returns false.
+// Proxy returns true so the swarm prefers this transport for multiaddrs
+// containing /warpid/. The TCP-only dialing/listening paths are
+// unaffected: TransportForListening picks the last proxy transport along
+// the multiaddr, and a plain /tcp/ addr still selects us as the only
+// transport registered for the TCP protocol.
 func (t *CamouflageTransport) Proxy() bool {
-	return false
+	return true
+}
+
+// EnableAlias wires alias mode onto the CamouflageTransport registered
+// on h's swarm. warpID="" makes the host dial-only. Lower-cases input.
+func EnableAlias(h host.Host, warpID string) error {
+	if h == nil {
+		return errors.New("camouflage/alias: host is nil")
+	}
+	finder, ok := h.Network().(interface {
+		TransportForDialing(ma.Multiaddr) transport.Transport
+	})
+	if !ok {
+		return fmt.Errorf("camouflage/alias: host network %T does not expose TransportForDialing", h.Network())
+	}
+	probe, err := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/0")
+	if err != nil {
+		return err
+	}
+	tr := finder.TransportForDialing(probe)
+	ct, ok := tr.(*CamouflageTransport)
+	if !ok {
+		return fmt.Errorf("camouflage/alias: no CamouflageTransport registered on host (got %T)", tr)
+	}
+	return ct.enableAlias(h, warpID)
+}
+
+func (t *CamouflageTransport) enableAlias(h host.Host, warpID string) error {
+	warpID = strings.ToLower(warpID)
+	if warpID != "" {
+		if len(warpID) != WarpIDByteLen*2 {
+			return fmt.Errorf("camouflage/alias: warpID must be %d hex chars (got %d)", WarpIDByteLen*2, len(warpID))
+		}
+		if _, err := hex.DecodeString(warpID); err != nil {
+			return fmt.Errorf("camouflage/alias: warpID must be valid hex: %w", err)
+		}
+	}
+
+	t.aliasMu.Lock()
+	defer t.aliasMu.Unlock()
+	if t.alias != nil {
+		return errors.New("camouflage/alias: already enabled")
+	}
+
+	spoof := func(s network.Stream, local, remote ma.Multiaddr) *SpoofConn {
+		return NewSpoofConnFromStream(s, local, remote, t.fragmentSize, t.handshakeLen, t.maxDelay)
+	}
+	wrap := func(s network.Stream, local, remote ma.Multiaddr, isClient bool) (manet.Conn, error) {
+		return NewCamouflageConn(spoof(s, local, remote), isClient, t.camoConfig)
+	}
+
+	t.alias = newAliasMode(h, t.upgrader, warpID, spoof, wrap)
+	return nil
+}
+
+// EnableAliasService runs the alias resolver on h — counterpart of
+// libp2p.EnableRelayService. Thin clients must NOT call this.
+func EnableAliasService(h host.Host) (*aliasresolver.Resolver, error) {
+	if h == nil {
+		return nil, errors.New("camouflage/alias: host is nil")
+	}
+	for _, p := range h.Mux().Protocols() {
+		if p == aliasresolver.RegisterProtocol {
+			return nil, errors.New("camouflage/alias: alias service already enabled")
+		}
+	}
+	r := aliasresolver.New(h)
+	r.Start()
+	return r, nil
 }
 
 func (t *CamouflageTransport) String() string {
@@ -371,11 +426,7 @@ func (l *camouflageGatedMaListener) Accept() (manet.Conn, network.ConnManagement
 		setLinger(conn, 0)
 		tryKeepAlive(conn, true)
 
-		// Layer 1: TCP fragmentation for server-side responses.
 		spoofed := NewSpoofConn(conn, l.fragmentSize, l.handshakeLen, l.maxDelay)
-
-		// Layer 2: Real TLS tunnel – server side accepts TLS with a plausible
-		// certificate chain and validates the client's ALPN.
 		camouflaged, err := NewCamouflageConn(spoofed, false, l.camoConfig)
 		if err != nil {
 			log.Printf("dpi: camouflage handshake failed from %s: %v", conn.RemoteAddr(), err)
@@ -399,8 +450,6 @@ func setLinger(conn net.Conn, sec int) {
 	}
 }
 
-// Prefer the full TCP keepalive interface (including period) but fall
-// back to just enabling keepalive if SetKeepAlivePeriod is unavailable.
 type (
 	fullKeepAlive interface {
 		SetKeepAlive(bool) error

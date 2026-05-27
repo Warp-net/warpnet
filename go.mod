@@ -6,7 +6,7 @@ tool github.com/wailsapp/wails/v2/cmd/wails
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/Warp-net/libp2p-camouflage-transport v0.0.0-20260426205729-375252339458
+	github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260527215625-fa53b6cbbf66
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
