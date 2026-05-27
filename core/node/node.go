@@ -26,8 +26,13 @@ package node
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
 	"strings"
@@ -88,6 +93,7 @@ type WarpNode struct {
 
 func NewWarpNode(
 	ctx context.Context,
+
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
@@ -118,6 +124,10 @@ func NewWarpNode(
 	node, err := warpnet.NewP2PNode(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %w", err)
+	}
+
+	if err := camouflage.EnableAlias(node, buildWarpID(node.Peerstore().PrivKey(node.ID()))); err != nil {
+		return nil, fmt.Errorf("node: failed to enable alias: %w", err)
 	}
 
 	pool, err := stream.NewStreamPool(ctx, node)
@@ -425,4 +435,14 @@ func (n *WarpNode) StopNode() {
 	n.node = nil
 
 	// pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+}
+
+func buildWarpID(privKey crypto.PrivKey) string {
+	raw, err := privKey.Raw()
+	if err != nil {
+		log.Fatalf("node: failed to generate raw private key: %v", err)
+	}
+	mac := hmac.New(sha256.New, raw)
+	_, _ = mac.Write([]byte("warpid/v1"))
+	return hex.EncodeToString(mac.Sum(nil))
 }
