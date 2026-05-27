@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/transport"
@@ -142,9 +143,26 @@ func WithHandshakeTimeout(d time.Duration) Option {
 	}
 }
 
+// WithWarpID enables IP-hiding alias mode. The transport then also
+// handles /p2p/<relayID>/warpid/<id>[/p2p/<peerID>] multiaddrs: Listen
+// registers the alias on the relay and publishes only that multiaddr,
+// Dial resolves an alias by talking to the relay. A zero-length warpID
+// leaves the transport dial-only for alias addresses (it can still reach
+// other aliased peers but cannot itself listen as one).
+func WithWarpID(warpID string) Option {
+	return func(t *CamouflageTransport) error {
+		// Lower-case so that signatures, table keys and multiaddr
+		// transcoding (hex.EncodeToString is always lower-case) all
+		// agree on the canonical form.
+		t.warpID = strings.ToLower(warpID)
+		return nil
+	}
+}
+
 // CamouflageTransport is a libp2p transport that wraps TCP connections with
 // real TLS camouflage (uTLS browser fingerprint) and handshake-phase
-// traffic fragmentation to evade DPI.
+// traffic fragmentation to evade DPI. When constructed with a host (DI)
+// it also owns an *aliasMode that handles /warpid/ multiaddrs on top.
 type CamouflageTransport struct {
 	inner     *tcp.TcpTransport
 	upgrader  transport.Upgrader
@@ -161,18 +179,31 @@ type CamouflageTransport struct {
 	browserFingerprint string
 	handshakeTimeout   time.Duration
 	camoConfig         *CamouflageConfig // built once in constructor
+
+	// warpID is a transient holder for the value supplied by
+	// WithWarpID; it is consumed when alias is constructed and never
+	// read again from here.
+	warpID string
+
+	// alias is non-nil whenever the DI graph supplied a host. It owns
+	// every piece of alias state; this transport never reaches into it
+	// directly.
+	alias *aliasMode
 }
 
 var _ transport.Transport = (*CamouflageTransport)(nil)
 
 // NewCamouflageTransport creates a DPI-evasion transport. The constructor
 // signature is compatible with libp2p.Transport() dependency injection:
-// the framework injects the upgrader, resource manager, and shared TCP
-// manager automatically.
+// the framework injects the upgrader, resource manager, shared TCP
+// manager and host automatically. host is only required when alias mode
+// (WithWarpID) is enabled, but accepting it here lets a single
+// construction site cover both use cases.
 func NewCamouflageTransport(
 	upgrader transport.Upgrader,
 	rcmgr network.ResourceManager,
 	sharedTCP *tcpreuse.ConnMgr,
+	h host.Host,
 	opts ...Option,
 ) (*CamouflageTransport, error) {
 	if rcmgr == nil {
@@ -212,12 +243,25 @@ func NewCamouflageTransport(
 	}
 	t.camoConfig = cfg
 
+	// Hand the alias-relevant inputs off to the alias layer and forget
+	// about them. From now on this transport only delegates to t.alias
+	// when it sees a /warpid/ multiaddr.
+	if h != nil {
+		t.alias = newAliasMode(h, upgrader, t.warpID)
+	}
+	t.warpID = ""
+
 	return t, nil
 }
 
 // Dial dials the remote peer, wrapping the raw TCP connection with
-// SpoofConn + real TLS camouflage before the Noise handshake.
+// SpoofConn + real TLS camouflage before the Noise handshake. When the
+// multiaddr contains a /warpid/ component, the dial is delegated to the
+// alias layer.
 func (t *CamouflageTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (transport.CapableConn, error) {
+	if t.alias != nil && hasWarpID(raddr) {
+		return t.alias.dial(ctx, t, raddr, p)
+	}
 	connScope, err := t.rcmgr.OpenConnection(network.DirOutbound, true, raddr)
 	if err != nil {
 		log.Printf("dpi: resource manager blocked outgoing connection to %s: %v", p, err)
@@ -288,13 +332,18 @@ func (t *CamouflageTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (
 
 // Listen creates a TCP listener whose accepted connections are wrapped
 // with SpoofConn + real TLS camouflage so that the TLS handshake
-// completes before the Noise upgrade.
+// completes before the Noise upgrade. When the multiaddr ends in
+// /warpid/<id>, the listener registers the alias on the relay encoded in
+// the address prefix and advertises only that alias.
 //
 // When sharedTCP is available, we register as DemultiplexedConnType_TLS
 // so that the tcpreuse demultiplexer routes incoming TLS ClientHello
 // connections (first byte 0x16) to this transport. Without this, the
 // shared port cannot dispatch connections to us.
 func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
+	if t.alias != nil && hasWarpID(laddr) {
+		return t.alias.listen(t, laddr)
+	}
 	var gated transport.GatedMaListener
 	if t.sharedTCP != nil {
 		var err error
@@ -322,18 +371,34 @@ func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, er
 }
 
 // CanDial returns true if the transport can dial the given multiaddr.
+// Alias addresses are delegated to the alias layer for structural
+// validation (it only accepts well-formed /p2p/<relay>/warpid/<id>
+// addresses).
 func (t *CamouflageTransport) CanDial(addr ma.Multiaddr) bool {
+	if hasWarpID(addr) {
+		return t.alias != nil && t.alias.canDial(addr)
+	}
 	return t.inner.CanDial(addr)
 }
 
-// Protocols returns the set of protocols handled by this transport.
+// Protocols returns the set of protocols handled by this transport: the
+// inner TCP transport's protocols, plus /warpid/ whenever the alias
+// layer is wired up.
 func (t *CamouflageTransport) Protocols() []int {
-	return t.inner.Protocols()
+	p := t.inner.Protocols()
+	if t.alias != nil {
+		p = append(p, P_WARPID)
+	}
+	return p
 }
 
-// Proxy always returns false.
+// Proxy returns true so the swarm prefers this transport for multiaddrs
+// containing /warpid/. The TCP-only dialing/listening paths are
+// unaffected: TransportForListening picks the last proxy transport along
+// the multiaddr, and a plain /tcp/ addr still selects us as the only
+// transport registered for the TCP protocol.
 func (t *CamouflageTransport) Proxy() bool {
-	return false
+	return true
 }
 
 func (t *CamouflageTransport) String() string {

@@ -168,7 +168,7 @@ func NewCRDTStatsStore(
 	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
 	dagService := warpnet.NewDAGService(blockService)
 
-	l := log.StandardLogger().WithContext(ctx)
+	l := log.StandardLogger().WithContext(ctx).WithField("crdt", StatsRepoName)
 
 	opts := crdt.DefaultOptions()
 	opts.Logger = l
