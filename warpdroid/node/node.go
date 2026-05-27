@@ -177,6 +177,11 @@ func newClient(
 		return nil, fmt.Errorf("failed to create libp2p host: %w", err)
 	}
 
+	if err := camouflage.EnableAlias(h, ""); err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to enable alias: %w", err)
+	}
+
 	var infos []peer.AddrInfo
 	for _, addr := range bootstrapNodes {
 		maddr, _ := multiaddr.NewMultiaddr(addr)

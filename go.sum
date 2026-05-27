@@ -79,8 +79,8 @@ github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54 h1:bsU8Tzxr/P
 github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54/go.mod h1:0tr7FllbE9gJkHq7CVeeDDFAFKQVy5RnCSSNBOvdqbc=
 github.com/StackExchange/wmi v1.2.1 h1:VIkavFPXSjcnS+O8yTq7NI32k0R5Aj+v39y29VYDOSA=
 github.com/StackExchange/wmi v1.2.1/go.mod h1:rcmrprowKIVzvc+NUiLncP2uuArMWLCbu9SBzvHz7e8=
-github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260527170825-98cf9b153461 h1:fdyBAy7sA+rnqM2dAdZHVekiFTO5SVRLNPgLJQErs2c=
-github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260527170825-98cf9b153461/go.mod h1:DqeFU1UysMPjS/3HNFtiTFl+CU79WxRYinrfaPo72ow=
+github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260527184136-30734ec96603 h1:10ThWyaIjaBlmpB8UIM7GkJyH1MuUcIs/8Twk0XjnLU=
+github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260527184136-30734ec96603/go.mod h1:DqeFU1UysMPjS/3HNFtiTFl+CU79WxRYinrfaPo72ow=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d h1:licZJFw2RwpHMqeKTCYkitsPqHNxTmd4SNR5r94FGM8=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d/go.mod h1:asat636LX7Bqt5lYEZ27JNDcqxfjdBQuJ/MM4CN/Lzo=
 github.com/alecthomas/assert/v2 v2.11.0 h1:2Q9r3ki8+JYXvGsDyBXwH3LcJ+WK5D0gc5E8vS6K3D0=

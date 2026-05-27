@@ -46,9 +46,11 @@ import (
 	"github.com/Warp-net/libp2p-camouflage-transport/aliasresolver"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/transport"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
@@ -142,21 +144,34 @@ type aliasMode struct {
 	warpID   string         // empty => dial-only (cannot listen)
 	upgrader transport.Upgrader
 
-	mu       sync.Mutex
-	listener *aliasedListener
+	mu        sync.Mutex
+	listeners map[peer.ID]*aliasedListener // keyed by relay peer
+
+	finderCtx    context.Context
+	finderCancel context.CancelFunc
 }
 
 // newAliasMode wires the alias layer onto a host. It installs the stop
 // stream handler immediately so even a dial-only node can later flip
-// into listening by calling Listen on a /warpid/ multiaddr.
+// into listening on a /warpid/ multiaddr. When warpID is non-empty it
+// also starts a background relay-finder that auto-Listens via every
+// peer it discovers speaking aliasresolver.RegisterProtocol — same
+// shape as libp2p's autorelay for circuit-v2.
 func newAliasMode(h host.Host, upgrader transport.Upgrader, warpID string) *aliasMode {
 	a := &aliasMode{
-		host:     h,
-		privKey:  h.Peerstore().PrivKey(h.ID()),
-		warpID:   warpID,
-		upgrader: upgrader,
+		host:      h,
+		privKey:   h.Peerstore().PrivKey(h.ID()),
+		warpID:    warpID,
+		upgrader:  upgrader,
+		listeners: make(map[peer.ID]*aliasedListener),
 	}
 	h.SetStreamHandler(aliasresolver.StopProtocol, a.handleStop)
+	h.Network().Notify(a)
+
+	if warpID != "" {
+		a.finderCtx, a.finderCancel = context.WithCancel(context.Background())
+		go a.runRelayFinder()
+	}
 	return a
 }
 
@@ -249,11 +264,12 @@ func (a *aliasMode) openResolveStream(ctx context.Context, raddr ma.Multiaddr, r
 }
 
 // listen registers this peer's WarpID on the relay encoded in laddr and
-// returns a listener whose advertised address is only the alias. At most
-// one alias listener can be active per aliasMode.
+// returns a listener whose advertised address is only the alias. Many
+// listeners can be active concurrently (one per relay) — that is what
+// auto-discovery uses to publish redundant alias paths.
 func (a *aliasMode) listen(t transport.Transport, laddr ma.Multiaddr) (transport.Listener, error) {
 	if a.warpID == "" {
-		return nil, errors.New("camouflage/alias: cannot listen — no WarpID configured (use WithWarpID)")
+		return nil, errors.New("camouflage/alias: cannot listen — no WarpID configured")
 	}
 	if a.privKey == nil {
 		return nil, errors.New("camouflage/alias: cannot listen — host private key unavailable")
@@ -268,13 +284,12 @@ func (a *aliasMode) listen(t transport.Transport, laddr ma.Multiaddr) (transport
 	}
 
 	a.mu.Lock()
-	if a.listener != nil {
-		existing := a.listener.relayID
+	if _, exists := a.listeners[relayID]; exists {
 		a.mu.Unlock()
-		return nil, fmt.Errorf("camouflage/alias: already listening via relay %s", existing)
+		return nil, fmt.Errorf("camouflage/alias: already listening via relay %s", relayID)
 	}
 	l := newAliasedListener(a, relayID, warpID)
-	a.listener = l
+	a.listeners[relayID] = l
 	a.mu.Unlock()
 
 	if err := a.registerOnRelay(context.Background(), relayID); err != nil {
@@ -331,16 +346,17 @@ func (a *aliasMode) registerOnRelay(ctx context.Context, relayID peer.ID) error 
 }
 
 // handleStop is invoked when a relay opens an inbound stream for a
-// dialer it has resolved to us. The sender must be the relay our active
-// listener registered with; streams from any other peer are dropped.
+// dialer it has resolved to us. We route the stream to the listener
+// registered for that relay; streams from peers we never registered
+// with are dropped.
 func (a *aliasMode) handleStop(s network.Stream) {
-	remote := s.Conn().RemotePeer()
+	relay := s.Conn().RemotePeer()
 
 	a.mu.Lock()
-	l := a.listener
+	l := a.listeners[relay]
 	a.mu.Unlock()
-	if l == nil || l.relayID != remote {
-		log.Printf("camouflage/alias: stop stream from unexpected peer %s", remote)
+	if l == nil {
+		log.Printf("camouflage/alias: stop stream from unregistered relay %s", relay)
 		_ = s.Reset()
 		return
 	}
@@ -349,13 +365,110 @@ func (a *aliasMode) handleStop(s network.Stream) {
 	}
 }
 
-// clear nils out the listener slot if l still occupies it. Called from
-// the listener's Close path and from the listen failure path.
+// clear removes a listener from the active set if it still occupies the
+// slot for its relay. Called from the listener's Close path, the listen
+// failure path, and the relay-disconnect notifiee.
 func (a *aliasMode) clear(l *aliasedListener) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.listener == l {
-		a.listener = nil
+	if cur, ok := a.listeners[l.relayID]; ok && cur == l {
+		delete(a.listeners, l.relayID)
+	}
+}
+
+// ===========================================================================
+// Auto relay-finder. Mirrors the libp2p autorelay shape for circuit-v2:
+// subscribe to identify completions, and for every peer that speaks
+// /warpnet/alias-register/0.0.0, automatically Listen on
+// /p2p/<peer>/warpid/<warpID>. The user doesn't have to call Listen
+// anywhere.
+// ===========================================================================
+
+func (a *aliasMode) runRelayFinder() {
+	sub, err := a.host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
+	if err != nil {
+		log.Printf("camouflage/alias: cannot subscribe to identify events: %v", err)
+		return
+	}
+	defer sub.Close()
+
+	for {
+		select {
+		case <-a.finderCtx.Done():
+			return
+		case e, ok := <-sub.Out():
+			if !ok {
+				return
+			}
+			evt, ok := e.(event.EvtPeerIdentificationCompleted)
+			if !ok {
+				continue
+			}
+			if !supportsRegisterProtocol(evt.Protocols) {
+				continue
+			}
+			a.maybeAutoListen(evt.Peer)
+		}
+	}
+}
+
+func supportsRegisterProtocol(protos []protocol.ID) bool {
+	for _, p := range protos {
+		if p == aliasresolver.RegisterProtocol {
+			return true
+		}
+	}
+	return false
+}
+
+// maybeAutoListen calls swarm.Listen for /p2p/<relay>/warpid/<warpID>
+// if we are not yet registered with this relay. Idempotent: a second
+// call for the same relay is a fast no-op (listen() rejects duplicates).
+func (a *aliasMode) maybeAutoListen(relay peer.ID) {
+	a.mu.Lock()
+	_, exists := a.listeners[relay]
+	a.mu.Unlock()
+	if exists {
+		return
+	}
+	listenAddr := buildAliasMultiaddr(relay, a.warpID)
+	if err := a.host.Network().Listen(listenAddr); err != nil {
+		log.Printf("camouflage/alias: auto-listen via %s: %v", relay, err)
+	}
+}
+
+// stop cancels the relay finder and unhooks the notifiee. Called from
+// CamouflageTransport's close path (if/when added) — currently the
+// goroutine also exits when the host's event bus closes, so explicit
+// stop is optional.
+func (a *aliasMode) stop() {
+	if a.finderCancel != nil {
+		a.finderCancel()
+	}
+	a.host.Network().StopNotify(a)
+}
+
+// ===========================================================================
+// network.Notifiee — drop the listener when its relay disconnects so the
+// listeners map stays in sync with reachable relays.
+// ===========================================================================
+
+var _ network.Notifiee = (*aliasMode)(nil)
+
+func (a *aliasMode) Listen(_ network.Network, _ ma.Multiaddr)      {}
+func (a *aliasMode) ListenClose(_ network.Network, _ ma.Multiaddr) {}
+func (a *aliasMode) Connected(_ network.Network, _ network.Conn)   {}
+
+func (a *aliasMode) Disconnected(n network.Network, c network.Conn) {
+	p := c.RemotePeer()
+	if len(n.ConnsToPeer(p)) > 0 {
+		return // still other conns alive
+	}
+	a.mu.Lock()
+	l := a.listeners[p]
+	a.mu.Unlock()
+	if l != nil {
+		_ = l.Close() // also calls a.clear(l)
 	}
 }
 
@@ -523,6 +636,13 @@ type aliasedListener struct {
 
 	closeOnce sync.Once
 	closed    chan struct{}
+
+	// closeMu pairs with isClosed to serialise the "already closed?"
+	// check against an enqueue on l.incoming. Without it, a race in
+	// deliver's select (closed-channel ready AND buffer space ready)
+	// could let Go's randomised select enqueue a stream after Close.
+	closeMu  sync.Mutex
+	isClosed bool
 }
 
 var _ transport.GatedMaListener = (*aliasedListener)(nil)
@@ -541,11 +661,16 @@ func newAliasedListener(a *aliasMode, relayID peer.ID, warpID string) *aliasedLi
 // deliver hands an inbound stream to a pending Accept. Returns false if
 // the listener has been closed or its queue is saturated; in either
 // case the caller resets the stream so the relay isn't kept on the
-// hook waiting for bytes.
+// hook waiting for bytes. Holding closeMu around the closed-check and
+// the send avoids the select-randomisation race where deliver could
+// enqueue after Close.
 func (l *aliasedListener) deliver(s network.Stream) bool {
-	select {
-	case <-l.closed:
+	l.closeMu.Lock()
+	defer l.closeMu.Unlock()
+	if l.isClosed {
 		return false
+	}
+	select {
 	case l.incoming <- s:
 		return true
 	default:
@@ -571,6 +696,13 @@ func (l *aliasedListener) Accept() (manet.Conn, network.ConnManagementScope, err
 
 func (l *aliasedListener) Close() error {
 	l.closeOnce.Do(func() {
+		// Flip isClosed under closeMu so any concurrent deliver
+		// reads true before its enqueue attempt, then drop the lock
+		// before closing the channel / draining.
+		l.closeMu.Lock()
+		l.isClosed = true
+		l.closeMu.Unlock()
+
 		close(l.closed)
 		l.a.clear(l)
 		for {

@@ -295,6 +295,9 @@ func WriteRegisterFrame(w io.Writer, warpIDHex string, sig []byte) error {
 	if err != nil {
 		return err
 	}
+	if len(sig) == 0 {
+		return errors.New("aliasresolver: signature is empty")
+	}
 	if len(sig) > MaxSigLen {
 		return fmt.Errorf("aliasresolver: signature too long (%d > %d)", len(sig), MaxSigLen)
 	}
