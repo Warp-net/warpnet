@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-bootstrap:
+  build-relay:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,13 +31,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Bootstrap Docker image
+      - name: Build and push Relay Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.bootstrap
+          file: Dockerfile.relay
           push: true
-          tags: ghcr.io/warp-net/warpnet-bootstrap:latest
+          tags: ghcr.io/warp-net/warpnet-relay:latest
           build-args: --dns 8.8.8.8
 
   build-moderator:
@@ -109,7 +109,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [ build-bootstrap, build-moderator, build-echo ]
+    needs: [ build-relay, build-moderator, build-echo ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

@@ -1,7 +1,7 @@
 services:
   warpnet11:
     container_name: warpnet-testnet-1
-    image: ghcr.io/warp-net/warpnet-bootstrap:latest
+    image: ghcr.io/warp-net/warpnet-relay:latest
     network_mode: host
     restart: always
     environment:
@@ -15,7 +15,7 @@ services:
 
   warpnet22:
     container_name: warpnet-testnet-2
-    image: ghcr.io/warp-net/warpnet-bootstrap:latest
+    image: ghcr.io/warp-net/warpnet-relay:latest
     network_mode: host
     restart: always
     environment:
@@ -29,7 +29,7 @@ services:
 
   warpnet33:
     container_name: warpnet-testnet-3
-    image: ghcr.io/warp-net/warpnet-bootstrap:latest
+    image: ghcr.io/warp-net/warpnet-relay:latest
     network_mode: host
     restart: always
     environment:

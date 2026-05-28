@@ -31,7 +31,7 @@ import (
 	"fmt"
 	"github.com/Warp-net/warpnet/core/challenge"
 
-	"github.com/Warp-net/warpnet/cmd/node/bootstrap/pubsub"
+	"github.com/Warp-net/warpnet/cmd/node/relay/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -67,7 +67,7 @@ type MetricsOnlinePusher interface {
 	PushStatusOffline(nodeId string)
 }
 
-type BootstrapNode struct {
+type RelayNode struct {
 	ctx               context.Context
 	node              *node.WarpNode
 	opts              []warpnet.WarpOption
@@ -80,29 +80,29 @@ type BootstrapNode struct {
 	selfHashHex       string
 }
 
-func NewBootstrapNode(
+func NewRelayNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
 	selfHashHex string,
 	m MetricsOnlinePusher,
-) (_ *BootstrapNode, err error) {
+) (_ *RelayNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
 	challenger := challenge.NewSpoofChallenger(ctx)
 
-	discService := discovery.NewBootstrapDiscoveryService(ctx, challenger, m)
+	discService := discovery.NewRelayDiscoveryService(ctx, challenger, m)
 
-	pubsubService := pubsub.NewPubSubBootstrap(
+	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
 		pubsub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: fail creating memory peerstore: %w", err)
+		return nil, fmt.Errorf("relay: fail creating memory peerstore: %w", err)
 	}
 	mapStore := datastore.NewMapDatastore()
 
@@ -138,7 +138,7 @@ func NewBootstrapNode(
 	}
 	opts = append(opts, node.CommonOptions...)
 
-	bn := &BootstrapNode{
+	rn := &RelayNode{
 		ctx:               ctx,
 		opts:              opts,
 		discService:       discService,
@@ -150,138 +150,138 @@ func NewBootstrapNode(
 		privKey:           privKey,
 	}
 
-	return bn, nil
+	return rn, nil
 }
 
-func (bn *BootstrapNode) NodeInfo() warpnet.NodeInfo {
-	bi := bn.node.BaseNodeInfo()
-	bi.OwnerId = warpnet.BootstrapOwner
-	bi.Hash = bn.selfHashHex
+func (rn *RelayNode) NodeInfo() warpnet.NodeInfo {
+	bi := rn.node.BaseNodeInfo()
+	bi.OwnerId = warpnet.RelayOwner
+	bi.Hash = rn.selfHashHex
 	return bi
 }
 
-func (bn *BootstrapNode) Start() (err error) {
-	if bn == nil {
-		panic("bootstrap: nil node")
+func (rn *RelayNode) Start() (err error) {
+	if rn == nil {
+		panic("relay: nil node")
 	}
-	bn.node, err = node.NewWarpNode(
-		bn.ctx,
-		bn.opts...,
+	rn.node, err = node.NewWarpNode(
+		rn.ctx,
+		rn.opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("bootstrap: failed to init node: %w", err)
+		return fmt.Errorf("relay: failed to init node: %w", err)
 	}
-	bn.setupHandlers()
+	rn.setupHandlers()
 
-	bn.pubsubService.Run(bn)
-	if err := bn.discService.Run(bn); err != nil {
+	rn.pubsubService.Run(rn)
+	if err := rn.discService.Run(rn); err != nil {
 		return err
 	}
 
-	nodeInfo := bn.NodeInfo()
+	nodeInfo := rn.NodeInfo()
 	println()
 	fmt.Printf(
-		"\033[1mBOOTSTRAP NODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",
+		"\033[1mRELAY NODE STARTED WITH ID %s AND ADDRESSES %v\033[0m\n",
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
 	return nil
 }
 
-func (bn *BootstrapNode) setupHandlers() {
-	if bn.node == nil {
-		panic("bootstrap: nil bootstrap node")
+func (rn *RelayNode) setupHandlers() {
+	if rn.node == nil {
+		panic("relay: nil relay node")
 	}
 
 	//nolint:govet
-	bn.node.SetStreamHandlers(
+	rn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_GET_INFO,
-			handler.StreamGetInfoHandler(bn, bn.discService.DiscoveryHandlerStream),
+			handler.StreamGetInfoHandler(rn, rn.discService.DiscoveryHandlerStream),
 		},
 	)
 }
 
-func (bn *BootstrapNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
-	if bn == nil || bn.node == nil {
+func (rn *RelayNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+	if rn == nil || rn.node == nil {
 		return nil, nil
 	}
-	return bn.node.SelfStream(path, data)
+	return rn.node.SelfStream(path, data)
 }
 
-func (bn *BootstrapNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
-	if bn == nil {
+func (rn *RelayNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
+	if rn == nil {
 		return
 	}
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	if nodeId == "" {
-		return nil, fmt.Errorf("bootstrap: stream:%w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
+		return nil, fmt.Errorf("relay: stream:%w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
 	}
-	bt, err := bn.node.Stream(nodeId, path, data)
+	bt, err := rn.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		return bt, nil
 	}
 	return bt, err
 }
 
-func (bn *BootstrapNode) Node() warpnet.P2PNode {
-	if bn == nil || bn.node == nil {
+func (rn *RelayNode) Node() warpnet.P2PNode {
+	if rn == nil || rn.node == nil {
 		return nil
 	}
-	return bn.node.Node()
+	return rn.node.Node()
 }
 
-func (bn *BootstrapNode) SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {
-	bn.node.Prioritizer().SetPriority(pid, r)
+func (rn *RelayNode) SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {
+	rn.node.Prioritizer().SetPriority(pid, r)
 }
 
-func (bn *BootstrapNode) SetMaxNodePriority(pid warpnet.WarpPeerID) {
-	bn.node.Prioritizer().SetMaxPriority(pid)
+func (rn *RelayNode) SetMaxNodePriority(pid warpnet.WarpPeerID) {
+	rn.node.Prioritizer().SetMaxPriority(pid)
 }
 
-func (bn *BootstrapNode) SetMinNodePriority(pid warpnet.WarpPeerID) {
-	bn.node.Prioritizer().SetMinPriority(pid)
+func (rn *RelayNode) SetMinNodePriority(pid warpnet.WarpPeerID) {
+	rn.node.Prioritizer().SetMinPriority(pid)
 }
 
-func (bn *BootstrapNode) Peerstore() warpnet.WarpPeerstore {
-	if bn == nil || bn.node == nil {
+func (rn *RelayNode) Peerstore() warpnet.WarpPeerstore {
+	if rn == nil || rn.node == nil {
 		return nil
 	}
-	return bn.node.Node().Peerstore()
+	return rn.node.Node().Peerstore()
 }
 
-func (bn *BootstrapNode) Network() warpnet.WarpNetwork {
-	if bn == nil || bn.node == nil {
+func (rn *RelayNode) Network() warpnet.WarpNetwork {
+	if rn == nil || rn.node == nil {
 		return nil
 	}
-	return bn.node.Node().Network()
+	return rn.node.Node().Network()
 }
 
-func (bn *BootstrapNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
-	return bn.node.Node().Connect(bn.ctx, info)
+func (rn *RelayNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
+	return rn.node.Node().Connect(rn.ctx, info)
 }
 
-func (bn *BootstrapNode) Stop() {
-	if bn == nil {
+func (rn *RelayNode) Stop() {
+	if rn == nil {
 		return
 	}
-	if bn.discService != nil {
-		bn.discService.Close()
+	if rn.discService != nil {
+		rn.discService.Close()
 	}
 
-	if bn.pubsubService != nil {
-		if err := bn.pubsubService.Close(); err != nil {
-			log.Errorf("bootstrap: failed to close pubsub: %v", err)
+	if rn.pubsubService != nil {
+		if err := rn.pubsubService.Close(); err != nil {
+			log.Errorf("relay: failed to close pubsub: %v", err)
 		}
 	}
-	if bn.dHashTable != nil {
-		bn.dHashTable.Close()
+	if rn.dHashTable != nil {
+		rn.dHashTable.Close()
 	}
-	if bn.memoryStoreCloseF != nil {
-		if err := bn.memoryStoreCloseF(); err != nil {
-			log.Errorf("bootstrap: failed to close memory store: %v", err)
+	if rn.memoryStoreCloseF != nil {
+		if err := rn.memoryStoreCloseF(); err != nil {
+			log.Errorf("relay: failed to close memory store: %v", err)
 		}
 	}
 
-	bn.node.StopNode()
+	rn.node.StopNode()
 }

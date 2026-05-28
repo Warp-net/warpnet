@@ -610,7 +610,7 @@ func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode)
 				log.Errorf("echo: failed to unmarshal info from new peer: %s %v", infoResp, err)
 				continue
 			}
-			if info.IsModerator() || info.IsBootstrap() {
+			if info.IsModerator() || info.IsRelay() {
 				continue
 			}
 			if info.OwnerId == "" {

@@ -36,7 +36,7 @@ import (
 	"time"
 
 	root "github.com/Warp-net/warpnet"
-	bootstrap "github.com/Warp-net/warpnet/cmd/node/bootstrap/node"
+	relay "github.com/Warp-net/warpnet/cmd/node/relay/node"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
@@ -82,7 +82,7 @@ func main() {
 
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
-		log.Errorf("bootstrap: fail generating key: %v", err)
+		log.Errorf("relay: fail generating key: %v", err)
 		return
 	}
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
@@ -98,15 +98,15 @@ func main() {
 		network,
 	)
 
-	n, err := bootstrap.NewBootstrapNode(ctx, privKey, psk, nodeId, codeHashHex, m)
+	n, err := relay.NewRelayNode(ctx, privKey, psk, nodeId, codeHashHex, m)
 	if err != nil {
-		log.Errorf("failed to init bootstrap node: %v", err)
+		log.Errorf("failed to init relay node: %v", err)
 		return
 	}
 	defer n.Stop()
 
 	if err := n.Start(); err != nil {
-		log.Errorf("failed to start bootstrap node: %v", err)
+		log.Errorf("failed to start relay node: %v", err)
 		return
 	}
 
@@ -115,5 +115,5 @@ func main() {
 	}
 
 	<-interruptChan
-	log.Infoln("bootstrap node interrupted...")
+	log.Infoln("relay node interrupted...")
 }
