@@ -86,11 +86,19 @@ type TimelineUpdater interface {
 	DeleteTweetFromTimeline(userID, tweetID string) error
 }
 
+// TweetFollowChecker reports whether ownerId follows authorId. The new-tweet
+// handler uses it to keep unsolicited tweets out of the local timeline: a
+// tweet is only accepted when the owner authored it or follows its author.
+type TweetFollowChecker interface {
+	IsFollowing(ownerId, authorId string) bool
+}
+
 func StreamNewTweetHandler(
 	broadcaster TweetBroadcaster,
 	authRepo OwnerTweetStorer,
 	tweetRepo TweetsStorer,
 	timelineRepo TimelineUpdater,
+	followRepo TweetFollowChecker,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -116,6 +124,17 @@ func StreamNewTweetHandler(
 
 		owner := authRepo.GetOwner()
 
+		// A tweet only belongs in this node's timeline if the owner wrote
+		// it (local authoring) or follows its author (delivered through the
+		// owner's own gossip subscription). Any other inbound NewTweetEvent
+		// is an unsolicited direct push from a peer we don't follow — drop
+		// it so it can't be injected into the Home feed. Ack so the sender
+		// doesn't treat it as a transport failure and retry.
+		isMyOwnTweet := owner.UserId == ev.UserId
+		if !isMyOwnTweet && (followRepo == nil || !followRepo.IsFollowing(owner.UserId, ev.UserId)) {
+			return event.Accepted, nil
+		}
+
 		tweet, err := tweetRepo.Create(ev.UserId, ev)
 		if err != nil {
 			return nil, err
@@ -128,7 +147,6 @@ func StreamNewTweetHandler(
 			log.Infof("fail adding tweet to timeline: %v", err)
 		}
 
-		isMyOwnTweet := owner.UserId == ev.UserId
 		if isMyOwnTweet { // publish to friends timelines
 			respTweetEvent := event.NewTweetEvent{
 				CreatedAt: tweet.CreatedAt,
