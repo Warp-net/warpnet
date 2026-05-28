@@ -45,20 +45,20 @@ type PubsubServerNodeConnector interface {
 
 var NewMemberDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
 
-type bootstrapPubSub struct {
+type relayPubSub struct {
 	ctx    context.Context
 	pubsub *pubsub.Gossip
 }
 
-func NewPubSubBootstrap(ctx context.Context, handlers ...pubsub.TopicHandler) *bootstrapPubSub {
-	bps := &bootstrapPubSub{
+func NewPubSubRelay(ctx context.Context, handlers ...pubsub.TopicHandler) *relayPubSub {
+	bps := &relayPubSub{
 		ctx: ctx,
 	}
 	bps.pubsub = pubsub.NewGossip(ctx, handlers...)
 	return bps
 }
 
-func (g *bootstrapPubSub) Run(node PubsubServerNodeConnector) {
+func (g *relayPubSub) Run(node PubsubServerNodeConnector) {
 	if g.pubsub.IsGossipRunning() {
 		return
 	}
@@ -69,10 +69,10 @@ func (g *bootstrapPubSub) Run(node PubsubServerNodeConnector) {
 	}
 }
 
-func (g *bootstrapPubSub) OwnerID() string {
-	return warpnet.BootstrapOwner
+func (g *relayPubSub) OwnerID() string {
+	return warpnet.RelayOwner
 }
 
-func (g *bootstrapPubSub) Close() (err error) {
+func (g *relayPubSub) Close() (err error) {
 	return g.pubsub.Close()
 }

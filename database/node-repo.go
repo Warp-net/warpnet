@@ -69,7 +69,7 @@ type NodeRepo struct {
 	prefix   string
 	stopChan chan struct{}
 
-	BootstrapSelfHashHex string
+	RelaySelfHashHex string
 }
 
 func NewNodeRepo(db NodeStorer) *NodeRepo {
