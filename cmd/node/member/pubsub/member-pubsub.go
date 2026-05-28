@@ -53,7 +53,7 @@ type PubsubServerNodeConnector interface {
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
-var NewBootstrapDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
+var NewRelayDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
 
 // MemberPubSub provides pubsub functionality for member nodes
 type MemberPubSub struct {

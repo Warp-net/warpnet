@@ -36,7 +36,7 @@ func TestBootstrapNodes(t *testing.T) {
 	nodes := []warpnet.WarpAddrInfo{{}, {}}
 	opt := BootstrapNodes(nodes...)
 	opt(&cfg)
-	assert.Len(t, cfg.boostrapNodes, 2)
+	assert.Len(t, cfg.bootstrapNodes, 2)
 }
 
 func TestNetwork(t *testing.T) {

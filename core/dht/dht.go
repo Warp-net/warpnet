@@ -130,7 +130,7 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		dht.MaxRecordAge(time.Hour),
 		dht.RoutingTableRefreshPeriod(time.Hour),
 		dht.RoutingTableRefreshQueryTimeout(time.Minute*5), //nolint:mnd
-		dht.BootstrapPeers(d.cfg.boostrapNodes...),
+		dht.BootstrapPeers(d.cfg.bootstrapNodes...),
 		dht.ProviderStore(providerStore),
 		dht.RoutingTableLatencyTolerance(time.Minute),
 		dht.BucketSize(50), //nolint:mnd
@@ -179,7 +179,7 @@ func (d *distributedHashTable) bootstrapDHT() {
 
 	// force dht to know its bootstrap nodes, force libp2p node to know its external address
 	// (in case of local network)
-	for _, info := range d.cfg.boostrapNodes {
+	for _, info := range d.cfg.bootstrapNodes {
 		if ownID == info.ID {
 			continue
 		}
@@ -190,7 +190,7 @@ func (d *distributedHashTable) bootstrapDHT() {
 		log.Errorf("dht: bootstrap: %s", err)
 	}
 
-	d.correctPeerIdMismatch(d.cfg.boostrapNodes)
+	d.correctPeerIdMismatch(d.cfg.bootstrapNodes)
 
 	<-d.dht.RefreshRoutingTable()
 	log.Infoln("dht: bootstrap complete")
@@ -285,12 +285,12 @@ func (d *distributedHashTable) findPeers(rd *drouting.RoutingDiscovery, ns strin
 	}
 }
 
-func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.WarpAddrInfo) {
+func (d *distributedHashTable) correctPeerIdMismatch(bootstrapNodes []warpnet.WarpAddrInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd    // common timeout
 	defer cancel()
 
 	g, ctx := errgroup.WithContext(ctx)
-	for _, addr := range boostrapNodes {
+	for _, addr := range bootstrapNodes {
 		g.Go(func() error {
 			localCtx, localCancel := context.WithTimeout(ctx, time.Second) // local timeout
 			defer localCancel()
@@ -317,7 +317,7 @@ func (d *distributedHashTable) correctPeerIdMismatch(boostrapNodes []warpnet.War
 }
 
 func (d *distributedHashTable) BootstrapNodes() []warpnet.WarpAddrInfo {
-	return d.cfg.boostrapNodes
+	return d.cfg.bootstrapNodes
 }
 
 func (d *distributedHashTable) ClosestPeers() []warpnet.WarpPeerID {

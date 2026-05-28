@@ -92,7 +92,7 @@ var ErrAllDialsFailed = swarm.ErrAllDialsFailed
 type relayStatus string
 
 const (
-	BootstrapOwner = "bootstrap"
+	RelayOwner     = "relay"
 	ModeratorOwner = "moderator"
 	WarpnetName    = "warpnet"
 	NoiseID        = noise.ID
@@ -236,8 +236,9 @@ type NodeInfo struct {
 	Network        string           `json:"network,omitempty"`
 }
 
-func (ni NodeInfo) IsBootstrap() bool {
-	return ni.OwnerId == BootstrapOwner
+func (ni NodeInfo) IsRelay() bool {
+	return ni.OwnerId == RelayOwner ||
+		ni.OwnerId == "bootstrap" // back compatibility
 }
 func (ni NodeInfo) IsModerator() bool {
 	return ni.OwnerId == ModeratorOwner
