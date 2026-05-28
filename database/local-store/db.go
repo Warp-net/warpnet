@@ -477,7 +477,7 @@ func (db *DB) NewTxn() (WarpTransactioner, error) {
 	}
 	wtx := &warpTxn{db.badger.NewTransaction(true)}
 	runtime.SetFinalizer(wtx, func(tx *warpTxn) {
-		defer func() { recover() }()
+		defer func() { recover() }() //nolint:errcheck // discard panic from rollback on a leaked txn
 		tx.Rollback()
 	})
 	return wtx, nil
