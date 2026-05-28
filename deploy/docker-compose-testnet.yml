@@ -5,6 +5,7 @@ services:
     network_mode: host
     restart: always
     environment:
+      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
       - NODE_PORT=4011
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=testnet
@@ -19,6 +20,7 @@ services:
     network_mode: host
     restart: always
     environment:
+      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
       - NODE_PORT=4022
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=testnet
@@ -33,6 +35,7 @@ services:
     network_mode: host
     restart: always
     environment:
+      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
       - NODE_PORT=4033
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=testnet

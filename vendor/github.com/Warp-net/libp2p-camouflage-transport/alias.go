@@ -364,6 +364,8 @@ func (a *aliasMode) runRelayFinder() {
 			if !ok {
 				continue
 			}
+			log.Printf("camouflage/alias: identify from %s, %d protocols, register=%v",
+				evt.Peer, len(evt.Protocols), supportsRegisterProtocol(evt.Protocols))
 			if !supportsRegisterProtocol(evt.Protocols) {
 				continue
 			}
