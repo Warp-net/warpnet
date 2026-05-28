@@ -92,10 +92,7 @@ var ErrAllDialsFailed = swarm.ErrAllDialsFailed
 type relayStatus string
 
 const (
-	// RelayOwner marks infrastructure relay nodes (the hardcoded entry
-	// points double as libp2p circuit relays). The wire value stays
-	// "bootstrap" for backward compatibility with already-deployed nodes.
-	RelayOwner     = "bootstrap"
+	RelayOwner     = "relay"
 	ModeratorOwner = "moderator"
 	WarpnetName    = "warpnet"
 	NoiseID        = noise.ID
@@ -240,7 +237,8 @@ type NodeInfo struct {
 }
 
 func (ni NodeInfo) IsRelay() bool {
-	return ni.OwnerId == RelayOwner
+	return ni.OwnerId == RelayOwner ||
+		ni.OwnerId == "bootstrap" // back compatibility
 }
 func (ni NodeInfo) IsModerator() bool {
 	return ni.OwnerId == ModeratorOwner
