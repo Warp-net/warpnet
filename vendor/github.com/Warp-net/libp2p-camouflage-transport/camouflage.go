@@ -311,16 +311,23 @@ func (t *CamouflageTransport) CanDial(addr ma.Multiaddr) bool {
 // Protocols claims /warpid/ unconditionally; the swarm reads this once
 // at AddTransport time. CanDial/Dial/Listen guard until EnableAlias.
 func (t *CamouflageTransport) Protocols() []int {
-	return append(t.inner.Protocols(), P_WARPID)
+	inner := t.inner.Protocols()
+	out := make([]int, len(inner), len(inner)+1)
+	copy(out, inner)
+	return append(out, P_WARPID)
 }
 
-// Proxy returns true so the swarm prefers this transport for multiaddrs
-// containing /warpid/. The TCP-only dialing/listening paths are
-// unaffected: TransportForListening picks the last proxy transport along
-// the multiaddr, and a plain /tcp/ addr still selects us as the only
-// transport registered for the TCP protocol.
+// Proxy must return false: this is a direct TCP transport. Returning true
+// makes the swarm treat *every* camouflage TCP connection as non-direct
+// (swarm.isDirectConn checks Transport().Proxy()), which breaks
+// reachability/relay logic that distinguishes direct vs relayed conns.
+//
+// Alias /warpid/ addresses are still routed here without Proxy: on the
+// listen side P_WARPID is the trailing protocol, so TransportForListening
+// selects us by default; on the dial side TransportForDialing picks us via
+// CanDial. Proxy is unnecessary for either path.
 func (t *CamouflageTransport) Proxy() bool {
-	return true
+	return false
 }
 
 // EnableAlias wires alias mode onto the CamouflageTransport registered

@@ -58,7 +58,7 @@ github.com/ProtonMail/go-crypto/openpgp/x448
 # github.com/StackExchange/wmi v1.2.1
 ## explicit; go 1.13
 github.com/StackExchange/wmi
-# github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260527215625-fa53b6cbbf66
+# github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260528193806-e566e1f5fdc2
 ## explicit; go 1.26.0
 github.com/Warp-net/libp2p-camouflage-transport
 github.com/Warp-net/libp2p-camouflage-transport/aliasresolver
@@ -383,11 +383,11 @@ github.com/huin/goupnp/httpu
 github.com/huin/goupnp/scpd
 github.com/huin/goupnp/soap
 github.com/huin/goupnp/ssdp
-# github.com/ipfs/bbloom v0.0.4
-## explicit; go 1.12
+# github.com/ipfs/bbloom v0.1.0
+## explicit; go 1.25
 github.com/ipfs/bbloom
-# github.com/ipfs/boxo v0.37.0
-## explicit; go 1.25.0
+# github.com/ipfs/boxo v0.39.0
+## explicit; go 1.25.7
 github.com/ipfs/boxo/bitswap
 github.com/ipfs/boxo/bitswap/client
 github.com/ipfs/boxo/bitswap/client/internal
@@ -436,8 +436,8 @@ github.com/ipfs/boxo/verifcid
 # github.com/ipfs/go-block-format v0.2.3
 ## explicit; go 1.24.0
 github.com/ipfs/go-block-format
-# github.com/ipfs/go-cid v0.6.0
-## explicit; go 1.24
+# github.com/ipfs/go-cid v0.6.1
+## explicit; go 1.25.0
 github.com/ipfs/go-cid
 # github.com/ipfs/go-cidutil v0.1.1
 ## explicit; go 1.24.0
@@ -463,11 +463,11 @@ github.com/ipfs/go-ipfs-pq
 # github.com/ipfs/go-ipld-format v0.6.3
 ## explicit; go 1.24.0
 github.com/ipfs/go-ipld-format
-# github.com/ipfs/go-ipld-legacy v0.2.2
-## explicit; go 1.23.10
+# github.com/ipfs/go-ipld-legacy v0.3.0
+## explicit; go 1.24.0
 github.com/ipfs/go-ipld-legacy
-# github.com/ipfs/go-log/v2 v2.9.1
-## explicit; go 1.24
+# github.com/ipfs/go-log/v2 v2.9.2
+## explicit; go 1.25
 github.com/ipfs/go-log/v2
 # github.com/ipfs/go-metrics-interface v0.3.0
 ## explicit; go 1.23
@@ -480,8 +480,8 @@ github.com/ipfs/go-peertaskqueue/peertracker
 # github.com/ipld/go-codec-dagpb v1.7.0
 ## explicit; go 1.22
 github.com/ipld/go-codec-dagpb
-# github.com/ipld/go-ipld-prime v0.22.0
-## explicit; go 1.24.0
+# github.com/ipld/go-ipld-prime v0.23.0
+## explicit; go 1.25.7
 github.com/ipld/go-ipld-prime
 github.com/ipld/go-ipld-prime/adl
 github.com/ipld/go-ipld-prime/codec
@@ -705,7 +705,7 @@ github.com/libp2p/go-libp2p/x/rate
 # github.com/libp2p/go-libp2p-asn-util v0.4.1
 ## explicit; go 1.19
 github.com/libp2p/go-libp2p-asn-util
-# github.com/libp2p/go-libp2p-kad-dht v0.39.0
+# github.com/libp2p/go-libp2p-kad-dht v0.40.0
 ## explicit; go 1.25.7
 github.com/libp2p/go-libp2p-kad-dht
 github.com/libp2p/go-libp2p-kad-dht/amino
@@ -768,8 +768,8 @@ github.com/marten-seemann/tcp
 # github.com/mattn/go-colorable v0.1.14
 ## explicit; go 1.18
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.20
-## explicit; go 1.15
+# github.com/mattn/go-isatty v0.0.22
+## explicit; go 1.21
 github.com/mattn/go-isatty
 # github.com/mattn/go-mastodon v0.0.10
 ## explicit; go 1.23
@@ -802,8 +802,9 @@ github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
-# github.com/mr-tron/base58 v1.2.0
-## explicit; go 1.12
+# github.com/mr-tron/base58 v1.3.0
+## explicit; go 1.11
+github.com/mr-tron/base58
 github.com/mr-tron/base58/base58
 # github.com/muesli/reflow v0.3.0
 ## explicit; go 1.13
@@ -831,8 +832,8 @@ github.com/multiformats/go-multiaddr-dns
 # github.com/multiformats/go-multiaddr-fmt v0.1.0
 ## explicit; go 1.13
 github.com/multiformats/go-multiaddr-fmt
-# github.com/multiformats/go-multibase v0.2.0
-## explicit; go 1.19
+# github.com/multiformats/go-multibase v0.3.0
+## explicit; go 1.25
 github.com/multiformats/go-multibase
 # github.com/multiformats/go-multicodec v0.10.0
 ## explicit; go 1.24
@@ -1341,7 +1342,7 @@ go.uber.org/mock/mockgen/model
 # go.uber.org/multierr v1.11.0
 ## explicit; go 1.19
 go.uber.org/multierr
-# go.uber.org/zap v1.27.1
+# go.uber.org/zap v1.28.0
 ## explicit; go 1.19
 go.uber.org/zap
 go.uber.org/zap/buffer
@@ -1358,7 +1359,7 @@ go.yaml.in/yaml/v2
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
-# golang.org/x/crypto v0.49.0
+# golang.org/x/crypto v0.50.0
 ## explicit; go 1.25.0
 golang.org/x/crypto/acme
 golang.org/x/crypto/acme/autocert
@@ -1381,7 +1382,7 @@ golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 golang.org/x/crypto/ssh/knownhosts
-# golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
+# golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
 ## explicit; go 1.25.0
 golang.org/x/exp/slices
 # golang.org/x/image v0.29.0
@@ -1389,13 +1390,13 @@ golang.org/x/exp/slices
 golang.org/x/image/bmp
 golang.org/x/image/draw
 golang.org/x/image/math/f64
-# golang.org/x/mod v0.34.0
+# golang.org/x/mod v0.35.0
 ## explicit; go 1.25.0
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.52.0
+# golang.org/x/net v0.53.0
 ## explicit; go 1.25.0
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -1421,7 +1422,7 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.20.0
 ## explicit; go 1.25.0
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.42.0
+# golang.org/x/sys v0.43.0
 ## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -1429,16 +1430,16 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/telemetry v0.0.0-20260311193753-579e4da9a98c
+# golang.org/x/telemetry v0.0.0-20260409153401-be6f6cb8b1fa
 ## explicit; go 1.25.0
 golang.org/x/telemetry/counter
 golang.org/x/telemetry/internal/counter
 golang.org/x/telemetry/internal/mmap
 golang.org/x/telemetry/internal/telemetry
-# golang.org/x/term v0.41.0
+# golang.org/x/term v0.42.0
 ## explicit; go 1.25.0
 golang.org/x/term
-# golang.org/x/text v0.35.0
+# golang.org/x/text v0.36.0
 ## explicit; go 1.25.0
 golang.org/x/text/cases
 golang.org/x/text/encoding
@@ -1459,7 +1460,7 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.14.0
 ## explicit; go 1.24.0
 golang.org/x/time/rate
-# golang.org/x/tools v0.43.0
+# golang.org/x/tools v0.44.0
 ## explicit; go 1.25.0
 golang.org/x/tools/cmd/goimports
 golang.org/x/tools/go/ast/astutil
@@ -1479,7 +1480,6 @@ golang.org/x/tools/internal/gcimporter
 golang.org/x/tools/internal/gocommand
 golang.org/x/tools/internal/gopathwalk
 golang.org/x/tools/internal/imports
-golang.org/x/tools/internal/modindex
 golang.org/x/tools/internal/packagesinternal
 golang.org/x/tools/internal/pkgbits
 golang.org/x/tools/internal/stdlib
