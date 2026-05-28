@@ -17,7 +17,6 @@ package site.warpnet.warpdroid
 
 import android.app.Application
 import android.app.NotificationManager
-import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.StrictMode
@@ -29,15 +28,11 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import androidx.work.WorkManager
-import coil3.ImageLoader
-import coil3.SingletonImageLoader
-import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.NEW_INSTALL_SCHEMA_VERSION
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.settings.PrefKeys.APP_THEME
 import site.warpnet.warpdroid.settings.SCHEMA_VERSION
-import site.warpnet.warpdroid.util.AnimatedPngDecoder
 import site.warpnet.warpdroid.util.LocaleManager
 import site.warpnet.warpdroid.util.setAppNightMode
 import dagger.hilt.android.HiltAndroidApp
@@ -50,7 +45,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 import org.conscrypt.Conscrypt
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.warpdroid.worker.PairRefreshWorker
@@ -58,8 +52,7 @@ import site.warpnet.warpdroid.worker.PairRefreshWorker
 @HiltAndroidApp
 class WarpdroidApplication :
     Application(),
-    Configuration.Provider,
-    SingletonImageLoader.Factory {
+    Configuration.Provider {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
@@ -72,9 +65,6 @@ class WarpdroidApplication :
 
     @Inject
     lateinit var notificationManager: NotificationManager
-
-    @Inject
-    lateinit var okHttpClient: OkHttpClient
 
     @Inject
     lateinit var warpnetClient: WarpnetClient
@@ -200,21 +190,6 @@ class WarpdroidApplication :
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
-
-    override fun newImageLoader(context: Context): ImageLoader {
-        return ImageLoader.Builder(context)
-            .components {
-                add(
-                    OkHttpNetworkFetcherFactory(
-                        callFactory = okHttpClient
-                    )
-                )
-                add(
-                    AnimatedPngDecoder.Factory()
-                )
-            }
-            .build()
-    }
 
     private fun upgradeSharedPreferences(oldVersion: Int, newVersion: Int) {
         Log.d(TAG, "Upgrading shared preferences: $oldVersion -> $newVersion")

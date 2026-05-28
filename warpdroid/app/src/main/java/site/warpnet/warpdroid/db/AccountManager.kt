@@ -6,7 +6,7 @@
 package site.warpnet.warpdroid.db
 
 import site.warpnet.warpdroid.db.entity.AccountEntity
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -59,10 +59,10 @@ class AccountManager @Inject constructor() {
     }
 
     /**
-     * Mirror-update the stub [AccountEntity] from a Warpnet-sourced [Account]
+     * Mirror-update the stub [AccountEntity] from a Warpnet-sourced [User]
      * DTO (populated in Phase 4 by the Warpnet→Warpnet mapper).
      */
-    suspend fun updateAccount(accountEntity: AccountEntity, account: Account) {
+    suspend fun updateAccount(accountEntity: AccountEntity, account: User) {
         updateAccount(accountEntity) {
             copy(
                 accountId = account.id,
@@ -82,18 +82,6 @@ class AccountManager @Inject constructor() {
     fun getAccountByIdentifier(identifier: String): AccountEntity? =
         accounts.find { it.identifier == identifier }
 
-    /** No-op: single-account model. Preserved for call-site compatibility. */
-    suspend fun setActiveAccount(accountId: Long) {
-        // Warpdroid only ever has the stub account active.
-    }
-
-    /**
-     * No-op: there is nothing to remove. Returns null to signal "no other
-     * account available" so the caller's "last account was logged out" path
-     * runs — except the caller is dead code in Warpdroid.
-     */
-    suspend fun remove(account: AccountEntity): AccountEntity? = null
-
     /** @return true — at least the stub account has notifications enabled. */
     fun areNotificationsEnabled(): Boolean = accounts.any { it.notificationsEnabled }
 
@@ -102,7 +90,7 @@ class AccountManager @Inject constructor() {
 
     companion object {
         const val STUB_ACCOUNT_ID: Long = 1L
-        const val STUB_DOMAIN: String = "warpnet.local"
+        const val STUB_DOMAIN: String = "warpnet.site"
         const val STUB_USERNAME: String = "me"
 
         private val STUB_ACCOUNT = AccountEntity(

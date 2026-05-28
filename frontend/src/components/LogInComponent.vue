@@ -34,19 +34,30 @@ resulting from the use or misuse of this software.
           @keydown.enter="$refs.password.focus()"
       />
     </div>
-    <div class="w-full bg-lightblue border-b-2 border-dark mt-10 mb-10 p-2 input_field">
+    <div class="w-full bg-lightblue border-b-2 border-dark mt-10 mb-2 p-2 input_field">
       <label for="login-password" class="text-dark text-center block">Password</label>
       <input
           id="login-password"
           v-model="password"
           class="w-full bg-lightblue text-lg text-center"
-          type="password"
+          :type="revealPassword ? 'text' : 'password'"
           ref="password"
           autocomplete="current-password"
           @keydown.enter="signIn"
       />
     </div>
-    <div class="flex justify-center">
+    <div class="flex justify-end mb-6">
+      <button
+        type="button"
+        @click="revealPassword = !revealPassword"
+        class="text-blue text-sm flat-btn"
+        :aria-pressed="revealPassword"
+      >
+        <i :class="revealPassword ? 'fas fa-eye-slash' : 'fas fa-eye'" aria-hidden="true"></i>
+        {{ revealPassword ? "Hide password" : "Reveal password" }}
+      </button>
+    </div>
+    <div class="flex justify-center mt-6">
       <button
         v-if="!isLoading"
         @click.prevent="signIn"
@@ -65,19 +76,20 @@ resulting from the use or misuse of this software.
       </button>
     </div>
   </template>
-  
+
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 export default {
   name: "LogInComponent",
   components: {
-    ProgressBar: defineAsyncComponent(() => import('./ProgressBar.vue'))
+    ProgressBar: defineAsyncComponent(() => import('./ProgressBar.vue')),
   },
   data() {
     return {
       username: "",
       password: "",
+      revealPassword: false,
       isLoading: false,
       showErrorModal: false,
       errorMessage: "",
@@ -115,4 +127,3 @@ export default {
     border-radius: 8px;
   }
 </style>
-  

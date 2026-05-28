@@ -23,11 +23,10 @@ import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.notifications.NotificationsViewHolder
 import site.warpnet.warpdroid.databinding.ItemFollowRequestBinding
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.util.TweetDisplayOptions
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
@@ -62,18 +61,13 @@ class FollowRequestViewHolder(
     }
 
     fun setupWithAccount(
-        account: TimelineAccount,
+        account: TimelineUser,
         animateAvatar: Boolean,
-        animateEmojis: Boolean,
+        @Suppress("UNUSED_PARAMETER") animateEmojis: Boolean,
         showBotOverlay: Boolean
     ) {
         val wrappedName = account.name.unicodeWrap()
-        val emojifiedName: CharSequence = wrappedName.emojify(
-            account.emojis,
-            binding.displayNameTextView,
-            animateEmojis
-        )
-        binding.displayNameTextView.text = emojifiedName
+        binding.displayNameTextView.text = wrappedName
         if (showHeader) {
             val wholeMessage: String = itemView.context.getString(
                 R.string.notification_follow_request_format,
@@ -81,7 +75,7 @@ class FollowRequestViewHolder(
             )
             binding.notificationTextView.text = SpannableString(wholeMessage).apply {
                 setSpan(StyleSpan(Typeface.BOLD), 0, wrappedName.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }.emojify(account.emojis, binding.notificationTextView, animateEmojis)
+            }
         }
         binding.notificationTextView.visible(showHeader)
         val formattedUsername = itemView.context.getString(
@@ -94,9 +88,8 @@ class FollowRequestViewHolder(
         } else {
             binding.accountNote.show()
 
-            val emojifiedNote = account.note.parseAsWarpnetHtml()
-                .emojify(account.emojis, binding.accountNote, animateEmojis)
-            setClickableText(binding.accountNote, emojifiedNote, emptyList(), null, linkListener)
+            val parsedNote = account.note.parseAsWarpnetHtml()
+            setClickableText(binding.accountNote, parsedNote, emptyList(), null, linkListener)
         }
         val avatarRadius = binding.avatar.context.resources.getDimensionPixelSize(
             R.dimen.avatar_radius_48dp

@@ -19,7 +19,7 @@ import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
 data class SearchResult(
-    val accounts: List<TimelineAccount>,
+    val accounts: List<TimelineUser>,
     val statuses: List<Tweet>,
     val hashtags: List<HashTag>
 )

@@ -69,7 +69,7 @@ import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.databinding.ActivityAccountBinding
 import site.warpnet.warpdroid.db.DraftsAlert
 import site.warpnet.warpdroid.db.entity.AccountEntity
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.interfaces.AccountSelectionListener
 import site.warpnet.warpdroid.interfaces.ActionButtonActivity
@@ -80,7 +80,6 @@ import site.warpnet.warpdroid.util.Error
 import site.warpnet.warpdroid.util.Loading
 import site.warpnet.warpdroid.util.Success
 import site.warpnet.warpdroid.util.copyToClipboard
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.ensureBottomMargin
 import site.warpnet.warpdroid.util.getDomain
 import site.warpnet.warpdroid.util.hide
@@ -120,7 +119,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private var muting: Boolean = false
     private var showingRetweets: Boolean = false
     private var subscribing: Boolean = false
-    private var loadedAccount: Account? = null
+    private var loadedAccount: User? = null
 
     private var animateAvatar: Boolean = false
     private var animateEmojis: Boolean = false
@@ -173,9 +172,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
 
         if (viewModel.isSelf) {
             updateButtons()
-            binding.saveNoteInfo.hide()
-        } else {
-            binding.saveNoteInfo.visibility = View.INVISIBLE
         }
     }
 
@@ -245,7 +241,10 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
 
         binding.accountFragmentViewPager.reduceSwipeSensitivity()
         binding.accountFragmentViewPager.adapter = adapter
-        binding.accountFragmentViewPager.offscreenPageLimit = 2
+        // Default offscreen prefetch (-1) instead of 2: opening Profile no longer
+        // composes 3 TimelineFragment LazyLists at once. Trade-off is a small lag
+        // on the first swipe to a not-yet-loaded tab; opening the screen is the
+        // hotter path on a low-end device.
 
         val pageTitles =
             arrayOf(
@@ -441,12 +440,12 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
     }
 
-    private fun onAccountChanged(account: Account?) {
+    private fun onAccountChanged(account: User?) {
         loadedAccount = account ?: return
 
         val usernameFormatted = getString(R.string.post_username_format, account.username)
         binding.accountUsernameTextView.text = usernameFormatted
-        binding.accountDisplayNameTextView.text = account.name.emojify(account.emojis, binding.accountDisplayNameTextView, animateEmojis)
+        binding.accountDisplayNameTextView.text = account.name
 
         // Long press on username to copy it to clipboard
         for (view in listOf(binding.accountUsernameTextView, binding.accountDisplayNameTextView)) {
@@ -461,12 +460,8 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             }
         }
 
-        val emojifiedNote = account.note.parseAsWarpnetHtml().emojify(
-            account.emojis,
-            binding.accountNoteTextView,
-            animateEmojis
-        )
-        setClickableText(binding.accountNoteTextView, emojifiedNote, emptyList(), null, this)
+        val parsedNote = account.note.parseAsWarpnetHtml()
+        setClickableText(binding.accountNoteTextView, parsedNote, emptyList(), null, this)
 
         accountFieldAdapter.fields = account.fields
         accountFieldAdapter.emojis = account.emojis
@@ -477,8 +472,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         updateAccountAvatar()
         updateToolbar()
         updateBadges()
-        updateMovedAccount()
-        updateRemoteAccount()
         updateAccountJoinedDate()
         updateAccountStats()
         invalidateOptionsMenu()
@@ -573,45 +566,8 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
      */
     private fun updateToolbar() {
         loadedAccount?.let { account ->
-            supportActionBar?.title = account.name.emojify(account.emojis, binding.accountToolbar, animateEmojis)
+            supportActionBar?.title = account.name
             supportActionBar?.subtitle = String.format(getString(R.string.post_username_format), account.username)
-        }
-    }
-
-    /**
-     * Update moved account info
-     */
-    private fun updateMovedAccount() {
-        loadedAccount?.moved?.let { movedAccount ->
-
-            binding.accountMovedView.show()
-
-            binding.accountMovedView.setOnClickListener {
-                onViewAccount(movedAccount.id)
-            }
-
-            binding.accountMovedDisplayName.text = movedAccount.name
-            binding.accountMovedUsername.text = getString(R.string.post_username_format, movedAccount.username)
-
-            val avatarRadius = resources.getDimensionPixelSize(R.dimen.avatar_radius_48dp)
-
-            loadAvatar(movedAccount.avatar, binding.accountMovedAvatar, avatarRadius, animateAvatar)
-
-            binding.accountMovedText.text = getString(R.string.account_moved_description, movedAccount.name)
-        }
-    }
-
-    /**
-     * Check is account remote and update info if so
-     */
-    private fun updateRemoteAccount() {
-        loadedAccount?.let { account ->
-            if (account.isRemote) {
-                binding.accountRemoveView.show()
-                binding.accountRemoveView.setOnClickListener {
-                    openLink(account.url)
-                }
-            }
         }
     }
 
@@ -690,10 +646,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             }
         }
 
-        // Warpnet has no per-target private note (Mastodon's "edit note
-        // about <user>") — the input layout stays hidden.
-        binding.accountNoteTextInputLayout.visible(false)
-
         updateButtons()
     }
 
@@ -744,24 +696,17 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private fun updateButtons() {
         invalidateOptionsMenu()
 
-        if (loadedAccount?.moved == null) {
-            binding.accountFollowButton.show()
-            updateFollowButton()
-            updateSubscribeButton()
+        binding.accountFollowButton.show()
+        updateFollowButton()
+        updateSubscribeButton()
 
-            if (blocking) {
-                binding.accountFloatingActionButton.hide()
-                binding.accountMuteButton.hide()
-            } else {
-                binding.accountFloatingActionButton.show()
-                binding.accountMuteButton.visible(muting)
-                updateMuteButton()
-            }
-        } else {
+        if (blocking) {
             binding.accountFloatingActionButton.hide()
-            binding.accountFollowButton.hide()
             binding.accountMuteButton.hide()
-            binding.accountSubscribeButton.hide()
+        } else {
+            binding.accountFloatingActionButton.show()
+            binding.accountMuteButton.visible(muting)
+            updateMuteButton()
         }
     }
 
@@ -975,7 +920,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
     }
 
-    private fun getFullUsername(account: Account): String {
+    private fun getFullUsername(account: User): String {
         return if (account.isRemote) {
             "@" + account.username
         } else {

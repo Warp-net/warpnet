@@ -142,7 +142,7 @@ func NewDiscoveryService(
 	}
 }
 
-func NewBootstrapDiscoveryService(
+func NewRelayDiscoveryService(
 	ctx context.Context, challenger DiscoveryChallenger, m MetricsOnlineDiscoverer) *discoveryService {
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
@@ -166,7 +166,7 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 	s.node = n
 	s.ownId = s.node.NodeInfo().ID
 
-	asBootstrap := s.node.NodeInfo().IsBootstrap()
+	asRelay := s.node.NodeInfo().IsRelay()
 	asModerator := s.node.NodeInfo().IsModerator()
 
 	go func() {
@@ -186,8 +186,8 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 				s.discoveryTicker.Reset(time.Minute * 5) //nolint:mnd
 
 				switch {
-				case asBootstrap:
-					s.handleAsBootstrap(info)
+				case asRelay:
+					s.handleAsRelay(info)
 				case asModerator:
 					s.handleAsModerator(info)
 				default:
@@ -236,6 +236,8 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 	}
 
 	select {
+	case <-s.stopChan:
+		return
 	case s.discoveryChan <- discoveredPeer{
 		ID:     pi.ID,
 		Addrs:  pi.Addrs,
@@ -306,7 +308,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	s.node.SetNodePriority(pi.ID, info.Reachability)
 
-	if info.IsBootstrap() {
+	if info.IsRelay() {
 		return
 	}
 
@@ -341,6 +343,10 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	}
 
 	s.m.PushStatusOnline(pi.ID.String())
+
+	if info.IsModerator() {
+		return
+	}
 
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())
 	if !errors.Is(err, database.ErrUserNotFound) && !existedUser.IsOffline {
@@ -377,9 +383,9 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	)
 }
 
-func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
+func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 	if s == nil || s.node == nil {
-		log.Errorf("discovery: bootstrap handle: nil discovery service")
+		log.Errorf("discovery: relay handle: nil discovery service")
 		return
 	}
 
@@ -391,20 +397,20 @@ func (s *discoveryService) handleAsBootstrap(peer discoveredPeer) {
 
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
-		log.Debugf("discovery: source '%s': bootstrap handle: connecting is backoffed: %s", peer.Source, pi.ID)
+		log.Debugf("discovery: source '%s': relay handle: connecting is backoffed: %s", peer.Source, pi.ID)
 		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
 		log.Debugf(
-			"discovery: source '%s': bootstrap handle: connect to new peer %s: %v",
+			"discovery: source '%s': relay handle: connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err,
 		)
 		if errors.Is(err, warpnet.ErrAllDialsFailed) {
 			err = warpnet.ErrAllDialsFailed
 		}
 		log.Warnf(
-			"discovery: source '%s': bootstrap handle: connect to new peer %s: %v",
+			"discovery: source '%s': relay handle: connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err,
 		)
 		s.m.PushStatusOffline(pi.ID.String())

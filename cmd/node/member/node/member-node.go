@@ -122,7 +122,7 @@ func NewMemberNode(
 	pubSubHandlers := memberPubSub.PrefollowHandlers(followingIds...)
 	pubSubHandlers = append(
 		pubSubHandlers,
-		memberPubSub.NewBootstrapDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
+		memberPubSub.NewRelayDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
@@ -419,7 +419,7 @@ func (m *MemberNode) setupHandlers(
 	token := authRepo.SessionToken()
 
 	hs := make([]warpnet.WarpStreamHandler, 0, 80)
-	hs = append(hs, m.adminHandlers(token, privKey, db, authRepo, r)...)
+	hs = append(hs, m.adminHandlers(token, privKey, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.replyHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
@@ -441,7 +441,6 @@ func (m *MemberNode) adminHandlers(
 	token string,
 	privKey ed25519.PrivateKey,
 	db Storer,
-	authRepo AuthProvider,
 	r *memberRepos,
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
@@ -463,7 +462,11 @@ func (m *MemberNode) adminHandlers(
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
-			handler.StreamModerationResultHandler(r.notificationRepo, r.tweetRepo, authRepo, r.timelineRepo),
+			handler.StreamModerationResultHandler(r.tweetRepo, m.userRepo, r.timelineRepo),
+		},
+		{
+			event.PUBLIC_POST_REPORT,
+			handler.StreamReportHandler(m.pubsubService),
 		},
 	}
 }
@@ -481,7 +484,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_TWEET,
-			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo),
+			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo),
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,

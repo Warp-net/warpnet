@@ -37,6 +37,7 @@ import (
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 	"github.com/ipfs/go-cid"
 	ds "github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -58,6 +59,7 @@ type PubSubProvider interface {
 	UnsubscribeUserUpdate(userId string) (err error)
 	Run(m pubsub.PubsubServerNodeConnector)
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
+	PublishReport(ev event.ReportEvent) error
 	Close() error
 	Gossip() *corePubsub.Gossip
 }
@@ -128,6 +130,7 @@ type FollowStorer interface {
 
 type Storer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
+	NewReadTxn() (local_store.WarpTransactioner, error)
 	Get(key local_store.DatabaseKey) ([]byte, error)
 	GetExpiration(key local_store.DatabaseKey) (uint64, error)
 	GetSize(key local_store.DatabaseKey) (int64, error)

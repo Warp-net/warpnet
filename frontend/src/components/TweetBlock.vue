@@ -78,8 +78,15 @@ resulting from the use or misuse of this software.
               <button type="button" @click.stop="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
               <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
             </template>
+            <button v-if="!isOwner && !tweet.parent_id" type="button" @click.stop="openReport" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Report tweet</button>
           </div>
         </div>
+        <ReportDialog
+          :show="showReportDialog"
+          title="Report tweet"
+          @submit="submitReport"
+          @cancel="showReportDialog = false"
+        />
       </div>
       <p v-if="!tweet.moderation || tweet.moderation?.is_ok" class="pb-2">
         {{ tweet.text }}
@@ -249,6 +256,7 @@ export default {
     RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
     EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
     QuoteOverlay: defineAsyncComponent(() => import('./QuoteOverlay.vue')),
+    ReportDialog: defineAsyncComponent(() => import('./ReportDialog.vue')),
   },
   data() {
     return {
@@ -259,6 +267,7 @@ export default {
       showEditOverlay: false,
       showQuoteOverlay: false,
       showDropdown: false,
+      showReportDialog: false,
       showRetweetMenu: false,
       quotedSourceText: '',
       quotedSourceUsername: '',
@@ -442,6 +451,30 @@ export default {
         t =  await warpnetService.getReply(getObject);
       }
       this.showReplyOverlay = true;
+    },
+    openReport() {
+      this.showDropdown = false;
+      this.showReportDialog = true;
+    },
+    async submitReport(reason) {
+      try {
+        // ModerationObjectType: tweets are type 1. Replies hide the
+        // Report button entirely (the moderator side has no
+        // reply-fetch wiring yet), so this only ever runs for root
+        // tweets.
+        const profile = await warpnetService.getProfile(this.tweet.user_id);
+        await warpnetService.report({
+          type: 1,
+          objectId: this.tweet.id,
+          targetUserId: this.tweet.user_id,
+          targetNodeId: profile?.node_id || '',
+          reason,
+        });
+      } catch (err) {
+        console.error('Failed to send report:', err);
+      } finally {
+        this.showReportDialog = false;
+      }
     },
     async deleteTweet() {
       this.showDropdown = false;

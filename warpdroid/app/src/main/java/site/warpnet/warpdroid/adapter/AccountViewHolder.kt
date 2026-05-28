@@ -3,10 +3,9 @@ package site.warpnet.warpdroid.adapter
 import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ItemAccountBinding
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LinkListener
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.visible
 
@@ -16,9 +15,9 @@ class AccountViewHolder(
     private lateinit var accountId: String
 
     fun setupWithAccount(
-        account: TimelineAccount,
+        account: TimelineUser,
         animateAvatar: Boolean,
-        animateEmojis: Boolean,
+        @Suppress("UNUSED_PARAMETER") animateEmojis: Boolean,
         showBotOverlay: Boolean
     ) {
         accountId = account.id
@@ -28,12 +27,7 @@ class AccountViewHolder(
             account.username
         )
 
-        val emojifiedName = account.name.emojify(
-            account.emojis,
-            binding.accountDisplayName,
-            animateEmojis
-        )
-        binding.accountDisplayName.text = emojifiedName
+        binding.accountDisplayName.text = account.name
 
         val avatarRadius = binding.accountAvatar.context.resources
             .getDimensionPixelSize(R.dimen.avatar_radius_48dp)

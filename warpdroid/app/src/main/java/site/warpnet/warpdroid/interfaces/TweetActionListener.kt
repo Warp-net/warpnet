@@ -75,6 +75,15 @@ interface TweetActionListener : LinkListener {
     fun onReply(viewData: TweetViewData.Concrete)
 
     /**
+     * Open the composer pre-loaded to quote the tweet represented by
+     * [viewData]. Mirrors the Vue desktop "Quote" button: opens
+     * [site.warpnet.warpdroid.components.compose.ComposeActivity] with
+     * quotedTweetId / quotedUserId populated so the sent tweet uses the
+     * PUBLIC_POST_RETWEET wire with a non-empty comment.
+     */
+    fun onQuote(viewData: TweetViewData.Concrete)
+
+    /**
      * Show a quote despite the author being blocked or muted.
      * @param viewData The parent status containing the quote.
      */

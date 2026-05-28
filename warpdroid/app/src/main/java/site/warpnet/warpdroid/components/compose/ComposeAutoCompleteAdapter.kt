@@ -28,15 +28,14 @@ import site.warpnet.warpdroid.databinding.ItemAutocompleteAccountBinding
 import site.warpnet.warpdroid.databinding.ItemAutocompleteEmojiBinding
 import site.warpnet.warpdroid.databinding.ItemAutocompleteHashtagBinding
 import site.warpnet.warpdroid.entity.Emoji
-import site.warpnet.warpdroid.entity.TimelineAccount
-import site.warpnet.warpdroid.util.emojify
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.visible
 
 class ComposeAutoCompleteAdapter(
     private val autocompletionProvider: AutocompletionProvider,
     private val animateAvatar: Boolean,
-    private val animateEmojis: Boolean,
+    @Suppress("UNUSED_PARAMETER") animateEmojis: Boolean,
     private val showBotBadge: Boolean,
     // if true, @ # : are returned in the result, otherwise only the raw value
     private val withDecoration: Boolean = true,
@@ -108,7 +107,7 @@ class ComposeAutoCompleteAdapter(
                 val accountResult = getItem(position) as AutocompleteResult.AccountResult
                 val account = accountResult.account
                 binding.username.text = context.getString(R.string.post_username_format, account.username)
-                binding.displayName.text = account.name.emojify(account.emojis, binding.displayName, animateEmojis)
+                binding.displayName.text = account.name
                 val avatarRadius = context.resources.getDimensionPixelSize(
                     R.dimen.avatar_radius_42dp
                 )
@@ -147,7 +146,7 @@ class ComposeAutoCompleteAdapter(
     }
 
     sealed interface AutocompleteResult {
-        class AccountResult(val account: TimelineAccount) : AutocompleteResult
+        class AccountResult(val account: TimelineUser) : AutocompleteResult
 
         class HashtagResult(val hashtag: String) : AutocompleteResult
 

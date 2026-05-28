@@ -35,7 +35,7 @@ import androidx.paging.PagingData
 import androidx.paging.compose.LazyPagingItems
 import site.warpnet.warpdroid.components.instanceinfo.InstanceInfo
 import site.warpnet.warpdroid.db.entity.AccountEntity
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 import site.warpnet.warpdroid.ui.tweetcomponents.Avatar
 import site.warpnet.warpdroid.ui.tweetcomponents.text.emojify
@@ -46,16 +46,16 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 
 @AndroidEntryPoint
-class SearchAccountsFragment : SearchFragment<TimelineAccount>() {
+class SearchAccountsFragment : SearchFragment<TimelineUser>() {
 
     @Inject
     lateinit var preferences: SharedPreferences
 
-    override val data: Flow<PagingData<TimelineAccount>>
+    override val data: Flow<PagingData<TimelineUser>>
         get() = viewModel.accountsFlow
 
     override fun LazyListScope.searchResult(
-        result: LazyPagingItems<TimelineAccount>,
+        result: LazyPagingItems<TimelineUser>,
         instanceInfo: InstanceInfo,
         accounts: List<AccountEntity>
     ) {

@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div id="app" class="flex h-full w-full">
+  <div id="app" class="flex h-screen w-full">
     <!-- Sidebar -->
     <SideNav />
 
@@ -160,13 +160,12 @@ resulting from the use or misuse of this software.
               class="flex-1 px-4 py-2 rounded-full bg-lighter focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue text-sm"
               placeholder="Start a new message"
               @keyup.enter="sendMessage"
-              :disabled="disabled"
           />
           <button
               @click="sendMessage"
-              :disabled="disabled || (!text.length && !imageAttachment)"
+              :disabled="!text.length && !imageAttachment"
               class="ml-4 w-9 h-9 rounded-full flex items-center justify-center"
-              :class="disabled || (!text.length && !imageAttachment) ? 'opacity-50 cursor-default' : 'hover:bg-lightblue'"
+              :class="(!text.length && !imageAttachment) ? 'opacity-50 cursor-default' : 'hover:bg-lightblue'"
               aria-label="Send message"
           >
             <i class="fas fa-arrow-right text-blue text-xl" aria-hidden="true"></i>
@@ -200,7 +199,6 @@ export default {
   data() {
     return {
       loading: true,
-      disabled: false,
       showNewMessageModal: false,
       chats: [],
       messages: [],
@@ -238,68 +236,69 @@ export default {
         name: "Home",
       });
     },
-    async sendMessage() {
+    sendMessage() {
       if (!this.active.other_user_id || (this.text.length === 0 && !this.imageAttachment)) return;
-      this.disabled = true;
 
-      try {
-        if (!this.active.id) {
-          const chat = await warpnetService.createChat(this.active.other_user_id);
-          if (chat && chat.id) {
-            await this.loadChatUser(chat.owner_id);
-            await this.loadChatUser(chat.other_user_id);
+      // Capture the input into locals and clear the form right away.
+      // The user can keep typing / send another message while the
+      // network round-trip below runs in the background — no more
+      // "input frozen until the message reappears in the chat".
+      const sentText = this.text;
+      const sentImage = this.imageAttachment;
+      this.text = '';
+      this.imageAttachment = undefined;
+      if (this.$refs.messageImageInput) {
+        this.$refs.messageImageInput.value = '';
+      }
 
-            this.active = { ...this.active, ...chat };
-
-            const existingIndex = this.chats.findIndex((c) => c.id === chat.id);
-            if (existingIndex === -1) {
-              this.chats = [...this.chats, chat];
-            } else {
-              this.chats.splice(existingIndex, 1, { ...this.chats[existingIndex], ...chat });
-            }
-          } else {
-            console.error('Failed to create chat');
-            this.disabled = false;
-            return;
-          }
-        }
-
-        let imageKey = "";
-        if (this.imageAttachment) {
-          imageKey = await warpnetService.uploadImage(this.imageAttachment);
-        }
-
-        await warpnetService.sendDirectMessage({
-          chatId: this.active.id,
-          receiverId: this.active.other_user_id,
-          text: this.text,
-          imageKey: imageKey,
-        });
-
-        const sentText = this.text;
-        const sentHadImage = !!imageKey;
-
-        await this.selectChat(this.active);
-
-        const chatIndex = this.chats.findIndex((c) => c.id === this.active.id);
-        if (chatIndex !== -1) {
-          const preview = sentText || (sentHadImage ? '[image]' : this.chats[chatIndex].last_message);
-          this.chats.splice(chatIndex, 1, {
-            ...this.chats[chatIndex],
-            last_message: preview,
-            updated_at: new Date().toISOString(),
-          });
-        }
-
-        this.text = '';
-        this.imageAttachment = undefined;
-        if (this.$refs.messageImageInput) {
-          this.$refs.messageImageInput.value = '';
-        }
-        this.disabled = false;
-      } catch (err) {
+      // Fire-and-forget. Errors are logged; failed sends do not block
+      // the next attempt because nothing in the UI is gating on this
+      // promise's resolution.
+      this.deliverMessage(sentText, sentImage).catch((err) => {
         console.error('Failed to send message:', err);
-        this.disabled = false;
+      });
+    },
+    async deliverMessage(sentText, sentImage) {
+      if (!this.active.id) {
+        const chat = await warpnetService.createChat(this.active.other_user_id);
+        if (!chat || !chat.id) {
+          throw new Error('createChat returned no id');
+        }
+        await this.loadChatUser(chat.owner_id);
+        await this.loadChatUser(chat.other_user_id);
+
+        this.active = { ...this.active, ...chat };
+
+        const existingIndex = this.chats.findIndex((c) => c.id === chat.id);
+        if (existingIndex === -1) {
+          this.chats = [...this.chats, chat];
+        } else {
+          this.chats.splice(existingIndex, 1, { ...this.chats[existingIndex], ...chat });
+        }
+      }
+
+      let imageKey = '';
+      if (sentImage) {
+        imageKey = await warpnetService.uploadImage(sentImage);
+      }
+
+      await warpnetService.sendDirectMessage({
+        chatId: this.active.id,
+        receiverId: this.active.other_user_id,
+        text: sentText,
+        imageKey: imageKey,
+      });
+
+      await this.selectChat(this.active);
+
+      const chatIndex = this.chats.findIndex((c) => c.id === this.active.id);
+      if (chatIndex !== -1) {
+        const preview = sentText || (imageKey ? '[image]' : this.chats[chatIndex].last_message);
+        this.chats.splice(chatIndex, 1, {
+          ...this.chats[chatIndex],
+          last_message: preview,
+          updated_at: new Date().toISOString(),
+        });
       }
     },
     scrollToEnd() {

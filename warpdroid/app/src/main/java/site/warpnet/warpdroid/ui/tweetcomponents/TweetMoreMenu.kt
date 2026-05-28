@@ -232,26 +232,11 @@ fun TweetMoreMenu(
 
             HorizontalDivider()
 
-            if (isOwnStatus && status.visibility == Tweet.Visibility.PRIVATE) {
-                if (status.retweeted) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.unretweet_private)) },
-                        onClick = {
-                            onDismissRequest()
-                            listener.onRetweet(viewData, false, Tweet.Visibility.PRIVATE, null)
-                        }
-                    )
-                } else {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.retweet_private)) },
-                        onClick = {
-                            onDismissRequest()
-                            listener.onRetweet(viewData, true, Tweet.Visibility.PRIVATE, null)
-                        }
-                    )
-                }
-            }
-            if (isOwnStatus && (status.visibility == Tweet.Visibility.PUBLIC || status.visibility == Tweet.Visibility.UNLISTED)) {
+            // Tusky exposed a "followers-only retweet" branch for own
+            // PRIVATE-visibility tweets here; Warpnet only ever stamps
+            // tweets as PUBLIC (WarpnetMapper.toTweet), so the branch
+            // was unreachable.
+            if (isOwnStatus) {
                 if (status.pinned) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.unpin_action)) },

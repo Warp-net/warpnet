@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 )
@@ -31,6 +32,25 @@ func (s stubModerationTweetUpdater) Update(tweet domain.Tweet) error {
 	return nil
 }
 
+type stubModerationUserUpdater struct {
+	getFn    func(userId string) (domain.User, error)
+	updateFn func(userId string, user domain.User) (domain.User, error)
+}
+
+func (s stubModerationUserUpdater) Get(userId string) (domain.User, error) {
+	if s.getFn != nil {
+		return s.getFn(userId)
+	}
+	return domain.User{Id: userId}, nil
+}
+
+func (s stubModerationUserUpdater) Update(userId string, user domain.User) (domain.User, error) {
+	if s.updateFn != nil {
+		return s.updateFn(userId, user)
+	}
+	return user, nil
+}
+
 type stubModerationTimelineDeleter struct {
 	deleteFn func(userID, tweetID string) error
 }
@@ -45,43 +65,69 @@ func (s stubModerationTimelineDeleter) DeleteTweetFromTimeline(userID, tweetID s
 func TestStreamModerationResultHandler(t *testing.T) {
 	owner := "owner-1"
 	tweetId := "tweet-1"
+	target := "target-1"
+
+	_ = owner
+	mkHandler := func(
+		notifier stubModerationNotifier,
+		tweets stubModerationTweetUpdater,
+		users stubModerationUserUpdater,
+		timeline stubModerationTimelineDeleter,
+	) func([]byte, interface{}) (any, error) {
+		_ = notifier
+		h := StreamModerationResultHandler(tweets, users, timeline)
+		return func(buf []byte, _ interface{}) (any, error) { return h(buf, s{}) }
+	}
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamModerationResultHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubModerationTimelineDeleter{})
-		_, err := h([]byte("{"), s{})
+		h := mkHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{}, stubModerationTimelineDeleter{})
+		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 
 	t.Run("tweet moderation - missing object id", func(t *testing.T) {
-		h := StreamModerationResultHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubModerationTimelineDeleter{})
-		_, err := h(marshal(t, event.ModerationResultEvent{Type: domain.ModerationTweetType, UserID: owner}), s{})
+		h := mkHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{}, stubModerationTimelineDeleter{})
+		_, err := h(marshal(t, event.ModerationResultEvent{Type: domain.ModerationTweetType, UserID: owner}), nil)
 		if !errors.Is(err, ErrNoObjectID) {
 			t.Fatalf("expected ErrNoObjectID, got: %v", err)
 		}
 	})
 
 	t.Run("tweet moderation - missing user id", func(t *testing.T) {
-		h := StreamModerationResultHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubModerationTimelineDeleter{})
-		_, err := h(marshal(t, event.ModerationResultEvent{Type: domain.ModerationTweetType, ObjectID: &tweetId}), s{})
+		h := mkHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{}, stubModerationTimelineDeleter{})
+		_, err := h(marshal(t, event.ModerationResultEvent{Type: domain.ModerationTweetType, ObjectID: &tweetId}), nil)
 		if !errors.Is(err, ErrNoUserID) {
 			t.Fatalf("expected ErrNoUserID, got: %v", err)
 		}
 	})
 
-	t.Run("tweet moderation OK - no notification", func(t *testing.T) {
+	// Shadow-ban semantics: the offender's node never receives a
+	// moderation stream, so the handler must never trigger a
+	// user-facing notification — not on OK, not on FAIL, not when the
+	// verdict happens to mention the local owner. The notification
+	// branch used to fire when `ev.UserID == owner.UserId`; that branch
+	// is gone.
+	t.Run("tweet moderation FAIL for local owner - still no notification (shadow ban)", func(t *testing.T) {
 		notified := false
-		h := StreamModerationResultHandler(stubModerationNotifier{addFn: func(not domain.Notification) error {
-			notified = true
-			return nil
-		}}, stubModerationTweetUpdater{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubModerationTimelineDeleter{})
+		h := mkHandler(
+			stubModerationNotifier{addFn: func(not domain.Notification) error {
+				notified = true
+				return nil
+			}},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{},
+		)
+		reason := "inappropriate content"
 		resp, err := h(marshal(t, event.ModerationResultEvent{
 			Type:     domain.ModerationTweetType,
 			ObjectID: &tweetId,
 			UserID:   owner,
-			Result:   domain.OK,
-		}), s{})
+			Result:   domain.FAIL,
+			Reason:   &reason,
+		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -89,50 +135,27 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			t.Fatalf("expected accepted, got: %v", resp)
 		}
 		if notified {
-			t.Fatal("should not notify on OK result")
+			t.Fatal("offender must NOT be notified (shadow-ban semantics)")
 		}
 	})
 
-	t.Run("tweet moderation FAIL - adds notification for owner", func(t *testing.T) {
+	t.Run("tweet moderation FAIL for other user - no notification", func(t *testing.T) {
 		notified := false
-		reason := "inappropriate content"
-		h := StreamModerationResultHandler(stubModerationNotifier{addFn: func(not domain.Notification) error {
-			notified = true
-			if not.Type != domain.NotificationModerationType {
-				t.Fatalf("expected moderation type, got: %v", not.Type)
-			}
-			return nil
-		}}, stubModerationTweetUpdater{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubModerationTimelineDeleter{})
-		resp, err := h(marshal(t, event.ModerationResultEvent{
-			Type:     domain.ModerationTweetType,
-			ObjectID: &tweetId,
-			UserID:   owner,
-			Result:   domain.FAIL,
-			Reason:   &reason,
-		}), s{})
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if resp != event.Accepted {
-			t.Fatalf("expected accepted, got: %v", resp)
-		}
-		if !notified {
-			t.Fatal("expected notification to be added")
-		}
-	})
-
-	t.Run("tweet moderation FAIL - not owner, no notification", func(t *testing.T) {
-		notified := false
-		h := StreamModerationResultHandler(stubModerationNotifier{addFn: func(not domain.Notification) error {
-			notified = true
-			return nil
-		}}, stubModerationTweetUpdater{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubModerationTimelineDeleter{})
+		h := mkHandler(
+			stubModerationNotifier{addFn: func(not domain.Notification) error {
+				notified = true
+				return nil
+			}},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{},
+		)
 		resp, err := h(marshal(t, event.ModerationResultEvent{
 			Type:     domain.ModerationTweetType,
 			ObjectID: &tweetId,
 			UserID:   "other-user",
 			Result:   domain.FAIL,
-		}), s{})
+		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -145,11 +168,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 	})
 
 	t.Run("unknown moderation type - returns accepted", func(t *testing.T) {
-		h := StreamModerationResultHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubModerationTimelineDeleter{})
+		h := mkHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{}, stubModerationTimelineDeleter{})
 		resp, err := h(marshal(t, event.ModerationResultEvent{
 			Type:   domain.ModerationObjectType(99),
 			UserID: owner,
-		}), s{})
+		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -161,22 +184,27 @@ func TestStreamModerationResultHandler(t *testing.T) {
 	t.Run("tweet moderation - updates tweet and removes from timeline", func(t *testing.T) {
 		tweetUpdated := false
 		timelineDeleted := false
-		h := StreamModerationResultHandler(stubModerationNotifier{}, stubModerationTweetUpdater{updateFn: func(tweet domain.Tweet) error {
-			tweetUpdated = true
-			if tweet.Moderation == nil {
-				t.Fatal("expected moderation info")
-			}
-			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubModerationTimelineDeleter{deleteFn: func(userID, tweetID string) error {
-			timelineDeleted = true
-			return nil
-		}})
+		h := mkHandler(
+			stubModerationNotifier{},
+			stubModerationTweetUpdater{updateFn: func(tweet domain.Tweet) error {
+				tweetUpdated = true
+				if tweet.Moderation == nil {
+					t.Fatal("expected moderation info")
+				}
+				return nil
+			}},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{deleteFn: func(userID, tweetID string) error {
+				timelineDeleted = true
+				return nil
+			}},
+		)
 		resp, err := h(marshal(t, event.ModerationResultEvent{
 			Type:     domain.ModerationTweetType,
 			ObjectID: &tweetId,
 			UserID:   owner,
 			Result:   domain.OK,
-		}), s{})
+		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -188,6 +216,77 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 		if !timelineDeleted {
 			t.Fatal("expected timeline entry to be deleted")
+		}
+	})
+
+	// New: profile-level moderation marks the user row and never errors
+	// out when the user isn't cached locally (observer doesn't follow).
+	t.Run("user moderation - sets user.Moderation flag", func(t *testing.T) {
+		var updated domain.User
+		h := mkHandler(
+			stubModerationNotifier{},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{
+				getFn: func(userId string) (domain.User, error) {
+					return domain.User{Id: userId, Bio: "old bio"}, nil
+				},
+				updateFn: func(userId string, user domain.User) (domain.User, error) {
+					updated = user
+					return user, nil
+				},
+			},
+			stubModerationTimelineDeleter{},
+		)
+		reason := "abuse"
+		resp, err := h(marshal(t, event.ModerationResultEvent{
+			Type:   domain.ModerationUserType,
+			UserID: target,
+			Result: domain.FAIL,
+			Reason: &reason,
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if updated.Moderation == nil || !updated.Moderation.IsModerated {
+			t.Fatalf("expected user moderation flag set: %+v", updated.Moderation)
+		}
+		if updated.Bio != "old bio" {
+			t.Fatalf("Bio must not be wiped — UI hides it on the flag, not the storage: got %q", updated.Bio)
+		}
+	})
+
+	t.Run("user moderation - unknown user is a no-op", func(t *testing.T) {
+		updateCalled := false
+		h := mkHandler(
+			stubModerationNotifier{},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{
+				getFn: func(userId string) (domain.User, error) {
+					return domain.User{}, database.ErrUserNotFound
+				},
+				updateFn: func(userId string, user domain.User) (domain.User, error) {
+					updateCalled = true
+					return user, nil
+				},
+			},
+			stubModerationTimelineDeleter{},
+		)
+		resp, err := h(marshal(t, event.ModerationResultEvent{
+			Type:   domain.ModerationUserType,
+			UserID: target,
+			Result: domain.FAIL,
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if updateCalled {
+			t.Fatal("update must not be called when the user isn't cached")
 		}
 	})
 }

@@ -18,7 +18,7 @@ import androidx.compose.runtime.Immutable
 import site.warpnet.warpdroid.entity.AccountWarning
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.RelationshipSeveranceEvent
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 
 @Immutable
 sealed class NotificationViewData {
@@ -32,7 +32,7 @@ sealed class NotificationViewData {
     data class Concrete(
         override val id: String,
         val type: Notification.Type,
-        val account: TimelineAccount,
+        val account: TimelineUser,
         val statusViewData: TweetViewData.Concrete?,
         val event: RelationshipSeveranceEvent?,
         val moderationWarning: AccountWarning?,

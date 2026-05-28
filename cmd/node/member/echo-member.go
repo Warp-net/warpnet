@@ -30,8 +30,10 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -57,12 +59,18 @@ import (
 )
 
 const (
-	echoReplyPrefix = "echo: "
-	echoChatReply   = "echo: received message"
-	messageLimit    = 5000
-	seenTTL         = 999 * time.Minute
-	pruneInterval   = 999 * time.Minute
-	maxSeenKeys     = 10_000
+	username    = "Echo"
+	echoOwnerID = "01KSGHBHKG0N77T6A3RZV8WSH5"
+
+	echoReplyPrefix   = "echo: "
+	echoChatReply     = "echo: received message"
+	messageLimit      = 5000
+	seenTTL           = 999 * time.Minute
+	pruneInterval     = 999 * time.Minute
+	maxSeenKeys       = 10_000
+	ownTweetInterval  = 5 * time.Minute
+	ownTweetFallback  = "echo: hello from the warpnet — random Chuck quote API was unavailable"
+	ownTweetCharLimit = 4096
 )
 
 // run node without GUI
@@ -88,7 +96,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		os.Exit(1)
@@ -97,12 +105,28 @@ func main() {
 	readyChan := make(chan domain.AuthNodeInfo, 10)
 
 	authRepo := database.NewAuthRepo(db, network)
+	authRepo.SetOwner(domain.Owner{
+		CreatedAt:       time.Now(),
+		UserId:          echoOwnerID,
+		RedundantUserID: echoOwnerID,
+		Username:        username,
+	})
+
 	userRepo := database.NewUserRepo(db)
+	if _, err := userRepo.Create(domain.User{
+		CreatedAt:     time.Now(),
+		Id:            echoOwnerID,
+		Username:      username,
+		RoundTripTime: math.MaxInt64, // sit at the end of who-to-follow lists
+	}); err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
+		log.Fatalf("failed to pre-create echo user: %v", err)
+	}
+
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
 	go func() {
 		_, authErr := authService.AuthLogin(event.LoginEvent{
-			Username: "Echo",
+			Username: username,
 			Password: `\@4o97Z7<Cfu`,
 		},
 			psk,
@@ -121,6 +145,7 @@ func main() {
 		config.Config().Node.Network,
 	)
 
+	bootstrapNodes, _ := config.Config().Node.AddrInfos()
 	echoNode, err := member.NewMemberNode(
 		ctx,
 		authRepo.PrivateKey(),
@@ -130,7 +155,7 @@ func main() {
 		config.Config().Version,
 		authRepo,
 		db,
-		[]warpnet.WarpAddrInfo{},
+		bootstrapNodes,
 		m,
 	)
 	if err != nil {
@@ -148,8 +173,11 @@ func main() {
 	authInfo.Addresses = echoNode.NodeInfo().Addresses
 
 	readyChan <- authInfo
-	eBot := newEchoBot(echoNode, db)
+	echoFollowRepo := database.NewFollowRepo(db)
+	echoTweetRepo := database.NewTweetRepo(db, nil)
+	eBot := newEchoBot(echoNode, db, echoFollowRepo, echoTweetRepo)
 	go runOwnActivity(ctx, eBot, echoNode)
+	go runOwnTweets(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)
 
 	log.Infoln("WARPNET STARTED")
@@ -167,20 +195,32 @@ type echoPersister interface {
 	Get(key local_store.DatabaseKey) ([]byte, error)
 }
 
+type echoFollowStorer interface {
+	Follow(fromUserId, toUserId string) error
+}
+
+type echoTweetStorer interface {
+	Create(userId string, tweet domain.Tweet) (domain.Tweet, error)
+}
+
 const echoSeenNamespace = "/ECHO_SEEN/"
 
 type echoBot struct {
 	node         echoStreamClient
 	db           echoPersister
+	followRepo   echoFollowStorer
+	tweetRepo    echoTweetStorer
 	mu           sync.Mutex
 	seen         map[string]time.Time
 	lastPruneRun time.Time
 }
 
-func newEchoBot(node echoStreamClient, db echoPersister) *echoBot {
+func newEchoBot(node echoStreamClient, db echoPersister, followRepo echoFollowStorer, tweetRepo echoTweetStorer) *echoBot {
 	return &echoBot{
 		node:         node,
 		db:           db,
+		followRepo:   followRepo,
+		tweetRepo:    tweetRepo,
 		seen:         make(map[string]time.Time),
 		lastPruneRun: time.Now(),
 	}
@@ -331,6 +371,20 @@ func (e *echoBot) handleFollow(msg []byte, requesterNodeID string) {
 	if requesterNodeID == "" {
 		return
 	}
+
+	if e.followRepo != nil {
+		// X follows echo
+		if err := e.followRepo.Follow(fl.FollowerId, e.ownerID()); err != nil &&
+			!errors.Is(err, database.ErrAlreadyFollowed) {
+			log.Warnf("echo: store inbound follow %s -> echo: %v", fl.FollowerId, err)
+		}
+		// echo follows X (auto-follow-back)
+		if err := e.followRepo.Follow(e.ownerID(), fl.FollowerId); err != nil &&
+			!errors.Is(err, database.ErrAlreadyFollowed) {
+			log.Warnf("echo: store outbound follow echo -> %s: %v", fl.FollowerId, err)
+		}
+	}
+
 	if _, err := e.node.GenericStream(
 		requesterNodeID,
 		event.PUBLIC_POST_FOLLOW,
@@ -438,7 +492,7 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) e
 			RootId:       tw.Id,
 			Text:         text,
 			UserId:       e.ownerID(),
-			Username:     "Echo",
+			Username:     username,
 		},
 	)
 	return err
@@ -462,7 +516,7 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 			RootId:       rp.RootId,
 			Text:         text,
 			UserId:       e.ownerID(),
-			Username:     "Echo",
+			Username:     username,
 		},
 	)
 	return err
@@ -556,7 +610,7 @@ func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode)
 				log.Errorf("echo: failed to unmarshal info from new peer: %s %v", infoResp, err)
 				continue
 			}
-			if info.IsModerator() || info.IsBootstrap() {
+			if info.IsModerator() || info.IsRelay() {
 				continue
 			}
 			if info.OwnerId == "" {
@@ -577,6 +631,74 @@ func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode)
 			}
 		}
 	}
+}
+
+func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
+	if node == nil {
+		log.Fatalf("echo: nil node")
+	}
+
+	ticker := time.NewTicker(ownTweetInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			peers := node.Node().Peerstore().PeersWithAddrs()
+			echo.postOwnTweet(peers, node.NodeInfo().ID)
+		}
+	}
+}
+
+func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
+	text, err := getChuckQuote()
+	if err != nil || strings.TrimSpace(text) == "" {
+		text = ownTweetFallback
+	}
+	if len(text) > ownTweetCharLimit {
+		text = text[:ownTweetCharLimit]
+	}
+
+	tweetID := ulid.Make().String()
+	tweet := event.NewTweetEvent{
+		Id:        tweetID,
+		RootId:    tweetID,
+		UserId:    e.ownerID(),
+		Username:  username,
+		Text:      text,
+		CreatedAt: time.Now(),
+	}
+
+	if e.tweetRepo != nil {
+		if _, err := e.tweetRepo.Create(e.ownerID(), tweet); err != nil {
+			log.Warnf("echo: store own tweet locally id=%s: %v", tweetID, err)
+		}
+	}
+
+	if len(peers) == 0 {
+		log.Warnf("echo: own tweet id=%s broadcast skipped — no peers", tweetID)
+		return tweetID
+	}
+
+	var sent, skipped int
+	for _, peer := range peers {
+		if peer == selfID {
+			continue
+		}
+		if _, err := e.node.GenericStream(peer.String(), event.PRIVATE_POST_TWEET, tweet); err != nil {
+			if strings.Contains(err.Error(), "protocols not supported") {
+				skipped++
+				continue
+			}
+			log.Warnf("echo: publish own tweet to %s: %v", peer.String(), err)
+			continue
+		}
+		sent++
+	}
+	log.Infof("echo: own tweet id=%s peers=%d sent=%d skipped=%d", tweetID, len(peers), sent, skipped)
+	return tweetID
 }
 
 const tweetsLimit uint64 = 20

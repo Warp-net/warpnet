@@ -30,7 +30,7 @@ data class Tweet(
     val id: String,
     // not present if it's retweet
     val url: String? = null,
-    val account: TimelineAccount,
+    val account: TimelineUser,
     @Json(name = "in_reply_to_id") val inReplyToId: String? = null,
     @Json(name = "in_reply_to_account_id") val inReplyToAccountId: String? = null,
     val retweet: Tweet? = null,

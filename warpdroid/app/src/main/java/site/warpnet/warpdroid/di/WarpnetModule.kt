@@ -24,7 +24,6 @@ import dagger.hilt.components.SingletonComponent
 import java.util.Date
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
-import okhttp3.OkHttpClient
 import site.warpnet.transport.ConnectionMonitor
 import site.warpnet.transport.Ed25519IdentityStore
 import site.warpnet.transport.WarpnetClient
@@ -81,6 +80,10 @@ object WarpnetModule {
      * sourced lazily from [PairedNodeStore] so a re-pair propagates
      * automatically — the closure captures the store by reference, not
      * its value at injection time.
+     *
+     * The dial-candidate list is logged on every reconnect attempt so
+     * stale / missing LAN addresses are visible in logcat without
+     * needing to inspect SharedPreferences. Tag `warpnet-dial`.
      */
     @Provides
     @Singleton
@@ -92,17 +95,14 @@ object WarpnetModule {
         client = client,
         scope = scope,
         dialAddresses = {
-            pairedNodeStore.load()?.let { paired ->
+            val candidates = pairedNodeStore.load()?.let { paired ->
                 paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
             } ?: emptyList()
+            android.util.Log.i(
+                "warpnet-dial",
+                "dial candidates (n=${candidates.size}): $candidates",
+            )
+            candidates
         },
     )
-
-    // Kept for call-site compatibility: the deleted NetworkModule used to
-    // provide this for WarpdroidApplication and PlayerModule. Media playback
-    // isn't wired to Warpnet yet, so a vanilla client with no interceptors
-    // is enough to keep the Hilt graph complete.
-    @Provides
-    @Singleton
-    fun providesOkHttpClient(): OkHttpClient = OkHttpClient.Builder().build()
 }

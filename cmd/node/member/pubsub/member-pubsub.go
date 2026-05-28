@@ -53,7 +53,7 @@ type PubsubServerNodeConnector interface {
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
-var NewBootstrapDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
+var NewRelayDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
 
 // MemberPubSub provides pubsub functionality for member nodes
 type MemberPubSub struct {
@@ -131,6 +131,28 @@ func (g *MemberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
 	}
 	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, userId)
 	return g.pubsub.Unsubscribe(topicName)
+}
+
+// PublishReport sends a Report event on the global moderator-facing
+// topic. Any moderator node subscribed to the same topic picks it up
+// and runs the engine against the offending object.
+func (g *MemberPubSub) PublishReport(ev event.ReportEvent) (err error) {
+	if g == nil || !g.pubsub.IsGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+
+	bt, err := json.Marshal(ev)
+	if err != nil {
+		return err
+	}
+	msg := event.Message{
+		Body:      json.RawMessage(bt),
+		NodeId:    g.NodeID(),
+		Timestamp: time.Now(),
+		MessageId: uuid.New().String(),
+		Version:   "0.0.0",
+	}
+	return g.pubsub.Publish(msg, event.ReportsTopic)
 }
 
 // PublishUpdateToFollowers - Publish for followers

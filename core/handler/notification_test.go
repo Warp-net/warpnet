@@ -11,8 +11,9 @@ import (
 )
 
 type stubNotificationRepo struct {
-	listFn func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
-	getFn  func(userId, notificationId string) (domain.Notification, error)
+	listFn        func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
+	getFn         func(userId, notificationId string) (domain.Notification, error)
+	unreadCountFn func(userId string) (uint64, error)
 }
 
 func (s stubNotificationRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
@@ -27,6 +28,13 @@ func (s stubNotificationRepo) Get(userId, notificationId string) (domain.Notific
 		return s.getFn(userId, notificationId)
 	}
 	return domain.Notification{}, nil
+}
+
+func (s stubNotificationRepo) UnreadCount(userId string) (uint64, error) {
+	if s.unreadCountFn != nil {
+		return s.unreadCountFn(userId)
+	}
+	return 0, nil
 }
 
 func TestStreamGetNotificationsHandler(t *testing.T) {
@@ -70,9 +78,14 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: now.Add(-2 * time.Second)},
 			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, UserId: owner, CreatedAt: now.Add(-1 * time.Second)},
 		}
-		h := StreamGetNotificationsHandler(stubNotificationRepo{listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
-			return nots, "end", nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		h := StreamGetNotificationsHandler(stubNotificationRepo{
+			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+				return nots, "end", nil
+			},
+			unreadCountFn: func(userId string) (uint64, error) {
+				return 2, nil
+			},
+		}, stubAuth{owner: domain.Owner{UserId: owner}})
 		resp, err := h(marshal(t, event.GetNotificationsEvent{}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -108,9 +121,12 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 			{Id: "1", Type: domain.NotificationLikeType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
 			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
 		}
-		h := StreamGetNotificationsHandler(stubNotificationRepo{listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
-			return nots, "end", nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		h := StreamGetNotificationsHandler(stubNotificationRepo{
+			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+				return nots, "end", nil
+			},
+			unreadCountFn: func(userId string) (uint64, error) { return 2, nil },
+		}, stubAuth{owner: domain.Owner{UserId: owner}})
 		resp, err := h(marshal(t, event.GetNotificationsEvent{}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -126,9 +142,12 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
 			{Id: "2", Type: domain.NotificationReplyType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
 		}
-		h := StreamGetNotificationsHandler(stubNotificationRepo{listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
-			return nots, "end", nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		h := StreamGetNotificationsHandler(stubNotificationRepo{
+			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+				return nots, "end", nil
+			},
+			unreadCountFn: func(userId string) (uint64, error) { return 0, nil },
+		}, stubAuth{owner: domain.Owner{UserId: owner}})
 		resp, err := h(marshal(t, event.GetNotificationsEvent{}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -136,6 +155,60 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		r := resp.(event.GetNotificationsResponse)
 		if r.UnreadCount != 0 {
 			t.Fatalf("expected 0 unread, got %d", r.UnreadCount)
+		}
+	})
+
+	t.Run("unread count is global, not page-local", func(t *testing.T) {
+		// One unread in the current page but 17 unread overall (older
+		// pages or pages the cursor hasn't reached): the response must
+		// carry 17, not 1. This is the bug behind the flickering
+		// "N unread" badge.
+		page := []domain.Notification{
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+		}
+		h := StreamGetNotificationsHandler(stubNotificationRepo{
+			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+				return page, "next", nil
+			},
+			unreadCountFn: func(userId string) (uint64, error) { return 17, nil },
+		}, stubAuth{owner: domain.Owner{UserId: owner}})
+		resp, err := h(marshal(t, event.GetNotificationsEvent{}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.GetNotificationsResponse)
+		if r.UnreadCount != 17 {
+			t.Fatalf("expected global unread count 17, got %d", r.UnreadCount)
+		}
+	})
+
+	t.Run("unread count falls back to page-local on repo error", func(t *testing.T) {
+		// 3 unread in the page; UnreadCount fails. Without a fallback
+		// the response would report 0 unread, which would drop the
+		// badge to 0 on every transient db hiccup. Page-local count
+		// is wrong globally but still > 0 when there's unread work.
+		page := []domain.Notification{
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+			{Id: "4", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
+		}
+		h := StreamGetNotificationsHandler(stubNotificationRepo{
+			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+				return page, "next", nil
+			},
+			unreadCountFn: func(userId string) (uint64, error) {
+				return 0, errors.New("db boom")
+			},
+		}, stubAuth{owner: domain.Owner{UserId: owner}})
+		resp, err := h(marshal(t, event.GetNotificationsEvent{}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.GetNotificationsResponse)
+		if r.UnreadCount != 3 {
+			t.Fatalf("expected page-local fallback count 3, got %d", r.UnreadCount)
 		}
 	})
 

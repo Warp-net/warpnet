@@ -5,12 +5,12 @@
  */
 package site.warpnet.warpdroid.warpnet
 
-import site.warpnet.warpdroid.entity.Account
+import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Conversation
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.Tweet
-import site.warpnet.warpdroid.entity.TimelineAccount
+import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.entity.notificationTypeFromString
 import java.util.Date
 import site.warpnet.transport.dto.WarpnetChat
@@ -30,10 +30,12 @@ import site.warpnet.transport.dto.WarpnetUser
  */
 object WarpnetMapper {
 
-    /** Warpnet UIs rely on URLs being present; Warpnet speaks in peer IDs. */
-    const val FAKE_BASE_URL: String = "https://warpnet.local"
+    /** Warpnet UIs rely on URLs being present; Warpnet speaks in peer IDs.
+     *  Use the canonical project domain so synthesised share URLs point
+     *  at the real Warpnet web entry point. */
+    const val FAKE_BASE_URL: String = "https://warpnet.site"
 
-    fun WarpnetUser.toAccount(): Account = Account(
+    fun WarpnetUser.toAccount(): User = User(
         id = id,
         // Warpnet has no instance-local handle; the canonical
         // peer-derived user_id is what the desktop frontend prints after
@@ -52,7 +54,7 @@ object WarpnetMapper {
         statusesCount = tweetsCount.toInt(),
     )
 
-    fun WarpnetUser.toTimelineAccount(): TimelineAccount = TimelineAccount(
+    fun WarpnetUser.toTimelineUser(): TimelineUser = TimelineUser(
         id = id,
         localUsername = id,
         username = id,
@@ -74,7 +76,7 @@ object WarpnetMapper {
         else "warpnet://avatar/$userId/$key"
 
     fun WarpnetTweet.toTweet(author: WarpnetUser?): Tweet {
-        val account = author?.toTimelineAccount() ?: stubTimelineAccount(userId, username)
+        val account = author?.toTimelineUser() ?: stubTimelineUser(userId, username)
         return Tweet(
             id = id,
             url = "$FAKE_BASE_URL/tweets/$id",
@@ -125,7 +127,7 @@ object WarpnetMapper {
     fun WarpnetNotification.toNotification(): Notification = Notification(
         id = id,
         type = notificationTypeFromString(type),
-        account = stubTimelineAccount(userId, text),
+        account = stubTimelineUser(userId, text),
         status = null,
     )
 
@@ -136,7 +138,7 @@ object WarpnetMapper {
      * as a single-participant thread with the most recent timestamp
      * from [WarpnetChat.updatedAt].
      */
-    fun chatToConversation(chat: WarpnetChat, otherAccount: TimelineAccount): Conversation = Conversation(
+    fun chatToConversation(chat: WarpnetChat, otherAccount: TimelineUser): Conversation = Conversation(
         id = chat.id,
         accounts = listOf(otherAccount),
         lastStatus = null,
@@ -146,7 +148,7 @@ object WarpnetMapper {
     private fun parseDate(raw: String): Date =
         if (raw.isEmpty()) Date(0) else runCatching { Date.from(java.time.Instant.parse(raw)) }.getOrElse { Date(0) }
 
-    private fun stubTimelineAccount(userId: String, username: String): TimelineAccount = TimelineAccount(
+    private fun stubTimelineUser(userId: String, username: String): TimelineUser = TimelineUser(
         id = userId,
         localUsername = userId,
         username = userId,

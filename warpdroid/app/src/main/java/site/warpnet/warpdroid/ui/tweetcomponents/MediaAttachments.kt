@@ -59,8 +59,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.ui.WarpdroidAsyncImage
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.ui.LongPressContextMenu
@@ -444,7 +444,7 @@ private fun MediaItem(
                     }
                 }
 
-                AsyncImage(
+                WarpdroidAsyncImage(
                     model = if (showMedia) attachment.previewUrl else null,
                     contentDescription = attachment.description ?: stringResource(R.string.description_post_media_no_description_placeholder),
                     placeholder = placeholder,

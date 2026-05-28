@@ -71,9 +71,7 @@ import com.google.android.material.snackbar.Snackbar
 import site.warpnet.warpdroid.BaseActivity
 import site.warpnet.warpdroid.BuildConfig
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.adapter.EmojiAdapter
 import site.warpnet.warpdroid.adapter.LocaleAdapter
-import site.warpnet.warpdroid.adapter.OnEmojiSelectedListener
 import site.warpnet.warpdroid.components.compose.ComposeViewModel.ConfirmationKind
 import site.warpnet.warpdroid.components.compose.ComposeViewModel.QueuedMedia
 import site.warpnet.warpdroid.components.compose.dialog.CaptionDialog
@@ -87,7 +85,6 @@ import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
 import site.warpnet.warpdroid.databinding.ActivityComposeBinding
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Attachment
-import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.PrefKeys
@@ -132,13 +129,11 @@ class ComposeActivity :
     BaseActivity(),
     ComposeOptionsListener,
     ComposeAutoCompleteAdapter.AutocompletionProvider,
-    OnEmojiSelectedListener,
     OnReceiveContentListener,
     CaptionDialog.Listener {
 
     private lateinit var composeOptionsBehavior: BottomSheetBehavior<*>
     private lateinit var addMediaBehavior: BottomSheetBehavior<*>
-    private lateinit var emojiBehavior: BottomSheetBehavior<*>
 
     /** The account that is being used to compose the status */
     private lateinit var activeAccount: AccountEntity
@@ -243,12 +238,10 @@ class ComposeActivity :
     private val onBackPressedCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             if (composeOptionsBehavior.state == BottomSheetBehavior.STATE_EXPANDED ||
-                addMediaBehavior.state == BottomSheetBehavior.STATE_EXPANDED ||
-                emojiBehavior.state == BottomSheetBehavior.STATE_EXPANDED
+                addMediaBehavior.state == BottomSheetBehavior.STATE_EXPANDED
             ) {
                 composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
                 addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-                emojiBehavior.state = BottomSheetBehavior.STATE_HIDDEN
                 return
             }
 
@@ -273,7 +266,6 @@ class ComposeActivity :
             val bottomBarPadding = resources.getDimensionPixelSize(R.dimen.compose_bottom_bar_padding_vertical)
             binding.composeBottomBar.updatePadding(bottom = insets.bottom + bottomBarPadding)
             binding.addMediaBottomSheet.updatePadding(bottom = insets.bottom + bottomBarHeight)
-            binding.emojiView.updatePadding(bottom = insets.bottom + bottomBarHeight)
             binding.composeOptionsBottomSheet.updatePadding(bottom = insets.bottom + bottomBarHeight)
             binding.composeMainScrollView.updateLayoutParams<ViewGroup.MarginLayoutParams> { bottomMargin = insets.bottom + bottomBarHeight }
         }
@@ -498,10 +490,6 @@ class ComposeActivity :
         }
 
         lifecycleScope.launch {
-            viewModel.emoji.collect(::setEmojiList)
-        }
-
-        lifecycleScope.launch {
             viewModel.showContentWarning.combine(
                 viewModel.markMediaAsSensitive
             ) { showContentWarning, markSensitive ->
@@ -570,11 +558,9 @@ class ComposeActivity :
 
         composeOptionsBehavior = BottomSheetBehavior.from(binding.composeOptionsBottomSheet)
         addMediaBehavior = BottomSheetBehavior.from(binding.addMediaBottomSheet)
-        emojiBehavior = BottomSheetBehavior.from(binding.emojiView)
 
         composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-        emojiBehavior.state = BottomSheetBehavior.STATE_HIDDEN
 
         val bottomSheetCallback = object : BottomSheetCallback() {
             override fun onStateChanged(bottomSheet: View, newState: Int) {
@@ -584,16 +570,12 @@ class ComposeActivity :
         }
         composeOptionsBehavior.addBottomSheetCallback(bottomSheetCallback)
         addMediaBehavior.addBottomSheetCallback(bottomSheetCallback)
-        emojiBehavior.addBottomSheetCallback(bottomSheetCallback)
-
-        enableButton(binding.composeEmojiButton, clickable = false, colorActive = false)
 
         // Setup the interface buttons.
         binding.composeTweetButton.setOnClickListener { onSendClicked() }
         binding.composeAddMediaButton.setOnClickListener { openPickDialog() }
         binding.composeToggleVisibilityButton.setOnClickListener { showComposeOptions() }
         binding.composeContentWarningButton.setOnClickListener { onContentWarningChanged() }
-        binding.composeEmojiButton.setOnClickListener { showEmojis() }
         binding.composeHideMediaButton.setOnClickListener { toggleHideMedia() }
         binding.atButton.setOnClickListener { atButtonClicked() }
         binding.hashButton.setOnClickListener { hashButtonClicked() }
@@ -665,8 +647,7 @@ class ComposeActivity :
         val confirmation = viewModel.closeConfirmation.value
         onBackPressedCallback.isEnabled = confirmation != ConfirmationKind.NONE ||
             composeOptionsBehavior.state != BottomSheetBehavior.STATE_HIDDEN ||
-            addMediaBehavior.state != BottomSheetBehavior.STATE_HIDDEN ||
-            emojiBehavior.state != BottomSheetBehavior.STATE_HIDDEN
+            addMediaBehavior.state != BottomSheetBehavior.STATE_HIDDEN
     }
 
     private fun replaceTextAtCaret(text: CharSequence) {
@@ -801,7 +782,6 @@ class ComposeActivity :
     private fun enableButtons(enable: Boolean, editing: Boolean) {
         binding.composeAddMediaButton.isClickable = enable
         binding.composeToggleVisibilityButton.isClickable = enable && !editing
-        binding.composeEmojiButton.isClickable = enable
         binding.composeHideMediaButton.isClickable = enable
         binding.composeTweetButton.isEnabled = enable
     }
@@ -832,30 +812,8 @@ class ComposeActivity :
         if (composeOptionsBehavior.state == BottomSheetBehavior.STATE_HIDDEN || composeOptionsBehavior.state == BottomSheetBehavior.STATE_COLLAPSED) {
             composeOptionsBehavior.state = BottomSheetBehavior.STATE_EXPANDED
             addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-            emojiBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         } else {
             composeOptionsBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
-        }
-    }
-
-    private fun showEmojis() {
-        binding.emojiView.adapter?.let {
-            if (it.itemCount == 0) {
-                val errorMessage =
-                    getString(
-                        R.string.error_no_custom_emojis,
-                        activeAccount
-                    )
-                displayTransientMessage(errorMessage)
-            } else {
-                if (emojiBehavior.state == BottomSheetBehavior.STATE_HIDDEN || emojiBehavior.state == BottomSheetBehavior.STATE_COLLAPSED) {
-                    emojiBehavior.state = BottomSheetBehavior.STATE_EXPANDED
-                    composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-                    addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-                } else {
-                    emojiBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
-                }
-            }
         }
     }
 
@@ -863,7 +821,6 @@ class ComposeActivity :
         if (addMediaBehavior.state == BottomSheetBehavior.STATE_HIDDEN || addMediaBehavior.state == BottomSheetBehavior.STATE_COLLAPSED) {
             addMediaBehavior.state = BottomSheetBehavior.STATE_EXPANDED
             composeOptionsBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-            emojiBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         } else {
             addMediaBehavior.setState(BottomSheetBehavior.STATE_HIDDEN)
         }
@@ -966,8 +923,32 @@ class ComposeActivity :
             enableButtons(true, viewModel.editing)
         } else if (characterCount <= maximumTootCharacters) {
             lifecycleScope.launch {
-                viewModel.sendStatus(contentText, spoilerText, activeAccount.id)
-                deleteDraftAndFinish()
+                try {
+                    viewModel.sendStatus(contentText, spoilerText, activeAccount.id)
+                    deleteDraftAndFinish()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Preserve structured cancellation — re-throw so the
+                    // Activity destroy / send-cancel path tears down the
+                    // coroutine cleanly instead of running UI work after.
+                    throw e
+                } catch (e: IllegalStateException) {
+                    // sendStatus check()s for media attached on the
+                    // quote-retweet path; the message describes the
+                    // specific cause so surface it instead of the
+                    // generic error toast.
+                    android.util.Log.w("ComposeActivity", "sendStatus failed", e)
+                    displayTransientMessage(R.string.error_compose_quote_with_media)
+                    enableButtons(true, viewModel.editing)
+                } catch (e: Exception) {
+                    // sendStatus throws on the quote-retweet path when the
+                    // backend call fails. Keep the user's typed text on
+                    // screen and re-enable the button so they can retry
+                    // instead of losing the draft to a silent fire-and-
+                    // forget failure.
+                    android.util.Log.w("ComposeActivity", "sendStatus failed", e)
+                    displayTransientMessage(R.string.error_generic)
+                    enableButtons(true, viewModel.editing)
+                }
             }
         } else {
             binding.composeEditField.error = getString(R.string.error_compose_character_limit)
@@ -1207,18 +1188,6 @@ class ComposeActivity :
         return viewModel.searchAutocompleteSuggestions(token)
     }
 
-    override fun onEmojiSelected(shortcode: String) {
-        replaceTextAtCaret(":$shortcode: ")
-    }
-
-    private fun setEmojiList(emojiList: List<Emoji>?) {
-        if (emojiList != null) {
-            val animateEmojis = preferences.getBoolean(PrefKeys.ANIMATE_CUSTOM_EMOJIS, false)
-            binding.emojiView.adapter = EmojiAdapter(emojiList, this@ComposeActivity, animateEmojis)
-            enableButton(binding.composeEmojiButton, true, emojiList.isNotEmpty())
-        }
-    }
-
     override fun onUpdateDescription(localId: Int, description: String) {
         viewModel.updateDescription(localId, description)
     }
@@ -1259,7 +1228,13 @@ class ComposeActivity :
         val modifiedInitialState: Boolean? = null,
         val language: String? = null,
         val statusId: String? = null,
-        val kind: ComposeKind? = null
+        val kind: ComposeKind? = null,
+        // Quote retweet: when set the composed tweet is sent via the
+        // PUBLIC_POST_RETWEET wire with the typed text used as the
+        // comment instead of a fresh PRIVATE_POST_TWEET. quotedUserId
+        // is the author of the source tweet (needed for the wire DTO).
+        val quotedTweetId: String? = null,
+        val quotedUserId: String? = null
     ) : Parcelable
 
     companion object {

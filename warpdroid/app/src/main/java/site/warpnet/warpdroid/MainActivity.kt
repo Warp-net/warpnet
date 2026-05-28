@@ -93,7 +93,6 @@ import site.warpnet.warpdroid.interfaces.ReselectableFragment
 import site.warpnet.warpdroid.pager.MainPagerAdapter
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.usecase.LogoutUsecase
-import site.warpnet.warpdroid.util.emojify
 import site.warpnet.warpdroid.util.getParcelableExtraCompat
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.loadHeader
@@ -111,7 +110,6 @@ import com.mikepenz.materialdrawer.model.interfaces.IProfile
 import com.mikepenz.materialdrawer.model.interfaces.descriptionRes
 import com.mikepenz.materialdrawer.model.interfaces.descriptionText
 import com.mikepenz.materialdrawer.model.interfaces.iconRes
-import com.mikepenz.materialdrawer.model.interfaces.iconUrl
 import com.mikepenz.materialdrawer.model.interfaces.nameRes
 import com.mikepenz.materialdrawer.model.interfaces.nameText
 import com.mikepenz.materialdrawer.util.AbstractDrawerImageLoader
@@ -213,7 +211,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             accountManager.updateActiveAccount { copy(accountId = paired.userId) }
         }
 
-        // will be redirected to LoginActivity by BaseActivity
         activeAccount = accountManager.activeAccount ?: return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -808,10 +805,9 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     }
 
     private fun changeAccount(
-        newSelectedId: Long,
+        @Suppress("UNUSED_PARAMETER") newSelectedId: Long,
         forward: Intent?,
     ) = lifecycleScope.launch {
-        accountManager.setActiveAccount(newSelectedId)
         val intent = Intent(this@MainActivity, MainActivity::class.java)
         if (forward != null) {
             intent.type = forward.type
@@ -969,13 +965,14 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
         loadHeader(activeProfile.profileHeaderUrl, header.accountHeaderBackground)
 
-        val animateEmojis = preferences.getBoolean(PrefKeys.ANIMATE_CUSTOM_EMOJIS, false)
         val profiles: MutableList<IProfile> =
             accounts.map { acc ->
                 ProfileDrawerItem().apply {
                     isSelected = acc == activeProfile
-                    nameText = acc.displayName.emojify(acc.emojis, header, animateEmojis)
-                    iconUrl = acc.profilePictureUrl
+                    nameText = acc.displayName
+                    // iconUrl on warpnet:// triggers setImageURI sync IO on main; real avatar is
+                    // Glide-loaded into header.currentProfileView below.
+                    iconRes = R.drawable.avatar_default
                     isNameShown = true
                     identifier = acc.id
                     descriptionText = "@${acc.username}"
@@ -992,6 +989,24 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         header.clear()
         header.profiles = profiles
         header.setActiveProfile(activeProfile.id)
+        // Load the active profile's real avatar async — ProfileDrawerItem only carries the placeholder.
+        if (activeProfile.profilePictureUrl.isNotBlank()) {
+            header.currentProfileView?.let { profileImageView ->
+                val animateAvatars = preferences.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false)
+                val manager = Glide.with(profileImageView)
+                if (animateAvatars) {
+                    manager.asDrawable()
+                        .load(activeProfile.profilePictureUrl)
+                        .placeholder(R.drawable.avatar_default)
+                        .into(profileImageView)
+                } else {
+                    manager.asBitmap()
+                        .load(activeProfile.profilePictureUrl)
+                        .placeholder(R.drawable.avatar_default)
+                        .into(profileImageView)
+                }
+            }
+        }
         binding.mainToolbar.subtitle = if (accountManager.shouldDisplaySelfUsername()) {
             activeProfile.fullName
         } else {

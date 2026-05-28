@@ -112,7 +112,18 @@ resulting from the use or misuse of this software.
                   class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
                   :class="isBlocked ? 'text-blue' : 'text-red-600'"
                 >{{ isBlocked ? `Unblock @${profile.id}` : `Block @${profile.id}` }}</button>
+                <button
+                  type="button"
+                  @click="openReport"
+                  class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn"
+                >Report @{{ profile.id }}</button>
               </div>
+              <ReportDialog
+                :show="showReportDialog"
+                :title="`Report @${profile.id}`"
+                @submit="submitReport"
+                @cancel="showReportDialog = false"
+              />
               <button
                 v-if="isFollower()"
                 @click="sendMessage()"
@@ -309,6 +320,7 @@ export default {
     SetUpProfileOverlay: defineAsyncComponent(() => import('@/components/SetUpProfileOverlay.vue')),
     Tweets: defineAsyncComponent(() => import('@/components/Tweets.vue')),
     ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
+    ReportDialog: defineAsyncComponent(() => import('@/components/ReportDialog.vue')),
   },
   data() {
     return {
@@ -330,6 +342,7 @@ export default {
       profileMenuOpen: false,
       isBlocked: false,
       showBlockConfirm: false,
+      showReportDialog: false,
     };
   },
   computed: {
@@ -443,6 +456,29 @@ export default {
         await warpnetService.muteUser(this.profile.id);
       } catch (err) {
         console.error(`failed to mute [${this.profile.id}]`, err);
+      }
+    },
+    openReport() {
+      this.profileMenuOpen = false;
+      this.showReportDialog = true;
+    },
+    async submitReport(reason) {
+      // type 0 = user profile in ModerationObjectType. One report
+      // covers the whole profile surface (username + bio + website +
+      // metadata); the moderator picks it up and re-fetches the user
+      // directly so it can't be tricked by a malicious reporter.
+      try {
+        await warpnetService.report({
+          type: 0,
+          objectId: '',
+          targetUserId: this.profile.id,
+          targetNodeId: this.profile.node_id || '',
+          reason,
+        });
+      } catch (err) {
+        console.error(`failed to report [${this.profile.id}]`, err);
+      } finally {
+        this.showReportDialog = false;
       }
     },
     // askBlockToggle opens the ConfirmDialog with text that depends on

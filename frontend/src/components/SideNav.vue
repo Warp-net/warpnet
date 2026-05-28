@@ -326,9 +326,11 @@ export default {
         localStorage.setItem("theme", "dark");
       }
     },
-    async signInByQR() {
-        this.qrCode = await warpnetService.getQR()
-        this.qrModalOpen = true
+    signInByQR() {
+        // warpnetService.getQR() is a synchronous in-memory lookup,
+        // no await needed.
+        this.qrCode = warpnetService.getQR();
+        this.qrModalOpen = true;
     },
     async closeQR() {
       this.qrModalOpen = false
@@ -346,6 +348,25 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     this.profile = warpnetService.getOwnerProfile();
+
+    // Root.vue sets this flag right after a first-run signup. Open
+    // the QR pairing dialog so a brand-new user sees the visual
+    // explainer without having to dig through the side-nav dropdown.
+    //
+    // Done first and in its own try/catch so a later avatar /
+    // notifications failure can't suppress the onboarding — for a
+    // first-run user the pairing UI is the most important thing this
+    // mount is supposed to surface. Routed through signInByQR() so
+    // there's a single code path opening the modal.
+    try {
+      if (typeof sessionStorage !== "undefined" &&
+          sessionStorage.getItem("warpnet:show-pairing-onboarding") === "1") {
+        sessionStorage.removeItem("warpnet:show-pairing-onboarding");
+        await this.signInByQR();
+      }
+    } catch (error) {
+      console.error("Failed to open pairing onboarding:", error);
+    }
 
     const fullProfile = await warpnetService.getProfile(this.profile.user_id);
     try {

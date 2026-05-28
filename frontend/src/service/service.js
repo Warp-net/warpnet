@@ -98,6 +98,7 @@ export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
 export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
+export const PUBLIC_POST_REPORT        = "/public/post/report/0.0.0"
 
 const stateMap = new Map();
 const notificationSubscribers = new Set();
@@ -316,6 +317,8 @@ export const warpnetService = {
             return []
         }
         this.setCursor('whotofollow', followResp.cursor || "")
+
+        followResp.users = followResp.users.filter(user => !user.isOffline);
 
         return followResp.users;
     },
@@ -1321,6 +1324,29 @@ export const warpnetService = {
             console.error(`failed to record view for tweet [${tweetId}]`, err);
             return null;
         }
+    },
+
+    // Report opens a moderation request to whichever moderator node is
+    // listening on the global reports topic. `type` is the
+    // ModerationObjectType enum; the backend currently accepts only
+    // 0 (user profile) and 1 (tweet) — reply (2) and image (3) reports
+    // are not wired end-to-end yet and will be rejected. `objectId` is
+    // required for tweet reports and ignored for user reports.
+    // `reason` is a free-form string capped at 256 chars by the
+    // backend; the UI presents a fixed set of labels as a convenience,
+    // but the server does not enforce that set.
+    async report({ type, objectId, targetUserId, targetNodeId, reason }) {
+        const request = {
+            path: PUBLIC_POST_REPORT,
+            body: {
+                type: type,
+                object_id: objectId || '',
+                target_user_id: targetUserId,
+                target_node_id: targetNodeId,
+                reason: reason,
+            },
+        }
+        return await this.sendToNode(request)
     },
 
     async setLiker(tweetId, profileId, profileObj) {

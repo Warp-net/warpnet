@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 -->
 
 <template>
-  <div id="app" class="flex container h-full w-full">
+  <div id="app" class="flex container h-screen w-full">
     <div class="flex container h-full w-full">
       <SideNav />
 
