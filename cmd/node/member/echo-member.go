@@ -145,6 +145,7 @@ func main() {
 		config.Config().Node.Network,
 	)
 
+	bootstrapNodes, _ := config.Config().Node.AddrInfos()
 	echoNode, err := member.NewMemberNode(
 		ctx,
 		authRepo.PrivateKey(),
@@ -154,7 +155,7 @@ func main() {
 		config.Config().Version,
 		authRepo,
 		db,
-		[]warpnet.WarpAddrInfo{},
+		bootstrapNodes,
 		m,
 	)
 	if err != nil {
