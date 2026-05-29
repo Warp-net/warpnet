@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
-	"fmt"
 	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
@@ -373,15 +372,10 @@ func (a *App) close(_ context.Context) {
 	close(a.readyChan)
 }
 
-const linuxDesktopTemplate = `
-	[Desktop Entry]
-	Name=warpnet
-	Exec=%s
-	Icon=warpnet
-	Type=Application
-	Categories=Network;Social;
-`
-
+// setLinuxDesktopIcon installs the .png that ~/.local/share/applications/warpnet.desktop
+// references via Icon=warpnet. The .desktop file itself is written by
+// cmd/node/member/deeplink.Register so the scheme handler and the
+// menu entry stay in lockstep.
 func setLinuxDesktopIcon(iconData []byte) {
 	if runtime.GOOS != "linux" {
 		return
@@ -396,25 +390,10 @@ func setLinuxDesktopIcon(iconData []byte) {
 	}
 	homeDir := currentUser.HomeDir
 
-	desktopDir := filepath.Join(homeDir, ".local", "share", "applications")
 	iconDir := filepath.Join(homeDir, ".local", "share", "icons", "hicolor", "512x512", "apps")
 
 	//#nosec
-	_ = os.MkdirAll(desktopDir, 0755)
-	//#nosec
 	_ = os.MkdirAll(iconDir, 0755)
-
-	execPath, err := os.Executable()
-	if err != nil {
-		log.Fatalf("setting icon: unable to determine executable path: %v", err)
-	}
-
-	desktopFile := filepath.Join(desktopDir, "warpnet.desktop")
-	content := fmt.Sprintf(linuxDesktopTemplate, execPath)
-	//#nosec
-	if err := os.WriteFile(desktopFile, []byte(content), 0644); err != nil {
-		log.Fatalf("setting icon: write .desktop file fail: %v", err)
-	}
 
 	iconPath := filepath.Join(iconDir, "warpnet.png")
 	//#nosec
