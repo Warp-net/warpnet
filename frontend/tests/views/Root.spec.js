@@ -5,6 +5,7 @@ vi.mock('@/service/service', () => ({
   warpnetService: {
     signInUser: vi.fn(),
     isFirstRun: vi.fn(),
+    consumePendingDeepLink: vi.fn(),
   },
 }));
 
@@ -46,6 +47,7 @@ beforeEach(() => {
   routerPush.mockClear();
   warpnetService.signInUser.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
+  warpnetService.consumePendingDeepLink.mockResolvedValue("");
   sessionStorage.clear();
 });
 

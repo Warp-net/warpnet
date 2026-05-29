@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, IsFirstRun} from "../../wailsjs/go/main/App";
+import {Call, ConsumePendingDeepLink, IsFirstRun} from "../../wailsjs/go/main/App";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -173,6 +173,20 @@ export const warpnetService = {
 
     async isFirstRun() {
         return Boolean(await IsFirstRun());
+    },
+
+    // Returns the raw warpnet:// URL the OS handed to the desktop
+    // binary (cold-start os.Args or macOS Mac.OnUrlOpen) and clears
+    // it on the Go side, so a refresh doesn't re-trigger. Returns
+    // the empty string when there's nothing pending.
+    async consumePendingDeepLink() {
+        try {
+            const raw = await ConsumePendingDeepLink();
+            return typeof raw === "string" ? raw : "";
+        } catch (e) {
+            console.warn("consumePendingDeepLink failed:", e);
+            return "";
+        }
     },
 
     async signInUser(form) {

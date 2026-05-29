@@ -279,6 +279,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {parseDeepLink} from "@/lib/deeplink";
 export default {
   name: "Root",
   components: {
@@ -348,6 +349,17 @@ export default {
           }
         }
         this.setStep("");
+        // If the desktop binary was opened via a warpnet:// link
+        // (cold-start os.Args or macOS Mac.OnUrlOpen), the Go side
+        // has the raw URL stashed. There's no Vue route by id, so
+        // we mimic what the SearchBar component does: route to
+        // Search with the id as the query — the Search view runs
+        // warpnetService.searchUsers(q) and renders the match.
+        const deepLink = parseDeepLink(await warpnetService.consumePendingDeepLink());
+        if (deepLink && deepLink.kind === "user") {
+          this.$router.push({ name: "Search", query: { q: deepLink.id } });
+          return;
+        }
         this.$router.push({ name: "Home" });
       } catch (error) {
         console.error("error signing up:", error);

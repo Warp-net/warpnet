@@ -180,6 +180,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {parseDeepLink} from "@/lib/deeplink";
 
 export default {
   name: "Home",
@@ -324,6 +325,14 @@ export default {
         this.toastTimeoutId = null;
       }, 4000);
     },
+    async consumeDeepLink() {
+      const link = parseDeepLink(await warpnetService.consumePendingDeepLink());
+      if (link && link.kind === "user") {
+        // No URL router for profiles in the Vue app; the search box
+        // is the de facto by-id navigation, so route there.
+        this.$router.push({ name: "Search", query: { q: link.id } });
+      }
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
@@ -350,6 +359,17 @@ export default {
     if (this.$route.query.compose) {
       this.focusCompose();
     }
+
+    // Pick up any pending warpnet:// link. The Root login path
+    // already handles the cold-start case before it routes us
+    // here, so this catches the macOS hot-path: app already
+    // running, user clicks warpnet.site/user?id=…, Mac.OnUrlOpen
+    // stashes the URL, this gets us to Search?q=id. Wired on
+    // window focus too so subsequent clicks while we're on Home
+    // also route, not just the first one.
+    this.consumeDeepLink();
+    this._deepLinkFocusHandler = () => this.consumeDeepLink();
+    window.addEventListener("focus", this._deepLinkFocusHandler);
   },
   watch: {
     '$route.query.compose'(val) {
@@ -362,6 +382,10 @@ export default {
     if (this.toastTimeoutId) {
       clearTimeout(this.toastTimeoutId);
       this.toastTimeoutId = null;
+    }
+    if (this._deepLinkFocusHandler) {
+      window.removeEventListener("focus", this._deepLinkFocusHandler);
+      this._deepLinkFocusHandler = null;
     }
   },
 };
