@@ -175,10 +175,7 @@ export const warpnetService = {
         return Boolean(await IsFirstRun());
     },
 
-    // Returns the raw warpnet:// URL the OS handed to the desktop
-    // binary (cold-start os.Args or macOS Mac.OnUrlOpen) and clears
-    // it on the Go side, so a refresh doesn't re-trigger. Returns
-    // the empty string when there's nothing pending.
+    // Returns the pending warpnet:// URL and clears it on the Go side.
     async consumePendingDeepLink() {
         try {
             const raw = await ConsumePendingDeepLink();

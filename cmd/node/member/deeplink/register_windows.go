@@ -9,18 +9,13 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// registerPlatform writes per-user registry keys so Windows routes
-// warpnet:// URLs to this executable. Per-user (HKCU\Software\Classes)
-// rather than HKLM so we don't need admin rights. Idempotent: every
-// startup overwrites the keys with the current exe path, which is
-// what we want if the user moved the .exe.
+// HKCU (not HKLM) so we don't need admin; rewritten each launch so a moved .exe stays valid.
 func registerPlatform() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("deeplink: locate own executable: %w", err)
 	}
 
-	// HKCU\Software\Classes\warpnet
 	root, _, err := registry.CreateKey(
 		registry.CURRENT_USER,
 		`Software\Classes\`+Scheme,
@@ -38,8 +33,6 @@ func registerPlatform() error {
 		return fmt.Errorf("deeplink: set URL Protocol marker: %w", err)
 	}
 
-	// HKCU\Software\Classes\warpnet\shell\open\command\(Default) =
-	// "C:\path\to\warpnet.exe" "%1"
 	cmdKey, _, err := registry.CreateKey(
 		registry.CURRENT_USER,
 		`Software\Classes\`+Scheme+`\shell\open\command`,

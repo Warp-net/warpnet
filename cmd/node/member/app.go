@@ -71,9 +71,7 @@ type App struct {
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
 
-	// deepLink is the latest pending warpnet:// payload to ship to
-	// the frontend, written either from os.Args at boot or from
-	// Mac.OnUrlOpen while running. Guarded by mx.
+	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
 	deepLink string
 }
 
@@ -94,14 +92,7 @@ func (a *App) IsFirstRun() bool {
 	return a.db.IsFirstRun()
 }
 
-// SetPendingDeepLink stores a warpnet:// payload to be picked up by
-// the frontend once it's ready. Used by the boot path (os.Args) and
-// the macOS Mac.OnUrlOpen callback. Safe to call from any goroutine
-// and at any time relative to startup. The cold-start path in
-// main.go calls this BEFORE wails.Run, so before startup() has
-// initialised a.mx; treat the pre-startup window as single-
-// threaded (it is — main hasn't handed off to Wails yet) and just
-// stash the value without locking.
+// SetPendingDeepLink stashes a warpnet:// payload for the frontend. Pre-startup safe (a.mx may be nil).
 func (a *App) SetPendingDeepLink(raw string) {
 	if a == nil {
 		return
@@ -115,15 +106,7 @@ func (a *App) SetPendingDeepLink(raw string) {
 	a.mx.Unlock()
 }
 
-// ConsumePendingDeepLink is exposed to the frontend over the Wails
-// bind: the Vue app polls it after login to learn whether the user
-// arrived via warpnet://, and routes to the appropriate screen.
-// Returns the raw URL (the frontend already knows the parsing rules
-// from deep-link-embed.html) and clears the stored value so a
-// refresh doesn't re-trigger. Returns "" if called before
-// startup() has wired up a.mx (defensive: shouldn't happen in
-// practice — the frontend can only call this after Wails has
-// rendered the page).
+// ConsumePendingDeepLink returns the pending warpnet:// URL and clears it.
 func (a *App) ConsumePendingDeepLink() string {
 	if a == nil || a.mx == nil {
 		return ""
@@ -389,10 +372,7 @@ func (a *App) close(_ context.Context) {
 	close(a.readyChan)
 }
 
-// setLinuxDesktopIcon installs the .png that ~/.local/share/applications/warpnet.desktop
-// references via Icon=warpnet. The .desktop file itself is written by
-// cmd/node/member/deeplink.Register so the scheme handler and the
-// menu entry stay in lockstep.
+// setLinuxDesktopIcon writes the PNG referenced by Icon=warpnet (the .desktop file is owned by deeplink.Register).
 func setLinuxDesktopIcon(iconData []byte) {
 	if runtime.GOOS != "linux" {
 		return

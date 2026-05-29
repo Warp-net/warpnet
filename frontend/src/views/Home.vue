@@ -326,10 +326,9 @@ export default {
       }, 4000);
     },
     async consumeDeepLink() {
+      // No URL router for profiles — route through Search.
       const link = parseDeepLink(await warpnetService.consumePendingDeepLink());
       if (link && link.kind === "user") {
-        // No URL router for profiles in the Vue app; the search box
-        // is the de facto by-id navigation, so route there.
         this.$router.push({ name: "Search", query: { q: link.id } });
       }
     },
@@ -360,13 +359,7 @@ export default {
       this.focusCompose();
     }
 
-    // Pick up any pending warpnet:// link. The Root login path
-    // already handles the cold-start case before it routes us
-    // here, so this catches the macOS hot-path: app already
-    // running, user clicks warpnet.site/user?id=…, Mac.OnUrlOpen
-    // stashes the URL, this gets us to Search?q=id. Wired on
-    // window focus too so subsequent clicks while we're on Home
-    // also route, not just the first one.
+    // macOS hot-path: re-check on focus so subsequent clicks also route.
     this.consumeDeepLink();
     this._deepLinkFocusHandler = () => this.consumeDeepLink();
     window.addEventListener("focus", this._deepLinkFocusHandler);

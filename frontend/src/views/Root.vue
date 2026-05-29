@@ -349,12 +349,7 @@ export default {
           }
         }
         this.setStep("");
-        // If the desktop binary was opened via a warpnet:// link
-        // (cold-start os.Args or macOS Mac.OnUrlOpen), the Go side
-        // has the raw URL stashed. There's no Vue route by id, so
-        // we mimic what the SearchBar component does: route to
-        // Search with the id as the query — the Search view runs
-        // warpnetService.searchUsers(q) and renders the match.
+        // No Vue route by id — route via Search (same as SearchBar).
         const deepLink = parseDeepLink(await warpnetService.consumePendingDeepLink());
         if (deepLink && deepLink.kind === "user") {
           this.$router.push({ name: "Search", query: { q: deepLink.id } });
