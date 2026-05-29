@@ -6,15 +6,21 @@
   hostinger (or any other URL — what matters is that links from
   posts/news point to it with ?id={userId} appended).
 
-  The snippet:
-    1. Reads the user id from ?id=... (or ?user=..., or a /user/{id}
-       path if your host happens to rewrite that way).
-    2. Quietly fires warpnet://user/{id} through a hidden iframe.
-    3. If the document hasn't been backgrounded by 1.5s (meaning
-       no app picked the link up), reveals install + retry buttons.
+  Flow:
+    1. Read the user id from ?id=... (or ?user=..., or /user/{id}).
+    2. Auto-fire warpnet://user/{id} through a hidden iframe. This
+       is the trick browsers DON'T block: top-frame navigation to
+       an unregistered custom scheme triggers the "site can't be
+       reached" interstitial in modern Chrome, but iframe.src does
+       not — it either hands off to the OS handler or fails
+       silently without replacing our document.
+    3. Watch for visibilitychange / blur to detect the OS handing
+       off. If 1.5s passes and we're still in front, the app isn't
+       installed — reveal the Open / Download buttons. The Open
+       button retries via the same iframe path.
 
-  Everything is scoped under #warpnet-launcher so the host
-  template's CSS is left alone.
+  Scoped under #warpnet-launcher so the host template's CSS is
+  untouched.
 -->
 <style>
   #warpnet-launcher {
@@ -100,7 +106,13 @@
   @media (prefers-color-scheme: dark) {
     #warpnet-launcher .wl-note { color: #9aa5b6; }
   }
-  #warpnet-launcher iframe { display: none; }
+  #warpnet-launcher iframe {
+    border: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+    visibility: hidden;
+  }
 </style>
 
 <div id="warpnet-launcher" aria-live="polite">
@@ -112,9 +124,10 @@
 
   <div id="wl-fallback" class="wl-hidden">
     <p>If nothing happened, the Warpnet app may not be installed on this computer yet.</p>
-    <a class="wl-btn" id="wl-open" href="#" rel="noopener">Open in Warpnet</a>
+    <button class="wl-btn" id="wl-open" type="button">Open in Warpnet</button>
     <a class="wl-btn wl-ghost" id="wl-download"
-       href="https://github.com/Warp-net/warpnet/releases/latest" rel="noopener">Download Warpnet</a>
+       href="https://github.com/Warp-net/warpnet/releases/latest"
+       target="_blank" rel="noopener">Download Warpnet</a>
     <p class="wl-note" id="wl-hint">Available for Windows, macOS and Linux.</p>
   </div>
 
@@ -126,9 +139,6 @@
     'use strict';
 
     // ----- 1. extract id -----------------------------------------
-    // Prefer ?id=... (the embed-friendly form on hosts that can't
-    // route /user/{id}); fall back to /user/{id} for setups that
-    // can. Tolerates trailing slashes.
     function parseUserId() {
       var p = new URLSearchParams(window.location.search);
       var q = p.get('id') || p.get('user');
@@ -148,7 +158,6 @@
     var frame = document.getElementById('wl-launcher-frame');
 
     var userId = parseUserId();
-
     if (!userId) {
       chip.textContent = 'unknown';
       intro.textContent =
@@ -161,7 +170,7 @@
 
     var deepLink = 'warpnet://user/' + encodeURIComponent(userId);
 
-    // ----- 2. OS hint for the install button --------------------
+    // ----- 2. OS hint --------------------------------------------
     var ua = navigator.userAgent || '';
     var platform = (navigator.userAgentData && navigator.userAgentData.platform) || '';
     if (/Win/i.test(platform) || /Windows/i.test(ua)) {
@@ -177,36 +186,41 @@
     }
 
     // ----- 3. fire the deep link --------------------------------
-    // Hidden iframe avoids the "site can't be reached" interstitial
-    // some browsers throw when location.href = 'warpnet://...' fails.
+    // Hidden iframe is the only auto-fire technique left that
+    // doesn't blow up a top-level Chrome tab with the "site can't
+    // be reached" page when the scheme is unregistered. The OS
+    // either intercepts the iframe navigation and hands off to the
+    // app, or the iframe fails silently and we stay in front.
+    //
+    // The retry button uses the same path — DO NOT use
+    // window.location.href = deepLink or <a href="warpnet://...">,
+    // those *do* replace the top frame in modern Chrome.
     function fire() {
       try {
         frame.src = deepLink;
-      } catch (_) {
-        try { window.location.href = deepLink; } catch (_) {}
-      }
+      } catch (_) { /* ignore */ }
     }
+
+    // ----- 4. detect handoff -------------------------------------
+    // visibilitychange / blur / pagehide trip when the OS gives
+    // focus to the app. If none of them fire within 1.5s we assume
+    // the scheme isn't registered and reveal the install UI.
+    var handedOff = false;
+    function markHandedOff() { handedOff = true; }
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) markHandedOff();
+    });
+    window.addEventListener('blur', markHandedOff);
+    window.addEventListener('pagehide', markHandedOff);
+
     fire();
 
-    // ----- 4. fallback timer ------------------------------------
-    // If the document gets backgrounded (browser handed off to the
-    // OS scheme handler) within 1.5s we assume the app took over.
-    // Otherwise we surface the install/retry UI.
-    var handed = false;
-    function markHanded() { handed = true; }
-    document.addEventListener('visibilitychange', function () {
-      if (document.hidden) markHanded();
-    });
-    window.addEventListener('blur', markHanded);
-    window.addEventListener('pagehide', markHanded);
-
     setTimeout(function () {
-      if (!handed) fallback.classList.remove('wl-hidden');
+      if (!handedOff) fallback.classList.remove('wl-hidden');
     }, 1500);
 
     // ----- 5. retry on user click -------------------------------
-    openBtn.addEventListener('click', function (e) {
-      e.preventDefault();
+    openBtn.addEventListener('click', function () {
       fire();
     });
   })();
