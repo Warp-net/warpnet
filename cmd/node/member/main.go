@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/cmd/node/member/deeplink"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -40,6 +41,23 @@ func main() {
 	app := NewApp()
 	icon := warpnet.GetLogo()
 	setLinuxDesktopIcon(icon)
+
+	// Claim the warpnet:// URL scheme so OS-level clicks on
+	// warpnet.site/user/{id} land back in this binary. Best-effort —
+	// failure here only means deep links won't work, the rest of the
+	// app keeps running. macOS is a no-op (declared in Info.plist).
+	if err := deeplink.Register(); err != nil {
+		log.Warnf("deeplink: scheme registration failed: %v", err)
+	}
+
+	// Capture a warpnet:// URL passed on argv (cold-start path: the
+	// OS launched us with the link as an argument). We stash it on
+	// the App and the frontend pulls it via ConsumePendingDeepLink
+	// once it's ready to route.
+	if link, ok := deeplink.FromArgs(os.Args); ok {
+		log.Infof("deeplink: cold-start link %s", link.Raw)
+		app.SetPendingDeepLink(link.Raw)
+	}
 
 	err = wails.Run(&options.App{
 		Title:            "warpnet", //nolint:goconst
@@ -80,7 +98,14 @@ func main() {
 				Icon:    icon,
 			},
 			OnFileOpen: nil,
-			OnUrlOpen:  nil,
+			// macOS routes warpnet:// clicks through this callback even
+			// while the app is already running (single-process model
+			// thanks to LaunchServices). We stash the raw URL and the
+			// frontend picks it up via ConsumePendingDeepLink.
+			OnUrlOpen: func(url string) {
+				log.Infof("deeplink: macOS OnUrlOpen %s", url)
+				app.SetPendingDeepLink(url)
+			},
 		},
 		Windows: &windows.Options{
 			WebviewIsTransparent:                false,

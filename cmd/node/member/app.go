@@ -71,6 +71,11 @@ type App struct {
 	psk         security.PSK
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
+
+	// deepLink is the latest pending warpnet:// payload to ship to
+	// the frontend, written either from os.Args at boot or from
+	// Mac.OnUrlOpen while running. Guarded by mx.
+	deepLink string
 }
 
 // NewApp creates a new App application struct
@@ -88,6 +93,30 @@ func (a *App) IsFirstRun() bool {
 		return false
 	}
 	return a.db.IsFirstRun()
+}
+
+// SetPendingDeepLink stores a warpnet:// payload to be picked up by
+// the frontend once it's ready. Used by the boot path (os.Args) and
+// the macOS Mac.OnUrlOpen callback. Safe to call from any goroutine
+// and at any time relative to startup.
+func (a *App) SetPendingDeepLink(raw string) {
+	a.mx.Lock()
+	a.deepLink = raw
+	a.mx.Unlock()
+}
+
+// ConsumePendingDeepLink is exposed to the frontend over the Wails
+// bind: the Vue app polls it after login to learn whether the user
+// arrived via warpnet://, and routes to the appropriate screen.
+// Returns the raw URL (the frontend already knows the parsing rules
+// from deep-link.html) and clears the stored value so a refresh
+// doesn't re-trigger.
+func (a *App) ConsumePendingDeepLink() string {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+	raw := a.deepLink
+	a.deepLink = ""
+	return raw
 }
 
 // startup is called when the app starts. The context is saved
