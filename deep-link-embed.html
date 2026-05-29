@@ -140,11 +140,17 @@
 
     // ----- 1. extract id -----------------------------------------
     function parseUserId() {
+      // URLSearchParams.get() already returns a decoded value, so
+      // don't decodeURIComponent() it again — that would mangle ids
+      // containing a literal "%xx" sequence and throws on malformed
+      // input. The pathname capture is a raw substring of
+      // location.pathname though, so it still needs decoding.
       var p = new URLSearchParams(window.location.search);
       var q = p.get('id') || p.get('user');
-      if (q) return decodeURIComponent(q);
+      if (q) return q;
       var m = window.location.pathname.match(/\/user\/([^\/?#]+)/i);
-      return m ? decodeURIComponent(m[1]) : null;
+      if (!m) return null;
+      try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; }
     }
 
     var root = document.getElementById('warpnet-launcher');

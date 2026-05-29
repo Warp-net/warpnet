@@ -48,12 +48,14 @@ func registerPlatform() error {
 	// The Icon=warpnet line matches what setLinuxDesktopIcon writes
 	// elsewhere in this binary; both functions touch the same file
 	// and we want them to produce a consistent final result regardless
-	// of which one runs last.
+	// of which one runs last. Quote the exe path so an install in
+	// "/Program Files/Warpnet" or similar (with a space) doesn't
+	// get split by the desktop launcher into multiple argv tokens.
 	contents := fmt.Sprintf(
 		`[Desktop Entry]
 Name=Warpnet
 Comment=Decentralized social network
-Exec=%s %%u
+Exec=%q %%u
 Icon=warpnet
 Terminal=false
 Type=Application

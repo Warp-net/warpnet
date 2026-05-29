@@ -51,18 +51,21 @@ var ErrMissingID = errors.New("deeplink: missing resource id")
 // and accepts either warpnet://user/{id} or warpnet:user/{id} (some
 // shells strip the // when forwarding).
 func Parse(raw string) (Link, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	original := strings.TrimSpace(raw)
+	if original == "" {
 		return Link{}, ErrNotWarpnetURL
 	}
 	// Tolerate the rare "warpnet:user/x" form by canonicalising to
-	// "warpnet://user/x" before handing it to net/url.
-	lower := strings.ToLower(raw)
+	// "warpnet://user/x" before handing it to net/url. Keep the
+	// original for Link.Raw so callers can log exactly what the OS
+	// handed us.
+	parseable := original
+	lower := strings.ToLower(parseable)
 	if strings.HasPrefix(lower, Scheme+":") && !strings.HasPrefix(lower, Scheme+"://") {
-		raw = Scheme + "://" + raw[len(Scheme)+1:]
+		parseable = Scheme + "://" + parseable[len(Scheme)+1:]
 	}
 
-	u, err := url.Parse(raw)
+	u, err := url.Parse(parseable)
 	if err != nil {
 		return Link{}, ErrNotWarpnetURL
 	}
@@ -78,22 +81,25 @@ func Parse(raw string) (Link, error) {
 		if id == "" || id == "." {
 			return Link{}, ErrMissingID
 		}
-		return Link{Kind: KindUser, ID: id, Raw: raw}, nil
+		return Link{Kind: KindUser, ID: id, Raw: original}, nil
 	default:
 		return Link{}, ErrUnsupportedKind
 	}
 }
 
 // FromArgs scans os.Args-style argv for a warpnet:// argument and
-// returns the first parseable link, if any. Returns ok=false when
-// none of the arguments are a deep link; callers can ignore the
-// error in that case.
+// returns the first parseable link, if any. Tolerates a leading
+// "-" or "--" before the scheme (some shell wrappers and the
+// canonical "warpnet --warpnet://..." invocation pass the link
+// that way). Returns ok=false when none of the arguments are a
+// deep link; callers can ignore the error in that case.
 func FromArgs(args []string) (Link, bool) {
 	for _, a := range args {
-		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(a)), Scheme+":") {
+		candidate := strings.TrimLeft(strings.TrimSpace(a), "-")
+		if !strings.HasPrefix(strings.ToLower(candidate), Scheme+":") {
 			continue
 		}
-		l, err := Parse(a)
+		l, err := Parse(candidate)
 		if err == nil {
 			return l, true
 		}

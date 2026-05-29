@@ -97,8 +97,19 @@ func (a *App) IsFirstRun() bool {
 // SetPendingDeepLink stores a warpnet:// payload to be picked up by
 // the frontend once it's ready. Used by the boot path (os.Args) and
 // the macOS Mac.OnUrlOpen callback. Safe to call from any goroutine
-// and at any time relative to startup.
+// and at any time relative to startup. The cold-start path in
+// main.go calls this BEFORE wails.Run, so before startup() has
+// initialised a.mx; treat the pre-startup window as single-
+// threaded (it is — main hasn't handed off to Wails yet) and just
+// stash the value without locking.
 func (a *App) SetPendingDeepLink(raw string) {
+	if a == nil {
+		return
+	}
+	if a.mx == nil {
+		a.deepLink = raw
+		return
+	}
 	a.mx.Lock()
 	a.deepLink = raw
 	a.mx.Unlock()
@@ -108,9 +119,15 @@ func (a *App) SetPendingDeepLink(raw string) {
 // bind: the Vue app polls it after login to learn whether the user
 // arrived via warpnet://, and routes to the appropriate screen.
 // Returns the raw URL (the frontend already knows the parsing rules
-// from deep-link.html) and clears the stored value so a refresh
-// doesn't re-trigger.
+// from deep-link-embed.html) and clears the stored value so a
+// refresh doesn't re-trigger. Returns "" if called before
+// startup() has wired up a.mx (defensive: shouldn't happen in
+// practice — the frontend can only call this after Wails has
+// rendered the page).
 func (a *App) ConsumePendingDeepLink() string {
+	if a == nil || a.mx == nil {
+		return ""
+	}
 	a.mx.Lock()
 	defer a.mx.Unlock()
 	raw := a.deepLink
