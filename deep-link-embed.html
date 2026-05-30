@@ -114,6 +114,11 @@
   (function () {
     'use strict';
 
+    // Single prefix so users can filter the console with "[warpnet]".
+    var LOG = '[warpnet-deeplink]';
+    function log()  { try { console.info.apply(console, [LOG].concat([].slice.call(arguments))); } catch (_) {} }
+    function warn() { try { console.warn.apply(console, [LOG].concat([].slice.call(arguments))); } catch (_) {} }
+
     // ----- 1. extract id -----------------------------------------
     function parseUserId() {
       // URLSearchParams.get() already returns a decoded value, so
@@ -123,14 +128,15 @@
       // location.pathname though, so it still needs decoding.
       var p = new URLSearchParams(window.location.search);
       var q = p.get('id') || p.get('user');
-      if (q) return q;
+      if (q) { log('id from query string'); return q; }
       var m = window.location.pathname.match(/\/user\/([^\/?#]+)/i);
       if (!m) return null;
+      log('id from pathname');
       try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; }
     }
 
     var root = document.getElementById('warpnet-launcher');
-    if (!root) return;
+    if (!root) { warn('launcher root #warpnet-launcher missing — embed not mounted'); return; }
 
     var chip = document.getElementById('wl-id');
     var intro = document.getElementById('wl-intro');
@@ -141,6 +147,7 @@
 
     var userId = parseUserId();
     if (!userId) {
+      warn('no user id in URL', window.location.href);
       chip.textContent = 'unknown';
       intro.textContent =
         "We couldn't find a user id in this link. Use a link of the form " +
@@ -151,6 +158,7 @@
     chip.textContent = userId;
 
     var deepLink = 'warpnet://user/' + encodeURIComponent(userId);
+    log('resolved', { userId: userId, deepLink: deepLink });
 
     // ----- 2. OS hint --------------------------------------------
     var ua = navigator.userAgent || '';
@@ -173,11 +181,14 @@
     // page when the scheme is unregistered. Reset src to about:blank
     // before reassigning, otherwise the second call is a no-op
     // (iframe is already at that URL).
-    function fire() {
+    function fire(source) {
+      log('fire via iframe', { source: source, src: deepLink });
       try {
         frame.src = 'about:blank';
         frame.src = deepLink;
-      } catch (_) { /* ignore */ }
+      } catch (e) {
+        warn('iframe fire threw', e);
+      }
     }
 
     // ----- 4. detect handoff -------------------------------------
@@ -185,22 +196,44 @@
     // focus to the app. If none of them fire within 1.5s we assume
     // the scheme isn't registered and reveal the install UI.
     var handedOff = false;
-    function markHandedOff() { handedOff = true; }
+    function markHandedOff(reason) {
+      if (handedOff) return;
+      handedOff = true;
+      log('handoff detected via', reason);
+    }
     document.addEventListener('visibilitychange', function () {
-      if (document.hidden) markHandedOff();
+      if (document.hidden) markHandedOff('visibilitychange');
     });
-    window.addEventListener('blur', markHandedOff);
-    window.addEventListener('pagehide', markHandedOff);
+    window.addEventListener('blur',     function () { markHandedOff('blur'); });
+    window.addEventListener('pagehide', function () { markHandedOff('pagehide'); });
 
-    fire();
+    fire('auto');
 
     setTimeout(function () {
-      if (!handedOff) fallback.classList.remove('wl-hidden');
+      if (handedOff) {
+        log('auto-fire OK, OS took focus');
+      } else {
+        warn('no handoff after 1.5s — scheme likely unregistered or browser blocked the iframe (typical for Chromium ≥90 / Brave). Revealing fallback UI.');
+        fallback.classList.remove('wl-hidden');
+      }
     }, 1500);
 
     // ----- 5. retry on user click -------------------------------
+    // Chromium-based browsers (Chrome ≥90, Brave, Edge) silently
+    // block external-scheme launches from hidden iframes — so the
+    // iframe path is useless once we land on the fallback UI. An
+    // <a>.click() driven from a click handler carries a user
+    // gesture, which is what those browsers require to actually
+    // hand off to the OS.
     openBtn.addEventListener('click', function () {
-      fire();
+      log('retry button clicked → anchor-click with user gesture', deepLink);
+      var a = document.createElement('a');
+      a.href = deepLink;
+      a.rel = 'noopener';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     });
   })();
 </script>
