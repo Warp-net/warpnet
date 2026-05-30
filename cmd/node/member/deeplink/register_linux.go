@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -50,24 +51,26 @@ StartupWMClass=warpnet
 	}
 	log.Infof("deeplink: wrote %s (Exec=%q)", desktopPath, exe)
 
-	// Without update-desktop-database the desktop environment's MIME
-	// cache keeps the old handler list and ignores the new MimeType=
-	// line. Without that, the browser asks the OS "who handles
-	// warpnet://?" and gets nothing — clicking the link does nothing.
+	// Cache refresh stays best-effort: some minimal images ship
+	// without update-desktop-database, but the binding below can
+	// still take.
 	if err := runShort("update-desktop-database", appsDir); err != nil {
 		log.Warnf("deeplink: update-desktop-database: %v", err)
 	}
 
 	if err := runShort("xdg-mime", "default", "warpnet.desktop", "x-scheme-handler/"+Scheme); err != nil {
-		log.Warnf("deeplink: xdg-mime default: %v", err)
+		return fmt.Errorf("deeplink: xdg-mime default: %w", err)
 	}
 
-	// Verify the association actually took. If it didn't, the browser
-	// still won't route the scheme — surface that clearly so the user
-	// knows what to debug, instead of "nothing happens".
-	if out, err := runShortOut("xdg-mime", "query", "default", "x-scheme-handler/"+Scheme); err == nil {
-		log.Infof("deeplink: x-scheme-handler/%s now resolves to %q", Scheme, out)
+	out, err := runShortOut("xdg-mime", "query", "default", "x-scheme-handler/"+Scheme)
+	if err != nil {
+		return fmt.Errorf("deeplink: xdg-mime query: %w", err)
 	}
+	got := strings.TrimSpace(out)
+	if got != "warpnet.desktop" {
+		return fmt.Errorf("deeplink: x-scheme-handler/%s resolves to %q, expected warpnet.desktop", Scheme, got) //nolint:err113 // diagnostic, not matched by callers
+	}
+	log.Infof("deeplink: x-scheme-handler/%s -> %s", Scheme, got)
 	return nil
 }
 
