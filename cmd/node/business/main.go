@@ -96,7 +96,8 @@ func main() {
 	defer db.Close()
 
 	readyChan := make(chan domain.AuthNodeInfo, 1)
-	authSvc := auth.NewAuthService(ctx, database.NewAuthRepo(db, network), database.NewUserRepo(db), readyChan)
+	userRepo := database.NewUserRepo(db)
+	authSvc := auth.NewAuthService(ctx, database.NewAuthRepo(db, network), userRepo, readyChan)
 
 	var wsKey []byte
 	if pw := config.Config().Node.Server.Password; pw != "" {
@@ -143,7 +144,7 @@ func main() {
 
 		// Stamp the role onto the owner's record so it travels to peers via
 		// PUBLIC_GET_USER + discovery. Any node could do the same with its role.
-		if err := database.NewUserRepo(db).SetRole(info.UserId, warpnet.BusinessRole); err != nil {
+		if err := userRepo.SetRole(info.UserId, warpnet.BusinessRole); err != nil {
 			log.Warnf("business: set owner role: %v", err)
 		}
 		go node.TrackPublicReachability(ctx)
