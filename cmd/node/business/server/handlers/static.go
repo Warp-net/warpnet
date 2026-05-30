@@ -27,12 +27,13 @@ package handlers
 import (
 	"io/fs"
 	"net/http"
+	"strings"
 
 	root "github.com/Warp-net/warpnet"
 )
 
-// Static serves the embedded Vue build (frontend/dist) with an SPA fallback to
-// index.html so client-side routes resolve.
+// Static serves the embedded Vue build (frontend/dist). Unknown paths fall back
+// to index.html so client-side routes resolve (SPA).
 func Static() (http.Handler, error) {
 	sub, err := fs.Sub(root.GetStaticEmbedded(), "frontend/dist")
 	if err != nil {
@@ -40,23 +41,14 @@ func Static() (http.Handler, error) {
 	}
 	fileServer := http.FileServer(http.FS(sub))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, statErr := fs.Stat(sub, trimLeadingSlash(r.URL.Path)); statErr != nil && r.URL.Path != "/" {
-			r2 := new(http.Request)
-			*r2 = *r
-			r2.URL.Path = "/"
-			fileServer.ServeHTTP(w, r2)
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if name == "" {
+			name = "index.html"
+		}
+		if _, err := fs.Stat(sub, name); err != nil {
+			http.ServeFileFS(w, r, sub, "index.html")
 			return
 		}
 		fileServer.ServeHTTP(w, r)
 	}), nil
-}
-
-func trimLeadingSlash(p string) string {
-	if len(p) > 0 && p[0] == '/' {
-		p = p[1:]
-	}
-	if p == "" {
-		return "."
-	}
-	return p
 }

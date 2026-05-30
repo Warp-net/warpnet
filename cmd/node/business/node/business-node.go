@@ -24,29 +24,27 @@ resulting from the use or misuse of this software.
 
 // Package node hosts the business node. A business node IS a member node — same
 // discovery, DHT, MDNS, pubsub, relay and the full handler set, so its profile
-// and posts are queryable like any user — so it embeds *member.MemberNode
-// rather than re-declaring any of that. It adds only the moderator: the report
-// subscription is attached to the node's own gossip (see moderation.go) and
-// torn down on Stop. The "business" marker rides on the owner's domain.User
-// record (stamped at startup), not on the node info.
+// and posts are queryable like any user — so it embeds *member.MemberNode and
+// adds only what a business node owes: a gossip accessor (so the moderator can
+// be wired to it from outside) and the public-IP tracker. It knows nothing
+// about the moderator or the dashboard; those are wired around it in main.
 package node
 
 import (
 	"context"
 	"crypto/ed25519"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/security"
+	log "github.com/sirupsen/logrus"
 )
 
 type BusinessNode struct {
 	*member.MemberNode
-
-	// moder is the moderator engine wrapper set by StartModerator. Held as a
-	// closer so the node needn't depend on the moderator package's concrete type.
-	moder interface{ Close() }
 }
 
 func NewBusinessNode(
@@ -76,12 +74,63 @@ func (b *BusinessNode) ID() warpnet.WarpPeerID {
 	return b.Node().ID()
 }
 
-func (b *BusinessNode) Stop() {
-	if b == nil {
+// Gossip exposes the node's single gossip instance so the moderator can attach
+// its report subscription to it (a host runs only one gossipsub router).
+func (b *BusinessNode) Gossip() *corePubsub.Gossip {
+	ps := b.PubSub()
+	if ps == nil {
+		return nil
+	}
+	return ps.Gossip()
+}
+
+// TrackPublicReachability enforces the public-IP obligation. It watches the
+// node's own AutoNAT verdict and public addresses, waits out a grace window
+// (AutoNAT v2 reports Unknown/Private transiently at boot), returns as soon as
+// the node looks public, and panics — crashing the process, which is the
+// assertion — only after several consecutive private readings. Run on a
+// goroutine.
+func (b *BusinessNode) TrackPublicReachability(ctx context.Context) {
+	const (
+		grace         = 90 * time.Second
+		sampleEvery   = 5 * time.Second
+		privateStreak = 3
+		maxWait       = 5 * time.Minute
+	)
+
+	select {
+	case <-ctx.Done():
 		return
+	case <-time.After(grace):
 	}
-	if b.moder != nil {
-		b.moder.Close()
+
+	deadline := time.Now().Add(maxWait)
+	ticker := time.NewTicker(sampleEvery)
+	defer ticker.Stop()
+
+	streak := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			switch b.NodeInfo().Reachability {
+			case warpnet.ReachabilityPublic:
+				log.Infoln("business: reachability confirmed public")
+				return
+			case warpnet.ReachabilityPrivate:
+				streak++
+				log.Warnf("business: reachability reported private (%d/%d)", streak, privateStreak)
+				if streak >= privateStreak && len(b.PublicAddrs()) == 0 {
+					panic("business: node is privately reachable (behind NAT) — a business node must have a publicly addressable IP")
+				}
+			default:
+				streak = 0
+			}
+			if time.Now().After(deadline) {
+				log.Warnln("business: reachability still unknown after max wait; continuing without public confirmation")
+				return
+			}
+		}
 	}
-	b.MemberNode.Stop()
 }

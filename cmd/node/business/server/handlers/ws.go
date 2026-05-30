@@ -27,10 +27,26 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 )
+
+// Dispatcher routes one request envelope through the node and reports node
+// readiness for the health probe.
+type Dispatcher interface {
+	Dispatch(req event.Message) event.Message
+	NodeReady() bool
+}
+
+// Codec is the WS channel's wire form, supplied by the server so the handler
+// stays free of crypto: Decode turns an inbound frame into request bytes
+// (reporting whether it was encrypted), Encode seals a reply, mirroring it.
+type Codec interface {
+	Decode(frame []byte) (plain []byte, encrypted bool)
+	Encode(reply []byte, encrypted bool) ([]byte, error)
+}
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
@@ -39,9 +55,9 @@ var upgrader = websocket.Upgrader{
 }
 
 // WS bridges WebSocket frames to the node's libp2p stream handlers: each frame
-// is one request envelope, dispatched and answered. Framing — and any channel
-// encryption — is the codec's job; the routing is the Dispatcher's. The handler
-// itself is just the read → dispatch → write loop.
+// is one event.Message, dispatched and answered. Framing and channel encryption
+// are the codec's job, routing is the Dispatcher's — the handler is just the
+// read → dispatch → write loop.
 func WS(d Dispatcher, codec Codec) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -58,7 +74,7 @@ func WS(d Dispatcher, codec Codec) http.HandlerFunc {
 			}
 
 			plain, encrypted := codec.Decode(frame)
-			var req AppMessage
+			var req event.Message
 			if err := json.Unmarshal(plain, &req); err != nil {
 				log.Warnf("business: ws envelope: %v", err)
 				continue

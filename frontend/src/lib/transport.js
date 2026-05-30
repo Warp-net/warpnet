@@ -55,7 +55,7 @@ const pending = new Map(); // message_id -> { resolve, reject, timer }
 
 function wsURL() {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${scheme}://${window.location.host}/api/ws`;
+  return `${scheme}://${window.location.host}/ws`;
 }
 
 function failPending(err) {

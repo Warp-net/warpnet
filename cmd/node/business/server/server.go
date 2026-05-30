@@ -22,175 +22,103 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-// Package server runs the business dashboard: it owns the node lifecycle and
-// the HTTP/WS surface. It receives its dependencies ready-made from main (the
-// db, auth service, psk, ...) — it does not build them — and exposes Dispatch
-// to the handlers, which are the only path-routing point.
+// Package server is the business dashboard: an HTTP/WS front end that serves the
+// embedded SPA and bridges dashboard requests to the node. It does NOT own the
+// node — main builds and starts the node and attaches it here through the Node
+// interface; the server only dispatches to it.
 package server
 
 import (
 	"context"
-	"crypto/ed25519"
-	stdjson "encoding/json"
-	"errors"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
-	node "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/cmd/node/business/server/handlers"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/core/stream"
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	localstore "github.com/Warp-net/warpnet/database/local-store"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
 
-// Deps are the ready-made dependencies main injects. The server builds nothing
-// itself except the node, which can only be built once the owner logs in.
-type Deps struct {
-	DB             *localstore.DB
-	Auth           *auth.AuthService
-	PSK            security.PSK
-	CodeHashHex    string
-	Bootstrap      []warpnet.WarpAddrInfo
-	Network        string
-	Version        *semver.Version
-	MetricsGateway string
-	ReadyChan      chan domain.AuthNodeInfo
-	WSKey          []byte // sha256(launch password); empty => plaintext channel
+// pathIsFirstRun is the control path the frontend sends (over the WS) before
+// login to choose between the login and sign-up screens.
+const pathIsFirstRun = "is-first-run"
+
+// Node is all the dashboard needs from the running node: feed it a request.
+type Node interface {
+	SelfStream(path stream.WarpRoute, data any) ([]byte, error)
 }
 
 type Server struct {
-	ctx context.Context
-	d   Deps
+	auth    *auth.AuthService
+	psk     security.PSK
+	wsKey   []byte
+	db      *localstore.DB
+	httpSrv *http.Server
 
 	mx   *sync.RWMutex
-	node *node.BusinessNode
+	node Node
 }
 
-func New(ctx context.Context, d Deps) *Server {
-	s := &Server{ctx: ctx, d: d, mx: new(sync.RWMutex)}
-	go s.runNode()
-	return s
-}
+func New(authSvc *auth.AuthService, psk security.PSK, wsKey []byte, db *localstore.DB) (*Server, error) {
+	s := &Server{auth: authSvc, psk: psk, wsKey: wsKey, db: db, mx: new(sync.RWMutex)}
 
-// Run serves the dashboard, blocking until the context is cancelled.
-func (s *Server) Run(addr string) error {
 	staticH, err := handlers.Static()
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	mux := http.NewServeMux()
-	mux.Handle("/api/ws", handlers.WS(s, aesCodec{key: s.d.WSKey}))
+	mux.Handle("/ws", handlers.WS(s, aesCodec{key: wsKey}))
 	mux.HandleFunc("/healthz", handlers.Healthz())
 	mux.HandleFunc("/readyz", handlers.Readyz(s))
 	mux.Handle("/", staticH)
-
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-	go func() {
-		<-s.ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
-	}()
-
-	log.Infof("business: dashboard listening on %s", addr)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
+	s.httpSrv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	return s, nil
 }
 
-// runNode waits for the first successful login (the auth readyChan handshake),
-// builds and starts the node, and wires the business obligations: the role on
-// the owner's record, the public-IP tracker, and the moderator engine. Relay is
-// already on — every WarpNode runs circuit-relay.
-func (s *Server) runNode() {
-	var info domain.AuthNodeInfo
-	select {
-	case <-s.ctx.Done():
-		log.Infoln("business: interrupted before login...")
-		return
-	case info = <-s.d.ReadyChan:
-		log.Infoln("business: database authentication passed")
-	}
-
-	ownNodeId, err := warpnet.IDFromPublicKey(s.d.Auth.PrivateKey().Public().(ed25519.PublicKey))
-	if err != nil {
-		log.Errorf("business: node ID: %v", err)
-		return
-	}
-
-	m := metrics.NewMetricsClient(s.d.MetricsGateway, ownNodeId.String(), s.d.Network)
-
-	bn, err := node.NewBusinessNode(
-		s.ctx, s.d.Auth.PrivateKey(), s.d.PSK, ownNodeId, s.d.CodeHashHex,
-		s.d.Version, s.d.Auth.Storage(), s.d.DB, s.d.Bootstrap, m,
-	)
-	if err != nil {
-		log.Errorf("business: init node: %v", err)
-		return
-	}
-
+// Attach hands the started node to the dashboard. main calls it once the node
+// is up; until then node calls report "not ready".
+func (s *Server) Attach(n Node) {
 	s.mx.Lock()
-	s.node = bn
+	s.node = n
 	s.mx.Unlock()
+}
 
-	if err := bn.Start(); err != nil {
-		log.Errorf("business: start node: %v", err)
-		return
-	}
+// Run serves until Shutdown (or a listen error).
+func (s *Server) Run(addr string) error {
+	s.httpSrv.Addr = addr
+	log.Infof("business: dashboard listening on %s", addr)
+	return s.httpSrv.ListenAndServe()
+}
 
-	// Stamp the role onto the owner's record so it travels to peers via
-	// PUBLIC_GET_USER + discovery. Any node could do the same with its own role.
-	if err := database.NewUserRepo(s.d.DB).SetRole(info.UserId, warpnet.BusinessRole); err != nil {
-		log.Warnf("business: set owner role: %v", err)
-	}
-
-	go bn.TrackPublicReachability(s.ctx)
-	if err := bn.StartModerator(s.ctx); err != nil {
-		log.Errorf("business: start moderator: %v", err)
-	}
-
-	info.ID = ownNodeId.String()
-	info.Network = s.d.Network
-	info.Addresses = bn.NodeInfo().Addresses
-	s.d.ReadyChan <- info
+func (s *Server) Shutdown() error {
+	return s.httpSrv.Shutdown(context.Background())
 }
 
 // Dispatch is the single routing point: is-first-run and login/logout inline,
 // every other path signed and run through the node's SelfStream — the same
 // middleware and handler stack the desktop client drives.
-func (s *Server) Dispatch(req handlers.AppMessage) (resp handlers.AppMessage) {
+func (s *Server) Dispatch(req event.Message) event.Message {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorf("business: dispatch panic: %v", r)
 		}
 	}()
-	resp.MessageId = req.MessageId
-	resp.Path = req.Path
-	resp.Timestamp = time.Now().String()
-	resp.Version = "0.0.0"
+	resp := event.Message{MessageId: req.MessageId, Destination: req.Destination, Timestamp: time.Now(), Version: "0.0.0"}
 
-	switch req.Path {
-	case handlers.PathIsFirstRun:
-		body, _ := json.Marshal(s.isFirstRun())
+	switch req.Destination {
+	case pathIsFirstRun:
+		body, _ := json.Marshal(s.db.IsFirstRun())
 		resp.Body = body
 	case event.PRIVATE_POST_LOGIN:
 		resp.Body = s.login(req.Body)
 	case event.PRIVATE_POST_LOGOUT:
-		s.withNode(func(n *node.BusinessNode) { n.Stop() })
-		s.d.Auth.AuthLogout()
-		resp.Body = []byte(`["logged_out"]`)
+		s.auth.AuthLogout()
+		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
 		resp.Body = s.nodeCall(req)
 	}
@@ -201,12 +129,12 @@ func (s *Server) Dispatch(req handlers.AppMessage) (resp handlers.AppMessage) {
 	return resp
 }
 
-func (s *Server) login(body []byte) stdjson.RawMessage {
+func (s *Server) login(body json.RawMessage) json.RawMessage {
 	var ev event.LoginEvent
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
-	loginResp, err := s.d.Auth.AuthLogin(ev, s.d.PSK)
+	loginResp, err := s.auth.AuthLogin(ev, s.psk)
 	if err != nil {
 		log.Errorf("business: auth: %v", err)
 		return newErrorResp(err.Error())
@@ -218,7 +146,7 @@ func (s *Server) login(body []byte) stdjson.RawMessage {
 	return bt
 }
 
-func (s *Server) nodeCall(req handlers.AppMessage) stdjson.RawMessage {
+func (s *Server) nodeCall(req event.Message) json.RawMessage {
 	s.mx.RLock()
 	n := s.node
 	s.mx.RUnlock()
@@ -226,63 +154,48 @@ func (s *Server) nodeCall(req handlers.AppMessage) stdjson.RawMessage {
 		return newErrorResp("not attached server node")
 	}
 
-	ts, _ := time.Parse(time.RFC3339, req.Timestamp)
-	body := json.RawMessage(req.Body)
-	respData, err := n.SelfStream(
-		stream.WarpRoute(req.Path),
-		event.Message{
-			Body:        body,
-			MessageId:   req.MessageId,
-			NodeId:      req.NodeId,
-			Destination: req.Path,
-			Timestamp:   ts,
-			Version:     req.Version,
-			Signature:   security.Sign(s.d.Auth.PrivateKey(), body),
-		},
-	)
+	req.Signature = security.Sign(s.auth.PrivateKey(), req.Body)
+	respData, err := n.SelfStream(stream.WarpRoute(req.Destination), req)
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
 	return respData
 }
 
-// NodeReady reports whether the node has been built and started (post-login).
+// NodeReady reports whether main has attached a started node (the readiness
+// probe gates traffic on it).
 func (s *Server) NodeReady() bool {
 	s.mx.RLock()
 	defer s.mx.RUnlock()
 	return s.node != nil
 }
 
-func (s *Server) isFirstRun() bool {
-	return s.d.DB != nil && s.d.DB.IsFirstRun()
-}
-
-func (s *Server) withNode(f func(n *node.BusinessNode)) {
-	s.mx.RLock()
-	n := s.node
-	s.mx.RUnlock()
-	if n != nil {
-		f(n)
-	}
-}
-
-func (s *Server) Close() {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Errorf("business: close panic: %v", r)
-		}
-	}()
-	log.Infoln("business: closing...")
-	s.withNode(func(n *node.BusinessNode) { n.Stop() })
-	if s.d.Auth != nil {
-		s.d.Auth.AuthLogout()
-	}
-	if s.d.DB != nil {
-		s.d.DB.Close()
-	}
-}
-
-func newErrorResp(msg string) stdjson.RawMessage {
+func newErrorResp(msg string) json.RawMessage {
 	bt, _ := json.Marshal(event.ResponseError{Code: http.StatusInternalServerError, Message: msg})
 	return bt
+}
+
+// aesCodec is the dashboard channel's wire form: AES-256-GCM with the preshared
+// key (sha256 of the launch password) when one is set, plaintext otherwise. The
+// is-first-run probe precedes the key and arrives in cleartext, so Decode reports
+// per frame whether it was encrypted and Encode mirrors that on the reply.
+type aesCodec struct{ key []byte }
+
+var _ handlers.Codec = aesCodec{}
+
+func (c aesCodec) Decode(frame []byte) (plain []byte, encrypted bool) {
+	if len(c.key) == 0 {
+		return frame, false
+	}
+	if p, err := security.AESGCMDecrypt(c.key, frame); err == nil {
+		return p, true
+	}
+	return frame, false
+}
+
+func (c aesCodec) Encode(reply []byte, encrypted bool) ([]byte, error) {
+	if !encrypted || len(c.key) == 0 {
+		return reply, nil
+	}
+	return security.AESGCMEncrypt(c.key, reply)
 }
