@@ -180,6 +180,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {parseDeepLink} from "@/lib/deeplink";
 
 export default {
   name: "Home",
@@ -324,6 +325,13 @@ export default {
         this.toastTimeoutId = null;
       }, 4000);
     },
+    async consumeDeepLink() {
+      // No URL router for profiles — route through Search.
+      const link = parseDeepLink(await warpnetService.consumePendingDeepLink());
+      if (link && link.kind === "user") {
+        this.$router.push({ name: "Search", query: { q: link.id } });
+      }
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
@@ -350,6 +358,11 @@ export default {
     if (this.$route.query.compose) {
       this.focusCompose();
     }
+
+    // macOS hot-path: re-check on focus so subsequent clicks also route.
+    this.consumeDeepLink();
+    this._deepLinkFocusHandler = () => this.consumeDeepLink();
+    window.addEventListener("focus", this._deepLinkFocusHandler);
   },
   watch: {
     '$route.query.compose'(val) {
@@ -362,6 +375,10 @@ export default {
     if (this.toastTimeoutId) {
       clearTimeout(this.toastTimeoutId);
       this.toastTimeoutId = null;
+    }
+    if (this._deepLinkFocusHandler) {
+      window.removeEventListener("focus", this._deepLinkFocusHandler);
+      this._deepLinkFocusHandler = null;
     }
   },
 };

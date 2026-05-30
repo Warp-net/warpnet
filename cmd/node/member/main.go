@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/cmd/node/member/deeplink"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -40,6 +41,16 @@ func main() {
 	app := NewApp()
 	icon := warpnet.GetLogo()
 	setLinuxDesktopIcon(icon)
+
+	// Best-effort: failure just means deep links don't work.
+	if err := deeplink.Register(); err != nil {
+		log.Warnf("deeplink: scheme registration failed: %v", err)
+	}
+
+	if link, ok := deeplink.FromArgs(os.Args); ok {
+		log.Infof("deeplink: cold-start link %s", link.Raw)
+		app.SetPendingDeepLink(link.Raw)
+	}
 
 	err = wails.Run(&options.App{
 		Title:            "warpnet", //nolint:goconst
@@ -80,7 +91,11 @@ func main() {
 				Icon:    icon,
 			},
 			OnFileOpen: nil,
-			OnUrlOpen:  nil,
+			// macOS hot-path: app stays single-process, URL clicks come here.
+			OnUrlOpen: func(url string) {
+				log.Infof("deeplink: macOS OnUrlOpen %s", url)
+				app.SetPendingDeepLink(url)
+			},
 		},
 		Windows: &windows.Options{
 			WebviewIsTransparent:                false,

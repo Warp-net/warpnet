@@ -75,6 +75,7 @@ if (process.env.NODE_ENV === 'development') {
                     return Promise.resolve({body:body});
                 },
                 IsFirstRun: () => Promise.resolve(true),
+                ConsumePendingDeepLink: () => Promise.resolve(""),
             }
         }
     };

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
-	"fmt"
 	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
@@ -71,6 +70,9 @@ type App struct {
 	psk         security.PSK
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
+
+	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
+	deepLink string
 }
 
 // NewApp creates a new App application struct
@@ -88,6 +90,32 @@ func (a *App) IsFirstRun() bool {
 		return false
 	}
 	return a.db.IsFirstRun()
+}
+
+// SetPendingDeepLink stashes a warpnet:// payload for the frontend. Pre-startup safe (a.mx may be nil).
+func (a *App) SetPendingDeepLink(raw string) {
+	if a == nil {
+		return
+	}
+	if a.mx == nil {
+		a.deepLink = raw
+		return
+	}
+	a.mx.Lock()
+	a.deepLink = raw
+	a.mx.Unlock()
+}
+
+// ConsumePendingDeepLink returns the pending warpnet:// URL and clears it.
+func (a *App) ConsumePendingDeepLink() string {
+	if a == nil || a.mx == nil {
+		return ""
+	}
+	a.mx.Lock()
+	defer a.mx.Unlock()
+	raw := a.deepLink
+	a.deepLink = ""
+	return raw
 }
 
 // startup is called when the app starts. The context is saved
@@ -344,15 +372,7 @@ func (a *App) close(_ context.Context) {
 	close(a.readyChan)
 }
 
-const linuxDesktopTemplate = `
-	[Desktop Entry]
-	Name=warpnet
-	Exec=%s
-	Icon=warpnet
-	Type=Application
-	Categories=Network;Social;
-`
-
+// setLinuxDesktopIcon writes the PNG referenced by Icon=warpnet (the .desktop file is owned by deeplink.Register).
 func setLinuxDesktopIcon(iconData []byte) {
 	if runtime.GOOS != "linux" {
 		return
@@ -367,25 +387,10 @@ func setLinuxDesktopIcon(iconData []byte) {
 	}
 	homeDir := currentUser.HomeDir
 
-	desktopDir := filepath.Join(homeDir, ".local", "share", "applications")
 	iconDir := filepath.Join(homeDir, ".local", "share", "icons", "hicolor", "512x512", "apps")
 
 	//#nosec
-	_ = os.MkdirAll(desktopDir, 0755)
-	//#nosec
 	_ = os.MkdirAll(iconDir, 0755)
-
-	execPath, err := os.Executable()
-	if err != nil {
-		log.Fatalf("setting icon: unable to determine executable path: %v", err)
-	}
-
-	desktopFile := filepath.Join(desktopDir, "warpnet.desktop")
-	content := fmt.Sprintf(linuxDesktopTemplate, execPath)
-	//#nosec
-	if err := os.WriteFile(desktopFile, []byte(content), 0644); err != nil {
-		log.Fatalf("setting icon: write .desktop file fail: %v", err)
-	}
 
 	iconPath := filepath.Join(iconDir, "warpnet.png")
 	//#nosec

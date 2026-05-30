@@ -10,5 +10,14 @@
   "author": {
     "name": "vadim",
     "email": "test@test.com"
+  },
+  "info": {
+    "protocols": [
+      {
+        "scheme": "warpnet",
+        "description": "Warpnet Protocol",
+        "role": "Viewer"
+      }
+    ]
   }
 }

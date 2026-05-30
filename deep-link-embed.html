@@ -1,0 +1,233 @@
+<!--
+  Warpnet deep-link launcher (embed snippet).
+
+  Paste this entire block (including <style> and <script>) into a
+  "Custom embed code" block on the page you publish at /user on
+  hostinger (or any other URL — what matters is that links from
+  posts/news point to it with ?id={userId} appended).
+
+  Flow:
+    1. Read the user id from ?id=... (or ?user=..., or /user/{id}).
+    2. Auto-fire warpnet://user/{id} through a hidden iframe. This
+       is the trick browsers DON'T block: top-frame navigation to
+       an unregistered custom scheme triggers the "site can't be
+       reached" interstitial in modern Chrome, but iframe.src does
+       not — it either hands off to the OS handler or fails
+       silently without replacing our document.
+    3. Watch for visibilitychange / blur to detect the OS handing
+       off. If 1.5s passes and we're still in front, the app isn't
+       installed — reveal the Open / Download buttons. The Open
+       button retries via the same iframe path.
+
+  Scoped under #warpnet-launcher so the host template's CSS is
+  untouched.
+-->
+<style>
+  #warpnet-launcher {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 480px;
+    margin: 32px auto;
+    padding: 28px;
+    border: 1px solid rgba(0, 0, 0, 0.10);
+    border-radius: 14px;
+    background: #ffffff;
+    color: #1b2636;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher {
+      background: #1b2636;
+      color: #e7ecf3;
+      border-color: rgba(255, 255, 255, 0.10);
+    }
+  }
+  #warpnet-launcher *,
+  #warpnet-launcher *::before,
+  #warpnet-launcher *::after {
+    box-sizing: border-box;
+  }
+  #warpnet-launcher h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+  #warpnet-launcher p {
+    margin: 0 0 14px;
+    color: #4a5566;
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher p { color: #9aa5b6; }
+  }
+  #warpnet-launcher .wl-chip {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.06);
+    font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher .wl-chip { background: rgba(255, 255, 255, 0.08); }
+  }
+  #warpnet-launcher .wl-btn {
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 10px;
+    background: #ff2d8e;
+    color: #ffffff;
+    font: 600 15px/1.2 inherit;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  #warpnet-launcher .wl-btn:hover { filter: brightness(1.08); }
+  #warpnet-launcher .wl-btn.wl-ghost {
+    background: transparent;
+    color: inherit;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher .wl-btn.wl-ghost { border-color: rgba(255, 255, 255, 0.15); }
+  }
+  #warpnet-launcher .wl-hidden { display: none; }
+  #warpnet-launcher .wl-note {
+    margin-top: 16px;
+    font-size: 12px;
+    text-align: center;
+    color: #4a5566;
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher .wl-note { color: #9aa5b6; }
+  }
+  #warpnet-launcher iframe {
+    border: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+    visibility: hidden;
+  }
+</style>
+
+<div id="warpnet-launcher" aria-live="polite">
+  <h2>Opening Warpnet…</h2>
+  <p id="wl-intro">
+    Trying to open <span class="wl-chip" id="wl-id">…</span> in the Warpnet desktop app.
+    If your browser shows a confirmation dialog, click <strong>Open Warpnet</strong>.
+  </p>
+
+  <div id="wl-fallback" class="wl-hidden">
+    <p>If nothing happened, the Warpnet app may not be installed on this computer yet.</p>
+    <button class="wl-btn" id="wl-open" type="button">Open in Warpnet</button>
+    <a class="wl-btn wl-ghost" id="wl-download"
+       href="https://warpnet.site/download"
+       target="_blank" rel="noopener">Download Warpnet</a>
+    <p class="wl-note" id="wl-hint">Available for Windows, macOS and Linux.</p>
+  </div>
+
+  <iframe id="wl-launcher-frame" aria-hidden="true" tabindex="-1"></iframe>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    // ----- 1. extract id -----------------------------------------
+    function parseUserId() {
+      // URLSearchParams.get() already returns a decoded value, so
+      // don't decodeURIComponent() it again — that would mangle ids
+      // containing a literal "%xx" sequence and throws on malformed
+      // input. The pathname capture is a raw substring of
+      // location.pathname though, so it still needs decoding.
+      var p = new URLSearchParams(window.location.search);
+      var q = p.get('id') || p.get('user');
+      if (q) return q;
+      var m = window.location.pathname.match(/\/user\/([^\/?#]+)/i);
+      if (!m) return null;
+      try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; }
+    }
+
+    var root = document.getElementById('warpnet-launcher');
+    if (!root) return;
+
+    var chip = document.getElementById('wl-id');
+    var intro = document.getElementById('wl-intro');
+    var fallback = document.getElementById('wl-fallback');
+    var openBtn = document.getElementById('wl-open');
+    var hint = document.getElementById('wl-hint');
+    var frame = document.getElementById('wl-launcher-frame');
+
+    var userId = parseUserId();
+    if (!userId) {
+      chip.textContent = 'unknown';
+      intro.textContent =
+        "We couldn't find a user id in this link. Use a link of the form " +
+        "warpnet.site/user?id={user_id}.";
+      fallback.classList.remove('wl-hidden');
+      return;
+    }
+    chip.textContent = userId;
+
+    var deepLink = 'warpnet://user/' + encodeURIComponent(userId);
+
+    // ----- 2. OS hint --------------------------------------------
+    var ua = navigator.userAgent || '';
+    var platform = (navigator.userAgentData && navigator.userAgentData.platform) || '';
+    if (/Win/i.test(platform) || /Windows/i.test(ua)) {
+      hint.textContent = 'Download for Windows.';
+    } else if (/Mac/i.test(platform) || /Mac OS X|Macintosh/i.test(ua)) {
+      hint.textContent = 'Download for macOS.';
+    } else if (/Android/i.test(ua)) {
+      hint.textContent = 'On Android? Install the Warpnet app from the releases page.';
+    } else if (/iPhone|iPad|iPod/i.test(ua)) {
+      hint.textContent = 'iOS is not supported yet.';
+    } else if (/Linux/i.test(platform) || /Linux/i.test(ua)) {
+      hint.textContent = 'Download for Linux.';
+    }
+
+    // ----- 3. fire the deep link --------------------------------
+    // Hidden iframe is the only auto-fire technique left that
+    // doesn't blow up a top-level Chrome tab with the "site can't
+    // be reached" page when the scheme is unregistered. The OS
+    // either intercepts the iframe navigation and hands off to the
+    // app, or the iframe fails silently and we stay in front.
+    //
+    // The retry button uses the same path — DO NOT use
+    // window.location.href = deepLink or <a href="warpnet://...">,
+    // those *do* replace the top frame in modern Chrome.
+    function fire() {
+      try {
+        frame.src = deepLink;
+      } catch (_) { /* ignore */ }
+    }
+
+    // ----- 4. detect handoff -------------------------------------
+    // visibilitychange / blur / pagehide trip when the OS gives
+    // focus to the app. If none of them fire within 1.5s we assume
+    // the scheme isn't registered and reveal the install UI.
+    var handedOff = false;
+    function markHandedOff() { handedOff = true; }
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) markHandedOff();
+    });
+    window.addEventListener('blur', markHandedOff);
+    window.addEventListener('pagehide', markHandedOff);
+
+    fire();
+
+    setTimeout(function () {
+      if (!handedOff) fallback.classList.remove('wl-hidden');
+    }, 1500);
+
+    // ----- 5. retry on user click -------------------------------
+    openBtn.addEventListener('click', function () {
+      fire();
+    });
+  })();
+</script>
