@@ -242,6 +242,22 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	return existingUser, txn.Commit()
 }
 
+// SetRole stamps a node role (domain.UserRole*) onto a user. Any node binary
+// calls it for its own owner at startup so the role travels with the user
+// record (and is propagated to peers via PUBLIC_GET_USER + discovery).
+func (repo *UserRepo) SetRole(userId, role string) error {
+	u, err := repo.Get(userId)
+	if err != nil {
+		return err
+	}
+	if u.Role == role {
+		return nil
+	}
+	u.Role = role
+	_, err = repo.Update(userId, u)
+	return err
+}
+
 // Get retrieves a user by their ID
 func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 	if userId == "" {

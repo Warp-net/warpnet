@@ -75,8 +75,8 @@ func init() {
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
 	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name of 'AI' model")
 
-	pflag.Bool("node.business.enabled", false, "Run node as a business node")
-	pflag.String("node.business.httpport", "7070", "Business node HTTP/WS dashboard port")
+	pflag.String("node.server.port", "7070", "Dashboard HTTP/WS port")
+	pflag.String("node.server.password", "", "Preshared secret that decrypts dashboard WS traffic")
 
 	pflag.String("logging.level", "info", "Logging level")
 	pflag.String("logging.format", "text", "'text' or 'json'")
@@ -141,9 +141,9 @@ func init() {
 			Moderator: moderator{
 				Path: strings.TrimSpace(viper.GetString("node.moderator.modelpath")),
 			},
-			Business: business{
-				Enabled:  viper.GetBool("node.business.enabled"),
-				HttpPort: strings.TrimSpace(viper.GetString("node.business.httpport")),
+			Server: server{
+				Port:     strings.TrimSpace(viper.GetString("node.server.port")),
+				Password: viper.GetString("node.server.password"),
 			},
 		},
 		Database: database{
@@ -176,15 +176,15 @@ type node struct {
 	IsPskPrinted bool
 	Metrics      metrics
 	Moderator    moderator
-	Business     business
+	Server       server
 	Seed         string
 }
 type moderator struct {
 	Path string
 }
-type business struct {
-	Enabled  bool
-	HttpPort string
+type server struct {
+	Port     string
+	Password string
 }
 type metrics struct {
 	Gateway string

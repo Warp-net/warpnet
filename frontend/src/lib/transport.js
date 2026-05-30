@@ -152,16 +152,30 @@ async function send(request) {
 // Call sends a Wails envelope { path, body, message_id, node_id, timestamp }
 // and resolves to the response envelope (with .body), matching the Wails
 // binding exactly.
+//
+// The dashboard channel is AES-256-GCM with the password as the preshared key
+// (the same secret the server is launched with). is-first-run precedes the
+// password and goes in cleartext; the login frame is the first encrypted one,
+// so the key is derived from the entered password *before* sending it. A
+// rejected or failed login clears the key so the user can retry.
 export async function Call(request) {
   if (hasWails()) {
     return Wails.Call(request);
   }
-  const resp = await send(request);
-  // A successful login response is the AuthNodeInfo (no error code); from here
-  // the socket is encrypted, so derive the key from the password just sent.
-  if (request.path === LOGIN_PATH && resp && resp.body && !resp.body.code) {
+  if (request.path === LOGIN_PATH) {
     aesKey = await importKey(request.body && request.body.password);
+    try {
+      const resp = await send(request);
+      if (resp && resp.body && resp.body.code) {
+        aesKey = null; // login rejected
+      }
+      return resp;
+    } catch (e) {
+      aesKey = null; // wrong password / timeout — allow another attempt
+      throw e;
+    }
   }
+  const resp = await send(request);
   if (request.path === LOGOUT_PATH) {
     aesKey = null;
   }

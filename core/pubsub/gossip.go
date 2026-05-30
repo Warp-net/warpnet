@@ -45,10 +45,20 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 )
+
+// UserUpdateTopicPrefix is the per-user followers topic prefix: a user's
+// followers listen on "user-update-<userId>".
+const UserUpdateTopicPrefix = "user-update"
+
+// UserUpdateTopic returns ownerId's followers topic name.
+func UserUpdateTopic(ownerId string) string {
+	return fmt.Sprintf("%s-%s", UserUpdateTopicPrefix, ownerId)
+}
 
 const (
 	pubSubDiscoveryTopic = "/warpnet/discovery/1.0.0"
@@ -583,6 +593,66 @@ func (g *Gossip) Close() (err error) {
 	g.subs = nil
 	log.Infoln("gossip: closed")
 	return err
+}
+
+// PublishUpdateToFollowers marshals body to a JSON object and publishes it on
+// ownerId's followers topic. Shared by the moderator (isolation verdicts) and
+// any caller that needs to push a typed update to a user's observers.
+func (g *Gossip) PublishUpdateToFollowers(ownerId, dest string, body any) (err error) {
+	if g == nil || !g.isRunning.Load() {
+		return ErrPubsubNotInit
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	msg := event.Message{
+		Body:        bodyBytes,
+		NodeId:      g.NodeInfo().ID.String(),
+		Destination: dest,
+		Timestamp:   time.Now(),
+		MessageId:   uuid.New().String(),
+		Version:     "0.0.0",
+	}
+	return g.Publish(msg, UserUpdateTopic(ownerId))
+}
+
+// SubscribeReports listens on the open reports topic and hands one verified
+// ReportEvent per message to h. The topic is open — anyone may publish — so
+// this path can't lean on the stream AuthMiddleware: the envelope is verified
+// against a pubkey derived from msg.NodeId, and anything that fails to verify
+// is dropped silently. Shared by the moderator and business nodes.
+func (g *Gossip) SubscribeReports(h func(ev event.ReportEvent) error) error {
+	if g == nil || !g.isRunning.Load() {
+		return ErrPubsubNotInit
+	}
+	return g.SubscribeRaw(event.ReportsTopic, func(data []byte) error {
+		var msg event.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return fmt.Errorf("pubsub: reports: envelope unmarshal: %w", err)
+		}
+
+		peerID := warpnet.FromStringToPeerID(msg.NodeId)
+		if peerID == "" {
+			log.Warnf("pubsub: reports: dropping message with malformed NodeId=%q", msg.NodeId)
+			return nil
+		}
+		pubKey := warpnet.FromIDToPubKey(peerID)
+		if len(pubKey) == 0 {
+			log.Warnf("pubsub: reports: dropping message: cannot derive pubkey from %s", msg.NodeId)
+			return nil
+		}
+		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
+			log.Warnf("pubsub: reports: dropping message from %s: signature invalid: %v", msg.NodeId, err)
+			return nil
+		}
+
+		var ev event.ReportEvent
+		if err := json.Unmarshal(msg.Body, &ev); err != nil {
+			return fmt.Errorf("pubsub: reports: payload unmarshal: %w", err)
+		}
+		return h(ev)
+	})
 }
 
 type pubsubDiscoveryMessage struct {

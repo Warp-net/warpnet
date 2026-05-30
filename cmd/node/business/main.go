@@ -31,15 +31,21 @@ import (
 	"syscall"
 	"time"
 
+	root "github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/cmd/node/business/server"
+	"github.com/Warp-net/warpnet/cmd/node/business/server/handlers"
+	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/database"
+	localstore "github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	if !config.Config().Node.Business.Enabled {
-		log.Errorln("business node not enabled: pass --node.business.enabled")
-		return
-	}
+	network := config.Config().Node.Network
+	version := config.Config().Version
 
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
 	if err != nil {
@@ -53,7 +59,7 @@ func main() {
 	}
 	log.SetOutput(os.Stdout) // stderr reserved for llama
 
-	log.Infof("network: %s", config.Config().Node.Network)
+	log.Infof("network: %s", network)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -66,15 +72,53 @@ func main() {
 		cancel()
 	}()
 
-	srv, err := NewServer(ctx)
+	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
-		log.Errorf("business: init failed: %v", err)
+		log.Errorf("business: generate PSK: %v", err)
 		return
 	}
+	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
+	if err != nil {
+		log.Errorf("business: codebase hash: %v", err)
+		return
+	}
+	infos, err := config.Config().Node.AddrInfos()
+	if err != nil {
+		log.Errorf("business: bootstrap infos: %v", err)
+		return
+	}
+
+	db, err := localstore.New(config.Config().Database.Path, localstore.DefaultOptions())
+	if err != nil {
+		log.Errorf("business: open db: %v", err)
+		return
+	}
+	authRepo := database.NewAuthRepo(db, network)
+	userRepo := database.NewUserRepo(db)
+	readyChan := make(chan domain.AuthNodeInfo, 1)
+
+	var wsKey []byte
+	if pw := config.Config().Node.Server.Password; pw != "" {
+		wsKey = handlers.DeriveKey(pw)
+	} else {
+		log.Warnln("business: node.server.password is empty — dashboard WS traffic is NOT encrypted")
+	}
+
+	srv := server.New(ctx, server.Deps{
+		DB:             db,
+		Auth:           auth.NewAuthService(ctx, authRepo, userRepo, readyChan),
+		PSK:            psk,
+		CodeHashHex:    codeHashHex,
+		Bootstrap:      infos,
+		Network:        network,
+		Version:        version,
+		MetricsGateway: config.Config().Node.Metrics.Gateway,
+		ReadyChan:      readyChan,
+		WSKey:          wsKey,
+	})
 	defer srv.Close()
 
-	addr := ":" + config.Config().Node.Business.HttpPort
-	if err := srv.Run(addr); err != nil {
+	if err := srv.Run(":" + config.Config().Node.Server.Port); err != nil {
 		log.Errorf("business: serve: %v", err)
 	}
 }
