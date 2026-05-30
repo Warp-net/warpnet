@@ -29,4 +29,4 @@ Always start to explore the codebase from the files:
     - Discard low-value or incorrect suggestions.
 
 ## Versioning
-- Increment the patch version in the `version` file on every commit. Create an according git tag.
+- Increment the patch version in the `version` file on every commit.
