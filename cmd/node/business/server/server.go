@@ -90,7 +90,7 @@ func (s *Server) Run(addr string) error {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/ws", handlers.WS(s, s.d.WSKey))
+	mux.Handle("/api/ws", handlers.WS(s, aesCodec{key: s.d.WSKey}))
 	mux.HandleFunc("/healthz", handlers.Healthz())
 	mux.HandleFunc("/readyz", handlers.Readyz(s))
 	mux.Handle("/", staticH)
@@ -156,7 +156,7 @@ func (s *Server) runNode() {
 		log.Warnf("business: set owner role: %v", err)
 	}
 
-	go trackPublicReachability(s.ctx, bn)
+	go bn.TrackPublicReachability(s.ctx)
 	if err := bn.StartModerator(s.ctx); err != nil {
 		log.Errorf("business: start moderator: %v", err)
 	}

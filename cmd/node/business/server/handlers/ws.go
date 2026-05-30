@@ -39,15 +39,10 @@ var upgrader = websocket.Upgrader{
 }
 
 // WS bridges WebSocket frames to the node's libp2p stream handlers: each frame
-// is one request envelope, dispatched and answered. That is the whole handler —
-// the routing lives in the Dispatcher, not here.
-//
-// key is the preshared AES-256 secret (sha256 of the launch password). When set,
-// frames are AES-256-GCM sealed; the handler simply mirrors the inbound frame's
-// encryption on the reply, so the cleartext probe (is-first-run) stays cleartext
-// while everything sent with the key stays encrypted. When key is empty the
-// channel is plaintext (rely on TLS / a trusted host).
-func WS(d Dispatcher, key []byte) http.HandlerFunc {
+// is one request envelope, dispatched and answered. Framing — and any channel
+// encryption — is the codec's job; the routing is the Dispatcher's. The handler
+// itself is just the read → dispatch → write loop.
+func WS(d Dispatcher, codec Codec) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -62,7 +57,7 @@ func WS(d Dispatcher, key []byte) http.HandlerFunc {
 				return
 			}
 
-			plain, encrypted := decode(key, frame)
+			plain, encrypted := codec.Decode(frame)
 			var req AppMessage
 			if err := json.Unmarshal(plain, &req); err != nil {
 				log.Warnf("business: ws envelope: %v", err)
@@ -74,29 +69,13 @@ func WS(d Dispatcher, key []byte) http.HandlerFunc {
 				log.Errorf("business: ws marshal: %v", err)
 				continue
 			}
-			if encrypted {
-				if out, err = seal(key, out); err != nil {
-					log.Errorf("business: ws seal: %v", err)
-					continue
-				}
+			if out, err = codec.Encode(out, encrypted); err != nil {
+				log.Errorf("business: ws encode: %v", err)
+				continue
 			}
 			if err := conn.WriteMessage(websocket.TextMessage, out); err != nil {
 				return
 			}
 		}
 	}
-}
-
-// decode reports whether the frame was encrypted (and returns its plaintext).
-// With no key the frame is plaintext; with a key it is encrypted unless it
-// fails to open (the cleartext is-first-run probe), in which case it is used
-// as-is.
-func decode(key, frame []byte) (plain []byte, encrypted bool) {
-	if len(key) == 0 {
-		return frame, false
-	}
-	if p, err := open(key, frame); err == nil {
-		return p, true
-	}
-	return frame, false
 }

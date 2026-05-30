@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package server
+package node
 
 import (
 	"context"
@@ -32,20 +32,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// reachabilityProbe is the node surface the public-IP tracker reads. The check
-// runs from the outside, against the node's exported API, not internal state.
-type reachabilityProbe interface {
-	NodeInfo() warpnet.NodeInfo
-	PublicAddrs() []warpnet.WarpAddress
-}
-
-// trackPublicReachability enforces the business node's public-IP obligation
-// from the outside: it watches the node's AutoNAT verdict (NodeInfo().Reachability)
-// and public addresses through the node's public API. It waits out a grace
-// window (AutoNAT v2 reports Unknown/Private transiently at boot), returns as
-// soon as the node looks public, and panics — crashing the process, which is
-// the assertion — only after several consecutive private readings.
-func trackPublicReachability(ctx context.Context, node reachabilityProbe) {
+// TrackPublicReachability enforces the business node's public-IP obligation. It
+// watches the node's own AutoNAT verdict and public addresses, waits out a
+// grace window (AutoNAT v2 reports Unknown/Private transiently at boot), returns
+// as soon as the node looks public, and panics — crashing the process, which is
+// the assertion — only after several consecutive private readings. Run it on a
+// goroutine.
+func (b *BusinessNode) TrackPublicReachability(ctx context.Context) {
 	const (
 		grace         = 90 * time.Second
 		sampleEvery   = 5 * time.Second
@@ -69,14 +62,14 @@ func trackPublicReachability(ctx context.Context, node reachabilityProbe) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			switch node.NodeInfo().Reachability {
+			switch b.NodeInfo().Reachability {
 			case warpnet.ReachabilityPublic:
 				log.Infoln("business: reachability confirmed public")
 				return
 			case warpnet.ReachabilityPrivate:
 				streak++
 				log.Warnf("business: reachability reported private (%d/%d)", streak, privateStreak)
-				if streak >= privateStreak && len(node.PublicAddrs()) == 0 {
+				if streak >= privateStreak && len(b.PublicAddrs()) == 0 {
 					panic("business: node is privately reachable (behind NAT) — a business node must have a publicly addressable IP")
 				}
 			default:

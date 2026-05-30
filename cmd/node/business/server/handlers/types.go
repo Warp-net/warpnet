@@ -51,3 +51,12 @@ type Dispatcher interface {
 	Dispatch(req AppMessage) AppMessage
 	NodeReady() bool
 }
+
+// Codec is the WS channel's wire (de)serialization, supplied by the server so
+// the handler stays free of crypto: Decode turns an inbound frame into request
+// bytes (reporting whether it was encrypted), Encode turns a reply into an
+// outbound frame, mirroring that encryption.
+type Codec interface {
+	Decode(frame []byte) (plain []byte, encrypted bool)
+	Encode(reply []byte, encrypted bool) ([]byte, error)
+}

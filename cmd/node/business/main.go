@@ -33,7 +33,6 @@ import (
 
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/cmd/node/business/server"
-	"github.com/Warp-net/warpnet/cmd/node/business/server/handlers"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/database"
@@ -99,7 +98,7 @@ func main() {
 
 	var wsKey []byte
 	if pw := config.Config().Node.Server.Password; pw != "" {
-		wsKey = handlers.DeriveKey(pw)
+		wsKey = security.AESKeyFromPassword(pw)
 	} else {
 		log.Warnln("business: node.server.password is empty — dashboard WS traffic is NOT encrypted")
 	}
