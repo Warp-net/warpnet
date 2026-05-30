@@ -47,6 +47,7 @@ export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
 export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
 export const PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
 export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
+export const PUBLIC_GET_INFO = "/public/get/info/0.0.0"
 export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
 export const PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
 export const PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
@@ -1603,6 +1604,19 @@ export const warpnetService = {
         }
 
         return await this.sendToNode(request);
+    },
+
+    // getNodeRole returns this node's role from PUBLIC_GET_INFO ("" for a
+    // regular node, "business" for a business node). Used to badge the owner's
+    // own account on the business dashboard without a domain.User field.
+    async getNodeRole(){
+        try {
+            const info = await this.sendToNode({path: PUBLIC_GET_INFO, body: {}});
+            return info?.role || "";
+        } catch (e) {
+            console.error("get node role failed:", e);
+            return "";
+        }
     },
 
     async sendToNode(request) {
