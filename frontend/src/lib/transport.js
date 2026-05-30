@@ -31,6 +31,7 @@ resulting from the use or misuse of this software.
 // with sha256(password); login and is-first-run precede the key, so they go in
 // cleartext.
 import * as Wails from "../../wailsjs/go/main/App";
+import * as WailsRuntime from "../../wailsjs/runtime/runtime";
 import {generateUUID} from "@/lib/uuid";
 
 const LOGIN_PATH = "/private/post/login/0.0.0";
@@ -46,6 +47,33 @@ function hasWails() {
     window.go.main.App &&
     typeof window.go.main.App.Call === "function"
   );
+}
+
+// hasWailsRuntime reports whether the Wails event runtime is injected. It is a
+// separate global from the Go bindings (window.runtime vs window.go), so the
+// runtime-event wrappers below check it independently.
+function hasWailsRuntime() {
+  return (
+    typeof window !== "undefined" &&
+    window.runtime &&
+    typeof window.runtime.EventsOnMultiple === "function"
+  );
+}
+
+// EventsOn / EventsOff bridge the Wails event runtime (used for the
+// deeplink:open handoff). The browser dashboard has no OS deep links and no
+// Wails runtime, so they no-op there instead of dereferencing window.runtime.
+export function EventsOn(eventName, callback) {
+  if (hasWailsRuntime()) {
+    return WailsRuntime.EventsOn(eventName, callback);
+  }
+  return () => {};
+}
+
+export function EventsOff(eventName, ...additional) {
+  if (hasWailsRuntime()) {
+    WailsRuntime.EventsOff(eventName, ...additional);
+  }
 }
 
 let socket = null;
