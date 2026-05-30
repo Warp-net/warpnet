@@ -33,6 +33,7 @@ import {parseDeepLink} from "@/lib/deeplink";
 import {warpnetService} from "@/service/service";
 
 const DEEP_LINK_EVENT = "deeplink:open";
+const LOG = "[warpnet-deeplink]";
 
 export default {
   name: "App",
@@ -41,14 +42,30 @@ export default {
     // process or macOS OnUrlOpen hands a warpnet:// URL to the
     // already-running app. Cold-start is still handled by Root /
     // Home polling ConsumePendingDeepLink in their own lifecycle.
+    console.info(LOG, "subscribing to", DEEP_LINK_EVENT);
     EventsOn(DEEP_LINK_EVENT, async () => {
+      console.info(LOG, "event received, pulling pending URL");
       try {
-        const link = parseDeepLink(await warpnetService.consumePendingDeepLink());
-        if (link && link.kind === "user") {
+        const raw = await warpnetService.consumePendingDeepLink();
+        if (!raw) {
+          console.warn(LOG, "event fired but pending URL was empty");
+          return;
+        }
+        console.info(LOG, "raw URL", raw);
+        const link = parseDeepLink(raw);
+        if (!link) {
+          console.warn(LOG, "could not parse", raw);
+          return;
+        }
+        console.info(LOG, "parsed", link);
+        if (link.kind === "user") {
+          console.info(LOG, "routing → Search q=" + link.id);
           this.$router.push({ name: "Search", query: { q: link.id } });
+        } else {
+          console.warn(LOG, "unhandled kind", link.kind);
         }
       } catch (e) {
-        console.warn("deeplink event handler:", e);
+        console.warn(LOG, "event handler threw", e);
       }
     });
   },
