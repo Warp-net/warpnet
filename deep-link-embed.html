@@ -168,17 +168,14 @@
     }
 
     // ----- 3. fire the deep link --------------------------------
-    // Hidden iframe is the only auto-fire technique left that
-    // doesn't blow up a top-level Chrome tab with the "site can't
-    // be reached" page when the scheme is unregistered. The OS
-    // either intercepts the iframe navigation and hands off to the
-    // app, or the iframe fails silently and we stay in front.
-    //
-    // The retry button uses the same path — DO NOT use
-    // window.location.href = deepLink or <a href="warpnet://...">,
-    // those *do* replace the top frame in modern Chrome.
+    // Hidden iframe is the only auto-fire technique that doesn't
+    // replace the top tab with Chrome's "site can't be reached"
+    // page when the scheme is unregistered. Reset src to about:blank
+    // before reassigning, otherwise the second call is a no-op
+    // (iframe is already at that URL).
     function fire() {
       try {
+        frame.src = 'about:blank';
         frame.src = deepLink;
       } catch (_) { /* ignore */ }
     }
