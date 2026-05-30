@@ -14,6 +14,10 @@ export function IsFirstRun() {
   return window['go']['main']['App']['IsFirstRun']();
 }
 
+export function NotifyDeepLink(arg1) {
+  return window['go']['main']['App']['NotifyDeepLink'](arg1);
+}
+
 export function SetPendingDeepLink(arg1) {
   return window['go']['main']['App']['SetPendingDeepLink'](arg1);
 }
