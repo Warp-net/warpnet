@@ -1,27 +1,3 @@
-<!--
-  Warpnet deep-link launcher (embed snippet).
-
-  Paste this entire block (including <style> and <script>) into a
-  "Custom embed code" block on the page you publish at /user on
-  hostinger (or any other URL — what matters is that links from
-  posts/news point to it with ?id={userId} appended).
-
-  Flow:
-    1. Read the user id from ?id=... (or ?user=..., or /user/{id}).
-    2. Auto-fire warpnet://user/{id} through a hidden iframe. This
-       is the trick browsers DON'T block: top-frame navigation to
-       an unregistered custom scheme triggers the "site can't be
-       reached" interstitial in modern Chrome, but iframe.src does
-       not — it either hands off to the OS handler or fails
-       silently without replacing our document.
-    3. Watch for visibilitychange / blur to detect the OS handing
-       off. If 1.5s passes and we're still in front, the app isn't
-       installed — reveal the Open / Download buttons. The Open
-       button retries via the same iframe path.
-
-  Scoped under #warpnet-launcher so the host template's CSS is
-  untouched.
--->
 <style>
   #warpnet-launcher {
     box-sizing: border-box;

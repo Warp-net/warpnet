@@ -6,7 +6,6 @@ A "business node" is a new node type with extended rights and obligations:
 
 **Rights**:
 - Posts reach nearby (by RTT) users who never explicitly followed the business
-- Has full analytics access for its own posts (views, likes, retweets, replies)
 
 **Obligations**:
 - Must have a publicly addressable IP (no NAT)
@@ -18,72 +17,58 @@ Currently `cmd/node/business/main.go` is a one-line stub. The codebase has three
 ### Key constraint (user-specified, hard)
 
 1. The recipient user MUST NOT be able to distinguish a business post from a regular tweet.
-2. **Member nodes MUST NOT contain any ad-aware code.** No ad-specific handler, no ad-specific config, no ad-specific service, no ad event type. Everything that happens on the member side must run through pre-existing, generic protocol code.
-3. The business node itself reaches into nearby member nodes and inserts itself into their existing "subscriptions" (gossipsub follow topics) using protocols the member already speaks.
+2. **Member nodes MUST NOT contain any ad-aware code.** No ad-specific handler, no ad-specific config, no ad-specific 
+   service, no ad event type. Everything that happens on the member side must run through pre-existing, generic protocol code.
+3. The business node itself reaches into nearby member nodes and inserts itself into their existing "subscriptions" 
+   (gossipsub follow topics) using protocols the member already speaks.
 
-### The mechanism: cross-topic publish (concept name in discussion: "паразитирование на чужих топиках")
+### The mechanism: cross-topic publish (concept name in discussion: "cross-topic-injection")
 
-The codebase identifier will be neutral — `cross-topic-injection` (or `topic-piggyback`) for service/package names. The Russian phrase is just our shorthand for the idea.
+The codebase identifier will be neutral — `cross-topic-injection` (or `topic-piggyback`) for service/package names. 
 
-Member nodes are already subscribed to per-user gossipsub topics for everyone they organically follow (`userUpdate-<X>` style, replaced with a pubkey-derived hex blob in Phase 0). When user X publishes a tweet, X's node publishes the message onto the corresponding topic; every subscriber's gossipsub mesh routes the message to them; subscriber's `SelfPublish` feeds it into the local handler stack; `StreamNewTweetHandler` writes to `tweetRepo` and calls `timelineRepo.AddTweetToTimeline(owner.UserId, tweet)`. The handler inserts whichever tweet arrives — it does **not** validate that the tweet's `UserId` equals the topic owner's `UserId`. That permissive default is the key.
+Member nodes are already subscribed to per-user gossipsub topics for everyone they organically follow 
+(`userUpdate-<X>` style, replaced with a pubkey-derived hex blob in Phase 0). When user X publishes a tweet, X's node 
+publishes the message onto the corresponding topic; every subscriber's gossipsub mesh routes the message to them; 
+subscriber's `SelfPublish` feeds it into the local handler stack; `StreamNewTweetHandler` writes to `tweetRepo` and 
+calls `timelineRepo.AddTweetToTimeline(owner.UserId, tweet)`. The handler inserts whichever tweet arrives — 
+it does **not** validate that the tweet's `UserId` equals the topic owner's `UserId`. That permissive default is the key.
 
-So the business node, after picking a target audience, simply **publishes its own tweet onto the topic of a publisher that the audience is already subscribed to**. The business never needs to be followed; it never creates a `Following` CRDT entry on the member; the member's UI shows no new account. The tweet appears in the member's timeline authored by the business, alongside the regular posts from the publisher whose topic carried it.
+So the business node, after picking a target audience, simply **publishes its own tweet onto the topic of a publisher that 
+the audience is already subscribed to**. 
+The business never needs to be followed; it never creates a `Following` CRDT entry on the member; 
+the member's UI shows no new account. The tweet appears in the member's timeline authored by the business, 
+alongside the regular posts from the publisher whose topic carried it.
 
 **Concrete flow**:
 1. Business subscribes to popular `userUpdate-<X>` topics itself (purely as an observer)
-2. Observes gossipsub mesh peers per topic — that gives it a map `member_peer_id → {topics member is subscribed to}`. Standard gossipsub gossiping already exposes this; no protocol change.
+2. Observes gossipsub mesh peers per topic — that gives it a map `member_peer_id → {topics member is subscribed to}`. 
+Standard gossipsub gossiping already exposes this; no protocol change.
 3. Filters candidate audience: members within RTT threshold, top N
 4. Picks topics that intersect the candidates
-5. Publishes its tweet onto one of those topics. Gossipsub fans it out to **every** subscriber of that topic (the candidates plus everyone else following the same publisher). That fan-out is fine — collateral reach is bonus distribution, not a bug.
+5. Publishes its tweet onto one of those topics. Gossipsub fans it out to **every** subscriber of that topic 
+(the candidates plus everyone else following the same publisher). That fan-out is fine — collateral reach is bonus distribution, not a bug.
 6. Member receives, member's existing `StreamNewTweetHandler` adds to timeline. Done.
 
 **Member-side code delta: zero.** No follow record, no new handler, no UI change, no surprise entry in Following list.
 
 ### Pre-existing permissive behavior this depends on
 
-The receive path does not assert `tweet.UserId == topic.publisher_id`. That's existing behavior — we don't change it, and we don't add a defensive check (such a check would be ad-aware and would break the feature, which the user explicitly forbids). This characteristic of the protocol is what makes the design feasible.
-
-### Cross-cutting prerequisite: encrypted subscription topic names
-
-A separate but related concern surfaced during design: **all** gossipsub subscription topic names should be opaque to outside observers, not just business-related ones. Currently `userUpdate-<userId>` is a predictable string; anyone who knows a userId can subscribe to that user's update stream, which leaks the social graph and gives any node free access to inject itself into someone's followee channel.
-
-This is independently valuable (privacy + access control for *all* users) and is also the cleanest way to lock down the business-injection path. Phase 0 below implements it as a foundation; the business-node feature builds on top.
+The receive path does not assert `tweet.UserId == topic.publisher_id`. That's existing behavior — we don't change it, 
+and we don't add a defensive check (such a check would be ad-aware and would break the feature,
+which the user explicitly forbids). This characteristic of the protocol is what makes the design feasible.
 
 ## Recommended approach
-
-### Phase 0 — Pubkey-derived subscription topic names (cross-cutting foundation)
-
-Replace the predictable `userUpdate-<userId>` topic name with a name derived from the publisher's existing libp2p public key.
-
-**Topic derivation**:
-- Topic name for user U's updates: `topic(U) = hex(SHA256(U.libp2p_pubkey_bytes || "userUpdate/v1"))`
-- The hex blob is what gossipsub sees on the wire; userId never appears in topic strings
-- Anyone who has discovered U as a peer already knows `U.libp2p_pubkey` (it's in NodeInfo, exchanged during `requestNodeUser`). So nothing new needs to be distributed — followers compute the topic name client-side from already-cached data
-- Outside observers (third-party gossipsub nodes that haven't done peer discovery with U) see only an opaque hex string — they can't map it back to a userId by inspection
-
-**Properties**:
-- ✅ Hides userId from topic-routing layer; passive observers can't enumerate "who publishes what" by topic name
-- ✅ No secret distribution, no handshake change, no migration of existing follow records
-- ✅ Zero new persistent state; topic name is pure function of (pubkey, kind)
-- ⚠️ This is **obfuscation, not access control**. Any peer that discovered U (which is necessary to dial U anyway) can compute the same topic name and subscribe. To prevent unwanted subscribers, the gate is still the existing follow handshake — gossipsub-level subscriber filtering isn't part of this phase. Phase 3's business-node injection is therefore still mediated through `PUBLIC_POST_FOLLOW`; the obscured topic name just stops casual snooping.
-
-**Files touched in Phase 0**:
-- `core/security/topic.go` (new) — `TopicName(pubkey []byte, kind string) string`. Pure deterministic function. Easy to unit-test.
-- `cmd/node/member/pubsub/member-pubsub.go` — replace the `userUpdateTopicPrefix + "-" + userId` formatting in `SubscribeUserUpdate`, `UnsubscribeUserUpdate`, `PublishUpdateToFollowers` with a call into `core/security/topic.go`. Each method needs access to the publisher's pubkey: pulled from `userRepo` (already cached after `requestNodeUser`) or from the local libp2p host for own publishes.
-- `cmd/node/member/pubsub/member-pubsub.go` `PrefollowHandlers` — same substitution
-- One small migration step in `cmd/node/member/node/member-node.go` startup: for one release cycle, the publisher subscribes to BOTH the legacy `userUpdate-<userId>` and the new hex topic, and publishes on both. Followers transitioning from old client subscribe to legacy; new client subscribes to hex. Drop legacy in the next release.
-
-This phase ships independently of business node and improves privacy for every user.
-
-This phase ships independently of business node and benefits every user.
 
 ### Phase 1 — Identity model
 
 In `core/warpnet/warpnet.go`:
-- New `NodeInfo.Role` field, string, values `""` (regular) or `"business"`. Carried in the wire NodeInfo, so any peer that does `requestNodeUser` learns the role. The business node needs this so it can filter to *member* peers during target selection (it should not advertise itself to other business / moderator / bootstrap nodes).
+- New `NodeInfo.Role` field, string, values `""` (regular) or `"business"`. Carried in the wire NodeInfo, 
+so any peer that does `requestNodeUser` learns the role. The business node needs this so it can filter to *member* peers 
+during target selection (it should not advertise itself to other business / moderator / bootstrap nodes).
 - `NodeInfo.IsBusiness()` helper mirroring `IsBootstrap()` / `IsModerator()`.
 
-`core/discovery/discovery.go` short-circuits stay as-is: business nodes go through `handleAsMember` (they have a real `UserId`, host real content, must be cached in `userRepo`).
+`core/discovery/discovery.go` short-circuits stay as-is: business nodes go through `handleAsMember` 
+(they have a real `UserId`, host real content, must be cached in `userRepo`).
 
 ### Phase 2 — Skeleton business node binary
 
@@ -91,11 +76,12 @@ New files: `cmd/node/business/main.go`, `cmd/node/business/node/business-node.go
 
 Pattern: copy `cmd/node/member/main.go` + `cmd/node/member/node/member-node.go`, strip Wails, retain:
 - Persistent local store at `config.Database.Path` (analytics history)
-- Auth (business owner credentials, same as member)
-- DHT (persistent), DiscoveryService, MDNS, PubSub (`MemberPubSub` reused as-is — business publishes its tweets through `PublishUpdateToFollowers` like any user)
+- Auth (business owner credentials, same as member), see Phase 6
+- DHT (persistent), DiscoveryService, MDNS, PubSub (`MemberPubSub` reused as-is — 
+business publishes its tweets through `PublishUpdateToFollowers` like any user)
 - The full member-style handler set (tweets, replies, follow, like, view) — business profile/posts must be queryable like any other user
 - `NodeInfo.Role = "business"`
-- Startup reachability assertion: panic if libp2p reports `ReachabilityPrivate` after AutoNAT v2 stabilises
+- Startup reachability assertion: panic if libp2p reports `ReachabilityPrivate` after AutoNAT v2 stabilises, flapping protection
 - Moderator engine + report subscription (Phase 5)
 - The new "ad injection" service (Phase 3)
 
@@ -104,26 +90,46 @@ No Wails. `app.go` exposes an HTTP server (Phase 6).
 ### Phase 3 — Ad injection via cross-topic publish (the only genuinely new business logic)
 
 New files under `cmd/node/business/crosstopic/`:
-- `topic-observer.go` — subscribes to a configurable set of `userUpdate-<X>` topics (popular publishers, by some heuristic or curated list), records gossipsub mesh peers per topic. Result: an in-memory map `peer_id → {topics they're subscribed to}` plus a reverse map `topic → {peer_ids subscribed}`.
-- `audience-picker.go` — from `userRepo`, lists known members (NodeInfo.Role == "") with `RoundTripTime > 0`, ranks by RTT ascending, picks top N (`config.Node.Business.AudienceSize`). Maps each candidate's `peer_id` to the set of topics it appears in from the observer.
+- `topic-observer.go` — subscribes to a configurable set of `userUpdate-<X>` topics (popular publishers, 
+by some heuristic or curated list), records gossipsub mesh peers per topic. Result: an in-memory map `peer_id → 
+{topics they're subscribed to}` plus a reverse map `topic → {peer_ids subscribed}`.
+- `audience-picker.go` — from `userRepo`, lists known members (NodeInfo.Role == "") with `RoundTripTime > 0`, 
+ranks by RTT ascending, picks top N (`config.Node.Business.AudienceSize`). Maps each candidate's `peer_id` to the set of
+topics it appears in from the observer.
 - `injection-service.go` — ticker (every `config.Node.Business.RefreshInterval`):
   1. Refresh observer mesh snapshots
   2. Compute audience
   3. For each candidate member, intersect its topic set with the observer's tracked topics → pick one or more topics to publish on
-  4. For each chosen topic, publish a business tweet using the existing `MemberPubSub.PublishUpdateToFollowers` machinery but with the **topic argument overridden** to the chosen `userUpdate-<X>` topic. (Currently `PublishUpdateToFollowers` derives the topic from `ownerId`. We add a small variant `PublishToTopic(topicName, bt)` on `MemberPubSub` that takes the topic name explicitly. This is a transport-layer addition, not a domain change.) The published payload is the business's tweet, signed by the business's libp2p key; gossipsub routes it to all subscribers of the topic.
+  4. For each chosen topic, publish a business tweet using the existing `MemberPubSub.PublishUpdateToFollowers` 
+  machinery but with the **topic argument overridden** to the chosen `userUpdate-<X>` topic. 
+  (Currently `PublishUpdateToFollowers` derives the topic from `ownerId`. We add a small variant `PublishToTopic(topicName, bt)` 
+  on `MemberPubSub` that takes the topic name explicitly. This is a transport-layer addition, not a domain change.) 
+  The published payload is the business's tweet, signed by the business's libp2p key; gossipsub routes it to all subscribers of the topic.
   5. Persist a small audit log (which tweet was injected on which topic at which time) for analytics
 
 This service is the **only** new networked logic in the business feature. It runs **only** on the business binary.
 
-**Why no member-side change**: members are already subscribed to the chosen topics for their organic follows. The business's tweet arrives through the existing gossipsub mesh, gets unwrapped by `SelfPublish`, dispatched to `StreamNewTweetHandler`, written to `tweetRepo`, inserted into the local timeline. The handler treats it identically to any other tweet on that topic. The tweet shows the business as author (because that's its `UserId`); the member's UI renders it as a normal tweet from the business — exactly indistinguishable from organic tweets the member would see if they had followed the business.
+**Why no member-side change**: members are already subscribed to the chosen topics for their organic follows. 
+The business's tweet arrives through the existing gossipsub mesh, gets unwrapped by `SelfPublish`, 
+dispatched to `StreamNewTweetHandler`, written to `tweetRepo`, inserted into the local timeline. 
+The handler treats it identically to any other tweet on that topic. The tweet shows the business as author 
+(because that's its `UserId`); the member's UI renders it as a normal tweet from the business — exactly indistinguishable 
+from organic tweets the member would see if they had followed the business.
 
-**Side effect (acceptable)**: the gossipsub topic's other subscribers (i.e., everyone who follows the publisher whose topic was used as a carrier) also receive the ad. The business gets free additional distribution beyond its target audience. The user previously framed this as a feature, not a problem.
+**Side effect (acceptable)**: the gossipsub topic's other subscribers 
+(i.e., everyone who follows the publisher whose topic was used as a carrier) 
+also receive the ad. The business gets free additional distribution beyond its target audience. 
+The user previously framed this as a feature, not a problem.
 
-**About `PublishToTopic`**: this is a tiny addition to `cmd/node/member/pubsub/member-pubsub.go` — it doesn't require a new protocol, it doesn't change the message format, it just exposes the underlying `g.pubsub.Publish(msg, topicName)` to the business binary directly. Member binary doesn't need to expose it; it's used only inside the business node code path.
+**About `PublishToTopic`**: this is a tiny addition to `cmd/node/member/pubsub/member-pubsub.go` — 
+it doesn't require a new protocol, it doesn't change the message format, 
+it just exposes the underlying `g.pubsub.Publish(msg, topicName)` to the business binary directly. 
+Member binary doesn't need to expose it; it's used only inside the business node code path.
 
 ### Phase 4 — Domain entity — unchanged
 
-No `IsPromoted` flag. Business tweets are identical `domain.Tweet` records. Analytics on the business side: select `tweetRepo.ListByUserId(businessUserId)` (existing).
+No `IsPromoted` flag. Business tweets are identical `domain.Tweet` records. Analytics on the business side: 
+select `tweetRepo.ListByUserId(businessUserId)` (existing).
 
 ### Phase 5 — Moderator role reuse
 
@@ -135,13 +141,15 @@ Reuse the existing engine and isolation protocol, do not fork:
 
 The moderator code is structured around a `ModeratorNode` interface — the business node implements it.
 
-### Phase 6 — HTTP frontend (Wails replacement)
+### Phase 6 — WS frontend (Wails replacement)
 
 **Backend** (`cmd/node/business/app.go`):
-- `http.Server` listening on `config.Node.Business.HttpPort`
-- Static file handler: serve `frontend/dist` via the existing `GetStaticEmbedded` (`embedded.go:53`)
-- API endpoint `POST /api/call` accepts the Wails JSON envelope `{path, body, message_id, node_id, timestamp}`; handler calls `businessNode.SelfStream(req.path, req.body)` — same middleware, same handler stack Wails uses
-- API endpoint `GET /api/is-first-run` mirrors `wailsjs/go/main/App.IsFirstRun`
+- websocket server listening on `config.Node.WSPort`
+- Static file http handler: serve `frontend/dist` via the existing `GetStaticEmbedded` (`embedded.go:53`)
+- WS endpoint accepts the Wails JSON envelope `{path, body, message_id, node_id, timestamp}`; 
+handler calls `businessNode.SelfStream(req.path, req.body)` — same middleware, same handler stack Wails uses
+- HTTP API endpoint `GET /api/is-first-run` mirrors `wailsjs/go/main/App.IsFirstRun`
+- WS AES-256 encryption with preshared secret - should be the same as user password for easy use
 - Session cookie auth backed by the existing `PRIVATE_POST_LOGIN` handler
 
 **Frontend** (`frontend/src/lib/transport.js` — new, small file):
@@ -152,13 +160,7 @@ The moderator code is structured around a `ModeratorNode` interface — the busi
 No changes to `TweetBlock.vue` — ads are indistinguishable.
 
 ### Phase 7 — Analytics surface (business UI only)
-
-Existing routes already expose what's needed:
-- Per-tweet stats: `StreamGetTweetStatsHandler` in `core/handler/tweet.go` — likes/retweets/replies/views aggregated from CRDT
-- Tweets by author: `tweetRepo.ListByUserId(businessUserId)` — existing
-- Views: `core/handler/view.go` — author-authoritative counter
-
-Business dashboard (new Vue view) iterates own tweets and queries existing stats routes. **No new backend routes.**
+Skip
 
 ### Phase 8 — Tests
 
@@ -200,7 +202,7 @@ Business dashboard (new Vue view) iterates own tweets and queries existing stats
 2. **Unit tests**: `go test -mod=vendor ./cmd/node/business/injection/...`
 3. **End-to-end smoke**:
    - Start business node on public IP: `go run ./cmd/node/business --node.business.enabled --node.business.httpport=7070 --node.business.audiencesize=5 --node.moderator.path=/models/llama.gguf`
-   - HTTP frontend: `curl http://<public-ip>:7070/`
+   - HTTP and WS frontend: `curl http://<public-ip>:7070/`
    - Log into business dashboard, post a tweet
    - Spin up three **unmodified** member nodes: M1, M2 follow some publisher P; M3 follows nobody overlapping
    - Configure business `ObservedTopics` to include P's topic
@@ -209,5 +211,4 @@ Business dashboard (new Vue view) iterates own tweets and queries existing stats
    - On M3: verify the business's tweet is NOT present (no shared topic = no exposure)
    - On all members' UIs: confirm the business does NOT appear in any "Following" list (no follow record was ever created)
    - Send a report from a member node; verify business runs the moderator engine and publishes the verdict on `IsolationTopic`
-4. **Public-only assertion**: start business node behind NAT, confirm panic on `ReachabilityPrivate`
-5. **Topic obfuscation (Phase 0)**: tcpdump gossipsub frames between two member nodes, confirm topic IDs are hex blobs not `userUpdate-<userId>` strings
+4. **Public-only assertion**: start business node behind NAT, confirm panic on `ReachabilityPrivate` 

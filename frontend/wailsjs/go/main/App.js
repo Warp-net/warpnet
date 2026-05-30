@@ -6,6 +6,14 @@ export function Call(arg1) {
   return window['go']['main']['App']['Call'](arg1);
 }
 
+export function ConsumePendingDeepLink() {
+  return window['go']['main']['App']['ConsumePendingDeepLink']();
+}
+
 export function IsFirstRun() {
   return window['go']['main']['App']['IsFirstRun']();
+}
+
+export function SetPendingDeepLink(arg1) {
+  return window['go']['main']['App']['SetPendingDeepLink'](arg1);
 }
