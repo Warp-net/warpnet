@@ -37,7 +37,7 @@ func Healthz() http.HandlerFunc {
 
 // Readyz is the readiness probe: ready once the node has been built and started
 // (i.e. the owner has logged in). Orchestrators use it to gate traffic.
-func Readyz(d Dispatcher) http.HandlerFunc {
+func Readyz(d *Dispatcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		if d.NodeReady() {
 			w.WriteHeader(http.StatusOK)

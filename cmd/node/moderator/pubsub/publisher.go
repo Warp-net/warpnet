@@ -25,15 +25,31 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// Package pubsub is the moderation pubsub: the layer above the raw gossip that
+// speaks moderation — publishing isolation verdicts on a user's followers topic
+// and subscribing to the global reports topic. Both the standalone moderator
+// binary (its own gossip) and the business node (wrapping its member gossip)
+// use it.
 package pubsub
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
+	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
+)
+
+const (
+	// prefixes
+	userUpdateTopicPrefix = "user-update"
 )
 
 type PubsubServerNodeConnector interface {
@@ -47,11 +63,19 @@ type moderatorPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
+// NewPubSub creates a moderation pubsub with its own gossip router — the
+// standalone moderator binary, which has no other gossip.
 func NewPubSub(ctx context.Context) *moderatorPubSub {
 	mps := &moderatorPubSub{}
 
 	mps.pubsub = pubsub.NewGossip(ctx, pubsub.NewDiscoveryRelayTopicHandler())
 	return mps
+}
+
+// NewOverGossip wraps an already-running gossip router — the business node,
+// which shares the single gossip its member core runs (a host hosts only one).
+func NewOverGossip(g *pubsub.Gossip) *moderatorPubSub {
+	return &moderatorPubSub{pubsub: g}
 }
 
 func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) error {
@@ -62,17 +86,67 @@ func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) error {
 	return g.pubsub.Run(node)
 }
 
-// PublishUpdateToFollowers publishes an isolation verdict on the offender's
-// followers topic. The shared gossip implementation owns the topic naming and
-// envelope assembly.
-func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body any) error {
-	return g.pubsub.PublishUpdateToFollowers(ownerId, dest, body)
+func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body any) (err error) {
+	if g == nil || !g.pubsub.IsGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	msg := event.Message{
+		Body:        bodyBytes,
+		NodeId:      g.pubsub.NodeInfo().ID.String(),
+		Destination: dest,
+		Timestamp:   time.Now(),
+		MessageId:   uuid.New().String(),
+		Version:     "0.0.0", // TODO manage protocol versions properly
+	}
+
+	return g.pubsub.Publish(msg, topicName)
 }
 
-// SubscribeReports listens on the global reports topic; the shared gossip
-// implementation verifies each envelope and hands up one ReportEvent.
+// SubscribeReports starts listening on the global reports topic. The handler
+// receives one ReportEvent per gossip message; the envelope (event.Message) is
+// unwrapped here so the moderator only deals with domain payloads.
+//
+// The reports topic is open — anyone can publish — so unlike normal stream
+// traffic this path doesn't go through AuthMiddleware. We verify the envelope's
+// signature against a public key derived from msg.NodeId before handing the
+// payload on. Anything that fails to verify is dropped silently.
 func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) error {
-	return g.pubsub.SubscribeReports(h)
+	if g == nil || !g.pubsub.IsGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	return g.pubsub.SubscribeRaw(event.ReportsTopic, func(data []byte) error {
+		var msg event.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return fmt.Errorf("pubsub: reports: envelope unmarshal: %w", err)
+		}
+
+		peerID := warpnet.FromStringToPeerID(msg.NodeId)
+		if peerID == "" {
+			log.Warnf("pubsub: reports: dropping message with malformed NodeId=%q", msg.NodeId)
+			return nil
+		}
+		pubKey := warpnet.FromIDToPubKey(peerID)
+		if len(pubKey) == 0 {
+			log.Warnf("pubsub: reports: dropping message: cannot derive pubkey from %s", msg.NodeId)
+			return nil
+		}
+		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
+			log.Warnf("pubsub: reports: dropping message from %s: signature invalid: %v", msg.NodeId, err)
+			return nil
+		}
+
+		var ev event.ReportEvent
+		if err := json.Unmarshal(msg.Body, &ev); err != nil {
+			return fmt.Errorf("pubsub: reports: payload unmarshal: %w", err)
+		}
+		return h(ev)
+	})
 }
 
 func (g *moderatorPubSub) Close() (err error) {

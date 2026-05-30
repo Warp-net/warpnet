@@ -33,13 +33,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Dispatcher routes one request envelope through the node and reports node
-// readiness for the health probe.
-type Dispatcher interface {
-	Dispatch(req event.Message) event.Message
-	NodeReady() bool
-}
-
 // Codec is the WS channel's wire form, supplied by the server so the handler
 // stays free of crypto: Decode turns an inbound frame into request bytes
 // (reporting whether it was encrypted), Encode seals a reply, mirroring it.
@@ -58,7 +51,7 @@ var upgrader = websocket.Upgrader{
 // is one event.Message, dispatched and answered. Framing and channel encryption
 // are the codec's job, routing is the Dispatcher's — the handler is just the
 // read → dispatch → write loop.
-func WS(d Dispatcher, codec Codec) http.HandlerFunc {
+func WS(d *Dispatcher, codec Codec) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
