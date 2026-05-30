@@ -120,19 +120,63 @@
     function warn() { try { console.warn.apply(console, [LOG].concat([].slice.call(arguments))); } catch (_) {} }
 
     // ----- 1. extract id -----------------------------------------
+    // The embed is often dropped into an <iframe srcdoc="…"> on
+    // warpnet.site, in which case window.location is "about:srcdoc"
+    // and carries no query string. Walk a fallback chain to get the
+    // id from the actual outer page.
+    function pickId(url, source) {
+      try {
+        var u = new URL(url);
+        var q = u.searchParams.get('id') || u.searchParams.get('user');
+        if (q) { log('id from', source, '(query)'); return q; }
+        var m = u.pathname.match(/\/user\/([^\/?#]+)/i);
+        if (m) {
+          log('id from', source, '(pathname)');
+          try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; }
+        }
+      } catch (_) { /* not a parseable URL — skip */ }
+      return null;
+    }
+
     function parseUserId() {
-      // URLSearchParams.get() already returns a decoded value, so
-      // don't decodeURIComponent() it again — that would mangle ids
-      // containing a literal "%xx" sequence and throws on malformed
-      // input. The pathname capture is a raw substring of
-      // location.pathname though, so it still needs decoding.
-      var p = new URLSearchParams(window.location.search);
-      var q = p.get('id') || p.get('user');
-      if (q) { log('id from query string'); return q; }
-      var m = window.location.pathname.match(/\/user\/([^\/?#]+)/i);
-      if (!m) return null;
-      log('id from pathname');
-      try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; }
+      // 1. Own location — works when embed is the top frame
+      //    (warpnet.site/user?id=…) or sits in an iframe with a real src.
+      var here = window.location.href;
+      if (here && here !== 'about:srcdoc' && here !== 'about:blank') {
+        var own = pickId(here, 'window.location');
+        if (own) return own;
+      } else {
+        log('window.location is', here, '— looking at parent');
+      }
+
+      // 2. Parent location — same-origin only; throws on cross-origin.
+      try {
+        var parentHref = window.parent && window.parent.location && window.parent.location.href;
+        if (parentHref) {
+          var fromParent = pickId(parentHref, 'window.parent.location');
+          if (fromParent) return fromParent;
+        }
+      } catch (e) {
+        log('window.parent.location blocked (cross-origin)');
+      }
+
+      // 3. document.referrer — works across origins, set by the browser
+      //    to the embedding page's URL.
+      if (document.referrer) {
+        var fromRef = pickId(document.referrer, 'document.referrer');
+        if (fromRef) return fromRef;
+      }
+
+      // 4. Explicit data-* on the iframe element, if the embedder set one.
+      try {
+        var el = window.frameElement;
+        if (el && el.dataset) {
+          var d = el.dataset.warpnetUser || el.dataset.userId || el.dataset.id;
+          if (d) { log('id from frameElement.dataset'); return d; }
+        }
+      } catch (_) { /* cross-origin — skip */ }
+
+      return null;
     }
 
     var root = document.getElementById('warpnet-launcher');
@@ -147,7 +191,14 @@
 
     var userId = parseUserId();
     if (!userId) {
-      warn('no user id in URL', window.location.href);
+      var parentHref = '';
+      try { parentHref = window.parent && window.parent.location && window.parent.location.href; }
+      catch (_) { parentHref = '<cross-origin>'; }
+      warn('no user id resolved', {
+        ownLocation: window.location.href,
+        parentLocation: parentHref,
+        referrer: document.referrer || '<empty>',
+      });
       chip.textContent = 'unknown';
       intro.textContent =
         "We couldn't find a user id in this link. Use a link of the form " +
