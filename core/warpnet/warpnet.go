@@ -94,6 +94,7 @@ type relayStatus string
 const (
 	RelayOwner     = "relay"
 	ModeratorOwner = "moderator"
+	BusinessRole   = "business"
 	WarpnetName    = "warpnet"
 	NoiseID        = noise.ID
 
@@ -234,6 +235,11 @@ type NodeInfo struct {
 	Protocols      []WarpProtocolID `json:"protocols"`
 	Hash           string           `json:"hash"`
 	Network        string           `json:"network,omitempty"`
+	// Role carries the node's extended kind on the wire. Empty means a
+	// regular node; "business" marks a business node. OwnerId stays the
+	// node's real user id, so a business node is still cached and queried
+	// like any member — Role is the only discriminator peers need.
+	Role string `json:"role,omitempty"`
 }
 
 func (ni NodeInfo) IsRelay() bool {
@@ -242,6 +248,9 @@ func (ni NodeInfo) IsRelay() bool {
 }
 func (ni NodeInfo) IsModerator() bool {
 	return ni.OwnerId == ModeratorOwner
+}
+func (ni NodeInfo) IsBusiness() bool {
+	return ni.Role == BusinessRole
 }
 
 type NodeStats struct {
