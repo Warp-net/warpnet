@@ -22,13 +22,21 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-// transport bridges the frontend to its node. The desktop/member build runs
-// inside Wails (window.go.main.App.*); the business node serves the same build
-// over plain HTTP. These wrappers keep the identical signatures the service
-// layer already calls, picking Wails when present and falling back to the
-// business node's /api endpoints otherwise. No call-site changes beyond the
-// import swap in service.js.
+// transport bridges the frontend to its node, keeping the exact signatures the
+// service layer already calls. Under Wails (desktop/member) it delegates to the
+// bound Go App. Otherwise — the business node's browser dashboard — it speaks a
+// single WebSocket: login, logout, is-first-run and every node call ride one
+// connection. The connection carries its own auth (a successful login
+// authenticates the socket), and every frame after login is AES-256-GCM sealed
+// with sha256(password); login and is-first-run precede the key, so they go in
+// cleartext.
 import * as Wails from "../../wailsjs/go/main/App";
+import {generateUUID} from "@/lib/uuid";
+
+const LOGIN_PATH = "/private/post/login/0.0.0";
+const LOGOUT_PATH = "/private/post/logout/0.0.0";
+const IS_FIRST_RUN_PATH = "is-first-run";
+const REQUEST_TIMEOUT_MS = 30000;
 
 function hasWails() {
   return (
@@ -40,23 +48,124 @@ function hasWails() {
   );
 }
 
+let socket = null;
+let connecting = null;
+let aesKey = null; // CryptoKey, set after a successful login; cleared on logout/close
+const pending = new Map(); // message_id -> { resolve, reject, timer }
+
+function wsURL() {
+  const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${scheme}://${window.location.host}/api/ws`;
+}
+
+function failPending(err) {
+  for (const [, p] of pending) {
+    clearTimeout(p.timer);
+    p.reject(err);
+  }
+  pending.clear();
+}
+
+function connect() {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    return Promise.resolve();
+  }
+  if (connecting) {
+    return connecting;
+  }
+  connecting = new Promise((resolve, reject) => {
+    const sock = new WebSocket(wsURL());
+    sock.onopen = () => {
+      socket = sock;
+      connecting = null;
+      resolve();
+    };
+    sock.onerror = () => {
+      connecting = null;
+      reject(new Error("ws connect failed"));
+    };
+    sock.onclose = () => {
+      socket = null;
+      connecting = null;
+      aesKey = null;
+      failPending(new Error("ws closed"));
+    };
+    sock.onmessage = (ev) => { onMessage(ev.data); };
+  });
+  return connecting;
+}
+
+async function onMessage(data) {
+  let text = data;
+  if (aesKey) {
+    try {
+      text = await aesDecrypt(aesKey, data);
+    } catch (e) {
+      console.error("ws decrypt failed:", e);
+      return;
+    }
+  }
+  let msg;
+  try {
+    msg = JSON.parse(text);
+  } catch (e) {
+    console.error("ws parse failed:", e);
+    return;
+  }
+  const p = pending.get(msg.message_id);
+  if (!p) {
+    return;
+  }
+  pending.delete(msg.message_id);
+  clearTimeout(p.timer);
+  p.resolve(msg);
+}
+
+async function send(request) {
+  await connect();
+  if (!request.message_id) {
+    request.message_id = generateUUID();
+  }
+  const id = request.message_id;
+
+  let payload = JSON.stringify(request);
+  if (aesKey) {
+    payload = await aesEncrypt(aesKey, payload);
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error(`request ${id} timed out`));
+    }, REQUEST_TIMEOUT_MS);
+    pending.set(id, { resolve, reject, timer });
+    try {
+      socket.send(payload);
+    } catch (e) {
+      pending.delete(id);
+      clearTimeout(timer);
+      reject(e);
+    }
+  });
+}
+
 // Call sends a Wails envelope { path, body, message_id, node_id, timestamp }
-// and resolves to the response envelope (with .body / .code / .message),
-// matching the Wails binding exactly.
+// and resolves to the response envelope (with .body), matching the Wails
+// binding exactly.
 export async function Call(request) {
   if (hasWails()) {
     return Wails.Call(request);
   }
-  const res = await fetch("/api/call", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify(request),
-  });
-  if (!res.ok) {
-    throw new Error(`call failed: ${res.status}`);
+  const resp = await send(request);
+  // A successful login response is the AuthNodeInfo (no error code); from here
+  // the socket is encrypted, so derive the key from the password just sent.
+  if (request.path === LOGIN_PATH && resp && resp.body && !resp.body.code) {
+    aesKey = await importKey(request.body && request.body.password);
   }
-  return res.json();
+  if (request.path === LOGOUT_PATH) {
+    aesKey = null;
+  }
+  return resp;
 }
 
 export async function IsFirstRun() {
@@ -64,11 +173,8 @@ export async function IsFirstRun() {
     return Wails.IsFirstRun();
   }
   try {
-    const res = await fetch("/api/is-first-run", { credentials: "same-origin" });
-    if (!res.ok) {
-      return false;
-    }
-    return res.json();
+    const resp = await send({ path: IS_FIRST_RUN_PATH, body: {} });
+    return Boolean(resp && resp.body);
   } catch (e) {
     console.error("is-first-run failed:", e);
     return false;
@@ -82,4 +188,48 @@ export async function ConsumePendingDeepLink() {
     return Wails.ConsumePendingDeepLink();
   }
   return "";
+}
+
+// --- AES-256-GCM, interoperable with the Go side (crypto/aes + cipher.GCM):
+// key = SHA-256(password); frame = base64( nonce(12) || ciphertext||tag(16) ).
+
+async function importKey(password) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password || ""));
+  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+async function aesEncrypt(key, plaintext) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext))
+  );
+  const frame = new Uint8Array(iv.length + ct.length);
+  frame.set(iv, 0);
+  frame.set(ct, iv.length);
+  return bytesToBase64(frame);
+}
+
+async function aesDecrypt(key, b64) {
+  const frame = base64ToBytes(b64);
+  const iv = frame.slice(0, 12);
+  const ct = frame.slice(12);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  return new TextDecoder().decode(pt);
+}
+
+function bytesToBase64(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) {
+    s += String.fromCharCode(bytes[i]);
+  }
+  return btoa(s);
+}
+
+function base64ToBytes(b64) {
+  const s = atob(b64);
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) {
+    bytes[i] = s.charCodeAt(i);
+  }
+  return bytes;
 }

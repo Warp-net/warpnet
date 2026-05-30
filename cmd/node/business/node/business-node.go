@@ -25,9 +25,10 @@ resulting from the use or misuse of this software.
 // Package node hosts the business node. A business node IS a member node — same
 // discovery, DHT, MDNS, pubsub, relay and the full handler set, so its profile
 // and posts are queryable like any user — so it embeds *member.MemberNode
-// rather than re-declaring any of that. It adds only what makes it a business
-// node: Role="business" on the wire, access to the node's gossip for the
-// moderator (see moderation.go), and tearing that moderator down on Stop.
+// rather than re-declaring any of that. It adds only the moderator: the report
+// subscription is attached to the node's own gossip (see moderation.go) and
+// torn down on Stop. The "business" marker rides on the owner's domain.User
+// record (stamped at startup), not on the node info.
 package node
 
 import (
@@ -36,10 +37,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
-	"github.com/Warp-net/warpnet/core/handler"
-	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 )
 
@@ -73,41 +71,9 @@ func NewBusinessNode(
 	return &BusinessNode{MemberNode: mn}, nil
 }
 
-// Start brings up the embedded member node, then rebinds PUBLIC_GET_INFO so the
-// response advertises Role="business". The member-registered handler closes
-// over the MemberNode, whose NodeInfo has no role, so the rebind is what lets
-// peers learn the kind via requestNodeInfo.
-func (b *BusinessNode) Start() error {
-	if err := b.MemberNode.Start(); err != nil {
-		return err
-	}
-	b.SetStreamHandlers(warpnet.WarpStreamHandler{
-		Path:    event.PUBLIC_GET_INFO,
-		Handler: handler.StreamGetInfoHandler(b, nil),
-	})
-	return nil
-}
-
-// NodeInfo is the member node info plus Role. OwnerId stays the real user id,
-// so the node is still cached and queried like any member.
-func (b *BusinessNode) NodeInfo() warpnet.NodeInfo {
-	ni := b.MemberNode.NodeInfo()
-	ni.Role = warpnet.BusinessRole
-	return ni
-}
-
 // ID satisfies the moderator's ModeratorNode interface.
 func (b *BusinessNode) ID() warpnet.WarpPeerID {
 	return b.Node().ID()
-}
-
-// Gossip is the node's single gossip instance, exposed for the moderator wiring.
-func (b *BusinessNode) Gossip() *corePubsub.Gossip {
-	ps := b.PubSub()
-	if ps == nil {
-		return nil
-	}
-	return ps.Gossip()
 }
 
 func (b *BusinessNode) Stop() {

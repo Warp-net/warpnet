@@ -27,72 +27,51 @@ package node
 import (
 	"context"
 	"fmt"
-	"time"
 
+	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/moderator"
 	"github.com/Warp-net/warpnet/config"
-	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
-// userUpdateTopicPrefix matches the member and moderator pubsub packages: a
-// per-user followers topic is "user-update-<userId>". Duplicated here (as it
-// already is between member and moderator pubsub) so the isolation verdict
-// lands on the same topic observers listen on.
-const userUpdateTopicPrefix = "user-update"
-
-// moderationPubSub adapts the node's single gossip instance to the two slices
-// of pubsub the moderator needs: publishing isolation verdicts on a user's
-// followers topic, and subscribing to the global reports topic. It mirrors
-// cmd/node/moderator/pubsub but reuses the gossip the business node already
-// runs instead of standing up a second gossipsub router (a host can host only
-// one).
+// moderationPubSub adapts the node's existing member pubsub to the two slices
+// the moderator needs: publishing isolation verdicts on a user's followers
+// topic, and subscribing to the global reports topic. It reuses the gossip the
+// business node already runs (a host can host only one gossipsub router) — the
+// publish path delegates to MemberPubSub, only the verdict's `any` body is
+// marshalled here to fit the isolation Publisher interface.
 type moderationPubSub struct {
-	gossip *corePubsub.Gossip
+	ps member.PubSubProvider
 }
 
-func newModerationPubSub(g *corePubsub.Gossip) *moderationPubSub {
-	return &moderationPubSub{gossip: g}
+func newModerationPubSub(ps member.PubSubProvider) *moderationPubSub {
+	return &moderationPubSub{ps: ps}
 }
 
-// PublishUpdateToFollowers marshals body to a real JSON object and publishes
-// it on ownerId's followers topic. The isolation protocol passes a struct, so
-// the signature takes `any` (unlike MemberPubSub's []byte variant).
-func (g *moderationPubSub) PublishUpdateToFollowers(ownerId, dest string, body any) (err error) {
-	if g == nil || g.gossip == nil || !g.gossip.IsGossipRunning() {
-		return warpnet.WarpError("business: moderation pubsub not initialized")
-	}
-	topicName := fmt.Sprintf("%s-%s", userUpdateTopicPrefix, ownerId)
-
-	bodyBytes, err := json.Marshal(body)
+// PublishUpdateToFollowers marshals the verdict (isolation passes a struct, not
+// bytes) and hands it to the member pubsub, which owns the topic naming.
+func (g *moderationPubSub) PublishUpdateToFollowers(ownerId, dest string, body any) error {
+	bt, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	msg := event.Message{
-		Body:        bodyBytes,
-		NodeId:      g.gossip.NodeInfo().ID.String(),
-		Destination: dest,
-		Timestamp:   time.Now(),
-		MessageId:   uuid.New().String(),
-		Version:     "0.0.0",
-	}
-	return g.gossip.Publish(msg, topicName)
+	return g.ps.PublishUpdateToFollowers(ownerId, dest, bt)
 }
 
-// SubscribeReports listens on the open reports topic. The envelope is verified
-// against a pubkey derived from msg.NodeId (the topic is open — anyone may
-// publish — so this path can't lean on AuthMiddleware); anything that fails to
-// verify is dropped silently. Mirrors moderator pubsub's SubscribeReports.
+// SubscribeReports listens on the open reports topic. The topic is open — anyone
+// may publish — so this path can't lean on AuthMiddleware: the envelope is
+// verified against a pubkey derived from msg.NodeId, and anything that fails is
+// dropped silently. Mirrors moderator pubsub's SubscribeReports.
 func (g *moderationPubSub) SubscribeReports(h func(ev event.ReportEvent) error) error {
-	if g == nil || g.gossip == nil || !g.gossip.IsGossipRunning() {
+	gossip := g.ps.Gossip()
+	if gossip == nil || !gossip.IsGossipRunning() {
 		return warpnet.WarpError("business: moderation pubsub not initialized")
 	}
-	return g.gossip.SubscribeRaw(event.ReportsTopic, func(data []byte) error {
+	return gossip.SubscribeRaw(event.ReportsTopic, func(data []byte) error {
 		var msg event.Message
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return fmt.Errorf("business: reports: envelope unmarshal: %w", err)
@@ -121,31 +100,31 @@ func (g *moderationPubSub) SubscribeReports(h func(ev event.ReportEvent) error) 
 	})
 }
 
-// StartModerator wires the shared moderator engine and report subscription
-// onto the business node, exactly as the standalone moderator binary does
-// (same engineReadyChan startup, same engine.Moderate interface, same
-// isolation protocol). It is a no-op when no model path is configured so the
-// business node still serves content and relays without a model present.
+// StartModerator wires the shared moderator engine and report subscription onto
+// the business node, exactly as the standalone moderator binary does (same
+// engineReadyChan startup, same engine.Moderate interface, same isolation
+// protocol). It is a no-op when no model path is configured so the node still
+// serves content and relays without a model present.
 //
 // moderator.Start blocks until the engine reports ready (or forever when the
-// binary is built without the `llama` tag), so it runs on its own goroutine
-// and never blocks node startup.
-func (m *BusinessNode) StartModerator(ctx context.Context) error {
+// binary is built without the `llama` tag), so it runs on its own goroutine and
+// never blocks node startup.
+func (b *BusinessNode) StartModerator(ctx context.Context) error {
 	if config.Config().Node.Moderator.Path == "" {
 		log.Warnln("business: moderator model path is empty; moderation disabled")
 		return nil
 	}
-	g := m.Gossip()
-	if g == nil {
+	ps := b.PubSub()
+	if ps == nil || ps.Gossip() == nil {
 		return warpnet.WarpError("business: moderator: gossip not running")
 	}
 
-	pub := newModerationPubSub(g)
-	moder, err := moderator.NewModerator(ctx, m, pub, pub)
+	pub := newModerationPubSub(ps)
+	moder, err := moderator.NewModerator(ctx, b, pub, pub)
 	if err != nil {
 		return fmt.Errorf("business: init moderator: %w", err)
 	}
-	m.moder = moder
+	b.moder = moder
 
 	go func() {
 		log.Infoln("business: starting moderator engine...")

@@ -64,8 +64,6 @@ type Server struct {
 	psk         security.PSK
 	readyChan   chan domain.AuthNodeInfo
 	mx          *sync.RWMutex
-
-	sessions *sessionStore
 }
 
 func NewServer(ctx context.Context) (*Server, error) {
@@ -100,7 +98,6 @@ func NewServer(ctx context.Context) (*Server, error) {
 		psk:         psk,
 		readyChan:   readyChan,
 		mx:          new(sync.RWMutex),
-		sessions:    newSessionStore(),
 	}, nil
 }
 
@@ -115,8 +112,6 @@ func (s *Server) Run(addr string) error {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/is-first-run", s.handleIsFirstRun)
-	mux.HandleFunc("/api/call", s.handleCall)
 	mux.HandleFunc("/api/ws", s.handleWS)
 	mux.Handle("/", staticH)
 

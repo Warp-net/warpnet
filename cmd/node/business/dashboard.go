@@ -30,7 +30,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"net/http"
 	"sync"
@@ -41,53 +40,151 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const sessionCookieName = "warpnet_business_session"
+// wsPathIsFirstRun is a control path (not a node route) the frontend sends
+// before logging in to decide between the login and sign-up screens.
+const wsPathIsFirstRun = "is-first-run"
 
 // errShortWSFrame is a package-level sentinel so the dynamic-error linter is
 // satisfied (and callers could errors.Is it if they ever needed to).
 var errShortWSFrame = errors.New("business: ws frame too short")
 
-// session holds per-login state. aesKey is sha256(password): the preshared
-// secret for the encrypted WS channel is the user's own password, so there is
-// no extra secret to manage.
-type session struct {
-	aesKey []byte
+var wsUpgrader = websocket.Upgrader{
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
+	// The dashboard is served from the same origin as the socket.
+	CheckOrigin: func(_ *http.Request) bool { return true },
 }
 
-type sessionStore struct {
-	mu sync.RWMutex
-	m  map[string]*session
+// handleWS is the single transport: every request the dashboard makes — login,
+// logout, is-first-run, and all node calls — rides this one connection.
+//
+// The connection carries its own auth: a successful login authenticates the
+// socket (no cookies). is-first-run and the login exchange travel in cleartext
+// (there is no key yet, and the login response only carries the network PSK,
+// which is shared by every node on the network anyway); every frame after a
+// successful login is AES-256-GCM sealed with sha256(password).
+func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Errorf("business: ws upgrade: %v", err)
+		return
+	}
+	(&wsConn{conn: conn, srv: s}).serve()
 }
 
-func newSessionStore() *sessionStore {
-	return &sessionStore{m: make(map[string]*session)}
+type wsConn struct {
+	conn    *websocket.Conn
+	srv     *Server
+	writeMu sync.Mutex
+
+	stateMu sync.RWMutex
+	authed  bool
+	key     []byte
 }
 
-func (s *sessionStore) create(aesKey []byte) string {
-	id := randomHex(32)
-	s.mu.Lock()
-	s.m[id] = &session{aesKey: aesKey}
-	s.mu.Unlock()
-	return id
+func (c *wsConn) serve() {
+	defer func() { _ = c.conn.Close() }()
+	for {
+		_, frame, err := c.conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		go c.handleFrame(frame)
+	}
 }
 
-func (s *sessionStore) get(id string) (*session, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	sess, ok := s.m[id]
-	return sess, ok
+func (c *wsConn) handleFrame(frame []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("business: ws frame panic: %v", r)
+		}
+	}()
+
+	c.stateMu.RLock()
+	authed, key := c.authed, c.key
+	c.stateMu.RUnlock()
+
+	raw := frame
+	if authed {
+		plain, err := aesOpen(key, frame)
+		if err != nil {
+			log.Warnf("business: ws decrypt: %v", err)
+			return
+		}
+		raw = plain
+	}
+
+	var msg AppMessage
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Warnf("business: ws envelope: %v", err)
+		return
+	}
+
+	// Pre-login control path: report first-run state in cleartext.
+	if !authed && msg.Path == wsPathIsFirstRun {
+		body, _ := json.Marshal(c.srv.isFirstRun())
+		c.send(false, AppMessage{MessageId: msg.MessageId, Path: msg.Path, Body: body})
+		return
+	}
+
+	// Before login only the login frame is accepted.
+	if !authed && msg.Path != event.PRIVATE_POST_LOGIN {
+		c.send(false, AppMessage{
+			MessageId: msg.MessageId,
+			Path:      msg.Path,
+			Body:      newErrorResp("unauthorized"),
+		})
+		return
+	}
+
+	resp, password := c.srv.dispatch(msg)
+
+	if msg.Path == event.PRIVATE_POST_LOGIN && password != "" {
+		// Login succeeded: the reply predates keying so it goes in cleartext;
+		// from here on the socket is encrypted.
+		c.send(false, resp)
+		c.stateMu.Lock()
+		c.authed = true
+		c.key = deriveKey(password)
+		c.stateMu.Unlock()
+		return
+	}
+
+	c.send(authed, resp)
+
+	if authed && msg.Path == event.PRIVATE_POST_LOGOUT {
+		c.stateMu.Lock()
+		c.authed = false
+		c.key = nil
+		c.stateMu.Unlock()
+	}
 }
 
-func (s *sessionStore) delete(id string) {
-	s.mu.Lock()
-	delete(s.m, id)
-	s.mu.Unlock()
-}
+// send marshals resp, seals it when the connection is encrypted, and writes one
+// frame. Writes are serialised because a gossip/relay frame may be in flight on
+// another goroutine for the same connection.
+func (c *wsConn) send(encrypted bool, resp AppMessage) {
+	out, err := json.Marshal(resp)
+	if err != nil {
+		log.Errorf("business: ws marshal: %v", err)
+		return
+	}
+	if encrypted {
+		c.stateMu.RLock()
+		key := c.key
+		c.stateMu.RUnlock()
+		out, err = aesSeal(key, out)
+		if err != nil {
+			log.Errorf("business: ws seal: %v", err)
+			return
+		}
+	}
 
-func randomHex(n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if err := c.conn.WriteMessage(websocket.TextMessage, out); err != nil {
+		log.Debugf("business: ws write: %v", err)
+	}
 }
 
 func deriveKey(password string) []byte {
@@ -95,136 +192,8 @@ func deriveKey(password string) []byte {
 	return sum[:]
 }
 
-func (s *Server) handleIsFirstRun(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(s.isFirstRun())
-}
-
-// handleCall is the HTTP boundary the frontend transport bridge talks to.
-// Login and logout are open (login establishes the session, logout tears it
-// down); every other path requires a session cookie — the gate backed by the
-// PRIVATE_POST_LOGIN handler.
-func (s *Server) handleCall(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var msg AppMessage
-	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-
-	if !isOpenPath(msg.Path) && !s.authorized(r) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	resp, password := s.dispatch(msg)
-
-	switch msg.Path {
-	case event.PRIVATE_POST_LOGIN:
-		if password != "" { // non-empty only when AuthLogin succeeded
-			id := s.sessions.create(deriveKey(password))
-			http.SetCookie(w, sessionCookie(id, false))
-		}
-	case event.PRIVATE_POST_LOGOUT:
-		if c, err := r.Cookie(sessionCookieName); err == nil {
-			s.sessions.delete(c.Value)
-		}
-		http.SetCookie(w, sessionCookie("", true))
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// handleWS is the AES-256-GCM channel. Frames are base64(nonce||ciphertext)
-// sealed with the session key (= sha256(password)); the decrypted payload is
-// the same AppMessage envelope handleCall accepts and is dispatched the same way.
-func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
-	sess, ok := s.session(r)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	upgrader := websocket.Upgrader{
-		ReadBufferSize:  4096,
-		WriteBufferSize: 4096,
-		CheckOrigin:     func(_ *http.Request) bool { return true },
-	}
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Errorf("business: ws upgrade: %v", err)
-		return
-	}
-	defer func() { _ = conn.Close() }()
-
-	for {
-		_, frame, err := conn.ReadMessage()
-		if err != nil {
-			return
-		}
-		plain, err := aesOpen(sess.aesKey, frame)
-		if err != nil {
-			log.Warnf("business: ws decrypt: %v", err)
-			continue
-		}
-
-		var msg AppMessage
-		if err := json.Unmarshal(plain, &msg); err != nil {
-			log.Warnf("business: ws envelope: %v", err)
-			continue
-		}
-		resp, _ := s.dispatch(msg)
-
-		out, err := json.Marshal(resp)
-		if err != nil {
-			continue
-		}
-		sealed, err := aesSeal(sess.aesKey, out)
-		if err != nil {
-			continue
-		}
-		if err := conn.WriteMessage(websocket.TextMessage, sealed); err != nil {
-			return
-		}
-	}
-}
-
-func isOpenPath(path string) bool {
-	return path == event.PRIVATE_POST_LOGIN || path == event.PRIVATE_POST_LOGOUT
-}
-
-func (s *Server) authorized(r *http.Request) bool {
-	_, ok := s.session(r)
-	return ok
-}
-
-func (s *Server) session(r *http.Request) (*session, bool) {
-	c, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return nil, false
-	}
-	return s.sessions.get(c.Value)
-}
-
-func sessionCookie(value string, expire bool) *http.Cookie {
-	c := &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    value,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	}
-	if expire {
-		c.MaxAge = -1
-	}
-	return c
-}
-
+// aesSeal returns base64(nonce || ciphertext+tag) — the frame layout the
+// browser's WebCrypto AES-GCM produces and consumes.
 func aesSeal(key, plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
