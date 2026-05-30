@@ -360,6 +360,9 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Errorf("discovery: source '%s': request node user: %s", peer.Source, err.Error())
 		return
 	}
+	// Carry the node kind onto the cached user so clients can badge business
+	// accounts. Regular nodes report "", which leaves the user unchanged.
+	user.Role = info.Role
 
 	newUser, err := s.userRepo.Create(user)
 	if errors.Is(err, database.ErrUserAlreadyExists) {

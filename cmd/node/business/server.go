@@ -182,6 +182,14 @@ func (s *Server) runNode() {
 		return
 	}
 
+	// Stamp the role onto the owner's own user record so PUBLIC_GET_USER (and
+	// the owner's own profile) reports it. Other nodes learn the role through
+	// discovery; this commits before the auth handshake completes its final
+	// user update, which preserves any non-empty role.
+	if err := s.markOwnUserBusiness(info.UserId); err != nil {
+		log.Warnf("business: mark own user role: %v", err)
+	}
+
 	go assertPublicReachability(s.ctx, node)
 	if err := node.StartModerator(s.ctx); err != nil {
 		log.Errorf("business: start moderator: %v", err)
@@ -325,6 +333,28 @@ func (s *Server) Close() {
 	if s.db != nil {
 		s.db.Close()
 	}
+}
+
+// markOwnUserBusiness stamps Role="business" on the owner's own user record so
+// PUBLIC_GET_USER reports the role for the owner's own profile too. Every other
+// node learns the role through discovery; this covers the self / cold-fetch
+// case. It runs before the auth handshake's final user update, and Update only
+// ever sets a non-empty role, so the stamp is not clobbered.
+func (s *Server) markOwnUserBusiness(ownerId string) error {
+	if ownerId == "" {
+		return nil
+	}
+	userRepo := database.NewUserRepo(s.db)
+	u, err := userRepo.Get(ownerId)
+	if err != nil {
+		return err
+	}
+	if u.Role == warpnet.BusinessRole {
+		return nil
+	}
+	u.Role = warpnet.BusinessRole
+	_, err = userRepo.Update(u.Id, u)
+	return err
 }
 
 func newErrorResp(msg string) stdjson.RawMessage {

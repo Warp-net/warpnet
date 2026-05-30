@@ -154,17 +154,17 @@ type Tweet struct {
 	ParentId  *string    `json:"parent_id,omitempty"`
 
 	// RetweetedBy retweeted by user id
-	RetweetedBy *string          `json:"retweeted_by,omitempty"`
-	RootId      string           `json:"root_id"`
-	Text        string           `json:"text"`
-	UserId      string           `json:"user_id"`
-	Username    string           `json:"username"`
-	ImageKeys   []string         `json:"image_keys,omitempty"`
-	Network     string           `json:"network"`
-	Moderation     *TweetModeration `json:"moderation,omitempty"`
-	Pinned         bool             `json:"pinned,omitempty"`
-	QuotedTweetId  *string          `json:"quoted_tweet_id,omitempty"`
-	QuotedUserId   *string          `json:"quoted_user_id,omitempty"`
+	RetweetedBy   *string          `json:"retweeted_by,omitempty"`
+	RootId        string           `json:"root_id"`
+	Text          string           `json:"text"`
+	UserId        string           `json:"user_id"`
+	Username      string           `json:"username"`
+	ImageKeys     []string         `json:"image_keys,omitempty"`
+	Network       string           `json:"network"`
+	Moderation    *TweetModeration `json:"moderation,omitempty"`
+	Pinned        bool             `json:"pinned,omitempty"`
+	QuotedTweetId *string          `json:"quoted_tweet_id,omitempty"`
+	QuotedUserId  *string          `json:"quoted_user_id,omitempty"`
 }
 
 func (t *Tweet) IsModerated() bool {
@@ -244,23 +244,27 @@ type User struct {
 	AvatarKey string `json:"avatar_key,omitempty"`
 
 	// BackgroundImage mime type + "," + base64
-	BackgroundImageKey string            `json:"background_image_key"`
-	Bio                string            `json:"bio"`
-	Birthdate          string            `json:"birthdate"`
-	CreatedAt          time.Time         `json:"created_at"`
-	UpdatedAt          *time.Time        `json:"updated_at,omitempty"`
-	FollowingsCount    int64             `json:"followings_count"`
-	FollowersCount     int64             `json:"followers_count"`
-	Id                 string            `json:"id"`
-	IsOffline          bool              `json:"isOffline"`
-	NodeId             string            `json:"node_id"`
-	Network            string            `json:"network"`
-	RoundTripTime      int64             `json:"rtt"`
-	TweetsCount        int64             `json:"tweets_count"`
-	Username           string            `json:"username"`
-	Website            *string           `json:"website,omitempty"`
-	Moderation         *UserModeration   `json:"moderation"`
-	Metadata           map[string]string `json:"metadata"`
+	BackgroundImageKey string     `json:"background_image_key"`
+	Bio                string     `json:"bio"`
+	Birthdate          string     `json:"birthdate"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          *time.Time `json:"updated_at,omitempty"`
+	FollowingsCount    int64      `json:"followings_count"`
+	FollowersCount     int64      `json:"followers_count"`
+	Id                 string     `json:"id"`
+	IsOffline          bool       `json:"isOffline"`
+	NodeId             string     `json:"node_id"`
+	Network            string     `json:"network"`
+	// Role mirrors NodeInfo.Role: "" for a regular user, "business" for a
+	// business account. Stamped from the node's NodeInfo when the user is
+	// cached (discovery) so clients can badge business accounts.
+	Role          string            `json:"role,omitempty"`
+	RoundTripTime int64             `json:"rtt"`
+	TweetsCount   int64             `json:"tweets_count"`
+	Username      string            `json:"username"`
+	Website       *string           `json:"website,omitempty"`
+	Moderation    *UserModeration   `json:"moderation"`
+	Metadata      map[string]string `json:"metadata"`
 	// Locked is the "manually-approve followers" flag. When true, an
 	// inbound follow lands in the follow-request queue instead of being
 	// accepted automatically.
@@ -330,4 +334,3 @@ func (t ModerationObjectType) String() string {
 		return "unknown"
 	}
 }
-

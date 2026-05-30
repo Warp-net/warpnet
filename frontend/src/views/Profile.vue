@@ -331,7 +331,6 @@ export default {
       showSetUpProfileModal: false,
       showEditProfileModal: false,
       isSelf: false,
-      nodeRole: "",
       followingLabel: "Following",
       loading: true,
       noUser: false,
@@ -357,13 +356,11 @@ export default {
       const rest = this.tweets.filter(t => !(t && t.pinned));
       return pinned.concat(rest);
     },
-    // isBusiness drives the "Business" badge. It reads the role straight off
-    // the node info (nodeRole, fetched via PUBLIC_GET_INFO for the own node) —
-    // no domain.User field. profile.role is honoured too, so the badge lights
-    // up automatically if a viewed user ever carries the role.
+    // isBusiness drives the "Business" badge — the role rides on the user
+    // record (domain.User.Role), stamped from the node's NodeInfo, same as any
+    // other profile field.
     isBusiness() {
-      return (this.profile && this.profile.role === "business") ||
-        (this.isSelf && this.nodeRole === "business");
+      return this.profile && this.profile.role === "business";
     },
   },
   methods: {
@@ -584,12 +581,6 @@ export default {
       )
 
       this.isSelf = this.isMySelf(profileId);
-
-      if (this.isSelf) {
-        // Own node only: PUBLIC_GET_INFO reflects the local node, so the badge
-        // is sourced here rather than from a domain.User field.
-        this.nodeRole = await warpnetService.getNodeRole();
-      }
 
       if (!this.isSelf) {
         await this.loadProfileBlockState();

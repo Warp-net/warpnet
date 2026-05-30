@@ -40,6 +40,10 @@ resulting from the use or misuse of this software.
                 v-if="user.isOffline"
                 class="text-sm font-medium bg-red-900 py-1 px-1 mx-2 rounded text-white align-middle"
             >Offline</span>
+            <span
+                v-if="user.role === 'business'"
+                class="text-sm font-medium bg-blue py-1 px-1 mx-2 rounded text-white align-middle"
+            >Business</span>
           </p>
           <p class="text-dark text-sm">
             @{{ user.id }}
