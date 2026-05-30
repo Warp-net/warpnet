@@ -28,7 +28,32 @@ resulting from the use or misuse of this software.
 </template>
 
 <script>
+import {EventsOff, EventsOn} from "../wailsjs/runtime/runtime";
+import {parseDeepLink} from "@/lib/deeplink";
+import {warpnetService} from "@/service/service";
+
+const DEEP_LINK_EVENT = "deeplink:open";
+
 export default {
   name: "App",
+  mounted() {
+    // Hot-path: Go side fires "deeplink:open" when a second
+    // process or macOS OnUrlOpen hands a warpnet:// URL to the
+    // already-running app. Cold-start is still handled by Root /
+    // Home polling ConsumePendingDeepLink in their own lifecycle.
+    EventsOn(DEEP_LINK_EVENT, async () => {
+      try {
+        const link = parseDeepLink(await warpnetService.consumePendingDeepLink());
+        if (link && link.kind === "user") {
+          this.$router.push({ name: "Search", query: { q: link.id } });
+        }
+      } catch (e) {
+        console.warn("deeplink event handler:", e);
+      }
+    });
+  },
+  beforeUnmount() {
+    EventsOff(DEEP_LINK_EVENT);
+  },
 };
 </script>

@@ -27,6 +27,7 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type AppStorer interface {
@@ -116,6 +117,24 @@ func (a *App) ConsumePendingDeepLink() string {
 	raw := a.deepLink
 	a.deepLink = ""
 	return raw
+}
+
+// NotifyDeepLink stashes the URL and, if the Wails runtime is ready,
+// unminimises + shows the window and emits "deeplink:open" so the
+// frontend pulls ConsumePendingDeepLink without waiting for a navigation.
+// Called from SingleInstanceLock.OnSecondInstanceLaunch (Linux/Windows)
+// and mac.Options.OnUrlOpen — both arrive while the app is already up.
+func (a *App) NotifyDeepLink(raw string) {
+	if a == nil || raw == "" {
+		return
+	}
+	a.SetPendingDeepLink(raw)
+	if a.ctx == nil {
+		return
+	}
+	wailsruntime.WindowUnminimise(a.ctx)
+	wailsruntime.WindowShow(a.ctx)
+	wailsruntime.EventsEmit(a.ctx, "deeplink:open")
 }
 
 // startup is called when the app starts. The context is saved
