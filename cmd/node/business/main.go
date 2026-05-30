@@ -66,15 +66,15 @@ func main() {
 		cancel()
 	}()
 
-	app := NewApp()
-	if err := app.Startup(ctx); err != nil {
-		log.Errorf("business: startup failed: %v", err)
+	srv, err := NewServer(ctx)
+	if err != nil {
+		log.Errorf("business: init failed: %v", err)
 		return
 	}
-	defer app.Close()
+	defer srv.Close()
 
 	addr := ":" + config.Config().Node.Business.HttpPort
-	if err := app.Serve(addr); err != nil {
+	if err := srv.Run(addr); err != nil {
 		log.Errorf("business: serve: %v", err)
 	}
 }

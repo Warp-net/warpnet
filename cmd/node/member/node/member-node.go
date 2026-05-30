@@ -876,6 +876,17 @@ func (m *MemberNode) Network() warpnet.WarpNetwork {
 	return m.node.Node().Network()
 }
 
+// PubSub exposes the pubsub service so a node that composes a MemberNode — the
+// business node — can attach extra subscriptions (e.g. the moderator report
+// topic) onto the single gossip instance a host can run. The member binary
+// never calls it.
+func (m *MemberNode) PubSub() PubSubProvider {
+	if m == nil {
+		return nil
+	}
+	return m.pubsubService
+}
+
 func (m *MemberNode) PublicAddrs() []warpnet.WarpAddress {
 	if m == nil || m.node == nil {
 		return nil
