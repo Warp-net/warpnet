@@ -139,6 +139,20 @@
     }
 
     function parseUserId() {
+      // 0. Explicit injection from the host page. For a srcdoc
+      //    iframe the host has full control of the inner document
+      //    string, so it can stash the id on window before our
+      //    script runs:
+      //      srcdoc='<script>window.WARPNET_USER_ID="01KSR…";<\/script>… embed …'
+      //    This is the only path that works when every URL-reading
+      //    route is blocked (cross-origin parent, empty referrer,
+      //    locked-down frameElement) — which is the warpnet.site
+      //    srcdoc case as of today.
+      if (typeof window.WARPNET_USER_ID === 'string' && window.WARPNET_USER_ID) {
+        log('id from window.WARPNET_USER_ID');
+        return window.WARPNET_USER_ID;
+      }
+
       // 1. Own location — works when embed is the top frame
       //    (warpnet.site/user?id=…) or sits in an iframe with a real src.
       var here = window.location.href;
