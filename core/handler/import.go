@@ -53,6 +53,10 @@ const maxTweetImages = 4
 // ("Fri May 29 20:52:08 +0000 2026").
 const archiveTimeLayout = "Mon Jan 02 15:04:05 -0700 2006"
 
+// mediaTypePhoto is the extended_entities media type for a still photo;
+// "animated_gif" and "video" are the types we deliberately skip.
+const mediaTypePhoto = "photo"
+
 // ImportTweetStorer is the slice of the tweet repo the importer needs:
 // Get to skip already-imported tweets, Create to store a new one. Create
 // writes straight to the repo (no follower broadcast), so a bulk import
@@ -106,7 +110,7 @@ func (at archiveTweet) photoMedia() []archiveMedia {
 	}
 	photos := make([]archiveMedia, 0, len(media))
 	for _, m := range media {
-		if m.Type == "photo" && m.MediaURLHTTPS != "" {
+		if m.Type == mediaTypePhoto && m.MediaURLHTTPS != "" {
 			photos = append(photos, m)
 		}
 	}
@@ -139,7 +143,7 @@ func StreamImportTwitterArchiveHandler(
 		if err != nil {
 			return nil, fmt.Errorf("import: opening archive: %w", err)
 		}
-		defer zr.Close()
+		defer func() { _ = zr.Close() }()
 
 		tweetFiles, mediaByName := indexArchive(zr.File)
 		if len(tweetFiles) == 0 {
@@ -300,7 +304,7 @@ func readZipFile(f *zip.File) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	return io.ReadAll(rc)
 }
 
