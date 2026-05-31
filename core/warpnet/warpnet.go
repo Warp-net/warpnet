@@ -242,7 +242,7 @@ type NodeInfo struct {
 
 func (ni NodeInfo) IsRelay() bool {
 	return ni.Type == RelayNode ||
-		ni.Type == "bootstrap" // back compatibility
+		ni.OwnerId == "bootstrap" || ni.OwnerId == "relay" // back compatibility
 }
 func (ni NodeInfo) IsModerator() bool {
 	return ni.Type == ModeratorNode
