@@ -28,6 +28,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	handlers2 "github.com/Warp-net/warpnet/cmd/node/business/handlers"
 	"net/http"
 	"os"
 	"os/signal"
@@ -36,7 +37,6 @@ import (
 
 	root "github.com/Warp-net/warpnet"
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
-	"github.com/Warp-net/warpnet/cmd/node/business/server/handlers"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -105,12 +105,13 @@ func main() {
 	authRepo := database.NewAuthRepo(db, network)
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
-	staticHandler, err := handlers.NewStaticHandler()
+	staticHandler, err := handlers2.NewStaticHandler()
 	if err != nil {
-		log.Fatalf("business: static handler load: %v", err)
+		log.Errorf("business: static handler load: %v", err)
+		return
 	}
 
-	bridgeHandler := handlers.NewBridgeHandler(
+	bridgeHandler := handlers2.NewBridgeHandler(
 		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
 		authService,
 		psk,
@@ -119,12 +120,12 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", bridgeHandler.Handle())
-	mux.HandleFunc("/healthz", handlers.HealthHandler())
-	mux.HandleFunc("/readyz", handlers.ReadyHandler())
+	mux.HandleFunc("/healthz", handlers2.HealthHandler())
+	mux.HandleFunc("/readyz", handlers2.ReadyHandler())
 	mux.Handle("/", staticHandler)
 
 	srv := &http.Server{Addr: ":" + port, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-	defer srv.Shutdown(ctx)
+	defer srv.Shutdown(ctx) //nolint:errcheck
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Errorf("business: serve http: %v", err)
