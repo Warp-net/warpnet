@@ -178,26 +178,9 @@ func StreamUploadImageHandler(
 			return nil, ErrNoImagesProvided
 		}
 
-		nodeInfo := info.NodeInfo()
-		ownerUser, err := userRepo.Get(nodeInfo.OwnerId)
-		if errors.Is(err, database.ErrUserNotFound) {
+		encryptedMeta, ownerUser, err := buildEncryptedImageMeta(info, userRepo)
+		if err != nil {
 			return nil, err
-		}
-		if err != nil {
-			return nil, fmt.Errorf("upload: fetching user: %w", err)
-		}
-
-		metaData := map[string]any{
-			nodeMetaKey: nodeInfo, userMetaKey: ownerUser, macMetaKey: warpnet.GetMacAddr(),
-		}
-		metaBytes, err := json.Marshal(metaData)
-		if err != nil {
-			return nil, fmt.Errorf("upload: marshalling meta data: %w", err)
-		}
-
-		encryptedMeta, err := security.EncryptAES(metaBytes, nil) // unknown password
-		if err != nil {
-			return nil, fmt.Errorf("upload: AES encrypting: %w", err)
 		}
 
 		var keys [4]string
@@ -220,6 +203,40 @@ func StreamUploadImageHandler(
 			Key4: keys[3],
 		}, nil
 	}
+}
+
+// buildEncryptedImageMeta fetches the owner user and produces the
+// AES-encrypted {node,user,MAC} blob embedded into uploaded media EXIF.
+// The encryption password is random and immediately discarded (see the
+// file header), so the metadata stands as proof of ownership without
+// leaking its contents. Shared by the image-upload and archive-import
+// handlers.
+func buildEncryptedImageMeta(
+	info MediaNodeInformer,
+	userRepo MediaUserFetcher,
+) (encryptedMeta []byte, ownerUser domain.User, err error) {
+	nodeInfo := info.NodeInfo()
+	ownerUser, err = userRepo.Get(nodeInfo.OwnerId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return nil, ownerUser, err
+	}
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: fetching user: %w", err)
+	}
+
+	metaData := map[string]any{
+		nodeMetaKey: nodeInfo, userMetaKey: ownerUser, macMetaKey: warpnet.GetMacAddr(),
+	}
+	metaBytes, err := json.Marshal(metaData)
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: marshalling meta data: %w", err)
+	}
+
+	encryptedMeta, err = security.EncryptAES(metaBytes, nil) // unknown password
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: AES encrypting: %w", err)
+	}
+	return encryptedMeta, ownerUser, nil
 }
 
 func processAndStoreImage(

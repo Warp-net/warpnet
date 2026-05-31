@@ -119,6 +119,24 @@ func (a *App) ConsumePendingDeepLink() string {
 	return raw
 }
 
+// OpenTwitterArchiveDialog opens a native file picker for an X (Twitter)
+// data archive .zip and returns the selected absolute path; an empty string
+// means the user cancelled. The path is handed to PRIVATE_POST_IMPORT_TWITTER
+// so the node reads the archive straight off disk (no multi-hundred-MB
+// upload through the bridge). Member (desktop) node only — the browser
+// dashboard has no Wails runtime, and the import button is hidden there.
+func (a *App) OpenTwitterArchiveDialog() (string, error) {
+	if a == nil || a.ctx == nil {
+		return "", nil
+	}
+	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "Select your X (Twitter) data archive (.zip)",
+		Filters: []wailsruntime.FileFilter{
+			{DisplayName: "Zip archives (*.zip)", Pattern: "*.zip"},
+		},
+	})
+}
+
 // NotifyDeepLink stashes the URL and, if the Wails runtime is ready,
 // unminimises + shows the window and emits "deeplink:open" so the
 // frontend pulls ConsumePendingDeepLink without waiting for a navigation.

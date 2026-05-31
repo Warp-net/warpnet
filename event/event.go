@@ -104,6 +104,18 @@ type FollowingsResponse struct {
 	FollowerId domain.ID   `json:"follower_id"`
 }
 
+// ImportTwitterArchiveEvent defines model for ImportTwitterArchiveEvent.
+type ImportTwitterArchiveEvent struct {
+	ArchivePath string `json:"archive_path"`
+}
+
+// ImportTwitterArchiveResponse defines model for ImportTwitterArchiveResponse.
+type ImportTwitterArchiveResponse struct {
+	ImportedTweets int `json:"imported_tweets"`
+	ImportedImages int `json:"imported_images"`
+	SkippedTweets  int `json:"skipped_tweets"`
+}
+
 type IsFollowingResponse struct {
 	IsFollowing bool `json:"is_following"`
 }
@@ -482,12 +494,12 @@ type ReportEvent struct {
 }
 
 type ModerationResultEvent struct {
-	Type        domain.ModerationObjectType `json:"type"`
-	Result      domain.ModerationResult     `json:"result"`
-	Reason      *string                     `json:"reason,omitempty"`
-	Model       domain.ModelType            `json:"model"`
-	UserID      domain.ID                   `json:"user_id"`
-	ObjectID    *domain.ID                  `json:"object_id,omitempty"`
+	Type     domain.ModerationObjectType `json:"type"`
+	Result   domain.ModerationResult     `json:"result"`
+	Reason   *string                     `json:"reason,omitempty"`
+	Model    domain.ModelType            `json:"model"`
+	UserID   domain.ID                   `json:"user_id"`
+	ObjectID *domain.ID                  `json:"object_id,omitempty"`
 	// ModeratorID is the peer id of the moderator that issued this
 	// verdict. Carried inside the payload (rather than read from the
 	// stream connection) because the verdict reaches the receiver via
@@ -596,10 +608,10 @@ type GetMutesResponse = GetBlocksResponse
 
 // GetTweetLikersEvent defines model for GetTweetLikersEvent.
 type GetTweetLikersEvent struct {
-	TweetId      domain.ID `json:"tweet_id"`
-	OwnerUserId  domain.ID `json:"owner_user_id"`
-	Cursor       *string   `json:"cursor,omitempty"`
-	Limit        *uint64   `json:"limit,omitempty"`
+	TweetId     domain.ID `json:"tweet_id"`
+	OwnerUserId domain.ID `json:"owner_user_id"`
+	Cursor      *string   `json:"cursor,omitempty"`
+	Limit       *uint64   `json:"limit,omitempty"`
 }
 
 // GetTweetRetweetersEvent defines model for GetTweetRetweetersEvent.

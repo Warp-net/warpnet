@@ -18,6 +18,10 @@ export function NotifyDeepLink(arg1) {
   return window['go']['main']['App']['NotifyDeepLink'](arg1);
 }
 
+export function OpenTwitterArchiveDialog() {
+  return window['go']['main']['App']['OpenTwitterArchiveDialog']();
+}
+
 export function SetPendingDeepLink(arg1) {
   return window['go']['main']['App']['SetPendingDeepLink'](arg1);
 }

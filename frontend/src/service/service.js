@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, ConsumePendingDeepLink, IsFirstRun} from "@/lib/transport";
+import {Call, ConsumePendingDeepLink, IsFirstRun, OpenTwitterArchiveDialog} from "@/lib/transport";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -66,6 +66,7 @@ export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/
 export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
+export const PRIVATE_POST_IMPORT_TWITTER = "/private/post/import/twitter/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PUBLIC_GET_REPLY = "/public/get/reply/0.0.0"
@@ -1061,6 +1062,24 @@ export const warpnetService = {
                 text: text,
                 image_keys: imageKeys || [],
                 created_at: new Date().toISOString(),
+            },
+        }
+
+        return await this.sendToNode(request);
+    },
+
+    async openTwitterArchiveDialog() {
+        // Native .zip picker (Wails desktop/member node). Returns the selected
+        // absolute path, or "" if the user cancelled / there is no native
+        // dialog (browser dashboard).
+        return await OpenTwitterArchiveDialog();
+    },
+
+    async importTwitterArchive(archivePath) {
+        const request = {
+            path: PRIVATE_POST_IMPORT_TWITTER,
+            body: {
+                archive_path: archivePath,
             },
         }
 
