@@ -242,7 +242,8 @@ type NodeInfo struct {
 
 func (ni NodeInfo) IsRelay() bool {
 	return ni.Type == RelayNode ||
-		ni.Type == "bootstrap" // back compatibility
+		ni.OwnerId == RelayNode || // back compat: relays before NodeInfo.Type marked the role in OwnerId ("relay")
+		ni.OwnerId == "bootstrap" // back compat: oldest relays used OwnerId "bootstrap"
 }
 func (ni NodeInfo) IsModerator() bool {
 	return ni.Type == ModeratorNode
