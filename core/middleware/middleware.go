@@ -48,7 +48,12 @@ const (
 )
 
 const (
-	MaxLimit              = units.MiB * 5 // TODO size limit???
+	MaxLimit = units.MiB * 5 // TODO size limit???
+	// ImportMaxLimit is the inbound cap for the Twitter archive import route,
+	// whose request body carries the whole archive as base64 (~33% larger
+	// than the raw .zip). It is a private, signature-gated route only the
+	// node owner can call, so the larger ceiling is not a remote-DoS vector.
+	ImportMaxLimit        = units.MiB * 512
 	InternalNodeErrorCode = 5000
 )
 

@@ -129,6 +129,7 @@ const inflightPostRequests = new Map();
 // by the UI (disabled buttons during upload).
 const dedupSkipPaths = new Set([
     PRIVATE_POST_UPLOAD_IMAGE,
+    PRIVATE_POST_IMPORT_TWITTER,
 ]);
 
 function isPostPath(path) {
