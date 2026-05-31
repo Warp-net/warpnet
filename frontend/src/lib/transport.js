@@ -236,6 +236,14 @@ export async function ConsumePendingDeepLink() {
 // key = SHA-256(password); frame = base64( nonce(12) || ciphertext||tag(16) ).
 
 async function importKey(password) {
+  // Web Crypto (crypto.subtle) is only exposed in a secure context — HTTPS or
+  // http://localhost. Over plain http://<ip> it is undefined, so fail with a
+  // clear message instead of "Cannot read properties of undefined".
+  if (!globalThis.crypto || !globalThis.crypto.subtle) {
+    throw new Error(
+      "Secure context required: open the dashboard over HTTPS or via an SSH tunnel to http://localhost."
+    );
+  }
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password || ""));
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
