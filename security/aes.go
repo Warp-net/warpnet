@@ -30,13 +30,18 @@ package security
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	pseudoRand "math/rand" // #nosec
 	"strconv"
 	"strings"
 	"time"
 )
+
+var ErrCiphertextTooShort = errors.New("security: ciphertext too short")
 
 const (
 	salt    = "cec27db4" // #nosec intentionally
@@ -124,4 +129,70 @@ func decryptAES(ciphertext, password []byte) ([]byte, error) {
 	}
 
 	return plain, nil
+}
+
+func AESKeyFromPassword(password string) []byte {
+	sum := sha256.Sum256([]byte(password))
+	return sum[:]
+}
+
+type AESCodec struct{ Key []byte }
+
+func (c AESCodec) Decode(frame []byte) (plain []byte, encrypted bool) {
+	if len(c.Key) == 0 {
+		return frame, false
+	}
+	if p, err := aesGCMDecrypt(c.Key, frame); err == nil {
+		return p, true
+	}
+	return frame, false
+}
+
+func (c AESCodec) Encode(reply []byte, encrypted bool) ([]byte, error) {
+	if !encrypted || len(c.Key) == 0 {
+		return reply, nil
+	}
+	return aesGCMEncrypt(c.Key, reply)
+}
+
+func aesGCMEncrypt(key, plaintext []byte) ([]byte, error) {
+	gcm, err := newAESGCM(key)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	ct := gcm.Seal(nonce, nonce, plaintext, nil)
+	out := make([]byte, base64.StdEncoding.EncodedLen(len(ct)))
+	base64.StdEncoding.Encode(out, ct)
+	return out, nil
+}
+
+func aesGCMDecrypt(key, sealed []byte) ([]byte, error) {
+	data := make([]byte, base64.StdEncoding.DecodedLen(len(sealed)))
+	n, err := base64.StdEncoding.Decode(data, sealed)
+	if err != nil {
+		return nil, err
+	}
+	data = data[:n]
+
+	gcm, err := newAESGCM(key)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < gcm.NonceSize() {
+		return nil, ErrCiphertextTooShort
+	}
+	nonce, ct := data[:gcm.NonceSize()], data[gcm.NonceSize():]
+	return gcm.Open(nil, nonce, ct, nil)
+}
+
+func newAESGCM(key []byte) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
 }

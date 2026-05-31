@@ -70,7 +70,7 @@ func (g *relayPubSub) Run(node PubsubServerNodeConnector) {
 }
 
 func (g *relayPubSub) OwnerID() string {
-	return warpnet.RelayOwner
+	return "None"
 }
 
 func (g *relayPubSub) Close() (err error) {

@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
 </template>
 
 <script>
-import {EventsOff, EventsOn} from "../wailsjs/runtime/runtime";
+import {EventsOff, EventsOn} from "@/lib/transport";
 import {parseDeepLink} from "@/lib/deeplink";
 import {warpnetService} from "@/service/service";
 

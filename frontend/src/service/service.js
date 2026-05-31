@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, ConsumePendingDeepLink, IsFirstRun} from "../../wailsjs/go/main/App";
+import {Call, ConsumePendingDeepLink, IsFirstRun} from "@/lib/transport";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -101,6 +101,9 @@ export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 export const PUBLIC_POST_REPORT        = "/public/post/report/0.0.0"
 
 const stateMap = new Map();
+// sessionStorage key for the owner profile; persisted on login so a page reload
+// restores the session instead of bouncing to the sign-up screen.
+const OWNER_STORAGE = "warpnet.owner";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
 
@@ -164,11 +167,28 @@ export const warpnetService = {
     setOwnerProfile(owner) {
         const key = `owner`;
         stateMap.set(key, owner)
+        try { sessionStorage.setItem(OWNER_STORAGE, JSON.stringify(owner)) } catch (e) {}
     },
 
     getOwnerProfile() {
         const key = `owner`;
         return stateMap.get(key)
+    },
+
+    // restoreSession re-hydrates the owner profile from sessionStorage on app
+    // start so a page reload stays on the current page. The long-lived node is
+    // still authenticated and transport restores the channel key in parallel,
+    // so no re-login is performed.
+    restoreSession() {
+        try {
+            const raw = sessionStorage.getItem(OWNER_STORAGE)
+            if (!raw) return
+            const owner = JSON.parse(raw)
+            if (owner && owner.user_id) {
+                stateMap.set(`owner`, owner)
+                startRefreshNotifications()
+            }
+        } catch (e) {}
     },
 
     async isFirstRun() {
@@ -251,6 +271,7 @@ export const warpnetService = {
         }
         stopRefreshNotifications()
         stateMap.clear()
+        try { sessionStorage.removeItem(OWNER_STORAGE) } catch (e) {}
         try {
             localStorage.removeItem(`first_run_seen`)
         } catch (e) {}
