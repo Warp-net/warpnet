@@ -61,7 +61,7 @@ services:
 
   vadim-testnet:
     container_name: vadim-testnet
-    image: ghcr.io/warp-net/warpnet-business:latest
+    image: ghcr.io/warp-net/warpnet-vadim:latest
     network_mode: host
     restart: always
     environment:
