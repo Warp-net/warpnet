@@ -17,11 +17,8 @@ ENV CGO_ENABLED=1
 ENV GOMEMLIMIT=2750MiB
 ENV GOGC=50
 
-# Built with the llama tag so the moderator engine is compiled in — a business
-# node must moderate. The HTTP/WS dashboard is served from the embedded
-# frontend/dist; no Wails build step.
-RUN git submodule update --init --recursive && \
-    go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/business
+# Serves the embedded frontend/dist over HTTP/WS; no Wails build step.
+RUN go build -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/business
 
 # Dashboard port; node.server.password is supplied at run time (env/flag), not baked in.
 EXPOSE 7070

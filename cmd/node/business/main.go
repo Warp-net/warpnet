@@ -39,8 +39,6 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/business/server"
 	"github.com/Warp-net/warpnet/cmd/node/business/server/handlers"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
-	"github.com/Warp-net/warpnet/cmd/node/moderator/moderator"
-	modpubsub "github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -65,7 +63,7 @@ func main() {
 	} else {
 		log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.DateTime})
 	}
-	log.SetOutput(os.Stdout) // stderr reserved for llama
+	log.SetOutput(os.Stdout)
 
 	log.Infof("network: %s", network)
 
@@ -113,8 +111,8 @@ func main() {
 		return
 	}
 
-	// The node and its moderator are started here, separately from the
-	// dashboard, on the first login, and attached to the server.
+	// The node is started here, separately from the dashboard, on the first
+	// login, and attached to the dispatcher.
 	go func() {
 		var info domain.AuthNodeInfo
 		select {
@@ -149,10 +147,6 @@ func main() {
 		}
 		go node.TrackPublicReachability(ctx)
 
-		if moder := startModerator(ctx, node); moder != nil {
-			defer moder.Close()
-		}
-
 		disp.Attach(node)
 		info.ID = ownNodeId.String()
 		info.Network = network
@@ -178,33 +172,4 @@ func main() {
 	}
 	cancel()
 	_ = srv.Shutdown()
-}
-
-// startModerator wires the moderator engine to the node's gossip as a separate
-// entity. Returns nil when no model path is configured. moderator.Start blocks
-// until the engine is ready (or forever without the `llama` tag), so it runs on
-// its own goroutine.
-func startModerator(ctx context.Context, node *bnode.BusinessNode) *moderator.Moderator {
-	if config.Config().Node.Moderator.Path == "" {
-		log.Warnln("business: moderator model path is empty; moderation disabled")
-		return nil
-	}
-	g := node.Gossip()
-	if g == nil {
-		log.Errorln("business: moderator: gossip not running")
-		return nil
-	}
-	mpub := modpubsub.NewOverGossip(g)
-	moder, err := moderator.NewModerator(ctx, node, mpub, mpub)
-	if err != nil {
-		log.Errorf("business: init moderator: %v", err)
-		return nil
-	}
-	go func() {
-		log.Infoln("business: starting moderator engine...")
-		if err := moder.Start(); err != nil {
-			log.Errorf("business: moderator start: %v", err)
-		}
-	}()
-	return moder
 }

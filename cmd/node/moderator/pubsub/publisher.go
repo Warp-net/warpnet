@@ -25,11 +25,6 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package pubsub is the moderation pubsub: the layer above the raw gossip that
-// speaks moderation — publishing isolation verdicts on a user's followers topic
-// and subscribing to the global reports topic. Both the standalone moderator
-// binary (its own gossip) and the business node (wrapping its member gossip)
-// use it.
 package pubsub
 
 import (
@@ -63,19 +58,11 @@ type moderatorPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
-// NewPubSub creates a moderation pubsub with its own gossip router — the
-// standalone moderator binary, which has no other gossip.
 func NewPubSub(ctx context.Context) *moderatorPubSub {
 	mps := &moderatorPubSub{}
 
 	mps.pubsub = pubsub.NewGossip(ctx, pubsub.NewDiscoveryRelayTopicHandler())
 	return mps
-}
-
-// NewOverGossip wraps an already-running gossip router — the business node,
-// which shares the single gossip its member core runs (a host hosts only one).
-func NewOverGossip(g *pubsub.Gossip) *moderatorPubSub {
-	return &moderatorPubSub{pubsub: g}
 }
 
 func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) error {
@@ -108,14 +95,17 @@ func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body an
 	return g.pubsub.Publish(msg, topicName)
 }
 
-// SubscribeReports starts listening on the global reports topic. The handler
-// receives one ReportEvent per gossip message; the envelope (event.Message) is
-// unwrapped here so the moderator only deals with domain payloads.
+// SubscribeReports starts listening on the global reports topic. The
+// handler receives one ReportEvent per gossip message; the underlying
+// envelope (event.Message) is unwrapped here so the moderator only
+// deals with domain payloads.
 //
-// The reports topic is open — anyone can publish — so unlike normal stream
-// traffic this path doesn't go through AuthMiddleware. We verify the envelope's
-// signature against a public key derived from msg.NodeId before handing the
-// payload on. Anything that fails to verify is dropped silently.
+// The reports topic is open — anyone can publish — so unlike normal
+// stream traffic this path doesn't go through AuthMiddleware. We
+// verify the envelope's libp2p signature against a public key derived
+// from msg.NodeId before handing the payload on. Anything that fails
+// to verify is dropped silently so a malicious peer cannot make us
+// waste cycles or pollute logs by spamming bogus reports.
 func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) error {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")

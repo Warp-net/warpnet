@@ -17,10 +17,6 @@ services:
       # Preshared secret that decrypts dashboard WS traffic; set it to the
       # owner's login password. Provide via your secret store, not in VCS.
       - NODE_SERVER_PASSWORD=${NODE_SERVER_PASSWORD}
-      # Drop the model path to run without moderation (engine stays idle).
-      - NODE_MODERATOR_MODELPATH=/root/.warpdata/llama-2-7b-chat.Q8_0.gguf
-      - CGO_CPPFLAGS="-DLLAMA_DISABLE_LOGS=1"
-      - CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete"
       - NODE_METRICS_GATEWAY=130.94.88.38:4091
     volumes:
       - /root/.warpdata:/root/.warpdata:rw

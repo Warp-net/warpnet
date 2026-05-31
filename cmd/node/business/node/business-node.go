@@ -25,9 +25,7 @@ resulting from the use or misuse of this software.
 // Package node hosts the business node. A business node IS a member node — same
 // discovery, DHT, MDNS, pubsub, relay and the full handler set, so its profile
 // and posts are queryable like any user — so it embeds *member.MemberNode and
-// adds only what a business node owes: a gossip accessor (so the moderator can
-// be wired to it from outside) and the public-IP tracker. It knows nothing
-// about the moderator or the dashboard; those are wired around it in main.
+// adds only the public-IP obligation a business node owes.
 package node
 
 import (
@@ -37,7 +35,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
-	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
@@ -67,21 +64,6 @@ func NewBusinessNode(
 		return nil, err
 	}
 	return &BusinessNode{MemberNode: mn}, nil
-}
-
-// ID satisfies the moderator's ModeratorNode interface.
-func (b *BusinessNode) ID() warpnet.WarpPeerID {
-	return b.Node().ID()
-}
-
-// Gossip exposes the node's single gossip instance so the moderator can attach
-// its report subscription to it (a host runs only one gossipsub router).
-func (b *BusinessNode) Gossip() *corePubsub.Gossip {
-	ps := b.PubSub()
-	if ps == nil {
-		return nil
-	}
-	return ps.Gossip()
 }
 
 // TrackPublicReachability enforces the public-IP obligation. It watches the
