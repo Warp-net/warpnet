@@ -32,8 +32,6 @@ import (
 	root "github.com/Warp-net/warpnet"
 )
 
-// Static serves the embedded Vue build (frontend/dist). Unknown paths fall back
-// to index.html so client-side routes resolve (SPA).
 func NewStaticHandler() (http.Handler, error) {
 	sub, err := fs.Sub(root.GetStaticEmbedded(), "frontend/dist")
 	if err != nil {
