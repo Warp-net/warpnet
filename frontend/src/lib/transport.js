@@ -80,8 +80,34 @@ export function EventsOff(eventName, ...additional) {
 
 let socket = null;
 let connecting = null;
-let aesKey = null; // CryptoKey, set after a successful login; cleared on logout/close
+// aesKey: raw 32-byte channel key (SHA-256 of the password). Persisted to
+// sessionStorage so a page reload resumes the already-authenticated node's
+// session (restoring the key here) instead of bouncing to the login screen.
+const CHANNEL_KEY_STORAGE = "warpnet.channel.key";
+let aesKey = restoreChannelKey();
 const pending = new Map(); // message_id -> { resolve, reject, timer }
+
+function restoreChannelKey() {
+  try {
+    const saved = sessionStorage.getItem(CHANNEL_KEY_STORAGE);
+    return saved ? base64ToBytes(saved) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveChannelKey() {
+  try {
+    if (aesKey) sessionStorage.setItem(CHANNEL_KEY_STORAGE, bytesToBase64(aesKey));
+  } catch (_) {}
+}
+
+function clearChannelKey() {
+  aesKey = null;
+  try {
+    sessionStorage.removeItem(CHANNEL_KEY_STORAGE);
+  } catch (_) {}
+}
 
 function wsURL() {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
@@ -197,17 +223,19 @@ export async function Call(request) {
     try {
       const resp = await send(request);
       if (resp && resp.body && resp.body.code) {
-        aesKey = null; // login rejected
+        clearChannelKey(); // login rejected
+      } else {
+        saveChannelKey(); // persist so a page reload resumes the session
       }
       return resp;
     } catch (e) {
-      aesKey = null; // wrong password / timeout — allow another attempt
+      clearChannelKey(); // wrong password / timeout — allow another attempt
       throw e;
     }
   }
   const resp = await send(request);
   if (request.path === LOGOUT_PATH) {
-    aesKey = null;
+    clearChannelKey();
   }
   return resp;
 }
