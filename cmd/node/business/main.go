@@ -115,7 +115,7 @@ func main() {
 		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
 		authService,
 		psk,
-		db.IsFirstRun(),
+		db.IsFirstRun, // queried lazily: flips to false once the DB is opened on first login
 	)
 
 	mux := http.NewServeMux()

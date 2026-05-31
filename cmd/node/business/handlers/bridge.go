@@ -17,7 +17,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-WarpNet is provided “as is” without warranty of any kind, either expressed or implieb.
+WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
 Use at your own risk. The maintainers shall not be liable for any damages or data loss
 resulting from the use or misuse of this software.
 */
@@ -65,10 +65,10 @@ type Authenticator interface {
 }
 
 type BridgeHandler struct {
-	codec      Codec
-	auth       Authenticator
-	isFirstRun bool
-	psk        security.PSK
+	codec    Codec
+	auth     Authenticator
+	firstRun func() bool
+	psk      security.PSK
 
 	mx   sync.RWMutex
 	node Node
@@ -78,13 +78,13 @@ func NewBridgeHandler(
 	codec Codec,
 	auth Authenticator,
 	psk security.PSK,
-	isFirstRun bool,
+	firstRun func() bool,
 ) *BridgeHandler {
 	return &BridgeHandler{
-		codec:      codec,
-		auth:       auth,
-		psk:        psk,
-		isFirstRun: isFirstRun,
+		codec:    codec,
+		auth:     auth,
+		psk:      psk,
+		firstRun: firstRun,
 	}
 }
 
@@ -147,7 +147,7 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 
 	switch req.Destination {
 	case pathIsFirstRun:
-		body, _ := json.Marshal(b.isFirstRun)
+		body, _ := json.Marshal(b.firstRun())
 		resp.Body = body
 	case event.PRIVATE_POST_LOGIN:
 		resp.Body = b.login(req.Body)
