@@ -31,6 +31,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -39,6 +40,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -200,9 +202,18 @@ func importOneTweet(
 		resp.SkippedTweets++
 		return
 	}
-	// Idempotent re-import: a tweet already stored under the owner is left
-	// untouched.
-	if _, err := tweetRepo.Get(ownerUser.Id, at.IDStr); err == nil {
+	// Idempotent re-import: skip a tweet already stored under the owner.
+	// Only a confirmed "not found" means we should import it; any other
+	// read error must NOT fall through to Create (that would rewrite the
+	// existing record and re-increment the tweet count), so skip and log.
+	switch _, err := tweetRepo.Get(ownerUser.Id, at.IDStr); {
+	case err == nil:
+		resp.SkippedTweets++
+		return
+	case errors.Is(err, database.ErrTweetNotFound):
+		// not stored yet — fall through and import it
+	default:
+		log.Errorf("import: checking existing tweet %s: %v", at.IDStr, err)
 		resp.SkippedTweets++
 		return
 	}

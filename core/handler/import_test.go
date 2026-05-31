@@ -4,6 +4,7 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"image"
 	"image/png"
 	"os"
@@ -32,6 +33,7 @@ func (s stubImportUserRepo) Get(userId string) (domain.User, error) {
 
 type stubImportTweetRepo struct {
 	stored map[string]domain.Tweet
+	getErr error
 }
 
 func newStubImportTweetRepo() *stubImportTweetRepo {
@@ -39,6 +41,9 @@ func newStubImportTweetRepo() *stubImportTweetRepo {
 }
 
 func (s *stubImportTweetRepo) Get(userID, tweetID string) (domain.Tweet, error) {
+	if s.getErr != nil {
+		return domain.Tweet{}, s.getErr
+	}
 	t, ok := s.stored[tweetID]
 	if !ok {
 		return domain.Tweet{}, database.ErrTweetNotFound
@@ -275,6 +280,31 @@ func TestStreamImportTwitterArchiveHandler(t *testing.T) {
 		}
 		if resp.SkippedTweets != 4 {
 			t.Fatalf("re-import skipped = %d, want 4", resp.SkippedTweets)
+		}
+	})
+
+	t.Run("non-notfound read error skips tweet without creating", func(t *testing.T) {
+		files := map[string][]byte{
+			"twitter-x/data/tweets.js":                   []byte(tweetsJS),
+			"twitter-x/data/tweets_media/111-ABC123.png": tinyPNG(t),
+		}
+		h, tweetRepo, mediaRepo, path := newImportHandlerWithArchive(t, files)
+		// A transient/corrupt read must NOT be treated as "not found".
+		tweetRepo.getErr = errors.New("transient db read failure")
+
+		out, err := h(marshalImport(t, event.ImportTwitterArchiveEvent{ArchivePath: path}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		resp := out.(event.ImportTwitterArchiveResponse)
+		if resp.ImportedTweets != 0 {
+			t.Fatalf("imported = %d, want 0 (read errors must not import)", resp.ImportedTweets)
+		}
+		if len(tweetRepo.stored) != 0 {
+			t.Fatalf("stored %d tweets, want 0 (must not Create on a read error)", len(tweetRepo.stored))
+		}
+		if mediaRepo.saved != 0 {
+			t.Fatalf("media saved = %d, want 0 (skip happens before photo import)", mediaRepo.saved)
 		}
 	})
 }
