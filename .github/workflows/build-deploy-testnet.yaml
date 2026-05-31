@@ -107,9 +107,42 @@ jobs:
           tags: ghcr.io/warp-net/warpnet-echo:latest
           build-args: --dns 8.8.8.8
 
+  build-vadim:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.26
+          cache-dependency-path: godep/go.sum
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Business Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.business
+          push: true
+          tags: ghcr.io/warp-net/warpnet-vadim:latest
+          build-args: --dns 8.8.8.8
+
   deploy:
     runs-on: ubuntu-latest
-    needs: [ build-relay, build-moderator, build-echo ]
+    needs: [ build-relay, build-moderator, build-echo, build-vadim ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
