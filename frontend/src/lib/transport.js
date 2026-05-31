@@ -33,6 +33,8 @@ resulting from the use or misuse of this software.
 import * as Wails from "../../wailsjs/go/main/App";
 import * as WailsRuntime from "../../wailsjs/runtime/runtime";
 import {generateUUID} from "@/lib/uuid";
+import { gcm } from "@noble/ciphers/aes";
+import { sha256 } from "@noble/hashes/sha256";
 
 const LOGIN_PATH = "/private/post/login/0.0.0";
 const LOGOUT_PATH = "/private/post/logout/0.0.0";
@@ -232,39 +234,30 @@ export async function ConsumePendingDeepLink() {
   return "";
 }
 
-// --- AES-256-GCM, interoperable with the Go side (crypto/aes + cipher.GCM):
+// --- AES-256-GCM via @noble (pure JS — works over plain http:// where
+// crypto.subtle is unavailable). Wire-compatible with Go's security.AESCodec:
 // key = SHA-256(password); frame = base64( nonce(12) || ciphertext||tag(16) ).
 
-async function importKey(password) {
-  // Web Crypto (crypto.subtle) is only exposed in a secure context — HTTPS or
-  // http://localhost. Over plain http://<ip> it is undefined, so fail with a
-  // clear message instead of "Cannot read properties of undefined".
-  if (!globalThis.crypto || !globalThis.crypto.subtle) {
-    throw new Error(
-      "Secure context required: open the dashboard over HTTPS or via an SSH tunnel to http://localhost."
-    );
-  }
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password || ""));
-  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+// importKey returns the raw 32-byte channel key, SHA-256(password), matching
+// Go's security.AESKeyFromPassword.
+function importKey(password) {
+  return sha256(new TextEncoder().encode(password || ""));
 }
 
-async function aesEncrypt(key, plaintext) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext))
-  );
-  const frame = new Uint8Array(iv.length + ct.length);
-  frame.set(iv, 0);
-  frame.set(ct, iv.length);
+function aesEncrypt(key, plaintext) {
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const ct = gcm(key, nonce).encrypt(new TextEncoder().encode(plaintext));
+  const frame = new Uint8Array(nonce.length + ct.length);
+  frame.set(nonce, 0);
+  frame.set(ct, nonce.length);
   return bytesToBase64(frame);
 }
 
-async function aesDecrypt(key, b64) {
+function aesDecrypt(key, b64) {
   const frame = base64ToBytes(b64);
-  const iv = frame.slice(0, 12);
+  const nonce = frame.slice(0, 12);
   const ct = frame.slice(12);
-  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
-  return new TextDecoder().decode(pt);
+  return new TextDecoder().decode(gcm(key, nonce).decrypt(ct));
 }
 
 function bytesToBase64(bytes) {
