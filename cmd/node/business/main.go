@@ -134,10 +134,6 @@ func main() {
 
 	log.Infof("business: listening on %s", srv.Addr)
 
-	// Build the node once on the first login and keep it alive for the whole
-	// process: logout closes the database and returns to the login page but
-	// never stops the node, and the next login reopens the database and
-	// re-authenticates. So service the auth handshake in a loop, not once.
 	var node *bnode.BusinessNode
 	defer func() {
 		if node != nil {
