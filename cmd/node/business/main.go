@@ -36,7 +36,6 @@ import (
 
 	root "github.com/Warp-net/warpnet"
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
-	"github.com/Warp-net/warpnet/cmd/node/business/server"
 	"github.com/Warp-net/warpnet/cmd/node/business/server/handlers"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
@@ -50,6 +49,10 @@ import (
 )
 
 func main() {
+	pw := config.Config().Node.Server.Password
+	if pw == "" {
+		log.Fatal("password is required")
+	}
 	network := config.Config().Node.Network
 	version := config.Config().Version
 
@@ -69,6 +72,9 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	interruptChan := make(chan os.Signal, 1)
+	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
@@ -95,81 +101,84 @@ func main() {
 
 	readyChan := make(chan domain.AuthNodeInfo, 1)
 	userRepo := database.NewUserRepo(db)
-	authSvc := auth.NewAuthService(ctx, database.NewAuthRepo(db, network), userRepo, readyChan)
+	authRepo := database.NewAuthRepo(db, network)
+	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
-	var wsKey []byte
-	if pw := config.Config().Node.Server.Password; pw != "" {
-		wsKey = security.AESKeyFromPassword(pw)
-	} else {
-		log.Warnln("business: node.server.password is empty — dashboard WS traffic is NOT encrypted")
+	staticHandler, err := handlers.NewStaticHandler()
+	if err != nil {
+		log.Fatalf("business: static handler load: %v", err)
 	}
 
-	disp := handlers.NewDispatcher(authSvc, db, psk)
-	srv, err := server.New(disp, wsKey)
+	bridgeHandler := handlers.NewBridgeHandler(
+		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
+		authService,
+		psk,
+		db.IsFirstRun(),
+	)
+
+	mux := http.NewServeMux()
+	mux.Handle("/ws", bridgeHandler.Handle())
+	mux.HandleFunc("/healthz", handlers.HealthHandler())
+	mux.HandleFunc("/readyz", handlers.ReadyHandler())
+	mux.Handle("/", staticHandler)
+
+	srv := &http.Server{Addr: ":4999", Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	defer srv.Shutdown(ctx)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Errorf("business: serve http: %v", err)
+		}
+	}()
+
+	log.Infof("business: listening on %s", srv.Addr)
+
+	var info domain.AuthNodeInfo
+	select {
+	case <-ctx.Done():
+		return
+	case info = <-readyChan:
+		log.Infoln("business: database authentication passed")
+	}
+
+	privateKey := authService.PrivateKey()
+	ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
 	if err != nil {
-		log.Errorf("business: init server: %v", err)
+		log.Errorf("business: node ID: %v", err)
 		return
 	}
 
-	// The node is started here, separately from the dashboard, on the first
-	// login, and attached to the dispatcher.
-	go func() {
-		var info domain.AuthNodeInfo
-		select {
-		case <-ctx.Done():
-			return
-		case info = <-readyChan:
-			log.Infoln("business: database authentication passed")
-		}
-
-		ownNodeId, err := warpnet.IDFromPublicKey(authSvc.PrivateKey().Public().(ed25519.PublicKey))
-		if err != nil {
-			log.Errorf("business: node ID: %v", err)
-			return
-		}
-		m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
-
-		node, err := bnode.NewBusinessNode(ctx, authSvc.PrivateKey(), psk, ownNodeId, codeHashHex, version, authSvc.Storage(), db, infos, m)
-		if err != nil {
-			log.Errorf("business: init node: %v", err)
-			return
-		}
-		if err := node.Start(); err != nil {
-			log.Errorf("business: start node: %v", err)
-			return
-		}
-		defer node.Stop()
-
-		// Stamp the role onto the owner's record so it travels to peers via
-		// PUBLIC_GET_USER + discovery. Any node could do the same with its role.
-		if err := userRepo.SetRole(info.UserId, warpnet.BusinessRole); err != nil {
-			log.Warnf("business: set owner role: %v", err)
-		}
-		go node.TrackPublicReachability(ctx)
-
-		disp.Attach(node)
-		info.ID = ownNodeId.String()
-		info.Network = network
-		info.Addresses = node.NodeInfo().Addresses
-		readyChan <- info
-
-		<-ctx.Done()
-	}()
-
-	interruptChan := make(chan os.Signal, 1)
-	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-
-	serveErr := make(chan error, 1)
-	go func() { serveErr <- srv.Run(":" + config.Config().Node.Server.Port) }()
-
-	select {
-	case <-interruptChan:
-		log.Infoln("business node interrupted...")
-	case err := <-serveErr:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("business: serve: %v", err)
-		}
+	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
+	node, err := bnode.NewBusinessNode(
+		ctx,
+		privateKey,
+		psk,
+		ownNodeId,
+		codeHashHex,
+		version,
+		authRepo,
+		db,
+		infos,
+		m,
+	)
+	if err != nil {
+		log.Errorf("business: init node: %v", err)
+		return
 	}
-	cancel()
-	_ = srv.Shutdown()
+	defer node.Stop()
+
+	if err := node.Start(); err != nil {
+		log.Errorf("business: start node: %v", err)
+		return
+	}
+
+	bridgeHandler.AttachNode(node)
+
+	info.ID = ownNodeId.String()
+	info.Network = network
+	info.Addresses = node.NodeInfo().Addresses
+	info.Role = node.NodeInfo().Type
+	readyChan <- info
+
+	<-interruptChan
+	log.Infoln("business node interrupted...")
 }

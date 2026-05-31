@@ -22,15 +22,12 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-// Package node hosts the business node. A business node IS a member node — same
-// discovery, DHT, MDNS, pubsub, relay and the full handler set, so its profile
-// and posts are queryable like any user — so it embeds *member.MemberNode and
-// adds only the public-IP obligation a business node owes.
 package node
 
 import (
 	"context"
 	"crypto/ed25519"
+	"github.com/Warp-net/warpnet/core/stream"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -41,7 +38,7 @@ import (
 )
 
 type BusinessNode struct {
-	*member.MemberNode
+	mn *member.MemberNode
 }
 
 func NewBusinessNode(
@@ -63,30 +60,38 @@ func NewBusinessNode(
 	if err != nil {
 		return nil, err
 	}
-	return &BusinessNode{MemberNode: mn}, nil
+	bn := &BusinessNode{mn: mn}
+	go bn.trackPublicReachability(ctx)
+	return bn, nil
 }
 
-// TrackPublicReachability enforces the public-IP obligation. It watches the
-// node's own AutoNAT verdict and public addresses, waits out a grace window
-// (AutoNAT v2 reports Unknown/Private transiently at boot), returns as soon as
-// the node looks public, and panics — crashing the process, which is the
-// assertion — only after several consecutive private readings. Run on a
-// goroutine.
-func (b *BusinessNode) TrackPublicReachability(ctx context.Context) {
-	const (
-		grace         = 90 * time.Second
-		sampleEvery   = 5 * time.Second
-		privateStreak = 3
-		maxWait       = 5 * time.Minute
-	)
+func (b *BusinessNode) Start() error {
+	return b.mn.Start()
+}
 
+func (b *BusinessNode) NodeInfo() warpnet.NodeInfo {
+	info := b.mn.NodeInfo()
+	info.Type = warpnet.BusinessNode
+	return info
+}
+
+func (b *BusinessNode) SelfStream(path stream.WarpRoute, data any) ([]byte, error) {
+	return b.mn.SelfStream(path, data)
+}
+
+const (
+	gracePeriod   = 90 * time.Second
+	sampleEvery   = 10 * time.Second
+	privateStreak = 5
+)
+
+func (b *BusinessNode) trackPublicReachability(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		return
-	case <-time.After(grace):
+	case <-time.After(gracePeriod):
 	}
 
-	deadline := time.Now().Add(maxWait)
 	ticker := time.NewTicker(sampleEvery)
 	defer ticker.Stop()
 
@@ -97,22 +102,19 @@ func (b *BusinessNode) TrackPublicReachability(ctx context.Context) {
 			return
 		case <-ticker.C:
 			switch b.NodeInfo().Reachability {
-			case warpnet.ReachabilityPublic:
-				log.Infoln("business: reachability confirmed public")
-				return
 			case warpnet.ReachabilityPrivate:
 				streak++
 				log.Warnf("business: reachability reported private (%d/%d)", streak, privateStreak)
-				if streak >= privateStreak && len(b.PublicAddrs()) == 0 {
+				if streak >= privateStreak {
 					panic("business: node is privately reachable (behind NAT) — a business node must have a publicly addressable IP")
 				}
 			default:
 				streak = 0
 			}
-			if time.Now().After(deadline) {
-				log.Warnln("business: reachability still unknown after max wait; continuing without public confirmation")
-				return
-			}
 		}
 	}
+}
+
+func (b *BusinessNode) Stop() {
+	b.mn.Stop()
 }

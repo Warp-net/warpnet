@@ -26,25 +26,17 @@ package handlers
 
 import "net/http"
 
-// Healthz is the Docker/Kubernetes liveness probe: the process is up and
-// serving HTTP. It says nothing about the node (which only exists after login).
-func Healthz() http.HandlerFunc {
+func HealthHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	}
 }
 
-// Readyz is the readiness probe: ready once the node has been built and started
-// (i.e. the owner has logged in). Orchestrators use it to gate traffic.
-func Readyz(d *Dispatcher) http.HandlerFunc {
+func ReadyHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		if d.NodeReady() {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ready"))
-			return
-		}
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte("not ready"))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready"))
+
 	}
 }

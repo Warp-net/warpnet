@@ -177,7 +177,8 @@ func (mn *ModeratorNode) Node() warpnet.P2PNode {
 
 func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	baseInfo := mn.node.BaseNodeInfo()
-	baseInfo.OwnerId = warpnet.ModeratorOwner
+	baseInfo.OwnerId = "None"
+	baseInfo.Type = warpnet.ModeratorNode
 	baseInfo.Hash = mn.selfHashHex
 	return baseInfo
 }

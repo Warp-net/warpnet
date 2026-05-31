@@ -155,7 +155,8 @@ func NewRelayNode(
 
 func (rn *RelayNode) NodeInfo() warpnet.NodeInfo {
 	bi := rn.node.BaseNodeInfo()
-	bi.OwnerId = warpnet.RelayOwner
+	bi.OwnerId = "None"
+	bi.Type = warpnet.RelayNode
 	bi.Hash = rn.selfHashHex
 	return bi
 }

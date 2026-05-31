@@ -181,6 +181,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		user.CreatedAt = owner.CreatedAt
 		user.RoundTripTime = math.MaxInt64 // put your user at the end of a who-to-follow list
 		user.NodeId = authInfo.ID
+		user.Role = authInfo.Role
 		owner.NodeId = authInfo.ID
 
 		log.Infof(

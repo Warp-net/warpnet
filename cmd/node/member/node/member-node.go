@@ -274,6 +274,7 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi.OwnerId = m.ownerId
 	bi.Hash = m.selfHashHex
 	bi.Network = m.network
+	bi.Type = warpnet.MemberNode
 
 	// Devices are persisted under the fat node's own libp2p peer ID by the
 	// pair handler (s.Conn().LocalPeer()), not under the owner's user ID,
