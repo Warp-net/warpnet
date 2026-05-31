@@ -53,6 +53,7 @@ func main() {
 	if pw == "" {
 		log.Fatal("password is required")
 	}
+	port := config.Config().Node.Server.Port
 	network := config.Config().Node.Network
 	version := config.Config().Version
 
@@ -122,7 +123,7 @@ func main() {
 	mux.HandleFunc("/readyz", handlers.ReadyHandler())
 	mux.Handle("/", staticHandler)
 
-	srv := &http.Server{Addr: ":4999", Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: ":" + port, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	defer srv.Shutdown(ctx)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

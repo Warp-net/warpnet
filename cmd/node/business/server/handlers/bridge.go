@@ -80,9 +80,10 @@ func NewBridgeHandler(
 	isFirstRun bool,
 ) *BridgeHandler {
 	return &BridgeHandler{
-		codec: codec,
-		auth:  auth,
-		psk:   psk,
+		codec:      codec,
+		auth:       auth,
+		psk:        psk,
+		isFirstRun: isFirstRun,
 	}
 }
 

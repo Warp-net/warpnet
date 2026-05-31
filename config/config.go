@@ -75,7 +75,7 @@ func init() {
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
 	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name of 'AI' model")
 
-	pflag.String("node.server.port", "7070", "Dashboard HTTP/WS port")
+	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")
 	pflag.String("node.server.password", "", "Preshared secret that decrypts dashboard WS traffic")
 
 	pflag.String("logging.level", "info", "Logging level")
