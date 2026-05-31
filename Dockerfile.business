@@ -13,13 +13,10 @@ WORKDIR /warpnet
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOMODCACHE=/go/pkg/mod
 ENV GOPATH=/warpnet
-ENV CGO_ENABLED=1
-ENV GOMEMLIMIT=2750MiB
-ENV GOGC=50
 
 # Serves the embedded frontend/dist over HTTP/WS; no Wails build step.
 RUN go build -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/business
 
 # Dashboard port; node.server.password is supplied at run time (env/flag), not baked in.
-EXPOSE 7070
+EXPOSE 4999
 CMD ["/warpnet/warpnet"]
