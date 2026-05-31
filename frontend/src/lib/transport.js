@@ -262,6 +262,17 @@ export async function ConsumePendingDeepLink() {
   return "";
 }
 
+// OpenTwitterArchiveDialog opens the native .zip picker under Wails (member
+// desktop node) and resolves to the selected absolute path ("" if cancelled).
+// The browser dashboard has no native file dialog and never shows the import
+// button, so it resolves to "".
+export async function OpenTwitterArchiveDialog() {
+  if (hasWails()) {
+    return Wails.OpenTwitterArchiveDialog();
+  }
+  return "";
+}
+
 // --- AES-256-GCM via @noble (pure JS — works over plain http:// where
 // crypto.subtle is unavailable). Wire-compatible with Go's security.AESCodec:
 // key = SHA-256(password); frame = base64( nonce(12) || ciphertext||tag(16) ).

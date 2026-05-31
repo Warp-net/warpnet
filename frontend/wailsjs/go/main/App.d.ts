@@ -10,4 +10,6 @@ export function IsFirstRun():Promise<boolean>;
 
 export function NotifyDeepLink(arg1:string):Promise<void>;
 
+export function OpenTwitterArchiveDialog():Promise<string>;
+
 export function SetPendingDeepLink(arg1:string):Promise<void>;
