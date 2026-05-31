@@ -18,6 +18,13 @@
         </button>
       </div>
       <div class="p-5">
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".zip,application/zip"
+          class="hidden"
+          @change="onFileChange"
+        />
         <!-- instructions -->
         <template v-if="phase === 'idle'">
           <p class="text-sm text-dark mb-3">
@@ -133,6 +140,13 @@ export default {
       this.$emit('close');
     },
     async chooseAndImport() {
+      // Browser dashboard (business node): no native dialog — pick a file and
+      // upload its bytes. Desktop (Wails member node): native dialog returns a
+      // path the node reads straight off local disk.
+      if (!warpnetService.isDesktopNode()) {
+        this.$refs.fileInput.click();
+        return;
+      }
       let path = '';
       try {
         path = await warpnetService.openTwitterArchiveDialog();
@@ -145,9 +159,34 @@ export default {
       if (!path) {
         return; // user cancelled the picker
       }
+      await this.runImport({ archivePath: path });
+    },
+    async onFileChange(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = ''; // allow re-selecting the same file later
+      if (!file) return;
       this.phase = 'importing';
       try {
-        const resp = await warpnetService.importTwitterArchive(path);
+        const archiveData = await this.readFileAsDataURL(file);
+        await this.runImport({ archiveData });
+      } catch (err) {
+        console.error('Failed to read archive:', err);
+        this.errorMessage = 'Could not read the selected file.';
+        this.phase = 'error';
+      }
+    },
+    readFileAsDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result); // data:...;base64,XXXX
+        reader.onerror = () => reject(new Error('file read error'));
+        reader.readAsDataURL(file);
+      });
+    },
+    async runImport(payload) {
+      this.phase = 'importing';
+      try {
+        const resp = await warpnetService.importTwitterArchive(payload);
         if (resp && resp.code) {
           throw new Error(resp.message || 'Import failed');
         }

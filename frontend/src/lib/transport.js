@@ -189,11 +189,16 @@ async function send(request) {
     payload = await aesEncrypt(aesKey, payload);
   }
 
+  // Archive import processes thousands of tweets server-side and can run
+  // well past the default budget; give /import/ routes a long window.
+  const timeoutMs = (typeof request.path === "string" && request.path.includes("/import/"))
+    ? 10 * 60 * 1000
+    : REQUEST_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error(`request ${id} timed out`));
-    }, REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
     pending.set(id, { resolve, reject, timer });
     try {
       socket.send(payload);
@@ -271,6 +276,13 @@ export async function OpenTwitterArchiveDialog() {
     return Wails.OpenTwitterArchiveDialog();
   }
   return "";
+}
+
+// IsDesktop reports whether the Wails desktop runtime is present (member
+// node). The browser dashboard (business node) returns false and must upload
+// the archive via an <input type=file> instead of the native dialog.
+export function IsDesktop() {
+  return hasWails();
 }
 
 // --- AES-256-GCM via @noble (pure JS — works over plain http:// where

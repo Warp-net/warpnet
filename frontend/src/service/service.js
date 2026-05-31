@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, ConsumePendingDeepLink, IsFirstRun, OpenTwitterArchiveDialog} from "@/lib/transport";
+import {Call, ConsumePendingDeepLink, IsFirstRun, OpenTwitterArchiveDialog, IsDesktop} from "@/lib/transport";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -129,6 +129,7 @@ const inflightPostRequests = new Map();
 // by the UI (disabled buttons during upload).
 const dedupSkipPaths = new Set([
     PRIVATE_POST_UPLOAD_IMAGE,
+    PRIVATE_POST_IMPORT_TWITTER,
 ]);
 
 function isPostPath(path) {
@@ -1068,6 +1069,12 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
+    isDesktopNode() {
+        // Desktop member node (Wails) → native dialog + node reads the .zip
+        // off local disk. Browser dashboard (business node) → file upload.
+        return IsDesktop();
+    },
+
     async openTwitterArchiveDialog() {
         // Native .zip picker (Wails desktop/member node). Returns the selected
         // absolute path, or "" if the user cancelled / there is no native
@@ -1075,11 +1082,12 @@ export const warpnetService = {
         return await OpenTwitterArchiveDialog();
     },
 
-    async importTwitterArchive(archivePath) {
+    async importTwitterArchive({archivePath = "", archiveData = ""}) {
         const request = {
             path: PRIVATE_POST_IMPORT_TWITTER,
             body: {
                 archive_path: archivePath,
+                archive_data: archiveData,
             },
         }
 
