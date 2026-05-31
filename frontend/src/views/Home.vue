@@ -142,19 +142,11 @@ resulting from the use or misuse of this software.
           some people and topics to follow now.
         </p>
         <button
-          v-if="!isBusiness"
           @click="showImportModal = true"
           class="text-white bg-blue rounded-full font-semibold mt-4 px-4 py-2 hover:bg-darkblue"
         >
           <p class="hidden lg:block">Import tweets from X</p>
           <i class="fas fa-file-import lg:hidden"></i>
-        </button>
-        <button
-          v-else
-          class="text-white bg-blue rounded-full font-semibold mt-4 px-4 py-2 hover:bg-darkblue"
-        >
-          <p class="hidden lg:block">Let's go!</p>
-          <i class="fas fa-plus lg:hidden"></i>
         </button>
       </div>
       <Tweets :tweets="timeline" />
@@ -216,7 +208,6 @@ export default {
       },
       loading: true,
       profile: {},
-      isBusiness: false,
       showImportModal: false,
       timeline: [],
       showInfo: false,
@@ -362,7 +353,6 @@ export default {
 
     try {
       const fullProfile = await warpnetService.getProfile(this.profile.user_id);
-      this.isBusiness = !!(fullProfile && fullProfile.role === 'business');
       if (fullProfile && !fullProfile.code) {
         this.profile.background_image = fullProfile.background_image_key
             ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.background_image_key})

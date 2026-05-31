@@ -120,8 +120,10 @@ func (at archiveTweet) photoMedia() []archiveMedia {
 }
 
 // StreamImportTwitterArchiveHandler imports the user's own original tweets
-// from an X (Twitter) data archive .zip sitting on local disk. It reads
-// data/tweets.js, skips retweets and replies, stores attached photos
+// from an X (Twitter) data archive .zip, taken either from a local disk path
+// (desktop member node) or uploaded base64 bytes (business browser
+// dashboard). It reads data/tweets.js, skips retweets and replies, stores
+// attached photos
 // (ignoring GIFs/videos) through the existing media pipeline, and writes
 // each tweet straight to the tweet repo under the owner's id. The original
 // X id is preserved so a re-run is idempotent. Likes, direct messages and
@@ -137,17 +139,13 @@ func StreamImportTwitterArchiveHandler(
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		if ev.ArchivePath == "" {
-			return nil, warpnet.WarpError("import: empty archive path")
-		}
-
-		zr, err := zip.OpenReader(ev.ArchivePath)
+		archiveFiles, closeArchive, err := openArchive(ev)
 		if err != nil {
-			return nil, fmt.Errorf("import: opening archive: %w", err)
+			return nil, err
 		}
-		defer func() { _ = zr.Close() }()
+		defer closeArchive()
 
-		tweetFiles, mediaByName := indexArchive(zr.File)
+		tweetFiles, mediaByName := indexArchive(archiveFiles)
 		if len(tweetFiles) == 0 {
 			return nil, warpnet.WarpError("import: tweets.js not found in archive")
 		}
@@ -279,6 +277,50 @@ func importTweetPhotos(
 		}
 	}
 	return keys, count
+}
+
+// openArchive opens the X archive from either a local filesystem path (the
+// desktop member node reads the .zip straight off disk) or in-memory base64
+// bytes (the business browser dashboard uploads the .zip, since it has no
+// access to the node's filesystem). It returns the archive entries and a
+// closer the caller must defer.
+func openArchive(ev event.ImportTwitterArchiveEvent) ([]*zip.File, func(), error) {
+	noop := func() {}
+	switch {
+	case ev.ArchivePath != "":
+		zr, err := zip.OpenReader(ev.ArchivePath)
+		if err != nil {
+			return nil, noop, fmt.Errorf("import: opening archive: %w", err)
+		}
+		return zr.File, func() { _ = zr.Close() }, nil
+	case ev.ArchiveData != "":
+		raw, err := decodeArchiveData(ev.ArchiveData)
+		if err != nil {
+			return nil, noop, err
+		}
+		zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+		if err != nil {
+			return nil, noop, fmt.Errorf("import: reading uploaded archive: %w", err)
+		}
+		return zr.File, noop, nil
+	default:
+		return nil, noop, warpnet.WarpError("import: no archive provided")
+	}
+}
+
+// decodeArchiveData base64-decodes the uploaded .zip, tolerating the
+// "data:...;base64," data-URL prefix the browser's FileReader produces.
+func decodeArchiveData(data string) ([]byte, error) {
+	if strings.HasPrefix(data, "data:") {
+		if i := strings.IndexByte(data, ','); i >= 0 {
+			data = data[i+1:]
+		}
+	}
+	raw, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return nil, fmt.Errorf("import: decoding uploaded archive: %w", err)
+	}
+	return raw, nil
 }
 
 // indexArchive splits the archive entries into the tweet payload file(s)

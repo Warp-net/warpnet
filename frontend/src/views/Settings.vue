@@ -28,7 +28,6 @@
           <i class="fas fa-chevron-right ml-auto text-dark text-sm"></i>
         </button>
         <button
-          v-if="!isBusiness"
           @click="showImportModal = true"
           class="text-left px-5 py-4 border-b border-lighter hover:bg-lightest flex items-center"
         >
@@ -64,7 +63,6 @@ export default {
   data() {
     return {
       ownerProfile: {},
-      isBusiness: false,
       showImportModal: false,
       items: [
         { name: 'SettingsPreferences', label: 'Preferences', hint: 'Default visibility, language', icon: 'fas fa-sliders-h' },
@@ -76,12 +74,6 @@ export default {
   },
   async created() {
     this.ownerProfile = warpnetService.getOwnerProfile();
-    try {
-      const fullProfile = await warpnetService.getProfile(this.ownerProfile.user_id);
-      this.isBusiness = !!(fullProfile && fullProfile.role === 'business');
-    } catch (error) {
-      console.error("Failed to load profile for settings:", error);
-    }
   },
 };
 </script>

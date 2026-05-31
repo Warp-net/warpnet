@@ -4,6 +4,7 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"image"
 	"image/png"
@@ -305,6 +306,32 @@ func TestStreamImportTwitterArchiveHandler(t *testing.T) {
 		}
 		if mediaRepo.saved != 0 {
 			t.Fatalf("media saved = %d, want 0 (skip happens before photo import)", mediaRepo.saved)
+		}
+	})
+
+	t.Run("imports from uploaded base64 archive data", func(t *testing.T) {
+		files := map[string][]byte{
+			"twitter-x/data/tweets.js":                   []byte(tweetsJS),
+			"twitter-x/data/tweets_media/111-ABC123.png": tinyPNG(t),
+		}
+		h, tweetRepo, _, path := newImportHandlerWithArchive(t, files)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read temp archive: %v", err)
+		}
+		// Mimic the browser FileReader: a data-URL-prefixed base64 blob.
+		dataURL := "data:application/zip;base64," + base64.StdEncoding.EncodeToString(raw)
+
+		out, err := h(marshalImport(t, event.ImportTwitterArchiveEvent{ArchiveData: dataURL}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		resp := out.(event.ImportTwitterArchiveResponse)
+		if resp.ImportedTweets != 2 {
+			t.Fatalf("imported = %d, want 2 (from uploaded bytes)", resp.ImportedTweets)
+		}
+		if _, err := tweetRepo.Get("owner-1", "111"); err != nil {
+			t.Fatalf("tweet 111 not stored from upload: %v", err)
 		}
 	})
 }
