@@ -30,6 +30,7 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -59,13 +60,21 @@ const archiveTimeLayout = "Mon Jan 02 15:04:05 -0700 2006"
 // "animated_gif" and "video" are the types we deliberately skip.
 const mediaTypePhoto = "photo"
 
-// ImportTweetStorer is the slice of the tweet repo the importer needs:
-// Get to skip already-imported tweets, Create to store a new one. Create
-// writes straight to the repo (no follower broadcast), so a bulk import
-// does not flood the network with historical tweets.
+// importTimeout bounds the whole archive import so a pathologically large
+// archive cannot pin the node indefinitely; the batch writer stops cleanly
+// when it elapses.
+const importTimeout = 10 * time.Minute
+
+// ImportTweetStorer is the slice of the tweet repo the importer needs.
+// Get skips already-imported tweets. CreateBatchForImport writes the
+// gathered tweets in batched transactions and bumps the replicated tweet
+// count ONCE — unlike per-tweet Create, which fires a CRDT/pubsub broadcast
+// for every tweet and would flood the node on a bulk import. It writes
+// straight to the repo (no follower broadcast) and honors ctx as an upper
+// time bound.
 type ImportTweetStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
-	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
+	CreateBatchForImport(ctx context.Context, userID string, tweets []domain.Tweet) (created int, err error)
 }
 
 // archiveTweet is the subset of an X archive tweet record we read. The
@@ -157,7 +166,10 @@ func StreamImportTwitterArchiveHandler(
 			return nil, fmt.Errorf("import: %w", err)
 		}
 
-		var resp event.ImportTwitterArchiveResponse
+		var (
+			resp     event.ImportTwitterArchiveResponse
+			toCreate []domain.Tweet
+		)
 		for _, tf := range tweetFiles {
 			raw, err := readZipFile(tf)
 			if err != nil {
@@ -168,8 +180,26 @@ func StreamImportTwitterArchiveHandler(
 				return nil, fmt.Errorf("import: parsing %s: %w", tf.Name, err)
 			}
 			for _, at := range tweets {
-				importOneTweet(at, mediaByName, encryptedMeta, ownerUser, tweetRepo, mediaRepo, &resp)
+				if t, ok := prepareImportTweet(at, mediaByName, encryptedMeta, ownerUser, tweetRepo, mediaRepo, &resp); ok {
+					toCreate = append(toCreate, t)
+				}
 			}
+		}
+
+		// Persist in batched transactions with a single CRDT stat update,
+		// bounded by importTimeout. This is the difference between one delta
+		// and tens of thousands of per-tweet CRDT broadcasts.
+		ctx, cancel := context.WithTimeout(context.Background(), importTimeout)
+		defer cancel()
+		created, err := tweetRepo.CreateBatchForImport(ctx, ownerUser.Id, toCreate)
+		if err != nil {
+			log.Errorf("import: batch create: %v", err)
+		}
+		resp.ImportedTweets = created
+		if created < len(toCreate) {
+			// Whatever didn't get written (early ctx cancel / error) counts
+			// as skipped; a re-run picks it up idempotently.
+			resp.SkippedTweets += len(toCreate) - created
 		}
 
 		log.Infof(
@@ -180,9 +210,11 @@ func StreamImportTwitterArchiveHandler(
 	}
 }
 
-// importOneTweet applies the scope rules to a single archive tweet and,
-// when in scope, stores its photos and the tweet itself, updating resp.
-func importOneTweet(
+// prepareImportTweet applies the scope rules to a single archive tweet and,
+// when in scope, stores its photos and returns the domain.Tweet ready to be
+// written in a batch. ok is false (and resp.SkippedTweets bumped) when the
+// tweet is out of scope, already imported, or has neither text nor an image.
+func prepareImportTweet(
 	at archiveTweet,
 	mediaByName map[string]*zip.File,
 	encryptedMeta []byte,
@@ -190,30 +222,30 @@ func importOneTweet(
 	tweetRepo ImportTweetStorer,
 	mediaRepo MediaStorer,
 	resp *event.ImportTwitterArchiveResponse,
-) {
+) (domain.Tweet, bool) {
 	if at.IDStr == "" {
-		return
+		return domain.Tweet{}, false
 	}
 	// Retweets and replies are out of scope (so are likes/DMs/profile,
 	// which live in other archive files we never read).
 	if at.isRetweet() || at.isReply() {
 		resp.SkippedTweets++
-		return
+		return domain.Tweet{}, false
 	}
 	// Idempotent re-import: skip a tweet already stored under the owner.
 	// Only a confirmed "not found" means we should import it; any other
-	// read error must NOT fall through to Create (that would rewrite the
-	// existing record and re-increment the tweet count), so skip and log.
+	// read error must NOT fall through to a write (that would rewrite the
+	// existing record and re-count it), so skip and log.
 	switch _, err := tweetRepo.Get(ownerUser.Id, at.IDStr); {
 	case err == nil:
 		resp.SkippedTweets++
-		return
+		return domain.Tweet{}, false
 	case errors.Is(err, database.ErrTweetNotFound):
-		// not stored yet — fall through and import it
+		// not stored yet — import it
 	default:
 		log.Errorf("import: checking existing tweet %s: %v", at.IDStr, err)
 		resp.SkippedTweets++
-		return
+		return domain.Tweet{}, false
 	}
 
 	imageKeys, imgCount := importTweetPhotos(at, mediaByName, encryptedMeta, ownerUser.Id, mediaRepo)
@@ -222,23 +254,17 @@ func importOneTweet(
 	text := html.UnescapeString(at.FullText)
 	if text == "" && len(imageKeys) == 0 {
 		resp.SkippedTweets++
-		return
+		return domain.Tweet{}, false
 	}
 
-	tweet := domain.Tweet{
+	return domain.Tweet{
 		Id:        at.IDStr,
 		Text:      text,
 		UserId:    ownerUser.Id,
 		Username:  ownerUser.Username,
 		CreatedAt: parseArchiveTime(at.CreatedAt),
 		ImageKeys: imageKeys,
-	}
-	if _, err := tweetRepo.Create(ownerUser.Id, tweet); err != nil {
-		log.Errorf("import: creating tweet %s: %v", at.IDStr, err)
-		resp.SkippedTweets++
-		return
-	}
-	resp.ImportedTweets++
+	}, true
 }
 
 // importTweetPhotos stores every bundled photo of a tweet and returns the

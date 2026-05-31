@@ -148,6 +148,7 @@ type Storer interface {
 type StatsStorer interface {
 	Increment(key ds.Key) error
 	Decrement(key ds.Key) error
+	Add(key ds.Key, n uint64) error
 	GetAggregatedStat(key ds.Key) (uint64, error)
 	Close() error
 }

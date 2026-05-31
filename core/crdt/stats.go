@@ -245,6 +245,31 @@ func (s *CRDTStatsStore) Decrement(key ds.Key) error {
 	return s.bump(decrNamespace, key, s.decrCounters)
 }
 
+// Add increases this process's incr sub-counter for key by n in a single
+// CRDT write, instead of n separate broadcasts. Bulk operations (e.g. the
+// Twitter archive import) use it so creating tens of thousands of records
+// produces one delta, not a per-record pubsub storm.
+func (s *CRDTStatsStore) Add(key ds.Key, n uint64) error {
+	if n == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cacheKey := key.String()
+	newValue := s.incrCounters[cacheKey] + n
+
+	fullKey := ds.NewKey(fmt.Sprintf(
+		"/%s/%s/%s/%s/%s",
+		s.prefix, incrNamespace, cacheKey, s.nodeID, s.generation,
+	))
+	if err := s.crdt.Put(s.ctx, fullKey, encodeCounter(newValue)); err != nil {
+		return fmt.Errorf("crdt stats: add %s counter %s: %w", incrNamespace, fullKey, err)
+	}
+	s.incrCounters[cacheKey] = newValue
+	return nil
+}
+
 // bump increases this process's sub-counter for (namespace, dataKey)
 // by 1 and writes the new running total to the CRDT under the
 // generation-tagged key. The (nodeID, generation) sub-counter is

@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -76,7 +77,12 @@ type TweetStatsStorer interface {
 	GetAggregatedStat(key ds.Key) (uint64, error)
 	Increment(key ds.Key) error
 	Decrement(key ds.Key) error
+	Add(key ds.Key, n uint64) error
 }
+
+// importChunkSize is how many tweets CreateBatchForImport writes per
+// transaction.
+const importChunkSize = 200
 
 // viewLockShards is the number of stripes in the per-tweet RecordView
 // lock pool. Sized so timeline-scrolling workloads see negligible
@@ -184,6 +190,84 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 		log.Warnf("tweet: stats db increment: %v", err)
 	}
 	return newTweet, nil
+}
+
+// CreateBatchForImport stores tweets in batched transactions and bumps the
+// replicated tweet count ONCE at the end. Unlike Create, it does not fire a
+// per-tweet CRDT/pubsub broadcast — a bulk import of tens of thousands of
+// tweets would otherwise flood the CRDT layer and peg the node. It honors
+// ctx as an upper time bound and returns the number actually written; a
+// re-run imports the remainder idempotently.
+func (repo *TweetRepo) CreateBatchForImport(ctx context.Context, userId string, tweets []domain.Tweet) (int, error) {
+	if userId == "" {
+		return 0, local.DBError("import batch: empty user id")
+	}
+	countKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsCountSubspace).
+		AddRootID(userId).
+		Build()
+
+	created := 0
+	for start := 0; start < len(tweets); start += importChunkSize {
+		if err := ctx.Err(); err != nil {
+			break // bounded: stop cleanly, keep what is already committed
+		}
+		end := min(start+importChunkSize, len(tweets))
+		n, err := repo.storeImportChunk(userId, countKey, tweets[start:end])
+		if err != nil {
+			return created, err
+		}
+		created += n
+	}
+
+	// One CRDT delta for the whole import instead of one per tweet.
+	if repo.statsDb != nil && created > 0 {
+		if err := repo.statsDb.Add(countKey.DatastoreKey(), uint64(created)); err != nil {
+			log.Warnf("import batch: stats db add: %v", err)
+		}
+	}
+	return created, nil
+}
+
+// storeImportChunk writes one chunk of tweets in a single transaction,
+// incrementing the local count per tweet. The CRDT stat is bumped once for
+// the whole import by the caller. The committed count is returned only on a
+// successful commit.
+func (repo *TweetRepo) storeImportChunk(userId string, countKey local.DatabaseKey, chunk []domain.Tweet) (int, error) {
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return 0, err
+	}
+	defer txn.Rollback()
+
+	n := 0
+	for _, tweet := range chunk {
+		if tweet.UserId == "" && tweet.Text == "" {
+			continue
+		}
+		if tweet.Id == "" {
+			tweet.Id = ulid.Make().String()
+		}
+		if tweet.CreatedAt.IsZero() {
+			tweet.CreatedAt = time.Now()
+		}
+		if tweet.Network == "" {
+			tweet.Network = "warpnet"
+		}
+		tweet.RootId = tweet.Id
+
+		if _, err := storeTweet(txn, userId, tweet, math.MaxInt64, false); err != nil {
+			return 0, err
+		}
+		if _, err := txn.Increment(countKey); err != nil {
+			return 0, err
+		}
+		n++
+	}
+	if err := txn.Commit(); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {

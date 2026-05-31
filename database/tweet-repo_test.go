@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -302,6 +303,43 @@ func (s *TweetRepoTestSuite) TestRecordView_DifferentTweetsLockIndependently() {
 	b, err := s.repo.RecordView(tweetB, viewer)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), b)
+}
+
+func (s *TweetRepoTestSuite) TestCreateBatchForImport() {
+	userId := ulid.Make().String()
+	const n = importChunkSize + 5 // span more than one chunk
+	tweets := make([]domain.Tweet, 0, n)
+	for i := 0; i < n; i++ {
+		tweets = append(tweets, domain.Tweet{
+			Id:        ulid.Make().String(),
+			UserId:    userId,
+			Text:      "imported",
+			CreatedAt: time.Now().Add(-time.Duration(i) * time.Minute),
+		})
+	}
+
+	created, err := s.repo.CreateBatchForImport(context.Background(), userId, tweets)
+	s.Require().NoError(err)
+	s.Equal(n, created)
+
+	got, err := s.repo.Get(userId, tweets[0].Id)
+	s.Require().NoError(err)
+	s.Equal("imported", got.Text)
+
+	count, err := s.repo.TweetsCount(userId)
+	s.Require().NoError(err)
+	s.Equal(uint64(n), count)
+}
+
+func (s *TweetRepoTestSuite) TestCreateBatchForImportCancelled() {
+	userId := ulid.Make().String()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled — nothing should be written
+	created, err := s.repo.CreateBatchForImport(ctx, userId, []domain.Tweet{
+		{Id: ulid.Make().String(), UserId: userId, Text: "x"},
+	})
+	s.Require().NoError(err)
+	s.Equal(0, created)
 }
 
 func TestTweetRepoTestSuite(t *testing.T) {

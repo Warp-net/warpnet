@@ -4,6 +4,7 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"image"
@@ -52,9 +53,11 @@ func (s *stubImportTweetRepo) Get(userID, tweetID string) (domain.Tweet, error) 
 	return t, nil
 }
 
-func (s *stubImportTweetRepo) Create(_ string, tweet domain.Tweet) (domain.Tweet, error) {
-	s.stored[tweet.Id] = tweet
-	return tweet, nil
+func (s *stubImportTweetRepo) CreateBatchForImport(_ context.Context, _ string, tweets []domain.Tweet) (int, error) {
+	for _, t := range tweets {
+		s.stored[t.Id] = t
+	}
+	return len(tweets), nil
 }
 
 type stubImportMediaRepo struct{ saved int }
