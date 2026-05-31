@@ -255,6 +255,7 @@ func (db *DB) Run(username, password string) (err error) {
 		return err
 	}
 	db.isRunning.Store(true)
+	db.stopChan = make(chan struct{}) // fresh lifecycle channel; lets Run after Close (logout→login) avoid a double-close
 
 	pwd, _ := os.Getwd()
 	log.Infof("database: is running, directory: %s %s", pwd, db.dbPath)

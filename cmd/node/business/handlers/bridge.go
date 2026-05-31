@@ -60,6 +60,7 @@ type Node interface {
 type Authenticator interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (event.LoginResponse, error)
 	AuthLogout()
+	Reset()
 	PrivateKey() ed25519.PrivateKey
 }
 
@@ -151,7 +152,8 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 	case event.PRIVATE_POST_LOGIN:
 		resp.Body = b.login(req.Body)
 	case event.PRIVATE_POST_LOGOUT:
-		b.auth.AuthLogout()
+		b.auth.AuthLogout() // closes the database; the node keeps running
+		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
 		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
 		resp.Body = b.call(req)

@@ -134,53 +134,68 @@ func main() {
 
 	log.Infof("business: listening on %s", srv.Addr)
 
-	var info domain.AuthNodeInfo
-	select {
-	case <-ctx.Done():
-		return
-	case info = <-readyChan:
-		log.Infoln("business: database authentication passed")
+	// Build the node once on the first login and keep it alive for the whole
+	// process: logout closes the database and returns to the login page but
+	// never stops the node, and the next login reopens the database and
+	// re-authenticates. So service the auth handshake in a loop, not once.
+	var node *bnode.BusinessNode
+	defer func() {
+		if node != nil {
+			node.Stop()
+		}
+	}()
+
+	for {
+		var info domain.AuthNodeInfo
+		select {
+		case <-ctx.Done():
+			return
+		case <-interruptChan:
+			log.Infoln("business node interrupted...")
+			return
+		case info = <-readyChan:
+			log.Infoln("business: database authentication passed")
+		}
+
+		if node == nil {
+			privateKey := authService.PrivateKey()
+			ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
+			if err != nil {
+				log.Errorf("business: node ID: %v", err)
+				return
+			}
+
+			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
+			node, err = bnode.NewBusinessNode(
+				ctx,
+				privateKey,
+				psk,
+				ownNodeId,
+				codeHashHex,
+				version,
+				authRepo,
+				db,
+				infos,
+				m,
+			)
+			if err != nil {
+				log.Errorf("business: init node: %v", err)
+				return
+			}
+
+			if err := node.Start(); err != nil {
+				log.Errorf("business: start node: %v", err)
+				return
+			}
+
+			bridgeHandler.AttachNode(node)
+		}
+
+		ni := node.NodeInfo()
+		info.ID = ni.ID.String()
+		info.Network = network
+		info.Addresses = ni.Addresses
+		info.Role = ni.Type
+		readyChan <- info
 	}
-
-	privateKey := authService.PrivateKey()
-	ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
-	if err != nil {
-		log.Errorf("business: node ID: %v", err)
-		return
-	}
-
-	m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
-	node, err := bnode.NewBusinessNode(
-		ctx,
-		privateKey,
-		psk,
-		ownNodeId,
-		codeHashHex,
-		version,
-		authRepo,
-		db,
-		infos,
-		m,
-	)
-	if err != nil {
-		log.Errorf("business: init node: %v", err)
-		return
-	}
-	defer node.Stop()
-
-	if err := node.Start(); err != nil {
-		log.Errorf("business: start node: %v", err)
-		return
-	}
-
-	bridgeHandler.AttachNode(node)
-
-	info.ID = ownNodeId.String()
-	info.Network = network
-	info.Addresses = node.NodeInfo().Addresses
-	info.Role = node.NodeInfo().Type
-	readyChan <- info
-
-	<-interruptChan
-	log.Infoln("business node interrupted...")
 }
