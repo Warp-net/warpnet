@@ -335,6 +335,7 @@ func StreamGetWhoToFollowHandler(
 		}
 
 		whotofollow := make([]domain.User, 0, len(users))
+		latestByNode := make(map[string]int, len(users))
 		for _, user := range users {
 			if user.IsOffline {
 				continue
@@ -349,6 +350,15 @@ func StreamGetWhoToFollowHandler(
 			if _, ok := followedUsers[user.Id]; ok {
 				continue
 			}
+
+			if idx, ok := latestByNode[user.NodeId]; ok {
+				if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
+					whotofollow[idx] = user
+				}
+				continue
+			}
+			latestByNode[user.NodeId] = len(whotofollow)
+
 			whotofollow = append(whotofollow, user)
 		}
 
