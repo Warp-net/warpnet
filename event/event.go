@@ -121,6 +121,20 @@ type ImportTwitterArchiveResponse struct {
 	SkippedTweets  int `json:"skipped_tweets"`
 }
 
+// ImportTweetEvent defines model for ImportTweetEvent.
+//
+// One pre-parsed original tweet streamed from the business browser dashboard.
+// The browser unzips and filters the X archive client-side (dropping retweets,
+// replies, GIFs and videos) and streams only the kept tweets, so the node
+// never buffers the whole archive. Images are raw base64 of the still photos
+// (at most four), without a data-URL prefix.
+type ImportTweetEvent struct {
+	Id        string   `json:"id"`
+	Text      string   `json:"text"`
+	CreatedAt string   `json:"created_at"`
+	Images    []string `json:"images,omitempty"`
+}
+
 type IsFollowingResponse struct {
 	IsFollowing bool `json:"is_following"`
 }

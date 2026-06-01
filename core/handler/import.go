@@ -173,6 +173,69 @@ func StreamImportTwitterArchiveHandler(
 	}
 }
 
+// StreamImportTweetHandler stores one pre-parsed original tweet streamed from
+// the business browser dashboard. The browser unzips and filters the X archive
+// client-side (skipping retweets, replies, GIFs and videos) and streams only
+// the kept tweets one by one, so the node never buffers the whole archive.
+// Photos arrive as raw base64 and go through the same EXIF/ownership pipeline
+// as a fresh upload.
+func StreamImportTweetHandler(
+	info MediaNodeInformer,
+	tweetRepo ImportTweetStorer,
+	mediaRepo MediaStorer,
+	userRepo MediaUserFetcher,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.ImportTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.Id == "" {
+			return nil, warpnet.WarpError("import: empty tweet id")
+		}
+
+		encryptedMeta, ownerUser, err := buildEncryptedImageMeta(info, userRepo)
+		if err != nil {
+			return nil, fmt.Errorf("import: %w", err)
+		}
+
+		var resp event.ImportTwitterArchiveResponse
+		imageKeys := make([]string, 0, len(ev.Images))
+		for i, img := range ev.Images {
+			if i >= maxTweetImages {
+				break
+			}
+			key, err := processAndStoreImage(imagePrefix+img, encryptedMeta, ownerUser.Id, mediaRepo)
+			if err != nil {
+				log.Warnf("import: storing photo for tweet %s: %v", ev.Id, err)
+				continue
+			}
+			imageKeys = append(imageKeys, key)
+			resp.ImportedImages++
+		}
+
+		text := html.UnescapeString(ev.Text)
+		if text == "" && len(imageKeys) == 0 {
+			resp.SkippedTweets++
+			return resp, nil
+		}
+
+		if _, err := tweetRepo.Create(ownerUser.Id, domain.Tweet{
+			Id:        ev.Id,
+			Text:      text,
+			UserId:    ownerUser.Id,
+			Username:  ownerUser.Username,
+			CreatedAt: parseArchiveTime(ev.CreatedAt),
+			ImageKeys: imageKeys,
+		}); err != nil {
+			log.Errorf("import: creating tweet %s: %v", ev.Id, err)
+			return nil, err
+		}
+		resp.ImportedTweets++
+		return resp, nil
+	}
+}
+
 // importOneTweet applies the scope rules to a single archive tweet and,
 // when in scope, stores its photos and the tweet itself, updating resp.
 func importOneTweet(

@@ -5,7 +5,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"image"
 	"image/png"
 	"os"
@@ -261,7 +260,7 @@ func TestStreamImportTwitterArchiveHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("idempotent re-import skips everything", func(t *testing.T) {
+	t.Run("re-import re-stores originals (dedup removed; duplicates allowed)", func(t *testing.T) {
 		files := map[string][]byte{
 			"twitter-x/data/tweets.js":                   []byte(tweetsJS),
 			"twitter-x/data/tweets_media/111-ABC123.png": tinyPNG(t),
@@ -276,36 +275,13 @@ func TestStreamImportTwitterArchiveHandler(t *testing.T) {
 			t.Fatalf("second import error: %v", err)
 		}
 		resp := out.(event.ImportTwitterArchiveResponse)
-		if resp.ImportedTweets != 0 {
-			t.Fatalf("re-import imported = %d, want 0", resp.ImportedTweets)
+		// The idempotency Get was removed, so a re-run re-stores the originals
+		// rather than skipping them; retweet + reply are still out of scope.
+		if resp.ImportedTweets != 2 {
+			t.Fatalf("re-import imported = %d, want 2", resp.ImportedTweets)
 		}
-		if resp.SkippedTweets != 4 {
-			t.Fatalf("re-import skipped = %d, want 4", resp.SkippedTweets)
-		}
-	})
-
-	t.Run("non-notfound read error skips tweet without creating", func(t *testing.T) {
-		files := map[string][]byte{
-			"twitter-x/data/tweets.js":                   []byte(tweetsJS),
-			"twitter-x/data/tweets_media/111-ABC123.png": tinyPNG(t),
-		}
-		h, tweetRepo, mediaRepo, path := newImportHandlerWithArchive(t, files)
-		// A transient/corrupt read must NOT be treated as "not found".
-		tweetRepo.getErr = errors.New("transient db read failure")
-
-		out, err := h(marshalImport(t, event.ImportTwitterArchiveEvent{ArchivePath: path}), nil)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		resp := out.(event.ImportTwitterArchiveResponse)
-		if resp.ImportedTweets != 0 {
-			t.Fatalf("imported = %d, want 0 (read errors must not import)", resp.ImportedTweets)
-		}
-		if len(tweetRepo.stored) != 0 {
-			t.Fatalf("stored %d tweets, want 0 (must not Create on a read error)", len(tweetRepo.stored))
-		}
-		if mediaRepo.saved != 0 {
-			t.Fatalf("media saved = %d, want 0 (skip happens before photo import)", mediaRepo.saved)
+		if resp.SkippedTweets != 2 {
+			t.Fatalf("re-import skipped = %d, want 2 (retweet + reply)", resp.SkippedTweets)
 		}
 	})
 
@@ -332,6 +308,123 @@ func TestStreamImportTwitterArchiveHandler(t *testing.T) {
 		}
 		if _, err := tweetRepo.Get("owner-1", "111"); err != nil {
 			t.Fatalf("tweet 111 not stored from upload: %v", err)
+		}
+	})
+}
+
+func newImportTweetHandler(t *testing.T) (warpnet.WarpHandlerFunc, *stubImportTweetRepo, *stubImportMediaRepo) {
+	t.Helper()
+	tweetRepo := newStubImportTweetRepo()
+	mediaRepo := &stubImportMediaRepo{}
+	informer := stubImportInformer{ownerId: "owner-1"}
+	userRepo := stubImportUserRepo{user: domain.User{Id: "owner-1", Username: "alice"}}
+	return StreamImportTweetHandler(informer, tweetRepo, mediaRepo, userRepo), tweetRepo, mediaRepo
+}
+
+func TestStreamImportTweetHandler(t *testing.T) {
+	t.Run("invalid payload", func(t *testing.T) {
+		h, _, _ := newImportTweetHandler(t)
+		if _, err := h([]byte("{"), nil); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("empty id", func(t *testing.T) {
+		h, _, _ := newImportTweetHandler(t)
+		if _, err := h(marshalImport(t, event.ImportTweetEvent{Text: "hi"}), nil); err == nil {
+			t.Fatal("expected error for empty id")
+		}
+	})
+
+	t.Run("happy path: text unescaped, photo attached", func(t *testing.T) {
+		h, tweetRepo, mediaRepo := newImportTweetHandler(t)
+		photo := base64.StdEncoding.EncodeToString(tinyPNG(t))
+		out, err := h(marshalImport(t, event.ImportTweetEvent{
+			Id:        "111",
+			Text:      "Hello &amp; welcome",
+			CreatedAt: "Fri May 29 20:52:08 +0000 2026",
+			Images:    []string{photo},
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		resp, ok := out.(event.ImportTwitterArchiveResponse)
+		if !ok {
+			t.Fatalf("unexpected response type %T", out)
+		}
+		if resp.ImportedTweets != 1 || resp.ImportedImages != 1 {
+			t.Fatalf("resp = %+v, want 1 tweet / 1 image", resp)
+		}
+		tw, err := tweetRepo.Get("owner-1", "111")
+		if err != nil {
+			t.Fatalf("tweet 111 not stored: %v", err)
+		}
+		if tw.Text != "Hello & welcome" {
+			t.Fatalf("text = %q, want unescaped", tw.Text)
+		}
+		if tw.UserId != "owner-1" || tw.Username != "alice" {
+			t.Fatalf("author = %s/%s, want owner-1/alice", tw.UserId, tw.Username)
+		}
+		if tw.CreatedAt.Year() != 2026 {
+			t.Fatalf("created year = %d, want 2026", tw.CreatedAt.Year())
+		}
+		if len(tw.ImageKeys) != 1 {
+			t.Fatalf("image keys = %d, want 1", len(tw.ImageKeys))
+		}
+		if mediaRepo.saved != 1 {
+			t.Fatalf("media saved = %d, want 1", mediaRepo.saved)
+		}
+	})
+
+	t.Run("text-only tweet imports", func(t *testing.T) {
+		h, tweetRepo, _ := newImportTweetHandler(t)
+		out, err := h(marshalImport(t, event.ImportTweetEvent{Id: "555", Text: "just text"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.(event.ImportTwitterArchiveResponse).ImportedTweets != 1 {
+			t.Fatal("text-only tweet should import")
+		}
+		if _, err := tweetRepo.Get("owner-1", "555"); err != nil {
+			t.Fatalf("tweet 555 not stored: %v", err)
+		}
+	})
+
+	t.Run("empty text and no images is skipped", func(t *testing.T) {
+		h, tweetRepo, _ := newImportTweetHandler(t)
+		out, err := h(marshalImport(t, event.ImportTweetEvent{Id: "666"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		resp := out.(event.ImportTwitterArchiveResponse)
+		if resp.ImportedTweets != 0 || resp.SkippedTweets != 1 {
+			t.Fatalf("resp = %+v, want 0 imported / 1 skipped", resp)
+		}
+		if len(tweetRepo.stored) != 0 {
+			t.Fatalf("stored %d tweets, want 0", len(tweetRepo.stored))
+		}
+	})
+
+	t.Run("caps at four photos", func(t *testing.T) {
+		h, tweetRepo, mediaRepo := newImportTweetHandler(t)
+		photo := base64.StdEncoding.EncodeToString(tinyPNG(t))
+		out, err := h(marshalImport(t, event.ImportTweetEvent{
+			Id:     "777",
+			Text:   "many",
+			Images: []string{photo, photo, photo, photo, photo, photo},
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.(event.ImportTwitterArchiveResponse).ImportedImages != 4 {
+			t.Fatalf("imported images = %d, want 4 (capped)", out.(event.ImportTwitterArchiveResponse).ImportedImages)
+		}
+		if mediaRepo.saved != 4 {
+			t.Fatalf("media saved = %d, want 4 (capped)", mediaRepo.saved)
+		}
+		tw, _ := tweetRepo.Get("owner-1", "777")
+		if len(tw.ImageKeys) != 4 {
+			t.Fatalf("image keys = %d, want 4 (capped)", len(tw.ImageKeys))
 		}
 	})
 }

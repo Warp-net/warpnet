@@ -492,6 +492,10 @@ func (m *MemberNode) tweetHandlers(
 			handler.StreamImportTwitterArchiveHandler(m, r.tweetRepo, r.mediaRepo, userRepo),
 		},
 		{
+			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
+			handler.StreamImportTweetHandler(m, r.tweetRepo, r.mediaRepo, userRepo),
+		},
+		{
 			event.PRIVATE_DELETE_TWEET,
 			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.likeRepo),
 		},
