@@ -250,21 +250,25 @@ export default {
       const mediaFilenames = this.photoMedia(at)
         .slice(0, 4)
         .map((m) => at.id_str + '-' + this.basename(m.media_url_https));
-      const text = this.htmlUnescape(this.stripMediaUrls(full, at)).trim();
+      const text = this.htmlUnescape(this.cleanTweetText(full, at)).trim();
       if (text === '' && mediaFilenames.length === 0) return null;
       return { id: at.id_str, text, createdAt: at.created_at || '', mediaFilenames };
     },
-    // stripMediaUrls removes the t.co media short-links X appends to full_text.
-    // The photo is imported separately (and GIFs/videos are dropped), so the
-    // bare link would otherwise render as text — and dangle when the media is
-    // absent from the archive. Non-media links (entities.urls) are left alone.
-    stripMediaUrls(text, at) {
+    // cleanTweetText rewrites the t.co short-links X embeds in full_text:
+    // media links are removed (the photo is imported separately; GIFs/videos
+    // are dropped, so the link would just dangle), and regular link short-links
+    // are expanded to their real destination instead of a bare t.co redirect.
+    cleanTweetText(text, at) {
+      let out = text;
       const media = []
         .concat((at.extended_entities && at.extended_entities.media) || [])
         .concat((at.entities && at.entities.media) || []);
-      let out = text;
       for (const m of media) {
         if (m && m.url) out = out.split(m.url).join('');
+      }
+      const urls = (at.entities && at.entities.urls) || [];
+      for (const u of urls) {
+        if (u && u.url && u.expanded_url) out = out.split(u.url).join(u.expanded_url);
       }
       return out;
     },
