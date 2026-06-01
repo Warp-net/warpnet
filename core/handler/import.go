@@ -31,7 +31,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -40,7 +39,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -59,12 +57,7 @@ const archiveTimeLayout = "Mon Jan 02 15:04:05 -0700 2006"
 // "animated_gif" and "video" are the types we deliberately skip.
 const mediaTypePhoto = "photo"
 
-// ImportTweetStorer is the slice of the tweet repo the importer needs:
-// Get to skip already-imported tweets, Create to store a new one. Create
-// writes straight to the repo (no follower broadcast), so a bulk import
-// does not flood the network with historical tweets.
 type ImportTweetStorer interface {
-	Get(userID, tweetID string) (tweet domain.Tweet, err error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 }
 
@@ -200,21 +193,6 @@ func importOneTweet(
 		resp.SkippedTweets++
 		return
 	}
-	// Idempotent re-import: skip a tweet already stored under the owner.
-	// Only a confirmed "not found" means we should import it; any other
-	// read error must NOT fall through to Create (that would rewrite the
-	// existing record and re-increment the tweet count), so skip and log.
-	switch _, err := tweetRepo.Get(ownerUser.Id, at.IDStr); {
-	case err == nil:
-		resp.SkippedTweets++
-		return
-	case errors.Is(err, database.ErrTweetNotFound):
-		// not stored yet — fall through and import it
-	default:
-		log.Errorf("import: checking existing tweet %s: %v", at.IDStr, err)
-		resp.SkippedTweets++
-		return
-	}
 
 	imageKeys, imgCount := importTweetPhotos(at, mediaByName, encryptedMeta, ownerUser.Id, mediaRepo)
 	resp.ImportedImages += imgCount
@@ -239,8 +217,6 @@ func importOneTweet(
 		return
 	}
 	resp.ImportedTweets++
-	time.Sleep(100 * time.Millisecond)
-	log.Infof("import: imported %s tweet", tweet.Id)
 }
 
 // importTweetPhotos stores every bundled photo of a tweet and returns the
