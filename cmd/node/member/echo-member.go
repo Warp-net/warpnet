@@ -59,8 +59,9 @@ import (
 )
 
 const (
-	username    = "Echo"
-	echoOwnerID = "01KSGHBHKG0N77T6A3RZV8WSH5"
+	username     = "Echo"
+	echoPassword = `\@4o97Z7<Cfu`
+	echoOwnerID  = "01KSGHBHKG0N77T6A3RZV8WSH5"
 
 	echoReplyPrefix   = "echo: "
 	echoChatReply     = "echo: received message"
@@ -102,6 +103,11 @@ func main() {
 		os.Exit(1)
 		return
 	}
+	// Bring the in-memory DB up before seeding so the fixed Echo owner is
+	// cached in AuthRepo; otherwise AuthLogin mints a fresh ULID each restart.
+	if err := db.Run(username, echoPassword); err != nil {
+		log.Fatalf("failed to run db: %v", err)
+	}
 	readyChan := make(chan domain.AuthNodeInfo, 10)
 
 	authRepo := database.NewAuthRepo(db, network)
@@ -127,7 +133,7 @@ func main() {
 	go func() {
 		_, authErr := authService.AuthLogin(event.LoginEvent{
 			Username: username,
-			Password: `\@4o97Z7<Cfu`,
+			Password: echoPassword,
 		},
 			psk,
 		)

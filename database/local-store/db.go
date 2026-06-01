@@ -244,6 +244,11 @@ func (db *DB) Run(username, password string) (err error) {
 	if username == "" || password == "" {
 		return DBError("database: username or password is empty")
 	}
+	// Idempotent: if a caller pre-ran the DB (e.g. echo seeds its owner
+	// before auth), reopening would drop the in-memory data written so far.
+	if db.isRunning.Load() {
+		return nil
+	}
 	hashSum := security.ConvertToSHA256([]byte(username + "@" + password))
 	execOpts := db.badgerOpts.WithEncryptionKey(hashSum)
 
