@@ -267,17 +267,6 @@ export async function ConsumePendingDeepLink() {
   return "";
 }
 
-// OpenTwitterArchiveDialog opens the native .zip picker under Wails (member
-// desktop node) and resolves to the selected absolute path ("" if cancelled).
-// The browser dashboard has no native file dialog and never shows the import
-// button, so it resolves to "".
-export async function OpenTwitterArchiveDialog() {
-  if (hasWails()) {
-    return Wails.OpenTwitterArchiveDialog();
-  }
-  return "";
-}
-
 // IsDesktop reports whether the Wails desktop runtime is present (member
 // node). The browser dashboard (business node) returns false and must upload
 // the archive via an <input type=file> instead of the native dialog.

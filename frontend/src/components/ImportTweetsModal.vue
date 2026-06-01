@@ -142,27 +142,11 @@ export default {
       if (this.phase === 'importing') return; // don't close mid-import
       this.$emit('close');
     },
-    async chooseAndImport() {
-      // Browser dashboard (business node): no native dialog — pick a file and
-      // upload its bytes. Desktop (Wails member node): native dialog returns a
-      // path the node reads straight off local disk.
-      if (!warpnetService.isDesktopNode()) {
-        this.$refs.fileInput.click();
-        return;
-      }
-      let path = '';
-      try {
-        path = await warpnetService.openTwitterArchiveDialog();
-      } catch (err) {
-        console.error('Failed to open archive dialog:', err);
-        this.errorMessage = 'Could not open the file picker.';
-        this.phase = 'error';
-        return;
-      }
-      if (!path) {
-        return; // user cancelled the picker
-      }
-      await this.runImport({ archivePath: path });
+    chooseAndImport() {
+      // Both the browser dashboard and the desktop (Wails) webview pick the
+      // .zip with a file input; the archive is unzipped and filtered in the
+      // client and streamed tweet-by-tweet, so neither uploads the whole file.
+      this.$refs.fileInput.click();
     },
     async onFileChange(e) {
       const file = e.target.files && e.target.files[0];
@@ -286,26 +270,6 @@ export default {
         bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
       }
       return btoa(bin);
-    },
-    async runImport(payload) {
-      this.phase = 'importing';
-      try {
-        const resp = await warpnetService.importTwitterArchive(payload);
-        if (resp && resp.code) {
-          throw new Error(resp.message || 'Import failed');
-        }
-        this.result = {
-          imported_tweets: resp?.imported_tweets || 0,
-          imported_images: resp?.imported_images || 0,
-          skipped_tweets: resp?.skipped_tweets || 0,
-        };
-        this.phase = 'done';
-        this.$emit('imported', this.result);
-      } catch (err) {
-        console.error('Tweet import failed:', err);
-        this.errorMessage = (err && err.message) ? err.message : 'Import failed. Please try again.';
-        this.phase = 'error';
-      }
     },
   },
 };

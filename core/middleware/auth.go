@@ -58,13 +58,10 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			remotePeer = s.Conn().RemotePeer()
 		)
 
-		// The Twitter archive import route carries the whole archive (base64)
-		// in its body; allow it a much larger ceiling than other routes.
+		// The per-tweet streaming import route carries one tweet plus up to
+		// four base64 photos; allow it a larger ceiling than other routes.
 		limit := int64(MaxLimit)
-		switch string(route) {
-		case event.PRIVATE_POST_IMPORT_TWITTER:
-			limit = int64(ImportMaxLimit)
-		case event.PRIVATE_POST_IMPORT_TWITTER_TWEET:
+		if string(route) == event.PRIVATE_POST_IMPORT_TWITTER_TWEET {
 			limit = int64(ImportTweetMaxLimit)
 		}
 		reader := io.LimitReader(s, limit)

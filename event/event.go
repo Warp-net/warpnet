@@ -104,16 +104,6 @@ type FollowingsResponse struct {
 	FollowerId domain.ID   `json:"follower_id"`
 }
 
-// ImportTwitterArchiveEvent defines model for ImportTwitterArchiveEvent.
-//
-// Exactly one source is set: ArchivePath (desktop member node — the node
-// reads the .zip straight off local disk) or ArchiveData (business browser
-// dashboard — base64 of the uploaded .zip, optionally data-URL prefixed).
-type ImportTwitterArchiveEvent struct {
-	ArchivePath string `json:"archive_path,omitempty"`
-	ArchiveData string `json:"archive_data,omitempty"`
-}
-
 // ImportTwitterArchiveResponse defines model for ImportTwitterArchiveResponse.
 type ImportTwitterArchiveResponse struct {
 	ImportedTweets int `json:"imported_tweets"`
