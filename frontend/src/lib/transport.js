@@ -312,9 +312,12 @@ function aesDecrypt(key, b64) {
 }
 
 function bytesToBase64(bytes) {
+  // Encode in 32 KB chunks: a per-byte string build is O(n) garbage and a
+  // multi-MB import frame (tweet + photos) would otherwise stall the tab.
   let s = "";
-  for (let i = 0; i < bytes.length; i++) {
-    s += String.fromCharCode(bytes[i]);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   }
   return btoa(s);
 }

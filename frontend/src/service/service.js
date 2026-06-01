@@ -67,6 +67,7 @@ export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER = "/private/post/import/twitter/0.0.0"
+export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PUBLIC_GET_REPLY = "/public/get/reply/0.0.0"
@@ -130,6 +131,7 @@ const inflightPostRequests = new Map();
 const dedupSkipPaths = new Set([
     PRIVATE_POST_UPLOAD_IMAGE,
     PRIVATE_POST_IMPORT_TWITTER,
+    PRIVATE_POST_IMPORT_TWITTER_TWEET,
 ]);
 
 function isPostPath(path) {
@@ -1088,6 +1090,24 @@ export const warpnetService = {
             body: {
                 archive_path: archivePath,
                 archive_data: archiveData,
+            },
+        }
+
+        return await this.sendToNode(request);
+    },
+
+    // importTweet streams one pre-parsed original tweet (text + up to four
+    // base64 photos) to the node, which stores it on arrival. The business
+    // browser dashboard parses and filters the X archive client-side and calls
+    // this once per kept tweet, so the node never buffers the whole archive.
+    async importTweet({id, text = "", createdAt = "", images = []}) {
+        const request = {
+            path: PRIVATE_POST_IMPORT_TWITTER_TWEET,
+            body: {
+                id: id,
+                text: text,
+                created_at: createdAt,
+                images: images,
             },
         }
 

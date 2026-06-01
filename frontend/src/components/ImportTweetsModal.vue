@@ -61,6 +61,7 @@
               This can take a few minutes for a large archive. Please keep this
               window open.
             </p>
+            <p v-if="progressText" class="text-sm font-semibold text-blue mt-2">{{ progressText }}</p>
           </div>
         </template>
 
@@ -111,6 +112,7 @@
 
 <script>
 import {warpnetService} from "@/service/service";
+import { unzipSync } from "fflate";
 
 export default {
   name: "ImportTweetsModal",
@@ -123,6 +125,7 @@ export default {
       phase: 'idle', // idle | importing | done | error
       result: { imported_tweets: 0, imported_images: 0, skipped_tweets: 0 },
       errorMessage: '',
+      progressText: '',
     };
   },
   watch: {
@@ -165,23 +168,124 @@ export default {
       const file = e.target.files && e.target.files[0];
       e.target.value = ''; // allow re-selecting the same file later
       if (!file) return;
+      await this.runBrowserImport(file);
+    },
+    // runBrowserImport unzips and filters the X archive in the browser and
+    // streams only the kept original tweets (text + up to four photos) to the
+    // node one at a time. Retweets, replies, GIFs and videos are dropped here
+    // and never uploaded, so the node never buffers the whole archive.
+    async runBrowserImport(file) {
       this.phase = 'importing';
+      this.errorMessage = '';
+      this.result = { imported_tweets: 0, imported_images: 0, skipped_tweets: 0 };
+      this.progressText = 'Reading archive…';
       try {
-        const archiveData = await this.readFileAsDataURL(file);
-        await this.runImport({ archiveData });
+        const buf = new Uint8Array(await file.arrayBuffer());
+
+        // Decompress only tweets.js / tweets-part*.js here — never the media,
+        // so a gigabyte of video in the archive is never even inflated.
+        const tweetEntries = unzipSync(buf, { filter: (f) => this.isTweetsFile(f.name) });
+        const archiveTweets = [];
+        for (const name of Object.keys(tweetEntries)) {
+          const text = new TextDecoder().decode(tweetEntries[name]);
+          archiveTweets.push(...this.parseArchiveTweets(text));
+        }
+
+        // Keep originals only; collect the photo filenames they reference.
+        const kept = [];
+        const neededMedia = new Set();
+        for (const at of archiveTweets) {
+          const t = this.toKeptTweet(at);
+          if (!t) { this.result.skipped_tweets++; continue; }
+          kept.push(t);
+          for (const fn of t.mediaFilenames) neededMedia.add(fn);
+        }
+
+        // Decompress only the referenced still photos — videos/GIFs are skipped.
+        let mediaByName = {};
+        if (neededMedia.size > 0) {
+          this.progressText = 'Extracting photos…';
+          mediaByName = unzipSync(buf, { filter: (f) => neededMedia.has(this.basename(f.name)) });
+        }
+
+        // Stream each kept tweet to the node, one at a time.
+        for (let i = 0; i < kept.length; i++) {
+          const t = kept[i];
+          this.progressText = `Importing ${i + 1} / ${kept.length}…`;
+          const images = [];
+          for (const fn of t.mediaFilenames) {
+            const bytes = mediaByName[fn];
+            if (bytes) images.push(this.bytesToBase64(bytes));
+          }
+          const resp = await warpnetService.importTweet({
+            id: t.id, text: t.text, createdAt: t.createdAt, images,
+          });
+          if (resp && resp.code) throw new Error(resp.message || 'Import failed');
+          this.result.imported_tweets += resp?.imported_tweets || 0;
+          this.result.imported_images += resp?.imported_images || 0;
+          this.result.skipped_tweets += resp?.skipped_tweets || 0;
+        }
+
+        this.progressText = '';
+        this.phase = 'done';
+        this.$emit('imported', this.result);
       } catch (err) {
-        console.error('Failed to read archive:', err);
-        this.errorMessage = 'Could not read the selected file.';
+        console.error('Tweet import failed:', err);
+        this.errorMessage = (err && err.message) ? err.message : 'Import failed. Please try again.';
         this.phase = 'error';
       }
     },
-    readFileAsDataURL(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result); // data:...;base64,XXXX
-        reader.onerror = () => reject(new Error('file read error'));
-        reader.readAsDataURL(file);
-      });
+    isTweetsFile(name) {
+      const base = this.basename(name);
+      return base === 'tweets.js' || (base.startsWith('tweets-part') && base.endsWith('.js'));
+    },
+    basename(p) {
+      const i = p.lastIndexOf('/');
+      return i >= 0 ? p.slice(i + 1) : p;
+    },
+    // parseArchiveTweets strips the "window.YTD.tweets.partN = " assignment
+    // wrapping the JSON array (everything from the first '[' is valid JSON).
+    parseArchiveTweets(text) {
+      const idx = text.indexOf('[');
+      if (idx < 0) return [];
+      return JSON.parse(text.slice(idx)).map((w) => w && w.tweet).filter(Boolean);
+    },
+    // toKeptTweet mirrors the node's scope rules: drop retweets ("RT @") and
+    // replies (in_reply_to_status_id_str), keep only still photos (≤4), and
+    // drop a tweet with neither text nor photos. Returns null when out of scope.
+    toKeptTweet(at) {
+      if (!at || !at.id_str) return null;
+      const full = at.full_text || '';
+      if (full.startsWith('RT @')) return null;
+      if (at.in_reply_to_status_id_str) return null;
+      const mediaFilenames = this.photoMedia(at)
+        .slice(0, 4)
+        .map((m) => at.id_str + '-' + this.basename(m.media_url_https));
+      const text = this.htmlUnescape(full);
+      if (text === '' && mediaFilenames.length === 0) return null;
+      return { id: at.id_str, text, createdAt: at.created_at || '', mediaFilenames };
+    },
+    // photoMedia trusts extended_entities (authoritative for the real media
+    // type) and falls back to entities; only "photo" survives.
+    photoMedia(at) {
+      let media = (at.extended_entities && at.extended_entities.media) || [];
+      if (media.length === 0) media = (at.entities && at.entities.media) || [];
+      return media.filter((m) => m.type === 'photo' && m.media_url_https);
+    },
+    htmlUnescape(s) {
+      const el = document.createElement('textarea');
+      el.innerHTML = s;
+      return el.value;
+    },
+    // bytesToBase64 encodes in 32 KB chunks to avoid a per-byte string build
+    // and the call-stack blowup of String.fromCharCode(...wholeArray).
+    bytesToBase64(bytes) {
+      let bin = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      return btoa(bin);
     },
     async runImport(payload) {
       this.phase = 'importing';
