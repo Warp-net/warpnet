@@ -110,14 +110,13 @@ func (p *streamPool) send(
 	}
 
 	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
-	if warpnet.IsNoAddressesError(err) {
+	// No known addresses (routing.ErrNotFound) or every dial failed
+	// (swarm.ErrAllDialsFailed) both mean the peer is unreachable — offline.
+	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) {
 		return nil, warpnet.ErrNodeIsOffline
 	}
 	if err != nil {
 		log.Debugf("stream: new: failed to create stream: %v", err)
-		if errors.Is(err, warpnet.ErrAllDialsFailed) {
-			err = warpnet.ErrAllDialsFailed
-		}
 		return nil, fmt.Errorf("stream: new: %w", err)
 	}
 	defer closeStream(stream)
