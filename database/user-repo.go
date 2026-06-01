@@ -216,6 +216,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		}
 	}
 	existingUser.RoundTripTime = newUser.RoundTripTime
+	existingUser.IsOffline = newUser.IsOffline
 	now := time.Now()
 	existingUser.UpdatedAt = &now
 
