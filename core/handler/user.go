@@ -352,11 +352,13 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 
-			if idx, ok := latestByNode[user.NodeId]; ok && user.Network != mastodon.MastodonNetwork {
-				if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
-					whotofollow[idx] = user
+			if user.NodeId != "" && user.Network != mastodon.MastodonNetwork {
+				if idx, ok := latestByNode[user.NodeId]; ok {
+					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
+						whotofollow[idx] = user
+					}
+					continue
 				}
-				continue
 			}
 
 			latestByNode[user.NodeId] = len(whotofollow)
