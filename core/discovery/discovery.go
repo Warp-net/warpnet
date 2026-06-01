@@ -74,6 +74,7 @@ type UserStorer interface {
 	Create(user domain.User) (domain.User, error)
 	Update(userId string, newUser domain.User) (domain.User, error)
 	GetByNodeID(nodeID string) (user domain.User, err error)
+	MarkForeignNodeUsersOffline(nodeID, keepUserID string) error
 }
 
 type MetricsOnlineDiscoverer interface {
@@ -346,6 +347,15 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	if info.IsModerator() {
 		return
+	}
+
+	// This node has one owner; mark offline any stale local user that still
+	// points at it under a different id (e.g. a former Echo identity). Runs
+	// before the early-return so it fires even when the owner is cached online.
+	if info.OwnerId != "" {
+		if err := s.userRepo.MarkForeignNodeUsersOffline(pi.ID.String(), info.OwnerId); err != nil {
+			log.Warnf("discovery: source '%s': reconcile stale node users: %v", peer.Source, err)
+		}
 	}
 
 	existedUser, err := s.userRepo.GetByNodeID(pi.ID.String())

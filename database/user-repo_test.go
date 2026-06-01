@@ -193,6 +193,51 @@ func (s *UserRepoTestSuite) TestSearch_EmptyQuery() {
 	s.Error(err)
 }
 
+func (s *UserRepoTestSuite) TestUpdatePersistsIsOffline() {
+	u := domain.User{Id: "off-toggle", Username: "toggle", NodeId: "off-node-t", CreatedAt: time.Now()}
+	_, err := s.repo.Create(u)
+	s.Require().NoError(err)
+
+	// Regression: Update used to drop IsOffline, so offline-marking never stuck.
+	_, err = s.repo.Update(u.Id, domain.User{IsOffline: true})
+	s.Require().NoError(err)
+	got, err := s.repo.Get(u.Id)
+	s.Require().NoError(err)
+	s.True(got.IsOffline, "Update must persist IsOffline=true")
+
+	_, err = s.repo.Update(u.Id, domain.User{IsOffline: false})
+	s.Require().NoError(err)
+	got, err = s.repo.Get(u.Id)
+	s.Require().NoError(err)
+	s.False(got.IsOffline, "Update must persist IsOffline=false")
+}
+
+func (s *UserRepoTestSuite) TestMarkForeignNodeUsersOffline() {
+	node := "off-shared-node"
+	owner := domain.User{Id: "off-owner", NodeId: node, Username: "owner", CreatedAt: time.Now()}
+	ghost := domain.User{Id: "off-ghost", NodeId: node, Username: "ghost", CreatedAt: time.Now()}
+	other := domain.User{Id: "off-other", NodeId: "off-other-node", Username: "other", CreatedAt: time.Now()}
+	for _, u := range []domain.User{owner, ghost, other} {
+		_, err := s.repo.Create(u)
+		s.Require().NoError(err)
+	}
+
+	err := s.repo.MarkForeignNodeUsersOffline(node, owner.Id)
+	s.Require().NoError(err)
+
+	gotOwner, err := s.repo.Get(owner.Id)
+	s.Require().NoError(err)
+	s.False(gotOwner.IsOffline, "node owner must stay online")
+
+	gotGhost, err := s.repo.Get(ghost.Id)
+	s.Require().NoError(err)
+	s.True(gotGhost.IsOffline, "stale same-node user must be marked offline")
+
+	gotOther, err := s.repo.Get(other.Id)
+	s.Require().NoError(err)
+	s.False(gotOther.IsOffline, "user on another node must be untouched")
+}
+
 func TestUserRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 

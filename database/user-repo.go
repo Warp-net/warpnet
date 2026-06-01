@@ -216,6 +216,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		}
 	}
 	existingUser.RoundTripTime = newUser.RoundTripTime
+	existingUser.IsOffline = newUser.IsOffline
 	now := time.Now()
 	existingUser.UpdatedAt = &now
 
@@ -240,6 +241,38 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		}
 	}
 	return existingUser, txn.Commit()
+}
+
+// MarkForeignNodeUsersOffline marks offline every stored user pointing at
+// nodeID except keepUserID. A discovered node hosts exactly one owner, so any
+// other user record carrying that NodeId is stale (e.g. a former identity of
+// that node) and must not surface as a live, followable account.
+func (repo *UserRepo) MarkForeignNodeUsersOffline(nodeID, keepUserID string) error {
+	if nodeID == "" {
+		return nil
+	}
+	limit := uint64(100)
+	var cursor *string
+	for {
+		users, cur, err := repo.List(&limit, cursor)
+		if err != nil {
+			return err
+		}
+		for _, u := range users {
+			if u.NodeId != nodeID || u.Id == keepUserID || u.IsOffline {
+				continue
+			}
+			u.IsOffline = true
+			if _, err := repo.Update(u.Id, u); err != nil {
+				return err
+			}
+		}
+		if cur == "" || cur == local_store.EndCursor {
+			break
+		}
+		cursor = &cur
+	}
+	return nil
 }
 
 // Get retrieves a user by their ID
