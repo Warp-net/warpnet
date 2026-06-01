@@ -186,10 +186,15 @@ export default {
         }
 
         // Decompress only the referenced still photos — videos/GIFs are skipped.
-        let mediaByName = {};
+        // fflate keys entries by their full archive path, so re-key by basename
+        // to match the per-tweet media filenames (`<id>-<basename>`).
+        const mediaByName = {};
         if (neededMedia.size > 0) {
           this.progressText = 'Extracting photos…';
-          mediaByName = unzipSync(buf, { filter: (f) => neededMedia.has(this.basename(f.name)) });
+          const entries = unzipSync(buf, { filter: (f) => neededMedia.has(this.basename(f.name)) });
+          for (const name of Object.keys(entries)) {
+            mediaByName[this.basename(name)] = entries[name];
+          }
         }
 
         // Stream each kept tweet to the node, one at a time.
