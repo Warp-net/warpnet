@@ -250,9 +250,23 @@ export default {
       const mediaFilenames = this.photoMedia(at)
         .slice(0, 4)
         .map((m) => at.id_str + '-' + this.basename(m.media_url_https));
-      const text = this.htmlUnescape(full);
+      const text = this.htmlUnescape(this.stripMediaUrls(full, at)).trim();
       if (text === '' && mediaFilenames.length === 0) return null;
       return { id: at.id_str, text, createdAt: at.created_at || '', mediaFilenames };
+    },
+    // stripMediaUrls removes the t.co media short-links X appends to full_text.
+    // The photo is imported separately (and GIFs/videos are dropped), so the
+    // bare link would otherwise render as text — and dangle when the media is
+    // absent from the archive. Non-media links (entities.urls) are left alone.
+    stripMediaUrls(text, at) {
+      const media = []
+        .concat((at.extended_entities && at.extended_entities.media) || [])
+        .concat((at.entities && at.entities.media) || []);
+      let out = text;
+      for (const m of media) {
+        if (m && m.url) out = out.split(m.url).join('');
+      }
+      return out;
     },
     // photoMedia trusts extended_entities (authoritative for the real media
     // type) and falls back to entities; only "photo" survives.
