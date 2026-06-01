@@ -120,8 +120,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", bridgeHandler.Handle())
-	mux.HandleFunc("/healthz", handlers2.HealthHandler())
-	mux.HandleFunc("/readyz", handlers2.ReadyHandler())
+	//mux.HandleFunc("/healthz", handlers2.HealthHandler())
+	//mux.HandleFunc("/readyz", handlers2.ReadyHandler())
 	mux.Handle("/", staticHandler)
 
 	srv := &http.Server{Addr: ":" + port, Handler: mux, ReadHeaderTimeout: 10 * time.Second}

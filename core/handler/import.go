@@ -239,6 +239,8 @@ func importOneTweet(
 		return
 	}
 	resp.ImportedTweets++
+	time.Sleep(100 * time.Millisecond)
+	log.Infof("import: imported %s tweet", tweet.Id)
 }
 
 // importTweetPhotos stores every bundled photo of a tweet and returns the
