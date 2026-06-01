@@ -272,6 +272,9 @@ func refreshUsers(
 	selfNodeID := streamer.NodeInfo().ID.String()
 	selfOwnerID := streamer.NodeInfo().OwnerId
 	for _, user := range usersResp.Users {
+		if user.IsOffline {
+			continue
+		}
 		// Skip records pointing back to this node — persisting them would
 		// later route fetches through GenericStream and trigger
 		// node.ErrSelfRequest.
@@ -333,6 +336,9 @@ func StreamGetWhoToFollowHandler(
 
 		whotofollow := make([]domain.User, 0, len(users))
 		for _, user := range users {
+			if user.IsOffline {
+				continue
+			}
 			if user.Id == owner.UserId || user.NodeId == owner.NodeId {
 				continue
 			}
