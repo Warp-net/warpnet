@@ -30,6 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"strings"
 	"time"
 
@@ -351,12 +352,13 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 
-			if idx, ok := latestByNode[user.NodeId]; ok {
+			if idx, ok := latestByNode[user.NodeId]; ok && user.Network != mastodon.MastodonNetwork {
 				if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
 					whotofollow[idx] = user
 				}
 				continue
 			}
+
 			latestByNode[user.NodeId] = len(whotofollow)
 
 			whotofollow = append(whotofollow, user)
