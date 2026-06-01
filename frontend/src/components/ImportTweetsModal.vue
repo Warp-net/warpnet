@@ -61,6 +61,7 @@
               This can take a few minutes for a large archive. Please keep this
               window open.
             </p>
+            <p v-if="progressText" class="text-sm font-semibold text-blue mt-2">{{ progressText }}</p>
           </div>
         </template>
 
@@ -111,6 +112,7 @@
 
 <script>
 import {warpnetService} from "@/service/service";
+import { unzipSync } from "fflate";
 
 export default {
   name: "ImportTweetsModal",
@@ -123,6 +125,7 @@ export default {
       phase: 'idle', // idle | importing | done | error
       result: { imported_tweets: 0, imported_images: 0, skipped_tweets: 0 },
       errorMessage: '',
+      progressText: '',
     };
   },
   watch: {
@@ -139,62 +142,80 @@ export default {
       if (this.phase === 'importing') return; // don't close mid-import
       this.$emit('close');
     },
-    async chooseAndImport() {
-      // Browser dashboard (business node): no native dialog — pick a file and
-      // upload its bytes. Desktop (Wails member node): native dialog returns a
-      // path the node reads straight off local disk.
-      if (!warpnetService.isDesktopNode()) {
-        this.$refs.fileInput.click();
-        return;
-      }
-      let path = '';
-      try {
-        path = await warpnetService.openTwitterArchiveDialog();
-      } catch (err) {
-        console.error('Failed to open archive dialog:', err);
-        this.errorMessage = 'Could not open the file picker.';
-        this.phase = 'error';
-        return;
-      }
-      if (!path) {
-        return; // user cancelled the picker
-      }
-      await this.runImport({ archivePath: path });
+    chooseAndImport() {
+      // Both the browser dashboard and the desktop (Wails) webview pick the
+      // .zip with a file input; the archive is unzipped and filtered in the
+      // client and streamed tweet-by-tweet, so neither uploads the whole file.
+      this.$refs.fileInput.click();
     },
     async onFileChange(e) {
       const file = e.target.files && e.target.files[0];
       e.target.value = ''; // allow re-selecting the same file later
       if (!file) return;
-      this.phase = 'importing';
-      try {
-        const archiveData = await this.readFileAsDataURL(file);
-        await this.runImport({ archiveData });
-      } catch (err) {
-        console.error('Failed to read archive:', err);
-        this.errorMessage = 'Could not read the selected file.';
-        this.phase = 'error';
-      }
+      await this.runBrowserImport(file);
     },
-    readFileAsDataURL(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result); // data:...;base64,XXXX
-        reader.onerror = () => reject(new Error('file read error'));
-        reader.readAsDataURL(file);
-      });
-    },
-    async runImport(payload) {
+    // runBrowserImport unzips and filters the X archive in the browser and
+    // streams only the kept original tweets (text + up to four photos) to the
+    // node one at a time. Retweets, replies, GIFs and videos are dropped here
+    // and never uploaded, so the node never buffers the whole archive.
+    async runBrowserImport(file) {
       this.phase = 'importing';
+      this.errorMessage = '';
+      this.result = { imported_tweets: 0, imported_images: 0, skipped_tweets: 0 };
+      this.progressText = 'Reading archive…';
       try {
-        const resp = await warpnetService.importTwitterArchive(payload);
-        if (resp && resp.code) {
-          throw new Error(resp.message || 'Import failed');
+        const buf = new Uint8Array(await file.arrayBuffer());
+
+        // Decompress only tweets.js / tweets-part*.js here — never the media,
+        // so a gigabyte of video in the archive is never even inflated.
+        const tweetEntries = unzipSync(buf, { filter: (f) => this.isTweetsFile(f.name) });
+        const archiveTweets = [];
+        for (const name of Object.keys(tweetEntries)) {
+          const text = new TextDecoder().decode(tweetEntries[name]);
+          archiveTweets.push(...this.parseArchiveTweets(text));
         }
-        this.result = {
-          imported_tweets: resp?.imported_tweets || 0,
-          imported_images: resp?.imported_images || 0,
-          skipped_tweets: resp?.skipped_tweets || 0,
-        };
+
+        // Keep originals only; collect the photo filenames they reference.
+        const kept = [];
+        const neededMedia = new Set();
+        for (const at of archiveTweets) {
+          const t = this.toKeptTweet(at);
+          if (!t) { this.result.skipped_tweets++; continue; }
+          kept.push(t);
+          for (const fn of t.mediaFilenames) neededMedia.add(fn);
+        }
+
+        // Decompress only the referenced still photos — videos/GIFs are skipped.
+        // fflate keys entries by their full archive path, so re-key by basename
+        // to match the per-tweet media filenames (`<id>-<basename>`).
+        const mediaByName = {};
+        if (neededMedia.size > 0) {
+          this.progressText = 'Extracting photos…';
+          const entries = unzipSync(buf, { filter: (f) => neededMedia.has(this.basename(f.name)) });
+          for (const name of Object.keys(entries)) {
+            mediaByName[this.basename(name)] = entries[name];
+          }
+        }
+
+        // Stream each kept tweet to the node, one at a time.
+        for (let i = 0; i < kept.length; i++) {
+          const t = kept[i];
+          this.progressText = `Importing ${i + 1} / ${kept.length}…`;
+          const images = [];
+          for (const fn of t.mediaFilenames) {
+            const bytes = mediaByName[fn];
+            if (bytes) images.push(this.bytesToBase64(bytes));
+          }
+          const resp = await warpnetService.importTweet({
+            id: t.id, text: t.text, createdAt: t.createdAt, images,
+          });
+          if (resp && resp.code) throw new Error(resp.message || 'Import failed');
+          this.result.imported_tweets += resp?.imported_tweets || 0;
+          this.result.imported_images += resp?.imported_images || 0;
+          this.result.skipped_tweets += resp?.skipped_tweets || 0;
+        }
+
+        this.progressText = '';
         this.phase = 'done';
         this.$emit('imported', this.result);
       } catch (err) {
@@ -202,6 +223,76 @@ export default {
         this.errorMessage = (err && err.message) ? err.message : 'Import failed. Please try again.';
         this.phase = 'error';
       }
+    },
+    isTweetsFile(name) {
+      const base = this.basename(name);
+      return base === 'tweets.js' || (base.startsWith('tweets-part') && base.endsWith('.js'));
+    },
+    basename(p) {
+      const i = p.lastIndexOf('/');
+      return i >= 0 ? p.slice(i + 1) : p;
+    },
+    // parseArchiveTweets strips the "window.YTD.tweets.partN = " assignment
+    // wrapping the JSON array (everything from the first '[' is valid JSON).
+    parseArchiveTweets(text) {
+      const idx = text.indexOf('[');
+      if (idx < 0) return [];
+      return JSON.parse(text.slice(idx)).map((w) => w && w.tweet).filter(Boolean);
+    },
+    // toKeptTweet mirrors the node's scope rules: drop retweets ("RT @") and
+    // replies (in_reply_to_status_id_str), keep only still photos (≤4), and
+    // drop a tweet with neither text nor photos. Returns null when out of scope.
+    toKeptTweet(at) {
+      if (!at || !at.id_str) return null;
+      const full = at.full_text || '';
+      if (full.startsWith('RT @')) return null;
+      if (at.in_reply_to_status_id_str) return null;
+      const mediaFilenames = this.photoMedia(at)
+        .slice(0, 4)
+        .map((m) => at.id_str + '-' + this.basename(m.media_url_https));
+      const text = this.htmlUnescape(this.cleanTweetText(full, at)).trim();
+      if (text === '' && mediaFilenames.length === 0) return null;
+      return { id: at.id_str, text, createdAt: at.created_at || '', mediaFilenames };
+    },
+    // cleanTweetText rewrites the t.co short-links X embeds in full_text:
+    // media links are removed (the photo is imported separately; GIFs/videos
+    // are dropped, so the link would just dangle), and regular link short-links
+    // are expanded to their real destination instead of a bare t.co redirect.
+    cleanTweetText(text, at) {
+      let out = text;
+      const media = []
+        .concat((at.extended_entities && at.extended_entities.media) || [])
+        .concat((at.entities && at.entities.media) || []);
+      for (const m of media) {
+        if (m && m.url) out = out.split(m.url).join('');
+      }
+      const urls = (at.entities && at.entities.urls) || [];
+      for (const u of urls) {
+        if (u && u.url && u.expanded_url) out = out.split(u.url).join(u.expanded_url);
+      }
+      return out;
+    },
+    // photoMedia trusts extended_entities (authoritative for the real media
+    // type) and falls back to entities; only "photo" survives.
+    photoMedia(at) {
+      let media = (at.extended_entities && at.extended_entities.media) || [];
+      if (media.length === 0) media = (at.entities && at.entities.media) || [];
+      return media.filter((m) => m.type === 'photo' && m.media_url_https);
+    },
+    htmlUnescape(s) {
+      const el = document.createElement('textarea');
+      el.innerHTML = s;
+      return el.value;
+    },
+    // bytesToBase64 encodes in 32 KB chunks to avoid a per-byte string build
+    // and the call-stack blowup of String.fromCharCode(...wholeArray).
+    bytesToBase64(bytes) {
+      let bin = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      return btoa(bin);
     },
   },
 };

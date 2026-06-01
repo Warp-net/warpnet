@@ -346,10 +346,10 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		_ = streamClient.Close()
 	}()
 
-	// Most self-streams finish near-instantly; the Twitter archive import
-	// parses and stores a whole archive and needs far longer.
+	// Most self-streams finish near-instantly; a streamed import tweet stores
+	// up to four photos through the image pipeline and needs a longer window.
 	deadline := time.Minute
-	if string(path) == warpevent.PRIVATE_POST_IMPORT_TWITTER {
+	if string(path) == warpevent.PRIVATE_POST_IMPORT_TWITTER_TWEET {
 		deadline = importStreamDeadline
 	}
 

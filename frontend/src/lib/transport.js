@@ -267,17 +267,6 @@ export async function ConsumePendingDeepLink() {
   return "";
 }
 
-// OpenTwitterArchiveDialog opens the native .zip picker under Wails (member
-// desktop node) and resolves to the selected absolute path ("" if cancelled).
-// The browser dashboard has no native file dialog and never shows the import
-// button, so it resolves to "".
-export async function OpenTwitterArchiveDialog() {
-  if (hasWails()) {
-    return Wails.OpenTwitterArchiveDialog();
-  }
-  return "";
-}
-
 // IsDesktop reports whether the Wails desktop runtime is present (member
 // node). The browser dashboard (business node) returns false and must upload
 // the archive via an <input type=file> instead of the native dialog.
@@ -312,9 +301,12 @@ function aesDecrypt(key, b64) {
 }
 
 function bytesToBase64(bytes) {
+  // Encode in 32 KB chunks: a per-byte string build is O(n) garbage and a
+  // multi-MB import frame (tweet + photos) would otherwise stall the tab.
   let s = "";
-  for (let i = 0; i < bytes.length; i++) {
-    s += String.fromCharCode(bytes[i]);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   }
   return btoa(s);
 }

@@ -104,21 +104,25 @@ type FollowingsResponse struct {
 	FollowerId domain.ID   `json:"follower_id"`
 }
 
-// ImportTwitterArchiveEvent defines model for ImportTwitterArchiveEvent.
-//
-// Exactly one source is set: ArchivePath (desktop member node — the node
-// reads the .zip straight off local disk) or ArchiveData (business browser
-// dashboard — base64 of the uploaded .zip, optionally data-URL prefixed).
-type ImportTwitterArchiveEvent struct {
-	ArchivePath string `json:"archive_path,omitempty"`
-	ArchiveData string `json:"archive_data,omitempty"`
-}
-
 // ImportTwitterArchiveResponse defines model for ImportTwitterArchiveResponse.
 type ImportTwitterArchiveResponse struct {
 	ImportedTweets int `json:"imported_tweets"`
 	ImportedImages int `json:"imported_images"`
 	SkippedTweets  int `json:"skipped_tweets"`
+}
+
+// ImportTweetEvent defines model for ImportTweetEvent.
+//
+// One pre-parsed original tweet streamed from the business browser dashboard.
+// The browser unzips and filters the X archive client-side (dropping retweets,
+// replies, GIFs and videos) and streams only the kept tweets, so the node
+// never buffers the whole archive. Images are raw base64 of the still photos
+// (at most four), without a data-URL prefix.
+type ImportTweetEvent struct {
+	Id        string   `json:"id"`
+	Text      string   `json:"text"`
+	CreatedAt string   `json:"created_at"`
+	Images    []string `json:"images,omitempty"`
 }
 
 type IsFollowingResponse struct {

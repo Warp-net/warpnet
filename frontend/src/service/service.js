@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, ConsumePendingDeepLink, IsFirstRun, OpenTwitterArchiveDialog, IsDesktop} from "@/lib/transport";
+import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop} from "@/lib/transport";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -66,7 +66,7 @@ export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/
 export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
-export const PRIVATE_POST_IMPORT_TWITTER = "/private/post/import/twitter/0.0.0"
+export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PUBLIC_GET_REPLY = "/public/get/reply/0.0.0"
@@ -129,7 +129,7 @@ const inflightPostRequests = new Map();
 // by the UI (disabled buttons during upload).
 const dedupSkipPaths = new Set([
     PRIVATE_POST_UPLOAD_IMAGE,
-    PRIVATE_POST_IMPORT_TWITTER,
+    PRIVATE_POST_IMPORT_TWITTER_TWEET,
 ]);
 
 function isPostPath(path) {
@@ -1075,19 +1075,18 @@ export const warpnetService = {
         return IsDesktop();
     },
 
-    async openTwitterArchiveDialog() {
-        // Native .zip picker (Wails desktop/member node). Returns the selected
-        // absolute path, or "" if the user cancelled / there is no native
-        // dialog (browser dashboard).
-        return await OpenTwitterArchiveDialog();
-    },
-
-    async importTwitterArchive({archivePath = "", archiveData = ""}) {
+    // importTweet streams one pre-parsed original tweet (text + up to four
+    // base64 photos) to the node, which stores it on arrival. The business
+    // browser dashboard parses and filters the X archive client-side and calls
+    // this once per kept tweet, so the node never buffers the whole archive.
+    async importTweet({id, text = "", createdAt = "", images = []}) {
         const request = {
-            path: PRIVATE_POST_IMPORT_TWITTER,
+            path: PRIVATE_POST_IMPORT_TWITTER_TWEET,
             body: {
-                archive_path: archivePath,
-                archive_data: archiveData,
+                id: id,
+                text: text,
+                created_at: createdAt,
+                images: images,
             },
         }
 
