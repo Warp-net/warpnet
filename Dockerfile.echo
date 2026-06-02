@@ -5,6 +5,9 @@ WORKDIR /warpnet
 
 ENV CGO_ENABLED=0
 
-RUN go build -tags echo -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/member/echo-member.go
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    go build -tags echo -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/member/echo-member.go
 
+FROM gcr.io/distroless/static-debian12
+COPY --from=builder /warpnet/warpnet /warpnet/warpnet
 CMD ["/warpnet/warpnet"]
