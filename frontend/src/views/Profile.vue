@@ -168,6 +168,10 @@ resulting from the use or misuse of this software.
                   class="text-sm font-medium bg-red-900 py-1 px-1 mx-2 rounded text-white align-middle"
               >Offline</span>
               <span
+                  v-if="isBusiness"
+                  class="text-sm font-medium bg-blue py-1 px-1 mx-2 rounded text-white align-middle"
+              >Business</span>
+              <span
                 v-if="isFollower() && !isSelf"
                 class="text-sm font-medium bg-gray-100 py-1 px-1 mx-2 rounded text-gray-500 align-middle"
               >Follows you</span>
@@ -351,6 +355,12 @@ export default {
       const pinned = this.tweets.filter(t => t && t.pinned);
       const rest = this.tweets.filter(t => !(t && t.pinned));
       return pinned.concat(rest);
+    },
+    // isBusiness drives the "Business" badge — the role rides on the user
+    // record (domain.User.Role), stamped from the node's NodeInfo, same as any
+    // other profile field.
+    isBusiness() {
+      return this.profile && this.profile.role === "business";
     },
   },
   methods: {

@@ -155,7 +155,8 @@ func NewRelayNode(
 
 func (rn *RelayNode) NodeInfo() warpnet.NodeInfo {
 	bi := rn.node.BaseNodeInfo()
-	bi.OwnerId = warpnet.RelayOwner
+	bi.OwnerId = "bootstrap" // relay wire marker so peers detecting relays by OwnerId (pre-Type) still skip challenging us
+	bi.Type = warpnet.RelayNode
 	bi.Hash = rn.selfHashHex
 	return bi
 }

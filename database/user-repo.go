@@ -198,6 +198,11 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if newUser.Network != "" {
 		existingUser.Network = newUser.Network
 	}
+	// Only ever set, never clear: a stale "" from a peer that doesn't report
+	// the role must not wipe a role already learned from the node's NodeInfo.
+	if newUser.Role != "" {
+		existingUser.Role = newUser.Role
+	}
 	if newUser.Moderation != nil {
 		if existingUser.Moderation == nil {
 			existingUser.Moderation = newUser.Moderation
@@ -211,6 +216,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		}
 	}
 	existingUser.RoundTripTime = newUser.RoundTripTime
+	existingUser.IsOffline = newUser.IsOffline
 	now := time.Now()
 	existingUser.UpdatedAt = &now
 

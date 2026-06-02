@@ -326,3 +326,32 @@ func TestDBTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(DBTestSuite))
 }
+
+// TestReopenAfterClose covers the long-lived-node lifecycle the business node
+// relies on: a logout closes the database and a later login reopens it on the
+// same handle, so data must survive the cycle and a second Close (and a
+// redundant one) must not double-close the lifecycle channel.
+func TestReopenAfterClose(t *testing.T) {
+	db, err := New(t.TempDir(), DefaultOptions())
+	assert.NoError(t, err)
+
+	const user, pass = "user", "pass"
+	key := DatabaseKey("/TEST/key")
+
+	assert.NoError(t, db.Run(user, pass))
+	assert.NoError(t, db.Set(key, []byte("value")))
+	db.Close()
+	assert.True(t, db.IsClosed())
+
+	// reopen on the same handle — data persists and the node's repos recover
+	assert.NoError(t, db.Run(user, pass))
+	got, err := db.Get(key)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("value"), got)
+
+	// second Close targets the channel recreated by the second Run, not the
+	// already-closed first one
+	assert.NotPanics(t, db.Close)
+	// a redundant close (process-exit defer after a logout) is a no-op
+	assert.NotPanics(t, db.Close)
+}

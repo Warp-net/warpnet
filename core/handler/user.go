@@ -30,6 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"strings"
 	"time"
 
@@ -272,6 +273,9 @@ func refreshUsers(
 	selfNodeID := streamer.NodeInfo().ID.String()
 	selfOwnerID := streamer.NodeInfo().OwnerId
 	for _, user := range usersResp.Users {
+		if user.IsOffline {
+			continue
+		}
 		// Skip records pointing back to this node — persisting them would
 		// later route fetches through GenericStream and trigger
 		// node.ErrSelfRequest.
@@ -332,7 +336,11 @@ func StreamGetWhoToFollowHandler(
 		}
 
 		whotofollow := make([]domain.User, 0, len(users))
+		latestByNode := make(map[string]int, len(users))
 		for _, user := range users {
+			if user.IsOffline {
+				continue
+			}
 			if user.Id == owner.UserId || user.NodeId == owner.NodeId {
 				continue
 			}
@@ -343,6 +351,18 @@ func StreamGetWhoToFollowHandler(
 			if _, ok := followedUsers[user.Id]; ok {
 				continue
 			}
+
+			if user.NodeId != "" && user.Network != mastodon.MastodonNetwork {
+				if idx, ok := latestByNode[user.NodeId]; ok {
+					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
+						whotofollow[idx] = user
+					}
+					continue
+				}
+			}
+
+			latestByNode[user.NodeId] = len(whotofollow)
+
 			whotofollow = append(whotofollow, user)
 		}
 

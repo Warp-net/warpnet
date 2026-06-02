@@ -27,9 +27,25 @@
           </div>
           <i class="fas fa-chevron-right ml-auto text-dark text-sm"></i>
         </button>
+        <button
+          @click="showImportModal = true"
+          class="text-left px-5 py-4 border-b border-lighter hover:bg-lightest flex items-center"
+        >
+          <i class="fa-fw mr-4 text-dark fas fa-file-import" aria-hidden="true"></i>
+          <div>
+            <p class="font-bold">Import tweets from X</p>
+            <p class="text-sm text-dark">Import your original tweets and photos from an X archive</p>
+          </div>
+          <i class="fas fa-chevron-right ml-auto text-dark text-sm"></i>
+        </button>
       </nav>
     </div>
     <DefaultRightBar :profile="ownerProfile" />
+
+    <ImportTweetsModal
+        :show="showImportModal"
+        @close="showImportModal = false"
+    />
   </div>
 </template>
 
@@ -42,10 +58,12 @@ export default {
   components: {
     SideNav: defineAsyncComponent(() => import('@/components/SideNav.vue')),
     DefaultRightBar: defineAsyncComponent(() => import('@/components/DefaultRightBar.vue')),
+    ImportTweetsModal: defineAsyncComponent(() => import('@/components/ImportTweetsModal.vue')),
   },
   data() {
     return {
       ownerProfile: {},
+      showImportModal: false,
       items: [
         { name: 'SettingsPreferences', label: 'Preferences', hint: 'Default visibility, language', icon: 'fas fa-sliders-h' },
         { name: 'SettingsBlocks', label: 'Blocked users', hint: 'Users you have blocked', icon: 'fas fa-ban' },

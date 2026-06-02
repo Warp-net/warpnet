@@ -3,6 +3,11 @@
     <!-- QR pairing UI. Isolated from strings.xml so the feature lives
          together; move into strings.xml when it is no longer in flux. -->
     <string name="warpnet_pair_scan_prompt">Point the camera at the QR code on your PC</string>
+    <string name="warpnet_pair_onboarding_title">Pair with your computer</string>
+    <string name="warpnet_pair_onboarding_step_1">1. Start the Warpnet app on your computer.</string>
+    <string name="warpnet_pair_onboarding_step_2">2. Open the menu → \"Pair device\" to show a QR code.</string>
+    <string name="warpnet_pair_onboarding_step_3">3. Point the camera at that QR code.</string>
+    <string name="warpnet_pair_onboarding_manual_link">No camera or no PC nearby? Enter pairing data manually.</string>
     <string name="warpnet_pair_connect">Connect</string>
     <string name="action_cancel">Cancel</string>
     <string name="warpnet_pair_title">Connect to my node</string>

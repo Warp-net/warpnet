@@ -28,6 +28,7 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u filinvadim --password-stdin
 docker pull ghcr.io/warp-net/warpnet-bootstrap:latest
 docker pull ghcr.io/warp-net/warpnet-moderator:latest
 docker pull ghcr.io/warp-net/warpnet-echo:latest
+docker pull ghcr.io/warp-net/warpnet-vadim:latest
 
 export HOSTNAME=''
 

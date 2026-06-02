@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet"
+	"github.com/Warp-net/warpnet/cmd/node/member/deeplink"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -41,6 +41,16 @@ func main() {
 	icon := warpnet.GetLogo()
 	setLinuxDesktopIcon(icon)
 
+	// Best-effort: failure just means deep links don't work.
+	if err := deeplink.Register(); err != nil {
+		log.Warnf("deeplink: scheme registration failed: %v", err)
+	}
+
+	if link, ok := deeplink.FromArgs(os.Args); ok {
+		log.Infof("deeplink: cold-start link %s", link.Raw)
+		app.SetPendingDeepLink(link.Raw)
+	}
+
 	err = wails.Run(&options.App{
 		Title:            "warpnet", //nolint:goconst
 		Width:            1024,
@@ -53,9 +63,17 @@ func main() {
 		OnStartup:        app.startup,
 		OnShutdown:       app.close,
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: uuid.New().String(),
-			OnSecondInstanceLaunch: func(_ options.SecondInstanceData) {
-				panic("second instance launched")
+			// Must be stable across launches — a fresh value per
+			// start defeats the lock and lets every xdg-open spawn
+			// a parallel process that fights for the Badger lock.
+			UniqueId: "net.warpnet.app",
+			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
+				if link, ok := deeplink.FromArgs(data.Args); ok {
+					log.Infof("deeplink: second-instance link %s", link.Raw)
+					app.NotifyDeepLink(link.Raw)
+					return
+				}
+				log.Infof("deeplink: second-instance launch with args %v", data.Args)
 			},
 		},
 		Bind: []any{
@@ -80,7 +98,11 @@ func main() {
 				Icon:    icon,
 			},
 			OnFileOpen: nil,
-			OnUrlOpen:  nil,
+			// macOS hot-path: app stays single-process, URL clicks come here.
+			OnUrlOpen: func(url string) {
+				log.Infof("deeplink: macOS OnUrlOpen %s", url)
+				app.NotifyDeepLink(url)
+			},
 		},
 		Windows: &windows.Options{
 			WebviewIsTransparent:                false,

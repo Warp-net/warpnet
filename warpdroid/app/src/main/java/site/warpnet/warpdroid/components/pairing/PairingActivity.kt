@@ -58,6 +58,7 @@ class PairingActivity : AppCompatActivity() {
     private lateinit var connectButton: MaterialButton
     private lateinit var cancelButton: MaterialButton
     private lateinit var scanPrompt: View
+    private lateinit var manualEntryLink: View
 
     private val validator by lazy { AuthNodeInfoValidator(moshi) }
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -85,6 +86,8 @@ class PairingActivity : AppCompatActivity() {
         connectButton = findViewById(R.id.connectButton)
         cancelButton = findViewById(R.id.cancelButton)
         scanPrompt = findViewById(R.id.scanPrompt)
+        manualEntryLink = findViewById(R.id.manualEntryLink)
+        manualEntryLink.setOnClickListener { showManualInput() }
 
         // Try to re-authenticate using the keystore-backed QR payload from
         // the last successful pair. On success we hand straight off to
@@ -94,6 +97,7 @@ class PairingActivity : AppCompatActivity() {
         // open happens on Dispatchers.IO so the keystore init + file I/O
         // never blocks the first frame.
         scanPrompt.visibility = View.GONE
+        manualEntryLink.visibility = View.GONE
         previewView.visibility = View.GONE
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
@@ -160,6 +164,7 @@ class PairingActivity : AppCompatActivity() {
 
     private fun startCameraOrManual() {
         scanPrompt.visibility = View.VISIBLE
+        manualEntryLink.visibility = View.VISIBLE
         previewView.visibility = View.VISIBLE
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
             showManualInput()
@@ -225,6 +230,7 @@ class PairingActivity : AppCompatActivity() {
 
     private fun showManualInput() {
         scanPrompt.visibility = View.GONE
+        manualEntryLink.visibility = View.GONE
         previewView.visibility = View.GONE
         val input = EditText(this).apply {
             setHint(R.string.warpnet_pair_manual_hint)
@@ -283,6 +289,7 @@ class PairingActivity : AppCompatActivity() {
 
     private fun showConfirmation(info: AuthNodeInfo, rawJson: String) {
         scanPrompt.visibility = View.GONE
+        manualEntryLink.visibility = View.GONE
         messagePanel.visibility = View.VISIBLE
         messageTitle.text = getString(R.string.warpnet_pair_title)
         val shortNodeId = info.nodeId.let { if (it.length > 16) "${it.take(8)}…${it.takeLast(6)}" else it }
@@ -332,6 +339,7 @@ class PairingActivity : AppCompatActivity() {
 
     private fun showFatalMessage(text: String) {
         scanPrompt.visibility = View.GONE
+        manualEntryLink.visibility = View.GONE
         progress.visibility = View.GONE
         messagePanel.visibility = View.VISIBLE
         messageTitle.text = getString(R.string.warpnet_pair_title)

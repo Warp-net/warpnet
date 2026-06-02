@@ -5,6 +5,7 @@ vi.mock('@/service/service', () => ({
   warpnetService: {
     signInUser: vi.fn(),
     isFirstRun: vi.fn(),
+    consumePendingDeepLink: vi.fn(),
   },
 }));
 
@@ -46,6 +47,7 @@ beforeEach(() => {
   routerPush.mockClear();
   warpnetService.signInUser.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
+  warpnetService.consumePendingDeepLink.mockResolvedValue("");
   sessionStorage.clear();
 });
 
@@ -243,6 +245,37 @@ describe('Root.vue', () => {
       expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
     });
     expect(sessionStorage.getItem('warpnet:show-pairing-onboarding')).toBe('1');
+  });
+
+  it('routes to Search?q=id when the OS handed us a warpnet://user/{id} link', async () => {
+    // Mirrors the cold-start path: the Go side has already
+    // captured os.Args / Mac.OnUrlOpen into App.deepLink; Vue
+    // sees it as a non-empty string from consumePendingDeepLink.
+    warpnetService.consumePendingDeepLink.mockResolvedValueOnce(
+      'warpnet://user/01HZX7K8'
+    );
+    renderRoot({ firstRun: true });
+    await completeSignUp();
+
+    await waitFor(() => {
+      expect(routerPush).toHaveBeenCalledWith({
+        name: 'Search',
+        query: { q: '01HZX7K8' },
+      });
+    });
+    expect(routerPush).not.toHaveBeenCalledWith({ name: 'Home' });
+  });
+
+  it('falls back to Home when the pending deep link is unparseable', async () => {
+    warpnetService.consumePendingDeepLink.mockResolvedValueOnce(
+      'not a warpnet url'
+    );
+    renderRoot({ firstRun: true });
+    await completeSignUp();
+
+    await waitFor(() => {
+      expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
+    });
   });
 
   it('does not write the pairing-onboarding flag when signInUser rejects', async () => {

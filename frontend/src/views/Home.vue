@@ -142,10 +142,11 @@ resulting from the use or misuse of this software.
           some people and topics to follow now.
         </p>
         <button
+          @click="showImportModal = true"
           class="text-white bg-blue rounded-full font-semibold mt-4 px-4 py-2 hover:bg-darkblue"
         >
-          <p class="hidden lg:block">Let's go!</p>
-          <i class="fas fa-plus lg:hidden"></i>
+          <p class="hidden lg:block">Import tweets from X</p>
+          <i class="fas fa-file-import lg:hidden"></i>
         </button>
       </div>
       <Tweets :tweets="timeline" />
@@ -174,12 +175,19 @@ resulting from the use or misuse of this software.
         :previewUrl="imageAttachments[altModalIndex] || ''"
         @close="altModalIndex = -1"
     />
+
+    <ImportTweetsModal
+        :show="showImportModal"
+        @close="showImportModal = false"
+        @imported="onTweetsImported"
+    />
   </div>
 </template>
 
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {parseDeepLink} from "@/lib/deeplink";
 
 export default {
   name: "Home",
@@ -190,6 +198,7 @@ export default {
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     InfoOverlay: defineAsyncComponent(() => import('@/components/InfoOverlay.vue')),
     AltTextModal: defineAsyncComponent(() => import('@/components/AltTextModal.vue')),
+    ImportTweetsModal: defineAsyncComponent(() => import('@/components/ImportTweetsModal.vue')),
   },
   data() {
     return {
@@ -199,6 +208,7 @@ export default {
       },
       loading: true,
       profile: {},
+      showImportModal: false,
       timeline: [],
       showInfo: false,
       infoContent: '',
@@ -324,6 +334,17 @@ export default {
         this.toastTimeoutId = null;
       }, 4000);
     },
+    onTweetsImported(result) {
+      const n = (result && result.imported_tweets) || 0;
+      this.showToast(`Imported ${n} tweet${n === 1 ? '' : 's'}. View them on your profile.`, 'success');
+    },
+    async consumeDeepLink() {
+      // No URL router for profiles — route through Search.
+      const link = parseDeepLink(await warpnetService.consumePendingDeepLink());
+      if (link && link.kind === "user") {
+        this.$router.push({ name: "Search", query: { q: link.id } });
+      }
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
@@ -350,6 +371,11 @@ export default {
     if (this.$route.query.compose) {
       this.focusCompose();
     }
+
+    // macOS hot-path: re-check on focus so subsequent clicks also route.
+    this.consumeDeepLink();
+    this._deepLinkFocusHandler = () => this.consumeDeepLink();
+    window.addEventListener("focus", this._deepLinkFocusHandler);
   },
   watch: {
     '$route.query.compose'(val) {
@@ -362,6 +388,10 @@ export default {
     if (this.toastTimeoutId) {
       clearTimeout(this.toastTimeoutId);
       this.toastTimeoutId = null;
+    }
+    if (this._deepLinkFocusHandler) {
+      window.removeEventListener("focus", this._deepLinkFocusHandler);
+      this._deepLinkFocusHandler = null;
     }
   },
 };

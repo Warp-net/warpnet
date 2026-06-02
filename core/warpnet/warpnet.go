@@ -92,10 +92,13 @@ var ErrAllDialsFailed = swarm.ErrAllDialsFailed
 type relayStatus string
 
 const (
-	RelayOwner     = "relay"
-	ModeratorOwner = "moderator"
-	WarpnetName    = "warpnet"
-	NoiseID        = noise.ID
+	RelayNode     = "relay"
+	ModeratorNode = "moderator"
+	BusinessNode  = "business"
+	MemberNode    = "member"
+
+	WarpnetName = "warpnet"
+	NoiseID     = noise.ID
 
 	Connected    = network.Connected
 	Limited      = network.Limited
@@ -222,6 +225,7 @@ func (wh *WarpStreamHandler) String() string {
 }
 
 type NodeInfo struct {
+	Type           string           `json:"type"`
 	OwnerId        string           `json:"owner_id"`
 	ID             WarpPeerID       `json:"node_id"`
 	Aliases        []WarpPeerID     `json:"aliases"`
@@ -237,11 +241,15 @@ type NodeInfo struct {
 }
 
 func (ni NodeInfo) IsRelay() bool {
-	return ni.OwnerId == RelayOwner ||
-		ni.OwnerId == "bootstrap" // back compatibility
+	return ni.Type == RelayNode ||
+		ni.OwnerId == RelayNode || // back compat: relays before NodeInfo.Type marked the role in OwnerId ("relay")
+		ni.OwnerId == "bootstrap" // back compat: oldest relays used OwnerId "bootstrap"
 }
 func (ni NodeInfo) IsModerator() bool {
-	return ni.OwnerId == ModeratorOwner
+	return ni.Type == ModeratorNode
+}
+func (ni NodeInfo) IsBusiness() bool {
+	return ni.Type == BusinessNode
 }
 
 type NodeStats struct {

@@ -41,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
@@ -323,6 +324,11 @@ func (n *WarpNode) Prioritizer() Prioritizer {
 	return n.prioritizer
 }
 
+// importStreamDeadline is the loopback-stream I/O deadline for the Twitter
+// archive import route, which parses and stores a whole archive and needs
+// far longer than the default one-minute self-stream budget.
+const importStreamDeadline = 10 * time.Minute
+
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
 		return nil, fmt.Errorf("node: selfstream: empty data") //nolint:err113
@@ -340,7 +346,14 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		_ = streamClient.Close()
 	}()
 
-	_ = streamServer.SetDeadline(time.Now().Add(time.Minute))
+	// Most self-streams finish near-instantly; a streamed import tweet stores
+	// up to four photos through the image pipeline and needs a longer window.
+	deadline := time.Minute
+	if string(path) == warpevent.PRIVATE_POST_IMPORT_TWITTER_TWEET {
+		deadline = importStreamDeadline
+	}
+
+	_ = streamServer.SetDeadline(time.Now().Add(deadline))
 	go handler(streamServer) // handler closes server stream by itself
 
 	bt, ok := data.([]byte)
@@ -351,7 +364,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		}
 	}
 
-	_ = streamClient.SetDeadline(time.Now().Add(time.Minute))
+	_ = streamClient.SetDeadline(time.Now().Add(deadline))
 	if _, err := streamClient.Write(bt); err != nil {
 		return nil, err
 	}

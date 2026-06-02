@@ -279,6 +279,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {parseDeepLink} from "@/lib/deeplink";
 export default {
   name: "Root",
   components: {
@@ -348,6 +349,12 @@ export default {
           }
         }
         this.setStep("");
+        // No Vue route by id — route via Search (same as SearchBar).
+        const deepLink = parseDeepLink(await warpnetService.consumePendingDeepLink());
+        if (deepLink && deepLink.kind === "user") {
+          this.$router.push({ name: "Search", query: { q: deepLink.id } });
+          return;
+        }
         this.$router.push({ name: "Home" });
       } catch (error) {
         console.error("error signing up:", error);

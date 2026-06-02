@@ -58,7 +58,13 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			remotePeer = s.Conn().RemotePeer()
 		)
 
-		reader := io.LimitReader(s, MaxLimit) // TODO size limit???
+		// The per-tweet streaming import route carries one tweet plus up to
+		// four base64 photos; allow it a larger ceiling than other routes.
+		limit := int64(MaxLimit)
+		if string(route) == event.PRIVATE_POST_IMPORT_TWITTER_TWEET {
+			limit = int64(ImportTweetMaxLimit)
+		}
+		reader := io.LimitReader(s, limit)
 		data, err := io.ReadAll(reader)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Errorf("middleware: auth: reading from stream: %v", err)

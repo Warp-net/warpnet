@@ -1,0 +1,304 @@
+<style>
+  #warpnet-launcher {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 480px;
+    margin: 32px auto;
+    padding: 28px;
+    border: 1px solid rgba(0, 0, 0, 0.10);
+    border-radius: 14px;
+    background: #ffffff;
+    color: #1b2636;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher {
+      background: #1b2636;
+      color: #e7ecf3;
+      border-color: rgba(255, 255, 255, 0.10);
+    }
+  }
+  #warpnet-launcher *,
+  #warpnet-launcher *::before,
+  #warpnet-launcher *::after {
+    box-sizing: border-box;
+  }
+  #warpnet-launcher h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+  #warpnet-launcher p {
+    margin: 0 0 14px;
+    color: #4a5566;
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher p { color: #9aa5b6; }
+  }
+  #warpnet-launcher .wl-chip {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.06);
+    font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher .wl-chip { background: rgba(255, 255, 255, 0.08); }
+  }
+  #warpnet-launcher .wl-btn {
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 10px;
+    background: #ff2d8e;
+    color: #ffffff;
+    font: 600 15px/1.2 inherit;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  #warpnet-launcher .wl-btn:hover { filter: brightness(1.08); }
+  #warpnet-launcher .wl-btn.wl-ghost {
+    background: transparent;
+    color: inherit;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher .wl-btn.wl-ghost { border-color: rgba(255, 255, 255, 0.15); }
+  }
+  #warpnet-launcher .wl-hidden { display: none; }
+  #warpnet-launcher .wl-note {
+    margin-top: 16px;
+    font-size: 12px;
+    text-align: center;
+    color: #4a5566;
+  }
+  @media (prefers-color-scheme: dark) {
+    #warpnet-launcher .wl-note { color: #9aa5b6; }
+  }
+  #warpnet-launcher iframe {
+    border: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+    visibility: hidden;
+  }
+</style>
+
+<div id="warpnet-launcher" aria-live="polite">
+  <h2>Opening Warpnet…</h2>
+  <p id="wl-intro">
+    Trying to open <span class="wl-chip" id="wl-id">…</span> in the Warpnet desktop app.
+    If your browser shows a confirmation dialog, click <strong>Open Warpnet</strong>.
+  </p>
+
+  <div id="wl-fallback" class="wl-hidden">
+    <p>If nothing happened, the Warpnet app may not be installed on this computer yet.</p>
+    <button class="wl-btn" id="wl-open" type="button">Open in Warpnet</button>
+    <a class="wl-btn wl-ghost" id="wl-download"
+       href="https://warpnet.site/download"
+       target="_blank" rel="noopener">Download Warpnet</a>
+    <p class="wl-note" id="wl-hint">Available for Windows, macOS and Linux.</p>
+  </div>
+
+  <iframe id="wl-launcher-frame" aria-hidden="true" tabindex="-1"></iframe>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    // Single prefix so users can filter the console with "[warpnet]".
+    var LOG = '[warpnet-deeplink]';
+    function log()  { try { console.info.apply(console, [LOG].concat([].slice.call(arguments))); } catch (_) {} }
+    function warn() { try { console.warn.apply(console, [LOG].concat([].slice.call(arguments))); } catch (_) {} }
+
+    // ----- 1. extract id -----------------------------------------
+    // The embed is often dropped into an <iframe srcdoc="…"> on
+    // warpnet.site, in which case window.location is "about:srcdoc"
+    // and carries no query string. Walk a fallback chain to get the
+    // id from the actual outer page.
+    function pickId(url, source) {
+      try {
+        var u = new URL(url);
+        var q = u.searchParams.get('id') || u.searchParams.get('user');
+        if (q) { log('id from', source, '(query)'); return q; }
+        var m = u.pathname.match(/\/user\/([^\/?#]+)/i);
+        if (m) {
+          log('id from', source, '(pathname)');
+          try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; }
+        }
+      } catch (_) { /* not a parseable URL — skip */ }
+      return null;
+    }
+
+    function parseUserId() {
+      // 0. Explicit injection from the host page. For a srcdoc
+      //    iframe the host has full control of the inner document
+      //    string, so it can stash the id on window before our
+      //    script runs:
+      //      srcdoc='<script>window.WARPNET_USER_ID="01KSR…";<\/script>… embed …'
+      //    This is the only path that works when every URL-reading
+      //    route is blocked (cross-origin parent, empty referrer,
+      //    locked-down frameElement) — which is the warpnet.site
+      //    srcdoc case as of today.
+      if (typeof window.WARPNET_USER_ID === 'string' && window.WARPNET_USER_ID) {
+        log('id from window.WARPNET_USER_ID');
+        return window.WARPNET_USER_ID;
+      }
+
+      // 1. Own location — works when embed is the top frame
+      //    (warpnet.site/user?id=…) or sits in an iframe with a real src.
+      var here = window.location.href;
+      if (here && here !== 'about:srcdoc' && here !== 'about:blank') {
+        var own = pickId(here, 'window.location');
+        if (own) return own;
+      } else {
+        log('window.location is', here, '— looking at parent');
+      }
+
+      // 2. Parent location — same-origin only; throws on cross-origin.
+      try {
+        var parentHref = window.parent && window.parent.location && window.parent.location.href;
+        if (parentHref) {
+          var fromParent = pickId(parentHref, 'window.parent.location');
+          if (fromParent) return fromParent;
+        }
+      } catch (e) {
+        log('window.parent.location blocked (cross-origin)');
+      }
+
+      // 3. document.referrer — works across origins, set by the browser
+      //    to the embedding page's URL.
+      if (document.referrer) {
+        var fromRef = pickId(document.referrer, 'document.referrer');
+        if (fromRef) return fromRef;
+      }
+
+      // 4. Explicit data-* on the iframe element, if the embedder set one.
+      try {
+        var el = window.frameElement;
+        if (el && el.dataset) {
+          var d = el.dataset.warpnetUser || el.dataset.userId || el.dataset.id;
+          if (d) { log('id from frameElement.dataset'); return d; }
+        }
+      } catch (_) { /* cross-origin — skip */ }
+
+      return null;
+    }
+
+    var root = document.getElementById('warpnet-launcher');
+    if (!root) { warn('launcher root #warpnet-launcher missing — embed not mounted'); return; }
+
+    var chip = document.getElementById('wl-id');
+    var intro = document.getElementById('wl-intro');
+    var fallback = document.getElementById('wl-fallback');
+    var openBtn = document.getElementById('wl-open');
+    var hint = document.getElementById('wl-hint');
+    var frame = document.getElementById('wl-launcher-frame');
+
+    var userId = parseUserId();
+    if (!userId) {
+      var parentHref = '';
+      try { parentHref = window.parent && window.parent.location && window.parent.location.href; }
+      catch (_) { parentHref = '<cross-origin>'; }
+      warn('no user id resolved', {
+        ownLocation: window.location.href,
+        parentLocation: parentHref,
+        referrer: document.referrer || '<empty>',
+      });
+      chip.textContent = 'unknown';
+      intro.textContent =
+        "We couldn't find a user id in this link. Use a link of the form " +
+        "warpnet.site/user?id={user_id}.";
+      fallback.classList.remove('wl-hidden');
+      return;
+    }
+    chip.textContent = userId;
+
+    var deepLink = 'warpnet://user/' + encodeURIComponent(userId);
+    log('resolved', { userId: userId, deepLink: deepLink });
+
+    // ----- 2. OS hint --------------------------------------------
+    var ua = navigator.userAgent || '';
+    var platform = (navigator.userAgentData && navigator.userAgentData.platform) || '';
+    if (/Win/i.test(platform) || /Windows/i.test(ua)) {
+      hint.textContent = 'Download for Windows.';
+    } else if (/Mac/i.test(platform) || /Mac OS X|Macintosh/i.test(ua)) {
+      hint.textContent = 'Download for macOS.';
+    } else if (/Android/i.test(ua)) {
+      hint.textContent = 'On Android? Install the Warpnet app from the releases page.';
+    } else if (/iPhone|iPad|iPod/i.test(ua)) {
+      hint.textContent = 'iOS is not supported yet.';
+    } else if (/Linux/i.test(platform) || /Linux/i.test(ua)) {
+      hint.textContent = 'Download for Linux.';
+    }
+
+    // ----- 3. fire the deep link --------------------------------
+    // Hidden iframe is the only auto-fire technique that doesn't
+    // replace the top tab with Chrome's "site can't be reached"
+    // page when the scheme is unregistered. Reset src to about:blank
+    // before reassigning, otherwise the second call is a no-op
+    // (iframe is already at that URL).
+    function fire(source) {
+      log('fire via iframe', { source: source, src: deepLink });
+      try {
+        frame.src = 'about:blank';
+        frame.src = deepLink;
+      } catch (e) {
+        warn('iframe fire threw', e);
+      }
+    }
+
+    // ----- 4. detect handoff -------------------------------------
+    // visibilitychange / blur / pagehide trip when the OS gives
+    // focus to the app. If none of them fire within 1.5s we assume
+    // the scheme isn't registered and reveal the install UI.
+    var handedOff = false;
+    function markHandedOff(reason) {
+      if (handedOff) return;
+      handedOff = true;
+      log('handoff detected via', reason);
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) markHandedOff('visibilitychange');
+    });
+    window.addEventListener('blur',     function () { markHandedOff('blur'); });
+    window.addEventListener('pagehide', function () { markHandedOff('pagehide'); });
+
+    fire('auto');
+
+    setTimeout(function () {
+      if (handedOff) {
+        log('auto-fire OK, OS took focus');
+      } else {
+        warn('no handoff after 1.5s — scheme likely unregistered or browser blocked the iframe (typical for Chromium ≥90 / Brave). Revealing fallback UI.');
+        fallback.classList.remove('wl-hidden');
+      }
+    }, 1500);
+
+    // ----- 5. retry on user click -------------------------------
+    // Chromium-based browsers (Chrome ≥90, Brave, Edge) silently
+    // block external-scheme launches from hidden iframes — so the
+    // iframe path is useless once we land on the fallback UI. An
+    // <a>.click() driven from a click handler carries a user
+    // gesture, which is what those browsers require to actually
+    // hand off to the OS.
+    openBtn.addEventListener('click', function () {
+      log('retry button clicked → anchor-click with user gesture', deepLink);
+      var a = document.createElement('a');
+      a.href = deepLink;
+      a.rel = 'noopener';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  })();
+</script>

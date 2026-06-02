@@ -177,12 +177,7 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 	if err := txn.Commit(); err != nil {
 		return newTweet, err
 	}
-	if repo.statsDb == nil {
-		return newTweet, nil
-	}
-	if err := repo.statsDb.Increment(countKey.DatastoreKey()); err != nil {
-		log.Warnf("tweet: stats db increment: %v", err)
-	}
+
 	return newTweet, nil
 }
 
@@ -400,14 +395,6 @@ func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
 		AddRootID(userId).
 		Build()
 
-	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(countKey.DatastoreKey())
-		if err == nil {
-			return total, nil
-		}
-		log.Warnf("crdt tweets count not found for user %s - %s", userId, err)
-	}
-
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return 0, err
@@ -446,12 +433,6 @@ func (repo *TweetRepo) Delete(userID, tweetID string) error {
 	}
 	if err := txn.Commit(); err != nil {
 		return err
-	}
-	if repo.statsDb == nil {
-		return nil
-	}
-	if err := repo.statsDb.Decrement(countKey.DatastoreKey()); err != nil {
-		log.Warnf("tweet: stats db decrement: %v", err)
 	}
 	return nil
 }

@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, IsFirstRun} from "../../wailsjs/go/main/App";
+import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop} from "@/lib/transport";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -66,6 +66,7 @@ export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/
 export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
+export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PUBLIC_GET_REPLY = "/public/get/reply/0.0.0"
@@ -101,6 +102,9 @@ export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 export const PUBLIC_POST_REPORT        = "/public/post/report/0.0.0"
 
 const stateMap = new Map();
+// sessionStorage key for the owner profile; persisted on login so a page reload
+// restores the session instead of bouncing to the sign-up screen.
+const OWNER_STORAGE = "warpnet.owner";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
 
@@ -125,6 +129,7 @@ const inflightPostRequests = new Map();
 // by the UI (disabled buttons during upload).
 const dedupSkipPaths = new Set([
     PRIVATE_POST_UPLOAD_IMAGE,
+    PRIVATE_POST_IMPORT_TWITTER_TWEET,
 ]);
 
 function isPostPath(path) {
@@ -164,6 +169,7 @@ export const warpnetService = {
     setOwnerProfile(owner) {
         const key = `owner`;
         stateMap.set(key, owner)
+        try { sessionStorage.setItem(OWNER_STORAGE, JSON.stringify(owner)) } catch (e) {}
     },
 
     getOwnerProfile() {
@@ -171,8 +177,35 @@ export const warpnetService = {
         return stateMap.get(key)
     },
 
+    // restoreSession re-hydrates the owner profile from sessionStorage on app
+    // start so a page reload stays on the current page. The long-lived node is
+    // still authenticated and transport restores the channel key in parallel,
+    // so no re-login is performed.
+    restoreSession() {
+        try {
+            const raw = sessionStorage.getItem(OWNER_STORAGE)
+            if (!raw) return
+            const owner = JSON.parse(raw)
+            if (owner && owner.user_id) {
+                stateMap.set(`owner`, owner)
+                startRefreshNotifications()
+            }
+        } catch (e) {}
+    },
+
     async isFirstRun() {
         return Boolean(await IsFirstRun());
+    },
+
+    // Returns the pending warpnet:// URL and clears it on the Go side.
+    async consumePendingDeepLink() {
+        try {
+            const raw = await ConsumePendingDeepLink();
+            return typeof raw === "string" ? raw : "";
+        } catch (e) {
+            console.warn("consumePendingDeepLink failed:", e);
+            return "";
+        }
     },
 
     async signInUser(form) {
@@ -240,6 +273,7 @@ export const warpnetService = {
         }
         stopRefreshNotifications()
         stateMap.clear()
+        try { sessionStorage.removeItem(OWNER_STORAGE) } catch (e) {}
         try {
             localStorage.removeItem(`first_run_seen`)
         } catch (e) {}
@@ -1029,6 +1063,30 @@ export const warpnetService = {
                 text: text,
                 image_keys: imageKeys || [],
                 created_at: new Date().toISOString(),
+            },
+        }
+
+        return await this.sendToNode(request);
+    },
+
+    isDesktopNode() {
+        // Desktop member node (Wails) → native dialog + node reads the .zip
+        // off local disk. Browser dashboard (business node) → file upload.
+        return IsDesktop();
+    },
+
+    // importTweet streams one pre-parsed original tweet (text + up to four
+    // base64 photos) to the node, which stores it on arrival. The business
+    // browser dashboard parses and filters the X archive client-side and calls
+    // this once per kept tweet, so the node never buffers the whole archive.
+    async importTweet({id, text = "", createdAt = "", images = []}) {
+        const request = {
+            path: PRIVATE_POST_IMPORT_TWITTER_TWEET,
+            body: {
+                id: id,
+                text: text,
+                created_at: createdAt,
+                images: images,
             },
         }
 

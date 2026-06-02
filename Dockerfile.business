@@ -1,0 +1,28 @@
+FROM ubuntu:24.04 AS builder
+
+RUN apt update && apt install -y git curl tar build-essential ca-certificates
+
+ENV GO_VERSION=1.26.0
+RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -o go.tar.gz \
+    && tar -C /usr/local -xzf go.tar.gz \
+    && rm go.tar.gz
+
+COPY . /warpnet
+WORKDIR /warpnet
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOMODCACHE=/go/pkg/mod
+ENV GOPATH=/warpnet
+ENV GOCACHE=/root/.cache/go-build
+
+# Serves the embedded frontend/dist over HTTP/WS; no Wails build step.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    go build -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/business
+
+FROM ubuntu:24.04
+COPY --from=builder /etc/ssl/certs /etc/ssl/certs
+COPY --from=builder /warpnet/warpnet /warpnet/warpnet
+
+# Dashboard port; node.server.password is supplied at run time (env/flag), not baked in.
+EXPOSE 4999
+CMD ["/warpnet/warpnet"]

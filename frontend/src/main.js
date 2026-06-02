@@ -29,12 +29,17 @@ import "./assets/tailwind.css";
 import router from "./router";
 import directives from "./directives";
 import filters from "./filters";
+import { warpnetService } from "./service/service";
 
 const app = createApp(App);
 
 app.config.errorHandler = function (err, vm, info) {
     console.error("GLOBAL ERROR HANDLER:", err, info);
 };
+
+// Resume an existing session (owner profile + channel key) before the router
+// runs, so a page reload stays on the current page instead of the login screen.
+warpnetService.restoreSession();
 
 app.use(router);
 app.use(directives);
