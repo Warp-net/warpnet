@@ -46,7 +46,7 @@ Warpnet is a fully decentralized, peer-to-peer social network built in Go. Every
 Every "decentralized" social network you've heard of still has a soft center.
 
 - **Federated networks** (like Mastodon) still put you on an *instance*. The instance admin holds your data, sets the rules, can defederate from others, and can simply shut the server down. You traded one landlord for thousands of smaller ones.
-- **Relay server based networks** (like Nostr) make the client thin and push storage onto *relays* — servers that can rate-limit you, refuse your events, or disappear.
+- **Relay server based networks** (like Nostr) make the client thin and push storage onto *relays* — stateful servers that can rate-limit you, refuse your events, or delete your data.
 - **"Protocol" networks** (like the atproto ecosystem) decentralize in theory but concentrate around a handful of large providers in practice.
 
 Warpnet takes the harder road on purpose: **there is no server tier at all.** Each participant runs a node that stores its own data locally and talks directly to other nodes. Discovery happens over a DHT, transport is encrypted end-to-end with the Noise protocol, and content spreads by propagating between peers. There is nothing in the middle to capture, subpoena, or switch off.
@@ -60,9 +60,9 @@ A fair comparison, because the alternatives are good projects making different t
 | | **Warpnet** | Mastodon | Nostr | Bluesky / atproto |
 |---|:---:|:---:|:---:|:---:|
 | Architecture | True P2P (libp2p) | Federated instances | Client + relay server | PDS + relays |
-| Server required? | **None** | Yes (instance) | Yes (relays) | Yes (providers) |
+| Server required? | **None** | Yes (instance) | Yes (relay servers) | Yes (providers) |
 | Where your data lives | **Your own node** | Instance admin's DB | Relay servers you post to | Your PDS provider |
-| Transport security | **Noise protocol** | TLS to instance | TLS to relay | TLS to provider |
+| Transport security | **Noise protocol** | TLS to instance | TLS to relay server | TLS to provider |
 | Can an admin deplatform you? | **No admin exists** | Yes (instance admin) | Relay server can drop you | Provider can drop you |
 | Discovery | **DHT** | Instance + relay routers | Relay server lists | Relays / indexers |
 | Moderation | LLM moderator nodes | Per-instance | Per-client | Labelers |
