@@ -65,7 +65,7 @@ A fair comparison, because the alternatives are good projects making different t
 | Transport security | **Noise protocol** | TLS to instance | TLS to relay | TLS to provider |
 | Can an admin deplatform you? | **No admin exists** | Yes (instance admin) | Relay server can drop you | Provider can drop you |
 | Discovery | **DHT** | Instance + relay routers | Relay server lists | Relays / indexers |
-| Moderation | Opt-in moderator nodes | Per-instance | Per-client | Labelers |
+| Moderation | LLM moderator nodes | Per-instance | Per-client | Labelers |
 
 Warpnet's bet: the only way to be genuinely censorship-resistant is to remove the server entirely, not to multiply it.
 
@@ -140,7 +140,7 @@ Warpnet has three node roles:
 |---|---|
 | **relay** | Stable entry points that help new nodes find peers via the DHT. Stateless. Thin. |
 | **member** | The full "fat" node most people run — holds local data, serves the UI, and participates in the network. |
-| **moderator** | Optional nodes that handle moderation using challenge/response signing and a pre-shared key. |
+| **moderator** | LLM moderation node. |
 
 ### One protocol, two clients
 
