@@ -190,10 +190,10 @@ If you want to trace a feature end to end, read **`event/paths.go`** (the route)
 
 ### Good places to start
 
-- 🏷️ Browse [issues labeled **`good first issue`**](https://github.com/Warp-net/warpnet/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — small, self-contained tasks with clear boundaries.
-- 🐛 [Report a bug](https://github.com/Warp-net/warpnet/issues/new?labels=bug&template=bug-report---.md) or [request a feature](https://github.com/Warp-net/warpnet/issues/new?labels=enhancement&template=feature-request---.md).
-- 📖 Read **[HOW-TO-HELP.md](https://github.com/Warp-net/warpnet/blob/main/HOW-TO-HELP.md)** for the longer guide.
-- 💬 Say hi in the [Telegram dev chat](https://t.me/warpnetdev) — the quickest way to find a task that fits you.
+- Browse [issues labeled **`good first issue`**](https://github.com/Warp-net/warpnet/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — small, self-contained tasks with clear boundaries.
+- [Report a bug](https://github.com/Warp-net/warpnet/issues/new?labels=bug&template=bug-report---.md) or [request a feature](https://github.com/Warp-net/warpnet/issues/new?labels=enhancement&template=feature-request---.md).
+- Read **[HOW-TO-HELP.md](https://github.com/Warp-net/warpnet/blob/main/HOW-TO-HELP.md)** for the longer guide.
+- Say hi in the [Telegram dev chat](https://t.me/warpnetdev) — the quickest way to find a task that fits you.
 
 ### A note on the architecture
 
@@ -207,7 +207,7 @@ Adding a feature usually means touching several layers in lockstep: a path in `e
 4. Run `make tests` and make sure `go vet ./...` / `golangci-lint run` are clean.
 5. Commit in imperative present tense and open a PR that names the path(s) you touched.
 
-Every contribution — code, docs, bug reports, or just kicking the tyres on testnet — is genuinely appreciated. And yes: a ⭐ helps more people find the project.
+Every contribution — code, docs, bug reports, or just kicking the tyres on testnet — is genuinely appreciated. And yes: a star helps more people find the project.
 
 ## FAQ
 
