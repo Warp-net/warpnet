@@ -231,9 +231,9 @@ It's actively developed and pre-1.0. Use testnet to explore, expect rough edges,
 
 ## Community
 
-- 💬 **Telegram:** [warpnetdev](https://t.me/warpnetdev)
-- 🐙 **Codeberg mirror:** [codeberg.org/Warpnet/warpnet](https://codeberg.org/Warpnet/warpnet)
-- 📦 **Snap Store:** [snapcraft.io/warpnet](https://snapcraft.io/warpnet)
+- **Telegram:** [warpnetdev](https://t.me/warpnetdev)
+- **Codeberg mirror:** [codeberg.org/Warpnet/warpnet](https://codeberg.org/Warpnet/warpnet)
+- **Snap Store:** [snapcraft.io/warpnet](https://snapcraft.io/warpnet)
 
 **Maintainer:** Vadim Filin — [github.com.mecdy@passmail.net](mailto:github.com.mecdy@passmail.net)
 
@@ -251,6 +251,6 @@ Warpnet is free software, licensed under the **GNU Affero General Public License
 
 **Built with Go, libp2p, Noise, and the conviction that a social network shouldn't have an owner.**
 
-If you believe that too — [grab a good first issue](https://github.com/Warp-net/warpnet/issues) and join in. ⭐
+If you believe that too — [grab a good first issue](https://github.com/Warp-net/warpnet/issues) and join in.
 
 </div>
