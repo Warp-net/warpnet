@@ -13,11 +13,13 @@ WORKDIR /warpnet
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOMODCACHE=/go/pkg/mod
 ENV GOPATH=/warpnet
+ENV GOCACHE=/root/.cache/go-build
 ENV CGO_ENABLED=1
-ENV GOMEMLIMIT=2750MiB 
+ENV GOMEMLIMIT=2750MiB
 ENV GOGC=50
 
-RUN git submodule update --init --recursive && \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    git submodule update --init --recursive && \
     go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
 
 CMD ["/warpnet/warpnet"]
