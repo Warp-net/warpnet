@@ -32,6 +32,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 
@@ -39,6 +40,8 @@ import (
 )
 
 const rsaKeyBits = 2048
+
+var errNotPEMFile = errors.New("keys: not a PEM file")
 
 // loadOrCreateKey loads an RSA private key from path, generating and
 // persisting a new 2048-bit key on first run. Mastodon verifies HTTP
@@ -51,7 +54,7 @@ func loadOrCreateKey(path string) (*rsa.PrivateKey, error) {
 	case err == nil:
 		block, _ := pem.Decode(bt)
 		if block == nil {
-			return nil, fmt.Errorf("keys: %s is not a PEM file", path)
+			return nil, fmt.Errorf("keys: %s: %w", path, errNotPEMFile)
 		}
 		key, perr := x509.ParsePKCS1PrivateKey(block.Bytes)
 		if perr != nil {

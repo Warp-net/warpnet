@@ -45,11 +45,23 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
+
+var (
+	errNoSignatureHeader   = errors.New("httpsig: missing Signature header")
+	errDigestMismatch      = errors.New("httpsig: digest mismatch")
+	errIncompleteSignature = errors.New("httpsig: incomplete Signature header")
+	errBadPublicKey        = errors.New("httpsig: bad public key")
+)
+
+// minSignedHeaders is the minimum set ActivityPub peers are expected to sign.
+var minSignedHeaders = []string{"(request-target)", "host", "date"}
 
 // signRequest signs req in place with keyID/key. For requests with a body,
 // pass the already-read body bytes so a Digest header is set and covered.
@@ -86,18 +98,30 @@ func signRequest(req *http.Request, keyID string, key *rsa.PrivateKey, body []by
 func verifyRequest(req *http.Request, body []byte, fetchKey func(keyID string) (*rsa.PublicKey, error)) error {
 	sigHdr := req.Header.Get("Signature")
 	if sigHdr == "" {
-		return fmt.Errorf("httpsig: missing Signature header")
+		return errNoSignatureHeader
 	}
 	keyID, headers, signature, err := parseSignatureHeader(sigHdr)
 	if err != nil {
 		return err
 	}
 
-	if contains(headers, "digest") {
+	// Enforce the minimum signed header set required for ActivityPub.
+	for _, required := range minSignedHeaders {
+		if !slices.Contains(headers, required) {
+			return fmt.Errorf("httpsig: %q not signed: %w", required, errIncompleteSignature)
+		}
+	}
+	// A request carrying a body MUST bind it via a signed digest, otherwise a
+	// tampered body would still verify.
+	if len(body) > 0 && !slices.Contains(headers, "digest") {
+		return fmt.Errorf("httpsig: body not bound by digest: %w", errIncompleteSignature)
+	}
+
+	if slices.Contains(headers, "digest") {
 		sum := sha256.Sum256(body)
 		want := "SHA-256=" + base64.StdEncoding.EncodeToString(sum[:])
 		if req.Header.Get("Digest") != want {
-			return fmt.Errorf("httpsig: digest mismatch")
+			return errDigestMismatch
 		}
 	}
 
@@ -131,31 +155,31 @@ func buildSigningString(req *http.Request, headers []string) string {
 		case "host":
 			fmt.Fprintf(&b, "host: %s", req.Host)
 		default:
-			fmt.Fprintf(&b, "%s: %s", h, req.Header.Get(http.CanonicalHeaderKey(h)))
+			fmt.Fprintf(&b, "%s: %s", h, req.Header.Get(h))
 		}
 	}
 	return b.String()
 }
 
 func parseSignatureHeader(v string) (keyID string, headers []string, signature string, err error) {
-	for _, part := range strings.Split(v, ",") {
-		eq := strings.IndexByte(part, '=')
-		if eq < 0 {
+	for part := range strings.SplitSeq(v, ",") {
+		k, val, ok := strings.Cut(part, "=")
+		if !ok {
 			continue
 		}
-		k := strings.TrimSpace(part[:eq])
-		val := strings.Trim(strings.TrimSpace(part[eq+1:]), `"`)
+		k = strings.TrimSpace(k)
+		val = strings.Trim(strings.TrimSpace(val), `"`)
 		switch k {
 		case "keyId":
 			keyID = val
 		case "headers":
-			headers = strings.Fields(val)
+			headers = strings.Fields(strings.ToLower(val))
 		case "signature":
 			signature = val
 		}
 	}
 	if keyID == "" || signature == "" {
-		return "", nil, "", fmt.Errorf("httpsig: incomplete Signature header")
+		return "", nil, "", errIncompleteSignature
 	}
 	if len(headers) == 0 {
 		headers = []string{"date"} // draft default
@@ -166,26 +190,17 @@ func parseSignatureHeader(v string) (keyID string, headers []string, signature s
 func parseRSAPublicKeyPEM(pemStr string) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
-		return nil, fmt.Errorf("httpsig: public key is not PEM")
+		return nil, fmt.Errorf("not PEM: %w", errBadPublicKey)
 	}
 	if pub, perr := x509.ParsePKIXPublicKey(block.Bytes); perr == nil {
 		rsaPub, ok := pub.(*rsa.PublicKey)
 		if !ok {
-			return nil, fmt.Errorf("httpsig: key is not RSA")
+			return nil, fmt.Errorf("not RSA: %w", errBadPublicKey)
 		}
 		return rsaPub, nil
 	}
 	if k, perr := x509.ParsePKCS1PublicKey(block.Bytes); perr == nil {
 		return k, nil
 	}
-	return nil, fmt.Errorf("httpsig: unparseable public key")
-}
-
-func contains(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
+	return nil, errBadPublicKey
 }

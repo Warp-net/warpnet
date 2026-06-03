@@ -29,12 +29,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Warp-net/warpnet/json"
@@ -47,6 +50,16 @@ const (
 	secContext     = "https://w3id.org/security/v1"
 
 	maxBodyBytes = 1 << 20
+
+	// maxInflightDeliveries bounds concurrent outbound Accept deliveries so a
+	// burst of inbound Follow activities can't spawn unbounded goroutines.
+	maxInflightDeliveries = 16
+)
+
+var (
+	errActorMalformed = errors.New("actor document malformed")
+	errRemoteStatus   = errors.New("remote returned error status")
+	errInsecureURL    = errors.New("remote URL must be https")
 )
 
 // gateway is the stateless ActivityPub front for one bridged Warpnet user.
@@ -59,6 +72,7 @@ type gateway struct {
 	source      warpnetSource
 	signingUser string // SKELETON: the single user the gateway signs outbound as
 	client      *http.Client
+	sem         chan struct{} // bounds concurrent Accept deliveries
 }
 
 func (g *gateway) baseURL() string            { return "https://" + g.host }
@@ -190,10 +204,31 @@ func writeJSON(w http.ResponseWriter, contentType string, v any) {
 	_, _ = w.Write(bt)
 }
 
+// validateRemoteURL rejects non-HTTPS targets before any outbound fetch. This
+// is the minimum SSRF guard for dereferencing attacker-supplied actor/key URLs.
+// TODO(prod): also block private/link-local/loopback IPs and guard against
+// DNS rebinding before exposing the gateway publicly.
+func validateRemoteURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse url %q: %w", raw, err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("url %q: %w", raw, errInsecureURL)
+	}
+	return nil
+}
+
 // fetchActor dereferences a remote actor document, signing the GET so it
 // works against instances running in authorized-fetch / secure mode.
-func (g *gateway) fetchActor(actorURL string) (map[string]any, error) {
-	req, err := http.NewRequest(http.MethodGet, actorURL, nil)
+func (g *gateway) fetchActor(ctx context.Context, actorURL string) (map[string]any, error) {
+	if err := validateRemoteURL(actorURL); err != nil {
+		return nil, err
+	}
+	// G704: dereferencing remote actor URLs is intrinsic to ActivityPub
+	// federation; validateRemoteURL enforces https, full SSRF hardening is a
+	// documented production TODO.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, actorURL, nil) //nolint:gosec // see note above
 	if err != nil {
 		return nil, err
 	}
@@ -201,13 +236,13 @@ func (g *gateway) fetchActor(actorURL string) (map[string]any, error) {
 	if err := signRequest(req, g.keyID(g.signingUser), g.key, nil); err != nil {
 		return nil, err
 	}
-	resp, err := g.client.Do(req)
+	resp, err := g.client.Do(req) //nolint:gosec // see G704 note above
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
+		return nil, fmt.Errorf("fetch %s: status %d: %w", actorURL, resp.StatusCode, errRemoteStatus)
 	}
 	bt, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if err != nil {
@@ -221,27 +256,27 @@ func (g *gateway) fetchActor(actorURL string) (map[string]any, error) {
 }
 
 // fetchKey resolves a keyId (actorURL#main-key) to its RSA public key.
-func (g *gateway) fetchKey(keyID string) (*rsa.PublicKey, error) {
+func (g *gateway) fetchKey(ctx context.Context, keyID string) (*rsa.PublicKey, error) {
 	actorURL := strings.SplitN(keyID, "#", 2)[0]
-	m, err := g.fetchActor(actorURL)
+	m, err := g.fetchActor(ctx, actorURL)
 	if err != nil {
 		return nil, err
 	}
 	pk, ok := m["publicKey"].(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("actor %s has no publicKey", actorURL)
+		return nil, fmt.Errorf("actor %s has no publicKey: %w", actorURL, errActorMalformed)
 	}
 	pemStr, _ := pk["publicKeyPem"].(string)
 	if pemStr == "" {
-		return nil, fmt.Errorf("actor %s has no publicKeyPem", actorURL)
+		return nil, fmt.Errorf("actor %s has no publicKeyPem: %w", actorURL, errActorMalformed)
 	}
 	return parseRSAPublicKeyPEM(pemStr)
 }
 
 // remoteInbox returns the best inbox URL for a remote actor (sharedInbox if
 // advertised, otherwise the personal inbox).
-func (g *gateway) remoteInbox(actorURL string) (string, error) {
-	m, err := g.fetchActor(actorURL)
+func (g *gateway) remoteInbox(ctx context.Context, actorURL string) (string, error) {
+	m, err := g.fetchActor(ctx, actorURL)
 	if err != nil {
 		return "", err
 	}
@@ -253,16 +288,19 @@ func (g *gateway) remoteInbox(actorURL string) (string, error) {
 	if inbox, ok := m["inbox"].(string); ok && inbox != "" {
 		return inbox, nil
 	}
-	return "", fmt.Errorf("actor %s has no inbox", actorURL)
+	return "", fmt.Errorf("actor %s has no inbox: %w", actorURL, errActorMalformed)
 }
 
 // postSigned delivers a signed POST of doc to target, as localUser.
-func (g *gateway) postSigned(localUser, target string, doc any) error {
+func (g *gateway) postSigned(ctx context.Context, localUser, target string, doc any) error {
+	if err := validateRemoteURL(target); err != nil {
+		return err
+	}
 	body, err := json.Marshal(doc)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -277,7 +315,7 @@ func (g *gateway) postSigned(localUser, target string, doc any) error {
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxBodyBytes))
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("%s returned %d", target, resp.StatusCode)
+		return fmt.Errorf("deliver to %s: status %d: %w", target, resp.StatusCode, errRemoteStatus)
 	}
 	return nil
 }
@@ -291,14 +329,12 @@ func randomToken() string {
 // userFromActorURL extracts the username from one of our own actor URLs
 // (https://host/users/NAME).
 func userFromActorURL(u string) string {
-	const marker = "/users/"
-	i := strings.Index(u, marker)
-	if i < 0 {
+	_, rest, ok := strings.Cut(u, "/users/")
+	if !ok {
 		return ""
 	}
-	name := u[i+len(marker):]
-	if j := strings.IndexByte(name, '/'); j >= 0 {
-		name = name[:j]
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		rest = rest[:i]
 	}
-	return name
+	return rest
 }

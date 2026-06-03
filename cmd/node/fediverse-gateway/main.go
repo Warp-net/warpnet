@@ -41,6 +41,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"net/http"
 	"os"
@@ -95,6 +96,7 @@ func main() {
 		source:      staticSource{user: wu},
 		signingUser: *user,
 		client:      &http.Client{Timeout: 15 * time.Second},
+		sem:         make(chan struct{}, maxInflightDeliveries),
 	}
 
 	srv := &http.Server{
@@ -106,7 +108,7 @@ func main() {
 	go func() {
 		log.Infof("gateway: listening on %s, public https://%s", *addr, *host)
 		log.Infof("gateway: bridged actor is @%s@%s -> %s", *user, *host, g.actorID(*user))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("gateway: serve: %v", err)
 		}
 	}()

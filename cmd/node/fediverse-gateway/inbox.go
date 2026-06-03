@@ -28,12 +28,17 @@ resulting from the use or misuse of this software.
 package main
 
 import (
+	"context"
+	"crypto/rsa"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
+
+const acceptDeliveryTimeout = 30 * time.Second
 
 func (g *gateway) handleSharedInbox(w http.ResponseWriter, r *http.Request) {
 	g.handleInbox(w, r, "")
@@ -52,7 +57,9 @@ func (g *gateway) handleInbox(w http.ResponseWriter, r *http.Request, user strin
 		http.Error(w, "read body", http.StatusBadRequest)
 		return
 	}
-	if err := verifyRequest(r, body, g.fetchKey); err != nil {
+	if err := verifyRequest(r, body, func(keyID string) (*rsa.PublicKey, error) {
+		return g.fetchKey(r.Context(), keyID)
+	}); err != nil {
 		log.Warnf("inbox: signature verification failed: %v", err)
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
@@ -78,8 +85,19 @@ func (g *gateway) handleInbox(w http.ResponseWriter, r *http.Request, user strin
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
-		go g.acceptFollow(localUser, remoteActor, raw)
-		w.WriteHeader(http.StatusAccepted)
+		// Bound concurrent Accept deliveries; on saturation ask the peer to
+		// retry rather than spawning unbounded goroutines.
+		select {
+		case g.sem <- struct{}{}:
+			go func() {
+				defer func() { <-g.sem }()
+				g.acceptFollow(localUser, remoteActor, raw)
+			}()
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			log.Warnf("inbox: delivery pool full, asking %s to retry", remoteActor)
+			http.Error(w, "busy", http.StatusServiceUnavailable)
+		}
 	default:
 		// Phase 2/3: translate Create/Like/Announce/Undo/Delete into Warpnet.
 		log.Infof("inbox: %q acknowledged but not handled yet (skeleton)", typ)
@@ -93,7 +111,10 @@ func (g *gateway) acceptFollow(localUser, remoteActorURL string, follow map[stri
 		log.Warnf("accept: missing remote actor")
 		return
 	}
-	inbox, err := g.remoteInbox(remoteActorURL)
+	ctx, cancel := context.WithTimeout(context.Background(), acceptDeliveryTimeout)
+	defer cancel()
+
+	inbox, err := g.remoteInbox(ctx, remoteActorURL)
 	if err != nil {
 		log.Errorf("accept: resolve inbox for %s: %v", remoteActorURL, err)
 		return
@@ -105,7 +126,7 @@ func (g *gateway) acceptFollow(localUser, remoteActorURL string, follow map[stri
 		Actor:   g.actorID(localUser),
 		Object:  follow,
 	}
-	if err := g.postSigned(localUser, inbox, accept); err != nil {
+	if err := g.postSigned(ctx, localUser, inbox, accept); err != nil {
 		log.Errorf("accept: deliver to %s: %v", inbox, err)
 		return
 	}
