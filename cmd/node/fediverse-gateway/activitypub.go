@@ -71,11 +71,26 @@ type actor struct {
 // Object is left as any so the original inbound activity can be echoed back
 // verbatim, which is what Accept(Follow) requires.
 type activity struct {
-	Context any    `json:"@context,omitempty"`
-	ID      string `json:"id,omitempty"`
-	Type    string `json:"type"`
-	Actor   string `json:"actor,omitempty"`
-	Object  any    `json:"object,omitempty"`
+	Context any      `json:"@context,omitempty"`
+	ID      string   `json:"id,omitempty"`
+	Type    string   `json:"type"`
+	Actor   string   `json:"actor,omitempty"`
+	Object  any      `json:"object,omitempty"`
+	To      []string `json:"to,omitempty"`
+	Cc      []string `json:"cc,omitempty"`
+}
+
+// note is the ActivityPub Note emitted inside a Create when a Warpnet tweet is
+// federated outbound.
+type note struct {
+	ID           string   `json:"id"`
+	Type         string   `json:"type"`
+	AttributedTo string   `json:"attributedTo"`
+	Content      string   `json:"content"`
+	Published    string   `json:"published"`
+	InReplyTo    string   `json:"inReplyTo,omitempty"`
+	To           []string `json:"to,omitempty"`
+	Cc           []string `json:"cc,omitempty"`
 }
 
 type orderedCollection struct {

@@ -130,9 +130,10 @@ func (g *gateway) acceptFollow(localUser, remoteActorURL string, follow map[stri
 		log.Errorf("accept: deliver to %s: %v", inbox, err)
 		return
 	}
+	if err := g.followers.Add(localUser, follower{Actor: remoteActorURL, Inbox: inbox}); err != nil {
+		log.Errorf("accept: persist follower %s: %v", remoteActorURL, err)
+	}
 	log.Infof("accept: Follow accepted (local=%s remote=%s)", localUser, remoteActorURL)
-	// TODO(phase2): persist remoteActorURL + inbox as a follower in Warpnet so
-	// outbound posts can be fanned out to it.
 }
 
 // stringField reads a string value from a loosely-typed activity, tolerating

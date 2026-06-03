@@ -2,12 +2,16 @@
 package main
 
 import (
+	"context"
 	"crypto/rsa"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 )
 
@@ -21,6 +25,10 @@ func testGateway(t *testing.T) *gateway {
 	if err != nil {
 		t.Fatalf("pub: %v", err)
 	}
+	fs, err := newFollowerStore(t.TempDir() + "/followers.json")
+	if err != nil {
+		t.Fatalf("followers: %v", err)
+	}
 	return &gateway{
 		host:        "gw.example",
 		key:         key,
@@ -29,6 +37,7 @@ func testGateway(t *testing.T) *gateway {
 		signingUser: "alice",
 		client:      http.DefaultClient,
 		sem:         make(chan struct{}, 4),
+		followers:   fs,
 	}
 }
 
@@ -116,4 +125,76 @@ func TestHTTPSignatureRoundTrip(t *testing.T) {
 			t.Fatal("expected digest mismatch, got nil")
 		}
 	})
+}
+
+func TestFollowerStore(t *testing.T) {
+	path := t.TempDir() + "/f.json"
+	s, err := newFollowerStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add("alice", follower{Actor: "https://m/users/bob", Inbox: "https://m/inbox"}); err != nil {
+		t.Fatal(err)
+	}
+	// idempotent by actor URL
+	if err := s.Add("alice", follower{Actor: "https://m/users/bob", Inbox: "https://m/inbox2"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.List("alice"); len(got) != 1 {
+		t.Fatalf("want 1 follower, got %d", len(got))
+	}
+	// reload from disk sees the persisted follower
+	s2, err := newFollowerStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s2.List("alice"); len(got) != 1 || got[0].Actor != "https://m/users/bob" {
+		t.Fatalf("reloaded store mismatch: %+v", got)
+	}
+}
+
+func TestBuildCreateNote(t *testing.T) {
+	g := testGateway(t)
+	a := g.buildCreateNote("alice", domain.Tweet{Id: "t1", Text: "hello <fedi>", CreatedAt: time.Unix(1700000000, 0)})
+	if a.Type != "Create" || a.Actor != "https://gw.example/users/alice" {
+		t.Fatalf("bad create: %+v", a)
+	}
+	n, ok := a.Object.(note)
+	if !ok {
+		t.Fatalf("object is not a note: %T", a.Object)
+	}
+	if n.ID != "https://gw.example/users/alice/statuses/t1" {
+		t.Fatalf("bad note id: %s", n.ID)
+	}
+	if !strings.Contains(n.Content, "&lt;fedi&gt;") {
+		t.Fatalf("content not html-escaped: %s", n.Content)
+	}
+	if len(n.To) == 0 || n.To[0] != asPublic {
+		t.Fatalf("note not addressed to public: %+v", n.To)
+	}
+}
+
+func TestPublishNoteFanout(t *testing.T) {
+	g := testGateway(t)
+	var mu sync.Mutex
+	hits := map[string]int{}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits[r.URL.Path]++
+		mu.Unlock()
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+	g.client = srv.Client()
+
+	_ = g.followers.Add("alice", follower{Actor: srv.URL + "/users/bob", Inbox: srv.URL + "/inbox/bob"})
+	_ = g.followers.Add("alice", follower{Actor: srv.URL + "/users/carol", Inbox: srv.URL + "/inbox/carol"})
+
+	g.publishNote(context.Background(), "alice", domain.Tweet{Id: "t1", Text: "hello fedi", CreatedAt: time.Now()})
+
+	mu.Lock()
+	defer mu.Unlock()
+	if hits["/inbox/bob"] != 1 || hits["/inbox/carol"] != 1 {
+		t.Fatalf("fanout mismatch: %+v", hits)
+	}
 }

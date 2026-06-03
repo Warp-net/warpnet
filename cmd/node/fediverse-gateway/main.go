@@ -26,15 +26,19 @@ resulting from the use or misuse of this software.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Command fediverse-gateway is a thin ActivityPub gateway that lets a single
-// Warpnet user be discovered and followed from Mastodon / the Fediverse.
+// Warpnet user be discovered and followed from Mastodon / the Fediverse and
+// federates that user's posts outbound to their Fediverse followers.
 //
-// This is the Phase-1 skeleton: it serves WebFinger, an actor document with
-// an RSA public key, and an inbox that verifies HTTP signatures and answers
-// inbound Follow activities with a signed Accept. It does not yet publish
-// posts outbound or translate inbound interactions into Warpnet — those are
-// Phase 2/3 (see README.md).
+// Implemented: WebFinger, an actor document with an RSA public key, an inbox
+// that verifies HTTP signatures and answers Follow with a signed Accept
+// (persisting the follower), and outbound Create(Note) fan-out to followers.
 //
-// The gateway holds no user content. It is meant to run behind a tunnel that
+// Not yet wired: the libp2p connector to a live Warpnet node (reading the real
+// user/profile and tweets, and triggering the fan-out on new tweets) — that is
+// the next step; until then the user is a static operator-configured stub.
+// Inbound interaction translation (Like/Announce/reply → Warpnet) is Phase 3.
+//
+// The gateway holds no Warpnet content. It is meant to run behind a tunnel that
 // terminates TLS (Tailscale Funnel, Cloudflare Tunnel, …) so it never deals
 // with certificates itself; -host is the public hostname that tunnel exposes.
 package main
@@ -56,12 +60,13 @@ const gatewayVersion = "0.1.0"
 
 func main() {
 	var (
-		host    = flag.String("host", envOr("GATEWAY_HOST", ""), "public hostname the tunnel exposes, e.g. name.tailnet.ts.net (no scheme)")
-		addr    = flag.String("addr", envOr("GATEWAY_ADDR", "127.0.0.1:8080"), "local listen address the tunnel forwards to")
-		keyPath = flag.String("key", envOr("GATEWAY_KEY", "fediverse-gateway-key.pem"), "path to the RSA private key (created on first run)")
-		user    = flag.String("user", envOr("GATEWAY_USER", "warpnet"), "preferredUsername of the bridged actor (the part before @host)")
-		display = flag.String("display-name", envOr("GATEWAY_DISPLAY_NAME", "Warpnet"), "display name shown on the actor")
-		summary = flag.String("summary", envOr("GATEWAY_SUMMARY", "Warpnet ↔ Fediverse gateway (skeleton)"), "actor bio/summary")
+		host          = flag.String("host", envOr("GATEWAY_HOST", ""), "public hostname the tunnel exposes, e.g. name.tailnet.ts.net (no scheme)")
+		addr          = flag.String("addr", envOr("GATEWAY_ADDR", "127.0.0.1:8080"), "local listen address the tunnel forwards to")
+		keyPath       = flag.String("key", envOr("GATEWAY_KEY", "fediverse-gateway-key.pem"), "path to the RSA private key (created on first run)")
+		user          = flag.String("user", envOr("GATEWAY_USER", "warpnet"), "preferredUsername of the bridged actor (the part before @host)")
+		display       = flag.String("display-name", envOr("GATEWAY_DISPLAY_NAME", "Warpnet"), "display name shown on the actor")
+		summary       = flag.String("summary", envOr("GATEWAY_SUMMARY", "Warpnet ↔ Fediverse gateway (skeleton)"), "actor bio/summary")
+		followersPath = flag.String("followers", envOr("GATEWAY_FOLLOWERS", "fediverse-gateway-followers.json"), "path to the followers store (created on first run)")
 	)
 	flag.Parse()
 
@@ -82,6 +87,11 @@ func main() {
 		log.Fatalf("gateway: %v", err)
 	}
 
+	fs, err := newFollowerStore(*followersPath)
+	if err != nil {
+		log.Fatalf("gateway: %v", err)
+	}
+
 	wu := warpnetUser{
 		ID:                *user,
 		PreferredUsername: *user,
@@ -97,6 +107,7 @@ func main() {
 		signingUser: *user,
 		client:      &http.Client{Timeout: 15 * time.Second},
 		sem:         make(chan struct{}, maxInflightDeliveries),
+		followers:   fs,
 	}
 
 	srv := &http.Server{

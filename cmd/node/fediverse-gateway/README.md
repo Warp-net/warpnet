@@ -16,17 +16,26 @@ The gateway stores **no user content**. The only durable secret is the RSA
 signing key on disk (Mastodon verifies HTTP signatures against RSA, while
 Warpnet node identities are Ed25519).
 
-## What this skeleton does NOT do yet
+## Implemented so far
 
-- Publish Warpnet posts outbound (Phase 2).
-- Translate inbound Create/Like/Announce/Undo/Delete into Warpnet (Phase 3).
-- Read the real user/profile from a node — `source.go` returns a single
-  operator-configured user (`-user/-display-name/-summary`). Wiring to the
-  `PUBLIC_GET_USER` route is the first Phase-2 task.
+- **Phase 1** — discovery + follow: WebFinger, RSA-keyed actor document, inbox
+  with HTTP-signature verification, `Follow` → signed `Accept`.
+- **Phase 2 (outbound)** — `Accept` now persists the remote follower
+  (`followers.go`, JSON store via `-followers`); the `followers` collection
+  reflects it; `publishNote` builds a `Create(Note)` from a Warpnet tweet and
+  fans it out (signed) to every follower's inbox.
+
+## Not yet wired
+
+- The **libp2p connector** to a live Warpnet node — reading the real
+  user/profile and tweets and triggering the fan-out on new tweets. Until then
+  `source.go` returns a single operator-configured user (`-user/-display-name/
+  -summary`) and `publishNote` is exercised only by tests / a future trigger.
+- Inbound interaction translation (Create/Like/Announce/Undo/Delete → Warpnet)
+  — Phase 3.
 - The HTTP signature code in `httpsig.go` is a minimal, self-contained Cavage
-  implementation for the skeleton. Production should swap it for
-  `superseriousbusiness/httpsig` (the library GoToSocial uses) behind the same
-  `signRequest` / `verifyRequest` functions.
+  implementation. Production should swap it for `superseriousbusiness/httpsig`
+  (the library GoToSocial uses) behind the same `signRequest` / `verifyRequest`.
 
 ## Phase 0 — public HTTPS endpoint without a domain or certificates
 

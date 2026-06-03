@@ -73,6 +73,7 @@ type gateway struct {
 	signingUser string // SKELETON: the single user the gateway signs outbound as
 	client      *http.Client
 	sem         chan struct{} // bounds concurrent Accept deliveries
+	followers   *followerStore
 }
 
 func (g *gateway) baseURL() string            { return "https://" + g.host }
@@ -135,7 +136,7 @@ func (g *gateway) handleUsers(w http.ResponseWriter, r *http.Request) {
 	case "outbox":
 		g.serveEmptyCollection(w, g.actorID(user)+"/outbox")
 	case "followers":
-		g.serveEmptyCollection(w, g.actorID(user)+"/followers")
+		g.serveFollowers(w, user)
 	case "following":
 		g.serveEmptyCollection(w, g.actorID(user)+"/following")
 	default:
@@ -172,6 +173,21 @@ func (g *gateway) serveEmptyCollection(w http.ResponseWriter, id string) {
 		Type:         "OrderedCollection",
 		TotalItems:   0,
 		OrderedItems: []any{},
+	})
+}
+
+func (g *gateway) serveFollowers(w http.ResponseWriter, user string) {
+	fs := g.followers.List(user)
+	items := make([]any, 0, len(fs))
+	for _, f := range fs {
+		items = append(items, f.Actor)
+	}
+	writeJSON(w, contentTypeAP, orderedCollection{
+		Context:      asContext,
+		ID:           g.actorID(user) + "/followers",
+		Type:         "OrderedCollection",
+		TotalItems:   len(items),
+		OrderedItems: items,
 	})
 }
 
