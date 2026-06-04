@@ -52,11 +52,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	log "github.com/sirupsen/logrus"
+	"tailscale.com/tsnet"
 )
 
 const gatewayVersion = "0.1.0"
@@ -88,8 +90,34 @@ func main() {
 		followersPath = envOr("GATEWAY_FOLLOWERS", "fediverse-gateway-followers.json")
 	)
 
+	// Optionally bring up the public endpoint via embedded Tailscale Funnel: the
+	// gateway becomes its own tailnet node and ListenFunnel (below) serves public
+	// HTTPS with an auto-provisioned *.ts.net cert, so host is derived from the
+	// node. The persisted Dir keeps the hostname stable across restarts (a
+	// rotating name orphans existing followers). Without the flag tsnet is never
+	// instantiated.
+	var ts *tsnet.Server
+	if envOr("GATEWAY_FUNNEL", "") != "" {
+		ts = &tsnet.Server{
+			Hostname: envOr("GATEWAY_FUNNEL_HOSTNAME", "warpnet-gw"),
+			Dir:      envOr("GATEWAY_FUNNEL_DIR", "fediverse-gateway-tsnet"),
+			AuthKey:  os.Getenv("TS_AUTHKEY"),
+			UserLogf: log.Infof,
+			Logf:     log.Debugf,
+		}
+		st, uerr := ts.Up(context.Background())
+		if uerr != nil {
+			log.Fatalf("gateway: tailscale funnel: %v", uerr)
+		}
+		if st.Self == nil || st.Self.DNSName == "" {
+			log.Fatalln("gateway: tailscale funnel: node has no DNS name (enable MagicDNS + HTTPS for the tailnet)")
+		}
+		host = strings.TrimSuffix(st.Self.DNSName, ".")
+		log.Infof("gateway: tailscale funnel node up as %s", host)
+	}
+
 	if host == "" {
-		log.Fatalln("gateway: GATEWAY_HOST is required (the public hostname your tunnel exposes)")
+		log.Fatalln("gateway: GATEWAY_HOST is required (the public hostname your tunnel exposes), or set GATEWAY_FUNNEL=1")
 	}
 
 	key, err := loadOrCreateKey(keyPath)
@@ -163,14 +191,27 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:              addr,
 		Handler:           g.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	if ts == nil {
+		srv.Addr = addr
+	}
 
 	go func() {
-		log.Infof("gateway: listening on %s, public https://%s", addr, host)
 		log.Infof("gateway: bridged actor is @%s@%s -> %s", user, host, g.actorID(user))
+		if ts != nil {
+			ln, lerr := ts.ListenFunnel("tcp", ":443")
+			if lerr != nil {
+				log.Fatalf("gateway: tailscale funnel: %v", lerr)
+			}
+			log.Infof("gateway: serving public https://%s via Tailscale Funnel", host)
+			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Fatalf("gateway: serve: %v", err)
+			}
+			return
+		}
+		log.Infof("gateway: listening on %s, public https://%s", addr, host)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("gateway: serve: %v", err)
 		}
@@ -188,6 +229,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+	if ts != nil {
+		_ = ts.Close()
+	}
 }
 
 func envOr(key, def string) string {

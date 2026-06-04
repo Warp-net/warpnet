@@ -84,6 +84,26 @@ tailscale funnel status      # prints e.g. https://my-host.tailXXXX.ts.net
 Your public `HOST` is the printed `my-host.tailXXXX.ts.net` (no scheme).
 Your federated handle becomes `@USER@my-host.tailXXXX.ts.net`.
 
+#### Embedded funnel (no separate `tailscaled` / CLI)
+
+Set `GATEWAY_FUNNEL=1` and the gateway brings up Funnel itself (embedded
+`tsnet`): it joins the tailnet as its own node, derives `GATEWAY_HOST` from the
+node name, and serves public HTTPS on `:443` with an auto-provisioned cert — no
+`tailscale` CLI or system daemon needed.
+
+```sh
+TS_AUTHKEY=tskey-auth-...  \  # tagged, reusable key (else a login URL is logged on first run)
+GATEWAY_FUNNEL=1 GATEWAY_USER=alice \
+  go run ./cmd/node/fediverse-gateway
+```
+
+- The tailnet must have HTTPS certs enabled and grant this node the `funnel`
+  node-attribute (ACL `nodeAttrs`), or startup fails with a Funnel-access error.
+- `GATEWAY_FUNNEL_HOSTNAME` (default `warpnet-gw`) sets the node name; the
+  persisted `GATEWAY_FUNNEL_DIR` (default `fediverse-gateway-tsnet`) keeps that
+  name — and your federated handle — stable across restarts.
+- `GATEWAY_HOST` / `GATEWAY_ADDR` are ignored in this mode.
+
 Alternatives: ngrok free static domain, or — for production — a cheap/free
 domain on Cloudflare with a *named* Cloudflare Tunnel (avoids the shared-domain
 blocklisting some instances apply to `*.ts.net` / `*.ngrok-free.app`).
@@ -106,7 +126,9 @@ Env vars: `GATEWAY_HOST`, `GATEWAY_ADDR` (default `127.0.0.1:8080`),
 `GATEWAY_KEY`, `GATEWAY_USER`, `GATEWAY_DISPLAY_NAME`, `GATEWAY_SUMMARY`,
 `GATEWAY_FOLLOWERS`. Set `GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/…` (+
 `NODE_NETWORK`) to source the profile from a live Warpnet node instead of the
-static stub.
+static stub. Set `GATEWAY_FUNNEL=1` (+ optional `TS_AUTHKEY`,
+`GATEWAY_FUNNEL_HOSTNAME`, `GATEWAY_FUNNEL_DIR`) to self-host the public HTTPS
+endpoint via embedded Tailscale Funnel (see Phase 0).
 
 ### Smoke-test the connector
 
