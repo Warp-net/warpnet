@@ -54,7 +54,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 	}
 
 	switch raw[keyType] {
-	case "Like":
+	case typeLike:
 		owner, tweetID, ok := g.parseLocalStatus(stringField(raw, keyObject))
 		if !ok {
 			return "", nil, false
@@ -63,7 +63,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			TweetId: tweetID, UserId: encodeActorID(actor), OwnerId: owner,
 		}, true
 
-	case "Create":
+	case typeCreate:
 		obj, _ := raw[keyObject].(map[string]any)
 		if obj == nil {
 			return "", nil, false
@@ -84,13 +84,13 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			Username:     actor,
 		}, true
 
-	case "Undo":
+	case typeUndo:
 		obj, _ := raw[keyObject].(map[string]any)
 		if obj == nil {
 			return "", nil, false
 		}
 		switch obj[keyType] {
-		case "Follow":
+		case typeFollow:
 			owner := userFromActorURL(stringField(obj, keyObject))
 			if owner == "" {
 				return "", nil, false
@@ -98,7 +98,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			return event.PUBLIC_POST_UNFOLLOW, event.NewUnfollowEvent{
 				FollowerId: encodeActorID(actor), FollowingId: owner,
 			}, true
-		case "Like":
+		case typeLike:
 			owner, tweetID, ok := g.parseLocalStatus(stringField(obj, keyObject))
 			if !ok {
 				return "", nil, false

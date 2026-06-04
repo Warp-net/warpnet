@@ -75,7 +75,7 @@ func (g *gateway) handleInbox(w http.ResponseWriter, r *http.Request, user strin
 	log.Infof("inbox: %s from %s", typ, remoteActor)
 
 	switch typ {
-	case "Follow":
+	case typeFollow:
 		localUser := userFromActorURL(stringField(raw, keyObject))
 		if localUser == "" {
 			localUser = user

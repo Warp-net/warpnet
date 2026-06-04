@@ -31,6 +31,15 @@ package main
 // Inbound activities are parsed loosely into map[string]any (see inbox.go);
 // these typed shapes are for the documents we emit.
 
+// ActivityPub activity/object type names the gateway emits or matches.
+const (
+	typeCreate = "Create"
+	typeLike   = "Like"
+	typeFollow = "Follow"
+	typeUndo   = "Undo"
+	typeNote   = "Note"
+)
+
 type webFingerJRD struct {
 	Subject string          `json:"subject"`
 	Links   []webFingerLink `json:"links"`

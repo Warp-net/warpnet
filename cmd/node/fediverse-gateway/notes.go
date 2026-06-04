@@ -46,7 +46,7 @@ func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
 
 	n := note{
 		ID:           noteID,
-		Type:         "Note",
+		Type:         typeNote,
 		AttributedTo: actorID,
 		Content:      "<p>" + html.EscapeString(t.Text) + "</p>",
 		Published:    t.CreatedAt.UTC().Format(time.RFC3339),
@@ -56,7 +56,7 @@ func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
 	return activity{
 		Context: asContext,
 		ID:      noteID + "/activity",
-		Type:    "Create",
+		Type:    typeCreate,
 		Actor:   actorID,
 		Object:  n,
 		To:      []string{asPublic},
