@@ -128,8 +128,10 @@ func main() {
 	// Follower graph lives in Warpnet (via the node connector); only when no
 	// node is configured does the gateway fall back to a local dev store.
 	var followers followerStore
+	var req nodeRequester
 	if nodeCli != nil {
 		followers = nodeFollowerStore{req: nodeCli}
+		req = nodeCli
 	} else {
 		ff, ferr := newFileFollowerStore(followersPath)
 		if ferr != nil {
@@ -148,6 +150,7 @@ func main() {
 		client:      &http.Client{Timeout: 15 * time.Second},
 		sem:         make(chan struct{}, maxInflightDeliveries),
 		followers:   followers,
+		req:         req,
 	}
 
 	// Federate the owner's new tweets to Fediverse followers.

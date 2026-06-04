@@ -70,13 +70,13 @@ func (g *gateway) handleInbox(w http.ResponseWriter, r *http.Request, user strin
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
-	typ, _ := raw["type"].(string)
-	remoteActor, _ := raw["actor"].(string)
+	typ, _ := raw[keyType].(string)
+	remoteActor, _ := raw[keyActor].(string)
 	log.Infof("inbox: %s from %s", typ, remoteActor)
 
 	switch typ {
 	case "Follow":
-		localUser := userFromActorURL(stringField(raw, "object"))
+		localUser := userFromActorURL(stringField(raw, keyObject))
 		if localUser == "" {
 			localUser = user
 		}
@@ -102,9 +102,36 @@ func (g *gateway) handleInbox(w http.ResponseWriter, r *http.Request, user strin
 			http.Error(w, "busy", http.StatusServiceUnavailable)
 		}
 	default:
-		// Phase 2/3: translate Create/Like/Announce/Undo/Delete into Warpnet.
-		log.Infof("inbox: %q acknowledged but not handled yet (skeleton)", typ)
+		g.handleInboundActivity(w, typ, raw)
+	}
+}
+
+// handleInboundActivity translates a non-Follow inbound activity into a Warpnet
+// route and forwards it to the owner's node, bounded by the delivery semaphore.
+func (g *gateway) handleInboundActivity(w http.ResponseWriter, typ string, raw map[string]any) {
+	route, payload, ok := g.translateInbound(raw)
+	if !ok {
+		log.Infof("inbox: %q acknowledged, not handled", typ)
 		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	if g.req == nil {
+		log.Warnf("inbox: %q needs a Warpnet node connection", typ)
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	select {
+	case g.sem <- struct{}{}:
+		go func() {
+			defer func() { <-g.sem }()
+			if _, err := g.req.request(route, payload); err != nil {
+				log.Errorf("inbox: forward %s -> %s: %v", typ, route, err)
+			}
+		}()
+		w.WriteHeader(http.StatusAccepted)
+	default:
+		log.Warnf("inbox: delivery pool full, dropping %s from %s", typ, raw[keyActor])
+		http.Error(w, "busy", http.StatusServiceUnavailable)
 	}
 }
 

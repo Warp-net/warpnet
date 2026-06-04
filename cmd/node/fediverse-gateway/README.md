@@ -34,16 +34,21 @@ store is used only as a dev fallback when no node is configured).
   existing `PUBLIC_POST_FOLLOW` route and fan-out reads `PUBLIC_GET_FOLLOWERS`
   (no new node routes); actor URLs travel as `ap:`-prefixed base64url follower
   ids and the inbox is resolved on demand. Enabled with `GATEWAY_NODE_ADDR`.
+- **Outbound trigger** (`tweetpoller.go`) — polls `PUBLIC_GET_TWEETS` and
+  federates the owner's new original posts via `publishNote` (stateless across
+  restarts; history isn't replayed).
+- **Phase 3 inbound** (`inbound.go`) — the inbox translates `Like` →
+  `PUBLIC_POST_LIKE`, a reply `Create(Note)` → `PUBLIC_POST_REPLY`, and
+  `Undo(Follow|Like)` → `PUBLIC_POST_UNFOLLOW`/`UNLIKE`, forwarding to the
+  owner's node (remote actors as `ap:` ids; tweet/owner recovered from our URLs).
 
 ## Not yet wired
 
-- A trigger that calls `publishNote` on new owner tweets (poll
-  `PUBLIC_GET_TWEETS` or subscribe).
-- Inbound interaction translation (Create/Like/Announce/Undo/Delete → Warpnet)
-  — Phase 3.
+- Inbound `Announce` (boost) → retweet and `Delete` → delete.
 - The HTTP signature code in `httpsig.go` is a minimal Cavage implementation;
   production should swap it for `superseriousbusiness/httpsig` behind the same
   `signRequest` / `verifyRequest`.
+- Live end-to-end validation against a node + Mastodon (needs network egress).
 
 ## Phase 0 — public HTTPS endpoint without a domain or certificates
 

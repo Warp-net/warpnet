@@ -319,6 +319,58 @@ func TestTweetPollerSeedAndDedup(t *testing.T) {
 	}
 }
 
+func TestTranslateInbound(t *testing.T) {
+	g := testGateway(t) // host gw.example
+	actor := "https://m/users/bob"
+	status := "https://gw.example/users/alice/statuses/t1"
+
+	route, payload, ok := g.translateInbound(map[string]any{"type": "Like", "actor": actor, "object": status})
+	if !ok || route != event.PUBLIC_POST_LIKE {
+		t.Fatalf("like: route=%q ok=%v", route, ok)
+	}
+	like := payload.(event.LikeEvent)
+	if like.TweetId != "t1" || like.OwnerId != "alice" {
+		t.Fatalf("like event: %+v", like)
+	}
+	if got, _ := decodeActorID(like.UserId); got != actor {
+		t.Fatalf("liker id round-trip: %q", like.UserId)
+	}
+
+	route, payload, ok = g.translateInbound(map[string]any{
+		"type": "Create", "actor": actor,
+		"object": map[string]any{"type": "Note", "content": "<p>hi there</p>", "inReplyTo": status},
+	})
+	if !ok || route != event.PUBLIC_POST_REPLY {
+		t.Fatalf("reply: route=%q ok=%v", route, ok)
+	}
+	reply := payload.(event.NewReplyEvent)
+	if reply.RootId != "t1" || reply.ParentId == nil || *reply.ParentId != "t1" || reply.Text != "hi there" {
+		t.Fatalf("reply event: %+v", reply)
+	}
+
+	if route, _, ok := g.translateInbound(map[string]any{
+		"type": "Undo", "actor": actor,
+		"object": map[string]any{"type": "Follow", "object": "https://gw.example/users/alice"},
+	}); !ok || route != event.PUBLIC_POST_UNFOLLOW {
+		t.Fatalf("undo follow: route=%q ok=%v", route, ok)
+	}
+
+	if route, _, ok := g.translateInbound(map[string]any{
+		"type": "Undo", "actor": actor,
+		"object": map[string]any{"type": "Like", "object": status},
+	}); !ok || route != event.PUBLIC_POST_UNLIKE {
+		t.Fatalf("undo like: route=%q ok=%v", route, ok)
+	}
+
+	// Announce (boost) and foreign-host objects are not handled.
+	if _, _, ok := g.translateInbound(map[string]any{"type": "Announce", "actor": actor, "object": status}); ok {
+		t.Fatal("announce should be unhandled")
+	}
+	if _, _, ok := g.translateInbound(map[string]any{"type": "Like", "actor": actor, "object": "https://evil/users/x/statuses/9"}); ok {
+		t.Fatal("foreign-host like should be unhandled")
+	}
+}
+
 func TestValidateRemoteURL(t *testing.T) {
 	for _, u := range []string{
 		"https://mastodon.social/users/x",

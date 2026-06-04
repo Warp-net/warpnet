@@ -60,6 +60,7 @@ const (
 	pathUsers     = "/users/"
 	pathInbox     = "/inbox"
 	pathFollowers = "/followers"
+	pathStatuses  = "/statuses/"
 )
 
 var (
@@ -82,6 +83,7 @@ type gateway struct {
 	client      *http.Client
 	sem         chan struct{} // bounds concurrent Accept deliveries
 	followers   followerStore
+	req         nodeRequester // connector to the owner's node; nil in dev/no-node mode
 
 	// allowPrivateTargets disables the SSRF guard's loopback/private-range
 	// rejection for outbound delivery. Test-only; never set in main.go.

@@ -41,7 +41,7 @@ const asPublic = "https://www.w3.org/ns/activitystreams#Public"
 // to the Warpnet tweet without local storage.
 func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
 	actorID := g.actorID(localUser)
-	noteID := actorID + "/statuses/" + t.Id
+	noteID := actorID + pathStatuses + t.Id
 	followers := actorID + pathFollowers
 
 	n := note{
