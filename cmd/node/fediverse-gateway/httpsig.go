@@ -58,10 +58,14 @@ var (
 	errDigestMismatch      = errors.New("httpsig: digest mismatch")
 	errIncompleteSignature = errors.New("httpsig: incomplete Signature header")
 	errBadPublicKey        = errors.New("httpsig: bad public key")
+	errStaleRequest        = errors.New("httpsig: request date out of range")
 )
 
 // minSignedHeaders is the minimum set ActivityPub peers are expected to sign.
 var minSignedHeaders = []string{"(request-target)", "host", "date"}
+
+// maxClockSkew bounds how far a request's Date may deviate from now (replay guard).
+const maxClockSkew = 12 * time.Hour
 
 // signRequest signs req in place with keyID/key. For requests with a body,
 // pass the already-read body bytes so a Digest header is set and covered.
@@ -110,6 +114,19 @@ func verifyRequest(req *http.Request, body []byte, fetchKey func(keyID string) (
 		if !slices.Contains(headers, required) {
 			return fmt.Errorf("httpsig: %q not signed: %w", required, errIncompleteSignature)
 		}
+	}
+	// Date must be present and recent: signing over an absent/empty date
+	// weakens replay protection.
+	dateStr := req.Header.Get("Date")
+	if dateStr == "" {
+		return fmt.Errorf("httpsig: missing Date header: %w", errIncompleteSignature)
+	}
+	when, derr := http.ParseTime(dateStr)
+	if derr != nil {
+		return fmt.Errorf("httpsig: bad Date header: %w", errIncompleteSignature)
+	}
+	if skew := time.Since(when); skew > maxClockSkew || skew < -maxClockSkew {
+		return errStaleRequest
 	}
 	// A request carrying a body MUST bind it via a signed digest, otherwise a
 	// tampered body would still verify.

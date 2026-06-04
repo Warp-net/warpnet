@@ -30,14 +30,15 @@ func testGateway(t *testing.T) *gateway {
 		t.Fatalf("followers: %v", err)
 	}
 	return &gateway{
-		host:        "gw.example",
-		key:         key,
-		keyPubPEM:   pub,
-		source:      staticSource{user: warpnetUser{ID: "alice", PreferredUsername: "alice", DisplayName: "Alice"}},
-		signingUser: "alice",
-		client:      http.DefaultClient,
-		sem:         make(chan struct{}, 4),
-		followers:   fs,
+		host:                "gw.example",
+		key:                 key,
+		keyPubPEM:           pub,
+		source:              staticSource{user: warpnetUser{ID: "alice", PreferredUsername: "alice", DisplayName: "Alice"}},
+		signingUser:         "alice",
+		client:              http.DefaultClient,
+		sem:                 make(chan struct{}, 4),
+		followers:           fs,
+		allowPrivateTargets: true,
 	}
 }
 
@@ -196,5 +197,29 @@ func TestPublishNoteFanout(t *testing.T) {
 	defer mu.Unlock()
 	if hits["/inbox/bob"] != 1 || hits["/inbox/carol"] != 1 {
 		t.Fatalf("fanout mismatch: %+v", hits)
+	}
+}
+
+func TestValidateRemoteURL(t *testing.T) {
+	for _, u := range []string{
+		"https://mastodon.social/users/x",
+		"https://example.com/inbox",
+	} {
+		if err := validateRemoteURL(u); err != nil {
+			t.Errorf("expected ok for %s, got %v", u, err)
+		}
+	}
+	for _, u := range []string{
+		"http://example.com/x",  // not https
+		"https://127.0.0.1/x",   // loopback
+		"https://localhost/x",   // localhost
+		"https://10.0.0.1/x",    // private
+		"https://169.254.1.1/x", // link-local
+		"https://[::1]/x",       // ipv6 loopback
+		"https:///x",            // no host
+	} {
+		if err := validateRemoteURL(u); err == nil {
+			t.Errorf("expected error for %s", u)
+		}
 	}
 }

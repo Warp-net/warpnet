@@ -38,6 +38,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 )
@@ -59,11 +60,13 @@ var (
 	errActorMalformed = errors.New("actor document malformed")
 	errRemoteStatus   = errors.New("remote returned error status")
 	errInsecureURL    = errors.New("remote URL must be https")
+	errBlockedHost    = errors.New("remote URL host is not allowed")
 )
 
-// gateway is the stateless ActivityPub front for one bridged Warpnet user.
-// It holds no content: documents are rendered on demand from source, and the
-// only durable secret is the RSA signing key (loaded from disk).
+// gateway is the ActivityPub front for one bridged Warpnet user. Documents are
+// rendered on demand from source; the state it keeps on disk is the RSA signing
+// key and the follower store (followers.go). Warpnet content is never stored
+// here.
 type gateway struct {
 	host        string // public hostname, e.g. name.tailnet.ts.net (no scheme)
 	key         *rsa.PrivateKey
@@ -73,6 +76,10 @@ type gateway struct {
 	client      *http.Client
 	sem         chan struct{} // bounds concurrent Accept deliveries
 	followers   *followerStore
+
+	// allowPrivateTargets disables the SSRF guard's loopback/private-range
+	// rejection for outbound delivery. Test-only; never set in main.go.
+	allowPrivateTargets bool
 }
 
 func (g *gateway) baseURL() string            { return "https://" + g.host }
@@ -219,10 +226,11 @@ func writeJSON(w http.ResponseWriter, contentType string, v any) {
 	_, _ = w.Write(bt)
 }
 
-// validateRemoteURL rejects non-HTTPS targets before any outbound fetch. This
-// is the minimum SSRF guard for dereferencing attacker-supplied actor/key URLs.
-// TODO(prod): also block private/link-local/loopback IPs and guard against
-// DNS rebinding before exposing the gateway publicly.
+// validateRemoteURL is the SSRF guard for dereferencing attacker-supplied
+// actor/key URLs: it requires https, a host, and rejects localhost plus literal
+// IPs in loopback/private/link-local/unspecified ranges.
+// TODO(prod): also guard hostnames that resolve into those ranges (DNS
+// rebinding) at dial time before exposing the gateway publicly.
 func validateRemoteURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -231,14 +239,29 @@ func validateRemoteURL(raw string) error {
 	if u.Scheme != "https" {
 		return fmt.Errorf("url %q: %w", raw, errInsecureURL)
 	}
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("url %q has no host: %w", raw, errBlockedHost)
+	}
+	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") {
+		return fmt.Errorf("url %q targets localhost: %w", raw, errBlockedHost)
+	}
+	if addr, perr := netip.ParseAddr(host); perr == nil {
+		if addr.IsLoopback() || addr.IsPrivate() || addr.IsUnspecified() ||
+			addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() {
+			return fmt.Errorf("url %q targets a disallowed address: %w", raw, errBlockedHost)
+		}
+	}
 	return nil
 }
 
 // fetchActor dereferences a remote actor document, signing the GET so it
 // works against instances running in authorized-fetch / secure mode.
 func (g *gateway) fetchActor(ctx context.Context, actorURL string) (map[string]any, error) {
-	if err := validateRemoteURL(actorURL); err != nil {
-		return nil, err
+	if !g.allowPrivateTargets {
+		if err := validateRemoteURL(actorURL); err != nil {
+			return nil, err
+		}
 	}
 	// G704: dereferencing remote actor URLs is intrinsic to ActivityPub
 	// federation; validateRemoteURL enforces https, full SSRF hardening is a
@@ -308,8 +331,10 @@ func (g *gateway) remoteInbox(ctx context.Context, actorURL string) (string, err
 
 // postSigned delivers a signed POST of doc to target, as localUser.
 func (g *gateway) postSigned(ctx context.Context, localUser, target string, doc any) error {
-	if err := validateRemoteURL(target); err != nil {
-		return err
+	if !g.allowPrivateTargets {
+		if err := validateRemoteURL(target); err != nil {
+			return err
+		}
 	}
 	body, err := json.Marshal(doc)
 	if err != nil {

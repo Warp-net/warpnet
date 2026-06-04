@@ -80,9 +80,12 @@ func (g *gateway) handleInbox(w http.ResponseWriter, r *http.Request, user strin
 		if localUser == "" {
 			localUser = user
 		}
-		if localUser == "" {
-			log.Warnf("inbox: Follow without resolvable local user")
-			w.WriteHeader(http.StatusAccepted)
+		// Only sign/persist for an actor we actually host — otherwise the
+		// shared inbox becomes a signing oracle and an unbounded follower-state
+		// sink for attacker-chosen usernames.
+		if _, ok := g.source.GetUser(localUser); !ok {
+			log.Warnf("inbox: Follow targets unknown local user %q from %s", localUser, remoteActor)
+			http.Error(w, "unknown actor", http.StatusNotFound)
 			return
 		}
 		// Bound concurrent Accept deliveries; on saturation ask the peer to
