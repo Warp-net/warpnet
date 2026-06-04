@@ -28,6 +28,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	handlers2 "github.com/Warp-net/warpnet/cmd/node/business/handlers"
 	"net/http"
 	"os"
@@ -132,7 +133,7 @@ func main() {
 		}
 	}()
 
-	log.Infof("business: listening on %s", srv.Addr)
+	fmt.Printf("\033[1mNODE IS LISTENING ON 'localhost:%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
 
 	var node *bnode.BusinessNode
 	defer func() {
