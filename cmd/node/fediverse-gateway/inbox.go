@@ -30,11 +30,11 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/json"
 	"io"
 	"net/http"
 	"time"
 
-	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
 

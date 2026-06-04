@@ -33,14 +33,13 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/Warp-net/warpnet/json"
 )
 
 const (

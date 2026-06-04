@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/json"
 )
 
 func testGateway(t *testing.T) *gateway {

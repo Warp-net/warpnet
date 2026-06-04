@@ -28,10 +28,9 @@ resulting from the use or misuse of this software.
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"sync"
-
-	"github.com/Warp-net/warpnet/json"
 )
 
 // follower is a remote Fediverse follower of a local (bridged) user.
