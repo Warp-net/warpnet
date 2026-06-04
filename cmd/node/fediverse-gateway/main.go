@@ -31,54 +31,62 @@ resulting from the use or misuse of this software.
 //
 // Implemented: WebFinger, an actor document with an RSA public key, an inbox
 // that verifies HTTP signatures and answers Follow with a signed Accept
-// (persisting the follower), and outbound Create(Note) fan-out to followers.
+// (persisting the follower), outbound Create(Note) fan-out, and a libp2p
+// connector to the Warpnet network (GATEWAY_PROBE_ECHO smoke-tests it against
+// the testnet echo node).
 //
-// Not yet wired: the libp2p connector to a live Warpnet node (reading the real
-// user/profile and tweets, and triggering the fan-out on new tweets) — that is
-// the next step; until then the user is a static operator-configured stub.
-// Inbound interaction translation (Like/Announce/reply → Warpnet) is Phase 3.
+// Configuration is environment-only (GATEWAY_* below, plus the standard
+// NODE_NETWORK for the libp2p side). It does NOT use CLI flags: importing the
+// libp2p stack pulls in config.init's pflag.Parse, which would clash with a
+// second flag set, and every other Warpnet node is env-configured too.
 //
-// The gateway holds no Warpnet content. It is meant to run behind a tunnel that
-// terminates TLS (Tailscale Funnel, Cloudflare Tunnel, …) so it never deals
-// with certificates itself; -host is the public hostname that tunnel exposes.
+// The gateway keeps only keys on disk (RSA signing key); profile/followers
+// live in Warpnet. It is meant to run behind a tunnel that terminates TLS
+// (Tailscale Funnel, Cloudflare Tunnel, …); GATEWAY_HOST is the public
+// hostname that tunnel exposes.
 package main
 
 import (
 	"context"
 	"errors"
-	"flag"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	log "github.com/sirupsen/logrus"
 )
 
 const gatewayVersion = "0.1.0"
 
 func main() {
-	var (
-		host          = flag.String("host", envOr("GATEWAY_HOST", ""), "public hostname the tunnel exposes, e.g. name.tailnet.ts.net (no scheme)")
-		addr          = flag.String("addr", envOr("GATEWAY_ADDR", "127.0.0.1:8080"), "local listen address the tunnel forwards to")
-		keyPath       = flag.String("key", envOr("GATEWAY_KEY", "fediverse-gateway-key.pem"), "path to the RSA private key (created on first run)")
-		user          = flag.String("user", envOr("GATEWAY_USER", "warpnet"), "preferredUsername of the bridged actor (the part before @host)")
-		display       = flag.String("display-name", envOr("GATEWAY_DISPLAY_NAME", "Warpnet"), "display name shown on the actor")
-		summary       = flag.String("summary", envOr("GATEWAY_SUMMARY", "Warpnet ↔ Fediverse gateway (skeleton)"), "actor bio/summary")
-		followersPath = flag.String("followers", envOr("GATEWAY_FOLLOWERS", "fediverse-gateway-followers.json"), "path to the followers store (created on first run)")
-	)
-	flag.Parse()
-
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true, TimestampFormat: time.DateTime})
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.InfoLevel)
 
-	if *host == "" {
-		log.Fatalln("gateway: -host is required (the public hostname your tunnel exposes)")
+	// Smoke-test the libp2p connector against the live testnet echo node.
+	if envOr("GATEWAY_PROBE_ECHO", "") != "" {
+		runEchoProbe()
+		return
 	}
 
-	key, err := loadOrCreateKey(*keyPath)
+	var (
+		host          = envOr("GATEWAY_HOST", "")
+		addr          = envOr("GATEWAY_ADDR", "127.0.0.1:8080")
+		keyPath       = envOr("GATEWAY_KEY", "fediverse-gateway-key.pem")
+		user          = envOr("GATEWAY_USER", "warpnet")
+		display       = envOr("GATEWAY_DISPLAY_NAME", "Warpnet")
+		summary       = envOr("GATEWAY_SUMMARY", "Warpnet ↔ Fediverse gateway (skeleton)")
+		followersPath = envOr("GATEWAY_FOLLOWERS", "fediverse-gateway-followers.json")
+	)
+
+	if host == "" {
+		log.Fatalln("gateway: GATEWAY_HOST is required (the public hostname your tunnel exposes)")
+	}
+
+	key, err := loadOrCreateKey(keyPath)
 	if err != nil {
 		log.Fatalf("gateway: %v", err)
 	}
@@ -87,38 +95,59 @@ func main() {
 		log.Fatalf("gateway: %v", err)
 	}
 
-	fs, err := newFollowerStore(*followersPath)
+	fs, err := newFollowerStore(followersPath)
 	if err != nil {
 		log.Fatalf("gateway: %v", err)
 	}
 
 	wu := warpnetUser{
-		ID:                *user,
-		PreferredUsername: *user,
-		DisplayName:       *display,
-		Summary:           *summary,
+		ID:                user,
+		PreferredUsername: user,
+		DisplayName:       display,
+		Summary:           summary,
+	}
+
+	// Profile source: read live from a Warpnet node when GATEWAY_NODE_ADDR is
+	// set (state lives in Warpnet), otherwise a static operator-configured stub.
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
+	var src warpnetSource = staticSource{user: wu}
+	var nodeCli *nodeClient
+	if nodeAddr := envOr("GATEWAY_NODE_ADDR", ""); nodeAddr != "" {
+		target, terr := warpnet.AddrInfoFromString(nodeAddr)
+		if terr != nil {
+			log.Fatalf("gateway: bad GATEWAY_NODE_ADDR: %v", terr)
+		}
+		nodeCli, err = newNodeClient(appCtx, envOr("NODE_NETWORK", "warpnet"), nil, *target)
+		if err != nil {
+			log.Fatalf("gateway: connect Warpnet node: %v", err)
+		}
+		defer nodeCli.close()
+		src = nodeSource{client: nodeCli, userID: user}
+		log.Infof("gateway: profile sourced from Warpnet node %s", target.ID)
 	}
 
 	g := &gateway{
-		host:        *host,
+		host:        host,
 		key:         key,
 		keyPubPEM:   pubPEM,
-		source:      staticSource{user: wu},
-		signingUser: *user,
+		source:      src,
+		signingUser: user,
 		client:      &http.Client{Timeout: 15 * time.Second},
 		sem:         make(chan struct{}, maxInflightDeliveries),
 		followers:   fs,
 	}
 
 	srv := &http.Server{
-		Addr:              *addr,
+		Addr:              addr,
 		Handler:           g.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
-		log.Infof("gateway: listening on %s, public https://%s", *addr, *host)
-		log.Infof("gateway: bridged actor is @%s@%s -> %s", *user, *host, g.actorID(*user))
+		log.Infof("gateway: listening on %s, public https://%s", addr, host)
+		log.Infof("gateway: bridged actor is @%s@%s -> %s", user, host, g.actorID(user))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("gateway: serve: %v", err)
 		}

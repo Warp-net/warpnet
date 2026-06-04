@@ -1,7 +1,7 @@
-# fediverse-gateway (Phase 1 skeleton)
+# fediverse-gateway
 
-A thin, stateless ActivityPub gateway that makes **one** Warpnet user
-discoverable and followable from Mastodon / the Fediverse.
+A thin ActivityPub gateway that makes **one** Warpnet user discoverable and
+followable from Mastodon / the Fediverse.
 
 It serves the minimum surface Mastodon's federation path exercises:
 
@@ -12,30 +12,36 @@ It serves the minimum surface Mastodon's federation path exercises:
 - `GET /users/{user}/{outbox,followers,following}` — empty collections
 - `GET /.well-known/nodeinfo`, `GET /nodeinfo/2.0`
 
-The gateway stores **no user content**. The only durable secret is the RSA
-signing key on disk (Mastodon verifies HTTP signatures against RSA, while
-Warpnet node identities are Ed25519).
+The gateway keeps **no Warpnet content**. On disk it holds the RSA signing key
+(Mastodon verifies HTTP signatures against RSA, while Warpnet identities are
+Ed25519) and — for now — a local follower store; that store moves into Warpnet
+once the connector's write path lands (see below).
 
 ## Implemented so far
 
 - **Phase 1** — discovery + follow: WebFinger, RSA-keyed actor document, inbox
   with HTTP-signature verification, `Follow` → signed `Accept`.
-- **Phase 2 (outbound)** — `Accept` now persists the remote follower
-  (`followers.go`, JSON store via `-followers`); the `followers` collection
-  reflects it; `publishNote` builds a `Create(Note)` from a Warpnet tweet and
-  fans it out (signed) to every follower's inbox.
+- **Phase 2 (outbound)** — `Accept` persists the remote follower; the
+  `followers` collection reflects it; `publishNote` builds a `Create(Note)`
+  from a Warpnet tweet and fans it out (signed) to followers.
+- **libp2p connector** (`nodeclient.go`) — a minimal client peer (same
+  PSK/transport/security as a member node) that dials a Warpnet node and calls
+  its routes. `nodeSource` reads the bridged user's profile live via
+  `PUBLIC_GET_USER` (enable with `GATEWAY_NODE_ADDR`), so the profile lives in
+  Warpnet, not the gateway. `GATEWAY_PROBE_ECHO=1` smoke-tests it against the
+  testnet echo node.
 
 ## Not yet wired
 
-- The **libp2p connector** to a live Warpnet node — reading the real
-  user/profile and tweets and triggering the fan-out on new tweets. Until then
-  `source.go` returns a single operator-configured user (`-user/-display-name/
-  -summary`) and `publishNote` is exercised only by tests / a future trigger.
+- Moving the **follower store into Warpnet** (node-side AP-follower routes) so
+  the gateway keeps only keys — needs new node routes; next step.
+- A trigger that calls `publishNote` on new owner tweets (poll
+  `PUBLIC_GET_TWEETS` or subscribe).
 - Inbound interaction translation (Create/Like/Announce/Undo/Delete → Warpnet)
   — Phase 3.
-- The HTTP signature code in `httpsig.go` is a minimal, self-contained Cavage
-  implementation. Production should swap it for `superseriousbusiness/httpsig`
-  (the library GoToSocial uses) behind the same `signRequest` / `verifyRequest`.
+- The HTTP signature code in `httpsig.go` is a minimal Cavage implementation;
+  production should swap it for `superseriousbusiness/httpsig` behind the same
+  `signRequest` / `verifyRequest`.
 
 ## Phase 0 — public HTTPS endpoint without a domain or certificates
 
@@ -67,18 +73,33 @@ blocklisting some instances apply to `*.ts.net` / `*.ngrok-free.app`).
 
 ## Phase 1 — run the gateway
 
+Configuration is **environment-only** (importing the libp2p stack pulls in
+config.init's pflag parsing, so the gateway must not define a second CLI flag
+set — and every Warpnet node is env-configured too):
+
 ```sh
-go run ./cmd/node/fediverse-gateway \
-  -host my-host.tailXXXX.ts.net \
-  -addr 127.0.0.1:8080 \
-  -user alice \
-  -display-name "Alice on Warpnet" \
-  -summary "Bridged from Warpnet"
-# the RSA key is created at ./fediverse-gateway-key.pem on first run
+GATEWAY_HOST=my-host.tailXXXX.ts.net \
+GATEWAY_USER=alice \
+GATEWAY_DISPLAY_NAME="Alice on Warpnet" \
+go run ./cmd/node/fediverse-gateway
+# RSA key created at ./fediverse-gateway-key.pem on first run
 ```
 
-Flags can also be set via env: `GATEWAY_HOST`, `GATEWAY_ADDR`, `GATEWAY_KEY`,
-`GATEWAY_USER`, `GATEWAY_DISPLAY_NAME`, `GATEWAY_SUMMARY`.
+Env vars: `GATEWAY_HOST`, `GATEWAY_ADDR` (default `127.0.0.1:8080`),
+`GATEWAY_KEY`, `GATEWAY_USER`, `GATEWAY_DISPLAY_NAME`, `GATEWAY_SUMMARY`,
+`GATEWAY_FOLLOWERS`. Set `GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/…` (+
+`NODE_NETWORK`) to source the profile from a live Warpnet node instead of the
+static stub.
+
+### Smoke-test the connector against the echo node
+
+```sh
+GATEWAY_PROBE_ECHO=1 go run ./cmd/node/fediverse-gateway
+# dials the testnet echo node (see deploy/) and reads its profile via PUBLIC_GET_USER
+```
+
+(Requires outbound network access to the echo node — it won't work from a
+sandbox without egress.)
 
 ## Milestone check
 
