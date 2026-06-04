@@ -63,6 +63,20 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			TweetId: tweetID, UserId: encodeActorID(actor), OwnerId: owner,
 		}, true
 
+	case typeAnnounce:
+		owner, tweetID, ok := g.parseLocalStatus(stringField(raw, keyObject))
+		if !ok {
+			return "", nil, false
+		}
+		by := encodeActorID(actor)
+		return event.PUBLIC_POST_RETWEET, event.NewRetweetEvent{
+			Id:          tweetID,
+			RootId:      tweetID,
+			UserId:      owner,
+			RetweetedBy: &by,
+			CreatedAt:   time.Now(),
+		}, true
+
 	case typeCreate:
 		obj, _ := raw[keyObject].(map[string]any)
 		if obj == nil {

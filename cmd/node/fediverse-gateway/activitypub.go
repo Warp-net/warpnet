@@ -33,11 +33,12 @@ package main
 
 // ActivityPub activity/object type names the gateway emits or matches.
 const (
-	typeCreate = "Create"
-	typeLike   = "Like"
-	typeFollow = "Follow"
-	typeUndo   = "Undo"
-	typeNote   = "Note"
+	typeCreate   = "Create"
+	typeLike     = "Like"
+	typeFollow   = "Follow"
+	typeUndo     = "Undo"
+	typeNote     = "Note"
+	typeAnnounce = "Announce"
 )
 
 type webFingerJRD struct {

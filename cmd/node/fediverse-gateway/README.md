@@ -38,13 +38,16 @@ store is used only as a dev fallback when no node is configured).
   federates the owner's new original posts via `publishNote` (stateless across
   restarts; history isn't replayed).
 - **Phase 3 inbound** (`inbound.go`) — the inbox translates `Like` →
-  `PUBLIC_POST_LIKE`, a reply `Create(Note)` → `PUBLIC_POST_REPLY`, and
-  `Undo(Follow|Like)` → `PUBLIC_POST_UNFOLLOW`/`UNLIKE`, forwarding to the
-  owner's node (remote actors as `ap:` ids; tweet/owner recovered from our URLs).
+  `PUBLIC_POST_LIKE`, a reply `Create(Note)` → `PUBLIC_POST_REPLY`, `Announce` →
+  `PUBLIC_POST_RETWEET`, and `Undo(Follow|Like)` → `PUBLIC_POST_UNFOLLOW`/
+  `UNLIKE`, forwarding to the owner's node (remote actors as `ap:` ids;
+  tweet/owner recovered from our URLs).
 
 ## Not yet wired
 
-- Inbound `Announce` (boost) → retweet and `Delete` → delete.
+- Inbound `Delete` → delete (needs an AP-object-id → Warpnet-reply-id mapping;
+  the Delete activity doesn't carry the reply's root, so it's out of scope for
+  the stateless gateway for now).
 - The HTTP signature code in `httpsig.go` is a minimal Cavage implementation;
   production should swap it for `superseriousbusiness/httpsig` behind the same
   `signRequest` / `verifyRequest`.

@@ -362,12 +362,24 @@ func TestTranslateInbound(t *testing.T) {
 		t.Fatalf("undo like: route=%q ok=%v", route, ok)
 	}
 
-	// Announce (boost) and foreign-host objects are not handled.
-	if _, _, ok := g.translateInbound(map[string]any{"type": "Announce", "actor": actor, "object": status}); ok {
-		t.Fatal("announce should be unhandled")
+	route, payload, ok = g.translateInbound(map[string]any{"type": "Announce", "actor": actor, "object": status})
+	if !ok || route != event.PUBLIC_POST_RETWEET {
+		t.Fatalf("announce: route=%q ok=%v", route, ok)
 	}
+	rt := payload.(event.NewRetweetEvent)
+	if rt.Id != "t1" || rt.RetweetedBy == nil {
+		t.Fatalf("retweet event: %+v", rt)
+	}
+	if got, _ := decodeActorID(*rt.RetweetedBy); got != actor {
+		t.Fatalf("booster id round-trip: %q", *rt.RetweetedBy)
+	}
+
+	// Foreign-host objects and unhandled types are rejected.
 	if _, _, ok := g.translateInbound(map[string]any{"type": "Like", "actor": actor, "object": "https://evil/users/x/statuses/9"}); ok {
 		t.Fatal("foreign-host like should be unhandled")
+	}
+	if _, _, ok := g.translateInbound(map[string]any{"type": "Delete", "actor": actor, "object": status}); ok {
+		t.Fatal("delete should be unhandled")
 	}
 }
 
