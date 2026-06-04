@@ -96,6 +96,31 @@ func TestTry_FixedBackoff(t *testing.T) {
 	assert.True(t, elapsed >= 20*time.Millisecond, "fixed backoff should add delay")
 }
 
+// TestTry_FixedBackoff_GrowsLinearlyNotExponentially guards against the
+// regression where FixedBackoff doubled the interval each attempt and was
+// therefore indistinguishable from ExponentialBackoff. With minInterval=10ms
+// and four failing attempts the linear schedule sleeps 20+30+40+50=140ms,
+// whereas the old doubling schedule slept 20+40+80+160=300ms.
+func TestTry_FixedBackoff_GrowsLinearlyNotExponentially(t *testing.T) {
+	const minInterval = 10 * time.Millisecond
+	r := New(minInterval, 8, FixedBackoff)
+	calls := 0
+	start := time.Now()
+	err := r.Try(context.Background(), func() error {
+		calls++
+		if calls < 5 {
+			return errors.New("transient")
+		}
+		return nil
+	})
+	elapsed := time.Since(start)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 5, calls)
+	assert.GreaterOrEqual(t, elapsed, 120*time.Millisecond, "linear backoff should accumulate ~140ms")
+	assert.Less(t, elapsed, 250*time.Millisecond, "exponential doubling (~300ms) must be excluded")
+}
+
 func TestTry_ExponentialBackoff(t *testing.T) {
 	r := New(10*time.Millisecond, 3, ExponentialBackoff)
 	calls := 0

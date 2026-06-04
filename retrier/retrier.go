@@ -102,7 +102,7 @@ func (r *retrier) Try(ctx context.Context, f RetrierFunc) (err error) {
 		case NoBackoff:
 
 		case FixedBackoff:
-			interval += interval
+			interval += r.minInterval
 		case ExponentialBackoff:
 			interval *= 2
 		}
