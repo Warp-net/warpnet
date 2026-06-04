@@ -61,6 +61,8 @@ import (
 
 const gatewayVersion = "0.1.0"
 
+const fatalFmt = "gateway: %v"
+
 func main() {
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true, TimestampFormat: time.DateTime})
 	log.SetOutput(os.Stdout)
@@ -88,11 +90,11 @@ func main() {
 
 	key, err := loadOrCreateKey(keyPath)
 	if err != nil {
-		log.Fatalf("gateway: %v", err)
+		log.Fatalf(fatalFmt, err)
 	}
 	pubPEM, err := publicKeyPEM(key)
 	if err != nil {
-		log.Fatalf("gateway: %v", err)
+		log.Fatalf(fatalFmt, err)
 	}
 
 	wu := warpnetUser{
@@ -132,7 +134,7 @@ func main() {
 		ff, ferr := newFileFollowerStore(followersPath)
 		if ferr != nil {
 			appCancel()
-			log.Fatalf("gateway: %v", ferr)
+			log.Fatalf(fatalFmt, ferr)
 		}
 		followers = ff
 	}

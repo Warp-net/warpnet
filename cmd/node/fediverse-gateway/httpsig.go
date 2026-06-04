@@ -61,11 +61,17 @@ var (
 	errStaleRequest        = errors.New("httpsig: request date out of range")
 )
 
-// requestTargetHeader is the draft-cavage pseudo-header covering method + path.
-const requestTargetHeader = "(request-target)"
+// draft-cavage signed-header names the gateway emits and requires.
+const (
+	requestTargetHeader = "(request-target)"
+	hostHeader          = "host"
+	dateHeader          = "date"
+	digestHeader        = "digest"
+	headerDate          = "Date" // canonical HTTP header name
+)
 
 // minSignedHeaders is the minimum set ActivityPub peers are expected to sign.
-var minSignedHeaders = []string{requestTargetHeader, "host", "date"}
+var minSignedHeaders = []string{requestTargetHeader, hostHeader, dateHeader}
 
 // maxClockSkew bounds how far a request's Date may deviate from now (replay guard).
 const maxClockSkew = 12 * time.Hour
@@ -73,18 +79,18 @@ const maxClockSkew = 12 * time.Hour
 // signRequest signs req in place with keyID/key. For requests with a body,
 // pass the already-read body bytes so a Digest header is set and covered.
 func signRequest(req *http.Request, keyID string, key *rsa.PrivateKey, body []byte) error {
-	if req.Header.Get("Date") == "" {
-		req.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	if req.Header.Get(headerDate) == "" {
+		req.Header.Set(headerDate, time.Now().UTC().Format(http.TimeFormat))
 	}
 	if req.Host == "" {
 		req.Host = req.URL.Host
 	}
 
-	headers := []string{requestTargetHeader, "host", "date"}
+	headers := []string{requestTargetHeader, hostHeader, dateHeader}
 	if body != nil {
 		sum := sha256.Sum256(body)
 		req.Header.Set("Digest", "SHA-256="+base64.StdEncoding.EncodeToString(sum[:]))
-		headers = append(headers, "digest")
+		headers = append(headers, digestHeader)
 	}
 
 	hashed := sha256.Sum256([]byte(buildSigningString(req, headers)))
@@ -120,7 +126,7 @@ func verifyRequest(req *http.Request, body []byte, fetchKey func(keyID string) (
 	}
 	// Date must be present and recent: signing over an absent/empty date
 	// weakens replay protection.
-	dateStr := req.Header.Get("Date")
+	dateStr := req.Header.Get(headerDate)
 	if dateStr == "" {
 		return fmt.Errorf("httpsig: missing Date header: %w", errIncompleteSignature)
 	}
@@ -133,11 +139,11 @@ func verifyRequest(req *http.Request, body []byte, fetchKey func(keyID string) (
 	}
 	// A request carrying a body MUST bind it via a signed digest, otherwise a
 	// tampered body would still verify.
-	if len(body) > 0 && !slices.Contains(headers, "digest") {
+	if len(body) > 0 && !slices.Contains(headers, digestHeader) {
 		return fmt.Errorf("httpsig: body not bound by digest: %w", errIncompleteSignature)
 	}
 
-	if slices.Contains(headers, "digest") {
+	if slices.Contains(headers, digestHeader) {
 		sum := sha256.Sum256(body)
 		want := "SHA-256=" + base64.StdEncoding.EncodeToString(sum[:])
 		if req.Header.Get("Digest") != want {
@@ -172,7 +178,7 @@ func buildSigningString(req *http.Request, headers []string) string {
 		switch h {
 		case requestTargetHeader:
 			fmt.Fprintf(&b, "(request-target): %s %s", strings.ToLower(req.Method), req.URL.RequestURI())
-		case "host":
+		case hostHeader:
 			fmt.Fprintf(&b, "host: %s", req.Host)
 		default:
 			fmt.Fprintf(&b, "%s: %s", h, req.Header.Get(h))
@@ -202,7 +208,7 @@ func parseSignatureHeader(v string) (keyID string, headers []string, signature s
 		return "", nil, "", errIncompleteSignature
 	}
 	if len(headers) == 0 {
-		headers = []string{"date"} // draft default
+		headers = []string{dateHeader} // draft default
 	}
 	return keyID, headers, signature, nil
 }

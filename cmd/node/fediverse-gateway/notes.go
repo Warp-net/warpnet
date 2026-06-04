@@ -42,7 +42,7 @@ const asPublic = "https://www.w3.org/ns/activitystreams#Public"
 func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
 	actorID := g.actorID(localUser)
 	noteID := actorID + "/statuses/" + t.Id
-	followers := actorID + "/followers"
+	followers := actorID + pathFollowers
 
 	n := note{
 		ID:           noteID,

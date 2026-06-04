@@ -56,6 +56,10 @@ const (
 	// maxInflightDeliveries bounds concurrent outbound Accept deliveries so a
 	// burst of inbound Follow activities can't spawn unbounded goroutines.
 	maxInflightDeliveries = 16
+
+	pathUsers     = "/users/"
+	pathInbox     = "/inbox"
+	pathFollowers = "/followers"
 )
 
 var (
@@ -85,7 +89,7 @@ type gateway struct {
 }
 
 func (g *gateway) baseURL() string            { return "https://" + g.host }
-func (g *gateway) actorID(user string) string { return g.baseURL() + "/users/" + user }
+func (g *gateway) actorID(user string) string { return g.baseURL() + pathUsers + user }
 func (g *gateway) keyID(user string) string   { return g.actorID(user) + "#main-key" }
 
 func (g *gateway) routes() *http.ServeMux {
@@ -93,8 +97,8 @@ func (g *gateway) routes() *http.ServeMux {
 	mux.HandleFunc("/.well-known/webfinger", g.handleWebFinger)
 	mux.HandleFunc("/.well-known/nodeinfo", g.handleNodeInfoLinks)
 	mux.HandleFunc("/nodeinfo/2.0", g.handleNodeInfo)
-	mux.HandleFunc("/users/", g.handleUsers)
-	mux.HandleFunc("/inbox", g.handleSharedInbox)
+	mux.HandleFunc(pathUsers, g.handleUsers)
+	mux.HandleFunc(pathInbox, g.handleSharedInbox)
 	return mux
 }
 
@@ -127,7 +131,7 @@ func (g *gateway) handleWebFinger(w http.ResponseWriter, r *http.Request) {
 // handleUsers serves the actor document at /users/{user} and dispatches the
 // per-actor sub-collections and inbox.
 func (g *gateway) handleUsers(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/users/"), "/")
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, pathUsers), "/")
 	user := parts[0]
 	wu, ok := g.source.GetUser(user)
 	if !ok {
@@ -161,16 +165,16 @@ func (g *gateway) serveActor(w http.ResponseWriter, wu warpnetUser) {
 		PreferredUsername: wu.PreferredUsername,
 		Name:              wu.DisplayName,
 		Summary:           wu.Summary,
-		Inbox:             id + "/inbox",
+		Inbox:             id + pathInbox,
 		Outbox:            id + "/outbox",
-		Followers:         id + "/followers",
+		Followers:         id + pathFollowers,
 		Following:         id + "/following",
 		PublicKey: publicKey{
 			ID:           g.keyID(wu.PreferredUsername),
 			Owner:        id,
 			PublicKeyPEM: g.keyPubPEM,
 		},
-		Endpoints: &actorEndpoints{SharedInbox: g.baseURL() + "/inbox"},
+		Endpoints: &actorEndpoints{SharedInbox: g.baseURL() + pathInbox},
 	})
 }
 
@@ -195,7 +199,7 @@ func (g *gateway) serveFollowers(w http.ResponseWriter, user string) {
 	}
 	writeJSON(w, contentTypeAP, orderedCollection{
 		Context:      asContext,
-		ID:           g.actorID(user) + "/followers",
+		ID:           g.actorID(user) + pathFollowers,
 		Type:         "OrderedCollection",
 		TotalItems:   len(items),
 		OrderedItems: items,
@@ -374,7 +378,7 @@ func randomToken() string {
 // userFromActorURL extracts the username from one of our own actor URLs
 // (https://host/users/NAME).
 func userFromActorURL(u string) string {
-	_, rest, ok := strings.Cut(u, "/users/")
+	_, rest, ok := strings.Cut(u, pathUsers)
 	if !ok {
 		return ""
 	}
