@@ -39,6 +39,7 @@ const (
 	typeUndo     = "Undo"
 	typeNote     = "Note"
 	typeAnnounce = "Announce"
+	typeDocument = "Document"
 )
 
 type webFingerJRD struct {
@@ -93,14 +94,23 @@ type activity struct {
 // note is the ActivityPub Note emitted inside a Create when a Warpnet tweet is
 // federated outbound.
 type note struct {
-	ID           string   `json:"id"`
-	Type         string   `json:"type"`
-	AttributedTo string   `json:"attributedTo"`
-	Content      string   `json:"content"`
-	Published    string   `json:"published"`
-	InReplyTo    string   `json:"inReplyTo,omitempty"`
-	To           []string `json:"to,omitempty"`
-	Cc           []string `json:"cc,omitempty"`
+	ID           string       `json:"id"`
+	Type         string       `json:"type"`
+	AttributedTo string       `json:"attributedTo"`
+	Content      string       `json:"content"`
+	Published    string       `json:"published"`
+	InReplyTo    string       `json:"inReplyTo,omitempty"`
+	To           []string     `json:"to,omitempty"`
+	Cc           []string     `json:"cc,omitempty"`
+	Attachment   []attachment `json:"attachment,omitempty"`
+}
+
+// attachment is an ActivityPub media attachment (image) on a Note. mediaType is
+// omitted — the gateway's /media endpoint sets the Content-Type and Mastodon
+// reads it from there.
+type attachment struct {
+	Type string `json:"type"`
+	URL  string `json:"url"`
 }
 
 type orderedCollection struct {

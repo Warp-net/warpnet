@@ -61,6 +61,9 @@ const (
 	pathInbox     = "/inbox"
 	pathFollowers = "/followers"
 	pathStatuses  = "/statuses/"
+	pathMedia     = "/media/"
+
+	headerContentType = "Content-Type"
 )
 
 var (
@@ -101,6 +104,7 @@ func (g *gateway) routes() *http.ServeMux {
 	mux.HandleFunc("/nodeinfo/2.0", g.handleNodeInfo)
 	mux.HandleFunc(pathUsers, g.handleUsers)
 	mux.HandleFunc(pathInbox, g.handleSharedInbox)
+	mux.HandleFunc(pathMedia, g.handleMedia)
 	return mux
 }
 
@@ -233,7 +237,7 @@ func writeJSON(w http.ResponseWriter, contentType string, v any) {
 		http.Error(w, "marshal", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(headerContentType, contentType)
 	_, _ = w.Write(bt)
 }
 
@@ -355,7 +359,7 @@ func (g *gateway) postSigned(ctx context.Context, localUser, target string, doc 
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", contentTypeAP)
+	req.Header.Set(headerContentType, contentTypeAP)
 	if err := signRequest(req, g.keyID(localUser), g.key, body); err != nil {
 		return err
 	}

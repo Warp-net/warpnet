@@ -2,9 +2,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -157,7 +160,7 @@ func TestFileFollowerStore(t *testing.T) {
 
 func TestBuildCreateNote(t *testing.T) {
 	g := testGateway(t)
-	a := g.buildCreateNote("alice", domain.Tweet{Id: "t1", Text: "hello <fedi>", CreatedAt: time.Unix(1700000000, 0)})
+	a := g.buildCreateNote("alice", domain.Tweet{Id: "t1", Text: "hello <fedi>", CreatedAt: time.Unix(1700000000, 0), UserId: "alice", ImageKeys: []string{"k1"}})
 	if a.Type != "Create" || a.Actor != "https://gw.example/users/alice" {
 		t.Fatalf("bad create: %+v", a)
 	}
@@ -173,6 +176,12 @@ func TestBuildCreateNote(t *testing.T) {
 	}
 	if len(n.To) == 0 || n.To[0] != asPublic {
 		t.Fatalf("note not addressed to public: %+v", n.To)
+	}
+	if len(n.Attachment) != 1 || n.Attachment[0].Type != "Document" {
+		t.Fatalf("attachment: %+v", n.Attachment)
+	}
+	if u, k, ok := decodeMediaRef(strings.TrimPrefix(n.Attachment[0].URL, "https://gw.example/media/")); !ok || u != "alice" || k != "k1" {
+		t.Fatalf("attachment ref: %s", n.Attachment[0].URL)
 	}
 }
 
@@ -214,13 +223,18 @@ type fakeRequester struct {
 	lastRoute     stream.WarpRoute
 	lastPayload   any
 	followersJSON []byte
+	imageFile     string
 }
 
 func (f *fakeRequester) request(route stream.WarpRoute, payload any) ([]byte, error) {
 	f.lastRoute = route
 	f.lastPayload = payload
-	if route == event.PUBLIC_GET_FOLLOWERS {
+	switch route {
+	case event.PUBLIC_GET_FOLLOWERS:
 		return f.followersJSON, nil
+	case event.PUBLIC_GET_IMAGE:
+		bt, _ := json.Marshal(event.GetImageResponse{File: f.imageFile})
+		return bt, nil
 	}
 	return []byte(`["accepted"]`), nil
 }
@@ -380,6 +394,31 @@ func TestTranslateInbound(t *testing.T) {
 	}
 	if _, _, ok := g.translateInbound(map[string]any{"type": "Delete", "actor": actor, "object": status}); ok {
 		t.Fatal("delete should be unhandled")
+	}
+}
+
+func TestHandleMedia(t *testing.T) {
+	g := testGateway(t)
+	raw := []byte{0x89, 'P', 'N', 'G'}
+	g.req = &fakeRequester{imageFile: "image/png," + base64.StdEncoding.EncodeToString(raw)}
+
+	srv := httptest.NewServer(g.routes())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/media/" + encodeMediaRef("alice", "img1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("content-type = %q", ct)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	if !bytes.Equal(got, raw) {
+		t.Fatalf("body mismatch: %v", got)
 	}
 }
 

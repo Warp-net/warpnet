@@ -53,6 +53,12 @@ func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
 		To:           []string{asPublic},
 		Cc:           []string{followers},
 	}
+	for _, key := range t.ImageKeys {
+		n.Attachment = append(n.Attachment, attachment{
+			Type: typeDocument,
+			URL:  g.baseURL() + pathMedia + encodeMediaRef(t.UserId, key),
+		})
+	}
 	return activity{
 		Context: asContext,
 		ID:      noteID + "/activity",
