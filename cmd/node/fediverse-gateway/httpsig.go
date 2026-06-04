@@ -61,8 +61,11 @@ var (
 	errStaleRequest        = errors.New("httpsig: request date out of range")
 )
 
+// requestTargetHeader is the draft-cavage pseudo-header covering method + path.
+const requestTargetHeader = "(request-target)"
+
 // minSignedHeaders is the minimum set ActivityPub peers are expected to sign.
-var minSignedHeaders = []string{"(request-target)", "host", "date"}
+var minSignedHeaders = []string{requestTargetHeader, "host", "date"}
 
 // maxClockSkew bounds how far a request's Date may deviate from now (replay guard).
 const maxClockSkew = 12 * time.Hour
@@ -77,7 +80,7 @@ func signRequest(req *http.Request, keyID string, key *rsa.PrivateKey, body []by
 		req.Host = req.URL.Host
 	}
 
-	headers := []string{"(request-target)", "host", "date"}
+	headers := []string{requestTargetHeader, "host", "date"}
 	if body != nil {
 		sum := sha256.Sum256(body)
 		req.Header.Set("Digest", "SHA-256="+base64.StdEncoding.EncodeToString(sum[:]))
@@ -167,7 +170,7 @@ func buildSigningString(req *http.Request, headers []string) string {
 			b.WriteByte('\n')
 		}
 		switch h {
-		case "(request-target)":
+		case requestTargetHeader:
 			fmt.Fprintf(&b, "(request-target): %s %s", strings.ToLower(req.Method), req.URL.RequestURI())
 		case "host":
 			fmt.Fprintf(&b, "host: %s", req.Host)

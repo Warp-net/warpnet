@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -101,17 +102,15 @@ func newFileFollowerStore(path string) (*fileFollowerStore, error) {
 func (s *fileFollowerStore) Add(localUser, actorURL string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ex := range s.data[localUser] {
-		if ex == actorURL {
-			return nil
-		}
+	if slices.Contains(s.data[localUser], actorURL) {
+		return nil
 	}
 	s.data[localUser] = append(s.data[localUser], actorURL)
 	bt, err := json.Marshal(s.data)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, bt, 0o600)
+	return os.WriteFile(s.path, bt, 0o600) //#nosec G703 -- operator-provided path
 }
 
 func (s *fileFollowerStore) List(localUser string) ([]string, error) {

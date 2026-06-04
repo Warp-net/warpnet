@@ -69,11 +69,12 @@ func newNodeClient(ctx context.Context, network string, bootstrap []warpnet.Warp
 		return nil, fmt.Errorf("nodeclient: identity: %w", err)
 	}
 
-	opts := []warpnet.WarpOption{
+	opts := make([]warpnet.WarpOption, 0, 3+len(node.CommonOptions))
+	opts = append(opts,
 		node.WarpIdentity(identity),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
-	}
+	)
 	opts = append(opts, node.CommonOptions...)
 
 	wn, err := node.NewWarpNode(ctx, opts...)
@@ -154,25 +155,28 @@ func echoAddrInfo() (warpnet.WarpAddrInfo, error) {
 // runEchoProbe connects to the live testnet echo node and fetches its owner
 // profile through nodeSource — a smoke test of the whole connector path.
 func runEchoProbe() {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
 	target, err := echoAddrInfo()
 	if err != nil {
-		log.Fatalf("probe: echo addr: %v", err)
+		log.Errorf("probe: echo addr: %v", err)
+		return
 	}
 	log.Infof("probe: dialing testnet echo node %s", target.ID)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
 	cl, err := newNodeClient(ctx, "testnet", nil, target)
 	if err != nil {
-		log.Fatalf("probe: connect: %v", err)
+		log.Errorf("probe: connect: %v", err)
+		return
 	}
 	defer cl.close()
 
 	src := nodeSource{client: cl, userID: echoOwnerID}
 	u, ok := src.GetUser(echoOwnerID)
 	if !ok {
-		log.Fatalln("probe: echo user not found / unreadable")
+		log.Errorln("probe: echo user not found / unreadable")
+		return
 	}
 	log.Infof("probe: OK — echo user id=%s name=%q bio=%q", u.ID, u.DisplayName, u.Summary)
 }

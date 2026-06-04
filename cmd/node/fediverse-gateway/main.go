@@ -105,20 +105,20 @@ func main() {
 	// Profile source: read live from a Warpnet node when GATEWAY_NODE_ADDR is
 	// set (state lives in Warpnet), otherwise a static operator-configured stub.
 	appCtx, appCancel := context.WithCancel(context.Background())
-	defer appCancel()
 
 	var src warpnetSource = staticSource{user: wu}
 	var nodeCli *nodeClient
 	if nodeAddr := envOr("GATEWAY_NODE_ADDR", ""); nodeAddr != "" {
 		target, terr := warpnet.AddrInfoFromString(nodeAddr)
 		if terr != nil {
+			appCancel()
 			log.Fatalf("gateway: bad GATEWAY_NODE_ADDR: %v", terr)
 		}
 		nodeCli, err = newNodeClient(appCtx, envOr("NODE_NETWORK", "warpnet"), nil, *target)
 		if err != nil {
+			appCancel()
 			log.Fatalf("gateway: connect Warpnet node: %v", err)
 		}
-		defer nodeCli.close()
 		src = nodeSource{client: nodeCli, userID: user}
 		log.Infof("gateway: profile sourced from Warpnet node %s", target.ID)
 	}
@@ -131,6 +131,7 @@ func main() {
 	} else {
 		ff, ferr := newFileFollowerStore(followersPath)
 		if ferr != nil {
+			appCancel()
 			log.Fatalf("gateway: %v", ferr)
 		}
 		followers = ff
@@ -166,6 +167,10 @@ func main() {
 	<-stop
 
 	log.Infoln("gateway: shutting down...")
+	appCancel()
+	if nodeCli != nil {
+		nodeCli.close()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
