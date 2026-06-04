@@ -260,6 +260,65 @@ func TestNodeFollowerStore(t *testing.T) {
 	}
 }
 
+func strptr(s string) *string { return &s }
+
+func TestPublishableTweet(t *testing.T) {
+	cases := []struct {
+		tw   domain.Tweet
+		want bool
+	}{
+		{domain.Tweet{UserId: "alice"}, true},
+		{domain.Tweet{UserId: "bob"}, false},                                 // not the owner
+		{domain.Tweet{UserId: "alice", RetweetedBy: strptr("alice")}, false}, // retweet
+		{domain.Tweet{UserId: "alice", ParentId: strptr("t0")}, false},       // reply
+		{domain.Tweet{UserId: "alice", ParentId: strptr("")}, true},          // empty parent = top-level
+	}
+	for i, c := range cases {
+		if got := publishableTweet(c.tw, "alice"); got != c.want {
+			t.Errorf("case %d: got %v want %v", i, got, c.want)
+		}
+	}
+}
+
+type fakeTweetsRequester struct {
+	tweets []domain.Tweet
+}
+
+func (f *fakeTweetsRequester) request(route stream.WarpRoute, _ any) ([]byte, error) {
+	if route == event.PUBLIC_GET_TWEETS {
+		bt, _ := json.Marshal(event.TweetsResponse{Tweets: f.tweets})
+		return bt, nil
+	}
+	return []byte(`["accepted"]`), nil
+}
+
+func TestTweetPollerSeedAndDedup(t *testing.T) {
+	fr := &fakeTweetsRequester{tweets: []domain.Tweet{{Id: "t1", UserId: "alice"}}}
+	var published []string
+	p := newTweetPoller(fr, "alice", func(_ context.Context, _ string, tw domain.Tweet) {
+		published = append(published, tw.Id)
+	})
+
+	// seed marks existing tweets as seen (no history replay)
+	for _, tw := range p.fetch() {
+		p.seen[tw.Id] = struct{}{}
+	}
+
+	// a new tweet arrives → published once
+	fr.tweets = append(fr.tweets, domain.Tweet{Id: "t2", UserId: "alice"})
+	p.poll(context.Background())
+	if len(published) != 1 || published[0] != "t2" {
+		t.Fatalf("expected only t2 published, got %v", published)
+	}
+
+	// polling again republishes nothing
+	published = nil
+	p.poll(context.Background())
+	if len(published) != 0 {
+		t.Fatalf("expected no republish, got %v", published)
+	}
+}
+
 func TestValidateRemoteURL(t *testing.T) {
 	for _, u := range []string{
 		"https://mastodon.social/users/x",

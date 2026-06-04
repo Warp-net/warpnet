@@ -150,6 +150,11 @@ func main() {
 		followers:   followers,
 	}
 
+	// Federate the owner's new tweets to Fediverse followers.
+	if nodeCli != nil {
+		go newTweetPoller(nodeCli, user, g.publishNote).run(appCtx)
+	}
+
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           g.routes(),
