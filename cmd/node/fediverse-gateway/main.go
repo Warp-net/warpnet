@@ -32,8 +32,8 @@ resulting from the use or misuse of this software.
 // Implemented: WebFinger, an actor document with an RSA public key, an inbox
 // that verifies HTTP signatures and answers Follow with a signed Accept
 // (persisting the follower), outbound Create(Note) fan-out, and a libp2p
-// connector to the Warpnet network (GATEWAY_PROBE_ECHO smoke-tests it against
-// the testnet echo node).
+// connector to the Warpnet network (GATEWAY_PROBE smoke-tests it against
+// GATEWAY_NODE_ADDR).
 //
 // Configuration is environment-only (GATEWAY_* below, plus the standard
 // NODE_NETWORK for the libp2p side). It does NOT use CLI flags: importing the
@@ -63,14 +63,18 @@ const gatewayVersion = "0.1.0"
 
 const fatalFmt = "gateway: %v"
 
+// defaultNetwork is the Warpnet network the connector joins unless NODE_NETWORK
+// overrides it.
+const defaultNetwork = "warpnet"
+
 func main() {
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true, TimestampFormat: time.DateTime})
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.InfoLevel)
 
-	// Smoke-test the libp2p connector against the live testnet echo node.
-	if envOr("GATEWAY_PROBE_ECHO", "") != "" {
-		runEchoProbe()
+	// Smoke-test the libp2p connector against the configured Warpnet node.
+	if envOr("GATEWAY_PROBE", "") != "" {
+		runProbe()
 		return
 	}
 
@@ -116,7 +120,7 @@ func main() {
 			appCancel()
 			log.Fatalf("gateway: bad GATEWAY_NODE_ADDR: %v", terr)
 		}
-		nodeCli, err = newNodeClient(appCtx, envOr("NODE_NETWORK", "warpnet"), nil, *target)
+		nodeCli, err = newNodeClient(appCtx, envOr("NODE_NETWORK", defaultNetwork), nil, *target)
 		if err != nil {
 			appCancel()
 			log.Fatalf("gateway: connect Warpnet node: %v", err)

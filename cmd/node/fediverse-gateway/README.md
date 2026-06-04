@@ -28,8 +28,8 @@ store is used only as a dev fallback when no node is configured).
 - **libp2p connector** (`nodeclient.go`) — a minimal client peer (same
   PSK/transport/security as a member node) that dials a Warpnet node and calls
   its routes. `nodeSource` reads the bridged user's profile via
-  `PUBLIC_GET_USER`. `GATEWAY_PROBE_ECHO=1` smoke-tests it against the testnet
-  echo node.
+  `PUBLIC_GET_USER`. `GATEWAY_PROBE=1` smoke-tests the connector against
+  `GATEWAY_NODE_ADDR`.
 - **Follower graph in Warpnet** — `Accept` records the remote actor through the
   existing `PUBLIC_POST_FOLLOW` route and fan-out reads `PUBLIC_GET_FOLLOWERS`
   (no new node routes); actor URLs travel as `ap:`-prefixed base64url follower
@@ -98,15 +98,15 @@ Env vars: `GATEWAY_HOST`, `GATEWAY_ADDR` (default `127.0.0.1:8080`),
 `NODE_NETWORK`) to source the profile from a live Warpnet node instead of the
 static stub.
 
-### Smoke-test the connector against the echo node
+### Smoke-test the connector
 
 ```sh
-GATEWAY_PROBE_ECHO=1 go run ./cmd/node/fediverse-gateway
-# dials the testnet echo node (see deploy/) and reads its profile via PUBLIC_GET_USER
+GATEWAY_PROBE=1 GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/… GATEWAY_USER=<id> NODE_NETWORK=<net> \
+  go run ./cmd/node/fediverse-gateway
+# dials GATEWAY_NODE_ADDR and reads the GATEWAY_USER profile via PUBLIC_GET_USER
 ```
 
-(Requires outbound network access to the echo node — it won't work from a
-sandbox without egress.)
+(Requires outbound network access to that node.)
 
 ## Milestone check
 

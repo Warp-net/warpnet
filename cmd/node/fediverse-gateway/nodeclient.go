@@ -46,10 +46,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// echoOwnerID is the fixed owner user id of the deployed testnet echo node
-// (see cmd/node/member/echo-member.go).
-const echoOwnerID = "01KSGHBHKG0N77T6A3RZV8WSH5"
-
 // nodeClient is the gateway's libp2p connection into the Warpnet network: a
 // minimal client peer (same PSK / transport / security as a member node) that
 // dials a target node and calls its routes. Profile and follower state live on
@@ -134,49 +130,37 @@ func (s nodeSource) GetUser(preferredUsername string) (warpnetUser, bool) {
 	}, true
 }
 
-// echoAddrInfo builds the dial address of the deployed testnet echo node from
-// its seed (NODE_SEED=echo) and well-known host:port (see deploy/).
-func echoAddrInfo() (warpnet.WarpAddrInfo, error) {
-	priv, err := security.GenerateKeyFromSeed([]byte("echo"))
-	if err != nil {
-		return warpnet.WarpAddrInfo{}, err
-	}
-	id, err := warpnet.IDFromPublicKey(priv.Public().(ed25519.PublicKey))
-	if err != nil {
-		return warpnet.WarpAddrInfo{}, err
-	}
-	info, err := warpnet.AddrInfoFromString(fmt.Sprintf("/ip4/130.94.88.38/tcp/4012/p2p/%s", id))
-	if err != nil {
-		return warpnet.WarpAddrInfo{}, err
-	}
-	return *info, nil
-}
-
-// runEchoProbe connects to the live testnet echo node and fetches its owner
-// profile through nodeSource — a smoke test of the whole connector path.
-func runEchoProbe() {
-	target, err := echoAddrInfo()
-	if err != nil {
-		log.Errorf("probe: echo addr: %v", err)
+// runProbe connects to the Warpnet node at GATEWAY_NODE_ADDR and fetches the
+// GATEWAY_USER profile — a node-agnostic smoke test of the connector path.
+func runProbe() {
+	nodeAddr := envOr("GATEWAY_NODE_ADDR", "")
+	user := envOr("GATEWAY_USER", "")
+	if nodeAddr == "" || user == "" {
+		log.Errorln("probe: set GATEWAY_NODE_ADDR and GATEWAY_USER")
 		return
 	}
-	log.Infof("probe: dialing testnet echo node %s", target.ID)
+	target, err := warpnet.AddrInfoFromString(nodeAddr)
+	if err != nil {
+		log.Errorf("probe: bad GATEWAY_NODE_ADDR: %v", err)
+		return
+	}
+	log.Infof("probe: dialing Warpnet node %s", target.ID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	cl, err := newNodeClient(ctx, "testnet", nil, target)
+	cl, err := newNodeClient(ctx, envOr("NODE_NETWORK", defaultNetwork), nil, *target)
 	if err != nil {
 		log.Errorf("probe: connect: %v", err)
 		return
 	}
 	defer cl.close()
 
-	src := nodeSource{client: cl, userID: echoOwnerID}
-	u, ok := src.GetUser(echoOwnerID)
+	src := nodeSource{client: cl, userID: user}
+	u, ok := src.GetUser(user)
 	if !ok {
-		log.Errorln("probe: echo user not found / unreadable")
+		log.Errorln("probe: user not found / unreadable")
 		return
 	}
-	log.Infof("probe: OK — echo user id=%s name=%q bio=%q", u.ID, u.DisplayName, u.Summary)
+	log.Infof("probe: OK — user id=%s name=%q bio=%q", u.ID, u.DisplayName, u.Summary)
 }
