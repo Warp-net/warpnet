@@ -1140,6 +1140,9 @@ github.com/stretchr/testify/suite
 # github.com/subosito/gotenv v1.6.0
 ## explicit; go 1.18
 github.com/subosito/gotenv
+# github.com/superseriousbusiness/httpsig v1.2.0-SSB
+## explicit; go 1.21
+github.com/superseriousbusiness/httpsig
 # github.com/tc-hib/winres v0.3.1
 ## explicit; go 1.19
 github.com/tc-hib/winres
@@ -1371,9 +1374,11 @@ golang.org/x/crypto/chacha20poly1305
 golang.org/x/crypto/cryptobyte
 golang.org/x/crypto/cryptobyte/asn1
 golang.org/x/crypto/curve25519
+golang.org/x/crypto/ed25519
 golang.org/x/crypto/hkdf
 golang.org/x/crypto/internal/alias
 golang.org/x/crypto/internal/poly1305
+golang.org/x/crypto/ripemd160
 golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/sha3
 golang.org/x/crypto/ssh

@@ -27,19 +27,13 @@ resulting from the use or misuse of this software.
 
 package main
 
-// This is a minimal, self-contained implementation of the "Cavage" HTTP
-// Signatures draft, enough for the Phase-1 skeleton: the header set
-// "(request-target) host date [digest]" with rsa-sha256. The RSA primitives
-// are stdlib.
-//
-// PRODUCTION: replace this file with superseriousbusiness/httpsig (the library
-// GoToSocial and Mastodon-compatible servers use) behind signRequest /
-// verifyRequest — do not grow a bespoke implementation. Known gaps here:
-// no Date-skew check, hs2019 not emitted, no signature reuse/caching.
+// HTTP Signatures (draft-cavage) for ActivityPub. The crypto and signing-string
+// canonicalization are delegated to superseriousbusiness/httpsig — the library
+// GoToSocial uses for Mastodon interop. This file keeps only the policy the
+// library leaves to the caller: the minimum signed header set, Date freshness
+// (replay guard), and binding any request body to a signed SHA-256 digest.
 
 import (
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
@@ -51,6 +45,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/superseriousbusiness/httpsig"
 )
 
 var (
@@ -85,35 +81,42 @@ func signRequest(req *http.Request, keyID string, key *rsa.PrivateKey, body []by
 	if req.Host == "" {
 		req.Host = req.URL.Host
 	}
+	// The signer reads the host from req.Header; net/http keeps it in req.Host
+	// (and omits this header from the wire), so mirror it for signing.
+	req.Header.Set("Host", req.Host)
 
 	headers := []string{requestTargetHeader, hostHeader, dateHeader}
 	if body != nil {
-		sum := sha256.Sum256(body)
-		req.Header.Set("Digest", "SHA-256="+base64.StdEncoding.EncodeToString(sum[:]))
 		headers = append(headers, digestHeader)
 	}
 
-	hashed := sha256.Sum256([]byte(buildSigningString(req, headers)))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, hashed[:])
+	signer, _, err := httpsig.NewSigner(
+		[]httpsig.Algorithm{httpsig.RSA_SHA256},
+		httpsig.DigestSha256,
+		headers,
+		httpsig.Signature,
+		0,
+	)
 	if err != nil {
+		return fmt.Errorf("httpsig: new signer: %w", err)
+	}
+	// The library sets the Digest header from body when "digest" is signed.
+	if err := signer.SignRequest(key, keyID, req, body); err != nil {
 		return fmt.Errorf("httpsig: sign: %w", err)
 	}
-	req.Header.Set("Signature", fmt.Sprintf(
-		`keyId="%s",algorithm="rsa-sha256",headers="%s",signature="%s"`,
-		keyID, strings.Join(headers, " "), base64.StdEncoding.EncodeToString(sig),
-	))
 	return nil
 }
 
 // verifyRequest checks the HTTP signature on an inbound request. body is the
 // already-read request body; fetchKey resolves a keyId to its RSA public key
-// (by dereferencing the signing actor's document).
+// (by dereferencing the signing actor's document). The library verifies the
+// signature itself; the checks below are policy it leaves to the caller.
 func verifyRequest(req *http.Request, body []byte, fetchKey func(keyID string) (*rsa.PublicKey, error)) error {
 	sigHdr := req.Header.Get("Signature")
 	if sigHdr == "" {
 		return errNoSignatureHeader
 	}
-	keyID, headers, signature, err := parseSignatureHeader(sigHdr)
+	_, headers, _, err := parseSignatureHeader(sigHdr)
 	if err != nil {
 		return err
 	}
@@ -142,7 +145,6 @@ func verifyRequest(req *http.Request, body []byte, fetchKey func(keyID string) (
 	if len(body) > 0 && !slices.Contains(headers, digestHeader) {
 		return fmt.Errorf("httpsig: body not bound by digest: %w", errIncompleteSignature)
 	}
-
 	if slices.Contains(headers, digestHeader) {
 		sum := sha256.Sum256(body)
 		want := "SHA-256=" + base64.StdEncoding.EncodeToString(sum[:])
@@ -151,40 +153,18 @@ func verifyRequest(req *http.Request, body []byte, fetchKey func(keyID string) (
 		}
 	}
 
-	pub, err := fetchKey(keyID)
+	v, err := httpsig.NewVerifier(req)
 	if err != nil {
-		return fmt.Errorf("httpsig: fetch key %q: %w", keyID, err)
+		return fmt.Errorf("httpsig: new verifier: %w", err)
 	}
-
-	sig, err := base64.StdEncoding.DecodeString(signature)
+	pub, err := fetchKey(v.KeyId())
 	if err != nil {
-		return fmt.Errorf("httpsig: decode signature: %w", err)
+		return fmt.Errorf("httpsig: fetch key %q: %w", v.KeyId(), err)
 	}
-	hashed := sha256.Sum256([]byte(buildSigningString(req, headers)))
-	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, hashed[:], sig); err != nil {
+	if err := v.Verify(pub, httpsig.RSA_SHA256); err != nil {
 		return fmt.Errorf("httpsig: verify: %w", err)
 	}
 	return nil
-}
-
-// buildSigningString assembles the draft-cavage signing string over the named
-// pseudo-headers and real headers, in order.
-func buildSigningString(req *http.Request, headers []string) string {
-	var b strings.Builder
-	for i, h := range headers {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		switch h {
-		case requestTargetHeader:
-			fmt.Fprintf(&b, "(request-target): %s %s", strings.ToLower(req.Method), req.URL.RequestURI())
-		case hostHeader:
-			fmt.Fprintf(&b, "host: %s", req.Host)
-		default:
-			fmt.Fprintf(&b, "%s: %s", h, req.Header.Get(h))
-		}
-	}
-	return b.String()
 }
 
 func parseSignatureHeader(v string) (keyID string, headers []string, signature string, err error) {

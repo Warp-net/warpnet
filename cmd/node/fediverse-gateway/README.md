@@ -45,15 +45,16 @@ store is used only as a dev fallback when no node is configured).
 - **Media** (`mediaproxy.go`) — outbound `Create(Note)` carries image
   `attachment`s and `/media/{ref}` proxies the bytes from the node
   (`PUBLIC_GET_IMAGE`) so Mastodon can fetch them; the gateway stores nothing.
+- **HTTP Signatures** (`httpsig.go`) — signing and verification delegate to
+  `superseriousbusiness/httpsig` (the library GoToSocial uses for Mastodon
+  interop); the gateway keeps only the policy the library leaves to the caller:
+  the minimum signed header set, Date freshness, and digest↔body binding.
 
 ## Not yet wired
 
 - Inbound `Delete` → delete (needs an AP-object-id → Warpnet-reply-id mapping;
   the Delete activity doesn't carry the reply's root, so it's out of scope for
   the stateless gateway for now).
-- The HTTP signature code in `httpsig.go` is a minimal Cavage implementation;
-  production should swap it for `superseriousbusiness/httpsig` behind the same
-  `signRequest` / `verifyRequest`.
 - Live end-to-end validation against a node + Mastodon (needs network egress).
 
 ## Phase 0 — public HTTPS endpoint without a domain or certificates
