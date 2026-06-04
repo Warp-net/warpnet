@@ -12,29 +12,31 @@ It serves the minimum surface Mastodon's federation path exercises:
 - `GET /users/{user}/{outbox,followers,following}` — empty collections
 - `GET /.well-known/nodeinfo`, `GET /nodeinfo/2.0`
 
-The gateway keeps **no Warpnet content**. On disk it holds the RSA signing key
-(Mastodon verifies HTTP signatures against RSA, while Warpnet identities are
-Ed25519) and — for now — a local follower store; that store moves into Warpnet
-once the connector's write path lands (see below).
+The gateway keeps **no Warpnet content** and, when connected to a node, **no
+follower state**: on disk it holds only the RSA signing key (Mastodon verifies
+HTTP signatures against RSA, while Warpnet identities are Ed25519). The AP
+follow graph lives in Warpnet, reusing the existing follow routes (a local JSON
+store is used only as a dev fallback when no node is configured).
 
 ## Implemented so far
 
 - **Phase 1** — discovery + follow: WebFinger, RSA-keyed actor document, inbox
   with HTTP-signature verification, `Follow` → signed `Accept`.
-- **Phase 2 (outbound)** — `Accept` persists the remote follower; the
-  `followers` collection reflects it; `publishNote` builds a `Create(Note)`
-  from a Warpnet tweet and fans it out (signed) to followers.
+- **Phase 2 (outbound)** — `publishNote` builds a `Create(Note)` from a Warpnet
+  tweet and fans it out (signed) to followers; the `followers` collection is
+  served from the live follow graph.
 - **libp2p connector** (`nodeclient.go`) — a minimal client peer (same
   PSK/transport/security as a member node) that dials a Warpnet node and calls
-  its routes. `nodeSource` reads the bridged user's profile live via
-  `PUBLIC_GET_USER` (enable with `GATEWAY_NODE_ADDR`), so the profile lives in
-  Warpnet, not the gateway. `GATEWAY_PROBE_ECHO=1` smoke-tests it against the
-  testnet echo node.
+  its routes. `nodeSource` reads the bridged user's profile via
+  `PUBLIC_GET_USER`. `GATEWAY_PROBE_ECHO=1` smoke-tests it against the testnet
+  echo node.
+- **Follower graph in Warpnet** — `Accept` records the remote actor through the
+  existing `PUBLIC_POST_FOLLOW` route and fan-out reads `PUBLIC_GET_FOLLOWERS`
+  (no new node routes); actor URLs travel as `ap:`-prefixed base64url follower
+  ids and the inbox is resolved on demand. Enabled with `GATEWAY_NODE_ADDR`.
 
 ## Not yet wired
 
-- Moving the **follower store into Warpnet** (node-side AP-follower routes) so
-  the gateway keeps only keys — needs new node routes; next step.
 - A trigger that calls `publishNote` on new owner tweets (poll
   `PUBLIC_GET_TWEETS` or subscribe).
 - Inbound interaction translation (Create/Like/Announce/Undo/Delete → Warpnet)

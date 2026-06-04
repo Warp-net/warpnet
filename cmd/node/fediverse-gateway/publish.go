@@ -39,14 +39,18 @@ import (
 // as a signed Create(Note). Delivery is best-effort per follower and bounded by
 // the gateway's delivery semaphore; it blocks until all deliveries settle.
 func (g *gateway) publishNote(ctx context.Context, localUser string, t domain.Tweet) {
-	followers := g.followers.List(localUser)
-	if len(followers) == 0 {
+	actorURLs, err := g.followers.List(localUser)
+	if err != nil {
+		log.Errorf("publish: list followers of %s: %v", localUser, err)
+		return
+	}
+	if len(actorURLs) == 0 {
 		return
 	}
 	create := g.buildCreateNote(localUser, t)
 
 	var wg sync.WaitGroup
-	for _, f := range followers {
+	for _, actorURL := range actorURLs {
 		select {
 		case g.sem <- struct{}{}:
 		case <-ctx.Done():
@@ -54,13 +58,18 @@ func (g *gateway) publishNote(ctx context.Context, localUser string, t domain.Tw
 			return
 		}
 		wg.Add(1)
-		go func(target string) {
+		go func(actor string) {
 			defer wg.Done()
 			defer func() { <-g.sem }()
-			if err := g.postSigned(ctx, localUser, target, create); err != nil {
-				log.Errorf("publish: deliver tweet %s to %s: %v", t.Id, target, err)
+			inbox, ierr := g.remoteInbox(ctx, actor)
+			if ierr != nil {
+				log.Errorf("publish: resolve inbox for %s: %v", actor, ierr)
+				return
 			}
-		}(f.Inbox)
+			if perr := g.postSigned(ctx, localUser, inbox, create); perr != nil {
+				log.Errorf("publish: deliver tweet %s to %s: %v", t.Id, inbox, perr)
+			}
+		}(actorURL)
 	}
 	wg.Wait()
 }

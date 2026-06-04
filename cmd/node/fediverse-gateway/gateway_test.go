@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 )
 
 func testGateway(t *testing.T) *gateway {
@@ -25,7 +27,7 @@ func testGateway(t *testing.T) *gateway {
 	if err != nil {
 		t.Fatalf("pub: %v", err)
 	}
-	fs, err := newFollowerStore(t.TempDir() + "/followers.json")
+	fs, err := newFileFollowerStore(t.TempDir() + "/followers.json")
 	if err != nil {
 		t.Fatalf("followers: %v", err)
 	}
@@ -128,28 +130,27 @@ func TestHTTPSignatureRoundTrip(t *testing.T) {
 	})
 }
 
-func TestFollowerStore(t *testing.T) {
+func TestFileFollowerStore(t *testing.T) {
 	path := t.TempDir() + "/f.json"
-	s, err := newFollowerStore(path)
+	s, err := newFileFollowerStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Add("alice", follower{Actor: "https://m/users/bob", Inbox: "https://m/inbox"}); err != nil {
+	if err := s.Add("alice", "https://m/users/bob"); err != nil {
 		t.Fatal(err)
 	}
-	// idempotent by actor URL
-	if err := s.Add("alice", follower{Actor: "https://m/users/bob", Inbox: "https://m/inbox2"}); err != nil {
+	if err := s.Add("alice", "https://m/users/bob"); err != nil { // idempotent
 		t.Fatal(err)
 	}
-	if got := s.List("alice"); len(got) != 1 {
+	if got, _ := s.List("alice"); len(got) != 1 {
 		t.Fatalf("want 1 follower, got %d", len(got))
 	}
 	// reload from disk sees the persisted follower
-	s2, err := newFollowerStore(path)
+	s2, err := newFileFollowerStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s2.List("alice"); len(got) != 1 || got[0].Actor != "https://m/users/bob" {
+	if got, _ := s2.List("alice"); len(got) != 1 || got[0] != "https://m/users/bob" {
 		t.Fatalf("reloaded store mismatch: %+v", got)
 	}
 }
@@ -179,7 +180,16 @@ func TestPublishNoteFanout(t *testing.T) {
 	g := testGateway(t)
 	var mu sync.Mutex
 	hits := map[string]int{}
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if name, ok := strings.CutPrefix(r.URL.Path, "/users/"); ok {
+			// actor document carrying this follower's inbox
+			writeJSON(w, contentTypeAP, map[string]any{
+				"id":    srv.URL + "/users/" + name,
+				"inbox": srv.URL + "/inbox/" + name,
+			})
+			return
+		}
 		mu.Lock()
 		hits[r.URL.Path]++
 		mu.Unlock()
@@ -188,8 +198,8 @@ func TestPublishNoteFanout(t *testing.T) {
 	defer srv.Close()
 	g.client = srv.Client()
 
-	_ = g.followers.Add("alice", follower{Actor: srv.URL + "/users/bob", Inbox: srv.URL + "/inbox/bob"})
-	_ = g.followers.Add("alice", follower{Actor: srv.URL + "/users/carol", Inbox: srv.URL + "/inbox/carol"})
+	_ = g.followers.Add("alice", srv.URL+"/users/bob")
+	_ = g.followers.Add("alice", srv.URL+"/users/carol")
 
 	g.publishNote(context.Background(), "alice", domain.Tweet{Id: "t1", Text: "hello fedi", CreatedAt: time.Now()})
 
@@ -197,6 +207,56 @@ func TestPublishNoteFanout(t *testing.T) {
 	defer mu.Unlock()
 	if hits["/inbox/bob"] != 1 || hits["/inbox/carol"] != 1 {
 		t.Fatalf("fanout mismatch: %+v", hits)
+	}
+}
+
+type fakeRequester struct {
+	lastRoute     stream.WarpRoute
+	lastPayload   any
+	followersJSON []byte
+}
+
+func (f *fakeRequester) request(route stream.WarpRoute, payload any) ([]byte, error) {
+	f.lastRoute = route
+	f.lastPayload = payload
+	if route == event.PUBLIC_GET_FOLLOWERS {
+		return f.followersJSON, nil
+	}
+	return []byte(`["accepted"]`), nil
+}
+
+func TestNodeFollowerStore(t *testing.T) {
+	const actor = "https://mastodon.social/users/bob"
+	fr := &fakeRequester{}
+	s := nodeFollowerStore{req: fr}
+
+	if err := s.Add("owner1", actor); err != nil {
+		t.Fatal(err)
+	}
+	ev, ok := fr.lastPayload.(event.NewFollowEvent)
+	if !ok {
+		t.Fatalf("follow payload type %T", fr.lastPayload)
+	}
+	if ev.FollowingId != "owner1" {
+		t.Fatalf("following id = %q", ev.FollowingId)
+	}
+	if got, _ := decodeActorID(ev.FollowerId); got != actor {
+		t.Fatalf("follower id didn't round-trip: %q -> %q", ev.FollowerId, got)
+	}
+
+	// List decodes AP follower ids and skips native Warpnet ids.
+	resp := event.FollowersResponse{Followers: []domain.ID{
+		encodeActorID(actor),
+		"01KSGHBHKG0N77T6A3RZV8WSH5", // native ULID — must be skipped
+	}}
+	fr.followersJSON, _ = json.Marshal(resp)
+
+	urls, err := s.List("owner1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(urls) != 1 || urls[0] != actor {
+		t.Fatalf("list mismatch: %+v", urls)
 	}
 }
 

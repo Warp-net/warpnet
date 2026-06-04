@@ -95,11 +95,6 @@ func main() {
 		log.Fatalf("gateway: %v", err)
 	}
 
-	fs, err := newFollowerStore(followersPath)
-	if err != nil {
-		log.Fatalf("gateway: %v", err)
-	}
-
 	wu := warpnetUser{
 		ID:                user,
 		PreferredUsername: user,
@@ -128,6 +123,19 @@ func main() {
 		log.Infof("gateway: profile sourced from Warpnet node %s", target.ID)
 	}
 
+	// Follower graph lives in Warpnet (via the node connector); only when no
+	// node is configured does the gateway fall back to a local dev store.
+	var followers followerStore
+	if nodeCli != nil {
+		followers = nodeFollowerStore{req: nodeCli}
+	} else {
+		ff, ferr := newFileFollowerStore(followersPath)
+		if ferr != nil {
+			log.Fatalf("gateway: %v", ferr)
+		}
+		followers = ff
+	}
+
 	g := &gateway{
 		host:        host,
 		key:         key,
@@ -136,7 +144,7 @@ func main() {
 		signingUser: user,
 		client:      &http.Client{Timeout: 15 * time.Second},
 		sem:         make(chan struct{}, maxInflightDeliveries),
-		followers:   fs,
+		followers:   followers,
 	}
 
 	srv := &http.Server{

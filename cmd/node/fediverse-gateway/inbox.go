@@ -133,7 +133,7 @@ func (g *gateway) acceptFollow(localUser, remoteActorURL string, follow map[stri
 		log.Errorf("accept: deliver to %s: %v", inbox, err)
 		return
 	}
-	if err := g.followers.Add(localUser, follower{Actor: remoteActorURL, Inbox: inbox}); err != nil {
+	if err := g.followers.Add(localUser, remoteActorURL); err != nil {
 		log.Errorf("accept: persist follower %s: %v", remoteActorURL, err)
 	}
 	log.Infof("accept: Follow accepted (local=%s remote=%s)", localUser, remoteActorURL)

@@ -28,29 +28,61 @@ resulting from the use or misuse of this software.
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
+	"strings"
 	"sync"
 )
 
-// follower is a remote Fediverse follower of a local (bridged) user.
-type follower struct {
-	Actor string `json:"actor"` // remote actor URL
-	Inbox string `json:"inbox"` // delivery inbox (sharedInbox or personal)
+// followerStore records, per local (bridged) user, the remote Fediverse actors
+// that follow them. The production path (nodeFollowerStore) keeps the follow
+// graph in Warpnet via the existing follow routes; fileFollowerStore is a local
+// dev fallback when no Warpnet node is configured. Either way the gateway keeps
+// only keys, not Warpnet content.
+type followerStore interface {
+	Add(localUser, actorURL string) error
+	List(localUser string) ([]string, error)
 }
 
-// followerStore persists remote followers per local user. The gateway runs as
-// a separate process (chosen architecture), so it keeps its own small
-// JSON-backed store; once the libp2p node connector lands this can be moved
-// into Warpnet's followRepo.
-type followerStore struct {
+// apFollowerPrefix tags follower ids that encode a remote ActivityPub actor, so
+// AP followers can be told apart from native Warpnet user ids (which are valid
+// base64url too). The ':' is safe as a key segment — the datastore delimiter is
+// '/'.
+const apFollowerPrefix = "ap:"
+
+var errNotAPFollower = errors.New("not an AP follower id")
+
+// encodeActorID encodes a remote actor URL into a Warpnet follower id that is
+// safe as a datastore key segment (base64url has no '/') and reversible, so the
+// gateway can recover the actor URL from a follower list.
+func encodeActorID(actorURL string) string {
+	return apFollowerPrefix + base64.RawURLEncoding.EncodeToString([]byte(actorURL))
+}
+
+func decodeActorID(id string) (string, error) {
+	enc, ok := strings.CutPrefix(id, apFollowerPrefix)
+	if !ok {
+		return "", errNotAPFollower
+	}
+	bt, err := base64.RawURLEncoding.DecodeString(enc)
+	if err != nil {
+		return "", err
+	}
+	return string(bt), nil
+}
+
+// fileFollowerStore is a JSON-backed dev fallback used only when the gateway has
+// no Warpnet node connection.
+type fileFollowerStore struct {
 	mu   sync.RWMutex
 	path string
-	data map[string][]follower // localUser -> followers
+	data map[string][]string // localUser -> actor URLs
 }
 
-func newFollowerStore(path string) (*followerStore, error) {
-	s := &followerStore{path: path, data: map[string][]follower{}}
+func newFileFollowerStore(path string) (*fileFollowerStore, error) {
+	s := &fileFollowerStore{path: path, data: map[string][]string{}}
 	bt, err := os.ReadFile(path) //#nosec G304 -- operator-provided path
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -66,33 +98,27 @@ func newFollowerStore(path string) (*followerStore, error) {
 	return s, nil
 }
 
-// Add records a follower (idempotent by actor URL) and persists the store.
-func (s *followerStore) Add(localUser string, f follower) error {
+func (s *fileFollowerStore) Add(localUser, actorURL string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, ex := range s.data[localUser] {
-		if ex.Actor == f.Actor {
+		if ex == actorURL {
 			return nil
 		}
 	}
-	s.data[localUser] = append(s.data[localUser], f)
-	return s.persistLocked()
-}
-
-// List returns a copy of localUser's followers.
-func (s *followerStore) List(localUser string) []follower {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	src := s.data[localUser]
-	out := make([]follower, len(src))
-	copy(out, src)
-	return out
-}
-
-func (s *followerStore) persistLocked() error {
+	s.data[localUser] = append(s.data[localUser], actorURL)
 	bt, err := json.Marshal(s.data)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(s.path, bt, 0o600)
+}
+
+func (s *fileFollowerStore) List(localUser string) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	src := s.data[localUser]
+	out := make([]string, len(src))
+	copy(out, src)
+	return out, nil
 }

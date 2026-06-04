@@ -41,6 +41,8 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -75,7 +77,7 @@ type gateway struct {
 	signingUser string // SKELETON: the single user the gateway signs outbound as
 	client      *http.Client
 	sem         chan struct{} // bounds concurrent Accept deliveries
-	followers   *followerStore
+	followers   followerStore
 
 	// allowPrivateTargets disables the SSRF guard's loopback/private-range
 	// rejection for outbound delivery. Test-only; never set in main.go.
@@ -183,10 +185,13 @@ func (g *gateway) serveEmptyCollection(w http.ResponseWriter, id string) {
 }
 
 func (g *gateway) serveFollowers(w http.ResponseWriter, user string) {
-	fs := g.followers.List(user)
-	items := make([]any, 0, len(fs))
-	for _, f := range fs {
-		items = append(items, f.Actor)
+	urls, err := g.followers.List(user)
+	if err != nil {
+		log.Errorf("followers: list %s: %v", user, err)
+	}
+	items := make([]any, 0, len(urls))
+	for _, u := range urls {
+		items = append(items, u)
 	}
 	writeJSON(w, contentTypeAP, orderedCollection{
 		Context:      asContext,
