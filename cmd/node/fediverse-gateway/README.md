@@ -7,6 +7,8 @@ It serves the minimum surface Mastodon's federation path exercises:
 
 - `GET /.well-known/webfinger` — resolves `acct:USER@HOST` → actor URL
 - `GET /users/{user}` — the `Person` actor document, with an RSA public key
+- `GET /users/{user}/statuses/{id}` — resolves a Note id back to the Warpnet
+  tweet, so peers can dereference, reply to, and boost our posts
 - `POST /users/{user}/inbox` and `POST /inbox` — verifies the HTTP signature
   and answers inbound `Follow` with a signed `Accept`
 - `GET /users/{user}/{outbox,followers,following}` — empty collections
@@ -24,7 +26,8 @@ store is used only as a dev fallback when no node is configured).
   with HTTP-signature verification, `Follow` → signed `Accept`.
 - **Phase 2 (outbound)** — `publishNote` builds a `Create(Note)` from a Warpnet
   tweet and fans it out (signed) to followers; the `followers` collection is
-  served from the live follow graph.
+  served from the live follow graph, and each Note is dereferenceable at
+  `/statuses/{id}` (`serveStatus`, via `PUBLIC_GET_TWEET`).
 - **libp2p connector** (`nodeclient.go`) — a minimal client peer (same
   PSK/transport/security as a member node) that dials a Warpnet node and calls
   its routes. `nodeSource` reads the bridged user's profile via

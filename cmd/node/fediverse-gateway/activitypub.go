@@ -92,8 +92,10 @@ type activity struct {
 }
 
 // note is the ActivityPub Note emitted inside a Create when a Warpnet tweet is
-// federated outbound.
+// federated outbound, and served standalone at /users/{user}/statuses/{id}
+// (Context is set only when served standalone).
 type note struct {
+	Context      any          `json:"@context,omitempty"`
 	ID           string       `json:"id"`
 	Type         string       `json:"type"`
 	AttributedTo string       `json:"attributedTo"`

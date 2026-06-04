@@ -224,6 +224,7 @@ type fakeRequester struct {
 	lastPayload   any
 	followersJSON []byte
 	imageFile     string
+	tweet         domain.Tweet
 }
 
 func (f *fakeRequester) request(route stream.WarpRoute, payload any) ([]byte, error) {
@@ -234,6 +235,9 @@ func (f *fakeRequester) request(route stream.WarpRoute, payload any) ([]byte, er
 		return f.followersJSON, nil
 	case event.PUBLIC_GET_IMAGE:
 		bt, _ := json.Marshal(event.GetImageResponse{File: f.imageFile})
+		return bt, nil
+	case event.PUBLIC_GET_TWEET:
+		bt, _ := json.Marshal(f.tweet)
 		return bt, nil
 	}
 	return []byte(`["accepted"]`), nil
@@ -420,6 +424,53 @@ func TestHandleMedia(t *testing.T) {
 	if !bytes.Equal(got, raw) {
 		t.Fatalf("body mismatch: %v", got)
 	}
+}
+
+func TestServeStatus(t *testing.T) {
+	g := testGateway(t)
+	g.req = &fakeRequester{tweet: domain.Tweet{
+		Id: "t1", UserId: "alice", Text: "hi <there>", CreatedAt: time.Unix(1700000000, 0),
+	}}
+
+	srv := httptest.NewServer(g.routes())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/users/alice/statuses/t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != contentTypeAP {
+		t.Fatalf("content-type = %q", ct)
+	}
+	var n note
+	if err := json.NewDecoder(resp.Body).Decode(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n.ID != "https://gw.example/users/alice/statuses/t1" || n.Type != typeNote {
+		t.Fatalf("note id/type: %+v", n)
+	}
+	if n.Context != asContext || !strings.Contains(n.Content, "&lt;there&gt;") {
+		t.Fatalf("note context/content: %+v", n)
+	}
+
+	t.Run("missing tweet 404s", func(t *testing.T) {
+		g2 := testGateway(t)
+		g2.req = &fakeRequester{} // empty tweet (Id == "")
+		srv2 := httptest.NewServer(g2.routes())
+		defer srv2.Close()
+		resp, err := http.Get(srv2.URL + "/users/alice/statuses/nope")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", resp.StatusCode)
+		}
+	})
 }
 
 func TestValidateRemoteURL(t *testing.T) {

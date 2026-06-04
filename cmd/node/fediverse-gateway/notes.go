@@ -28,24 +28,27 @@ resulting from the use or misuse of this software.
 package main
 
 import (
+	"encoding/json"
 	"html"
+	"net/http"
 	"time"
 
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
+	log "github.com/sirupsen/logrus"
 )
 
 const asPublic = "https://www.w3.org/ns/activitystreams#Public"
 
-// buildCreateNote wraps a Warpnet tweet as an ActivityPub Create(Note) authored
-// by localUser. The Note id is deterministic so a later GET can resolve it back
-// to the Warpnet tweet without local storage.
-func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
+// buildNote renders a Warpnet tweet as an ActivityPub Note authored by
+// localUser. The Note id is deterministic (.../statuses/{id}) so serveStatus
+// can resolve it back to the tweet without local storage.
+func (g *gateway) buildNote(localUser string, t domain.Tweet) note {
 	actorID := g.actorID(localUser)
-	noteID := actorID + pathStatuses + t.Id
 	followers := actorID + pathFollowers
 
 	n := note{
-		ID:           noteID,
+		ID:           actorID + pathStatuses + t.Id,
 		Type:         typeNote,
 		AttributedTo: actorID,
 		Content:      "<p>" + html.EscapeString(t.Text) + "</p>",
@@ -59,13 +62,47 @@ func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
 			URL:  g.baseURL() + pathMedia + encodeMediaRef(t.UserId, key),
 		})
 	}
+	return n
+}
+
+// buildCreateNote wraps a Warpnet tweet as an ActivityPub Create(Note) authored
+// by localUser, addressed to the public and the author's followers.
+func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
+	n := g.buildNote(localUser, t)
 	return activity{
 		Context: asContext,
-		ID:      noteID + "/activity",
+		ID:      n.ID + "/activity",
 		Type:    typeCreate,
-		Actor:   actorID,
+		Actor:   n.AttributedTo,
 		Object:  n,
-		To:      []string{asPublic},
-		Cc:      []string{followers},
+		To:      n.To,
+		Cc:      n.Cc,
 	}
+}
+
+// serveStatus resolves one of our deterministic Note ids back to the Warpnet
+// tweet (PUBLIC_GET_TWEET) and renders it as a standalone Note, so peers can
+// dereference, reply to, and boost the gateway's posts. Needs a node.
+func (g *gateway) serveStatus(w http.ResponseWriter, r *http.Request, user, tweetID string) {
+	if g.req == nil {
+		http.NotFound(w, r)
+		return
+	}
+	bt, err := g.req.request(event.PUBLIC_GET_TWEET, event.GetTweetEvent{
+		TweetId: tweetID,
+		UserId:  user,
+	})
+	if err != nil {
+		log.Warnf("status: fetch %s/%s: %v", user, tweetID, err)
+		http.NotFound(w, r)
+		return
+	}
+	var t domain.Tweet
+	if jerr := json.Unmarshal(bt, &t); jerr != nil || t.Id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	n := g.buildNote(user, t)
+	n.Context = asContext
+	writeJSON(w, contentTypeAP, n)
 }

@@ -157,6 +157,12 @@ func (g *gateway) handleUsers(w http.ResponseWriter, r *http.Request) {
 		g.serveFollowers(w, user)
 	case "following":
 		g.serveEmptyCollection(w, g.actorID(user)+"/following")
+	case "statuses":
+		if len(parts) < 3 || parts[2] == "" {
+			http.NotFound(w, r)
+			return
+		}
+		g.serveStatus(w, r, user, parts[2])
 	default:
 		http.NotFound(w, r)
 	}
