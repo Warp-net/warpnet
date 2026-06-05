@@ -25,9 +25,11 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Command fediverse-gateway is a thin ActivityPub gateway that lets a single
-// Warpnet user be discovered and followed from Mastodon / the Fediverse and
-// federates that user's posts outbound to their Fediverse followers.
+// Command fediverse-gateway is a thin ActivityPub gateway that lets Warpnet
+// users be discovered and followed from Mastodon / the Fediverse. It is agnostic
+// to node, user, and network: it joins Warpnet through the network's bootstrap
+// nodes and resolves any requested user via the public routes. Outbound
+// post/follow federation runs for the optional GATEWAY_USER.
 //
 // Implemented: WebFinger, an actor document with an RSA public key, an inbox
 // that verifies HTTP signatures and answers Follow with a signed Accept
@@ -56,7 +58,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
 	log "github.com/sirupsen/logrus"
 	"tailscale.com/tsnet"
 )
@@ -64,10 +65,6 @@ import (
 const gatewayVersion = "0.1.0"
 
 const fatalFmt = "gateway: %v"
-
-// defaultNetwork is the Warpnet network the connector joins unless NODE_NETWORK
-// overrides it.
-const defaultNetwork = "warpnet"
 
 func main() {
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true, TimestampFormat: time.DateTime})
@@ -84,7 +81,7 @@ func main() {
 		host          = envOr("GATEWAY_HOST", "")
 		addr          = envOr("GATEWAY_ADDR", "127.0.0.1:8080")
 		keyPath       = envOr("GATEWAY_KEY", "fediverse-gateway-key.pem")
-		user          = envOr("GATEWAY_USER", "warpnet")
+		user          = envOr("GATEWAY_USER", "")
 		display       = envOr("GATEWAY_DISPLAY_NAME", "Warpnet")
 		summary       = envOr("GATEWAY_SUMMARY", "Warpnet ↔ Fediverse gateway (skeleton)")
 		followersPath = envOr("GATEWAY_FOLLOWERS", "fediverse-gateway-followers.json")
@@ -136,25 +133,19 @@ func main() {
 		Summary:           summary,
 	}
 
-	// Profile source: read live from a Warpnet node when GATEWAY_NODE_ADDR is
-	// set (state lives in Warpnet), otherwise a static operator-configured stub.
+	// Join Warpnet through the network's bootstrap nodes (agnostic to any
+	// specific node) and serve any user via the network; fall back to the static
+	// profile only if the network is unreachable.
 	appCtx, appCancel := context.WithCancel(context.Background())
 
 	var src warpnetSource = staticSource{user: wu}
 	var nodeCli *nodeClient
-	if nodeAddr := envOr("GATEWAY_NODE_ADDR", ""); nodeAddr != "" {
-		target, terr := warpnet.AddrInfoFromString(nodeAddr)
-		if terr != nil {
-			appCancel()
-			log.Fatalf("gateway: bad GATEWAY_NODE_ADDR: %v", terr)
-		}
-		nodeCli, err = newNodeClient(appCtx, envOr("NODE_NETWORK", defaultNetwork), nil, *target)
-		if err != nil {
-			appCancel()
-			log.Fatalf("gateway: connect Warpnet node: %v", err)
-		}
-		src = nodeSource{client: nodeCli, userID: user}
-		log.Infof("gateway: profile sourced from Warpnet node %s", target.ID)
+	if cli, cerr := connectNetwork(appCtx); cerr != nil {
+		log.Warnf("gateway: %v; serving the static profile only", cerr)
+	} else {
+		nodeCli = cli
+		src = nodeSource{client: nodeCli}
+		log.Infoln("gateway: joined Warpnet; any user is resolvable via the network")
 	}
 
 	// Follower graph lives in Warpnet (via the node connector); only when no
@@ -185,8 +176,9 @@ func main() {
 		req:         req,
 	}
 
-	// Federate the owner's new tweets, and outbound follows, to the Fediverse.
-	if nodeCli != nil {
+	// Federate the configured user's posts and follows outbound (optional —
+	// inbound discovery/interactions work for any user without this).
+	if nodeCli != nil && user != "" {
 		go newTweetPoller(nodeCli, user, g.publishNote).run(appCtx)
 		go newFollowPoller(nodeCli, user,
 			func(actorURL string) { g.sendFollow(user, actorURL) },

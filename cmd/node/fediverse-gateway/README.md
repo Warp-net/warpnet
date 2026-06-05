@@ -1,7 +1,9 @@
 # fediverse-gateway
 
-A thin ActivityPub gateway that makes **one** Warpnet user discoverable and
-followable from Mastodon / the Fediverse.
+A thin ActivityPub gateway that makes Warpnet users discoverable and followable
+from Mastodon / the Fediverse. It is agnostic to node, user, and network: it
+joins Warpnet through the network's bootstrap nodes and resolves any requested
+user via the public routes.
 
 It serves the minimum surface Mastodon's federation path exercises:
 
@@ -29,14 +31,14 @@ store is used only as a dev fallback when no node is configured).
   served from the live follow graph, and each Note is dereferenceable at
   `/statuses/{id}` (`serveStatus`, via `PUBLIC_GET_TWEET`).
 - **libp2p connector** (`nodeclient.go`) — a minimal client peer (same
-  PSK/transport/security as a member node) that dials a Warpnet node and calls
-  its routes. `nodeSource` reads the bridged user's profile via
-  `PUBLIC_GET_USER`. `GATEWAY_PROBE=1` smoke-tests the connector against
-  `GATEWAY_NODE_ADDR`.
+  PSK/transport/security as a member node) that joins Warpnet through the
+  network's bootstrap nodes (no specific node required) and routes requests to
+  any entry peer. `nodeSource` resolves *any* requested user's profile via
+  `PUBLIC_GET_USER`. `GATEWAY_PROBE=1` smoke-tests the connector.
 - **Follower graph in Warpnet** — `Accept` records the remote actor through the
   existing `PUBLIC_POST_FOLLOW` route and fan-out reads `PUBLIC_GET_FOLLOWERS`
   (no new node routes); actor URLs travel as `ap:`-prefixed base64url follower
-  ids and the inbox is resolved on demand. Enabled with `GATEWAY_NODE_ADDR`.
+  ids and the inbox is resolved on demand.
 - **Outbound trigger** (`tweetpoller.go`) — polls `PUBLIC_GET_TWEETS` and
   federates the owner's new original posts via `publishNote` (stateless across
   restarts; history isn't replayed).
@@ -139,12 +141,15 @@ go run ./cmd/node/fediverse-gateway
 ```
 
 Env vars: `GATEWAY_HOST`, `GATEWAY_ADDR` (default `127.0.0.1:8080`),
-`GATEWAY_KEY`, `GATEWAY_USER`, `GATEWAY_DISPLAY_NAME`, `GATEWAY_SUMMARY`,
-`GATEWAY_FOLLOWERS`. Set `GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/…` (+
-`NODE_NETWORK`) to source the profile from a live Warpnet node instead of the
-static stub. Set `GATEWAY_FUNNEL=1` (+ optional `TS_AUTHKEY`,
-`GATEWAY_FUNNEL_HOSTNAME`, `GATEWAY_FUNNEL_DIR`) to self-host the public HTTPS
-endpoint via embedded Tailscale Funnel (see Phase 0).
+`GATEWAY_KEY`, `GATEWAY_DISPLAY_NAME`, `GATEWAY_SUMMARY`, `GATEWAY_FOLLOWERS`.
+The gateway joins Warpnet through the network's bootstrap nodes automatically
+(`NODE_NETWORK`, default `warpnet`); `GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/…` adds
+an explicit entry peer but isn't required. `GATEWAY_USER` is optional — inbound
+discovery/interactions work for **any** user; set it only to federate that
+user's posts/follows outbound (and to sign authorized-fetch GETs). Set
+`GATEWAY_FUNNEL=1` (+ optional `TS_AUTHKEY`, `GATEWAY_FUNNEL_HOSTNAME`,
+`GATEWAY_FUNNEL_DIR`) to self-host the public HTTPS endpoint via embedded
+Tailscale Funnel (see Phase 0).
 
 ### Smoke-test the connector
 

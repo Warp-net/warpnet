@@ -48,14 +48,52 @@ import (
 
 // nodeClient is the gateway's libp2p connection into the Warpnet network: a
 // minimal client peer (same PSK / transport / security as a member node) that
-// dials a target node and calls its routes. Profile and follower state live on
-// the node; the gateway keeps only keys.
+// joins through the network's bootstrap nodes and routes requests to whichever
+// entry peer answers. It is agnostic to any specific node — the public routes
+// relay to the user's own node — so the gateway stores no node/profile state.
 type nodeClient struct {
-	wn       *node.WarpNode
-	targetID warpnet.WarpPeerID
+	wn    *node.WarpNode
+	peers []warpnet.WarpPeerID
 }
 
-func newNodeClient(ctx context.Context, network string, bootstrap []warpnet.WarpAddrInfo, target warpnet.WarpAddrInfo) (*nodeClient, error) {
+// networkEntries are the peers the gateway uses to enter Warpnet: the configured
+// network's bootstrap nodes (NODE_NETWORK, default "warpnet") plus an optional
+// explicit GATEWAY_NODE_ADDR. None of them is privileged — any one is just an
+// entry point into the network.
+func networkEntries() ([]warpnet.WarpAddrInfo, error) {
+	var entries []warpnet.WarpAddrInfo
+	for _, s := range config.Config().Node.Bootstrap {
+		ai, err := warpnet.AddrInfoFromString(s)
+		if err != nil {
+			log.Warnf("nodeclient: bad bootstrap %q: %v", s, err)
+			continue
+		}
+		entries = append(entries, *ai)
+	}
+	if extra := envOr("GATEWAY_NODE_ADDR", ""); extra != "" {
+		ai, err := warpnet.AddrInfoFromString(extra)
+		if err != nil {
+			return nil, fmt.Errorf("bad GATEWAY_NODE_ADDR: %w", err)
+		}
+		entries = append(entries, *ai)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no Warpnet entry peers (set NODE_NETWORK or GATEWAY_NODE_ADDR)")
+	}
+	return entries, nil
+}
+
+// connectNetwork joins Warpnet through the configured network and returns a
+// node-agnostic client.
+func connectNetwork(ctx context.Context) (*nodeClient, error) {
+	entries, err := networkEntries()
+	if err != nil {
+		return nil, err
+	}
+	return newNodeClient(ctx, config.Config().Node.Network, entries)
+}
+
+func newNodeClient(ctx context.Context, network string, entries []warpnet.WarpAddrInfo) (*nodeClient, error) {
 	psk, err := security.GeneratePSK(network, config.Config().Version)
 	if err != nil {
 		return nil, fmt.Errorf("nodeclient: psk: %w", err)
@@ -78,21 +116,35 @@ func newNodeClient(ctx context.Context, network string, bootstrap []warpnet.Warp
 		return nil, fmt.Errorf("nodeclient: new node: %w", err)
 	}
 
-	for _, b := range bootstrap {
-		if cerr := wn.Connect(b); cerr != nil {
-			log.Warnf("nodeclient: bootstrap %s: %v", b.ID, cerr)
+	var peers []warpnet.WarpPeerID
+	for _, e := range entries {
+		if cerr := wn.Connect(e); cerr != nil {
+			log.Warnf("nodeclient: connect %s: %v", e.ID, cerr)
+			continue
 		}
+		peers = append(peers, e.ID)
 	}
-	if err := wn.Connect(target); err != nil {
+	if len(peers) == 0 {
 		wn.StopNode()
-		return nil, fmt.Errorf("nodeclient: connect %s: %w", target.ID, err)
+		return nil, fmt.Errorf("nodeclient: no Warpnet entry peer reachable")
 	}
+	log.Infof("nodeclient: joined Warpnet (%s) via %d entry peer(s)", network, len(peers))
 
-	return &nodeClient{wn: wn, targetID: target.ID}, nil
+	return &nodeClient{wn: wn, peers: peers}, nil
 }
 
+// request streams to entry peers in turn until one answers; the public handlers
+// relay to the owning node, so any reachable peer can serve the route.
 func (c *nodeClient) request(route stream.WarpRoute, payload any) ([]byte, error) {
-	return c.wn.Stream(c.targetID, route, payload)
+	var lastErr error
+	for _, p := range c.peers {
+		bt, err := c.wn.Stream(p, route, payload)
+		if err == nil {
+			return bt, nil
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("nodeclient: %s failed on all entry peers: %w", route, lastErr)
 }
 
 func (c *nodeClient) close() {
@@ -101,25 +153,21 @@ func (c *nodeClient) close() {
 	}
 }
 
-// nodeSource reads the bridged user's profile live from a Warpnet node via
-// PUBLIC_GET_USER, so the gateway stores no profile of its own.
+// nodeSource reads any requested user's profile live from the Warpnet network
+// via PUBLIC_GET_USER, so the gateway is agnostic to which user it serves and
+// stores no profile of its own.
 type nodeSource struct {
 	client *nodeClient
-	userID string
 }
 
 func (s nodeSource) GetUser(preferredUsername string) (warpnetUser, bool) {
-	if preferredUsername != s.userID {
-		return warpnetUser{}, false
-	}
-	bt, err := s.client.request(event.PUBLIC_GET_USER, event.GetUserEvent{UserId: s.userID})
+	bt, err := s.client.request(event.PUBLIC_GET_USER, event.GetUserEvent{UserId: preferredUsername})
 	if err != nil {
-		log.Errorf("nodesource: get user %s: %v", s.userID, err)
+		log.Errorf("nodesource: get user %s: %v", preferredUsername, err)
 		return warpnetUser{}, false
 	}
 	var u domain.User
 	if uerr := json.Unmarshal(bt, &u); uerr != nil || u.Id == "" {
-		log.Errorf("nodesource: decode user %s: %v (%s)", s.userID, uerr, string(bt))
 		return warpnetUser{}, false
 	}
 	return warpnetUser{
@@ -130,34 +178,26 @@ func (s nodeSource) GetUser(preferredUsername string) (warpnetUser, bool) {
 	}, true
 }
 
-// runProbe connects to the Warpnet node at GATEWAY_NODE_ADDR and fetches the
-// GATEWAY_USER profile — a node-agnostic smoke test of the connector path.
+// runProbe joins Warpnet and fetches the GATEWAY_USER profile — a smoke test of
+// the node-agnostic connector path.
 func runProbe() {
-	nodeAddr := envOr("GATEWAY_NODE_ADDR", "")
 	user := envOr("GATEWAY_USER", "")
-	if nodeAddr == "" || user == "" {
-		log.Errorln("probe: set GATEWAY_NODE_ADDR and GATEWAY_USER")
+	if user == "" {
+		log.Errorln("probe: set GATEWAY_USER (and optionally GATEWAY_NODE_ADDR)")
 		return
 	}
-	target, err := warpnet.AddrInfoFromString(nodeAddr)
-	if err != nil {
-		log.Errorf("probe: bad GATEWAY_NODE_ADDR: %v", err)
-		return
-	}
-	log.Infof("probe: dialing Warpnet node %s", target.ID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	cl, err := newNodeClient(ctx, envOr("NODE_NETWORK", defaultNetwork), nil, *target)
+	cl, err := connectNetwork(ctx)
 	if err != nil {
 		log.Errorf("probe: connect: %v", err)
 		return
 	}
 	defer cl.close()
 
-	src := nodeSource{client: cl, userID: user}
-	u, ok := src.GetUser(user)
+	u, ok := nodeSource{client: cl}.GetUser(user)
 	if !ok {
 		log.Errorln("probe: user not found / unreadable")
 		return

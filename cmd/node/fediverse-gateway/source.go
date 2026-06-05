@@ -35,13 +35,12 @@ type warpnetUser struct {
 	Summary           string
 }
 
-// warpnetSource yields the Warpnet user a given actor handle maps to.
+// warpnetSource resolves the Warpnet user a given actor handle maps to.
 //
-// SKELETON: staticSource returns a single operator-configured user so the
-// Phase-1 milestone (discover + follow from Mastodon) is reachable without any
-// node wiring. Phase 2/3 replace this with a node-backed implementation that
-// reads via the PUBLIC_GET_USER route — either a libp2p stream client like
-// warpdroid/node, or an embedded member node.
+// nodeSource (nodeclient.go) is the node-agnostic implementation: it resolves
+// ANY requested handle live from the Warpnet network via PUBLIC_GET_USER.
+// staticSource is a single-user dev fallback, used only when the network is
+// unreachable.
 type warpnetSource interface {
 	GetUser(preferredUsername string) (warpnetUser, bool)
 }

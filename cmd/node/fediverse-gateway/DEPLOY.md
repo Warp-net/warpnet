@@ -9,13 +9,13 @@ then verifying.
 
 ## Prerequisites
 
-- A running **Warpnet node** (the one whose user you want to bridge).
 - **Docker** on the host that will run the gateway.
 - A free **Tailscale** account (created in step A1).
+- Outbound internet — the gateway joins Warpnet through the network's public
+  bootstrap nodes on its own; you don't run or point at a specific node.
 
-The gateway keeps only keys/identity on disk; the profile and follower graph live
-in Warpnet. It needs outbound internet (for Tailscale) and network reach to the
-Warpnet node.
+The gateway keeps only keys/identity on disk; profiles and the follower graph
+live in Warpnet. It is agnostic to node, user, and network.
 
 ---
 
@@ -52,18 +52,19 @@ copy the `tskey-auth-...` value — it becomes `TS_AUTHKEY`.
 
 ---
 
-## B. Warpnet values to gather
+## B. Warpnet settings (all optional)
 
-| Variable            | What it is                                                    | Where to find it                          |
-| ------------------- | ------------------------------------------------------------- | ----------------------------------------- |
-| `GATEWAY_USER`      | the owner's user id on the node; becomes the `@USER@host` handle | your profile / owner id on the node     |
-| `GATEWAY_NODE_ADDR` | the node multiaddr `/ip4/<ip>/tcp/<port>/p2p/<peerid>`        | the running node's logs / info            |
-| `NODE_NETWORK`      | the Warpnet network name (usually `warpnet`)                  | the node config                           |
+The gateway joins Warpnet by itself and serves **any** user, so none of these
+are required:
 
-> **Important — the IP in `GATEWAY_NODE_ADDR`:** inside a container `127.0.0.1`
-> is the container itself, not the host. If the node runs on the same machine,
-> use the host's **LAN IP** in the multiaddr, or run the container with
-> `--network host`.
+| Variable            | When to set it                                                                                   | Default     |
+| ------------------- | ------------------------------------------------------------------------------------------------ | ----------- |
+| `GATEWAY_USER`      | to also federate *that user's* posts/follows **outbound**; becomes the `@USER@host` you post as  | (none)      |
+| `NODE_NETWORK`      | only for a non-default network                                                                   | `warpnet`   |
+| `GATEWAY_NODE_ADDR` | to add an explicit entry peer instead of the bootstrap nodes                                     | (bootstrap) |
+
+> If you do set `GATEWAY_NODE_ADDR`, note that inside a container `127.0.0.1` is
+> the container, not the host — use the node's **LAN IP** or `--network host`.
 
 ---
 
@@ -81,17 +82,17 @@ docker build -f Dockerfile.gateway -t warpnet-gateway .
 ```sh
 docker run -d --name warpnet-gw -v warpnet-gw-data:/data \
   -e GATEWAY_FUNNEL=1 \
-  -e TS_AUTHKEY=tskey-auth-xxxxxxxx \                                 # from A4
-  -e GATEWAY_USER=alice \                                            # from B
+  -e TS_AUTHKEY=tskey-auth-xxxxxxxx \      # from A4
+  -e GATEWAY_USER=alice \                  # optional — also federate alice's posts/follows outbound
   -e GATEWAY_DISPLAY_NAME="Alice on Warpnet" \
-  -e GATEWAY_NODE_ADDR=/ip4/192.168.1.50/tcp/4001/p2p/12D3Koo... \   # from B (LAN IP!)
-  -e NODE_NETWORK=warpnet \
   warpnet-gateway
 ```
 
+The gateway joins Warpnet through the network's bootstrap nodes on its own — no
+`GATEWAY_NODE_ADDR` or `NODE_NETWORK` needed (add them only per the table in B).
+
 - With `GATEWAY_FUNNEL=1` you do **not** publish any ports — inbound traffic
-  arrives through Tailscale. The container needs only outbound internet plus
-  network reach to the node.
+  arrives through Tailscale. The container needs only outbound internet.
 - The `/data` volume holds the RSA key, the follower fallback, and the Tailscale
   node identity, so the `*.ts.net` hostname stays stable across restarts.
 
@@ -132,18 +133,19 @@ pending). The gateway logs `inbox: Follow from …` and `accept: Follow accepted
 | ------------------------------------------------ | --------------------------------------------------------------------------- |
 | Funnel-access error on startup                   | A2 (HTTPS) or A3 (funnel in ACL) not done                                   |
 | a login URL is printed and startup hangs         | `TS_AUTHKEY` empty/expired → regenerate (A4)                                |
-| `connect Warpnet node` / timeouts to the node    | wrong `GATEWAY_NODE_ADDR` (`127.0.0.1` ≠ host inside a container) → LAN IP or `--network host` |
+| `serving the static profile only` in logs        | couldn't reach Warpnet bootstrap → check outbound internet, or set `GATEWAY_NODE_ADDR` (LAN IP / `--network host`) |
 | handle doesn't resolve from Mastodon             | Funnel isn't public (check the D1 Funnel line) or you searched the wrong host |
 | `signature verification failed` on inbound       | host clock drift → sync NTP                                                 |
 
 ---
 
-## Running without a node (quick test)
+## Static fallback (no network)
 
-If `GATEWAY_NODE_ADDR` is omitted, the container still starts in a static-stub
-mode: the profile comes from `GATEWAY_DISPLAY_NAME`/`GATEWAY_SUMMARY` and the
-follower list is a local file. Good for smoke-testing discovery + Follow, but
-posts and inbound interactions are not bridged.
+If the gateway can't reach Warpnet (no bootstrap peers), it falls back to a
+single static profile from `GATEWAY_USER`/`GATEWAY_DISPLAY_NAME`/`GATEWAY_SUMMARY`
+with a local follower file — enough to smoke-test discovery + Follow, but real
+profiles, posts, and interactions aren't bridged. Normally it joins the network
+automatically and serves any user.
 
 ## Without Docker
 

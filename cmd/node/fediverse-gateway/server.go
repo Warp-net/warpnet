@@ -89,7 +89,7 @@ type gateway struct {
 	key         *rsa.PrivateKey
 	keyPubPEM   string
 	source      warpnetSource
-	signingUser string // SKELETON: the single user the gateway signs outbound as
+	signingUser string // optional: user to sign authorized-fetch GETs as ("" = unsigned)
 	client      *http.Client
 	sem         chan struct{} // bounds concurrent Accept deliveries
 	followers   followerStore
@@ -335,8 +335,12 @@ func (g *gateway) fetchActor(ctx context.Context, actorURL string) (map[string]a
 		return nil, err
 	}
 	req.Header.Set("Accept", contentTypeAP)
-	if err := signRequest(req, g.keyID(g.signingUser), g.key, nil); err != nil {
-		return nil, err
+	// Sign the fetch only when a signing user is configured (authorized-fetch /
+	// secure-mode peers require it); otherwise fetch unsigned.
+	if g.signingUser != "" {
+		if err := signRequest(req, g.keyID(g.signingUser), g.key, nil); err != nil {
+			return nil, err
+		}
 	}
 	resp, err := g.client.Do(req) //nolint:gosec // see G704 note above
 	if err != nil {
