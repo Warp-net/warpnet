@@ -53,12 +53,27 @@ store is used only as a dev fallback when no node is configured).
   `superseriousbusiness/httpsig` (the library GoToSocial uses for Mastodon
   interop); the gateway keeps only the policy the library leaves to the caller:
   the minimum signed header set, Date freshness, and digest↔body binding.
+- **Outbound follows** (`outbound.go`) — `followPoller` polls
+  `PUBLIC_GET_FOLLOWINGS`; when the owner follows a Fediverse actor (an
+  `ap:`-encoded id) it delivers a signed `Follow` to that actor's inbox, and
+  `Undo(Follow)` on unfollow (the first poll seeds a baseline; history isn't
+  replayed).
+- **SSRF-hardened fetches** (`server.go`) — the outbound client re-validates
+  every redirect hop and the resolved dial IP (rejecting loopback/private/
+  link-local), so attacker-supplied actor/key URLs can't reach internal services.
 
 ## Not yet wired
 
-- Inbound `Delete` → delete (needs an AP-object-id → Warpnet-reply-id mapping;
-  the Delete activity doesn't carry the reply's root, so it's out of scope for
-  the stateless gateway for now).
+- Inbound/outbound `Delete` (deletion). Deletion on a node is the owner-only
+  `PRIVATE_DELETE_TWEET` route, which the gateway (an external client with only
+  `PUBLIC_*` access) cannot call — a bridged remote author has no public path to
+  delete its ingested reply. This needs a node-side public delete route with a
+  "bridged author may delete its own content" authorization model: a change on
+  the node, not the gateway. (The id mapping itself is solvable statelessly via
+  ids derived deterministically from the AP object id.)
+- Outbound owner interactions beyond Follow (owner liking/boosting/replying to
+  Fediverse posts): needs a reverse Warpnet-id → AP-id mapping that the ingest
+  hashing doesn't provide — same family as Delete.
 - Live end-to-end validation against a node + Mastodon (needs network egress).
 
 ## Phase 0 — public HTTPS endpoint without a domain or certificates
@@ -161,3 +176,31 @@ Watch the gateway logs for `inbox: Follow from …` and
 - Keep the clock synced (NTP); HTTP signatures are time-sensitive.
 - Some instances run authorized-fetch ("secure mode"); the gateway already
   signs outbound GETs to handle this.
+
+## Deploy (Docker)
+
+`Dockerfile.gateway` (repo root) builds a static binary from the vendored tree
+(no submodule/cgo needed) and runs it. State persists under `/data`, so mount a
+volume to keep the RSA key, followers, and — crucially — the Tailscale node
+identity (a stable `*.ts.net` hostname).
+
+```sh
+# from the repo root (build context is the module root)
+docker build -f Dockerfile.gateway -t warpnet-gateway .
+
+docker run -d --name warpnet-gw -v warpnet-gw-data:/data \
+  -e GATEWAY_FUNNEL=1 \
+  -e TS_AUTHKEY=tskey-auth-... \
+  -e GATEWAY_USER=alice \
+  -e GATEWAY_DISPLAY_NAME="Alice on Warpnet" \
+  -e GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/… \
+  -e NODE_NETWORK=warpnet \
+  warpnet-gateway
+docker logs -f warpnet-gw   # prints the @user@host handle once Funnel is up
+```
+
+With `GATEWAY_FUNNEL=1` the container needs only outbound internet (no published
+ports) — Funnel ingress reaches it through Tailscale. To instead front it with
+an external tunnel, drop `GATEWAY_FUNNEL`/`TS_AUTHKEY`, add `-e GATEWAY_HOST=…`
+and `-p 8080:8080` (default `GATEWAY_ADDR` is `:8080` inside the container —
+set `GATEWAY_ADDR=0.0.0.0:8080`).

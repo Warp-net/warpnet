@@ -185,9 +185,13 @@ func main() {
 		req:         req,
 	}
 
-	// Federate the owner's new tweets to Fediverse followers.
+	// Federate the owner's new tweets, and outbound follows, to the Fediverse.
 	if nodeCli != nil {
 		go newTweetPoller(nodeCli, user, g.publishNote).run(appCtx)
+		go newFollowPoller(nodeCli, user,
+			func(actorURL string) { g.sendFollow(user, actorURL) },
+			func(actorURL string) { g.sendUndoFollow(user, actorURL) },
+		).run(appCtx)
 	}
 
 	srv := &http.Server{

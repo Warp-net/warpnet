@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -220,11 +221,12 @@ func TestPublishNoteFanout(t *testing.T) {
 }
 
 type fakeRequester struct {
-	lastRoute     stream.WarpRoute
-	lastPayload   any
-	followersJSON []byte
-	imageFile     string
-	tweet         domain.Tweet
+	lastRoute      stream.WarpRoute
+	lastPayload    any
+	followersJSON  []byte
+	followingsJSON []byte
+	imageFile      string
+	tweet          domain.Tweet
 }
 
 func (f *fakeRequester) request(route stream.WarpRoute, payload any) ([]byte, error) {
@@ -233,6 +235,8 @@ func (f *fakeRequester) request(route stream.WarpRoute, payload any) ([]byte, er
 	switch route {
 	case event.PUBLIC_GET_FOLLOWERS:
 		return f.followersJSON, nil
+	case event.PUBLIC_GET_FOLLOWINGS:
+		return f.followingsJSON, nil
 	case event.PUBLIC_GET_IMAGE:
 		bt, _ := json.Marshal(event.GetImageResponse{File: f.imageFile})
 		return bt, nil
@@ -442,6 +446,64 @@ func TestSafeClientRedirect(t *testing.T) {
 	}
 	if err := c.CheckRedirect(pub, make([]*http.Request, maxRedirects)); err == nil {
 		t.Fatal("overlong redirect chain should be rejected")
+	}
+}
+
+func TestIsBlockedIP(t *testing.T) {
+	for _, s := range []string{"127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.1.1", "::1", "0.0.0.0"} {
+		if !isBlockedIP(netip.MustParseAddr(s)) {
+			t.Errorf("%s should be blocked", s)
+		}
+	}
+	for _, s := range []string{"1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"} {
+		if isBlockedIP(netip.MustParseAddr(s)) {
+			t.Errorf("%s should be allowed", s)
+		}
+	}
+}
+
+func TestSafeClientBlocksPrivateDial(t *testing.T) {
+	// The dialer's Control must reject a connection to a loopback IP (DNS
+	// rebinding defence) before any TCP connect happens.
+	c := newSafeClient(2 * time.Second)
+	if _, err := c.Get("http://127.0.0.1:9/"); err == nil {
+		t.Fatal("dial to a loopback IP should be blocked")
+	}
+}
+
+func TestFollowPollerDiff(t *testing.T) {
+	fr := &fakeRequester{}
+	var followed, unfollowed []string
+	p := newFollowPoller(fr, "owner",
+		func(a string) { followed = append(followed, a) },
+		func(a string) { unfollowed = append(unfollowed, a) },
+	)
+	enc := func(urls ...string) []byte {
+		ids := []domain.ID{"warpnet-native-id"} // non-ap following must be ignored
+		for _, u := range urls {
+			ids = append(ids, encodeActorID(u))
+		}
+		bt, _ := json.Marshal(event.FollowingsResponse{Followings: ids})
+		return bt
+	}
+
+	fr.followingsJSON = enc("https://m/users/bob")
+	if err := p.poll(); err != nil {
+		t.Fatal(err)
+	}
+	if len(followed) != 0 || len(unfollowed) != 0 {
+		t.Fatalf("baseline must fire nothing: f=%v u=%v", followed, unfollowed)
+	}
+
+	fr.followingsJSON = enc("https://m/users/carol")
+	if err := p.poll(); err != nil {
+		t.Fatal(err)
+	}
+	if len(followed) != 1 || followed[0] != "https://m/users/carol" {
+		t.Fatalf("followed=%v", followed)
+	}
+	if len(unfollowed) != 1 || unfollowed[0] != "https://m/users/bob" {
+		t.Fatalf("unfollowed=%v", unfollowed)
 	}
 }
 

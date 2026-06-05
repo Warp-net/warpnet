@@ -1,0 +1,27 @@
+FROM ubuntu:24.04
+
+RUN apt update && apt install -y curl tar ca-certificates && rm -rf /var/lib/apt/lists/*
+
+ENV GO_VERSION=1.26.4
+RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -o go.tar.gz \
+    && tar -C /usr/local -xzf go.tar.gz \
+    && rm go.tar.gz
+
+COPY . /warpnet
+WORKDIR /warpnet
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV CGO_ENABLED=0
+
+# The gateway doesn't import the core/moderation submodule, so it builds straight
+# from the vendored tree — no submodule init or cgo needed.
+RUN go build -ldflags "-s -w" -mod=vendor -o /usr/local/bin/fediverse-gateway ./cmd/node/fediverse-gateway
+
+# Persisted state — RSA signing key, follower fallback, and the Tailscale node
+# identity (keeps the *.ts.net hostname stable across restarts) — lives in /data.
+ENV GATEWAY_KEY=/data/key.pem \
+    GATEWAY_FOLLOWERS=/data/followers.json \
+    GATEWAY_FUNNEL_DIR=/data/tsnet
+VOLUME ["/data"]
+
+CMD ["/usr/local/bin/fediverse-gateway"]

@@ -37,10 +37,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -272,23 +274,42 @@ func validateRemoteURL(raw string) error {
 	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") {
 		return fmt.Errorf("url %q targets localhost: %w", raw, errBlockedHost)
 	}
-	if addr, perr := netip.ParseAddr(host); perr == nil {
-		if addr.IsLoopback() || addr.IsPrivate() || addr.IsUnspecified() ||
-			addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() {
-			return fmt.Errorf("url %q targets a disallowed address: %w", raw, errBlockedHost)
-		}
+	if addr, perr := netip.ParseAddr(host); perr == nil && isBlockedIP(addr) {
+		return fmt.Errorf("url %q targets a disallowed address: %w", raw, errBlockedHost)
 	}
 	return nil
 }
 
-// newSafeClient builds the HTTP client for outbound federation. CheckRedirect
-// re-applies the SSRF guard to every redirect hop and caps the chain, so a
-// malicious actor/key URL can't 30x-redirect us into a private/loopback
-// address. Signatures aren't re-applied across redirects, so a redirected
-// signed fetch fails at the target — failing closed.
+// isBlockedIP reports whether ip is in a range outbound federation must never
+// reach (loopback, private, link-local, multicast, unspecified).
+func isBlockedIP(ip netip.Addr) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast()
+}
+
+// newSafeClient builds the HTTP client for outbound federation, hardened against
+// SSRF on attacker-supplied actor/key URLs: CheckRedirect re-applies the URL
+// guard to every redirect hop (and caps the chain), and the dialer's Control
+// validates the *resolved* IP at connect time, closing DNS-rebinding that the
+// hostname checks can't see. Signatures aren't re-applied across redirects, so a
+// redirected signed fetch fails at the target — failing closed.
 func newSafeClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	dialer.Control = func(_, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return err
+		}
+		if ip, perr := netip.ParseAddr(host); perr == nil && isBlockedIP(ip) {
+			return fmt.Errorf("dial %s: %w", address, errBlockedHost)
+		}
+		return nil
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.DialContext = dialer.DialContext
 	return &http.Client{
-		Timeout: timeout,
+		Timeout:   timeout,
+		Transport: tr,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= maxRedirects {
 				return errTooManyRedirects
