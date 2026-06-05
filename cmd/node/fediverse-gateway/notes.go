@@ -33,8 +33,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -43,7 +41,7 @@ const asPublic = "https://www.w3.org/ns/activitystreams#Public"
 // buildNote renders a Warpnet tweet as an ActivityPub Note authored by
 // localUser. The Note id is deterministic (.../statuses/{id}) so serveStatus
 // can resolve it back to the tweet without local storage.
-func (g *gateway) buildNote(localUser string, t domain.Tweet) note {
+func (g *gateway) buildNote(localUser string, t tweet) note {
 	actorID := g.actorID(localUser)
 	followers := actorID + pathFollowers
 
@@ -67,7 +65,7 @@ func (g *gateway) buildNote(localUser string, t domain.Tweet) note {
 
 // buildCreateNote wraps a Warpnet tweet as an ActivityPub Create(Note) authored
 // by localUser, addressed to the public and the author's followers.
-func (g *gateway) buildCreateNote(localUser string, t domain.Tweet) activity {
+func (g *gateway) buildCreateNote(localUser string, t tweet) activity {
 	n := g.buildNote(localUser, t)
 	return activity{
 		Context: asContext,
@@ -88,7 +86,7 @@ func (g *gateway) serveStatus(w http.ResponseWriter, r *http.Request, user, twee
 		http.NotFound(w, r)
 		return
 	}
-	bt, err := g.req.request(event.PUBLIC_GET_TWEET, event.GetTweetEvent{
+	bt, err := g.req.request(routeGetTweet, getTweetEvent{
 		TweetId: tweetID,
 		UserId:  user,
 	})
@@ -97,7 +95,7 @@ func (g *gateway) serveStatus(w http.ResponseWriter, r *http.Request, user, twee
 		http.NotFound(w, r)
 		return
 	}
-	var t domain.Tweet
+	var t tweet
 	if jerr := json.Unmarshal(bt, &t); jerr != nil || t.Id == "" {
 		http.NotFound(w, r)
 		return

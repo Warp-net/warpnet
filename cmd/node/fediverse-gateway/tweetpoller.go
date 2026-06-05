@@ -32,8 +32,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -51,10 +49,10 @@ type tweetPoller struct {
 	owner    string
 	interval time.Duration
 	seen     map[string]struct{}
-	publish  func(ctx context.Context, owner string, t domain.Tweet)
+	publish  func(ctx context.Context, owner string, t tweet)
 }
 
-func newTweetPoller(req nodeRequester, owner string, publish func(context.Context, string, domain.Tweet)) *tweetPoller {
+func newTweetPoller(req nodeRequester, owner string, publish func(context.Context, string, tweet)) *tweetPoller {
 	return &tweetPoller{
 		req:      req,
 		owner:    owner,
@@ -92,13 +90,13 @@ func (p *tweetPoller) poll(ctx context.Context) {
 	}
 }
 
-func (p *tweetPoller) fetch() []domain.Tweet {
-	bt, err := p.req.request(event.PUBLIC_GET_TWEETS, event.GetAllTweetsEvent{UserId: p.owner})
+func (p *tweetPoller) fetch() []tweet {
+	bt, err := p.req.request(routeGetTweets, getAllTweetsEvent{UserId: p.owner})
 	if err != nil {
 		log.Errorf("poller: get tweets for %s: %v", p.owner, err)
 		return nil
 	}
-	var resp event.TweetsResponse
+	var resp tweetsResponse
 	if jerr := json.Unmarshal(bt, &resp); jerr != nil {
 		log.Errorf("poller: decode tweets: %v", jerr)
 		return nil
@@ -109,7 +107,7 @@ func (p *tweetPoller) fetch() []domain.Tweet {
 // publishableTweet reports whether a tweet should be federated outbound: an
 // original top-level post authored by the owner. Retweets and replies are
 // skipped for now (inReplyTo / Announce mapping is a later step).
-func publishableTweet(t domain.Tweet, owner string) bool {
+func publishableTweet(t tweet, owner string) bool {
 	if t.UserId != owner || t.RetweetedBy != nil {
 		return false
 	}

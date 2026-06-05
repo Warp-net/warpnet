@@ -33,7 +33,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -116,11 +115,11 @@ func (p *followPoller) run(ctx context.Context) {
 // poll reads the owner's followings and fires onFollow/onUnfollow for added and
 // removed Fediverse actors. The first call only seeds the baseline.
 func (p *followPoller) poll() error {
-	bt, err := p.req.request(event.PUBLIC_GET_FOLLOWINGS, event.GetFollowingsEvent{UserId: p.owner})
+	bt, err := p.req.request(routeGetFollowings, getFollowersEvent{UserId: p.owner})
 	if err != nil {
 		return err
 	}
-	var resp event.FollowingsResponse
+	var resp followingsResponse
 	if err := json.Unmarshal(bt, &resp); err != nil {
 		return err
 	}

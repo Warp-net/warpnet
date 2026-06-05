@@ -33,8 +33,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/stream"
-	"github.com/Warp-net/warpnet/event"
 	stripper "github.com/grokify/html-strip-tags-go"
 )
 
@@ -49,7 +47,7 @@ const (
 // existing handlers. Remote actors travel as ap:-prefixed base64url ids (the
 // follower scheme); the owner and tweet are recovered from our own URLs.
 // Delete is not handled yet (it needs an AP-id -> Warpnet-id mapping).
-func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, bool) {
+func (g *gateway) translateInbound(raw map[string]any) (string, any, bool) {
 	actor, _ := raw[keyActor].(string)
 	if actor == "" {
 		return "", nil, false
@@ -61,7 +59,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 		if !ok {
 			return "", nil, false
 		}
-		return event.PUBLIC_POST_LIKE, event.LikeEvent{
+		return routePostLike, likeEvent{
 			TweetId: tweetID, UserId: encodeActorID(actor), OwnerId: owner,
 		}, true
 
@@ -71,7 +69,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			return "", nil, false
 		}
 		by := encodeActorID(actor)
-		return event.PUBLIC_POST_RETWEET, event.NewRetweetEvent{
+		return routePostRetweet, tweet{
 			Id:          tweetID,
 			RootId:      tweetID,
 			UserId:      owner,
@@ -89,7 +87,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			return "", nil, false
 		}
 		pid := parentID
-		return event.PUBLIC_POST_REPLY, event.NewReplyEvent{
+		return routePostReply, newReplyEvent{
 			CreatedAt:    time.Now(),
 			Id:           randomToken(),
 			ParentId:     &pid,
@@ -111,7 +109,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			if owner == "" {
 				return "", nil, false
 			}
-			return event.PUBLIC_POST_UNFOLLOW, event.NewUnfollowEvent{
+			return routePostUnfollow, newFollowEvent{
 				FollowerId: encodeActorID(actor), FollowingId: owner,
 			}, true
 		case typeLike:
@@ -119,7 +117,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			if !ok {
 				return "", nil, false
 			}
-			return event.PUBLIC_POST_UNLIKE, event.UnlikeEvent{
+			return routePostUnlike, likeEvent{
 				TweetId: tweetID, UserId: encodeActorID(actor), OwnerId: owner,
 			}, true
 		case typeAnnounce:
@@ -127,7 +125,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			if !ok {
 				return "", nil, false
 			}
-			return event.PUBLIC_POST_UNRETWEET, event.UnretweetEvent{
+			return routePostUnretweet, unretweetEvent{
 				TweetId: tweetID, RetweeterId: encodeActorID(actor),
 			}, true
 		}

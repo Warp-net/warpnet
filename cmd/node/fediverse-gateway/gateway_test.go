@@ -15,10 +15,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/Warp-net/warpnet/core/stream"
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 )
 
 func testGateway(t *testing.T) *gateway {
@@ -161,7 +157,7 @@ func TestFileFollowerStore(t *testing.T) {
 
 func TestBuildCreateNote(t *testing.T) {
 	g := testGateway(t)
-	a := g.buildCreateNote("alice", domain.Tweet{Id: "t1", Text: "hello <fedi>", CreatedAt: time.Unix(1700000000, 0), UserId: "alice", ImageKeys: []string{"k1"}})
+	a := g.buildCreateNote("alice", tweet{Id: "t1", Text: "hello <fedi>", CreatedAt: time.Unix(1700000000, 0), UserId: "alice", ImageKeys: []string{"k1"}})
 	if a.Type != "Create" || a.Actor != "https://gw.example/users/alice" {
 		t.Fatalf("bad create: %+v", a)
 	}
@@ -211,7 +207,7 @@ func TestPublishNoteFanout(t *testing.T) {
 	_ = g.followers.Add("alice", srv.URL+"/users/bob")
 	_ = g.followers.Add("alice", srv.URL+"/users/carol")
 
-	g.publishNote(context.Background(), "alice", domain.Tweet{Id: "t1", Text: "hello fedi", CreatedAt: time.Now()})
+	g.publishNote(context.Background(), "alice", tweet{Id: "t1", Text: "hello fedi", CreatedAt: time.Now()})
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -221,26 +217,26 @@ func TestPublishNoteFanout(t *testing.T) {
 }
 
 type fakeRequester struct {
-	lastRoute      stream.WarpRoute
+	lastRoute      string
 	lastPayload    any
 	followersJSON  []byte
 	followingsJSON []byte
 	imageFile      string
-	tweet          domain.Tweet
+	tweet          tweet
 }
 
-func (f *fakeRequester) request(route stream.WarpRoute, payload any) ([]byte, error) {
+func (f *fakeRequester) request(route string, payload any) ([]byte, error) {
 	f.lastRoute = route
 	f.lastPayload = payload
 	switch route {
-	case event.PUBLIC_GET_FOLLOWERS:
+	case routeGetFollowers:
 		return f.followersJSON, nil
-	case event.PUBLIC_GET_FOLLOWINGS:
+	case routeGetFollowings:
 		return f.followingsJSON, nil
-	case event.PUBLIC_GET_IMAGE:
-		bt, _ := json.Marshal(event.GetImageResponse{File: f.imageFile})
+	case routeGetImage:
+		bt, _ := json.Marshal(getImageResponse{File: f.imageFile})
 		return bt, nil
-	case event.PUBLIC_GET_TWEET:
+	case routeGetTweet:
 		bt, _ := json.Marshal(f.tweet)
 		return bt, nil
 	}
@@ -255,7 +251,7 @@ func TestNodeFollowerStore(t *testing.T) {
 	if err := s.Add("owner1", actor); err != nil {
 		t.Fatal(err)
 	}
-	ev, ok := fr.lastPayload.(event.NewFollowEvent)
+	ev, ok := fr.lastPayload.(newFollowEvent)
 	if !ok {
 		t.Fatalf("follow payload type %T", fr.lastPayload)
 	}
@@ -267,7 +263,7 @@ func TestNodeFollowerStore(t *testing.T) {
 	}
 
 	// List decodes AP follower ids and skips native Warpnet ids.
-	resp := event.FollowersResponse{Followers: []domain.ID{
+	resp := followersResponse{Followers: []string{
 		encodeActorID(actor),
 		"01KSGHBHKG0N77T6A3RZV8WSH5", // native ULID — must be skipped
 	}}
@@ -286,14 +282,14 @@ func strptr(s string) *string { return &s }
 
 func TestPublishableTweet(t *testing.T) {
 	cases := []struct {
-		tw   domain.Tweet
+		tw   tweet
 		want bool
 	}{
-		{domain.Tweet{UserId: "alice"}, true},
-		{domain.Tweet{UserId: "bob"}, false},                                 // not the owner
-		{domain.Tweet{UserId: "alice", RetweetedBy: strptr("alice")}, false}, // retweet
-		{domain.Tweet{UserId: "alice", ParentId: strptr("t0")}, false},       // reply
-		{domain.Tweet{UserId: "alice", ParentId: strptr("")}, true},          // empty parent = top-level
+		{tweet{UserId: "alice"}, true},
+		{tweet{UserId: "bob"}, false},                                 // not the owner
+		{tweet{UserId: "alice", RetweetedBy: strptr("alice")}, false}, // retweet
+		{tweet{UserId: "alice", ParentId: strptr("t0")}, false},       // reply
+		{tweet{UserId: "alice", ParentId: strptr("")}, true},          // empty parent = top-level
 	}
 	for i, c := range cases {
 		if got := publishableTweet(c.tw, "alice"); got != c.want {
@@ -303,21 +299,21 @@ func TestPublishableTweet(t *testing.T) {
 }
 
 type fakeTweetsRequester struct {
-	tweets []domain.Tweet
+	tweets []tweet
 }
 
-func (f *fakeTweetsRequester) request(route stream.WarpRoute, _ any) ([]byte, error) {
-	if route == event.PUBLIC_GET_TWEETS {
-		bt, _ := json.Marshal(event.TweetsResponse{Tweets: f.tweets})
+func (f *fakeTweetsRequester) request(route string, _ any) ([]byte, error) {
+	if route == routeGetTweets {
+		bt, _ := json.Marshal(tweetsResponse{Tweets: f.tweets})
 		return bt, nil
 	}
 	return []byte(`["accepted"]`), nil
 }
 
 func TestTweetPollerSeedAndDedup(t *testing.T) {
-	fr := &fakeTweetsRequester{tweets: []domain.Tweet{{Id: "t1", UserId: "alice"}}}
+	fr := &fakeTweetsRequester{tweets: []tweet{{Id: "t1", UserId: "alice"}}}
 	var published []string
-	p := newTweetPoller(fr, "alice", func(_ context.Context, _ string, tw domain.Tweet) {
+	p := newTweetPoller(fr, "alice", func(_ context.Context, _ string, tw tweet) {
 		published = append(published, tw.Id)
 	})
 
@@ -327,7 +323,7 @@ func TestTweetPollerSeedAndDedup(t *testing.T) {
 	}
 
 	// a new tweet arrives → published once
-	fr.tweets = append(fr.tweets, domain.Tweet{Id: "t2", UserId: "alice"})
+	fr.tweets = append(fr.tweets, tweet{Id: "t2", UserId: "alice"})
 	p.poll(context.Background())
 	if len(published) != 1 || published[0] != "t2" {
 		t.Fatalf("expected only t2 published, got %v", published)
@@ -347,10 +343,10 @@ func TestTranslateInbound(t *testing.T) {
 	status := "https://gw.example/users/alice/statuses/t1"
 
 	route, payload, ok := g.translateInbound(map[string]any{"type": "Like", "actor": actor, "object": status})
-	if !ok || route != event.PUBLIC_POST_LIKE {
+	if !ok || route != routePostLike {
 		t.Fatalf("like: route=%q ok=%v", route, ok)
 	}
-	like := payload.(event.LikeEvent)
+	like := payload.(likeEvent)
 	if like.TweetId != "t1" || like.OwnerId != "alice" {
 		t.Fatalf("like event: %+v", like)
 	}
@@ -362,10 +358,10 @@ func TestTranslateInbound(t *testing.T) {
 		"type": "Create", "actor": actor,
 		"object": map[string]any{"type": "Note", "content": "<p>hi there</p>", "inReplyTo": status},
 	})
-	if !ok || route != event.PUBLIC_POST_REPLY {
+	if !ok || route != routePostReply {
 		t.Fatalf("reply: route=%q ok=%v", route, ok)
 	}
-	reply := payload.(event.NewReplyEvent)
+	reply := payload.(newReplyEvent)
 	if reply.RootId != "t1" || reply.ParentId == nil || *reply.ParentId != "t1" || reply.Text != "hi there" {
 		t.Fatalf("reply event: %+v", reply)
 	}
@@ -376,31 +372,31 @@ func TestTranslateInbound(t *testing.T) {
 	if route, _, ok := g.translateInbound(map[string]any{
 		"type": "Undo", "actor": actor,
 		"object": map[string]any{"type": "Follow", "object": "https://gw.example/users/alice"},
-	}); !ok || route != event.PUBLIC_POST_UNFOLLOW {
+	}); !ok || route != routePostUnfollow {
 		t.Fatalf("undo follow: route=%q ok=%v", route, ok)
 	}
 
 	if route, _, ok := g.translateInbound(map[string]any{
 		"type": "Undo", "actor": actor,
 		"object": map[string]any{"type": "Like", "object": status},
-	}); !ok || route != event.PUBLIC_POST_UNLIKE {
+	}); !ok || route != routePostUnlike {
 		t.Fatalf("undo like: route=%q ok=%v", route, ok)
 	}
 
 	if route, payload, ok := g.translateInbound(map[string]any{
 		"type": "Undo", "actor": actor,
 		"object": map[string]any{"type": "Announce", "object": status},
-	}); !ok || route != event.PUBLIC_POST_UNRETWEET {
+	}); !ok || route != routePostUnretweet {
 		t.Fatalf("undo announce: route=%q ok=%v", route, ok)
-	} else if ur := payload.(event.UnretweetEvent); ur.TweetId != "t1" {
+	} else if ur := payload.(unretweetEvent); ur.TweetId != "t1" {
 		t.Fatalf("unretweet event: %+v", ur)
 	}
 
 	route, payload, ok = g.translateInbound(map[string]any{"type": "Announce", "actor": actor, "object": status})
-	if !ok || route != event.PUBLIC_POST_RETWEET {
+	if !ok || route != routePostRetweet {
 		t.Fatalf("announce: route=%q ok=%v", route, ok)
 	}
-	rt := payload.(event.NewRetweetEvent)
+	rt := payload.(tweet)
 	if rt.Id != "t1" || rt.RetweetedBy == nil {
 		t.Fatalf("retweet event: %+v", rt)
 	}
@@ -491,11 +487,11 @@ func TestFollowPollerDiff(t *testing.T) {
 		func(a string) { unfollowed = append(unfollowed, a) },
 	)
 	enc := func(urls ...string) []byte {
-		ids := []domain.ID{"warpnet-native-id"} // non-ap following must be ignored
+		ids := []string{"warpnet-native-id"} // non-ap following must be ignored
 		for _, u := range urls {
 			ids = append(ids, encodeActorID(u))
 		}
-		bt, _ := json.Marshal(event.FollowingsResponse{Followings: ids})
+		bt, _ := json.Marshal(followingsResponse{Followings: ids})
 		return bt
 	}
 
@@ -546,7 +542,7 @@ func TestHandleMedia(t *testing.T) {
 
 func TestServeStatus(t *testing.T) {
 	g := testGateway(t)
-	g.req = &fakeRequester{tweet: domain.Tweet{
+	g.req = &fakeRequester{tweet: tweet{
 		Id: "t1", UserId: "alice", Text: "hi <there>", CreatedAt: time.Unix(1700000000, 0),
 	}}
 

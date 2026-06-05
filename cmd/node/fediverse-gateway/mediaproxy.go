@@ -33,7 +33,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -68,14 +67,14 @@ func (g *gateway) handleMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bt, err := g.req.request(event.PUBLIC_GET_IMAGE, event.GetImageEvent{UserId: userID, Key: key})
+	bt, err := g.req.request(routeGetImage, getImageEvent{UserId: userID, Key: key})
 	if err != nil {
 		log.Errorf("media: fetch %s/%s: %v", userID, key, err)
 		http.Error(w, "fetch failed", http.StatusBadGateway)
 		return
 	}
 
-	var resp event.GetImageResponse
+	var resp getImageResponse
 	if jerr := json.Unmarshal(bt, &resp); jerr != nil || resp.File == "" {
 		http.NotFound(w, r)
 		return

@@ -31,14 +31,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
 )
 
 // publishNote fans a Warpnet tweet out to every Fediverse follower of localUser
 // as a signed Create(Note). Delivery is best-effort per follower and bounded by
 // the gateway's delivery semaphore; it blocks until all deliveries settle.
-func (g *gateway) publishNote(ctx context.Context, localUser string, t domain.Tweet) {
+func (g *gateway) publishNote(ctx context.Context, localUser string, t tweet) {
 	actorURLs, err := g.followers.List(localUser)
 	if err != nil {
 		log.Errorf("publish: list followers of %s: %v", localUser, err)

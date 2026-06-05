@@ -30,11 +30,13 @@ store is used only as a dev fallback when no node is configured).
   tweet and fans it out (signed) to followers; the `followers` collection is
   served from the live follow graph, and each Note is dereferenceable at
   `/statuses/{id}` (`serveStatus`, via `PUBLIC_GET_TWEET`).
-- **libp2p connector** (`nodeclient.go`) — a minimal client peer (same
-  PSK/transport/security as a member node) that joins Warpnet through the
-  network's bootstrap nodes (no specific node required) and routes requests to
-  any entry peer. `nodeSource` resolves *any* requested user's profile via
-  `PUBLIC_GET_USER`. `GATEWAY_PROBE=1` smoke-tests the connector.
+- **libp2p connector** (`nodeclient.go`, `warpwire.go`, `warpdto.go`) — a plain
+  `libp2p` host built directly with `libp2p.New` (warpnet's PSK + camouflage
+  transport + noise) that joins through the network's bootstrap nodes and routes
+  requests to any entry peer. The wire DTOs, PSK/signing, route protocol IDs and
+  bootstrap peers are copied locally, so the gateway imports **no warpnet Go
+  packages** — only native libp2p. `nodeSource` resolves *any* requested user's
+  profile; `GATEWAY_PROBE=1` smoke-tests the connector.
 - **Follower graph in Warpnet** — `Accept` records the remote actor through the
   existing `PUBLIC_POST_FOLLOW` route and fan-out reads `PUBLIC_GET_FOLLOWERS`
   (no new node routes); actor URLs travel as `ap:`-prefixed base64url follower

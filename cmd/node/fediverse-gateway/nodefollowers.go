@@ -29,14 +29,11 @@ package main
 
 import (
 	"encoding/json"
-
-	"github.com/Warp-net/warpnet/core/stream"
-	"github.com/Warp-net/warpnet/event"
 )
 
 // nodeRequester is the subset of nodeClient that the follower store needs.
 type nodeRequester interface {
-	request(route stream.WarpRoute, payload any) ([]byte, error)
+	request(route string, payload any) ([]byte, error)
 }
 
 // nodeFollowerStore keeps the AP follow graph in Warpnet by reusing the
@@ -49,7 +46,7 @@ type nodeFollowerStore struct {
 }
 
 func (s nodeFollowerStore) Add(localUser, actorURL string) error {
-	_, err := s.req.request(event.PUBLIC_POST_FOLLOW, event.NewFollowEvent{
+	_, err := s.req.request(routePostFollow, newFollowEvent{
 		FollowerId:  encodeActorID(actorURL),
 		FollowingId: localUser,
 	})
@@ -57,11 +54,11 @@ func (s nodeFollowerStore) Add(localUser, actorURL string) error {
 }
 
 func (s nodeFollowerStore) List(localUser string) ([]string, error) {
-	bt, err := s.req.request(event.PUBLIC_GET_FOLLOWERS, event.GetFollowersEvent{UserId: localUser})
+	bt, err := s.req.request(routeGetFollowers, getFollowersEvent{UserId: localUser})
 	if err != nil {
 		return nil, err
 	}
-	var resp event.FollowersResponse
+	var resp followersResponse
 	if err := json.Unmarshal(bt, &resp); err != nil {
 		return nil, err
 	}

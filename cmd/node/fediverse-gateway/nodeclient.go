@@ -36,14 +36,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/node"
-	"github.com/Warp-net/warpnet/core/stream"
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/security"
+	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
 	"github.com/libp2p/go-libp2p"
+	p2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/pnet"
+	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -53,23 +52,23 @@ var (
 )
 
 // nodeClient is the gateway's libp2p connection into the Warpnet network: a
-// minimal client peer (same PSK / transport / security as a member node) that
-// joins through the network's bootstrap nodes and routes requests to whichever
-// entry peer answers. It is agnostic to any specific node — the public routes
-// relay to the user's own node — so the gateway stores no node/profile state.
+// plain libp2p host (warpnet's PSK / camouflage transport / noise) that joins
+// through the network's bootstrap nodes and routes requests to whichever entry
+// peer answers. It is agnostic to any specific node — the public routes relay to
+// the owning node — so the gateway stores no node/profile state.
 type nodeClient struct {
-	wn    *node.WarpNode
-	peers []warpnet.WarpPeerID
+	h     host.Host
+	priv  ed25519.PrivateKey
+	peers []peer.ID
 }
 
-// networkEntries are the peers the gateway uses to enter Warpnet: the configured
-// network's bootstrap nodes (NODE_NETWORK, default "warpnet") plus an optional
-// explicit GATEWAY_NODE_ADDR. None of them is privileged — any one is just an
-// entry point into the network.
-func networkEntries() ([]warpnet.WarpAddrInfo, error) {
-	var entries []warpnet.WarpAddrInfo
-	for _, s := range config.Config().Node.Bootstrap {
-		ai, err := warpnet.AddrInfoFromString(s)
+// networkEntries are the peers the gateway uses to enter Warpnet: the network's
+// bootstrap nodes plus an optional explicit GATEWAY_NODE_ADDR. None is
+// privileged — any one is just an entry point.
+func networkEntries(network string) ([]peer.AddrInfo, error) {
+	var entries []peer.AddrInfo
+	for _, s := range bootstrapByNetwork[network] {
+		ai, err := peer.AddrInfoFromString(s)
 		if err != nil {
 			log.Warnf("nodeclient: bad bootstrap %q: %v", s, err)
 			continue
@@ -77,7 +76,7 @@ func networkEntries() ([]warpnet.WarpAddrInfo, error) {
 		entries = append(entries, *ai)
 	}
 	if extra := envOr("GATEWAY_NODE_ADDR", ""); extra != "" {
-		ai, err := warpnet.AddrInfoFromString(extra)
+		ai, err := peer.AddrInfoFromString(extra)
 		if err != nil {
 			return nil, fmt.Errorf("bad GATEWAY_NODE_ADDR: %w", err)
 		}
@@ -89,62 +88,67 @@ func networkEntries() ([]warpnet.WarpAddrInfo, error) {
 	return entries, nil
 }
 
-// connectNetwork joins Warpnet through the configured network and returns a
-// node-agnostic client.
+// connectNetwork builds a libp2p host wired for Warpnet and joins through the
+// configured network's entry peers.
 func connectNetwork(ctx context.Context) (*nodeClient, error) {
-	entries, err := networkEntries()
+	network := envOr("NODE_NETWORK", defaultWarpnetNetwork)
+	entries, err := networkEntries(network)
 	if err != nil {
 		return nil, err
 	}
-	return newNodeClient(ctx, config.Config().Node.Network, entries)
-}
 
-func newNodeClient(ctx context.Context, network string, entries []warpnet.WarpAddrInfo) (*nodeClient, error) {
-	psk, err := security.GeneratePSK(network, config.Config().Version)
-	if err != nil {
-		return nil, fmt.Errorf("nodeclient: psk: %w", err)
-	}
-	_, identity, err := ed25519.GenerateKey(rand.Reader)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("nodeclient: identity: %w", err)
 	}
-
-	opts := make([]warpnet.WarpOption, 0, 3+len(node.CommonOptions))
-	opts = append(opts,
-		node.WarpIdentity(identity),
-		libp2p.PrivateNetwork(warpnet.PSK(psk)),
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
-	)
-	opts = append(opts, node.CommonOptions...)
-
-	wn, err := node.NewWarpNode(ctx, opts...)
+	p2pPriv, err := p2pcrypto.UnmarshalEd25519PrivateKey(priv)
 	if err != nil {
-		return nil, fmt.Errorf("nodeclient: new node: %w", err)
+		return nil, fmt.Errorf("nodeclient: key: %w", err)
 	}
 
-	var peers []warpnet.WarpPeerID
+	h, err := libp2p.New(
+		libp2p.Identity(p2pPriv),
+		libp2p.PrivateNetwork(pnet.PSK(generatePSK(network))),
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
+		libp2p.WithDialTimeout(60*time.Second),
+		libp2p.Transport(camouflage.NewCamouflageTransport),
+		libp2p.Ping(true),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.EnableAutoNATv2(),
+		libp2p.EnableRelay(),
+		libp2p.EnableHolePunching(),
+		libp2p.EnableNATService(),
+		libp2p.NATPortMap(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("nodeclient: new host: %w", err)
+	}
+
+	var peers []peer.ID
 	for _, e := range entries {
-		if cerr := wn.Connect(e); cerr != nil {
+		if cerr := h.Connect(ctx, e); cerr != nil {
 			log.Warnf("nodeclient: connect %s: %v", e.ID, cerr)
 			continue
 		}
 		peers = append(peers, e.ID)
 	}
 	if len(peers) == 0 {
-		wn.StopNode()
+		_ = h.Close()
 		return nil, errNoEntryReachable
 	}
 	log.Infof("nodeclient: joined Warpnet (%s) via %d entry peer(s)", network, len(peers))
 
-	return &nodeClient{wn: wn, peers: peers}, nil
+	return &nodeClient{h: h, priv: priv, peers: peers}, nil
 }
 
 // request streams to entry peers in turn until one answers; the public handlers
 // relay to the owning node, so any reachable peer can serve the route.
-func (c *nodeClient) request(route stream.WarpRoute, payload any) ([]byte, error) {
+func (c *nodeClient) request(route string, payload any) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 	var lastErr error
 	for _, p := range c.peers {
-		bt, err := c.wn.Stream(p, route, payload)
+		bt, err := streamSend(ctx, c.h, p, c.priv, route, payload)
 		if err == nil {
 			return bt, nil
 		}
@@ -154,25 +158,25 @@ func (c *nodeClient) request(route stream.WarpRoute, payload any) ([]byte, error
 }
 
 func (c *nodeClient) close() {
-	if c != nil && c.wn != nil {
-		c.wn.StopNode()
+	if c != nil && c.h != nil {
+		_ = c.h.Close()
 	}
 }
 
 // nodeSource reads any requested user's profile live from the Warpnet network
-// via PUBLIC_GET_USER, so the gateway is agnostic to which user it serves and
+// via the user route, so the gateway is agnostic to which user it serves and
 // stores no profile of its own.
 type nodeSource struct {
 	client *nodeClient
 }
 
 func (s nodeSource) GetUser(preferredUsername string) (warpnetUser, bool) {
-	bt, err := s.client.request(event.PUBLIC_GET_USER, event.GetUserEvent{UserId: preferredUsername})
+	bt, err := s.client.request(routeGetUser, getUserEvent{UserId: preferredUsername})
 	if err != nil {
 		log.Errorf("nodesource: get user %s: %v", preferredUsername, err)
 		return warpnetUser{}, false
 	}
-	var u domain.User
+	var u user
 	if uerr := json.Unmarshal(bt, &u); uerr != nil || u.Id == "" {
 		return warpnetUser{}, false
 	}
@@ -185,10 +189,10 @@ func (s nodeSource) GetUser(preferredUsername string) (warpnetUser, bool) {
 }
 
 // runProbe joins Warpnet and fetches the GATEWAY_USER profile — a smoke test of
-// the node-agnostic connector path.
+// the connector path.
 func runProbe() {
-	user := envOr("GATEWAY_USER", "")
-	if user == "" {
+	u := envOr("GATEWAY_USER", "")
+	if u == "" {
 		log.Errorln("probe: set GATEWAY_USER (and optionally GATEWAY_NODE_ADDR)")
 		return
 	}
@@ -203,10 +207,10 @@ func runProbe() {
 	}
 	defer cl.close()
 
-	u, ok := nodeSource{client: cl}.GetUser(user)
+	wu, ok := nodeSource{client: cl}.GetUser(u)
 	if !ok {
 		log.Errorln("probe: user not found / unreadable")
 		return
 	}
-	log.Infof("probe: OK — user id=%s name=%q bio=%q", u.ID, u.DisplayName, u.Summary)
+	log.Infof("probe: OK — user id=%s name=%q bio=%q", wu.ID, wu.DisplayName, wu.Summary)
 }
