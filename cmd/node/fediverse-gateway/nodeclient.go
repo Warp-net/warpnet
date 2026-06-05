@@ -32,6 +32,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -44,6 +45,11 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
+)
+
+var (
+	errNoEntryPeers     = errors.New("no Warpnet entry peers (set NODE_NETWORK or GATEWAY_NODE_ADDR)")
+	errNoEntryReachable = errors.New("nodeclient: no Warpnet entry peer reachable")
 )
 
 // nodeClient is the gateway's libp2p connection into the Warpnet network: a
@@ -78,7 +84,7 @@ func networkEntries() ([]warpnet.WarpAddrInfo, error) {
 		entries = append(entries, *ai)
 	}
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("no Warpnet entry peers (set NODE_NETWORK or GATEWAY_NODE_ADDR)")
+		return nil, errNoEntryPeers
 	}
 	return entries, nil
 }
@@ -126,7 +132,7 @@ func newNodeClient(ctx context.Context, network string, entries []warpnet.WarpAd
 	}
 	if len(peers) == 0 {
 		wn.StopNode()
-		return nil, fmt.Errorf("nodeclient: no Warpnet entry peer reachable")
+		return nil, errNoEntryReachable
 	}
 	log.Infof("nodeclient: joined Warpnet (%s) via %d entry peer(s)", network, len(peers))
 
