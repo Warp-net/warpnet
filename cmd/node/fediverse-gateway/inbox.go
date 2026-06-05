@@ -101,6 +101,8 @@ func (g *gateway) handleInbox(w http.ResponseWriter, r *http.Request, user strin
 			log.Warnf("inbox: delivery pool full, asking %s to retry", remoteActor)
 			http.Error(w, "busy", http.StatusServiceUnavailable)
 		}
+	case typeDelete:
+		g.handleDelete(w, raw)
 	default:
 		g.handleInboundActivity(w, typ, raw)
 	}
@@ -133,6 +135,17 @@ func (g *gateway) handleInboundActivity(w http.ResponseWriter, typ string, raw m
 		log.Warnf("inbox: delivery pool full, dropping %s from %s", typ, raw[keyActor])
 		http.Error(w, "busy", http.StatusServiceUnavailable)
 	}
+}
+
+// handleDelete is a stub. The gateway can't delete on the owner's node (deletion
+// is the owner-only PRIVATE_DELETE_TWEET route), so it acknowledges the activity
+// — stopping peer retries — and logs the target so it can be removed manually
+// through direct node access.
+func (g *gateway) handleDelete(w http.ResponseWriter, raw map[string]any) {
+	log.Infof("inbox: Delete from %s for %s acknowledged; gateway cannot delete "+
+		"(owner-only) — remove it on the node directly if needed",
+		stringField(raw, keyActor), stringField(raw, keyObject))
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // acceptFollow resolves the follower's inbox and delivers a signed Accept.

@@ -39,6 +39,7 @@ const (
 	typeUndo     = "Undo"
 	typeNote     = "Note"
 	typeAnnounce = "Announce"
+	typeDelete   = "Delete"
 	typeDocument = "Document"
 )
 

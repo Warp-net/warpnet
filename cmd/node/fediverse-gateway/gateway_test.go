@@ -413,7 +413,19 @@ func TestTranslateInbound(t *testing.T) {
 		t.Fatal("foreign-host like should be unhandled")
 	}
 	if _, _, ok := g.translateInbound(map[string]any{"type": "Delete", "actor": actor, "object": status}); ok {
-		t.Fatal("delete should be unhandled")
+		t.Fatal("delete should not translate to a node route")
+	}
+}
+
+func TestHandleDeleteStub(t *testing.T) {
+	g := testGateway(t)
+	w := httptest.NewRecorder()
+	g.handleDelete(w, map[string]any{
+		"type": "Delete", "actor": "https://m/users/bob",
+		"object": "https://m/users/bob/statuses/9",
+	})
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", w.Code)
 	}
 }
 

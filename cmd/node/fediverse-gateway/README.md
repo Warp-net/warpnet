@@ -64,13 +64,13 @@ store is used only as a dev fallback when no node is configured).
 
 ## Not yet wired
 
-- Inbound/outbound `Delete` (deletion). Deletion on a node is the owner-only
-  `PRIVATE_DELETE_TWEET` route, which the gateway (an external client with only
-  `PUBLIC_*` access) cannot call — a bridged remote author has no public path to
-  delete its ingested reply. This needs a node-side public delete route with a
-  "bridged author may delete its own content" authorization model: a change on
-  the node, not the gateway. (The id mapping itself is solvable statelessly via
-  ids derived deterministically from the AP object id.)
+- `Delete` (actual deletion). Inbound `Delete` is acknowledged and logged as a
+  stub (`handleDelete`), but the gateway does not perform the deletion: it's the
+  owner-only `PRIVATE_DELETE_TWEET` route and the gateway has only `PUBLIC_*`
+  access. Deletion is done manually through direct node access. (A public,
+  bridged-author-authorized delete route on the node would let the gateway do
+  it; the id mapping is solvable statelessly via ids derived from the AP object
+  id.)
 - Outbound owner interactions beyond Follow (owner liking/boosting/replying to
   Fediverse posts): needs a reverse Warpnet-id → AP-id mapping that the ingest
   hashing doesn't provide — same family as Delete.
