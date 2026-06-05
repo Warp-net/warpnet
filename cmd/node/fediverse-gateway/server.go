@@ -41,6 +41,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -57,6 +58,9 @@ const (
 	// burst of inbound Follow activities can't spawn unbounded goroutines.
 	maxInflightDeliveries = 16
 
+	// maxRedirects caps redirect hops for outbound federation fetches.
+	maxRedirects = 5
+
 	pathUsers     = "/users/"
 	pathInbox     = "/inbox"
 	pathFollowers = "/followers"
@@ -67,10 +71,11 @@ const (
 )
 
 var (
-	errActorMalformed = errors.New("actor document malformed")
-	errRemoteStatus   = errors.New("remote returned error status")
-	errInsecureURL    = errors.New("remote URL must be https")
-	errBlockedHost    = errors.New("remote URL host is not allowed")
+	errActorMalformed   = errors.New("actor document malformed")
+	errRemoteStatus     = errors.New("remote returned error status")
+	errInsecureURL      = errors.New("remote URL must be https")
+	errBlockedHost      = errors.New("remote URL host is not allowed")
+	errTooManyRedirects = errors.New("too many redirects")
 )
 
 // gateway is the ActivityPub front for one bridged Warpnet user. Documents are
@@ -276,6 +281,23 @@ func validateRemoteURL(raw string) error {
 	return nil
 }
 
+// newSafeClient builds the HTTP client for outbound federation. CheckRedirect
+// re-applies the SSRF guard to every redirect hop and caps the chain, so a
+// malicious actor/key URL can't 30x-redirect us into a private/loopback
+// address. Signatures aren't re-applied across redirects, so a redirected
+// signed fetch fails at the target — failing closed.
+func newSafeClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxRedirects {
+				return errTooManyRedirects
+			}
+			return validateRemoteURL(req.URL.String())
+		},
+	}
+}
+
 // fetchActor dereferences a remote actor document, signing the GET so it
 // works against instances running in authorized-fetch / secure mode.
 func (g *gateway) fetchActor(ctx context.Context, actorURL string) (map[string]any, error) {
@@ -323,6 +345,12 @@ func (g *gateway) fetchKey(ctx context.Context, keyID string) (*rsa.PublicKey, e
 	}
 	pk, ok := m["publicKey"].(map[string]any)
 	if !ok {
+		// Some servers send publicKey as an array; take the first object.
+		if arr, isArr := m["publicKey"].([]any); isArr && len(arr) > 0 {
+			pk, ok = arr[0].(map[string]any)
+		}
+	}
+	if !ok || pk == nil {
 		return nil, fmt.Errorf("actor %s has no publicKey: %w", actorURL, errActorMalformed)
 	}
 	pemStr, _ := pk["publicKeyPem"].(string)

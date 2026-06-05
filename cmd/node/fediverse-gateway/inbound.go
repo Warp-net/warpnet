@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package main
 
 import (
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -46,7 +48,7 @@ const (
 // route + event the gateway should send to the owner's node, reusing Warpnet's
 // existing handlers. Remote actors travel as ap:-prefixed base64url ids (the
 // follower scheme); the owner and tweet are recovered from our own URLs.
-// Announce (boost) and Delete are not handled yet.
+// Delete is not handled yet (it needs an AP-id -> Warpnet-id mapping).
 func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, bool) {
 	actor, _ := raw[keyActor].(string)
 	if actor == "" {
@@ -95,7 +97,7 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			RootId:       parentID,
 			Text:         stripper.StripTags(stringField(obj, "content")),
 			UserId:       encodeActorID(actor),
-			Username:     actor,
+			Username:     handleFromActorURL(actor),
 		}, true
 
 	case typeUndo:
@@ -120,6 +122,14 @@ func (g *gateway) translateInbound(raw map[string]any) (stream.WarpRoute, any, b
 			return event.PUBLIC_POST_UNLIKE, event.UnlikeEvent{
 				TweetId: tweetID, UserId: encodeActorID(actor), OwnerId: owner,
 			}, true
+		case typeAnnounce:
+			_, tweetID, ok := g.parseLocalStatus(stringField(obj, keyObject))
+			if !ok {
+				return "", nil, false
+			}
+			return event.PUBLIC_POST_UNRETWEET, event.UnretweetEvent{
+				TweetId: tweetID, RetweeterId: encodeActorID(actor),
+			}, true
 		}
 	}
 	return "", nil, false
@@ -141,4 +151,19 @@ func (g *gateway) parseLocalStatus(statusURL string) (owner, tweetID string, ok 
 		tweetID = tweetID[:i]
 	}
 	return owner, tweetID, true
+}
+
+// handleFromActorURL turns a remote actor URL (https://host/users/bob or
+// https://host/@bob) into a readable "bob@host" handle for display, falling
+// back to the raw URL when it can't be parsed.
+func handleFromActorURL(actorURL string) string {
+	u, err := url.Parse(actorURL)
+	if err != nil || u.Host == "" {
+		return actorURL
+	}
+	name := strings.TrimPrefix(path.Base(u.Path), "@")
+	if name == "" || name == "." || name == "/" {
+		return actorURL
+	}
+	return name + "@" + u.Host
 }

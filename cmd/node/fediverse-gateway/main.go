@@ -179,7 +179,7 @@ func main() {
 		keyPubPEM:   pubPEM,
 		source:      src,
 		signingUser: user,
-		client:      &http.Client{Timeout: 15 * time.Second},
+		client:      newSafeClient(15 * time.Second),
 		sem:         make(chan struct{}, maxInflightDeliveries),
 		followers:   followers,
 		req:         req,

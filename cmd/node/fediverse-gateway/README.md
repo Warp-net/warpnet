@@ -42,9 +42,10 @@ store is used only as a dev fallback when no node is configured).
   restarts; history isn't replayed).
 - **Phase 3 inbound** (`inbound.go`) — the inbox translates `Like` →
   `PUBLIC_POST_LIKE`, a reply `Create(Note)` → `PUBLIC_POST_REPLY`, `Announce` →
-  `PUBLIC_POST_RETWEET`, and `Undo(Follow|Like)` → `PUBLIC_POST_UNFOLLOW`/
-  `UNLIKE`, forwarding to the owner's node (remote actors as `ap:` ids;
-  tweet/owner recovered from our URLs).
+  `PUBLIC_POST_RETWEET`, and `Undo(Follow|Like|Announce)` →
+  `PUBLIC_POST_UNFOLLOW`/`UNLIKE`/`UNRETWEET`, forwarding to the owner's node
+  (remote actors as `ap:` ids, shown as `user@host`; tweet/owner recovered from
+  our URLs).
 - **Media** (`mediaproxy.go`) — outbound `Create(Note)` carries image
   `attachment`s and `/media/{ref}` proxies the bytes from the node
   (`PUBLIC_GET_IMAGE`) so Mastodon can fetch them; the gateway stores nothing.

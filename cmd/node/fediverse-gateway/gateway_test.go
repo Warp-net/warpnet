@@ -365,6 +365,9 @@ func TestTranslateInbound(t *testing.T) {
 	if reply.RootId != "t1" || reply.ParentId == nil || *reply.ParentId != "t1" || reply.Text != "hi there" {
 		t.Fatalf("reply event: %+v", reply)
 	}
+	if reply.Username != "bob@m" {
+		t.Fatalf("reply username = %q, want bob@m", reply.Username)
+	}
 
 	if route, _, ok := g.translateInbound(map[string]any{
 		"type": "Undo", "actor": actor,
@@ -378,6 +381,15 @@ func TestTranslateInbound(t *testing.T) {
 		"object": map[string]any{"type": "Like", "object": status},
 	}); !ok || route != event.PUBLIC_POST_UNLIKE {
 		t.Fatalf("undo like: route=%q ok=%v", route, ok)
+	}
+
+	if route, payload, ok := g.translateInbound(map[string]any{
+		"type": "Undo", "actor": actor,
+		"object": map[string]any{"type": "Announce", "object": status},
+	}); !ok || route != event.PUBLIC_POST_UNRETWEET {
+		t.Fatalf("undo announce: route=%q ok=%v", route, ok)
+	} else if ur := payload.(event.UnretweetEvent); ur.TweetId != "t1" {
+		t.Fatalf("unretweet event: %+v", ur)
 	}
 
 	route, payload, ok = g.translateInbound(map[string]any{"type": "Announce", "actor": actor, "object": status})
@@ -398,6 +410,38 @@ func TestTranslateInbound(t *testing.T) {
 	}
 	if _, _, ok := g.translateInbound(map[string]any{"type": "Delete", "actor": actor, "object": status}); ok {
 		t.Fatal("delete should be unhandled")
+	}
+}
+
+func TestHandleFromActorURL(t *testing.T) {
+	cases := map[string]string{
+		"https://mastodon.social/users/bob": "bob@mastodon.social",
+		"https://example.com/@alice":        "alice@example.com",
+		"https://example.com/users/carol/":  "carol@example.com",
+		"justname":                          "justname",
+	}
+	for in, want := range cases {
+		if got := handleFromActorURL(in); got != want {
+			t.Errorf("handleFromActorURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSafeClientRedirect(t *testing.T) {
+	c := newSafeClient(time.Second)
+	if c.CheckRedirect == nil {
+		t.Fatal("expected a CheckRedirect guard")
+	}
+	priv, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1/x", nil)
+	if err := c.CheckRedirect(priv, nil); err == nil {
+		t.Fatal("private redirect target should be rejected")
+	}
+	pub, _ := http.NewRequest(http.MethodGet, "https://example.com/y", nil)
+	if err := c.CheckRedirect(pub, nil); err != nil {
+		t.Fatalf("public https redirect should pass: %v", err)
+	}
+	if err := c.CheckRedirect(pub, make([]*http.Request, maxRedirects)); err == nil {
+		t.Fatal("overlong redirect chain should be rejected")
 	}
 }
 
