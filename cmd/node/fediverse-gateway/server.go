@@ -415,7 +415,9 @@ func (g *gateway) postSigned(ctx context.Context, localUser, target string, doc 
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
+	// G704: target is a federation peer inbox; validateRemoteURL (above) enforces
+	// https and newSafeClient guards redirects + the resolved dial IP.
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body)) //nolint:gosec // see note above
 	if err != nil {
 		return err
 	}
@@ -423,7 +425,7 @@ func (g *gateway) postSigned(ctx context.Context, localUser, target string, doc 
 	if err := signRequest(req, g.keyID(localUser), g.key, body); err != nil {
 		return err
 	}
-	resp, err := g.client.Do(req)
+	resp, err := g.client.Do(req) //nolint:gosec // see G704 note above
 	if err != nil {
 		return err
 	}
