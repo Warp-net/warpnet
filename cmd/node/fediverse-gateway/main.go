@@ -85,14 +85,15 @@ func main() {
 		followersPath = envOr("GATEWAY_FOLLOWERS", "fediverse-gateway-followers.json")
 	)
 
-	// Optionally bring up the public endpoint via embedded Tailscale Funnel: the
+	// Self-host the public endpoint via embedded Tailscale Funnel by default: the
 	// gateway becomes its own tailnet node and ListenFunnel (below) serves public
-	// HTTPS with an auto-provisioned *.ts.net cert, so host is derived from the
-	// node. The persisted Dir keeps the hostname stable across restarts (a
-	// rotating name orphans existing followers). Without the flag tsnet is never
-	// instantiated.
+	// HTTPS with an auto-provisioned *.ts.net cert, deriving host from the node.
+	// The persisted Dir keeps the hostname stable across restarts (a rotating
+	// name orphans existing followers). Setting GATEWAY_HOST opts out — it means
+	// you front the gateway yourself (external tunnel / reverse proxy), so it
+	// serves plain HTTP on GATEWAY_ADDR instead.
 	var ts *tsnet.Server
-	if envOr("GATEWAY_FUNNEL", "") != "" {
+	if host == "" {
 		ts = &tsnet.Server{
 			Hostname: envOr("GATEWAY_FUNNEL_HOSTNAME", "warpnet-gw"),
 			Dir:      envOr("GATEWAY_FUNNEL_DIR", "fediverse-gateway-tsnet"),
@@ -109,10 +110,6 @@ func main() {
 		}
 		host = strings.TrimSuffix(st.Self.DNSName, ".")
 		log.Infof("gateway: tailscale funnel node up as %s", host)
-	}
-
-	if host == "" {
-		log.Fatalln("gateway: GATEWAY_HOST is required (the public hostname your tunnel exposes), or set GATEWAY_FUNNEL=1")
 	}
 
 	key, err := loadOrCreateKey(keyPath)

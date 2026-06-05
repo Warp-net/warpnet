@@ -80,7 +80,6 @@ docker build -f Dockerfile.gateway -t warpnet-gateway .
 
 ```sh
 docker run -d --name warpnet-gw -v warpnet-gw-data:/data \
-  -e GATEWAY_FUNNEL=1 \
   -e TS_AUTHKEY=tskey-auth-xxxxxxxx \      # from A4
   warpnet-gateway
 ```
@@ -88,8 +87,9 @@ docker run -d --name warpnet-gw -v warpnet-gw-data:/data \
 The gateway joins Warpnet through the network's bootstrap nodes on its own — no
 `GATEWAY_NODE_ADDR` or `NODE_NETWORK` needed (add them only per the table in B).
 
-- With `GATEWAY_FUNNEL=1` you do **not** publish any ports — inbound traffic
-  arrives through Tailscale. The container needs only outbound internet.
+- With no `GATEWAY_HOST` (the default) the gateway self-hosts via Funnel — you do
+  **not** publish any ports; inbound traffic arrives through Tailscale, so the
+  container needs only outbound internet.
 - The `/data` volume holds the RSA key, the follower fallback, and the Tailscale
   node identity, so the `*.ts.net` hostname stays stable across restarts.
 

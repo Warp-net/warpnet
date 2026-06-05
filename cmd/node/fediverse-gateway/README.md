@@ -103,16 +103,15 @@ tailscale funnel status      # prints e.g. https://my-host.tailXXXX.ts.net
 Your public `HOST` is the printed `my-host.tailXXXX.ts.net` (no scheme).
 Your federated handle becomes `@USER@my-host.tailXXXX.ts.net`.
 
-#### Embedded funnel (no separate `tailscaled` / CLI)
+#### Embedded funnel (default — no separate `tailscaled` / CLI)
 
-Set `GATEWAY_FUNNEL=1` and the gateway brings up Funnel itself (embedded
-`tsnet`): it joins the tailnet as its own node, derives `GATEWAY_HOST` from the
+With **no `GATEWAY_HOST`** set, the gateway brings up Funnel itself (embedded
+`tsnet`): it joins the tailnet as its own node, derives the public host from the
 node name, and serves public HTTPS on `:443` with an auto-provisioned cert — no
 `tailscale` CLI or system daemon needed.
 
 ```sh
 TS_AUTHKEY=tskey-auth-...  \  # tagged, reusable key (else a login URL is logged on first run)
-GATEWAY_FUNNEL=1 GATEWAY_USER=alice \
   go run ./cmd/node/fediverse-gateway
 ```
 
@@ -120,8 +119,9 @@ GATEWAY_FUNNEL=1 GATEWAY_USER=alice \
   node-attribute (ACL `nodeAttrs`), or startup fails with a Funnel-access error.
 - `GATEWAY_FUNNEL_HOSTNAME` (default `warpnet-gw`) sets the node name; the
   persisted `GATEWAY_FUNNEL_DIR` (default `fediverse-gateway-tsnet`) keeps that
-  name — and your federated handle — stable across restarts.
-- `GATEWAY_HOST` / `GATEWAY_ADDR` are ignored in this mode.
+  name — and your federated handles — stable across restarts.
+- Setting `GATEWAY_HOST` opts out (you front the gateway yourself; it then serves
+  plain HTTP on `GATEWAY_ADDR`).
 
 Alternatives: ngrok free static domain, or — for production — a cheap/free
 domain on Cloudflare with a *named* Cloudflare Tunnel (avoids the shared-domain
@@ -145,9 +145,10 @@ network's bootstrap nodes automatically (`NODE_NETWORK`, default `warpnet`);
 `GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/…` adds an explicit entry peer but isn't
 required. There is **no per-user config**: discovery/interactions work for any
 user, and a user's posts start federating outbound once they gain a Fediverse
-follower. Set `GATEWAY_FUNNEL=1` (+ optional `TS_AUTHKEY`,
-`GATEWAY_FUNNEL_HOSTNAME`, `GATEWAY_FUNNEL_DIR`) to self-host the public HTTPS
-endpoint via embedded Tailscale Funnel (see Phase 0).
+follower. By default the gateway self-hosts the public HTTPS endpoint via
+embedded Tailscale Funnel (set `TS_AUTHKEY`; optional `GATEWAY_FUNNEL_HOSTNAME`,
+`GATEWAY_FUNNEL_DIR`); set `GATEWAY_HOST` to front it with your own tunnel
+instead (it then serves plain HTTP on `GATEWAY_ADDR`). See Phase 0.
 
 ### Smoke-test the connector
 
@@ -195,18 +196,12 @@ identity (a stable `*.ts.net` hostname).
 docker build -f Dockerfile.gateway -t warpnet-gateway .
 
 docker run -d --name warpnet-gw -v warpnet-gw-data:/data \
-  -e GATEWAY_FUNNEL=1 \
   -e TS_AUTHKEY=tskey-auth-... \
-  -e GATEWAY_USER=alice \
-  -e GATEWAY_DISPLAY_NAME="Alice on Warpnet" \
-  -e GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/… \
-  -e NODE_NETWORK=warpnet \
   warpnet-gateway
-docker logs -f warpnet-gw   # prints the @user@host handle once Funnel is up
+docker logs -f warpnet-gw   # prints the public *.ts.net host once Funnel is up
 ```
 
-With `GATEWAY_FUNNEL=1` the container needs only outbound internet (no published
-ports) — Funnel ingress reaches it through Tailscale. To instead front it with
-an external tunnel, drop `GATEWAY_FUNNEL`/`TS_AUTHKEY`, add `-e GATEWAY_HOST=…`
-and `-p 8080:8080` (default `GATEWAY_ADDR` is `:8080` inside the container —
-set `GATEWAY_ADDR=0.0.0.0:8080`).
+With no `GATEWAY_HOST` the gateway self-hosts public HTTPS via Funnel — the
+container needs only outbound internet (no published ports). To front it with an
+external tunnel instead, add `-e GATEWAY_HOST=…` and `-p 8080:8080` (set
+`GATEWAY_ADDR=0.0.0.0:8080`) and drop `TS_AUTHKEY`.
