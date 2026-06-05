@@ -179,6 +179,9 @@ Watch the gateway logs for `inbox: Follow from …` and
 
 ## Deploy (Docker)
 
+A full step-by-step runbook (Tailscale setup, values to gather, verification,
+troubleshooting) is in [DEPLOY.md](DEPLOY.md). In short:
+
 `Dockerfile.gateway` (repo root) builds a static binary from the vendored tree
 (no submodule/cgo needed) and runs it. State persists under `/data`, so mount a
 volume to keep the RSA key, followers, and — crucially — the Tailscale node
