@@ -29,7 +29,8 @@ resulting from the use or misuse of this software.
 // users be discovered and followed from Mastodon / the Fediverse. It is agnostic
 // to node, user, and network: it joins Warpnet through the network's bootstrap
 // nodes and resolves any requested user via the public routes. Outbound
-// post/follow federation runs for the optional GATEWAY_USER.
+// post/follow federation follows the graph — it starts for a user once they
+// gain a Fediverse follower, and is never pinned to a configured user.
 //
 // Implemented: WebFinger, an actor document with an RSA public key, an inbox
 // that verifies HTTP signatures and answers Follow with a signed Accept
@@ -81,9 +82,6 @@ func main() {
 		host          = envOr("GATEWAY_HOST", "")
 		addr          = envOr("GATEWAY_ADDR", "127.0.0.1:8080")
 		keyPath       = envOr("GATEWAY_KEY", "fediverse-gateway-key.pem")
-		user          = envOr("GATEWAY_USER", "")
-		display       = envOr("GATEWAY_DISPLAY_NAME", "Warpnet")
-		summary       = envOr("GATEWAY_SUMMARY", "Warpnet ↔ Fediverse gateway (skeleton)")
 		followersPath = envOr("GATEWAY_FOLLOWERS", "fediverse-gateway-followers.json")
 	)
 
@@ -126,19 +124,12 @@ func main() {
 		log.Fatalf(fatalFmt, err)
 	}
 
-	wu := warpnetUser{
-		ID:                user,
-		PreferredUsername: user,
-		DisplayName:       display,
-		Summary:           summary,
-	}
-
 	// Join Warpnet through the network's bootstrap nodes (agnostic to any
-	// specific node) and serve any user via the network; fall back to the static
-	// profile only if the network is unreachable.
+	// specific node) and serve any user via the network. Outbound federation is
+	// driven by the follower graph (onFollowed), never pinned to a user.
 	appCtx, appCancel := context.WithCancel(context.Background())
 
-	var src warpnetSource = staticSource{user: wu}
+	var src warpnetSource = staticSource{} // empty fallback when the network is unreachable
 	var nodeCli *nodeClient
 	if cli, cerr := connectNetwork(appCtx); cerr != nil {
 		log.Warnf("gateway: %v; serving the static profile only", cerr)
@@ -165,25 +156,21 @@ func main() {
 	}
 
 	g := &gateway{
-		host:        host,
-		key:         key,
-		keyPubPEM:   pubPEM,
-		source:      src,
-		signingUser: user,
-		client:      newSafeClient(15 * time.Second),
-		sem:         make(chan struct{}, maxInflightDeliveries),
-		followers:   followers,
-		req:         req,
+		host:      host,
+		key:       key,
+		keyPubPEM: pubPEM,
+		source:    src,
+		client:    newSafeClient(15 * time.Second),
+		sem:       make(chan struct{}, maxInflightDeliveries),
+		followers: followers,
+		req:       req,
 	}
 
-	// Federate the configured user's posts and follows outbound (optional —
-	// inbound discovery/interactions work for any user without this).
-	if nodeCli != nil && user != "" {
-		go newTweetPoller(nodeCli, user, g.publishNote).run(appCtx)
-		go newFollowPoller(nodeCli, user,
-			func(actorURL string) { g.sendFollow(user, actorURL) },
-			func(actorURL string) { g.sendUndoFollow(user, actorURL) },
-		).run(appCtx)
+	// Outbound federation follows the graph: when a Warpnet user gains a
+	// Fediverse follower (an accepted inbound Follow), start federating that
+	// user's new posts and follows. It is never pinned to a specific user.
+	if nodeCli != nil {
+		g.onFollowed = newOutboundFederation(appCtx, nodeCli, g).start
 	}
 
 	srv := &http.Server{
@@ -195,7 +182,7 @@ func main() {
 	}
 
 	go func() {
-		log.Infof("gateway: bridged actor is @%s@%s -> %s", user, host, g.actorID(user))
+		log.Infof("gateway: serving Warpnet users at https://%s/users/{id}", host)
 		if ts != nil {
 			ln, lerr := ts.ListenFunnel("tcp", ":443")
 			if lerr != nil {

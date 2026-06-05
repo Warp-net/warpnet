@@ -177,6 +177,11 @@ func (g *gateway) acceptFollow(localUser, remoteActorURL string, follow map[stri
 		log.Errorf("accept: persist follower %s: %v", remoteActorURL, err)
 	}
 	log.Infof("accept: Follow accepted (local=%s remote=%s)", localUser, remoteActorURL)
+
+	// localUser now has a Fediverse follower — start federating their posts/follows.
+	if g.onFollowed != nil {
+		g.onFollowed(localUser)
+	}
 }
 
 // stringField reads a string value from a loosely-typed activity, tolerating

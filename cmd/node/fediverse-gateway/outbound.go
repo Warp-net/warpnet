@@ -30,11 +30,47 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
+
+// outboundFederation lazily federates a Warpnet user's posts and follows once
+// that user gains a Fediverse follower (learned from accepted inbound Follows),
+// so federation follows the graph and is never pinned to a configured user.
+type outboundFederation struct {
+	ctx     context.Context
+	req     nodeRequester
+	g       *gateway
+	mu      sync.Mutex
+	started map[string]bool
+}
+
+func newOutboundFederation(ctx context.Context, req nodeRequester, g *gateway) *outboundFederation {
+	return &outboundFederation{ctx: ctx, req: req, g: g, started: map[string]bool{}}
+}
+
+// start begins federating localUser's posts and outbound follows; idempotent per
+// user, so repeated follows don't spawn duplicate pollers.
+func (o *outboundFederation) start(localUser string) {
+	if localUser == "" {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.started[localUser] {
+		return
+	}
+	o.started[localUser] = true
+	log.Infof("outbound: federating %s", localUser)
+	go newTweetPoller(o.req, localUser, o.g.publishNote).run(o.ctx)
+	go newFollowPoller(o.req, localUser,
+		func(actorURL string) { o.g.sendFollow(localUser, actorURL) },
+		func(actorURL string) { o.g.sendUndoFollow(localUser, actorURL) },
+	).run(o.ctx)
+}
 
 const followPollInterval = 30 * time.Second
 

@@ -93,7 +93,8 @@ type gateway struct {
 	client      *http.Client
 	sem         chan struct{} // bounds concurrent Accept deliveries
 	followers   followerStore
-	req         nodeRequester // connector to the owner's node; nil in dev/no-node mode
+	req         nodeRequester          // connector to the owner's node; nil in dev/no-node mode
+	onFollowed  func(localUser string) // starts outbound federation for a user; nil without a node
 
 	// allowPrivateTargets disables the SSRF guard's loopback/private-range
 	// rejection for outbound delivery. Test-only; never set in main.go.

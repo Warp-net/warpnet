@@ -57,11 +57,10 @@ copy the `tskey-auth-...` value — it becomes `TS_AUTHKEY`.
 The gateway joins Warpnet by itself and serves **any** user, so none of these
 are required:
 
-| Variable            | When to set it                                                                                   | Default     |
-| ------------------- | ------------------------------------------------------------------------------------------------ | ----------- |
-| `GATEWAY_USER`      | to also federate *that user's* posts/follows **outbound**; becomes the `@USER@host` you post as  | (none)      |
-| `NODE_NETWORK`      | only for a non-default network                                                                   | `warpnet`   |
-| `GATEWAY_NODE_ADDR` | to add an explicit entry peer instead of the bootstrap nodes                                     | (bootstrap) |
+| Variable            | When to set it                                               | Default     |
+| ------------------- | ----------------------------------------------------------- | ----------- |
+| `NODE_NETWORK`      | only for a non-default network                              | `warpnet`   |
+| `GATEWAY_NODE_ADDR` | to add an explicit entry peer instead of the bootstrap nodes | (bootstrap) |
 
 > If you do set `GATEWAY_NODE_ADDR`, note that inside a container `127.0.0.1` is
 > the container, not the host — use the node's **LAN IP** or `--network host`.
@@ -83,8 +82,6 @@ docker build -f Dockerfile.gateway -t warpnet-gateway .
 docker run -d --name warpnet-gw -v warpnet-gw-data:/data \
   -e GATEWAY_FUNNEL=1 \
   -e TS_AUTHKEY=tskey-auth-xxxxxxxx \      # from A4
-  -e GATEWAY_USER=alice \                  # optional — also federate alice's posts/follows outbound
-  -e GATEWAY_DISPLAY_NAME="Alice on Warpnet" \
   warpnet-gateway
 ```
 
@@ -110,18 +107,18 @@ Look for:
 
 ```
 gateway: tailscale funnel node up as warpnet-gw.tailXXXX.ts.net
-gateway: bridged actor is @alice@warpnet-gw.tailXXXX.ts.net -> https://.../users/alice
+gateway: joined Warpnet; any user is resolvable via the network
 gateway: serving public https://warpnet-gw.tailXXXX.ts.net via Tailscale Funnel
 ```
 
-Your public handle is `@alice@warpnet-gw.tailXXXX.ts.net`.
+Any Warpnet user is reachable at `@<warpnet-user-id>@warpnet-gw.tailXXXX.ts.net`.
 
 **D2. (One-time) Disable node key expiry.** At
 <https://login.tailscale.com/admin/machines>, on the `warpnet-gw` row open the
 `⋯` menu → **Disable key expiry** (otherwise the node asks to re-authenticate
 after ~180 days).
 
-**D3. From any Mastodon account**, search `@alice@warpnet-gw.tailXXXX.ts.net`:
+**D3. From any Mastodon account**, search `@<warpnet-user-id>@warpnet-gw.tailXXXX.ts.net`:
 the profile should resolve, and **Follow** should flip to "Following" (not stay
 pending). The gateway logs `inbox: Follow from …` and `accept: Follow accepted …`.
 
@@ -139,13 +136,12 @@ pending). The gateway logs `inbox: Follow from …` and `accept: Follow accepted
 
 ---
 
-## Static fallback (no network)
+## If the network is unreachable
 
-If the gateway can't reach Warpnet (no bootstrap peers), it falls back to a
-single static profile from `GATEWAY_USER`/`GATEWAY_DISPLAY_NAME`/`GATEWAY_SUMMARY`
-with a local follower file — enough to smoke-test discovery + Follow, but real
-profiles, posts, and interactions aren't bridged. Normally it joins the network
-automatically and serves any user.
+If the gateway can't reach any Warpnet bootstrap peer, it logs `serving the
+static profile only` and serves an empty source — no users resolve until it can
+join. Check the container's outbound internet (or set `GATEWAY_NODE_ADDR`).
+Normally it joins automatically and serves any user.
 
 ## Without Docker
 

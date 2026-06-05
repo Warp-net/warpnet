@@ -39,9 +39,11 @@ store is used only as a dev fallback when no node is configured).
   existing `PUBLIC_POST_FOLLOW` route and fan-out reads `PUBLIC_GET_FOLLOWERS`
   (no new node routes); actor URLs travel as `ap:`-prefixed base64url follower
   ids and the inbox is resolved on demand.
-- **Outbound trigger** (`tweetpoller.go`) — polls `PUBLIC_GET_TWEETS` and
-  federates the owner's new original posts via `publishNote` (stateless across
-  restarts; history isn't replayed).
+- **Outbound federation** (`outbound.go`, `tweetpoller.go`) — driven by the
+  follower graph: when a Warpnet user gains a Fediverse follower (an accepted
+  inbound `Follow`), `outboundFederation` starts a poller (`PUBLIC_GET_TWEETS`)
+  that federates that user's new original posts via `publishNote`. Never pinned
+  to a configured user; history isn't replayed across restarts.
 - **Phase 3 inbound** (`inbound.go`) — the inbox translates `Like` →
   `PUBLIC_POST_LIKE`, a reply `Create(Note)` → `PUBLIC_POST_REPLY`, `Announce` →
   `PUBLIC_POST_RETWEET`, and `Undo(Follow|Like|Announce)` →
@@ -55,11 +57,10 @@ store is used only as a dev fallback when no node is configured).
   `superseriousbusiness/httpsig` (the library GoToSocial uses for Mastodon
   interop); the gateway keeps only the policy the library leaves to the caller:
   the minimum signed header set, Date freshness, and digest↔body binding.
-- **Outbound follows** (`outbound.go`) — `followPoller` polls
-  `PUBLIC_GET_FOLLOWINGS`; when the owner follows a Fediverse actor (an
-  `ap:`-encoded id) it delivers a signed `Follow` to that actor's inbox, and
-  `Undo(Follow)` on unfollow (the first poll seeds a baseline; history isn't
-  replayed).
+- **Outbound follows** (`outbound.go`) — for each federated user, `followPoller`
+  polls `PUBLIC_GET_FOLLOWINGS`; when that user follows a Fediverse actor (an
+  `ap:`-encoded id) it delivers a signed `Follow` to the actor's inbox, and
+  `Undo(Follow)` on unfollow (the first poll seeds a baseline).
 - **SSRF-hardened fetches** (`server.go`) — the outbound client re-validates
   every redirect hop and the resolved dial IP (rejecting loopback/private/
   link-local), so attacker-supplied actor/key URLs can't reach internal services.
@@ -134,22 +135,19 @@ set — and every Warpnet node is env-configured too):
 
 ```sh
 GATEWAY_HOST=my-host.tailXXXX.ts.net \
-GATEWAY_USER=alice \
-GATEWAY_DISPLAY_NAME="Alice on Warpnet" \
 go run ./cmd/node/fediverse-gateway
 # RSA key created at ./fediverse-gateway-key.pem on first run
 ```
 
 Env vars: `GATEWAY_HOST`, `GATEWAY_ADDR` (default `127.0.0.1:8080`),
-`GATEWAY_KEY`, `GATEWAY_DISPLAY_NAME`, `GATEWAY_SUMMARY`, `GATEWAY_FOLLOWERS`.
-The gateway joins Warpnet through the network's bootstrap nodes automatically
-(`NODE_NETWORK`, default `warpnet`); `GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/…` adds
-an explicit entry peer but isn't required. `GATEWAY_USER` is optional — inbound
-discovery/interactions work for **any** user; set it only to federate that
-user's posts/follows outbound (and to sign authorized-fetch GETs). Set
-`GATEWAY_FUNNEL=1` (+ optional `TS_AUTHKEY`, `GATEWAY_FUNNEL_HOSTNAME`,
-`GATEWAY_FUNNEL_DIR`) to self-host the public HTTPS endpoint via embedded
-Tailscale Funnel (see Phase 0).
+`GATEWAY_KEY`, `GATEWAY_FOLLOWERS`. The gateway joins Warpnet through the
+network's bootstrap nodes automatically (`NODE_NETWORK`, default `warpnet`);
+`GATEWAY_NODE_ADDR=/ip4/…/tcp/…/p2p/…` adds an explicit entry peer but isn't
+required. There is **no per-user config**: discovery/interactions work for any
+user, and a user's posts start federating outbound once they gain a Fediverse
+follower. Set `GATEWAY_FUNNEL=1` (+ optional `TS_AUTHKEY`,
+`GATEWAY_FUNNEL_HOSTNAME`, `GATEWAY_FUNNEL_DIR`) to self-host the public HTTPS
+endpoint via embedded Tailscale Funnel (see Phase 0).
 
 ### Smoke-test the connector
 
