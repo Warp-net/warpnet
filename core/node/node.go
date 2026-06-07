@@ -372,10 +372,20 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	_ = streamClient.CloseWrite()
 
 	result, err := io.ReadAll(streamClient)
-	if err != nil && !errors.Is(err, io.EOF) && errors.Is(err, io.ErrClosedPipe) {
+	if !isBenignStreamCloseErr(err) {
 		return result, err
 	}
 	return result, nil
+}
+
+// isBenignStreamCloseErr reports whether err returned from reading a stream is a
+// normal end-of-stream signal rather than a real I/O failure. io.ReadAll never
+// surfaces io.EOF, but a loopback stream may return io.ErrClosedPipe once the
+// peer half is closed; in both cases the response has already been read in full.
+func isBenignStreamCloseErr(err error) bool {
+	return err == nil ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrClosedPipe)
 }
 
 const ErrSelfRequest = warpnet.WarpError("self request is not allowed")
