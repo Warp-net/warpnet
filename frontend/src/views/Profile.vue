@@ -52,9 +52,11 @@ resulting from the use or misuse of this software.
           <i class="fas fa-exclamation-triangle mt-1 mr-2" aria-hidden="true"></i>
           <span>
             You are leaving the trusted Warpnet zone. This profile is bridged
-            from <b>{{ profile.network }}</b>: its identity is not verified by
-            Warpnet, its content is not moderated by the network, and anything
-            you do here (follow, like, reply) becomes public on the Fediverse.
+            from <b>{{ profile.network }}</b>. Anything you do here (post, reply,
+            like, follow) leaves the peer-to-peer network and is stored on
+            <b>{{ profile.network }}</b>'s servers — you no longer own or control
+            that data. Moderation there is performed by human administrators, not
+            by Warpnet's automated (LLM) moderation.
           </span>
         </div>
 
