@@ -315,36 +315,8 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	// The ActivityPub gateway is not a Warpnet-codebase node and serves no
 	// challenge route — exclude it from the challenge, like alias peers.
-	if pi.ID.String() != mastodon.GatewayNodeID {
-		isRepeatable, err := s.challenger.Challenge(
-			s.node.Peerstore().PubKey(pi.ID),
-			s.getChallengeLevel(pi.ID),
-			s.requestChallenge(pi.ID),
-		)
-		if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
-			log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
-			if info.Reachability == warpnet.ReachabilityPublic {
-				// NEVER block relay nodes
-				return
-			}
-			if isRepeatable {
-				_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
-			} else {
-				// reset block time
-				_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
-				_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
-			}
-			s.node.Peerstore().RemovePeer(pi.ID)
-			s.node.SetMinNodePriority(pi.ID)
-			s.m.PushStatusOffline(pi.ID.String())
-			return
-		}
-		if err != nil {
-			log.Errorf(
-				"discovery: source '%s': failed to request challenge for peer %s: %v",
-				peer.Source, pi.ID, err)
-			return
-		}
+	if pi.ID.String() != mastodon.GatewayNodeID && !s.passChallenge(peer, pi, info) {
+		return
 	}
 
 	s.m.PushStatusOnline(pi.ID.String())
@@ -386,6 +358,41 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		newUser.RoundTripTime,
 		peer.Source,
 	)
+}
+
+// passChallenge runs the spoof challenge against a discovered peer and reports
+// whether discovery may proceed; on a failed challenge it blocklists the peer.
+func (s *discoveryService) passChallenge(peer discoveredPeer, pi warpnet.WarpAddrInfo, info warpnet.NodeInfo) bool {
+	isRepeatable, err := s.challenger.Challenge(
+		s.node.Peerstore().PubKey(pi.ID),
+		s.getChallengeLevel(pi.ID),
+		s.requestChallenge(pi.ID),
+	)
+	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
+		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
+		if info.Reachability == warpnet.ReachabilityPublic {
+			// NEVER block relay nodes
+			return false
+		}
+		if isRepeatable {
+			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
+		} else {
+			// reset block time
+			_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
+			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
+		}
+		s.node.Peerstore().RemovePeer(pi.ID)
+		s.node.SetMinNodePriority(pi.ID)
+		s.m.PushStatusOffline(pi.ID.String())
+		return false
+	}
+	if err != nil {
+		log.Errorf(
+			"discovery: source '%s': failed to request challenge for peer %s: %v",
+			peer.Source, pi.ID, err)
+		return false
+	}
+	return true
 }
 
 func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
