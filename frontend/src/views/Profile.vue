@@ -46,7 +46,7 @@ resulting from the use or misuse of this software.
 
         <!-- foreign-network (bridged, e.g. Mastodon) safety warning -->
         <div
-          v-if="!noUser && profile && profile.network && profile.network !== 'warpnet'"
+          v-if="!noUser && profile && profile.network && !['warpnet', 'testnet', 'mainnet'].includes(profile.network)"
           class="px-5 py-3 bg-yellow-100 border-b border-yellow-400 text-yellow-800 text-sm flex items-start"
         >
           <i class="fas fa-exclamation-triangle mt-1 mr-2" aria-hidden="true"></i>
