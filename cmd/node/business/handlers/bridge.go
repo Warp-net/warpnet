@@ -40,6 +40,10 @@ import (
 
 const pathIsFirstRun = "is-first-run"
 
+// maxInflightDispatches bounds concurrent in-flight dashboard requests per
+// websocket connection.
+const maxInflightDispatches = 32
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
@@ -97,6 +101,13 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 		}
 		defer func() { _ = conn.Close() }()
 
+		// Dispatch every message in its own goroutine: a slow request (e.g. a
+		// bridged Mastodon profile resolved live through the gateway) must not
+		// head-of-line block the rest of the dashboard. The frontend matches
+		// responses by message_id, so ordering is irrelevant; the mutex guards
+		// the single-writer requirement of gorilla/websocket.
+		var writeMx sync.Mutex
+		sem := make(chan struct{}, maxInflightDispatches)
 		for {
 			_, frame, err := conn.ReadMessage()
 			if err != nil {
@@ -110,18 +121,24 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 				continue
 			}
 
-			out, err := json.Marshal(b.dispatch(req))
-			if err != nil {
-				log.Errorf("business: ws marshal: %v", err)
-				continue
-			}
-			if out, err = b.codec.Encode(out, encrypted); err != nil {
-				log.Errorf("business: ws encode: %v", err)
-				continue
-			}
-			if err := conn.WriteMessage(websocket.TextMessage, out); err != nil {
-				return
-			}
+			sem <- struct{}{}
+			go func() {
+				defer func() { <-sem }()
+				out, err := json.Marshal(b.dispatch(req))
+				if err != nil {
+					log.Errorf("business: ws marshal: %v", err)
+					return
+				}
+				if out, err = b.codec.Encode(out, encrypted); err != nil {
+					log.Errorf("business: ws encode: %v", err)
+					return
+				}
+				writeMx.Lock()
+				defer writeMx.Unlock()
+				if err := conn.WriteMessage(websocket.TextMessage, out); err != nil {
+					log.Warnf("business: ws write: %v", err)
+				}
+			}()
 		}
 	}
 }
