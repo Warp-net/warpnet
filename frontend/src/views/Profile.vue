@@ -44,6 +44,20 @@ resulting from the use or misuse of this software.
           </div>
         </div>
 
+        <!-- foreign-network (bridged, e.g. Mastodon) safety warning -->
+        <div
+          v-if="!noUser && profile && profile.network && profile.network !== 'warpnet'"
+          class="px-5 py-3 bg-yellow-100 border-b border-yellow-400 text-yellow-800 text-sm flex items-start"
+        >
+          <i class="fas fa-exclamation-triangle mt-1 mr-2" aria-hidden="true"></i>
+          <span>
+            You are leaving the trusted Warpnet zone. This profile is bridged
+            from <b>{{ profile.network }}</b>: its identity is not verified by
+            Warpnet, its content is not moderated by the network, and anything
+            you do here (follow, like, reply) becomes public on the Fediverse.
+          </span>
+        </div>
+
         <!-- background image -->
         <div
           class="border-b border-lighter flex"
