@@ -68,7 +68,7 @@ services:
       - NODE_PORT=4055
       - NODE_HOST_V4=207.154.221.44
       - NODE_NETWORK=testnet
-      - LOGGING_LEVEL=debug
+      - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SERVER_PORT=4999
       - NODE_SERVER_PASSWORD=${NODE_SERVER_PASSWORD}
