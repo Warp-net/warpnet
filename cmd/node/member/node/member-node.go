@@ -40,6 +40,7 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -106,6 +107,8 @@ func NewMemberNode(
 	followRepo := database.NewFollowRepo(db)
 	deviceRepo := database.NewDevicesRepo(db)
 	owner := authRepo.GetOwner()
+
+	mastodon.SeedEntryUser(userRepo)
 
 	challenger := challenge.NewSpoofChallenger(ctx)
 

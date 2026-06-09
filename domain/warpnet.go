@@ -43,11 +43,6 @@ type ID = string
 // than this cannot be encoded and the QR modal renders blank.
 const QRByteModeCapacity = 2953
 
-// MastodonNetwork marks users bridged in from Mastodon (served by the
-// ActivityPub gateway as a regular Warpnet peer). The node itself is agnostic
-// to the gateway; this is only a User.Network tag for UI/recommendation rules.
-const MastodonNetwork = "mastodon"
-
 // AuthNodeInfo defines model for AuthNodeInfo.
 type AuthNodeInfo struct {
 	UserId         string   `json:"user_id"`
