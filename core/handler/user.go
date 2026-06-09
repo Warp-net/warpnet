@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -351,7 +352,7 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 
-			if user.NodeId != "" && user.Network != domain.MastodonNetwork {
+			if user.NodeId != "" && user.Network != mastodon.Network {
 				if idx, ok := latestByNode[user.NodeId]; ok {
 					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
 						whotofollow[idx] = user

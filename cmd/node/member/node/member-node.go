@@ -40,12 +40,12 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
@@ -81,31 +81,6 @@ type MemberNode struct {
 	retrier                       retrier.Retrier
 }
 
-const (
-	// mastodonGatewayNodeID is the libp2p peer id of the ActivityPub gateway
-	// (deterministically derived from its fixed seed). mastodonEntryHandle is a
-	// single Mastodon account seeded locally as the entry point into the
-	// Fediverse: it resolves like any remote user (streamed to the gateway), and
-	// its followings lead to other Mastodon accounts. The node treats it as an
-	// ordinary remote user and stays unaware of the gateway / ActivityPub.
-	mastodonGatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
-	mastodonEntryHandle   = "warpnet@mastodon.social"
-)
-
-// seedMastodonEntryUser inserts the bridged Mastodon entry account so it is
-// discoverable/searchable locally; opening it streams to the gateway node.
-func seedMastodonEntryUser(userRepo *database.UserRepo) {
-	u := domain.User{
-		Id:       mastodonEntryHandle,
-		Username: "Warpnet",
-		NodeId:   mastodonGatewayNodeID,
-		Network:  domain.MastodonNetwork,
-	}
-	if _, err := userRepo.Create(u); err != nil {
-		_, _ = userRepo.Update(u.Id, u)
-	}
-}
-
 func NewMemberNode(
 	ctx context.Context,
 	privKey ed25519.PrivateKey,
@@ -133,7 +108,7 @@ func NewMemberNode(
 	deviceRepo := database.NewDevicesRepo(db)
 	owner := authRepo.GetOwner()
 
-	seedMastodonEntryUser(userRepo)
+	mastodon.SeedEntryUser(userRepo)
 
 	challenger := challenge.NewSpoofChallenger(ctx)
 
