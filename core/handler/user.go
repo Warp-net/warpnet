@@ -122,8 +122,8 @@ func StreamGetUserHandler(
 		}
 
 		otherUser, err := repo.Get(ev.UserId)
-		if errors.Is(err, database.ErrUserNotFound) && strings.Contains(ev.UserId, "@") {
-			return resolveBridgedUser(ev, repo, streamer)
+		if errors.Is(err, database.ErrUserNotFound) && ev.NodeId != "" && ev.NodeId != owner.NodeId {
+			return resolveUserFromNode(ev, repo, streamer)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("get user: other user %w", err)
@@ -142,25 +142,30 @@ func StreamGetUserHandler(
 	}
 }
 
-// resolveBridgedUser fetches an unknown Fediverse handle from the gateway node
-// (the home node of every bridged user) and persists it like any other user.
-func resolveBridgedUser(ev event.GetUserEvent, repo UserFetcher, streamer UserStreamer) (domain.User, error) {
-	data, err := streamer.GenericStream(mastodon.GatewayNodeID, event.PUBLIC_GET_USER, ev)
+// resolveUserFromNode fetches a locally unknown user from the node named in the
+// event (the node that produced the list the user came from) and persists it
+// like any other user.
+func resolveUserFromNode(ev event.GetUserEvent, repo UserFetcher, streamer UserStreamer) (domain.User, error) {
+	data, err := streamer.GenericStream(
+		ev.NodeId,
+		event.PUBLIC_GET_USER,
+		event.GetUserEvent{UserId: ev.UserId},
+	)
 	if err != nil {
-		return domain.User{}, fmt.Errorf("get user: bridged %s: %w", ev.UserId, err)
+		return domain.User{}, fmt.Errorf("get user: resolve %s from node: %w", ev.UserId, err)
 	}
 
 	var possibleError event.ResponseError
 	if _ = json.Unmarshal(data, &possibleError); possibleError.Message != "" {
-		return domain.User{}, fmt.Errorf("get user: bridged %s: %w", ev.UserId, possibleError)
+		return domain.User{}, fmt.Errorf("get user: resolve %s from node: %w", ev.UserId, possibleError)
 	}
 
 	var u domain.User
 	if err := json.Unmarshal(data, &u); err != nil {
-		return domain.User{}, fmt.Errorf("get user: bridged response unmarshal: %w", err)
+		return domain.User{}, fmt.Errorf("get user: resolve response unmarshal: %w", err)
 	}
 	if u.Id == "" {
-		return domain.User{}, fmt.Errorf("get user: bridged %s: %w", ev.UserId, database.ErrUserNotFound)
+		return domain.User{}, fmt.Errorf("get user: resolve %s: %w", ev.UserId, database.ErrUserNotFound)
 	}
 
 	if _, err := repo.Create(u); err != nil {
