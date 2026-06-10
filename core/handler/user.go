@@ -122,11 +122,14 @@ func StreamGetUserHandler(
 		}
 
 		otherUser, err := repo.Get(ev.UserId)
-		if errors.Is(err, database.ErrUserNotFound) && ev.NodeId != "" && ev.NodeId != owner.NodeId {
-			return resolveUserFromNode(ev, repo, streamer)
-		}
 		if err != nil {
-			return nil, fmt.Errorf("get user: other user %w", err)
+			log.Warnf("get user: other user: %v", err)
+			otherUser = updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
+			if otherUser.Username == "" {
+				return nil, fmt.Errorf("get user: other user %w", err)
+			}
+			_, _ = repo.Create(otherUser)
+			return otherUser, nil
 		}
 		if otherUser.NodeId == "" {
 			return otherUser, fmt.Errorf("get user: node id is not found") //nolint:err113
@@ -140,38 +143,6 @@ func StreamGetUserHandler(
 		}()
 		return otherUser, nil
 	}
-}
-
-// resolveUserFromNode fetches a locally unknown user from the node named in the
-// event (the node that produced the list the user came from) and persists it
-// like any other user.
-func resolveUserFromNode(ev event.GetUserEvent, repo UserFetcher, streamer UserStreamer) (domain.User, error) {
-	data, err := streamer.GenericStream(
-		ev.NodeId,
-		event.PUBLIC_GET_USER,
-		event.GetUserEvent{UserId: ev.UserId},
-	)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("get user: resolve %s from node: %w", ev.UserId, err)
-	}
-
-	var possibleError event.ResponseError
-	if _ = json.Unmarshal(data, &possibleError); possibleError.Message != "" {
-		return domain.User{}, fmt.Errorf("get user: resolve %s from node: %w", ev.UserId, possibleError)
-	}
-
-	var u domain.User
-	if err := json.Unmarshal(data, &u); err != nil {
-		return domain.User{}, fmt.Errorf("get user: resolve response unmarshal: %w", err)
-	}
-	if u.Id == "" {
-		return domain.User{}, fmt.Errorf("get user: resolve %s: %w", ev.UserId, database.ErrUserNotFound)
-	}
-
-	if _, err := repo.Create(u); err != nil {
-		_, _ = repo.Update(u.Id, u)
-	}
-	return u, nil
 }
 
 // TODO update also tweet, followers, followings counts
