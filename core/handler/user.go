@@ -122,6 +122,9 @@ func StreamGetUserHandler(
 		}
 
 		otherUser, err := repo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) && strings.Contains(ev.UserId, "@") {
+			return resolveBridgedUser(ev, repo, streamer)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("get user: other user %w", err)
 		}
@@ -137,6 +140,33 @@ func StreamGetUserHandler(
 		}()
 		return otherUser, nil
 	}
+}
+
+// resolveBridgedUser fetches an unknown Fediverse handle from the gateway node
+// (the home node of every bridged user) and persists it like any other user.
+func resolveBridgedUser(ev event.GetUserEvent, repo UserFetcher, streamer UserStreamer) (domain.User, error) {
+	data, err := streamer.GenericStream(mastodon.GatewayNodeID, event.PUBLIC_GET_USER, ev)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("get user: bridged %s: %w", ev.UserId, err)
+	}
+
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(data, &possibleError); possibleError.Message != "" {
+		return domain.User{}, fmt.Errorf("get user: bridged %s: %w", ev.UserId, possibleError)
+	}
+
+	var u domain.User
+	if err := json.Unmarshal(data, &u); err != nil {
+		return domain.User{}, fmt.Errorf("get user: bridged response unmarshal: %w", err)
+	}
+	if u.Id == "" {
+		return domain.User{}, fmt.Errorf("get user: bridged %s: %w", ev.UserId, database.ErrUserNotFound)
+	}
+
+	if _, err := repo.Create(u); err != nil {
+		_, _ = repo.Update(u.Id, u)
+	}
+	return u, nil
 }
 
 // TODO update also tweet, followers, followings counts
