@@ -151,12 +151,10 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 			}
 
 			sem <- struct{}{}
-			inflight.Add(1)
-			go func() {
-				defer inflight.Done()
+			inflight.Go(func() {
 				defer func() { <-sem }()
 				respond(req, encrypted)
-			}()
+			})
 		}
 	}
 }
