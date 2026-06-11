@@ -32,7 +32,7 @@ modules:
       # pinned git source, e.g.:
       #   - type: git
       #     url: https://github.com/Warp-net/warpnet.git
-      #     tag: v0.7.236
+      #     tag: v0.7.240
       #     commit: <commit sha>
       - type: dir
         path: ..
