@@ -225,7 +225,7 @@ resulting from the use or misuse of this software.
                 @click="goToFollowers()"
                 class="flex flex-row hover:underline"
               >
-                <span class="font-bold">{{ profile.followers_count || followings.length }}</span>
+                <span class="font-bold">{{ profile.followers_count || followers.length }}</span>
                 <span class="text-dark whitespace-pre"> Followers</span>
               </button>
             </div>
