@@ -107,11 +107,30 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 		// bounds in-flight work; the frontend matches replies by message_id, so
 		// out-of-order responses are fine.
 		var writeMx sync.Mutex
+		var inflight sync.WaitGroup
 		sem := make(chan struct{}, maxInflightDispatches)
+
+		respond := func(req event.Message, encrypted bool) {
+			out, err := json.Marshal(b.dispatch(req))
+			if err != nil {
+				log.Errorf("business: ws marshal: %v", err)
+				return
+			}
+			if out, err = b.codec.Encode(out, encrypted); err != nil {
+				log.Errorf("business: ws encode: %v", err)
+				return
+			}
+			writeMx.Lock()
+			defer writeMx.Unlock()
+			if err := conn.WriteMessage(websocket.TextMessage, out); err != nil {
+				_ = conn.Close() // unblock ReadMessage so the loop exits
+			}
+		}
 
 		for {
 			_, frame, err := conn.ReadMessage()
 			if err != nil {
+				inflight.Wait()
 				return
 			}
 
@@ -122,24 +141,21 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 				continue
 			}
 
-			sem <- struct{}{}
-			go func() {
-				defer func() { <-sem }()
+			// Login/logout are connection-wide state transitions (they open/close
+			// the DB and drive a shared auth handshake), so they must not overlap
+			// any in-flight call: drain first, then run synchronously as a barrier.
+			if req.Destination == event.PRIVATE_POST_LOGIN || req.Destination == event.PRIVATE_POST_LOGOUT {
+				inflight.Wait()
+				respond(req, encrypted)
+				continue
+			}
 
-				out, err := json.Marshal(b.dispatch(req))
-				if err != nil {
-					log.Errorf("business: ws marshal: %v", err)
-					return
-				}
-				if out, err = b.codec.Encode(out, encrypted); err != nil {
-					log.Errorf("business: ws encode: %v", err)
-					return
-				}
-				writeMx.Lock()
-				defer writeMx.Unlock()
-				if err := conn.WriteMessage(websocket.TextMessage, out); err != nil {
-					_ = conn.Close() // unblock ReadMessage so the loop exits
-				}
+			sem <- struct{}{}
+			inflight.Add(1)
+			go func() {
+				defer inflight.Done()
+				defer func() { <-sem }()
+				respond(req, encrypted)
 			}()
 		}
 	}
