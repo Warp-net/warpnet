@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>site.warpnet.Warpnet</id>
+  <name>Warpnet</name>
+  <summary>Decentralized, peer-to-peer social network</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <developer id="site.warpnet">
+    <name>Warpnet Developers</name>
+  </developer>
+  <description>
+    <p>
+      Warpnet is a decentralized, peer-to-peer social network inspired by Twitter, built with Go.
+      It runs without central servers, using Noise protocol for inter-node communication and
+      built-in local storage. Warpnet is censorship-resistant, scalable, and fully open-source.
+    </p>
+  </description>
+  <launchable type="desktop-id">site.warpnet.Warpnet.desktop</launchable>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-info">intense</content_attribute>
+  </content_rating>
+  <url type="homepage">https://warpnet.site</url>
+  <url type="bugtracker">https://github.com/Warp-net/warpnet/issues</url>
+  <url type="vcs-browser">https://github.com/Warp-net/warpnet</url>
+  <url type="donation">https://boosty.to/warpnet</url>
+  <url type="contact">https://t.me/warpnetdev</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://github.com/Warp-net/.github/raw/main/docs/warpscreen.jpg</image>
+      <caption>Warpnet timeline</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.7.236" date="2026-06-11"/>
+  </releases>
+</component>

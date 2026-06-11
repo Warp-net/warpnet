@@ -1,0 +1,37 @@
+name: Flatpak
+
+on:
+  push:
+    branches:
+      - flatpak
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flatpak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Build flatpak
+        uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
+        with:
+          manifest-path: flatpak/site.warpnet.Warpnet.yml
+          bundle: warpnet.flatpak
+          cache-key: flatpak-builder-${{ github.sha }}
+
+      - name: Lint manifest and appstream
+        run: |
+          flatpak install -y --noninteractive flathub org.flatpak.Builder
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest flatpak/site.warpnet.Warpnet.yml
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder appstream flatpak/site.warpnet.Warpnet.metainfo.xml

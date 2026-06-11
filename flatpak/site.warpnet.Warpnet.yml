@@ -1,0 +1,40 @@
+app-id: site.warpnet.Warpnet
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.golang
+command: warpnet
+
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+
+modules:
+  - name: warpnet
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/golang/bin
+      env:
+        CGO_ENABLED: '1'
+        GOFLAGS: '-mod=vendor'
+    build-commands:
+      - go build -trimpath -ldflags "-s -w" -tags desktop,production,webkit2_41 -o warpnet ./cmd/node/member
+      - install -Dm0755 warpnet /app/bin/warpnet
+      - install -Dm0644 flatpak/site.warpnet.Warpnet.desktop /app/share/applications/site.warpnet.Warpnet.desktop
+      - install -Dm0644 flatpak/site.warpnet.Warpnet.metainfo.xml /app/share/metainfo/site.warpnet.Warpnet.metainfo.xml
+      - install -Dm0644 cmd/node/member/icon.png /app/share/icons/hicolor/512x512/apps/site.warpnet.Warpnet.png
+    sources:
+      # For the Flathub submission this source must be replaced with a
+      # pinned git source, e.g.:
+      #   - type: git
+      #     url: https://github.com/Warp-net/warpnet.git
+      #     tag: v0.7.236
+      #     commit: <commit sha>
+      - type: dir
+        path: ..
+        skip:
+          - .git

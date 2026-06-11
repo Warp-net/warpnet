@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Warpnet
+Comment=Decentralized, peer-to-peer social network
+Exec=warpnet %u
+Icon=site.warpnet.Warpnet
+Terminal=false
+Categories=Network;InstantMessaging;
+Keywords=social;p2p;decentralized;peer-to-peer;
+MimeType=x-scheme-handler/warpnet;
+StartupWMClass=warpnet
