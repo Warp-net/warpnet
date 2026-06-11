@@ -111,7 +111,7 @@ export default {
     async loadMore() {
       const followers = await warpnetService.getFollowers({userId:this.profile.id, cursorReset: false})
       for (const id of followers) {
-        const u = await warpnetService.getProfile(id)
+        const u = await warpnetService.getProfile(id, this.profile?.node_id)
         this.profiles.push(u)
       }
     },
@@ -128,7 +128,7 @@ export default {
 
       const followers = await warpnetService.getFollowers({userId: profileId, cursorReset: true})
       for (const id of followers) {
-        const u = await warpnetService.getProfile(id)
+        const u = await warpnetService.getProfile(id, this.profile?.node_id)
         if (!u) {
           continue
         }
