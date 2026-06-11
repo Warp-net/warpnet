@@ -123,7 +123,13 @@ func StreamGetUserHandler(
 
 		otherUser, err := repo.Get(ev.UserId)
 		if err != nil {
-			return nil, fmt.Errorf("get user: other user %w", err)
+			log.Warnf("get user: other user: %v", err)
+			otherUser = updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
+			if otherUser.Username == "" {
+				return nil, fmt.Errorf("get user: other user %w", err)
+			}
+			_, _ = repo.Create(otherUser)
+			return otherUser, nil
 		}
 		if otherUser.NodeId == "" {
 			return otherUser, fmt.Errorf("get user: node id is not found") //nolint:err113

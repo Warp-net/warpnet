@@ -279,11 +279,12 @@ export const warpnetService = {
         } catch (e) {}
     },
 
-    async getProfile(userId) {
+    async getProfile(userId, nodeId) {
         const request = {
             path: PUBLIC_GET_USER,
             body: {
                 user_id: userId,
+                ...(nodeId ? {node_id: nodeId} : {}),
             },
         }
 
