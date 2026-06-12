@@ -20,6 +20,6 @@ ENV GOGC=50
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     git submodule update --init --recursive && \
-    go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet cmd/node/moderator/main.go
+    go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -v -o warpnet cmd/node/moderator/main.go
 
 CMD ["/warpnet/warpnet"]
