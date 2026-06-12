@@ -1,0 +1,66 @@
+# Dockerfile.cuda - CUDA build environment for llama-go
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+# Install build essentials and cmake
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    libcurl4-openssl-dev \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go 1.26.3
+ARG GO_VERSION=1.26.3
+RUN wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
+    rm go${GO_VERSION}.linux-amd64.tar.gz
+ENV PATH=/usr/local/go/bin:${PATH}
+
+# Install Node.js 20 for GitHub Actions compatibility
+ARG NODE_VERSION=20
+RUN NODE_URL="https://nodejs.org/dist/latest-v${NODE_VERSION}.x/" && \
+    FULL_NODE_VERSION=$(curl -sL ${NODE_URL} | grep -oP 'node-v\K[0-9]+\.[0-9]+\.[0-9]+' | head -1) && \
+    FULL_VERSION="v${FULL_NODE_VERSION}" && \
+    ARCH=$(dpkg --print-architecture | sed 's/amd64/x64/;s/ppc64el/ppc64le/') && \
+    TARBALL="node-${FULL_VERSION}-linux-${ARCH}.tar.xz" && \
+    echo "Downloading Node.js ${FULL_VERSION} for ${ARCH}..." && \
+    curl -fSL "${NODE_URL}/${TARBALL}" -o "${TARBALL}" && \
+    NODE_PATH="/opt/node" && \
+    mkdir -p "${NODE_PATH}" && \
+    echo "Extracting Node.js ${FULL_VERSION} to ${NODE_PATH}..." && \
+    tar -xJf "${TARBALL}" --strip-components=1 -C "${NODE_PATH}" && \
+    ln -sf ${NODE_PATH}/bin/node /usr/local/bin/node && \
+    ln -sf ${NODE_PATH}/bin/npm /usr/local/bin/npm && \
+    ln -sf ${NODE_PATH}/bin/npx /usr/local/bin/npx && \
+    rm "${TARBALL}"
+ENV PATH=/opt/node/bin:${PATH}
+
+WORKDIR /workspace
+
+# Set environment for CUDA builds
+ENV BUILD_TYPE=cublas
+# Default to RTX 3090/3080 architecture (can be overridden with --build-arg CUDA_ARCHITECTURES=...)
+# Common architectures:
+#   61 = GTX 1000 series (Pascal)
+#   70 = V100 (Volta)
+#   75 = RTX 2000 series, GTX 1600 series (Turing)
+#   80 = A100 (Ampere)
+#   86 = RTX 3000 series (Ampere)
+#   89 = RTX 4000 series (Ada Lovelace)
+ARG CUDA_ARCHITECTURES=86
+ENV CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
+ENV LIBRARY_PATH=/workspace
+ENV C_INCLUDE_PATH=/workspace
+ENV LD_LIBRARY_PATH=/workspace:/usr/local/cuda/lib64
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+ENV LLAMA_LOG=error
+
+# Override NVIDIA's entrypoint to suppress banner and simplify usage
+ENTRYPOINT ["/bin/bash", "-c"]
+
+# Build command (can be overridden)
+CMD ["BUILD_TYPE=cublas CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES} make libbinding.a"]

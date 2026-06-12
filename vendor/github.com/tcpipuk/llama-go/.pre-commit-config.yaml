@@ -1,0 +1,86 @@
+# Pre-commit configuration for llama-go
+# Runs quality checks before commits
+
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+default_stages:
+  - pre-commit
+  - manual
+
+repos:
+  # File integrity and format checks - run first for efficiency
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-case-conflict
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+      - id: destroyed-symlinks
+      # Exclude cgo_headers/ from file-modifying hooks: these are vendored
+      # copies of llama.cpp headers that must match the submodule byte-for-byte
+      # (CI verifies drift). Reformatting them would break the drift check.
+      - id: end-of-file-fixer
+        exclude: '^cgo_headers/'
+      - id: fix-byte-order-marker
+        exclude: '^cgo_headers/'
+      - id: mixed-line-ending
+        exclude: '^cgo_headers/'
+      - id: trailing-whitespace
+        exclude: '^cgo_headers/'
+
+  # Markdown linting
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.22.1
+    hooks:
+      - id: markdownlint-cli2
+        args: ["--fix"]
+
+  # Go language checks
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -l -d .
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: goimports
+        name: goimports
+        entry: sh -c 'go install golang.org/x/tools/cmd/goimports@latest && $(go env GOPATH)/bin/goimports -l -d .'
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: go mod tidy
+        language: system
+        files: go\.mod$
+        pass_filenames: false
+
+      - id: golangci-lint
+        name: golangci-lint
+        entry: sh -c 'docker run --rm -v $(pwd):/workspace -w /workspace golang:1.26.2-trixie bash -c "LIBRARY_PATH=/workspace C_INCLUDE_PATH=/workspace go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && \$(go env GOPATH)/bin/golangci-lint run"'
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-test
+        name: go test
+        entry: sh -c 'docker run --rm --gpus all -v $(pwd):/workspace -w /workspace git.tomfos.tr/tom/llama-go:build-cuda bash -c "LIBRARY_PATH=/workspace C_INCLUDE_PATH=/workspace LD_LIBRARY_PATH=/workspace go run github.com/onsi/ginkgo/v2/ginkgo --label-filter=\"!gpu\" -v ./..."'
+        language: system
+        types: [go]
+        pass_filenames: false
+
+  # Conventional commit message format enforcement - run last
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: ["--strict", "--force-scope", "--verbose"]

@@ -1,0 +1,53 @@
+# Markdown linting configuration
+
+# Force specific heading style - ATX (# symbols)
+MD003:
+  style: atx
+
+# Force dash for unordered lists
+MD004:
+  style: dash
+
+# Line length - 100 chars, but don't check code blocks or tables
+MD013:
+  code_blocks: false
+  line_length: 100
+  headings: false
+  stern: false
+  tables: false
+
+# Allow dollar signs in code blocks (for shell prompts)
+MD014: false
+
+# Trailing punctuation in headings - allow ? and !
+MD026:
+  punctuation: ".,;:"
+
+# Force ordered numbering for lists (1. 2. 3. not 1. 1. 1.)
+MD029:
+  style: ordered
+
+# Allow inline HTML for special formatting
+MD033: false
+
+# Allow emphasis used instead of a heading
+MD036: false
+
+# Allow spaces inside link text for better readability
+MD039: false
+
+# Prefer fenced code blocks over indented
+MD046:
+  style: fenced
+
+# Force backticks for code fences
+MD048:
+  style: backtick
+
+# Force asterisk for emphasis
+MD049:
+  style: asterisk
+
+# Force double asterisk for strong emphasis
+MD050:
+  style: asterisk

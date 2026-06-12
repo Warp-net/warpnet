@@ -1,0 +1,32 @@
+FROM golang:latest AS builder
+
+# Declare build argument for target architecture
+ARG TARGETARCH
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    libcurl4-openssl-dev
+
+WORKDIR /workspace
+
+# Copy submodule first (changes least frequently)
+COPY llama.cpp/ ./llama.cpp/
+
+# Copy build files (changes occasionally)
+COPY Makefile ./
+
+# Copy source files (changes more frequently)
+COPY binding.cpp binding.h ./
+COPY *.c *.h ./
+
+# Build the static library (no need to clean in fresh container)
+RUN make libbinding.a
+
+# Rename output based on target platform
+RUN mv libbinding.a libbinding_linux_${TARGETARCH}.a
+
+# Export stage - only contains the binary we want
+FROM scratch
+COPY --from=builder /workspace/libbinding_linux_*.a /
