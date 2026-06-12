@@ -248,6 +248,10 @@ type GetTweetEvent struct {
 // GetUserEvent defines model for GetUserEvent.
 type GetUserEvent struct {
 	UserId domain.ID `json:"user_id"`
+
+	// NodeId optionally names the node to resolve the user from when it is
+	// unknown locally (e.g. the node that produced the list the user came from).
+	NodeId string `json:"node_id,omitempty"`
 }
 
 // LikeEvent defines model for LikeEvent.

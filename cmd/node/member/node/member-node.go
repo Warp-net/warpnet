@@ -78,7 +78,6 @@ type MemberNode struct {
 	statsDb                       StatsStorer
 	privKey                       ed25519.PrivateKey
 	ownerId, selfHashHex, network string
-	pseudoNode                    PseudoStreamer
 	retrier                       retrier.Retrier
 }
 
@@ -109,6 +108,8 @@ func NewMemberNode(
 	deviceRepo := database.NewDevicesRepo(db)
 	owner := authRepo.GetOwner()
 
+	mastodon.SeedEntryUser(userRepo)
+
 	challenger := challenge.NewSpoofChallenger(ctx)
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, challenger, metrics)
@@ -135,17 +136,6 @@ func NewMemberNode(
 		dht.BootstrapNodes(bootstrapNodes...),
 		dht.Network(warpNetwork),
 	)
-
-	mastodonPseudoNode, err := mastodon.NewWarpnetMastodonPseudoNode(ctx, version)
-	if err != nil {
-		log.Errorf("mastodon: creating mastodon pseudo-node: %v", err)
-	}
-	if mastodonPseudoNode != nil {
-		_, _ = userRepo.Create(mastodonPseudoNode.WarpnetUser())
-		_, _ = userRepo.Update(mastodonPseudoNode.WarpnetUser().Id, mastodonPseudoNode.WarpnetUser())
-		_, _ = userRepo.Create(mastodonPseudoNode.DefaultUser())
-		_, _ = userRepo.Update(mastodonPseudoNode.DefaultUser().Id, mastodonPseudoNode.DefaultUser())
-	}
 
 	opts := []warpnet.WarpOption{ //nolint:prealloc
 		node.WarpIdentity(privKey),
@@ -179,7 +169,6 @@ func NewMemberNode(
 		privKey:       privKey,
 		ownerId:       owner.UserId,
 		selfHashHex:   selfHashHex,
-		pseudoNode:    mastodonPseudoNode,
 		network:       warpNetwork,
 	}
 
@@ -262,9 +251,6 @@ func (m *MemberNode) Connect(p warpnet.WarpAddrInfo) error {
 	if m == nil || m.node == nil {
 		return nil
 	}
-	if m.pseudoNode != nil && m.pseudoNode.IsMastodonID(p.ID) {
-		return nil
-	}
 
 	return m.node.Connect(p)
 }
@@ -322,16 +308,6 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
 	if nodeId == "" {
 		return nil, fmt.Errorf("member: stream: %w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
-	}
-
-	var isMastodonID bool
-	if m.pseudoNode != nil {
-		isMastodonID = m.pseudoNode.IsMastodonID(nodeId)
-	}
-
-	if isMastodonID {
-		log.Debugf("member: stream: peer %s is mastodon", nodeIdStr)
-		return m.pseudoNode.Route(path, data)
 	}
 
 	bt, err := m.node.Stream(nodeId, path, data)

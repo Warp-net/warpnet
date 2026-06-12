@@ -30,10 +30,10 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/mastodon"
 	"strings"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -123,7 +123,13 @@ func StreamGetUserHandler(
 
 		otherUser, err := repo.Get(ev.UserId)
 		if err != nil {
-			return nil, fmt.Errorf("get user: other user %w", err)
+			log.Warnf("get user: other user: %v", err)
+			otherUser = updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
+			if otherUser.Username == "" {
+				return nil, fmt.Errorf("get user: other user %w", err)
+			}
+			_, _ = repo.Create(otherUser)
+			return otherUser, nil
 		}
 		if otherUser.NodeId == "" {
 			return otherUser, fmt.Errorf("get user: node id is not found") //nolint:err113
@@ -352,7 +358,7 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 
-			if user.NodeId != "" && user.Network != mastodon.MastodonNetwork {
+			if user.NodeId != "" && user.Network != mastodon.Network {
 				if idx, ok := latestByNode[user.NodeId]; ok {
 					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
 						whotofollow[idx] = user

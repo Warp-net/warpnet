@@ -44,6 +44,22 @@ resulting from the use or misuse of this software.
           </div>
         </div>
 
+        <!-- foreign-network (bridged, e.g. Mastodon) safety warning -->
+        <div
+          v-if="!noUser && profile && profile.network && !['warpnet', 'testnet', 'mainnet'].includes(profile.network)"
+          class="px-5 py-3 bg-yellow-100 border-b border-yellow-400 text-yellow-800 text-sm flex items-start"
+        >
+          <i class="fas fa-exclamation-triangle mt-1 mr-2" aria-hidden="true"></i>
+          <span>
+            You are leaving the trusted Warpnet zone. This profile is bridged
+            from <b>{{ profile.network }}</b>. Anything you do here (post, reply,
+            like, follow) leaves the peer-to-peer network and is stored on
+            <b>{{ profile.network }}</b>'s servers — you no longer own or control
+            that data. Moderation there is performed by human administrators, not
+            by Warpnet's automated (LLM) moderation.
+          </span>
+        </div>
+
         <!-- background image -->
         <div
           class="border-b border-lighter flex"
@@ -209,7 +225,7 @@ resulting from the use or misuse of this software.
                 @click="goToFollowers()"
                 class="flex flex-row hover:underline"
               >
-                <span class="font-bold">{{ profile.followers_count || followings.length }}</span>
+                <span class="font-bold">{{ profile.followers_count || followers.length }}</span>
                 <span class="text-dark whitespace-pre"> Followers</span>
               </button>
             </div>
