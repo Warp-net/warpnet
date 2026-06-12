@@ -18,6 +18,7 @@ ENV CGO_ENABLED=1
 ENV GOMEMLIMIT=2750MiB
 ENV GOGC=50
 
+RUN go mod download
 RUN --mount=type=cache,target=/root/.cache/go-build \
     git submodule update --init --recursive && \
     go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -v -o warpnet cmd/node/moderator/main.go
