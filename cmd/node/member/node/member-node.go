@@ -527,7 +527,7 @@ func (m *MemberNode) replyHandlers(
 		},
 		{
 			event.PUBLIC_GET_REPLIES,
-			handler.StreamGetRepliesHandler(r.replyRepo),
+			handler.StreamGetRepliesHandler(r.replyRepo, userRepo, m),
 		},
 	}
 }

@@ -165,6 +165,9 @@ type GetAllRepliesEvent struct {
 	Limit    *uint64   `json:"limit,omitempty"`
 	ParentId domain.ID `json:"parent_id"`
 	RootId   domain.ID `json:"root_id"`
+
+	// RootUserId is the root tweet author; forwards go to their home node.
+	RootUserId domain.ID `json:"root_user_id,omitempty"`
 }
 
 // GetAllTweetsEvent defines model for GetAllTweetsEvent.

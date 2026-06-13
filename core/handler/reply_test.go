@@ -271,7 +271,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 	parentId := "parent-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{})
+		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -290,6 +290,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 				seenParent = parentIdArg
 				return nil, "", nil
 			}},
+			stubReplyUserRepo{}, stubStreamer{},
 		)
 		_, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId}), nil)
 		if err != nil {
@@ -301,7 +302,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 	})
 
 	t.Run("empty root id", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{})
+		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetAllRepliesEvent{ParentId: parentId}), nil)
 		if err == nil || err.Error() != "empty root id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -312,7 +313,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		replies := []domain.ReplyNode{{Reply: domain.Tweet{Id: "r1", Text: "reply"}}}
 		h := StreamGetRepliesHandler(stubReplyRepo{getRepliesTreeFn: func(rootID, parentIdArg string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
 			return replies, "end", nil
-		}})
+		}}, stubReplyUserRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -330,10 +331,34 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		boom := errors.New("db down")
 		h := StreamGetRepliesHandler(stubReplyRepo{getRepliesTreeFn: func(string, string, *uint64, *string) ([]domain.ReplyNode, string, error) {
 			return nil, "", boom
-		}})
+		}}, stubReplyUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
 		if !errors.Is(err, boom) {
 			t.Fatalf("expected db error, got %v", err)
+		}
+	})
+
+	t.Run("forwards to root author's home node when no local replies", func(t *testing.T) {
+		// With an empty local store the handler resolves the root author's home
+		// node (foreign, e.g. a bridged post) and returns that node's reply.
+		forwarded := event.RepliesResponse{Replies: []domain.ReplyNode{{Reply: domain.Tweet{Id: "m1"}}}}
+		userRepo := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		}}
+		streamer := stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			if nodeId != "remote-node" {
+				t.Fatalf("expected forward to remote-node, got %q", nodeId)
+			}
+			return marshal(t, forwarded), nil
+		}}
+		h := StreamGetRepliesHandler(stubReplyRepo{}, userRepo, streamer)
+		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, RootUserId: "author-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.RepliesResponse)
+		if len(r.Replies) != 1 || r.Replies[0].Reply.Id != "m1" {
+			t.Fatalf("expected forwarded reply m1, got %+v", r.Replies)
 		}
 	})
 }
