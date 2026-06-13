@@ -322,6 +322,29 @@ func StreamDeleteReplyHandler(
 // storage anyway. The dead code is removed; proper remote-fetch
 // routing would need a RootUserId in GetAllRepliesEvent to identify the
 // author of the root tweet, which clients don't currently send.
+// forwardReplies asks the root tweet's owner node for its replies when that
+// node is not us (a bridged Mastodon post owned by the gateway). ok=false means
+// "handle locally" — no RootUserId, own/unknown node, or a forward failure.
+func forwardReplies(userRepo ReplyUserFetcher, streamer ReplyStreamer, ev event.GetAllRepliesEvent) (event.RepliesResponse, bool) {
+	if ev.RootUserId == "" {
+		return event.RepliesResponse{}, false
+	}
+	author, err := userRepo.Get(string(ev.RootUserId))
+	if err != nil || author.NodeId == "" || author.NodeId == streamer.NodeInfo().ID.String() {
+		return event.RepliesResponse{}, false
+	}
+	data, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_REPLIES, ev)
+	if err != nil {
+		log.Errorf("get replies: forward to %s: %v", author.NodeId, err)
+		return event.RepliesResponse{}, false
+	}
+	var resp event.RepliesResponse
+	if json.Unmarshal(data, &resp) != nil {
+		return event.RepliesResponse{}, false
+	}
+	return resp, true
+}
+
 func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, streamer ReplyStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllRepliesEvent
@@ -334,21 +357,10 @@ func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, stream
 		}
 
 		// Foreign root (e.g. a bridged Mastodon post owned by the gateway): the
-		// replies live on the owner node, not in our local store — forward there.
-		if ev.RootUserId != "" {
-			ownNodeID := streamer.NodeInfo().ID.String()
-			if author, aerr := userRepo.Get(string(ev.RootUserId)); aerr == nil &&
-				author.NodeId != "" && author.NodeId != ownNodeID {
-				data, ferr := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_REPLIES, ev)
-				if ferr == nil {
-					var resp event.RepliesResponse
-					if json.Unmarshal(data, &resp) == nil {
-						return resp, nil
-					}
-				}
-				log.Errorf("get replies: forward to %s: %v", author.NodeId, ferr)
-				// fall through to the local store on any failure
-			}
+		// replies live on the owner node, not in our local store — forward there
+		// and fall through to the local store on any failure.
+		if resp, ok := forwardReplies(userRepo, streamer, ev); ok {
+			return resp, nil
 		}
 
 		// Top-level replies on a thread have no parent — clients send an
