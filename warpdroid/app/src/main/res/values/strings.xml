@@ -130,6 +130,7 @@
 
     <string name="report_username_format">Report @%1$s</string>
     <string name="report_comment_hint">Additional comments?</string>
+    <string name="account_network_warning">You are leaving the trusted Warpnet zone. This profile is bridged from %1$s. Anything you do here (post, reply, like, follow) leaves the peer-to-peer network and is stored on %1$s\'s servers — you no longer own or control that data. Moderation there is performed by human administrators, not by Warpnet\'s automated (LLM) moderation.</string>
 
     <string name="action_quick_reply">Quick Reply</string>
     <string name="action_reply">Reply</string>
