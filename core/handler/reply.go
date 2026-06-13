@@ -31,7 +31,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -311,22 +310,24 @@ func StreamDeleteReplyHandler(
 // Clients send an empty ParentId for "give me the top-level replies of the
 // thread", which we normalise to RootId so the repo lookup matches the first
 // tier. Replies known locally (pushed to us via gossip, or cached) are served
-// from the store; when we have none, a bridged Mastodon thread keeps its
-// replies on the gateway, so we ask the bridge node for them.
+// from the store; when we have none, the thread may live on the root author's
+// home node, so we ask that node for them.
 //
-// forwardReplies asks the bridge (gateway) node for a thread's replies. The
-// gateway is the home node of every bridged Mastodon user, so the seeded entry
-// user in the local user repo pins it — no per-request user id is needed. For a
-// native Warpnet root the gateway can't resolve the id and returns nothing,
-// so ok=false and the caller keeps the local result.
+// forwardReplies asks the root tweet author's home node for the thread's
+// replies when that node is not this one. ev.UserId is the root author (the
+// node is agnostic to what network they belong to). ok=false means "handle
+// locally": no author, own/unknown node, or a forward that yields nothing.
 func forwardReplies(userRepo ReplyUserFetcher, streamer ReplyStreamer, ev event.GetAllRepliesEvent) (event.RepliesResponse, bool) {
-	bridge, err := userRepo.Get(mastodon.EntryHandle)
-	if err != nil || bridge.NodeId == "" || bridge.NodeId == streamer.NodeInfo().ID.String() {
+	if ev.UserId == "" {
 		return event.RepliesResponse{}, false
 	}
-	data, err := streamer.GenericStream(bridge.NodeId, event.PUBLIC_GET_REPLIES, ev)
+	author, err := userRepo.Get(string(ev.UserId))
+	if err != nil || author.NodeId == "" || author.NodeId == streamer.NodeInfo().ID.String() {
+		return event.RepliesResponse{}, false
+	}
+	data, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_REPLIES, ev)
 	if err != nil {
-		log.Errorf("get replies: forward to bridge %s: %v", bridge.NodeId, err)
+		log.Errorf("get replies: forward to %s: %v", author.NodeId, err)
 		return event.RepliesResponse{}, false
 	}
 	var resp event.RepliesResponse
@@ -361,8 +362,8 @@ func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, stream
 		if err != nil {
 			return nil, err
 		}
-		// Nothing locally: a bridged Mastodon thread keeps its replies on the
-		// gateway. Ask the bridge node; keep the local (empty) result on failure.
+		// Nothing locally: the thread may live on the root author's home node
+		// (e.g. a bridged post). Ask it; keep the local (empty) result on failure.
 		if len(replies) == 0 {
 			if resp, ok := forwardReplies(userRepo, streamer, ev); ok {
 				return resp, nil

@@ -338,21 +338,21 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("forwards to bridge when no local replies", func(t *testing.T) {
-		// A bridged Mastodon thread keeps its replies on the gateway; with an
-		// empty local store the handler asks the bridge node and returns its reply.
+	t.Run("forwards to root author's home node when no local replies", func(t *testing.T) {
+		// With an empty local store the handler resolves the root author's home
+		// node (foreign, e.g. a bridged post) and returns that node's reply.
 		forwarded := event.RepliesResponse{Replies: []domain.ReplyNode{{Reply: domain.Tweet{Id: "m1"}}}}
 		userRepo := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
-			return domain.User{Id: userId, NodeId: "gateway-node"}, nil
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
 		}}
 		streamer := stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
-			if nodeId != "gateway-node" {
-				t.Fatalf("expected forward to gateway-node, got %q", nodeId)
+			if nodeId != "remote-node" {
+				t.Fatalf("expected forward to remote-node, got %q", nodeId)
 			}
 			return marshal(t, forwarded), nil
 		}}
 		h := StreamGetRepliesHandler(stubReplyRepo{}, userRepo, streamer)
-		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId}), nil)
+		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, UserId: "author-1"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
