@@ -337,4 +337,28 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 			t.Fatalf("expected db error, got %v", err)
 		}
 	})
+
+	t.Run("forwards to bridge when no local replies", func(t *testing.T) {
+		// A bridged Mastodon thread keeps its replies on the gateway; with an
+		// empty local store the handler asks the bridge node and returns its reply.
+		forwarded := event.RepliesResponse{Replies: []domain.ReplyNode{{Reply: domain.Tweet{Id: "m1"}}}}
+		userRepo := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "gateway-node"}, nil
+		}}
+		streamer := stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			if nodeId != "gateway-node" {
+				t.Fatalf("expected forward to gateway-node, got %q", nodeId)
+			}
+			return marshal(t, forwarded), nil
+		}}
+		h := StreamGetRepliesHandler(stubReplyRepo{}, userRepo, streamer)
+		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.RepliesResponse)
+		if len(r.Replies) != 1 || r.Replies[0].Reply.Id != "m1" {
+			t.Fatalf("expected forwarded reply m1, got %+v", r.Replies)
+		}
+	})
 }

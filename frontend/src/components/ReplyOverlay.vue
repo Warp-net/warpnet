@@ -161,7 +161,6 @@ export default {
     const repliesRequest = {
       rootId: this.tweet.root_id || this.tweet.id,
       parentId: this.tweet.id,
-      rootUserId: this.tweet.user_id,
       cursorReset: true,
     }
     let replies = await warpnetService.getReplies(repliesRequest);

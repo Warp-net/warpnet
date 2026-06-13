@@ -31,6 +31,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -306,40 +307,30 @@ func StreamDeleteReplyHandler(
 // StreamGetRepliesHandler answers /public/get/replies requests.
 //
 // ev.RootId is the root tweet of the thread; ev.ParentId is the parent
-// TWEET id selecting which subtree of replies to return (NOT a user id —
-// it gets compared against tweet/reply ids in the repo). Clients send
-// an empty ParentId for "give me the top-level replies of the thread",
-// which we normalise to RootId so the repo lookup matches the first
-// tier of replies. Replies are served straight from the local store:
-// any reply we know about (because the author's node pushed it to us
-// via gossip, or because we cached an earlier fetch) is returned;
-// otherwise the response is empty.
+// TWEET id selecting which subtree of replies to return (NOT a user id).
+// Clients send an empty ParentId for "give me the top-level replies of the
+// thread", which we normalise to RootId so the repo lookup matches the first
+// tier. Replies known locally (pushed to us via gossip, or cached) are served
+// from the store; when we have none, a bridged Mastodon thread keeps its
+// replies on the gateway, so we ask the bridge node for them.
 //
-// Note on routing: this used to try to forward the request to the
-// "parent user" by treating ParentId as a user id and looking it up in
-// userRepo. That can't work — ParentId is a tweet id — so the lookup
-// always returned ErrUserNotFound and we silently fell back to local
-// storage anyway. The dead code is removed; proper remote-fetch
-// routing would need a RootUserId in GetAllRepliesEvent to identify the
-// author of the root tweet, which clients don't currently send.
-// forwardReplies asks the root tweet's owner node for its replies when that
-// node is not us (a bridged Mastodon post owned by the gateway). ok=false means
-// "handle locally" — no RootUserId, own/unknown node, or a forward failure.
+// forwardReplies asks the bridge (gateway) node for a thread's replies. The
+// gateway is the home node of every bridged Mastodon user, so the seeded entry
+// user in the local user repo pins it — no per-request user id is needed. For a
+// native Warpnet root the gateway can't resolve the id and returns nothing,
+// so ok=false and the caller keeps the local result.
 func forwardReplies(userRepo ReplyUserFetcher, streamer ReplyStreamer, ev event.GetAllRepliesEvent) (event.RepliesResponse, bool) {
-	if ev.RootUserId == "" {
+	bridge, err := userRepo.Get(mastodon.EntryHandle)
+	if err != nil || bridge.NodeId == "" || bridge.NodeId == streamer.NodeInfo().ID.String() {
 		return event.RepliesResponse{}, false
 	}
-	author, err := userRepo.Get(string(ev.RootUserId))
-	if err != nil || author.NodeId == "" || author.NodeId == streamer.NodeInfo().ID.String() {
-		return event.RepliesResponse{}, false
-	}
-	data, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_REPLIES, ev)
+	data, err := streamer.GenericStream(bridge.NodeId, event.PUBLIC_GET_REPLIES, ev)
 	if err != nil {
-		log.Errorf("get replies: forward to %s: %v", author.NodeId, err)
+		log.Errorf("get replies: forward to bridge %s: %v", bridge.NodeId, err)
 		return event.RepliesResponse{}, false
 	}
 	var resp event.RepliesResponse
-	if json.Unmarshal(data, &resp) != nil {
+	if json.Unmarshal(data, &resp) != nil || len(resp.Replies) == 0 {
 		return event.RepliesResponse{}, false
 	}
 	return resp, true
@@ -356,13 +347,6 @@ func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, stream
 			return nil, warpnet.WarpError("empty root id")
 		}
 
-		// Foreign root (e.g. a bridged Mastodon post owned by the gateway): the
-		// replies live on the owner node, not in our local store — forward there
-		// and fall through to the local store on any failure.
-		if resp, ok := forwardReplies(userRepo, streamer, ev); ok {
-			return resp, nil
-		}
-
 		// Top-level replies on a thread have no parent — clients send an
 		// empty parent_id in that case. Treat it as the root itself so
 		// the repo returns the first-tier replies hanging off RootId.
@@ -376,6 +360,13 @@ func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, stream
 		replies, cursor, err := repo.GetRepliesTree(rootId, parentId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
+		}
+		// Nothing locally: a bridged Mastodon thread keeps its replies on the
+		// gateway. Ask the bridge node; keep the local (empty) result on failure.
+		if len(replies) == 0 {
+			if resp, ok := forwardReplies(userRepo, streamer, ev); ok {
+				return resp, nil
+			}
 		}
 		return event.RepliesResponse{
 			Cursor:  cursor,
