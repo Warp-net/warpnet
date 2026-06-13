@@ -108,7 +108,8 @@ export default {
       const repliesPage = await warpnetService.getReplies({
         rootId: root,
         parentId: this.tweet.id,
-        rootUserId: this.tweet.user_id,
+        // user_id is the root author only when this tweet is the root itself.
+        rootUserId: root === this.tweet.id ? this.tweet.user_id : undefined,
         cursorReset: true,
       });
       this.replies = Array.isArray(repliesPage) ? repliesPage : (repliesPage?.replies || []);

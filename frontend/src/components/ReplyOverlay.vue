@@ -158,10 +158,12 @@ export default {
   },
   async created() {
     console.log("loading component:", this.$options.name);
+    const root = this.tweet.root_id || this.tweet.id;
     const repliesRequest = {
-      rootId: this.tweet.root_id || this.tweet.id,
+      rootId: root,
       parentId: this.tweet.id,
-      rootUserId: this.tweet.user_id,
+      // user_id is the root author only when this tweet is the root itself.
+      rootUserId: root === this.tweet.id ? this.tweet.user_id : undefined,
       cursorReset: true,
     }
     let replies = await warpnetService.getReplies(repliesRequest);
