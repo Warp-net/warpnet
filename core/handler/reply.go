@@ -319,7 +319,7 @@ func forwardReplies(userRepo ReplyUserFetcher, streamer ReplyStreamer, ev event.
 		return event.RepliesResponse{}, false
 	}
 	var resp event.RepliesResponse
-	if json.Unmarshal(data, &resp) != nil || len(resp.Replies) == 0 {
+	if err := json.Unmarshal(data, &resp); err != nil {
 		return event.RepliesResponse{}, false
 	}
 	return resp, true
