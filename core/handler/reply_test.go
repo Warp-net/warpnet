@@ -352,7 +352,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 			return marshal(t, forwarded), nil
 		}}
 		h := StreamGetRepliesHandler(stubReplyRepo{}, userRepo, streamer)
-		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, UserId: "author-1"}), nil)
+		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, RootUserId: "author-1"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

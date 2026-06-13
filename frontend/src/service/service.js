@@ -1262,7 +1262,7 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async getReplies({rootId, parentId, userId, cursorReset}) {
+    async getReplies({rootId, parentId, rootUserId, cursorReset}) {
         let cursor = this.getCursor('replies')
         if (cursorReset) {
             cursor = ''
@@ -1278,7 +1278,7 @@ export const warpnetService = {
                 parent_id: parentId,
                 limit: defaultLimit,
                 cursor: cursor,
-                ...(userId ? {user_id: userId} : {}),
+                ...(rootUserId ? {root_user_id: rootUserId} : {}),
             },
         }
 

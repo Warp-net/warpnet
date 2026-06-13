@@ -303,25 +303,13 @@ func StreamDeleteReplyHandler(
 	}
 }
 
-// StreamGetRepliesHandler answers /public/get/replies requests.
-//
-// ev.RootId is the root tweet of the thread; ev.ParentId is the parent
-// TWEET id selecting which subtree of replies to return (NOT a user id).
-// Clients send an empty ParentId for "give me the top-level replies of the
-// thread", which we normalise to RootId so the repo lookup matches the first
-// tier. Replies known locally (pushed to us via gossip, or cached) are served
-// from the store; when we have none, the thread may live on the root author's
-// home node, so we ask that node for them.
-//
 // forwardReplies asks the root tweet author's home node for the thread's
-// replies when that node is not this one. ev.UserId is the root author (the
-// node is agnostic to what network they belong to). ok=false means "handle
-// locally": no author, own/unknown node, or a forward that yields nothing.
+// replies when that node is not this one. ok=false means handle locally.
 func forwardReplies(userRepo ReplyUserFetcher, streamer ReplyStreamer, ev event.GetAllRepliesEvent) (event.RepliesResponse, bool) {
-	if ev.UserId == "" {
+	if ev.RootUserId == "" {
 		return event.RepliesResponse{}, false
 	}
-	author, err := userRepo.Get(string(ev.UserId))
+	author, err := userRepo.Get(string(ev.RootUserId))
 	if err != nil || author.NodeId == "" || author.NodeId == streamer.NodeInfo().ID.String() {
 		return event.RepliesResponse{}, false
 	}
@@ -348,9 +336,7 @@ func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, stream
 			return nil, warpnet.WarpError("empty root id")
 		}
 
-		// Top-level replies on a thread have no parent — clients send an
-		// empty parent_id in that case. Treat it as the root itself so
-		// the repo returns the first-tier replies hanging off RootId.
+		// Empty parent_id means top-level replies: treat it as the root.
 		if ev.ParentId == "" {
 			ev.ParentId = ev.RootId
 		}
@@ -362,8 +348,7 @@ func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, stream
 		if err != nil {
 			return nil, err
 		}
-		// Nothing locally: the thread may live on the root author's home node
-		// (e.g. a bridged post). Ask it; keep the local (empty) result on failure.
+		// Nothing locally: try the root author's home node.
 		if len(replies) == 0 {
 			if resp, ok := forwardReplies(userRepo, streamer, ev); ok {
 				return resp, nil
