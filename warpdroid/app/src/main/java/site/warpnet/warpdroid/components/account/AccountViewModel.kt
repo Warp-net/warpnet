@@ -141,6 +141,25 @@ class AccountViewModel @Inject constructor(
         changeRelationship(RelationShipAction.UNMUTE)
     }
 
+    /**
+     * Publish a moderation report for the viewed account. type 0 = user
+     * profile; the offender's home node is taken from the loaded account
+     * so moderators can re-fetch the content directly.
+     */
+    fun reportAccount(reason: String) = viewModelScope.launch {
+        val account = _accountData.value?.data ?: return@launch
+        warpnetApi.reportContent(
+            type = 0,
+            objectId = "",
+            targetUserId = account.id,
+            targetNodeId = account.nodeId,
+            reason = reason,
+        ).fold(
+            { Log.d(TAG, "reported account ${account.id}") },
+            { t -> Log.w(TAG, "failed reporting account", t) },
+        )
+    }
+
     fun changeSubscribingState() {
         val relationship = _relationshipData.value?.data
         if (relationship?.notifying == true ||

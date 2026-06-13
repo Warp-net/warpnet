@@ -474,6 +474,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         updateBadges()
         updateAccountJoinedDate()
         updateAccountStats()
+        updateNetworkWarning()
         invalidateOptionsMenu()
 
         binding.accountMuteButton.setOnClickListener {
@@ -526,6 +527,21 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             } catch (e: ParseException) {
                 binding.accountDateJoined.visibility = View.GONE
             }
+        }
+    }
+
+    // Warn when the viewed account is bridged from a foreign network
+    // (e.g. Mastodon): leaving the trusted Warpnet zone means actions are
+    // stored on that network's servers and moderated by humans, not by
+    // Warpnet's automated moderation. Mirrors the desktop profile banner.
+    private fun updateNetworkWarning() {
+        val network = loadedAccount?.network.orEmpty()
+        val foreign = network.isNotBlank() &&
+            network !in setOf("warpnet", "testnet", "mainnet")
+        binding.accountNetworkWarning.visible(foreign)
+        if (foreign) {
+            binding.accountNetworkWarningText.text =
+                getString(R.string.account_network_warning, network)
         }
     }
 
@@ -750,6 +766,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             // It shouldn't be possible to block, mute or report yourself.
             menu.removeItem(R.id.action_block)
             menu.removeItem(R.id.action_mute)
+            menu.removeItem(R.id.action_report)
             menu.removeItem(R.id.action_show_retweets)
         }
 
@@ -807,6 +824,45 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         } else {
             viewModel.unmuteAccount()
         }
+    }
+
+    private fun showReportDialog() {
+        val account = loadedAccount ?: return
+        // Violation labels mirror the active Llama Guard hazard classes the
+        // moderation engine reports (see the `moderation` repo, prompt.go),
+        // so a report uses the same language as the automated verdict.
+        val categories = arrayOf(
+            "Violent Crimes",
+            "Non-Violent Crimes",
+            "Sex Crimes",
+            "Child Exploitation",
+            "Privacy",
+            "Indiscriminate Weapons",
+            "Hate",
+            "Self-Harm",
+            "Code Interpreter Abuse",
+        )
+        val checked = BooleanArray(categories.size)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.report_username_format, account.username))
+            .setMultiChoiceItems(categories, checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setPositiveButton(R.string.action_report) { _, _ ->
+                val reason = categories
+                    .filterIndexed { index, _ -> checked[index] }
+                    .joinToString(", ")
+                if (reason.isNotBlank()) {
+                    viewModel.reportAccount(reason)
+                    Snackbar.make(
+                        binding.accountCoordinatorLayout,
+                        R.string.confirmation_reported,
+                        Snackbar.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun mention() {
@@ -894,6 +950,10 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             }
             R.id.action_block -> {
                 toggleBlock()
+                return true
+            }
+            R.id.action_report -> {
+                showReportDialog()
                 return true
             }
             R.id.action_mute -> {
