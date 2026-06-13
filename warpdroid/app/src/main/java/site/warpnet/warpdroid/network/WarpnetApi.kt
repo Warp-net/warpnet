@@ -762,6 +762,25 @@ class WarpnetApi @Inject constructor(
         }
     }
 
+    // Publish a moderation report to the network's reports topic. [type]
+    // mirrors the fat node's ModerationObjectType (0 = user, 1 = tweet);
+    // [reason] is free-form text capped at 256 chars by the backend.
+    suspend fun reportContent(
+        type: Int,
+        objectId: String,
+        targetUserId: String,
+        targetNodeId: String,
+        reason: String,
+    ): NetworkResult<Unit> = result {
+        warpnet.reportContent(
+            type = type,
+            objectId = objectId,
+            targetUserId = targetUserId,
+            targetNodeId = targetNodeId,
+            reason = reason,
+        )
+    }
+
     suspend fun relationships(accountIds: List<String>): NetworkResult<List<Relationship>> = result {
         accountIds.map { warpnet.relationshipFor(it) }
     }

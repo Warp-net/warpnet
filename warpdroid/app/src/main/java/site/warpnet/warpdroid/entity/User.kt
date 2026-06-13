@@ -43,7 +43,14 @@ data class User(
     // default value for backward compatibility
     val fields: List<Field> = emptyList(),
     val moved: User? = null,
-    val roles: List<Role> = emptyList()
+    val roles: List<Role> = emptyList(),
+    // Origin network of the account ("warpnet"/"mainnet"/"testnet" for
+    // native peers, or a bridged foreign network like "mastodon"). Empty
+    // on older nodes. Drives the foreign-network safety banner.
+    val network: String = "",
+    // Peer ID of the node hosting this account; required to address a
+    // moderation report at the offender's home node.
+    @Json(name = "node_id") val nodeId: String = ""
 ) {
 
     val name: String

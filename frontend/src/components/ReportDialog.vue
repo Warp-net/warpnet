@@ -16,20 +16,24 @@
         <p :id="descId" class="text-sm text-dark mb-3">
           Reports are sent to moderators on the network. The reported user is not notified.
         </p>
-        <label :for="reasonInputId" class="block text-sm font-medium mb-1">
-          Reason
-        </label>
-        <textarea
-          :id="reasonInputId"
-          v-model="reason"
-          :maxlength="maxLen"
-          rows="4"
-          placeholder="Describe why you're reporting this."
-          class="w-full border border-lighter rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-        ></textarea>
-        <p class="text-xs text-dark mt-1 text-right" aria-live="polite">
-          {{ trimmedReason.length }} / {{ maxLen }}
-        </p>
+        <fieldset>
+          <legend class="block text-sm font-medium mb-1">
+            What's wrong? Select all that apply.
+          </legend>
+          <label
+            v-for="category in categories"
+            :key="category"
+            class="flex items-center gap-2 py-1 text-sm cursor-pointer"
+          >
+            <input
+              type="checkbox"
+              :value="category"
+              v-model="selected"
+              class="text-red-600 focus:ring-red-500"
+            />
+            <span>{{ category }}</span>
+          </label>
+        </fieldset>
       </div>
       <div class="flex justify-end gap-2 px-5 py-3 border-t border-lighter">
         <button
@@ -47,10 +51,21 @@
 </template>
 
 <script>
-// Backend caps Report.reason at MaxReportReasonLen = 256 (see
-// event/report.go). Keep the UI in sync so the user sees the limit
-// before the server rejects.
-const MAX_REASON_LEN = 256;
+// Violation categories mirror the active Llama Guard hazard classes the
+// moderation engine reports (see the `moderation` repo, prompt.go —
+// llamaGuardCategories). Keeping the labels identical means a user's
+// report speaks the same language as the automated verdict.
+const REPORT_CATEGORIES = [
+  "Violent Crimes",
+  "Non-Violent Crimes",
+  "Sex Crimes",
+  "Child Exploitation",
+  "Privacy",
+  "Indiscriminate Weapons",
+  "Hate",
+  "Self-Harm",
+  "Code Interpreter Abuse",
+];
 
 export default {
   name: "ReportDialog",
@@ -65,26 +80,27 @@ export default {
     // share ARIA ids.
     const uid = Math.random().toString(36).slice(2, 8);
     return {
-      reason: "",
+      selected: [],
       submitting: false,
+      categories: REPORT_CATEGORIES,
       titleId: `report-dialog-title-${uid}`,
       descId: `report-dialog-desc-${uid}`,
-      reasonInputId: `report-dialog-reason-${uid}`,
-      maxLen: MAX_REASON_LEN,
     };
   },
   computed: {
-    trimmedReason() {
-      return this.reason.trim();
+    // The wire reason is the comma-joined list of selected categories,
+    // so moderators see the standardized labels.
+    composedReason() {
+      return this.selected.join(", ");
     },
     canSubmit() {
-      return !this.submitting && this.trimmedReason.length > 0;
+      return !this.submitting && this.selected.length > 0;
     },
   },
   watch: {
     show(val) {
       if (val) {
-        this.reason = "";
+        this.selected = [];
         this.submitting = false;
       }
     },
@@ -97,7 +113,7 @@ export default {
     submit() {
       if (!this.canSubmit) return;
       this.submitting = true;
-      this.$emit("submit", this.trimmedReason);
+      this.$emit("submit", this.composedReason);
     },
   },
 };
