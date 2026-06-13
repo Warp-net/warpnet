@@ -16,7 +16,7 @@
         <p :id="descId" class="text-sm text-dark mb-3">
           Reports are sent to moderators on the network. The reported user is not notified.
         </p>
-        <fieldset class="mb-3">
+        <fieldset>
           <legend class="block text-sm font-medium mb-1">
             What's wrong? Select all that apply.
           </legend>
@@ -34,23 +34,6 @@
             <span>{{ category }}</span>
           </label>
         </fieldset>
-        <label :for="reasonInputId" class="block text-sm font-medium mb-1">
-          Additional details (optional)
-        </label>
-        <textarea
-          :id="reasonInputId"
-          v-model="details"
-          rows="3"
-          placeholder="Add anything that helps moderators."
-          class="w-full border border-lighter rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-        ></textarea>
-        <p
-          class="text-xs mt-1 text-right"
-          :class="composedReason.length > maxLen ? 'text-red-600' : 'text-dark'"
-          aria-live="polite"
-        >
-          {{ composedReason.length }} / {{ maxLen }}
-        </p>
       </div>
       <div class="flex justify-end gap-2 px-5 py-3 border-t border-lighter">
         <button
@@ -68,11 +51,6 @@
 </template>
 
 <script>
-// Backend caps Report.reason at MaxReportReasonLen = 256 (see
-// event/report.go). Keep the UI in sync so the user sees the limit
-// before the server rejects.
-const MAX_REASON_LEN = 256;
-
 // Violation categories mirror the active Llama Guard hazard classes the
 // moderation engine reports (see the `moderation` repo, prompt.go —
 // llamaGuardCategories). Keeping the labels identical means a user's
@@ -103,35 +81,26 @@ export default {
     const uid = Math.random().toString(36).slice(2, 8);
     return {
       selected: [],
-      details: "",
       submitting: false,
       categories: REPORT_CATEGORIES,
       titleId: `report-dialog-title-${uid}`,
       descId: `report-dialog-desc-${uid}`,
-      reasonInputId: `report-dialog-reason-${uid}`,
-      maxLen: MAX_REASON_LEN,
     };
   },
   computed: {
     // The wire reason is the comma-joined list of selected categories,
-    // optionally followed by the free-form detail, so moderators see
-    // the standardized label plus any context the reporter adds.
+    // so moderators see the standardized labels.
     composedReason() {
-      const cats = this.selected.join(", ");
-      const det = this.details.trim();
-      if (cats && det) return `${cats} — ${det}`;
-      return cats || det;
+      return this.selected.join(", ");
     },
     canSubmit() {
-      const len = this.composedReason.length;
-      return !this.submitting && len > 0 && len <= this.maxLen;
+      return !this.submitting && this.selected.length > 0;
     },
   },
   watch: {
     show(val) {
       if (val) {
         this.selected = [];
-        this.details = "";
         this.submitting = false;
       }
     },
