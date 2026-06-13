@@ -34,15 +34,8 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 )
 
-// MaxReportReasonLen caps the free-form reason on the wire. Reports
-// are gossiped network-wide, so an unbounded reason field is a cheap
-// way to bloat the topic and spam logs.
 const MaxReportReasonLen = 256
 
-// Errors are exported so callers can match against them with
-// errors.Is — useful both in the publishing handler (which returns
-// 4xx-style errors to the UI) and in the moderator consumer (which
-// drops bad messages silently).
 var (
 	ErrReportNoTargetUser = errors.New("report: empty target_user_id")
 	ErrReportNoTargetNode = errors.New("report: empty target_node_id")
@@ -52,27 +45,17 @@ var (
 	ErrReportBadType      = errors.New("report: unsupported moderation object type")
 )
 
-// SanitizeReport normalizes the user-typed fields of a ReportEvent so
-// that Validate (and downstream logs) see a canonical value. Mutates
-// in place. Idempotent.
 func SanitizeReport(ev *ReportEvent) {
 	if ev == nil {
 		return
 	}
 	ev.Reason = strings.TrimSpace(ev.Reason)
 	if ev.ObjectID != nil {
-		trimmed := domain.ID(strings.TrimSpace(string(*ev.ObjectID)))
+		trimmed := strings.TrimSpace(*ev.ObjectID)
 		ev.ObjectID = &trimmed
 	}
 }
 
-// ValidateReport returns nil if the event is shape-acceptable. Run
-// SanitizeReport first so whitespace-only fields are caught.
-//
-// Called both by the member-side publishing handler (to reject bad
-// client input) and by the moderator-side consumer (because the
-// reports topic is open — a signed message is still untrusted
-// content). Keep the two paths in sync by sharing this function.
 func ValidateReport(ev ReportEvent) error {
 	if ev.TargetUserID == "" {
 		return ErrReportNoTargetUser

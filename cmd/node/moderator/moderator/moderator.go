@@ -133,20 +133,13 @@ func (m *Moderator) Close() {
 	}
 }
 
-// handleReport runs the engine against whatever the report points at.
-// The moderator never trusts the reporter's payload — it always
-// re-fetches the content from the target node directly so a malicious
-// reporter cannot weaponize the moderator.
-//
-// A signature-verified envelope is NOT the same as trusted content:
-// any peer with a valid key can publish a malformed ReportEvent.
-// Re-run the same SanitizeReport/ValidateReport the publisher handler
-// used, so consumers don't drift from publishers.
 func (m *Moderator) handleReport(ev event.ReportEvent) error {
 	if m.isClosed.Load() {
 		return nil
 	}
+
 	event.SanitizeReport(&ev)
+
 	if err := event.ValidateReport(ev); err != nil {
 		log.Warnf("moderator: report dropped: %v", err)
 		return nil
@@ -181,29 +174,25 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 		event.GetTweetEvent{TweetId: *ev.ObjectID, UserId: ev.TargetUserID},
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "protocols not supported") {
-			return nil
-		}
-		return fmt.Errorf("fetch tweet: %w", err)
+		return fmt.Errorf("moderator: fetch tweet %s: %w", *ev.ObjectID, err)
 	}
 
 	var tweet domain.Tweet
 	if err := json.Unmarshal(data, &tweet); err != nil {
-		return fmt.Errorf("unmarshal tweet: %w", err)
+		return fmt.Errorf("moderator: unmarshal tweet: %w", err)
 	}
 	if tweet.Id == "" || tweet.Text == "" {
+		log.Warn("moderator: empty tweet")
 		return nil
 	}
 
 	ok, reason, err := engine.Moderate(tweet.Text)
 	if err != nil {
-		return fmt.Errorf("engine moderate tweet: %w", err)
+		return fmt.Errorf("moderator: process tweet: %w", err)
 	}
 	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
 
-	// Shadow-ban semantics: only bad verdicts go on the wire. OK
-	// verdicts are dropped silently so we don't flood the followers
-	// topic with no-op gossip and don't poke observer state.
+	// Shadow-ban: only bad verdicts go on the wire.
 	if ok {
 		return nil
 	}
@@ -225,10 +214,7 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 		event.GetUserEvent{UserId: ev.TargetUserID},
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "protocols not supported") {
-			return nil
-		}
-		return fmt.Errorf("fetch user: %w", err)
+		return fmt.Errorf("fetch user %s: %w", ev.TargetUserID, err)
 	}
 
 	var user domain.User
@@ -239,17 +225,15 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 		return nil
 	}
 
-	// One report covers the whole profile surface a stranger sees:
-	// username, bio, website, custom metadata fields. We concatenate
-	// them so the engine sees the full picture in a single pass.
 	text := buildProfileText(user)
 	if text == "" {
+		log.Warn("moderator: empty profile text")
 		return nil
 	}
 
 	ok, reason, err := engine.Moderate(text)
 	if err != nil {
-		return fmt.Errorf("engine moderate user: %w", err)
+		return fmt.Errorf("moderator: process user: %w", err)
 	}
 	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
 
@@ -273,10 +257,7 @@ func buildProfileText(u domain.User) string {
 	if u.Website != nil {
 		parts = append(parts, *u.Website)
 	}
-	// Sort metadata keys so the same profile always serializes to
-	// the same engine input — Go map iteration is randomized, which
-	// would otherwise let the engine return different verdicts for
-	// identical content.
+
 	keys := make([]string, 0, len(u.Metadata))
 	for k := range u.Metadata {
 		keys = append(keys, k)

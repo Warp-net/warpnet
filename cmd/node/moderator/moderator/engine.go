@@ -36,7 +36,7 @@ import (
 )
 
 func init() {
-	log.Infoln("moderator node: initializing")
+	log.Infof("moderator node: initializing, path: %s", config.Config().Node.Moderator.Path)
 	go func() {
 		defer close(engineReadyChan)
 		select {
@@ -50,6 +50,10 @@ func init() {
 		engine, err = moderation.NewLlamaEngine(config.Config().Node.Moderator.Path, runtime.NumCPU())
 		if err != nil {
 			log.Fatalf("moderator node: initializing: %v", err)
+		}
+		log.Infoln("moderator node: preheat started")
+		if _, _, err := engine.Moderate("i sell heroin and guns"); err != nil {
+			log.Fatalf("moderator node: preheat failed: %v", err)
 		}
 		log.Infoln("moderator node: initialized")
 	}()

@@ -33,12 +33,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Publisher is the slice of moderator pubsub the isolation protocol
-// needs: publish a verdict onto the offender's followers topic so every
-// observer re-renders the object with the moderation flag set. The
-// implementation marshals `body` once on the way out — callers MUST
-// pass a struct (or any non-[]byte value) so the result is a real JSON
-// object on the wire, not a base64-encoded blob.
 type Publisher interface {
 	PublishUpdateToFollowers(ownerId, dest string, body any) (err error)
 }
@@ -56,9 +50,6 @@ func NewIsolationProtocol(pub Publisher) *IsolationProtocol {
 	return &IsolationProtocol{pub: pub}
 }
 
-// IsolateTweet broadcasts a tweet moderation verdict on the offender's
-// followers topic. Subscribers apply the verdict via
-// StreamModerationResultHandler and re-render with the moderation flag.
 func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModeration) {
 	if t == nil || m == nil {
 		return
@@ -83,11 +74,6 @@ func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModera
 	}
 }
 
-// IsolateUser broadcasts a profile-level moderation verdict on the
-// offender's followers topic. Followers cache the user with
-// Moderation.IsModerated = true and clients hide bio / name / website /
-// custom fields on the next render. The user row stays on disk;
-// nothing is wiped.
 func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, m *domain.UserModeration) {
 	if u == nil || m == nil {
 		return
