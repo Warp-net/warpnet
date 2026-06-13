@@ -829,8 +829,10 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private fun showReportDialog() {
         val account = loadedAccount ?: return
         // Violation labels mirror the active Llama Guard hazard classes the
-        // moderation engine reports (see the `moderation` repo, prompt.go),
-        // so a report uses the same language as the automated verdict.
+        // moderation engine reports (see the `moderation` repo, prompt.go).
+        // Kept as literals rather than a localized string-array on purpose:
+        // the joined reason is a cross-client wire value the moderators and
+        // engine match against, so it must stay identical across locales.
         val categories = arrayOf(
             "Violent Crimes",
             "Non-Violent Crimes",
@@ -853,12 +855,14 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
                     .filterIndexed { index, _ -> checked[index] }
                     .joinToString(", ")
                 if (reason.isNotBlank()) {
-                    viewModel.reportAccount(reason)
-                    Snackbar.make(
-                        binding.accountCoordinatorLayout,
-                        R.string.confirmation_reported,
-                        Snackbar.LENGTH_SHORT
-                    ).show()
+                    lifecycleScope.launch {
+                        val sent = viewModel.reportAccount(reason)
+                        Snackbar.make(
+                            binding.accountCoordinatorLayout,
+                            if (sent) R.string.confirmation_reported else R.string.failed_report,
+                            Snackbar.LENGTH_SHORT
+                        ).show()
+                    }
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)

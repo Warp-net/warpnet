@@ -144,19 +144,29 @@ class AccountViewModel @Inject constructor(
     /**
      * Publish a moderation report for the viewed account. type 0 = user
      * profile; the offender's home node is taken from the loaded account
-     * so moderators can re-fetch the content directly.
+     * so moderators can re-fetch the content directly. Returns true only
+     * when the report was actually published.
      */
-    fun reportAccount(reason: String) = viewModelScope.launch {
-        val account = _accountData.value?.data ?: return@launch
-        warpnetApi.reportContent(
+    suspend fun reportAccount(reason: String): Boolean {
+        val account = _accountData.value?.data ?: return false
+        // target_node_id is required by the backend; a blank node id (older
+        // nodes, bridged accounts) is rejected, so don't claim success.
+        if (account.nodeId.isBlank()) return false
+        return warpnetApi.reportContent(
             type = 0,
             objectId = "",
             targetUserId = account.id,
             targetNodeId = account.nodeId,
             reason = reason,
         ).fold(
-            { Log.d(TAG, "reported account ${account.id}") },
-            { t -> Log.w(TAG, "failed reporting account", t) },
+            {
+                Log.d(TAG, "reported account ${account.id}")
+                true
+            },
+            { t ->
+                Log.w(TAG, "failed reporting account", t)
+                false
+            },
         )
     }
 
