@@ -165,6 +165,11 @@ type GetAllRepliesEvent struct {
 	Limit    *uint64   `json:"limit,omitempty"`
 	ParentId domain.ID `json:"parent_id"`
 	RootId   domain.ID `json:"root_id"`
+
+	// RootUserId is the author of the root tweet; when its node is not this one
+	// (e.g. a bridged Mastodon post owned by the gateway), the handler forwards
+	// the request there to fetch replies it does not store locally.
+	RootUserId domain.ID `json:"root_user_id,omitempty"`
 }
 
 // GetAllTweetsEvent defines model for GetAllTweetsEvent.

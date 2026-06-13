@@ -252,9 +252,8 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 	})
 
 	t.Run("StreamGetRepliesHandler - replies under own tweet", func(t *testing.T) {
-		// Replies handler is fully local now; no streamer/user repo
-		// involved (see reply.go for why).
-		h := StreamGetRepliesHandler(stubReplyRepo{})
+		// Local path: empty RootUserId skips the forward branch (see reply.go).
+		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
 		if _, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootID, ParentId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

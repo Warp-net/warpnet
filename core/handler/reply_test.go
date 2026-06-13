@@ -271,7 +271,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 	parentId := "parent-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{})
+		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -290,6 +290,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 				seenParent = parentIdArg
 				return nil, "", nil
 			}},
+			stubReplyUserRepo{}, stubStreamer{},
 		)
 		_, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId}), nil)
 		if err != nil {
@@ -301,7 +302,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 	})
 
 	t.Run("empty root id", func(t *testing.T) {
-		h := StreamGetRepliesHandler(stubReplyRepo{})
+		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetAllRepliesEvent{ParentId: parentId}), nil)
 		if err == nil || err.Error() != "empty root id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -312,7 +313,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		replies := []domain.ReplyNode{{Reply: domain.Tweet{Id: "r1", Text: "reply"}}}
 		h := StreamGetRepliesHandler(stubReplyRepo{getRepliesTreeFn: func(rootID, parentIdArg string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
 			return replies, "end", nil
-		}})
+		}}, stubReplyUserRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -330,7 +331,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		boom := errors.New("db down")
 		h := StreamGetRepliesHandler(stubReplyRepo{getRepliesTreeFn: func(string, string, *uint64, *string) ([]domain.ReplyNode, string, error) {
 			return nil, "", boom
-		}})
+		}}, stubReplyUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootId, ParentId: parentId}), nil)
 		if !errors.Is(err, boom) {
 			t.Fatalf("expected db error, got %v", err)

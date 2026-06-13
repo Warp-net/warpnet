@@ -322,7 +322,7 @@ func StreamDeleteReplyHandler(
 // storage anyway. The dead code is removed; proper remote-fetch
 // routing would need a RootUserId in GetAllRepliesEvent to identify the
 // author of the root tweet, which clients don't currently send.
-func StreamGetRepliesHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
+func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, streamer ReplyStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllRepliesEvent
 		err := json.Unmarshal(buf, &ev)
@@ -332,6 +332,25 @@ func StreamGetRepliesHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
 		if ev.RootId == "" {
 			return nil, warpnet.WarpError("empty root id")
 		}
+
+		// Foreign root (e.g. a bridged Mastodon post owned by the gateway): the
+		// replies live on the owner node, not in our local store — forward there.
+		if ev.RootUserId != "" {
+			ownNodeID := streamer.NodeInfo().ID.String()
+			if author, aerr := userRepo.Get(string(ev.RootUserId)); aerr == nil &&
+				author.NodeId != "" && author.NodeId != ownNodeID {
+				data, ferr := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_REPLIES, ev)
+				if ferr == nil {
+					var resp event.RepliesResponse
+					if json.Unmarshal(data, &resp) == nil {
+						return resp, nil
+					}
+				}
+				log.Errorf("get replies: forward to %s: %v", author.NodeId, ferr)
+				// fall through to the local store on any failure
+			}
+		}
+
 		// Top-level replies on a thread have no parent — clients send an
 		// empty parent_id in that case. Treat it as the root itself so
 		// the repo returns the first-tier replies hanging off RootId.
