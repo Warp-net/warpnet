@@ -199,7 +199,7 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 
 	m.isolation.IsolateTweet(&tweet, &domain.TweetModeration{
 		ModeratorID: m.node.ID().String(),
-		Model:       domain.LLAMA2,
+		Model:       domain.LLAMAGuard3,
 		IsOk:        domain.FAIL,
 		Reason:      &reason,
 		TimeAt:      time.Now(),
@@ -244,7 +244,7 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 
 	m.isolation.IsolateUser(m.node.ID().String(), &user, &domain.UserModeration{
 		IsModerated: true,
-		Model:       domain.LLAMA2,
+		Model:       domain.LLAMAGuard3,
 		IsOk:        false,
 		Reason:      &reason,
 		TimeAt:      time.Now(),

@@ -73,7 +73,7 @@ func init() {
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	pflag.String("node.metrics.gateway", "130.94.88.38:4091", "Prometheus push metrics server")
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
-	pflag.String("node.moderator.modelpath", "/root/.warpdata/llama-2-7b-chat.Q8_0.gguf", "File name of 'AI' model")
+	pflag.String("node.moderator.modelpath", "/root/.warpdata/Llama-Guard-3-1B.Q8_0.gguf ", "File name of 'AI' model")
 
 	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")
 	pflag.String("node.server.password", "", "Preshared secret that decrypts dashboard WS traffic")
