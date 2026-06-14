@@ -51,10 +51,6 @@ func init() {
 		if err != nil {
 			log.Fatalf("moderator node: initializing: %v", err)
 		}
-		log.Infoln("moderator node: preheat started")
-		if _, _, err := engine.Moderate("i sell heroin and guns"); err != nil {
-			log.Fatalf("moderator node: preheat failed: %v", err)
-		}
 		log.Infoln("moderator node: initialized")
 	}()
 }
