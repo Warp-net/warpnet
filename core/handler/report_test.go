@@ -82,7 +82,7 @@ func TestStreamReportHandler(t *testing.T) {
 	})
 
 	t.Run("oversized reason rejected", func(t *testing.T) {
-		long := make([]byte, event.MaxReportReasonLen+1)
+		long := make([]byte, MaxReportReasonLen+1)
 		for i := range long {
 			long[i] = 'a'
 		}
