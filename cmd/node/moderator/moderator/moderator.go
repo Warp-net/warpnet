@@ -138,13 +138,6 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 		return nil
 	}
 
-	event.SanitizeReport(&ev)
-
-	if err := event.ValidateReport(ev); err != nil {
-		log.Warnf("moderator: report dropped: %v", err)
-		return nil
-	}
-
 	// %q quotes and escapes control characters so a reason like
 	// "spam\nfake log line" can't inject log noise.
 	log.Infof("moderator: report received type=%s target_user=%s reason=%q",

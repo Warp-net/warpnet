@@ -28,36 +28,40 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"errors"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+	"strings"
 )
 
-// ReportPublisher is the slice of the member pubsub provider this
-// handler needs — published reports land on the moderator-facing topic.
+const MaxReportReasonLen = 256
+
+var (
+	ErrReportNoTargetUser = errors.New("report: empty target_user_id")
+	ErrReportNoTargetNode = errors.New("report: empty target_node_id")
+	ErrReportNoReason     = errors.New("report: empty reason")
+	ErrReportReasonLong   = errors.New("report: reason too long")
+	ErrReportNoObjectID   = errors.New("report: empty object_id for tweet")
+	ErrReportBadType      = errors.New("report: unsupported moderation object type")
+)
+
 type ReportPublisher interface {
 	PublishReport(ev event.ReportEvent) error
 }
 
-// StreamReportHandler receives a PUBLIC_POST_REPORT call from a logged-in
-// user (via the local Vue UI or warpdroid) and forwards it to the global
-// reports gossip topic so any moderator node picks it up.
-//
-// The handler intentionally does not store reports locally — there's no
-// audit log on the reporter's node. Trust comes from the libp2p
-// signature on the envelope, which the auth middleware already verified
-// before this code runs. Shape-level validation lives in
-// event.ValidateReport so the moderator consumer can re-run the same
-// check against the gossiped message.
 func StreamReportHandler(publisher ReportPublisher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ReportEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		event.SanitizeReport(&ev)
-		if err := event.ValidateReport(ev); err != nil {
+
+		sanitizeReport(&ev)
+
+		if err := validateReport(ev); err != nil {
 			return nil, err
 		}
 
@@ -69,4 +73,42 @@ func StreamReportHandler(publisher ReportPublisher) warpnet.WarpHandlerFunc {
 			ev.Type.String(), ev.TargetUserID, ev.Reason)
 		return event.Accepted, nil
 	}
+}
+
+func sanitizeReport(ev *event.ReportEvent) {
+	if ev == nil {
+		return
+	}
+	ev.Reason = strings.TrimSpace(ev.Reason)
+	if ev.ObjectID != nil {
+		trimmed := strings.TrimSpace(*ev.ObjectID)
+		ev.ObjectID = &trimmed
+	}
+}
+
+func validateReport(ev event.ReportEvent) error {
+	if ev.TargetUserID == "" {
+		return ErrReportNoTargetUser
+	}
+	if ev.TargetNodeID == "" {
+		return ErrReportNoTargetNode
+	}
+	if ev.Reason == "" {
+		return ErrReportNoReason
+	}
+	if len(ev.Reason) > MaxReportReasonLen {
+		return ErrReportReasonLong
+	}
+	switch ev.Type {
+	case domain.ModerationTweetType:
+		if ev.ObjectID == nil || *ev.ObjectID == "" {
+			return ErrReportNoObjectID
+		}
+	case domain.ModerationUserType:
+		// object_id is optional / unused for user reports
+	default:
+		// Reply / image reports are not wired end-to-end yet.
+		return ErrReportBadType
+	}
+	return nil
 }

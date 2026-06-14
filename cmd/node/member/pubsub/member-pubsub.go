@@ -133,9 +133,6 @@ func (g *MemberPubSub) UnsubscribeUserUpdate(userId string) (err error) {
 	return g.pubsub.Unsubscribe(topicName)
 }
 
-// PublishReport sends a Report event on the global moderator-facing
-// topic. Any moderator node subscribed to the same topic picks it up
-// and runs the engine against the offending object.
 func (g *MemberPubSub) PublishReport(ev event.ReportEvent) (err error) {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
