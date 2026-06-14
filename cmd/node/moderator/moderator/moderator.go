@@ -140,8 +140,12 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 
 	// %q quotes and escapes control characters so a reason like
 	// "spam\nfake log line" can't inject log noise.
-	log.Infof("moderator: report received type=%s target_user=%s reason=%q",
-		ev.Type.String(), ev.TargetUserID, ev.Reason)
+	objectID := ""
+	if ev.ObjectID != nil {
+		objectID = *ev.ObjectID
+	}
+	log.Infof("moderator: report received type=%s target_user=%s target_node=%s object_id=%s reason=%q",
+		ev.Type.String(), ev.TargetUserID, ev.TargetNodeID, objectID, ev.Reason)
 
 	switch ev.Type {
 	case domain.ModerationTweetType:
@@ -175,7 +179,7 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 	// error. Detect it so it isn't silently parsed into a zero-value tweet.
 	var respErr event.ResponseError
 	if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
-		log.Warnf("moderator: fetch tweet %s failed: %s", *ev.ObjectID, respErr.Message)
+		log.Warnf("moderator: fetch tweet %s from node %s failed: %s", *ev.ObjectID, ev.TargetNodeID, respErr.Message)
 		return nil
 	}
 
@@ -225,7 +229,7 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 
 	var respErr event.ResponseError
 	if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
-		log.Warnf("moderator: fetch user %s failed: %s", ev.TargetUserID, respErr.Message)
+		log.Warnf("moderator: fetch user %s from node %s failed: %s", ev.TargetUserID, ev.TargetNodeID, respErr.Message)
 		return nil
 	}
 
