@@ -165,6 +165,9 @@ type GetAllRepliesEvent struct {
 	Limit    *uint64   `json:"limit,omitempty"`
 	ParentId domain.ID `json:"parent_id"`
 	RootId   domain.ID `json:"root_id"`
+
+	// RootUserId is the root tweet author; forwards go to their home node.
+	RootUserId domain.ID `json:"root_user_id,omitempty"`
 }
 
 // GetAllTweetsEvent defines model for GetAllTweetsEvent.
@@ -248,6 +251,10 @@ type GetTweetEvent struct {
 // GetUserEvent defines model for GetUserEvent.
 type GetUserEvent struct {
 	UserId domain.ID `json:"user_id"`
+
+	// NodeId optionally names the node to resolve the user from when it is
+	// unknown locally (e.g. the node that produced the list the user came from).
+	NodeId string `json:"node_id,omitempty"`
 }
 
 // LikeEvent defines model for LikeEvent.

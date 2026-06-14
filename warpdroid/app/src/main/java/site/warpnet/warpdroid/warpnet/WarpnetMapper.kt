@@ -52,6 +52,8 @@ object WarpnetMapper {
         followersCount = followersCount.toInt(),
         followingCount = followingsCount.toInt(),
         statusesCount = tweetsCount.toInt(),
+        network = network,
+        nodeId = nodeId,
     )
 
     fun WarpnetUser.toTimelineUser(): TimelineUser = TimelineUser(

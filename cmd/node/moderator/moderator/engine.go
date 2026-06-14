@@ -36,7 +36,7 @@ import (
 )
 
 func init() {
-	log.Infoln("moderator node: initializing")
+	log.Infof("moderator node: initializing, path: %s", config.Config().Node.Moderator.Path)
 	go func() {
 		defer close(engineReadyChan)
 		select {

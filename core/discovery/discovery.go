@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/backoff"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -312,34 +313,38 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	isRepeatable, err := s.challenger.Challenge(
-		s.node.Peerstore().PubKey(pi.ID),
-		s.getChallengeLevel(pi.ID),
-		s.requestChallenge(pi.ID),
-	)
-	if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
-		log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
-		if info.Reachability == warpnet.ReachabilityPublic {
-			// NEVER block relay nodes
+	// The ActivityPub gateway is not a Warpnet-codebase node and serves no
+	// challenge route — exclude it from the challenge, like alias peers.
+	if pi.ID.String() != mastodon.GatewayNodeID { //nolint:nestif
+		isRepeatable, err := s.challenger.Challenge(
+			s.node.Peerstore().PubKey(pi.ID),
+			s.getChallengeLevel(pi.ID),
+			s.requestChallenge(pi.ID),
+		)
+		if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
+			log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
+			if info.Reachability == warpnet.ReachabilityPublic {
+				// NEVER block relay nodes
+				return
+			}
+			if isRepeatable {
+				_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
+			} else {
+				// reset block time
+				_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
+				_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
+			}
+			s.node.Peerstore().RemovePeer(pi.ID)
+			s.node.SetMinNodePriority(pi.ID)
+			s.m.PushStatusOffline(pi.ID.String())
 			return
 		}
-		if isRepeatable {
-			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
-		} else {
-			// reset block time
-			_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
-			_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
+		if err != nil {
+			log.Errorf(
+				"discovery: source '%s': failed to request challenge for peer %s: %v",
+				peer.Source, pi.ID, err)
+			return
 		}
-		s.node.Peerstore().RemovePeer(pi.ID)
-		s.node.SetMinNodePriority(pi.ID)
-		s.m.PushStatusOffline(pi.ID.String())
-		return
-	}
-	if err != nil {
-		log.Errorf(
-			"discovery: source '%s': failed to request challenge for peer %s: %v",
-			peer.Source, pi.ID, err)
-		return
 	}
 
 	s.m.PushStatusOnline(pi.ID.String())

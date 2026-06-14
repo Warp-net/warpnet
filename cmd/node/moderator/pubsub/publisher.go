@@ -95,17 +95,6 @@ func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body an
 	return g.pubsub.Publish(msg, topicName)
 }
 
-// SubscribeReports starts listening on the global reports topic. The
-// handler receives one ReportEvent per gossip message; the underlying
-// envelope (event.Message) is unwrapped here so the moderator only
-// deals with domain payloads.
-//
-// The reports topic is open — anyone can publish — so unlike normal
-// stream traffic this path doesn't go through AuthMiddleware. We
-// verify the envelope's libp2p signature against a public key derived
-// from msg.NodeId before handing the payload on. Anything that fails
-// to verify is dropped silently so a malicious peer cannot make us
-// waste cycles or pollute logs by spamming bogus reports.
 func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) error {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")

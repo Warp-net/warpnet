@@ -316,6 +316,42 @@
                             android:textSize="?attr/tweet_text_medium" />
                     </LinearLayout>
 
+                    <LinearLayout
+                        android:id="@+id/accountNetworkWarning"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="8dp"
+                        android:background="@drawable/media_warning_bg"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:padding="12dp"
+                        android:visibility="gone"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@id/accountFollowing"
+                        tools:visibility="visible">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginEnd="10dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_error_24dp"
+                            app:tint="?android:textColorSecondary" />
+
+                        <TextView
+                            android:id="@+id/accountNetworkWarningText"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hyphenationFrequency="full"
+                            android:lineSpacingMultiplier="1.1"
+                            android:textColor="?android:textColorSecondary"
+                            android:textSize="?attr/tweet_text_medium"
+                            tools:text="You are leaving the trusted Warpnet zone. This profile is bridged from mastodon." />
+                    </LinearLayout>
+
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <!-- correct size and color will be set programmatically -->

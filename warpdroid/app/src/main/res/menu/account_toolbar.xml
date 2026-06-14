@@ -31,6 +31,10 @@
         android:title="@string/action_block"
         app:showAsAction="never" />
 
+    <item android:id="@+id/action_report"
+        android:title="@string/action_report"
+        app:showAsAction="never" />
+
     <item android:id="@+id/action_add_or_remove_from_list"
         android:title="@string/action_add_or_remove_from_list"
         app:showAsAction="never" />

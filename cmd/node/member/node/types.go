@@ -32,7 +32,6 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
-	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
@@ -150,11 +149,4 @@ type StatsStorer interface {
 	Decrement(key ds.Key) error
 	GetAggregatedStat(key ds.Key) (uint64, error)
 	Close() error
-}
-
-type PseudoStreamer interface {
-	ID() warpnet.WarpPeerID
-	IsMastodonID(id warpnet.WarpPeerID) bool
-	Addrs() []warpnet.WarpAddress
-	Route(r stream.WarpRoute, data any) (_ []byte, err error)
 }

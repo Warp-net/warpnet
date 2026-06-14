@@ -279,11 +279,12 @@ export const warpnetService = {
         } catch (e) {}
     },
 
-    async getProfile(userId) {
+    async getProfile(userId, nodeId) {
         const request = {
             path: PUBLIC_GET_USER,
             body: {
                 user_id: userId,
+                ...(nodeId ? {node_id: nodeId} : {}),
             },
         }
 
@@ -1261,7 +1262,7 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async getReplies({rootId, parentId, cursorReset}) {
+    async getReplies({rootId, parentId, rootUserId, cursorReset}) {
         let cursor = this.getCursor('replies')
         if (cursorReset) {
             cursor = ''
@@ -1277,6 +1278,7 @@ export const warpnetService = {
                 parent_id: parentId,
                 limit: defaultLimit,
                 cursor: cursor,
+                ...(rootUserId ? {root_user_id: rootUserId} : {}),
             },
         }
 

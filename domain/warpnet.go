@@ -174,7 +174,7 @@ func (t *Tweet) IsModerated() bool {
 
 type ModelType string
 
-const LLAMA2 ModelType = "llama2"
+const LLAMAGuard3 ModelType = "LlamaGuard3"
 
 // TweetEdit is an immutable revision row. Tweets are mutated in-place
 // (Tweet.Text rewritten) and a TweetEdit is appended for each edit so

@@ -303,26 +303,29 @@ func StreamDeleteReplyHandler(
 	}
 }
 
-// StreamGetRepliesHandler answers /public/get/replies requests.
-//
-// ev.RootId is the root tweet of the thread; ev.ParentId is the parent
-// TWEET id selecting which subtree of replies to return (NOT a user id —
-// it gets compared against tweet/reply ids in the repo). Clients send
-// an empty ParentId for "give me the top-level replies of the thread",
-// which we normalise to RootId so the repo lookup matches the first
-// tier of replies. Replies are served straight from the local store:
-// any reply we know about (because the author's node pushed it to us
-// via gossip, or because we cached an earlier fetch) is returned;
-// otherwise the response is empty.
-//
-// Note on routing: this used to try to forward the request to the
-// "parent user" by treating ParentId as a user id and looking it up in
-// userRepo. That can't work — ParentId is a tweet id — so the lookup
-// always returned ErrUserNotFound and we silently fell back to local
-// storage anyway. The dead code is removed; proper remote-fetch
-// routing would need a RootUserId in GetAllRepliesEvent to identify the
-// author of the root tweet, which clients don't currently send.
-func StreamGetRepliesHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
+// forwardReplies asks the root tweet author's home node for the thread's
+// replies when that node is not this one. ok=false means handle locally.
+func forwardReplies(userRepo ReplyUserFetcher, streamer ReplyStreamer, ev event.GetAllRepliesEvent) (event.RepliesResponse, bool) {
+	if ev.RootUserId == "" {
+		return event.RepliesResponse{}, false
+	}
+	author, err := userRepo.Get(string(ev.RootUserId))
+	if err != nil || author.NodeId == "" || author.NodeId == streamer.NodeInfo().ID.String() {
+		return event.RepliesResponse{}, false
+	}
+	data, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_REPLIES, ev)
+	if err != nil {
+		log.Errorf("get replies: forward to %s: %v", author.NodeId, err)
+		return event.RepliesResponse{}, false
+	}
+	var resp event.RepliesResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return event.RepliesResponse{}, false
+	}
+	return resp, true
+}
+
+func StreamGetRepliesHandler(repo ReplyStorer, userRepo ReplyUserFetcher, streamer ReplyStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllRepliesEvent
 		err := json.Unmarshal(buf, &ev)
@@ -332,9 +335,8 @@ func StreamGetRepliesHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
 		if ev.RootId == "" {
 			return nil, warpnet.WarpError("empty root id")
 		}
-		// Top-level replies on a thread have no parent — clients send an
-		// empty parent_id in that case. Treat it as the root itself so
-		// the repo returns the first-tier replies hanging off RootId.
+
+		// Empty parent_id means top-level replies: treat it as the root.
 		if ev.ParentId == "" {
 			ev.ParentId = ev.RootId
 		}
@@ -345,6 +347,12 @@ func StreamGetRepliesHandler(repo ReplyStorer) warpnet.WarpHandlerFunc {
 		replies, cursor, err := repo.GetRepliesTree(rootId, parentId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
+		}
+		// Nothing locally: try the root author's home node.
+		if len(replies) == 0 {
+			if resp, ok := forwardReplies(userRepo, streamer, ev); ok {
+				return resp, nil
+			}
 		}
 		return event.RepliesResponse{
 			Cursor:  cursor,

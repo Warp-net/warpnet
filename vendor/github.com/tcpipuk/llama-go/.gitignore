@@ -1,0 +1,27 @@
+# build files
+/binding.o
+/build
+/ggml-metal.metal
+prepare
+wrapper.o
+cgo_headers/.vendored
+
+# build artefacts (static and shared)
+lib*.a
+lib*.so
+lib*.so.*
+lib*.dylib
+
+# build output directories
+/build-output
+
+# just in case
+.DS_Store
+.idea
+.vscode
+Thumbs.db
+CLAUDE.md
+
+# local testing files
+ggllm-test-model.bin
+*.gguf

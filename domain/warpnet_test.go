@@ -45,7 +45,3 @@ func TestModerationObjectType_String(t *testing.T) {
 	assert.Equal(t, "image content", ModerationImageType.String())
 	assert.Equal(t, "unknown", ModerationObjectType(99).String())
 }
-
-func TestModelType(t *testing.T) {
-	assert.Equal(t, ModelType("llama2"), LLAMA2)
-}

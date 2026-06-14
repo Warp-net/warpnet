@@ -18,7 +18,7 @@ relay-main:
 	go run cmd/node/relay/main.go --node.network testnet --node.print-psk
 
 run-moderator:
-	CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete" go run -tags=llama cmd/node/moderator/main.go --node.network testnet --node.port 4002 --node.seed moderatorlocalhost --node.moderator.modelpath $(HOME)/.warpdata/llama-2-7b-chat.Q8_0.gguf 2>/dev/null
+	CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete" go run -tags=llama cmd/node/moderator/main.go --node.network testnet --node.port 4002 --node.seed moderatorlocalhost 2>/dev/null
 
 tests:
 	CGO_ENABLED=0 go test -short -p 8 -v ./...
@@ -61,9 +61,6 @@ build-windows:
 
 download-golang-armv6:
 	wget -c https://go.dev/dl/go1.26.0.linux-armv6l.tar.gz
-
-gen-aar:
-	cd warpdroid/node && ./build-native.sh && cd -
   
 .PHONY: frontend
 frontend:

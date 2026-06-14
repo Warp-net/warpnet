@@ -2,7 +2,7 @@ FROM ubuntu:24.04 AS builder
 
 RUN apt update && apt install -y git curl tar build-essential ca-certificates
 
-ENV GO_VERSION=1.26.0
+ENV GO_VERSION=1.26.3
 RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -o go.tar.gz \
     && tar -C /usr/local -xzf go.tar.gz \
     && rm go.tar.gz

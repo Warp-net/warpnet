@@ -1,0 +1,26 @@
+# Pre-built llama-go static archives, packaged for COPY --from= use.
+#
+# This Dockerfile takes already-built artifacts from the build context (produced
+# by the CI test job, which runs `make libbinding.a` in static mode) and packs
+# them into a scratch image. No compilation happens here — the test job has
+# already done it, and the same artifacts that passed the tests are what get
+# shipped.
+#
+# Layout:
+#   /libs/libbinding.a            — static wrapper (link-time)
+#   /libs/lib*.a                  — llama.cpp static archives (link-time)
+#   /headers/wrapper.h            — CGO type declarations (link-time)
+#
+# llama.cpp headers used by wrapper.cpp ship inside the llama-go Go module
+# itself (cgo_headers/), so consumers don't need them here.
+
+FROM scratch
+COPY libbinding.a                  /libs/
+COPY libllama.a                    /libs/
+COPY libllama-common.a             /libs/
+COPY libllama-common-base.a        /libs/
+COPY libggml.a                     /libs/
+COPY libggml-base.a                /libs/
+COPY libggml-cpu.a                 /libs/
+COPY libggml-cuda.a                /libs/
+COPY wrapper.h                     /headers/
