@@ -170,12 +170,25 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 		return fmt.Errorf("moderator: fetch tweet %s: %w", *ev.ObjectID, err)
 	}
 
+	// The target node serialises a failed fetch (tweet not found, moderated,
+	// offline-forward) as an event.ResponseError envelope, not a transport
+	// error. Detect it so it isn't silently parsed into a zero-value tweet.
+	var respErr event.ResponseError
+	if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
+		log.Warnf("moderator: fetch tweet %s failed: %s", *ev.ObjectID, respErr.Message)
+		return nil
+	}
+
 	var tweet domain.Tweet
 	if err := json.Unmarshal(data, &tweet); err != nil {
 		return fmt.Errorf("moderator: unmarshal tweet: %w", err)
 	}
-	if tweet.Id == "" || tweet.Text == "" {
-		log.Warn("moderator: empty tweet")
+	if tweet.Id == "" {
+		log.Warnf("moderator: tweet %s not found on node %s", *ev.ObjectID, ev.TargetNodeID)
+		return nil
+	}
+	if tweet.Text == "" {
+		log.Infof("moderator: tweet %s has no text to moderate", tweet.Id)
 		return nil
 	}
 
@@ -210,11 +223,18 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 		return fmt.Errorf("fetch user %s: %w", ev.TargetUserID, err)
 	}
 
+	var respErr event.ResponseError
+	if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
+		log.Warnf("moderator: fetch user %s failed: %s", ev.TargetUserID, respErr.Message)
+		return nil
+	}
+
 	var user domain.User
 	if err := json.Unmarshal(data, &user); err != nil {
-		return fmt.Errorf("unmarshal user: %w", err)
+		return fmt.Errorf("moderator: unmarshal user: %w", err)
 	}
 	if user.Id == "" {
+		log.Warnf("moderator: user %s not found on node %s", ev.TargetUserID, ev.TargetNodeID)
 		return nil
 	}
 
