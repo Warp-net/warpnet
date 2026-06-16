@@ -188,6 +188,8 @@ If you want to trace a feature end to end, read **`event/paths.go`** (the route)
 
 **This is the part that matters most, and the part where help is most wanted.** Warpnet is real, working, and ambitious — and right now it's carried by a very small team. If decentralized systems, libp2p, or Go are your thing, there's a lot of room here to own a meaningful piece.
 
+👉 **New here? Read the [Contributor Onboarding Guide](docs/ONBOARDING.md) first.** It's the complete, end-to-end walkthrough: the philosophy, the architecture, how to build and run every node role, the desktop/Android/business clients, and how to ship your first feature.
+
 ### Good places to start
 
 - Browse [issues labeled **`good first issue`**](https://github.com/Warp-net/warpnet/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — small, self-contained tasks with clear boundaries.
