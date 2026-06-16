@@ -476,6 +476,17 @@ cd cmd/node/member && wails build -devtools -tags webkit2_41
 > production build only reflects UI changes after you rebuild the dist **and**
 > rebuild the binary. Skip `make frontend` and you’ll run a stale UI.
 
+> [!NOTE]
+> **`frontend/dist` is committed to the repository — on purpose, against the
+> usual convention.** Build output is normally git-ignored, but here the
+> checked-in `dist/` is exactly what `//go:embed frontend/dist` bakes into the
+> binary at `go build` time. Since `go build` never runs npm, committing `dist/`
+> is what lets *anyone* — CI, `go install`, or a contributor who only touches Go
+> — produce a working binary with a real UI **without a Node toolchain at all**.
+> This is also what makes the single self-contained binary possible (see §1). The
+> trade-off: when you change the UI you must rebuild **and commit**
+> `frontend/dist` alongside your source, so the embedded copy stays in sync.
+
 **C. In a plain browser via a business node (no GTK/Wails needed):**
 
 ```bash
