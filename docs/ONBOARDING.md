@@ -70,6 +70,31 @@ transport is encrypted with the **Noise** protocol, content propagates **peer to
 peer**, and your data lives in an embedded datastore on *your* machine. There is
 nothing in the middle to capture, subpoena, or switch off.
 
+### One binary *is* the whole product
+
+Warpnet ships as a **single, self-contained executable — and it always will.**
+Everything is baked into that one file: the node engine, the entire Vue UI
+(embedded via `//go:embed frontend/dist`), the icon, the version, and even the
+**full Go source tree** — embedded so the binary can hash and attest to its own
+code (the "codebase hash" used during device pairing, §12). There is no separate
+frontend to deploy, no runtime assets to fetch, no dependency to install
+alongside it. You run one file and you *are* a full node with a UI.
+
+**This single-binary form is the single most important way Warpnet is
+distributed — by design, not by accident.** A lone executable needs no app
+store, no installer, no website, and no server to pull anything from. It can be
+checksummed, mirrored, copied to a USB stick, sideloaded, or handed
+peer-to-peer from one person to the next. If a download page or an app store is
+blocked, anyone who already has the file can simply give it to you — the same
+resilience the network itself is built on. Packaging such as the Snap (§5) is
+**only a convenience wrapper** around that one binary: delivery channels are
+replaceable, but the single-file form is not.
+
+A censorship-resistant *network* whose *client* could be choked off at an app
+store or a download server would be resistant in name only. Keeping the whole
+product in one portable, verifiable file closes that gap — which is exactly why
+it is the canonical artifact every other distribution method just wraps.
+
 **Why this matters for you as a contributor:** almost every design decision in
 the codebase follows from "there is no server". No server means no central
 database (so storage is local and per-node), no trusted endpoint (so every
@@ -233,6 +258,14 @@ warpnet
 ```
 
 [Snap Store →](https://snapcraft.io/warpnet)
+
+> [!IMPORTANT]
+> The Snap is just **one convenient channel**. The canonical artifact is the
+> **single self-contained binary itself** (see
+> [One binary *is* the whole product](#one-binary-is-the-whole-product)) — you
+> can run it directly, verify its checksum, mirror it, sideload it, or share it
+> peer-to-peer with no store and no server involved. This is Warpnet's primary,
+> most resilient distribution method; every other channel just wraps that file.
 
 ### Platform support
 
