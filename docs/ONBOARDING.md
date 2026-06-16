@@ -1,8 +1,8 @@
 # Warpnet Contributor Onboarding
 
-> A complete, end-to-end guide for new contributors: the *why* behind every
-> piece, the *how it works*, the *how to run it*, and the *how to change it* —
-> across the whole Warpnet ecosystem.
+**A complete, end-to-end guide for new contributors** — the *why* behind every
+piece, the *how it works*, the *how to run it*, and the *how to change it*,
+across the whole Warpnet ecosystem.
 
 This document is longer than a typical README on purpose. It is meant to take
 you from "I just cloned the repo" to "I understand *why* the architecture looks
@@ -147,6 +147,7 @@ different build of the same codebase.
 | **business** | `cmd/node/business/main.go` | A headless node that serves the same UI to a **browser** over an encrypted WebSocket (for server/hosted deployments). | no special CGO/tags (plain `go build`) |
 | **echo** | `cmd/node/member/echo-member.go` | A headless "bot" member node with an in-memory store, to populate a local network and for tests. | `CGO_ENABLED=0`, `-tags echo` |
 
+> [!NOTE]
 > **Why these CGO settings?** (These are taken straight from the `Dockerfile.*`
 > for each role, so they match what ships.) The **member** node links GTK/WebKit
 > for the Wails desktop UI → needs cgo. The **moderator** links llama.cpp →
@@ -156,6 +157,7 @@ different build of the same codebase.
 > all — it’s an ordinary `go build ./cmd/node/business` with no cgo libraries
 > required.
 
+> [!TIP]
 > **Mental model:** *relays* are thin signposts, *members* are the network
 > itself, *moderators* are optional opt-in referees, *business* is "Warpnet on a
 > server, used from a browser", and *echo* is a test bot. Only **member** has a
@@ -387,6 +389,7 @@ You almost never think about libp2p in the frontend. You call **one function**,
    The request envelope is `{ path, body, message_id, node_id, timestamp }` and
    the response is `{ body, … }` — identical in both transports.
 
+> [!NOTE]
 > **Why a single `Call` with two backends?** Because the UI must run unchanged
 > in two very different places: embedded in a desktop binary (where Go is a
 > function call away) and in a remote browser (where the node is across a
@@ -432,7 +435,8 @@ cd cmd/node/member && wails build -devtools -tags webkit2_41
 ./build/bin/warpnet --node.network testnet
 ```
 
-> **Important — why the extra `make frontend` step:** `wails.json` has
+> [!IMPORTANT]
+> **Why the extra `make frontend` step:** `wails.json` has
 > **`skipfrontend: true`**, so `wails build` does **not** compile the Vue app
 > for you. And the binary doesn’t use Wails’ own asset bundling — it embeds
 > `frontend/dist` via `//go:embed frontend/dist` in `embedded.go`. So a
@@ -686,6 +690,7 @@ make echo-main     # echo bot, port 4002, database.dir "echo"
 A realistic local swarm is **one relay + one member + a few echo bots**: the
 relay provides discovery, the echo bots give the member peers to interact with.
 
+> [!WARNING]
 > **Gotcha:** the desktop app holds a single-instance lock (`net.warpnet.app`)
 > and BadgerDB takes an exclusive lock per data directory. If a second GUI
 > window refuses to open, that’s why — populate the network with headless
@@ -951,6 +956,7 @@ if likedUser.NodeId != streamer.NodeInfo().ID.String() {
    incl. the `// SPDX-License-Identifier: AGPL-3.0-or-later` line). Run
    `make tests`, `go vet ./...`, `golangci-lint run`.
 
+> [!TIP]
 > There’s a project skill, **`warpnet-add-handler`**, that encodes exactly this
 > cross-layer flow if you’re working with the agent tooling.
 
