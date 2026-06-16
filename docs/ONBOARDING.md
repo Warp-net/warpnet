@@ -512,15 +512,87 @@ types (so payloads are hex/JSON strings):
 | `RefreshPeerAddrs(addrs)` | Update the fat node’s addresses after a pairing handshake. |
 | `Disconnect()`, `Shutdown()` | Tear down. |
 
-### The thin-client / pairing model
+### Pairing a phone with a fat node — and why it works this way
 
-In the project’s glossary, a phone is a **thin client / alias / device** that
-**pairs** with a **fat (member) node**. The mobile node opens libp2p streams to
-the fat node (e.g. `PRIVATE_POST_PAIR` to pair), and the camouflage transport
-(see §14) lets it dial over disguised TLS on hostile mobile networks. The Kotlin
-side keeps `ProtocolIds.kt` and the Moshi DTOs in lockstep with Go’s
-`event/paths.go` and `domain/` types — a drift there shows up as blank fields on
-the device (see §16).
+In the glossary, a phone is a **thin client / alias / device**; the computer
+node is the **fat node / backend**. Rather than make the phone a full,
+always-online peer, Warpnet **pairs** it to a fat node and lets the phone act
+*through* that node.
+
+**Why pair at all?** A phone is the worst possible P2P peer: the OS kills
+background apps, the radio sleeps, battery and storage are scarce, and its IP
+changes constantly. It cannot reliably stay online to hold canonical data or
+keep DHT/relay connections alive. The fat node runs on an always-on computer —
+it holds the account’s data and keeps the connections up — and the phone becomes
+a lightweight remote for it. The phone is an **alias/device** of the account
+that lives on the fat node, not a second copy of it.
+
+**The QR carries an `AuthNodeInfo`, never a private key.** To link the two
+devices, the fat node renders its `AuthNodeInfo` as a **QR code**. That struct
+(`domain/warpnet.go`) carries everything the phone needs to find, join, and be
+authorized by the node:
+
+| Field | Why it’s in the QR |
+|---|---|
+| `token` | A secret minted by the fat node — the **pairing authorization** (see below). |
+| `psk` | The private-network key, so the phone can speak to the network at all. |
+| `node_id` | The fat node’s **peer ID**, pinned during dialing to prevent impersonation. |
+| `addresses` / `bootstrap_peers` | Where to reach the fat node and the network. |
+| `network`, `user_id`, `role` | Which network/account the device is joining. |
+
+Because `AuthNodeInfo` is bigger than a QR’s byte mode likes, the desktop
+gzip-compresses it and Base45-encodes it (`frontend/src/lib/qr-payload.js`); the
+phone reverses that with `QrPayloadCodec`/`QrCodeAnalyzer`. **Crucially, the fat
+node’s private key never leaves the desktop** — the phone generates *its own*
+libp2p identity.
+
+**The handshake** (`PairingCoordinator` on the phone, `core/handler/pair.go` on
+the node):
+
+1. Phone scans the QR, decodes and validates the `AuthNodeInfo`.
+2. Phone derives **its own** Ed25519 identity — deterministically from device
+   info plus the fat node’s pinned peer ID, so the same phone always re-pairs to
+   the same node with the same key (and pairing to a *different* node rotates the
+   key).
+3. Phone dials the node using addresses pinned with the advertised peer ID
+   (`<addr>/p2p/<node_id>`). The **Noise handshake aborts if the remote’s key
+   doesn’t match** the pinned ID — so nobody can impersonate the fat node.
+4. Phone sends `PRIVATE_POST_PAIR` (`/private/post/admin/pair/0.0.0`) carrying
+   the payload, which includes the **token**.
+5. The node accepts **only if the token matches its own**, then records the
+   phone’s peer ID as an authorized `Device` and replies with its **current
+   public addresses**. The phone persists the pairing only on a
+   `{"code":0,"message":"Accepted"}` reply.
+
+**Why each piece is there:**
+
+- **Own identity, not the master key** — a QR can be photographed, so the root
+  private key must never be in it. The phone is a *separate, revocable* peer:
+  lose the phone and the fat node simply forgets that `Device`; the account’s
+  master key was never exposed.
+- **Token = authorization** — possessing it proves the pairer physically saw
+  *this* node’s screen. The node refuses any pair whose token doesn’t match, so a
+  random peer can’t pair itself in.
+- **PSK = network admission** — without the private-network key the phone can’t
+  talk to the network at all; the QR hands it over out-of-band.
+- **Peer-ID pinning = no MITM** — the dialed node must cryptographically prove it
+  owns the advertised peer ID during the Noise handshake.
+- **QR = a local, serverless, out-of-band channel** — pairing data crosses an
+  air-gap (screen → camera) with no server and no typing, which fits Warpnet’s
+  "no middle" stance; hence the gzip+Base45 packing to make it fit.
+
+**Staying paired.** A home fat node’s public address drifts (dynamic IP, NAT), so
+a background `PairRefreshWorker` periodically refreshes it: every successful pair
+response returns the node’s current addresses, which the bridge merges into the
+peerstore (`RefreshPeerAddrs`) so the phone can reconnect.
+
+After pairing, the phone opens libp2p streams to the fat node using the shared
+route strings, **signing each request with its own key** (`Sign`) so the node’s
+auth middleware verifies it against the peer ID it sees on the stream. On hostile
+mobile networks the camouflage transport (§14) disguises those connections as
+HTTPS. As always, the Kotlin `ProtocolIds.kt` and Moshi DTOs must stay in
+lockstep with Go’s `event/paths.go` and `domain/` — drift shows up as blank
+fields (§16).
 
 ### How to build it
 
