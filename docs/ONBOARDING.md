@@ -1025,9 +1025,10 @@ frontend fixes, better error messages/docs, or running a public relay node.
 - **Codeberg mirror:** https://codeberg.org/Warpnet/warpnet
 - **Snap Store:** https://snapcraft.io/warpnet
 
-Warpnet is real, working, ambitious, and carried by a very small team. If
-decentralized systems, libp2p, or Go are your thing, there is a lot of room here
-to own a meaningful piece. Every contribution — code, docs, bug reports, or just
+Warpnet is real, working, ambitious — and built and maintained by a single
+person (one maintainer, no company, no team). If decentralized systems, libp2p,
+or Go are your thing, there is a huge amount of room here to own a meaningful
+piece, and your help has outsized impact. Every contribution — code, docs, bug reports, or just
 kicking the tyres on testnet — genuinely helps.
 
 **Built with Go, libp2p, Noise, and the conviction that a social network
