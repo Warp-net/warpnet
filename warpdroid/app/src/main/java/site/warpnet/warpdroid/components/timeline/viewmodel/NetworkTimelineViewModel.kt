@@ -77,7 +77,12 @@ class NetworkTimelineViewModel @Inject constructor(
     @OptIn(ExperimentalPagingApi::class)
     override val statuses = Pager(
         config = PagingConfig(
-            pageSize = LOAD_AT_ONCE
+            pageSize = LOAD_AT_ONCE,
+            // Pin initialLoadSize to one page; the Paging3 default of
+            // 3 * pageSize made the first load fan out into multiple
+            // back-to-back network pages, so the timeline felt like it
+            // loaded everything at once.
+            initialLoadSize = LOAD_AT_ONCE,
         ),
         pagingSourceFactory = {
             NetworkTimelinePagingSource(
