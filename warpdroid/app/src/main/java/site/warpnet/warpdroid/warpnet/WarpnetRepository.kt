@@ -5,6 +5,7 @@
  */
 package site.warpnet.warpdroid.warpnet
 
+import site.warpnet.warpdroid.cache.TtlLruCache
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Notification
@@ -1209,30 +1210,19 @@ class WarpnetRepository @Inject constructor(
 
     private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
-    private data class CachedUser(val user: WarpnetUser, val atMillis: Long)
-
     private suspend fun resolveUser(
         userId: String,
         cache: MutableMap<String, WarpnetUser>,
     ): WarpnetUser? {
         if (userId.isBlank()) return null
         cache[userId]?.let { return it }
-        // Process-wide profile cache (TTL'd, LRU-bounded) so author/follower
-        // lookups reuse results across pages and screens instead of re-paying
-        // a relay round-trip every time. Profiles change rarely; tweet stats
-        // are NOT cached here — they're fetched separately and churn.
-        val now = System.currentTimeMillis()
-        userCache[userId]?.let { cached ->
-            if (now - cached.atMillis < USER_CACHE_TTL_MILLIS) {
-                cache[userId] = cached.user
-                return cached.user
-            }
-            userCache.remove(userId) // drop the expired entry on access
-        }
-        return runCatching { getUser(userId) }.getOrNull()?.also {
-            cache[userId] = it
-            userCache[userId] = CachedUser(it, now)
-        }
+        // Reuse profiles across pages and screens via the shared cache so a
+        // follower/author lookup isn't a fresh relay round-trip every time.
+        // Tweet stats are NOT cached here — they're fetched separately and
+        // churn.
+        return userCache.getOrLoad(userId) {
+            runCatching { getUser(userId) }.getOrNull()
+        }?.also { cache[userId] = it }
     }
 
     /**
@@ -1273,29 +1263,15 @@ class WarpnetRepository @Inject constructor(
         return tail.takeIf { it.isNotBlank() }
     }
 
-    // Process-wide, TTL'd, size-bounded profile cache shared by every
-    // resolveUser call on this singleton. The access-ordered LinkedHashMap
-    // evicts least-recently-used entries once USER_CACHE_MAX_SIZE is hit, so
-    // browsing many users can't grow it without bound; it's wrapped in a
-    // synchronized map so concurrent hydration fan-outs (timeline authors,
-    // follower lists) can read/write without coordination. Expired entries
-    // are dropped on access in resolveUser.
-    private val userCache: MutableMap<String, CachedUser> = java.util.Collections.synchronizedMap(
-        object : LinkedHashMap<String, CachedUser>(64, 0.75f, true) {
-            override fun removeEldestEntry(eldest: Map.Entry<String, CachedUser>): Boolean =
-                size > USER_CACHE_MAX_SIZE
-        },
+    // Shared profile cache (see resolveUser). Profiles are slow-changing, so
+    // a 5-minute TTL trades a little staleness for a large drop in relay
+    // round-trips; the 256-entry LRU bound caps memory on low-end devices.
+    private val userCache = TtlLruCache<String, WarpnetUser>(
+        maxSize = 256,
+        ttlMillis = 5L * 60L * 1000L,
     )
 
     private companion object {
         const val TAG = "WarpnetRepository"
-
-        // Profiles are slow-changing; 5 minutes trades a little staleness
-        // for a large drop in relay round-trips on a high-latency link.
-        const val USER_CACHE_TTL_MILLIS = 5L * 60L * 1000L
-
-        // Cap memory on low-end devices: keep at most this many resolved
-        // profiles, evicting least-recently-used beyond it.
-        const val USER_CACHE_MAX_SIZE = 256
     }
 }
