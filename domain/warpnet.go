@@ -51,7 +51,7 @@ type AuthNodeInfo struct {
 	ID             string   `json:"node_id"`
 	Addresses      []string `json:"addresses"`
 	Role           string   `json:"role"`
-	BootstrapPeers []string `json:"bootstrap_peers"`
+	BootstrapPeers []string `json:"bootstrap_peers,omitempty"`
 	Network        string   `json:"network,omitempty"`
 }
 
