@@ -5,6 +5,7 @@
  */
 package site.warpnet.warpdroid.warpnet
 
+import site.warpnet.warpdroid.cache.TtlLruCache
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Notification
@@ -64,9 +65,11 @@ import site.warpnet.transport.dto.WarpnetUser
  * translations, polls, media uploads) are **not** exposed here — the
  * corresponding Warpdroid features are removed in Phase 5 rather than faked.
  *
- * Author lookups are resolved lazily via [resolveUser] with a per-call
- * cache, so a 40-tweet timeline from 3 distinct authors hits
- * `GET_USER` at most three times.
+ * Author lookups are resolved lazily via [resolveUser], which layers a
+ * per-call cache over a process-wide TTL'd [userCache]; a 40-tweet
+ * timeline from 3 distinct authors hits `GET_USER` at most three times,
+ * and repeat views across pages/screens reuse the cached profiles
+ * instead of re-paying a relay round-trip.
  */
 @OptIn(ExperimentalStdlibApi::class)
 @Singleton
@@ -159,10 +162,16 @@ class WarpnetRepository @Inject constructor(
     suspend fun getTimelineUser(userId: String): TimelineUser =
         getUser(userId).toTimelineUser()
 
-    private suspend fun getUser(userId: String): WarpnetUser {
+    private suspend fun getUser(userId: String, nodeId: String = ""): WarpnetUser {
+        // Fall back to the paired fat node as the resolution hint when the
+        // caller doesn't supply one, so every getUser path — timeline and
+        // quoted-tweet authors, ancestors, profile opens, follower lists —
+        // can resolve a user that isn't cached locally, not just the lists
+        // that thread a hint explicitly.
+        val hint = nodeId.ifEmpty { pairedNodeStore.load()?.pinnedPeerId.orEmpty() }
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_USER,
-            getUserAdapter.toJson(GetUserEvent(userId = userId)),
+            getUserAdapter.toJson(GetUserEvent(userId = userId, nodeId = hint)),
         )
         return userAdapter.fromJson(raw)
             ?: throw IllegalStateException("getUser returned empty body for $userId")
@@ -1201,10 +1210,19 @@ class WarpnetRepository @Inject constructor(
 
     private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
-    private suspend fun resolveUser(userId: String, cache: MutableMap<String, WarpnetUser>): WarpnetUser? {
+    private suspend fun resolveUser(
+        userId: String,
+        cache: MutableMap<String, WarpnetUser>,
+    ): WarpnetUser? {
         if (userId.isBlank()) return null
         cache[userId]?.let { return it }
-        return runCatching { getUser(userId) }.getOrNull()?.also { cache[userId] = it }
+        // Reuse profiles across pages and screens via the shared cache so a
+        // follower/author lookup isn't a fresh relay round-trip every time.
+        // Tweet stats are NOT cached here — they're fetched separately and
+        // churn.
+        return userCache.getOrLoad(userId) {
+            runCatching { getUser(userId) }.getOrNull()
+        }?.also { cache[userId] = it }
     }
 
     /**
@@ -1244,6 +1262,14 @@ class WarpnetRepository @Inject constructor(
         val tail = url.removePrefix(prefix)
         return tail.takeIf { it.isNotBlank() }
     }
+
+    // Shared profile cache (see resolveUser). Profiles are slow-changing, so
+    // a 5-minute TTL trades a little staleness for a large drop in relay
+    // round-trips; the 256-entry LRU bound caps memory on low-end devices.
+    private val userCache = TtlLruCache<String, WarpnetUser>(
+        maxSize = 256,
+        ttlMillis = 5L * 60L * 1000L,
+    )
 
     private companion object {
         const val TAG = "WarpnetRepository"

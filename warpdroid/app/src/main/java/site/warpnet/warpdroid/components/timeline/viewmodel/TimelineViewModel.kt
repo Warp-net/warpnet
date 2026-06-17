@@ -183,7 +183,11 @@ abstract class TimelineViewModel(
 
     companion object {
         private const val TAG = "TimelineVM"
-        internal const val LOAD_AT_ONCE = 30
+        // One network page = 20 tweets. Kept equal to the Pager's
+        // initialLoadSize so the first load fetches one page, not the
+        // Paging3 default of 3x (which made the timeline pull everything
+        // on a small network).
+        internal const val LOAD_AT_ONCE = 20
 
         fun filterContextMatchesKind(kind: Kind, filterContext: List<Filter.Kind>): Boolean =
             filterContext.contains(kind.toFilterKind())
