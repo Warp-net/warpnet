@@ -20,15 +20,25 @@ package site.warpnet.warpdroid.cache
  *    least-recently-used entry is dropped, bounding memory on low-end
  *    devices.
  *
- * All public operations synchronize on the instance, so concurrent
- * coroutines (e.g. a timeline hydration fan-out) can share one cache without
- * external coordination. [nowMillis] is injectable for deterministic tests.
+ * [get], [put], [invalidate], [clear] and [size] synchronize on the
+ * instance, so concurrent coroutines (e.g. a timeline hydration fan-out)
+ * can share one cache without external coordination. [getOrLoad] is a
+ * convenience that is intentionally NOT atomic: its [get] and [put] are
+ * each synchronized, but two callers racing on the same missing key may
+ * both run the loader (last write wins). That is fine for idempotent reads
+ * and avoids holding the lock across a suspending load. [nowMillis] is
+ * injectable for deterministic tests.
  */
 class TtlLruCache<K : Any, V : Any>(
     private val maxSize: Int,
     private val ttlMillis: Long,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
+    init {
+        require(maxSize > 0) { "maxSize must be > 0, was $maxSize" }
+        require(ttlMillis > 0) { "ttlMillis must be > 0, was $ttlMillis" }
+    }
+
     private data class Entry<V>(val value: V, val storedAt: Long)
 
     private val map = object : LinkedHashMap<K, Entry<V>>(16, 0.75f, true) {
@@ -51,7 +61,12 @@ class TtlLruCache<K : Any, V : Any>(
         map[key] = Entry(value, nowMillis())
     }
 
-    /** Return the cached value if fresh, otherwise compute, store and return it. */
+    /**
+     * Return the cached value if fresh, otherwise compute via [loader], store
+     * and return it. Not atomic: concurrent callers for the same missing key
+     * may each run [loader] and the last result wins. Suitable for idempotent
+     * loads (e.g. a profile fetch); don't use it for dedup-critical work.
+     */
     suspend fun getOrLoad(key: K, loader: suspend () -> V?): V? {
         get(key)?.let { return it }
         return loader()?.also { put(key, it) }
