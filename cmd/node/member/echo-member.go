@@ -177,6 +177,7 @@ func main() {
 	authInfo.ID = nodeId.String()
 	authInfo.Network = network
 	authInfo.Addresses = echoNode.NodeInfo().Addresses
+	authInfo.BootstrapPeers = config.Config().Node.Bootstrap
 
 	readyChan <- authInfo
 	echoFollowRepo := database.NewFollowRepo(db)
