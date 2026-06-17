@@ -85,7 +85,14 @@ data class WarpnetNotification(
 // -----------------------------------------------------------------------------
 
 @JsonClass(generateAdapter = true)
-data class GetUserEvent(@Json(name = "user_id") val userId: String)
+data class GetUserEvent(
+    @Json(name = "user_id") val userId: String,
+    // Optional hint naming the node to resolve the user from when it is
+    // unknown locally (the node that produced the list/timeline the user
+    // came from). Mirrors the Vue client's getProfile(id, nodeId). The
+    // backend tag is node_id,omitempty so an empty value is a no-op.
+    @Json(name = "node_id") val nodeId: String = "",
+)
 
 @JsonClass(generateAdapter = true)
 data class GetAllTweetsEvent(
