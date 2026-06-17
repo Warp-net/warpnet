@@ -129,8 +129,7 @@ jobs:
 
   # APK release runs in parallel with the desktop matrix. Same tag
   # input — both jobs attach their artifacts to the same GitHub
-  # Release. The same APK pipeline is also available standalone as
-  # release-warpdroid.yaml for APK-only / quick-test releases.
+  # Release.
   release-warpdroid:
     runs-on: ubuntu-latest
     permissions:
