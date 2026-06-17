@@ -64,9 +64,11 @@ import site.warpnet.transport.dto.WarpnetUser
  * translations, polls, media uploads) are **not** exposed here — the
  * corresponding Warpdroid features are removed in Phase 5 rather than faked.
  *
- * Author lookups are resolved lazily via [resolveUser] with a per-call
- * cache, so a 40-tweet timeline from 3 distinct authors hits
- * `GET_USER` at most three times.
+ * Author lookups are resolved lazily via [resolveUser], which layers a
+ * per-call cache over a process-wide TTL'd [userCache]; a 40-tweet
+ * timeline from 3 distinct authors hits `GET_USER` at most three times,
+ * and repeat views across pages/screens reuse the cached profiles
+ * instead of re-paying a relay round-trip.
  */
 @OptIn(ExperimentalStdlibApi::class)
 @Singleton
@@ -159,10 +161,10 @@ class WarpnetRepository @Inject constructor(
     suspend fun getTimelineUser(userId: String): TimelineUser =
         getUser(userId).toTimelineUser()
 
-    private suspend fun getUser(userId: String): WarpnetUser {
+    private suspend fun getUser(userId: String, nodeId: String = ""): WarpnetUser {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_USER,
-            getUserAdapter.toJson(GetUserEvent(userId = userId)),
+            getUserAdapter.toJson(GetUserEvent(userId = userId, nodeId = nodeId)),
         )
         return userAdapter.fromJson(raw)
             ?: throw IllegalStateException("getUser returned empty body for $userId")
@@ -621,7 +623,7 @@ class WarpnetRepository @Inject constructor(
             ),
         )
         val page = getFollowReqsRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
-        return hydrateAccounts(page.followerIds) to page.cursor
+        return hydrateAccounts(page.followerIds, pairedNodeStore.load()?.pinnedPeerId.orEmpty()) to page.cursor
     }
 
     suspend fun authorizeFollowRequest(userId: String, followerId: String) {
@@ -1045,7 +1047,7 @@ class WarpnetRepository @Inject constructor(
             getFollowersAdapter.toJson(GetFollowersEvent(userId = userId, cursor = cursor, limit = limit)),
         )
         val page = followersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
-        return hydrateAccounts(page.followers) to page.cursor
+        return hydrateAccounts(page.followers, pairedNodeStore.load()?.pinnedPeerId.orEmpty()) to page.cursor
     }
 
     suspend fun getFollowings(userId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
@@ -1054,7 +1056,7 @@ class WarpnetRepository @Inject constructor(
             getFollowingsAdapter.toJson(GetFollowingsEvent(userId = userId, cursor = cursor, limit = limit)),
         )
         val page = followingsRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
-        return hydrateAccounts(page.followings) to page.cursor
+        return hydrateAccounts(page.followings, pairedNodeStore.load()?.pinnedPeerId.orEmpty()) to page.cursor
     }
 
     /**
@@ -1099,10 +1101,10 @@ class WarpnetRepository @Inject constructor(
     // Internals
     // -----------------------------------------------------------------
 
-    private suspend fun hydrateAccounts(userIds: List<String>): List<TimelineUser> {
+    private suspend fun hydrateAccounts(userIds: List<String>, nodeId: String = ""): List<TimelineUser> {
         if (userIds.isEmpty()) return emptyList()
         val cache = mutableMapOf<String, WarpnetUser>()
-        return userIds.mapNotNull { id -> resolveUser(id, cache)?.toTimelineUser() }
+        return userIds.mapNotNull { id -> resolveUser(id, cache, nodeId)?.toTimelineUser() }
     }
 
     private suspend fun hydrateTweets(tweets: List<WarpnetTweet>): List<Tweet> = coroutineScope {
@@ -1138,8 +1140,11 @@ class WarpnetRepository @Inject constructor(
                 async { runCatching { getStatus(tweetId = qId, userId = qUser) }.getOrNull() }
             }
 
+        // Resolve unknown authors against the node that served this
+        // timeline (the paired fat node), mirroring the followers path.
+        val ownerNodeId = pairedNodeStore.load()?.pinnedPeerId.orEmpty()
         val baseTweets: suspend (WarpnetTweet) -> Tweet = { t ->
-            val base = t.toTweet(resolveUser(t.userId, cache))
+            val base = t.toTweet(resolveUser(t.userId, cache, ownerNodeId))
             attachQuote(t, base, quoteJobs)
         }
 
@@ -1201,10 +1206,30 @@ class WarpnetRepository @Inject constructor(
 
     private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
-    private suspend fun resolveUser(userId: String, cache: MutableMap<String, WarpnetUser>): WarpnetUser? {
+    private data class CachedUser(val user: WarpnetUser, val atMillis: Long)
+
+    private suspend fun resolveUser(
+        userId: String,
+        cache: MutableMap<String, WarpnetUser>,
+        nodeId: String = "",
+    ): WarpnetUser? {
         if (userId.isBlank()) return null
         cache[userId]?.let { return it }
-        return runCatching { getUser(userId) }.getOrNull()?.also { cache[userId] = it }
+        // Process-wide profile cache (TTL'd) so author/follower lookups
+        // reuse results across pages and screens instead of re-paying a
+        // relay round-trip every time. Profiles change rarely; tweet stats
+        // are NOT cached here — they're fetched separately and churn.
+        val now = System.currentTimeMillis()
+        userCache[userId]?.let { cached ->
+            if (now - cached.atMillis < USER_CACHE_TTL_MILLIS) {
+                cache[userId] = cached.user
+                return cached.user
+            }
+        }
+        return runCatching { getUser(userId, nodeId) }.getOrNull()?.also {
+            cache[userId] = it
+            userCache[userId] = CachedUser(it, now)
+        }
     }
 
     /**
@@ -1245,7 +1270,16 @@ class WarpnetRepository @Inject constructor(
         return tail.takeIf { it.isNotBlank() }
     }
 
+    // Process-wide, TTL'd profile cache shared by every resolveUser call on
+    // this singleton. Thread-safe so concurrent hydration fan-outs (timeline
+    // authors, follower lists) can read/write without coordination.
+    private val userCache = java.util.concurrent.ConcurrentHashMap<String, CachedUser>()
+
     private companion object {
         const val TAG = "WarpnetRepository"
+
+        // Profiles are slow-changing; 5 minutes trades a little staleness
+        // for a large drop in relay round-trips on a high-latency link.
+        const val USER_CACHE_TTL_MILLIS = 5L * 60L * 1000L
     }
 }
