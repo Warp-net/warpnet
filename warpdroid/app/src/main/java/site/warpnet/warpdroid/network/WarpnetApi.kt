@@ -23,6 +23,7 @@
  */
 package site.warpnet.warpdroid.network
 
+import android.net.Uri
 import android.util.Log
 import at.connyduck.calladapter.networkresult.NetworkResult
 import site.warpnet.warpdroid.components.filters.FilterExpiration
@@ -65,6 +66,10 @@ class WarpnetApi @Inject constructor(
     companion object {
         private const val TAG = "WarpnetApi"
 
+        // Matches database/local-store/db.go EndCursor: the sentinel the
+        // store returns once a prefix scan is exhausted.
+        private const val END_CURSOR = "end"
+
         private val STUB_BODY = "".toResponseBody("text/plain".toMediaTypeOrNull())
         private fun unsupported(name: String) =
             UnsupportedOperationException("WarpnetApi.$name has no Warpnet equivalent")
@@ -91,10 +96,17 @@ class WarpnetApi @Inject constructor(
      */
     private suspend fun <T> paginated(block: suspend () -> Pair<List<T>, String>): Response<List<T>> = try {
         val (items, nextCursor) = block()
-        val headers = if (nextCursor.isNotEmpty()) {
+        // The Warpnet store signals "no more pages" with the sentinel
+        // "end" (and "" when a node returns nothing). Don't synthesise a
+        // next link for either, or the RemoteMediator fires one more
+        // pointless APPEND that re-queries an exhausted cursor. The cursor
+        // is an opaque DB key that can contain URL-reserved characters
+        // ('/', '=', ...), so percent-encode it; the mediators read it back
+        // with Uri.getQueryParameter, which decodes automatically.
+        val headers = if (nextCursor.isNotEmpty() && nextCursor != END_CURSOR) {
             Headers.headersOf(
                 "Link",
-                "<${WarpnetMapper.FAKE_BASE_URL}/?max_id=$nextCursor>; rel=\"next\"",
+                "<${WarpnetMapper.FAKE_BASE_URL}/?max_id=${Uri.encode(nextCursor)}>; rel=\"next\"",
             )
         } else {
             Headers.headersOf()
