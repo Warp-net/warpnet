@@ -1,4 +1,4 @@
-name: build Warpdroid
+name: Tests / Build Warpdroid
 
 on:
   pull_request:
