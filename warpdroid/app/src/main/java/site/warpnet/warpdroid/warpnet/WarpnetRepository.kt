@@ -877,6 +877,7 @@ class WarpnetRepository @Inject constructor(
                 site.warpnet.transport.dto.PinTweetEvent(userId = userId, tweetId = tweetId),
             ),
         )
+        tweetCache.invalidate(tweetId)
     }
 
     suspend fun unpinTweet(userId: String, tweetId: String) {
@@ -886,6 +887,7 @@ class WarpnetRepository @Inject constructor(
                 site.warpnet.transport.dto.PinTweetEvent(userId = userId, tweetId = tweetId),
             ),
         )
+        tweetCache.invalidate(tweetId)
     }
 
     // -----------------------------------------------------------------
@@ -1295,8 +1297,9 @@ class WarpnetRepository @Inject constructor(
     // timestamps are effectively immutable, so we park the body to skip the
     // PUBLIC_GET_TWEET round-trip on re-opens (threads, ancestors, quote
     // sources). Invalidation strategy:
-    //  - editTweet / deleteStatus drop (and edit re-seeds) the entry, so a
-    //    local mutation never serves a stale snapshot;
+    //  - editTweet / deleteStatus / pinTweet / unpinTweet drop (and edit
+    //    re-seeds) the entry, so a local mutation never serves a stale
+    //    snapshot;
     //  - the TTL is a backstop for changes we don't observe locally (e.g. an
     //    edit made from another device);
     //  - the LRU bound caps memory on low-end devices.
