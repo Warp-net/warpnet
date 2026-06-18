@@ -207,12 +207,7 @@ class WarpnetRepository @Inject constructor(
     }
 
     suspend fun getStatus(tweetId: String, userId: String): Tweet {
-        val raw = client.request(
-            ProtocolIds.PUBLIC_GET_TWEET,
-            getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId)),
-        )
-        val tweet = tweetAdapter.fromJson(raw)
-            ?: throw IllegalStateException("getStatus returned empty body for $tweetId")
+        val tweet = fetchTweetRaw(tweetId, userId)
         val base = tweet.toTweet(author = runCatching { getUser(tweet.userId) }.getOrNull())
         val stats = runCatching { getTweetStats(tweetId = tweet.id, userId = userId) }.getOrNull()
         return if (stats == null) base else base.copy(
@@ -273,12 +268,46 @@ class WarpnetRepository @Inject constructor(
     }
 
     private suspend fun fetchTweetRaw(tweetId: String, userId: String): WarpnetTweet {
+        tweetCache.get(tweetId)?.let { return it }
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET,
             getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId)),
         )
-        return tweetAdapter.fromJson(raw)
+        val tweet = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("fetchTweetRaw returned empty body for $tweetId")
+        if (isAgedForCache(tweet)) tweetCache.put(tweetId, tweet)
+        return tweet
+    }
+
+    /**
+     * Only cache tweets last modified at least [TWEET_CACHE_MIN_AGE_MILLIS]
+     * ago. A recently created — or recently edited — tweet is still churning,
+     * so we always re-fetch its body live and never serve a stale snapshot.
+     * The gate keys on updated_at when present (falling back to created_at):
+     * an edit bumps updated_at, so a tweet created long ago but edited
+     * recently — including a remote edit we can't invalidate locally — stays
+     * out of the cache until it settles. A tweet without a parseable
+     * timestamp is treated as not cacheable. Only the tweet body is cached
+     * here — engagement stats churn and stay live (see getStatus /
+     * hydrateTweets, which fetch counts separately).
+     */
+    private fun isAgedForCache(tweet: WarpnetTweet): Boolean {
+        val lastModifiedMillis = (tweet.updatedAt ?: tweet.createdAt)
+            ?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+            ?: return false
+        return System.currentTimeMillis() - lastModifiedMillis >= TWEET_CACHE_MIN_AGE_MILLIS
+    }
+
+    /**
+     * Seed [tweetCache] with the aged bodies on a freshly fetched page so a
+     * later thread/ancestor open is a cache hit. Retweet wrappers are
+     * skipped: they reuse the original tweet's id but carry retweetedBy, so
+     * caching one would shadow the canonical body under the same key.
+     */
+    private fun seedTweetCache(tweets: List<WarpnetTweet>) {
+        tweets.forEach { t ->
+            if (t.retweetedBy.isNullOrEmpty() && isAgedForCache(t)) tweetCache.put(t.id, t)
+        }
     }
 
     // -----------------------------------------------------------------
@@ -309,6 +338,7 @@ class WarpnetRepository @Inject constructor(
             ProtocolIds.PRIVATE_DELETE_TWEET,
             deleteTweetAdapter.toJson(DeleteTweetEvent(tweetId = tweetId, userId = userId)),
         )
+        tweetCache.invalidate(tweetId)
     }
 
     // -----------------------------------------------------------------
@@ -667,8 +697,15 @@ class WarpnetRepository @Inject constructor(
                 ),
             ),
         )
-        return tweetAdapter.fromJson(raw)
+        val edited = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("editTweet returned empty body for $tweetId")
+        // The edit rewrote the body, so drop any cached snapshot of the old
+        // text. isAgedForCache keys on updated_at, so the just-edited tweet
+        // is "recently modified" and stays uncached until it settles for an
+        // hour; the guarded put is a no-op now but keeps the invariant local.
+        tweetCache.invalidate(tweetId)
+        if (isAgedForCache(edited)) tweetCache.put(tweetId, edited)
+        return edited
     }
 
     // -----------------------------------------------------------------
@@ -857,6 +894,7 @@ class WarpnetRepository @Inject constructor(
                 site.warpnet.transport.dto.PinTweetEvent(userId = userId, tweetId = tweetId),
             ),
         )
+        tweetCache.invalidate(tweetId)
     }
 
     suspend fun unpinTweet(userId: String, tweetId: String) {
@@ -866,6 +904,7 @@ class WarpnetRepository @Inject constructor(
                 site.warpnet.transport.dto.PinTweetEvent(userId = userId, tweetId = tweetId),
             ),
         )
+        tweetCache.invalidate(tweetId)
     }
 
     // -----------------------------------------------------------------
@@ -1116,6 +1155,10 @@ class WarpnetRepository @Inject constructor(
 
     private suspend fun hydrateTweets(tweets: List<WarpnetTweet>): List<Tweet> = coroutineScope {
         if (tweets.isEmpty()) return@coroutineScope emptyList()
+        // Warm the body cache with the aged tweets on this page (timeline,
+        // replies) so opening one as a thread/ancestor later is a cache hit;
+        // stats are still fetched live below.
+        seedTweetCache(tweets)
         val cache = mutableMapOf<String, WarpnetUser>()
         // Stats are fetched per tweet in parallel so a 30-tweet timeline
         // doesn't pay 30x serialised round-trip latency. Failures degrade
@@ -1271,7 +1314,27 @@ class WarpnetRepository @Inject constructor(
         ttlMillis = 5L * 60L * 1000L,
     )
 
+    // Tweet-body cache. Once a tweet is older than an hour its text and
+    // timestamps are effectively immutable, so we park the body to skip the
+    // PUBLIC_GET_TWEET round-trip on re-opens (threads, ancestors, quote
+    // sources). Invalidation strategy:
+    //  - editTweet / deleteStatus / pinTweet / unpinTweet drop (and edit
+    //    re-seeds) the entry, so a local mutation never serves a stale
+    //    snapshot;
+    //  - the TTL is a backstop for changes we don't observe locally (e.g. an
+    //    edit made from another device);
+    //  - the LRU bound caps memory on low-end devices.
+    // Stats are never cached here — see isAgedForCache.
+    private val tweetCache = TtlLruCache<String, WarpnetTweet>(
+        maxSize = 512,
+        ttlMillis = TWEET_CACHE_TTL_MILLIS,
+    )
+
     private companion object {
         const val TAG = "WarpnetRepository"
+        // Minimum tweet age before its body is eligible for caching.
+        const val TWEET_CACHE_MIN_AGE_MILLIS = 60L * 60L * 1000L
+        // Backstop expiry for cached tweet bodies.
+        const val TWEET_CACHE_TTL_MILLIS = 6L * 60L * 60L * 1000L
     }
 }
