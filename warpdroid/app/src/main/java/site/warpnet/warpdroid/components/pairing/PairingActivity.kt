@@ -52,6 +52,8 @@ class PairingActivity : AppCompatActivity() {
 
     private lateinit var previewView: PreviewView
     private lateinit var progress: View
+    private lateinit var progressBar: com.google.android.material.progressindicator.LinearProgressIndicator
+    private lateinit var progressCaption: android.widget.TextView
     private lateinit var messagePanel: View
     private lateinit var messageTitle: android.widget.TextView
     private lateinit var messageBody: android.widget.TextView
@@ -61,6 +63,9 @@ class PairingActivity : AppCompatActivity() {
     private lateinit var manualEntryLink: View
 
     private val validator by lazy { AuthNodeInfoValidator(moshi) }
+    private val startupProgress by lazy {
+        StartupProgressController(progressBar, progressCaption, STARTUP_STAGES)
+    }
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var analyzer: QrCodeAnalyzer? = null
     private var cameraProvider: ProcessCameraProvider? = null
@@ -80,6 +85,8 @@ class PairingActivity : AppCompatActivity() {
         setContentView(R.layout.activity_pairing)
         previewView = findViewById(R.id.previewView)
         progress = findViewById(R.id.progress)
+        progressBar = findViewById(R.id.progressBar)
+        progressCaption = findViewById(R.id.progressCaption)
         messagePanel = findViewById(R.id.messagePanel)
         messageTitle = findViewById(R.id.messageTitle)
         messageBody = findViewById(R.id.messageBody)
@@ -114,7 +121,9 @@ class PairingActivity : AppCompatActivity() {
     private suspend fun tryAutoPair(rawJson: String) {
         when (val result = validator.validate(rawJson)) {
             is ValidationResult.Valid -> {
+                startupProgress.start(lifecycleScope)
                 val outcome = pairingCoordinator.pair(result.authNodeInfo, result.rawJson)
+                finishStartupProgress(outcome)
                 progress.visibility = View.GONE
                 handleAutoPairOutcome(outcome)
             }
@@ -310,9 +319,25 @@ class PairingActivity : AppCompatActivity() {
         messagePanel.visibility = View.GONE
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
+            startupProgress.start(lifecycleScope)
             val outcome = pairingCoordinator.pair(info, rawJson)
+            finishStartupProgress(outcome)
             progress.visibility = View.GONE
             handleOutcome(outcome)
+        }
+    }
+
+    /**
+     * Snap the bar to 100% on a real successful pair; otherwise just stop the
+     * timed fill so the error panel replaces it. Completion is gated on the
+     * actual [PairingOutcome] so the UI never reaches 100% before the node is
+     * connected.
+     */
+    private suspend fun finishStartupProgress(outcome: PairingOutcome) {
+        if (outcome is PairingOutcome.Success) {
+            startupProgress.complete(R.string.warpnet_startup_stage_ready)
+        } else {
+            startupProgress.cancel()
         }
     }
 
@@ -347,5 +372,21 @@ class PairingActivity : AppCompatActivity() {
         connectButton.visibility = View.GONE
         cancelButton.text = getString(R.string.action_cancel)
         cancelButton.setOnClickListener { finish() }
+    }
+
+    private companion object {
+        // Caption sequence for the cold-start progress bar, ordered to mirror
+        // the libp2p node lifecycle (start → discover → handshake → pair →
+        // connected) followed by the first tweet-load cycle (profile →
+        // timeline) that runs once MainActivity takes over.
+        val STARTUP_STAGES = listOf(
+            R.string.warpnet_startup_stage_node,
+            R.string.warpnet_startup_stage_peers,
+            R.string.warpnet_startup_stage_handshake,
+            R.string.warpnet_startup_stage_pairing,
+            R.string.warpnet_startup_stage_connected,
+            R.string.warpnet_startup_stage_account,
+            R.string.warpnet_startup_stage_timeline,
+        )
     }
 }
