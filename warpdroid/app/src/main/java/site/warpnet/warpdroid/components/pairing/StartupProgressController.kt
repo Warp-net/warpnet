@@ -40,12 +40,20 @@ class StartupProgressController(
     @Volatile private var completed = false
     private var job: Job? = null
 
+    init {
+        require(stageCaptions.isNotEmpty()) { "stageCaptions must not be empty" }
+    }
+
     /** Begin the timed fill + caption stepping on [scope] (main dispatcher). */
     fun start(scope: CoroutineScope) {
+        // Cancel any prior run up-front so a quick retry can't leave two
+        // coroutines driving the same views.
+        job?.cancel()
         completed = false
         indicator.isIndeterminate = false
         indicator.max = 100
         indicator.progress = 0
+        caption.setText(stageCaptions.first())
         job = scope.launch {
             val totalTicks = (fillDurationMs / TICK_MS).toInt().coerceAtLeast(1)
             var lastStage = -1
