@@ -24,4 +24,17 @@
     <string name="warpnet_pair_session_expired">Session expired, please re-pair with your node.</string>
     <string name="warpnet_pair_forget">Forget paired node</string>
     <string name="warpnet_pair_auto_failed">Saved pairing is no longer accepted; please scan again.</string>
+
+    <!-- Cold-start progress stages. The libp2p node init + pairing has no
+         fine-grained progress, so these captions step a determinate bar
+         through the node lifecycle and the first tweet-load instead of an
+         indeterminate spinner that reads as "frozen". -->
+    <string name="warpnet_startup_stage_node">Starting your node…</string>
+    <string name="warpnet_startup_stage_peers">Discovering peers…</string>
+    <string name="warpnet_startup_stage_handshake">Securing the connection…</string>
+    <string name="warpnet_startup_stage_pairing">Pairing with your node…</string>
+    <string name="warpnet_startup_stage_connected">Connection established…</string>
+    <string name="warpnet_startup_stage_account">Loading your profile…</string>
+    <string name="warpnet_startup_stage_timeline">Loading your timeline…</string>
+    <string name="warpnet_startup_stage_ready">Ready</string>
 </resources>

@@ -149,15 +149,36 @@
         </LinearLayout>
     </ScrollView>
 
-    <ProgressBar
+    <LinearLayout
         android:id="@+id/progress"
-        style="?android:progressBarStyleLarge"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progressBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:indeterminate="false"
+            app:trackCornerRadius="4dp" />
+
+        <TextView
+            android:id="@+id/progressCaption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:text="@string/warpnet_startup_stage_node"
+            android:textAppearance="?attr/textAppearanceBodyMedium" />
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
