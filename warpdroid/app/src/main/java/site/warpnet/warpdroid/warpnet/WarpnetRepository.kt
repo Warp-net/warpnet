@@ -294,6 +294,18 @@ class WarpnetRepository @Inject constructor(
         return System.currentTimeMillis() - createdAtMillis >= TWEET_CACHE_MIN_AGE_MILLIS
     }
 
+    /**
+     * Seed [tweetCache] with the aged bodies on a freshly fetched page so a
+     * later thread/ancestor open is a cache hit. Retweet wrappers are
+     * skipped: they reuse the original tweet's id but carry retweetedBy, so
+     * caching one would shadow the canonical body under the same key.
+     */
+    private fun seedTweetCache(tweets: List<WarpnetTweet>) {
+        tweets.forEach { t ->
+            if (t.retweetedBy.isNullOrEmpty() && isAgedForCache(t)) tweetCache.put(t.id, t)
+        }
+    }
+
     // -----------------------------------------------------------------
     // Posting
     // -----------------------------------------------------------------
@@ -1138,6 +1150,10 @@ class WarpnetRepository @Inject constructor(
 
     private suspend fun hydrateTweets(tweets: List<WarpnetTweet>): List<Tweet> = coroutineScope {
         if (tweets.isEmpty()) return@coroutineScope emptyList()
+        // Warm the body cache with the aged tweets on this page (timeline,
+        // replies) so opening one as a thread/ancestor later is a cache hit;
+        // stats are still fetched live below.
+        seedTweetCache(tweets)
         val cache = mutableMapOf<String, WarpnetUser>()
         // Stats are fetched per tweet in parallel so a 30-tweet timeline
         // doesn't pay 30x serialised round-trip latency. Failures degrade
