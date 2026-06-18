@@ -207,12 +207,7 @@ class WarpnetRepository @Inject constructor(
     }
 
     suspend fun getStatus(tweetId: String, userId: String): Tweet {
-        val raw = client.request(
-            ProtocolIds.PUBLIC_GET_TWEET,
-            getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId)),
-        )
-        val tweet = tweetAdapter.fromJson(raw)
-            ?: throw IllegalStateException("getStatus returned empty body for $tweetId")
+        val tweet = fetchTweetRaw(tweetId, userId)
         val base = tweet.toTweet(author = runCatching { getUser(tweet.userId) }.getOrNull())
         val stats = runCatching { getTweetStats(tweetId = tweet.id, userId = userId) }.getOrNull()
         return if (stats == null) base else base.copy(
@@ -273,12 +268,30 @@ class WarpnetRepository @Inject constructor(
     }
 
     private suspend fun fetchTweetRaw(tweetId: String, userId: String): WarpnetTweet {
+        tweetCache.get(tweetId)?.let { return it }
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET,
             getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId)),
         )
-        return tweetAdapter.fromJson(raw)
+        val tweet = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("fetchTweetRaw returned empty body for $tweetId")
+        if (isAgedForCache(tweet)) tweetCache.put(tweetId, tweet)
+        return tweet
+    }
+
+    /**
+     * Only cache tweets that are at least [TWEET_CACHE_MIN_AGE_MILLIS] old.
+     * A fresh tweet is still being edited and engaged with, so we always
+     * re-fetch its body live and never serve a stale snapshot. A tweet
+     * without a parseable created_at is treated as not cacheable. Only the
+     * tweet body is cached here — engagement stats churn and stay live
+     * (see getStatus / hydrateTweets, which fetch counts separately).
+     */
+    private fun isAgedForCache(tweet: WarpnetTweet): Boolean {
+        val createdAtMillis = tweet.createdAt
+            ?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+            ?: return false
+        return System.currentTimeMillis() - createdAtMillis >= TWEET_CACHE_MIN_AGE_MILLIS
     }
 
     // -----------------------------------------------------------------
@@ -309,6 +322,7 @@ class WarpnetRepository @Inject constructor(
             ProtocolIds.PRIVATE_DELETE_TWEET,
             deleteTweetAdapter.toJson(DeleteTweetEvent(tweetId = tweetId, userId = userId)),
         )
+        tweetCache.invalidate(tweetId)
     }
 
     // -----------------------------------------------------------------
@@ -667,8 +681,14 @@ class WarpnetRepository @Inject constructor(
                 ),
             ),
         )
-        return tweetAdapter.fromJson(raw)
+        val edited = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("editTweet returned empty body for $tweetId")
+        // The edit rewrote the body, so drop any cached snapshot of the old
+        // text and replace it with the just-returned revision (creation time
+        // is unchanged, so an already-aged tweet stays cacheable).
+        tweetCache.invalidate(tweetId)
+        if (isAgedForCache(edited)) tweetCache.put(tweetId, edited)
+        return edited
     }
 
     // -----------------------------------------------------------------
@@ -1271,7 +1291,26 @@ class WarpnetRepository @Inject constructor(
         ttlMillis = 5L * 60L * 1000L,
     )
 
+    // Tweet-body cache. Once a tweet is older than an hour its text and
+    // timestamps are effectively immutable, so we park the body to skip the
+    // PUBLIC_GET_TWEET round-trip on re-opens (threads, ancestors, quote
+    // sources). Invalidation strategy:
+    //  - editTweet / deleteStatus drop (and edit re-seeds) the entry, so a
+    //    local mutation never serves a stale snapshot;
+    //  - the TTL is a backstop for changes we don't observe locally (e.g. an
+    //    edit made from another device);
+    //  - the LRU bound caps memory on low-end devices.
+    // Stats are never cached here — see isAgedForCache.
+    private val tweetCache = TtlLruCache<String, WarpnetTweet>(
+        maxSize = 512,
+        ttlMillis = TWEET_CACHE_TTL_MILLIS,
+    )
+
     private companion object {
         const val TAG = "WarpnetRepository"
+        // Minimum tweet age before its body is eligible for caching.
+        const val TWEET_CACHE_MIN_AGE_MILLIS = 60L * 60L * 1000L
+        // Backstop expiry for cached tweet bodies.
+        const val TWEET_CACHE_TTL_MILLIS = 6L * 60L * 60L * 1000L
     }
 }
