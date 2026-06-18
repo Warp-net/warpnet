@@ -280,18 +280,22 @@ class WarpnetRepository @Inject constructor(
     }
 
     /**
-     * Only cache tweets that are at least [TWEET_CACHE_MIN_AGE_MILLIS] old.
-     * A fresh tweet is still being edited and engaged with, so we always
-     * re-fetch its body live and never serve a stale snapshot. A tweet
-     * without a parseable created_at is treated as not cacheable. Only the
-     * tweet body is cached here — engagement stats churn and stay live
-     * (see getStatus / hydrateTweets, which fetch counts separately).
+     * Only cache tweets last modified at least [TWEET_CACHE_MIN_AGE_MILLIS]
+     * ago. A recently created — or recently edited — tweet is still churning,
+     * so we always re-fetch its body live and never serve a stale snapshot.
+     * The gate keys on updated_at when present (falling back to created_at):
+     * an edit bumps updated_at, so a tweet created long ago but edited
+     * recently — including a remote edit we can't invalidate locally — stays
+     * out of the cache until it settles. A tweet without a parseable
+     * timestamp is treated as not cacheable. Only the tweet body is cached
+     * here — engagement stats churn and stay live (see getStatus /
+     * hydrateTweets, which fetch counts separately).
      */
     private fun isAgedForCache(tweet: WarpnetTweet): Boolean {
-        val createdAtMillis = tweet.createdAt
+        val lastModifiedMillis = (tweet.updatedAt ?: tweet.createdAt)
             ?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
             ?: return false
-        return System.currentTimeMillis() - createdAtMillis >= TWEET_CACHE_MIN_AGE_MILLIS
+        return System.currentTimeMillis() - lastModifiedMillis >= TWEET_CACHE_MIN_AGE_MILLIS
     }
 
     /**
@@ -696,8 +700,9 @@ class WarpnetRepository @Inject constructor(
         val edited = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("editTweet returned empty body for $tweetId")
         // The edit rewrote the body, so drop any cached snapshot of the old
-        // text and replace it with the just-returned revision (creation time
-        // is unchanged, so an already-aged tweet stays cacheable).
+        // text. isAgedForCache keys on updated_at, so the just-edited tweet
+        // is "recently modified" and stays uncached until it settles for an
+        // hour; the guarded put is a no-op now but keeps the invariant local.
         tweetCache.invalidate(tweetId)
         if (isAgedForCache(edited)) tweetCache.put(tweetId, edited)
         return edited
