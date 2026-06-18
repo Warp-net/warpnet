@@ -240,6 +240,36 @@ If you want to trace a feature end to end, read it in this order:
 **`database/like-repo.go`** (the storage). `like` is intentionally the cleanest
 small reference, and `core/handler/like_test.go` is a complete worked test.
 
+### Why the node is shaped like MVC — on purpose
+
+That `route → handler → storage` order is not a coincidence. The node is
+deliberately laid out to mirror the **MVC pattern** most web developers already
+carry in their heads, so you can map what you know onto Warpnet on day one
+instead of reverse-engineering a bespoke architecture first:
+
+| MVC role | Warpnet | What lives there |
+|---|---|---|
+| **Router** | `event/paths.go` + handler registration (`setupHandlers`) | The route strings and which handler each one dispatches to. |
+| **Controller** | `core/handler/<feature>.go` (one per route) | Request handling and business logic — the unit you add. |
+| **Model** | `database/<feature>-repo.go` + `domain/` | Persistence (repositories over BadgerDB) and the domain types. |
+| **View** | `frontend/` (Vue SPA) + the Android/business clients | What the user sees; reaches the controller over one of the three transports (§2). |
+
+"Add a feature" then decomposes into the same moves a Rails/Django/Spring/Laravel
+dev already knows: declare a route, write a controller, touch the model, render
+it in the view. The `like` feature (§13) is the worked reference for exactly that
+path.
+
+> [!NOTE]
+> **Why force a familiar shape onto a P2P node?** Underneath, this is not a web
+> app: there is no HTTP server, the "router" dispatches **libp2p streams**, and
+> the very same controller is reached three ways — in-process (Wails desktop),
+> over a WebSocket (business), or across the network from a remote peer (§12).
+> None of that has to be understood up front. Presenting the codebase as MVC is
+> a deliberate onboarding decision — it lets a new contributor be productive in
+> the one layer they care about (a handler, a repo, a Vue view) before they
+> learn the P2P plumbing that holds it together. The novelty budget is spent on
+> the network, not on the file layout.
+
 ---
 
 ## 5. Installing & using Warpnet
@@ -938,6 +968,60 @@ be authoritative*. `database/like-repo.go` is the canonical example.
 - **Codebase hash:** `embedded.go` embeds the entire Go source, and
   `security.GetCodebaseHashHex` hashes it. Used during device pairing so a thin
   client can verify *what code* it’s talking to — provenance without a CA.
+
+### Your identity *is* your password ("user data first")
+
+The bullet above ("derived deterministically from credentials") is the single
+most important identity decision in the project, so here is the whole story.
+
+There is no account, no key file, and nothing stored on a server — because there
+is no server. When you log in you give a **username + password**
+(`event.LoginEvent`, handled locally as `PRIVATE_POST_LOGIN` in
+`cmd/node/member/app.go`; it never crosses the network). That one password then
+does **two jobs at once** (`database/auth-repo.go` → `Authenticate`):
+
+1. **It decrypts your local database.** `db.Run(username, password)` opens the
+   BadgerDB that holds *everything you own* — profile, timeline, chats, drafts,
+   follows. The store is encrypted at rest with `SHA-256(username + "@" +
+   password)` as the key, so a wrong password is literally a decryption-key
+   mismatch (`ErrWrongPassword`). The password *is* the database password.
+2. **It regenerates your cryptographic identity.** From
+   `SHA-256(username + "@" + password + "@" + network + …)` Warpnet
+   **deterministically** derives your Ed25519 keypair
+   (`security.GenerateKeyFromSeed`) — the code says it plainly: *"no random —
+   private key must be determined."* That keypair's public half becomes your
+   **libp2p node ID** (`warpnet.IDFromPublicKey`), and its private half signs
+   every request you send (`security.Sign`; see the signed `event.Message`
+   envelope above).
+
+So the username + password are the root of the whole node: the same secret that
+unlocks your data also *is* the seed of the identity that data is published
+under. And **the private key is never written to disk** — it does not exist
+until you log in and is reconstructed from the password each time (a logged-out
+node literally holds `privateKey == nil`). The only durable things on your
+machine are *your data* (the encrypted DB) and the password in your head that
+both opens it and regenerates the key that speaks for it.
+
+> [!NOTE]
+> **Why build identity this way? Because user data comes first.** In a
+> client/server network your identity is a row in someone else's database and
+> your data is *theirs*. With no server that model is impossible — and storing
+> the private key as a plain file would just move the single point of failure
+> onto a fragile artifact: lose the file and your identity is gone, copy it and
+> your identity leaks. Warpnet inverts it: **your data is the primary object,
+> and your identity is a pure function of the secret that guards that data.**
+> Your encrypted database *is* your account. That is what "user data first"
+> means here — nothing to register, nothing held for you, nothing to back up but
+> the data itself. Type the same username / password / network on any machine
+> and you deterministically *become* the same node (same ID) and can open your
+> own data.
+
+> [!WARNING]
+> The flip side of deterministic derivation: the password is **the seed of your
+> identity, not a rotatable login**. Change it and you derive a *different* key —
+> a different node ID, i.e. a different identity (password recovery is still a
+> `TODO` in `auth-repo.go`). Passwords are enforced at 8–32 chars with upper,
+> lower, digit and special (`validatePassword`). Choose it once, deliberately.
 
 ### Moderation flow
 
