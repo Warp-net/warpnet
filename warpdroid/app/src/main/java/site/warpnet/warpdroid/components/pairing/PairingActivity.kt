@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import site.warpnet.transport.dto.AuthNodeInfo
@@ -121,11 +122,16 @@ class PairingActivity : AppCompatActivity() {
     private suspend fun tryAutoPair(rawJson: String) {
         when (val result = validator.validate(rawJson)) {
             is ValidationResult.Valid -> {
-                startupProgress.start(lifecycleScope)
-                val outcome = pairingCoordinator.pair(result.authNodeInfo, result.rawJson)
-                finishStartupProgress(outcome)
-                progress.visibility = View.GONE
-                handleAutoPairOutcome(outcome)
+                // Run the progress animation as a child of this coroutine
+                // (coroutineScope) so an exception/cancellation in pair()
+                // tears it down with us instead of orphaning UI updates.
+                coroutineScope {
+                    startupProgress.start(this)
+                    val outcome = pairingCoordinator.pair(result.authNodeInfo, result.rawJson)
+                    finishStartupProgress(outcome)
+                    progress.visibility = View.GONE
+                    handleAutoPairOutcome(outcome)
+                }
             }
             is ValidationResult.Invalid -> {
                 // Stored payload no longer parses; treat as a hard failure
@@ -319,7 +325,9 @@ class PairingActivity : AppCompatActivity() {
         messagePanel.visibility = View.GONE
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
-            startupProgress.start(lifecycleScope)
+            // Tie the progress animation to this coroutine so it's cancelled
+            // with us rather than running on as a sibling under lifecycleScope.
+            startupProgress.start(this)
             val outcome = pairingCoordinator.pair(info, rawJson)
             finishStartupProgress(outcome)
             progress.visibility = View.GONE
