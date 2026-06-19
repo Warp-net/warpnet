@@ -225,10 +225,14 @@ class TimelineFragment :
 
             val statuses = viewModel.statuses.collectAsLazyPagingItems()
 
-            // "Who to follow" recommendations, shown only on the home timeline.
-            val whoToFollow by whoToFollowViewModel.state.collectAsStateWithLifecycle()
-            if (kind == TimelineViewModel.Kind.HOME) {
+            // "Who to follow" recommendations, HOME only. Collect (and thus
+            // instantiate the lazy VM) only on HOME so other timelines —
+            // mentions, profiles — never create it.
+            val whoToFollow = if (kind == TimelineViewModel.Kind.HOME) {
                 LaunchedEffect(Unit) { whoToFollowViewModel.loadOnce() }
+                whoToFollowViewModel.state.collectAsStateWithLifecycle().value
+            } else {
+                WhoToFollowViewModel.State()
             }
 
             if (viewModel.kind == TimelineViewModel.Kind.HOME && oldestFirst) {
@@ -284,6 +288,17 @@ class TimelineFragment :
                                         .padding(16.dp)
                                         .background(colorScheme.surface, RoundedCornerShape(8.dp))
                                         .padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                            // Always-show: surface recommendations even when
+                            // the home timeline itself is empty.
+                            if (kind == TimelineViewModel.Kind.HOME && whoToFollow.accounts.isNotEmpty()) {
+                                WhoToFollowCarousel(
+                                    accounts = whoToFollow.accounts,
+                                    followedIds = whoToFollow.followed,
+                                    onOpenProfile = ::onViewAccount,
+                                    onFollow = whoToFollowViewModel::follow,
+                                    modifier = Modifier.widthIn(max = 640.dp),
                                 )
                             }
                             WarpdroidMessageView(

@@ -14,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +39,7 @@ class WhoToFollowViewModel @Inject constructor(
     val state: StateFlow<State> = _state.asStateFlow()
 
     private var loaded = false
+    private var reloadJob: Job? = null
 
     /** Load recommendations the first time the home timeline shows them. */
     fun loadOnce() {
@@ -48,13 +50,14 @@ class WhoToFollowViewModel @Inject constructor(
 
     fun reload() {
         val userId = accountManager.activeAccount?.accountId ?: return
-        viewModelScope.launch {
-            val (accounts, _) = try {
-                repo.whoToFollow(userId)
+        reloadJob?.cancel() // a newer refresh supersedes any in-flight one
+        reloadJob = viewModelScope.launch {
+            val accounts = try {
+                repo.whoToFollow(userId).first
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                emptyList<TimelineUser>() to ""
+                return@launch // keep previously loaded suggestions on error
             }
             _state.update { it.copy(accounts = accounts) }
         }
