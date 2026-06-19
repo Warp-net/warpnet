@@ -29,6 +29,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/security"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -53,7 +54,23 @@ const logoutGracePeriod = 5 * time.Second
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin:     func(_ *http.Request) bool { return true }, // same-origin dashboard
+	CheckOrigin:     sameOrigin, // reject cross-site WebSocket hijacking
+}
+
+// sameOrigin permits only the dashboard served from this node: a request whose
+// Origin host matches the Host it connects to. A missing Origin (non-browser
+// clients, e.g. health probes) is allowed; any other origin is rejected so a
+// malicious page can't open a /ws connection and pin the auto-logout open.
+func sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return u.Host == r.Host
 }
 
 type Codec interface {
