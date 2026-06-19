@@ -349,6 +349,13 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     if (state.isUp) R.color.warpdroid_green else R.color.warpdroid_red,
                 )
                 binding.connectionIndicator.imageTintList = ColorStateList.valueOf(color)
+                binding.connectionIndicator.contentDescription = getString(
+                    if (state.isUp) {
+                        R.string.connection_indicator_connected
+                    } else {
+                        R.string.connection_indicator_disconnected
+                    },
+                )
             }
         }
 

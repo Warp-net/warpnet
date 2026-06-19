@@ -36,8 +36,9 @@
                     android:layout_height="12dp"
                     android:layout_gravity="end|center_vertical"
                     android:layout_marginEnd="12dp"
-                    android:contentDescription="@string/connection_indicator_desc"
-                    android:src="@drawable/ic_connection_dot" />
+                    android:contentDescription="@string/connection_indicator_disconnected"
+                    android:src="@drawable/ic_connection_dot"
+                    android:tint="@color/warpdroid_red" />
 
             </com.google.android.material.appbar.MaterialToolbar>
 
