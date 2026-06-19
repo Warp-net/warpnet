@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,18 +69,23 @@ class ChatsViewModel @Inject constructor(
     }
 
     fun onNewChatQuery(query: String) {
-        _newChat.update { it.copy(query = query) }
         searchJob?.cancel()
-        if (query.isBlank()) {
-            _newChat.update { it.copy(results = emptyList(), searching = false) }
-            return
-        }
+        // Drop the previous query's results right away so a stale user can't be
+        // picked while the new search is debouncing or in flight.
+        _newChat.update { it.copy(query = query, results = emptyList(), searching = query.isNotBlank()) }
+        if (query.isBlank()) return
         searchJob = viewModelScope.launch {
             delay(300) // debounce keystrokes before hitting the fat node
-            _newChat.update { it.copy(searching = true) }
-            val (users, _) = runCatching { repo.searchAccounts(query) }
-                .getOrDefault(emptyList<TimelineUser>() to "")
-            _newChat.update { it.copy(results = users, searching = false) }
+            val users = try {
+                repo.searchAccounts(query).first
+            } catch (e: CancellationException) {
+                throw e // a superseded search must stay cancelled, not fall through
+            } catch (e: Throwable) {
+                emptyList()
+            }
+            // Apply only if this is still the active query, so an out-of-order
+            // response can't overwrite results for a newer one.
+            _newChat.update { if (it.query == query) it.copy(results = users, searching = false) else it }
         }
     }
 
