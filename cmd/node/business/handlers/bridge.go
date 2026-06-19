@@ -213,13 +213,14 @@ func (b *BridgeHandler) connDisconnected() {
 }
 
 // autoLogout fires when the dashboard has been gone for the whole grace period.
-// It bails if a tab reconnected meanwhile or no one is logged in.
+// It holds connMx across the decision and the logout so a reconnect can't slip
+// in between (which would leave an active connection on a logged-out node); the
+// reconnect either precedes it (activeConns > 0, bail) or follows it cleanly.
 func (b *BridgeHandler) autoLogout() {
 	b.connMx.Lock()
+	defer b.connMx.Unlock()
 	b.logoutTimer = nil
-	reconnected := b.activeConns > 0
-	b.connMx.Unlock()
-	if reconnected || !b.auth.IsAuthenticated() {
+	if b.activeConns > 0 || !b.auth.IsAuthenticated() {
 		return
 	}
 	log.Infoln("business: dashboard closed, logging out")
