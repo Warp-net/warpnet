@@ -158,7 +158,9 @@
     <string name="action_post_failed_show_drafts">Show drafts</string>
     <string name="action_post_failed_do_nothing">Dismiss</string>
     <string name="action_follow">Follow</string>
+    <string name="action_following">Following</string>
     <string name="action_unfollow">Unfollow</string>
+    <string name="who_to_follow">Who to follow</string>
     <string name="action_block">Block</string>
     <string name="action_unblock">Unblock</string>
     <string name="action_share_account_link">Share link to account</string>
