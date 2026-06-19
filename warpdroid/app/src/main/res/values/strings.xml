@@ -67,6 +67,11 @@
     <string name="chat_messages_empty">No messages yet</string>
     <string name="chat_compose_placeholder">Message</string>
     <string name="action_chat_send">Send</string>
+    <string name="chats_new_message">New message</string>
+    <string name="connection_indicator_connected">Connected to your node</string>
+    <string name="connection_indicator_disconnected">Not connected to your node</string>
+    <string name="chats_search_people">Search people</string>
+    <string name="chats_no_results">No results</string>
     <string name="title_public_local">Local</string>
     <string name="title_public_trending_hashtags">Trending hashtags</string>
     <string name="title_public_trending_statuses">Trending posts</string>
@@ -155,7 +160,9 @@
     <string name="action_post_failed_show_drafts">Show drafts</string>
     <string name="action_post_failed_do_nothing">Dismiss</string>
     <string name="action_follow">Follow</string>
+    <string name="action_following">Following</string>
     <string name="action_unfollow">Unfollow</string>
+    <string name="who_to_follow">Who to follow</string>
     <string name="action_block">Block</string>
     <string name="action_unblock">Unblock</string>
     <string name="action_share_account_link">Share link to account</string>

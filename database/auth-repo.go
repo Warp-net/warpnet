@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/database/local-store"
@@ -61,6 +62,7 @@ type AuthStorer interface {
 type AuthRepo struct {
 	db           AuthStorer
 	owner        domain.Owner
+	mx           sync.RWMutex
 	sessionToken string
 	network      string
 	privateKey   ed25519.PrivateKey
@@ -88,8 +90,15 @@ func (repo *AuthRepo) Authenticate(username, password string) (err error) {
 		return err
 	}
 
-	repo.sessionToken, repo.privateKey, err = repo.generateSecrets(username, password)
-	return err
+	token, pk, err := repo.generateSecrets(username, password)
+	if err != nil {
+		return err
+	}
+	repo.mx.Lock()
+	repo.sessionToken = token
+	repo.privateKey = pk
+	repo.mx.Unlock()
+	return nil
 }
 
 func (repo *AuthRepo) generateSecrets(username, password string) (token string, pk ed25519.PrivateKey, err error) {
@@ -115,6 +124,8 @@ func (repo *AuthRepo) generateSecrets(username, password string) (token string, 
 }
 
 func (repo *AuthRepo) SessionToken() string {
+	repo.mx.RLock()
+	defer repo.mx.RUnlock()
 	return repo.sessionToken
 }
 
@@ -122,10 +133,13 @@ func (repo *AuthRepo) PrivateKey() ed25519.PrivateKey {
 	if repo == nil {
 		return nil
 	}
-	if repo.privateKey == nil {
+	repo.mx.RLock()
+	pk := repo.privateKey
+	repo.mx.RUnlock()
+	if pk == nil {
 		panic("private key is nil")
 	}
-	return repo.privateKey
+	return pk
 }
 
 func (repo *AuthRepo) GetOwner() domain.Owner {

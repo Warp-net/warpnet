@@ -39,14 +39,24 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
+type stubPairAuth struct{ token string }
+
+func (s *stubPairAuth) SessionToken() string { return s.token }
+
 type stubDeviceRepo struct {
+	saved       int
 	setDeviceFn func(ownerNodeId string, device domain.Device) error
 }
 
-func (s stubDeviceRepo) SetDevice(ownerNodeId string, device domain.Device) error {
-	if s.setDeviceFn != nil {
-		return s.setDeviceFn(ownerNodeId, device)
+func (s *stubDeviceRepo) SetDevice(ownerNodeId string, device domain.Device) error {
+	if s.setDeviceFn == nil {
+		s.saved++
+		return nil
 	}
+	if err := s.setDeviceFn(ownerNodeId, device); err != nil {
+		return err
+	}
+	s.saved++
 	return nil
 }
 
@@ -87,7 +97,8 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 	}}
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamNodesPairingHandler(serverToken, stubDeviceRepo{}, stubNodeAddresser{})
+		auth := &stubPairAuth{token: serverToken}
+		h := StreamNodesPairingHandler(auth, &stubDeviceRepo{}, stubNodeAddresser{})
 		_, err := h([]byte("{"), stream)
 		if err == nil {
 			t.Fatal("expected error")
@@ -95,7 +106,8 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 	})
 
 	t.Run("empty token", func(t *testing.T) {
-		h := StreamNodesPairingHandler(serverToken, stubDeviceRepo{}, stubNodeAddresser{})
+		auth := &stubPairAuth{token: serverToken}
+		h := StreamNodesPairingHandler(auth, &stubDeviceRepo{}, stubNodeAddresser{})
 		_, err := h(marshal(t, domain.AuthNodeInfo{Token: ""}), stream)
 		if err == nil || err.Error() != "empty token" {
 			t.Fatalf("unexpected err: %v", err)
@@ -103,7 +115,8 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 	})
 
 	t.Run("token mismatch", func(t *testing.T) {
-		h := StreamNodesPairingHandler(serverToken, stubDeviceRepo{}, stubNodeAddresser{})
+		auth := &stubPairAuth{token: serverToken}
+		h := StreamNodesPairingHandler(auth, &stubDeviceRepo{}, stubNodeAddresser{})
 		_, err := h(marshal(t, domain.AuthNodeInfo{Token: "wrong-token"}), stream)
 		if err == nil || err.Error() != "token mismatch" {
 			t.Fatalf("unexpected err: %v", err)
@@ -112,7 +125,8 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 
 	t.Run("device repo error", func(t *testing.T) {
 		repoErr := errors.New("db down")
-		h := StreamNodesPairingHandler(serverToken, stubDeviceRepo{
+		auth := &stubPairAuth{token: serverToken}
+		h := StreamNodesPairingHandler(auth, &stubDeviceRepo{
 			setDeviceFn: func(ownerNodeId string, device domain.Device) error {
 				return repoErr
 			},
@@ -127,13 +141,15 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 		addr, _ := ma.NewMultiaddr("/ip4/1.2.3.4/tcp/4001")
 		var capturedOwner string
 		var capturedDevice domain.Device
-		h := StreamNodesPairingHandler(serverToken, stubDeviceRepo{
+		repo := &stubDeviceRepo{
 			setDeviceFn: func(ownerNodeId string, device domain.Device) error {
 				capturedOwner = ownerNodeId
 				capturedDevice = device
 				return nil
 			},
-		}, stubNodeAddresser{addrs: []warpnet.WarpAddress{addr}})
+		}
+		auth := &stubPairAuth{token: serverToken}
+		h := StreamNodesPairingHandler(auth, repo, stubNodeAddresser{addrs: []warpnet.WarpAddress{addr}})
 
 		resp, err := h(marshal(t, domain.AuthNodeInfo{Token: serverToken}), stream)
 		if err != nil {
@@ -156,4 +172,26 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 			t.Fatalf("expected [%s], got %v", addr.String(), addrs)
 		}
 	})
+}
+
+func TestStreamNodesPairingHandler_ReadsLiveToken(t *testing.T) {
+	auth := &stubPairAuth{token: "tokenA"}
+	devices := &stubDeviceRepo{}
+	h := StreamNodesPairingHandler(auth, devices, stubNodeAddresser{})
+
+	peerID, _ := peer.Decode("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
+	stream := stubPairStream{conn: stubPairConn{localPeerID: peerID, remotePeerID: peerID}}
+	body := marshal(t, domain.AuthNodeInfo{Token: "tokenB"})
+
+	if _, err := h(body, stream); err == nil {
+		t.Fatal("expected token mismatch while session token is tokenA")
+	}
+
+	auth.token = "tokenB"
+	if _, err := h(body, stream); err != nil {
+		t.Fatalf("expected pairing to succeed after the session token rotated to tokenB, got: %v", err)
+	}
+	if devices.saved != 1 {
+		t.Fatalf("expected device saved once, got %d", devices.saved)
+	}
 }

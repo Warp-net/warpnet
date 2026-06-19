@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -154,6 +155,9 @@ class TimelineFragment :
         )[NetworkTimelineViewModel::class.java]
     }
 
+    // Account recommendations shown as a carousel inside the HOME timeline.
+    private val whoToFollowViewModel: WhoToFollowViewModel by viewModels()
+
     private lateinit var kind: TimelineViewModel.Kind
 
     private var isPullToRefreshEnabled = true
@@ -221,6 +225,16 @@ class TimelineFragment :
 
             val statuses = viewModel.statuses.collectAsLazyPagingItems()
 
+            // "Who to follow" recommendations, HOME only. Collect (and thus
+            // instantiate the lazy VM) only on HOME so other timelines —
+            // mentions, profiles — never create it.
+            val whoToFollow = if (kind == TimelineViewModel.Kind.HOME) {
+                LaunchedEffect(Unit) { whoToFollowViewModel.loadOnce() }
+                whoToFollowViewModel.state.collectAsStateWithLifecycle().value
+            } else {
+                WhoToFollowViewModel.State()
+            }
+
             if (viewModel.kind == TimelineViewModel.Kind.HOME && oldestFirst) {
                 LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
                     viewModel.saveHomeTimelinePosition(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
@@ -236,6 +250,7 @@ class TimelineFragment :
             LaunchedEffect(Unit) {
                 refresh.collect {
                     statuses.refresh()
+                    if (kind == TimelineViewModel.Kind.HOME) whoToFollowViewModel.reload()
                 }
             }
 
@@ -273,6 +288,17 @@ class TimelineFragment :
                                         .padding(16.dp)
                                         .background(colorScheme.surface, RoundedCornerShape(8.dp))
                                         .padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                            // Always-show: surface recommendations even when
+                            // the home timeline itself is empty.
+                            if (kind == TimelineViewModel.Kind.HOME && whoToFollow.accounts.isNotEmpty()) {
+                                WhoToFollowCarousel(
+                                    accounts = whoToFollow.accounts,
+                                    followedIds = whoToFollow.followed,
+                                    onOpenProfile = ::onViewAccount,
+                                    onFollow = whoToFollowViewModel::follow,
+                                    modifier = Modifier.widthIn(max = 640.dp),
                                 )
                             }
                             WarpdroidMessageView(
@@ -356,6 +382,10 @@ class TimelineFragment :
                             },
                             key = statuses.itemKey { it.id }
                         ) { index ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
                             when (val viewData = statuses[index]) {
                                 null -> {
                                     TweetPlaceholder(
@@ -399,6 +429,21 @@ class TimelineFragment :
                                         modifier = Modifier.widthIn(max = 640.dp)
                                     )
                                 }
+                            }
+                            // Instagram-style recommendations: after the 5th item
+                            // (or the last, on a short timeline), HOME only.
+                            if (kind == TimelineViewModel.Kind.HOME &&
+                                whoToFollow.accounts.isNotEmpty() &&
+                                index == minOf(4, statuses.itemCount - 1)
+                            ) {
+                                WhoToFollowCarousel(
+                                    accounts = whoToFollow.accounts,
+                                    followedIds = whoToFollow.followed,
+                                    onOpenProfile = ::onViewAccount,
+                                    onFollow = whoToFollowViewModel::follow,
+                                    modifier = Modifier.widthIn(max = 640.dp),
+                                )
+                            }
                             }
                         }
 
@@ -470,6 +515,7 @@ class TimelineFragment :
                 onRefresh = {
                     isUserRefresh = true
                     statuses.refresh()
+                    if (kind == TimelineViewModel.Kind.HOME) whoToFollowViewModel.reload()
                 },
                 modifier = modifier
             ) {

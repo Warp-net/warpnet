@@ -9,7 +9,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +30,11 @@ class ChatsViewModel @Inject constructor(
 
     data class ChatRow(
         val chat: WarpnetChat,
+        // The counterpart's user id from the owner's perspective. GetUserChats
+        // returns chats started by either side, so otherUserId is only the
+        // counterpart when we created the chat; when they did, the chat is
+        // stored as {ownerId: them, otherUserId: me} and we must use ownerId.
+        val otherUserId: String,
         val other: TimelineUser?,
     )
 
@@ -37,13 +44,66 @@ class ChatsViewModel @Inject constructor(
         val error: Throwable? = null,
     )
 
+    // New-chat composer: a user search that, on pick, creates the 1:1 chat
+    // and reports the resulting chat id back so the screen can open it.
+    data class NewChatState(
+        val visible: Boolean = false,
+        val query: String = "",
+        val results: List<TimelineUser> = emptyList(),
+        val searching: Boolean = false,
+    )
+
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
+    private val _newChat = MutableStateFlow(NewChatState())
+    val newChat: StateFlow<NewChatState> = _newChat.asStateFlow()
+
     private var loadJob: Job? = null
+    private var searchJob: Job? = null
 
     init {
         reload()
+    }
+
+    fun showNewChat() = _newChat.update { NewChatState(visible = true) }
+
+    fun hideNewChat() {
+        searchJob?.cancel()
+        _newChat.update { NewChatState(visible = false) }
+    }
+
+    fun onNewChatQuery(query: String) {
+        searchJob?.cancel()
+        // Drop the previous query's results right away so a stale user can't be
+        // picked while the new search is debouncing or in flight.
+        _newChat.update { it.copy(query = query, results = emptyList(), searching = query.isNotBlank()) }
+        if (query.isBlank()) return
+        searchJob = viewModelScope.launch {
+            delay(300) // debounce keystrokes before hitting the fat node
+            val users = try {
+                repo.searchAccounts(query).first
+            } catch (e: CancellationException) {
+                throw e // a superseded search must stay cancelled, not fall through
+            } catch (e: Throwable) {
+                emptyList()
+            }
+            // Apply only if this is still the active query, so an out-of-order
+            // response can't overwrite results for a newer one.
+            _newChat.update { if (it.query == query) it.copy(results = users, searching = false) else it }
+        }
+    }
+
+    fun startChat(other: TimelineUser, onOpen: (chatId: String, otherUserId: String, name: String) -> Unit) {
+        val userId = accountManager.activeAccount?.accountId ?: return
+        viewModelScope.launch {
+            val chat = runCatching { repo.createChat(ownerId = userId, otherUserId = other.id) }.getOrNull()
+            if (chat != null && chat.id.isNotEmpty()) {
+                _newChat.update { NewChatState(visible = false) }
+                onOpen(chat.id, other.id, other.name)
+                reload()
+            }
+        }
     }
 
     fun reload() {
@@ -58,8 +118,15 @@ class ChatsViewModel @Inject constructor(
             try {
                 val (chats, _) = repo.getChats(userId)
                 val rows = chats.map { chat ->
-                    val other = runCatching { repo.getTimelineUser(chat.otherUserId) }.getOrNull()
-                    ChatRow(chat = chat, other = other)
+                    val otherUserId = if (chat.ownerId == userId) chat.otherUserId else chat.ownerId
+                    val other = try {
+                        repo.getTimelineUser(otherUserId)
+                    } catch (e: CancellationException) {
+                        throw e // let a superseded reload cancel promptly
+                    } catch (e: Throwable) {
+                        null
+                    }
+                    ChatRow(chat = chat, otherUserId = otherUserId, other = other)
                 }
                 _state.update { it.copy(chats = rows, loading = false) }
             } catch (e: Throwable) {

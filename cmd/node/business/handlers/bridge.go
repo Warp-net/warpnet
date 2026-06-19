@@ -29,6 +29,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/security"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -44,10 +45,32 @@ const pathIsFirstRun = "is-first-run"
 // burst of dashboard calls) can spawn, so one connection can't exhaust memory.
 const maxInflightDispatches = 32
 
+// logoutGracePeriod is how long the node waits after the last dashboard
+// connection drops before logging the owner out. A page reload reconnects well
+// within this window (cancelling the logout); closing the browser tab never
+// reconnects, so the logout fires and the database is sealed.
+const logoutGracePeriod = 5 * time.Second
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin:     func(_ *http.Request) bool { return true }, // same-origin dashboard
+	CheckOrigin:     sameOrigin, // reject cross-site WebSocket hijacking
+}
+
+// sameOrigin permits only the dashboard served from this node: a request whose
+// Origin host matches the Host it connects to. A missing Origin (non-browser
+// clients, e.g. health probes) is allowed; any other origin is rejected so a
+// malicious page can't open a /ws connection and pin the auto-logout open.
+func sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return u.Host == r.Host
 }
 
 type Codec interface {
@@ -65,6 +88,7 @@ type Authenticator interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (event.LoginResponse, error)
 	AuthLogout()
 	Reset()
+	IsAuthenticated() bool
 	PrivateKey() ed25519.PrivateKey
 }
 
@@ -76,6 +100,10 @@ type BridgeHandler struct {
 
 	mx   sync.RWMutex
 	node Node
+
+	connMx      sync.Mutex
+	activeConns int
+	logoutTimer *time.Timer
 }
 
 func NewBridgeHandler(
@@ -99,6 +127,14 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 			log.Errorf("business: ws upgrade: %v", err)
 			return
 		}
+
+		// Track the dashboard connection so closing the last browser tab logs
+		// the owner out (a reload reconnects within the grace period). The
+		// conn.Close defer is registered last so it runs first on return:
+		// the socket is fully torn down before the disconnect accounting arms
+		// the auto-logout timer.
+		b.connConnected()
+		defer b.connDisconnected()
 		defer func() { _ = conn.Close() }()
 
 		// Dispatch each message in its own goroutine so a slow libp2p self-stream
@@ -163,6 +199,53 @@ func (b *BridgeHandler) AttachNode(n Node) {
 	b.mx.Lock()
 	b.node = n
 	b.mx.Unlock()
+}
+
+// connConnected records a new dashboard connection and cancels any pending
+// auto-logout (e.g. a page reload reconnecting within the grace period).
+func (b *BridgeHandler) connConnected() {
+	b.connMx.Lock()
+	defer b.connMx.Unlock()
+	b.activeConns++
+	if b.logoutTimer != nil {
+		b.logoutTimer.Stop()
+		b.logoutTimer = nil
+	}
+}
+
+// connDisconnected records a dropped dashboard connection. When the last one
+// goes away it arms a grace timer that logs the owner out unless a new
+// connection arrives first, so closing the browser tab seals the node while a
+// reload keeps the session.
+func (b *BridgeHandler) connDisconnected() {
+	b.connMx.Lock()
+	defer b.connMx.Unlock()
+	if b.activeConns > 0 {
+		b.activeConns--
+	}
+	if b.activeConns > 0 {
+		return
+	}
+	if b.logoutTimer != nil {
+		b.logoutTimer.Stop()
+	}
+	b.logoutTimer = time.AfterFunc(logoutGracePeriod, b.autoLogout)
+}
+
+// autoLogout fires when the dashboard has been gone for the whole grace period.
+// It holds connMx across the decision and the logout so a reconnect can't slip
+// in between (which would leave an active connection on a logged-out node); the
+// reconnect either precedes it (activeConns > 0, bail) or follows it cleanly.
+func (b *BridgeHandler) autoLogout() {
+	b.connMx.Lock()
+	defer b.connMx.Unlock()
+	b.logoutTimer = nil
+	if b.activeConns > 0 || !b.auth.IsAuthenticated() {
+		return
+	}
+	log.Infoln("business: dashboard closed, logging out")
+	b.auth.AuthLogout() // closes the database; the node keeps running
+	b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
 }
 
 func (b *BridgeHandler) dispatch(req event.Message) event.Message {
