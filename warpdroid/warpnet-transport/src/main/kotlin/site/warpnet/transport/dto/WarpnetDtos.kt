@@ -544,6 +544,14 @@ data class WarpnetChat(
     @Json(name = "updated_at") val updatedAt: String = "",
 )
 
+// Wire shape mirrors event.NewChatEvent. chat_id is omitted so the fat node
+// composes the deterministic 1:1 chat id; the response is a WarpnetChat.
+@JsonClass(generateAdapter = true)
+data class NewChatEvent(
+    @Json(name = "owner_id") val ownerId: String,
+    @Json(name = "other_user_id") val otherUserId: String,
+)
+
 @JsonClass(generateAdapter = true)
 data class GetChatEvent(
     @Json(name = "user_id") val userId: String,
