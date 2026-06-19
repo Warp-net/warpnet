@@ -204,7 +204,7 @@ class ChatsActivity : BaseActivity() {
 
     @Composable
     private fun ChatRow(row: ChatsViewModel.ChatRow, onClick: () -> Unit) {
-        val name = row.other?.name ?: row.chat.otherUserId
+        val name = row.other?.name ?: row.otherUserId
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -228,7 +228,7 @@ class ChatsActivity : BaseActivity() {
             ChatMessagesActivity.newIntent(
                 this,
                 chatId = row.chat.id,
-                otherUserId = row.chat.otherUserId,
+                otherUserId = row.otherUserId,
                 otherUserName = other.name,
             ),
         )

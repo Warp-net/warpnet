@@ -30,6 +30,11 @@ class ChatsViewModel @Inject constructor(
 
     data class ChatRow(
         val chat: WarpnetChat,
+        // The counterpart's user id from the owner's perspective. GetUserChats
+        // returns chats started by either side, so otherUserId is only the
+        // counterpart when we created the chat; when they did, the chat is
+        // stored as {ownerId: them, otherUserId: me} and we must use ownerId.
+        val otherUserId: String,
         val other: TimelineUser?,
     )
 
@@ -113,8 +118,9 @@ class ChatsViewModel @Inject constructor(
             try {
                 val (chats, _) = repo.getChats(userId)
                 val rows = chats.map { chat ->
-                    val other = runCatching { repo.getTimelineUser(chat.otherUserId) }.getOrNull()
-                    ChatRow(chat = chat, other = other)
+                    val otherUserId = if (chat.ownerId == userId) chat.otherUserId else chat.ownerId
+                    val other = runCatching { repo.getTimelineUser(otherUserId) }.getOrNull()
+                    ChatRow(chat = chat, otherUserId = otherUserId, other = other)
                 }
                 _state.update { it.copy(chats = rows, loading = false) }
             } catch (e: Throwable) {
