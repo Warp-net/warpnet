@@ -142,6 +142,8 @@ class WarpnetRepository @Inject constructor(
     private val viewsCountAdapter = moshi.adapter<ViewsCountResponse>()
     private val newTweetAdapter = moshi.adapter<WarpnetTweet>()
     private val deleteTweetAdapter = moshi.adapter<DeleteTweetEvent>()
+    private val newChatAdapter = moshi.adapter<site.warpnet.transport.dto.NewChatEvent>()
+    private val chatAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetChat>()
     private val getChatsAdapter = moshi.adapter<site.warpnet.transport.dto.GetChatsEvent>()
     private val getChatsRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetChatsResponse>()
     private val deleteChatAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteChatEvent>()
@@ -979,6 +981,19 @@ class WarpnetRepository @Inject constructor(
     // -----------------------------------------------------------------
     // Chats (1:1 DMs on the fat node)
     // -----------------------------------------------------------------
+
+    // Create (or fetch, if it already exists) the 1:1 chat with [otherUserId].
+    // The fat node composes the deterministic chat id and returns the chat, so
+    // a fresh conversation can be opened before any message is sent.
+    suspend fun createChat(ownerId: String, otherUserId: String): site.warpnet.transport.dto.WarpnetChat? {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_POST_CHAT,
+            newChatAdapter.toJson(
+                site.warpnet.transport.dto.NewChatEvent(ownerId = ownerId, otherUserId = otherUserId),
+            ),
+        )
+        return chatAdapter.fromJson(raw)
+    }
 
     suspend fun getChats(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetChat>, String> {
         val raw = client.request(

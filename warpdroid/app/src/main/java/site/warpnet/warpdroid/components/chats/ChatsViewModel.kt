@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,13 +38,61 @@ class ChatsViewModel @Inject constructor(
         val error: Throwable? = null,
     )
 
+    // New-chat composer: a user search that, on pick, creates the 1:1 chat
+    // and reports the resulting chat id back so the screen can open it.
+    data class NewChatState(
+        val visible: Boolean = false,
+        val query: String = "",
+        val results: List<TimelineUser> = emptyList(),
+        val searching: Boolean = false,
+    )
+
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
+    private val _newChat = MutableStateFlow(NewChatState())
+    val newChat: StateFlow<NewChatState> = _newChat.asStateFlow()
+
     private var loadJob: Job? = null
+    private var searchJob: Job? = null
 
     init {
         reload()
+    }
+
+    fun showNewChat() = _newChat.update { NewChatState(visible = true) }
+
+    fun hideNewChat() {
+        searchJob?.cancel()
+        _newChat.update { NewChatState(visible = false) }
+    }
+
+    fun onNewChatQuery(query: String) {
+        _newChat.update { it.copy(query = query) }
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _newChat.update { it.copy(results = emptyList(), searching = false) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(300) // debounce keystrokes before hitting the fat node
+            _newChat.update { it.copy(searching = true) }
+            val (users, _) = runCatching { repo.searchAccounts(query) }
+                .getOrDefault(emptyList<TimelineUser>() to "")
+            _newChat.update { it.copy(results = users, searching = false) }
+        }
+    }
+
+    fun startChat(other: TimelineUser, onOpen: (chatId: String, otherUserId: String, name: String) -> Unit) {
+        val userId = accountManager.activeAccount?.accountId ?: return
+        viewModelScope.launch {
+            val chat = runCatching { repo.createChat(ownerId = userId, otherUserId = other.id) }.getOrNull()
+            if (chat != null && chat.id.isNotEmpty()) {
+                _newChat.update { NewChatState(visible = false) }
+                onOpen(chat.id, other.id, other.name)
+                reload()
+            }
+        }
     }
 
     fun reload() {
