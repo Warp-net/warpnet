@@ -29,10 +29,8 @@ package database
 
 import (
 	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -93,12 +91,13 @@ func (repo *AuthRepo) Authenticate(username, password string) (err error) {
 }
 
 func (repo *AuthRepo) generateSecrets(username, password string) (token string, pk ed25519.PrivateKey, err error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(127))
-	if err != nil {
-		return "", nil, err
-	}
-	randChar := string(uint8(n.Uint64())) //#nosec
-	tokenSeed := []byte(username + "@" + password + "@" + repo.network + "@" + randChar + "@" + time.Now().String())
+	// The token must be deterministic, like the private key below. A paired
+	// device stores it and re-presents it on every pair refresh, so it has to
+	// survive the node re-authenticating — e.g. a business node sealing its DB
+	// when the dashboard tab closes and reopening on the next login. A random,
+	// timestamped token rotated on every authentication and broke already-paired
+	// devices (and freshly scanned QRs) with "token mismatch".
+	tokenSeed := []byte(username + "@" + password + "@" + repo.network + "@token")
 	token = base64.StdEncoding.EncodeToString(security.ConvertToSHA256(tokenSeed))
 
 	pkSeed := base64.StdEncoding.EncodeToString(

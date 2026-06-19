@@ -81,6 +81,19 @@ func (s *AuthRepoTestSuite) TestSessionTokenAndPrivateKey() {
 	assert.NotNil(s.T(), s.repo.PrivateKey())
 }
 
+// TestSessionTokenDeterministic guards the pairing fix: re-authenticating with
+// the same credentials must reproduce the same token, so a paired device's
+// stored token keeps matching after the node re-authenticates (e.g. a business
+// node sealing its DB on dashboard close and reopening on the next login).
+func (s *AuthRepoTestSuite) TestSessionTokenDeterministic() {
+	first, _, err := s.repo.generateSecrets("alice", "Password1!")
+	s.Require().NoError(err)
+	second, _, err := s.repo.generateSecrets("alice", "Password1!")
+	s.Require().NoError(err)
+	assert.Equal(s.T(), first, second)
+	assert.NotEmpty(s.T(), first)
+}
+
 func (s *AuthRepoTestSuite) TestPrivateKey_PanicIfNil() {
 	defer func() {
 		if r := recover(); r == nil {
