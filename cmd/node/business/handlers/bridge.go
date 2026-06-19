@@ -127,12 +127,15 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 			log.Errorf("business: ws upgrade: %v", err)
 			return
 		}
-		defer func() { _ = conn.Close() }()
 
 		// Track the dashboard connection so closing the last browser tab logs
-		// the owner out (a reload reconnects within the grace period).
+		// the owner out (a reload reconnects within the grace period). The
+		// conn.Close defer is registered last so it runs first on return:
+		// the socket is fully torn down before the disconnect accounting arms
+		// the auto-logout timer.
 		b.connConnected()
 		defer b.connDisconnected()
+		defer func() { _ = conn.Close() }()
 
 		// Dispatch each message in its own goroutine so a slow libp2p self-stream
 		// can't head-of-line block every other dashboard call on the connection.
