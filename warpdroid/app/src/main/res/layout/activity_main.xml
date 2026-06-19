@@ -28,7 +28,18 @@
                 android:minHeight="?attr/actionBarSize"
                 app:contentInsetStartWithNavigation="0dp"
                 app:layout_scrollFlags="scroll|enterAlways"
-                app:navigationContentDescription="@string/action_open_drawer" />
+                app:navigationContentDescription="@string/action_open_drawer">
+
+                <ImageView
+                    android:id="@+id/connectionIndicator"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="12dp"
+                    android:contentDescription="@string/connection_indicator_desc"
+                    android:src="@drawable/ic_connection_dot" />
+
+            </com.google.android.material.appbar.MaterialToolbar>
 
             <com.google.android.material.appbar.MaterialToolbar
                 android:id="@+id/topNav"

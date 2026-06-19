@@ -22,6 +22,7 @@ import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Animatable
@@ -141,6 +142,9 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     @Inject
     lateinit var pairedNodeStore: PairedNodeStore
+
+    @Inject
+    lateinit var connectionMonitor: site.warpnet.transport.ConnectionMonitor
 
     private val viewModel: MainViewModel by viewModels()
 
@@ -336,6 +340,16 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
         lifecycleScope.launch {
             viewModel.unauthorized.collect(::showUnauthorizedWarning)
+        }
+
+        lifecycleScope.launch {
+            connectionMonitor.linkState.collect { state ->
+                val color = ContextCompat.getColor(
+                    this@MainActivity,
+                    if (state.isUp) R.color.warpdroid_green else R.color.warpdroid_red,
+                )
+                binding.connectionIndicator.imageTintList = ColorStateList.valueOf(color)
+            }
         }
 
         onBackPressedDispatcher.addCallback(this@MainActivity, onBackPressedCallback)
