@@ -394,9 +394,6 @@ func (m *MemberNode) setupHandlers(
 	}
 
 	hs := make([]warpnet.WarpStreamHandler, 0, 80)
-	// Pass authRepo, not a token snapshot: the pairing handler reads the current
-	// session token so a re-authenticated node (new token) still matches a
-	// freshly scanned QR.
 	hs = append(hs, m.adminHandlers(authRepo, privKey, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.replyHandlers(authRepo, userRepo, r)...)

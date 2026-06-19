@@ -43,18 +43,10 @@ type DeviceStorer interface {
 	SetDevice(ownerNodeId string, device domain.Device) error
 }
 
-// PairAuthStorer exposes the node's current session token. The handler reads it
-// per request (not a value captured at registration) so a re-authenticated node
-// — e.g. a business node that seals its DB on dashboard close and reopens on the
-// next login, minting a fresh token — still matches a freshly scanned QR.
 type PairAuthStorer interface {
 	SessionToken() string
 }
 
-// StreamNodesPairingHandler authorizes a device whose presented token matches
-// the node's current session token, read from authRepo per request (see
-// PairAuthStorer) so a re-authenticated node still matches a freshly scanned QR
-// instead of failing with "token mismatch".
 func StreamNodesPairingHandler(authRepo PairAuthStorer, deviceRepo DeviceStorer, n NodeAddresser) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var clientInfo domain.AuthNodeInfo
