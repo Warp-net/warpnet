@@ -393,10 +393,11 @@ func (m *MemberNode) setupHandlers(
 		filterRepo:       database.NewFilterRepo(db),
 	}
 
-	token := authRepo.SessionToken()
-
 	hs := make([]warpnet.WarpStreamHandler, 0, 80)
-	hs = append(hs, m.adminHandlers(token, privKey, db, r)...)
+	// Pass the token accessor, not a snapshot: the pairing handler must read
+	// the current session token so a re-authenticated node (new token) still
+	// matches a freshly scanned QR.
+	hs = append(hs, m.adminHandlers(authRepo.SessionToken, privKey, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.replyHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
@@ -415,7 +416,7 @@ func (m *MemberNode) setupHandlers(
 
 //nolint:govet
 func (m *MemberNode) adminHandlers(
-	token string,
+	tokenFn func() string,
 	privKey ed25519.PrivateKey,
 	db Storer,
 	r *memberRepos,
@@ -423,7 +424,7 @@ func (m *MemberNode) adminHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_PAIR,
-			handler.StreamNodesPairingHandler(token, m.deviceRepo, m),
+			handler.StreamNodesPairingHandler(tokenFn, m.deviceRepo, m),
 		},
 		{
 			event.PUBLIC_POST_NODE_CHALLENGE,
