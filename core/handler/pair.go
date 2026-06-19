@@ -43,7 +43,11 @@ type DeviceStorer interface {
 	SetDevice(ownerNodeId string, device domain.Device) error
 }
 
-func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer, n NodeAddresser) warpnet.WarpHandlerFunc {
+type PairAuthStorer interface {
+	SessionToken() string
+}
+
+func StreamNodesPairingHandler(authRepo PairAuthStorer, deviceRepo DeviceStorer, n NodeAddresser) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var clientInfo domain.AuthNodeInfo
 		if err := json.Unmarshal(buf, &clientInfo); err != nil {
@@ -54,7 +58,7 @@ func StreamNodesPairingHandler(serverToken string, deviceRepo DeviceStorer, n No
 			return nil, warpnet.WarpError("empty token")
 		}
 
-		if serverToken != clientInfo.Token {
+		if authRepo.SessionToken() != clientInfo.Token {
 			log.Errorf("pair: token does not match server identity")
 			return nil, warpnet.WarpError("token mismatch")
 		}
