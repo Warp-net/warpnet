@@ -43,14 +43,19 @@ type DeviceStorer interface {
 	SetDevice(ownerNodeId string, device domain.Device) error
 }
 
+// PairAuthStorer exposes the node's current session token. The handler reads it
+// per request (not a value captured at registration) so a re-authenticated node
+// — e.g. a business node that seals its DB on dashboard close and reopens on the
+// next login, minting a fresh token — still matches a freshly scanned QR.
+type PairAuthStorer interface {
+	SessionToken() string
+}
+
 // StreamNodesPairingHandler authorizes a device whose presented token matches
-// the node's session token. tokenFn returns the *current* token rather than a
-// value captured at registration: a node may re-authenticate (e.g. a business
-// node sealing its DB when the dashboard tab closes and reopening on the next
-// login), which mints a fresh session token, and the QR the dashboard shows
-// advertises that new token. Reading it live keeps the handler in step so a
-// freshly scanned QR matches instead of failing with "token mismatch".
-func StreamNodesPairingHandler(tokenFn func() string, deviceRepo DeviceStorer, n NodeAddresser) warpnet.WarpHandlerFunc {
+// the node's current session token, read from authRepo per request (see
+// PairAuthStorer) so a re-authenticated node still matches a freshly scanned QR
+// instead of failing with "token mismatch".
+func StreamNodesPairingHandler(authRepo PairAuthStorer, deviceRepo DeviceStorer, n NodeAddresser) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var clientInfo domain.AuthNodeInfo
 		if err := json.Unmarshal(buf, &clientInfo); err != nil {
@@ -61,7 +66,7 @@ func StreamNodesPairingHandler(tokenFn func() string, deviceRepo DeviceStorer, n
 			return nil, warpnet.WarpError("empty token")
 		}
 
-		if tokenFn() != clientInfo.Token {
+		if authRepo.SessionToken() != clientInfo.Token {
 			log.Errorf("pair: token does not match server identity")
 			return nil, warpnet.WarpError("token mismatch")
 		}
