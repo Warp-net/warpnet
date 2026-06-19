@@ -119,7 +119,13 @@ class ChatsViewModel @Inject constructor(
                 val (chats, _) = repo.getChats(userId)
                 val rows = chats.map { chat ->
                     val otherUserId = if (chat.ownerId == userId) chat.otherUserId else chat.ownerId
-                    val other = runCatching { repo.getTimelineUser(otherUserId) }.getOrNull()
+                    val other = try {
+                        repo.getTimelineUser(otherUserId)
+                    } catch (e: CancellationException) {
+                        throw e // let a superseded reload cancel promptly
+                    } catch (e: Throwable) {
+                        null
+                    }
                     ChatRow(chat = chat, otherUserId = otherUserId, other = other)
                 }
                 _state.update { it.copy(chats = rows, loading = false) }
