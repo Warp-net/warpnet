@@ -1,8 +1,11 @@
 package event
 
 import (
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/Warp-net/warpnet/json"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -103,4 +106,76 @@ func TestPaths_VersionSuffix(t *testing.T) {
 	for _, r := range routes {
 		assert.Contains(t, r, "/0.0.0")
 	}
+}
+
+// TestMessage_RoundTrip guards the wire contract of the envelope every node
+// exchanges. The Destination field is serialized under the JSON key "path"
+// (a known historical quirk), so a regression that renames the tag would
+// silently route nothing — assert the key explicitly, not just the round-trip.
+func TestMessage_RoundTrip(t *testing.T) {
+	ts := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
+	in := Message{
+		Body:        json.RawMessage(`{"hello":"world"}`),
+		MessageId:   "msg-1",
+		NodeId:      "node-1",
+		Destination: PUBLIC_POST_LIKE,
+		Timestamp:   ts,
+		Version:     "0.7.224",
+		Signature:   "sig",
+	}
+
+	data, err := json.Marshal(in)
+	assert.NoError(t, err)
+	assert.Contains(t, string(data), `"path":"`+PUBLIC_POST_LIKE+`"`)
+	assert.NotContains(t, string(data), `"destination"`)
+
+	var out Message
+	assert.NoError(t, json.Unmarshal(data, &out))
+	assert.Equal(t, in.MessageId, out.MessageId)
+	assert.Equal(t, in.NodeId, out.NodeId)
+	assert.Equal(t, in.Destination, out.Destination)
+	assert.Equal(t, in.Version, out.Version)
+	assert.Equal(t, in.Signature, out.Signature)
+	assert.JSONEq(t, string(in.Body), string(out.Body))
+	assert.True(t, in.Timestamp.Equal(out.Timestamp))
+}
+
+// TestGetAllTweetsEvent_OmitEmpty verifies that optional pagination fields are
+// omitted from the wire when nil. A missing omitempty would emit `"cursor":null`
+// and break clients (e.g. Moshi) that decode null into a blank value.
+func TestGetAllTweetsEvent_OmitEmpty(t *testing.T) {
+	data, err := json.Marshal(GetAllTweetsEvent{UserId: "user-1"})
+	assert.NoError(t, err)
+	assert.NotContains(t, string(data), "cursor")
+	assert.NotContains(t, string(data), "limit")
+	assert.Contains(t, string(data), `"user_id":"user-1"`)
+
+	cursor := "next"
+	limit := uint64(20)
+	in := GetAllTweetsEvent{UserId: "user-1", Cursor: &cursor, Limit: &limit}
+	data, err = json.Marshal(in)
+	assert.NoError(t, err)
+
+	var out GetAllTweetsEvent
+	assert.NoError(t, json.Unmarshal(data, &out))
+	assert.Equal(t, in.UserId, out.UserId)
+	assert.NotNil(t, out.Cursor)
+	assert.Equal(t, cursor, *out.Cursor)
+	assert.NotNil(t, out.Limit)
+	assert.Equal(t, limit, *out.Limit)
+}
+
+// TestLikeEvent_RoundTrip pins the snake_case wire keys the clients rely on.
+func TestLikeEvent_RoundTrip(t *testing.T) {
+	in := LikeEvent{TweetId: "tweet-1", UserId: "user-1", OwnerId: "owner-1"}
+
+	data, err := json.Marshal(in)
+	assert.NoError(t, err)
+	for _, key := range []string{`"tweet_id"`, `"user_id"`, `"owner_id"`} {
+		assert.True(t, strings.Contains(string(data), key), "missing key %s", key)
+	}
+
+	var out LikeEvent
+	assert.NoError(t, json.Unmarshal(data, &out))
+	assert.Equal(t, in, out)
 }
