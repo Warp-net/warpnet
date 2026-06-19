@@ -72,7 +72,7 @@ private fun WhoToFollowCard(
     onOpenProfile: () -> Unit,
     onFollow: () -> Unit,
 ) {
-    Card(modifier = Modifier.width(150.dp)) {
+    Card(onClick = onOpenProfile, modifier = Modifier.width(150.dp)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -100,7 +100,11 @@ private fun WhoToFollowCard(
                 modifier = Modifier.fillMaxWidth(),
             )
             if (isFollowed) {
-                OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = {},
+                    enabled = false,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text(stringResource(R.string.action_following))
                 }
             } else {

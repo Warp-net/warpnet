@@ -500,6 +500,7 @@ class TimelineFragment :
                 onRefresh = {
                     isUserRefresh = true
                     statuses.refresh()
+                    if (kind == TimelineViewModel.Kind.HOME) whoToFollowViewModel.reload()
                 },
                 modifier = modifier
             ) {
