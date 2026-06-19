@@ -1158,6 +1158,18 @@ class WarpnetRepository @Inject constructor(
         return page.users.map { it.toTimelineUser() } to page.cursor
     }
 
+    // Account recommendations ("who to follow"). The fat node already drops the
+    // owner, offline nodes and already-followed users, so the carousel renders
+    // the page as-is. Limit mirrors the desktop front-end (20).
+    suspend fun whoToFollow(userId: String, cursor: String = "", limit: Int = 20): Pair<List<TimelineUser>, String> {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_WHOTOFOLLOW,
+            getAllUsersAdapter.toJson(GetAllUsersEvent(userId = userId, cursor = cursor, limit = limit)),
+        )
+        val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
+        return page.users.map { it.toTimelineUser() } to page.cursor
+    }
+
     // -----------------------------------------------------------------
     // Internals
     // -----------------------------------------------------------------
