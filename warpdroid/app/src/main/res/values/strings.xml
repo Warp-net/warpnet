@@ -68,6 +68,8 @@
     <string name="chat_compose_placeholder">Message</string>
     <string name="action_chat_send">Send</string>
     <string name="chats_new_message">New message</string>
+    <string name="connection_indicator_connected">Connected to your node</string>
+    <string name="connection_indicator_disconnected">Not connected to your node</string>
     <string name="chats_search_people">Search people</string>
     <string name="chats_no_results">No results</string>
     <string name="title_public_local">Local</string>
