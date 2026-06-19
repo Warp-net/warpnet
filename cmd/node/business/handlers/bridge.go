@@ -44,6 +44,12 @@ const pathIsFirstRun = "is-first-run"
 // burst of dashboard calls) can spawn, so one connection can't exhaust memory.
 const maxInflightDispatches = 32
 
+// logoutGracePeriod is how long the node waits after the last dashboard
+// connection drops before logging the owner out. A page reload reconnects well
+// within this window (cancelling the logout); closing the browser tab never
+// reconnects, so the logout fires and the database is sealed.
+const logoutGracePeriod = 5 * time.Second
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
@@ -65,6 +71,7 @@ type Authenticator interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (event.LoginResponse, error)
 	AuthLogout()
 	Reset()
+	IsAuthenticated() bool
 	PrivateKey() ed25519.PrivateKey
 }
 
@@ -76,6 +83,10 @@ type BridgeHandler struct {
 
 	mx   sync.RWMutex
 	node Node
+
+	connMx      sync.Mutex
+	activeConns int
+	logoutTimer *time.Timer
 }
 
 func NewBridgeHandler(
@@ -100,6 +111,11 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 			return
 		}
 		defer func() { _ = conn.Close() }()
+
+		// Track the dashboard connection so closing the last browser tab logs
+		// the owner out (a reload reconnects within the grace period).
+		b.connConnected()
+		defer b.connDisconnected()
 
 		// Dispatch each message in its own goroutine so a slow libp2p self-stream
 		// can't head-of-line block every other dashboard call on the connection.
@@ -163,6 +179,52 @@ func (b *BridgeHandler) AttachNode(n Node) {
 	b.mx.Lock()
 	b.node = n
 	b.mx.Unlock()
+}
+
+// connConnected records a new dashboard connection and cancels any pending
+// auto-logout (e.g. a page reload reconnecting within the grace period).
+func (b *BridgeHandler) connConnected() {
+	b.connMx.Lock()
+	defer b.connMx.Unlock()
+	b.activeConns++
+	if b.logoutTimer != nil {
+		b.logoutTimer.Stop()
+		b.logoutTimer = nil
+	}
+}
+
+// connDisconnected records a dropped dashboard connection. When the last one
+// goes away it arms a grace timer that logs the owner out unless a new
+// connection arrives first, so closing the browser tab seals the node while a
+// reload keeps the session.
+func (b *BridgeHandler) connDisconnected() {
+	b.connMx.Lock()
+	defer b.connMx.Unlock()
+	if b.activeConns > 0 {
+		b.activeConns--
+	}
+	if b.activeConns > 0 {
+		return
+	}
+	if b.logoutTimer != nil {
+		b.logoutTimer.Stop()
+	}
+	b.logoutTimer = time.AfterFunc(logoutGracePeriod, b.autoLogout)
+}
+
+// autoLogout fires when the dashboard has been gone for the whole grace period.
+// It bails if a tab reconnected meanwhile or no one is logged in.
+func (b *BridgeHandler) autoLogout() {
+	b.connMx.Lock()
+	b.logoutTimer = nil
+	reconnected := b.activeConns > 0
+	b.connMx.Unlock()
+	if reconnected || !b.auth.IsAuthenticated() {
+		return
+	}
+	log.Infoln("business: dashboard closed, logging out")
+	b.auth.AuthLogout() // closes the database; the node keeps running
+	b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
 }
 
 func (b *BridgeHandler) dispatch(req event.Message) event.Message {
