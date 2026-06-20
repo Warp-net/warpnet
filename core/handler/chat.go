@@ -304,7 +304,9 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 			return event.NewMessageResponse(msg), nil
 		}
 		if err != nil {
-			return nil, err
+			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, err)
+			msg.Status = "undelivered" //nolint:goconst
+			return event.NewMessageResponse(msg), nil
 		}
 
 		if ownNodeInfo.ID.String() == otherUser.NodeId {
@@ -321,13 +323,10 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 				CreatedAt:  now,
 			}),
 		)
-		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			log.Warnf("chat message sent to offline node: %s", otherUser.NodeId)
-			msg.Status = "undelivered" //nolint:goconst
-			return event.NewMessageResponse(msg), nil
-		}
 		if err != nil {
-			return nil, err
+			log.Warnf("chat message not delivered to node %s: %v", otherUser.NodeId, err)
+			msg.Status = "undelivered"
+			return event.NewMessageResponse(msg), nil
 		}
 
 		var possibleError event.ResponseError
