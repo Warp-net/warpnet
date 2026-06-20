@@ -59,8 +59,14 @@ resulting from the use or misuse of this software.
   >
     <div>
       <button
-        class="h-12 w-12 hover:bg-lightblue text-3xl text-blue rounded-full"
+        @click="open('Home')"
+        class="h-12 w-12 hover:bg-lightblue text-blue rounded-full flex items-center justify-center"
+        aria-label="Warpnet home"
       >
+        <svg viewBox="0 0 100 100" class="w-7 h-7" fill="none" stroke="currentColor"
+             stroke-width="12" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M25 36 L36.5 64 L50 50 L63.5 64 L75 36" />
+        </svg>
       </button>
       <div>
         <button
