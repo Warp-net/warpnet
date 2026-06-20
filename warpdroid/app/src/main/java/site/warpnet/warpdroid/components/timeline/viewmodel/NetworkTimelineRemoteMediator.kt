@@ -20,7 +20,6 @@ import androidx.paging.ExperimentalPagingApi
 import androidx.paging.LoadType
 import androidx.paging.PagingState
 import androidx.paging.RemoteMediator
-import site.warpnet.warpdroid.components.timeline.util.ifExpected
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.util.HttpHeaderLink
 import site.warpnet.warpdroid.util.toViewData
@@ -132,10 +131,10 @@ class NetworkTimelineRemoteMediator(
             viewModel.currentSource?.invalidate()
             return MediatorResult.Success(endOfPaginationReached = statuses.isEmpty())
         } catch (e: Exception) {
-            return ifExpected(e) {
-                Log.w(TAG, "Failed to load timeline", e)
-                MediatorResult.Error(e)
-            }
+            // Surface any load failure as a load error instead of rethrowing
+            // unexpected exceptions, which would crash the whole app.
+            Log.w(TAG, "Failed to load timeline", e)
+            return MediatorResult.Error(e)
         }
     }
 
