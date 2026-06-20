@@ -54,16 +54,20 @@ class ChatMessagesViewModel @Inject constructor(
         pollJob?.cancel()
         pollJob = viewModelScope.launch {
             while (isActive) {
-                delay(POLL_INTERVAL_MS)
                 val userId = accountManager.activeAccount?.accountId
-                if (userId.isNullOrEmpty() || chatId.isEmpty()) continue
-                val msgs = runCatching {
-                    repo.getMessages(ownerId = userId, chatId = chatId).first
-                }.getOrNull() ?: continue
-                _state.update { s ->
-                    val next = msgs.reversed()
-                    if (next == s.messages) s else s.copy(messages = next)
+                if (!userId.isNullOrEmpty() && chatId.isNotEmpty()) {
+                    val limit = maxOf(_state.value.messages.size, DEFAULT_PAGE)
+                    val msgs = runCatching {
+                        repo.getMessages(ownerId = userId, chatId = chatId, limit = limit).first
+                    }.getOrNull()
+                    if (msgs != null) {
+                        _state.update { s ->
+                            val next = msgs.reversed()
+                            if (next == s.messages) s else s.copy(messages = next)
+                        }
+                    }
                 }
+                delay(POLL_INTERVAL_MS)
             }
         }
     }
@@ -120,5 +124,6 @@ class ChatMessagesViewModel @Inject constructor(
 
     companion object {
         private const val POLL_INTERVAL_MS = 3000L
+        private const val DEFAULT_PAGE = 40
     }
 }
