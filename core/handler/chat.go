@@ -232,6 +232,8 @@ func StreamGetUserChatsHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpn
 
 const messageLimit = 5000
 
+const statusUndelivered = "undelivered"
+
 // StreamNewMessageHandler is for sending a new message
 func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer ChatStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -305,7 +307,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 		}
 		if err != nil {
 			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, err)
-			msg.Status = "undelivered" //nolint:goconst
+			msg.Status = statusUndelivered
 			return event.NewMessageResponse(msg), nil
 		}
 
@@ -325,14 +327,14 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 		)
 		if err != nil {
 			log.Warnf("chat message not delivered to node %s: %v", otherUser.NodeId, err)
-			msg.Status = "undelivered"
+			msg.Status = statusUndelivered
 			return event.NewMessageResponse(msg), nil
 		}
 
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(otherMsgData, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other message error response: %s", possibleError.Message)
-			msg.Status = "undelivered"
+			msg.Status = statusUndelivered
 		}
 
 		return event.NewMessageResponse(msg), err
