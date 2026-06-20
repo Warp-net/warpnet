@@ -11,10 +11,12 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import site.warpnet.transport.dto.WarpnetMessage
 import site.warpnet.warpdroid.db.AccountManager
@@ -42,9 +44,37 @@ class ChatMessagesViewModel @Inject constructor(
     val state: StateFlow<State> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+    private var pollJob: Job? = null
 
     init {
         reload()
+        startPolling()
+    }
+
+    // The fat node has no live push to a paired thin client, so re-fetch the
+    // chat while it is open to surface incoming messages (e.g. bot replies).
+    private fun startPolling() {
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch {
+            while (isActive) {
+                delay(POLL_INTERVAL_MS)
+                val userId = accountManager.activeAccount?.accountId
+                if (userId.isNullOrEmpty() || chatId.isEmpty()) continue
+                val msgs = runCatching {
+                    repo.getMessages(ownerId = userId, chatId = chatId).first
+                }.getOrNull() ?: continue
+                _state.update { s ->
+                    val next = msgs.reversed()
+                    if (next.map { it.id } == s.messages.map { it.id }) s
+                    else s.copy(messages = next)
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        pollJob?.cancel()
+        super.onCleared()
     }
 
     fun reload() {
@@ -86,5 +116,9 @@ class ChatMessagesViewModel @Inject constructor(
                 s.copy(messages = next, sending = false)
             }
         }
+    }
+
+    companion object {
+        private const val POLL_INTERVAL_MS = 3000L
     }
 }
