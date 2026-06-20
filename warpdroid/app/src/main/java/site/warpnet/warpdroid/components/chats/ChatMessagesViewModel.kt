@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,19 +73,25 @@ class ChatMessagesViewModel @Inject constructor(
         val userId = accountManager.activeAccount?.accountId ?: return
         if (chatId.isEmpty() || otherUserId.isEmpty()) return
         viewModelScope.launch {
-            _state.update { it.copy(sending = true) }
-            val sent = runCatching {
-                repo.sendMessage(
+            _state.update { it.copy(sending = true, error = null) }
+            try {
+                val sent = repo.sendMessage(
                     chatId = chatId,
                     senderId = userId,
                     receiverId = otherUserId,
                     text = text,
                 )
-            }.getOrNull()
-            _state.update { s ->
-                val next = if (sent != null) s.messages + sent else s.messages
-                s.copy(messages = next, sending = false)
+                _state.update { s ->
+                    val next = if (sent != null) s.messages + sent else s.messages
+                    s.copy(messages = next, sending = false)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                _state.update { it.copy(sending = false, error = e) }
             }
         }
     }
+
+    fun clearError() = _state.update { it.copy(error = null) }
 }

@@ -12,6 +12,7 @@ package site.warpnet.warpdroid.components.chats
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
@@ -48,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -79,6 +81,16 @@ class ChatMessagesActivity : BaseActivity() {
         val otherName = intent.getStringExtra(EXTRA_OTHER_NAME).orEmpty()
         var draft by remember { mutableStateOf("") }
         val listState = rememberLazyListState()
+        val context = LocalContext.current
+
+        // Surface send/load failures instead of silently dropping them, so the
+        // backend reason (e.g. "not authorized for this chat") is visible.
+        LaunchedEffect(state.error) {
+            state.error?.let { e ->
+                Toast.makeText(context, e.message ?: e.toString(), Toast.LENGTH_LONG).show()
+                viewModel.clearError()
+            }
+        }
 
         // Whenever a new message lands, scroll to it so the user sees their
         // own send or the incoming reply without scrolling manually.
