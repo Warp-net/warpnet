@@ -95,7 +95,9 @@ func (repo *AuthRepo) Authenticate(username, password string) (err error) {
 		return err
 	}
 	repo.mx.Lock()
-	repo.sessionToken = token
+	if repo.sessionToken == "" {
+		repo.sessionToken = token
+	}
 	repo.privateKey = pk
 	repo.mx.Unlock()
 	return nil

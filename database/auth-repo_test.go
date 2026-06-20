@@ -81,6 +81,18 @@ func (s *AuthRepoTestSuite) TestSessionTokenAndPrivateKey() {
 	assert.NotNil(s.T(), s.repo.PrivateKey())
 }
 
+func (s *AuthRepoTestSuite) TestSessionTokenStablePerInstance() {
+	first := s.repo.SessionToken()
+	s.Require().NotEmpty(first)
+
+	s.Require().NoError(s.repo.Authenticate("test", "test"))
+	assert.Equal(s.T(), first, s.repo.SessionToken())
+
+	other := NewAuthRepo(s.db, "test")
+	s.Require().NoError(other.Authenticate("test", "test"))
+	assert.NotEqual(s.T(), first, other.SessionToken())
+}
+
 func (s *AuthRepoTestSuite) TestPrivateKey_PanicIfNil() {
 	defer func() {
 		if r := recover(); r == nil {
