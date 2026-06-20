@@ -150,6 +150,7 @@ class WarpnetRepository @Inject constructor(
     private val getMessagesAdapter = moshi.adapter<site.warpnet.transport.dto.GetMessagesEvent>()
     private val getMessagesRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMessagesResponse>()
     private val newMessageAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetMessage>()
+    private val newMessageEventAdapter = moshi.adapter<site.warpnet.transport.dto.NewMessageEvent>()
     private val deleteMessageAdapter = moshi.adapter<site.warpnet.transport.dto.DeleteMessageEvent>()
     private val unretweetAdapter = moshi.adapter<UnretweetEvent>()
     private val reportEventAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetReportEvent>()
@@ -1046,8 +1047,8 @@ class WarpnetRepository @Inject constructor(
     ): site.warpnet.transport.dto.WarpnetMessage? {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_MESSAGE,
-            newMessageAdapter.toJson(
-                site.warpnet.transport.dto.WarpnetMessage(
+            newMessageEventAdapter.toJson(
+                site.warpnet.transport.dto.NewMessageEvent(
                     chatId = chatId,
                     senderId = senderId,
                     receiverId = receiverId,
