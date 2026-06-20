@@ -11,10 +11,12 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import site.warpnet.transport.dto.WarpnetMessage
 import site.warpnet.warpdroid.db.AccountManager
@@ -42,9 +44,41 @@ class ChatMessagesViewModel @Inject constructor(
     val state: StateFlow<State> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+    private var pollJob: Job? = null
 
     init {
         reload()
+    }
+
+    fun startPolling() {
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch {
+            while (isActive) {
+                val userId = accountManager.activeAccount?.accountId
+                if (!userId.isNullOrEmpty() && chatId.isNotEmpty()) {
+                    val limit = maxOf(_state.value.messages.size, DEFAULT_PAGE)
+                    val msgs = runCatching {
+                        repo.getMessages(ownerId = userId, chatId = chatId, limit = limit).first
+                    }.getOrNull()
+                    if (msgs != null) {
+                        _state.update { s ->
+                            val next = msgs.reversed()
+                            if (next == s.messages) s else s.copy(messages = next)
+                        }
+                    }
+                }
+                delay(POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    fun stopPolling() {
+        pollJob?.cancel()
+    }
+
+    override fun onCleared() {
+        pollJob?.cancel()
+        super.onCleared()
     }
 
     fun reload() {
@@ -86,5 +120,10 @@ class ChatMessagesViewModel @Inject constructor(
                 s.copy(messages = next, sending = false)
             }
         }
+    }
+
+    companion object {
+        private const val POLL_INTERVAL_MS = 3000L
+        private const val DEFAULT_PAGE = 40
     }
 }
