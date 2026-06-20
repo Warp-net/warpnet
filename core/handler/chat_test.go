@@ -405,11 +405,11 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		t.Fatalf("unexpected user not found branch: %#v err=%v", resp, err)
 	}
 
-	_, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
+	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
 	}}, stubUserRepo{getFn: func(userId string) (domain.User, error) { return domain.User{}, repoErr }}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
-	if !errors.Is(err, repoErr) {
-		t.Fatalf("expected user repo error: %v", err)
+	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
+		t.Fatalf("expected undelivered on receiver resolve error: %#v err=%v", resp, err)
 	}
 
 	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
@@ -421,13 +421,13 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		t.Fatalf("expected undelivered offline: %#v err=%v", resp, err)
 	}
 
-	_, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
+	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
 	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 		return nil, repoErr
 	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
-	if !errors.Is(err, repoErr) {
-		t.Fatalf("expected stream error: %v", err)
+	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
+		t.Fatalf("expected undelivered on stream error: %#v err=%v", resp, err)
 	}
 
 	remoteErr, _ := json.Marshal(event.ResponseError{Message: "remote failed", Code: 400})

@@ -2,5 +2,5 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android" android:layout_height="108dp" android:layout_width="108dp">
     <background android:drawable="@color/icon_background"/>
     <foreground android:drawable="@drawable/launcher_foreground" />
-    <monochrome android:drawable="@drawable/launcher_monochrome"/>
+    <monochrome android:drawable="@drawable/launcher_monochrome_inset"/>
 </adaptive-icon>
