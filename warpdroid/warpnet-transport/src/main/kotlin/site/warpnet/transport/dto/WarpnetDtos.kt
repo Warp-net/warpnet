@@ -596,8 +596,9 @@ data class GetMessagesResponse(
     val messages: List<WarpnetMessage> = emptyList(),
 )
 
-// Wire shape mirrors domain.ChatMessage. Send paths populate sender / receiver
-// / chat / text; the server fills id and timestamps.
+// Wire shape mirrors domain.ChatMessage. Used to PARSE responses; sending must
+// use NewMessageEvent instead, since an empty created_at ("") fails to
+// unmarshal into the node's time.Time field.
 @JsonClass(generateAdapter = true)
 data class WarpnetMessage(
     val id: String = "",
@@ -607,6 +608,17 @@ data class WarpnetMessage(
     val text: String = "",
     @Json(name = "created_at") val createdAt: String = "",
     val status: String = "",
+)
+
+// Send-only body for PUBLIC_POST_MESSAGE: just the fields the node reads. The
+// server assigns id/created_at/status, so we must not send created_at="" — the
+// node parses it into time.Time and rejects the empty string.
+@JsonClass(generateAdapter = true)
+data class NewMessageEvent(
+    @Json(name = "chat_id") val chatId: String,
+    @Json(name = "sender_id") val senderId: String,
+    @Json(name = "receiver_id") val receiverId: String,
+    val text: String,
 )
 
 // Wire shape mirrors event.DeleteMessageEvent = GetMessageEvent.
