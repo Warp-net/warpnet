@@ -48,12 +48,9 @@ class ChatMessagesViewModel @Inject constructor(
 
     init {
         reload()
-        startPolling()
     }
 
-    // The fat node has no live push to a paired thin client, so re-fetch the
-    // chat while it is open to surface incoming messages (e.g. bot replies).
-    private fun startPolling() {
+    fun startPolling() {
         pollJob?.cancel()
         pollJob = viewModelScope.launch {
             while (isActive) {
@@ -65,11 +62,14 @@ class ChatMessagesViewModel @Inject constructor(
                 }.getOrNull() ?: continue
                 _state.update { s ->
                     val next = msgs.reversed()
-                    if (next.map { it.id } == s.messages.map { it.id }) s
-                    else s.copy(messages = next)
+                    if (next == s.messages) s else s.copy(messages = next)
                 }
             }
         }
+    }
+
+    fun stopPolling() {
+        pollJob?.cancel()
     }
 
     override fun onCleared() {

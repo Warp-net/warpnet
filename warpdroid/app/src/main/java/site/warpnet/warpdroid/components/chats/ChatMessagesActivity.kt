@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import site.warpnet.transport.dto.WarpnetMessage
@@ -79,6 +80,11 @@ class ChatMessagesActivity : BaseActivity() {
         val otherName = intent.getStringExtra(EXTRA_OTHER_NAME).orEmpty()
         var draft by remember { mutableStateOf("") }
         val listState = rememberLazyListState()
+
+        LifecycleResumeEffect(Unit) {
+            viewModel.startPolling()
+            onPauseOrDispose { viewModel.stopPolling() }
+        }
 
         // Whenever a new message lands, scroll to it so the user sees their
         // own send or the incoming reply without scrolling manually.
