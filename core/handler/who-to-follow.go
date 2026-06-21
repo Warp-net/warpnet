@@ -25,9 +25,6 @@ func StreamGetWhoToFollowHandler(
 			return nil, errEmptyUserId
 		}
 
-		// Candidates come back in RTT-key order with the BadgerDB cursor
-		// threaded through, so a "new" account (empty graph) gets the
-		// nearest-by-RTT peers for free and pagination stays cursor-based.
 		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
@@ -36,7 +33,7 @@ func StreamGetWhoToFollowHandler(
 		followingsLimit := uint64(80) //nolint:mnd    // TODO limit?
 		followings, _, err := followRepo.GetFollowings(authRepo.GetOwner().UserId, &followingsLimit, nil)
 		if err != nil {
-			log.Errorf("get who to follow handler: get followings %v", err)
+			log.Errorf("get who to follow handler: get followers %v", err)
 		}
 
 		followedUsers := map[string]struct{}{}
@@ -59,20 +56,6 @@ func StreamGetWhoToFollowHandler(
 
 		whotofollow := make([]domain.User, 0, len(users))
 		latestByNode := make(map[string]int, len(users))
-
-		// Pin the Mastodon entry account on top of the owner's first page
-		// until it is followed. It is seeded without an avatar/tweets, so it
-		// never survives the candidate filters - surface it explicitly.
-		isOwnerView := ev.UserId == owner.UserId
-		isFirstPage := ev.Cursor == nil || *ev.Cursor == ""
-		if isOwnerView && isFirstPage {
-			if entry, err := userRepo.Get(mastodon.EntryHandle); err == nil && entry.Id != "" {
-				if _, followed := followedUsers[entry.Id]; !followed && entry.Id != owner.UserId {
-					whotofollow = append(whotofollow, entry)
-				}
-			}
-		}
-
 		for _, user := range users {
 			if user.IsOffline { // exclude offline
 				continue
@@ -85,9 +68,6 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 			if _, ok := followedUsers[user.Id]; ok { // exclude already followed
-				continue
-			}
-			if user.Id == mastodon.EntryHandle { // already pinned above
 				continue
 			}
 

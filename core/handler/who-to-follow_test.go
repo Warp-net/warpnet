@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -69,14 +68,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	})
 
 	t.Run("empty results", func(t *testing.T) {
-		// getFn misses for everyone (incl. the Mastodon entry) so nothing is pinned.
-		h := StreamGetWhoToFollowHandler(
-			stubAuth{owner: domain.Owner{UserId: owner}},
-			stubUserFetcher{getFn: func(userId string) (domain.User, error) {
-				return domain.User{}, errors.New("not found")
-			}},
-			stubUserFollowsCounter{},
-		)
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -84,49 +76,6 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		r := resp.(event.UsersResponse)
 		if len(r.Users) != 0 {
 			t.Fatalf("expected empty users: %v", r.Users)
-		}
-	})
-
-	t.Run("pins mastodon entry until followed", func(t *testing.T) {
-		fetcher := stubUserFetcher{
-			whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
-				return []domain.User{}, "", nil
-			},
-			getFn: func(userId string) (domain.User, error) {
-				if userId == mastodon.EntryHandle {
-					return domain.User{Id: mastodon.EntryHandle, NodeId: mastodon.GatewayNodeID, Network: mastodon.Network}, nil
-				}
-				return domain.User{}, errors.New("not found")
-			},
-		}
-
-		h := StreamGetWhoToFollowHandler(
-			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-1"}},
-			fetcher, stubUserFollowsCounter{},
-		)
-		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		r := resp.(event.UsersResponse)
-		if len(r.Users) != 1 || r.Users[0].Id != mastodon.EntryHandle {
-			t.Fatalf("expected pinned mastodon entry, got: %v", r.Users)
-		}
-
-		hFollowed := StreamGetWhoToFollowHandler(
-			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-1"}},
-			fetcher,
-			stubUserFollowsCounter{getFollowingsFn: func(userId string, limit *uint64, cursor *string) ([]string, string, error) {
-				return []string{mastodon.EntryHandle}, "", nil
-			}},
-		)
-		respFollowed, err := hFollowed(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		rFollowed := respFollowed.(event.UsersResponse)
-		if len(rFollowed.Users) != 0 {
-			t.Fatalf("expected mastodon entry hidden once followed, got: %v", rFollowed.Users)
 		}
 	})
 }
