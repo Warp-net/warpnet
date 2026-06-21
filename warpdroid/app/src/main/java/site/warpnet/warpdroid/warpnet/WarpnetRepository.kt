@@ -1363,18 +1363,9 @@ class WarpnetRepository @Inject constructor(
         ttlMillis = TWEET_CACHE_TTL_MILLIS,
     )
 
-    // Image-blob cache for getImageBytes. Warpnet image keys are content
-    // hashes (SHA-256 of the bytes; see database.MediaRepo.SetImage), so a
-    // (userId, key) pair maps to immutable bytes for all time — caching it
-    // needs neither a TTL nor invalidation, and a changed avatar simply
-    // produces a new key. Glide already memory-caches decoded bitmaps and
-    // disk-caches the source bytes, but every miss above this layer pays a
-    // base64 relay round-trip through PUBLIC_GET_IMAGE; this backstops those
-    // misses (Glide disk eviction, the fullscreen viewer's network fallback,
-    // concurrent first paints).
-    // Bounded by total bytes rather than entry count because image sizes
-    // vary widely, capping memory on low-end devices. LruCache is itself
-    // synchronized, so the fetch fan-out can share it without coordination.
+    // Image-blob cache for getImageBytes. Keys are SHA-256 content hashes,
+    // so (userId, key) -> bytes is immutable: no TTL or invalidation needed.
+    // Bounded by total bytes, not entry count, since image sizes vary widely.
     private val imageCache = object : LruCache<String, ByteArray>(IMAGE_CACHE_MAX_BYTES) {
         override fun sizeOf(key: String, value: ByteArray): Int = value.size
     }
