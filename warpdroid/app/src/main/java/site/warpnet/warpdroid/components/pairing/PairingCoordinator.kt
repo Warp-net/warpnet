@@ -32,6 +32,10 @@ sealed class PairingOutcome {
     data class PeerIdMismatch(val expected: String, val errorMessage: String) : PairingOutcome()
 }
 
+internal fun WarpnetException.ProtocolError.isDurablePairRejection(): Boolean =
+    serverMessage.contains("token mismatch", ignoreCase = true) ||
+        serverMessage.contains("empty token", ignoreCase = true)
+
 @Singleton
 class PairingCoordinator @Inject constructor(
     private val client: WarpnetClient,
@@ -75,7 +79,11 @@ class PairingCoordinator @Inject constructor(
             withContext(Dispatchers.IO) { pairedNodeStore.save(paired, rawJson) }
             PairingOutcome.Success(paired)
         } catch (e: WarpnetException.ProtocolError) {
-            PairingOutcome.Rejected(e.code, e.serverMessage)
+            if (e.isDurablePairRejection()) {
+                PairingOutcome.Rejected(e.code, e.serverMessage)
+            } else {
+                PairingOutcome.TransportError(e.serverMessage)
+            }
         } catch (e: WarpnetException.TransportFailure) {
             // libp2p verifies peer ID during the Noise handshake; a mismatch
             // surfaces as a transport failure with a "peer id mismatch" hint

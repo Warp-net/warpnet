@@ -26,6 +26,7 @@ import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.WarpnetException
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.pairing.PairingActivity
+import site.warpnet.warpdroid.components.pairing.isDurablePairRejection
 
 /**
  * Periodically re-pings the fat node's /private/post/pair handler so the
@@ -57,20 +58,21 @@ class PairRefreshWorker @AssistedInject constructor(
             Log.d(TAG, "pair refresh skipped: not initialised")
             Result.success()
         } catch (e: WarpnetException.ProtocolError) {
-            // The fat node rejected the pairing (token mismatch / no
-            // longer paired). The stored identity is unusable — wipe it
-            // and bounce the user to the QR scanner. Returns success so
-            // WorkManager doesn't loop on a non-recoverable failure.
-            Log.w(TAG, "pair refresh rejected: code=${e.code} ${e.serverMessage}")
-            withContext(Dispatchers.IO) { pairedNodeStore.clear() }
-            client.shutdown()
-            val intent = Intent(applicationContext, PairingActivity::class.java)
-                .addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TASK,
-                )
-            applicationContext.startActivity(intent)
-            Result.success()
+            if (!e.isDurablePairRejection()) {
+                Log.w(TAG, "pair refresh transient node error: code=${e.code} ${e.serverMessage}")
+                Result.retry()
+            } else {
+                Log.w(TAG, "pair refresh rejected: code=${e.code} ${e.serverMessage}")
+                withContext(Dispatchers.IO) { pairedNodeStore.clear() }
+                client.shutdown()
+                val intent = Intent(applicationContext, PairingActivity::class.java)
+                    .addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TASK,
+                    )
+                applicationContext.startActivity(intent)
+                Result.success()
+            }
         } catch (e: Exception) {
             Log.w(TAG, "pair refresh failed", e)
             Result.retry()

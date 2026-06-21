@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- the original Warpdroid Blue, but for better contrast warpdroid_blue_light and warpdroid_blue_dark should be used in the ui-->
-    <color name="warpdroid_blue">#2b90d9</color>
-    <color name="warpdroid_blue_light">#3c9add</color>
-    <color name="warpdroid_blue_dark">#217aba</color>
-    <color name="warpdroid_blue_lighter">#56a7e1</color>
+    <!-- Warpnet brand magenta (#C5007F, canonical from the frontend); _light is the lighter accent #f4d5e1. Names kept historically. -->
+    <color name="warpdroid_blue">#C5007F</color>
+    <color name="warpdroid_blue_light">#f4d5e1</color>
+    <color name="warpdroid_blue_dark">#C5007F</color>
+    <color name="warpdroid_blue_lighter">#f4d5e1</color>
     <color name="warpdroid_orange">#ca8f04</color>
     <color name="warpdroid_orange_light">#fab207</color>
     <color name="warpdroid_green_dark">#00731B</color>
@@ -33,10 +33,10 @@
     <color name="warpdroid_grey_90">#d9e1e8</color>
     <color name="warpdroid_grey_95">#ebeff4</color>
 
-    <color name="warpdroid_grey_blue_light">#94bada</color>
-    <color name="warpdroid_grey_blue_dark">#305879</color>
+    <color name="warpdroid_grey_blue_light">#f4d5e1</color>
+    <color name="warpdroid_grey_blue_dark">#630241</color>
 
-    <color name="transparent_warpdroid_blue">#8c2b90d9</color>
+    <color name="transparent_warpdroid_blue">#8cc5007f</color>
     <color name="transparent_black">#8f000000</color>
     <color name="transparent_warpdroid_grey_10">#CC16191f</color>
     <color name="header_background_filter_dark">#44000000</color>
