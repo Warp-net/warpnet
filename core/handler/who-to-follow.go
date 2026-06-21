@@ -17,6 +17,7 @@ import (
 
 const (
 	whoToFollowDefaultLimit   = 20
+	whoToFollowMaxLimit       = 100
 	whoToFollowCandidateScan  = 500
 	whoToFollowSnapshotTTL    = 10 * time.Minute
 	whoToFollowFanoutCap      = 30
@@ -96,15 +97,16 @@ func paginateUsers(users []domain.User, cursor *string, limit *uint64) event.Use
 	}
 	size := whoToFollowDefaultLimit
 	if limit != nil && *limit > 0 {
-		size = int(*limit)
+		l := *limit
+		if l > whoToFollowMaxLimit {
+			l = whoToFollowMaxLimit
+		}
+		size = int(l) //nolint:gosec // bounded by whoToFollowMaxLimit, safe to convert
 	}
 	if offset >= len(users) {
 		return event.UsersResponse{Users: []domain.User{}}
 	}
-	end := offset + size
-	if end > len(users) {
-		end = len(users)
-	}
+	end := min(offset+size, len(users))
 	next := ""
 	if end < len(users) {
 		next = strconv.Itoa(end)
