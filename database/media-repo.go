@@ -37,9 +37,9 @@ import (
 )
 
 const (
-	MediaRepoName       = "/MEDIA"
-	ImageSubNamespace   = "IMAGES"
-	ImageMetaSubNS      = "IMAGES_META"
+	MediaRepoName     = "/MEDIA"
+	ImageSubNamespace = "IMAGES"
+	ImageMetaSubNS    = "IMAGES_META"
 	// VideoSubNamespace is reserved — videos are not yet supported.
 	VideoSubNamespace = "VIDEOS"
 )

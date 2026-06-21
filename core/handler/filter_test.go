@@ -10,14 +10,14 @@ import (
 )
 
 type stubFilterRepo struct {
-	createFn        func(userId string, f domain.Filter) (domain.Filter, error)
-	getFn           func(userId, filterId string) (domain.Filter, error)
-	updateFn        func(userId string, f domain.Filter) (domain.Filter, error)
-	deleteFn        func(userId, filterId string) error
-	listFn          func(userId string, limit *uint64, cursor *string) ([]domain.Filter, string, error)
-	addKwFn         func(userId, filterId string, kw domain.FilterKeyword) (domain.FilterKeyword, error)
-	updateKwFn      func(userId string, kw domain.FilterKeyword) (domain.FilterKeyword, error)
-	deleteKwFn      func(userId, keywordId string) error
+	createFn   func(userId string, f domain.Filter) (domain.Filter, error)
+	getFn      func(userId, filterId string) (domain.Filter, error)
+	updateFn   func(userId string, f domain.Filter) (domain.Filter, error)
+	deleteFn   func(userId, filterId string) error
+	listFn     func(userId string, limit *uint64, cursor *string) ([]domain.Filter, string, error)
+	addKwFn    func(userId, filterId string, kw domain.FilterKeyword) (domain.FilterKeyword, error)
+	updateKwFn func(userId string, kw domain.FilterKeyword) (domain.FilterKeyword, error)
+	deleteKwFn func(userId, keywordId string) error
 }
 
 func (s stubFilterRepo) Create(u string, f domain.Filter) (domain.Filter, error) {

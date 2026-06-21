@@ -5,11 +5,11 @@
 // speak the same libp2p protocols agree on their wire contract:
 //
 //   - Backend (Go):  event/paths.go + event/event.go + domain/warpnet.go
-//                  + core/handler/*.go
-//                  + cmd/node/member/node/member-node.go (the route table)
+//   - core/handler/*.go
+//   - cmd/node/member/node/member-node.go (the route table)
 //   - Frontend (JS): frontend/src/service/service.js
 //   - Warpdroid:     warpdroid/.../ProtocolIds.kt + WarpnetDtos.kt
-//                  + warpdroid/.../WarpnetRepository.kt
+//   - warpdroid/.../WarpnetRepository.kt
 //
 // What the test enforces, end to end (no hand-curated table — everything
 // is discovered from the sources themselves):
@@ -22,16 +22,16 @@
 //     body, the test walks the alias chain from event.X (possibly into
 //     domain.Y) to a concrete struct. Then, for each client that wires
 //     the protocol:
-//       a) the client's keys must be a subset of the backend struct's
-//          JSON tags (typos / renames = fail);
-//       b) every Go field the handler explicitly validates as non-empty
-//          (`if ev.X == ""` / `if ev.X == nil`) must be present on the
-//          wire (missing required field = fail). The required set is
-//          read directly from handler code, not derived from
-//          `omitempty`, so server-stamped fields like
-//          domain.Tweet.Id and domain.Tweet.CreatedAt — which lack
-//          `omitempty` but are absent from request bodies on purpose —
-//          do not produce false positives.
+//     a) the client's keys must be a subset of the backend struct's
+//     JSON tags (typos / renames = fail);
+//     b) every Go field the handler explicitly validates as non-empty
+//     (`if ev.X == ""` / `if ev.X == nil`) must be present on the
+//     wire (missing required field = fail). The required set is
+//     read directly from handler code, not derived from
+//     `omitempty`, so server-stamped fields like
+//     domain.Tweet.Id and domain.Tweet.CreatedAt — which lack
+//     `omitempty` but are absent from request bodies on purpose —
+//     do not produce false positives.
 //     If a routed body-decoding handler is wired by neither client, the
 //     subtest fails unless the path is allowlisted in
 //     protocolsWithoutClient (node-only protocols or documented
@@ -1047,24 +1047,24 @@ func kotlinResponseDtoForPath(t *testing.T, adapters map[string]string) map[stri
 var protocolsWithoutResponseDTO = map[string]string{
 	// Acks: handlers return event.Accepted (a string constant) so there's
 	// nothing to compare against on the wire.
-	"PRIVATE_POST_BLOCK":                     "ack-only: handler returns event.Accepted",
-	"PRIVATE_POST_UNBLOCK":                   "ack-only: handler returns event.Accepted",
-	"PRIVATE_POST_MUTE":                      "ack-only: handler returns event.Accepted",
-	"PRIVATE_POST_UNMUTE":                    "ack-only: handler returns event.Accepted",
-	"PRIVATE_POST_BOOKMARK":                  "ack-only: handler returns event.Accepted",
-	"PRIVATE_POST_UNBOOKMARK":                "ack-only: handler returns event.Accepted",
-	"PRIVATE_POST_NOTIFICATION_READ":         "ack-only: handler returns event.Accepted",
-	"PRIVATE_DELETE_CHAT":                    "ack-only: handler returns event.Accepted",
-	"PRIVATE_DELETE_MESSAGE":                 "ack-only: handler returns event.Accepted",
-	"PRIVATE_DELETE_FILTER":                  "ack-only: handler returns event.Accepted",
-	"PRIVATE_DELETE_FILTER_KEYWORD":          "ack-only: handler returns event.Accepted",
-	"PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE":  "ack-only: handler returns event.Accepted",
-	"PRIVATE_POST_FOLLOW_REQUEST_REJECT":     "ack-only: handler returns event.Accepted",
-	"PUBLIC_POST_PIN":                        "ack-only: handler returns event.Accepted",
-	"PUBLIC_POST_UNPIN":                      "ack-only: handler returns event.Accepted",
-	"PUBLIC_POST_VIEW":                       "ack-only: handler returns event.Accepted",
-	"PUBLIC_DELETE_REPLY":                    "ack-only: handler returns event.Accepted",
-	"PRIVATE_DELETE_TWEET":                   "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_BLOCK":                    "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_UNBLOCK":                  "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_MUTE":                     "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_UNMUTE":                   "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_BOOKMARK":                 "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_UNBOOKMARK":               "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_NOTIFICATION_READ":        "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_CHAT":                   "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_MESSAGE":                "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_FILTER":                 "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_FILTER_KEYWORD":         "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE": "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_FOLLOW_REQUEST_REJECT":    "ack-only: handler returns event.Accepted",
+	"PUBLIC_POST_PIN":                       "ack-only: handler returns event.Accepted",
+	"PUBLIC_POST_UNPIN":                     "ack-only: handler returns event.Accepted",
+	"PUBLIC_POST_VIEW":                      "ack-only: handler returns event.Accepted",
+	"PUBLIC_DELETE_REPLY":                   "ack-only: handler returns event.Accepted",
+	"PRIVATE_DELETE_TWEET":                  "ack-only: handler returns event.Accepted",
 }
 
 func TestAPISync_ResponsePayloads(t *testing.T) {
@@ -1127,4 +1127,3 @@ func TestAPISync_ResponsePayloads(t *testing.T) {
 	}
 	require.Greaterf(t, checked, 0, "no response payloads compared — discovery is broken")
 }
-
