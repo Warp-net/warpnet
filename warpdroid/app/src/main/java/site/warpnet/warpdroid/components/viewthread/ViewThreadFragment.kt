@@ -215,7 +215,7 @@ class ViewThreadFragment :
     private fun ViewThreadContentList(
         uiState: ThreadUiState.Success
     ) {
-        val statuses = uiState.statusViewData.distinctBy { it.id }
+        val statuses = remember(uiState.statusViewData) { uiState.statusViewData.distinctBy { it.id } }
 
         var refreshing by remember { mutableStateOf(false) }
 

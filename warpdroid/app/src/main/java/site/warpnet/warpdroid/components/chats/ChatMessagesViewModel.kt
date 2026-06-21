@@ -122,14 +122,16 @@ class ChatMessagesViewModel @Inject constructor(
         }
     }
 
-    private fun List<WarpnetMessage>.orderedForDisplay(): List<WarpnetMessage> =
-        distinctBy { it.id.ifEmpty { it.createdAt + it.text } }
-            .sortedWith(
-                compareBy(
-                    { runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH },
-                    { it.id },
-                )
-            )
+    private fun List<WarpnetMessage>.orderedForDisplay(): List<WarpnetMessage> {
+        // Must equal the LazyColumn item key; used for both de-dup and the sort tie-break.
+        fun key(m: WarpnetMessage) = m.id.ifEmpty { m.createdAt + m.text }
+        return distinctBy(::key).sortedWith(
+            compareBy(
+                { runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH },
+                ::key,
+            ),
+        )
+    }
 
     companion object {
         private const val POLL_INTERVAL_MS = 3000L

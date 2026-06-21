@@ -344,7 +344,7 @@ class TimelineFragment :
                     val visibleStatusIds: Set<String> by remember(listState) {
                         derivedStateOf {
                             listState.layoutInfo.visibleItemsInfo
-                                .mapNotNull { it.key as? String }
+                                .mapNotNull { statuses.getOptId(it.index) }
                                 .toSet()
                         }
                     }
@@ -423,7 +423,7 @@ class TimelineFragment :
                                         onLoadMore = {
                                             viewModel.loadMore(viewData.id)
                                             val itemAfter = listState.layoutInfo.visibleItemsInfo.find { it.index == index + 1 }
-                                            idOfItemBelow = itemAfter?.key as? String?
+                                            idOfItemBelow = itemAfter?.let { statuses.getOptId(it.index) }
                                         },
                                         modifier = Modifier.widthIn(max = 640.dp)
                                     )
@@ -462,7 +462,7 @@ class TimelineFragment :
                                 if (idOfItemBelow != null && statuses.itemCount > itemCount && firstItemId == statuses.getOptId(0) && lastItemId == statuses.getOptId(statuses.itemCount - 1)) {
                                     // items got inserted but not at the top or bottom -> must be a load more insert
                                     // check if the item that was below the "load more" gap is still visible
-                                    listState.layoutInfo.visibleItemsInfo.find { itemInfo -> itemInfo.key == idOfItemBelow }?.offset?.let { offsetOfItemBelow ->
+                                    listState.layoutInfo.visibleItemsInfo.find { itemInfo -> statuses.getOptId(itemInfo.index) == idOfItemBelow }?.offset?.let { offsetOfItemBelow ->
                                         // if it is, find its new index
                                         val itemBelow = statuses.itemSnapshotList.find { it?.id == idOfItemBelow }
                                         val indexOfItemBelow = statuses.itemSnapshotList.indexOf(itemBelow)
