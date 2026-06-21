@@ -82,7 +82,7 @@ class ChatsViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             delay(300) // debounce keystrokes before hitting the fat node
             val users = try {
-                repo.searchAccounts(query).first
+                repo.searchAccounts(query).first.distinctBy { it.id }
             } catch (e: CancellationException) {
                 throw e // a superseded search must stay cancelled, not fall through
             } catch (e: Throwable) {
@@ -117,7 +117,7 @@ class ChatsViewModel @Inject constructor(
             _state.update { it.copy(loading = true, error = null) }
             try {
                 val (chats, _) = repo.getChats(userId)
-                val rows = chats.map { chat ->
+                val rows = chats.distinctBy { it.id }.map { chat ->
                     val otherUserId = if (chat.ownerId == userId) chat.otherUserId else chat.ownerId
                     val other = try {
                         repo.getTimelineUser(otherUserId)
