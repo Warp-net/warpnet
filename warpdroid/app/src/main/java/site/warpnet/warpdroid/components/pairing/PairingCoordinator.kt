@@ -32,6 +32,13 @@ sealed class PairingOutcome {
     data class PeerIdMismatch(val expected: String, val errorMessage: String) : PairingOutcome()
 }
 
+// Durable de-pair only for a genuine auth rejection (token mismatch / empty
+// token; see core/handler/pair.go). Other envelopes (5000 internal error,
+// server-side stream-read, deadline) are transient and must not wipe creds.
+internal fun WarpnetException.ProtocolError.isDurablePairRejection(): Boolean =
+    serverMessage.contains("token mismatch", ignoreCase = true) ||
+        serverMessage.contains("empty token", ignoreCase = true)
+
 @Singleton
 class PairingCoordinator @Inject constructor(
     private val client: WarpnetClient,
@@ -75,7 +82,13 @@ class PairingCoordinator @Inject constructor(
             withContext(Dispatchers.IO) { pairedNodeStore.save(paired, rawJson) }
             PairingOutcome.Success(paired)
         } catch (e: WarpnetException.ProtocolError) {
-            PairingOutcome.Rejected(e.code, e.serverMessage)
+            if (e.isDurablePairRejection()) {
+                PairingOutcome.Rejected(e.code, e.serverMessage)
+            } else {
+                // Transient/internal node error surfaced as a ResponseError;
+                // keep credentials and let the caller retry, not re-scan.
+                PairingOutcome.TransportError(e.serverMessage)
+            }
         } catch (e: WarpnetException.TransportFailure) {
             // libp2p verifies peer ID during the Noise handshake; a mismatch
             // surfaces as a transport failure with a "peer id mismatch" hint
