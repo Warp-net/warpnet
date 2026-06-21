@@ -674,7 +674,7 @@ func (m *MemberNode) userHandlers(
 		},
 		{
 			event.PUBLIC_GET_WHOTOFOLLOW,
-			handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo, m),
+			handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo),
 		},
 		{
 			event.PRIVATE_POST_USER,

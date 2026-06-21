@@ -13,7 +13,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	owner := "owner-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -21,7 +21,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
 		_, err := h(marshal(t, event.GetAllUsersEvent{}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -46,7 +46,6 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			stubUserFollowsCounter{getFollowingsFn: func(userId string, limit *uint64, cursor *string) ([]string, string, error) {
 				return []string{"already-followed"}, "", nil
 			}},
-			stubUserStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -62,7 +61,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
 			return nil, "", repoErr
-		}}, stubUserFollowsCounter{}, stubUserStreamer{})
+		}}, stubUserFollowsCounter{})
 		_, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -77,7 +76,6 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 				return domain.User{}, errors.New("not found")
 			}},
 			stubUserFollowsCounter{},
-			stubUserStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -104,7 +102,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 
 		h := StreamGetWhoToFollowHandler(
 			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-1"}},
-			fetcher, stubUserFollowsCounter{}, stubUserStreamer{},
+			fetcher, stubUserFollowsCounter{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -121,7 +119,6 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			stubUserFollowsCounter{getFollowingsFn: func(userId string, limit *uint64, cursor *string) ([]string, string, error) {
 				return []string{mastodon.EntryHandle}, "", nil
 			}},
-			stubUserStreamer{},
 		)
 		respFollowed, err := hFollowed(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
