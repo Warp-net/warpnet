@@ -19,11 +19,11 @@ import site.warpnet.transport.dto.AuthNodeInfo
 /**
  * Runs the full pairing handshake: init → dial → pair → persist.
  *
- * Failure surfaces: [PairingOutcome.TransportError] for dial-time failures
- * (firewall, PSK mismatch, network unreachable) and
- * [PairingOutcome.Rejected] for server-side rejections ("token mismatch",
- * etc.). Identity is only persisted after the server returns exactly
- * `{"code":0,"message":"Accepted"}`.
+ * Failure surfaces: [PairingOutcome.Rejected] only for durable auth rejections
+ * ("token mismatch" / "empty token"); [PairingOutcome.TransportError] for
+ * dial-time failures (firewall, PSK mismatch, network unreachable) and for
+ * transient server-side errors. Identity is persisted only after the node
+ * accepts the pair and returns its public multiaddrs.
  */
 sealed class PairingOutcome {
     data class Success(val paired: PairedNode) : PairingOutcome()
