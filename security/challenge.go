@@ -25,19 +25,18 @@ resulting from the use or misuse of this software.
 package security
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io/fs"
 	"math/rand/v2" //#nosec
-	"path/filepath"
+	"path"
 	"sort"
 	"strconv"
 )
 
 type SampleLocation struct {
 	DirStack  []int // every index is level and value is dir num
-	FileStack []int // file index, line index, left line border, right line border
+	FileStack []int // file index
 }
 
 func ResolveChallenge(codebase FileSystem, location SampleLocation, nonce int64) ([]byte, error) {
@@ -60,10 +59,7 @@ func GenerateChallenge(codebase FileSystem, nonce int64) ([]byte, SampleLocation
 
 var (
 	ErrNoSampleFiles          = errors.New("challenge: no usable files or subdirectories")
-	ErrEmptySampleLine        = errors.New("empty sample line found")
-	ErrNoNonEmptySampleLines  = errors.New("no non-empty lines found")
 	ErrSampleIndexOutOfBounds = errors.New("sample index out of bounds")
-	ErrInvalidSubstringBounds = errors.New("invalid substring bounds")
 )
 
 func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, result SampleLocation, err error) {
@@ -85,79 +81,37 @@ func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, 
 		}
 	}
 
-	perm := rand.Perm(len(dirs))
-	for _, dirIndex := range perm {
-		selectedDir := dirs[dirIndex]
-		subPath := filepath.Join(dir, selectedDir.Name())
-
-		subEntries, err := fs.ReadDir(codebase, subPath)
-		if err != nil {
-			continue
-		}
-
-		var fileCount int
-		for _, e := range subEntries {
-			if !e.IsDir() {
-				fileCount++
+	// Subdirectories and the files of this directory compete on equal footing,
+	// so files outside leaf directories are sampled too.
+	total := len(dirs) + len(files)
+	for _, c := range rand.Perm(total) {
+		if c < len(dirs) {
+			subPath := path.Join(dir, dirs[c].Name())
+			sample, subResult, err := generateSample(codebase, subPath, append(dirStack, c))
+			if err == nil {
+				return sample, subResult, nil
 			}
-		}
-		if fileCount == 0 {
 			continue
 		}
 
-		sample, subResult, err := generateSample(codebase, subPath, append(dirStack, dirIndex))
-		if err == nil {
-			return sample, subResult, nil
+		fileIndex := c - len(dirs)
+		fullPath := path.Join(dir, files[fileIndex].Name())
+
+		content, err := fs.ReadFile(codebase, fullPath)
+		if err != nil || len(content) == 0 {
+			continue
 		}
+
+		return string(content), SampleLocation{
+			DirStack:  dirStack,
+			FileStack: []int{fileIndex},
+		}, nil
 	}
 
-	if len(files) == 0 {
-		return "", result, ErrNoSampleFiles
-	}
-
-	fileIndex := rand.IntN(len(files)) //#nosec
-	selectedFile := files[fileIndex]
-	fullPath := filepath.Join(dir, selectedFile.Name())
-
-	line, lineNum, err := getRandomLine(codebase, fullPath)
-	if err != nil {
-		return "", result, fmt.Errorf("challenge: read random line from %s: %w", fullPath, err)
-	}
-	if len(line) == 0 {
-		return "", result, fmt.Errorf("challenge: %w, path: %s", ErrEmptySampleLine, fullPath)
-	}
-
-	lineLen := len(line)
-	var left, right int
-	if lineLen == 1 {
-		left, right = 0, 1
-	} else {
-		left = rand.IntN(lineLen - 1)                //#nosec
-		right = left + 1 + rand.IntN(lineLen-left-1) //#nosec
-	}
-
-	sample := line[left:right]
-
-	return sample, SampleLocation{
-		DirStack:  dirStack,
-		FileStack: []int{fileIndex, lineNum, left, right},
-	}, nil
+	return "", result, ErrNoSampleFiles
 }
 
-func getRandomLine(codebase FileSystem, path string) (string, int, error) {
-	lines, err := readLines(codebase, path)
-	if err != nil {
-		return "", 0, err
-	}
-	if len(lines) == 0 {
-		return "", 0, fmt.Errorf("challenge: %w, path %s", ErrNoNonEmptySampleLines, path)
-	}
-
-	index := rand.IntN(len(lines)) //#nosec
-	return lines[index], index, nil
-}
-
-var ErrInvalidStackSize = errors.New("challenge: invalid file stack size - expected 4 elements")
+var ErrInvalidStackSize = errors.New("challenge: invalid file stack size - expected at least 1 element")
 
 func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 	currentDir := "."
@@ -178,12 +132,12 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 				dirs = append(dirs, e)
 			}
 		}
-		if dirIndex >= len(dirs) {
+		if dirIndex < 0 || dirIndex >= len(dirs) {
 			return "", fmt.Errorf("challenge: dir index %d: level %d: %w", dirIndex, level, ErrSampleIndexOutOfBounds)
 		}
 
 		nextDir := dirs[dirIndex].Name()
-		currentDir = filepath.Join(currentDir, nextDir)
+		currentDir = path.Join(currentDir, nextDir)
 	}
 
 	entries, err := fs.ReadDir(codebase, currentDir)
@@ -201,56 +155,22 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 			regularFiles = append(regularFiles, e)
 		}
 	}
-	if len(loc.FileStack) != 4 {
+	if len(loc.FileStack) < 1 {
 		return "", ErrInvalidStackSize
 	}
 
 	fileIndex := loc.FileStack[0]
-	lineIndex := loc.FileStack[1]
-	left := loc.FileStack[2]
-	right := loc.FileStack[3]
-
-	if fileIndex >= len(regularFiles) {
+	if fileIndex < 0 || fileIndex >= len(regularFiles) {
 		return "", fmt.Errorf("challenge: %d %w - found %d files", fileIndex, ErrSampleIndexOutOfBounds, len(regularFiles))
 	}
 
 	targetFile := regularFiles[fileIndex].Name()
-	fullPath := filepath.Join(currentDir, targetFile)
+	fullPath := path.Join(currentDir, targetFile)
 
-	lines, err := readLines(codebase, fullPath)
+	content, err := fs.ReadFile(codebase, fullPath)
 	if err != nil {
-		return "", fmt.Errorf("challenge: read lines from %s: %w", fullPath, err)
-	}
-	if lineIndex >= len(lines) {
-		return "", fmt.Errorf("challenge: %d %w, len=%d", lineIndex, ErrSampleIndexOutOfBounds, len(lines))
+		return "", fmt.Errorf("challenge: read file %s: %w", fullPath, err)
 	}
 
-	line := lines[lineIndex]
-	if left > right || left < 0 || right > len(line) {
-		return "", fmt.Errorf("challenge: %w: [%d:%d] on len=%d", ErrInvalidSubstringBounds, left, right, len(line))
-	}
-
-	return line[left:right], nil
-}
-
-func readLines(codebase FileSystem, path string) ([]string, error) {
-	f, err := codebase.Open(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var lines []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		text := scanner.Text()
-		if len(text) <= 2 { // drop '}',')', '\t', '\n' etc.
-			continue
-		}
-
-		lines = append(lines, text)
-	}
-
-	_ = f.Close()
-
-	return lines, scanner.Err()
+	return string(content), nil
 }
