@@ -19,11 +19,11 @@ import site.warpnet.transport.dto.AuthNodeInfo
 /**
  * Runs the full pairing handshake: init → dial → pair → persist.
  *
- * Failure surfaces: [PairingOutcome.Rejected] only for durable auth rejections
- * ("token mismatch" / "empty token"); [PairingOutcome.TransportError] for
- * dial-time failures (firewall, PSK mismatch, network unreachable) and for
- * transient server-side errors. Identity is persisted only after the node
- * accepts the pair and returns its public multiaddrs.
+ * Failure surfaces: [PairingOutcome.TransportError] for dial-time failures
+ * (firewall, PSK mismatch, network unreachable) and
+ * [PairingOutcome.Rejected] for server-side rejections ("token mismatch",
+ * etc.). Identity is only persisted after the server returns exactly
+ * `{"code":0,"message":"Accepted"}`.
  */
 sealed class PairingOutcome {
     data class Success(val paired: PairedNode) : PairingOutcome()
@@ -32,9 +32,6 @@ sealed class PairingOutcome {
     data class PeerIdMismatch(val expected: String, val errorMessage: String) : PairingOutcome()
 }
 
-// Durable de-pair only for a genuine auth rejection (token mismatch / empty
-// token; see core/handler/pair.go). Other envelopes (5000 internal error,
-// server-side stream-read, deadline) are transient and must not wipe creds.
 internal fun WarpnetException.ProtocolError.isDurablePairRejection(): Boolean =
     serverMessage.contains("token mismatch", ignoreCase = true) ||
         serverMessage.contains("empty token", ignoreCase = true)
@@ -85,8 +82,6 @@ class PairingCoordinator @Inject constructor(
             if (e.isDurablePairRejection()) {
                 PairingOutcome.Rejected(e.code, e.serverMessage)
             } else {
-                // Transient/internal node error surfaced as a ResponseError;
-                // keep credentials and let the caller retry, not re-scan.
                 PairingOutcome.TransportError(e.serverMessage)
             }
         } catch (e: WarpnetException.TransportFailure) {

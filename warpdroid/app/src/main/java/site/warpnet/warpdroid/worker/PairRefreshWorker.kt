@@ -59,15 +59,9 @@ class PairRefreshWorker @AssistedInject constructor(
             Result.success()
         } catch (e: WarpnetException.ProtocolError) {
             if (!e.isDurablePairRejection()) {
-                // A ResponseError that isn't a genuine auth rejection (5000
-                // internal error, server-side stream-read, deadline) is
-                // transient — keep the token and retry, don't force a re-scan.
                 Log.w(TAG, "pair refresh transient node error: code=${e.code} ${e.serverMessage}")
                 Result.retry()
             } else {
-                // Genuine de-pair (token mismatch / empty token): the stored
-                // identity is unusable — wipe it and bounce to the QR scanner.
-                // Returns success so WorkManager doesn't loop on it.
                 Log.w(TAG, "pair refresh rejected: code=${e.code} ${e.serverMessage}")
                 withContext(Dispatchers.IO) { pairedNodeStore.clear() }
                 client.shutdown()
