@@ -19,10 +19,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
-import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.fragment.app.commit
 import site.warpnet.warpdroid.components.timeline.TimelineFragment
 import site.warpnet.warpdroid.components.timeline.viewmodel.TimelineViewModel.Kind
@@ -82,12 +81,9 @@ class TweetListActivity : BottomSheetActivity() {
         // Compose-from-tag was the only consumer of the FAB. Hide it.
         binding.composeButton.visibility = View.GONE
 
-        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
             val bars = insets.getInsets(systemBars())
-            binding.root.updateLayoutParams<CoordinatorLayout.LayoutParams> {
-                topMargin = bars.top
-                bottomMargin = bars.bottom
-            }
+            v.updatePadding(top = bars.top, bottom = bars.bottom)
             insets
         }
     }
