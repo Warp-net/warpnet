@@ -97,11 +97,7 @@ func paginateUsers(users []domain.User, cursor *string, limit *uint64) event.Use
 	}
 	size := whoToFollowDefaultLimit
 	if limit != nil && *limit > 0 {
-		l := *limit
-		if l > whoToFollowMaxLimit {
-			l = whoToFollowMaxLimit
-		}
-		size = int(l) //nolint:gosec // bounded by whoToFollowMaxLimit, safe to convert
+		size = int(min(*limit, whoToFollowMaxLimit)) //nolint:gosec // bounded by whoToFollowMaxLimit
 	}
 	if offset >= len(users) {
 		return event.UsersResponse{Users: []domain.User{}}
@@ -116,7 +112,7 @@ func paginateUsers(users []domain.User, cursor *string, limit *uint64) event.Use
 
 func (r *whoToFollowRecommender) recommendations() ([]domain.User, error) {
 	owner := r.authRepo.GetOwner()
-	cnt, err := r.followRepo.GetFollowingsCount(owner.UserId)
+	followCount, err := r.followRepo.GetFollowingsCount(owner.UserId)
 	if err != nil {
 		log.Errorf("who to follow: followings count: %v", err)
 	}
@@ -129,11 +125,11 @@ func (r *whoToFollowRecommender) recommendations() ([]domain.User, error) {
 		if buildErr != nil {
 			return nil, buildErr
 		}
-		r.snapshot = &whoToFollowSnapshot{users: users, builtAt: time.Now(), followCount: cnt}
+		r.snapshot = &whoToFollowSnapshot{users: users, builtAt: time.Now(), followCount: followCount}
 	}
 
 	snap := r.snapshot
-	stale := !snap.hasFoF || snap.followCount != cnt || time.Since(snap.builtAt) > whoToFollowSnapshotTTL
+	stale := !snap.hasFoF || snap.followCount != followCount || time.Since(snap.builtAt) > whoToFollowSnapshotTTL
 	if stale && !r.building {
 		r.building = true
 		go r.refresh()
@@ -187,10 +183,10 @@ func (r *whoToFollowRecommender) refresh() {
 	}
 
 	final := r.assemble(owner, followed, ordered)
-	cnt, _ := r.followRepo.GetFollowingsCount(owner.UserId)
+	followCount, _ := r.followRepo.GetFollowingsCount(owner.UserId)
 
 	r.mu.Lock()
-	r.snapshot = &whoToFollowSnapshot{users: final, builtAt: time.Now(), hasFoF: true, followCount: cnt}
+	r.snapshot = &whoToFollowSnapshot{users: final, builtAt: time.Now(), hasFoF: true, followCount: followCount}
 	r.mu.Unlock()
 }
 
