@@ -63,7 +63,7 @@ class ChatMessagesViewModel @Inject constructor(
                     }.getOrNull()
                     if (msgs != null) {
                         _state.update { s ->
-                            val next = msgs.sortedByTime()
+                            val next = msgs.orderedForDisplay()
                             if (next == s.messages) s else s.copy(messages = next)
                         }
                     }
@@ -94,7 +94,7 @@ class ChatMessagesViewModel @Inject constructor(
             try {
                 val (msgs, _) = repo.getMessages(ownerId = userId, chatId = chatId)
                 // Wire order isn't reliably time-sorted; sort it ourselves.
-                _state.update { it.copy(messages = msgs.sortedByTime(), loading = false) }
+                _state.update { it.copy(messages = msgs.orderedForDisplay(), loading = false) }
             } catch (e: Throwable) {
                 _state.update { it.copy(loading = false, error = e) }
             }
@@ -116,20 +116,20 @@ class ChatMessagesViewModel @Inject constructor(
                 )
             }.getOrNull()
             _state.update { s ->
-                val next = if (sent != null) (s.messages + sent).sortedByTime() else s.messages
+                val next = if (sent != null) (s.messages + sent).orderedForDisplay() else s.messages
                 s.copy(messages = next, sending = false)
             }
         }
     }
 
-    // Oldest-first by created_at, ties broken by the creation-ordered ULID id.
-    private fun List<WarpnetMessage>.sortedByTime(): List<WarpnetMessage> =
-        sortedWith(
-            compareBy(
-                { runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH },
-                { it.id },
+    private fun List<WarpnetMessage>.orderedForDisplay(): List<WarpnetMessage> =
+        distinctBy { it.id.ifEmpty { it.createdAt + it.text } }
+            .sortedWith(
+                compareBy(
+                    { runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH },
+                    { it.id },
+                )
             )
-        )
 
     companion object {
         private const val POLL_INTERVAL_MS = 3000L
