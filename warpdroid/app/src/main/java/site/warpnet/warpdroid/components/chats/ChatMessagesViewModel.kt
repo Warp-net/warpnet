@@ -93,10 +93,7 @@ class ChatMessagesViewModel @Inject constructor(
             _state.update { it.copy(loading = true, error = null, ownUserId = userId) }
             try {
                 val (msgs, _) = repo.getMessages(ownerId = userId, chatId = chatId)
-                // Sort chronologically (oldest at top, newest at bottom). A blanket
-                // reverse mis-ordered same-second messages: the wire is newest-first
-                // across seconds but oldest-first within a second, so a reply could
-                // surface above its request.
+                // Wire order isn't reliably time-sorted; sort it ourselves.
                 _state.update { it.copy(messages = msgs.sortedByTime(), loading = false) }
             } catch (e: Throwable) {
                 _state.update { it.copy(loading = false, error = e) }
@@ -125,9 +122,7 @@ class ChatMessagesViewModel @Inject constructor(
         }
     }
 
-    // Chat renders oldest-first. Order by created_at, breaking ties on the ULID
-    // id (the node assigns it in creation order), so the transport's ordering
-    // quirks can't surface a reply above its request.
+    // Oldest-first by created_at, ties broken by the creation-ordered ULID id.
     private fun List<WarpnetMessage>.sortedByTime(): List<WarpnetMessage> =
         sortedWith(
             compareBy(
