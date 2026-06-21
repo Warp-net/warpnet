@@ -171,15 +171,16 @@ class FiltersActivity : BaseActivity() {
                             modifier = Modifier.align(Alignment.Center)
                         )
                     } else {
+                        val filters = state.filters.distinctBy { it.id }
                         LazyColumn {
                             items(
-                                count = state.filters.size,
-                                key = { index -> state.filters[index].id }
+                                count = filters.size,
+                                key = { index -> filters[index].id }
                             ) { index ->
                                 Filter(
-                                    filter = state.filters[index],
+                                    filter = filters[index],
                                     onDelete = {
-                                        showDeleteConfirmation = state.filters[index]
+                                        showDeleteConfirmation = filters[index]
                                     }
                                 )
                             }

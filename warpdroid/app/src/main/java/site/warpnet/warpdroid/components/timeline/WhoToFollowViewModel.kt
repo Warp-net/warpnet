@@ -53,7 +53,7 @@ class WhoToFollowViewModel @Inject constructor(
         reloadJob?.cancel() // a newer refresh supersedes any in-flight one
         reloadJob = viewModelScope.launch {
             val accounts = try {
-                repo.whoToFollow(userId).first
+                repo.whoToFollow(userId).first.distinctBy { it.id }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

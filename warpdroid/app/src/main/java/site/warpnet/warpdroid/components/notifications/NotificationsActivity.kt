@@ -181,7 +181,7 @@ class NotificationsActivity : BaseActivity() {
             return
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(items, key = { it.id }) { n ->
+            items(items.distinctBy { it.id }, key = { it.id }) { n ->
                 NotificationRow(n) { onNotificationClick(n) }
                 HorizontalDivider()
             }
@@ -216,7 +216,7 @@ class NotificationsActivity : BaseActivity() {
             return
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(requests, key = { it.id }) { acc ->
+            items(requests.distinctBy { it.id }, key = { it.id }) { acc ->
                 FollowRequestRow(
                     account = acc,
                     onAuthorize = { onAuthorize(acc.id) },

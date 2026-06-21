@@ -76,7 +76,6 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
-import androidx.paging.compose.itemKey
 import at.connyduck.sparkbutton.compose.SparkButtonState
 import site.warpnet.warpdroid.BottomSheetActivity
 import site.warpnet.warpdroid.R
@@ -380,7 +379,7 @@ class TimelineFragment :
                                     "loadMore"
                                 }
                             },
-                            key = statuses.itemKey { it.id }
+                            // No id key: paged timeline can repeat an id across pages and crash the list (cf. SearchTweetesFragment).
                         ) { index ->
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
