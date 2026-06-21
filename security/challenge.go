@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math/rand/v2" //#nosec
-	"path/filepath"
+	"path"
 	"sort"
 	"strconv"
 )
@@ -86,7 +86,7 @@ func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, 
 	total := len(dirs) + len(files)
 	for _, c := range rand.Perm(total) {
 		if c < len(dirs) {
-			subPath := filepath.Join(dir, dirs[c].Name())
+			subPath := path.Join(dir, dirs[c].Name())
 			sample, subResult, err := generateSample(codebase, subPath, append(dirStack, c))
 			if err == nil {
 				return sample, subResult, nil
@@ -95,7 +95,7 @@ func generateSample(codebase FileSystem, dir string, dirStack []int) (_ string, 
 		}
 
 		fileIndex := c - len(dirs)
-		fullPath := filepath.Join(dir, files[fileIndex].Name())
+		fullPath := path.Join(dir, files[fileIndex].Name())
 
 		content, err := fs.ReadFile(codebase, fullPath)
 		if err != nil || len(content) == 0 {
@@ -137,7 +137,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 		}
 
 		nextDir := dirs[dirIndex].Name()
-		currentDir = filepath.Join(currentDir, nextDir)
+		currentDir = path.Join(currentDir, nextDir)
 	}
 
 	entries, err := fs.ReadDir(codebase, currentDir)
@@ -165,7 +165,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 	}
 
 	targetFile := regularFiles[fileIndex].Name()
-	fullPath := filepath.Join(currentDir, targetFile)
+	fullPath := path.Join(currentDir, targetFile)
 
 	content, err := fs.ReadFile(codebase, fullPath)
 	if err != nil {
