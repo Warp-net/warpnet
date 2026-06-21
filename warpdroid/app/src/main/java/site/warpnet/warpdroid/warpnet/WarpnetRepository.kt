@@ -5,6 +5,7 @@
  */
 package site.warpnet.warpdroid.warpnet
 
+import android.util.LruCache
 import site.warpnet.warpdroid.cache.TtlLruCache
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.entity.User
@@ -1078,6 +1079,8 @@ class WarpnetRepository @Inject constructor(
      */
     suspend fun getImageBytes(userId: String, key: String): ByteArray? {
         if (userId.isBlank() || key.isBlank()) return null
+        val cacheKey = "$userId/$key"
+        imageCache.get(cacheKey)?.let { return it }
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_IMAGE,
             getImageEventAdapter.toJson(
@@ -1090,7 +1093,9 @@ class WarpnetRepository @Inject constructor(
         // whole payload is treated as base64 to stay forward-compatible.
         val comma = file.indexOf(',')
         val b64 = if (comma >= 0) file.substring(comma + 1) else file
-        return runCatching { android.util.Base64.decode(b64, android.util.Base64.DEFAULT) }.getOrNull()
+        val bytes = runCatching { android.util.Base64.decode(b64, android.util.Base64.DEFAULT) }.getOrNull()
+        if (bytes != null && bytes.isNotEmpty()) imageCache.put(cacheKey, bytes)
+        return bytes
     }
 
     // -----------------------------------------------------------------
@@ -1358,11 +1363,20 @@ class WarpnetRepository @Inject constructor(
         ttlMillis = TWEET_CACHE_TTL_MILLIS,
     )
 
+    // Image-blob cache for getImageBytes. Keys are SHA-256 content hashes,
+    // so (userId, key) -> bytes is immutable: no TTL or invalidation needed.
+    // Bounded by total bytes, not entry count, since image sizes vary widely.
+    private val imageCache = object : LruCache<String, ByteArray>(IMAGE_CACHE_MAX_BYTES) {
+        override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
+
     private companion object {
         const val TAG = "WarpnetRepository"
         // Minimum tweet age before its body is eligible for caching.
         const val TWEET_CACHE_MIN_AGE_MILLIS = 60L * 60L * 1000L
         // Backstop expiry for cached tweet bodies.
         const val TWEET_CACHE_TTL_MILLIS = 6L * 60L * 60L * 1000L
+        // Total image-blob bytes kept in memory before LRU eviction.
+        const val IMAGE_CACHE_MAX_BYTES = 8 * 1024 * 1024
     }
 }
