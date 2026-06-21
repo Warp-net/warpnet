@@ -130,7 +130,7 @@ class ChatMessagesActivity : BaseActivity() {
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            items(state.messages, key = { it.id.ifEmpty { it.createdAt + it.text } }) { msg ->
+                            items(state.messages, key = { messageDisplayKey(it) }) { msg ->
                                 MessageBubble(msg, isOwn = msg.senderId == state.ownUserId)
                             }
                         }
