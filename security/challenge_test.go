@@ -190,6 +190,12 @@ func TestResolveChallenge_Errors(t *testing.T) {
 	if _, err := ResolveChallenge(codebase, SampleLocation{DirStack: []int{999}, FileStack: []int{0}}, 1); !errors.Is(err, ErrSampleIndexOutOfBounds) {
 		t.Fatalf("dir index out of bounds: want ErrSampleIndexOutOfBounds, got %v", err)
 	}
+	if _, err := ResolveChallenge(codebase, SampleLocation{FileStack: []int{-1}}, 1); !errors.Is(err, ErrSampleIndexOutOfBounds) {
+		t.Fatalf("negative file index: want ErrSampleIndexOutOfBounds, got %v", err)
+	}
+	if _, err := ResolveChallenge(codebase, SampleLocation{DirStack: []int{-1}, FileStack: []int{0}}, 1); !errors.Is(err, ErrSampleIndexOutOfBounds) {
+		t.Fatalf("negative dir index: want ErrSampleIndexOutOfBounds, got %v", err)
+	}
 }
 
 func TestGenerateChallenge_NoFiles(t *testing.T) {

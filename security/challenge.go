@@ -132,7 +132,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 				dirs = append(dirs, e)
 			}
 		}
-		if dirIndex >= len(dirs) {
+		if dirIndex < 0 || dirIndex >= len(dirs) {
 			return "", fmt.Errorf("challenge: dir index %d: level %d: %w", dirIndex, level, ErrSampleIndexOutOfBounds)
 		}
 
@@ -160,7 +160,7 @@ func findSample(codebase FileSystem, loc SampleLocation) (string, error) {
 	}
 
 	fileIndex := loc.FileStack[0]
-	if fileIndex >= len(regularFiles) {
+	if fileIndex < 0 || fileIndex >= len(regularFiles) {
 		return "", fmt.Errorf("challenge: %d %w - found %d files", fileIndex, ErrSampleIndexOutOfBounds, len(regularFiles))
 	}
 
