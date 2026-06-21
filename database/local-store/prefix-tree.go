@@ -119,7 +119,7 @@ func (l ParentLayer) AddParentId(mandatoryPrefix string) IdLayer {
 
 func (l ParentLayer) AddReversedTimestamp(tm time.Time) RangeLayer {
 	key := string(l)
-	key = fmt.Sprintf("%s%s%019d", key, Delimeter, math.MaxInt64-tm.Unix())
+	key = fmt.Sprintf("%s%s%019d", key, Delimeter, math.MaxInt64-tm.UnixMilli())
 	return RangeLayer(key)
 }
 func (l RangeLayer) Build() DatabaseKey {
@@ -143,7 +143,7 @@ func (l IdLayer) AddId(mandatoryPrefix string) IdLayer {
 }
 func (l IdLayer) AddReversedTimestamp(tm time.Time) RangeLayer {
 	key := string(l)
-	key = fmt.Sprintf("%s%s%019d", key, Delimeter, math.MaxInt64-tm.Unix())
+	key = fmt.Sprintf("%s%s%019d", key, Delimeter, math.MaxInt64-tm.UnixMilli())
 	return RangeLayer(key)
 }
 
