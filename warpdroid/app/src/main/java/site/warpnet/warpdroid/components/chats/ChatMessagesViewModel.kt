@@ -23,6 +23,11 @@ import site.warpnet.transport.dto.WarpnetMessage
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
+// Shared with ChatMessagesActivity's LazyColumn key so de-dup and rendered keys stay in sync.
+// The fixed-length-ULID senderId prefix keeps the id-less fallback collision-resistant.
+internal fun messageDisplayKey(m: WarpnetMessage): String =
+    m.id.ifEmpty { "${m.senderId}${m.createdAt}${m.text}" }
+
 @HiltViewModel
 class ChatMessagesViewModel @Inject constructor(
     private val repo: WarpnetRepository,
@@ -122,16 +127,13 @@ class ChatMessagesViewModel @Inject constructor(
         }
     }
 
-    private fun List<WarpnetMessage>.orderedForDisplay(): List<WarpnetMessage> {
-        // Must equal the LazyColumn item key; used for both de-dup and the sort tie-break.
-        fun key(m: WarpnetMessage) = m.id.ifEmpty { m.createdAt + m.text }
-        return distinctBy(::key).sortedWith(
+    private fun List<WarpnetMessage>.orderedForDisplay(): List<WarpnetMessage> =
+        distinctBy(::messageDisplayKey).sortedWith(
             compareBy(
                 { runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH },
-                ::key,
+                ::messageDisplayKey,
             ),
         )
-    }
 
     companion object {
         private const val POLL_INTERVAL_MS = 3000L
