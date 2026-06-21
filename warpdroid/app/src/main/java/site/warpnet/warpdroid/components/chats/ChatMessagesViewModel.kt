@@ -9,6 +9,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -62,7 +63,7 @@ class ChatMessagesViewModel @Inject constructor(
                     }.getOrNull()
                     if (msgs != null) {
                         _state.update { s ->
-                            val next = msgs.reversed()
+                            val next = msgs.sortedByTime()
                             if (next == s.messages) s else s.copy(messages = next)
                         }
                     }
@@ -92,9 +93,11 @@ class ChatMessagesViewModel @Inject constructor(
             _state.update { it.copy(loading = true, error = null, ownUserId = userId) }
             try {
                 val (msgs, _) = repo.getMessages(ownerId = userId, chatId = chatId)
-                // The wire returns newest-first; reverse so the LazyColumn shows
-                // the oldest message at the top and the latest at the bottom.
-                _state.update { it.copy(messages = msgs.reversed(), loading = false) }
+                // Sort chronologically (oldest at top, newest at bottom). A blanket
+                // reverse mis-ordered same-second messages: the wire is newest-first
+                // across seconds but oldest-first within a second, so a reply could
+                // surface above its request.
+                _state.update { it.copy(messages = msgs.sortedByTime(), loading = false) }
             } catch (e: Throwable) {
                 _state.update { it.copy(loading = false, error = e) }
             }
@@ -116,11 +119,22 @@ class ChatMessagesViewModel @Inject constructor(
                 )
             }.getOrNull()
             _state.update { s ->
-                val next = if (sent != null) s.messages + sent else s.messages
+                val next = if (sent != null) (s.messages + sent).sortedByTime() else s.messages
                 s.copy(messages = next, sending = false)
             }
         }
     }
+
+    // Chat renders oldest-first. Order by created_at, breaking ties on the ULID
+    // id (the node assigns it in creation order), so the transport's ordering
+    // quirks can't surface a reply above its request.
+    private fun List<WarpnetMessage>.sortedByTime(): List<WarpnetMessage> =
+        sortedWith(
+            compareBy(
+                { runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH },
+                { it.id },
+            )
+        )
 
     companion object {
         private const val POLL_INTERVAL_MS = 3000L
