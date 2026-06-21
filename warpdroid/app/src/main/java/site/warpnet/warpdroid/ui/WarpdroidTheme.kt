@@ -33,9 +33,10 @@ import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 import site.warpnet.warpdroid.ui.preferences.PreferencesProvider
 
-val warpdroidBlueLight = Color(0xFF3C9ADD)
-val warpdroidBlueDark = Color(0xFF217ABA)
-val warpdroidBlueLighter = Color(0xFF56A7E1)
+// Warpnet brand magenta (canonical from the frontend). Names kept historically.
+val warpdroidBlueLight = Color(0xFFF4D5E1)
+val warpdroidBlueDark = Color(0xFFC5007F)
+val warpdroidBlueLighter = Color(0xFFF4D5E1)
 val warpdroidOrange = Color(0xFFCA8F04)
 val warpdroidOrangeLight = Color(0xFFFAB207)
 val warpdroidGreenDark = Color(0xFF00731B)
@@ -45,8 +46,8 @@ val warpdroidGreenLighter = Color(0xFFCCFFD8)
 val warpdroidRed = Color(0xFFDF1553)
 val warpdroidRedLighter = Color(0xFFFF7287)
 
-val warpdroidGreyBlueLight = Color(0xFF94BADA)
-val warpdroidGreyBlueDark = Color(0xFF305879)
+val warpdroidGreyBlueLight = Color(0xFFF4D5E1)
+val warpdroidGreyBlueDark = Color(0xFF630241)
 
 val warpdroidGrey05 = Color(0xFF070B14)
 val warpdroidGrey10 = Color(0xFF16191F)
@@ -96,11 +97,11 @@ private val LightWarpdroidColorScheme = WarpdroidColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = warpdroidBlueLight,
-    onPrimary = warpdroidGrey10,
-    inversePrimary = warpdroidBlueDark,
-    secondary = warpdroidBlueLight,
-    onSecondary = warpdroidGrey90,
+    primary = warpdroidBlueDark,
+    onPrimary = Color.White,
+    inversePrimary = warpdroidBlueLight,
+    secondary = warpdroidBlueDark,
+    onSecondary = Color.White,
     surface = warpdroidGrey30,
     background = warpdroidGrey20,
     surfaceContainer = warpdroidGrey30,
@@ -127,7 +128,6 @@ private val DarkWarpdroidColorScheme = WarpdroidColorScheme(
 )
 
 private val BlackColorScheme = DarkColorScheme.copy(
-    onPrimary = Color.Black,
     background = Color.Black,
     surface = warpdroidGrey10,
     surfaceContainer = warpdroidGrey10,

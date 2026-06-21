@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">@color/warpdroid_blue_light</color>
-    <color name="colorSecondary">@color/warpdroid_blue_light</color>
+    <color name="colorPrimary">@color/warpdroid_blue_dark</color>
+    <color name="colorSecondary">@color/warpdroid_blue_dark</color>
     <color name="colorSurface">@color/warpdroid_grey_30</color>
     <color name="colorPrimaryDark">@color/warpdroid_grey_25</color>
 
-    <color name="colorOnPrimary">@color/warpdroid_grey_10</color>
+    <color name="colorOnPrimary">@color/white</color>
 
     <color name="colorBackground">@color/warpdroid_grey_20</color>
     <color name="windowBackground">@color/warpdroid_grey_10</color>
