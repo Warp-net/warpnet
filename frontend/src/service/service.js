@@ -323,7 +323,7 @@ export const warpnetService = {
         return usersResp.users;
     },
 
-    async getWhoToFollow(profileId, cursorReset) {
+    async getWhoToFollow(profileId, cursorReset, limit = defaultLimit) {
         let cursor = this.getCursor('whotofollow')
         if (cursorReset) {
             cursor = ''
@@ -341,7 +341,7 @@ export const warpnetService = {
         const request = {
             path: PUBLIC_GET_WHOTOFOLLOW,
             body: {
-            limit: defaultLimit,
+                limit: limit,
                 cursor: cursor,
                 user_id: profileId,
             },
@@ -349,9 +349,10 @@ export const warpnetService = {
 
         const followResp = await this.sendToNode(request);
         if (!followResp || followResp.users.length === 0) {
+            this.setCursor('whotofollow', endCursor)
             return []
         }
-        this.setCursor('whotofollow', followResp.cursor || "")
+        this.setCursor('whotofollow', followResp.cursor || endCursor)
 
         followResp.users = followResp.users.filter(user => !user.isOffline);
 
