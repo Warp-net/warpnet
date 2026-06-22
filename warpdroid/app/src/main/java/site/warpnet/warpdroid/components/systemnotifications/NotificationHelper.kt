@@ -26,6 +26,7 @@ import androidx.core.app.RemoteInput
 import androidx.core.app.TaskStackBuilder
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -111,6 +112,12 @@ class NotificationHelper @Inject constructor(
     }
 
     fun enablePullNotifications() {
+        // Battery-cheap background mode: the OS-minimum periodic interval
+        // (~15 min), gated on network + battery-not-low, with linear backoff
+        // when the fat node is unreachable. Mirrors PairRefreshWorker so the
+        // two pulls batch under the same constraints. This is the baseline that
+        // must work with no special permissions; faster/exact modes are tuning
+        // on top, never a correctness dependency.
         val workRequest: PeriodicWorkRequest = PeriodicWorkRequest.Builder(
             NotificationWorker::class.java,
             PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS,
@@ -119,7 +126,13 @@ class NotificationHelper @Inject constructor(
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiresBatteryNotLow(true)
                     .build()
+            )
+            .setBackoffCriteria(
+                BackoffPolicy.LINEAR,
+                1L,
+                TimeUnit.MINUTES,
             )
             .build()
 

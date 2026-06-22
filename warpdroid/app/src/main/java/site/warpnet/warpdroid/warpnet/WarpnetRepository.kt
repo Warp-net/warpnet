@@ -542,6 +542,23 @@ class WarpnetRepository @Inject constructor(
     }
 
     /**
+     * Delta pull for the background notification worker: fetch only the
+     * notifications newer than [since] (the id of the newest one already held).
+     * Empty [since] returns a normal first page (full catch-up). This is the
+     * watermark path — distinct from [getNotifications], which paginates with
+     * an opaque cursor. The fat node resolves the recipient from the paired
+     * session. Returns the new notifications (newest-first) plus the cursor.
+     */
+    suspend fun getNotificationsSince(since: String, limit: Int = 40): Pair<List<Notification>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_NOTIFICATIONS,
+            getNotifsAdapter.toJson(GetNotificationsEvent(since = since, limit = limit)),
+        )
+        val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
+        return page.notifications.map { it.toNotification() } to page.cursor
+    }
+
+    /**
      * Fetch a single notification by id. The fat node resolves the recipient
      * from the paired session; only the notification id travels on the wire.
      */

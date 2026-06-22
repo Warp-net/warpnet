@@ -524,9 +524,16 @@ type ModerationResultEvent struct {
 	ModeratorID domain.ID `json:"moderator_id,omitempty"`
 }
 
+// GetNotificationsEvent requests a page of the owner's notifications.
+// Cursor paginates newest-first through everything (opaque key from a prior
+// response). Since is a delta watermark — the id of the newest notification
+// the caller already holds — and makes the node return only notifications
+// newer than it (warpdroid's background pull uses this). Since takes
+// precedence when both are set.
 type GetNotificationsEvent struct {
 	Cursor *string `json:"cursor,omitempty"`
 	Limit  *uint64 `json:"limit,omitempty"`
+	Since  *string `json:"since,omitempty"`
 }
 
 // GetNotificationEvent defines model for GetNotificationEvent.

@@ -39,6 +39,7 @@ resulting from the use or misuse of this software.
 
 type NotifierFetcher interface {
 	List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
+	ListSince(userId, since string, limit *uint64) ([]domain.Notification, string, error)
 	UnreadCount(userId string) (uint64, error)
 }
 
@@ -67,7 +68,17 @@ func StreamGetNotificationsHandler(
 
 		owner := authRepo.GetOwner()
 
-		notifications, cur, err := repo.List(owner.UserId, ev.Limit, ev.Cursor)
+		// Since (a delta watermark) takes precedence over Cursor (page key):
+		// warpdroid's background pull sends only Since to get "what's new".
+		var (
+			notifications []domain.Notification
+			cur           string
+		)
+		if ev.Since != nil && *ev.Since != "" {
+			notifications, cur, err = repo.ListSince(owner.UserId, *ev.Since, ev.Limit)
+		} else {
+			notifications, cur, err = repo.List(owner.UserId, ev.Limit, ev.Cursor)
+		}
 		if err != nil {
 			return nil, err
 		}

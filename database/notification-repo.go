@@ -274,6 +274,73 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 	return nots, cur, nil
 }
 
+// ListSince returns the owner's notifications newer than the notification
+// whose id is `since`, newest-first. It walks the per-user prefix (already
+// stored newest-first) and stops the moment it reaches `since` — every later
+// row is something the caller already has. If `since` is empty it falls back
+// to List (a normal first page). If the watermark row is gone (24 h TTL
+// expired, or the id was never seen) the scan returns everything it collected,
+// so the client catches up instead of silently missing events.
+//
+// limit caps how many new notifications come back; the returned cursor is
+// informational (EndCursor once the scan reaches the watermark or the end of
+// the prefix).
+func (repo *NotificationsRepo) ListSince(userId, since string, limit *uint64) ([]domain.Notification, string, error) {
+	if userId == "" {
+		return nil, "", local_store.DBError("missing user id")
+	}
+	if since == "" {
+		return repo.List(userId, limit, nil)
+	}
+
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		Build()
+
+	// Read-only txn: a pure scan, no writes to conflict on (same rationale
+	// as UnreadCount).
+	txn, err := repo.db.NewReadTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	var maxItems uint64
+	if limit != nil {
+		maxItems = *limit
+	}
+
+	var (
+		out    []domain.Notification
+		cursor string
+		page   uint64 = 100
+	)
+	for {
+		items, next, lerr := txn.List(prefix, &page, &cursor)
+		if lerr != nil {
+			return nil, "", lerr
+		}
+		for _, item := range items {
+			var not domain.Notification
+			if uerr := json.Unmarshal(item.Value, &not); uerr != nil {
+				return nil, "", uerr
+			}
+			if not.Id == since {
+				return out, local_store.EndCursor, nil
+			}
+			out = append(out, not)
+			if maxItems > 0 && uint64(len(out)) >= maxItems {
+				return out, next, nil
+			}
+		}
+		if next == "" || next == local_store.EndCursor || next == cursor || uint64(len(items)) < page {
+			break
+		}
+		cursor = next
+	}
+	return out, local_store.EndCursor, nil
+}
+
 // unreadCountPageSize is the per-iteration batch UnreadCount uses to
 // walk a user's notifications. Exposed as a package var so tests can
 // shrink it to force multiple iterations without having to seed

@@ -292,8 +292,11 @@ class WarpnetApi @Inject constructor(
     ): Response<List<Notification>> {
         val userId = accountManager.activeAccount?.accountId.orEmpty()
         if (userId.isEmpty()) return stubList()
+        // minId is a delta watermark (newest id already seen), not a page key —
+        // route it through the since-based pull so the node returns only newer
+        // notifications instead of mis-reading it as an opaque pagination cursor.
         return paginated {
-            warpnet.getNotifications(userId = userId, cursor = minId.orEmpty(), limit = 40)
+            warpnet.getNotificationsSince(since = minId.orEmpty(), limit = 40)
         }
     }
 
