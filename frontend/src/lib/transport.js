@@ -81,15 +81,16 @@ export function EventsOff(eventName, ...additional) {
 let socket = null;
 let connecting = null;
 // aesKey: raw 32-byte channel key (SHA-256 of the password). Persisted to
-// sessionStorage so a page reload resumes the already-authenticated node's
-// session (restoring the key here) instead of bouncing to the login screen.
+// localStorage so reopening the tab or reloading the page resumes the
+// already-authenticated node's session (restoring the key here) instead of
+// bouncing to the login screen; cleared on logout.
 const CHANNEL_KEY_STORAGE = "warpnet.channel.key";
 let aesKey = restoreChannelKey();
 const pending = new Map(); // message_id -> { resolve, reject, timer }
 
 function restoreChannelKey() {
   try {
-    const saved = sessionStorage.getItem(CHANNEL_KEY_STORAGE);
+    const saved = localStorage.getItem(CHANNEL_KEY_STORAGE);
     return saved ? base64ToBytes(saved) : null;
   } catch (_) {
     return null;
@@ -98,14 +99,14 @@ function restoreChannelKey() {
 
 function saveChannelKey() {
   try {
-    if (aesKey) sessionStorage.setItem(CHANNEL_KEY_STORAGE, bytesToBase64(aesKey));
+    if (aesKey) localStorage.setItem(CHANNEL_KEY_STORAGE, bytesToBase64(aesKey));
   } catch (_) {}
 }
 
 function clearChannelKey() {
   aesKey = null;
   try {
-    sessionStorage.removeItem(CHANNEL_KEY_STORAGE);
+    localStorage.removeItem(CHANNEL_KEY_STORAGE);
   } catch (_) {}
 }
 
