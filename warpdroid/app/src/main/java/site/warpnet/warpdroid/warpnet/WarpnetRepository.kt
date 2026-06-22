@@ -543,7 +543,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun getNewNotifications(cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {
         val raw = client.request(
-            ProtocolIds.PRIVATE_GET_NOTIFICATIONS_NEW,
+            ProtocolIds.PRIVATE_GET_NEW_NOTIFICATIONS,
             getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
         val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""

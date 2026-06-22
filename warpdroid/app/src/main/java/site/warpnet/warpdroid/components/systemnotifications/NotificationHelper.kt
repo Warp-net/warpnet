@@ -139,7 +139,7 @@ class NotificationHelper @Inject constructor(
             )
             .build()
 
-        workManager.enqueueUniquePeriodicWork(NOTIFICATION_PULL_NAME, ExistingPeriodicWorkPolicy.KEEP, workRequest)
+        workManager.enqueueUniquePeriodicWork(NOTIFICATION_PULL_NAME, ExistingPeriodicWorkPolicy.UPDATE, workRequest)
 
         Log.d(TAG, "Enabled pull checks with ${PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS / 60000} minutes interval.")
     }
