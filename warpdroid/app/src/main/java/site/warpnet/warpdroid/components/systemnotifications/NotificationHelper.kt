@@ -198,7 +198,12 @@ class NotificationHelper @Inject constructor(
                 context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             if (connectivityManager != null) {
                 val callback = object : ConnectivityManager.NetworkCallback() {
+                    private var skipInitialCallback = connectivityManager.activeNetwork != null
                     override fun onAvailable(network: Network) {
+                        if (skipInitialCallback) {
+                            skipInitialCallback = false
+                            return
+                        }
                         fetchNotificationsNow()
                     }
                 }

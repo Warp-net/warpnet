@@ -253,7 +253,7 @@ func (s *DBTestSuite) TestTxn_ReverseList() {
 	rev, cursor, err := txn2.ReverseList(DatabaseKey("/revlist/"), nil, nil)
 	assert.NoError(s.T(), err)
 	assert.Len(s.T(), rev, 3)
-	assert.NotEmpty(s.T(), cursor)
+	assert.Equal(s.T(), endCursor, cursor)
 	assert.Equal(s.T(), fwd[0].Key, rev[len(rev)-1].Key)
 	assert.Equal(s.T(), fwd[len(fwd)-1].Key, rev[0].Key)
 	_ = txn2.Commit()
