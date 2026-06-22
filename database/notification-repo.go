@@ -274,7 +274,7 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 	return nots, cur, nil
 }
 
-func (repo *NotificationsRepo) ListNewer(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
+func (repo *NotificationsRepo) ReverseList(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 	if userId == "" {
 		return nil, "", local_store.DBError("missing user id")
 	}

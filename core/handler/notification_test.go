@@ -16,7 +16,7 @@ type stubNotificationRepo struct {
 	unreadCountFn func(userId string) (uint64, error)
 }
 
-func (s stubNotificationRepo) ListNewer(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
+func (s stubNotificationRepo) ReverseList(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 	if s.listFn != nil {
 		return s.listFn(userId, cursor, limit)
 	}

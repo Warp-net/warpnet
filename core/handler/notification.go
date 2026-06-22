@@ -38,7 +38,7 @@ resulting from the use or misuse of this software.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 type NotifierFetcher interface {
-	ListNewer(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error)
+	ReverseList(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error)
 	UnreadCount(userId string) (uint64, error)
 }
 
@@ -67,7 +67,7 @@ func StreamGetNotificationsHandler(
 
 		owner := authRepo.GetOwner()
 
-		notifications, cur, err := repo.ListNewer(owner.UserId, ev.Cursor, ev.Limit)
+		notifications, cur, err := repo.ReverseList(owner.UserId, ev.Cursor, ev.Limit)
 		if err != nil {
 			return nil, err
 		}

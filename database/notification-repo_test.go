@@ -285,7 +285,7 @@ func (s *NotificationsRepoTestSuite) TestNotificationsIsolatedByUser() {
 	s.Equal("for user2", nots2[0].Text)
 }
 
-func (s *NotificationsRepoTestSuite) TestListNewer_ReturnsOnlyNewerThanCursor() {
+func (s *NotificationsRepoTestSuite) TestReverseList_ReturnsOnlyNewerThanCursor() {
 	userId := uuid.New().String()
 	base := time.Now()
 	for i := 0; i < 3; i++ {
@@ -298,7 +298,7 @@ func (s *NotificationsRepoTestSuite) TestListNewer_ReturnsOnlyNewerThanCursor() 
 		}))
 	}
 
-	first, cursor, err := s.repo.ListNewer(userId, nil, nil)
+	first, cursor, err := s.repo.ReverseList(userId, nil, nil)
 	s.Require().NoError(err)
 	s.Len(first, 3)
 	s.Require().NotEmpty(cursor)
@@ -311,14 +311,14 @@ func (s *NotificationsRepoTestSuite) TestListNewer_ReturnsOnlyNewerThanCursor() 
 		CreatedAt: base.Add(10 * time.Second),
 	}))
 
-	newer, _, err := s.repo.ListNewer(userId, &cursor, nil)
+	newer, _, err := s.repo.ReverseList(userId, &cursor, nil)
 	s.Require().NoError(err)
 	s.Len(newer, 1)
 	s.Equal("newer", newer[0].Text)
 }
 
-func (s *NotificationsRepoTestSuite) TestListNewer_MissingUserId() {
-	_, _, err := s.repo.ListNewer("", nil, nil)
+func (s *NotificationsRepoTestSuite) TestReverseList_MissingUserId() {
+	_, _, err := s.repo.ReverseList("", nil, nil)
 	s.Error(err)
 	s.Contains(err.Error(), "missing user id")
 }
