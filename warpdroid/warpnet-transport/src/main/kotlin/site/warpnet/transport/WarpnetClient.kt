@@ -123,22 +123,24 @@ class WarpnetClient(
      * [WarpnetException.TransportFailure].
      */
     suspend fun pair(rawAuthNodeInfoJson: String) = withContext(Dispatchers.IO) {
+        // A backgrounded host is paused (see [pause]) but still initialised.
+        // Bring it back to life and wait for its background re-dial to the known
+        // desktop peer to land. Done outside the lock so this timed wait doesn't
+        // serialise ahead of lifecycle transitions (pause / resume / connect) or
+        // other callers that need the mutex.
+        if (_state.value == ConnectionState.Disconnected) {
+            resume()
+            var waited = 0L
+            while (!binding.isConnected() && waited < REVIVE_TIMEOUT_MS) {
+                delay(REVIVE_POLL_MS)
+                waited += REVIVE_POLL_MS
+            }
+        }
         mutex.withLock {
-            // A backgrounded host is paused (see [pause]) but still initialised.
-            // Bring it back to life and let it re-dial the known desktop peer so
-            // the handshake has a connection to ride — this is what lets a
-            // background pair refresh re-establish the connection on its own.
-            // resume() re-dials asynchronously, so wait briefly for it to land.
-            if (_state.value == ConnectionState.Disconnected) {
-                binding.resume()
-                var waited = 0L
-                while (!binding.isConnected() && waited < REVIVE_TIMEOUT_MS) {
-                    delay(REVIVE_POLL_MS)
-                    waited += REVIVE_POLL_MS
-                }
-                if (binding.isConnected()) {
-                    _state.value = ConnectionState.Connected
-                }
+            // resume()'s re-dial may have landed during the wait without
+            // flipping state; trust the binding's live view before deciding.
+            if (_state.value !is ConnectionState.Connected && binding.isConnected()) {
+                _state.value = ConnectionState.Connected
             }
             if (_state.value !is ConnectionState.Connected) {
                 throw WarpnetException.NotConnected()

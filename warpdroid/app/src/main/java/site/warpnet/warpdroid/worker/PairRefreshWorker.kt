@@ -45,8 +45,12 @@ class PairRefreshWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        val rawQr = pairedNodeStore.loadRawQr()
-            ?: return Result.success() // no pairing yet — nothing to refresh
+        val rawQr = pairedNodeStore.loadRawQr() ?: run {
+            // No pairing (none yet, or cleared by an unpair): stop reporting
+            // connected so NotificationWorker doesn't keep trying to pull.
+            connectionStatus.update(false)
+            return Result.success()
+        }
         return try {
             client.pair(rawQr)
             // Pair succeeded → connected. Publish it so NotificationWorker knows
