@@ -548,6 +548,7 @@ class NotificationHelper @Inject constructor(
         val accountName = notification.account.name.unicodeWrap()
         return when (notification.type) {
             Notification.Type.Mention -> context.getString(R.string.notification_mention_format, accountName)
+            Notification.Type.Reply -> context.getString(R.string.notification_mention_format, accountName)
             Notification.Type.Status -> context.getString(R.string.notification_subscription_format, accountName)
             Notification.Type.Follow -> context.getString(R.string.notification_follow_format, accountName)
             Notification.Type.FollowRequest -> context.getString(R.string.notification_follow_request_format, accountName)
