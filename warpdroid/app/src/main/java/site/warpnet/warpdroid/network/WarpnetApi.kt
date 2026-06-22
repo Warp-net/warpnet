@@ -293,7 +293,7 @@ class WarpnetApi @Inject constructor(
         val userId = accountManager.activeAccount?.accountId.orEmpty()
         if (userId.isEmpty()) return stubList()
         return paginated {
-            warpnet.getNotifications(userId = userId, cursor = cursor, limit = 40)
+            warpnet.getNewNotifications(cursor = cursor, limit = 40)
         }
     }
 

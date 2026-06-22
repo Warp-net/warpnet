@@ -77,7 +77,7 @@ class NotificationFetcher @Inject constructor(
         val notifications = response.body().orEmpty()
 
         val newCursor = Links.from(response.headers()["link"]).next
-        if (!newCursor.isNullOrEmpty()) {
+        if (!newCursor.isNullOrEmpty() && newCursor != stored) {
             accountManager.updateAccount(account) { copy(notificationMarkerId = newCursor) }
         }
 
