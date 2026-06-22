@@ -9,7 +9,7 @@ import (
 )
 
 type stubSubsRepo struct {
-	subscribeFn    func(ownerId, targetId string) error
+	subscribeFn   func(ownerId, targetId string) error
 	unsubscribeFn func(ownerId, targetId string) error
 }
 

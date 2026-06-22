@@ -193,7 +193,7 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if unlikedUser.NodeId == ownNodeInfo.ID.String() {
 			return event.LikesCountResponse{Count: num}, nil
 		}

@@ -102,8 +102,9 @@ export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 export const PUBLIC_POST_REPORT        = "/public/post/report/0.0.0"
 
 const stateMap = new Map();
-// sessionStorage key for the owner profile; persisted on login so a page reload
-// restores the session instead of bouncing to the sign-up screen.
+// localStorage key for the owner profile; persisted on login so reopening the
+// tab or reloading the page restores the session instead of bouncing to the
+// sign-up screen.
 const OWNER_STORAGE = "warpnet.owner";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
@@ -169,7 +170,7 @@ export const warpnetService = {
     setOwnerProfile(owner) {
         const key = `owner`;
         stateMap.set(key, owner)
-        try { sessionStorage.setItem(OWNER_STORAGE, JSON.stringify(owner)) } catch (e) {}
+        try { localStorage.setItem(OWNER_STORAGE, JSON.stringify(owner)) } catch (e) {}
     },
 
     getOwnerProfile() {
@@ -177,13 +178,13 @@ export const warpnetService = {
         return stateMap.get(key)
     },
 
-    // restoreSession re-hydrates the owner profile from sessionStorage on app
-    // start so a page reload stays on the current page. The long-lived node is
-    // still authenticated and transport restores the channel key in parallel,
-    // so no re-login is performed.
+    // restoreSession re-hydrates the owner profile from localStorage on app
+    // start so reopening the tab or reloading the page stays on the current
+    // page. The long-lived node is still authenticated and transport restores
+    // the channel key in parallel, so no re-login is performed.
     restoreSession() {
         try {
-            const raw = sessionStorage.getItem(OWNER_STORAGE)
+            const raw = localStorage.getItem(OWNER_STORAGE)
             if (!raw) return
             const owner = JSON.parse(raw)
             if (owner && owner.user_id) {
@@ -273,7 +274,7 @@ export const warpnetService = {
         }
         stopRefreshNotifications()
         stateMap.clear()
-        try { sessionStorage.removeItem(OWNER_STORAGE) } catch (e) {}
+        try { localStorage.removeItem(OWNER_STORAGE) } catch (e) {}
         try {
             localStorage.removeItem(`first_run_seen`)
         } catch (e) {}
@@ -323,7 +324,7 @@ export const warpnetService = {
         return usersResp.users;
     },
 
-    async getWhoToFollow(profileId, cursorReset) {
+    async getWhoToFollow(cursorReset, limit = defaultLimit) {
         let cursor = this.getCursor('whotofollow')
         if (cursorReset) {
             cursor = ''
@@ -332,26 +333,32 @@ export const warpnetService = {
             return []
         }
 
+        // Who-to-follow is always scoped to the signed-in owner.
         const owner = this.getOwnerProfile()
-
-        if (!profileId || profileId === '') {
-            profileId = owner.user_id
+        if (!owner || !owner.user_id) {
+            return []
         }
 
         const request = {
             path: PUBLIC_GET_WHOTOFOLLOW,
             body: {
-            limit: defaultLimit,
+                limit: limit,
                 cursor: cursor,
-                user_id: profileId,
+                user_id: owner.user_id,
             },
         }
 
         const followResp = await this.sendToNode(request);
-        if (!followResp || followResp.users.length === 0) {
+        // No/invalid response (transient error or error payload): don't end
+        // the cursor so the session can retry later.
+        if (!followResp || !Array.isArray(followResp.users)) {
             return []
         }
-        this.setCursor('whotofollow', followResp.cursor || "")
+        if (followResp.users.length === 0) {
+            this.setCursor('whotofollow', endCursor)
+            return []
+        }
+        this.setCursor('whotofollow', followResp.cursor || endCursor)
 
         followResp.users = followResp.users.filter(user => !user.isOffline);
 

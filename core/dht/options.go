@@ -29,7 +29,7 @@ import "github.com/Warp-net/warpnet/core/warpnet"
 type dhtConfig struct {
 	store                         RoutingStorer
 	addCallbacks, removeCallbacks []func(info warpnet.WarpPeerID)
-	bootstrapNodes                 []warpnet.WarpAddrInfo
+	bootstrapNodes                []warpnet.WarpAddrInfo
 	network                       string
 }
 type Option func(*dhtConfig)
