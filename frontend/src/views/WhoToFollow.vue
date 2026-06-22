@@ -78,7 +78,6 @@ export default {
   data() {
     return {
       loading: true,
-      ownerId: undefined,
       profiles: [],
       hasMore: true,
     };
@@ -91,7 +90,7 @@ export default {
       if (!this.hasMore) {
         return;
       }
-      const users = await warpnetService.getWhoToFollow(this.ownerId, false);
+      const users = await warpnetService.getWhoToFollow(false);
       if (!users || users.length === 0) {
         this.hasMore = false;
         return;
@@ -102,9 +101,7 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     try {
-      const owner = warpnetService.getOwnerProfile();
-      this.ownerId = owner?.user_id;
-      const users = await warpnetService.getWhoToFollow(this.ownerId, true);
+      const users = await warpnetService.getWhoToFollow(true);
       this.profiles = users || [];
       if (this.profiles.length === 0) {
         this.hasMore = false;

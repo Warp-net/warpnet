@@ -70,7 +70,6 @@ export default {
   props: ["profile"],
   data() {
     return {
-      ownerProfile: undefined,
       profiles: [],
       followingStatus: new Map(),
     };
@@ -109,10 +108,8 @@ export default {
    },
   async created() {
     console.log("loading component:", this.$options.name);
-    this.ownerProfile = warpnetService.getOwnerProfile();
-    const effectiveProfile = this.profile || this.ownerProfile;
-    const profileId = effectiveProfile?.id || effectiveProfile?.user_id;
-    this.profiles = await warpnetService.getWhoToFollow(profileId, true, 5)
+    // Who-to-follow is always scoped to the signed-in owner.
+    this.profiles = await warpnetService.getWhoToFollow(true, 5)
     for (const p of this.profiles) {
       const status = await warpnetService.isFollowing(p.id);
       this.followingStatus.set(p.id, status);

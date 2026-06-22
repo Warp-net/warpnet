@@ -323,7 +323,7 @@ export const warpnetService = {
         return usersResp.users;
     },
 
-    async getWhoToFollow(profileId, cursorReset, limit = defaultLimit) {
+    async getWhoToFollow(cursorReset, limit = defaultLimit) {
         let cursor = this.getCursor('whotofollow')
         if (cursorReset) {
             cursor = ''
@@ -332,23 +332,20 @@ export const warpnetService = {
             return []
         }
 
+        // Who-to-follow is always scoped to the signed-in owner.
         const owner = this.getOwnerProfile()
-
-        if (!profileId || profileId === '') {
-            profileId = owner.user_id
-        }
 
         const request = {
             path: PUBLIC_GET_WHOTOFOLLOW,
             body: {
                 limit: limit,
                 cursor: cursor,
-                user_id: profileId,
+                user_id: owner?.user_id,
             },
         }
 
         const followResp = await this.sendToNode(request);
-        if (!followResp || followResp.users.length === 0) {
+        if (!followResp || !followResp.users || followResp.users.length === 0) {
             this.setCursor('whotofollow', endCursor)
             return []
         }
