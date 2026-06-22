@@ -9,13 +9,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Last known link status to the paired fat node.
+ * Last known connection status to the paired fat node.
  *
  * Published by [site.warpnet.warpdroid.worker.PairRefreshWorker] — the only
  * entity that pairs — from the result of its pair handshake, and read by
  * [site.warpnet.warpdroid.worker.NotificationWorker] so the pull skips when
- * there is no live link instead of failing the fetch. Process-scoped: a cold
- * start defaults to not-connected until the next pair refresh reports in.
+ * not connected instead of failing the fetch. Process-scoped: a cold start
+ * defaults to not-connected until the next pair refresh reports in.
  */
 @Singleton
 class ConnectionStatus @Inject constructor() {

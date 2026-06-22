@@ -49,8 +49,8 @@ class PairRefreshWorker @AssistedInject constructor(
             ?: return Result.success() // no pairing yet — nothing to refresh
         return try {
             client.pair(rawQr)
-            // Pair succeeded → the link is live. Publish it so NotificationWorker
-            // knows a pull can reach the node this cycle.
+            // Pair succeeded → connected. Publish it so NotificationWorker knows
+            // a pull can reach the node this cycle.
             connectionStatus.update(true)
             Result.success()
         } catch (e: WarpnetException.NotConnected) {

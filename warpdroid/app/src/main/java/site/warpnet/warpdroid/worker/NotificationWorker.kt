@@ -46,7 +46,7 @@ class NotificationWorker @AssistedInject constructor(
         val accountId = inputData.getLong(KEY_ACCOUNT_ID, 0).takeIf { it != 0L }
 
         // Connection status is owned by PairRefreshWorker — the only entity
-        // that pairs. Pull only when it reports a live link; otherwise skip and
+        // that pairs. Pull only when it reports connected; otherwise skip and
         // let a later cycle fetch once a pair refresh has reported connected.
         if (!connectionStatus.isConnected) {
             return Result.success()
