@@ -44,6 +44,7 @@ resulting from the use or misuse of this software.
 
         <button
           v-if="hasMore && !loading"
+          :disabled="loadingMore"
           @click="loadMore()"
           class="p-3 w-full hover:bg-lighter text-center text-blue border-t border-lighter"
         >
@@ -78,6 +79,7 @@ export default {
   data() {
     return {
       loading: true,
+      loadingMore: false,
       profiles: [],
       hasMore: true,
     };
@@ -87,15 +89,22 @@ export default {
       this.$router.push("/");
     },
     async loadMore() {
-      if (!this.hasMore) {
+      if (!this.hasMore || this.loadingMore) {
         return;
       }
-      const users = await warpnetService.getWhoToFollow(false);
-      if (!users || users.length === 0) {
-        this.hasMore = false;
-        return;
+      this.loadingMore = true;
+      try {
+        const users = await warpnetService.getWhoToFollow(false);
+        if (!users || users.length === 0) {
+          this.hasMore = false;
+          return;
+        }
+        this.profiles.push(...users);
+      } catch (err) {
+        console.error("loading component:", this.$options.name, err);
+      } finally {
+        this.loadingMore = false;
       }
-      this.profiles.push(...users);
     },
   },
   async created() {

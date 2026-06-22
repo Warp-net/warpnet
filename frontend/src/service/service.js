@@ -334,18 +334,26 @@ export const warpnetService = {
 
         // Who-to-follow is always scoped to the signed-in owner.
         const owner = this.getOwnerProfile()
+        if (!owner || !owner.user_id) {
+            return []
+        }
 
         const request = {
             path: PUBLIC_GET_WHOTOFOLLOW,
             body: {
                 limit: limit,
                 cursor: cursor,
-                user_id: owner?.user_id,
+                user_id: owner.user_id,
             },
         }
 
         const followResp = await this.sendToNode(request);
-        if (!followResp || !followResp.users || followResp.users.length === 0) {
+        // No/invalid response (transient error or error payload): don't end
+        // the cursor so the session can retry later.
+        if (!followResp || !Array.isArray(followResp.users)) {
+            return []
+        }
+        if (followResp.users.length === 0) {
             this.setCursor('whotofollow', endCursor)
             return []
         }
