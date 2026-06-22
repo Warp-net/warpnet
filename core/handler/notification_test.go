@@ -11,14 +11,14 @@ import (
 )
 
 type stubNotificationRepo struct {
-	listFn        func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
+	listFn        func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error)
 	getFn         func(userId, notificationId string) (domain.Notification, error)
 	unreadCountFn func(userId string) (uint64, error)
 }
 
-func (s stubNotificationRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+func (s stubNotificationRepo) ListNewer(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 	if s.listFn != nil {
-		return s.listFn(userId, limit, cursor)
+		return s.listFn(userId, cursor, limit)
 	}
 	return nil, "", nil
 }
@@ -62,7 +62,7 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("db failed")
-		h := StreamGetNotificationsHandler(stubNotificationRepo{listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+		h := StreamGetNotificationsHandler(stubNotificationRepo{listFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 			return nil, "", repoErr
 		}}, stubAuth{owner: domain.Owner{UserId: owner}})
 		_, err := h(marshal(t, event.GetNotificationsEvent{}), nil)
@@ -79,7 +79,7 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, UserId: owner, CreatedAt: now.Add(-1 * time.Second)},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
-			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+			listFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 				return nots, "end", nil
 			},
 			unreadCountFn: func(userId string) (uint64, error) {
@@ -122,7 +122,7 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
-			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+			listFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 				return nots, "end", nil
 			},
 			unreadCountFn: func(userId string) (uint64, error) { return 2, nil },
@@ -143,7 +143,7 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 			{Id: "2", Type: domain.NotificationReplyType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
-			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+			listFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 				return nots, "end", nil
 			},
 			unreadCountFn: func(userId string) (uint64, error) { return 0, nil },
@@ -168,7 +168,7 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
-			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+			listFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 				return page, "next", nil
 			},
 			unreadCountFn: func(userId string) (uint64, error) { return 17, nil },
@@ -195,7 +195,7 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 			{Id: "4", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
-			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+			listFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 				return page, "next", nil
 			},
 			unreadCountFn: func(userId string) (uint64, error) {
@@ -215,7 +215,7 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 	t.Run("with pagination params", func(t *testing.T) {
 		var capturedLimit *uint64
 		var capturedCursor *string
-		h := StreamGetNotificationsHandler(stubNotificationRepo{listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
+		h := StreamGetNotificationsHandler(stubNotificationRepo{listFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 			capturedLimit = limit
 			capturedCursor = cursor
 			return nil, "end", nil

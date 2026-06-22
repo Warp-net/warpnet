@@ -288,12 +288,12 @@ class WarpnetApi @Inject constructor(
     }
 
     suspend fun notificationsPage(
-        minId: String?,
+        cursor: String,
     ): Response<List<Notification>> {
         val userId = accountManager.activeAccount?.accountId.orEmpty()
         if (userId.isEmpty()) return stubList()
         return paginated {
-            warpnet.getNotifications(userId = userId, cursor = minId.orEmpty(), limit = 40)
+            warpnet.getNotifications(userId = userId, cursor = cursor, limit = 40)
         }
     }
 

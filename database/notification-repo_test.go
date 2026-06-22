@@ -285,6 +285,44 @@ func (s *NotificationsRepoTestSuite) TestNotificationsIsolatedByUser() {
 	s.Equal("for user2", nots2[0].Text)
 }
 
+func (s *NotificationsRepoTestSuite) TestListNewer_ReturnsOnlyNewerThanCursor() {
+	userId := uuid.New().String()
+	base := time.Now()
+	for i := 0; i < 3; i++ {
+		s.Require().NoError(s.repo.Add(domain.Notification{
+			Id:        uuid.New().String(),
+			Type:      domain.NotificationLikeType,
+			Text:      "n",
+			UserId:    userId,
+			CreatedAt: base.Add(time.Duration(i) * time.Second),
+		}))
+	}
+
+	first, cursor, err := s.repo.ListNewer(userId, nil, nil)
+	s.Require().NoError(err)
+	s.Len(first, 3)
+	s.Require().NotEmpty(cursor)
+
+	s.Require().NoError(s.repo.Add(domain.Notification{
+		Id:        uuid.New().String(),
+		Type:      domain.NotificationReplyType,
+		Text:      "newer",
+		UserId:    userId,
+		CreatedAt: base.Add(10 * time.Second),
+	}))
+
+	newer, _, err := s.repo.ListNewer(userId, &cursor, nil)
+	s.Require().NoError(err)
+	s.Len(newer, 1)
+	s.Equal("newer", newer[0].Text)
+}
+
+func (s *NotificationsRepoTestSuite) TestListNewer_MissingUserId() {
+	_, _, err := s.repo.ListNewer("", nil, nil)
+	s.Error(err)
+	s.Contains(err.Error(), "missing user id")
+}
+
 func TestNotificationsRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
