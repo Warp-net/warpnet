@@ -124,6 +124,22 @@ class WarpnetClient(
      */
     suspend fun pair(rawAuthNodeInfoJson: String) = withContext(Dispatchers.IO) {
         mutex.withLock {
+            // A backgrounded host is paused (see [pause]) but still initialised.
+            // Bring it back to life and let it re-dial the known desktop peer so
+            // the handshake has a connection to ride — this is what lets a
+            // background pair refresh re-establish the connection on its own.
+            // resume() re-dials asynchronously, so wait briefly for it to land.
+            if (_state.value == ConnectionState.Disconnected) {
+                binding.resume()
+                var waited = 0L
+                while (!binding.isConnected() && waited < REVIVE_TIMEOUT_MS) {
+                    delay(REVIVE_POLL_MS)
+                    waited += REVIVE_POLL_MS
+                }
+                if (binding.isConnected()) {
+                    _state.value = ConnectionState.Connected
+                }
+            }
             if (_state.value !is ConnectionState.Connected) {
                 throw WarpnetException.NotConnected()
             }
@@ -329,6 +345,11 @@ class WarpnetClient(
         // a paged getTimeline still returns within ~30s on a flaky link
         // before the ViewModel decides to show "an error occurred".
         val STREAM_RETRY_BACKOFFS = longArrayOf(500L, 1_500L, 4_000L, 8_000L)
+
+        // How long pair() waits for resume()'s background re-dial to the
+        // known desktop peer to land before giving up, and how often it polls.
+        const val REVIVE_TIMEOUT_MS = 5_000L
+        const val REVIVE_POLL_MS = 250L
     }
 }
 
