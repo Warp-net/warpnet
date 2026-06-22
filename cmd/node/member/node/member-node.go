@@ -769,6 +769,10 @@ func (m *MemberNode) notificationHandlers(
 			handler.StreamGetNotificationsHandler(r.notificationRepo, authRepo),
 		},
 		{
+			event.PRIVATE_GET_PUSHES,
+			handler.StreamGetPushesHandler(r.notificationRepo, authRepo),
+		},
+		{
 			event.PRIVATE_GET_NOTIFICATION,
 			handler.StreamGetNotificationHandler(r.notificationRepo, authRepo),
 		},

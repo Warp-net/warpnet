@@ -239,6 +239,26 @@ func (s *DBTestSuite) TestTxn_List() {
 	_ = txn2.Commit()
 }
 
+func (s *DBTestSuite) TestTxn_ReverseList() {
+	txn, _ := s.db.NewTxn()
+	_ = txn.Set(DatabaseKey("/revlist/item1"), []byte("a"))
+	_ = txn.Set(DatabaseKey("/revlist/item2"), []byte("b"))
+	_ = txn.Set(DatabaseKey("/revlist/item3"), []byte("c"))
+	_ = txn.Commit()
+
+	txn2, _ := s.db.NewTxn()
+	defer txn2.Rollback()
+	fwd, _, err := txn2.List(DatabaseKey("/revlist/"), nil, nil)
+	assert.NoError(s.T(), err)
+	rev, cursor, err := txn2.ReverseList(DatabaseKey("/revlist/"), nil, nil)
+	assert.NoError(s.T(), err)
+	assert.Len(s.T(), rev, 3)
+	assert.Equal(s.T(), endCursor, cursor)
+	assert.Equal(s.T(), fwd[0].Key, rev[len(rev)-1].Key)
+	assert.Equal(s.T(), fwd[len(fwd)-1].Key, rev[0].Key)
+	_ = txn2.Commit()
+}
+
 func (s *DBTestSuite) TestTxn_ListKeys() {
 	txn, _ := s.db.NewTxn()
 	_ = txn.Set(DatabaseKey("/listkeys/item1"), []byte("a"))

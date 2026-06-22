@@ -12,6 +12,7 @@ import (
 
 type stubNotificationRepo struct {
 	listFn        func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
+	reverseListFn func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error)
 	getFn         func(userId, notificationId string) (domain.Notification, error)
 	unreadCountFn func(userId string) (uint64, error)
 }
@@ -19,6 +20,13 @@ type stubNotificationRepo struct {
 func (s stubNotificationRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
 	if s.listFn != nil {
 		return s.listFn(userId, limit, cursor)
+	}
+	return nil, "", nil
+}
+
+func (s stubNotificationRepo) ReverseList(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
+	if s.reverseListFn != nil {
+		return s.reverseListFn(userId, cursor, limit)
 	}
 	return nil, "", nil
 }
@@ -232,6 +240,44 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		}
 		if capturedCursor == nil || *capturedCursor != "some-cursor" {
 			t.Fatalf("expected cursor 'some-cursor', got %v", capturedCursor)
+		}
+	})
+}
+
+func TestStreamGetPushesHandler(t *testing.T) {
+	owner := "owner-1"
+
+	t.Run("routes to ReverseList and returns cursor", func(t *testing.T) {
+		called := false
+		var capturedCursor *string
+		h := StreamGetPushesHandler(stubNotificationRepo{
+			reverseListFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
+				called = true
+				capturedCursor = cursor
+				return []domain.Notification{
+					{Id: "1", Type: domain.NotificationLikeType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+				}, "cur-key", nil
+			},
+			unreadCountFn: func(userId string) (uint64, error) { return 1, nil },
+		}, stubAuth{owner: domain.Owner{UserId: owner}})
+
+		cursor := "watermark"
+		resp, err := h(marshal(t, event.GetNotificationsEvent{Cursor: &cursor}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !called {
+			t.Fatal("expected ReverseList to be called")
+		}
+		if capturedCursor == nil || *capturedCursor != "watermark" {
+			t.Fatalf("expected cursor 'watermark', got %v", capturedCursor)
+		}
+		r := resp.(event.GetNotificationsResponse)
+		if r.Cursor != "cur-key" {
+			t.Fatalf("expected cursor 'cur-key', got %q", r.Cursor)
+		}
+		if len(r.Notifications) != 1 {
+			t.Fatalf("expected 1 notification, got %d", len(r.Notifications))
 		}
 	})
 }

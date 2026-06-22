@@ -9,7 +9,6 @@ import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.HttpHeaderLink
-import site.warpnet.warpdroid.util.isLessThan
 import javax.inject.Inject
 
 /** Models next/prev links from the "Links" header in an API response */
@@ -68,62 +67,21 @@ class NotificationFetcher @Inject constructor(
         }
     }
 
-    /**
-     * Fetch new Warpnet Notifications and update the marker position.
-     *
-     * Here, "new" means "notifications with IDs newer than notifications the user has already
-     * seen."
-     *
-     * The "water mark" for Warpnet Notification IDs are stored in three places.
-     *
-     * - acccount.lastNotificationId -- the ID of the top-most notification when the user last
-     *   left the Notifications tab.
-     * - The Warpnet "marker" API -- the ID of the most recent notification fetched here.
-     * - account.notificationMarkerId -- local version of the value from the Warpnet marker
-     *   API, in case the Warpnet server does not implement that API.
-     *
-     * The user may have refreshed the "Notifications" tab and seen notifications newer than the
-     * ones that were last fetched here. So `lastNotificationId` takes precedence if it is greater
-     * than the marker.
-     */
     private suspend fun fetchNewNotifications(account: AccountEntity): List<Notification> {
-        // Pick where to read from. Warpnet has no server-side read-marker —
-        // local "last seen" + the most recent visited id is the only source.
-        val localMarkerId = account.notificationMarkerId
-        val readingPosition = account.lastNotificationId
+        val stored = account.notificationMarkerId
+        val cursor = if (stored.isEmpty() || stored == "0") "" else stored
 
-        var minId: String? = if (readingPosition.isLessThan(localMarkerId)) localMarkerId else readingPosition
-        Log.d(TAG, "  localMarkerId: $localMarkerId")
-        Log.d(TAG, "  readingPosition: $readingPosition")
+        val response = warpnetApi.notificationsPage(cursor = cursor)
+        if (!response.isSuccessful) return emptyList()
 
-        Log.d(TAG, "Getting Notifications for ${account.fullName}, min_id: $minId.")
+        val notifications = response.body().orEmpty()
 
-        // Fetch all outstanding notifications
-        val notifications: List<Notification> = buildList {
-            while (minId != null) {
-                val response = warpnetApi.notificationsPage(minId = minId)
-                if (!response.isSuccessful) break
-
-                // Notifications are returned in the page in order, newest first;
-                // insert the new page at the head of the list.
-                response.body()?.let { addAll(0, it) }
-
-                // Get the previous page, which will be chronologically newer
-                // notifications. If it doesn't exist this is null and the loop
-                // will exit.
-                val links = Links.from(response.headers()["link"])
-                minId = links.prev
-            }
+        val newCursor = Links.from(response.headers()["link"]).next
+        if (!newCursor.isNullOrEmpty() && newCursor != stored) {
+            accountManager.updateAccount(account) { copy(notificationMarkerId = newCursor) }
         }
 
-        // Bump the local marker so we don't re-process the same notifications.
-        notifications.firstOrNull()?.let {
-            val newMarkerId = notifications.first().id
-            accountManager.updateAccount(account) { copy(notificationMarkerId = newMarkerId) }
-        }
-
-        Log.d(TAG, "Got ${notifications.size} Notifications.")
-
+        Log.d(TAG, "Got ${notifications.size} notifications for ${account.fullName}.")
         return notifications
     }
 

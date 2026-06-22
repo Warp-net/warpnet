@@ -274,6 +274,51 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 	return nots, cur, nil
 }
 
+func (repo *NotificationsRepo) ReverseList(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
+	if userId == "" {
+		return nil, "", local_store.DBError("missing user id")
+	}
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		Build()
+
+	txn, err := repo.db.NewReadTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	var items []local_store.ListItem
+	if cursor == nil || *cursor == "" {
+		items, _, err = txn.List(prefix, limit, nil)
+	} else {
+		items, _, err = txn.ReverseList(prefix, limit, cursor)
+		if err == nil && len(items) > 0 && items[0].Key == *cursor {
+			items = items[1:]
+		}
+	}
+	if err != nil {
+		return nil, "", err
+	}
+
+	newCursor := ""
+	if cursor != nil {
+		newCursor = *cursor
+	}
+	nots := make([]domain.Notification, 0, len(items))
+	for _, item := range items {
+		var not domain.Notification
+		if uerr := json.Unmarshal(item.Value, &not); uerr != nil {
+			return nil, "", uerr
+		}
+		nots = append(nots, not)
+		if newCursor == "" || item.Key < newCursor {
+			newCursor = item.Key
+		}
+	}
+	return nots, newCursor, nil
+}
+
 // unreadCountPageSize is the per-iteration batch UnreadCount uses to
 // walk a user's notifications. Exposed as a package var so tests can
 // shrink it to force multiple iterations without having to seed

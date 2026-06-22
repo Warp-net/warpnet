@@ -466,6 +466,7 @@ type WarpTransactioner interface {
 	IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error
 	ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) error
 	List(prefix DatabaseKey, limit *uint64, cursor *string) ([]ListItem, string, error)
+	ReverseList(prefix DatabaseKey, limit *uint64, cursor *string) ([]ListItem, string, error)
 	ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([]string, string, error)
 	BatchGet(keys ...DatabaseKey) ([]ListItem, error)
 }
@@ -689,6 +690,14 @@ type ListItem struct {
 }
 
 func (t *warpTxn) List(prefix DatabaseKey, limit *uint64, cursor *string) ([]ListItem, string, error) {
+	return t.list(prefix, limit, cursor, false)
+}
+
+func (t *warpTxn) ReverseList(prefix DatabaseKey, limit *uint64, cursor *string) ([]ListItem, string, error) {
+	return t.list(prefix, limit, cursor, true)
+}
+
+func (t *warpTxn) list(prefix DatabaseKey, limit *uint64, cursor *string, reverse bool) ([]ListItem, string, error) {
 	var startCursor DatabaseKey
 	if cursor != nil && *cursor != "" {
 		startCursor = DatabaseKey(*cursor)
@@ -704,7 +713,7 @@ func (t *warpTxn) List(prefix DatabaseKey, limit *uint64, cursor *string) ([]Lis
 
 	items := make([]ListItem, 0, *limit) //
 	cur, err := iterate(
-		t.txn, prefix, startCursor, limit, true,
+		t.txn, prefix, startCursor, limit, true, reverse,
 		func(key string, value []byte) error {
 			items = append(items, ListItem{
 				Key:   key,
@@ -732,7 +741,7 @@ func (t *warpTxn) ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([
 
 	items := make([]string, 0, *limit) //
 	cur, err := iterate(
-		t.txn, prefix, startCursor, limit, false,
+		t.txn, prefix, startCursor, limit, false, false,
 		func(key string, _ []byte) error {
 			items = append(items, key)
 			return nil
@@ -749,6 +758,7 @@ func iterate(
 	startCursor DatabaseKey,
 	limit *uint64,
 	includeValues bool,
+	reverse bool,
 	handler iterKeysValuesFunc,
 ) (cursor string, err error) {
 	if strings.Contains(prefix.String(), FixedKey) {
@@ -760,15 +770,18 @@ func iterate(
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = includeValues
 	opts.PrefetchSize = 20
+	opts.Reverse = reverse
 
 	it := txn.NewIterator(opts)
 	defer it.Close()
 
-	p := prefix.Bytes()
+	prefixBytes := prefix.Bytes()
+	p := prefixBytes
 	if !startCursor.IsEmpty() {
 		p = startCursor.Bytes()
+	} else if reverse {
+		p = append(append([]byte{}, prefixBytes...), 0xFF)
 	}
-	prefixBytes := prefix.Bytes()
 
 	var (
 		lastKey DatabaseKey
