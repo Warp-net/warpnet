@@ -5,7 +5,7 @@
  */
 package site.warpnet.warpdroid.components.pairing
 
-import android.util.Log
+import com.squareup.moshi.Moshi
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +42,9 @@ class PairingCoordinator @Inject constructor(
     private val client: WarpnetClient,
     private val identityStore: Ed25519IdentityStore,
     private val pairedNodeStore: PairedNodeStore,
+    moshi: Moshi,
 ) {
+    private val validator = AuthNodeInfoValidator(moshi)
     suspend fun pair(info: AuthNodeInfo, rawJson: String): PairingOutcome {
         val paired = PairedNode.from(info)
         // Build /p2p/<id>-terminated multiaddrs from NodeInfo.Addresses so the
@@ -108,41 +110,17 @@ class PairingCoordinator @Inject constructor(
      * the foreground lifecycle is the only other thing that dials, so without
      * this the 15-minute notification pull never has a connection to ride.
      *
-     * Returns true when the host ends up Connected. A no-op (returns true)
-     * when already connected: the foreground owns that live connection and
-     * must not be torn down here. Mirrors the two proven dial sequences:
-     * cold process -> initialise + connect + pair (same as auto-pair); warm
-     * but paused -> resume + connect (same as the onStart resume path).
+     * Re-runs the same [pair] handshake the foreground auto-pair path uses,
+     * so dial + pair lives in one place, and reports connectivity straight
+     * from the resulting [PairingOutcome]. A no-op (returns true) when already
+     * connected: the foreground owns that live connection and must not be
+     * re-paired from under it.
      */
     suspend fun ensureConnected(): Boolean {
         if (client.state.value is ConnectionState.Connected) return true
-        val paired = withContext(Dispatchers.IO) { pairedNodeStore.load() } ?: return false
-        val candidates = paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
-        if (candidates.isEmpty()) return false
-        return try {
-            if (client.state.value == ConnectionState.Uninitialised) {
-                val rawJson = withContext(Dispatchers.IO) { pairedNodeStore.loadRawQr() }
-                    ?: return false
-                val config = WarpnetConfig(
-                    privKeyHex = identityStore.deriveHex(paired.pinnedPeerId),
-                    pskHex = paired.psk,
-                    bootstrapAddrs = paired.bootstrapAddrs.ifEmpty { candidates },
-                    desktopPeerAddr = candidates.first(),
-                    network = paired.network,
-                )
-                client.initialise(config)
-                client.connect(candidates)
-                client.pair(rawJson)
-            } else {
-                client.resume()
-                if (client.state.value !is ConnectionState.Connected) {
-                    client.connect(candidates)
-                }
-            }
-            client.state.value is ConnectionState.Connected
-        } catch (e: WarpnetException) {
-            Log.w("PairingCoordinator", "ensureConnected failed: ${e.message}")
-            false
-        }
+        val rawJson = withContext(Dispatchers.IO) { pairedNodeStore.loadRawQr() } ?: return false
+        val info = (validator.validate(rawJson) as? ValidationResult.Valid)?.authNodeInfo
+            ?: return false
+        return pair(info, rawJson) is PairingOutcome.Success
     }
 }
