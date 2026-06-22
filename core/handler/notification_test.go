@@ -12,7 +12,6 @@ import (
 
 type stubNotificationRepo struct {
 	listFn        func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
-	listSinceFn   func(userId, since string, limit *uint64) ([]domain.Notification, string, error)
 	getFn         func(userId, notificationId string) (domain.Notification, error)
 	unreadCountFn func(userId string) (uint64, error)
 }
@@ -20,13 +19,6 @@ type stubNotificationRepo struct {
 func (s stubNotificationRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
 	if s.listFn != nil {
 		return s.listFn(userId, limit, cursor)
-	}
-	return nil, "", nil
-}
-
-func (s stubNotificationRepo) ListSince(userId, since string, limit *uint64) ([]domain.Notification, string, error) {
-	if s.listSinceFn != nil {
-		return s.listSinceFn(userId, since, limit)
 	}
 	return nil, "", nil
 }
@@ -217,71 +209,6 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		r := resp.(event.GetNotificationsResponse)
 		if r.UnreadCount != 3 {
 			t.Fatalf("expected page-local fallback count 3, got %d", r.UnreadCount)
-		}
-	})
-
-	t.Run("since takes precedence and routes to ListSince", func(t *testing.T) {
-		var capturedSince string
-		var capturedLimit *uint64
-		sinceCalled := false
-		nots := []domain.Notification{
-			{Id: "9", Type: domain.NotificationMentionType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
-		}
-		h := StreamGetNotificationsHandler(stubNotificationRepo{
-			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
-				t.Fatal("List must not be called when Since is set")
-				return nil, "", nil
-			},
-			listSinceFn: func(userId, since string, limit *uint64) ([]domain.Notification, string, error) {
-				sinceCalled = true
-				capturedSince = since
-				capturedLimit = limit
-				return nots, "end", nil
-			},
-			unreadCountFn: func(userId string) (uint64, error) { return 1, nil },
-		}, stubAuth{owner: domain.Owner{UserId: owner}})
-
-		since := "watermark-7"
-		limit := uint64(40)
-		resp, err := h(marshal(t, event.GetNotificationsEvent{Since: &since, Limit: &limit}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if !sinceCalled {
-			t.Fatal("expected ListSince to be called")
-		}
-		if capturedSince != "watermark-7" {
-			t.Fatalf("expected since 'watermark-7', got %q", capturedSince)
-		}
-		if capturedLimit == nil || *capturedLimit != 40 {
-			t.Fatalf("expected limit 40, got %v", capturedLimit)
-		}
-		r := resp.(event.GetNotificationsResponse)
-		if len(r.Notifications) != 1 || r.Notifications[0].Id != "9" {
-			t.Fatalf("expected the single delta notification, got %+v", r.Notifications)
-		}
-	})
-
-	t.Run("empty since falls back to List", func(t *testing.T) {
-		listCalled := false
-		h := StreamGetNotificationsHandler(stubNotificationRepo{
-			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
-				listCalled = true
-				return nil, "end", nil
-			},
-			listSinceFn: func(userId, since string, limit *uint64) ([]domain.Notification, string, error) {
-				t.Fatal("ListSince must not be called when Since is empty")
-				return nil, "", nil
-			},
-		}, stubAuth{owner: domain.Owner{UserId: owner}})
-
-		empty := ""
-		_, err := h(marshal(t, event.GetNotificationsEvent{Since: &empty}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if !listCalled {
-			t.Fatal("expected List to be called for empty Since")
 		}
 	})
 

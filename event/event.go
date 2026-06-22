@@ -527,7 +527,6 @@ type ModerationResultEvent struct {
 type GetNotificationsEvent struct {
 	Cursor *string `json:"cursor,omitempty"`
 	Limit  *uint64 `json:"limit,omitempty"`
-	Since  *string `json:"since,omitempty"`
 }
 
 // GetNotificationEvent defines model for GetNotificationEvent.

@@ -176,7 +176,6 @@ data class UnretweetEvent(
 data class GetNotificationsEvent(
     val cursor: String = "",
     val limit: Int = 40,
-    val since: String = "",
 )
 
 @JsonClass(generateAdapter = true)

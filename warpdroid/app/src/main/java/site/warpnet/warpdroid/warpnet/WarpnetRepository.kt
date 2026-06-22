@@ -541,15 +541,6 @@ class WarpnetRepository @Inject constructor(
         return page.notifications.map { it.toNotification() } to page.cursor
     }
 
-    suspend fun getNotificationsSince(since: String, limit: Int = 40): Pair<List<Notification>, String> {
-        val raw = client.request(
-            ProtocolIds.PRIVATE_GET_NOTIFICATIONS,
-            getNotifsAdapter.toJson(GetNotificationsEvent(since = since, limit = limit)),
-        )
-        val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
-        return page.notifications.map { it.toNotification() } to page.cursor
-    }
-
     /**
      * Fetch a single notification by id. The fat node resolves the recipient
      * from the paired session; only the notification id travels on the wire.

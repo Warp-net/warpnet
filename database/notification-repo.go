@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	NotificationsRepoName = "/NOTIFICATIONS_V2"
+	NotificationsRepoName = "/NOTIFICATIONS"
 )
 
 var ErrNotificationsNotFound = local_store.DBError("notifications not found")
@@ -69,7 +69,9 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 
 	notKey := local_store.NewPrefixBuilder(NotificationsRepoName).
 		AddRootID(not.UserId).
-		AddParentId(not.Id).
+		AddReversedTimestamp(not.CreatedAt).
+		AddParentId(not.Type.String()).
+		AddId(not.Id).
 		Build()
 
 	bt, err := json.Marshal(not)
@@ -90,7 +92,8 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 }
 
 // MarkRead flips Notification.IsRead to true for the given notification.
-// It scans the per-user prefix to locate the row from (userId, notificationId).
+// Notification keys are timestamp-indexed within a per-user prefix, so a
+// scan is unavoidable to locate the row from (userId, notificationId).
 //
 // The scan and the write live in *separate* transactions on purpose.
 // Badger's SSI tracks every key the txn reads; doing the prefix scan
@@ -249,7 +252,7 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 	}
 	defer txn.Rollback()
 
-	items, cur, err := txn.ReverseList(prefix, limit, cursor)
+	items, cur, err := txn.List(prefix, limit, cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -258,85 +261,17 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 		return nil, "", err
 	}
 
-	return decodeNotifications(items, cur)
-}
-
-func decodeNotifications(items []local_store.ListItem, cursor string) ([]domain.Notification, string, error) {
 	nots := make([]domain.Notification, 0, len(items))
 	for _, item := range items {
 		var not domain.Notification
-		if err := json.Unmarshal(item.Value, &not); err != nil {
+		err = json.Unmarshal(item.Value, &not)
+		if err != nil {
 			return nil, "", err
 		}
 		nots = append(nots, not)
 	}
-	return nots, cursor, nil
-}
 
-func (repo *NotificationsRepo) ListSince(userId, since string, limit *uint64) ([]domain.Notification, string, error) {
-	if userId == "" {
-		return nil, "", local_store.DBError("missing user id")
-	}
-	if since == "" {
-		return repo.List(userId, limit, nil)
-	}
-
-	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
-		AddRootID(userId).
-		Build()
-	sinceKey := local_store.NewPrefixBuilder(NotificationsRepoName).
-		AddRootID(userId).
-		AddParentId(since).
-		Build()
-
-	txn, err := repo.db.NewReadTxn()
-	if err != nil {
-		return nil, "", err
-	}
-	defer txn.Rollback()
-
-	if _, gerr := txn.Get(sinceKey); gerr != nil {
-		items, cur, lerr := txn.ReverseList(prefix, limit, nil)
-		if lerr != nil {
-			return nil, "", lerr
-		}
-		return decodeNotifications(items, cur)
-	}
-
-	var maxItems uint64
-	if limit != nil {
-		maxItems = *limit
-	}
-
-	var (
-		out    []domain.Notification
-		cursor        = sinceKey.String()
-		page   uint64 = 100
-	)
-	for {
-		items, next, lerr := txn.List(prefix, &page, &cursor)
-		if lerr != nil {
-			return nil, "", lerr
-		}
-		for _, item := range items {
-			var not domain.Notification
-			if uerr := json.Unmarshal(item.Value, &not); uerr != nil {
-				return nil, "", uerr
-			}
-			if not.Id == since {
-				continue
-			}
-			out = append(out, not)
-			if maxItems > 0 && uint64(len(out)) >= maxItems {
-				return out, next, nil
-			}
-		}
-		if next == "" || next == local_store.EndCursor || next == cursor || uint64(len(items)) < page {
-			break
-		}
-		cursor = next
-	}
-	return out, local_store.EndCursor, nil
+	return nots, cur, nil
 }
 
 // unreadCountPageSize is the per-iteration batch UnreadCount uses to
