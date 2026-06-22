@@ -172,11 +172,6 @@ class WarpdroidApplication :
                 override fun onStart(owner: LifecycleOwner) {
                     transportScope.launch {
                         warpnetClient.resume()
-                        // Event-driven fast refresh: surface anything new as
-                        // soon as the app is foregrounded instead of waiting up
-                        // to ~15 min for the periodic pull. Best-effort — if the
-                        // re-dial isn't live yet the worker no-ops and the
-                        // periodic run catches up. No polling loop, no alarm.
                         notificationHelper.fetchNotificationsNow()
                         // Polling has to come back after the host is
                         // re-dialled or the very first poll observes
@@ -184,9 +179,6 @@ class WarpdroidApplication :
                         // pointless reconnect race against resume().
                         connectionMonitor.start()
                     }
-                    // Foreground-only: also pull when the device starts
-                    // charging or the network returns while the user is in the
-                    // app. Torn down in onStop so it adds no background wakeup.
                     notificationHelper.startOpportunisticRefresh()
                 }
 

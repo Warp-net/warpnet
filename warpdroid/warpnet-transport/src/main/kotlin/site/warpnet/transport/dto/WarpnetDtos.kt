@@ -172,10 +172,6 @@ data class UnretweetEvent(
     @Json(name = "retweeter_id") val retweeterId: String,
 )
 
-// cursor paginates newest-first (opaque key from a prior response); since is a
-// delta watermark (id of the newest notification already held) — the node then
-// returns only notifications newer than it. Mirrors event.GetNotificationsEvent
-// on the fat node; since takes precedence server-side when both are set.
 @JsonClass(generateAdapter = true)
 data class GetNotificationsEvent(
     val cursor: String = "",

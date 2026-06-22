@@ -288,7 +288,6 @@ func (s *NotificationsRepoTestSuite) TestNotificationsIsolatedByUser() {
 func (s *NotificationsRepoTestSuite) TestListSince_ReturnsOnlyNewer() {
 	userId := uuid.New().String()
 
-	// Three notifications, oldest → newest. Add() stores them newest-first.
 	ids := []string{"n-old", "n-mid", "n-new"}
 	for i, id := range ids {
 		s.Require().NoError(s.repo.Add(domain.Notification{
@@ -300,7 +299,6 @@ func (s *NotificationsRepoTestSuite) TestListSince_ReturnsOnlyNewer() {
 		}))
 	}
 
-	// Watermark at the middle row: only the newer one should come back.
 	nots, _, err := s.repo.ListSince(userId, "n-mid", nil)
 	s.Require().NoError(err)
 	s.Len(nots, 1)
@@ -319,7 +317,6 @@ func (s *NotificationsRepoTestSuite) TestListSince_UnknownWatermarkCatchesUpAll(
 		}))
 	}
 
-	// A watermark that was never stored (e.g. expired): return everything.
 	nots, _, err := s.repo.ListSince(userId, "does-not-exist", nil)
 	s.Require().NoError(err)
 	s.Len(nots, 3)

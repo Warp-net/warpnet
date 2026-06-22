@@ -68,8 +68,6 @@ func StreamGetNotificationsHandler(
 
 		owner := authRepo.GetOwner()
 
-		// Since (a delta watermark) takes precedence over Cursor (page key):
-		// warpdroid's background pull sends only Since to get "what's new".
 		var (
 			notifications []domain.Notification
 			cur           string

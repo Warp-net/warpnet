@@ -87,8 +87,6 @@ class NotificationHelper @Inject constructor(
 
     private var notificationId: Int = NOTIFICATION_ID_PRUNE_CACHE + 1
 
-    // Foreground-only opportunistic refresh hooks, held so they can be torn
-    // down when the app backgrounds (see start/stopOpportunisticRefresh).
     private var chargingReceiver: BroadcastReceiver? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -123,12 +121,6 @@ class NotificationHelper @Inject constructor(
     }
 
     fun enablePullNotifications() {
-        // Battery-cheap background mode: the OS-minimum periodic interval
-        // (~15 min), gated on network + battery-not-low, with linear backoff
-        // when the fat node is unreachable. Mirrors PairRefreshWorker so the
-        // two pulls batch under the same constraints. This is the baseline that
-        // must work with no special permissions; faster/exact modes are tuning
-        // on top, never a correctness dependency.
         val workRequest: PeriodicWorkRequest = PeriodicWorkRequest.Builder(
             NotificationWorker::class.java,
             PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS,
@@ -182,27 +174,8 @@ class NotificationHelper @Inject constructor(
         }
     }
 
-    /**
-     * Best-effort immediate pull, used when the app comes to the foreground so
-     * fresh notifications show up promptly instead of waiting for the next
-     * periodic tick. Event-driven (no polling loop) and gated on network only;
-     * the periodic worker remains the reliability backstop. Subject to the
-     * libp2p re-dial finishing — if the host isn't connected yet the fetch is a
-     * no-op and the next periodic run catches up.
-     */
     fun fetchNotificationsNow() = enqueueOneTimeWorker(null)
 
-    /**
-     * While the app is foregrounded, pull immediately when the device starts
-     * charging or the network comes back, instead of waiting for the next
-     * ~15 min periodic tick. Registered on foreground and torn down on
-     * background (see [stopOpportunisticRefresh]) so it never adds a background
-     * wakeup source — the periodic worker stays the sole background mechanism
-     * and the reliability backstop. Event-driven only: no polling loop, no
-     * alarm, no foreground service, no wakelock, no new permissions. Rapid
-     * triggers coalesce via the unique one-shot work, and each pull is cheap
-     * thanks to the since-watermark delta fetch.
-     */
     fun startOpportunisticRefresh() {
         if (chargingReceiver == null) {
             val receiver = object : BroadcastReceiver() {
@@ -212,8 +185,6 @@ class NotificationHelper @Inject constructor(
                     }
                 }
             }
-            // ACTION_POWER_CONNECTED is a protected system broadcast, so
-            // NOT_EXPORTED is correct and the system still delivers it.
             ContextCompat.registerReceiver(
                 context,
                 receiver,
@@ -231,9 +202,6 @@ class NotificationHelper @Inject constructor(
                         fetchNotificationsNow()
                     }
                 }
-                // registerDefaultNetworkCallback needs ACCESS_NETWORK_STATE
-                // (already merged in via WorkManager). Guarded so a missing
-                // grant degrades to charging-only instead of crashing.
                 val registered = runCatching {
                     connectivityManager.registerDefaultNetworkCallback(callback)
                 }.isSuccess
@@ -268,8 +236,6 @@ class NotificationHelper @Inject constructor(
             oneTimeRequestBuilder.setInputData(data.build())
         }
 
-        // Unique work so rapid foreground transitions coalesce into one pull
-        // instead of stacking expedited jobs against the quota.
         workManager.enqueueUniqueWork(
             NOTIFICATION_PULL_ONESHOT_NAME,
             ExistingWorkPolicy.KEEP,

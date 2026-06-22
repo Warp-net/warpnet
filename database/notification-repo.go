@@ -274,17 +274,6 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 	return nots, cur, nil
 }
 
-// ListSince returns the owner's notifications newer than the notification
-// whose id is `since`, newest-first. It walks the per-user prefix (already
-// stored newest-first) and stops the moment it reaches `since` — every later
-// row is something the caller already has. If `since` is empty it falls back
-// to List (a normal first page). If the watermark row is gone (24 h TTL
-// expired, or the id was never seen) the scan returns everything it collected,
-// so the client catches up instead of silently missing events.
-//
-// limit caps how many new notifications come back; the returned cursor is
-// informational (EndCursor once the scan reaches the watermark or the end of
-// the prefix).
 func (repo *NotificationsRepo) ListSince(userId, since string, limit *uint64) ([]domain.Notification, string, error) {
 	if userId == "" {
 		return nil, "", local_store.DBError("missing user id")
@@ -297,8 +286,6 @@ func (repo *NotificationsRepo) ListSince(userId, since string, limit *uint64) ([
 		AddRootID(userId).
 		Build()
 
-	// Read-only txn: a pure scan, no writes to conflict on (same rationale
-	// as UnreadCount).
 	txn, err := repo.db.NewReadTxn()
 	if err != nil {
 		return nil, "", err
