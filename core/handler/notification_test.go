@@ -244,13 +244,13 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 	})
 }
 
-func TestStreamGetNewNotificationsHandler(t *testing.T) {
+func TestStreamGetPushesHandler(t *testing.T) {
 	owner := "owner-1"
 
 	t.Run("routes to ReverseList and returns cursor", func(t *testing.T) {
 		called := false
 		var capturedCursor *string
-		h := StreamGetNewNotificationsHandler(stubNotificationRepo{
+		h := StreamGetPushesHandler(stubNotificationRepo{
 			reverseListFn: func(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error) {
 				called = true
 				capturedCursor = cursor

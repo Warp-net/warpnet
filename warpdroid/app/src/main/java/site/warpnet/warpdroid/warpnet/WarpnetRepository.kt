@@ -541,9 +541,9 @@ class WarpnetRepository @Inject constructor(
         return page.notifications.map { it.toNotification() } to page.cursor
     }
 
-    suspend fun getNewNotifications(cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {
+    suspend fun getPushes(cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {
         val raw = client.request(
-            ProtocolIds.PRIVATE_GET_NEW_NOTIFICATIONS,
+            ProtocolIds.PRIVATE_GET_PUSHES,
             getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
         val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
