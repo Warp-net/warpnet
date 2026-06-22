@@ -288,7 +288,7 @@ func (s *NotificationsRepoTestSuite) TestNotificationsIsolatedByUser() {
 func (s *NotificationsRepoTestSuite) TestListSince_ReturnsOnlyNewer() {
 	userId := uuid.New().String()
 
-	ids := []string{"n-old", "n-mid", "n-new"}
+	ids := []string{"id1", "id2", "id3"}
 	for i, id := range ids {
 		s.Require().NoError(s.repo.Add(domain.Notification{
 			Id:        id,
@@ -299,10 +299,10 @@ func (s *NotificationsRepoTestSuite) TestListSince_ReturnsOnlyNewer() {
 		}))
 	}
 
-	nots, _, err := s.repo.ListSince(userId, "n-mid", nil)
+	nots, _, err := s.repo.ListSince(userId, "id2", nil)
 	s.Require().NoError(err)
 	s.Len(nots, 1)
-	s.Equal("n-new", nots[0].Id)
+	s.Equal("id3", nots[0].Id)
 }
 
 func (s *NotificationsRepoTestSuite) TestListSince_UnknownWatermarkCatchesUpAll() {

@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	NotificationsRepoName = "/NOTIFICATIONS"
+	NotificationsRepoName = "/NOTIFICATIONS_V2"
 )
 
 var ErrNotificationsNotFound = local_store.DBError("notifications not found")
@@ -69,9 +69,7 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 
 	notKey := local_store.NewPrefixBuilder(NotificationsRepoName).
 		AddRootID(not.UserId).
-		AddReversedTimestamp(not.CreatedAt).
-		AddParentId(not.Type.String()).
-		AddId(not.Id).
+		AddParentId(not.Id).
 		Build()
 
 	bt, err := json.Marshal(not)
@@ -92,8 +90,7 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 }
 
 // MarkRead flips Notification.IsRead to true for the given notification.
-// Notification keys are timestamp-indexed within a per-user prefix, so a
-// scan is unavoidable to locate the row from (userId, notificationId).
+// It scans the per-user prefix to locate the row from (userId, notificationId).
 //
 // The scan and the write live in *separate* transactions on purpose.
 // Badger's SSI tracks every key the txn reads; doing the prefix scan
@@ -252,7 +249,7 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 	}
 	defer txn.Rollback()
 
-	items, cur, err := txn.List(prefix, limit, cursor)
+	items, cur, err := txn.ReverseList(prefix, limit, cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -261,17 +258,19 @@ func (repo *NotificationsRepo) List(userId string, limit *uint64, cursor *string
 		return nil, "", err
 	}
 
+	return decodeNotifications(items, cur)
+}
+
+func decodeNotifications(items []local_store.ListItem, cursor string) ([]domain.Notification, string, error) {
 	nots := make([]domain.Notification, 0, len(items))
 	for _, item := range items {
 		var not domain.Notification
-		err = json.Unmarshal(item.Value, &not)
-		if err != nil {
+		if err := json.Unmarshal(item.Value, &not); err != nil {
 			return nil, "", err
 		}
 		nots = append(nots, not)
 	}
-
-	return nots, cur, nil
+	return nots, cursor, nil
 }
 
 func (repo *NotificationsRepo) ListSince(userId, since string, limit *uint64) ([]domain.Notification, string, error) {
@@ -285,12 +284,24 @@ func (repo *NotificationsRepo) ListSince(userId, since string, limit *uint64) ([
 	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
 		AddRootID(userId).
 		Build()
+	sinceKey := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		AddParentId(since).
+		Build()
 
 	txn, err := repo.db.NewReadTxn()
 	if err != nil {
 		return nil, "", err
 	}
 	defer txn.Rollback()
+
+	if _, gerr := txn.Get(sinceKey); gerr != nil {
+		items, cur, lerr := txn.ReverseList(prefix, limit, nil)
+		if lerr != nil {
+			return nil, "", lerr
+		}
+		return decodeNotifications(items, cur)
+	}
 
 	var maxItems uint64
 	if limit != nil {
@@ -299,7 +310,7 @@ func (repo *NotificationsRepo) ListSince(userId, since string, limit *uint64) ([
 
 	var (
 		out    []domain.Notification
-		cursor string
+		cursor        = sinceKey.String()
 		page   uint64 = 100
 	)
 	for {
@@ -313,7 +324,7 @@ func (repo *NotificationsRepo) ListSince(userId, since string, limit *uint64) ([
 				return nil, "", uerr
 			}
 			if not.Id == since {
-				return out, local_store.EndCursor, nil
+				continue
 			}
 			out = append(out, not)
 			if maxItems > 0 && uint64(len(out)) >= maxItems {
