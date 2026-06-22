@@ -53,7 +53,8 @@ resulting from the use or misuse of this software.
       </button>
     </div>
     <button
-        @click="loadMore()"
+        v-if="profiles.length > 0"
+        @click="showMore()"
         class="p-3 w-full hover:bg-lighter text-left text-blue border-t border-lighter"
     >
       Show More
@@ -69,7 +70,6 @@ export default {
   props: ["profile"],
   data() {
     return {
-      ownerProfile: undefined,
       profiles: [],
       followingStatus: new Map(),
     };
@@ -102,24 +102,14 @@ export default {
       );
       this.profiles = [...this.profiles];
     },
-    async loadMore() {
-      const effectiveProfile = this.profile || this.ownerProfile;
-      const profileId = effectiveProfile?.id || effectiveProfile?.user_id;
-      const users = await warpnetService.getWhoToFollow(profileId, false)
-      for (const p of users) {
-        const status = await warpnetService.isFollowing(p.id);
-        this.followingStatus.set(p.id, status);
-      }
-      this.profiles = [...this.profiles, ...users];
-      await this.loadAvatars(users);
+    showMore() {
+      this.$router.push({ name: "WhoToFollow" });
     },
    },
   async created() {
     console.log("loading component:", this.$options.name);
-    this.ownerProfile = warpnetService.getOwnerProfile();
-    const effectiveProfile = this.profile || this.ownerProfile;
-    const profileId = effectiveProfile?.id || effectiveProfile?.user_id;
-    this.profiles = await warpnetService.getWhoToFollow(profileId, true)
+    // Who-to-follow is always scoped to the signed-in owner.
+    this.profiles = await warpnetService.getWhoToFollow(true, 5)
     for (const p of this.profiles) {
       const status = await warpnetService.isFollowing(p.id);
       this.followingStatus.set(p.id, status);

@@ -157,6 +157,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/who-to-follow",
+    name: "WhoToFollow",
+    component: () =>
+      import(/* webpackChunkName: "who-to-follow" */ "../views/WhoToFollow.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/follow-requests",
     name: "FollowRequests",
     component: () =>

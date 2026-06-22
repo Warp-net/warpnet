@@ -323,7 +323,7 @@ export const warpnetService = {
         return usersResp.users;
     },
 
-    async getWhoToFollow(profileId, cursorReset) {
+    async getWhoToFollow(cursorReset, limit = defaultLimit) {
         let cursor = this.getCursor('whotofollow')
         if (cursorReset) {
             cursor = ''
@@ -332,26 +332,32 @@ export const warpnetService = {
             return []
         }
 
+        // Who-to-follow is always scoped to the signed-in owner.
         const owner = this.getOwnerProfile()
-
-        if (!profileId || profileId === '') {
-            profileId = owner.user_id
+        if (!owner || !owner.user_id) {
+            return []
         }
 
         const request = {
             path: PUBLIC_GET_WHOTOFOLLOW,
             body: {
-            limit: defaultLimit,
+                limit: limit,
                 cursor: cursor,
-                user_id: profileId,
+                user_id: owner.user_id,
             },
         }
 
         const followResp = await this.sendToNode(request);
-        if (!followResp || followResp.users.length === 0) {
+        // No/invalid response (transient error or error payload): don't end
+        // the cursor so the session can retry later.
+        if (!followResp || !Array.isArray(followResp.users)) {
             return []
         }
-        this.setCursor('whotofollow', followResp.cursor || "")
+        if (followResp.users.length === 0) {
+            this.setCursor('whotofollow', endCursor)
+            return []
+        }
+        this.setCursor('whotofollow', followResp.cursor || endCursor)
 
         followResp.users = followResp.users.filter(user => !user.isOffline);
 
