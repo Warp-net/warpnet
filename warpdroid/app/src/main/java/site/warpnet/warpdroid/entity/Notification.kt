@@ -119,5 +119,9 @@ val visibleNotificationTypes = listOf(
 )
 
 fun notificationTypeFromString(s: String): Type {
+    // Warpnet emits "reply" for replies to your tweet; the Tusky-derived model
+    // has no reply type and treats replies as mentions. Without this, replies
+    // map to Unknown, get no channel, and are dropped before a push is shown.
+    if (s.lowercase() == "reply") return Type.Mention
     return visibleNotificationTypes.firstOrNull { it.name == s.lowercase() } ?: Type.Unknown(s)
 }

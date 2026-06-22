@@ -380,8 +380,9 @@ class NotificationHelper @Inject constructor(
             builder.setLargeIcon(accountAvatar)
         }
 
-        // Reply to mention action; RemoteInput is available from KitKat Watch, but buttons are available from Nougat
-        if (body.type == Notification.Type.Mention) {
+        // Reply to mention action; RemoteInput is available from KitKat Watch, but buttons are available from Nougat.
+        // Quick-reply/compose dereference the referenced status, which Warpnet notifications don't carry, so skip them.
+        if (body.type == Notification.Type.Mention && body.status != null) {
             val replyRemoteInput = RemoteInput.Builder(KEY_REPLY)
                 .setLabel(context.getString(R.string.label_quick_reply))
                 .build()
