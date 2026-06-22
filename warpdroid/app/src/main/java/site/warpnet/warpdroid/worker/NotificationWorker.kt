@@ -20,14 +20,21 @@ package site.warpnet.warpdroid.worker
 import android.app.Notification
 import android.content.Context
 import androidx.hilt.work.HiltWorker
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import site.warpnet.transport.ConnectionState
+import site.warpnet.transport.WarpnetClient
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.components.pairing.PairingCoordinator
 import site.warpnet.warpdroid.components.systemnotifications.NotificationFetcher
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @HiltWorker
 class NotificationWorker @AssistedInject constructor(
@@ -35,6 +42,8 @@ class NotificationWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val notificationsFetcher: NotificationFetcher,
     notificationHelper: NotificationHelper,
+    private val client: WarpnetClient,
+    private val pairingCoordinator: PairingCoordinator,
 ) : CoroutineWorker(appContext, params) {
     val notification: Notification = notificationHelper.createWorkerNotification(
         R.string.notification_notification_worker
@@ -42,7 +51,28 @@ class NotificationWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val accountId = inputData.getLong(KEY_ACCOUNT_ID, 0).takeIf { it != 0L }
-        notificationsFetcher.fetchAndShow(accountId)
+
+        // The libp2p host is paused while the app is backgrounded, so the
+        // periodic pull has no live connection to ride. Wake it ourselves
+        // (the foreground path can't), then release it again so the relay
+        // keep-alive doesn't drain the battery between polls. When the app is
+        // foregrounded the UI owns the connection — don't touch it.
+        val foreground = withContext(Dispatchers.Main) {
+            ProcessLifecycleOwner.get().lifecycle.currentState
+                .isAtLeast(Lifecycle.State.STARTED)
+        }
+        val wokeHost = !foreground && client.state.value !is ConnectionState.Connected
+        if (wokeHost && !pairingCoordinator.ensureConnected()) {
+            return Result.success() // not paired or node unreachable; retry next cycle
+        }
+
+        try {
+            notificationsFetcher.fetchAndShow(accountId)
+        } finally {
+            if (wokeHost) {
+                client.pause()
+            }
+        }
         return Result.success()
     }
 

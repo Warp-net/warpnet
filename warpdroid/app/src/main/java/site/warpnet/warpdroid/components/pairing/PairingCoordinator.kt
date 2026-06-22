@@ -5,6 +5,7 @@
  */
 package site.warpnet.warpdroid.components.pairing
 
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -97,6 +98,51 @@ class PairingCoordinator @Inject constructor(
             }
         } catch (e: WarpnetException) {
             PairingOutcome.TransportError(e.message.orEmpty())
+        }
+    }
+
+    /**
+     * Bring the libp2p host up from the persisted pairing so a background
+     * worker (e.g. [site.warpnet.warpdroid.worker.NotificationWorker]) can
+     * reach the fat node while the app is paused or its process is cold —
+     * the foreground lifecycle is the only other thing that dials, so without
+     * this the 15-minute notification pull never has a connection to ride.
+     *
+     * Returns true when the host ends up Connected. A no-op (returns true)
+     * when already connected: the foreground owns that live connection and
+     * must not be torn down here. Mirrors the two proven dial sequences:
+     * cold process -> initialise + connect + pair (same as auto-pair); warm
+     * but paused -> resume + connect (same as the onStart resume path).
+     */
+    suspend fun ensureConnected(): Boolean {
+        if (client.state.value is ConnectionState.Connected) return true
+        val paired = withContext(Dispatchers.IO) { pairedNodeStore.load() } ?: return false
+        val candidates = paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
+        if (candidates.isEmpty()) return false
+        return try {
+            if (client.state.value == ConnectionState.Uninitialised) {
+                val rawJson = withContext(Dispatchers.IO) { pairedNodeStore.loadRawQr() }
+                    ?: return false
+                val config = WarpnetConfig(
+                    privKeyHex = identityStore.deriveHex(paired.pinnedPeerId),
+                    pskHex = paired.psk,
+                    bootstrapAddrs = paired.bootstrapAddrs.ifEmpty { candidates },
+                    desktopPeerAddr = candidates.first(),
+                    network = paired.network,
+                )
+                client.initialise(config)
+                client.connect(candidates)
+                client.pair(rawJson)
+            } else {
+                client.resume()
+                if (client.state.value !is ConnectionState.Connected) {
+                    client.connect(candidates)
+                }
+            }
+            client.state.value is ConnectionState.Connected
+        } catch (e: WarpnetException) {
+            Log.w("PairingCoordinator", "ensureConnected failed: ${e.message}")
+            false
         }
     }
 }
