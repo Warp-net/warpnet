@@ -184,9 +184,14 @@ class WarpdroidApplication :
                         // pointless reconnect race against resume().
                         connectionMonitor.start()
                     }
+                    // Foreground-only: also pull when the device starts
+                    // charging or the network returns while the user is in the
+                    // app. Torn down in onStop so it adds no background wakeup.
+                    notificationHelper.startOpportunisticRefresh()
                 }
 
                 override fun onStop(owner: LifecycleOwner) {
+                    notificationHelper.stopOpportunisticRefresh()
                     transportScope.launch {
                         connectionMonitor.stop()
                         warpnetClient.pause()

@@ -6,11 +6,15 @@ import android.app.NotificationChannel
 import android.app.NotificationChannelGroup
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -24,6 +28,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.NotificationManagerCompat.NotificationWithIdAndTag
 import androidx.core.app.RemoteInput
 import androidx.core.app.TaskStackBuilder
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.work.BackoffPolicy
@@ -81,6 +86,11 @@ class NotificationHelper @Inject constructor(
     private var workManager: WorkManager = WorkManager.getInstance(context)
 
     private var notificationId: Int = NOTIFICATION_ID_PRUNE_CACHE + 1
+
+    // Foreground-only opportunistic refresh hooks, held so they can be torn
+    // down when the app backgrounds (see start/stopOpportunisticRefresh).
+    private var chargingReceiver: BroadcastReceiver? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     init {
         createWorkerNotificationChannel()
@@ -181,6 +191,71 @@ class NotificationHelper @Inject constructor(
      * no-op and the next periodic run catches up.
      */
     fun fetchNotificationsNow() = enqueueOneTimeWorker(null)
+
+    /**
+     * While the app is foregrounded, pull immediately when the device starts
+     * charging or the network comes back, instead of waiting for the next
+     * ~15 min periodic tick. Registered on foreground and torn down on
+     * background (see [stopOpportunisticRefresh]) so it never adds a background
+     * wakeup source — the periodic worker stays the sole background mechanism
+     * and the reliability backstop. Event-driven only: no polling loop, no
+     * alarm, no foreground service, no wakelock, no new permissions. Rapid
+     * triggers coalesce via the unique one-shot work, and each pull is cheap
+     * thanks to the since-watermark delta fetch.
+     */
+    fun startOpportunisticRefresh() {
+        if (chargingReceiver == null) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == Intent.ACTION_POWER_CONNECTED) {
+                        fetchNotificationsNow()
+                    }
+                }
+            }
+            // ACTION_POWER_CONNECTED is a protected system broadcast, so
+            // NOT_EXPORTED is correct and the system still delivers it.
+            ContextCompat.registerReceiver(
+                context,
+                receiver,
+                IntentFilter(Intent.ACTION_POWER_CONNECTED),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            chargingReceiver = receiver
+        }
+        if (networkCallback == null) {
+            val connectivityManager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            if (connectivityManager != null) {
+                val callback = object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) {
+                        fetchNotificationsNow()
+                    }
+                }
+                // registerDefaultNetworkCallback needs ACCESS_NETWORK_STATE
+                // (already merged in via WorkManager). Guarded so a missing
+                // grant degrades to charging-only instead of crashing.
+                val registered = runCatching {
+                    connectivityManager.registerDefaultNetworkCallback(callback)
+                }.isSuccess
+                if (registered) {
+                    networkCallback = callback
+                }
+            }
+        }
+    }
+
+    fun stopOpportunisticRefresh() {
+        chargingReceiver?.let { receiver ->
+            runCatching { context.unregisterReceiver(receiver) }
+            chargingReceiver = null
+        }
+        networkCallback?.let { callback ->
+            val connectivityManager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            runCatching { connectivityManager?.unregisterNetworkCallback(callback) }
+            networkCallback = null
+        }
+    }
 
     private fun enqueueOneTimeWorker(account: AccountEntity?) {
         val oneTimeRequestBuilder = OneTimeWorkRequest.Builder(NotificationWorker::class.java)
