@@ -22,10 +22,12 @@ import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import site.warpnet.transport.ConnectionState
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.WarpnetException
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.pairing.PairingActivity
+import site.warpnet.warpdroid.components.pairing.PairingCoordinator
 import site.warpnet.warpdroid.components.pairing.isDurablePairRejection
 
 /**
@@ -40,13 +42,25 @@ class PairRefreshWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val client: WarpnetClient,
     private val pairedNodeStore: PairedNodeStore,
+    private val pairingCoordinator: PairingCoordinator,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
         val rawQr = pairedNodeStore.loadRawQr()
             ?: return Result.success() // no pairing yet — nothing to refresh
         return try {
-            client.pair(rawQr)
+            if (client.state.value is ConnectionState.Connected) {
+                // Already up (foreground): refresh the peerstore addresses on
+                // the live link, as before.
+                client.pair(rawQr)
+            } else {
+                // Backgrounded / cold process: the foreground lifecycle won't
+                // dial here, so bring the host up ourselves. ensureConnected()
+                // runs the same pair handshake (so the peerstore is refreshed
+                // too); the resulting connection state is what NotificationWorker
+                // rides when its own cycle fires.
+                pairingCoordinator.ensureConnected()
+            }
             Result.success()
         } catch (e: WarpnetException.NotConnected) {
             // App likely backgrounded; the host is paused and the next
