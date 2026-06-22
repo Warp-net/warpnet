@@ -123,15 +123,20 @@ class WarpnetClient(
      * [WarpnetException.TransportFailure].
      */
     suspend fun pair(rawAuthNodeInfoJson: String) = withContext(Dispatchers.IO) {
+        if (_state.value == ConnectionState.Uninitialised) {
+            throw WarpnetException.NotInitialised()
+        }
         // A backgrounded host is paused (see [pause]) but still initialised.
         // Bring it back to life and wait for its background re-dial to the known
-        // desktop peer to land. Done outside the lock so this timed wait doesn't
-        // serialise ahead of lifecycle transitions (pause / resume / connect) or
-        // other callers that need the mutex.
+        // desktop peer to land. The timed wait stays outside the lock so it
+        // doesn't serialise ahead of lifecycle transitions (pause / resume /
+        // connect); each isConnected() read still takes the mutex, since binding
+        // access is otherwise serialised through it.
         if (_state.value == ConnectionState.Disconnected) {
             resume()
             var waited = 0L
-            while (!binding.isConnected() && waited < REVIVE_TIMEOUT_MS) {
+            while (waited < REVIVE_TIMEOUT_MS) {
+                if (mutex.withLock { binding.isConnected() }) break
                 delay(REVIVE_POLL_MS)
                 waited += REVIVE_POLL_MS
             }
