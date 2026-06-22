@@ -23,9 +23,8 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
-import site.warpnet.transport.ConnectionState
-import site.warpnet.transport.WarpnetClient
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.components.pairing.ConnectionStatus
 import site.warpnet.warpdroid.components.systemnotifications.NotificationFetcher
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import dagger.assisted.Assisted
@@ -37,7 +36,7 @@ class NotificationWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val notificationsFetcher: NotificationFetcher,
     notificationHelper: NotificationHelper,
-    private val client: WarpnetClient,
+    private val connectionStatus: ConnectionStatus,
 ) : CoroutineWorker(appContext, params) {
     val notification: Notification = notificationHelper.createWorkerNotification(
         R.string.notification_notification_worker
@@ -46,12 +45,10 @@ class NotificationWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val accountId = inputData.getLong(KEY_ACCOUNT_ID, 0).takeIf { it != 0L }
 
-        // Bringing the libp2p host up is the pairing entity's job
-        // (PairRefreshWorker in the background, the foreground lifecycle
-        // otherwise). Here we only ride the result of that pairing: pull when
-        // the link is live, otherwise skip and let a later cycle catch up once
-        // a connection exists.
-        if (client.state.value !is ConnectionState.Connected) {
+        // Connection status is owned by PairRefreshWorker — the only entity
+        // that pairs. Pull only when it reports a live link; otherwise skip and
+        // let a later cycle fetch once a pair refresh has reported connected.
+        if (!connectionStatus.isConnected) {
             return Result.success()
         }
 

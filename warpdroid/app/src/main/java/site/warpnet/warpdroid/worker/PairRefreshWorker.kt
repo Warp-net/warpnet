@@ -22,12 +22,11 @@ import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import site.warpnet.transport.ConnectionState
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.WarpnetException
+import site.warpnet.warpdroid.components.pairing.ConnectionStatus
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.pairing.PairingActivity
-import site.warpnet.warpdroid.components.pairing.PairingCoordinator
 import site.warpnet.warpdroid.components.pairing.isDurablePairRejection
 
 /**
@@ -42,33 +41,27 @@ class PairRefreshWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val client: WarpnetClient,
     private val pairedNodeStore: PairedNodeStore,
-    private val pairingCoordinator: PairingCoordinator,
+    private val connectionStatus: ConnectionStatus,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
         val rawQr = pairedNodeStore.loadRawQr()
             ?: return Result.success() // no pairing yet — nothing to refresh
         return try {
-            if (client.state.value is ConnectionState.Connected) {
-                // Already up (foreground): refresh the peerstore addresses on
-                // the live link, as before.
-                client.pair(rawQr)
-            } else {
-                // Backgrounded / cold process: the foreground lifecycle won't
-                // dial here, so bring the host up ourselves. ensureConnected()
-                // runs the same pair handshake (so the peerstore is refreshed
-                // too); the resulting connection state is what NotificationWorker
-                // rides when its own cycle fires.
-                pairingCoordinator.ensureConnected()
-            }
+            client.pair(rawQr)
+            // Pair succeeded → the link is live. Publish it so NotificationWorker
+            // knows a pull can reach the node this cycle.
+            connectionStatus.update(true)
             Result.success()
         } catch (e: WarpnetException.NotConnected) {
             // App likely backgrounded; the host is paused and the next
             // foreground transition will redial. No point retrying with
             // backoff and burning the radio.
+            connectionStatus.update(false)
             Log.d(TAG, "pair refresh skipped: not connected")
             Result.success()
         } catch (e: WarpnetException.NotInitialised) {
+            connectionStatus.update(false)
             Log.d(TAG, "pair refresh skipped: not initialised")
             Result.success()
         } catch (e: WarpnetException.ProtocolError) {
@@ -77,6 +70,7 @@ class PairRefreshWorker @AssistedInject constructor(
                 Result.retry()
             } else {
                 Log.w(TAG, "pair refresh rejected: code=${e.code} ${e.serverMessage}")
+                connectionStatus.update(false)
                 withContext(Dispatchers.IO) { pairedNodeStore.clear() }
                 client.shutdown()
                 val intent = Intent(applicationContext, PairingActivity::class.java)
@@ -88,6 +82,7 @@ class PairRefreshWorker @AssistedInject constructor(
                 Result.success()
             }
         } catch (e: Exception) {
+            connectionStatus.update(false)
             Log.w(TAG, "pair refresh failed", e)
             Result.retry()
         }

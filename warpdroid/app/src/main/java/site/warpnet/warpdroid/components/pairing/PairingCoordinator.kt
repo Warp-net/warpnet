@@ -5,7 +5,6 @@
  */
 package site.warpnet.warpdroid.components.pairing
 
-import com.squareup.moshi.Moshi
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -42,9 +41,7 @@ class PairingCoordinator @Inject constructor(
     private val client: WarpnetClient,
     private val identityStore: Ed25519IdentityStore,
     private val pairedNodeStore: PairedNodeStore,
-    moshi: Moshi,
 ) {
-    private val validator = AuthNodeInfoValidator(moshi)
     suspend fun pair(info: AuthNodeInfo, rawJson: String): PairingOutcome {
         val paired = PairedNode.from(info)
         // Build /p2p/<id>-terminated multiaddrs from NodeInfo.Addresses so the
@@ -101,26 +98,5 @@ class PairingCoordinator @Inject constructor(
         } catch (e: WarpnetException) {
             PairingOutcome.TransportError(e.message.orEmpty())
         }
-    }
-
-    /**
-     * Bring the libp2p host up from the persisted pairing so a background
-     * worker (e.g. [site.warpnet.warpdroid.worker.NotificationWorker]) can
-     * reach the fat node while the app is paused or its process is cold —
-     * the foreground lifecycle is the only other thing that dials, so without
-     * this the 15-minute notification pull never has a connection to ride.
-     *
-     * Re-runs the same [pair] handshake the foreground auto-pair path uses,
-     * so dial + pair lives in one place, and reports connectivity straight
-     * from the resulting [PairingOutcome]. A no-op (returns true) when already
-     * connected: the foreground owns that live connection and must not be
-     * re-paired from under it.
-     */
-    suspend fun ensureConnected(): Boolean {
-        if (client.state.value is ConnectionState.Connected) return true
-        val rawJson = withContext(Dispatchers.IO) { pairedNodeStore.loadRawQr() } ?: return false
-        val info = (validator.validate(rawJson) as? ValidationResult.Valid)?.authNodeInfo
-            ?: return false
-        return pair(info, rawJson) is PairingOutcome.Success
     }
 }
