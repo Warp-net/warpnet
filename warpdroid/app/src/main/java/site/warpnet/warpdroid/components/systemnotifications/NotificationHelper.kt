@@ -30,6 +30,7 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OutOfQuotaPolicy
@@ -171,6 +172,16 @@ class NotificationHelper @Inject constructor(
         }
     }
 
+    /**
+     * Best-effort immediate pull, used when the app comes to the foreground so
+     * fresh notifications show up promptly instead of waiting for the next
+     * periodic tick. Event-driven (no polling loop) and gated on network only;
+     * the periodic worker remains the reliability backstop. Subject to the
+     * libp2p re-dial finishing — if the host isn't connected yet the fetch is a
+     * no-op and the next periodic run catches up.
+     */
+    fun fetchNotificationsNow() = enqueueOneTimeWorker(null)
+
     private fun enqueueOneTimeWorker(account: AccountEntity?) {
         val oneTimeRequestBuilder = OneTimeWorkRequest.Builder(NotificationWorker::class.java)
             .setExpedited(OutOfQuotaPolicy.DROP_WORK_REQUEST)
@@ -182,7 +193,13 @@ class NotificationHelper @Inject constructor(
             oneTimeRequestBuilder.setInputData(data.build())
         }
 
-        workManager.enqueue(oneTimeRequestBuilder.build())
+        // Unique work so rapid foreground transitions coalesce into one pull
+        // instead of stacking expedited jobs against the quota.
+        workManager.enqueueUniqueWork(
+            NOTIFICATION_PULL_ONESHOT_NAME,
+            ExistingWorkPolicy.KEEP,
+            oneTimeRequestBuilder.build(),
+        )
     }
 
     fun disablePullNotifications() {
@@ -726,6 +743,7 @@ class NotificationHelper @Inject constructor(
         private const val EXTRA_NOTIFICATION_TYPE = BuildConfig.APPLICATION_ID + ".notification.extra.notification_type"
         private const val GROUP_SUMMARY_TAG = BuildConfig.APPLICATION_ID + ".notification.group_summary"
         private const val NOTIFICATION_PULL_NAME = "pullNotifications"
+        private const val NOTIFICATION_PULL_ONESHOT_NAME = "pullNotificationsNow"
 
         private val numberFormat = NumberFormat.getNumberInstance()
 

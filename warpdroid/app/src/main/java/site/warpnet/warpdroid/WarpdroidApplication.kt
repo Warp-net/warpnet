@@ -28,6 +28,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import androidx.work.WorkManager
+import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.NEW_INSTALL_SCHEMA_VERSION
 import site.warpnet.warpdroid.settings.PrefKeys
@@ -71,6 +72,9 @@ class WarpdroidApplication :
 
     @Inject
     lateinit var connectionMonitor: site.warpnet.transport.ConnectionMonitor
+
+    @Inject
+    lateinit var notificationHelper: NotificationHelper
 
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -168,6 +172,12 @@ class WarpdroidApplication :
                 override fun onStart(owner: LifecycleOwner) {
                     transportScope.launch {
                         warpnetClient.resume()
+                        // Event-driven fast refresh: surface anything new as
+                        // soon as the app is foregrounded instead of waiting up
+                        // to ~15 min for the periodic pull. Best-effort — if the
+                        // re-dial isn't live yet the worker no-ops and the
+                        // periodic run catches up. No polling loop, no alarm.
+                        notificationHelper.fetchNotificationsNow()
                         // Polling has to come back after the host is
                         // re-dialled or the very first poll observes
                         // the still-Disconnected binding and triggers a
