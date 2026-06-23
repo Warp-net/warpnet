@@ -192,10 +192,11 @@ func handleNewReply(
 ) (any, error) {
 	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
 	parentId := strings.TrimPrefix(*ev.ParentId, domain.RetweetPrefix)
+	id := strings.TrimPrefix(ev.Id, domain.RetweetPrefix)
 
 	reply, err := replyRepo.AddReply(domain.Tweet{
 		CreatedAt:    ev.CreatedAt,
-		Id:           ev.Id,
+		Id:           id,
 		ParentId:     &parentId,
 		ParentUserId: ev.ParentUserId,
 		RootId:       rootId,
@@ -240,19 +241,21 @@ func handleNewReply(
 		return reply, nil
 	}
 
+	// Forward the normalized/stored reply (prefix-stripped ids) so peers
+	// build identical thread keys.
 	replyDataResp, err := streamer.GenericStream(
 		parentUser.NodeId,
 		event.PRIVATE_POST_TWEET,
 		domain.Tweet{
 			CreatedAt:    reply.CreatedAt,
 			Id:           reply.Id,
-			ParentId:     ev.ParentId,
-			ParentUserId: ev.ParentUserId,
-			RootId:       ev.RootId,
-			Text:         ev.Text,
-			UserId:       ev.UserId,
-			Username:     ev.Username,
-			ImageKeys:    ev.ImageKeys,
+			ParentId:     reply.ParentId,
+			ParentUserId: reply.ParentUserId,
+			RootId:       reply.RootId,
+			Text:         reply.Text,
+			UserId:       reply.UserId,
+			Username:     reply.Username,
+			ImageKeys:    reply.ImageKeys,
 		},
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
@@ -523,8 +526,9 @@ func deleteReply(
 	streamer TweetStreamer,
 ) (any, error) {
 	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
+	id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
-	reply, err := repo.GetReply(rootId, ev.TweetId)
+	reply, err := repo.GetReply(rootId, id)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +538,7 @@ func deleteReply(
 		parentId = strings.TrimPrefix(*reply.ParentId, domain.RetweetPrefix)
 	}
 
-	if err := repo.DeleteReply(rootId, parentId, ev.TweetId); err != nil {
+	if err := repo.DeleteReply(rootId, parentId, id); err != nil {
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
 	}
@@ -555,10 +559,11 @@ func deleteReply(
 		return event.Accepted, nil
 	}
 
+	// Forward normalized ids so the remote node deletes under the same key.
 	resp, err := streamer.GenericStream(
 		parentUser.NodeId,
 		event.PRIVATE_DELETE_TWEET,
-		event.DeleteTweetEvent{TweetId: ev.TweetId, RootId: ev.RootId, UserId: ev.UserId},
+		event.DeleteTweetEvent{TweetId: id, RootId: rootId, UserId: ev.UserId},
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		return event.Accepted, nil
