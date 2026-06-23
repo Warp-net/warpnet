@@ -364,9 +364,10 @@ func StreamGetTweetsHandler(
 			return nil, err
 		}
 
-		// A RootId means "get the replies under a tweet": replies are tweets
-		// with a parent, served from the thread index instead of a timeline.
-		if ev.RootId != "" {
+		// Thread context (RootId or ParentId) means "get the replies under a
+		// tweet": replies are tweets with a parent, served from the thread
+		// index. A plain timeline/profile request carries only UserId.
+		if ev.RootId != "" || ev.ParentId != "" {
 			return getThreadReplies(repo, userRepo, streamer, ev)
 		}
 
@@ -457,8 +458,10 @@ func tweetsRefreshBackground(
 	}
 }
 
-// getThreadReplies serves the replies under a tweet (a flat list of tweets
-// with a parent). With no local replies it forwards to the root author's home
+// getThreadReplies serves the direct replies to a tweet — a flat list of
+// tweets whose ParentId is that tweet, within its RootId thread. It is one
+// level of the tree; clients walk deeper by re-querying with each reply as
+// the parent. With no local replies it forwards to the root author's home
 // node so threads on remote/bridged tweets still resolve.
 func getThreadReplies(
 	repo TweetsStorer,
@@ -466,13 +469,20 @@ func getThreadReplies(
 	streamer TweetStreamer,
 	ev event.GetAllTweetsEvent,
 ) (any, error) {
-	// Empty parent_id means top-level replies: treat it as the root.
-	if ev.ParentId == "" {
-		ev.ParentId = ev.RootId
+	// ParentId is the tweet whose replies we want; RootId locates its thread.
+	// For a top-level tweet the two coincide, so either field implies the
+	// other — derive the missing one rather than misroute the request.
+	parentId := ev.ParentId
+	if parentId == "" {
+		parentId = ev.RootId
+	}
+	rootId := ev.RootId
+	if rootId == "" {
+		rootId = parentId
 	}
 
-	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
-	parentId := strings.TrimPrefix(ev.ParentId, domain.RetweetPrefix)
+	rootId = strings.TrimPrefix(rootId, domain.RetweetPrefix)
+	parentId = strings.TrimPrefix(parentId, domain.RetweetPrefix)
 
 	replies, cursor, err := repo.GetReplies(rootId, parentId, ev.Limit, ev.Cursor)
 	if err != nil {
