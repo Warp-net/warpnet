@@ -59,14 +59,6 @@ const (
 	reTweetersSubspace      = "RETWEETERS"
 	viewsSubspace           = "VIEWS"
 	viewersSubspace         = "VIEWERS"
-
-	// repliesSubspace is the thread index inside the tweets namespace. Replies
-	// are tweets (domain.Tweet with ParentId set) keyed by their root tweet so
-	// a thread level can be fetched with one prefix scan, independent of which
-	// user authored each reply. Living under a /TWEETS subspace keeps them out
-	// of the per-user timeline scan (List) without a separate namespace.
-	repliesSubspace      = "REPLIES"
-	repliesCountSubspace = "REPLIESCOUNT"
 )
 
 type TweetsStorer interface {
@@ -507,19 +499,22 @@ func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]dom
 
 // ====================== REPLIES (thread) ====================
 
-// A reply is a domain.Tweet with a parent. It is stored exactly like a tweet,
-// but partitioned by its ParentId (the tweet it replies to) instead of by the
-// author, under the REPLIES subspace, so the keys mirror storeTweet:
+// A reply IS a tweet. It is stored with the same /TWEETS keys as any tweet,
+// just partitioned by its ParentId (the tweet it replies to) instead of by
+// the author. So the reply methods are thin wrappers over the tweet storage:
 //
-//	/TWEETS/REPLIES/<parentId>/fixed/<replyId>          -> sortable key
-//	/TWEETS/REPLIES/<parentId>/<reversed-ts>/<replyId>  -> reply data
+//	AddReply     -> storeTweet(parentId, ...)  (keeps RootId; Create would not)
+//	GetReply     -> Get(parentId, replyId)
+//	DeleteReply  -> delete under parentId, returning the body for propagation
+//	GetReplies   -> List(parentId)
+//	RepliesCount -> TweetsCount(parentId)
 //
-// "Replies to tweet X" is then a single prefix scan by X, exactly like a
-// user's tweets are a scan by the user id. RootId stays on the record for
-// client-side threading but is not part of any key.
+// "Replies to tweet X" is then List(X): the same scan as a user's tweets,
+// since X's partition holds exactly the replies to X. RootId stays on the
+// record for client-side threading but is not part of any key.
 
-// AddReply stores a reply partitioned by its parent and bumps the parent's
-// reply counter.
+// AddReply stores a reply under its parent's partition and bumps the parent's
+// count. Unlike Create it does not rewrite RootId, so the thread root is kept.
 func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	if reply.UserId == "" && reply.Text == "" {
 		return reply, local.DBError("empty reply")
@@ -534,20 +529,7 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 		reply.CreatedAt = time.Now()
 	}
 	parentID := *reply.ParentId
-
-	data, err := json.Marshal(reply)
-	if err != nil {
-		return reply, fmt.Errorf("marshalling reply: %w", err)
-	}
-
-	fixedKey := repliesFixedKey(parentID, reply.Id)
-	sortableKey := local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(repliesSubspace).
-		AddRootID(parentID).
-		AddReversedTimestamp(reply.CreatedAt).
-		AddParentId(reply.Id).
-		Build()
-	replyCountKey := repliesCountKey(parentID)
+	countKey := tweetsCountKey(parentID)
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -555,87 +537,49 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	}
 	defer txn.Rollback()
 
-	if err := txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
-		return reply, fmt.Errorf("adding reply fixed key: %w", err)
+	if _, err := storeTweet(txn, parentID, reply, math.MaxInt64, false); err != nil {
+		return reply, err
 	}
-	if err := txn.Set(sortableKey, data); err != nil {
-		return reply, fmt.Errorf("adding reply data: %w", err)
-	}
-	if _, err = txn.Increment(replyCountKey); err != nil {
+	if _, err = txn.Increment(countKey); err != nil {
 		return reply, err
 	}
 	if err := txn.Commit(); err != nil {
 		return reply, err
 	}
 	if repo.statsDb != nil {
-		if err := repo.statsDb.Increment(replyCountKey.DatastoreKey()); err != nil {
+		if err := repo.statsDb.Increment(countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db increment: %v", err)
 		}
 	}
 	return reply, nil
 }
 
-func (repo *TweetRepo) GetReply(parentID, replyID string) (tweet domain.Tweet, err error) {
+// GetReply fetches a reply by its parent + id — the tweet Get under the parent
+// partition.
+func (repo *TweetRepo) GetReply(parentID, replyID string) (domain.Tweet, error) {
 	if parentID == "" || replyID == "" {
-		return tweet, local.DBError("parentID and replyID cannot be empty")
+		return domain.Tweet{}, local.DBError("parentID and replyID cannot be empty")
 	}
-
-	txn, err := repo.db.NewTxn()
-	if err != nil {
-		return tweet, fmt.Errorf("creating transaction: %w", err)
-	}
-	defer txn.Rollback()
-
-	sortableKey, err := txn.Get(repliesFixedKey(parentID, replyID))
-	if err != nil {
-		return tweet, err
-	}
-	data, err := txn.Get(local.DatabaseKey(sortableKey))
-	if err != nil {
-		return tweet, err
-	}
-	if err = json.Unmarshal(data, &tweet); err != nil {
-		return tweet, fmt.Errorf("unmarshalling reply: %w", err)
-	}
-	return tweet, txn.Commit()
+	return repo.Get(parentID, replyID)
 }
 
-func (repo *TweetRepo) RepliesCount(tweetId string) (repliesNum uint64, err error) {
+// RepliesCount is the count of tweets under the tweet's partition, i.e. its
+// direct replies.
+func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
 	}
-	replyCountKey := repliesCountKey(tweetId)
-
-	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(replyCountKey.DatastoreKey())
-		if err == nil {
-			return total, nil
-		}
-		log.Warnf("get replies count stat: %v", err)
-	}
-
-	bt, err := repo.db.Get(replyCountKey)
-
-	if local.IsNotFoundError(err) {
-		return 0, ErrReplyNotFound
-	}
-	if err != nil {
-		return 0, err
-	}
-	return binary.BigEndian.Uint64(bt), nil
+	return repo.TweetsCount(tweetId)
 }
 
-// DeleteReply removes a reply (by parent + id) and decrements the parent's
-// reply counter in a single transaction, returning the deleted reply so the
-// caller can propagate the deletion without a second read.
+// DeleteReply removes a reply (the tweet delete under the parent partition)
+// and returns the deleted reply so the caller can propagate the deletion
+// without a second read.
 func (repo *TweetRepo) DeleteReply(parentID, replyID string) (domain.Tweet, error) {
 	var reply domain.Tweet
 	if parentID == "" || replyID == "" {
 		return reply, local.DBError("parentID or replyID cannot be empty")
 	}
-
-	fixedKey := repliesFixedKey(parentID, replyID)
-	replyCountKey := repliesCountKey(parentID)
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -643,98 +587,44 @@ func (repo *TweetRepo) DeleteReply(parentID, replyID string) (domain.Tweet, erro
 	}
 	defer txn.Rollback()
 
-	sortableKey, err := txn.Get(fixedKey)
+	reply, _, err = get(txn, parentID, replyID)
 	if err != nil {
-		return reply, fmt.Errorf("getting sortable key: %w", err)
+		return reply, err
 	}
-	data, err := txn.Get(local.DatabaseKey(sortableKey))
-	if err != nil {
-		return reply, fmt.Errorf("getting reply: %w", err)
+	if err := deleteTweet(txn, parentID, replyID); err != nil {
+		return reply, err
 	}
-	if err := json.Unmarshal(data, &reply); err != nil {
-		return reply, fmt.Errorf("unmarshalling reply: %w", err)
-	}
-
-	if err := txn.Delete(fixedKey); err != nil {
-		return reply, fmt.Errorf("deleting fixed key: %w", err)
-	}
-	if err := txn.Delete(local.DatabaseKey(sortableKey)); err != nil {
-		return reply, fmt.Errorf("deleting sortable key: %w", err)
-	}
-	if _, err = txn.Decrement(replyCountKey); err != nil {
+	countKey := tweetsCountKey(parentID)
+	if _, err = txn.Decrement(countKey); err != nil {
 		return reply, err
 	}
 	if err := txn.Commit(); err != nil {
 		return reply, err
 	}
 	if repo.statsDb != nil {
-		if err := repo.statsDb.Decrement(replyCountKey.DatastoreKey()); err != nil {
+		if err := repo.statsDb.Decrement(countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db decrement: %v", err)
 		}
 	}
 	return reply, nil
 }
 
-// GetReplies returns the direct replies to parentID, newest first. Replies are
-// tweets, so the result is a flat []domain.Tweet — each carries its ParentId
-// for clients that want to nest deeper levels.
+// GetReplies returns the direct replies to parentID, newest first — the tweet
+// List of the parent's partition. Replies are tweets, so the result is a flat
+// []domain.Tweet, each carrying its ParentId for clients that want to nest.
 func (repo *TweetRepo) GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if parentID == "" {
 		return nil, "", local.DBError("parentID cannot be blank")
 	}
-
-	prefix := local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(repliesSubspace).
-		AddRootID(parentID).
-		Build()
-
-	txn, err := repo.db.NewTxn()
-	if err != nil {
-		return nil, "", fmt.Errorf("creating transaction: %w", err)
-	}
-	defer txn.Rollback()
-
-	items, cur, err := txn.List(prefix, limit, cursor)
-	if err != nil {
-		return nil, "", fmt.Errorf("listing replies: %w", err)
-	}
-
-	if err := txn.Commit(); err != nil {
-		return nil, "", fmt.Errorf("committing transaction: %w", err)
-	}
-
-	replies := make([]domain.Tweet, 0, len(items))
-	for _, item := range items {
-		var t domain.Tweet
-		if err = json.Unmarshal(item.Value, &t); err != nil {
-			return nil, "", fmt.Errorf("unmarshalling reply: %w", err)
-		}
-		replies = append(replies, t)
-	}
-
-	sort.SliceStable(replies, func(i, j int) bool {
-		return replies[i].CreatedAt.After(replies[j].CreatedAt)
-	})
-
-	return replies, cur, nil
+	return repo.List(parentID, limit, cursor)
 }
 
-// repliesFixedKey is the stable id index for a reply within its parent's
-// partition (mirrors a tweet's fixed key); its value points at the sortable
-// data key.
-func repliesFixedKey(parentID, replyID string) local.DatabaseKey {
+// tweetsCountKey is the per-partition tweet counter used by Create/Delete; for
+// a tweet's partition it doubles as that tweet's reply count.
+func tweetsCountKey(partitionID string) local.DatabaseKey {
 	return local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(repliesSubspace).
-		AddRootID(parentID).
-		AddRange(local.FixedRangeKey).
-		AddParentId(replyID).
-		Build()
-}
-
-func repliesCountKey(parentID string) local.DatabaseKey {
-	return local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(repliesCountSubspace).
-		AddRootID(parentID).
+		AddSubPrefix(tweetsCountSubspace).
+		AddRootID(partitionID).
 		Build()
 }
 
