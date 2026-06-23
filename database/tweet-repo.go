@@ -641,9 +641,14 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (repliesNum uint64, err erro
 	return binary.BigEndian.Uint64(bt), nil
 }
 
-func (repo *TweetRepo) DeleteReply(rootID, parentID, replyID string) error {
-	if rootID == "" || parentID == "" || replyID == "" {
-		return local.DBError("rootID, parent ID or replyID cannot be empty")
+// DeleteReply removes a reply from its thread and decrements its parent's
+// reply counter in a single transaction, returning the deleted reply (so the
+// caller can propagate the deletion without a second read). The parent id is
+// taken from the stored reply itself.
+func (repo *TweetRepo) DeleteReply(rootID, replyID string) (domain.Tweet, error) {
+	var reply domain.Tweet
+	if rootID == "" || replyID == "" {
+		return reply, local.DBError("rootID or replyID cannot be empty")
 	}
 
 	treeKey := local.NewPrefixBuilder(RepliesNamespace).
@@ -652,41 +657,51 @@ func (repo *TweetRepo) DeleteReply(rootID, parentID, replyID string) error {
 		AddParentId(replyID).
 		Build()
 
-	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
-		AddSubPrefix(repliesCountSubspace).
-		AddRootID(parentID).
-		Build()
-
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return fmt.Errorf("creating transaction: %w", err)
+		return reply, fmt.Errorf("creating transaction: %w", err)
 	}
 	defer txn.Rollback()
 
 	sortableKey, err := txn.Get(treeKey)
 	if err != nil {
-		return fmt.Errorf("getting sortable key: %w", err)
+		return reply, fmt.Errorf("getting sortable key: %w", err)
 	}
+	data, err := txn.Get(local.DatabaseKey(sortableKey))
+	if err != nil {
+		return reply, fmt.Errorf("getting reply: %w", err)
+	}
+	if err := json.Unmarshal(data, &reply); err != nil {
+		return reply, fmt.Errorf("unmarshalling reply: %w", err)
+	}
+
+	parentID := rootID
+	if reply.ParentId != nil && *reply.ParentId != "" {
+		parentID = *reply.ParentId
+	}
+	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddSubPrefix(repliesCountSubspace).
+		AddRootID(parentID).
+		Build()
+
 	if err := txn.Delete(treeKey); err != nil {
-		return fmt.Errorf("deleting tree key: %w", err)
+		return reply, fmt.Errorf("deleting tree key: %w", err)
 	}
 	if err := txn.Delete(local.DatabaseKey(sortableKey)); err != nil {
-		return fmt.Errorf("deleting sortable key: %w", err)
+		return reply, fmt.Errorf("deleting sortable key: %w", err)
 	}
-	_, err = txn.Decrement(replyCountKey)
-	if err != nil {
-		return err
+	if _, err = txn.Decrement(replyCountKey); err != nil {
+		return reply, err
 	}
 	if err := txn.Commit(); err != nil {
-		return err
+		return reply, err
 	}
-	if repo.statsDb == nil {
-		return nil
+	if repo.statsDb != nil {
+		if err := repo.statsDb.Decrement(replyCountKey.DatastoreKey()); err != nil {
+			log.Warnf("reply: stats db decrement: %v", err)
+		}
 	}
-	if err := repo.statsDb.Decrement(replyCountKey.DatastoreKey()); err != nil {
-		log.Warnf("reply: stats db decrement: %v", err)
-	}
-	return nil
+	return reply, nil
 }
 
 // GetReplies returns the replies (tweets with a parent) under parentId inside

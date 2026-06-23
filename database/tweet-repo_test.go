@@ -130,7 +130,8 @@ func (s *TweetRepoTestSuite) TestCreateTweetAndReply() {
 	s.Equal(uint64(1), count)
 
 	// Deleting the reply removes it from the thread and decrements the count.
-	s.Require().NoError(s.repo.DeleteReply(tweet.Id, tweet.Id, reply.Id))
+	_, err = s.repo.DeleteReply(tweet.Id, reply.Id)
+	s.Require().NoError(err)
 	_, err = s.repo.GetReply(tweet.Id, reply.Id)
 	s.Error(err)
 	count, err = s.repo.RepliesCount(tweet.Id)

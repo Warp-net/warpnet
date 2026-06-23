@@ -123,8 +123,11 @@ func (s *ReplyRepoTestSuite) TestDeleteReply() {
 	_, err := s.repo.AddReply(reply)
 	s.Require().NoError(err)
 
-	err = s.repo.DeleteReply(rootID, parentID, replyID)
+	deleted, err := s.repo.DeleteReply(rootID, replyID)
 	s.Require().NoError(err)
+	s.Equal(replyID, deleted.Id)
+	s.Require().NotNil(deleted.ParentId)
+	s.Equal(parentID, *deleted.ParentId)
 
 	_, err = s.repo.GetReply(rootID, replyID)
 	s.Error(err)

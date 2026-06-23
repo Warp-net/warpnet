@@ -27,7 +27,7 @@ type stubTweetRepo struct {
 	createWithTTLFn func(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
 	addReplyFn      func(reply domain.Tweet) (domain.Tweet, error)
 	getReplyFn      func(rootID, replyID string) (domain.Tweet, error)
-	deleteReplyFn   func(rootID, parentID, replyID string) error
+	deleteReplyFn   func(rootID, replyID string) (domain.Tweet, error)
 	repliesFn       func(rootID, parentId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 }
 
@@ -120,11 +120,11 @@ func (s stubTweetRepo) GetReply(rootID, replyID string) (domain.Tweet, error) {
 	}
 	return domain.Tweet{Id: replyID, RootId: rootID}, nil
 }
-func (s stubTweetRepo) DeleteReply(rootID, parentID, replyID string) error {
+func (s stubTweetRepo) DeleteReply(rootID, replyID string) (domain.Tweet, error) {
 	if s.deleteReplyFn != nil {
-		return s.deleteReplyFn(rootID, parentID, replyID)
+		return s.deleteReplyFn(rootID, replyID)
 	}
-	return nil
+	return domain.Tweet{Id: replyID, RootId: rootID}, nil
 }
 func (s stubTweetRepo) GetReplies(rootID, parentId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if s.repliesFn != nil {

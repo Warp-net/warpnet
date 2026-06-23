@@ -81,7 +81,7 @@ type TweetsStorer interface {
 	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
 	AddReply(reply domain.Tweet) (domain.Tweet, error)
 	GetReply(rootID, replyID string) (domain.Tweet, error)
-	DeleteReply(rootID, parentID, replyID string) error
+	DeleteReply(rootID, replyID string) (domain.Tweet, error)
 	GetReplies(rootId, parentId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 }
 
@@ -601,17 +601,8 @@ func deleteReply(
 	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
 	id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
-	reply, err := repo.GetReply(rootId, id)
+	reply, err := repo.DeleteReply(rootId, id)
 	if err != nil {
-		return nil, err
-	}
-
-	parentId := rootId
-	if reply.ParentId != nil {
-		parentId = strings.TrimPrefix(*reply.ParentId, domain.RetweetPrefix)
-	}
-
-	if err := repo.DeleteReply(rootId, parentId, id); err != nil {
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
 	}
