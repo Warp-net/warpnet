@@ -382,6 +382,87 @@ func TestStreamNewTweetHandler(t *testing.T) {
 	})
 }
 
+// TestStreamNewTweetHandler_TweetThenReply exercises both branches of the
+// unified handler: a top-level tweet is created and added to the timeline,
+// then a reply to it is routed into the thread store (AddReply) and kept out
+// of the timeline.
+func TestStreamNewTweetHandler_TweetThenReply(t *testing.T) {
+	owner := "owner-1"
+
+	var timelineIds []string
+	replyStored := false
+	repo := stubTweetRepo{
+		createFn: func(userId string, tweet domain.Tweet) (domain.Tweet, error) {
+			tweet.Id = "tweet-1"
+			tweet.RootId = tweet.Id
+			return tweet, nil
+		},
+		addReplyFn: func(reply domain.Tweet) (domain.Tweet, error) {
+			replyStored = true
+			if reply.Id == "" {
+				reply.Id = "reply-1"
+			}
+			return reply, nil
+		},
+	}
+	timeline := stubTimelineRepo{addFn: func(userId string, tweet domain.Tweet) error {
+		timelineIds = append(timelineIds, tweet.Id)
+		return nil
+	}}
+	h := StreamNewTweetHandler(
+		stubTweetBroadcaster{},
+		stubAuth{owner: domain.Owner{UserId: owner}},
+		repo,
+		timeline,
+		stubFollowChecker{},
+		stubTweetUserRepo{},
+		stubModerationNotifier{},
+		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}},
+	)
+
+	// 1) a top-level tweet: stored and added to the timeline.
+	resp, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "hello"}), nil)
+	if err != nil {
+		t.Fatalf("tweet: unexpected err: %v", err)
+	}
+	tweet := resp.(domain.Tweet)
+	if tweet.IsReply() {
+		t.Fatal("top-level tweet must not be a reply")
+	}
+	if tweet.RootId != tweet.Id {
+		t.Fatalf("top-level tweet RootId must equal Id, got root=%q id=%q", tweet.RootId, tweet.Id)
+	}
+	if len(timelineIds) != 1 || timelineIds[0] != tweet.Id {
+		t.Fatalf("tweet must be added to the timeline, got %v", timelineIds)
+	}
+
+	// 2) a reply to that tweet: stored in the thread, NOT added to timeline.
+	parentUserID := owner
+	replyResp, err := h(marshal(t, event.NewTweetEvent{
+		UserId:       owner,
+		Text:         "a reply",
+		ParentId:     &tweet.Id,
+		ParentUserId: &parentUserID,
+		RootId:       tweet.Id,
+	}), nil)
+	if err != nil {
+		t.Fatalf("reply: unexpected err: %v", err)
+	}
+	reply := replyResp.(domain.Tweet)
+	if !reply.IsReply() {
+		t.Fatal("reply must have a parent")
+	}
+	if reply.RootId != tweet.Id {
+		t.Fatalf("reply RootId must be the thread root %q, got %q", tweet.Id, reply.RootId)
+	}
+	if !replyStored {
+		t.Fatal("reply must be stored via AddReply")
+	}
+	if len(timelineIds) != 1 {
+		t.Fatalf("reply must NOT be added to the timeline, ids=%v", timelineIds)
+	}
+}
+
 func TestStreamGetTweetHandler(t *testing.T) {
 	owner := "owner-1"
 	tweetId := "tweet-1"

@@ -76,6 +76,68 @@ func (s *TweetRepoTestSuite) TestCreateAndGetTweet() {
 	s.Equal(created.Text, fetched.Text)
 }
 
+// TestCreateTweetAndReply covers the unified model end to end: a top-level
+// tweet lands in the author's timeline keyspace, while a reply to it is a
+// tweet with a parent that lives in the thread index — retrievable via the
+// thread APIs, counted against its parent, and kept out of every timeline.
+func (s *TweetRepoTestSuite) TestCreateTweetAndReply() {
+	author := ulid.Make().String()
+
+	tweet, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: "root tweet"})
+	s.Require().NoError(err)
+	s.Equal(tweet.Id, tweet.RootId, "top-level tweet is its own root")
+	s.False(tweet.IsReply())
+
+	limit := uint64(10)
+	list, _, err := s.repo.List(author, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(list, 1)
+	s.Equal(tweet.Id, list[0].Id)
+
+	// A reply is a domain.Tweet with a parent, stored in the thread index.
+	replier := ulid.Make().String()
+	reply, err := s.repo.AddReply(domain.Tweet{
+		UserId:   replier,
+		Text:     "a reply",
+		RootId:   tweet.Id,
+		ParentId: &tweet.Id,
+	})
+	s.Require().NoError(err)
+	s.True(reply.IsReply())
+	s.NotEmpty(reply.Id)
+
+	// The reply must not pollute either party's timeline keyspace.
+	authorList, _, err := s.repo.List(author, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(authorList, 1, "reply must stay out of the parent author's timeline")
+	replierList, _, err := s.repo.List(replier, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(replierList, 0, "reply must stay out of the replier's timeline")
+
+	// The reply is retrievable from the thread by id and via the tree.
+	gotReply, err := s.repo.GetReply(tweet.Id, reply.Id)
+	s.Require().NoError(err)
+	s.Equal("a reply", gotReply.Text)
+
+	tree, _, err := s.repo.GetRepliesTree(tweet.Id, tweet.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(tree, 1)
+	s.Equal(reply.Id, tree[0].Reply.Id)
+
+	// The parent's reply counter incremented.
+	count, err := s.repo.RepliesCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+
+	// Deleting the reply removes it from the thread and decrements the count.
+	s.Require().NoError(s.repo.DeleteReply(tweet.Id, tweet.Id, reply.Id))
+	_, err = s.repo.GetReply(tweet.Id, reply.Id)
+	s.Error(err)
+	count, err = s.repo.RepliesCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+}
+
 func (s *TweetRepoTestSuite) TestPinAndUnpin() {
 	userId := ulid.Make().String()
 	tweet := domain.Tweet{UserId: userId, Text: "pin me"}
