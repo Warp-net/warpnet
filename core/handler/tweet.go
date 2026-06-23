@@ -296,29 +296,16 @@ func StreamGetTweetHandler(
 			return nil, warpnet.WarpError("tweet is moderated")
 		}
 
-		// A reply carries its thread RootId; resolve it from the thread
-		// index, falling back to the timeline keyspace for top-level tweets.
-		localGet := func() (domain.Tweet, error) {
-			if ev.RootId != "" && ev.RootId != ev.TweetId {
-				rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
-				id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
-				if t, err := repo.GetReply(rootId, id); err == nil {
-					return t, nil
-				}
-			}
-			return repo.Get(ev.UserId, ev.TweetId)
-		}
-
 		owner := authRepo.GetOwner()
 
 		isMyOwnTweet := ev.UserId == owner.UserId
 		if isMyOwnTweet {
-			return localGet()
+			return localTweet(repo, ev)
 		}
 
 		otherUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			return localGet()
+			return localTweet(repo, ev)
 		}
 		if err != nil {
 			return nil, err
@@ -330,7 +317,7 @@ func StreamGetTweetHandler(
 			ev,
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return localGet()
+			return localTweet(repo, ev)
 		}
 		if err != nil {
 			return nil, err
@@ -339,16 +326,30 @@ func StreamGetTweetHandler(
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other get tweet error response: %s", possibleError.Message)
-			return localGet()
+			return localTweet(repo, ev)
 		}
 
 		var tweet domain.Tweet
 		if err = json.Unmarshal(getTweetResp, &tweet); err != nil {
-			return repo.Get(ev.UserId, ev.TweetId)
+			return localTweet(repo, ev)
 		}
 
 		return tweet, nil
 	}
+}
+
+// localTweet resolves a tweet from local storage: a reply (RootId set and
+// distinct from TweetId) is read from the thread index, anything else from
+// the timeline keyspace.
+func localTweet(repo TweetsStorer, ev event.GetTweetEvent) (domain.Tweet, error) {
+	if ev.RootId != "" && ev.RootId != ev.TweetId {
+		rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
+		id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
+		if t, err := repo.GetReply(rootId, id); err == nil {
+			return t, nil
+		}
+	}
+	return repo.Get(ev.UserId, ev.TweetId)
 }
 
 func StreamGetTweetsHandler(
