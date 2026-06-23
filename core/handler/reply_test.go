@@ -241,15 +241,13 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("empty parent id defaults to root", func(t *testing.T) {
-		// Top-level replies on a thread carry no parent_id from the client —
-		// the handler must fall back to root_id so the lookup runs against
-		// the first tier of replies hanging off the root tweet.
-		var seenRoot, seenParent string
+	t.Run("only root id falls back to it as the parent partition", func(t *testing.T) {
+		// A request that names only the root tweet (no explicit parent_id)
+		// must scan that tweet's partition — its direct replies.
+		var seenParent string
 		h := StreamGetTweetsHandler(
-			stubTweetRepo{repliesFn: func(rootID, parentIdArg string, _ *uint64, _ *string) ([]domain.Tweet, string, error) {
-				seenRoot = rootID
-				seenParent = parentIdArg
+			stubTweetRepo{repliesFn: func(parentID string, _ *uint64, _ *string) ([]domain.Tweet, string, error) {
+				seenParent = parentID
 				return nil, "", nil
 			}},
 			stubTweetUserRepo{}, stubStreamer{},
@@ -258,14 +256,14 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if seenRoot != rootId || seenParent != rootId {
-			t.Fatalf("expected rootId %q and parentId %q from root fallback, got root=%q parent=%q", rootId, rootId, seenRoot, seenParent)
+		if seenParent != rootId {
+			t.Fatalf("expected parent partition %q from root fallback, got %q", rootId, seenParent)
 		}
 	})
 
 	t.Run("serves replies from local repo", func(t *testing.T) {
 		replies := []domain.Tweet{{Id: "r1", Text: "reply"}}
-		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(rootID, parentIdArg string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 			return replies, "end", nil
 		}}, stubTweetUserRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, ParentId: parentId}), nil)
@@ -283,7 +281,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 
 	t.Run("propagates repo error", func(t *testing.T) {
 		boom := errors.New("db down")
-		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, string, *uint64, *string) ([]domain.Tweet, string, error) {
+		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
 			return nil, "", boom
 		}}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, ParentId: parentId}), nil)

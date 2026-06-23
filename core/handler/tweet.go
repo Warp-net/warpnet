@@ -80,9 +80,9 @@ type TweetsStorer interface {
 	Unpin(userId, tweetId string) (domain.Tweet, error)
 	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
 	AddReply(reply domain.Tweet) (domain.Tweet, error)
-	GetReply(rootID, replyID string) (domain.Tweet, error)
-	DeleteReply(rootID, replyID string) (domain.Tweet, error)
-	GetReplies(rootId, parentId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
+	GetReply(parentID, replyID string) (domain.Tweet, error)
+	DeleteReply(parentID, replyID string) (domain.Tweet, error)
+	GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 }
 
 type TimelineUpdater interface {
@@ -338,14 +338,14 @@ func StreamGetTweetHandler(
 	}
 }
 
-// localTweet resolves a tweet from local storage: a reply (RootId set and
-// distinct from TweetId) is read from the thread index, anything else from
-// the timeline keyspace.
+// localTweet resolves a tweet from local storage: a reply (ParentId set and
+// distinct from TweetId) is read from the thread index under its parent,
+// anything else from the timeline keyspace.
 func localTweet(repo TweetsStorer, ev event.GetTweetEvent) (domain.Tweet, error) {
-	if ev.RootId != "" && ev.RootId != ev.TweetId {
-		rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
+	if ev.ParentId != "" && ev.ParentId != ev.TweetId {
+		parentId := strings.TrimPrefix(ev.ParentId, domain.RetweetPrefix)
 		id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
-		if t, err := repo.GetReply(rootId, id); err == nil {
+		if t, err := repo.GetReply(parentId, id); err == nil {
 			return t, nil
 		}
 	}
@@ -459,32 +459,25 @@ func tweetsRefreshBackground(
 }
 
 // getThreadReplies serves the direct replies to a tweet — a flat list of
-// tweets whose ParentId is that tweet, within its RootId thread. It is one
-// level of the tree; clients walk deeper by re-querying with each reply as
-// the parent. With no local replies it forwards to the root author's home
-// node so threads on remote/bridged tweets still resolve.
+// tweets whose ParentId is that tweet. It is one level of the tree; clients
+// walk deeper by re-querying with each reply as the parent. With no local
+// replies it forwards to the root author's home node so threads on remote/
+// bridged tweets still resolve.
 func getThreadReplies(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 	ev event.GetAllTweetsEvent,
 ) (any, error) {
-	// ParentId is the tweet whose replies we want; RootId locates its thread.
-	// For a top-level tweet the two coincide, so either field implies the
-	// other — derive the missing one rather than misroute the request.
+	// The replies are partitioned by their parent tweet. Clients may name it
+	// as ParentId, or as RootId when the parent is the thread root itself.
 	parentId := ev.ParentId
 	if parentId == "" {
 		parentId = ev.RootId
 	}
-	rootId := ev.RootId
-	if rootId == "" {
-		rootId = parentId
-	}
-
-	rootId = strings.TrimPrefix(rootId, domain.RetweetPrefix)
 	parentId = strings.TrimPrefix(parentId, domain.RetweetPrefix)
 
-	replies, cursor, err := repo.GetReplies(rootId, parentId, ev.Limit, ev.Cursor)
+	replies, cursor, err := repo.GetReplies(parentId, ev.Limit, ev.Cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -551,9 +544,9 @@ func StreamDeleteTweetHandler(
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		// A reply carries its thread RootId: delete it from the thread index
-		// and forward the deletion to the parent author's node.
-		if ev.RootId != "" && ev.RootId != ev.TweetId {
+		// A reply carries its ParentId: delete it from the thread index under
+		// its parent and forward the deletion to the parent author's node.
+		if ev.ParentId != "" && ev.ParentId != ev.TweetId {
 			return deleteReply(ev, repo, userRepo, streamer)
 		}
 
@@ -598,10 +591,10 @@ func deleteReply(
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) (any, error) {
-	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
+	parentId := strings.TrimPrefix(ev.ParentId, domain.RetweetPrefix)
 	id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
-	reply, err := repo.DeleteReply(rootId, id)
+	reply, err := repo.DeleteReply(parentId, id)
 	if err != nil {
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
@@ -627,7 +620,7 @@ func deleteReply(
 	resp, err := streamer.GenericStream(
 		parentUser.NodeId,
 		event.PRIVATE_DELETE_TWEET,
-		event.DeleteTweetEvent{TweetId: id, RootId: rootId, UserId: ev.UserId},
+		event.DeleteTweetEvent{TweetId: id, ParentId: parentId, UserId: ev.UserId},
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		return event.Accepted, nil

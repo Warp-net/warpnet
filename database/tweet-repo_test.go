@@ -119,7 +119,7 @@ func (s *TweetRepoTestSuite) TestCreateTweetAndReply() {
 	s.Require().NoError(err)
 	s.Equal("a reply", gotReply.Text)
 
-	thread, _, err := s.repo.GetReplies(tweet.Id, tweet.Id, &limit, nil)
+	thread, _, err := s.repo.GetReplies(tweet.Id, &limit, nil)
 	s.Require().NoError(err)
 	s.Require().Len(thread, 1)
 	s.Equal(reply.Id, thread[0].Id)
@@ -383,7 +383,7 @@ func (s *TweetRepoTestSuite) TestAddAndGetReply() {
 	s.Require().NoError(err)
 	s.NotEmpty(saved.Id)
 
-	got, err := s.repo.GetReply(rootID, reply.Id)
+	got, err := s.repo.GetReply(parentID, reply.Id)
 	s.Require().NoError(err)
 	s.Equal(reply.Text, got.Text)
 	s.Equal(reply.UserId, got.UserId)
@@ -428,13 +428,13 @@ func (s *TweetRepoTestSuite) TestDeleteReply() {
 	_, err := s.repo.AddReply(reply)
 	s.Require().NoError(err)
 
-	deleted, err := s.repo.DeleteReply(rootID, replyID)
+	deleted, err := s.repo.DeleteReply(parentID, replyID)
 	s.Require().NoError(err)
 	s.Equal(replyID, deleted.Id)
 	s.Require().NotNil(deleted.ParentId)
 	s.Equal(parentID, *deleted.ParentId)
 
-	_, err = s.repo.GetReply(rootID, replyID)
+	_, err = s.repo.GetReply(parentID, replyID)
 	s.Error(err)
 }
 
@@ -456,7 +456,7 @@ func (s *TweetRepoTestSuite) TestGetReplies() {
 	}
 
 	limit := uint64(10)
-	replies, cursor, err := s.repo.GetReplies(rootID, parentID, &limit, nil)
+	replies, cursor, err := s.repo.GetReplies(parentID, &limit, nil)
 	s.Require().NoError(err)
 	s.Len(replies, 3)
 	s.Equal(cursor, "end")

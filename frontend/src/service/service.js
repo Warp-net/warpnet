@@ -1299,13 +1299,13 @@ export const warpnetService = {
         return repliesResp.tweets.filter(t => t && t.id);
     },
 
-    // a reply is a tweet; fetch it via the tweet route, passing root_id so
-    // the backend resolves it from the thread index.
-    async getReply({rootId, replyId, userId}) {
+    // a reply is a tweet; fetch it via the tweet route, passing parent_id (the
+    // tweet it replies to) so the backend resolves it from the thread index.
+    async getReply({parentId, replyId, userId}) {
         const request = {
             path: PUBLIC_GET_TWEET,
             body: {
-                root_id: rootId,
+                parent_id: parentId,
                 tweet_id: replyId,
                 user_id: userId,
             },
@@ -1314,12 +1314,12 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async deleteReply({userId, rootId, replyId}) {
+    async deleteReply({userId, parentId, replyId}) {
         const request = {
             path: PRIVATE_DELETE_TWEET,
             body: {
                 user_id: userId,
-                root_id: rootId,
+                parent_id: parentId,
                 tweet_id: replyId,
             },
         }

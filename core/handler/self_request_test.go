@@ -245,10 +245,10 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			nodeInfo:        ownerInfo,
 			genericStreamFn: failOnStream(t),
 		}
-		// A reply carries its thread RootId; the own-tweet path resolves it
+		// A reply carries its ParentId; the own-tweet path resolves it
 		// locally from the thread index without any outbound stream.
 		h := StreamGetTweetHandler(stubTweetRepo{}, auth, ownerTweetUserRepo, streamer)
-		if _, err := h(marshal(t, event.GetTweetEvent{TweetId: "reply-1", RootId: rootID, UserId: owner}), nil); err != nil {
+		if _, err := h(marshal(t, event.GetTweetEvent{TweetId: "reply-1", ParentId: rootID, UserId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})

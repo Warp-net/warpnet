@@ -228,13 +228,13 @@ type GetTimelineEvent = GetAllTweetsEvent
 
 // GetTweetEvent defines model for GetTweetEvent.
 //
-// RootId is set when the target is a reply: it names the thread the reply
-// lives in so the handler can resolve it from the thread index. Empty (or
-// equal to TweetId) means a top-level tweet.
+// ParentId is set when the target is a reply: it is the tweet the reply hangs
+// off, i.e. the partition the reply is stored under, so the handler can
+// resolve it from the thread index. Empty means a top-level tweet.
 type GetTweetEvent struct {
-	TweetId domain.ID `json:"tweet_id"`
-	UserId  domain.ID `json:"user_id"`
-	RootId  domain.ID `json:"root_id,omitempty"`
+	TweetId  domain.ID `json:"tweet_id"`
+	UserId   domain.ID `json:"user_id"`
+	ParentId domain.ID `json:"parent_id,omitempty"`
 }
 
 // GetUserEvent defines model for GetUserEvent.
