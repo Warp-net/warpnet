@@ -367,6 +367,105 @@ func (s *TweetRepoTestSuite) TestRecordView_DifferentTweetsLockIndependently() {
 	s.Equal(uint64(1), b)
 }
 
+func (s *TweetRepoTestSuite) TestAddAndGetReply() {
+	parentID := ulid.Make().String()
+	rootID := ulid.Make().String()
+	reply := domain.Tweet{
+		Id:        ulid.Make().String(),
+		RootId:    rootID,
+		ParentId:  &parentID,
+		UserId:    "user123",
+		Text:      "This is a reply",
+		CreatedAt: time.Now(),
+	}
+
+	saved, err := s.repo.AddReply(reply)
+	s.Require().NoError(err)
+	s.NotEmpty(saved.Id)
+
+	got, err := s.repo.GetReply(rootID, reply.Id)
+	s.Require().NoError(err)
+	s.Equal(reply.Text, got.Text)
+	s.Equal(reply.UserId, got.UserId)
+}
+
+func (s *TweetRepoTestSuite) TestRepliesCount() {
+	parentID := ulid.Make().String()
+	rootID := ulid.Make().String()
+
+	for i := 0; i < 3; i++ {
+		reply := domain.Tweet{
+			Id:        ulid.Make().String(),
+			RootId:    rootID,
+			ParentId:  &parentID,
+			UserId:    "user123",
+			Text:      "reply",
+			CreatedAt: time.Now(),
+		}
+		_, err := s.repo.AddReply(reply)
+		s.Require().NoError(err)
+	}
+
+	count, err := s.repo.RepliesCount(parentID)
+	s.Require().NoError(err)
+	s.Equal(uint64(3), count)
+}
+
+func (s *TweetRepoTestSuite) TestDeleteReply() {
+	parentID := ulid.Make().String()
+	rootID := ulid.Make().String()
+	replyID := ulid.Make().String()
+
+	reply := domain.Tweet{
+		Id:        replyID,
+		RootId:    rootID,
+		ParentId:  &parentID,
+		UserId:    "user123",
+		Text:      "to delete",
+		CreatedAt: time.Now(),
+	}
+
+	_, err := s.repo.AddReply(reply)
+	s.Require().NoError(err)
+
+	deleted, err := s.repo.DeleteReply(rootID, replyID)
+	s.Require().NoError(err)
+	s.Equal(replyID, deleted.Id)
+	s.Require().NotNil(deleted.ParentId)
+	s.Equal(parentID, *deleted.ParentId)
+
+	_, err = s.repo.GetReply(rootID, replyID)
+	s.Error(err)
+}
+
+func (s *TweetRepoTestSuite) TestGetReplies() {
+	rootID := ulid.Make().String()
+	parentID := ulid.Make().String()
+
+	for i := 0; i < 3; i++ {
+		reply := domain.Tweet{
+			Id:        ulid.Make().String(),
+			RootId:    rootID,
+			ParentId:  &parentID,
+			UserId:    "user",
+			Text:      "child",
+			CreatedAt: time.Now().Add(time.Duration(i) * time.Second),
+		}
+		_, err := s.repo.AddReply(reply)
+		s.Require().NoError(err)
+	}
+
+	limit := uint64(10)
+	replies, cursor, err := s.repo.GetReplies(rootID, parentID, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(replies, 3)
+	s.Equal(cursor, "end")
+
+	for _, reply := range replies {
+		s.Equal("child", reply.Text)
+	}
+}
+
 func TestTweetRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 

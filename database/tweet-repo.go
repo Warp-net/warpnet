@@ -60,12 +60,12 @@ const (
 	viewsSubspace           = "VIEWS"
 	viewersSubspace         = "VIEWERS"
 
-	// RepliesNamespace is the thread index: replies are stored keyed by their
-	// root tweet so a whole thread subtree can be fetched with one prefix
-	// scan, independent of which user authored each reply. Replies are tweets
-	// (domain.Tweet with ParentId set) but live here instead of the author's
-	// timeline keyspace.
-	RepliesNamespace     = "/REPLY"
+	// repliesSubspace is the thread index inside the tweets namespace. Replies
+	// are tweets (domain.Tweet with ParentId set) keyed by their root tweet so
+	// a thread level can be fetched with one prefix scan, independent of which
+	// user authored each reply. Living under a /TWEETS subspace keeps them out
+	// of the per-user timeline scan (List) without a separate namespace.
+	repliesSubspace      = "REPLIES"
 	repliesCountSubspace = "REPLIESCOUNT"
 )
 
@@ -534,20 +534,22 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 		return reply, fmt.Errorf("marshalling reply meta: %w", err)
 	}
 
-	treeKey := local.NewPrefixBuilder(RepliesNamespace).
+	treeKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(repliesSubspace).
 		AddRootID(reply.RootId).
 		AddRange(local.FixedRangeKey).
 		AddParentId(reply.Id).
 		Build()
 
-	parentSortableKey := local.NewPrefixBuilder(RepliesNamespace).
+	parentSortableKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(repliesSubspace).
 		AddRootID(reply.RootId).
 		AddParentId(*reply.ParentId).
 		AddId(reply.Id).
 		AddReversedTimestamp(reply.CreatedAt).
 		Build()
 
-	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
+	replyCountKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(repliesCountSubspace).
 		AddRootID(*reply.ParentId).
 		Build()
@@ -585,7 +587,8 @@ func (repo *TweetRepo) GetReply(rootID string, replyId string) (tweet domain.Twe
 		return tweet, local.DBError("rootID and replyId cannot be empty")
 	}
 
-	treeKey := local.NewPrefixBuilder(RepliesNamespace).
+	treeKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(repliesSubspace).
 		AddRootID(rootID).
 		AddRange(local.FixedRangeKey).
 		AddParentId(replyId).
@@ -617,7 +620,7 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (repliesNum uint64, err erro
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
 	}
-	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
+	replyCountKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(repliesCountSubspace).
 		AddRootID(tweetId).
 		Build()
@@ -651,7 +654,8 @@ func (repo *TweetRepo) DeleteReply(rootID, replyID string) (domain.Tweet, error)
 		return reply, local.DBError("rootID or replyID cannot be empty")
 	}
 
-	treeKey := local.NewPrefixBuilder(RepliesNamespace).
+	treeKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(repliesSubspace).
 		AddRootID(rootID).
 		AddRange(local.FixedRangeKey).
 		AddParentId(replyID).
@@ -679,7 +683,7 @@ func (repo *TweetRepo) DeleteReply(rootID, replyID string) (domain.Tweet, error)
 	if reply.ParentId != nil && *reply.ParentId != "" {
 		parentID = *reply.ParentId
 	}
-	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
+	replyCountKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(repliesCountSubspace).
 		AddRootID(parentID).
 		Build()
@@ -712,7 +716,8 @@ func (repo *TweetRepo) GetReplies(rootId, parentId string, limit *uint64, cursor
 		return nil, "", local.DBError("root ID cannot be blank")
 	}
 
-	prefix := local.NewPrefixBuilder(RepliesNamespace).
+	prefix := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(repliesSubspace).
 		AddRootID(rootId).
 		AddParentId(parentId).
 		Build()
