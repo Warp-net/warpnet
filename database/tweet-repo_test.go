@@ -139,6 +139,82 @@ func (s *TweetRepoTestSuite) TestCreateTweetAndReply() {
 	s.Equal(uint64(0), count)
 }
 
+// TestThreadNesting proves replies nest by partitioning on the parent: a
+// reply-to-a-reply is stored under its immediate parent, each level is a
+// separate scan, the thread RootId is preserved through the chain, and none
+// of the replies leak into any author's timeline.
+func (s *TweetRepoTestSuite) TestThreadNesting() {
+	author := ulid.Make().String()
+	replier := ulid.Make().String()
+
+	root, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: "root"})
+	s.Require().NoError(err)
+
+	r1, err := s.repo.AddReply(domain.Tweet{
+		UserId: replier, Text: "lvl1", RootId: root.Id, ParentId: &root.Id,
+	})
+	s.Require().NoError(err)
+
+	r2, err := s.repo.AddReply(domain.Tweet{
+		UserId: replier, Text: "lvl2", RootId: root.Id, ParentId: &r1.Id,
+	})
+	s.Require().NoError(err)
+
+	// RootId is preserved through the chain (not rewritten to the reply id).
+	s.Equal(root.Id, r1.RootId)
+	s.Equal(root.Id, r2.RootId)
+
+	limit := uint64(10)
+
+	// Each level is the direct-replies scan of its parent.
+	lvl1, _, err := s.repo.GetReplies(root.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(lvl1, 1)
+	s.Equal(r1.Id, lvl1[0].Id)
+
+	lvl2, _, err := s.repo.GetReplies(r1.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(lvl2, 1)
+	s.Equal(r2.Id, lvl2[0].Id)
+
+	leaf, _, err := s.repo.GetReplies(r2.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(leaf, 0)
+
+	// Point lookups resolve under the right parent.
+	got1, err := s.repo.GetReply(root.Id, r1.Id)
+	s.Require().NoError(err)
+	s.Equal("lvl1", got1.Text)
+	got2, err := s.repo.GetReply(r1.Id, r2.Id)
+	s.Require().NoError(err)
+	s.Equal("lvl2", got2.Text)
+
+	// Per-parent reply counts.
+	c0, _ := s.repo.RepliesCount(root.Id)
+	s.Equal(uint64(1), c0)
+	c1, _ := s.repo.RepliesCount(r1.Id)
+	s.Equal(uint64(1), c1)
+
+	// Nothing leaked into any timeline: only the root tweet is in the
+	// author's list, and the replier authored no top-level tweets.
+	authorList, _, err := s.repo.List(author, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(authorList, 1)
+	s.Equal(root.Id, authorList[0].Id)
+	replierList, _, err := s.repo.List(replier, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(replierList, 0)
+
+	// Deleting the mid-level reply clears its parent's scan and count.
+	_, err = s.repo.DeleteReply(root.Id, r1.Id)
+	s.Require().NoError(err)
+	lvl1, _, err = s.repo.GetReplies(root.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(lvl1, 0)
+	c0, _ = s.repo.RepliesCount(root.Id)
+	s.Equal(uint64(0), c0)
+}
+
 func (s *TweetRepoTestSuite) TestPinAndUnpin() {
 	userId := ulid.Make().String()
 	tweet := domain.Tweet{UserId: userId, Text: "pin me"}
