@@ -75,7 +75,6 @@ export const PUBLIC_POST_UNFOLLOW = "/public/post/unfollow/0.0.0"
 export const PUBLIC_GET_USER = "/public/get/user/0.0.0"
 export const PUBLIC_GET_USERS = "/public/get/users/0.0.0"
 export const PUBLIC_GET_WHOTOFOLLOW = "/public/get/whotofollow/0.0.0"
-export const PUBLIC_GET_REPLIES = "/public/get/replies/0.0.0"
 export const PUBLIC_GET_FOLLOWERS = "/public/get/followers/0.0.0"
 export const PUBLIC_POST_FOLLOW = "/public/post/follow/0.0.0"
 export const PUBLIC_POST_LIKE = "/public/post/like/0.0.0"
@@ -1276,8 +1275,10 @@ export const warpnetService = {
             return []
         }
 
+        // Replies are tweets with a parent: a root_id selects the thread
+        // branch of the tweets route, which returns a flat TweetsResponse.
         const request = {
-            path: PUBLIC_GET_REPLIES,
+            path: PUBLIC_GET_TWEETS,
             body: {
                 root_id: rootId,
                 parent_id: parentId,
@@ -1292,16 +1293,10 @@ export const warpnetService = {
             return []
         }
         this.setCursor('replies', repliesResp.cursor || 'end')
-        if (!repliesResp.replies || repliesResp.replies.length === 0) {
+        if (!repliesResp.tweets || repliesResp.tweets.length === 0) {
             return []
         }
-        // Backend ships a ReplyNode tree (`{ children, reply }`); the UI
-        // wants plain Tweet records. Flatten one level — the top-level
-        // replies are what's rendered; nested children would need a
-        // dedicated thread view.
-        return repliesResp.replies
-            .map(node => (node && node.reply) ? node.reply : node)
-            .filter(t => t && t.id);
+        return repliesResp.tweets.filter(t => t && t.id);
     },
 
     // a reply is a tweet; fetch it via the tweet route, passing root_id so

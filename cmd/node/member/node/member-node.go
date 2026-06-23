@@ -394,7 +394,6 @@ func (m *MemberNode) setupHandlers(
 	hs := make([]warpnet.WarpStreamHandler, 0, 80)
 	hs = append(hs, m.adminHandlers(authRepo, privKey, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
-	hs = append(hs, m.replyHandlers(userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
 	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
 	hs = append(hs, m.followRequestHandlers(followRepo)...)
@@ -498,19 +497,6 @@ func (m *MemberNode) tweetHandlers(
 		{
 			event.PUBLIC_POST_UNRETWEET,
 			handler.StreamUnretweetHandler(r.tweetRepo, userRepo, m),
-		},
-	}
-}
-
-//nolint:govet
-func (m *MemberNode) replyHandlers(
-	userRepo UserProvider,
-	r *memberRepos,
-) []warpnet.WarpStreamHandler {
-	return []warpnet.WarpStreamHandler{
-		{
-			event.PUBLIC_GET_REPLIES,
-			handler.StreamGetRepliesHandler(r.tweetRepo, userRepo, m),
 		},
 	}
 }

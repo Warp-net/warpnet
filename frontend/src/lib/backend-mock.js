@@ -40,7 +40,6 @@ import {
     PUBLIC_GET_FOLLOWINGS,
     PUBLIC_GET_FOLLOWERS,
     PUBLIC_GET_IMAGE,
-    PUBLIC_GET_REPLIES,
     PUBLIC_GET_TWEET,
     PUBLIC_GET_TWEET_STATS,
     PUBLIC_GET_TWEETS,
@@ -179,6 +178,17 @@ function generateResponse(arg) {
             return {cursor: "end", user_id: arg.body.user_id, tweets: timelineTweets}
 
         case PUBLIC_GET_TWEETS:
+            // A root_id selects the thread branch: replies are tweets with a
+            // parent, returned as a flat tweets list.
+            if (arg.body.root_id) {
+                const parentId = arg.body.parent_id || arg.body.root_id
+                const threadReplies = [];
+                for (const [key, value] of mockMap) {
+                    if (key.startsWith("reply:") && value.parent_id === parentId && value.root_id === arg.body.root_id)
+                        threadReplies.push(value);
+                }
+                return {cursor: "end", user_id: parentId, tweets: threadReplies}
+            }
             let tweetsList = []
             for (const [key, value] of mockMap) {
                 if (key.startsWith("tweet:")) {
@@ -351,14 +361,6 @@ function generateResponse(arg) {
             unretweetStats.retweets_count--
             mockMap.set("stats:"+arg.body.tweet_id, unretweetStats)
             return {code:0, message:"Accepted"};
-
-        case PUBLIC_GET_REPLIES:
-            const replies = [];
-            for (const [key, value] of mockMap) {
-                if (key.startsWith("reply:") && value.parent_id === arg.body.parent_id && value.root_id === arg.body.root_id)
-                    replies.push({reply: value, children: []});
-            }
-            return {cursor: "end", replies: replies};
 
         case PRIVATE_DELETE_TWEET:
             // A reply carries its thread root_id; delete it from the thread

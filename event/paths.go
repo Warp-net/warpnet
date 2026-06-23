@@ -56,7 +56,6 @@ const (
 	PUBLIC_GET_FOLLOWINGS             = "/public/get/followings/0.0.0"
 	PUBLIC_GET_FOLLOWERS              = "/public/get/followers/0.0.0"
 	PUBLIC_GET_INFO                   = "/public/get/info/0.0.0"
-	PUBLIC_GET_REPLIES                = "/public/get/replies/0.0.0"
 	PUBLIC_GET_TWEET                  = "/public/get/tweet/0.0.0"
 	PUBLIC_GET_TWEET_STATS            = "/public/get/tweetstats/0.0.0"
 	PUBLIC_GET_TWEETS                 = "/public/get/tweets/0.0.0"

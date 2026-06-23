@@ -82,7 +82,7 @@ type TweetsStorer interface {
 	AddReply(reply domain.Tweet) (domain.Tweet, error)
 	GetReply(rootID, replyID string) (domain.Tweet, error)
 	DeleteReply(rootID, parentID, replyID string) error
-	GetRepliesTree(rootId, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error)
+	GetReplies(rootId, parentId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 }
 
 type TimelineUpdater interface {
@@ -362,6 +362,13 @@ func StreamGetTweetsHandler(
 		if err != nil {
 			return nil, err
 		}
+
+		// A RootId means "get the replies under a tweet": replies are tweets
+		// with a parent, served from the thread index instead of a timeline.
+		if ev.RootId != "" {
+			return getThreadReplies(repo, userRepo, streamer, ev)
+		}
+
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
 		}
@@ -447,6 +454,61 @@ func tweetsRefreshBackground(
 		}
 		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24*30) //nolint:mnd
 	}
+}
+
+// getThreadReplies serves the replies under a tweet (a flat list of tweets
+// with a parent). With no local replies it forwards to the root author's home
+// node so threads on remote/bridged tweets still resolve.
+func getThreadReplies(
+	repo TweetsStorer,
+	userRepo TweetUserFetcher,
+	streamer TweetStreamer,
+	ev event.GetAllTweetsEvent,
+) (any, error) {
+	// Empty parent_id means top-level replies: treat it as the root.
+	if ev.ParentId == "" {
+		ev.ParentId = ev.RootId
+	}
+
+	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
+	parentId := strings.TrimPrefix(ev.ParentId, domain.RetweetPrefix)
+
+	replies, cursor, err := repo.GetReplies(rootId, parentId, ev.Limit, ev.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	if len(replies) == 0 {
+		if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
+			return resp, nil
+		}
+	}
+	return event.TweetsResponse{
+		Cursor: cursor,
+		Tweets: replies,
+		UserId: parentId,
+	}, nil
+}
+
+// forwardThreadReplies asks the root tweet author's home node for the thread's
+// replies when that node is not this one. ok=false means handle locally.
+func forwardThreadReplies(userRepo TweetUserFetcher, streamer TweetStreamer, ev event.GetAllTweetsEvent) (event.TweetsResponse, bool) {
+	if ev.RootUserId == "" {
+		return event.TweetsResponse{}, false
+	}
+	author, err := userRepo.Get(ev.RootUserId)
+	if err != nil || author.NodeId == "" || author.NodeId == streamer.NodeInfo().ID.String() {
+		return event.TweetsResponse{}, false
+	}
+	data, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_TWEETS, ev)
+	if err != nil {
+		log.Errorf("get replies: forward to %s: %v", author.NodeId, err)
+		return event.TweetsResponse{}, false
+	}
+	var resp event.TweetsResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return event.TweetsResponse{}, false
+	}
+	return resp, true
 }
 
 type LikeTweetStorer interface {

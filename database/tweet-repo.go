@@ -689,7 +689,10 @@ func (repo *TweetRepo) DeleteReply(rootID, parentID, replyID string) error {
 	return nil
 }
 
-func (repo *TweetRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
+// GetReplies returns the replies (tweets with a parent) under parentId inside
+// the rootId thread, newest first. Replies are tweets, so the result is a flat
+// []domain.Tweet — each carries its ParentId for clients that want to nest.
+func (repo *TweetRepo) GetReplies(rootId, parentId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if rootId == "" {
 		return nil, "", local.DBError("root ID cannot be blank")
 	}
@@ -723,75 +726,11 @@ func (repo *TweetRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cu
 		replies = append(replies, t)
 	}
 
-	return buildRepliesTree(replies), cur, nil
-}
-
-func buildRepliesTree(replies []domain.Tweet) []domain.ReplyNode {
-	if len(replies) == 0 {
-		return []domain.ReplyNode{}
-	}
-
-	type node struct {
-		reply    domain.Tweet
-		children []*node
-	}
-
-	nodeMap := make(map[string]*node, len(replies))
-	var rootNodes []*node
-
-	for _, reply := range replies {
-		if reply.Id == "" {
-			continue
-		}
-		nodeMap[reply.Id] = &node{reply: reply}
-	}
-
-	for _, reply := range replies {
-		if reply.Id == "" {
-			continue
-		}
-
-		n := nodeMap[reply.Id]
-		if n == nil {
-			continue
-		}
-
-		if reply.ParentId == nil {
-			rootNodes = append(rootNodes, n)
-			continue
-		}
-
-		parentNode, ok := nodeMap[*reply.ParentId]
-		if !ok {
-			rootNodes = append(rootNodes, n)
-			continue
-		}
-
-		parentNode.children = append(parentNode.children, n)
-	}
-
-	var toReplyNode func(n *node) domain.ReplyNode
-	toReplyNode = func(n *node) domain.ReplyNode {
-		children := make([]domain.ReplyNode, 0, len(n.children))
-		for _, child := range n.children {
-			children = append(children, toReplyNode(child))
-		}
-		return domain.ReplyNode{
-			Reply:    n.reply,
-			Children: children,
-		}
-	}
-
-	roots := make([]domain.ReplyNode, 0, len(rootNodes))
-	for _, rn := range rootNodes {
-		roots = append(roots, toReplyNode(rn))
-	}
-
-	sort.SliceStable(roots, func(i, j int) bool {
-		return roots[i].Reply.CreatedAt.After(roots[j].Reply.CreatedAt)
+	sort.SliceStable(replies, func(i, j int) bool {
+		return replies[i].CreatedAt.After(replies[j].CreatedAt)
 	})
 
-	return roots
+	return replies, cur, nil
 }
 
 // ====================== RETWEET ====================

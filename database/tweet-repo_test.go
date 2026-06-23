@@ -119,10 +119,10 @@ func (s *TweetRepoTestSuite) TestCreateTweetAndReply() {
 	s.Require().NoError(err)
 	s.Equal("a reply", gotReply.Text)
 
-	tree, _, err := s.repo.GetRepliesTree(tweet.Id, tweet.Id, &limit, nil)
+	thread, _, err := s.repo.GetReplies(tweet.Id, tweet.Id, &limit, nil)
 	s.Require().NoError(err)
-	s.Require().Len(tree, 1)
-	s.Equal(reply.Id, tree[0].Reply.Id)
+	s.Require().Len(thread, 1)
+	s.Equal(reply.Id, thread[0].Id)
 
 	// The parent's reply counter incremented.
 	count, err := s.repo.RepliesCount(tweet.Id)

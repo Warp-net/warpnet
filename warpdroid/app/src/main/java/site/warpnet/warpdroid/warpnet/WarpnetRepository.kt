@@ -28,7 +28,6 @@ import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.dto.DeleteTweetEvent
 import site.warpnet.transport.dto.FollowersResponse
 import site.warpnet.transport.dto.FollowingsResponse
-import site.warpnet.transport.dto.GetAllRepliesEvent
 import site.warpnet.transport.dto.GetAllTweetsEvent
 import site.warpnet.transport.dto.GetAllUsersEvent
 import site.warpnet.transport.dto.GetFollowersEvent
@@ -45,7 +44,6 @@ import site.warpnet.transport.dto.LikeEvent
 import site.warpnet.transport.dto.LikesCountResponse
 import site.warpnet.transport.dto.NewFollowEvent
 import site.warpnet.transport.dto.NewUnfollowEvent
-import site.warpnet.transport.dto.RepliesResponse
 import site.warpnet.transport.dto.TweetStatsResponse
 import site.warpnet.transport.dto.TweetsResponse
 import site.warpnet.transport.dto.UnretweetEvent
@@ -83,7 +81,6 @@ class WarpnetRepository @Inject constructor(
     private val userAdapter = moshi.adapter<WarpnetUser>()
     private val tweetAdapter = moshi.adapter<WarpnetTweet>()
     private val tweetsRespAdapter = moshi.adapter<TweetsResponse>()
-    private val repliesRespAdapter = moshi.adapter<RepliesResponse>()
     private val notificationsRespAdapter = moshi.adapter<GetNotificationsResponse>()
     private val notificationRespAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetNotification>()
     private val likesCountAdapter = moshi.adapter<LikesCountResponse>()
@@ -99,7 +96,6 @@ class WarpnetRepository @Inject constructor(
     private val getAllUsersAdapter = moshi.adapter<GetAllUsersEvent>()
     private val getTweetAdapter = moshi.adapter<GetTweetEvent>()
     private val getTweetStatsAdapter = moshi.adapter<GetTweetStatsEvent>()
-    private val getRepliesAdapter = moshi.adapter<GetAllRepliesEvent>()
     private val getNotifsAdapter = moshi.adapter<GetNotificationsEvent>()
     private val getNotifAdapter = moshi.adapter<site.warpnet.transport.dto.GetNotificationEvent>()
     private val markNotifReadAdapter = moshi.adapter<site.warpnet.transport.dto.MarkNotificationReadEvent>()
@@ -231,22 +227,14 @@ class WarpnetRepository @Inject constructor(
     }
 
     suspend fun getReplies(rootId: String, parentId: String = "", cursor: String = ""): List<Tweet> {
+        // Replies are tweets with a parent: a rootId selects the thread branch
+        // of the tweets route, which returns a flat TweetsResponse.
         val raw = client.request(
-            ProtocolIds.PUBLIC_GET_REPLIES,
-            getRepliesAdapter.toJson(GetAllRepliesEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
+            ProtocolIds.PUBLIC_GET_TWEETS,
+            getAllTweetsAdapter.toJson(GetAllTweetsEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
         )
-        val page = repliesRespAdapter.fromJson(raw) ?: return emptyList()
-        // Backend returns a ReplyNode tree ({reply, children}); flatten
-        // depth-first into the flat List<WarpnetTweet> the UI expects.
-        val flat = mutableListOf<site.warpnet.transport.dto.WarpnetTweet>()
-        fun walk(nodes: List<site.warpnet.transport.dto.WarpnetReplyNode>) {
-            for (n in nodes) {
-                flat += n.reply
-                if (n.children.isNotEmpty()) walk(n.children)
-            }
-        }
-        walk(page.replies)
-        return hydrateTweets(flat)
+        val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList()
+        return hydrateTweets(page.tweets)
     }
 
     /**

@@ -136,12 +136,6 @@ type Device struct {
 	LastActive time.Time          `json:"last_active"`
 }
 
-// ReplyNode defines model for ReplyNode.
-type ReplyNode struct {
-	Children []ReplyNode `json:"children"`
-	Reply    Tweet       `json:"reply"`
-}
-
 const RetweetPrefix = "RT:"
 
 // Tweet defines model for Tweet.

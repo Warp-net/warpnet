@@ -98,9 +98,17 @@ data class GetUserEvent(
     @Json(name = "node_id") val nodeId: String = "",
 )
 
+// Two shapes share this event, dispatched on rootId server-side:
+//   - timeline/profile: userId set, rootId empty.
+//   - thread replies: rootId set; parentId selects the subtree (empty means
+//     the replies hanging off rootId); rootUserId lets the node forward to the
+//     root author's home node. Replies come back as a flat TweetsResponse.
 @JsonClass(generateAdapter = true)
 data class GetAllTweetsEvent(
-    @Json(name = "user_id") val userId: String,
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "root_id") val rootId: String = "",
+    @Json(name = "parent_id") val parentId: String = "",
+    @Json(name = "root_user_id") val rootUserId: String = "",
     val cursor: String = "",
     val limit: Int = 40,
 )
@@ -109,14 +117,6 @@ data class GetAllTweetsEvent(
 data class GetTweetEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
-)
-
-@JsonClass(generateAdapter = true)
-data class GetAllRepliesEvent(
-    @Json(name = "root_id") val rootId: String,
-    @Json(name = "parent_id") val parentId: String = "",
-    val cursor: String = "",
-    val limit: Int = 40,
 )
 
 @JsonClass(generateAdapter = true)
@@ -430,22 +430,6 @@ data class GetAllUsersEvent(
 @JsonClass(generateAdapter = true)
 data class TweetsResponse(
     val tweets: List<WarpnetTweet> = emptyList(),
-    val cursor: String = "",
-)
-
-// Wire shape mirrors domain.ReplyNode on the fat node — each list element is
-// a tree node with the reply payload nested under [reply] and any deeper
-// descendants under [children]. Parsing a reply page straight into
-// List<WarpnetTweet> would Moshi-default every field to blank.
-@JsonClass(generateAdapter = true)
-data class WarpnetReplyNode(
-    val reply: WarpnetTweet,
-    val children: List<WarpnetReplyNode> = emptyList(),
-)
-
-@JsonClass(generateAdapter = true)
-data class RepliesResponse(
-    val replies: List<WarpnetReplyNode> = emptyList(),
     val cursor: String = "",
 )
 

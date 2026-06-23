@@ -151,27 +151,21 @@ type GetAllMessagesEvent struct {
 	Limit   *uint64   `json:"limit,omitempty"`
 }
 
-// GetAllRepliesEvent defines model for GetAllRepliesEvent.
-//
-// ParentId is the parent TWEET id (not a user id) — it selects which
-// subtree of replies inside RootId to return. Empty means "top-level
-// replies of the thread"; the handler treats that as ParentId = RootId.
-// RootId is the root tweet of the thread.
-type GetAllRepliesEvent struct {
-	Cursor   *string   `json:"cursor,omitempty"`
-	Limit    *uint64   `json:"limit,omitempty"`
-	ParentId domain.ID `json:"parent_id"`
-	RootId   domain.ID `json:"root_id"`
-
-	// RootUserId is the root tweet author; forwards go to their home node.
-	RootUserId domain.ID `json:"root_user_id,omitempty"`
-}
-
 // GetAllTweetsEvent defines model for GetAllTweetsEvent.
+//
+// Two shapes share this event, dispatched on RootId:
+//   - timeline/profile: UserId set, RootId empty — returns the user's tweets.
+//   - thread replies: RootId set — returns the replies (tweets with a parent)
+//     under ParentId within that thread; empty ParentId means the replies
+//     hanging directly off RootId. RootUserId is the root tweet author, used
+//     to forward the request to their home node when the thread isn't local.
 type GetAllTweetsEvent struct {
-	Cursor *string   `json:"cursor,omitempty"`
-	Limit  *uint64   `json:"limit,omitempty"`
-	UserId domain.ID `json:"user_id"`
+	Cursor     *string   `json:"cursor,omitempty"`
+	Limit      *uint64   `json:"limit,omitempty"`
+	UserId     domain.ID `json:"user_id"`
+	RootId     domain.ID `json:"root_id,omitempty"`
+	ParentId   domain.ID `json:"parent_id,omitempty"`
+	RootUserId domain.ID `json:"root_user_id,omitempty"`
 }
 
 // GetAllUsersEvent defines model for GetAllUsersEvent.
@@ -328,13 +322,6 @@ type Owner = domain.Owner
 
 // ReTweetsCountResponse defines model for ReTweetsCountResponse.
 type ReTweetsCountResponse = LikesCountResponse
-
-// RepliesResponse defines model for RepliesTreeResponse.
-type RepliesResponse struct {
-	Cursor  string             `json:"cursor"`
-	Replies []domain.ReplyNode `json:"replies"`
-	UserId  *domain.ID         `json:"user_id,omitempty"`
-}
 
 // TweetsResponse defines model for TweetsResponse.
 type TweetsResponse struct {

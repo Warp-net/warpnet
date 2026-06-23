@@ -28,7 +28,7 @@ type stubTweetRepo struct {
 	addReplyFn      func(reply domain.Tweet) (domain.Tweet, error)
 	getReplyFn      func(rootID, replyID string) (domain.Tweet, error)
 	deleteReplyFn   func(rootID, parentID, replyID string) error
-	repliesTreeFn   func(rootID, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error)
+	repliesFn       func(rootID, parentId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 }
 
 func (s stubTweetRepo) TweetsCount(userId string) (uint64, error) {
@@ -126,9 +126,9 @@ func (s stubTweetRepo) DeleteReply(rootID, parentID, replyID string) error {
 	}
 	return nil
 }
-func (s stubTweetRepo) GetRepliesTree(rootID, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
-	if s.repliesTreeFn != nil {
-		return s.repliesTreeFn(rootID, parentId, limit, cursor)
+func (s stubTweetRepo) GetReplies(rootID, parentId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+	if s.repliesFn != nil {
+		return s.repliesFn(rootID, parentId, limit, cursor)
 	}
 	return nil, "", nil
 }
