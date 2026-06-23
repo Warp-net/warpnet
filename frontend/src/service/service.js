@@ -67,11 +67,8 @@ export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
-export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
-export const PUBLIC_GET_REPLY = "/public/get/reply/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
-export const PUBLIC_DELETE_REPLY = "/public/delete/reply/0.0.0"
 export const PRIVATE_DELETE_TWEET = "/private/delete/tweet/0.0.0"
 export const PRIVATE_POST_USER = "/private/post/user/0.0.0"
 export const PUBLIC_POST_UNFOLLOW = "/public/post/unfollow/0.0.0"
@@ -1250,12 +1247,13 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    // create reply
+    // create reply — a reply is a tweet with a parent, posted through the
+    // tweet route; the backend routes it into the thread by its parent_id.
     async replyTweet({rootId, parentId, parentUserId, text}) {
         const owner = this.getOwnerProfile()
 
         const request = {
-            path: PUBLIC_POST_REPLY,
+            path: PRIVATE_POST_TWEET,
             body: {
                 root_id: rootId,
                 parent_id: parentId,
@@ -1306,12 +1304,14 @@ export const warpnetService = {
             .filter(t => t && t.id);
     },
 
+    // a reply is a tweet; fetch it via the tweet route, passing root_id so
+    // the backend resolves it from the thread index.
     async getReply({rootId, replyId, userId}) {
         const request = {
-            path: PUBLIC_GET_REPLY,
+            path: PUBLIC_GET_TWEET,
             body: {
                 root_id: rootId,
-                reply_id: replyId,
+                tweet_id: replyId,
                 user_id: userId,
             },
         }
@@ -1321,11 +1321,11 @@ export const warpnetService = {
 
     async deleteReply({userId, rootId, replyId}) {
         const request = {
-            path: PUBLIC_DELETE_REPLY,
+            path: PRIVATE_DELETE_TWEET,
             body: {
                 user_id: userId,
                 root_id: rootId,
-                reply_id: replyId,
+                tweet_id: replyId,
             },
         }
 

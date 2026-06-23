@@ -35,14 +35,11 @@ object ProtocolIds {
     const val PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
     const val PUBLIC_GET_TWEET_STATS = "/public/get/tweetstats/0.0.0"
     const val PUBLIC_GET_REPLIES = "/public/get/replies/0.0.0"
-    const val PUBLIC_GET_REPLY = "/public/get/reply/0.0.0"
     const val PUBLIC_GET_FOLLOWERS = "/public/get/followers/0.0.0"
     const val PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
     const val PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
 
     // public writes
-    const val PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
-    const val PUBLIC_DELETE_REPLY = "/public/delete/reply/0.0.0"
     const val PUBLIC_POST_LIKE = "/public/post/like/0.0.0"
     const val PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
     const val PUBLIC_POST_VIEW = "/public/post/view/0.0.0"

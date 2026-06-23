@@ -71,18 +71,21 @@ func (s stubReplyTweetRepo) Get(userID, tweetID string) (domain.Tweet, error) {
 	return domain.Tweet{Id: tweetID, UserId: userID}, nil
 }
 
+// Replies are created through StreamNewTweetHandler: a tweet with a parent
+// (ParentId set) is routed into the thread store instead of the timeline.
 func TestStreamNewReplyHandler(t *testing.T) {
 	owner := "owner-1"
 	parentUser := "parent-user"
 	rootId := "root-1"
 	parentId := "parent-1"
 
-	makeEvent := func() event.NewReplyEvent {
-		return event.NewReplyEvent{
+	makeEvent := func() event.NewTweetEvent {
+		pu := parentUser
+		return event.NewTweetEvent{
 			CreatedAt:    time.Now(),
 			Id:           "reply-1",
 			ParentId:     &parentId,
-			ParentUserId: parentUser,
+			ParentUserId: &pu,
 			RootId:       rootId,
 			Text:         "a reply",
 			UserId:       owner,
@@ -90,8 +93,21 @@ func TestStreamNewReplyHandler(t *testing.T) {
 		}
 	}
 
+	build := func(repo stubTweetRepo, userRepo stubReplyUserRepo, notifier stubModerationNotifier, streamer stubStreamer) warpnet.WarpHandlerFunc {
+		return StreamNewTweetHandler(
+			stubTweetBroadcaster{},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			repo,
+			stubTimelineRepo{},
+			stubFollowChecker{},
+			userRepo,
+			notifier,
+			streamer,
+		)
+	}
+
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+		h := build(stubTweetRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -99,28 +115,18 @@ func TestStreamNewReplyHandler(t *testing.T) {
 	})
 
 	t.Run("empty text", func(t *testing.T) {
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+		h := build(stubTweetRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		ev := makeEvent()
 		ev.Text = ""
 		_, err := h(marshal(t, ev), nil)
-		if err == nil || err.Error() != "empty reply body" {
-			t.Fatalf("unexpected err: %v", err)
-		}
-	})
-
-	t.Run("nil parent id", func(t *testing.T) {
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{})
-		ev := makeEvent()
-		ev.ParentId = nil
-		_, err := h(marshal(t, ev), nil)
-		if err == nil || err.Error() != "empty parent ID" {
+		if err == nil || err.Error() != "empty tweet text" {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 
 	t.Run("add reply error", func(t *testing.T) {
 		repoErr := errors.New("db failed")
-		h := StreamNewReplyHandler(stubReplyRepo{addReplyFn: func(reply domain.Tweet) (domain.Tweet, error) {
+		h := build(stubTweetRepo{addReplyFn: func(reply domain.Tweet) (domain.Tweet, error) {
 			return domain.Tweet{}, repoErr
 		}}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, makeEvent()), nil)
@@ -130,7 +136,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 	})
 
 	t.Run("parent user not found", func(t *testing.T) {
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+		h := build(stubTweetRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
 		}}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, makeEvent()), nil)
@@ -145,7 +151,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 	t.Run("someone replied to my tweet - adds notification", func(t *testing.T) {
 		notified := false
 		nodeID := warpnet.WarpPeerID("my-node")
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+		h := build(stubTweetRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{Id: userId, NodeId: nodeID.String()}, nil
 		}}, stubModerationNotifier{addFn: func(not domain.Notification) error {
 			notified = true
@@ -171,7 +177,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 
 	t.Run("user repo error", func(t *testing.T) {
 		repoErr := errors.New("user repo err")
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+		h := build(stubTweetRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, repoErr
 		}}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		_, err := h(marshal(t, makeEvent()), nil)
@@ -181,7 +187,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 	})
 
 	t.Run("successful stream response", func(t *testing.T) {
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		h := build(stubTweetRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return []byte("{}"), nil
@@ -197,7 +203,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 	})
 
 	t.Run("stream node offline", func(t *testing.T) {
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		h := build(stubTweetRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
@@ -214,7 +220,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 
 	t.Run("stream error", func(t *testing.T) {
 		streamErr := errors.New("broken")
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		h := build(stubTweetRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
@@ -228,7 +234,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 
 	t.Run("remote response with error payload", func(t *testing.T) {
 		respErr, _ := json.Marshal(event.ResponseError{Code: 500, Message: "oops"})
-		h := StreamNewReplyHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		h := build(stubTweetRepo{}, stubReplyUserRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return respErr, nil
@@ -245,7 +251,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 
 	t.Run("strips retweet prefix from rootId and parentId", func(t *testing.T) {
 		var capturedRootId string
-		h := StreamNewReplyHandler(stubReplyRepo{addReplyFn: func(reply domain.Tweet) (domain.Tweet, error) {
+		h := build(stubTweetRepo{addReplyFn: func(reply domain.Tweet) (domain.Tweet, error) {
 			capturedRootId = reply.RootId
 			reply.Id = "reply-1"
 			return reply, nil

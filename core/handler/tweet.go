@@ -79,6 +79,10 @@ type TweetsStorer interface {
 	Pin(userId, tweetId string) (domain.Tweet, error)
 	Unpin(userId, tweetId string) (domain.Tweet, error)
 	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
+	AddReply(reply domain.Tweet) (domain.Tweet, error)
+	GetReply(rootID, replyID string) (domain.Tweet, error)
+	DeleteReply(rootID, parentID, replyID string) error
+	GetRepliesTree(rootId, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error)
 }
 
 type TimelineUpdater interface {
@@ -99,6 +103,9 @@ func StreamNewTweetHandler(
 	tweetRepo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	followRepo TweetFollowChecker,
+	userRepo TweetUserFetcher,
+	notifyRepo ModerationNotifier,
+	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -120,6 +127,12 @@ func StreamNewTweetHandler(
 		}
 		if len(ev.Text) > tweetCharLimit {
 			return nil, warpnet.WarpError("tweet text is too long")
+		}
+
+		// A reply is a tweet with a parent: it lives inside its thread, not
+		// in the timeline, so it never reaches the follower-broadcast path.
+		if ev.IsReply() {
+			return handleNewReply(ev, tweetRepo, userRepo, notifyRepo, streamer)
 		}
 
 		owner := authRepo.GetOwner()
@@ -167,6 +180,96 @@ func StreamNewTweetHandler(
 	}
 }
 
+// handleNewReply stores a reply in its thread, notifies the parent tweet's
+// author when it lives here, and forwards the reply to the parent author's
+// node otherwise so the thread stays consistent across peers.
+func handleNewReply(
+	ev domain.Tweet,
+	replyRepo TweetsStorer,
+	userRepo TweetUserFetcher,
+	notifyRepo ModerationNotifier,
+	streamer TweetStreamer,
+) (any, error) {
+	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
+	parentId := strings.TrimPrefix(*ev.ParentId, domain.RetweetPrefix)
+
+	reply, err := replyRepo.AddReply(domain.Tweet{
+		CreatedAt:    ev.CreatedAt,
+		Id:           ev.Id,
+		ParentId:     &parentId,
+		ParentUserId: ev.ParentUserId,
+		RootId:       rootId,
+		Text:         ev.Text,
+		UserId:       ev.UserId,
+		Username:     ev.Username,
+		ImageKeys:    ev.ImageKeys,
+	})
+	if err != nil {
+		log.Errorf("reply handler failed: %v", err)
+		return nil, err
+	}
+
+	if ev.ParentUserId == nil || *ev.ParentUserId == "" {
+		return reply, nil
+	}
+	parentUserId := *ev.ParentUserId
+
+	parentUser, err := userRepo.Get(parentUserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return reply, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	ownNodeInfo := streamer.NodeInfo()
+	isOwnTweetReply := parentUserId == ownNodeInfo.OwnerId
+	if isOwnTweetReply {
+		if ev.UserId != ownNodeInfo.OwnerId {
+			if err := notifyRepo.Add(domain.Notification{
+				Type:   domain.NotificationReplyType,
+				Text:   ev.Username + " replied to your tweet",
+				UserId: parentUserId,
+			}); err != nil {
+				log.Errorf("reply handler: adding notification: %v", err)
+			}
+		}
+		return reply, nil
+	}
+	if ownNodeInfo.ID.String() == parentUser.NodeId {
+		return reply, nil
+	}
+
+	replyDataResp, err := streamer.GenericStream(
+		parentUser.NodeId,
+		event.PRIVATE_POST_TWEET,
+		domain.Tweet{
+			CreatedAt:    reply.CreatedAt,
+			Id:           reply.Id,
+			ParentId:     ev.ParentId,
+			ParentUserId: ev.ParentUserId,
+			RootId:       ev.RootId,
+			Text:         ev.Text,
+			UserId:       ev.UserId,
+			Username:     ev.Username,
+			ImageKeys:    ev.ImageKeys,
+		},
+	)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		return reply, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(replyDataResp, &possibleError); possibleError.Message != "" {
+		log.Errorf("unmarshal other reply error response: %s", possibleError.Message)
+	}
+
+	return reply, nil
+}
+
 func StreamGetTweetHandler(
 	repo TweetsStorer,
 	authRepo OwnerTweetStorer,
@@ -190,16 +293,29 @@ func StreamGetTweetHandler(
 			return nil, warpnet.WarpError("tweet is moderated")
 		}
 
+		// A reply carries its thread RootId; resolve it from the thread
+		// index, falling back to the timeline keyspace for top-level tweets.
+		localGet := func() (domain.Tweet, error) {
+			if ev.RootId != "" && ev.RootId != ev.TweetId {
+				rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
+				id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
+				if t, err := repo.GetReply(rootId, id); err == nil {
+					return t, nil
+				}
+			}
+			return repo.Get(ev.UserId, ev.TweetId)
+		}
+
 		owner := authRepo.GetOwner()
 
 		isMyOwnTweet := ev.UserId == owner.UserId
 		if isMyOwnTweet {
-			return repo.Get(ev.UserId, ev.TweetId)
+			return localGet()
 		}
 
 		otherUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			return repo.Get(ev.UserId, ev.TweetId)
+			return localGet()
 		}
 		if err != nil {
 			return nil, err
@@ -211,7 +327,7 @@ func StreamGetTweetHandler(
 			ev,
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return repo.Get(ev.UserId, ev.TweetId)
+			return localGet()
 		}
 		if err != nil {
 			return nil, err
@@ -220,7 +336,7 @@ func StreamGetTweetHandler(
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(getTweetResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other get tweet error response: %s", possibleError.Message)
-			return repo.Get(ev.UserId, ev.TweetId)
+			return localGet()
 		}
 
 		var tweet domain.Tweet
@@ -343,6 +459,8 @@ func StreamDeleteTweetHandler(
 	repo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	likeRepo LikeTweetStorer,
+	userRepo TweetUserFetcher,
+	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteTweetEvent
@@ -355,6 +473,12 @@ func StreamDeleteTweetHandler(
 		}
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("empty tweet id")
+		}
+
+		// A reply carries its thread RootId: delete it from the thread index
+		// and forward the deletion to the parent author's node.
+		if ev.RootId != "" && ev.RootId != ev.TweetId {
+			return deleteReply(ev, repo, userRepo, streamer)
 		}
 
 		if _, err := likeRepo.Unlike(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
@@ -388,6 +512,67 @@ func StreamDeleteTweetHandler(
 
 		return event.Accepted, nil
 	}
+}
+
+// deleteReply removes a reply from its thread and propagates the deletion to
+// the parent author's node so the thread stays consistent across peers.
+func deleteReply(
+	ev event.DeleteTweetEvent,
+	repo TweetsStorer,
+	userRepo TweetUserFetcher,
+	streamer TweetStreamer,
+) (any, error) {
+	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
+
+	reply, err := repo.GetReply(rootId, ev.TweetId)
+	if err != nil {
+		return nil, err
+	}
+
+	parentId := rootId
+	if reply.ParentId != nil {
+		parentId = strings.TrimPrefix(*reply.ParentId, domain.RetweetPrefix)
+	}
+
+	if err := repo.DeleteReply(rootId, parentId, ev.TweetId); err != nil {
+		log.Errorf("delete reply handler failed: %v", err)
+		return nil, err
+	}
+
+	if reply.ParentUserId == nil || *reply.ParentUserId == "" {
+		return event.Accepted, nil
+	}
+
+	ownNodeInfo := streamer.NodeInfo()
+	parentUser, err := userRepo.Get(*reply.ParentUserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return event.Accepted, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if ownNodeInfo.ID.String() == parentUser.NodeId {
+		return event.Accepted, nil
+	}
+
+	resp, err := streamer.GenericStream(
+		parentUser.NodeId,
+		event.PRIVATE_DELETE_TWEET,
+		event.DeleteTweetEvent{TweetId: ev.TweetId, RootId: ev.RootId, UserId: ev.UserId},
+	)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		return event.Accepted, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
+		log.Errorf("unmarshal other delete reply error response: %s", possibleError.Message)
+	}
+
+	return event.Accepted, nil
 }
 
 type RetweetsTweetStorer interface {

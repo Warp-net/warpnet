@@ -44,7 +44,7 @@ type ReplyRepoTestSuite struct {
 	suite.Suite
 
 	db   *local_store.DB
-	repo *ReplyRepo
+	repo *TweetRepo
 }
 
 func (s *ReplyRepoTestSuite) SetupSuite() {
@@ -55,7 +55,7 @@ func (s *ReplyRepoTestSuite) SetupSuite() {
 	auth := NewAuthRepo(s.db, "test")
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo = NewRepliesRepo(s.db, nil)
+	s.repo = NewTweetRepo(s.db, nil)
 }
 
 func (s *ReplyRepoTestSuite) TearDownSuite() {

@@ -48,6 +48,7 @@ import (
 var (
 	ErrTweetNotFound = local.DBError("tweet not found")
 	ErrViewsNotFound = local.DBError("views not found")
+	ErrReplyNotFound = local.DBError("reply not found")
 )
 
 const (
@@ -58,6 +59,14 @@ const (
 	reTweetersSubspace      = "RETWEETERS"
 	viewsSubspace           = "VIEWS"
 	viewersSubspace         = "VIEWERS"
+
+	// RepliesNamespace is the thread index: replies are stored keyed by their
+	// root tweet so a whole thread subtree can be fetched with one prefix
+	// scan, independent of which user authored each reply. Replies are tweets
+	// (domain.Tweet with ParentId set) but live here instead of the author's
+	// timeline keyspace.
+	RepliesNamespace     = "/REPLY"
+	repliesCountSubspace = "REPLIESCOUNT"
 )
 
 type TweetsStorer interface {
@@ -494,6 +503,295 @@ func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]dom
 		return tweets[i].CreatedAt.After(tweets[j].CreatedAt)
 	})
 	return tweets, cur, nil
+}
+
+// ====================== REPLIES (thread) ====================
+
+// AddReply stores a reply (a domain.Tweet with ParentId set) in the thread
+// index keyed by its root tweet and bumps the parent's reply counter.
+func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
+	if reply.UserId == "" && reply.Text == "" {
+		return reply, local.DBError("empty reply")
+	}
+	if reply.RootId == "" {
+		return reply, local.DBError("empty root")
+	}
+	if reply.ParentId == nil {
+		return reply, local.DBError("empty parent")
+	}
+	if reply.Id == "" {
+		reply.Id = ulid.Make().String()
+	}
+	if reply.Id == reply.RootId {
+		return reply, local.DBError("this is tweet not reply")
+	}
+	if reply.CreatedAt.IsZero() {
+		reply.CreatedAt = time.Now()
+	}
+
+	data, err := json.Marshal(reply)
+	if err != nil {
+		return reply, fmt.Errorf("marshalling reply meta: %w", err)
+	}
+
+	treeKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddRootID(reply.RootId).
+		AddRange(local.FixedRangeKey).
+		AddParentId(reply.Id).
+		Build()
+
+	parentSortableKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddRootID(reply.RootId).
+		AddParentId(*reply.ParentId).
+		AddId(reply.Id).
+		AddReversedTimestamp(reply.CreatedAt).
+		Build()
+
+	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddSubPrefix(repliesCountSubspace).
+		AddRootID(*reply.ParentId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return reply, fmt.Errorf("creating transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	if err := txn.Set(treeKey, parentSortableKey.Bytes()); err != nil {
+		return reply, fmt.Errorf("adding reply sortable key: %w", err)
+	}
+	if err := txn.Set(parentSortableKey, data); err != nil {
+		return reply, fmt.Errorf("adding reply data: %w", err)
+	}
+	_, err = txn.Increment(replyCountKey)
+	if err != nil {
+		return reply, err
+	}
+	if err := txn.Commit(); err != nil {
+		return reply, err
+	}
+	if repo.statsDb == nil {
+		return reply, nil
+	}
+	if err := repo.statsDb.Increment(replyCountKey.DatastoreKey()); err != nil {
+		log.Warnf("reply: stats db increment: %v", err)
+	}
+	return reply, nil
+}
+
+func (repo *TweetRepo) GetReply(rootID string, replyId string) (tweet domain.Tweet, err error) {
+	if rootID == "" || replyId == "" {
+		return tweet, local.DBError("rootID and replyId cannot be empty")
+	}
+
+	treeKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddRootID(rootID).
+		AddRange(local.FixedRangeKey).
+		AddParentId(replyId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return tweet, fmt.Errorf("creating transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	sortableKey, err := txn.Get(treeKey)
+	if err != nil {
+		return tweet, err
+	}
+
+	data, err := txn.Get(local.DatabaseKey(sortableKey))
+	if err != nil {
+		return tweet, err
+	}
+
+	if err = json.Unmarshal(data, &tweet); err != nil {
+		return tweet, fmt.Errorf("unmarshalling reply: %w", err)
+	}
+	return tweet, txn.Commit()
+}
+
+func (repo *TweetRepo) RepliesCount(tweetId string) (repliesNum uint64, err error) {
+	if tweetId == "" {
+		return 0, local.DBError("empty tweet id")
+	}
+	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddSubPrefix(repliesCountSubspace).
+		AddRootID(tweetId).
+		Build()
+
+	if repo.statsDb != nil {
+		total, err := repo.statsDb.GetAggregatedStat(replyCountKey.DatastoreKey())
+		if err == nil {
+			return total, nil
+		}
+		log.Warnf("get replies count stat: %v", err)
+	}
+
+	bt, err := repo.db.Get(replyCountKey)
+
+	if local.IsNotFoundError(err) {
+		return 0, ErrReplyNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return binary.BigEndian.Uint64(bt), nil
+}
+
+func (repo *TweetRepo) DeleteReply(rootID, parentID, replyID string) error {
+	if rootID == "" || parentID == "" || replyID == "" {
+		return local.DBError("rootID, parent ID or replyID cannot be empty")
+	}
+
+	treeKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddRootID(rootID).
+		AddRange(local.FixedRangeKey).
+		AddParentId(replyID).
+		Build()
+
+	replyCountKey := local.NewPrefixBuilder(RepliesNamespace).
+		AddSubPrefix(repliesCountSubspace).
+		AddRootID(parentID).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return fmt.Errorf("creating transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	sortableKey, err := txn.Get(treeKey)
+	if err != nil {
+		return fmt.Errorf("getting sortable key: %w", err)
+	}
+	if err := txn.Delete(treeKey); err != nil {
+		return fmt.Errorf("deleting tree key: %w", err)
+	}
+	if err := txn.Delete(local.DatabaseKey(sortableKey)); err != nil {
+		return fmt.Errorf("deleting sortable key: %w", err)
+	}
+	_, err = txn.Decrement(replyCountKey)
+	if err != nil {
+		return err
+	}
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	if repo.statsDb == nil {
+		return nil
+	}
+	if err := repo.statsDb.Decrement(replyCountKey.DatastoreKey()); err != nil {
+		log.Warnf("reply: stats db decrement: %v", err)
+	}
+	return nil
+}
+
+func (repo *TweetRepo) GetRepliesTree(rootId, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
+	if rootId == "" {
+		return nil, "", local.DBError("root ID cannot be blank")
+	}
+
+	prefix := local.NewPrefixBuilder(RepliesNamespace).
+		AddRootID(rootId).
+		AddParentId(parentId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", fmt.Errorf("creating transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	items, cur, err := txn.List(prefix, limit, cursor)
+	if err != nil {
+		return nil, "", fmt.Errorf("listing replies: %w", err)
+	}
+
+	if err := txn.Commit(); err != nil {
+		return nil, "", fmt.Errorf("committing transaction: %w", err)
+	}
+
+	replies := make([]domain.Tweet, 0, len(items))
+	for _, item := range items {
+		var t domain.Tweet
+		if err = json.Unmarshal(item.Value, &t); err != nil {
+			return nil, "", fmt.Errorf("unmarshalling reply: %w", err)
+		}
+		replies = append(replies, t)
+	}
+
+	return buildRepliesTree(replies), cur, nil
+}
+
+func buildRepliesTree(replies []domain.Tweet) []domain.ReplyNode {
+	if len(replies) == 0 {
+		return []domain.ReplyNode{}
+	}
+
+	type node struct {
+		reply    domain.Tweet
+		children []*node
+	}
+
+	nodeMap := make(map[string]*node, len(replies))
+	var rootNodes []*node
+
+	for _, reply := range replies {
+		if reply.Id == "" {
+			continue
+		}
+		nodeMap[reply.Id] = &node{reply: reply}
+	}
+
+	for _, reply := range replies {
+		if reply.Id == "" {
+			continue
+		}
+
+		n := nodeMap[reply.Id]
+		if n == nil {
+			continue
+		}
+
+		if reply.ParentId == nil {
+			rootNodes = append(rootNodes, n)
+			continue
+		}
+
+		parentNode, ok := nodeMap[*reply.ParentId]
+		if !ok {
+			rootNodes = append(rootNodes, n)
+			continue
+		}
+
+		parentNode.children = append(parentNode.children, n)
+	}
+
+	var toReplyNode func(n *node) domain.ReplyNode
+	toReplyNode = func(n *node) domain.ReplyNode {
+		children := make([]domain.ReplyNode, 0, len(n.children))
+		for _, child := range n.children {
+			children = append(children, toReplyNode(child))
+		}
+		return domain.ReplyNode{
+			Reply:    n.reply,
+			Children: children,
+		}
+	}
+
+	roots := make([]domain.ReplyNode, 0, len(rootNodes))
+	for _, rn := range rootNodes {
+		roots = append(roots, toReplyNode(rn))
+	}
+
+	sort.SliceStable(roots, func(i, j int) bool {
+		return roots[i].Reply.CreatedAt.After(roots[j].Reply.CreatedAt)
+	})
+
+	return roots
 }
 
 // ====================== RETWEET ====================

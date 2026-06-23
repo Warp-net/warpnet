@@ -147,12 +147,17 @@ const RetweetPrefix = "RT:"
 // Tweet defines model for Tweet.
 //
 // ParentId is the parent TWEET id (not a user id) for replies; nil for
-// top-level tweets and for replies that hang directly off RootId.
+// top-level tweets and for replies that hang directly off RootId. A tweet
+// with a non-nil ParentId is a reply: it lives inside its RootId thread
+// instead of the author's timeline. ParentUserId is the parent tweet's
+// author id — the routing key used to forward a reply to the node hosting
+// the parent so the thread stays consistent across peers.
 type Tweet struct {
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	Id        string     `json:"id"`
-	ParentId  *string    `json:"parent_id,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
+	Id           string     `json:"id"`
+	ParentId     *string    `json:"parent_id,omitempty"`
+	ParentUserId *string    `json:"parent_user_id,omitempty"`
 
 	// RetweetedBy retweeted by user id
 	RetweetedBy   *string          `json:"retweeted_by,omitempty"`
@@ -166,6 +171,12 @@ type Tweet struct {
 	Pinned        bool             `json:"pinned,omitempty"`
 	QuotedTweetId *string          `json:"quoted_tweet_id,omitempty"`
 	QuotedUserId  *string          `json:"quoted_user_id,omitempty"`
+}
+
+// IsReply reports whether the tweet is a reply, i.e. it hangs off a parent
+// tweet inside a thread rather than being a top-level timeline tweet.
+func (t *Tweet) IsReply() bool {
+	return t.ParentId != nil && *t.ParentId != ""
 }
 
 func (t *Tweet) IsModerated() bool {

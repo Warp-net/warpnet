@@ -34,6 +34,9 @@ data class WarpnetTweet(
     @Json(name = "created_at") val createdAt: String? = null,
     @Json(name = "updated_at") val updatedAt: String? = null,
     @Json(name = "parent_id") val parentId: String? = null,
+    // Parent tweet author's id; set on replies so the fat node can forward
+    // the reply to the node hosting the parent (see domain.Tweet).
+    @Json(name = "parent_user_id") val parentUserId: String? = null,
     @Json(name = "retweeted_by") val retweetedBy: String? = null,
     @Json(name = "root_id") val rootId: String = "",
     val text: String,

@@ -25,6 +25,10 @@ type stubTweetRepo struct {
 	deleteFn        func(userID, tweetID string) error
 	unRetweetFn     func(retweetedByUserID, tweetId string) error
 	createWithTTLFn func(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
+	addReplyFn      func(reply domain.Tweet) (domain.Tweet, error)
+	getReplyFn      func(rootID, replyID string) (domain.Tweet, error)
+	deleteReplyFn   func(rootID, parentID, replyID string) error
+	repliesTreeFn   func(rootID, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error)
 }
 
 func (s stubTweetRepo) TweetsCount(userId string) (uint64, error) {
@@ -100,6 +104,33 @@ func (s stubTweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
 }
 func (s stubTweetRepo) AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error) {
 	return edit, nil
+}
+func (s stubTweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
+	if s.addReplyFn != nil {
+		return s.addReplyFn(reply)
+	}
+	if reply.Id == "" {
+		reply.Id = "reply-1"
+	}
+	return reply, nil
+}
+func (s stubTweetRepo) GetReply(rootID, replyID string) (domain.Tweet, error) {
+	if s.getReplyFn != nil {
+		return s.getReplyFn(rootID, replyID)
+	}
+	return domain.Tweet{Id: replyID, RootId: rootID}, nil
+}
+func (s stubTweetRepo) DeleteReply(rootID, parentID, replyID string) error {
+	if s.deleteReplyFn != nil {
+		return s.deleteReplyFn(rootID, parentID, replyID)
+	}
+	return nil
+}
+func (s stubTweetRepo) GetRepliesTree(rootID, parentId string, limit *uint64, cursor *string) ([]domain.ReplyNode, string, error) {
+	if s.repliesTreeFn != nil {
+		return s.repliesTreeFn(rootID, parentId, limit, cursor)
+	}
+	return nil, "", nil
 }
 
 type stubFollowChecker struct {
@@ -218,7 +249,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 	owner := "owner-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{})
+		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -226,7 +257,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{})
+		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.NewTweetEvent{Text: "hello"}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -234,7 +265,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet text", func(t *testing.T) {
-		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{})
+		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.NewTweetEvent{UserId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet text" {
 			t.Fatalf("unexpected err: %v", err)
@@ -242,7 +273,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 	})
 
 	t.Run("tweet text too long", func(t *testing.T) {
-		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{})
+		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		longText := make([]byte, tweetCharLimit+1)
 		for i := range longText {
 			longText[i] = 'a'
@@ -259,7 +290,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{blocklistFn: func(tweetId string) error {
 			blocklisted = true
 			return nil
-		}}, stubTimelineRepo{}, stubFollowChecker{})
+		}}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.NewTweetEvent{Id: "t1", UserId: owner, Text: "bad", Moderation: &domain.TweetModeration{IsOk: fail}}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -273,7 +304,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{createFn: func(userId string, tweet domain.Tweet) (domain.Tweet, error) {
 			return domain.Tweet{}, repoErr
-		}}, stubTimelineRepo{}, stubFollowChecker{})
+		}}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "hello"}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -285,7 +316,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 		h := StreamNewTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		resp, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "hello"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -303,7 +334,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 		h := StreamNewTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{following: true})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{following: true}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		resp, err := h(marshal(t, event.NewTweetEvent{UserId: "other-1", Text: "from friend"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -331,6 +362,9 @@ func TestStreamNewTweetHandler(t *testing.T) {
 				return nil
 			}},
 			stubFollowChecker{following: false},
+			stubTweetUserRepo{},
+			stubModerationNotifier{},
+			stubStreamer{},
 		)
 		resp, err := h(marshal(t, event.NewTweetEvent{Id: "x1", UserId: "stranger-1", Text: "unsolicited"}), nil)
 		if err != nil {
@@ -511,7 +545,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -519,7 +553,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{TweetId: tweetId}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -527,7 +561,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -538,7 +572,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{deleteFn: func(userID, tweetID string) error {
 			return repoErr
-		}}, stubTimelineRepo{}, stubTweetLikeRepo{})
+		}}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -550,7 +584,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -568,7 +602,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: "other-1", TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
