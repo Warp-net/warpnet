@@ -867,6 +867,7 @@ type mockTweetsStorer struct {
     IsBlocklistedFunc      func(string) bool
     BlocklistFunc          func(string) error
     CreateWithTTLFunc      func(string, domain.Tweet, time.Duration) (domain.Tweet, error)
+    TweetsCountFunc        func(string) (uint64, error)
 }
 
 func (m *mockTweetsStorer) Create(u string, t domain.Tweet) (domain.Tweet, error) {
@@ -959,6 +960,11 @@ func (m *mockTweetsStorer) CreateWithTTL(u string, t domain.Tweet, d time.Durati
     return t, nil
 }
 
+func (m *mockTweetsStorer) TweetsCount(u string) (uint64, error) {
+    if m.TweetsCountFunc != nil { return m.TweetsCountFunc(u) }
+    return 0, nil
+}
+
 // ==================== ОСТАЛЬНЫЕ МОКИ ====================
 
 type mockOwner struct{ owner domain.Owner }
@@ -1008,6 +1014,29 @@ func (m *mockStreamer) NodeInfo() warpnet.NodeInfo {
     return warpnet.NodeInfo{OwnerId: "owner123", ID: "node-owner"}
 }
 
+type mockLikeStorer struct {
+    LikeFunc       func(string, string) (uint64, error)
+    UnlikeFunc     func(string, string) (uint64, error)
+    LikesCountFunc func(string) (uint64, error)
+    LikersFunc     func(string, *uint64, *string) ([]string, string, error)
+}
+func (m *mockLikeStorer) Like(tweetId, userId string) (uint64, error) {
+    if m.LikeFunc != nil { return m.LikeFunc(tweetId, userId) }
+    return 0, nil
+}
+func (m *mockLikeStorer) Unlike(tweetId, userId string) (uint64, error) {
+    if m.UnlikeFunc != nil { return m.UnlikeFunc(tweetId, userId) }
+    return 0, nil
+}
+func (m *mockLikeStorer) LikesCount(tweetId string) (uint64, error) {
+    if m.LikesCountFunc != nil { return m.LikesCountFunc(tweetId) }
+    return 0, nil
+}
+func (m *mockLikeStorer) Likers(tweetId string, l *uint64, c *string) ([]string, string, error) {
+    if m.LikersFunc != nil { return m.LikersFunc(tweetId, l, c) }
+    return nil, "", nil
+}
+
 // ==================== ТЕСТЫ ====================
 
 func TestStreamNewTweetHandler_CornerCases(t *testing.T) {
@@ -1023,14 +1052,15 @@ func TestStreamNewTweetHandler_CornerCases(t *testing.T) {
         errMsg    string
     }{
         {
-            name: "moderation blocked",
-            event: event.NewTweetEvent{Id: "t1", UserId: "owner123", Text: "bad", Moderation: &event.ModerationResult{IsOk: false}},
+            name: "moderation blocked -> blocklisted, no error",
+            event: event.NewTweetEvent{Id: "t1", UserId: "owner123", Text: "bad", Moderation: &domain.TweetModeration{IsOk: false}},
             setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
                 o.owner = owner
                 ts.BlocklistFunc = func(id string) error { return nil }
             },
-            wantErr: true,
-            errMsg:  "tweet is moderated", // зависит от реализации Blocklist
+            // A moderated-out tweet is blocklisted and the handler returns
+            // Blocklist's (nil) error — it does not surface a handler error.
+            wantErr: false,
         },
         {
             name:    "empty user id",
@@ -1110,8 +1140,7 @@ func TestStreamNewTweetHandler_CornerCases(t *testing.T) {
 
             handler := StreamNewTweetHandler(broadcaster, ownerRepo, tweetRepo, timeline, follow, userRepo, nil, streamer)
 
-            // В реальных тестах лучше делать json.Marshal(tt.event)
-            _, err := handler([]byte(`{}`), nil)
+            _, err := handler(marshal(t, tt.event), nil)
 
             if tt.wantErr {
                 require.Error(t, err)
@@ -1178,7 +1207,7 @@ func TestStreamEditTweetHandler_CornerCases(t *testing.T) {
             tt.setup(repo, tl)
 
             handler := StreamEditTweetHandler(repo, tl)
-            _, err := handler([]byte(`{}`), nil)
+            _, err := handler(marshal(t, tt.ev), nil)
 
             if tt.wantErr {
                 assert.Error(t, err)
@@ -1242,7 +1271,7 @@ func TestStreamGetTweetHandler_CornerCases(t *testing.T) {
             tt.setup(ts, uf, s, o)
 
             handler := StreamGetTweetHandler(ts, o, uf, s)
-            _, err := handler([]byte(`{}`), nil)
+            _, err := handler(marshal(t, tt.ev), nil)
 
             if tt.wantErr {
                 assert.Error(t, err)
@@ -1289,7 +1318,7 @@ func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
             tt.setup(ts, uf, s)
 
             handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockLikeStorer{}, uf, s)
-            _, err := handler([]byte(`{}`), nil)
+            _, err := handler(marshal(t, tt.ev), nil)
 
             if tt.wantErr {
                 assert.Error(t, err)
