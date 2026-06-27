@@ -59,7 +59,6 @@ object PrefKeys {
     const val SCHEMA_VERSION: String = "schema_version"
     const val LAST_USED_PUSH_PROVIDER = "lastUsedPushProvider"
 
-    /** Whether we've already prompted the user to disable battery optimizations. */
     const val ASKED_IGNORE_BATTERY_OPTIMIZATIONS = "askedIgnoreBatteryOptimizations"
 
     const val APP_THEME = "appTheme"

@@ -181,9 +181,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             }
         }
 
-    // The battery-optimization system dialog does not report a reliable result
-    // code, so the launcher result is ignored; the actual state is re-read from
-    // PowerManager on the next launch.
     private val requestIgnoreBatteryOptimizationsLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
 
@@ -244,8 +241,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             }
         }
 
-        // Ask once to exempt Warpdroid from battery optimizations so the paired
-        // node can keep running in the background without restrictions.
         requestIgnoreBatteryOptimizations()
 
         setContentView(binding.root)
@@ -1051,9 +1046,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     override fun getActionButton() = binding.composeButton
 
-    // Prompt the user once to whitelist Warpdroid from Doze / battery
-    // optimizations. The system enforces background limits only while the app
-    // is optimized, so there is nothing to do once it is already exempt.
     @SuppressLint("BatteryLife")
     private fun requestIgnoreBatteryOptimizations() {
         val powerManager = getSystemService(PowerManager::class.java) ?: return
