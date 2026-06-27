@@ -13,7 +13,7 @@ enum class NotificationChannelData(
     @StringRes val description: Int,
 ) {
     MENTION(
-        listOf(Notification.Type.Mention),
+        listOf(Notification.Type.Mention, Notification.Type.Reply),
         R.string.notification_mention_name,
         R.string.notification_mention_descriptions,
     ),
