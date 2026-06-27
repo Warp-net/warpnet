@@ -113,10 +113,15 @@ data class GetAllTweetsEvent(
     val limit: Int = 40,
 )
 
+// For a reply the target lives under its parent tweet's partition; the node
+// resolves it by parentId, falling back to rootId (they coincide for a direct
+// reply to the thread root). Both empty means a top-level tweet.
 @JsonClass(generateAdapter = true)
 data class GetTweetEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
+    @Json(name = "parent_id") val parentId: String = "",
+    @Json(name = "root_id") val rootId: String = "",
 )
 
 @JsonClass(generateAdapter = true)
@@ -163,10 +168,14 @@ data class GetTweetStatsEvent(
     @Json(name = "user_id") val userId: String,
 )
 
+// For a reply, parentId/rootId address the parent partition it is stored
+// under so the node deletes it from the thread (not the timeline keyspace).
 @JsonClass(generateAdapter = true)
 data class DeleteTweetEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
+    @Json(name = "parent_id") val parentId: String = "",
+    @Json(name = "root_id") val rootId: String = "",
 )
 
 @JsonClass(generateAdapter = true)

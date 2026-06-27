@@ -251,7 +251,10 @@ class WarpnetRepository @Inject constructor(
         val cache = mutableMapOf<String, WarpnetUser>()
         var steps = 0
         while (!current.parentId.isNullOrEmpty() && steps < maxDepth) {
-            val parent = runCatching { fetchTweetRaw(current.parentId!!, userId) }.getOrNull() ?: break
+            // The parent is a reply stored under its own parent; we don't know
+            // that grandparent here, so pass the thread root as the fallback
+            // partition (resolves parents that hang directly off the root).
+            val parent = runCatching { fetchTweetRaw(current.parentId!!, userId, rootId = current.rootId) }.getOrNull() ?: break
             chain += parent.toTweet(resolveUser(parent.userId, cache))
             current = parent
             steps++
@@ -259,11 +262,11 @@ class WarpnetRepository @Inject constructor(
         return chain.asReversed()
     }
 
-    private suspend fun fetchTweetRaw(tweetId: String, userId: String): WarpnetTweet {
+    private suspend fun fetchTweetRaw(tweetId: String, userId: String, parentId: String = "", rootId: String = ""): WarpnetTweet {
         tweetCache.get(tweetId)?.let { return it }
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET,
-            getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId)),
+            getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId, parentId = parentId, rootId = rootId)),
         )
         val tweet = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("fetchTweetRaw returned empty body for $tweetId")
@@ -326,9 +329,20 @@ class WarpnetRepository @Inject constructor(
     }
 
     suspend fun deleteStatus(tweetId: String, userId: String) {
+        // A reply is stored under its parent's partition, so the delete must
+        // carry parent/root. Recover them from the cached body (a viewed reply
+        // is cached by getReplies); a top-level tweet leaves them empty.
+        val cached = tweetCache.get(tweetId)
         client.request(
             ProtocolIds.PRIVATE_DELETE_TWEET,
-            deleteTweetAdapter.toJson(DeleteTweetEvent(tweetId = tweetId, userId = userId)),
+            deleteTweetAdapter.toJson(
+                DeleteTweetEvent(
+                    tweetId = tweetId,
+                    userId = userId,
+                    parentId = cached?.parentId.orEmpty(),
+                    rootId = cached?.rootId.orEmpty(),
+                ),
+            ),
         )
         tweetCache.invalidate(tweetId)
     }
