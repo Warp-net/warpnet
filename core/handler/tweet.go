@@ -338,12 +338,22 @@ func StreamGetTweetHandler(
 	}
 }
 
-// localTweet resolves a tweet from local storage: a reply (ParentId set and
-// distinct from TweetId) is read from the thread index under its parent,
-// anything else from the timeline keyspace.
+// replyParent returns the partition a reply is stored under: its ParentId,
+// falling back to RootId (they coincide for a direct reply to the thread
+// root). Empty means the target is not addressed as a reply.
+func replyParent(parentId, rootId string) string {
+	if parentId != "" {
+		return parentId
+	}
+	return rootId
+}
+
+// localTweet resolves a tweet from local storage: a reply (addressed by a
+// parent distinct from itself) is read from the thread index under its
+// parent, anything else from the timeline keyspace.
 func localTweet(repo TweetsStorer, ev event.GetTweetEvent) (domain.Tweet, error) {
-	if ev.ParentId != "" && ev.ParentId != ev.TweetId {
-		parentId := strings.TrimPrefix(ev.ParentId, domain.RetweetPrefix)
+	if parent := replyParent(ev.ParentId, ev.RootId); parent != "" && parent != ev.TweetId {
+		parentId := strings.TrimPrefix(parent, domain.RetweetPrefix)
 		id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		if t, err := repo.GetReply(parentId, id); err == nil {
 			return t, nil
@@ -471,11 +481,7 @@ func getThreadReplies(
 ) (any, error) {
 	// The replies are partitioned by their parent tweet. Clients may name it
 	// as ParentId, or as RootId when the parent is the thread root itself.
-	parentId := ev.ParentId
-	if parentId == "" {
-		parentId = ev.RootId
-	}
-	parentId = strings.TrimPrefix(parentId, domain.RetweetPrefix)
+	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
 
 	replies, cursor, err := repo.GetReplies(parentId, ev.Limit, ev.Cursor)
 	if err != nil {
@@ -544,9 +550,10 @@ func StreamDeleteTweetHandler(
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		// A reply carries its ParentId: delete it from the thread index under
-		// its parent and forward the deletion to the parent author's node.
-		if ev.ParentId != "" && ev.ParentId != ev.TweetId {
+		// A reply is addressed by its parent (ParentId, or RootId as fallback):
+		// delete it from the thread index under its parent and forward the
+		// deletion to the parent author's node.
+		if parent := replyParent(ev.ParentId, ev.RootId); parent != "" && parent != ev.TweetId {
 			return deleteReply(ev, repo, userRepo, streamer)
 		}
 
@@ -591,7 +598,7 @@ func deleteReply(
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) (any, error) {
-	parentId := strings.TrimPrefix(ev.ParentId, domain.RetweetPrefix)
+	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
 	id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
 	reply, err := repo.DeleteReply(parentId, id)

@@ -92,7 +92,7 @@ export default {
       let fetched = null;
       if (isReply) {
         fetched = await warpnetService.getReply({
-          parentId, replyId: tweetId, userId: userIdHint,
+          parentId, rootId, replyId: tweetId, userId: userIdHint,
         });
         if (fetched && fetched.reply) fetched = fetched.reply;
       } else {
