@@ -85,14 +85,14 @@ export default {
         return;
       }
 
-      // Replies aren't stored under the user's TWEETS namespace, so
-      // /public/get/tweet returns 404 for them. Use /public/get/reply
-      // when the route hint says we're looking at a reply.
+      // Replies live in the thread index, not under the user's TWEETS
+      // partition, so they're fetched by their parent (the tweet they reply
+      // to) when the route hint says we're looking at a reply.
       const isReply = !!parentId && rootId && rootId !== tweetId;
       let fetched = null;
       if (isReply) {
         fetched = await warpnetService.getReply({
-          rootId, replyId: tweetId, userId: userIdHint,
+          parentId, rootId, replyId: tweetId, userId: userIdHint,
         });
         if (fetched && fetched.reply) fetched = fetched.reply;
       } else {

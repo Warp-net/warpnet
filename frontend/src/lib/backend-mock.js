@@ -37,12 +37,9 @@ import {
     PRIVATE_POST_UPLOAD_IMAGE,
     PRIVATE_POST_USER,
     PRIVATE_DELETE_MESSAGE,
-    PUBLIC_DELETE_REPLY,
     PUBLIC_GET_FOLLOWINGS,
     PUBLIC_GET_FOLLOWERS,
     PUBLIC_GET_IMAGE,
-    PUBLIC_GET_REPLIES,
-    PUBLIC_GET_REPLY,
     PUBLIC_GET_TWEET,
     PUBLIC_GET_TWEET_STATS,
     PUBLIC_GET_TWEETS,
@@ -53,7 +50,6 @@ import {
     PUBLIC_POST_FOLLOW,
     PUBLIC_POST_LIKE,
     PUBLIC_POST_MESSAGE,
-    PUBLIC_POST_REPLY,
     PUBLIC_POST_RETWEET,
     PUBLIC_POST_UNFOLLOW,
     PUBLIC_POST_UNLIKE,
@@ -101,6 +97,28 @@ function generateResponse(arg) {
             }
 
         case PRIVATE_POST_TWEET:
+            // A reply is a tweet with a parent: store it in the thread, bump
+            // the parent's reply count, and keep it out of the timeline.
+            if (arg.body.parent_id) {
+                let reply = {
+                    id : generateUUID(),
+                    root_id : arg.body.root_id,
+                    parent_id : arg.body.parent_id,
+                    parent_user_id : arg.body.parent_user_id,
+                    text : arg.body.text || "Missing!",
+                    username : arg.body.username || "Missing!",
+                    user_id : arg.body.user_id,
+                    created_at : arg.body.created_at || Date.now().toString(),
+                };
+                mockMap.set("reply:"+reply.id, reply);
+                let replyStats = mockMap.get("stats:"+arg.body.parent_id)
+                if (replyStats) {
+                    replyStats.replies_count++
+                    mockMap.set("stats:"+arg.body.parent_id, replyStats)
+                }
+                return reply;
+            }
+
             const tweetUid = generateUUID()
             let t = {
                 id : tweetUid,
@@ -149,14 +167,28 @@ function generateResponse(arg) {
 
         case PUBLIC_GET_TWEET:
             const gotTweet =  mockMap.get("tweet:"+arg.body.tweet_id)
-            if (!gotTweet) return {code:404, message:"Tweet not found"};
-            return gotTweet;
+            if (gotTweet) return gotTweet;
+            // A reply carries its thread root_id; fall back to the thread store.
+            const gotReplyTweet = mockMap.get("reply:"+arg.body.tweet_id)
+            if (!gotReplyTweet) return {code:404, message:"Tweet not found"};
+            return gotReplyTweet;
 
         case PRIVATE_GET_TIMELINE :
             const timelineTweets = mockMap.get("timeline") || [];
             return {cursor: "end", user_id: arg.body.user_id, tweets: timelineTweets}
 
         case PUBLIC_GET_TWEETS:
+            // A root_id selects the thread branch: replies are tweets with a
+            // parent, returned as a flat tweets list.
+            if (arg.body.root_id) {
+                const parentId = arg.body.parent_id || arg.body.root_id
+                const threadReplies = [];
+                for (const [key, value] of mockMap) {
+                    if (key.startsWith("reply:") && value.parent_id === parentId && value.root_id === arg.body.root_id)
+                        threadReplies.push(value);
+                }
+                return {cursor: "end", user_id: parentId, tweets: threadReplies}
+            }
             let tweetsList = []
             for (const [key, value] of mockMap) {
                 if (key.startsWith("tweet:")) {
@@ -330,46 +362,19 @@ function generateResponse(arg) {
             mockMap.set("stats:"+arg.body.tweet_id, unretweetStats)
             return {code:0, message:"Accepted"};
 
-        case PUBLIC_POST_REPLY:
-            let reply = {
-                id : generateUUID(),
-                root_id : arg.body.root_id,
-                parent_id : arg.body.parent_id,
-                text : arg.body.text || "Missing!",
-                username : arg.body.username || "Missing!",
-                user_id : arg.body.user_id,
-                parent_user_id : arg.body.parent_user_id,
-            };
-
-            mockMap.set("reply:"+reply.id, reply);
-
-            let replyStats = mockMap.get("stats:"+arg.body.root_id)
-            replyStats.replies_count++
-            mockMap.set("stats:"+arg.body.root_id, replyStats)
-            return reply;
-
-        case PUBLIC_GET_REPLIES:
-            const replies = [];
-            for (const [key, value] of mockMap) {
-                if (key.startsWith("reply:") && value.parent_id === arg.body.parent_id && value.root_id === arg.body.root_id)
-                    replies.push({reply: value, children: []});
-            }
-            return {cursor: "end", replies: replies};
-
-        case PUBLIC_GET_REPLY:
-            const gotReply =  mockMap.get("reply:"+arg.body.reply_id);
-            if (!gotReply) return {code:404, message:"Reply not found"};
-            return gotReply;
-
-        case PUBLIC_DELETE_REPLY:
-            let deleteReplyStats = mockMap.get("stats:"+arg.body.root_id)
-            deleteReplyStats.replies_count--
-            mockMap.set("stats:"+arg.body.root_id, deleteReplyStats)
-
-            mockMap.delete("reply:"+arg.body.reply_id);
-            return {code:0,message:"Accepted"};
-
         case PRIVATE_DELETE_TWEET:
+            // A reply carries its thread root_id; delete it from the thread
+            // store and decrement its parent's reply count.
+            const replyToDelete = mockMap.get("reply:"+arg.body.tweet_id);
+            if (replyToDelete) {
+                const parentStats = mockMap.get("stats:"+replyToDelete.parent_id)
+                if (parentStats) {
+                    parentStats.replies_count--
+                    mockMap.set("stats:"+replyToDelete.parent_id, parentStats)
+                }
+                mockMap.delete("reply:"+arg.body.tweet_id);
+                return {code:0, message:"Accepted"};
+            }
             mockMap.delete("stats:"+arg.body.tweet_id);
             mockMap.delete("tweet:"+arg.body.tweet_id);
             const tl = mockMap.get("timeline") || [];

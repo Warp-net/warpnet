@@ -240,47 +240,50 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 		}
 	})
 
-	t.Run("StreamGetReplyHandler - own reply", func(t *testing.T) {
+	t.Run("StreamGetTweetHandler - own reply", func(t *testing.T) {
 		streamer := stubStreamer{
 			nodeInfo:        ownerInfo,
 			genericStreamFn: failOnStream(t),
 		}
-		h := StreamGetReplyHandler(stubReplyRepo{}, auth, ownerTweetUserRepo, streamer)
-		if _, err := h(marshal(t, event.GetReplyEvent{ReplyId: "reply-1", RootId: rootID, UserId: owner}), nil); err != nil {
+		// A reply carries its ParentId; the own-tweet path resolves it
+		// locally from the thread index without any outbound stream.
+		h := StreamGetTweetHandler(stubTweetRepo{}, auth, ownerTweetUserRepo, streamer)
+		if _, err := h(marshal(t, event.GetTweetEvent{TweetId: "reply-1", ParentId: rootID, UserId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 
-	t.Run("StreamGetRepliesHandler - replies under own tweet", func(t *testing.T) {
+	t.Run("StreamGetTweetsHandler - replies under own tweet", func(t *testing.T) {
 		// No root author id in the event, so the forward branch is skipped and
-		// the request is served from the local store (see reply.go).
-		h := StreamGetRepliesHandler(stubReplyRepo{}, stubReplyUserRepo{}, stubStreamer{})
-		if _, err := h(marshal(t, event.GetAllRepliesEvent{RootId: rootID, ParentId: owner}), nil); err != nil {
+		// the request is served from the local thread store.
+		h := StreamGetTweetsHandler(stubTweetRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		if _, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootID, ParentId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 
-	t.Run("StreamNewReplyHandler - reply to own tweet", func(t *testing.T) {
+	t.Run("StreamNewTweetHandler - reply to own tweet", func(t *testing.T) {
 		streamer := stubStreamer{
 			nodeInfo:        ownerInfo,
 			genericStreamFn: failOnStream(t),
 		}
 		// The reply targets a parent tweet whose author lives on the owner's
 		// node — the handler must serve it locally.
-		userRepo := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+		userRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{Id: userId, NodeId: ownerNodeID}, nil
 		}}
 		parentID := "parent-1"
-		ev := event.NewReplyEvent{
+		parentUserID := owner
+		ev := event.NewTweetEvent{
 			Id:           "reply-1",
 			ParentId:     &parentID,
-			ParentUserId: owner,
+			ParentUserId: &parentUserID,
 			RootId:       rootID,
 			Text:         "hello",
 			UserId:       "stranger",
 			Username:     "stranger",
 		}
-		h := StreamNewReplyHandler(stubReplyRepo{}, userRepo, stubModerationNotifier{}, streamer)
+		h := StreamNewTweetHandler(stubTweetBroadcaster{}, auth, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, userRepo, stubModerationNotifier{}, streamer)
 		if _, err := h(marshal(t, ev), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -367,9 +370,9 @@ func TestStreamGetUsersHandler_DropsSelfPointingRecords(t *testing.T) {
 	}
 }
 
-// Fix #2 regression: StreamNewReplyHandler used to detect "reply to my own
-// tweet" only via parentUser.NodeId == streamer.NodeInfo().ID.String(). When
-// the stored NodeId drifted from the runtime peer.ID encoding, that check
+// Fix #2 regression: the reply path used to detect "reply to my own tweet"
+// only via parentUser.NodeId == streamer.NodeInfo().ID.String(). When the
+// stored NodeId drifted from the runtime peer.ID encoding, that check
 // silently returned false and the handler dialed self. The check must also
 // match by owner id.
 func TestStreamNewReplyHandler_OwnTweet_NodeIdFormatDrift(t *testing.T) {
@@ -386,21 +389,22 @@ func TestStreamNewReplyHandler_OwnTweet_NodeIdFormatDrift(t *testing.T) {
 	// parentUser.NodeId here intentionally diverges from
 	// ownerPeerID.String() to simulate a stored record whose NodeId was
 	// captured in a different encoding. Only the owner-id branch can save us.
-	userRepo := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+	userRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: "stale-encoded-form"}, nil
 	}}
 
-	ev := event.NewReplyEvent{
+	parentUserID := owner
+	ev := event.NewTweetEvent{
 		Id:           "reply-1",
 		ParentId:     &parentID,
-		ParentUserId: owner,
+		ParentUserId: &parentUserID,
 		RootId:       rootID,
 		Text:         "reply body",
 		UserId:       "stranger",
 		Username:     "stranger",
 	}
 
-	h := StreamNewReplyHandler(stubReplyRepo{}, userRepo, stubModerationNotifier{}, streamer)
+	h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, userRepo, stubModerationNotifier{}, streamer)
 	if _, err := h(marshal(t, ev), nil); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

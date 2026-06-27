@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -74,6 +75,228 @@ func (s *TweetRepoTestSuite) TestCreateAndGetTweet() {
 	s.Require().NoError(err)
 	s.Equal(created.Id, fetched.Id)
 	s.Equal(created.Text, fetched.Text)
+}
+
+// TestCreateTweetAndReply covers the unified model end to end: a top-level
+// tweet lands in the author's timeline keyspace, while a reply to it is a
+// tweet with a parent that lives in the thread index — retrievable via the
+// thread APIs, counted against its parent, and kept out of every timeline.
+func (s *TweetRepoTestSuite) TestCreateTweetAndReply() {
+	author := ulid.Make().String()
+
+	tweet, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: "root tweet"})
+	s.Require().NoError(err)
+	s.Equal(tweet.Id, tweet.RootId, "top-level tweet is its own root")
+	s.False(tweet.IsReply())
+
+	limit := uint64(10)
+	list, _, err := s.repo.List(author, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(list, 1)
+	s.Equal(tweet.Id, list[0].Id)
+
+	// A reply is a domain.Tweet with a parent, stored in the thread index.
+	replier := ulid.Make().String()
+	reply, err := s.repo.AddReply(domain.Tweet{
+		UserId:   replier,
+		Text:     "a reply",
+		RootId:   tweet.Id,
+		ParentId: &tweet.Id,
+	})
+	s.Require().NoError(err)
+	s.True(reply.IsReply())
+	s.NotEmpty(reply.Id)
+
+	// The reply must not pollute either party's timeline keyspace.
+	authorList, _, err := s.repo.List(author, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(authorList, 1, "reply must stay out of the parent author's timeline")
+	replierList, _, err := s.repo.List(replier, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(replierList, 0, "reply must stay out of the replier's timeline")
+
+	// The reply is retrievable from the thread by id and via the tree.
+	gotReply, err := s.repo.GetReply(tweet.Id, reply.Id)
+	s.Require().NoError(err)
+	s.Equal("a reply", gotReply.Text)
+
+	thread, _, err := s.repo.GetReplies(tweet.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(thread, 1)
+	s.Equal(reply.Id, thread[0].Id)
+
+	// The parent's reply counter incremented.
+	count, err := s.repo.RepliesCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+
+	// Deleting the reply removes it from the thread and decrements the count.
+	_, err = s.repo.DeleteReply(tweet.Id, reply.Id)
+	s.Require().NoError(err)
+	_, err = s.repo.GetReply(tweet.Id, reply.Id)
+	s.Error(err)
+	count, err = s.repo.RepliesCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+}
+
+// TestThreadNesting proves replies nest by partitioning on the parent: a
+// reply-to-a-reply is stored under its immediate parent, each level is a
+// separate scan, the thread RootId is preserved through the chain, and none
+// of the replies leak into any author's timeline.
+func (s *TweetRepoTestSuite) TestThreadNesting() {
+	author := ulid.Make().String()
+	replier := ulid.Make().String()
+
+	root, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: "root"})
+	s.Require().NoError(err)
+
+	r1, err := s.repo.AddReply(domain.Tweet{
+		UserId: replier, Text: "lvl1", RootId: root.Id, ParentId: &root.Id,
+	})
+	s.Require().NoError(err)
+
+	r2, err := s.repo.AddReply(domain.Tweet{
+		UserId: replier, Text: "lvl2", RootId: root.Id, ParentId: &r1.Id,
+	})
+	s.Require().NoError(err)
+
+	// RootId is preserved through the chain (not rewritten to the reply id).
+	s.Equal(root.Id, r1.RootId)
+	s.Equal(root.Id, r2.RootId)
+
+	limit := uint64(10)
+
+	// Each level is the direct-replies scan of its parent.
+	lvl1, _, err := s.repo.GetReplies(root.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(lvl1, 1)
+	s.Equal(r1.Id, lvl1[0].Id)
+
+	lvl2, _, err := s.repo.GetReplies(r1.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(lvl2, 1)
+	s.Equal(r2.Id, lvl2[0].Id)
+
+	leaf, _, err := s.repo.GetReplies(r2.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(leaf, 0)
+
+	// Point lookups resolve under the right parent.
+	got1, err := s.repo.GetReply(root.Id, r1.Id)
+	s.Require().NoError(err)
+	s.Equal("lvl1", got1.Text)
+	got2, err := s.repo.GetReply(r1.Id, r2.Id)
+	s.Require().NoError(err)
+	s.Equal("lvl2", got2.Text)
+
+	// Per-parent reply counts.
+	c0, _ := s.repo.RepliesCount(root.Id)
+	s.Equal(uint64(1), c0)
+	c1, _ := s.repo.RepliesCount(r1.Id)
+	s.Equal(uint64(1), c1)
+
+	// Nothing leaked into any timeline: only the root tweet is in the
+	// author's list, and the replier authored no top-level tweets.
+	authorList, _, err := s.repo.List(author, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(authorList, 1)
+	s.Equal(root.Id, authorList[0].Id)
+	replierList, _, err := s.repo.List(replier, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(replierList, 0)
+
+	// Deleting the mid-level reply clears its parent's scan and count.
+	_, err = s.repo.DeleteReply(root.Id, r1.Id)
+	s.Require().NoError(err)
+	lvl1, _, err = s.repo.GetReplies(root.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(lvl1, 0)
+	c0, _ = s.repo.RepliesCount(root.Id)
+	s.Equal(uint64(0), c0)
+}
+
+// TestThreadNestingDeep builds a 10-level deep reply chain (each reply
+// answers the previous one) and verifies the storage holds it correctly:
+// every level is its parent's single direct reply, every reply keeps the
+// original thread RootId, every point lookup resolves under the right parent,
+// per-parent counts are 1, and none of the 10 replies leak into a timeline.
+func (s *TweetRepoTestSuite) TestThreadNestingDeep() {
+	const depth = 10
+	author := ulid.Make().String()
+	replier := ulid.Make().String()
+
+	root, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: "root"})
+	s.Require().NoError(err)
+
+	// Build the chain: chain[0] is the root tweet, chain[i] replies to chain[i-1].
+	chain := []domain.Tweet{root}
+	for i := 1; i <= depth; i++ {
+		parentID := chain[i-1].Id
+		r, err := s.repo.AddReply(domain.Tweet{
+			UserId:   replier,
+			Text:     "lvl" + strconv.Itoa(i),
+			RootId:   root.Id,
+			ParentId: &parentID,
+		})
+		s.Require().NoError(err)
+		chain = append(chain, r)
+	}
+
+	limit := uint64(10)
+	for i := 1; i <= depth; i++ {
+		parentID := chain[i-1].Id
+		reply := chain[i]
+
+		// RootId is preserved at every depth (never rewritten to the reply id).
+		s.Equal(root.Id, reply.RootId, "level %d must keep the thread root", i)
+
+		// Each parent has exactly its one direct reply.
+		kids, _, err := s.repo.GetReplies(parentID, &limit, nil)
+		s.Require().NoError(err)
+		s.Require().Len(kids, 1, "level %d parent must have 1 direct reply", i)
+		s.Equal(reply.Id, kids[0].Id)
+
+		// Point lookup resolves under the correct parent.
+		got, err := s.repo.GetReply(parentID, reply.Id)
+		s.Require().NoError(err)
+		s.Equal("lvl"+strconv.Itoa(i), got.Text)
+
+		// Per-parent reply count.
+		c, err := s.repo.RepliesCount(parentID)
+		s.Require().NoError(err)
+		s.Equal(uint64(1), c, "level %d parent count", i)
+	}
+
+	// The deepest reply has no children.
+	leaf, _, err := s.repo.GetReplies(chain[depth].Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(leaf, 0)
+
+	// No reply leaked into a timeline: only the root tweet is in the author's
+	// list, and the replier authored no top-level tweets.
+	authorList, _, err := s.repo.List(author, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(authorList, 1)
+	s.Equal(root.Id, authorList[0].Id)
+	replierList, _, err := s.repo.List(replier, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(replierList, 0)
+
+	// Deleting a mid-chain reply clears its parent's scan/count; deeper
+	// replies remain stored under their own parents.
+	mid := depth / 2
+	_, err = s.repo.DeleteReply(chain[mid-1].Id, chain[mid].Id)
+	s.Require().NoError(err)
+	gone, _, err := s.repo.GetReplies(chain[mid-1].Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(gone, 0)
+	c, err := s.repo.RepliesCount(chain[mid-1].Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), c)
+	stillThere, err := s.repo.GetReply(chain[mid].Id, chain[mid+1].Id)
+	s.Require().NoError(err)
+	s.Equal("lvl"+strconv.Itoa(mid+1), stillThere.Text)
 }
 
 func (s *TweetRepoTestSuite) TestPinAndUnpin() {
@@ -302,6 +525,105 @@ func (s *TweetRepoTestSuite) TestRecordView_DifferentTweetsLockIndependently() {
 	b, err := s.repo.RecordView(tweetB, viewer)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), b)
+}
+
+func (s *TweetRepoTestSuite) TestAddAndGetReply() {
+	parentID := ulid.Make().String()
+	rootID := ulid.Make().String()
+	reply := domain.Tweet{
+		Id:        ulid.Make().String(),
+		RootId:    rootID,
+		ParentId:  &parentID,
+		UserId:    "user123",
+		Text:      "This is a reply",
+		CreatedAt: time.Now(),
+	}
+
+	saved, err := s.repo.AddReply(reply)
+	s.Require().NoError(err)
+	s.NotEmpty(saved.Id)
+
+	got, err := s.repo.GetReply(parentID, reply.Id)
+	s.Require().NoError(err)
+	s.Equal(reply.Text, got.Text)
+	s.Equal(reply.UserId, got.UserId)
+}
+
+func (s *TweetRepoTestSuite) TestRepliesCount() {
+	parentID := ulid.Make().String()
+	rootID := ulid.Make().String()
+
+	for i := 0; i < 3; i++ {
+		reply := domain.Tweet{
+			Id:        ulid.Make().String(),
+			RootId:    rootID,
+			ParentId:  &parentID,
+			UserId:    "user123",
+			Text:      "reply",
+			CreatedAt: time.Now(),
+		}
+		_, err := s.repo.AddReply(reply)
+		s.Require().NoError(err)
+	}
+
+	count, err := s.repo.RepliesCount(parentID)
+	s.Require().NoError(err)
+	s.Equal(uint64(3), count)
+}
+
+func (s *TweetRepoTestSuite) TestDeleteReply() {
+	parentID := ulid.Make().String()
+	rootID := ulid.Make().String()
+	replyID := ulid.Make().String()
+
+	reply := domain.Tweet{
+		Id:        replyID,
+		RootId:    rootID,
+		ParentId:  &parentID,
+		UserId:    "user123",
+		Text:      "to delete",
+		CreatedAt: time.Now(),
+	}
+
+	_, err := s.repo.AddReply(reply)
+	s.Require().NoError(err)
+
+	deleted, err := s.repo.DeleteReply(parentID, replyID)
+	s.Require().NoError(err)
+	s.Equal(replyID, deleted.Id)
+	s.Require().NotNil(deleted.ParentId)
+	s.Equal(parentID, *deleted.ParentId)
+
+	_, err = s.repo.GetReply(parentID, replyID)
+	s.Error(err)
+}
+
+func (s *TweetRepoTestSuite) TestGetReplies() {
+	rootID := ulid.Make().String()
+	parentID := ulid.Make().String()
+
+	for i := 0; i < 3; i++ {
+		reply := domain.Tweet{
+			Id:        ulid.Make().String(),
+			RootId:    rootID,
+			ParentId:  &parentID,
+			UserId:    "user",
+			Text:      "child",
+			CreatedAt: time.Now().Add(time.Duration(i) * time.Second),
+		}
+		_, err := s.repo.AddReply(reply)
+		s.Require().NoError(err)
+	}
+
+	limit := uint64(10)
+	replies, cursor, err := s.repo.GetReplies(parentID, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(replies, 3)
+	s.Equal(cursor, "end")
+
+	for _, reply := range replies {
+		s.Equal("child", reply.Text)
+	}
 }
 
 func TestTweetRepoTestSuite(t *testing.T) {

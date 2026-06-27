@@ -52,20 +52,25 @@ func TestNotificationsDeliveredToRecipient_Reply(t *testing.T) {
 	parentId := "parent-1"
 	nodeID := warpnet.WarpPeerID("alice-node")
 
-	h := StreamNewReplyHandler(
-		stubReplyRepo{},
-		stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+	h := StreamNewTweetHandler(
+		stubTweetBroadcaster{},
+		stubAuth{owner: domain.Owner{UserId: tweetOwner}},
+		stubTweetRepo{},
+		stubTimelineRepo{},
+		stubFollowChecker{},
+		stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{Id: userId, NodeId: nodeID.String()}, nil
 		}},
 		repo,
 		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner, ID: nodeID}},
 	)
 
-	ev := event.NewReplyEvent{
+	parentUserID := tweetOwner
+	ev := event.NewTweetEvent{
 		CreatedAt:    time.Now(),
 		Id:           "reply-1",
 		ParentId:     &parentId,
-		ParentUserId: tweetOwner,
+		ParentUserId: &parentUserID,
 		RootId:       rootId,
 		Text:         "a reply",
 		UserId:       replier,
@@ -204,20 +209,25 @@ func TestNotifications_NoSelfNotification(t *testing.T) {
 		parentId := "parent-1"
 		nodeID := warpnet.WarpPeerID("alice-node")
 
-		h := StreamNewReplyHandler(
-			stubReplyRepo{},
-			stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+		h := StreamNewTweetHandler(
+			stubTweetBroadcaster{},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			stubTweetRepo{},
+			stubTimelineRepo{},
+			stubFollowChecker{},
+			stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 				return domain.User{Id: userId, NodeId: nodeID.String()}, nil
 			}},
 			repo,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}},
 		)
 
-		ev := event.NewReplyEvent{
+		parentUserID := owner
+		ev := event.NewTweetEvent{
 			CreatedAt:    time.Now(),
 			Id:           "reply-1",
 			ParentId:     &parentId,
-			ParentUserId: owner,
+			ParentUserId: &parentUserID,
 			RootId:       "root-1",
 			Text:         "self reply",
 			UserId:       owner,

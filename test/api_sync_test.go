@@ -1063,7 +1063,6 @@ var protocolsWithoutResponseDTO = map[string]string{
 	"PUBLIC_POST_PIN":                       "ack-only: handler returns event.Accepted",
 	"PUBLIC_POST_UNPIN":                     "ack-only: handler returns event.Accepted",
 	"PUBLIC_POST_VIEW":                      "ack-only: handler returns event.Accepted",
-	"PUBLIC_DELETE_REPLY":                   "ack-only: handler returns event.Accepted",
 	"PRIVATE_DELETE_TWEET":                  "ack-only: handler returns event.Accepted",
 }
 

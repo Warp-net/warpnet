@@ -48,6 +48,7 @@ import (
 var (
 	ErrTweetNotFound = local.DBError("tweet not found")
 	ErrViewsNotFound = local.DBError("views not found")
+	ErrReplyNotFound = local.DBError("reply not found")
 )
 
 const (
@@ -494,6 +495,137 @@ func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]dom
 		return tweets[i].CreatedAt.After(tweets[j].CreatedAt)
 	})
 	return tweets, cur, nil
+}
+
+// ====================== REPLIES (thread) ====================
+
+// A reply IS a tweet. It is stored with the same /TWEETS keys as any tweet,
+// just partitioned by its ParentId (the tweet it replies to) instead of by
+// the author. So the reply methods are thin wrappers over the tweet storage:
+//
+//	AddReply     -> storeTweet(parentId, ...)  (keeps RootId; Create would not)
+//	GetReply     -> Get(parentId, replyId)
+//	DeleteReply  -> delete under parentId, returning the body for propagation
+//	GetReplies   -> List(parentId)
+//	RepliesCount -> TweetsCount(parentId)
+//
+// "Replies to tweet X" is then List(X): the same scan as a user's tweets,
+// since X's partition holds exactly the replies to X. RootId stays on the
+// record for client-side threading but is not part of any key.
+
+// AddReply stores a reply under its parent's partition and bumps the parent's
+// count. Unlike Create it does not rewrite RootId, so the thread root is kept.
+func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
+	if reply.UserId == "" && reply.Text == "" {
+		return reply, local.DBError("empty reply")
+	}
+	if reply.ParentId == nil || *reply.ParentId == "" {
+		return reply, local.DBError("empty parent")
+	}
+	if reply.Id == "" {
+		reply.Id = ulid.Make().String()
+	}
+	if reply.CreatedAt.IsZero() {
+		reply.CreatedAt = time.Now()
+	}
+	parentID := *reply.ParentId
+	countKey := tweetsCountKey(parentID)
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return reply, fmt.Errorf("creating transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	if _, err := storeTweet(txn, parentID, reply, math.MaxInt64, false); err != nil {
+		return reply, err
+	}
+	if _, err = txn.Increment(countKey); err != nil {
+		return reply, err
+	}
+	if err := txn.Commit(); err != nil {
+		return reply, err
+	}
+	if repo.statsDb != nil {
+		if err := repo.statsDb.Increment(countKey.DatastoreKey()); err != nil {
+			log.Warnf("reply: stats db increment: %v", err)
+		}
+	}
+	return reply, nil
+}
+
+// GetReply fetches a reply by its parent + id — the tweet Get under the parent
+// partition.
+func (repo *TweetRepo) GetReply(parentID, replyID string) (domain.Tweet, error) {
+	if parentID == "" || replyID == "" {
+		return domain.Tweet{}, local.DBError("parentID and replyID cannot be empty")
+	}
+	return repo.Get(parentID, replyID)
+}
+
+// RepliesCount is the count of tweets under the tweet's partition, i.e. its
+// direct replies.
+func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
+	if tweetId == "" {
+		return 0, local.DBError("empty tweet id")
+	}
+	return repo.TweetsCount(tweetId)
+}
+
+// DeleteReply removes a reply (the tweet delete under the parent partition)
+// and returns the deleted reply so the caller can propagate the deletion
+// without a second read.
+func (repo *TweetRepo) DeleteReply(parentID, replyID string) (domain.Tweet, error) {
+	var reply domain.Tweet
+	if parentID == "" || replyID == "" {
+		return reply, local.DBError("parentID or replyID cannot be empty")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return reply, fmt.Errorf("creating transaction: %w", err)
+	}
+	defer txn.Rollback()
+
+	reply, _, err = get(txn, parentID, replyID)
+	if err != nil {
+		return reply, err
+	}
+	if err := deleteTweet(txn, parentID, replyID); err != nil {
+		return reply, err
+	}
+	countKey := tweetsCountKey(parentID)
+	if _, err = txn.Decrement(countKey); err != nil {
+		return reply, err
+	}
+	if err := txn.Commit(); err != nil {
+		return reply, err
+	}
+	if repo.statsDb != nil {
+		if err := repo.statsDb.Decrement(countKey.DatastoreKey()); err != nil {
+			log.Warnf("reply: stats db decrement: %v", err)
+		}
+	}
+	return reply, nil
+}
+
+// GetReplies returns the direct replies to parentID, newest first — the tweet
+// List of the parent's partition. Replies are tweets, so the result is a flat
+// []domain.Tweet, each carrying its ParentId for clients that want to nest.
+func (repo *TweetRepo) GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+	if parentID == "" {
+		return nil, "", local.DBError("parentID cannot be blank")
+	}
+	return repo.List(parentID, limit, cursor)
+}
+
+// tweetsCountKey is the per-partition tweet counter used by Create/Delete; for
+// a tweet's partition it doubles as that tweet's reply count.
+func tweetsCountKey(partitionID string) local.DatabaseKey {
+	return local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(tweetsCountSubspace).
+		AddRootID(partitionID).
+		Build()
 }
 
 // ====================== RETWEET ====================

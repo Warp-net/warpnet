@@ -75,9 +75,6 @@ type DeleteChatEvent struct {
 // DeleteMessageEvent defines model for DeleteMessageEvent.
 type DeleteMessageEvent = GetMessageEvent
 
-// DeleteReplyEvent defines model for DeleteReplyEvent.
-type DeleteReplyEvent = GetReplyEvent
-
 // DeleteTweetEvent defines model for DeleteTweetEvent.
 type DeleteTweetEvent = GetTweetEvent
 
@@ -154,27 +151,21 @@ type GetAllMessagesEvent struct {
 	Limit   *uint64   `json:"limit,omitempty"`
 }
 
-// GetAllRepliesEvent defines model for GetAllRepliesEvent.
-//
-// ParentId is the parent TWEET id (not a user id) — it selects which
-// subtree of replies inside RootId to return. Empty means "top-level
-// replies of the thread"; the handler treats that as ParentId = RootId.
-// RootId is the root tweet of the thread.
-type GetAllRepliesEvent struct {
-	Cursor   *string   `json:"cursor,omitempty"`
-	Limit    *uint64   `json:"limit,omitempty"`
-	ParentId domain.ID `json:"parent_id"`
-	RootId   domain.ID `json:"root_id"`
-
-	// RootUserId is the root tweet author; forwards go to their home node.
-	RootUserId domain.ID `json:"root_user_id,omitempty"`
-}
-
 // GetAllTweetsEvent defines model for GetAllTweetsEvent.
+//
+// Two shapes share this event, dispatched on RootId:
+//   - timeline/profile: UserId set, RootId empty — returns the user's tweets.
+//   - thread replies: RootId set — returns the replies (tweets with a parent)
+//     under ParentId within that thread; empty ParentId means the replies
+//     hanging directly off RootId. RootUserId is the root tweet author, used
+//     to forward the request to their home node when the thread isn't local.
 type GetAllTweetsEvent struct {
-	Cursor *string   `json:"cursor,omitempty"`
-	Limit  *uint64   `json:"limit,omitempty"`
-	UserId domain.ID `json:"user_id"`
+	Cursor     *string   `json:"cursor,omitempty"`
+	Limit      *uint64   `json:"limit,omitempty"`
+	UserId     domain.ID `json:"user_id"`
+	RootId     domain.ID `json:"root_id,omitempty"`
+	ParentId   domain.ID `json:"parent_id,omitempty"`
+	RootUserId domain.ID `json:"root_user_id,omitempty"`
 }
 
 // GetAllUsersEvent defines model for GetAllUsersEvent.
@@ -229,13 +220,6 @@ type GetTweetStatsEvent struct {
 // GetReTweetsCountEvent defines model for GetReTweetsCountEvent.
 type GetReTweetsCountEvent = GetLikesCountEvent
 
-// GetReplyEvent defines model for GetReplyEvent.
-type GetReplyEvent struct {
-	ReplyId domain.ID `json:"reply_id"`
-	RootId  domain.ID `json:"root_id"`
-	UserId  domain.ID `json:"user_id"`
-}
-
 // GetRetweetersResponse defines model for GetRetweetersResponse.
 type GetRetweetersResponse = UsersResponse
 
@@ -243,9 +227,15 @@ type GetRetweetersResponse = UsersResponse
 type GetTimelineEvent = GetAllTweetsEvent
 
 // GetTweetEvent defines model for GetTweetEvent.
+//
+// For a reply, the target is stored under its parent tweet's partition. The
+// handler resolves it by ParentId, falling back to RootId (they coincide for
+// a direct reply to the thread root). Both empty means a top-level tweet.
 type GetTweetEvent struct {
-	TweetId domain.ID `json:"tweet_id"`
-	UserId  domain.ID `json:"user_id"`
+	TweetId  domain.ID `json:"tweet_id"`
+	UserId   domain.ID `json:"user_id"`
+	ParentId domain.ID `json:"parent_id,omitempty"`
+	RootId   domain.ID `json:"root_id,omitempty"`
 }
 
 // GetUserEvent defines model for GetUserEvent.
@@ -316,27 +306,6 @@ type NewMessageEvent = domain.ChatMessage
 // NewMessageResponse defines model for NewMessageResponse.
 type NewMessageResponse = domain.ChatMessage
 
-// NewReplyEvent defines model for NewReplyEvent.
-//
-// ParentId is the parent TWEET id this reply is attached to (nil/empty
-// means the reply hangs directly off RootId). ParentUserId is the user
-// id of the parent tweet's author — that's the routing key the server
-// uses to forward the request to the right node when the parent tweet
-// lives on a remote peer.
-type NewReplyEvent struct {
-	CreatedAt    time.Time  `json:"created_at"`
-	Id           domain.ID  `json:"id"`
-	ParentId     *domain.ID `json:"parent_id,omitempty"`
-	ParentUserId domain.ID  `json:"parent_user_id"`
-	RootId       domain.ID  `json:"root_id"`
-	Text         string     `json:"text"`
-	UserId       domain.ID  `json:"user_id"`
-	Username     string     `json:"username"`
-}
-
-// NewReplyResponse defines model for NewReplyResponse.
-type NewReplyResponse = domain.Tweet
-
 // NewRetweetEvent defines model for NewRetweetEvent.
 type NewRetweetEvent = domain.Tweet
 
@@ -354,13 +323,6 @@ type Owner = domain.Owner
 
 // ReTweetsCountResponse defines model for ReTweetsCountResponse.
 type ReTweetsCountResponse = LikesCountResponse
-
-// RepliesResponse defines model for RepliesTreeResponse.
-type RepliesResponse struct {
-	Cursor  string             `json:"cursor"`
-	Replies []domain.ReplyNode `json:"replies"`
-	UserId  *domain.ID         `json:"user_id,omitempty"`
-}
 
 // TweetsResponse defines model for TweetsResponse.
 type TweetsResponse struct {
