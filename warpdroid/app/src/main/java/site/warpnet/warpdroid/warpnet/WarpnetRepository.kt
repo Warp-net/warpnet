@@ -28,7 +28,6 @@ import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.dto.DeleteTweetEvent
 import site.warpnet.transport.dto.FollowersResponse
 import site.warpnet.transport.dto.FollowingsResponse
-import site.warpnet.transport.dto.GetAllRepliesEvent
 import site.warpnet.transport.dto.GetAllTweetsEvent
 import site.warpnet.transport.dto.GetAllUsersEvent
 import site.warpnet.transport.dto.GetFollowersEvent
@@ -45,7 +44,6 @@ import site.warpnet.transport.dto.LikeEvent
 import site.warpnet.transport.dto.LikesCountResponse
 import site.warpnet.transport.dto.NewFollowEvent
 import site.warpnet.transport.dto.NewUnfollowEvent
-import site.warpnet.transport.dto.RepliesResponse
 import site.warpnet.transport.dto.TweetStatsResponse
 import site.warpnet.transport.dto.TweetsResponse
 import site.warpnet.transport.dto.UnretweetEvent
@@ -83,7 +81,6 @@ class WarpnetRepository @Inject constructor(
     private val userAdapter = moshi.adapter<WarpnetUser>()
     private val tweetAdapter = moshi.adapter<WarpnetTweet>()
     private val tweetsRespAdapter = moshi.adapter<TweetsResponse>()
-    private val repliesRespAdapter = moshi.adapter<RepliesResponse>()
     private val notificationsRespAdapter = moshi.adapter<GetNotificationsResponse>()
     private val notificationRespAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetNotification>()
     private val likesCountAdapter = moshi.adapter<LikesCountResponse>()
@@ -99,7 +96,6 @@ class WarpnetRepository @Inject constructor(
     private val getAllUsersAdapter = moshi.adapter<GetAllUsersEvent>()
     private val getTweetAdapter = moshi.adapter<GetTweetEvent>()
     private val getTweetStatsAdapter = moshi.adapter<GetTweetStatsEvent>()
-    private val getRepliesAdapter = moshi.adapter<GetAllRepliesEvent>()
     private val getNotifsAdapter = moshi.adapter<GetNotificationsEvent>()
     private val getNotifAdapter = moshi.adapter<site.warpnet.transport.dto.GetNotificationEvent>()
     private val markNotifReadAdapter = moshi.adapter<site.warpnet.transport.dto.MarkNotificationReadEvent>()
@@ -231,22 +227,14 @@ class WarpnetRepository @Inject constructor(
     }
 
     suspend fun getReplies(rootId: String, parentId: String = "", cursor: String = ""): List<Tweet> {
+        // Replies are tweets with a parent: a rootId selects the thread branch
+        // of the tweets route, which returns a flat TweetsResponse.
         val raw = client.request(
-            ProtocolIds.PUBLIC_GET_REPLIES,
-            getRepliesAdapter.toJson(GetAllRepliesEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
+            ProtocolIds.PUBLIC_GET_TWEETS,
+            getAllTweetsAdapter.toJson(GetAllTweetsEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
         )
-        val page = repliesRespAdapter.fromJson(raw) ?: return emptyList()
-        // Backend returns a ReplyNode tree ({reply, children}); flatten
-        // depth-first into the flat List<WarpnetTweet> the UI expects.
-        val flat = mutableListOf<site.warpnet.transport.dto.WarpnetTweet>()
-        fun walk(nodes: List<site.warpnet.transport.dto.WarpnetReplyNode>) {
-            for (n in nodes) {
-                flat += n.reply
-                if (n.children.isNotEmpty()) walk(n.children)
-            }
-        }
-        walk(page.replies)
-        return hydrateTweets(flat)
+        val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList()
+        return hydrateTweets(page.tweets)
     }
 
     /**
@@ -263,7 +251,10 @@ class WarpnetRepository @Inject constructor(
         val cache = mutableMapOf<String, WarpnetUser>()
         var steps = 0
         while (!current.parentId.isNullOrEmpty() && steps < maxDepth) {
-            val parent = runCatching { fetchTweetRaw(current.parentId!!, userId) }.getOrNull() ?: break
+            // The parent is a reply stored under its own parent; we don't know
+            // that grandparent here, so pass the thread root as the fallback
+            // partition (resolves parents that hang directly off the root).
+            val parent = runCatching { fetchTweetRaw(current.parentId!!, userId, rootId = current.rootId) }.getOrNull() ?: break
             chain += parent.toTweet(resolveUser(parent.userId, cache))
             current = parent
             steps++
@@ -271,11 +262,11 @@ class WarpnetRepository @Inject constructor(
         return chain.asReversed()
     }
 
-    private suspend fun fetchTweetRaw(tweetId: String, userId: String): WarpnetTweet {
+    private suspend fun fetchTweetRaw(tweetId: String, userId: String, parentId: String = "", rootId: String = ""): WarpnetTweet {
         tweetCache.get(tweetId)?.let { return it }
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET,
-            getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId)),
+            getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId, parentId = parentId, rootId = rootId)),
         )
         val tweet = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("fetchTweetRaw returned empty body for $tweetId")
@@ -338,9 +329,20 @@ class WarpnetRepository @Inject constructor(
     }
 
     suspend fun deleteStatus(tweetId: String, userId: String) {
+        // A reply is stored under its parent's partition, so the delete must
+        // carry parent/root. Recover them from the cached body (a viewed reply
+        // is cached by getReplies); a top-level tweet leaves them empty.
+        val cached = tweetCache.get(tweetId)
         client.request(
             ProtocolIds.PRIVATE_DELETE_TWEET,
-            deleteTweetAdapter.toJson(DeleteTweetEvent(tweetId = tweetId, userId = userId)),
+            deleteTweetAdapter.toJson(
+                DeleteTweetEvent(
+                    tweetId = tweetId,
+                    userId = userId,
+                    parentId = cached?.parentId.orEmpty(),
+                    rootId = cached?.rootId.orEmpty(),
+                ),
+            ),
         )
         tweetCache.invalidate(tweetId)
     }
@@ -535,6 +537,15 @@ class WarpnetRepository @Inject constructor(
     suspend fun getNotifications(userId: String, cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {
         val raw = client.request(
             ProtocolIds.PRIVATE_GET_NOTIFICATIONS,
+            getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
+        )
+        val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
+        return page.notifications.map { it.toNotification() } to page.cursor
+    }
+
+    suspend fun getPushes(cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_PUSHES,
             getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
         val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""

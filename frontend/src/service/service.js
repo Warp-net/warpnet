@@ -67,18 +67,14 @@ export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0
 export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
-export const PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
-export const PUBLIC_GET_REPLY = "/public/get/reply/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
-export const PUBLIC_DELETE_REPLY = "/public/delete/reply/0.0.0"
 export const PRIVATE_DELETE_TWEET = "/private/delete/tweet/0.0.0"
 export const PRIVATE_POST_USER = "/private/post/user/0.0.0"
 export const PUBLIC_POST_UNFOLLOW = "/public/post/unfollow/0.0.0"
 export const PUBLIC_GET_USER = "/public/get/user/0.0.0"
 export const PUBLIC_GET_USERS = "/public/get/users/0.0.0"
 export const PUBLIC_GET_WHOTOFOLLOW = "/public/get/whotofollow/0.0.0"
-export const PUBLIC_GET_REPLIES = "/public/get/replies/0.0.0"
 export const PUBLIC_GET_FOLLOWERS = "/public/get/followers/0.0.0"
 export const PUBLIC_POST_FOLLOW = "/public/post/follow/0.0.0"
 export const PUBLIC_POST_LIKE = "/public/post/like/0.0.0"
@@ -1250,12 +1246,13 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    // create reply
+    // create reply — a reply is a tweet with a parent, posted through the
+    // tweet route; the backend routes it into the thread by its parent_id.
     async replyTweet({rootId, parentId, parentUserId, text}) {
         const owner = this.getOwnerProfile()
 
         const request = {
-            path: PUBLIC_POST_REPLY,
+            path: PRIVATE_POST_TWEET,
             body: {
                 root_id: rootId,
                 parent_id: parentId,
@@ -1278,8 +1275,10 @@ export const warpnetService = {
             return []
         }
 
+        // Replies are tweets with a parent: a root_id selects the thread
+        // branch of the tweets route, which returns a flat TweetsResponse.
         const request = {
-            path: PUBLIC_GET_REPLIES,
+            path: PUBLIC_GET_TWEETS,
             body: {
                 root_id: rootId,
                 parent_id: parentId,
@@ -1294,24 +1293,22 @@ export const warpnetService = {
             return []
         }
         this.setCursor('replies', repliesResp.cursor || 'end')
-        if (!repliesResp.replies || repliesResp.replies.length === 0) {
+        if (!repliesResp.tweets || repliesResp.tweets.length === 0) {
             return []
         }
-        // Backend ships a ReplyNode tree (`{ children, reply }`); the UI
-        // wants plain Tweet records. Flatten one level — the top-level
-        // replies are what's rendered; nested children would need a
-        // dedicated thread view.
-        return repliesResp.replies
-            .map(node => (node && node.reply) ? node.reply : node)
-            .filter(t => t && t.id);
+        return repliesResp.tweets.filter(t => t && t.id);
     },
 
-    async getReply({rootId, replyId, userId}) {
+    // a reply is a tweet; fetch it via the tweet route, addressed by parent_id
+    // (the tweet it replies to). root_id is sent as a fallback the backend
+    // uses when parent_id is absent.
+    async getReply({parentId, rootId, replyId, userId}) {
         const request = {
-            path: PUBLIC_GET_REPLY,
+            path: PUBLIC_GET_TWEET,
             body: {
+                parent_id: parentId,
                 root_id: rootId,
-                reply_id: replyId,
+                tweet_id: replyId,
                 user_id: userId,
             },
         }
@@ -1319,13 +1316,14 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async deleteReply({userId, rootId, replyId}) {
+    async deleteReply({userId, parentId, rootId, replyId}) {
         const request = {
-            path: PUBLIC_DELETE_REPLY,
+            path: PRIVATE_DELETE_TWEET,
             body: {
                 user_id: userId,
+                parent_id: parentId,
                 root_id: rootId,
-                reply_id: replyId,
+                tweet_id: replyId,
             },
         }
 

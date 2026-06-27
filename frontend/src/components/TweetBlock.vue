@@ -444,6 +444,7 @@ export default {
         t =  await warpnetService.getTweet(getObject);
       } else {
         const getObject = {
+          parentId: this.tweet.parent_id,
           rootId: this.tweet.root_id,
           replyId: this.tweet.id,
           userId: this.tweet.user_id,
@@ -487,6 +488,7 @@ export default {
         } else {
           await warpnetService.deleteReply({
             userId: this.tweet.user_id,
+            parentId: this.tweet.parent_id,
             rootId: this.tweet.root_id,
             replyId: this.tweet.id,
           });

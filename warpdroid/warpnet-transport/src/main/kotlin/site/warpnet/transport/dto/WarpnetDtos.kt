@@ -34,6 +34,9 @@ data class WarpnetTweet(
     @Json(name = "created_at") val createdAt: String? = null,
     @Json(name = "updated_at") val updatedAt: String? = null,
     @Json(name = "parent_id") val parentId: String? = null,
+    // Parent tweet author's id; set on replies so the fat node can forward
+    // the reply to the node hosting the parent (see domain.Tweet).
+    @Json(name = "parent_user_id") val parentUserId: String? = null,
     @Json(name = "retweeted_by") val retweetedBy: String? = null,
     @Json(name = "root_id") val rootId: String = "",
     val text: String,
@@ -95,25 +98,30 @@ data class GetUserEvent(
     @Json(name = "node_id") val nodeId: String = "",
 )
 
+// Two shapes share this event, dispatched on rootId server-side:
+//   - timeline/profile: userId set, rootId empty.
+//   - thread replies: rootId set; parentId selects the subtree (empty means
+//     the replies hanging off rootId); rootUserId lets the node forward to the
+//     root author's home node. Replies come back as a flat TweetsResponse.
 @JsonClass(generateAdapter = true)
 data class GetAllTweetsEvent(
-    @Json(name = "user_id") val userId: String,
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "root_id") val rootId: String = "",
+    @Json(name = "parent_id") val parentId: String = "",
+    @Json(name = "root_user_id") val rootUserId: String = "",
     val cursor: String = "",
     val limit: Int = 40,
 )
 
+// For a reply the target lives under its parent tweet's partition; the node
+// resolves it by parentId, falling back to rootId (they coincide for a direct
+// reply to the thread root). Both empty means a top-level tweet.
 @JsonClass(generateAdapter = true)
 data class GetTweetEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
-)
-
-@JsonClass(generateAdapter = true)
-data class GetAllRepliesEvent(
-    @Json(name = "root_id") val rootId: String,
     @Json(name = "parent_id") val parentId: String = "",
-    val cursor: String = "",
-    val limit: Int = 40,
+    @Json(name = "root_id") val rootId: String = "",
 )
 
 @JsonClass(generateAdapter = true)
@@ -160,10 +168,14 @@ data class GetTweetStatsEvent(
     @Json(name = "user_id") val userId: String,
 )
 
+// For a reply, parentId/rootId address the parent partition it is stored
+// under so the node deletes it from the thread (not the timeline keyspace).
 @JsonClass(generateAdapter = true)
 data class DeleteTweetEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
+    @Json(name = "parent_id") val parentId: String = "",
+    @Json(name = "root_id") val rootId: String = "",
 )
 
 @JsonClass(generateAdapter = true)
@@ -427,22 +439,6 @@ data class GetAllUsersEvent(
 @JsonClass(generateAdapter = true)
 data class TweetsResponse(
     val tweets: List<WarpnetTweet> = emptyList(),
-    val cursor: String = "",
-)
-
-// Wire shape mirrors domain.ReplyNode on the fat node — each list element is
-// a tree node with the reply payload nested under [reply] and any deeper
-// descendants under [children]. Parsing a reply page straight into
-// List<WarpnetTweet> would Moshi-default every field to blank.
-@JsonClass(generateAdapter = true)
-data class WarpnetReplyNode(
-    val reply: WarpnetTweet,
-    val children: List<WarpnetReplyNode> = emptyList(),
-)
-
-@JsonClass(generateAdapter = true)
-data class RepliesResponse(
-    val replies: List<WarpnetReplyNode> = emptyList(),
     val cursor: String = "",
 )
 

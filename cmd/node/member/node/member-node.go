@@ -354,7 +354,6 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 type memberRepos struct {
 	timelineRepo     *database.TimelineRepo
 	tweetRepo        *database.TweetRepo
-	replyRepo        *database.ReplyRepo
 	likeRepo         *database.LikeRepo
 	chatRepo         *database.ChatRepo
 	mediaRepo        *database.MediaRepo
@@ -381,7 +380,6 @@ func (m *MemberNode) setupHandlers(
 	r := &memberRepos{
 		timelineRepo:     database.NewTimelineRepo(db),
 		tweetRepo:        database.NewTweetRepo(db, statsDB),
-		replyRepo:        database.NewRepliesRepo(db, statsDB),
 		likeRepo:         database.NewLikeRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
@@ -396,7 +394,6 @@ func (m *MemberNode) setupHandlers(
 	hs := make([]warpnet.WarpStreamHandler, 0, 80)
 	hs = append(hs, m.adminHandlers(authRepo, privKey, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
-	hs = append(hs, m.replyHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
 	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
 	hs = append(hs, m.followRequestHandlers(followRepo)...)
@@ -459,7 +456,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_TWEET,
-			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo),
+			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, r.notificationRepo, m),
 		},
 		{
 			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
@@ -467,7 +464,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
-			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.likeRepo),
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.likeRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
@@ -479,7 +476,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEET_STATS,
-			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.likeRepo, r.tweetRepo, r.replyRepo, userRepo, m),
+			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.likeRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_TWEET_EDIT,
@@ -500,32 +497,6 @@ func (m *MemberNode) tweetHandlers(
 		{
 			event.PUBLIC_POST_UNRETWEET,
 			handler.StreamUnretweetHandler(r.tweetRepo, userRepo, m),
-		},
-	}
-}
-
-//nolint:govet
-func (m *MemberNode) replyHandlers(
-	authRepo AuthProvider,
-	userRepo UserProvider,
-	r *memberRepos,
-) []warpnet.WarpStreamHandler {
-	return []warpnet.WarpStreamHandler{
-		{
-			event.PUBLIC_POST_REPLY,
-			handler.StreamNewReplyHandler(r.replyRepo, userRepo, r.notificationRepo, m),
-		},
-		{
-			event.PUBLIC_DELETE_REPLY,
-			handler.StreamDeleteReplyHandler(r.tweetRepo, userRepo, r.replyRepo, m),
-		},
-		{
-			event.PUBLIC_GET_REPLY,
-			handler.StreamGetReplyHandler(r.replyRepo, authRepo, userRepo, m),
-		},
-		{
-			event.PUBLIC_GET_REPLIES,
-			handler.StreamGetRepliesHandler(r.replyRepo, userRepo, m),
 		},
 	}
 }
@@ -767,6 +738,10 @@ func (m *MemberNode) notificationHandlers(
 		{
 			event.PRIVATE_GET_NOTIFICATIONS,
 			handler.StreamGetNotificationsHandler(r.notificationRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_PUSHES,
+			handler.StreamGetPushesHandler(r.notificationRepo, authRepo),
 		},
 		{
 			event.PRIVATE_GET_NOTIFICATION,

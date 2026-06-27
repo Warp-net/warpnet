@@ -315,10 +315,29 @@ func (e *echoBot) handleTweet(msg []byte, requesterNodeID string) {
 	if tw.UserId == e.ownerID() {
 		return
 	}
-	if e.wasSeen("tweet", tw.Id) {
+	if requesterNodeID == "" {
 		return
 	}
-	if requesterNodeID == "" {
+
+	// A reply is a tweet with a parent: echo replies to it instead of
+	// liking/retweeting a top-level tweet.
+	if tw.IsReply() {
+		if tw.RootId == "" {
+			return
+		}
+		if strings.EqualFold(tw.Username, "Echo") || strings.HasPrefix(tw.Text, echoReplyPrefix) {
+			return
+		}
+		if e.wasSeen("reply", tw.Id) {
+			return
+		}
+		if err := e.replyToReply(tw, requesterNodeID); err != nil {
+			log.Warnf("echo: auto-reply-reply failed: %v", err)
+		}
+		return
+	}
+
+	if e.wasSeen("tweet", tw.Id) {
 		return
 	}
 
@@ -330,33 +349,6 @@ func (e *echoBot) handleTweet(msg []byte, requesterNodeID string) {
 	}
 	if err := e.replyToTweet(tw, requesterNodeID); err != nil {
 		log.Warnf("echo: auto-reply-tweet failed: %v", err)
-	}
-}
-
-func (e *echoBot) handleReply(msg []byte, requesterNodeID string) {
-	var rp event.NewReplyEvent
-	if err := json.Unmarshal(msg, &rp); err != nil {
-		log.Warnf("echo: parse reply event: %v", err)
-		return
-	}
-	if rp.UserId == "" || rp.Id == "" || rp.RootId == "" {
-		return
-	}
-	if rp.UserId == e.ownerID() {
-		return
-	}
-	if strings.EqualFold(rp.Username, "Echo") || strings.HasPrefix(rp.Text, echoReplyPrefix) {
-		return
-	}
-	if e.wasSeen("reply", rp.Id) {
-		return
-	}
-	if requesterNodeID == "" {
-		return
-	}
-
-	if err := e.replyToReply(rp, requesterNodeID); err != nil {
-		log.Warnf("echo: auto-reply-reply failed: %v", err)
 	}
 }
 
@@ -483,6 +475,7 @@ func (e *echoBot) retweet(tw event.NewTweetEvent, requesterNodeID string) error 
 
 func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
 	parentID := tw.Id
+	parentUserID := tw.UserId
 	text := echoReplyPrefix + tw.Text
 	quote, err := getChuckQuote()
 	if err == nil {
@@ -490,12 +483,12 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) e
 	}
 	_, err = e.node.GenericStream(
 		requesterNodeID,
-		event.PUBLIC_POST_REPLY,
-		event.NewReplyEvent{
+		event.PRIVATE_POST_TWEET,
+		event.NewTweetEvent{
 			CreatedAt:    time.Now(),
 			Id:           ulid.Make().String(),
 			ParentId:     &parentID,
-			ParentUserId: tw.UserId,
+			ParentUserId: &parentUserID,
 			RootId:       tw.Id,
 			Text:         text,
 			UserId:       e.ownerID(),
@@ -505,8 +498,9 @@ func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) e
 	return err
 }
 
-func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) error {
+func (e *echoBot) replyToReply(rp event.NewTweetEvent, requesterNodeID string) error {
 	parentID := rp.Id
+	parentUserID := rp.UserId
 	text := echoReplyPrefix + rp.Text
 	quote, err := getChuckQuote()
 	if err == nil {
@@ -514,12 +508,12 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 	}
 	_, err = e.node.GenericStream(
 		requesterNodeID,
-		event.PUBLIC_POST_REPLY,
-		event.NewReplyEvent{
+		event.PRIVATE_POST_TWEET,
+		event.NewTweetEvent{
 			CreatedAt:    time.Now(),
 			Id:           ulid.Make().String(),
 			ParentId:     &parentID,
-			ParentUserId: rp.UserId,
+			ParentUserId: &parentUserID,
 			RootId:       rp.RootId,
 			Text:         text,
 			UserId:       e.ownerID(),
@@ -531,7 +525,6 @@ func (e *echoBot) replyToReply(rp event.NewReplyEvent, requesterNodeID string) e
 
 func setupHandlers(echo *echoBot, node *member.MemberNode) {
 	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
-	node.Node().RemoveStreamHandler(event.PUBLIC_POST_REPLY)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_MESSAGE)
 
@@ -542,13 +535,6 @@ func setupHandlers(echo *echoBot, node *member.MemberNode) {
 				event.PRIVATE_POST_TWEET,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
 					echo.handleTweet(msg, requesterNodeID(s))
-					return event.Accepted, nil
-				},
-			},
-			{
-				event.PUBLIC_POST_REPLY,
-				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleReply(msg, requesterNodeID(s))
 					return event.Accepted, nil
 				},
 			},

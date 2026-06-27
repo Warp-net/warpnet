@@ -222,7 +222,9 @@ export default {
   },
   computed: {
     mentions() {
-      return this.notifications.filter(n => n.type === 'mention');
+      // Warpnet emits "reply" (never "mention") when someone responds to you,
+      // so the Mentions tab keys off replies too.
+      return this.notifications.filter(n => n.type === 'mention' || n.type === 'reply');
     },
   },
   methods: {

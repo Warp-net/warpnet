@@ -6,11 +6,15 @@ import android.app.NotificationChannel
 import android.app.NotificationChannelGroup
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -24,11 +28,14 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.NotificationManagerCompat.NotificationWithIdAndTag
 import androidx.core.app.RemoteInput
 import androidx.core.app.TaskStackBuilder
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OutOfQuotaPolicy
@@ -80,6 +87,9 @@ class NotificationHelper @Inject constructor(
 
     private var notificationId: Int = NOTIFICATION_ID_PRUNE_CACHE + 1
 
+    private var chargingReceiver: BroadcastReceiver? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
     init {
         createWorkerNotificationChannel()
     }
@@ -119,11 +129,17 @@ class NotificationHelper @Inject constructor(
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiresBatteryNotLow(true)
                     .build()
+            )
+            .setBackoffCriteria(
+                BackoffPolicy.LINEAR,
+                1L,
+                TimeUnit.MINUTES,
             )
             .build()
 
-        workManager.enqueueUniquePeriodicWork(NOTIFICATION_PULL_NAME, ExistingPeriodicWorkPolicy.KEEP, workRequest)
+        workManager.enqueueUniquePeriodicWork(NOTIFICATION_PULL_NAME, ExistingPeriodicWorkPolicy.UPDATE, workRequest)
 
         Log.d(TAG, "Enabled pull checks with ${PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS / 60000} minutes interval.")
     }
@@ -158,6 +174,63 @@ class NotificationHelper @Inject constructor(
         }
     }
 
+    fun fetchNotificationsNow() = enqueueOneTimeWorker(null)
+
+    fun startOpportunisticRefresh() {
+        if (chargingReceiver == null) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == Intent.ACTION_POWER_CONNECTED) {
+                        fetchNotificationsNow()
+                    }
+                }
+            }
+            ContextCompat.registerReceiver(
+                context,
+                receiver,
+                IntentFilter(Intent.ACTION_POWER_CONNECTED),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            chargingReceiver = receiver
+        }
+        if (networkCallback == null) {
+            val connectivityManager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            if (connectivityManager != null) {
+                val hadNetwork = runCatching { connectivityManager.activeNetwork != null }.getOrDefault(false)
+                val callback = object : ConnectivityManager.NetworkCallback() {
+                    private var skipInitialCallback = hadNetwork
+                    override fun onAvailable(network: Network) {
+                        if (skipInitialCallback) {
+                            skipInitialCallback = false
+                            return
+                        }
+                        fetchNotificationsNow()
+                    }
+                }
+                val registered = runCatching {
+                    connectivityManager.registerDefaultNetworkCallback(callback)
+                }.isSuccess
+                if (registered) {
+                    networkCallback = callback
+                }
+            }
+        }
+    }
+
+    fun stopOpportunisticRefresh() {
+        chargingReceiver?.let { receiver ->
+            runCatching { context.unregisterReceiver(receiver) }
+            chargingReceiver = null
+        }
+        networkCallback?.let { callback ->
+            val connectivityManager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            runCatching { connectivityManager?.unregisterNetworkCallback(callback) }
+            networkCallback = null
+        }
+    }
+
     private fun enqueueOneTimeWorker(account: AccountEntity?) {
         val oneTimeRequestBuilder = OneTimeWorkRequest.Builder(NotificationWorker::class.java)
             .setExpedited(OutOfQuotaPolicy.DROP_WORK_REQUEST)
@@ -169,7 +242,11 @@ class NotificationHelper @Inject constructor(
             oneTimeRequestBuilder.setInputData(data.build())
         }
 
-        workManager.enqueue(oneTimeRequestBuilder.build())
+        workManager.enqueueUniqueWork(
+            NOTIFICATION_PULL_ONESHOT_NAME,
+            ExistingWorkPolicy.KEEP,
+            oneTimeRequestBuilder.build(),
+        )
     }
 
     fun disablePullNotifications() {
@@ -471,6 +548,7 @@ class NotificationHelper @Inject constructor(
         val accountName = notification.account.name.unicodeWrap()
         return when (notification.type) {
             Notification.Type.Mention -> context.getString(R.string.notification_mention_format, accountName)
+            Notification.Type.Reply -> context.getString(R.string.notification_mention_format, accountName)
             Notification.Type.Status -> context.getString(R.string.notification_subscription_format, accountName)
             Notification.Type.Follow -> context.getString(R.string.notification_follow_format, accountName)
             Notification.Type.FollowRequest -> context.getString(R.string.notification_follow_request_format, accountName)
@@ -713,6 +791,7 @@ class NotificationHelper @Inject constructor(
         private const val EXTRA_NOTIFICATION_TYPE = BuildConfig.APPLICATION_ID + ".notification.extra.notification_type"
         private const val GROUP_SUMMARY_TAG = BuildConfig.APPLICATION_ID + ".notification.group_summary"
         private const val NOTIFICATION_PULL_NAME = "pullNotifications"
+        private const val NOTIFICATION_PULL_ONESHOT_NAME = "pullNotificationsNow"
 
         private val numberFormat = NumberFormat.getNumberInstance()
 

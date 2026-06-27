@@ -34,13 +34,14 @@ data class Notification(
     @Json(name = "emoji_url") val emojiUrl: String? = null,
 ) {
 
-    /** From https://docs.joinmastodon.org/entities/Notification/#type */
     @JsonClass(generateAdapter = false)
     sealed class Type(val name: String) {
         data class Unknown(val unknownName: String) : Type(unknownName)
 
         /** Someone mentioned you */
         object Mention : Type("mention")
+
+        object Reply : Type("reply")
 
         /** Someone retweeted one of your statuses */
         object Retweet : Type("retweet")
@@ -104,6 +105,7 @@ data class Notification(
  * which leds to crash since those subclasses are referenced here */
 val visibleNotificationTypes = listOf(
     Type.Mention,
+    Type.Reply,
     Type.Retweet,
     Type.Like,
     Type.PleromaEmojiReaction,

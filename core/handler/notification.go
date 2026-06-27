@@ -39,6 +39,7 @@ resulting from the use or misuse of this software.
 
 type NotifierFetcher interface {
 	List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
+	ReverseList(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error)
 	UnreadCount(userId string) (uint64, error)
 }
 
@@ -60,46 +61,68 @@ func StreamGetNotificationsHandler(
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetNotificationsEvent
-		err := json.Unmarshal(buf, &ev)
-		if err != nil {
+		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-
 		owner := authRepo.GetOwner()
-
 		notifications, cur, err := repo.List(owner.UserId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
 		}
+		return notificationsResponse(repo, owner.UserId, notifications, cur), nil
+	}
+}
 
-		// Unread count must reflect ALL of the user's notifications,
-		// not just the page returned above; otherwise the SideNav
-		// "N unread" badge flickers between page-local counts as the
-		// front-end re-polls every 2 s.
-		unreadCount, err := repo.UnreadCount(owner.UserId)
+// StreamGetPushesHandler returns notifications newer than the given
+// cursor (delta pull) via ReverseList, keeping the response cursor as a
+// high-water mark. The plain notifications route stays on List so the desktop
+// UI's older-page pagination (cursor -> end) is unaffected.
+func StreamGetPushesHandler(
+	repo NotifierFetcher,
+	authRepo NotifierAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetNotificationsEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		owner := authRepo.GetOwner()
+		notifications, cur, err := repo.ReverseList(owner.UserId, ev.Cursor, ev.Limit)
 		if err != nil {
-			log.Errorf("notification handler: unread count: %v", err)
-			// Fall back to the page-local count instead of zero so a
-			// transient db hiccup doesn't drop the badge to 0 — it
-			// still lags reality by whatever lives off-page, but a
-			// stale > 0 is closer than a confidently wrong 0.
-			for _, n := range notifications {
-				if !n.IsRead {
-					unreadCount++
-				}
+			return nil, err
+		}
+		return notificationsResponse(repo, owner.UserId, notifications, cur), nil
+	}
+}
+
+// notificationsResponse attaches the all-notifications unread count (not the
+// page-local count, which makes the badge flicker as the UI re-polls) and
+// sorts unread-first, newest-first.
+func notificationsResponse(
+	repo NotifierFetcher,
+	userId string,
+	notifications []domain.Notification,
+	cur string,
+) event.GetNotificationsResponse {
+	unreadCount, err := repo.UnreadCount(userId)
+	if err != nil {
+		log.Errorf("notification handler: unread count: %v", err)
+		for _, n := range notifications {
+			if !n.IsRead {
+				unreadCount++
 			}
 		}
-		sort.SliceStable(notifications, func(i, j int) bool {
-			if notifications[i].IsRead != notifications[j].IsRead {
-				return !notifications[i].IsRead
-			}
-			return notifications[i].CreatedAt.After(notifications[j].CreatedAt)
-		})
-		return event.GetNotificationsResponse{
-			Cursor:        cur,
-			UnreadCount:   unreadCount,
-			Notifications: notifications,
-		}, nil
+	}
+	sort.SliceStable(notifications, func(i, j int) bool {
+		if notifications[i].IsRead != notifications[j].IsRead {
+			return !notifications[i].IsRead
+		}
+		return notifications[i].CreatedAt.After(notifications[j].CreatedAt)
+	})
+	return event.GetNotificationsResponse{
+		Cursor:        cur,
+		UnreadCount:   unreadCount,
+		Notifications: notifications,
 	}
 }
 

@@ -122,7 +122,11 @@ class NotificationsActivity : BaseActivity() {
                         when (selectedTab) {
                             Tab.ALL -> NotificationList(state.notifications)
                             Tab.MENTIONS -> NotificationList(
-                                state.notifications.filter { it.type is Notification.Type.Mention }
+                                // Warpnet emits "reply" (never "mention") when someone responds
+                                // to you, so the Mentions tab keys off replies too.
+                                state.notifications.filter {
+                                    it.type is Notification.Type.Mention || it.type is Notification.Type.Reply
+                                }
                             )
                             Tab.FOLLOW_REQUESTS -> FollowRequestList(
                                 requests = state.followRequests,
