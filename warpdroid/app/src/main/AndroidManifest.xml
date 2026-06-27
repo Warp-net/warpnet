@@ -8,6 +8,11 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.VIBRATE" /> <!-- For notifications -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Lets the user exempt Warpdroid from Doze / battery optimizations so the
+         paired libp2p node keeps running in the background unrestricted. -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        tools:ignore="BatteryLife" />
     <!-- Camera is used only by the QR pairing scanner. Hardware is not
          required, so the app remains installable on devices without a
          camera. -->

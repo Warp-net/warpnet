@@ -18,6 +18,7 @@ package site.warpnet.warpdroid
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
@@ -30,6 +31,8 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
 import android.view.KeyEvent
@@ -49,6 +52,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.app.ActivityCompat
+import androidx.core.content.edit
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -177,6 +181,12 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             }
         }
 
+    // The battery-optimization system dialog does not report a reliable result
+    // code, so the launcher result is ignored; the actual state is re-read from
+    // PowerManager on the next launch.
+    private val requestIgnoreBatteryOptimizationsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+
     @SuppressLint("RestrictedApi")
     override fun onCreate(savedInstanceState: Bundle?) {
         // Newer Android versions don't need to install the compat Splash Screen
@@ -233,6 +243,10 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 return
             }
         }
+
+        // Ask once to exempt Warpdroid from battery optimizations so the paired
+        // node can keep running in the background without restrictions.
+        requestIgnoreBatteryOptimizations()
 
         setContentView(binding.root)
 
@@ -1036,6 +1050,31 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
     }
 
     override fun getActionButton() = binding.composeButton
+
+    // Prompt the user once to whitelist Warpdroid from Doze / battery
+    // optimizations. The system enforces background limits only while the app
+    // is optimized, so there is nothing to do once it is already exempt.
+    @SuppressLint("BatteryLife")
+    private fun requestIgnoreBatteryOptimizations() {
+        val powerManager = getSystemService(PowerManager::class.java) ?: return
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            return
+        }
+        if (preferences.getBoolean(PrefKeys.ASKED_IGNORE_BATTERY_OPTIMIZATIONS, false)) {
+            return
+        }
+        preferences.edit { putBoolean(PrefKeys.ASKED_IGNORE_BATTERY_OPTIMIZATIONS, true) }
+        try {
+            requestIgnoreBatteryOptimizationsLauncher.launch(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName"),
+                ),
+            )
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "No activity to handle battery optimization exemption request", e)
+        }
+    }
 
     companion object {
         private const val TAG = "MainActivity" // logging tag
