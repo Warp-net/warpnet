@@ -31,7 +31,6 @@ import (
 	"sync/atomic"
 
 	"github.com/Masterminds/semver/v3"
-	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -61,10 +60,9 @@ type ModeratorNode struct {
 
 	memoryStoreCloseF func() error
 
-	version     *semver.Version
-	psk         security.PSK
-	privKey     ed25519.PrivateKey
-	selfHashHex string
+	version *semver.Version
+	psk     security.PSK
+	privKey ed25519.PrivateKey
 
 	isClosed *atomic.Bool
 }
@@ -74,7 +72,6 @@ func NewModeratorNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	selfHashHex string,
 ) (_ *ModeratorNode, err error) {
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
@@ -121,7 +118,6 @@ func NewModeratorNode(
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
-		selfHashHex:       selfHashHex,
 		version:           config.Config().Version,
 		options:           opts,
 		isClosed:          new(atomic.Bool),
@@ -145,10 +141,6 @@ func (mn *ModeratorNode) Start() (err error) {
 		warpnet.WarpStreamHandler{ //nolint:govet
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(mn, nil),
-		},
-		warpnet.WarpStreamHandler{ //nolint:govet
-			event.PUBLIC_POST_NODE_CHALLENGE,
-			handler.StreamChallengeHandler(root.GetCodeBase(), mn.privKey),
 		},
 	)
 
@@ -179,7 +171,6 @@ func (mn *ModeratorNode) NodeInfo() warpnet.NodeInfo {
 	baseInfo := mn.node.BaseNodeInfo()
 	baseInfo.OwnerId = "None"
 	baseInfo.Type = warpnet.ModeratorNode
-	baseInfo.Hash = mn.selfHashHex
 	return baseInfo
 }
 

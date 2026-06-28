@@ -29,13 +29,6 @@ import (
 	"io/fs"
 )
 
-//go:embed *.go */*.go */*/*.go */*/*/*.go */*/*/*/*.go */*/*/*/*/*.go
-var codeBaseSingleton embed.FS
-
-func GetCodeBase() embed.FS {
-	return codeBaseSingleton
-}
-
 //go:embed version
 var versionSingleton []byte
 
