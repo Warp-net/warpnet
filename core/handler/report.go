@@ -29,6 +29,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -73,6 +74,68 @@ func StreamReportHandler(publisher ReportPublisher) warpnet.WarpHandlerFunc {
 			ev.Type.String(), ev.TargetUserID, ev.Reason)
 		return event.Accepted, nil
 	}
+}
+
+// StreamReportResultHandler runs on the reporter's node. The moderator
+// delivers the verdict for a reported object straight here (a direct
+// PUBLIC_POST_REPORT_RESULT stream, not the followers/observers isolation
+// broadcast), so the user who filed the report gets a notification telling
+// them what happened. This is the only moderation path that intentionally
+// notifies a user — the shadow-ban broadcast handled by
+// StreamModerationResultHandler must never do so.
+func StreamReportResultHandler(
+	notifier ModerationNotifier,
+	authRepo NotifierAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.ModerationResultEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+
+		owner := authRepo.GetOwner()
+		if owner.UserId == "" {
+			return event.Accepted, nil
+		}
+		// Defensive: the moderator stamps ReporterID with the user it is
+		// notifying. If it ever names someone else, drop it rather than
+		// raise a misaddressed notification.
+		if ev.ReporterID != "" && ev.ReporterID != owner.UserId {
+			return event.Accepted, nil
+		}
+
+		// Best-effort, matching the like/follow handlers: a local storage
+		// failure is logged but doesn't fail the moderator's delivery.
+		if err := notifier.Add(domain.Notification{
+			Type:   domain.NotificationModerationType,
+			Text:   reportResultText(ev),
+			UserId: owner.UserId,
+		}); err != nil {
+			log.Errorf("report result: add notification: %v", err)
+		}
+		return event.Accepted, nil
+	}
+}
+
+// reportResultText turns a verdict into the line shown in the reporter's
+// notifications. domain.OK (true) means "reviewed, nothing wrong"; a FAIL
+// verdict means the object was moderated, and the engine's reason (a Llama
+// Guard hazard label) is appended when present.
+func reportResultText(ev event.ModerationResultEvent) string {
+	subject := "content"
+	switch ev.Type {
+	case domain.ModerationTweetType:
+		subject = "tweet"
+	case domain.ModerationUserType:
+		subject = "profile"
+	}
+	if bool(ev.Result) {
+		return fmt.Sprintf("The %s you reported was reviewed — no violation found", subject)
+	}
+	if ev.Reason != nil && *ev.Reason != "" {
+		return fmt.Sprintf("The %s you reported was moderated: %s", subject, *ev.Reason)
+	}
+	return fmt.Sprintf("The %s you reported was moderated", subject)
 }
 
 func sanitizeReport(ev *event.ReportEvent) {

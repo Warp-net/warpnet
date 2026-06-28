@@ -731,6 +731,7 @@ var protocolsWithoutClient = map[string]string{
 	"PRIVATE_POST_PAIR":             "node-only: node↔node pairing handshake",
 	"PUBLIC_POST_NODE_CHALLENGE":    "node-only: proof-of-source-tree challenge",
 	"PUBLIC_POST_MODERATION_RESULT": "node-only: moderation result gossip",
+	"PUBLIC_POST_REPORT_RESULT":     "node-only: moderation verdict delivered to the reporter",
 
 	"PRIVATE_GET_MESSAGE":    "client-TODO: single-message read is unimplemented on both clients",
 	"PRIVATE_DELETE_MESSAGE": "client-TODO: single-message delete is unimplemented on both clients",
