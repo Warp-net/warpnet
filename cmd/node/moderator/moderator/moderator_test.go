@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/isolation"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -44,6 +45,22 @@ func (e *recordingEngine) Moderate(content string) (bool, string, error) {
 }
 
 func (e *recordingEngine) Close() {}
+
+// fixedEngine returns a preset verdict, letting a test drive the FAIL path
+// (which the OK-returning recordingEngine deliberately stops short of).
+type fixedEngine struct {
+	ok     bool
+	reason string
+}
+
+func (e fixedEngine) Moderate(string) (bool, string, error) { return e.ok, e.reason, nil }
+func (e fixedEngine) Close()                                {}
+
+// stubPublisher satisfies the isolation Publisher; the followers/observers
+// broadcast is a no-op so tests can focus on the direct reporter delivery.
+type stubPublisher struct{}
+
+func (stubPublisher) PublishUpdateToFollowers(_, _ string, _ any) error { return nil }
 
 func withEngine(t *testing.T, e Engine) {
 	t.Helper()
@@ -129,31 +146,37 @@ func TestHandleTweetReport_EmptyTextSkipsEngine(t *testing.T) {
 	}
 }
 
-// The reporter learns the outcome even on a clean (OK) verdict: the
-// moderator opens a direct PUBLIC_POST_REPORT_RESULT stream to their node.
+// On an actioned (FAIL) verdict the moderator re-sends the result straight
+// to the reporter's node on PUBLIC_POST_MODERATION_RESULT, with ReporterID
+// set so that node raises a notification for the reporter.
 func TestHandleTweetReport_NotifiesReporter(t *testing.T) {
-	rec := &recordingEngine{} // OK verdict, stops before isolation
-	withEngine(t, rec)
+	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
 
 	var (
 		gotNode   string
-		gotPath   stream.WarpRoute
 		gotResult event.ModerationResultEvent
-		gotCount  int
+		delivered int
 	)
 	node := stubModeratorNode{
 		streamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			if path == event.PUBLIC_GET_TWEET {
-				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world"}), nil
+				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
 			}
-			gotNode, gotPath, gotCount = nodeId, path, gotCount+1
-			if r, ok := data.(event.ModerationResultEvent); ok {
-				gotResult = r
+			if path == event.PUBLIC_POST_MODERATION_RESULT {
+				delivered++
+				gotNode = nodeId
+				if r, ok := data.(event.ModerationResultEvent); ok {
+					gotResult = r
+				}
 			}
 			return []byte(event.Accepted), nil
 		},
 	}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{
+		node:      node,
+		isolation: isolation.NewIsolationProtocol(stubPublisher{}),
+		isClosed:  new(atomic.Bool),
+	}
 
 	rep := tweetReport("tweet-1")
 	rep.ReporterID = "reporter-1"
@@ -162,11 +185,8 @@ func TestHandleTweetReport_NotifiesReporter(t *testing.T) {
 	if err := m.handleTweetReport(rep); err != nil {
 		t.Fatalf("handleTweetReport: %v", err)
 	}
-	if gotCount != 1 {
-		t.Fatalf("expected exactly one report-result delivery, got %d", gotCount)
-	}
-	if gotPath != event.PUBLIC_POST_REPORT_RESULT {
-		t.Fatalf("expected report-result route, got %q", gotPath)
+	if delivered != 1 {
+		t.Fatalf("expected exactly one reporter delivery, got %d", delivered)
 	}
 	if gotNode != "reporter-node-1" {
 		t.Fatalf("expected delivery to the reporter node, got %q", gotNode)
@@ -174,33 +194,31 @@ func TestHandleTweetReport_NotifiesReporter(t *testing.T) {
 	if gotResult.ReporterID != "reporter-1" {
 		t.Fatalf("expected reporter id propagated, got %q", gotResult.ReporterID)
 	}
-	if gotResult.Result != domain.OK {
-		t.Fatal("expected the OK verdict to be propagated to the reporter")
+	if gotResult.Result != domain.FAIL {
+		t.Fatal("expected the FAIL verdict to be propagated to the reporter")
 	}
 }
 
-// A report carrying no reporter identity (older client) must not trigger a
-// stray delivery — only the tweet fetch goes on the wire.
+// A report carrying no reporter identity (older client) is still moderated
+// but must not trigger a direct reporter delivery.
 func TestHandleTweetReport_NoReporterNoDelivery(t *testing.T) {
-	rec := &recordingEngine{}
-	withEngine(t, rec)
+	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
 
-	calls := 0
 	node := stubModeratorNode{
 		streamFn: func(_ string, path stream.WarpRoute, _ any) ([]byte, error) {
-			calls++
-			if path == event.PUBLIC_POST_REPORT_RESULT {
-				t.Fatal("must not deliver a report-result without a reporter node id")
+			if path == event.PUBLIC_POST_MODERATION_RESULT {
+				t.Fatal("must not deliver to a reporter without a reporter node id")
 			}
-			return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world"}), nil
+			return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
 		},
 	}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{
+		node:      node,
+		isolation: isolation.NewIsolationProtocol(stubPublisher{}),
+		isClosed:  new(atomic.Bool),
+	}
 
 	if err := m.handleTweetReport(tweetReport("tweet-1")); err != nil {
 		t.Fatalf("handleTweetReport: %v", err)
-	}
-	if calls != 1 {
-		t.Fatalf("expected only the tweet fetch on the wire, got %d calls", calls)
 	}
 }

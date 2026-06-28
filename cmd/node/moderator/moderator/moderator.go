@@ -159,23 +159,26 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 	}
 }
 
-// notifyReporter delivers the verdict straight to the user who filed the
-// report (PUBLIC_POST_REPORT_RESULT on their node) so they learn the
-// outcome. Best-effort: a delivery failure (reporter offline) must not
-// abort moderation, which is why it logs instead of returning the error.
+// notifyReporter re-sends an actioned (FAIL) verdict straight to the user
+// who filed the report so their node can raise a notification. It reuses
+// PUBLIC_POST_MODERATION_RESULT (same as the followers/observers broadcast)
+// but with ReporterID set, which is the flag the receiving handler keys on
+// to notify — and only — the reporter. Best-effort: a delivery failure
+// (reporter offline) must not abort moderation, so it logs instead of
+// returning the error. Only called for FAIL verdicts, matching the
+// shadow-ban rule that clean content never goes on the wire.
 func (m *Moderator) notifyReporter(
 	rep event.ReportEvent,
-	ok bool,
 	reason *string,
 	objectID *domain.ID,
 	targetUserID domain.ID,
 ) {
-	if rep.ReporterNodeID == "" {
+	if rep.ReporterNodeID == "" || rep.ReporterID == "" {
 		return
 	}
 	result := event.ModerationResultEvent{
 		Type:        rep.Type,
-		Result:      domain.ModerationResult(ok),
+		Result:      domain.FAIL,
 		Reason:      reason,
 		Model:       domain.LLAMAGuard3,
 		UserID:      targetUserID,
@@ -185,7 +188,7 @@ func (m *Moderator) notifyReporter(
 	}
 	if _, err := m.node.GenericStream(
 		rep.ReporterNodeID,
-		event.PUBLIC_POST_REPORT_RESULT,
+		event.PUBLIC_POST_MODERATION_RESULT,
 		result,
 	); err != nil {
 		log.Warnf("moderator: notify reporter %s: %v", rep.ReporterNodeID, err)
@@ -235,11 +238,6 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 	}
 	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
 
-	// Tell the reporter the outcome regardless of verdict — this is a
-	// direct stream to them, not the shadow-ban broadcast, so it never
-	// reaches the offender.
-	m.notifyReporter(ev, ok, &reason, &tweet.Id, tweet.UserId)
-
 	// Shadow-ban: only bad verdicts go on the wire.
 	if ok {
 		return nil
@@ -252,6 +250,9 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
+	// Tell the reporter their report was actioned. Direct stream to them,
+	// not the shadow-ban broadcast, so it never reaches the offender.
+	m.notifyReporter(ev, &reason, &tweet.Id, tweet.UserId)
 	return nil
 }
 
@@ -292,11 +293,6 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 	}
 	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
 
-	// Tell the reporter the outcome regardless of verdict — this is a
-	// direct stream to them, not the shadow-ban broadcast, so it never
-	// reaches the offender.
-	m.notifyReporter(ev, ok, &reason, nil, user.Id)
-
 	// Shadow-ban: only bad verdicts go on the wire.
 	if ok {
 		return nil
@@ -309,6 +305,9 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
+	// Tell the reporter their report was actioned. Direct stream to them,
+	// not the shadow-ban broadcast, so it never reaches the offender.
+	m.notifyReporter(ev, &reason, nil, user.Id)
 	return nil
 }
 

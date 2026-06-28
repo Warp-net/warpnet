@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Warp-net/warpnet/database"
@@ -67,15 +68,13 @@ func TestStreamModerationResultHandler(t *testing.T) {
 	tweetId := "tweet-1"
 	target := "target-1"
 
-	_ = owner
 	mkHandler := func(
 		notifier stubModerationNotifier,
 		tweets stubModerationTweetUpdater,
 		users stubModerationUserUpdater,
 		timeline stubModerationTimelineDeleter,
 	) func([]byte, interface{}) (any, error) {
-		_ = notifier
-		h := StreamModerationResultHandler(tweets, users, timeline)
+		h := StreamModerationResultHandler(notifier, tweets, users, timeline, stubAuth{owner: domain.Owner{UserId: owner}})
 		return func(buf []byte, _ interface{}) (any, error) { return h(buf, s{}) }
 	}
 
@@ -136,6 +135,80 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 		if notified {
 			t.Fatal("offender must NOT be notified (shadow-ban semantics)")
+		}
+	})
+
+	// When the moderator delivers the verdict straight to the reporter it
+	// stamps ReporterID. That — and only that — turns the same handler into
+	// a notifying one, addressed to the local owner (the reporter).
+	t.Run("reported tweet actioned - notifies the reporter", func(t *testing.T) {
+		var got domain.Notification
+		notified := false
+		h := mkHandler(
+			stubModerationNotifier{addFn: func(not domain.Notification) error {
+				notified = true
+				got = not
+				return nil
+			}},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{},
+		)
+		reason := "Hate"
+		resp, err := h(marshal(t, event.ModerationResultEvent{
+			Type:       domain.ModerationTweetType,
+			ObjectID:   &tweetId,
+			UserID:     "offender",
+			Result:     domain.FAIL,
+			Reason:     &reason,
+			ReporterID: owner, // delivered straight to the reporter
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if !notified {
+			t.Fatal("the reporter must be notified")
+		}
+		if got.UserId != owner {
+			t.Fatalf("notification must target the reporter, got %q", got.UserId)
+		}
+		if got.Type != domain.NotificationModerationType {
+			t.Fatalf("expected moderation notification, got %q", got.Type)
+		}
+		if !strings.Contains(got.Text, "tweet") || !strings.Contains(got.Text, "Hate") {
+			t.Fatalf("unexpected notification text: %q", got.Text)
+		}
+	})
+
+	t.Run("verdict naming another reporter is not notified locally", func(t *testing.T) {
+		notified := false
+		h := mkHandler(
+			stubModerationNotifier{addFn: func(not domain.Notification) error {
+				notified = true
+				return nil
+			}},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{},
+		)
+		resp, err := h(marshal(t, event.ModerationResultEvent{
+			Type:       domain.ModerationTweetType,
+			ObjectID:   &tweetId,
+			UserID:     "offender",
+			Result:     domain.FAIL,
+			ReporterID: "someone-else",
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if notified {
+			t.Fatal("must not notify when the verdict names a different reporter")
 		}
 	})
 

@@ -491,10 +491,11 @@ type ModerationResultEvent struct {
 	// would be the local node, not the moderator.
 	ModeratorID domain.ID `json:"moderator_id,omitempty"`
 	// ReporterID is set only when the moderator delivers this verdict
-	// straight to the user who reported the object (PUBLIC_POST_REPORT_RESULT),
-	// so that node can raise a notification for them. It stays empty on the
-	// followers/observers isolation broadcast (PUBLIC_POST_MODERATION_RESULT),
-	// which must never notify anyone.
+	// straight to the user who reported the object, so that node can raise a
+	// notification for them. It stays empty on the followers/observers
+	// isolation broadcast (which must never notify anyone); both deliveries
+	// share the PUBLIC_POST_MODERATION_RESULT route, so this field is what
+	// the handler keys on to tell them apart.
 	ReporterID domain.ID `json:"reporter_id,omitempty"`
 }
 
