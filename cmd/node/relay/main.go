@@ -35,7 +35,6 @@ import (
 	"syscall"
 	"time"
 
-	root "github.com/Warp-net/warpnet"
 	relay "github.com/Warp-net/warpnet/cmd/node/relay/node"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/metrics"
@@ -85,11 +84,6 @@ func main() {
 		log.Errorf("relay: fail generating key: %v", err)
 		return
 	}
-	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
-	if err != nil {
-		log.Errorln(err)
-		return
-	}
 
 	nodeId, _ := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	m := metrics.NewMetricsClient(
@@ -98,7 +92,7 @@ func main() {
 		network,
 	)
 
-	n, err := relay.NewRelayNode(ctx, privKey, psk, nodeId, codeHashHex, m)
+	n, err := relay.NewRelayNode(ctx, privKey, psk, nodeId, m)
 	if err != nil {
 		log.Errorf("failed to init relay node: %v", err)
 		return

@@ -236,7 +236,6 @@ type NodeInfo struct {
 	BootstrapPeers []WarpAddrInfo   `json:"bootstrap_peers"`
 	Reachability   WarpReachability `json:"reachability"`
 	Protocols      []WarpProtocolID `json:"protocols"`
-	Hash           string           `json:"hash"`
 	Network        string           `json:"network,omitempty"`
 }
 

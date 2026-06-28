@@ -157,8 +157,6 @@ func main() {
 		authRepo.PrivateKey(),
 		psk,
 		nodeId,
-		"echo",
-		config.Config().Version,
 		authRepo,
 		db,
 		bootstrapNodes,

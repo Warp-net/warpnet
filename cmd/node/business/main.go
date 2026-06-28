@@ -36,7 +36,6 @@ import (
 	"syscall"
 	"time"
 
-	root "github.com/Warp-net/warpnet"
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
@@ -83,11 +82,7 @@ func main() {
 		log.Errorf("business: generate PSK: %v", err)
 		return
 	}
-	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
-	if err != nil {
-		log.Errorf("business: codebase hash: %v", err)
-		return
-	}
+
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
 		log.Errorf("business: bootstrap infos: %v", err)
@@ -168,8 +163,6 @@ func main() {
 				privateKey,
 				psk,
 				ownNodeId,
-				codeHashHex,
-				version,
 				authRepo,
 				db,
 				infos,

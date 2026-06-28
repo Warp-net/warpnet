@@ -33,7 +33,6 @@ import (
 	"syscall"
 	"time"
 
-	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/moderator"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
@@ -84,11 +83,6 @@ func main() {
 		log.Errorf("moderator: fail generating key: %v", err)
 		return
 	}
-	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
-	if err != nil {
-		log.Errorln(err)
-		return
-	}
 
 	ownNodeId, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	if err != nil {
@@ -96,7 +90,7 @@ func main() {
 		return
 	}
 
-	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId, codeHashHex)
+	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId)
 	if err != nil {
 		log.Errorf("failed to init moderator node: %v", err)
 		return
