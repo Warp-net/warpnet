@@ -127,7 +127,10 @@ func NewMemberNode(
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
-	warpNetwork := config.Config().Node.Network
+	// The network is chosen on the login page and carried by the auth repo
+	// (constructed with it at login), so the DHT namespace matches the PSK
+	// instead of reading a value fixed at startup.
+	warpNetwork := config.NormalizeNetwork(authRepo.Network())
 
 	dHashTable := dht.NewDHTable(
 		ctx,

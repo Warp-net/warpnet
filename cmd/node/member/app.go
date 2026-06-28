@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
+	"fmt"
 	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
@@ -31,6 +32,7 @@ import (
 )
 
 type AppStorer interface {
+	Run(username, password string) error
 	NewTxn() (local_store.WarpTransactioner, error)
 	NewReadTxn() (local_store.WarpTransactioner, error)
 	Get(key local_store.DatabaseKey) ([]byte, error)
@@ -138,7 +140,10 @@ func (a *App) NotifyDeepLink(raw string) {
 }
 
 // startup is called when the app starts. The context is saved
-// so we can call the runtime methods
+// so we can call the runtime methods. The database is opened here (its directory
+// is fixed by config) so first-run detection works before login, but the auth
+// service, PSK and node are network-scoped and the network is now chosen on the
+// sign-up / login page, so they are brought up in initSession on the first login.
 func (a *App) startup(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -147,8 +152,6 @@ func (a *App) startup(ctx context.Context) {
 	}()
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
-	version := config.Config().Version
-	network := config.Config().Node.Network
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
 		log.Errorf("failed to get codebase hash: %v \n", err)
@@ -161,20 +164,35 @@ func (a *App) startup(ctx context.Context) {
 		log.Errorf("failed to init db: %v \n", err)
 		return
 	}
-
-	authRepo := database.NewAuthRepo(db, network)
-	userRepo := database.NewUserRepo(db)
 	a.db = db
-	a.readyChan = make(chan domain.AuthNodeInfo, 1)
-	a.auth = auth.NewAuthService(ctx, authRepo, userRepo, a.readyChan)
+}
 
-	psk, err := security.GeneratePSK(network, version)
+// initSession brings up the auth service, PSK and node for the network the user
+// picked on the sign-up / login page. It runs once, on the first login; later
+// logins reuse the already-initialized session.
+func (a *App) initSession(network string) error {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+	if a.auth != nil {
+		return nil
+	}
+	if a.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	network = config.NormalizeNetwork(network)
+
+	authRepo := database.NewAuthRepo(a.db, network)
+	userRepo := database.NewUserRepo(a.db)
+	a.readyChan = make(chan domain.AuthNodeInfo, 1)
+	a.auth = auth.NewAuthService(a.ctx, authRepo, userRepo, a.readyChan)
+
+	psk, err := security.GeneratePSK(network, config.Config().Version)
 	if err != nil {
-		log.Errorf("failed to generate PSK: %v", err)
-		return
+		return fmt.Errorf("generate PSK: %w", err)
 	}
 	a.psk = psk
 	go a.runNode(network, psk)
+	return nil
 }
 
 func (a *App) runNode(network string, psk security.PSK) {
@@ -203,7 +221,7 @@ func (a *App) runNode(network string, psk security.PSK) {
 		network,
 	)
 
-	infos, err := config.Config().Node.AddrInfos()
+	infos, err := config.AddrInfosForNetwork(network)
 	if err != nil {
 		log.Fatalf("failed to get bootstrap nodes infos: %v", err)
 	}
@@ -243,7 +261,7 @@ func (a *App) runNode(network string, psk security.PSK) {
 	serverNodeAuthInfo.ID = ownNodeId.String()
 	serverNodeAuthInfo.Network = network
 	serverNodeAuthInfo.Addresses = a.node.NodeInfo().Addresses
-	serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
+	serverNodeAuthInfo.BootstrapPeers = config.BootstrapNodesForNetwork(network)
 	a.readyChan <- serverNodeAuthInfo
 }
 
@@ -264,7 +282,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			log.Errorf("app: call panic: %v", r)
 		}
 	}()
-	if a == nil || a.auth == nil {
+	if a == nil {
 		log.Errorln("app not initialized")
 		response.Body = newErrorResp("internal app not ready")
 		return response
@@ -296,6 +314,12 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			return response
 		}
 
+		if err = a.initSession(ev.Network); err != nil {
+			log.Errorf("init session: %v \n", err)
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
+
 		var loginResp event.LoginResponse
 		loginResp, err = a.auth.AuthLogin(ev, a.psk)
 		if err != nil {
@@ -312,8 +336,15 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.node.Stop() // close node first
-		a.auth.AuthLogout()
+		a.mx.RLock()
+		node := a.node
+		a.mx.RUnlock()
+		if node != nil {
+			node.Stop() // close node first
+		}
+		if a.auth != nil {
+			a.auth.AuthLogout()
+		}
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	default:
@@ -384,11 +415,20 @@ func (a *App) close(_ context.Context) {
 
 	log.Infoln("app: closing...")
 
-	a.node.Stop() // close node first
-
-	a.auth.AuthLogout()
-
-	close(a.readyChan)
+	// The session is set up lazily on first login; if the app closes before
+	// anyone logs in, there is nothing to tear down.
+	a.mx.RLock()
+	node := a.node
+	a.mx.RUnlock()
+	if node != nil {
+		node.Stop() // close node first
+	}
+	if a.auth != nil {
+		a.auth.AuthLogout()
+	}
+	if a.readyChan != nil {
+		close(a.readyChan)
+	}
 }
 
 // setLinuxDesktopIcon writes the PNG referenced by Icon=warpnet (the .desktop file is owned by deeplink.Register).

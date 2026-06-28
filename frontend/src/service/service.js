@@ -211,6 +211,7 @@ export const warpnetService = {
             body: {
                 username: form.username,
                 password: form.password,
+                network: form.network || "",
             }
         }
         const resp = await this.sendToNode(request);

@@ -62,6 +62,7 @@ type AuthPersistencyLayer interface {
 	GetOwner() domain.Owner
 	SetOwner(domain.Owner) (domain.Owner, error)
 	PrivateKey() ed25519.PrivateKey
+	Network() string
 	Logout()
 }
 

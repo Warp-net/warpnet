@@ -46,6 +46,22 @@ resulting from the use or misuse of this software.
           @keydown.enter="signIn"
       />
     </div>
+    <div class="w-full bg-lightblue border-b-2 border-dark mt-10 mb-6 p-2 input_field">
+      <label for="login-network" class="text-dark text-center block">Network</label>
+      <input
+          id="login-network"
+          v-model="network"
+          class="w-full bg-lightblue text-lg text-center"
+          type="text"
+          list="login-network-options"
+          autocomplete="off"
+          spellcheck="false"
+      />
+      <datalist id="login-network-options">
+        <option value="mainnet"></option>
+        <option value="testnet"></option>
+      </datalist>
+    </div>
     <div class="flex justify-end mb-6">
       <button
         type="button"
@@ -89,6 +105,7 @@ export default {
     return {
       username: "",
       password: "",
+      network: "mainnet",
       revealPassword: false,
       isLoading: false,
       showErrorModal: false,
@@ -103,7 +120,7 @@ export default {
       this.isLoading = true;
       this.showErrorModal = false;
       try {
-        await warpnetService.signInUser({username: this.username, password: this.password});
+        await warpnetService.signInUser({username: this.username, password: this.password, network: this.network});
         this.$router.push({ name: "Home" });
       } catch (error) {
         console.log("error signing in", error);

@@ -106,6 +106,22 @@ resulting from the use or misuse of this software.
                 autocomplete="username"
               />
             </div>
+            <div class="w-full bg-lightblue border-b-2 border-dark mb-8 p-2">
+              <label for="signup-network" class="text-dark">Network</label>
+              <input
+                id="signup-network"
+                v-model="network"
+                class="w-full bg-lightblue text-lg"
+                type="text"
+                list="signup-network-options"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <datalist id="signup-network-options">
+                <option value="mainnet"></option>
+                <option value="testnet"></option>
+              </datalist>
+            </div>
           </div>
         </div>
 
@@ -292,6 +308,7 @@ export default {
       username: "",
       password: "",
       passwordConfirm: "",
+      network: "mainnet",
       revealPassword: false,
       isFirstRun: null,
       isLoading: false,
@@ -332,6 +349,7 @@ export default {
         await warpnetService.signInUser({
           username: this.username,
           password: this.password,
+          network: this.network,
         });
         if (wasFirstRun) {
           // SideNav picks this up on mount and opens the pairing

@@ -89,6 +89,7 @@ type StatsProvider interface {
 type AuthProvider interface {
 	GetOwner() domain.Owner
 	SessionToken() string
+	Network() string
 }
 
 type UserProvider interface {

@@ -125,6 +125,13 @@ func (repo *AuthRepo) generateSecrets(username, password string) (token string, 
 	return token, privateKey, nil
 }
 
+// Network returns the network this repo derives identities for. The member app
+// constructs the repo with the network the user picked on the login page, so the
+// node reads it from here instead of from the startup config.
+func (repo *AuthRepo) Network() string {
+	return repo.network
+}
+
 func (repo *AuthRepo) SessionToken() string {
 	repo.mx.RLock()
 	defer repo.mx.RUnlock()
