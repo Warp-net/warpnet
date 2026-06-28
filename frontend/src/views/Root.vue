@@ -108,19 +108,26 @@ resulting from the use or misuse of this software.
             </div>
             <div class="w-full bg-lightblue border-b-2 border-dark mb-8 p-2">
               <label for="signup-network" class="text-dark">Network</label>
-              <input
+              <select
                 id="signup-network"
-                v-model="network"
+                v-model="networkChoice"
+                class="w-full bg-lightblue text-lg"
+              >
+                <option value="mainnet">mainnet</option>
+                <option value="testnet">testnet</option>
+                <option value="custom">custom…</option>
+              </select>
+            </div>
+            <div v-if="networkChoice === 'custom'" class="w-full bg-lightblue border-b-2 border-dark mb-8 p-2">
+              <label for="signup-network-custom" class="text-dark">Custom network</label>
+              <input
+                id="signup-network-custom"
+                v-model="customNetwork"
                 class="w-full bg-lightblue text-lg"
                 type="text"
-                list="signup-network-options"
                 autocomplete="off"
                 spellcheck="false"
               />
-              <datalist id="signup-network-options">
-                <option value="mainnet"></option>
-                <option value="testnet"></option>
-              </datalist>
             </div>
           </div>
         </div>
@@ -308,7 +315,8 @@ export default {
       username: "",
       password: "",
       passwordConfirm: "",
-      network: "mainnet",
+      networkChoice: "mainnet",
+      customNetwork: "",
       revealPassword: false,
       isFirstRun: null,
       isLoading: false,
@@ -346,10 +354,13 @@ export default {
         // Capture firstRun BEFORE signInUser: by the time the node has
         // a session, IsFirstRun() flips to false on the next call.
         const wasFirstRun = this.isFirstRun === true;
+        const network = this.networkChoice === "custom"
+          ? this.customNetwork.trim()
+          : this.networkChoice;
         await warpnetService.signInUser({
           username: this.username,
           password: this.password,
-          network: this.network,
+          network,
         });
         if (wasFirstRun) {
           // SideNav picks this up on mount and opens the pairing

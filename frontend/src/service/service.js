@@ -102,6 +102,9 @@ const stateMap = new Map();
 // tab or reloading the page restores the session instead of bouncing to the
 // sign-up screen.
 const OWNER_STORAGE = "warpnet.owner";
+// localStorage key for the network chosen on sign-up; reused on later logins,
+// which intentionally have no network field. Kept across logout on purpose.
+const NETWORK_STORAGE = "warpnet.network";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
 
@@ -206,12 +209,22 @@ export const warpnetService = {
     },
 
     async signInUser(form) {
+        // The network is chosen only on sign-up; persist it so later logins
+        // (which have no network field) rejoin the same network. Falls back to
+        // the stored value, then to "mainnet".
+        let network = (form.network || "").trim();
+        try {
+            if (network) localStorage.setItem(NETWORK_STORAGE, network);
+            else network = localStorage.getItem(NETWORK_STORAGE) || "";
+        } catch (e) {}
+        if (!network) network = "mainnet";
+
         let request = {
             path: PRIVATE_POST_LOGIN,
             body: {
                 username: form.username,
                 password: form.password,
-                network: form.network || "",
+                network: network,
             }
         }
         const resp = await this.sendToNode(request);
