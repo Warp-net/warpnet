@@ -159,6 +159,8 @@ func (a *App) startup(ctx context.Context) {
 	a.db = db
 }
 
+const errDatabaseNotReady warpnet.WarpError = "database not initialized"
+
 // initSession brings up the auth service, PSK and node for the network the user
 // picked on the sign-up / login page. It runs once, on the first login; later
 // logins reuse the already-initialized session.
@@ -169,7 +171,7 @@ func (a *App) initSession(network string) error {
 		return nil
 	}
 	if a.db == nil {
-		return fmt.Errorf("database not initialized")
+		return errDatabaseNotReady
 	}
 	network = config.NormalizeNetwork(network)
 
