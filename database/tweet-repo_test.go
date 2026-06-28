@@ -36,6 +36,7 @@ import (
 
 	"go.uber.org/goleak"
 
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
@@ -569,6 +570,78 @@ func (s *TweetRepoTestSuite) TestRepliesCount() {
 	count, err := s.repo.RepliesCount(parentID)
 	s.Require().NoError(err)
 	s.Equal(uint64(3), count)
+}
+
+// fakeTweetStats is an in-memory TweetStatsStorer used to assert that the
+// per-tweet counters consult the aggregated CRDT store, not only the local db.
+type fakeTweetStats struct {
+	mu   sync.Mutex
+	vals map[string]uint64
+}
+
+func newFakeTweetStats() *fakeTweetStats {
+	return &fakeTweetStats{vals: make(map[string]uint64)}
+}
+
+func (f *fakeTweetStats) GetAggregatedStat(key ds.Key) (uint64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.vals[key.String()], nil
+}
+
+func (f *fakeTweetStats) Increment(key ds.Key) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.vals[key.String()]++
+	return nil
+}
+
+func (f *fakeTweetStats) Decrement(key ds.Key) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.vals[key.String()] > 0 {
+		f.vals[key.String()]--
+	}
+	return nil
+}
+
+// TestRepliesCountReadsAggregatedStat guards the cross-stack reply counter:
+// RepliesCount must prefer the aggregated CRDT stat (like likes/retweets/views),
+// not only the local per-partition count. Otherwise the frontend reply counter
+// reads back stale/zero and stays hidden.
+func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
+	stats := newFakeTweetStats()
+	repo := NewTweetRepo(s.db, stats)
+
+	parentID := ulid.Make().String()
+	rootID := ulid.Make().String()
+
+	for i := 0; i < 3; i++ {
+		_, err := repo.AddReply(domain.Tweet{
+			Id:        ulid.Make().String(),
+			RootId:    rootID,
+			ParentId:  &parentID,
+			UserId:    "user123",
+			Text:      "reply",
+			CreatedAt: time.Now(),
+		})
+		s.Require().NoError(err)
+	}
+
+	// Simulate replies aggregated from other nodes via the CRDT that never
+	// touched this node's local counter.
+	countKey := tweetsCountKey(parentID).DatastoreKey()
+	s.Require().NoError(stats.Increment(countKey))
+	s.Require().NoError(stats.Increment(countKey))
+
+	// Local count is 3, aggregated CRDT count is 5: RepliesCount must report 5.
+	localCount, err := repo.TweetsCount(parentID)
+	s.Require().NoError(err)
+	s.Equal(uint64(3), localCount)
+
+	count, err := repo.RepliesCount(parentID)
+	s.Require().NoError(err)
+	s.Equal(uint64(5), count)
 }
 
 func (s *TweetRepoTestSuite) TestDeleteReply() {

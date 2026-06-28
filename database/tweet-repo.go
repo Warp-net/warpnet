@@ -564,10 +564,18 @@ func (repo *TweetRepo) GetReply(parentID, replyID string) (domain.Tweet, error) 
 }
 
 // RepliesCount is the count of tweets under the tweet's partition, i.e. its
-// direct replies.
+// direct replies. Like likes/retweets/views it prefers the aggregated CRDT
+// counter (maintained by AddReply under the same key) over the local count.
 func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
+	}
+	if repo.statsDb != nil {
+		total, err := repo.statsDb.GetAggregatedStat(tweetsCountKey(tweetId).DatastoreKey())
+		if err == nil {
+			return total, nil
+		}
+		log.Warnf("crdt replies count not found for %s - %s", tweetId, err)
 	}
 	return repo.TweetsCount(tweetId)
 }
