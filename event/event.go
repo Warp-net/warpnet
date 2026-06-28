@@ -469,6 +469,10 @@ type ReportEvent struct {
 	TargetNodeID domain.ID                   `json:"target_node_id"`
 	ObjectID     *domain.ID                  `json:"object_id,omitempty"`
 	Reason       string                      `json:"reason"`
+	// Reporter identity, stamped by the reporter's node at publish time so
+	// the moderator can return the verdict to it.
+	ReporterID     domain.ID `json:"reporter_id,omitempty"`
+	ReporterNodeID domain.ID `json:"reporter_node_id,omitempty"`
 }
 
 type ModerationResultEvent struct {
@@ -484,6 +488,9 @@ type ModerationResultEvent struct {
 	// pubsub → SelfStream, and the loopback connection's RemotePeer
 	// would be the local node, not the moderator.
 	ModeratorID domain.ID `json:"moderator_id,omitempty"`
+	// ReporterID is set only on the reporter-bound delivery; empty on the
+	// isolation broadcast. The handler keys on it to notify only the reporter.
+	ReporterID domain.ID `json:"reporter_id,omitempty"`
 }
 
 type GetNotificationsEvent struct {

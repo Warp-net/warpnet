@@ -29,6 +29,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -75,9 +76,11 @@ type ModerationTimelelineDeleter interface {
 //     hide bio/displayName/url/website on the next render. The user row
 //     stays on disk, only the Moderation sidecar is set.
 func StreamModerationResultHandler(
+	notifier ModerationNotifier,
 	tweetRepo ModerationTweetUpdater,
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
+	authRepo NotifierAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
@@ -90,8 +93,11 @@ func StreamModerationResultHandler(
 		// Attribution must come from the payload itself.
 		moderatorId := ev.ModeratorID
 
-		log.Infof("moderation: result type=%s user=%s result=%t",
-			ev.Type.String(), ev.UserID, bool(ev.Result))
+		log.Infof("moderation: result type=%s user=%s result=%t reporter=%s",
+			ev.Type.String(), ev.UserID, bool(ev.Result), ev.ReporterID)
+
+		// Before the switch, which early-returns for users not cached locally.
+		notifyReporter(notifier, authRepo, ev)
 
 		switch ev.Type {
 		case domain.ModerationTweetType:
@@ -156,9 +162,39 @@ func StreamModerationResultHandler(
 			return event.Accepted, nil
 		}
 
-		// No notification path: the offender must not be informed
-		// (shadow isolation). Followers / observers simply re-render
-		// with the moderation flag set.
 		return event.Accepted, nil
 	}
+}
+
+// notifyReporter notifies the reporter, addressed by ReporterID which the
+// moderator sets only on the reporter-bound delivery.
+func notifyReporter(notifier ModerationNotifier, authRepo NotifierAuthStorer, ev event.ModerationResultEvent) {
+	if notifier == nil || authRepo == nil || ev.ReporterID == "" {
+		return
+	}
+	owner := authRepo.GetOwner()
+	if owner.UserId == "" || owner.UserId != ev.ReporterID {
+		return
+	}
+	if err := notifier.Add(domain.Notification{
+		Type:   domain.NotificationModerationType,
+		Text:   reportResultText(ev),
+		UserId: owner.UserId,
+	}); err != nil {
+		log.Errorf("moderation: notify reporter: %v", err)
+	}
+}
+
+func reportResultText(ev event.ModerationResultEvent) string {
+	subject := "content"
+	switch ev.Type {
+	case domain.ModerationTweetType:
+		subject = "tweet"
+	case domain.ModerationUserType:
+		subject = "profile"
+	}
+	if ev.Reason != nil && *ev.Reason != "" {
+		return fmt.Sprintf("The %s you reported was moderated: %s", subject, *ev.Reason)
+	}
+	return fmt.Sprintf("The %s you reported was moderated", subject)
 }
