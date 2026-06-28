@@ -138,10 +138,7 @@ func (g *MemberPubSub) PublishReport(ev event.ReportEvent) (err error) {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 
-	// Stamp the reporter's identity from this node so the moderator can
-	// deliver the verdict back. Done here (not in the UI-facing handler)
-	// so it always matches the signing node and can't be spoofed by a
-	// crafted body.
+	// Stamp reporter identity from this node so it can't be spoofed by the body.
 	ev.ReporterID = g.OwnerID()
 	ev.ReporterNodeID = g.NodeID()
 

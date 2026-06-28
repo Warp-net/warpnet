@@ -15,9 +15,7 @@ import (
 
 type stubModeratorNode struct {
 	resp []byte
-	// streamFn, when set, handles every GenericStream call so a test can
-	// return different payloads per route (fetch the tweet, then capture
-	// the report-result delivery). Falls back to resp otherwise.
+	// streamFn, when set, handles GenericStream per route; falls back to resp.
 	streamFn func(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
 
@@ -46,8 +44,7 @@ func (e *recordingEngine) Moderate(content string) (bool, string, error) {
 
 func (e *recordingEngine) Close() {}
 
-// fixedEngine returns a preset verdict, letting a test drive the FAIL path
-// (which the OK-returning recordingEngine deliberately stops short of).
+// fixedEngine returns a preset verdict so a test can drive the FAIL path.
 type fixedEngine struct {
 	ok     bool
 	reason string
@@ -56,8 +53,6 @@ type fixedEngine struct {
 func (e fixedEngine) Moderate(string) (bool, string, error) { return e.ok, e.reason, nil }
 func (e fixedEngine) Close()                                {}
 
-// stubPublisher satisfies the isolation Publisher; the followers/observers
-// broadcast is a no-op so tests can focus on the direct reporter delivery.
 type stubPublisher struct{}
 
 func (stubPublisher) PublishUpdateToFollowers(_, _ string, _ any) error { return nil }
@@ -146,9 +141,7 @@ func TestHandleTweetReport_EmptyTextSkipsEngine(t *testing.T) {
 	}
 }
 
-// On an actioned (FAIL) verdict the moderator re-sends the result straight
-// to the reporter's node on PUBLIC_POST_MODERATION_RESULT, with ReporterID
-// set so that node raises a notification for the reporter.
+// On a FAIL verdict the moderator re-sends the result to the reporter's node with ReporterID set.
 func TestHandleTweetReport_NotifiesReporter(t *testing.T) {
 	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
 
@@ -199,8 +192,7 @@ func TestHandleTweetReport_NotifiesReporter(t *testing.T) {
 	}
 }
 
-// A report carrying no reporter identity (older client) is still moderated
-// but must not trigger a direct reporter delivery.
+// No reporter identity (older client) -> moderated, but no reporter delivery.
 func TestHandleTweetReport_NoReporterNoDelivery(t *testing.T) {
 	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
 

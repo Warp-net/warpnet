@@ -469,10 +469,8 @@ type ReportEvent struct {
 	TargetNodeID domain.ID                   `json:"target_node_id"`
 	ObjectID     *domain.ID                  `json:"object_id,omitempty"`
 	Reason       string                      `json:"reason"`
-	// ReporterID / ReporterNodeID identify the user who filed the report so
-	// the moderator can deliver the verdict back to them. Stamped by the
-	// reporter's node at publish time (PublishReport), not supplied by the
-	// UI, so they always match the signing node.
+	// Reporter identity, stamped by the reporter's node at publish time so
+	// the moderator can return the verdict to it.
 	ReporterID     domain.ID `json:"reporter_id,omitempty"`
 	ReporterNodeID domain.ID `json:"reporter_node_id,omitempty"`
 }
@@ -490,12 +488,8 @@ type ModerationResultEvent struct {
 	// pubsub → SelfStream, and the loopback connection's RemotePeer
 	// would be the local node, not the moderator.
 	ModeratorID domain.ID `json:"moderator_id,omitempty"`
-	// ReporterID is set only when the moderator delivers this verdict
-	// straight to the user who reported the object, so that node can raise a
-	// notification for them. It stays empty on the followers/observers
-	// isolation broadcast (which must never notify anyone); both deliveries
-	// share the PUBLIC_POST_MODERATION_RESULT route, so this field is what
-	// the handler keys on to tell them apart.
+	// ReporterID is set only on the reporter-bound delivery; empty on the
+	// isolation broadcast. The handler keys on it to notify only the reporter.
 	ReporterID domain.ID `json:"reporter_id,omitempty"`
 }
 

@@ -138,9 +138,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 	})
 
-	// When the moderator delivers the verdict straight to the reporter it
-	// stamps ReporterID. That — and only that — turns the same handler into
-	// a notifying one, addressed to the local owner (the reporter).
+	// ReporterID set + matching the local owner turns the same handler into a notifying one.
 	t.Run("reported tweet actioned - notifies the reporter", func(t *testing.T) {
 		var got domain.Notification
 		notified := false

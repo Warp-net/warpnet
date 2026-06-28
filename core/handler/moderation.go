@@ -64,23 +64,17 @@ type ModerationTimelelineDeleter interface {
 
 // StreamModerationResultHandler receives a verdict from a moderator and
 // applies it locally so this node's view of the offending object is
-// downgraded. Three design notes:
+// downgraded. Two design notes:
 //
 //   - Isolation is shadow-style: the offender's own node never receives
 //     this stream (the moderator only publishes the verdict to the
 //     followers/observers pubsub topic, see IsolationProtocol). The
-//     offender must never see a moderation notification.
+//     previous "notify the owner" branch was deleted because that defeats
+//     the whole point — the offender would see a moderation notification.
 //
 //   - ModerationUserType marks the user-level moderation flag so clients
 //     hide bio/displayName/url/website on the next render. The user row
 //     stays on disk, only the Moderation sidecar is set.
-//
-//   - The reporter — and only the reporter — is told the outcome. The
-//     moderator re-sends the verdict straight to the reporter's node with
-//     ReporterID set; the followers/observers broadcast leaves it empty and
-//     so never notifies. The notification is raised before the isolation
-//     switch because that switch early-returns for users not cached locally,
-//     and the reporter need not follow the offender.
 func StreamModerationResultHandler(
 	notifier ModerationNotifier,
 	tweetRepo ModerationTweetUpdater,
@@ -102,6 +96,7 @@ func StreamModerationResultHandler(
 		log.Infof("moderation: result type=%s user=%s result=%t reporter=%s",
 			ev.Type.String(), ev.UserID, bool(ev.Result), ev.ReporterID)
 
+		// Before the switch, which early-returns for users not cached locally.
 		notifyReporter(notifier, authRepo, ev)
 
 		switch ev.Type {
@@ -167,17 +162,12 @@ func StreamModerationResultHandler(
 			return event.Accepted, nil
 		}
 
-		// Offenders and plain observers are never notified (shadow
-		// isolation); they simply re-render with the moderation flag set.
-		// Only the reporter is notified, handled above by notifyReporter.
 		return event.Accepted, nil
 	}
 }
 
-// notifyReporter raises a notification for the user who filed the report,
-// and only them. The moderator stamps ReporterID when it delivers the
-// verdict directly to the reporter's node; the followers/observers
-// broadcast leaves it empty, so this is a no-op there.
+// notifyReporter notifies the reporter, addressed by ReporterID which the
+// moderator sets only on the reporter-bound delivery.
 func notifyReporter(notifier ModerationNotifier, authRepo NotifierAuthStorer, ev event.ModerationResultEvent) {
 	if notifier == nil || authRepo == nil || ev.ReporterID == "" {
 		return
@@ -186,8 +176,6 @@ func notifyReporter(notifier ModerationNotifier, authRepo NotifierAuthStorer, ev
 	if owner.UserId == "" || owner.UserId != ev.ReporterID {
 		return
 	}
-	// Best-effort, matching the like/follow handlers: a local storage
-	// failure is logged but doesn't fail the moderator's delivery.
 	if err := notifier.Add(domain.Notification{
 		Type:   domain.NotificationModerationType,
 		Text:   reportResultText(ev),
@@ -197,10 +185,6 @@ func notifyReporter(notifier ModerationNotifier, authRepo NotifierAuthStorer, ev
 	}
 }
 
-// reportResultText is the line shown in the reporter's notifications. The
-// moderator only delivers actioned (FAIL) verdicts, so this describes a
-// moderated object; the engine's reason (a Llama Guard hazard label) is
-// appended when present.
 func reportResultText(ev event.ModerationResultEvent) string {
 	subject := "content"
 	switch ev.Type {

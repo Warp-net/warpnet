@@ -159,14 +159,9 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 	}
 }
 
-// notifyReporter re-sends an actioned (FAIL) verdict straight to the user
-// who filed the report so their node can raise a notification. It reuses
-// PUBLIC_POST_MODERATION_RESULT (same as the followers/observers broadcast)
-// but with ReporterID set, which is the flag the receiving handler keys on
-// to notify — and only — the reporter. Best-effort: a delivery failure
-// (reporter offline) must not abort moderation, so it logs instead of
-// returning the error. Only called for FAIL verdicts, matching the
-// shadow-ban rule that clean content never goes on the wire.
+// notifyReporter re-sends the verdict to the reporter's node on the same
+// route as the broadcast, but with ReporterID set so it notifies them.
+// Best-effort: a delivery failure must not abort moderation.
 func (m *Moderator) notifyReporter(
 	rep event.ReportEvent,
 	reason *string,
@@ -250,8 +245,6 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
-	// Tell the reporter their report was actioned. Direct stream to them,
-	// not the shadow-ban broadcast, so it never reaches the offender.
 	m.notifyReporter(ev, &reason, &tweet.Id, tweet.UserId)
 	return nil
 }
@@ -305,8 +298,6 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
-	// Tell the reporter their report was actioned. Direct stream to them,
-	// not the shadow-ban broadcast, so it never reaches the offender.
 	m.notifyReporter(ev, &reason, nil, user.Id)
 	return nil
 }
