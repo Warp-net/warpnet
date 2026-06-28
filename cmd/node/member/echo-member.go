@@ -162,6 +162,7 @@ func main() {
 		authRepo,
 		db,
 		bootstrapNodes,
+		network,
 		m,
 	)
 	if err != nil {

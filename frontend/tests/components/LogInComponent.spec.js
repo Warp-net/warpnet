@@ -85,6 +85,7 @@ describe('LogInComponent', () => {
       expect(warpnetService.signInUser).toHaveBeenCalledWith({
         username: 'alice',
         password: 's3cret',
+        network: 'mainnet',
       });
     });
   });
@@ -113,6 +114,7 @@ describe('LogInComponent', () => {
       expect(warpnetService.signInUser).toHaveBeenCalledWith({
         username: 'alice',
         password: 's3cret',
+        network: 'mainnet',
       });
     });
   });
@@ -226,6 +228,7 @@ describe('LogInComponent', () => {
       expect(warpnetService.signInUser).toHaveBeenCalledWith({
         username: '',
         password: '',
+        network: 'mainnet',
       });
     });
   });

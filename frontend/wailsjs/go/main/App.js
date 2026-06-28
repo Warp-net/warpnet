@@ -10,8 +10,8 @@ export function ConsumePendingDeepLink() {
   return window['go']['main']['App']['ConsumePendingDeepLink']();
 }
 
-export function IsFirstRun() {
-  return window['go']['main']['App']['IsFirstRun']();
+export function IsFirstRun(arg1) {
+  return window['go']['main']['App']['IsFirstRun'](arg1);
 }
 
 export function NotifyDeepLink(arg1) {

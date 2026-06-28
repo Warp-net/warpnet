@@ -64,6 +64,14 @@ var testnetBootstrapNodes = []string{
 
 var configSingleton config
 
+// userBootstrapNodes and databaseDir capture the operator-provided inputs that
+// the per-network helpers below need to rebuild bootstrap lists and database
+// paths once the network is chosen at login time instead of from config.
+var (
+	userBootstrapNodes []string
+	databaseDir        string
+)
+
 func init() {
 	pflag.String("node.host.v4", "0.0.0.0", "Node host IPv4")
 	pflag.String("node.host.v6", "::", "Node host IPv6")
@@ -90,40 +98,28 @@ func init() {
 
 	_ = viper.BindPFlags(pflag.CommandLine)
 
-	bootstrapAddrList := make([]string, 0, len(warpnetBootstrapNodes))
 	bootstrapAddrs := viper.GetString("node.bootstrap")
-
-	split := strings.Split(bootstrapAddrs, ",")
 	if bootstrapAddrs != "" {
-		bootstrapAddrList = split
+		userBootstrapNodes = strings.Split(bootstrapAddrs, ",")
 	}
 
-	network := strings.TrimSpace(viper.GetString("node.network"))
-	if network == "mainnet" {
-		network = warpnetNetwork
-	}
-	if network == warpnetNetwork {
-		bootstrapAddrList = append(bootstrapAddrList, warpnetBootstrapNodes...)
-	}
-	if network == testNetNetwork {
-		bootstrapAddrList = append(bootstrapAddrList, testnetBootstrapNodes...)
-	}
+	network := NormalizeNetwork(viper.GetString("node.network"))
 
 	version := root.GetVersion()
 	fmt.Printf(noticeTemplate, strings.ToUpper(warpnet.WarpnetName), version, "2025", "Vadim Filin")
 
 	host := viper.GetString("node.host.v4")
 	port := viper.GetString("node.port")
-	dbDir := viper.GetString("database.dir")
+	databaseDir = strings.TrimSpace(viper.GetString("database.dir"))
 
 	seed := strings.TrimSpace(viper.GetString("node.seed"))
 	if seed == "" {
-		seed = "seed" + network + dbDir + host + port
+		seed = "seed" + network + databaseDir + host + port
 	}
 
-	appPath := getAppPath()
+	bootstrapAddrList := BootstrapNodesForNetwork(network)
 
-	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
+	dbPath := DatabasePathForNetwork(network)
 
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
@@ -210,10 +206,14 @@ func (n node) IsTestnet() bool {
 }
 
 func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
-	if len(n.Bootstrap) == 0 {
+	return addrInfos(n.Bootstrap)
+}
+
+func addrInfos(bootstrap []string) (infos []warpnet.WarpAddrInfo, err error) {
+	if len(bootstrap) == 0 {
 		return infos, nil
 	}
-	for _, addr := range n.Bootstrap {
+	for _, addr := range bootstrap {
 		maddr, err := warpnet.NewMultiaddr(addr)
 		if err != nil {
 			return nil, err
@@ -225,6 +225,47 @@ func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
 		infos = append(infos, *addrInfo)
 	}
 	return infos, nil
+}
+
+// NormalizeNetwork trims the network name and folds the "mainnet" alias and the
+// empty value onto the canonical "warpnet" network, matching the rules the PSK
+// derivation and on-disk database layout already rely on. The network is chosen
+// at login time, so any value that reaches the node passes through here first.
+func NormalizeNetwork(network string) string {
+	network = strings.TrimSpace(network)
+	switch network {
+	case "", "mainnet":
+		return warpnetNetwork
+	default:
+		return network
+	}
+}
+
+// BootstrapNodesForNetwork returns the operator-provided bootstrap multiaddrs
+// plus the built-in defaults for the given network.
+func BootstrapNodesForNetwork(network string) []string {
+	network = NormalizeNetwork(network)
+	nodes := make([]string, 0, len(userBootstrapNodes)+len(warpnetBootstrapNodes))
+	nodes = append(nodes, userBootstrapNodes...)
+	switch network {
+	case warpnetNetwork:
+		nodes = append(nodes, warpnetBootstrapNodes...)
+	case testNetNetwork:
+		nodes = append(nodes, testnetBootstrapNodes...)
+	}
+	return nodes
+}
+
+// DatabasePathForNetwork returns the on-disk database directory for the given
+// network, keeping each network's data separated as before.
+func DatabasePathForNetwork(network string) string {
+	return filepath.Join(getAppPath(), NormalizeNetwork(network), databaseDir)
+}
+
+// AddrInfosForNetwork resolves the bootstrap multiaddrs for the given network
+// into peer AddrInfos.
+func AddrInfosForNetwork(network string) ([]warpnet.WarpAddrInfo, error) {
+	return addrInfos(BootstrapNodesForNetwork(network))
 }
 
 func getAppPath() string {

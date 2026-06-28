@@ -260,9 +260,14 @@ type LikesCountResponse struct {
 }
 
 // LoginEvent defines model for LoginEvent.
+//
+// Network is chosen by the user on the login page and selects which Warpnet
+// network the node joins (it drives the PSK, bootstrap peers, DHT namespace and
+// the per-network database directory). Empty and "mainnet" fold onto "warpnet".
 type LoginEvent struct {
 	Password string `json:"password"` //nolint:gosec
 	Username string `json:"username"`
+	Network  string `json:"network"`
 }
 
 // LoginResponse defines model for LoginResponse.

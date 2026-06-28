@@ -85,27 +85,31 @@ type Authenticator interface {
 	PrivateKey() ed25519.PrivateKey
 }
 
+// SessionInitializer brings up the network-scoped state (database, auth service
+// and PSK) for the network the user picked on the login page, returning the
+// authenticator and PSK to drive the login. It is idempotent: the first login
+// creates the session and later logins reuse it.
+type SessionInitializer func(network string) (Authenticator, security.PSK, error)
+
 type BridgeHandler struct {
-	codec    Codec
-	auth     Authenticator
-	firstRun func() bool
-	psk      security.PSK
+	codec       Codec
+	initSession SessionInitializer
+	firstRun    func(network string) bool
 
 	mx   sync.RWMutex
+	auth Authenticator
 	node Node
 }
 
 func NewBridgeHandler(
 	codec Codec,
-	auth Authenticator,
-	psk security.PSK,
-	firstRun func() bool,
+	initSession SessionInitializer,
+	firstRun func(network string) bool,
 ) *BridgeHandler {
 	return &BridgeHandler{
-		codec:    codec,
-		auth:     auth,
-		psk:      psk,
-		firstRun: firstRun,
+		codec:       codec,
+		initSession: initSession,
+		firstRun:    firstRun,
 	}
 }
 
@@ -198,13 +202,20 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 
 	switch req.Destination {
 	case pathIsFirstRun:
-		body, _ := json.Marshal(b.firstRun())
+		var ev event.LoginEvent
+		_ = json.Unmarshal(req.Body, &ev) // body carries only the selected network
+		body, _ := json.Marshal(b.firstRun(ev.Network))
 		resp.Body = body
 	case event.PRIVATE_POST_LOGIN:
 		resp.Body = b.login(req.Body)
 	case event.PRIVATE_POST_LOGOUT:
-		b.auth.AuthLogout() // closes the database; the node keeps running
-		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
+		b.mx.RLock()
+		authn := b.auth
+		b.mx.RUnlock()
+		if authn != nil {
+			authn.AuthLogout() // closes the database; the node keeps running
+			authn.Reset()      // clear the auth guard so the next login can re-authenticate
+		}
 		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
 		resp.Body = b.call(req)
@@ -221,7 +232,19 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
-	loginResp, err := b.auth.AuthLogin(ev, b.psk)
+
+	// The network comes from the login form, so the session (database, auth
+	// service, PSK) is brought up here on the first login rather than at boot.
+	authn, psk, err := b.initSession(ev.Network)
+	if err != nil {
+		log.Errorf("business: init session: %v", err)
+		return newErrorResp(err.Error())
+	}
+	b.mx.Lock()
+	b.auth = authn
+	b.mx.Unlock()
+
+	loginResp, err := authn.AuthLogin(ev, psk)
 	if err != nil {
 		log.Errorf("business: auth: %v", err)
 		return newErrorResp(err.Error())
@@ -236,11 +259,12 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 	b.mx.RLock()
 	n := b.node
+	authn := b.auth
 	b.mx.RUnlock()
-	if n == nil {
+	if n == nil || authn == nil {
 		return newErrorResp("not attached server node")
 	}
-	req.Signature = security.Sign(b.auth.PrivateKey(), req.Body)
+	req.Signature = security.Sign(authn.PrivateKey(), req.Body)
 	respData, err := n.SelfStream(stream.WarpRoute(req.Destination), req)
 	if err != nil {
 		return newErrorResp(err.Error())

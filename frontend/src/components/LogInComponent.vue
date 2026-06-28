@@ -85,6 +85,14 @@ export default {
   components: {
     ProgressBar: defineAsyncComponent(() => import('./ProgressBar.vue')),
   },
+  props: {
+    // network selected on the login page; drives which Warpnet network the
+    // node joins. Owned by the parent so sign-up and log-in share one value.
+    network: {
+      type: String,
+      default: "mainnet",
+    },
+  },
   data() {
     return {
       username: "",
@@ -103,7 +111,7 @@ export default {
       this.isLoading = true;
       this.showErrorModal = false;
       try {
-        await warpnetService.signInUser({username: this.username, password: this.password});
+        await warpnetService.signInUser({username: this.username, password: this.password, network: this.network});
         this.$router.push({ name: "Home" });
       } catch (error) {
         console.log("error signing in", error);

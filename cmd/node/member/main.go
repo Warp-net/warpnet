@@ -35,7 +35,8 @@ func main() {
 	}
 	log.SetOutput(os.Stdout)
 
-	log.Infof("network: %s", config.Config().Node.Network)
+	// The network is chosen by the user on the login page, so it is unknown
+	// here and is logged later when the node starts.
 
 	app := NewApp()
 	icon := warpnet.GetLogo()

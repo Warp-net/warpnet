@@ -70,7 +70,7 @@ if (process.env.NODE_ENV === 'development') {
                     const body = generateResponse(arg1);
                     return Promise.resolve({body:body});
                 },
-                IsFirstRun: () => Promise.resolve(true),
+                IsFirstRun: (_network) => Promise.resolve(true),
                 ConsumePendingDeepLink: () => Promise.resolve(""),
             }
         }

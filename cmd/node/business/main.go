@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -55,7 +56,6 @@ func main() {
 		log.Fatal("password is required")
 	}
 	port := config.Config().Node.Server.Port
-	network := config.Config().Node.Network
 	version := config.Config().Version
 
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
@@ -70,41 +70,70 @@ func main() {
 	}
 	log.SetOutput(os.Stdout)
 
-	log.Infof("network: %s", network)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	interruptChan := make(chan os.Signal, 1)
 	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	psk, err := security.GeneratePSK(network, version)
-	if err != nil {
-		log.Errorf("business: generate PSK: %v", err)
-		return
-	}
 	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
 	if err != nil {
 		log.Errorf("business: codebase hash: %v", err)
 		return
 	}
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		log.Errorf("business: bootstrap infos: %v", err)
-		return
-	}
-
-	db, err := localstore.New(config.Config().Database.Path, localstore.DefaultOptions())
-	if err != nil {
-		log.Errorf("business: open db: %v", err)
-		return
-	}
-	defer db.Close()
 
 	readyChan := make(chan domain.AuthNodeInfo, 1)
-	userRepo := database.NewUserRepo(db)
-	authRepo := database.NewAuthRepo(db, network)
-	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
+
+	// The network is chosen by the dashboard user on the login page, so the
+	// database, auth service and PSK are all network-scoped and created on the
+	// first login (initSession) rather than at boot.
+	var (
+		sessMx      sync.Mutex
+		db          *localstore.DB
+		authRepo    *database.AuthRepo
+		authService *auth.AuthService
+		psk         security.PSK
+		network     string
+	)
+	defer func() {
+		sessMx.Lock()
+		if db != nil {
+			db.Close()
+		}
+		sessMx.Unlock()
+	}()
+
+	firstRun := func(net string) bool {
+		probe, err := localstore.New(config.DatabasePathForNetwork(net), localstore.DefaultOptions())
+		if err != nil {
+			log.Errorf("business: first-run probe: %v", err)
+			return false
+		}
+		return probe.IsFirstRun()
+	}
+
+	initSession := func(net string) (handlers2.Authenticator, security.PSK, error) {
+		sessMx.Lock()
+		defer sessMx.Unlock()
+		if authService != nil {
+			return authService, psk, nil
+		}
+		net = config.NormalizeNetwork(net)
+		p, err := security.GeneratePSK(net, version)
+		if err != nil {
+			return nil, nil, err
+		}
+		d, err := localstore.New(config.DatabasePathForNetwork(net), localstore.DefaultOptions())
+		if err != nil {
+			return nil, nil, err
+		}
+		ar := database.NewAuthRepo(d, net)
+		userRepo := database.NewUserRepo(d)
+		as := auth.NewAuthService(ctx, ar, userRepo, readyChan)
+		db, authRepo, authService, psk, network = d, ar, as, p, net
+		log.Infof("business: network: %s", net)
+		return as, p, nil
+	}
 
 	staticHandler, err := handlers2.NewStaticHandler()
 	if err != nil {
@@ -114,9 +143,8 @@ func main() {
 
 	bridgeHandler := handlers2.NewBridgeHandler(
 		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
-		authService,
-		psk,
-		db.IsFirstRun, // queried lazily: flips to false once the DB is opened on first login
+		initSession,
+		firstRun,
 	)
 
 	mux := http.NewServeMux()
@@ -154,25 +182,36 @@ func main() {
 			log.Infoln("business: database authentication passed")
 		}
 
+		sessMx.Lock()
+		d, ar, p, net := db, authRepo, psk, network
+		sessMx.Unlock()
+
 		if node == nil {
-			privateKey := authService.PrivateKey()
+			privateKey := ar.PrivateKey()
 			ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
 			if err != nil {
 				log.Errorf("business: node ID: %v", err)
 				return
 			}
 
-			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
+			infos, err := config.AddrInfosForNetwork(net)
+			if err != nil {
+				log.Errorf("business: bootstrap infos: %v", err)
+				return
+			}
+
+			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), net)
 			node, err = bnode.NewBusinessNode(
 				ctx,
 				privateKey,
-				psk,
+				p,
 				ownNodeId,
 				codeHashHex,
 				version,
-				authRepo,
-				db,
+				ar,
+				d,
 				infos,
+				net,
 				m,
 			)
 			if err != nil {
@@ -190,10 +229,10 @@ func main() {
 
 		ni := node.NodeInfo()
 		info.ID = ni.ID.String()
-		info.Network = network
+		info.Network = net
 		info.Addresses = ni.Addresses
 		info.Role = ni.Type
-		info.BootstrapPeers = config.Config().Node.Bootstrap
+		info.BootstrapPeers = config.BootstrapNodesForNetwork(net)
 		readyChan <- info
 	}
 }

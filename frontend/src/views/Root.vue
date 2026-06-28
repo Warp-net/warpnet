@@ -53,13 +53,30 @@ resulting from the use or misuse of this software.
             Dive deep into the Warp and see what happens...
           </p>
           <p>Join Warpnet today.</p>
+          <div class="mt-4 mb-2">
+            <label for="login-network" class="block text-sm text-dark mb-1">Network</label>
+            <input
+              id="login-network"
+              v-model="network"
+              class="w-full bg-lightblue border-b-2 border-dark p-2 text-lg rounded"
+              type="text"
+              list="network-options"
+              autocomplete="off"
+              spellcheck="false"
+              @change="refreshFirstRun"
+            />
+            <datalist id="network-options">
+              <option value="mainnet"></option>
+              <option value="testnet"></option>
+            </datalist>
+          </div>
           <button v-if="isFirstRun === true"
             @click.prevent="setSignUpStep('step1')"
             class="rounded-full bg-blue font-bold text-lg text-white mt-4 p-3 hover:bg-darkblue"
           >
             Sign up
           </button>
-          <LogInComponent v-else-if="isFirstRun === false"></LogInComponent>
+          <LogInComponent v-else-if="isFirstRun === false" :network="network"></LogInComponent>
         </div>
       </div>
     </div>
@@ -292,6 +309,7 @@ export default {
       username: "",
       password: "",
       passwordConfirm: "",
+      network: "mainnet",
       revealPassword: false,
       isFirstRun: null,
       isLoading: false,
@@ -313,15 +331,20 @@ export default {
     },
   },
   async mounted() {
-    try {
-      this.isFirstRun = await warpnetService.isFirstRun();
-    } catch (err) {
-      console.error("failed to determine first-run state:", err);
-      this.isFirstRun = false;
-    }
+    await this.refreshFirstRun();
     console.log("Is first run:", this.isFirstRun);
   },
   methods: {
+    // First-run state is tracked per network (each network has its own data
+    // directory), so re-check whenever the selected network changes.
+    async refreshFirstRun() {
+      try {
+        this.isFirstRun = await warpnetService.isFirstRun(this.network);
+      } catch (err) {
+        console.error("failed to determine first-run state:", err);
+        this.isFirstRun = false;
+      }
+    },
     async signMeUp() {
       try {
         this.isLoading = true;
@@ -332,6 +355,7 @@ export default {
         await warpnetService.signInUser({
           username: this.username,
           password: this.password,
+          network: this.network,
         });
         if (wasFirstRun) {
           // SideNav picks this up on mount and opens the pairing

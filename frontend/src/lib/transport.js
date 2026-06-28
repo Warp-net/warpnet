@@ -246,12 +246,15 @@ export async function Call(request) {
   return resp;
 }
 
-export async function IsFirstRun() {
+// IsFirstRun reports whether the given network has no account on this device
+// yet. The network is a login-page input, so it is forwarded to the node: the
+// first-run state is tracked per network (each lives in its own database dir).
+export async function IsFirstRun(network) {
   if (hasWails()) {
-    return Wails.IsFirstRun();
+    return Wails.IsFirstRun(network || "");
   }
   try {
-    const resp = await send({ path: IS_FIRST_RUN_PATH, body: {} });
+    const resp = await send({ path: IS_FIRST_RUN_PATH, body: { network: network || "" } });
     return Boolean(resp && resp.body);
   } catch (e) {
     console.error("is-first-run failed:", e);

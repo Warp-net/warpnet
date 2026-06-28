@@ -6,7 +6,7 @@ export function Call(arg1:main.AppMessage):Promise<main.AppMessage>;
 
 export function ConsumePendingDeepLink():Promise<string>;
 
-export function IsFirstRun():Promise<boolean>;
+export function IsFirstRun(arg1:string):Promise<boolean>;
 
 export function NotifyDeepLink(arg1:string):Promise<void>;
 

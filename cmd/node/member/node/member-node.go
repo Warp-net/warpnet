@@ -91,6 +91,7 @@ func NewMemberNode(
 	authRepo AuthProvider,
 	db Storer,
 	bootstrapNodes []warpnet.WarpAddrInfo,
+	network string,
 	metrics MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
@@ -127,7 +128,7 @@ func NewMemberNode(
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
-	warpNetwork := config.Config().Node.Network
+	warpNetwork := config.NormalizeNetwork(network)
 
 	dHashTable := dht.NewDHTable(
 		ctx,

@@ -190,8 +190,8 @@ export const warpnetService = {
         } catch (e) {}
     },
 
-    async isFirstRun() {
-        return Boolean(await IsFirstRun());
+    async isFirstRun(network) {
+        return Boolean(await IsFirstRun(network));
     },
 
     // Returns the pending warpnet:// URL and clears it on the Go side.
@@ -211,6 +211,7 @@ export const warpnetService = {
             body: {
                 username: form.username,
                 password: form.password,
+                network: form.network || "",
             }
         }
         const resp = await this.sendToNode(request);
