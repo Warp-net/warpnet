@@ -27,7 +27,6 @@ package handlers
 import (
 	"context"
 	"crypto/ed25519"
-	"fmt"
 	"github.com/Masterminds/semver/v3"
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
@@ -250,26 +249,10 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
-	psk, err := security.GeneratePSK(ev.Network, b.version)
-	if err != nil {
-		return newErrorResp(fmt.Sprintf("business: generate PSK: %v", err))
+	if err := b.setupAuth(ev.Network); err != nil {
+		return newErrorResp(err.Error())
 	}
-
-	dbPath := filepath.Join(local_store.GetAppPath(), strings.TrimSpace(ev.Network), strings.TrimSpace(b.dbDir))
-
-	db, err := local_store.New(dbPath, local_store.DefaultOptions())
-	if err != nil {
-		return newErrorResp(fmt.Sprintf("business: open db: %v", err))
-	}
-	b.db = db
-	b.network = ev.Network
-	b.psk = psk
-
-	userRepo := database.NewUserRepo(db)
-	authRepo := database.NewAuthRepo(db, ev.Network)
-	b.auth = auth.NewAuthService(b.ctx, authRepo, userRepo, b.readyChan)
-
-	loginResp, err := b.auth.AuthLogin(ev, psk)
+	loginResp, err := b.auth.AuthLogin(ev, b.psk)
 	if err != nil {
 		log.Errorf("business: auth: %v", err)
 		return newErrorResp(err.Error())
@@ -279,6 +262,27 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 		return newErrorResp(err.Error())
 	}
 	return bt
+}
+
+// setupAuth opens the network-scoped database and wires the auth service for
+// the login-supplied network. It does not authenticate — login does that next.
+func (b *BridgeHandler) setupAuth(network string) error {
+	psk, err := security.GeneratePSK(network, b.version)
+	if err != nil {
+		return err
+	}
+	dbPath := filepath.Join(local_store.GetAppPath(), strings.TrimSpace(network), strings.TrimSpace(b.dbDir))
+	db, err := local_store.New(dbPath, local_store.DefaultOptions())
+	if err != nil {
+		return err
+	}
+	b.db = db
+	b.network = network
+	b.psk = psk
+	userRepo := database.NewUserRepo(db)
+	authRepo := database.NewAuthRepo(db, network)
+	b.auth = auth.NewAuthService(b.ctx, authRepo, userRepo, b.readyChan)
+	return nil
 }
 
 // isFirstRun answers the cleartext is-first-run probe (it precedes the channel
