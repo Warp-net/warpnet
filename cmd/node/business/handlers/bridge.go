@@ -31,7 +31,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -101,17 +100,20 @@ type Authenticator interface {
 }
 
 type BridgeHandler struct {
-	ctx       context.Context
-	codec     Codec
-	auth      Authenticator
-	db        *local_store.DB
-	mx        sync.RWMutex
-	node      Node
-	dbDir     string
-	version   *semver.Version
-	readyChan chan domain.AuthNodeInfo
-	network   string
-	psk       security.PSK
+	ctx            context.Context
+	codec          Codec
+	auth           Authenticator
+	db             *local_store.DB
+	mx             sync.RWMutex
+	node           Node
+	dbDir          string
+	version        *semver.Version
+	readyChan      chan domain.AuthNodeInfo
+	bootstrapNodes []warpnet.WarpAddrInfo
+	bootstrapPeers []string
+	metricsGateway string
+	network        string
+	psk            security.PSK
 }
 
 func NewBridgeHandler(
@@ -120,13 +122,19 @@ func NewBridgeHandler(
 	dbDir string,
 	version *semver.Version,
 	readyChan chan domain.AuthNodeInfo,
+	bootstrapNodes []warpnet.WarpAddrInfo,
+	bootstrapPeers []string,
+	metricsGateway string,
 ) *BridgeHandler {
 	return &BridgeHandler{
-		ctx:       ctx,
-		codec:     codec,
-		dbDir:     dbDir,
-		version:   version,
-		readyChan: readyChan,
+		ctx:            ctx,
+		codec:          codec,
+		dbDir:          dbDir,
+		version:        version,
+		readyChan:      readyChan,
+		bootstrapNodes: bootstrapNodes,
+		bootstrapPeers: bootstrapPeers,
+		metricsGateway: metricsGateway,
 	}
 }
 
@@ -244,9 +252,6 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
-	if strings.TrimSpace(ev.Network) == "" {
-		ev.Network = config.Config().Node.Network
-	}
 	psk, err := security.GeneratePSK(ev.Network, b.version)
 	if err != nil {
 		return newErrorResp(fmt.Sprintf("business: generate PSK: %v", err))
@@ -282,11 +287,8 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 func (b *BridgeHandler) isFirstRun(body json.RawMessage) json.RawMessage {
 	var ev event.LoginEvent
 	_ = json.Unmarshal(body, &ev)
-	if strings.TrimSpace(ev.Network) == "" {
-		ev.Network = config.Config().Node.Network
-	}
 	dbPath := filepath.Join(local_store.GetAppPath(), strings.TrimSpace(ev.Network), strings.TrimSpace(b.dbDir))
-	out, _ := json.Marshal(local_store.IsFirstRun(dbPath))
+	out, _ := json.Marshal(local_store.IsFirstRunAt(dbPath))
 	return out
 }
 
@@ -318,13 +320,7 @@ func (b *BridgeHandler) RunNode() {
 				return
 			}
 
-			infos, err := config.Config().Node.AddrInfos()
-			if err != nil {
-				log.Errorf("business: bootstrap infos: %v", err)
-				return
-			}
-
-			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), b.network)
+			m := metrics.NewMetricsClient(b.metricsGateway, ownNodeId.String(), b.network)
 			node, err = bnode.NewBusinessNode(
 				b.ctx,
 				privateKey,
@@ -333,7 +329,7 @@ func (b *BridgeHandler) RunNode() {
 				b.auth.Storage(),
 				b.db,
 				b.network,
-				infos,
+				b.bootstrapNodes,
 				m,
 			)
 			if err != nil {
@@ -354,7 +350,7 @@ func (b *BridgeHandler) RunNode() {
 		info.Network = b.network
 		info.Addresses = ni.Addresses
 		info.Role = ni.Type
-		info.BootstrapPeers = config.Config().Node.Bootstrap
+		info.BootstrapPeers = b.bootstrapPeers
 		b.readyChan <- info
 	}
 }

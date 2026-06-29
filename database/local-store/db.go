@@ -1018,9 +1018,9 @@ func GetAppPath() string {
 	return dbPath
 }
 
-// IsFirstRun reports whether the store at dbPath has never been initialized,
+// IsFirstRunAt reports whether the store at dbPath has never been initialized,
 // read from the on-disk lock file without opening the database. It lets the
 // caller decide sign-up vs login before the password (and network) are known.
-func IsFirstRun(dbPath string) bool {
+func IsFirstRunAt(dbPath string) bool {
 	return !findFirstRunFlag(filepath.Join(dbPath, version0))
 }

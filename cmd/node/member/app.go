@@ -86,9 +86,6 @@ func (a *App) IsFirstRun(network string) bool {
 	if a == nil || a.mx == nil {
 		return false
 	}
-	if strings.TrimSpace(network) == "" {
-		network = config.Config().Node.Network
-	}
 	a.mx.RLock()
 	db := a.db
 	a.mx.RUnlock()
@@ -97,7 +94,7 @@ func (a *App) IsFirstRun(network string) bool {
 	}
 	// Pre-login the DB is not open yet; read the network-scoped lock file directly.
 	dbPath := filepath.Join(a.appPath, strings.TrimSpace(network), strings.TrimSpace(a.dbDir))
-	return local_store.IsFirstRun(dbPath)
+	return local_store.IsFirstRunAt(dbPath)
 }
 
 // SetPendingDeepLink stashes a warpnet:// payload for the frontend. Pre-startup safe (a.mx may be nil).
@@ -164,9 +161,6 @@ func (a *App) startup(ctx context.Context) {
 // idempotent so a rejected login can be retried without reopening the DB, which
 // would fail on badger's single-process directory lock.
 func (a *App) setupAuth(network string) error {
-	if strings.TrimSpace(network) == "" {
-		network = config.Config().Node.Network
-	}
 	if a.auth != nil {
 		return nil
 	}
