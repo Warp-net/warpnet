@@ -343,6 +343,13 @@ func StreamGetImageHandler(
 			return event.GetImageResponse{File: ""}, nil
 		}
 
+		// Serve the persisted copy first so a foreign avatar (e.g. Mastodon,
+		// keyed by URL) survives node restarts and doesn't need a gateway
+		// round-trip on every view.
+		if cached, cErr := mediaRepo.GetImage(ev.UserId, ev.Key); cErr == nil && cached != "" {
+			return event.GetImageResponse{File: string(cached)}, nil
+		}
+
 		resp, err := streamer.GenericStream(u.NodeId, event.PUBLIC_GET_IMAGE, ev)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
 			return event.GetImageResponse{File: ""}, nil
