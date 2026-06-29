@@ -246,12 +246,12 @@ export async function Call(request) {
   return resp;
 }
 
-export async function IsFirstRun() {
+export async function IsFirstRun(network) {
   if (hasWails()) {
-    return Wails.IsFirstRun();
+    return Wails.IsFirstRun(network);
   }
   try {
-    const resp = await send({ path: IS_FIRST_RUN_PATH, body: {} });
+    const resp = await send({ path: IS_FIRST_RUN_PATH, body: { network } });
     return Boolean(resp && resp.body);
   } catch (e) {
     console.error("is-first-run failed:", e);

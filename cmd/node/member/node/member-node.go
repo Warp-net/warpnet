@@ -85,6 +85,7 @@ func NewMemberNode(
 	ownNodeId warpnet.WarpPeerID,
 	authRepo AuthProvider,
 	db Storer,
+	network string,
 	bootstrapNodes []warpnet.WarpAddrInfo,
 	metrics MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
@@ -120,14 +121,12 @@ func NewMemberNode(
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
-	warpNetwork := config.Config().Node.Network
-
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(bootstrapNodes...),
-		dht.Network(warpNetwork),
+		dht.Network(network),
 	)
 
 	opts := []warpnet.WarpOption{ //nolint:prealloc
@@ -160,7 +159,7 @@ func NewMemberNode(
 		authRepo:      authRepo,
 		db:            db,
 		ownerId:       owner.UserId,
-		network:       warpNetwork,
+		network:       network,
 	}
 
 	return mn, nil

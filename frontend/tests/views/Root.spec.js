@@ -142,6 +142,7 @@ describe('Root.vue', () => {
       expect(warpnetService.signInUser).toHaveBeenCalledWith({
         username: 'alice',
         password: 's3cret',
+        network: 'warpnet',
       });
       expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
     });

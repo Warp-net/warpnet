@@ -102,6 +102,26 @@ const stateMap = new Map();
 // tab or reloading the page restores the session instead of bouncing to the
 // sign-up screen.
 const OWNER_STORAGE = "warpnet.owner";
+// Network is chosen by the user at sign-up and remembered here so later logins
+// (which have no picker) and the first-run probe target the same network.
+const NETWORK_STORAGE = "warpnet.network";
+const DEFAULT_NETWORK = "warpnet";
+
+function getStoredNetwork() {
+    try {
+        const n = localStorage.getItem(NETWORK_STORAGE);
+        return (n && n.trim()) || DEFAULT_NETWORK;
+    } catch (e) {
+        return DEFAULT_NETWORK;
+    }
+}
+
+function setStoredNetwork(network) {
+    try {
+        localStorage.setItem(NETWORK_STORAGE, network);
+    } catch (e) {}
+}
+
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
 
@@ -191,7 +211,7 @@ export const warpnetService = {
     },
 
     async isFirstRun() {
-        return Boolean(await IsFirstRun());
+        return Boolean(await IsFirstRun(getStoredNetwork()));
     },
 
     // Returns the pending warpnet:// URL and clears it on the Go side.
@@ -206,11 +226,13 @@ export const warpnetService = {
     },
 
     async signInUser(form) {
+        const network = (form.network && form.network.trim()) || getStoredNetwork();
         let request = {
             path: PRIVATE_POST_LOGIN,
             body: {
                 username: form.username,
                 password: form.password,
+                network,
             }
         }
         const resp = await this.sendToNode(request);
@@ -220,6 +242,8 @@ export const warpnetService = {
         if (resp.code) {
             throw new Error(resp.message)
         }
+        // Remember the network so later logins (no picker) and first-run reuse it.
+        setStoredNetwork(network);
         // Seed the owner profile from the flat AuthNodeInfo first so any
         // sendToNode call below has node_id/user_id available; getProfile
         // is fetched on a best-effort basis to back-fill the username.

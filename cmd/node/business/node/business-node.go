@@ -47,12 +47,13 @@ func NewBusinessNode(
 	ownNodeId warpnet.WarpPeerID,
 	authRepo member.AuthProvider,
 	db member.Storer,
+	network string,
 	bootstrapNodes []warpnet.WarpAddrInfo,
 	metrics member.MetricsOnlinePusher,
 ) (*BusinessNode, error) {
 	mn, err := member.NewMemberNode(
 		ctx, privKey, psk, ownNodeId,
-		authRepo, db, bootstrapNodes, metrics,
+		authRepo, db, network, bootstrapNodes, metrics,
 	)
 	if err != nil {
 		return nil, err

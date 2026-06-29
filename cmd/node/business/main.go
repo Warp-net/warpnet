@@ -26,7 +26,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
 	"errors"
 	"fmt"
 	handlers2 "github.com/Warp-net/warpnet/cmd/node/business/handlers"
@@ -36,11 +35,8 @@ import (
 	"syscall"
 	"time"
 
-	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
@@ -78,15 +74,10 @@ func main() {
 		return
 	}
 
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		log.Errorf("business: bootstrap infos: %v", err)
-		return
-	}
-
 	readyChan := make(chan domain.AuthNodeInfo, 1)
 
 	bridgeHandler := handlers2.NewBridgeHandler(
+		ctx,
 		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
 		dbDir,
 		version,
@@ -109,4 +100,9 @@ func main() {
 
 	fmt.Printf("\033[1mNODE IS LISTENING ON 'localhost:%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
 
+	// Start the node once login authenticates the network-scoped database.
+	go bridgeHandler.RunNode()
+
+	<-interruptChan
+	log.Infoln("business node interrupted...")
 }

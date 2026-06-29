@@ -159,6 +159,7 @@ func main() {
 		nodeId,
 		authRepo,
 		db,
+		network,
 		bootstrapNodes,
 		m,
 	)

@@ -82,16 +82,22 @@ func NewApp() *App {
 	return &App{}
 }
 
-func (a *App) IsFirstRun() bool {
+func (a *App) IsFirstRun(network string) bool {
 	if a == nil || a.mx == nil {
 		return false
 	}
-	a.mx.RLock()
-	defer a.mx.RUnlock()
-	if a.db == nil {
-		return false
+	if strings.TrimSpace(network) == "" {
+		network = config.Config().Node.Network
 	}
-	return a.db.IsFirstRun()
+	a.mx.RLock()
+	db := a.db
+	a.mx.RUnlock()
+	if db != nil {
+		return db.IsFirstRun()
+	}
+	// Pre-login the DB is not open yet; read the network-scoped lock file directly.
+	dbPath := filepath.Join(a.appPath, strings.TrimSpace(network), strings.TrimSpace(a.dbDir))
+	return local_store.IsFirstRun(dbPath)
 }
 
 // SetPendingDeepLink stashes a warpnet:// payload for the frontend. Pre-startup safe (a.mx may be nil).
@@ -153,92 +159,100 @@ func (a *App) startup(ctx context.Context) {
 	a.appPath = local_store.GetAppPath()
 }
 
+// setupAuth opens the network-scoped database and wires the auth service on the
+// first login (the DB path and PSK depend on the login-supplied network). It is
+// idempotent so a rejected login can be retried without reopening the DB, which
+// would fail on badger's single-process directory lock.
+func (a *App) setupAuth(network string) error {
+	if strings.TrimSpace(network) == "" {
+		network = config.Config().Node.Network
+	}
+	if a.auth != nil {
+		return nil
+	}
+	psk, err := security.GeneratePSK(network, a.version)
+	if err != nil {
+		return err
+	}
+	dbPath := filepath.Join(a.appPath, strings.TrimSpace(network), strings.TrimSpace(a.dbDir))
+	db, err := local_store.New(dbPath, local_store.DefaultOptions())
+	if err != nil {
+		return err
+	}
+	authRepo := database.NewAuthRepo(db, network)
+	userRepo := database.NewUserRepo(db)
+	a.mx.Lock()
+	a.db = db
+	a.mx.Unlock()
+	a.psk = psk
+	a.readyChan = make(chan domain.AuthNodeInfo, 1)
+	a.auth = auth.NewAuthService(a.ctx, authRepo, userRepo, a.readyChan)
+	go a.runNode(network)
+	return nil
+}
+
 func (a *App) runNode(network string) {
 	var (
 		err                error
 		serverNodeAuthInfo domain.AuthNodeInfo
 	)
-	dbPath := filepath.Join(a.appPath, strings.TrimSpace(network), strings.TrimSpace(a.dbDir))
-	db, err := local_store.New(dbPath, local_store.DefaultOptions())
-	if err != nil {
-		log.Errorf("failed to init db: %v \n", err)
+
+	// wait DB auth
+	select {
+	case <-a.ctx.Done():
+		log.Infoln("interrupted...")
 		return
+	case serverNodeAuthInfo = <-a.readyChan:
+		log.Infoln("database authentication passed")
 	}
 
-	authRepo := database.NewAuthRepo(db, network)
-	userRepo := database.NewUserRepo(db)
-	a.db = db
-	a.readyChan = make(chan domain.AuthNodeInfo, 1)
-	a.auth = auth.NewAuthService(a.ctx, authRepo, userRepo, a.readyChan)
-
-	psk, err := security.GeneratePSK(network, a.version)
+	ownNodeId, err := warpnet.IDFromPublicKey(a.auth.PrivateKey().Public().(ed25519.PublicKey))
 	if err != nil {
-		log.Errorf("failed to generate PSK: %v", err)
-		return
+		log.Fatalf("failed to get current node ID: %v", err)
 	}
-	a.psk = psk
-	go func() {
-		// wait DB auth
-		select {
-		case <-a.ctx.Done():
-			log.Infoln("interrupted...")
-			return
-		case serverNodeAuthInfo = <-a.readyChan:
-			log.Infoln("database authentication passed")
-		}
 
-		ownNodeId, err := warpnet.IDFromPublicKey(a.auth.PrivateKey().Public().(ed25519.PublicKey))
-		if err != nil {
-			log.Fatalf("failed to get current node ID: %v", err)
-		}
+	m := metrics.NewMetricsClient(
+		config.Config().Node.Metrics.Gateway,
+		ownNodeId.String(),
+		network,
+	)
 
-		m := metrics.NewMetricsClient(
-			config.Config().Node.Metrics.Gateway,
-			ownNodeId.String(),
-			network,
-		)
+	infos, err := config.Config().Node.AddrInfos()
+	if err != nil {
+		log.Fatalf("failed to get bootstrap nodes infos: %v", err)
+	}
 
-		infos, err := config.Config().Node.AddrInfos()
-		if err != nil {
-			log.Fatalf("failed to get bootstrap nodes infos: %v", err)
-		}
-
-		a.mx.Lock()
-		a.node, err = member.NewMemberNode(
-			a.ctx,
-			a.auth.PrivateKey(),
-			psk,
-			ownNodeId,
-			a.auth.Storage(),
-			a.db,
-			infos,
-			m,
-		)
-		if err != nil {
-			a.mx.Unlock()
-			log.Errorf("failed to init node: %v \n", err)
-			return
-		}
+	a.mx.Lock()
+	a.node, err = member.NewMemberNode(
+		a.ctx,
+		a.auth.PrivateKey(),
+		a.psk,
+		ownNodeId,
+		a.auth.Storage(),
+		a.db,
+		network,
+		infos,
+		m,
+	)
+	if err != nil {
 		a.mx.Unlock()
+		log.Errorf("failed to init node: %v \n", err)
+		return
+	}
+	a.mx.Unlock()
 
-		if err != nil {
-			log.Errorf("failed to init node: %v \n", err)
-			return
-		}
+	err = a.node.Start()
+	if err != nil {
+		log.Errorf("failed to start member node: %v \n", err)
+		return
+	}
 
-		err = a.node.Start()
-		if err != nil {
-			log.Errorf("failed to start member node: %v \n", err)
-			return
-		}
-
-		// report to auth handler - Node set up and running
-		serverNodeAuthInfo.ID = ownNodeId.String()
-		serverNodeAuthInfo.Network = network
-		serverNodeAuthInfo.Addresses = a.node.NodeInfo().Addresses
-		serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
-		a.readyChan <- serverNodeAuthInfo
-	}()
+	// report to auth handler - Node set up and running
+	serverNodeAuthInfo.ID = ownNodeId.String()
+	serverNodeAuthInfo.Network = network
+	serverNodeAuthInfo.Addresses = a.node.NodeInfo().Addresses
+	serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
+	a.readyChan <- serverNodeAuthInfo
 }
 
 type AppMessage struct {
@@ -258,7 +272,9 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			log.Errorf("app: call panic: %v", r)
 		}
 	}()
-	if a == nil || a.auth == nil {
+	// auth is created lazily on the first login (the DB path depends on the
+	// login-supplied network), so the guard checks startup ran (mx set), not auth.
+	if a == nil || a.mx == nil {
 		log.Errorln("app not initialized")
 		response.Body = newErrorResp("internal app not ready")
 		return response
@@ -290,7 +306,11 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			return response
 		}
 
-		a.runNode(ev.Network)
+		if err = a.setupAuth(ev.Network); err != nil {
+			log.Errorf("auth setup: %v \n", err)
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
 
 		var loginResp event.LoginResponse
 		loginResp, err = a.auth.AuthLogin(ev, a.psk)
@@ -308,8 +328,15 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.node.Stop() // close node first
-		a.auth.AuthLogout()
+		a.mx.RLock()
+		n := a.node
+		a.mx.RUnlock()
+		if n != nil {
+			n.Stop() // close node first
+		}
+		if a.auth != nil {
+			a.auth.AuthLogout()
+		}
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	default:
@@ -380,11 +407,20 @@ func (a *App) close(_ context.Context) {
 
 	log.Infoln("app: closing...")
 
-	a.node.Stop() // close node first
+	a.mx.RLock()
+	n := a.node
+	a.mx.RUnlock()
+	if n != nil {
+		n.Stop() // close node first
+	}
 
-	a.auth.AuthLogout()
+	if a.auth != nil {
+		a.auth.AuthLogout()
+	}
 
-	close(a.readyChan)
+	if a.readyChan != nil {
+		close(a.readyChan)
+	}
 }
 
 // setLinuxDesktopIcon writes the PNG referenced by Icon=warpnet (the .desktop file is owned by deeplink.Register).

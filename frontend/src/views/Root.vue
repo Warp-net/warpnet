@@ -251,6 +251,27 @@ resulting from the use or misuse of this software.
               <p class="text-2xl font-bold">Create your account</p>
             </div>
 
+            <div class="w-full bg-lightblue border-b-2 border-dark p-2 mb-6">
+              <label for="signup-network" class="leading-tight text-dark">Network</label>
+              <select
+                id="signup-network"
+                v-model="networkChoice"
+                class="w-full bg-lightblue text-lg"
+              >
+                <option value="warpnet">Mainnet</option>
+                <option value="testnet">Testnet</option>
+                <option value="custom">Custom</option>
+              </select>
+              <input
+                v-if="networkChoice === 'custom'"
+                id="signup-network-custom"
+                v-model="customNetwork"
+                class="w-full bg-lightblue text-lg mt-2"
+                type="text"
+                placeholder="Custom network name"
+              />
+            </div>
+
             <p>
               By signing up, you agree to our
               <a href="https://github.com/Warp-net/docs/blob/main/legal/T%26C.md" class="text-blue">Terms</a>,
@@ -259,6 +280,8 @@ resulting from the use or misuse of this software.
             <button
               v-if="!isLoading"
               @click="signMeUp"
+              :class="!network ? 'opacity-50 cursor-not-allowed' : ''"
+              :disabled="!network"
               class="w-full rounded-full mt-4 py-3 bg-blue text-white font-bold hover:bg-darkblue"
             >
               Sign up
@@ -301,6 +324,10 @@ export default {
       futureAds: false,
       localStorageLoss: false,
       signUpError: "",
+
+      // Network is chosen here at sign-up; "custom" reveals a free-text field.
+      networkChoice: "warpnet",
+      customNetwork: "",
     };
   },
   computed: {
@@ -310,6 +337,12 @@ export default {
         this.passwordConfirm.length > 0 &&
         this.password === this.passwordConfirm
       );
+    },
+    network() {
+      if (this.networkChoice === "custom") {
+        return this.customNetwork.trim();
+      }
+      return this.networkChoice;
     },
   },
   async mounted() {
@@ -332,6 +365,7 @@ export default {
         await warpnetService.signInUser({
           username: this.username,
           password: this.password,
+          network: this.network,
         });
         if (wasFirstRun) {
           // SideNav picks this up on mount and opens the pairing

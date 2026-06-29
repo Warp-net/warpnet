@@ -31,6 +31,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
+	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -89,35 +90,28 @@ type Node interface {
 }
 
 // Authenticator is the slice of the auth service the dispatcher uses: log the
-// owner in and out, and sign self-stream requests with their key.
+// owner in and out, sign self-stream requests with their key, and hand the
+// node its owner storage.
 type Authenticator interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (event.LoginResponse, error)
 	AuthLogout()
 	Reset()
 	PrivateKey() ed25519.PrivateKey
-}
-
-type BridgeStorer interface {
-	Run(username, password string) (err error)
-	Set(key local_store.DatabaseKey, value []byte) error
-	Get(key local_store.DatabaseKey) ([]byte, error)
-	NewTxn() (local_store.WarpTransactioner, error)
-	Delete(key local_store.DatabaseKey) error
-	IsFirstRun() bool
-	Close()
+	Storage() auth.AuthPersistencyLayer
 }
 
 type BridgeHandler struct {
-	ctx            context.Context
-	codec          Codec
-	auth           Authenticator
-	db             BridgeStorer
-	mx             sync.RWMutex
-	node           Node
-	dbDir          string
-	version        *semver.Version
-	readyChan      chan domain.AuthNodeInfo
-	bootstrapPeers []string
+	ctx       context.Context
+	codec     Codec
+	auth      Authenticator
+	db        *local_store.DB
+	mx        sync.RWMutex
+	node      Node
+	dbDir     string
+	version   *semver.Version
+	readyChan chan domain.AuthNodeInfo
+	network   string
+	psk       security.PSK
 }
 
 func NewBridgeHandler(
@@ -126,15 +120,13 @@ func NewBridgeHandler(
 	dbDir string,
 	version *semver.Version,
 	readyChan chan domain.AuthNodeInfo,
-	bootstrapPeers []string,
 ) *BridgeHandler {
 	return &BridgeHandler{
-		ctx:            ctx,
-		codec:          codec,
-		dbDir:          dbDir,
-		version:        version,
-		readyChan:      readyChan,
-		bootstrapPeers: bootstrapPeers,
+		ctx:       ctx,
+		codec:     codec,
+		dbDir:     dbDir,
+		version:   version,
+		readyChan: readyChan,
 	}
 }
 
@@ -227,14 +219,15 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 
 	switch req.Destination {
 	case pathIsFirstRun:
-		body, _ := json.Marshal(b.db.IsFirstRun())
-		resp.Body = body
+		resp.Body = b.isFirstRun(req.Body)
 	case event.PRIVATE_POST_LOGIN:
 		resp.Body = b.login(req.Body)
 	case event.PRIVATE_POST_LOGOUT:
 		b.auth.AuthLogout() // closes the database; the node keeps running
 		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
-		b.db.Close()
+		if b.db != nil {
+			b.db.Close()
+		}
 		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
 		resp.Body = b.call(req)
@@ -251,6 +244,9 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
+	if strings.TrimSpace(ev.Network) == "" {
+		ev.Network = config.Config().Node.Network
+	}
 	psk, err := security.GeneratePSK(ev.Network, b.version)
 	if err != nil {
 		return newErrorResp(fmt.Errorf("business: generate PSK: %v", err).Error())
@@ -262,6 +258,8 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	if err != nil {
 		return newErrorResp(fmt.Errorf("business: open db: %v", err).Error())
 	}
+	b.network = ev.Network
+	b.psk = psk
 
 	userRepo := database.NewUserRepo(b.db)
 	authRepo := database.NewAuthRepo(b.db, ev.Network)
@@ -279,7 +277,23 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	return bt
 }
 
-func (b *BridgeHandler) runNode(network string) {
+// isFirstRun answers the cleartext is-first-run probe (it precedes the channel
+// key) from the network-scoped lock file, without opening the database.
+func (b *BridgeHandler) isFirstRun(body json.RawMessage) json.RawMessage {
+	var ev event.LoginEvent
+	_ = json.Unmarshal(body, &ev)
+	if strings.TrimSpace(ev.Network) == "" {
+		ev.Network = config.Config().Node.Network
+	}
+	dbPath := filepath.Join(local_store.GetAppPath(), strings.TrimSpace(ev.Network), strings.TrimSpace(b.dbDir))
+	out, _ := json.Marshal(local_store.IsFirstRun(dbPath))
+	return out
+}
+
+// RunNode waits for the auth handshake on readyChan, starts the node once, and
+// reports its info back. The network and PSK are stashed by login before the
+// auth handshake fires, so the channel hand-off makes them visible here.
+func (b *BridgeHandler) RunNode() {
 	var node *bnode.BusinessNode
 	defer func() {
 		if node != nil {
@@ -304,14 +318,21 @@ func (b *BridgeHandler) runNode(network string) {
 				return
 			}
 
-			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
+			infos, err := config.Config().Node.AddrInfos()
+			if err != nil {
+				log.Errorf("business: bootstrap infos: %v", err)
+				return
+			}
+
+			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), b.network)
 			node, err = bnode.NewBusinessNode(
-				ctx,
+				b.ctx,
 				privateKey,
-				psk,
+				b.psk,
 				ownNodeId,
-				authRepo,
-				db,
+				b.auth.Storage(),
+				b.db,
+				b.network,
 				infos,
 				m,
 			)
@@ -330,10 +351,10 @@ func (b *BridgeHandler) runNode(network string) {
 
 		ni := node.NodeInfo()
 		info.ID = ni.ID.String()
-		info.Network = network
+		info.Network = b.network
 		info.Addresses = ni.Addresses
 		info.Role = ni.Type
-		info.BootstrapPeers = b.bootstrapPeers
+		info.BootstrapPeers = config.Config().Node.Bootstrap
 		b.readyChan <- info
 	}
 }

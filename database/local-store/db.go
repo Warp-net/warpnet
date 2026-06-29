@@ -108,11 +108,10 @@ func (e DBError) Error() string {
 }
 
 type Options struct {
-	discardRatioGC           float64
-	intervalGC               time.Duration
-	sleepGC                  time.Duration
-	isInMemory               bool
-	path, network, directory string
+	discardRatioGC float64
+	intervalGC     time.Duration
+	sleepGC        time.Duration
+	isInMemory     bool
 }
 
 func DefaultOptions() *Options {
@@ -1017,4 +1016,11 @@ func GetAppPath() string {
 	}
 
 	return dbPath
+}
+
+// IsFirstRun reports whether the store at dbPath has never been initialized,
+// read from the on-disk lock file without opening the database. It lets the
+// caller decide sign-up vs login before the password (and network) are known.
+func IsFirstRun(dbPath string) bool {
+	return !findFirstRunFlag(filepath.Join(dbPath, version0))
 }
