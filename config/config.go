@@ -198,20 +198,6 @@ func (n node) IsTestnet() bool {
 	return n.Network == testNetNetwork
 }
 
-func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
-	if len(n.Bootstrap) == 0 {
-		return infos, nil
-	}
-	for _, addr := range n.Bootstrap {
-		maddr, err := warpnet.NewMultiaddr(addr)
-		if err != nil {
-			return nil, err
-		}
-		addrInfo, err := warpnet.AddrInfoFromP2pAddr(maddr)
-		if err != nil {
-			return nil, err
-		}
-		infos = append(infos, *addrInfo)
-	}
-	return infos, nil
+func (n node) AddrInfos() ([]warpnet.WarpAddrInfo, error) {
+	return warpnet.ParseAddrInfos(n.Bootstrap)
 }

@@ -428,6 +428,19 @@ func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromString(s)
 }
 
+// ParseAddrInfos parses p2p multiaddr strings (e.g. bootstrap peers) into AddrInfos.
+func ParseAddrInfos(peers []string) ([]WarpAddrInfo, error) {
+	infos := make([]WarpAddrInfo, 0, len(peers))
+	for _, p := range peers {
+		info, err := AddrInfoFromString(p)
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, *info)
+	}
+	return infos, nil
+}
+
 func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
 	store, err := pstoreds.NewPeerstore(ctx, db, pstoreds.DefaultOpts())
 	return WarpPeerstore(store), err

@@ -340,7 +340,7 @@ func (b *BridgeHandler) RunNode() {
 				return
 			}
 
-			infos, err := addrInfos(b.bootstrapPeers)
+			infos, err := warpnet.ParseAddrInfos(b.bootstrapPeers)
 			if err != nil {
 				log.Errorf("business: bootstrap infos: %v", err)
 				return
@@ -394,24 +394,6 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 		return newErrorResp(err.Error())
 	}
 	return respData
-}
-
-// addrInfos parses bootstrap multiaddr strings into the AddrInfos the node
-// needs; the same strings are reported verbatim as AuthNodeInfo.BootstrapPeers.
-func addrInfos(peers []string) ([]warpnet.WarpAddrInfo, error) {
-	infos := make([]warpnet.WarpAddrInfo, 0, len(peers))
-	for _, p := range peers {
-		maddr, err := warpnet.NewMultiaddr(p)
-		if err != nil {
-			return nil, err
-		}
-		info, err := warpnet.AddrInfoFromP2pAddr(maddr)
-		if err != nil {
-			return nil, err
-		}
-		infos = append(infos, *info)
-	}
-	return infos, nil
 }
 
 func newErrorResp(msg string) json.RawMessage {
