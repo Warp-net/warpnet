@@ -129,7 +129,6 @@ type BridgeHandler struct {
 	dbDir          string
 	version        *semver.Version
 	readyChan      chan domain.AuthNodeInfo
-	bootstrapNodes []warpnet.WarpAddrInfo
 	bootstrapPeers []string
 	metricsGateway string
 	network        string
@@ -142,7 +141,6 @@ func NewBridgeHandler(
 	dbDir string,
 	version *semver.Version,
 	readyChan chan domain.AuthNodeInfo,
-	bootstrapNodes []warpnet.WarpAddrInfo,
 	bootstrapPeers []string,
 	metricsGateway string,
 ) *BridgeHandler {
@@ -152,7 +150,6 @@ func NewBridgeHandler(
 		dbDir:          dbDir,
 		version:        version,
 		readyChan:      readyChan,
-		bootstrapNodes: bootstrapNodes,
 		bootstrapPeers: bootstrapPeers,
 		metricsGateway: metricsGateway,
 	}
@@ -343,6 +340,12 @@ func (b *BridgeHandler) RunNode() {
 				return
 			}
 
+			infos, err := addrInfos(b.bootstrapPeers)
+			if err != nil {
+				log.Errorf("business: bootstrap infos: %v", err)
+				return
+			}
+
 			m := metrics.NewMetricsClient(b.metricsGateway, ownNodeId.String(), b.network)
 			node, err = bnode.NewBusinessNode(
 				b.ctx,
@@ -352,7 +355,7 @@ func (b *BridgeHandler) RunNode() {
 				b.auth.Storage(),
 				b.db,
 				b.network,
-				b.bootstrapNodes,
+				infos,
 				m,
 			)
 			if err != nil {
@@ -391,6 +394,24 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 		return newErrorResp(err.Error())
 	}
 	return respData
+}
+
+// addrInfos parses bootstrap multiaddr strings into the AddrInfos the node
+// needs; the same strings are reported verbatim as AuthNodeInfo.BootstrapPeers.
+func addrInfos(peers []string) ([]warpnet.WarpAddrInfo, error) {
+	infos := make([]warpnet.WarpAddrInfo, 0, len(peers))
+	for _, p := range peers {
+		maddr, err := warpnet.NewMultiaddr(p)
+		if err != nil {
+			return nil, err
+		}
+		info, err := warpnet.AddrInfoFromP2pAddr(maddr)
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, *info)
+	}
+	return infos, nil
 }
 
 func newErrorResp(msg string) json.RawMessage {

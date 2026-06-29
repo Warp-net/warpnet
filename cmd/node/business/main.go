@@ -74,12 +74,6 @@ func main() {
 		return
 	}
 
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		log.Errorf("business: bootstrap infos: %v", err)
-		return
-	}
-
 	readyChan := make(chan domain.AuthNodeInfo, 1)
 
 	bridgeHandler := handlers2.NewBridgeHandler(
@@ -88,7 +82,6 @@ func main() {
 		dbDir,
 		version,
 		readyChan,
-		infos,
 		config.Config().Node.Bootstrap,
 		config.Config().Node.Metrics.Gateway,
 	)
