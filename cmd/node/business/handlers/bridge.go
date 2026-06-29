@@ -30,7 +30,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
-	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -99,11 +98,32 @@ type Authenticator interface {
 	Storage() auth.AuthPersistencyLayer
 }
 
+// BridgeStorer is the store contract the bridge owns and hands to the business
+// node. It is declared here (not imported from the member package) so the
+// business layer depends on its own abstraction, not on member internals.
+type BridgeStorer interface {
+	NewTxn() (local_store.WarpTransactioner, error)
+	NewReadTxn() (local_store.WarpTransactioner, error)
+	Get(key local_store.DatabaseKey) ([]byte, error)
+	GetExpiration(key local_store.DatabaseKey) (uint64, error)
+	GetSize(key local_store.DatabaseKey) (int64, error)
+	Sync() error
+	IsClosed() bool
+	InnerDB() *local_store.WarpDB
+	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	Set(key local_store.DatabaseKey, value []byte) error
+	Delete(key local_store.DatabaseKey) error
+	Path() string
+	Stats() map[string]string
+	IsFirstRun() bool
+	Close()
+}
+
 type BridgeHandler struct {
 	ctx            context.Context
 	codec          Codec
 	auth           Authenticator
-	db             member.Storer
+	db             BridgeStorer
 	mx             sync.RWMutex
 	node           Node
 	dbDir          string
