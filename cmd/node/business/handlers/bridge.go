@@ -249,14 +249,14 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	}
 	psk, err := security.GeneratePSK(ev.Network, b.version)
 	if err != nil {
-		return newErrorResp(fmt.Errorf("business: generate PSK: %v", err).Error())
+		return newErrorResp(fmt.Sprintf("business: generate PSK: %v", err))
 	}
 
 	dbPath := filepath.Join(local_store.GetAppPath(), strings.TrimSpace(ev.Network), strings.TrimSpace(b.dbDir))
 
 	b.db, err = local_store.New(dbPath, local_store.DefaultOptions())
 	if err != nil {
-		return newErrorResp(fmt.Errorf("business: open db: %v", err).Error())
+		return newErrorResp(fmt.Sprintf("business: open db: %v", err))
 	}
 	b.network = ev.Network
 	b.psk = psk
