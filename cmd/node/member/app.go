@@ -156,14 +156,10 @@ func (a *App) startup(ctx context.Context) {
 	a.appPath = local_store.GetAppPath()
 }
 
-// setupAuth opens the network-scoped database and wires the auth service on the
-// first login (the DB path and PSK depend on the login-supplied network). It is
-// idempotent so a rejected login can be retried without reopening the DB, which
-// would fail on badger's single-process directory lock.
+// setupAuth opens the network-scoped database and wires the auth service for
+// the login-supplied network (which determines the DB path and PSK). It does
+// not start the node — the caller starts the node runner once auth is in place.
 func (a *App) setupAuth(network string) error {
-	if a.auth != nil {
-		return nil
-	}
 	psk, err := security.GeneratePSK(network, a.version)
 	if err != nil {
 		return err
@@ -181,7 +177,6 @@ func (a *App) setupAuth(network string) error {
 	a.psk = psk
 	a.readyChan = make(chan domain.AuthNodeInfo, 1)
 	a.auth = auth.NewAuthService(a.ctx, authRepo, userRepo, a.readyChan)
-	go a.runNode(network)
 	return nil
 }
 
@@ -300,10 +295,16 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			return response
 		}
 
-		if err = a.setupAuth(ev.Network); err != nil {
-			log.Errorf("auth setup: %v \n", err)
-			response.Body = newErrorResp(err.Error())
-			return response
+		// First login wires auth for the chosen network and starts the node
+		// runner; retries reuse them (a.auth stays set even if AuthLogin fails),
+		// so the DB is not reopened against badger's single-process lock.
+		if a.auth == nil {
+			if err = a.setupAuth(ev.Network); err != nil {
+				log.Errorf("auth setup: %v \n", err)
+				response.Body = newErrorResp(err.Error())
+				return response
+			}
+			go a.runNode(ev.Network)
 		}
 
 		var loginResp event.LoginResponse

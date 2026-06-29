@@ -31,6 +31,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
+	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -103,7 +104,7 @@ type BridgeHandler struct {
 	ctx            context.Context
 	codec          Codec
 	auth           Authenticator
-	db             *local_store.DB
+	db             member.Storer
 	mx             sync.RWMutex
 	node           Node
 	dbDir          string
@@ -233,9 +234,6 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 	case event.PRIVATE_POST_LOGOUT:
 		b.auth.AuthLogout() // closes the database; the node keeps running
 		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
-		if b.db != nil {
-			b.db.Close()
-		}
 		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
 		resp.Body = b.call(req)
@@ -259,15 +257,16 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 
 	dbPath := filepath.Join(local_store.GetAppPath(), strings.TrimSpace(ev.Network), strings.TrimSpace(b.dbDir))
 
-	b.db, err = local_store.New(dbPath, local_store.DefaultOptions())
+	db, err := local_store.New(dbPath, local_store.DefaultOptions())
 	if err != nil {
 		return newErrorResp(fmt.Sprintf("business: open db: %v", err))
 	}
+	b.db = db
 	b.network = ev.Network
 	b.psk = psk
 
-	userRepo := database.NewUserRepo(b.db)
-	authRepo := database.NewAuthRepo(b.db, ev.Network)
+	userRepo := database.NewUserRepo(db)
+	authRepo := database.NewAuthRepo(db, ev.Network)
 	b.auth = auth.NewAuthService(b.ctx, authRepo, userRepo, b.readyChan)
 
 	loginResp, err := b.auth.AuthLogin(ev, psk)
