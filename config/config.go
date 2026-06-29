@@ -27,15 +27,11 @@ package config
 import (
 	"flag"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -51,12 +47,9 @@ var warpnetBootstrapNodes = []string{
 	"/ip4/207.154.221.44/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
 	"/ip4/207.154.221.44/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
 	"/ip4/207.154.221.44/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
-	// RU
-	"/ip4/130.94.88.38/tcp/4011/p2p/12D3KooWNW7nbLpbsEVJ86JN6c1zXRDKGCbqmLfhitFCPccRv2YW",
 }
 
 var testnetBootstrapNodes = []string{
-	// EU
 	"/ip4/207.154.221.44/tcp/4011/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
 	"/ip4/207.154.221.44/tcp/4022/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
 	"/ip4/207.154.221.44/tcp/4033/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
@@ -121,10 +114,6 @@ func init() {
 		seed = "seed" + network + dbDir + host + port
 	}
 
-	appPath := getAppPath()
-
-	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
-
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
 		Node: node{
@@ -147,7 +136,7 @@ func init() {
 			},
 		},
 		Database: database{
-			Path: dbPath,
+			Dir: dbDir,
 		},
 		Logging: logging{
 			Level:  strings.TrimSpace(viper.GetString("logging.level")),
@@ -190,7 +179,7 @@ type metrics struct {
 	Gateway string
 }
 type database struct {
-	Path string
+	Dir string
 }
 
 type logFormat string
@@ -225,35 +214,4 @@ func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
 		infos = append(infos, *addrInfo)
 	}
 	return infos, nil
-}
-
-func getAppPath() string {
-	var dbPath string
-
-	switch runtime.GOOS {
-	case "windows":
-		// %LOCALAPPDATA% Windows
-		appData := os.Getenv("LOCALAPPDATA") // C:\Users\{username}\AppData\Local
-		if appData == "" {
-			log.Fatal("failed to get path to LOCALAPPDATA")
-		}
-		dbPath = filepath.Join(appData, "warpdata")
-
-	case "darwin", "linux", "android":
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			log.Fatal(err)
-		}
-		dbPath = filepath.Join(homeDir, ".warpdata")
-
-	default:
-		log.Fatal("unsupported OS")
-	}
-
-	err := os.MkdirAll(dbPath, 0750) //nolint:gosec
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return dbPath
 }

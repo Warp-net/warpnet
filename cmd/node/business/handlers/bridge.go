@@ -25,11 +25,23 @@ resulting from the use or misuse of this software.
 package handlers
 
 import (
+	"context"
 	"crypto/ed25519"
+	"fmt"
+	"github.com/Masterminds/semver/v3"
+	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
+	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	"net/http"
 	"net/url"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,27 +97,44 @@ type Authenticator interface {
 	PrivateKey() ed25519.PrivateKey
 }
 
-type BridgeHandler struct {
-	codec    Codec
-	auth     Authenticator
-	firstRun func() bool
-	psk      security.PSK
+type BridgeStorer interface {
+	Run(username, password string) (err error)
+	Set(key local_store.DatabaseKey, value []byte) error
+	Get(key local_store.DatabaseKey) ([]byte, error)
+	NewTxn() (local_store.WarpTransactioner, error)
+	Delete(key local_store.DatabaseKey) error
+	IsFirstRun() bool
+	Close()
+}
 
-	mx   sync.RWMutex
-	node Node
+type BridgeHandler struct {
+	ctx            context.Context
+	codec          Codec
+	auth           Authenticator
+	db             BridgeStorer
+	mx             sync.RWMutex
+	node           Node
+	dbDir          string
+	version        *semver.Version
+	readyChan      chan domain.AuthNodeInfo
+	bootstrapPeers []string
 }
 
 func NewBridgeHandler(
+	ctx context.Context,
 	codec Codec,
-	auth Authenticator,
-	psk security.PSK,
-	firstRun func() bool,
+	dbDir string,
+	version *semver.Version,
+	readyChan chan domain.AuthNodeInfo,
+	bootstrapPeers []string,
 ) *BridgeHandler {
 	return &BridgeHandler{
-		codec:    codec,
-		auth:     auth,
-		psk:      psk,
-		firstRun: firstRun,
+		ctx:            ctx,
+		codec:          codec,
+		dbDir:          dbDir,
+		version:        version,
+		readyChan:      readyChan,
+		bootstrapPeers: bootstrapPeers,
 	}
 }
 
@@ -198,13 +227,14 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 
 	switch req.Destination {
 	case pathIsFirstRun:
-		body, _ := json.Marshal(b.firstRun())
+		body, _ := json.Marshal(b.db.IsFirstRun())
 		resp.Body = body
 	case event.PRIVATE_POST_LOGIN:
 		resp.Body = b.login(req.Body)
 	case event.PRIVATE_POST_LOGOUT:
 		b.auth.AuthLogout() // closes the database; the node keeps running
 		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
+		b.db.Close()
 		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
 		resp.Body = b.call(req)
@@ -221,7 +251,23 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
-	loginResp, err := b.auth.AuthLogin(ev, b.psk)
+	psk, err := security.GeneratePSK(ev.Network, b.version)
+	if err != nil {
+		return newErrorResp(fmt.Errorf("business: generate PSK: %v", err).Error())
+	}
+
+	dbPath := filepath.Join(local_store.GetAppPath(), strings.TrimSpace(ev.Network), strings.TrimSpace(b.dbDir))
+
+	b.db, err = local_store.New(dbPath, local_store.DefaultOptions())
+	if err != nil {
+		return newErrorResp(fmt.Errorf("business: open db: %v", err).Error())
+	}
+
+	userRepo := database.NewUserRepo(b.db)
+	authRepo := database.NewAuthRepo(b.db, ev.Network)
+	b.auth = auth.NewAuthService(b.ctx, authRepo, userRepo, b.readyChan)
+
+	loginResp, err := b.auth.AuthLogin(ev, psk)
 	if err != nil {
 		log.Errorf("business: auth: %v", err)
 		return newErrorResp(err.Error())
@@ -231,6 +277,65 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 		return newErrorResp(err.Error())
 	}
 	return bt
+}
+
+func (b *BridgeHandler) runNode(network string) {
+	var node *bnode.BusinessNode
+	defer func() {
+		if node != nil {
+			node.Stop()
+		}
+	}()
+
+	for {
+		var info domain.AuthNodeInfo
+		select {
+		case <-b.ctx.Done():
+			return
+		case info = <-b.readyChan:
+			log.Infoln("business: database authentication passed")
+		}
+
+		if node == nil {
+			privateKey := b.auth.PrivateKey()
+			ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
+			if err != nil {
+				log.Errorf("business: node ID: %v", err)
+				return
+			}
+
+			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
+			node, err = bnode.NewBusinessNode(
+				ctx,
+				privateKey,
+				psk,
+				ownNodeId,
+				authRepo,
+				db,
+				infos,
+				m,
+			)
+			if err != nil {
+				log.Errorf("business: init node: %v", err)
+				return
+			}
+
+			if err := node.Start(); err != nil {
+				log.Errorf("business: start node: %v", err)
+				return
+			}
+
+			b.AttachNode(node)
+		}
+
+		ni := node.NodeInfo()
+		info.ID = ni.ID.String()
+		info.Network = network
+		info.Addresses = ni.Addresses
+		info.Role = ni.Type
+		info.BootstrapPeers = b.bootstrapPeers
+		b.readyChan <- info
+	}
 }
 
 func (b *BridgeHandler) call(req event.Message) json.RawMessage {

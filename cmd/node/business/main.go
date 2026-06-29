@@ -37,11 +37,8 @@ import (
 	"time"
 
 	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
-	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
-	localstore "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
@@ -54,8 +51,8 @@ func main() {
 		log.Fatal("password is required")
 	}
 	port := config.Config().Node.Server.Port
-	network := config.Config().Node.Network
 	version := config.Config().Version
+	dbDir := config.Config().Database.Dir
 
 	lvl, err := log.ParseLevel(config.Config().Logging.Level)
 	if err != nil {
@@ -69,17 +66,15 @@ func main() {
 	}
 	log.SetOutput(os.Stdout)
 
-	log.Infof("network: %s", network)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	interruptChan := make(chan os.Signal, 1)
 	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	psk, err := security.GeneratePSK(network, version)
+	staticHandler, err := handlers2.NewStaticHandler()
 	if err != nil {
-		log.Errorf("business: generate PSK: %v", err)
+		log.Errorf("business: static handler load: %v", err)
 		return
 	}
 
@@ -89,29 +84,13 @@ func main() {
 		return
 	}
 
-	db, err := localstore.New(config.Config().Database.Path, localstore.DefaultOptions())
-	if err != nil {
-		log.Errorf("business: open db: %v", err)
-		return
-	}
-	defer db.Close()
-
 	readyChan := make(chan domain.AuthNodeInfo, 1)
-	userRepo := database.NewUserRepo(db)
-	authRepo := database.NewAuthRepo(db, network)
-	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
-
-	staticHandler, err := handlers2.NewStaticHandler()
-	if err != nil {
-		log.Errorf("business: static handler load: %v", err)
-		return
-	}
 
 	bridgeHandler := handlers2.NewBridgeHandler(
 		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
-		authService,
-		psk,
-		db.IsFirstRun, // queried lazily: flips to false once the DB is opened on first login
+		dbDir,
+		version,
+		readyChan,
 	)
 
 	mux := http.NewServeMux()
@@ -130,63 +109,4 @@ func main() {
 
 	fmt.Printf("\033[1mNODE IS LISTENING ON 'localhost:%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
 
-	var node *bnode.BusinessNode
-	defer func() {
-		if node != nil {
-			node.Stop()
-		}
-	}()
-
-	for {
-		var info domain.AuthNodeInfo
-		select {
-		case <-ctx.Done():
-			return
-		case <-interruptChan:
-			log.Infoln("business node interrupted...")
-			return
-		case info = <-readyChan:
-			log.Infoln("business: database authentication passed")
-		}
-
-		if node == nil {
-			privateKey := authService.PrivateKey()
-			ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
-			if err != nil {
-				log.Errorf("business: node ID: %v", err)
-				return
-			}
-
-			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
-			node, err = bnode.NewBusinessNode(
-				ctx,
-				privateKey,
-				psk,
-				ownNodeId,
-				authRepo,
-				db,
-				infos,
-				m,
-			)
-			if err != nil {
-				log.Errorf("business: init node: %v", err)
-				return
-			}
-
-			if err := node.Start(); err != nil {
-				log.Errorf("business: start node: %v", err)
-				return
-			}
-
-			bridgeHandler.AttachNode(node)
-		}
-
-		ni := node.NodeInfo()
-		info.ID = ni.ID.String()
-		info.Network = network
-		info.Addresses = ni.Addresses
-		info.Role = ni.Type
-		info.BootstrapPeers = config.Config().Node.Bootstrap
-		readyChan <- info
-	}
 }

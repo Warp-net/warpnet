@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
+	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,14 +64,15 @@ type NodeServer interface {
 }
 
 type App struct {
-	ctx       context.Context
-	auth      AppAuthServicer
-	node      NodeServer
-	db        AppStorer
-	psk       security.PSK
-	readyChan chan domain.AuthNodeInfo
-	mx        *sync.RWMutex
-
+	ctx            context.Context
+	auth           AppAuthServicer
+	node           NodeServer
+	db             AppStorer
+	psk            security.PSK
+	readyChan      chan domain.AuthNodeInfo
+	mx             *sync.RWMutex
+	appPath, dbDir string
+	version        *semver.Version
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
 	deepLink string
 }
@@ -145,10 +148,18 @@ func (a *App) startup(ctx context.Context) {
 	}()
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
-	version := config.Config().Version
-	network := config.Config().Node.Network
+	a.version = config.Config().Version
+	a.dbDir = config.Config().Database.Dir
+	a.appPath = local_store.GetAppPath()
+}
 
-	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
+func (a *App) runNode(network string) {
+	var (
+		err                error
+		serverNodeAuthInfo domain.AuthNodeInfo
+	)
+	dbPath := filepath.Join(a.appPath, strings.TrimSpace(network), strings.TrimSpace(a.dbDir))
+	db, err := local_store.New(dbPath, local_store.DefaultOptions())
 	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		return
@@ -158,83 +169,76 @@ func (a *App) startup(ctx context.Context) {
 	userRepo := database.NewUserRepo(db)
 	a.db = db
 	a.readyChan = make(chan domain.AuthNodeInfo, 1)
-	a.auth = auth.NewAuthService(ctx, authRepo, userRepo, a.readyChan)
+	a.auth = auth.NewAuthService(a.ctx, authRepo, userRepo, a.readyChan)
 
-	psk, err := security.GeneratePSK(network, version)
+	psk, err := security.GeneratePSK(network, a.version)
 	if err != nil {
 		log.Errorf("failed to generate PSK: %v", err)
 		return
 	}
 	a.psk = psk
-	go a.runNode(network, psk)
-}
+	go func() {
+		// wait DB auth
+		select {
+		case <-a.ctx.Done():
+			log.Infoln("interrupted...")
+			return
+		case serverNodeAuthInfo = <-a.readyChan:
+			log.Infoln("database authentication passed")
+		}
 
-func (a *App) runNode(network string, psk security.PSK) {
-	var (
-		err                error
-		serverNodeAuthInfo domain.AuthNodeInfo
-	)
+		ownNodeId, err := warpnet.IDFromPublicKey(a.auth.PrivateKey().Public().(ed25519.PublicKey))
+		if err != nil {
+			log.Fatalf("failed to get current node ID: %v", err)
+		}
 
-	// wait DB auth
-	select {
-	case <-a.ctx.Done():
-		log.Infoln("interrupted...")
-		return
-	case serverNodeAuthInfo = <-a.readyChan:
-		log.Infoln("database authentication passed")
-	}
+		m := metrics.NewMetricsClient(
+			config.Config().Node.Metrics.Gateway,
+			ownNodeId.String(),
+			network,
+		)
 
-	ownNodeId, err := warpnet.IDFromPublicKey(a.auth.PrivateKey().Public().(ed25519.PublicKey))
-	if err != nil {
-		log.Fatalf("failed to get current node ID: %v", err)
-	}
+		infos, err := config.Config().Node.AddrInfos()
+		if err != nil {
+			log.Fatalf("failed to get bootstrap nodes infos: %v", err)
+		}
 
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		ownNodeId.String(),
-		network,
-	)
-
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		log.Fatalf("failed to get bootstrap nodes infos: %v", err)
-	}
-
-	a.mx.Lock()
-	a.node, err = member.NewMemberNode(
-		a.ctx,
-		a.auth.PrivateKey(),
-		psk,
-		ownNodeId,
-		a.auth.Storage(),
-		a.db,
-		infos,
-		m,
-	)
-	if err != nil {
+		a.mx.Lock()
+		a.node, err = member.NewMemberNode(
+			a.ctx,
+			a.auth.PrivateKey(),
+			psk,
+			ownNodeId,
+			a.auth.Storage(),
+			a.db,
+			infos,
+			m,
+		)
+		if err != nil {
+			a.mx.Unlock()
+			log.Errorf("failed to init node: %v \n", err)
+			return
+		}
 		a.mx.Unlock()
-		log.Errorf("failed to init node: %v \n", err)
-		return
-	}
-	a.mx.Unlock()
 
-	if err != nil {
-		log.Errorf("failed to init node: %v \n", err)
-		return
-	}
+		if err != nil {
+			log.Errorf("failed to init node: %v \n", err)
+			return
+		}
 
-	err = a.node.Start()
-	if err != nil {
-		log.Errorf("failed to start member node: %v \n", err)
-		return
-	}
+		err = a.node.Start()
+		if err != nil {
+			log.Errorf("failed to start member node: %v \n", err)
+			return
+		}
 
-	// report to auth handler - Node set up and running
-	serverNodeAuthInfo.ID = ownNodeId.String()
-	serverNodeAuthInfo.Network = network
-	serverNodeAuthInfo.Addresses = a.node.NodeInfo().Addresses
-	serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
-	a.readyChan <- serverNodeAuthInfo
+		// report to auth handler - Node set up and running
+		serverNodeAuthInfo.ID = ownNodeId.String()
+		serverNodeAuthInfo.Network = network
+		serverNodeAuthInfo.Addresses = a.node.NodeInfo().Addresses
+		serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
+		a.readyChan <- serverNodeAuthInfo
+	}()
 }
 
 type AppMessage struct {
@@ -285,6 +289,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
+
+		a.runNode(ev.Network)
 
 		var loginResp event.LoginResponse
 		loginResp, err = a.auth.AuthLogin(ev, a.psk)

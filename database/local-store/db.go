@@ -108,10 +108,11 @@ func (e DBError) Error() string {
 }
 
 type Options struct {
-	discardRatioGC float64
-	intervalGC     time.Duration
-	sleepGC        time.Duration
-	isInMemory     bool
+	discardRatioGC           float64
+	intervalGC               time.Duration
+	sleepGC                  time.Duration
+	isInMemory               bool
+	path, network, directory string
 }
 
 func DefaultOptions() *Options {
@@ -985,4 +986,35 @@ func ToDatastoreErrNotFound(err error) error {
 	default:
 		return err
 	}
+}
+
+func GetAppPath() string {
+	var dbPath string
+
+	switch runtime.GOOS {
+	case "windows":
+		// %LOCALAPPDATA% Windows
+		appData := os.Getenv("LOCALAPPDATA") // C:\Users\{username}\AppData\Local
+		if appData == "" {
+			log.Fatal("failed to get path to LOCALAPPDATA")
+		}
+		dbPath = filepath.Join(appData, "warpdata")
+
+	case "darwin", "linux", "android":
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		dbPath = filepath.Join(homeDir, ".warpdata")
+
+	default:
+		log.Fatal("unsupported OS")
+	}
+
+	err := os.MkdirAll(dbPath, 0750) //nolint:gosec
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return dbPath
 }
