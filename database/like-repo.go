@@ -33,6 +33,7 @@ import (
 
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
@@ -46,16 +47,6 @@ const (
 )
 
 var ErrLikesNotFound = local_store.DBError("like not found")
-
-// LikedTweet is one entry of a user's "tweets I liked" index. The tweet
-// author's id is stored alongside so the client can fetch the tweet without
-// an extra resolution round-trip (same trick as database.Bookmark).
-type LikedTweet struct {
-	UserId      string    `json:"user_id"`
-	TweetId     string    `json:"tweet_id"`
-	OwnerUserId string    `json:"owner_user_id"`
-	CreatedAt   time.Time `json:"created_at"`
-}
 
 type LikeStorer interface {
 	Get(key local_store.DatabaseKey) ([]byte, error)
@@ -258,7 +249,7 @@ func (repo *LikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
 		return local_store.DBError("empty owner user id")
 	}
 
-	lt := LikedTweet{
+	lt := domain.LikedTweet{
 		UserId:      userId,
 		TweetId:     tweetId,
 		OwnerUserId: ownerUserId,
@@ -341,7 +332,7 @@ func (repo *LikeRepo) RemoveLiked(userId, tweetId string) error {
 	return txn.Commit()
 }
 
-func (repo *LikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]LikedTweet, string, error) {
+func (repo *LikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error) {
 	if userId == "" {
 		return nil, "", local_store.DBError("empty user id")
 	}
@@ -365,9 +356,9 @@ func (repo *LikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]Lik
 		return nil, "", err
 	}
 
-	liked := make([]LikedTweet, 0, len(items))
+	liked := make([]domain.LikedTweet, 0, len(items))
 	for _, item := range items {
-		var lt LikedTweet
+		var lt domain.LikedTweet
 		if err := json.Unmarshal(item.Value, &lt); err != nil {
 			return nil, "", err
 		}

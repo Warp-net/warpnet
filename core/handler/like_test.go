@@ -20,7 +20,7 @@ type stubLikeRepo struct {
 	likersFn      func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 	setLikedFn    func(userId, tweetId, ownerUserId string) error
 	removeLikedFn func(userId, tweetId string) error
-	likedFn       func(userId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error)
+	likedFn       func(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error)
 }
 
 func (s stubLikeRepo) Like(tweetId, userId string) (uint64, error) {
@@ -59,7 +59,7 @@ func (s stubLikeRepo) RemoveLiked(userId, tweetId string) error {
 	}
 	return nil
 }
-func (s stubLikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error) {
+func (s stubLikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error) {
 	if s.likedFn != nil {
 		return s.likedFn(userId, limit, cursor)
 	}
@@ -402,7 +402,7 @@ func TestStreamGetLikesHandler(t *testing.T) {
 
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("db error")
-		h := StreamGetLikesHandler(stubLikeRepo{likedFn: func(userId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error) {
+		h := StreamGetLikesHandler(stubLikeRepo{likedFn: func(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error) {
 			return nil, "", repoErr
 		}})
 		_, err := h(marshal(t, event.GetLikesEvent{UserId: userId}), nil)
@@ -412,11 +412,11 @@ func TestStreamGetLikesHandler(t *testing.T) {
 	})
 
 	t.Run("happy path", func(t *testing.T) {
-		h := StreamGetLikesHandler(stubLikeRepo{likedFn: func(gotUserId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error) {
+		h := StreamGetLikesHandler(stubLikeRepo{likedFn: func(gotUserId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error) {
 			if gotUserId != userId {
 				t.Fatalf("unexpected user id: %q", gotUserId)
 			}
-			return []database.LikedTweet{
+			return []domain.LikedTweet{
 				{UserId: userId, TweetId: "tweet-1", OwnerUserId: "author-1"},
 			}, "end", nil
 		}})

@@ -234,7 +234,7 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 }
 
 type LikedTweetsLister interface {
-	Liked(userId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error)
+	Liked(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error)
 }
 
 // StreamGetLikesHandler returns one page of the local user's "tweets I
