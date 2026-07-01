@@ -30,6 +30,7 @@ import site.warpnet.transport.dto.FollowersResponse
 import site.warpnet.transport.dto.FollowingsResponse
 import site.warpnet.transport.dto.GetAllTweetsEvent
 import site.warpnet.transport.dto.GetAllUsersEvent
+import site.warpnet.transport.dto.GetBookmarksEvent
 import site.warpnet.transport.dto.GetFollowersEvent
 import site.warpnet.transport.dto.GetFollowingsEvent
 import site.warpnet.transport.dto.GetIsFollowingEvent
@@ -1004,7 +1005,7 @@ class WarpnetRepository @Inject constructor(
             val raw = client.request(
                 ProtocolIds.PRIVATE_GET_LIKES,
                 getBookmarksEventAdapter.toJson(
-                    site.warpnet.transport.dto.GetBookmarksEvent(userId = userId, cursor = cursor, limit = limit),
+                    GetBookmarksEvent(userId = userId, cursor = cursor, limit = limit),
                 ),
             )
             val page = getBookmarksRespAdapter.fromJson(raw)
