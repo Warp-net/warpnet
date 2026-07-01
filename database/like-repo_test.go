@@ -30,6 +30,7 @@ package database
 
 import (
 	"testing"
+	"time"
 
 	"go.uber.org/goleak"
 
@@ -175,6 +176,21 @@ func (s *LikeRepoTestSuite) TestLikedIndex() {
 	s.Equal(userId, liked[0].UserId)
 	s.Equal(tweetId, liked[0].TweetId)
 	s.Equal(ownerId, liked[0].OwnerUserId)
+
+	// A later like must come back first (newest-liked-first ordering).
+	laterTweetId := ulid.Make().String()
+	time.Sleep(2 * time.Millisecond)
+	err = s.repo.SetLiked(userId, laterTweetId, ownerId)
+	s.Require().NoError(err)
+
+	liked, _, err = s.repo.Liked(userId, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(liked, 2)
+	s.Equal(laterTweetId, liked[0].TweetId)
+	s.Equal(tweetId, liked[1].TweetId)
+
+	err = s.repo.RemoveLiked(userId, laterTweetId)
+	s.Require().NoError(err)
 
 	// Remove and verify the index is empty again.
 	err = s.repo.RemoveLiked(userId, tweetId)

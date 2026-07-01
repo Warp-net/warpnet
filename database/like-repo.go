@@ -255,12 +255,20 @@ func (repo *LikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
 		CreatedAt:   time.Now(),
 	}
 
-	// Deterministic key, same shape as the LIKER index: reconstructible
-	// on unlike and iterable (no fixed segment).
-	likedKey := local_store.NewPrefixBuilder(LikeRepoName).
+	// Same fixed/sortable key pair as the chat message repo: the fixed key
+	// gives deterministic lookup for unlike and is skipped by iteration,
+	// the sortable key orders the list newest-liked-first.
+	fixedKey := local_store.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(LikedSubNamespace).
 		AddRootID(userId).
-		AddRange(local_store.NoneRangeKey).
+		AddRange(local_store.FixedRangeKey).
+		AddParentId(tweetId).
+		Build()
+
+	sortableKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikedSubNamespace).
+		AddRootID(userId).
+		AddReversedTimestamp(lt.CreatedAt).
 		AddParentId(tweetId).
 		Build()
 
@@ -275,10 +283,13 @@ func (repo *LikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
 	}
 	defer txn.Rollback()
 
-	if existing, err := txn.Get(likedKey); err == nil && len(existing) != 0 {
+	if existing, err := txn.Get(fixedKey); err == nil && len(existing) != 0 {
 		return txn.Commit() // already indexed, no-op
 	}
-	if err = txn.Set(likedKey, bt); err != nil {
+	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
+		return err
+	}
+	if err = txn.Set(sortableKey, bt); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -292,10 +303,10 @@ func (repo *LikeRepo) RemoveLiked(userId, tweetId string) error {
 		return local_store.DBError("empty tweet id")
 	}
 
-	likedKey := local_store.NewPrefixBuilder(LikeRepoName).
+	fixedKey := local_store.NewPrefixBuilder(LikeRepoName).
 		AddSubPrefix(LikedSubNamespace).
 		AddRootID(userId).
-		AddRange(local_store.NoneRangeKey).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(tweetId).
 		Build()
 
@@ -305,7 +316,17 @@ func (repo *LikeRepo) RemoveLiked(userId, tweetId string) error {
 	}
 	defer txn.Rollback()
 
-	if err := txn.Delete(likedKey); err != nil {
+	sortableKey, err := txn.Get(fixedKey)
+	if err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	if len(sortableKey) == 0 {
+		return txn.Commit() // not indexed, no-op
+	}
+	if err = txn.Delete(fixedKey); err != nil {
+		return err
+	}
+	if err = txn.Delete(local_store.DatabaseKey(sortableKey)); err != nil {
 		return err
 	}
 	return txn.Commit()
