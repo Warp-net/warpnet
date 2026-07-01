@@ -47,6 +47,16 @@ const (
 
 var ErrLikesNotFound = local_store.DBError("like not found")
 
+// LikedTweet is one entry of a user's "tweets I liked" index. The tweet
+// author's id is stored alongside so the client can fetch the tweet without
+// an extra resolution round-trip (same trick as database.Bookmark).
+type LikedTweet struct {
+	UserId      string    `json:"user_id"`
+	TweetId     string    `json:"tweet_id"`
+	OwnerUserId string    `json:"owner_user_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type LikeStorer interface {
 	Get(key local_store.DatabaseKey) ([]byte, error)
 	NewTxn() (local_store.WarpTransactioner, error)
@@ -235,16 +245,6 @@ func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ l
 		likers = append(likers, userId)
 	}
 	return likers, cur, nil
-}
-
-// LikedTweet is one entry of a user's "tweets I liked" index. The tweet
-// author's id is stored alongside so the client can fetch the tweet without
-// an extra resolution round-trip (same trick as database.Bookmark).
-type LikedTweet struct {
-	UserId      string    `json:"user_id"`
-	TweetId     string    `json:"tweet_id"`
-	OwnerUserId string    `json:"owner_user_id"`
-	CreatedAt   time.Time `json:"created_at"`
 }
 
 func (repo *LikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
