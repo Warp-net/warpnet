@@ -220,6 +220,5 @@ class AccountMediaFragment :
         }
 
         private const val ACCOUNT_ID_ARG = "account_id"
-        private const val TAG = "AccountMediaFragment"
     }
 }

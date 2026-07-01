@@ -6,14 +6,12 @@
 package site.warpnet.warpdroid.warpnet
 
 import site.warpnet.warpdroid.entity.User
-import site.warpnet.warpdroid.entity.Conversation
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.entity.notificationTypeFromString
 import java.util.Date
-import site.warpnet.transport.dto.WarpnetChat
 import site.warpnet.transport.dto.WarpnetNotification
 import site.warpnet.transport.dto.WarpnetTweet
 import site.warpnet.transport.dto.WarpnetUser
@@ -131,20 +129,6 @@ object WarpnetMapper {
         type = notificationTypeFromString(type),
         account = stubTimelineUser(userId, text),
         status = null,
-    )
-
-    /**
-     * Surface a Warpnet 1:1 chat as a [Conversation]. The Warpnet wire
-     * carries only the latest message text and the two participants, so
-     * [Conversation.lastStatus] is left null; the UI shows the chat row
-     * as a single-participant thread with the most recent timestamp
-     * from [WarpnetChat.updatedAt].
-     */
-    fun chatToConversation(chat: WarpnetChat, otherAccount: TimelineUser): Conversation = Conversation(
-        id = chat.id,
-        accounts = listOf(otherAccount),
-        lastStatus = null,
-        unread = false,
     )
 
     private fun parseDate(raw: String): Date =

@@ -182,7 +182,6 @@ abstract class TimelineViewModel(
     abstract fun saveHomeTimelinePosition(firstVisibleIndex: Int, firstVisibleOffset: Int)
 
     companion object {
-        private const val TAG = "TimelineVM"
         // One network page = 20 tweets. Kept equal to the Pager's
         // initialLoadSize so the first load fetches one page, not the
         // Paging3 default of 3x (which made the timeline pull everything
