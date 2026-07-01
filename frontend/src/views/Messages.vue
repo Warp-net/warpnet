@@ -117,7 +117,17 @@ resulting from the use or misuse of this software.
         <div class="flex flex-col">
           <div v-for="message in messages" :key="message.id">
             <!-- Own message -->
-            <div v-if="message.sender_id === ownerProfile.user_id" class="flex justify-end mb-4">
+            <div v-if="message.sender_id === ownerProfile.user_id" class="group flex items-center justify-end mb-4">
+              <button
+                  v-if="message.id"
+                  type="button"
+                  @click="deleteMessage(message)"
+                  class="mr-2 w-7 h-7 rounded-full items-center justify-center hover:bg-red-100 hidden group-hover:flex flat-btn"
+                  aria-label="Delete message"
+                  title="Delete message"
+              >
+                <i class="fas fa-trash text-sm text-red-500" aria-hidden="true"></i>
+              </button>
               <div class="bg-blue text-white py-2 px-4 rounded-tl-3xl rounded-bl-3xl rounded-tr-xl">
                 <p v-if="message.text">{{ message.text }}</p>
                 <img v-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
@@ -369,6 +379,15 @@ export default {
         this.active = undefined;
       } catch (err) {
         console.error('Failed to delete chat:', err);
+      }
+    },
+    async deleteMessage(message) {
+      if (!this.active?.id || !message?.id) return;
+      try {
+        await warpnetService.deleteMessage(this.active.id, message.id);
+        this.messages = this.messages.filter((m) => m.id !== message.id);
+      } catch (err) {
+        console.error('Failed to delete message:', err);
       }
     },
     deselectAll() {

@@ -37,6 +37,7 @@ export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
+export const PRIVATE_GET_LIKES = "/private/get/likes/0.0.0"
 export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
 export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
 export const PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
@@ -979,6 +980,48 @@ export const warpnetService = {
         return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
     },
 
+    async getLikes(cursorReset) {
+        let cursor = this.getCursor('likes')
+        if (cursorReset) {
+            cursor = ''
+        }
+        if (cursor === endCursor) {
+            return { items: [], cursor: endCursor };
+        }
+        const owner = this.getOwnerProfile()
+        if (!owner) return { items: [], cursor: endCursor };
+        const request = {
+            path: PRIVATE_GET_LIKES,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor: cursor,
+            },
+        }
+        const resp = await this.sendToNode(request);
+        if (!resp) return { items: [], cursor: endCursor };
+        this.setCursor('likes', resp.cursor || 'end')
+
+        // Same reference-only wire shape as bookmarks: the backend returns
+        // the liked index entries (tweet_id + owner_user_id), each hydrated
+        // into the full Tweet so the view renders it like a timeline tweet.
+        const rawItems = resp.items || [];
+        const hydrated = await Promise.all(rawItems.map(async (b) => {
+            if (!b || !b.tweet_id) return null;
+            try {
+                const tweet = await this.getTweet({
+                    userId: b.owner_user_id || owner.user_id,
+                    tweetId: b.tweet_id,
+                });
+                return tweet ? { ...b, tweet } : null;
+            } catch (e) {
+                console.warn('like hydrate failed:', b, e);
+                return null;
+            }
+        }));
+        return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
+    },
+
     async getNotification(notificationId) {
         if (!notificationId) return null;
         const request = {
@@ -1580,6 +1623,18 @@ export const warpnetService = {
             path: PRIVATE_DELETE_CHAT,
             body: {
                 chat_id: chatId,
+            },
+        }
+
+        return await this.sendToNode(request);
+    },
+
+    async deleteMessage(chatId, messageId) {
+        const request = {
+            path: PRIVATE_DELETE_MESSAGE,
+            body: {
+                chat_id: chatId,
+                id: messageId,
             },
         }
 
