@@ -704,3 +704,50 @@ func TestTweetRepoTestSuite(t *testing.T) {
 
 	suite.Run(t, new(TweetRepoTestSuite))
 }
+
+func (s *TweetRepoTestSuite) TestList_NewestFirst() {
+	userId := ulid.Make().String()
+
+	older, err := s.repo.Create(userId, domain.Tweet{
+		UserId:    userId,
+		Text:      "older",
+		CreatedAt: time.Now().Add(-2 * time.Second),
+	})
+	s.Require().NoError(err)
+	newer, err := s.repo.Create(userId, domain.Tweet{UserId: userId, Text: "newer"})
+	s.Require().NoError(err)
+
+	limit := uint64(10)
+	tweets, _, err := s.repo.List(userId, &limit, nil)
+	s.Require().NoError(err)
+	// The exact length also proves the fixed lookup keys written by
+	// Create are skipped by List.
+	s.Require().Len(tweets, 2)
+	s.Equal(newer.Id, tweets[0].Id)
+	s.Equal(older.Id, tweets[1].Id)
+}
+
+func (s *TweetRepoTestSuite) TestRetweeters_Multiple() {
+	author := ulid.Make().String()
+	src, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: "source"})
+	s.Require().NoError(err)
+
+	retweeter1 := ulid.Make().String()
+	retweeter2 := ulid.Make().String()
+
+	rt1 := src
+	rt1.RetweetedBy = &retweeter1
+	_, err = s.repo.NewRetweet(rt1)
+	s.Require().NoError(err)
+
+	rt2 := src
+	rt2.RetweetedBy = &retweeter2
+	_, err = s.repo.NewRetweet(rt2)
+	s.Require().NoError(err)
+
+	limit := uint64(10)
+	retweeters, _, err := s.repo.Retweeters(src.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(retweeters, 2)
+	s.ElementsMatch([]string{retweeter1, retweeter2}, retweeters)
+}

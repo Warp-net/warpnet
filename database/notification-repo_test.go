@@ -73,6 +73,11 @@ func (s *NotificationsRepoTestSuite) TestAddAndListNotifications() {
 	s.Require().NoError(err)
 	s.Len(nots, 3)
 	s.Equal("end", cursor)
+
+	// Newest-first ordering (reversed-timestamp keys).
+	s.Equal(not3.Text, nots[0].Text)
+	s.Equal(not2.Text, nots[1].Text)
+	s.Equal(not1.Text, nots[2].Text)
 }
 
 func (s *NotificationsRepoTestSuite) TestUnreadCountWalksAllPages() {
@@ -327,4 +332,34 @@ func TestNotificationsRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	suite.Run(t, new(NotificationsRepoTestSuite))
+}
+
+func (s *NotificationsRepoTestSuite) TestReverseList_NewerThanCursor() {
+	userId := uuid.New().String()
+
+	s.Require().NoError(s.repo.Add(domain.Notification{
+		Type:      domain.NotificationLikeType,
+		Text:      "first",
+		UserId:    userId,
+		CreatedAt: time.Now().Add(-2 * time.Second),
+	}))
+
+	limit := uint64(10)
+	nots, cursor, err := s.repo.ReverseList(userId, nil, &limit)
+	s.Require().NoError(err)
+	s.Require().Len(nots, 1)
+	s.NotEmpty(cursor)
+
+	s.Require().NoError(s.repo.Add(domain.Notification{
+		Type:      domain.NotificationReplyType,
+		Text:      "second",
+		UserId:    userId,
+		CreatedAt: time.Now(),
+	}))
+
+	// Only the notification newer than the cursor comes back.
+	nots, _, err = s.repo.ReverseList(userId, &cursor, &limit)
+	s.Require().NoError(err)
+	s.Require().Len(nots, 1)
+	s.Equal("second", nots[0].Text)
 }

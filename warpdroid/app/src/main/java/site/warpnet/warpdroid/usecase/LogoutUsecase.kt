@@ -19,6 +19,7 @@ class LogoutUsecase @Inject constructor(
      * a fresh stub account.
      */
     suspend fun logout(account: AccountEntity) {
+        notificationHelper.clearNotificationsForAccount(account)
         notificationHelper.disableNotificationsForAccount(account)
         shareShortcutHelper.removeShortcut(account)
     }

@@ -504,8 +504,10 @@ class NotificationHelper @Inject constructor(
 
     private fun getNotificationBuilder(notification: Notification, account: AccountEntity, channelId: String): NotificationCompat.Builder {
         val notificationType = notification.type
-        val eventResultPendingIntent = if (notificationType == Notification.Type.ModerationWarning) {
-            val warning = notification.moderationWarning!!
+        // Warpnet moderation verdicts arrive as ModerationWarning without the
+        // Mastodon AccountWarning payload — fall through to the generic intent.
+        val warning = if (notificationType == Notification.Type.ModerationWarning) notification.moderationWarning else null
+        val eventResultPendingIntent = if (warning != null) {
             val intent = Intent(Intent.ACTION_VIEW, "https://${account.domain}/disputes/strikes/${warning.id}".toUri())
             PendingIntent.getActivity(context, account.id.toInt(), intent, pendingIntentFlags(false))
         } else {
@@ -576,7 +578,12 @@ class NotificationHelper @Inject constructor(
                 notification.status?.content?.parseAsWarpnetHtml()?.toString()
             }
             Notification.Type.SeveredRelationship -> return severedRelationShipText(context, notification.event!!, account.domain)
-            Notification.Type.ModerationWarning -> return context.getString(notification.moderationWarning!!.action.text)
+            Notification.Type.ModerationWarning -> {
+                // Warpnet verdicts carry the whole message in the pre-composed
+                // text (surfaced as account.name by the mapper).
+                val warning = notification.moderationWarning ?: return notification.account.name
+                return context.getString(warning.action.text)
+            }
             else -> return null
         }
     }

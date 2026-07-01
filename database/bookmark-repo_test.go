@@ -30,6 +30,7 @@ package database
 
 import (
 	"testing"
+	"time"
 
 	"go.uber.org/goleak"
 
@@ -75,6 +76,17 @@ func (s *BookmarkRepoTestSuite) TestBookmarkAndList() {
 	s.Len(bms, 1)
 	s.Equal(tweetId, bms[0].TweetId)
 	s.Equal(ownerId, bms[0].OwnerUserId)
+
+	// A later bookmark must come back first (newest-first ordering).
+	laterTweetId := uuid.New().String()
+	time.Sleep(2 * time.Millisecond)
+	s.Require().NoError(s.repo.Bookmark(userId, laterTweetId, ownerId))
+
+	bms, _, err = s.repo.List(userId, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(bms, 2)
+	s.Equal(laterTweetId, bms[0].TweetId)
+	s.Equal(tweetId, bms[1].TweetId)
 }
 
 func (s *BookmarkRepoTestSuite) TestBookmarkIdempotent() {

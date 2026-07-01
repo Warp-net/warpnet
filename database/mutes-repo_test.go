@@ -80,3 +80,19 @@ func TestMutesRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(MutesRepoTestSuite))
 }
+
+func (s *MutesRepoTestSuite) TestList_Multiple() {
+	repo := NewMutesRepo(s.db)
+	muter := uuid.New().String()
+	mutee1 := uuid.New().String()
+	mutee2 := uuid.New().String()
+
+	s.Require().NoError(repo.Mute(muter, mutee1))
+	s.Require().NoError(repo.Mute(muter, mutee2))
+
+	limit := uint64(10)
+	ids, _, err := repo.List(muter, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(ids, 2)
+	s.ElementsMatch([]string{mutee1, mutee2}, ids)
+}

@@ -15,6 +15,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +41,7 @@ import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -79,7 +83,30 @@ class ChatMessagesActivity : BaseActivity() {
         val state by viewModel.state.collectAsStateWithLifecycle()
         val otherName = intent.getStringExtra(EXTRA_OTHER_NAME).orEmpty()
         var draft by remember { mutableStateOf("") }
+        var messageToDelete by remember { mutableStateOf<WarpnetMessage?>(null) }
         val listState = rememberLazyListState()
+
+        messageToDelete?.let { pending ->
+            AlertDialog(
+                onDismissRequest = { messageToDelete = null },
+                text = { Text(stringResource(R.string.dialog_delete_message_warning)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteMessage(pending)
+                            messageToDelete = null
+                        },
+                    ) {
+                        Text(stringResource(R.string.action_delete))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { messageToDelete = null }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                },
+            )
+        }
 
         LifecycleResumeEffect(Unit) {
             viewModel.startPolling()
@@ -131,7 +158,18 @@ class ChatMessagesActivity : BaseActivity() {
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             items(state.messages, key = { messageDisplayKey(it) }) { msg ->
-                                MessageBubble(msg, isOwn = msg.senderId == state.ownUserId)
+                                val isOwn = msg.senderId == state.ownUserId
+                                MessageBubble(
+                                    msg = msg,
+                                    isOwn = isOwn,
+                                    // Only own, id-carrying messages can be deleted —
+                                    // PRIVATE_DELETE_MESSAGE addresses by message id.
+                                    onLongPress = if (isOwn && msg.id.isNotEmpty()) {
+                                        { messageToDelete = msg }
+                                    } else {
+                                        null
+                                    },
+                                )
                             }
                         }
                     }
@@ -152,7 +190,14 @@ class ChatMessagesActivity : BaseActivity() {
     }
 
     @Composable
-    private fun MessageBubble(msg: WarpnetMessage, isOwn: Boolean) {
+    private fun MessageBubble(msg: WarpnetMessage, isOwn: Boolean, onLongPress: (() -> Unit)? = null) {
+        val longPressModifier = if (onLongPress != null) {
+            Modifier.pointerInput(msg.id) {
+                detectTapGestures(onLongPress = { onLongPress() })
+            }
+        } else {
+            Modifier
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -166,6 +211,7 @@ class ChatMessagesActivity : BaseActivity() {
                         color = if (isOwn) colorScheme.primary else colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(12.dp),
                     )
+                    .then(longPressModifier)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 Text(

@@ -151,3 +151,24 @@ func TestFilterRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(FilterRepoTestSuite))
 }
+
+func (s *FilterRepoTestSuite) TestList_Multiple() {
+	user := uuid.New().String()
+	_, err := s.repo.Create(user, domain.Filter{
+		Title:   "one",
+		Context: []domain.FilterContext{domain.FilterContextHome},
+		Action:  domain.FilterActionHide,
+	})
+	s.Require().NoError(err)
+	_, err = s.repo.Create(user, domain.Filter{
+		Title:   "two",
+		Context: []domain.FilterContext{domain.FilterContextHome},
+		Action:  domain.FilterActionHide,
+	})
+	s.Require().NoError(err)
+
+	limit := uint64(10)
+	list, _, err := s.repo.List(user, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(list, 2)
+}

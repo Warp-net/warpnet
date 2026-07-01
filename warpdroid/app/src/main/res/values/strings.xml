@@ -293,6 +293,7 @@
     <string name="dialog_delete_post_warning">Delete this post?</string>
     <string name="dialog_redraft_post_warning">Delete and re-draft this post?</string>
     <string name="dialog_delete_conversation_warning">Delete this conversation?</string>
+    <string name="dialog_delete_message_warning">Delete this message?</string>
     <string name="mute_domain_warning">Are you sure you want to block all of %1$s? You will not see content from that domain in any public timelines or in your notifications. Your followers from that domain will be removed.</string>
     <string name="mute_domain_warning_dialog_ok">Hide entire domain</string>
     <string name="dialog_block_warning">Block @%1$s?</string>

@@ -30,6 +30,7 @@ import site.warpnet.transport.dto.FollowersResponse
 import site.warpnet.transport.dto.FollowingsResponse
 import site.warpnet.transport.dto.GetAllTweetsEvent
 import site.warpnet.transport.dto.GetAllUsersEvent
+import site.warpnet.transport.dto.GetBookmarksEvent
 import site.warpnet.transport.dto.GetFollowersEvent
 import site.warpnet.transport.dto.GetFollowingsEvent
 import site.warpnet.transport.dto.GetIsFollowingEvent
@@ -987,6 +988,37 @@ class WarpnetRepository @Inject constructor(
             tweets to page.cursor
         }.getOrElse { e ->
             android.util.Log.w(TAG, "getBookmarks($userId) failed", e)
+            emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
+        }
+    }
+
+    /**
+     * Fetch one page of tweets the user liked, newest first. The wire shape
+     * is identical to bookmarks (Go aliases GetLikesEvent/GetLikesResponse to
+     * the bookmark types), so the bookmark DTOs and adapters are reused.
+     */
+    suspend fun getLikes(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.warpdroid.entity.Tweet>, String> {
+        if (userId.isBlank()) {
+            return emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
+        }
+        return runCatching {
+            val raw = client.request(
+                ProtocolIds.PRIVATE_GET_LIKES,
+                getBookmarksEventAdapter.toJson(
+                    GetBookmarksEvent(userId = userId, cursor = cursor, limit = limit),
+                ),
+            )
+            val page = getBookmarksRespAdapter.fromJson(raw)
+                ?: return@runCatching emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
+            if (page.items.isEmpty()) {
+                return@runCatching emptyList<site.warpnet.warpdroid.entity.Tweet>() to page.cursor
+            }
+            val tweets = page.items.mapNotNull { liked ->
+                runCatching { getStatus(tweetId = liked.tweetId, userId = liked.ownerUserId) }.getOrNull()
+            }
+            tweets to page.cursor
+        }.getOrElse { e ->
+            android.util.Log.w(TAG, "getLikes($userId) failed", e)
             emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
         }
     }

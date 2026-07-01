@@ -531,7 +531,7 @@ type GetBookmarksEvent struct {
 	Limit  *uint64   `json:"limit,omitempty"`
 }
 
-// BookmarkItem mirrors database.Bookmark on the wire.
+// BookmarkItem mirrors domain.Bookmark on the wire.
 type BookmarkItem struct {
 	UserId      domain.ID `json:"user_id"`
 	TweetId     domain.ID `json:"tweet_id"`
@@ -544,6 +544,12 @@ type GetBookmarksResponse struct {
 	Items  []BookmarkItem `json:"items"`
 	Cursor string         `json:"cursor"`
 }
+
+// GetLikesEvent defines model for GetLikesEvent.
+type GetLikesEvent = GetBookmarksEvent
+
+// GetLikesResponse defines model for GetLikesResponse.
+type GetLikesResponse = GetBookmarksResponse
 
 // PinTweetEvent defines model for PinTweetEvent.
 type PinTweetEvent struct {

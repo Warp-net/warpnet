@@ -112,10 +112,31 @@ type Identity struct {
 	PSK   string `json:"psk"`
 }
 
+// Bookmark defines model for Bookmark — the local pin a user puts on
+// someone's tweet. The owner id is stored alongside so the timeline render
+// can fetch the tweet without an extra resolution round-trip.
+type Bookmark struct {
+	UserId      string    `json:"user_id"`
+	TweetId     string    `json:"tweet_id"`
+	OwnerUserId string    `json:"owner_user_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 // Like defines model for Like.
 type Like struct {
 	TweetId string `json:"tweet_id"`
 	UserId  string `json:"user_id"`
+}
+
+// LikedTweet defines model for LikedTweet — one entry of a user's
+// "tweets I liked" index. OwnerUserId is the tweet author's id, stored
+// alongside so clients can fetch the tweet without an extra resolution
+// round-trip.
+type LikedTweet struct {
+	UserId      string    `json:"user_id"`
+	TweetId     string    `json:"tweet_id"`
+	OwnerUserId string    `json:"owner_user_id"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // Owner defines model for Owner.

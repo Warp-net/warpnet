@@ -127,6 +127,19 @@ class ChatMessagesViewModel @Inject constructor(
         }
     }
 
+    fun deleteMessage(message: WarpnetMessage) {
+        val messageId = message.id
+        if (chatId.isEmpty() || messageId.isEmpty()) return
+        viewModelScope.launch {
+            runCatching { repo.deleteMessage(chatId = chatId, messageId = messageId) }
+                .onSuccess {
+                    _state.update { s ->
+                        s.copy(messages = s.messages.filterNot { it.id == messageId })
+                    }
+                }
+        }
+    }
+
     private fun List<WarpnetMessage>.orderedForDisplay(): List<WarpnetMessage> =
         distinctBy(::messageDisplayKey).sortedWith(
             compareBy(

@@ -159,6 +159,23 @@ resulting from the use or misuse of this software.
             Bookmarks
           </p>
         </button>
+        <button
+          @click="$router.push({ name: 'Likes' })"
+          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          aria-label="Likes"
+        >
+          <i
+            class="fa-heart"
+            :class="$route.name === 'Likes' ? 'text-2xl fas' : 'text-xl far'"
+            aria-hidden="true"
+          ></i>
+          <p
+            class="text-lg ml-4 text-left hidden xl:block"
+            :class="$route.name === 'Likes' ? 'font-bold' : ''"
+          >
+            Likes
+          </p>
+        </button>
 <!--        <button-->
 <!--          class="focus:outline-none hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"-->
 <!--        >-->

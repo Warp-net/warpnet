@@ -834,7 +834,16 @@ class WarpnetApi @Inject constructor(
         minId: String? = null,
         sinceId: String?,
         limit: Int?,
-    ): Response<List<Tweet>> = stubList()
+    ): Response<List<Tweet>> {
+        val active = accountManager.activeAccount ?: return stubList()
+        return paginated {
+            warpnet.getLikes(
+                userId = active.accountId,
+                cursor = maxId.orEmpty(),
+                limit = limit ?: 40,
+            )
+        }
+    }
 
     suspend fun bookmarks(
         maxId: String?,
