@@ -216,3 +216,20 @@ func (s *LikeRepoTestSuite) TestLikedIndex_InvalidParams() {
 	_, _, err := s.repo.Liked("", nil, nil)
 	s.Error(err)
 }
+
+func (s *LikeRepoTestSuite) TestLikers_Multiple() {
+	tweetId := ulid.Make().String()
+	user1 := ulid.Make().String()
+	user2 := ulid.Make().String()
+
+	_, err := s.repo.Like(tweetId, user1)
+	s.Require().NoError(err)
+	_, err = s.repo.Like(tweetId, user2)
+	s.Require().NoError(err)
+
+	limit := uint64(10)
+	likers, _, err := s.repo.Likers(tweetId, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(likers, 2)
+	s.ElementsMatch([]string{user1, user2}, likers)
+}

@@ -3,6 +3,7 @@ package database
 
 import (
 	"testing"
+	"time"
 
 	"go.uber.org/goleak"
 
@@ -153,4 +154,41 @@ func (s *FollowerRepoTestSuite) TestGetFollowings() {
 func TestFollowerRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(FollowerRepoTestSuite))
+}
+
+func (s *FollowerRepoTestSuite) TestGetFollowersAndFollowings_NewestFirst() {
+	target := "order-target"
+	s.Require().NoError(s.repo.Follow("order-follower-a", target))
+	time.Sleep(3 * time.Millisecond)
+	s.Require().NoError(s.repo.Follow("order-follower-b", target))
+
+	limit := uint64(10)
+	followers, _, err := s.repo.GetFollowers(target, &limit, nil)
+	s.Require().NoError(err)
+	// The exact length also proves the fixed lookup keys written by
+	// Follow are skipped by ListKeys.
+	s.Require().Len(followers, 2)
+	s.Equal([]string{"order-follower-b", "order-follower-a"}, followers)
+
+	src := "order-src"
+	s.Require().NoError(s.repo.Follow(src, "order-followee-a"))
+	time.Sleep(3 * time.Millisecond)
+	s.Require().NoError(s.repo.Follow(src, "order-followee-b"))
+
+	followings, _, err := s.repo.GetFollowings(src, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(followings, 2)
+	s.Equal([]string{"order-followee-b", "order-followee-a"}, followings)
+}
+
+func (s *FollowerRepoTestSuite) TestListFollowRequests_Multiple() {
+	target := "reqs-target"
+	s.Require().NoError(s.repo.AddFollowRequest(target, "req-a"))
+	s.Require().NoError(s.repo.AddFollowRequest(target, "req-b"))
+
+	limit := uint64(10)
+	reqs, _, err := s.repo.ListFollowRequests(target, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(reqs, 2)
+	s.ElementsMatch([]string{"req-a", "req-b"}, reqs)
 }

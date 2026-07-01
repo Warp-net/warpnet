@@ -198,3 +198,29 @@ func TestUserRepoTestSuite(t *testing.T) {
 
 	suite.Run(t, new(UserRepoTestSuite))
 }
+
+func (s *UserRepoTestSuite) TestList_NoFixedKeyLeak() {
+	fresh := []domain.User{
+		{Id: "leakcheck1", Username: "x", CreatedAt: time.Now()},
+		{Id: "leakcheck2", Username: "y", CreatedAt: time.Now()},
+		{Id: "leakcheck3", Username: "z", CreatedAt: time.Now()},
+	}
+	for _, u := range fresh {
+		_, err := s.repo.Create(u)
+		s.Require().NoError(err)
+	}
+
+	limit := uint64(100)
+	all, _, err := s.repo.List(&limit, nil)
+	s.Require().NoError(err)
+
+	seen := map[string]int{}
+	for _, u := range all {
+		seen[u.Id]++
+	}
+	// Each user appears exactly once: the fixed lookup keys written by
+	// Create are skipped by List, so no duplicates and no decode leaks.
+	s.Equal(1, seen["leakcheck1"])
+	s.Equal(1, seen["leakcheck2"])
+	s.Equal(1, seen["leakcheck3"])
+}
