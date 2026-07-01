@@ -400,14 +400,6 @@ class ViewThreadViewModel @AssistedInject constructor(
         }
     }
 
-    private fun updateStatus(statusId: String, updater: (Tweet) -> Tweet) {
-        updateTweetViewData(statusId) { viewData ->
-            viewData.copy(
-                status = updater(viewData.status)
-            )
-        }
-    }
-
     fun changeFilter(filtered: Boolean, viewData: TweetViewData.Concrete) {
         updateTweetViewData(viewData.id) { viewData ->
             viewData.copy(

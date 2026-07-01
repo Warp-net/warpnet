@@ -7,16 +7,13 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ViewBackgroundMessageBinding
-import site.warpnet.warpdroid.util.addDrawables
 import site.warpnet.warpdroid.util.getDrawableRes
 import site.warpnet.warpdroid.util.getErrorString
 import site.warpnet.warpdroid.util.hide
-import site.warpnet.warpdroid.util.show
 import site.warpnet.warpdroid.util.visible
 
 /**
@@ -64,16 +61,5 @@ class BackgroundMessageView @JvmOverloads constructor(
         binding.button.setOnClickListener(clickListener)
         binding.button.visible(clickListener != null)
         binding.helpTextCard.hide()
-    }
-
-    fun showHelp(@StringRes helpRes: Int) {
-        val size: Int = binding.helpText.textSize.toInt() + 2
-        val color = binding.helpText.currentTextColor
-        val text = context.getText(helpRes)
-        val textWithDrawables = addDrawables(text, color, size, context)
-
-        binding.helpText.setText(textWithDrawables, TextView.BufferType.SPANNABLE)
-
-        binding.helpTextCard.show()
     }
 }

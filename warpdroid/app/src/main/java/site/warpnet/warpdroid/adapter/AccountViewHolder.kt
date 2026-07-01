@@ -5,7 +5,6 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ItemAccountBinding
 import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.interfaces.AccountActionListener
-import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.visible
 
@@ -38,13 +37,5 @@ class AccountViewHolder(
 
     fun setupActionListener(listener: AccountActionListener) {
         itemView.setOnClickListener { listener.onViewAccount(accountId) }
-    }
-
-    fun setupLinkListener(listener: LinkListener) {
-        itemView.setOnClickListener {
-            listener.onViewAccount(
-                accountId
-            )
-        }
     }
 }

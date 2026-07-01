@@ -249,14 +249,6 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun updateStatus(statusId: String, updater: (Tweet) -> Tweet) {
-        updateTweetViewData(statusId) { viewData ->
-            viewData.copy(
-                status = updater(viewData.status)
-            )
-        }
-    }
-
     companion object {
         internal const val DEFAULT_LOAD_SIZE = 20
     }

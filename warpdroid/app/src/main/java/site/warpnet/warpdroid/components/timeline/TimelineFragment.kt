@@ -764,7 +764,6 @@ class TimelineFragment :
     }
 
     companion object {
-        private const val TAG = "TimelineF" // logging tag
         private const val KIND_ARG = "kind"
         private const val ID_ARG = "id"
 

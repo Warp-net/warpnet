@@ -241,47 +241,6 @@ private fun SpannableStringBuilder.styleQuoteSpans(view: TextView) {
 }
 
 /**
- * Put mentions in a piece of text and makes them clickable, associating them with callbacks to
- * notify when they're clicked.
- *
- * @param view the returned text will be put in
- * @param mentions any '@' mentions which are known to be in the content
- * @param listener to notify about particular spans that are clicked
- */
-fun setClickableMentions(view: TextView, mentions: List<Mention>?, listener: LinkListener) {
-    if (mentions?.isEmpty() != false) {
-        view.text = null
-        return
-    }
-
-    view.text = SpannableStringBuilder().apply {
-        var start = 0
-        var end = 0
-        var flags: Int
-        var firstMention = true
-
-        for (mention in mentions) {
-            val customSpan = getCustomSpanForMentionUrl(mention.url, mention.id, listener)
-            end += 1 + mention.localUsername.length // length of @ + username
-            flags = getSpanFlags(customSpan)
-            if (firstMention) {
-                firstMention = false
-            } else {
-                append(" ")
-                start += 1
-                end += 1
-            }
-
-            append("@")
-            append(mention.localUsername)
-            setSpan(customSpan, start, end, flags)
-            start = end
-        }
-    }
-    view.movementMethod = NoTrailingSpaceLinkMovementMethod
-}
-
-/**
  * Opens a link, depending on the settings, either in the browser or in a custom tab
  *
  * @receiver the Context to open the link from

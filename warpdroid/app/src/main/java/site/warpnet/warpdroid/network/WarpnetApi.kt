@@ -30,7 +30,6 @@ import site.warpnet.warpdroid.components.filters.FilterExpiration
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Attachment
-import site.warpnet.warpdroid.entity.Conversation
 import site.warpnet.warpdroid.entity.DeletedTweet
 import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Filter
@@ -877,37 +876,6 @@ class WarpnetApi @Inject constructor(
             warpnet.rejectFollowRequest(userId = active.accountId, followerId = accountId)
             warpnet.relationshipFor(accountId)
         }
-    }
-
-    // ---------------------------------------------------------------
-    // conversations (Warpnet 1:1 chats)
-    // ---------------------------------------------------------------
-
-    suspend fun getConversations(
-        maxId: String? = null,
-        limit: Int? = null,
-    ): Response<List<Conversation>> {
-        val active = accountManager.activeAccount ?: return stubList()
-        return paginated {
-            val (chats, cursor) = warpnet.getChats(
-                userId = active.accountId,
-                cursor = maxId.orEmpty(),
-                limit = limit ?: 40,
-            )
-            val conversations = chats.mapNotNull { chat ->
-                runCatching {
-                    val other = warpnet.getTimelineUser(chat.otherUserId)
-                    WarpnetMapper.chatToConversation(chat, other)
-                }.getOrNull()
-            }
-            conversations to cursor
-        }
-    }
-
-    suspend fun deleteConversation(conversationId: String): NetworkResult<Unit> = result {
-        val active = accountManager.activeAccount
-            ?: throw IllegalStateException("No active account")
-        warpnet.deleteChat(userId = active.accountId, chatId = conversationId)
     }
 
     // ---------------------------------------------------------------

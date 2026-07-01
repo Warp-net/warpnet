@@ -21,12 +21,10 @@ import android.text.Spanned
 import android.text.style.StyleSpan
 import androidx.recyclerview.widget.RecyclerView
 import site.warpnet.warpdroid.R
-import site.warpnet.warpdroid.components.notifications.NotificationsViewHolder
 import site.warpnet.warpdroid.databinding.ItemFollowRequestBinding
 import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.interfaces.AccountActionListener
 import site.warpnet.warpdroid.interfaces.LinkListener
-import site.warpnet.warpdroid.util.TweetDisplayOptions
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.loadAvatar
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
@@ -34,31 +32,13 @@ import site.warpnet.warpdroid.util.setClickableText
 import site.warpnet.warpdroid.util.show
 import site.warpnet.warpdroid.util.unicodeWrap
 import site.warpnet.warpdroid.util.visible
-import site.warpnet.warpdroid.viewdata.NotificationViewData
 
 class FollowRequestViewHolder(
     private val binding: ItemFollowRequestBinding,
     private val accountListener: AccountActionListener,
     private val linkListener: LinkListener,
     private val showHeader: Boolean
-) : RecyclerView.ViewHolder(binding.root), NotificationsViewHolder {
-
-    override fun bind(
-        viewData: NotificationViewData.Concrete,
-        payloads: List<*>,
-        statusDisplayOptions: TweetDisplayOptions
-    ) {
-        if (payloads.isNotEmpty()) {
-            return
-        }
-        setupWithAccount(
-            viewData.account,
-            statusDisplayOptions.animateAvatars,
-            statusDisplayOptions.animateEmojis,
-            statusDisplayOptions.showBotOverlay
-        )
-        setupActionListener(accountListener, viewData.account.id)
-    }
+) : RecyclerView.ViewHolder(binding.root) {
 
     fun setupWithAccount(
         account: TimelineUser,

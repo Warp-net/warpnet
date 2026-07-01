@@ -172,8 +172,6 @@ class PreferencesActivity :
     }
 
     companion object {
-        @Suppress("unused")
-        private const val TAG = "PreferencesActivity"
         const val GENERAL_PREFERENCES = 0
         const val ACCOUNT_PREFERENCES = 1
         const val NOTIFICATION_PREFERENCES = 2

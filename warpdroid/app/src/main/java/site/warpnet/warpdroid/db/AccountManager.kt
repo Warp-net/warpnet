@@ -46,9 +46,6 @@ class AccountManager @Inject constructor() {
             .stateIn(scope, SharingStarted.Lazily, current)
     }
 
-    /** @return true — Warpdroid is always "signed in" to the stub account. */
-    fun hasActiveAccount(): Boolean = activeAccount != null
-
     /** Mutates the active account in place. */
     fun updateActiveAccount(changer: AccountEntity.() -> AccountEntity) {
         _accountsFlow.value = accounts.map { if (it.isActive) changer(it) else it }
@@ -78,9 +75,6 @@ class AccountManager @Inject constructor() {
 
     fun getAccountById(accountId: Long): AccountEntity? =
         accounts.find { it.id == accountId }
-
-    fun getAccountByIdentifier(identifier: String): AccountEntity? =
-        accounts.find { it.identifier == identifier }
 
     /** @return true — at least the stub account has notifications enabled. */
     fun areNotificationsEnabled(): Boolean = accounts.any { it.notificationsEnabled }

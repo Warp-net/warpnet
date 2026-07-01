@@ -80,10 +80,6 @@ fun Tweet.toViewData(
     }
 )
 
-fun CombinedLoadStates.isAnyLoading(): Boolean {
-    return this.refresh == LoadState.Loading || this.append == LoadState.Loading || this.prepend == LoadState.Loading
-}
-
 fun CombinedLoadStates.isRefreshing(): Boolean {
     return this.source.refresh == LoadState.Loading ||
         this.mediator?.refresh == LoadState.Loading ||
