@@ -251,7 +251,7 @@ func (ni NodeInfo) IsBusiness() bool {
 	return ni.Type == BusinessNode
 }
 
-type NodeStats struct {
+type NodeMetrics struct {
 	UserId          string          `json:"user_id"`
 	NodeID          WarpPeerID      `json:"node_id"`
 	Version         *semver.Version `json:"version"`
