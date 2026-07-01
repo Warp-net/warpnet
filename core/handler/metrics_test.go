@@ -64,7 +64,7 @@ func TestStreamGetStatsHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		stats := resp.(warpnet.NodeStats)
+		stats := resp.(warpnet.NodeMetrics)
 		if stats.UserId != "owner-1" {
 			t.Fatalf("expected user id owner-1, got: %s", stats.UserId)
 		}
@@ -96,7 +96,7 @@ func TestStreamGetStatsHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		stats := resp.(warpnet.NodeStats)
+		stats := resp.(warpnet.NodeMetrics)
 		if stats.NetworkState != "Disconnected" {
 			t.Fatalf("expected Disconnected, got: %s", stats.NetworkState)
 		}

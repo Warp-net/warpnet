@@ -34,19 +34,19 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
-type StatsNodeInformer interface {
+type MetricsNodeInformer interface {
 	NodeInfo() warpnet.NodeInfo
 	Peerstore() warpnet.WarpPeerstore
 	Network() warpnet.WarpNetwork
 }
 
-type StatsProvider interface {
+type MetricsProvider interface {
 	Stats() map[string]string
 }
 
 func StreamGetStatsHandler(
-	i StatsNodeInformer,
-	db StatsProvider,
+	i MetricsNodeInformer,
+	db MetricsProvider,
 ) warpnet.WarpHandlerFunc {
 	return func(_ []byte, s warpnet.WarpStream) (any, error) {
 		sent, recv := warpnet.GetNetworkIO()
@@ -65,7 +65,7 @@ func StreamGetStatsHandler(
 			publicAddrsStr = strings.Join(nodeInfo.Addresses, ",")
 		}
 
-		stats := warpnet.NodeStats{
+		stats := warpnet.NodeMetrics{
 			UserId:          nodeInfo.OwnerId,
 			NodeID:          nodeInfo.ID,
 			Version:         nodeInfo.Version,
