@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 )
 
 type stubBookmarkRepo struct {
 	bookmarkFn   func(userId, tweetId, ownerUserId string) error
 	unbookmarkFn func(userId, tweetId string) error
-	listFn       func(userId string, limit *uint64, cursor *string) ([]database.Bookmark, string, error)
+	listFn       func(userId string, limit *uint64, cursor *string) ([]domain.Bookmark, string, error)
 }
 
 func (s stubBookmarkRepo) Bookmark(userId, tweetId, ownerUserId string) error {
@@ -30,7 +30,7 @@ func (s stubBookmarkRepo) Unbookmark(userId, tweetId string) error {
 	return nil
 }
 
-func (s stubBookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]database.Bookmark, string, error) {
+func (s stubBookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Bookmark, string, error) {
 	if s.listFn != nil {
 		return s.listFn(userId, limit, cursor)
 	}
@@ -149,8 +149,8 @@ func TestStreamGetBookmarksHandler(t *testing.T) {
 	})
 	t.Run("happy path", func(t *testing.T) {
 		now := time.Now()
-		h := StreamGetBookmarksHandler(stubBookmarkRepo{listFn: func(_ string, _ *uint64, _ *string) ([]database.Bookmark, string, error) {
-			return []database.Bookmark{
+		h := StreamGetBookmarksHandler(stubBookmarkRepo{listFn: func(_ string, _ *uint64, _ *string) ([]domain.Bookmark, string, error) {
+			return []domain.Bookmark{
 				{UserId: "u", TweetId: "t1", OwnerUserId: "o1", CreatedAt: now},
 			}, "end", nil
 		}})

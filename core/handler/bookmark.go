@@ -29,7 +29,7 @@ package handler
 
 import (
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 )
@@ -37,7 +37,7 @@ import (
 type BookmarkStorer interface {
 	Bookmark(userId, tweetId, ownerUserId string) error
 	Unbookmark(userId, tweetId string) error
-	List(userId string, limit *uint64, cursor *string) ([]database.Bookmark, string, error)
+	List(userId string, limit *uint64, cursor *string) ([]domain.Bookmark, string, error)
 }
 
 func StreamBookmarkHandler(repo BookmarkStorer) warpnet.WarpHandlerFunc {

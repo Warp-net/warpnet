@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 )
 
@@ -39,16 +40,6 @@ const (
 	bookmarkListSub  = "LIST" // forward index: per-owner cursor of bookmarked tweet ids
 	bookmarkItemSub  = "ITEM" // payload: serialised Bookmark keyed by tweet id
 )
-
-// Bookmark is the local pin a user puts on someone's tweet. The owner id is
-// stored alongside so the timeline render can fetch the tweet without an
-// extra resolution round-trip.
-type Bookmark struct {
-	UserId      string    `json:"user_id"`
-	TweetId     string    `json:"tweet_id"`
-	OwnerUserId string    `json:"owner_user_id"`
-	CreatedAt   time.Time `json:"created_at"`
-}
 
 type BookmarkStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
@@ -73,7 +64,7 @@ func (repo *BookmarkRepo) Bookmark(userId, tweetId, ownerUserId string) error {
 		return local_store.DBError("empty owner user id")
 	}
 
-	bm := Bookmark{
+	bm := domain.Bookmark{
 		UserId:      userId,
 		TweetId:     tweetId,
 		OwnerUserId: ownerUserId,
@@ -156,7 +147,7 @@ func (repo *BookmarkRepo) Unbookmark(userId, tweetId string) error {
 	return txn.Commit()
 }
 
-func (repo *BookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]Bookmark, string, error) {
+func (repo *BookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Bookmark, string, error) {
 	if userId == "" {
 		return nil, "", local_store.DBError("empty user id")
 	}
@@ -180,9 +171,9 @@ func (repo *BookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]
 		return nil, "", err
 	}
 
-	bms := make([]Bookmark, 0, len(items))
+	bms := make([]domain.Bookmark, 0, len(items))
 	for _, item := range items {
-		var bm Bookmark
+		var bm domain.Bookmark
 		if err := json.Unmarshal(item.Value, &bm); err != nil {
 			return nil, "", err
 		}

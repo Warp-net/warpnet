@@ -531,7 +531,7 @@ type GetBookmarksEvent struct {
 	Limit  *uint64   `json:"limit,omitempty"`
 }
 
-// BookmarkItem mirrors database.Bookmark on the wire.
+// BookmarkItem mirrors domain.Bookmark on the wire.
 type BookmarkItem struct {
 	UserId      domain.ID `json:"user_id"`
 	TweetId     domain.ID `json:"tweet_id"`
