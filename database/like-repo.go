@@ -29,9 +29,11 @@ package database
 
 import (
 	"encoding/binary"
+	"time"
 
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,6 +41,8 @@ const (
 	LikeRepoName      = "/LIKES"
 	IncrSubNamespace  = "INCR"
 	LikerSubNamespace = "LIKER"
+	likedListSub      = "LIKED"     // forward index: per-user cursor of liked tweet refs
+	likedItemSub      = "LIKEDITEM" // stable lookup by tweet id for unlike
 )
 
 var ErrLikesNotFound = local_store.DBError("like not found")
@@ -231,4 +235,143 @@ func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ l
 		likers = append(likers, userId)
 	}
 	return likers, cur, nil
+}
+
+// LikedTweet is one entry of a user's "tweets I liked" index. The tweet
+// author's id is stored alongside so the client can fetch the tweet without
+// an extra resolution round-trip (same trick as database.Bookmark).
+type LikedTweet struct {
+	UserId      string    `json:"user_id"`
+	TweetId     string    `json:"tweet_id"`
+	OwnerUserId string    `json:"owner_user_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+func (repo *LikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	if tweetId == "" {
+		return local_store.DBError("empty tweet id")
+	}
+	if ownerUserId == "" {
+		return local_store.DBError("empty owner user id")
+	}
+
+	lt := LikedTweet{
+		UserId:      userId,
+		TweetId:     tweetId,
+		OwnerUserId: ownerUserId,
+		CreatedAt:   time.Now(),
+	}
+
+	// list-key: ordered by creation time (reverse so newest comes first
+	// when iterating); item-key: stable lookup by tweet id for unlike.
+	listKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(likedListSub).
+		AddRootID(userId).
+		AddReversedTimestamp(lt.CreatedAt).
+		AddParentId(tweetId).
+		Build()
+
+	itemKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(likedItemSub).
+		AddRootID(userId).
+		AddParentId(tweetId).
+		Build()
+
+	bt, err := json.Marshal(lt)
+	if err != nil {
+		return err
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if existing, err := txn.Get(itemKey); err == nil && len(existing) != 0 {
+		return txn.Commit() // already indexed, no-op
+	}
+	if err = txn.Set(itemKey, []byte(listKey)); err != nil {
+		return err
+	}
+	if err = txn.Set(listKey, bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+func (repo *LikeRepo) RemoveLiked(userId, tweetId string) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	if tweetId == "" {
+		return local_store.DBError("empty tweet id")
+	}
+
+	itemKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(likedItemSub).
+		AddRootID(userId).
+		AddParentId(tweetId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	listKeyBytes, err := txn.Get(itemKey)
+	if local_store.IsNotFoundError(err) {
+		return txn.Commit()
+	}
+	if err != nil {
+		return err
+	}
+	if err = txn.Delete(itemKey); err != nil {
+		return err
+	}
+	if len(listKeyBytes) != 0 {
+		if err = txn.Delete(local_store.DatabaseKey(listKeyBytes)); err != nil {
+			return err
+		}
+	}
+	return txn.Commit()
+}
+
+func (repo *LikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]LikedTweet, string, error) {
+	if userId == "" {
+		return nil, "", local_store.DBError("empty user id")
+	}
+
+	prefix := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(likedListSub).
+		AddRootID(userId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	items, cur, err := txn.List(prefix, limit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	if err = txn.Commit(); err != nil {
+		return nil, "", err
+	}
+
+	liked := make([]LikedTweet, 0, len(items))
+	for _, item := range items {
+		var lt LikedTweet
+		if err := json.Unmarshal(item.Value, &lt); err != nil {
+			return nil, "", err
+		}
+		liked = append(liked, lt)
+	}
+	return liked, cur, nil
 }

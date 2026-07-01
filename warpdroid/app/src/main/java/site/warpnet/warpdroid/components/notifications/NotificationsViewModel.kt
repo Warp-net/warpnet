@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.TimelineUser
@@ -24,6 +25,7 @@ import site.warpnet.warpdroid.warpnet.WarpnetRepository
 class NotificationsViewModel @Inject constructor(
     private val repo: WarpnetRepository,
     private val accountManager: AccountManager,
+    private val notificationHelper: NotificationHelper,
 ) : ViewModel() {
 
     data class State(
@@ -68,6 +70,9 @@ class NotificationsViewModel @Inject constructor(
                 notifs.forEach { n ->
                     runCatching { repo.markNotificationRead(n.id) }
                 }
+                // The list is read now — retract anything still sitting in
+                // the system tray for this account.
+                accountManager.activeAccount?.let(notificationHelper::clearNotificationsForAccount)
             } catch (e: Throwable) {
                 _state.update { it.copy(loading = false, error = e) }
             }

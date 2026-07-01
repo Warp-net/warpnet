@@ -14,10 +14,13 @@ import (
 )
 
 type stubLikeRepo struct {
-	likeFn       func(tweetId, userId string) (uint64, error)
-	unlikeFn     func(tweetId, userId string) (uint64, error)
-	likesCountFn func(tweetId string) (uint64, error)
-	likersFn     func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
+	likeFn        func(tweetId, userId string) (uint64, error)
+	unlikeFn      func(tweetId, userId string) (uint64, error)
+	likesCountFn  func(tweetId string) (uint64, error)
+	likersFn      func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
+	setLikedFn    func(userId, tweetId, ownerUserId string) error
+	removeLikedFn func(userId, tweetId string) error
+	likedFn       func(userId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error)
 }
 
 func (s stubLikeRepo) Like(tweetId, userId string) (uint64, error) {
@@ -41,6 +44,24 @@ func (s stubLikeRepo) LikesCount(tweetId string) (uint64, error) {
 func (s stubLikeRepo) Likers(tweetId string, limit *uint64, cursor *string) ([]string, string, error) {
 	if s.likersFn != nil {
 		return s.likersFn(tweetId, limit, cursor)
+	}
+	return nil, "", nil
+}
+func (s stubLikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
+	if s.setLikedFn != nil {
+		return s.setLikedFn(userId, tweetId, ownerUserId)
+	}
+	return nil
+}
+func (s stubLikeRepo) RemoveLiked(userId, tweetId string) error {
+	if s.removeLikedFn != nil {
+		return s.removeLikedFn(userId, tweetId)
+	}
+	return nil
+}
+func (s stubLikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error) {
+	if s.likedFn != nil {
+		return s.likedFn(userId, limit, cursor)
 	}
 	return nil, "", nil
 }
@@ -356,6 +377,62 @@ func TestStreamUnlikeHandler(t *testing.T) {
 		}
 		if capturedTweetId != tweetId {
 			t.Fatalf("expected stripped id %q, got %q", tweetId, capturedTweetId)
+		}
+	})
+}
+
+func TestStreamGetLikesHandler(t *testing.T) {
+	userId := "user-1"
+
+	t.Run("invalid payload", func(t *testing.T) {
+		h := StreamGetLikesHandler(stubLikeRepo{})
+		_, err := h([]byte("{"), nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("empty user id", func(t *testing.T) {
+		h := StreamGetLikesHandler(stubLikeRepo{})
+		_, err := h(marshal(t, event.GetLikesEvent{}), nil)
+		if err == nil || err.Error() != "likes: empty user id" {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("repo error", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		h := StreamGetLikesHandler(stubLikeRepo{likedFn: func(userId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error) {
+			return nil, "", repoErr
+		}})
+		_, err := h(marshal(t, event.GetLikesEvent{UserId: userId}), nil)
+		if !errors.Is(err, repoErr) {
+			t.Fatalf("expected repo error, got: %v", err)
+		}
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		h := StreamGetLikesHandler(stubLikeRepo{likedFn: func(gotUserId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error) {
+			if gotUserId != userId {
+				t.Fatalf("unexpected user id: %q", gotUserId)
+			}
+			return []database.LikedTweet{
+				{UserId: userId, TweetId: "tweet-1", OwnerUserId: "author-1"},
+			}, "end", nil
+		}})
+		resp, err := h(marshal(t, event.GetLikesEvent{UserId: userId}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		likesResp, ok := resp.(event.GetLikesResponse)
+		if !ok {
+			t.Fatalf("unexpected response type: %T", resp)
+		}
+		if likesResp.Cursor != "end" || len(likesResp.Items) != 1 {
+			t.Fatalf("unexpected response: %+v", likesResp)
+		}
+		if likesResp.Items[0].TweetId != "tweet-1" || likesResp.Items[0].OwnerUserId != "author-1" {
+			t.Fatalf("unexpected item: %+v", likesResp.Items[0])
 		}
 	})
 }

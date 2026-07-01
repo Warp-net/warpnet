@@ -511,6 +511,10 @@ func (m *MemberNode) engagementHandlers(
 			event.PUBLIC_GET_TWEET_RETWEETERS,
 			handler.StreamGetTweetRetweetersHandler(r.tweetRepo, userRepo, m),
 		},
+		{
+			event.PRIVATE_GET_LIKES,
+			handler.StreamGetLikesHandler(r.likeRepo),
+		},
 	}
 }
 

@@ -147,3 +147,56 @@ func TestLikeRepoTestSuite(t *testing.T) {
 
 	suite.Run(t, new(LikeRepoTestSuite))
 }
+
+func (s *LikeRepoTestSuite) TestLikedIndex() {
+	userId := ulid.Make().String()
+	ownerId := ulid.Make().String()
+	tweetId := ulid.Make().String()
+
+	// Empty before anything is liked.
+	limit := uint64(10)
+	liked, cur, err := s.repo.Liked(userId, &limit, nil)
+	s.Require().NoError(err)
+	s.Empty(liked)
+	s.Equal("end", cur)
+
+	// Index a liked tweet.
+	err = s.repo.SetLiked(userId, tweetId, ownerId)
+	s.Require().NoError(err)
+
+	// Indexing again is a no-op, not a duplicate.
+	err = s.repo.SetLiked(userId, tweetId, ownerId)
+	s.Require().NoError(err)
+
+	liked, cur, err = s.repo.Liked(userId, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(liked, 1)
+	s.Equal("end", cur)
+	s.Equal(userId, liked[0].UserId)
+	s.Equal(tweetId, liked[0].TweetId)
+	s.Equal(ownerId, liked[0].OwnerUserId)
+
+	// Remove and verify the index is empty again.
+	err = s.repo.RemoveLiked(userId, tweetId)
+	s.Require().NoError(err)
+
+	// Removing again should not fail.
+	err = s.repo.RemoveLiked(userId, tweetId)
+	s.Require().NoError(err)
+
+	liked, _, err = s.repo.Liked(userId, &limit, nil)
+	s.Require().NoError(err)
+	s.Empty(liked)
+}
+
+func (s *LikeRepoTestSuite) TestLikedIndex_InvalidParams() {
+	id := ulid.Make().String()
+
+	s.Error(s.repo.SetLiked("", id, id))
+	s.Error(s.repo.SetLiked(id, "", id))
+	s.Error(s.repo.SetLiked(id, id, ""))
+	s.Error(s.repo.RemoveLiked("", id))
+	s.Error(s.repo.RemoveLiked(id, ""))
+	_, _, err := s.repo.Liked("", nil, nil)
+	s.Error(err)
+}

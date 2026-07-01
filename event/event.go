@@ -545,6 +545,12 @@ type GetBookmarksResponse struct {
 	Cursor string         `json:"cursor"`
 }
 
+// GetLikesEvent defines model for GetLikesEvent.
+type GetLikesEvent = GetBookmarksEvent
+
+// GetLikesResponse defines model for GetLikesResponse.
+type GetLikesResponse = GetBookmarksResponse
+
 // PinTweetEvent defines model for PinTweetEvent.
 type PinTweetEvent struct {
 	UserId  domain.ID `json:"user_id"`

@@ -62,6 +62,8 @@ type LikesStorer interface {
 	Unlike(tweetId, userId string) (likesNum uint64, err error)
 	LikesCount(tweetId string) (likesNum uint64, err error)
 	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
+	SetLiked(userId, tweetId, ownerUserId string) error
+	RemoveLiked(userId, tweetId string) error
 }
 
 func StreamLikeHandler(
@@ -91,6 +93,11 @@ func StreamLikeHandler(
 		if err != nil {
 			log.Errorf("like handler failed: %v", err)
 			return nil, err
+		}
+		// Best-effort "tweets I liked" index; the like itself already
+		// succeeded, so an index failure must not fail the request.
+		if err := repo.SetLiked(ev.OwnerId, tweetId, ev.UserId); err != nil {
+			log.Warnf("like handler: liked index: %v", err)
 		}
 		ownNodeInfo := streamer.NodeInfo()
 
@@ -174,6 +181,9 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 			log.Errorf("unlike handler failed: %v", err)
 			return nil, err
 		}
+		if err := repo.RemoveLiked(ev.OwnerId, tweetId); err != nil {
+			log.Warnf("unlike handler: liked index: %v", err)
+		}
 
 		ownNodeInfo := streamer.NodeInfo()
 		isOwnTweetDislike := ev.OwnerId == ev.UserId
@@ -220,5 +230,39 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 		}
 
 		return event.LikesCountResponse{Count: num}, nil
+	}
+}
+
+type LikedTweetsLister interface {
+	Liked(userId string, limit *uint64, cursor *string) ([]database.LikedTweet, string, error)
+}
+
+// StreamGetLikesHandler returns one page of the local user's "tweets I
+// liked" index, newest first. Same reference-only wire shape as bookmarks:
+// clients hydrate each tweet via PUBLIC_GET_TWEET using OwnerUserId.
+func StreamGetLikesHandler(repo LikedTweetsLister) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetLikesEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("likes: empty user id")
+		}
+
+		liked, cur, err := repo.Liked(ev.UserId, ev.Limit, ev.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		items := make([]event.BookmarkItem, 0, len(liked))
+		for _, lt := range liked {
+			items = append(items, event.BookmarkItem{
+				UserId:      lt.UserId,
+				TweetId:     lt.TweetId,
+				OwnerUserId: lt.OwnerUserId,
+				CreatedAt:   lt.CreatedAt,
+			})
+		}
+		return event.GetLikesResponse{Items: items, Cursor: cur}, nil
 	}
 }
