@@ -42,8 +42,7 @@ const (
 	LikeRepoName      = "/LIKES"
 	IncrSubNamespace  = "INCR"
 	LikerSubNamespace = "LIKER"
-	likedListSub      = "LIKED"     // forward index: per-user cursor of liked tweet refs
-	likedItemSub      = "LIKEDITEM" // stable lookup by tweet id for unlike
+	LikedSubNamespace = "LIKED" // per-user index of liked tweet refs
 )
 
 var ErrLikesNotFound = local_store.DBError("like not found")
@@ -256,18 +255,12 @@ func (repo *LikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
 		CreatedAt:   time.Now(),
 	}
 
-	// list-key: ordered by creation time (reverse so newest comes first
-	// when iterating); item-key: stable lookup by tweet id for unlike.
-	listKey := local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(likedListSub).
+	// Deterministic key, same shape as the LIKER index: reconstructible
+	// on unlike and iterable (no fixed segment).
+	likedKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikedSubNamespace).
 		AddRootID(userId).
-		AddReversedTimestamp(lt.CreatedAt).
-		AddParentId(tweetId).
-		Build()
-
-	itemKey := local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(likedItemSub).
-		AddRootID(userId).
+		AddRange(local_store.NoneRangeKey).
 		AddParentId(tweetId).
 		Build()
 
@@ -282,13 +275,10 @@ func (repo *LikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
 	}
 	defer txn.Rollback()
 
-	if existing, err := txn.Get(itemKey); err == nil && len(existing) != 0 {
+	if existing, err := txn.Get(likedKey); err == nil && len(existing) != 0 {
 		return txn.Commit() // already indexed, no-op
 	}
-	if err = txn.Set(itemKey, []byte(listKey)); err != nil {
-		return err
-	}
-	if err = txn.Set(listKey, bt); err != nil {
+	if err = txn.Set(likedKey, bt); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -302,9 +292,10 @@ func (repo *LikeRepo) RemoveLiked(userId, tweetId string) error {
 		return local_store.DBError("empty tweet id")
 	}
 
-	itemKey := local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(likedItemSub).
+	likedKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikedSubNamespace).
 		AddRootID(userId).
+		AddRange(local_store.NoneRangeKey).
 		AddParentId(tweetId).
 		Build()
 
@@ -314,20 +305,8 @@ func (repo *LikeRepo) RemoveLiked(userId, tweetId string) error {
 	}
 	defer txn.Rollback()
 
-	listKeyBytes, err := txn.Get(itemKey)
-	if local_store.IsNotFoundError(err) {
-		return txn.Commit()
-	}
-	if err != nil {
+	if err := txn.Delete(likedKey); err != nil {
 		return err
-	}
-	if err = txn.Delete(itemKey); err != nil {
-		return err
-	}
-	if len(listKeyBytes) != 0 {
-		if err = txn.Delete(local_store.DatabaseKey(listKeyBytes)); err != nil {
-			return err
-		}
 	}
 	return txn.Commit()
 }
@@ -338,7 +317,7 @@ func (repo *LikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]dom
 	}
 
 	prefix := local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(likedListSub).
+		AddSubPrefix(LikedSubNamespace).
 		AddRootID(userId).
 		Build()
 

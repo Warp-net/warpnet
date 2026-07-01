@@ -238,8 +238,8 @@ type LikedTweetsLister interface {
 }
 
 // StreamGetLikesHandler returns one page of the local user's "tweets I
-// liked" index, newest first. Same reference-only wire shape as bookmarks:
-// clients hydrate each tweet via PUBLIC_GET_TWEET using OwnerUserId.
+// liked" index. Same reference-only wire shape as bookmarks: clients
+// hydrate each tweet via PUBLIC_GET_TWEET using OwnerUserId.
 func StreamGetLikesHandler(repo LikedTweetsLister) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetLikesEvent
