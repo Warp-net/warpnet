@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.ui.tweetcomponents.Avatar
+import site.warpnet.warpdroid.ui.warpdroidColors
 
 @Composable
 fun WhoToFollowCarousel(
@@ -46,6 +47,7 @@ fun WhoToFollowCarousel(
         Text(
             text = stringResource(R.string.who_to_follow),
             fontWeight = FontWeight.Bold,
+            color = warpdroidColors.primaryTextColor,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
         LazyRow(
