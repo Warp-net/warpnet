@@ -11,6 +11,10 @@ import { warpnetService, PRIVATE_POST_TWEET, PUBLIC_GET_TWEET } from "@/service/
 describe("warpnetService.sendToNode idempotency dedup", () => {
     beforeEach(() => {
         callMock.mockReset();
+        // transport.Call routes through the Wails binding only when
+        // window.go is injected; without it, it opens a WebSocket the
+        // jsdom environment can't serve.
+        window.go = { main: { App: { Call: callMock } } };
         warpnetService.setOwnerProfile({ user_id: "u1", node_id: "n1" });
     });
 
