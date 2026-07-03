@@ -150,6 +150,7 @@ export default {
         parentUserId: this.tweet.user_id,
         text: this.text
       });
+      this.$emit('replied');
       this.$emit('close');
     },
   },

@@ -21,11 +21,11 @@
         <textarea
           v-model="text"
           rows="4"
-          maxlength="2000"
+          maxlength="280"
           placeholder="Add a comment"
           class="w-full rounded border border-lighter bg-white p-2 focus:outline-none focus:ring-2 focus:ring-blue"
         ></textarea>
-        <div class="text-right text-xs text-dark">{{ text.length }} / 2000</div>
+        <div class="text-right text-xs text-dark">{{ text.length }} / 280</div>
 
         <div class="mt-3 border border-lighter rounded p-3 bg-lightest text-sm">
           <p class="font-bold">{{ tweet.username || 'Anonymous' }}

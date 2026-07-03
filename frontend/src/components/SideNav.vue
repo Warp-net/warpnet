@@ -226,10 +226,11 @@ resulting from the use or misuse of this software.
         <i class="fas fa-plus xl:hidden"></i>
       </button>
     </div>
-    <div v-if="profile" class="xl:w-full relative mt-2 w-10 h-10">
+    <div v-if="profile" ref="accountMenu" class="xl:w-full relative mt-2 w-10 h-10">
       <button
         @click="dropdown = !dropdown"
         class="flex items-center w-full hover:bg-lightblue rounded-full"
+        :aria-expanded="dropdown"
       >
         <img
           :src="profile.avatar || '/default_profile.png'"
@@ -317,6 +318,21 @@ export default {
     } else {
       document.documentElement.classList.remove("dark");
     }
+    // Close the account dropdown on outside click / Escape.
+    this._onDocClick = (e) => {
+      if (!this.dropdown) return;
+      const menu = this.$refs.accountMenu;
+      if (menu && !menu.contains(e.target)) {
+        this.dropdown = false;
+      }
+    };
+    this._onDocKeyup = (e) => {
+      if (e.key === "Escape" && this.dropdown) {
+        this.dropdown = false;
+      }
+    };
+    document.addEventListener("click", this._onDocClick);
+    window.addEventListener("keyup", this._onDocKeyup);
   },
   methods: {
     async open(target) {
@@ -416,6 +432,14 @@ export default {
     if (this.unsubscribeNotifications) {
       this.unsubscribeNotifications();
       this.unsubscribeNotifications = null;
+    }
+    if (this._onDocClick) {
+      document.removeEventListener("click", this._onDocClick);
+      this._onDocClick = null;
+    }
+    if (this._onDocKeyup) {
+      window.removeEventListener("keyup", this._onDocKeyup);
+      this._onDocKeyup = null;
     }
   },
 };

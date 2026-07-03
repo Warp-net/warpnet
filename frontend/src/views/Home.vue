@@ -44,7 +44,11 @@ resulting from the use or misuse of this software.
           <i class="fas fa-info-circle" aria-hidden="true"></i>
         </button>
       </div>
-      <div class="px-5 py-3 border-b-8 border-lighter flex">
+      <div
+        class="px-5 py-3 border-b-8 border-lighter flex"
+        @dragover.prevent
+        @drop.prevent="onImageDrop"
+      >
         <div v-if="profile" class="flex-none mr-4">
           <img
             :src="profile.avatar || '/default_profile.png'"
@@ -57,9 +61,11 @@ resulting from the use or misuse of this software.
             id="compose-tweet"
             ref="composeTweet"
             v-model="tweet.text"
+            maxlength="280"
             placeholder="What's happening?"
             class="w-full focus:outline-none mt-3 pb-3"
           ></textarea>
+          <div class="text-right text-xs text-dark">{{ tweet.text.length }} / 280</div>
           <div v-if="imageAttachments.length > 0" class="flex flex-wrap gap-2 mt-2 mb-2">
             <div v-for="(img, index) in imageAttachments" :key="img" class="relative inline-block">
               <img
@@ -121,8 +127,8 @@ resulting from the use or misuse of this software.
               @click="addNewTweet"
               type="button"
               class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
-              :class="(tweet.text && pendingReads === 0) ? '' : 'opacity-50 cursor-not-allowed'"
-              :disabled="!tweet.text || pendingReads > 0"
+              :class="(tweet.text.trim() && pendingReads === 0) ? '' : 'opacity-50 cursor-not-allowed'"
+              :disabled="!tweet.text.trim() || pendingReads > 0"
             >
               Tweet
             </button>
@@ -237,7 +243,18 @@ export default {
       this.$refs[ref].click();
     },
     async fileChange(ref) {
-      const files = Array.from(this.$refs[ref].files);
+      this.addImageFiles(Array.from(this.$refs[ref].files));
+      if (this.$refs[ref]) {
+        this.$refs[ref].value = '';
+      }
+    },
+    onImageDrop(event) {
+      const files = Array.from(event.dataTransfer?.files || [])
+          .filter(f => f.type && f.type.startsWith('image/'));
+      if (files.length === 0) return;
+      this.addImageFiles(files);
+    },
+    addImageFiles(files) {
       const remaining = 4 - this.imageAttachments.length;
       const toAdd = files.slice(0, remaining);
       for (const file of toAdd) {
@@ -265,9 +282,6 @@ export default {
           this.pendingReads--;
         };
       }
-      if (this.$refs[ref]) {
-        this.$refs[ref].value = '';
-      }
     },
     removeImageAttachment(index) {
       this.imageAttachments.splice(index, 1);
@@ -277,7 +291,7 @@ export default {
       this.altModalIndex = index;
     },
     async addNewTweet() {
-      if (!this.tweet.text) return;
+      if (!this.tweet.text.trim()) return;
       const draftText = this.tweet.text;
       const draftImages = this.imageAttachments;
       try {
@@ -368,14 +382,18 @@ export default {
     this.timeline = await warpnetService.getMyTimeline(true);
     this.loading = false;
 
-    if (this.$route.query.compose) {
-      this.focusCompose();
-    }
-
     // macOS hot-path: re-check on focus so subsequent clicks also route.
     this.consumeDeepLink();
     this._deepLinkFocusHandler = () => this.consumeDeepLink();
     window.addEventListener("focus", this._deepLinkFocusHandler);
+  },
+  mounted() {
+    // The compose hint is handled here (not in created) so the textarea
+    // ref is guaranteed to exist — otherwise "Tweet" from another page
+    // silently lands on Home without focusing the composer.
+    if (this.$route.query.compose) {
+      this.focusCompose();
+    }
   },
   watch: {
     '$route.query.compose'(val) {

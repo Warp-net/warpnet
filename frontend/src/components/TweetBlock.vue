@@ -88,7 +88,7 @@ resulting from the use or misuse of this software.
           @cancel="showReportDialog = false"
         />
       </div>
-      <p v-if="!tweet.moderation || tweet.moderation?.is_ok" class="pb-2">
+      <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2" v-linkify>
         {{ tweet.text }}
       </p>
       <p v-else class="pb-2 bg-red-300">
@@ -117,19 +117,30 @@ resulting from the use or misuse of this software.
         <img
             :src="tweetImages[0]"
             alt="Tweet image"
-            class="rounded-lg max-w-full border border-lighter"
+            class="rounded-lg max-w-full border border-lighter cursor-zoom-in"
+            @click.stop="openImageView(tweetImages[0])"
         />
       </div>
       <div v-else-if="tweetImages.length === 2" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
-        <img v-for="(img, i) in tweetImages" :key="i" :src="img" alt="Tweet image" class="w-full h-48 object-cover" />
+        <img v-for="(img, i) in tweetImages" :key="i" :src="img" alt="Tweet image" class="w-full h-48 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
       </div>
       <div v-else-if="tweetImages.length === 3" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter" style="height:300px">
-        <img :src="tweetImages[0]" alt="Tweet image" class="row-span-2 w-full h-full object-cover" style="grid-row: span 2" />
-        <img :src="tweetImages[1]" alt="Tweet image" class="w-full h-full object-cover" />
-        <img :src="tweetImages[2]" alt="Tweet image" class="w-full h-full object-cover" />
+        <img :src="tweetImages[0]" alt="Tweet image" class="row-span-2 w-full h-full object-cover cursor-zoom-in" style="grid-row: span 2" @click.stop="openImageView(tweetImages[0])" />
+        <img :src="tweetImages[1]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(tweetImages[1])" />
+        <img :src="tweetImages[2]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(tweetImages[2])" />
       </div>
       <div v-else-if="tweetImages.length >= 4" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
-        <img v-for="(img, i) in tweetImages.slice(0, 4)" :key="i" :src="img" alt="Tweet image" class="w-full h-36 object-cover" />
+        <img v-for="(img, i) in tweetImages.slice(0, 4)" :key="i" :src="img" alt="Tweet image" class="w-full h-36 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
+      </div>
+      <div
+        v-if="viewedImage"
+        class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 cursor-pointer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tweet image full view"
+        @click.stop="closeImageView"
+      >
+        <img :src="viewedImage" alt="Tweet image (full size)" class="max-w-full max-h-full object-contain rounded" />
       </div>
       <div class="flex w-full mt-1">
         <div class="flex items-center text-sm text-dark w-1/4">
@@ -214,6 +225,7 @@ resulting from the use or misuse of this software.
         :tweet="tweet" :profile="profile"
         :showReplyOverlay="showReplyOverlay"
         @close="showReplyOverlay = false"
+        @replied="loadTweetStats(tweet.id, tweet.user_id)"
     />
     <LikersOverlay
         :show="showLikersOverlay"
@@ -239,6 +251,7 @@ resulting from the use or misuse of this software.
         :show="showQuoteOverlay"
         :tweet="tweet"
         @close="showQuoteOverlay = false"
+        @posted="onQuotePosted"
     />
   </div>
 </template>
@@ -283,9 +296,11 @@ export default {
       repliesCount: new Map(),
       viewsCount: new Map(),
       tweetImages: [],
+      viewedImage: null,
       viewObserver: null,
       viewRecorded: false,
       viewInFlight: false,
+      statsRetried: false,
     };
   },
   methods: {
@@ -428,6 +443,27 @@ export default {
       this.showDropdown = false;
       this.showRetweetMenu = false;
       this.showQuoteOverlay = true;
+    },
+    async onQuotePosted() {
+      try {
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+      } catch (err) {
+        console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
+      }
+    },
+    openImageView(img) {
+      this.viewedImage = img;
+      this._onLightboxKeyup = (e) => {
+        if (e.key === "Escape") this.closeImageView();
+      };
+      window.addEventListener("keyup", this._onLightboxKeyup);
+    },
+    closeImageView() {
+      this.viewedImage = null;
+      if (this._onLightboxKeyup) {
+        window.removeEventListener("keyup", this._onLightboxKeyup);
+        this._onLightboxKeyup = null;
+      }
     },
     onTweetEdited(updated) {
       if (updated && updated.text) {
@@ -575,7 +611,19 @@ export default {
     },
     async loadTweetStats(tweetId, userId) {
       const stats = await warpnetService.getTweetStats(tweetId, userId);
-      if (!stats || !stats.tweet_id) return;
+      if (!stats || !stats.tweet_id) {
+        // Transient handler/stream error surfaces as an empty body; a
+        // single delayed retry keeps the counters from silently showing
+        // zeros until the next full reload.
+        if (!this.statsRetried) {
+          this.statsRetried = true;
+          this._statsRetryTimer = setTimeout(() => {
+            this._statsRetryTimer = null;
+            this.loadTweetStats(tweetId, userId).catch(() => {});
+          }, 2500);
+        }
+        return;
+      }
 
       this.likesCount.set(stats.tweet_id, stats.likes_count);
       this.retweetsCount.set(stats.tweet_id, stats.retweets_count);
@@ -681,30 +729,40 @@ export default {
       // those and logs spurious errors.
       return;
     }
-    this.profile = await warpnetService.getProfile(this.tweet.user_id);
+    // Profile/avatar/image loads may transiently fail (author node
+    // unreachable); never let that abort the stats/interaction loads
+    // below, or the row renders with zeroed counters until a reload.
+    try {
+      this.profile = await warpnetService.getProfile(this.tweet.user_id);
 
-    if (this.tweet.retweeted_by && this.tweet.retweeted_by !== this.profile.id) {
-      const retweeter = await warpnetService.getProfile(this.tweet.retweeted_by)
-      this.label = `${retweeter.username} Retweeted`;
+      if (this.tweet.retweeted_by && this.tweet.retweeted_by !== this.profile.id) {
+        const retweeter = await warpnetService.getProfile(this.tweet.retweeted_by)
+        this.label = `${retweeter.username} Retweeted`;
+      }
+
+      const imageKeys = (this.tweet.image_keys && this.tweet.image_keys.length > 0)
+          ? this.tweet.image_keys
+          : [];
+      const loadedImages = await Promise.all(
+          imageKeys.map(key => warpnetService.getImage({userId: this.tweet.user_id, key}))
+      );
+      this.tweetImages = loadedImages.filter(img => img);
+      this.profile.avatar = await warpnetService.getImage({userId: this.profile.id, key: this.profile.avatar_key})
+    } catch (err) {
+      console.error(`failed to load tweet author assets [${this.tweet.id}]`, err);
     }
-
-    const imageKeys = (this.tweet.image_keys && this.tweet.image_keys.length > 0)
-        ? this.tweet.image_keys
-        : [];
-    const loadedImages = await Promise.all(
-        imageKeys.map(key => warpnetService.getImage({userId: this.tweet.user_id, key}))
-    );
-    this.tweetImages = loadedImages.filter(img => img);
-    this.profile.avatar = await warpnetService.getImage({userId: this.profile.id, key: this.profile.avatar_key})
 
     console.log("final tweet:", JSON.stringify(this.tweet));
 
     const owner = warpnetService.getOwnerProfile();
     this.isOwner = owner && owner.user_id === this.tweet.user_id;
 
-    await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
-
-    await this.refreshInteractionState();
+    try {
+      await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+      await this.refreshInteractionState();
+    } catch (err) {
+      console.error(`failed to load tweet stats [${this.tweet.id}]`, err);
+    }
 
     if (this.tweet.quoted_tweet_id) {
       await this.loadQuotedSource();
@@ -717,6 +775,14 @@ export default {
     if (this.viewObserver) {
       this.viewObserver.disconnect();
       this.viewObserver = null;
+    }
+    if (this._onLightboxKeyup) {
+      window.removeEventListener("keyup", this._onLightboxKeyup);
+      this._onLightboxKeyup = null;
+    }
+    if (this._statsRetryTimer) {
+      clearTimeout(this._statsRetryTimer);
+      this._statsRetryTimer = null;
     }
   },
 };
