@@ -22,7 +22,7 @@
       </div>
 
       <div v-if="!loading && tweet && !notFound">
-        <TweetBlock :tweet="tweet" />
+        <TweetBlock ref="rootTweet" :tweet="tweet" />
 
         <div class="border-t border-lighter p-3 flex flex-col gap-2">
           <textarea
@@ -130,6 +130,10 @@ export default {
           this.replies = [created, ...this.replies];
         }
         this.replyText = '';
+        // Refresh the root tweet's counters so the reply count updates
+        // without a full page reload.
+        this.$refs.rootTweet?.loadTweetStats(this.tweet.id, this.tweet.user_id)
+          ?.catch(err => console.error('Failed to refresh tweet stats:', err));
       } catch (err) {
         console.error('Failed to post reply:', err);
       } finally {

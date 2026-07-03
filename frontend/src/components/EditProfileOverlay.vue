@@ -252,7 +252,18 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     console.log(this.$options.name);
+    // The in-memory owner stub only carries user_id/node_id/username, so
+    // fetch the full profile — otherwise Bio/Website/avatar open blank and
+    // saving would wipe them.
     this.profile = warpnetService.getOwnerProfile();
+    try {
+      const full = await warpnetService.getProfile(this.profile.user_id);
+      if (full && !full.code && full.id) {
+        this.profile = { ...this.profile, ...full };
+      }
+    } catch (err) {
+      console.error("Failed to load full profile for editing:", err);
+    }
     this.username = this.profile.username;
     this.background_image = await warpnetService.getImage({userId:this.profile.user_id, key:this.profile.background_image_key});
     this.avatar = await warpnetService.getImage({userId:this.profile.user_id, key:this.profile.avatar_key})

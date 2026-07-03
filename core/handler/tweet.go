@@ -697,41 +697,37 @@ func StreamGetTweetStatsHandler(
 		isMyOwnTweet := ev.UserId == ownNodeInfo.OwnerId
 		if !isMyOwnTweet { //nolint:nestif
 			u, err := userRepo.Get(ev.UserId)
-			if errors.Is(err, database.ErrUserNotFound) {
-				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
-			}
-			if err != nil {
+			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 				return nil, err
 			}
 
-			if ownNodeInfo.ID.String() == u.NodeId {
-				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
-			}
+			if err == nil && ownNodeInfo.ID.String() != u.NodeId {
+				statsResp, err := streamer.GenericStream(
+					u.NodeId,
+					event.PUBLIC_GET_TWEET_STATS,
+					ev,
+				)
+				if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+					log.Errorf("stream other stats handler failed: %v", err)
+					return nil, err
+				}
+				if err == nil {
+					var possibleError event.ResponseError
+					if _ = json.Unmarshal(statsResp, &possibleError); possibleError.Message != "" {
+						return nil, fmt.Errorf("unmarshal other reply response: %w", possibleError)
+					}
 
-			statsResp, err := streamer.GenericStream(
-				u.NodeId,
-				event.PUBLIC_GET_TWEET_STATS,
-				ev,
-			)
-			if errors.Is(err, warpnet.ErrNodeIsOffline) {
-				return event.TweetStatsResponse{TweetId: ev.TweetId}, nil
-			}
-			if err != nil {
-				log.Errorf("stream other stats handler failed: %v", err)
-				return nil, err
-			}
+					var stats event.TweetStatsResponse
+					if err := json.Unmarshal(statsResp, &stats); err != nil {
+						return nil, fmt.Errorf("fetching tweet stats response: %w", err)
+					}
 
-			var possibleError event.ResponseError
-			if _ = json.Unmarshal(statsResp, &possibleError); possibleError.Message != "" {
-				return nil, fmt.Errorf("unmarshal other reply response: %w", possibleError)
+					return stats, nil
+				}
 			}
-
-			var stats event.TweetStatsResponse
-			if err := json.Unmarshal(statsResp, &stats); err != nil {
-				return nil, fmt.Errorf("fetching tweet stats response: %w", err)
-			}
-
-			return stats, nil
+			// Author unknown locally or their node is offline: fall through
+			// to the local CRDT-replicated counts instead of fabricating an
+			// all-zero response (mirrors the view handler's fallback).
 		}
 
 		var (

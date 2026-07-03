@@ -431,26 +431,93 @@ export const warpnetService = {
 
         const owner = this.getOwnerProfile()
 
-        const request = {
-            path: PRIVATE_GET_TIMELINE,
-            body: {
-                limit: defaultLimit,
-                cursor: cursor,
-                user_id: owner.user_id,
-            },
-        }
+        // A page whose tweets are all hidden by keyword filters must not
+        // look like the end of the timeline (an empty result stops the
+        // scroll-driven pagination), so fetch further pages — bounded —
+        // until something survives or the cursor runs out.
+        for (let page = 0; page < 5; page++) {
+            const request = {
+                path: PRIVATE_GET_TIMELINE,
+                body: {
+                    limit: defaultLimit,
+                    cursor: cursor,
+                    user_id: owner.user_id,
+                },
+            }
 
-        const timelineResp = await this.sendToNode(request);
-        if (!timelineResp) {
-            return []
-        }
+            const timelineResp = await this.sendToNode(request);
+            if (!timelineResp) {
+                return []
+            }
 
-        this.setCursor('timeline', timelineResp.cursor || 'end')
-        if (!timelineResp.tweets || timelineResp.tweets.length === 0) {
-            return []
-        }
+            cursor = timelineResp.cursor || 'end'
+            this.setCursor('timeline', cursor)
+            if (!timelineResp.tweets || timelineResp.tweets.length === 0) {
+                return []
+            }
 
-        return timelineResp.tweets;
+            const visible = await this.applyHomeFilters(timelineResp.tweets);
+            if (visible.length > 0 || cursor === endCursor) {
+                return visible;
+            }
+        }
+        return []
+    },
+
+    // applyHomeFilters drops tweets matching the owner's active keyword
+    // filters whose context covers the home timeline. Filters are stored
+    // on the node (Settings → Filters) but matching happens client-side.
+    // The owner's own tweets are exempt so a fresh post never looks like
+    // a silent failure.
+    async applyHomeFilters(tweets) {
+        if (!tweets || tweets.length === 0) return tweets;
+        let filters = [];
+        try {
+            let cursor = '';
+            for (let page = 0; page < 10; page++) {
+                const resp = await this.getFilters(cursor);
+                filters = filters.concat(resp?.filters || []);
+                cursor = resp?.cursor || '';
+                if (!cursor || cursor === endCursor || (resp?.filters || []).length === 0) break;
+            }
+        } catch (err) {
+            console.warn('failed to load filters for timeline:', err);
+            return tweets;
+        }
+        const now = Date.now();
+        const active = filters.filter(f => f
+            && f.action === 'hide'
+            && (!f.context || f.context.length === 0 || f.context.includes('home'))
+            && (!f.expires_at || new Date(f.expires_at).getTime() > now));
+        const rules = [];
+        for (const f of active) {
+            for (const kw of (f.keywords || [])) {
+                const word = (kw.keyword || '').trim().toLowerCase();
+                if (!word) continue;
+                rules.push({ word, whole: !!kw.whole_word });
+            }
+        }
+        if (rules.length === 0) return tweets;
+        const wordChar = /[\p{L}\p{N}_]/u;
+        const matchesWhole = (text, word) => {
+            let idx = text.indexOf(word);
+            while (idx !== -1) {
+                const before = idx > 0 ? text[idx - 1] : '';
+                const after = idx + word.length < text.length ? text[idx + word.length] : '';
+                if (!(before && wordChar.test(before)) && !(after && wordChar.test(after))) {
+                    return true;
+                }
+                idx = text.indexOf(word, idx + 1);
+            }
+            return false;
+        };
+        const hidden = (text) => {
+            const lower = (text || '').toLowerCase();
+            return rules.some(r => r.whole ? matchesWhole(lower, r.word) : lower.includes(r.word));
+        };
+        const owner = this.getOwnerProfile();
+        return tweets.filter(tw => tw
+            && ((owner && tw.user_id === owner.user_id) || !hidden(tw.text)));
     },
 
     async getNotifications(cursorReset) {

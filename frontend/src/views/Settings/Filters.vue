@@ -145,20 +145,20 @@ export default {
     },
     async removeKeyword(filterId, keywordId) {
       try {
-        await warpnetService.deleteFilterKeyword(filterId, keywordId);
+        await warpnetService.deleteFilterKeyword(keywordId);
         await this.reload();
       } catch (err) { console.error('Failed to remove keyword', err); }
     },
     async renameFilter(f) {
       if (!f.title || !f.title.trim()) return;
       try {
-        await warpnetService.updateFilter(f.id, { title: f.title.trim(), context: f.context, action: f.action });
+        await warpnetService.updateFilter({ id: f.id, title: f.title.trim(), context: f.context, action: f.action });
       } catch (err) { console.error('Failed to rename filter', err); }
     },
     async renameKeyword(filterId, kw) {
       if (!kw.keyword || !kw.keyword.trim()) return;
       try {
-        await warpnetService.updateFilterKeyword(filterId, kw.id, kw.keyword.trim(), kw.whole_word || false);
+        await warpnetService.updateFilterKeyword(kw.id, kw.keyword.trim(), kw.whole_word || false);
       } catch (err) { console.error('Failed to rename keyword', err); }
     },
   },
