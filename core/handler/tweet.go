@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -125,7 +126,9 @@ func StreamNewTweetHandler(
 		if ev.Text == "" {
 			return nil, warpnet.WarpError("empty tweet text")
 		}
-		if len(ev.Text) > tweetCharLimit {
+		// Runes, not bytes: 280 means 280 user-visible characters
+		// regardless of script (the UI counters count characters too).
+		if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
 			return nil, warpnet.WarpError("tweet text is too long")
 		}
 
@@ -808,6 +811,9 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 		}
 		if ev.Text == "" {
 			return nil, warpnet.WarpError("edit tweet: empty text")
+		}
+		if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
+			return nil, warpnet.WarpError("tweet text is too long")
 		}
 
 		existing, err := repo.Get(ev.UserId, ev.TweetId)

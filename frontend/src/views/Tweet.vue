@@ -28,7 +28,7 @@
           <textarea
             v-model="replyText"
             rows="2"
-            maxlength="2000"
+            maxlength="280"
             placeholder="Tweet your reply"
             class="w-full rounded border border-lighter bg-white p-2 focus:outline-none focus:ring-2 focus:ring-blue text-sm"
           ></textarea>

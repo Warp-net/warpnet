@@ -61,11 +61,11 @@ resulting from the use or misuse of this software.
             id="compose-tweet"
             ref="composeTweet"
             v-model="tweet.text"
-            maxlength="2000"
+            maxlength="280"
             placeholder="What's happening?"
             class="w-full focus:outline-none mt-3 pb-3"
           ></textarea>
-          <div class="text-right text-xs text-dark">{{ tweet.text.length }} / 2000</div>
+          <div class="text-right text-xs text-dark">{{ tweet.text.length }} / 280</div>
           <div v-if="imageAttachments.length > 0" class="flex flex-wrap gap-2 mt-2 mb-2">
             <div v-for="(img, index) in imageAttachments" :key="img" class="relative inline-block">
               <img
