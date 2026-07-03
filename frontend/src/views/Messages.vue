@@ -97,16 +97,18 @@ resulting from the use or misuse of this software.
         <button @click="gotoHome()" class="block md:hidden mr-2 focus:outline-none">
           <i class="fas fa-arrow-left text-blue"></i>
         </button>
-        <div class="mr-4">
-          <img
-              :src="getUser(active.other_user_id)?.avatar || '/default_profile.png'"
-              class="w-6 h-6 rounded-full object-cover bg-transparent"
-          />
-        </div>
-        <div class="flex flex-col">
-          <h1 class="font-bold">{{ getUser(active.other_user_id)?.username }}</h1>
-          <p class="text-xs text-dark">@{{ active.other_user_id }}</p>
-        </div>
+        <button type="button" @click="gotoProfile(active.other_user_id)" class="flex items-center text-left flat-btn" aria-label="View profile">
+          <div class="mr-4">
+            <img
+                :src="getUser(active.other_user_id)?.avatar || '/default_profile.png'"
+                class="w-6 h-6 rounded-full object-cover bg-transparent"
+            />
+          </div>
+          <div class="flex flex-col">
+            <h1 class="font-bold">{{ getUser(active.other_user_id)?.username }}</h1>
+            <p class="text-xs text-dark">@{{ active.other_user_id }}</p>
+          </div>
+        </button>
         <button type="button" @click="deleteCurrentChat" class="ml-auto rounded-full w-9 h-9 flex items-center justify-center hover:bg-red-100 flat-btn" aria-label="Delete chat">
           <i class="fas fa-trash text-xl text-red-500" aria-hidden="true"></i>
         </button>
@@ -138,7 +140,8 @@ resulting from the use or misuse of this software.
             <div v-else class="flex items-start mb-4">
               <img
                   :src="getUser(active.other_user_id)?.avatar || '/default_profile.png'"
-                  class="h-8 w-8 rounded-full mr-2 object-cover bg-transparent"
+                  class="h-8 w-8 rounded-full mr-2 object-cover bg-transparent cursor-pointer"
+                  @click="gotoProfile(active.other_user_id)"
               />
               <div class="bg-lighter text-black py-2 px-4 rounded-tr-3xl rounded-tl-xl rounded-br-3xl">
                 <p v-if="message.text">{{ message.text }}</p>
@@ -246,6 +249,13 @@ export default {
     gotoHome() {
       this.$router.push({
         name: "Home",
+      });
+    },
+    gotoProfile(userId) {
+      if (!userId) return;
+      this.$router.push({
+        name: "Profile",
+        params: { id: userId },
       });
     },
     sendMessage() {
