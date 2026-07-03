@@ -364,6 +364,22 @@ export default {
     } finally {
       this.loading = false;
     }
+
+    // Ride the service's 2s notification poll so new notifications show
+    // up while the page is open, instead of only after a manual reload.
+    // Items already marked read locally stay read even if a poll lands
+    // before the mark-read request settles on the node.
+    this._unsubscribeLive = warpnetService.subscribeNotifications((resp) => {
+      if (this.loading) return;
+      const incoming = (resp && resp.notifications) || [];
+      if (incoming.length === 0) return;
+      const readIds = new Set(
+        this.notifications.filter((n) => n && n.is_read).map((n) => n.id)
+      );
+      this.notifications = incoming.map((n) =>
+        n && readIds.has(n.id) ? { ...n, is_read: true } : n
+      );
+    });
   },
   mounted() {
     this._onDocClick = (e) => {
@@ -382,6 +398,10 @@ export default {
     window.addEventListener("keyup", this._onDocKeyup);
   },
   beforeUnmount() {
+    if (this._unsubscribeLive) {
+      this._unsubscribeLive();
+      this._unsubscribeLive = null;
+    }
     if (this._onDocClick) {
       document.removeEventListener("click", this._onDocClick);
       this._onDocClick = null;

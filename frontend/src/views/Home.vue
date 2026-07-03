@@ -318,7 +318,32 @@ export default {
     },
     async loadMore() {
       const timeline = await warpnetService.getMyTimeline(false);
-      this.timeline = this.timeline.concat(timeline);
+      const known = new Set(this.timeline.map((t) => t && t.id));
+      this.timeline = this.timeline.concat(
+        timeline.filter((t) => t && t.id && !known.has(t.id))
+      );
+    },
+    // Poll-driven live updates (no server push on the bridge): re-fetch
+    // the first timeline page and prepend unseen tweets so new posts
+    // appear without a manual page reload. The pagination cursor is
+    // saved/restored so scroll-driven loadMore isn't reset by the poll.
+    async refreshTimeline() {
+      if (this._timelineRefreshing || this.loading) return;
+      this._timelineRefreshing = true;
+      try {
+        const savedCursor = warpnetService.getCursor('timeline');
+        const page = await warpnetService.getMyTimeline(true);
+        warpnetService.setCursor('timeline', savedCursor);
+        const known = new Set(this.timeline.map((t) => t && t.id));
+        const fresh = page.filter((t) => t && t.id && !known.has(t.id));
+        if (fresh.length > 0) {
+          this.timeline = [...fresh, ...this.timeline];
+        }
+      } catch (err) {
+        console.error('Failed to refresh timeline:', err);
+      } finally {
+        this._timelineRefreshing = false;
+      }
     },
     async toggleInfo(event) {
       if (this.showInfo) {
@@ -382,6 +407,8 @@ export default {
     this.timeline = await warpnetService.getMyTimeline(true);
     this.loading = false;
 
+    this._timelineTimer = setInterval(() => this.refreshTimeline(), 10000);
+
     // macOS hot-path: re-check on focus so subsequent clicks also route.
     this.consumeDeepLink();
     this._deepLinkFocusHandler = () => this.consumeDeepLink();
@@ -403,6 +430,10 @@ export default {
     },
   },
   beforeUnmount() {
+    if (this._timelineTimer) {
+      clearInterval(this._timelineTimer);
+      this._timelineTimer = null;
+    }
     if (this.toastTimeoutId) {
       clearTimeout(this.toastTimeoutId);
       this.toastTimeoutId = null;

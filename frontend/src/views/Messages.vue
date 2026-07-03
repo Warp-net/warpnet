@@ -113,7 +113,7 @@ resulting from the use or misuse of this software.
       </div>
 
       <!-- Messages -->
-      <div class="flex-1 overflow-y-scroll px-5 pt-5 no-scrollbar" v-scroll:top="loadMore">
+      <div ref="messagesScroll" class="flex-1 overflow-y-scroll px-5 pt-5 no-scrollbar" v-scroll:top="loadMore">
         <div class="flex flex-col">
           <div v-for="message in messages" :key="message.id">
             <!-- Own message -->
@@ -218,6 +218,8 @@ export default {
       imageAttachment: undefined,
       usersMap: new Map(),
       otherUser: undefined,
+      refreshTimer: null,
+      refreshInFlight: false,
     };
   },
   methods: {
@@ -406,13 +408,75 @@ export default {
       const olderMessages = await warpnetService.getDirectMessages(
           {chatId: this.active.id, cursorReset: false},
       )
-      await Promise.all(olderMessages.map(async (msg) => {
+      const known = new Set(this.messages.map((m) => m && m.id));
+      const fresh = olderMessages.filter((m) => m && m.id && !known.has(m.id));
+      await Promise.all(fresh.map(async (msg) => {
         if (msg.image_key) {
           msg.image = await warpnetService.getImage({userId: msg.sender_id, key: msg.image_key});
         }
       }));
-      this.messages = [...olderMessages, ...this.messages];
+      this.messages = [...fresh, ...this.messages];
       this.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    },
+    isNearBottom() {
+      const el = this.$refs.messagesScroll;
+      if (!el) return true;
+      return el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    },
+    // Poll-driven live updates: the node bridge is strictly
+    // request/response (no server push), so — like the 2s notification
+    // poll in service.js — the chat list and the active chat are
+    // re-fetched on an interval and new items merged in by id. The
+    // pagination cursors are saved and restored around the page-1
+    // fetches so scroll-back pagination isn't reset by the poll.
+    async refreshData() {
+      if (this.refreshInFlight || this.loading) return;
+      this.refreshInFlight = true;
+      try {
+        const savedChatsCursor = warpnetService.getCursor('chats');
+        const chats = await warpnetService.getChats(true);
+        warpnetService.setCursor('chats', savedChatsCursor);
+        for (const chat of chats) {
+          if (!this.usersMap.has(chat.owner_id)) await this.loadChatUser(chat.owner_id);
+          if (!this.usersMap.has(chat.other_user_id)) await this.loadChatUser(chat.other_user_id);
+          if (chat.owner_id !== this.ownerProfile.user_id) {
+            [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
+          }
+        }
+        if (chats.length > 0) {
+          const freshIds = new Set(chats.map((c) => c.id));
+          this.chats = [...chats, ...this.chats.filter((c) => !freshIds.has(c.id))];
+        }
+
+        const activeId = this.active?.id;
+        if (!activeId) return;
+        const savedMessagesCursor = warpnetService.getCursor('messages');
+        const page = await warpnetService.getDirectMessages(
+            {chatId: activeId, cursorReset: true},
+        );
+        warpnetService.setCursor('messages', savedMessagesCursor);
+        // The user may have switched chats while the fetch was in flight.
+        if (this.active?.id !== activeId) return;
+        const known = new Set(this.messages.map((m) => m && m.id));
+        const fresh = page.filter((m) => m && m.id && !known.has(m.id));
+        if (fresh.length === 0) return;
+        await Promise.all(fresh.map(async (msg) => {
+          if (msg.image_key) {
+            msg.image = await warpnetService.getImage({userId: msg.sender_id, key: msg.image_key});
+          }
+        }));
+        if (this.active?.id !== activeId) return;
+        const wasNearBottom = this.isNearBottom();
+        this.messages = [...this.messages, ...fresh]
+            .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        if (wasNearBottom) {
+          this.scrollToEnd();
+        }
+      } catch (err) {
+        console.error('Failed to refresh chats:', err);
+      } finally {
+        this.refreshInFlight = false;
+      }
     },
   },
   async created() {
@@ -420,6 +484,9 @@ export default {
     console.log("messages: route chat id:", this.$route.params.chatId)
 
     this.ownerProfile = warpnetService.getOwnerProfile()
+    // Started before the initial load (refreshData no-ops while loading)
+    // so a user with no chats yet still picks up an incoming chat live.
+    this.refreshTimer = setInterval(() => this.refreshData(), 3000);
     await this.loadChatUser(this.ownerProfile.user_id)
 
     const chats = await warpnetService.getChats(true)
@@ -447,6 +514,12 @@ export default {
     this.chats = chats;
     await this.selectChat(activeChat);
     this.loading = false;
+  },
+  beforeUnmount() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
   },
 };
 </script>

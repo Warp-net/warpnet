@@ -144,7 +144,10 @@ function connect() {
     sock.onclose = () => {
       socket = null;
       connecting = null;
-      aesKey = null;
+      // Re-arm the channel key from localStorage so an automatic
+      // reconnect resumes the encrypted session; after a logout the
+      // stored key is already cleared and this stays null.
+      aesKey = restoreChannelKey();
       failPending(new Error("ws closed"));
     };
     sock.onmessage = (ev) => { onMessage(ev.data); };

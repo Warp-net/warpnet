@@ -99,6 +99,8 @@ export default {
       chatId: undefined,
       currentUserId: undefined,
       otherUser: undefined,
+      refreshTimer: null,
+      refreshInFlight: false,
     };
   },
   methods: {
@@ -144,7 +146,31 @@ export default {
         const container = this.$refs.messageContainer;
         container.scrollTop = container.scrollHeight;
       });
-    }
+    },
+
+    // Poll-driven live updates (no server push on the bridge): re-fetch
+    // page 1 and merge new messages in by id so incoming messages appear
+    // without a manual page reload.
+    async refreshMessages() {
+      if (this.refreshInFlight || this.loading) return;
+      this.refreshInFlight = true;
+      try {
+        const page = await warpnetService.getDirectMessages(
+            {chatId: this.chatId, cursorReset: true},
+        );
+        const known = new Set(this.messages.map((m) => m && m.id));
+        const fresh = page.filter((m) => m && m.id && !known.has(m.id));
+        if (fresh.length > 0) {
+          this.messages = [...this.messages, ...fresh]
+              .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+          this.scrollToBottom();
+        }
+      } catch (err) {
+        console.error('Failed to refresh messages:', err);
+      } finally {
+        this.refreshInFlight = false;
+      }
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
@@ -164,6 +190,14 @@ export default {
     this.otherUser.avatar = await warpnetService.getImage({userId:this.otherUser.id, key:this.otherUser.avatar_key})
     this.loading = false;
     this.scrollToBottom();
-  }
+
+    this.refreshTimer = setInterval(() => this.refreshMessages(), 3000);
+  },
+  beforeUnmount() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  },
 };
 </script>
