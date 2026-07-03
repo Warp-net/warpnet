@@ -138,6 +138,10 @@ func (g *MemberPubSub) PublishReport(ev event.ReportEvent) (err error) {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 
+	// Stamp reporter identity from this node so it can't be spoofed by the body.
+	ev.ReporterID = g.OwnerID()
+	ev.ReporterNodeID = g.NodeID()
+
 	bt, err := json.Marshal(ev)
 	if err != nil {
 		return err

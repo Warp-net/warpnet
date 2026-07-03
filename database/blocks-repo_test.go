@@ -98,3 +98,19 @@ func TestBlocksRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(BlocksRepoTestSuite))
 }
+
+func (s *BlocksRepoTestSuite) TestList_Multiple() {
+	repo := NewBlocksRepo(s.db)
+	blocker := uuid.New().String()
+	blockee1 := uuid.New().String()
+	blockee2 := uuid.New().String()
+
+	s.Require().NoError(repo.Block(blocker, blockee1))
+	s.Require().NoError(repo.Block(blocker, blockee2))
+
+	limit := uint64(10)
+	ids, _, err := repo.List(blocker, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(ids, 2)
+	s.ElementsMatch([]string{blockee1, blockee2}, ids)
+}

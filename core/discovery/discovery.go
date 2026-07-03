@@ -31,9 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/challenge"
 	"github.com/hashicorp/golang-lru/v2/expirable"
-	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"math/rand/v2"
 	"time"
 
@@ -58,10 +56,6 @@ type DiscoveryInfoStorer interface {
 	SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
 	SetMaxNodePriority(pid warpnet.WarpPeerID)
 	SetMinNodePriority(pid warpnet.WarpPeerID)
-}
-
-type DiscoveryChallenger interface {
-	Challenge(pubKey ic.PubKey, level int, streamF challenge.StreamFunc) (bool, error)
 }
 
 type NodeStorer interface {
@@ -103,9 +97,8 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 
-	ownId      warpnet.WarpPeerID
-	limiter    *leakyBucketRateLimiter
-	challenger DiscoveryChallenger
+	ownId   warpnet.WarpPeerID
+	limiter *leakyBucketRateLimiter
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -122,7 +115,6 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
-	challenger DiscoveryChallenger,
 	m MetricsOnlineDiscoverer,
 ) *discoveryService {
 	capacity := 32
@@ -134,7 +126,6 @@ func NewDiscoveryService(
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
-		challenger:      challenger,
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -143,13 +134,11 @@ func NewDiscoveryService(
 	}
 }
 
-func NewRelayDiscoveryService(
-	ctx context.Context, challenger DiscoveryChallenger, m MetricsOnlineDiscoverer) *discoveryService {
+func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *discoveryService {
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
 		ctx:             ctx,
 		limiter:         newRateLimiter(32, 2),
-		challenger:      challenger,
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -312,39 +301,8 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if info.IsRelay() {
 		return
 	}
-
-	// The ActivityPub gateway is not a Warpnet-codebase node and serves no
-	// challenge route — exclude it from the challenge, like alias peers.
-	if pi.ID.String() != mastodon.GatewayNodeID { //nolint:nestif
-		isRepeatable, err := s.challenger.Challenge(
-			s.node.Peerstore().PubKey(pi.ID),
-			s.getChallengeLevel(pi.ID),
-			s.requestChallenge(pi.ID),
-		)
-		if errors.Is(err, challenge.ErrChallengeMismatch) || errors.Is(err, challenge.ErrChallengeSignatureInvalid) {
-			log.Warnf("discovery: source '%s': challenge is invalid for peer: %s", peer.Source, pi.ID.String())
-			if info.Reachability == warpnet.ReachabilityPublic {
-				// NEVER block relay nodes
-				return
-			}
-			if isRepeatable {
-				_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
-			} else {
-				// reset block time
-				_ = s.nodeRepo.BlocklistRemove(pi.ID.String())
-				_ = s.nodeRepo.BlocklistExponential(pi.ID.String())
-			}
-			s.node.Peerstore().RemovePeer(pi.ID)
-			s.node.SetMinNodePriority(pi.ID)
-			s.m.PushStatusOffline(pi.ID.String())
-			return
-		}
-		if err != nil {
-			log.Errorf(
-				"discovery: source '%s': failed to request challenge for peer %s: %v",
-				peer.Source, pi.ID, err)
-			return
-		}
+	if pi.ID.String() == mastodon.GatewayNodeID {
+		return
 	}
 
 	s.m.PushStatusOnline(pi.ID.String())
@@ -446,45 +404,6 @@ func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
 }
 
-func (s *discoveryService) requestChallenge(peerId warpnet.WarpPeerID) challenge.StreamFunc {
-	return func(coord []event.ChallengeSample) ([]event.ChallengeSolution, error) {
-		resp, err := s.node.GenericStream(
-			peerId.String(),
-			event.PUBLIC_POST_NODE_CHALLENGE,
-			event.ChallengeEvent{Coordinates: coord},
-		)
-		if err != nil {
-			return nil, err
-		}
-		if len(resp) == 0 {
-			err := warpnet.WarpError("no challenge response from new peer")
-			return nil, fmt.Errorf("%w: %s", err, peerId.String())
-		}
-
-		var challengeResp event.ChallengeResponse
-		err = json.Unmarshal(resp, &challengeResp)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal challenge from new peer: %s %w", resp, err)
-		}
-		return challengeResp.Solutions, nil
-	}
-}
-
-func (s *discoveryService) getChallengeLevel(peerId warpnet.WarpPeerID) (level int) {
-	if s.nodeRepo == nil {
-		return 1
-	}
-	term, err := s.nodeRepo.BlocklistTerm(peerId.String())
-	if err != nil {
-		log.Errorf("discovery: peer %s blocklist term: %s", peerId.String(), err.Error())
-		return 1
-	}
-	if term != nil {
-		return int(term.Level)
-	}
-	return 1
-}
-
 func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpnet.NodeInfo, err error) {
 	infoResp, err := s.node.GenericStream(pi.ID.String(), event.PUBLIC_GET_INFO, nil)
 	if err != nil {
@@ -535,21 +454,6 @@ func (s *discoveryService) requestNodeUser(pi warpnet.WarpAddrInfo, userId strin
 	user.NodeId = pi.ID.String()
 	user.RoundTripTime = elapsed.Milliseconds()
 	return user, nil
-}
-
-func (s *discoveryService) getBlockLevel(pi warpnet.WarpAddrInfo) (level int) {
-	if s.nodeRepo == nil {
-		return 1
-	}
-	term, err := s.nodeRepo.BlocklistTerm(pi.ID.String())
-	if err != nil {
-		log.Errorf("discovery: peer %s blocklist term: %s", pi.ID.String(), err.Error())
-		return 1
-	}
-	if term != nil {
-		level = int(term.Level)
-	}
-	return level
 }
 
 func (s *discoveryService) Close() {

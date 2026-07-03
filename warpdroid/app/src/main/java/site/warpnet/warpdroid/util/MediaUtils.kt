@@ -24,13 +24,11 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
-import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.time.Duration.Companion.hours
 
 /**
  * Helper methods for obtaining and resizing media files
@@ -164,29 +162,6 @@ fun getImageOrientation(uri: Uri, contentResolver: ContentResolver): Int {
     } catch (e: IOException) {
         Log.w(TAG, e)
         return ExifInterface.ORIENTATION_UNDEFINED
-    }
-}
-
-fun deleteStaleCachedMedia(mediaDirectory: File?) {
-    if (mediaDirectory == null || !mediaDirectory.exists()) {
-        // Nothing to do
-        return
-    }
-
-    val unixTime = System.currentTimeMillis() - 24.hours.inWholeMilliseconds
-
-    val files = mediaDirectory.listFiles { file -> unixTime > file.lastModified() && file.name.contains(MEDIA_TEMP_PREFIX) }
-    if (files.isNullOrEmpty()) {
-        // Nothing to do
-        return
-    }
-
-    for (file in files) {
-        try {
-            file.delete()
-        } catch (se: SecurityException) {
-            Log.e(TAG, "Error removing stale cached media")
-        }
     }
 }
 

@@ -121,5 +121,10 @@ val visibleNotificationTypes = listOf(
 )
 
 fun notificationTypeFromString(s: String): Type {
-    return visibleNotificationTypes.firstOrNull { it.name == s.lowercase() } ?: Type.Unknown(s)
+    val normalized = s.lowercase()
+    // The Warpnet fat node emits "moderation" (domain.NotificationModerationType)
+    // for report verdicts; map it onto ModerationWarning so it isn't dropped
+    // as Unknown by NotificationHelper.filterNotification.
+    if (normalized == "moderation") return Type.ModerationWarning
+    return visibleNotificationTypes.firstOrNull { it.name == normalized } ?: Type.Unknown(s)
 }

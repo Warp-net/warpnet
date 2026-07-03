@@ -30,7 +30,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/security"
@@ -46,15 +45,13 @@ func NewBusinessNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	selfHashHex string,
-	version *semver.Version,
 	authRepo member.AuthProvider,
 	db member.Storer,
 	bootstrapNodes []warpnet.WarpAddrInfo,
 	metrics member.MetricsOnlinePusher,
 ) (*BusinessNode, error) {
 	mn, err := member.NewMemberNode(
-		ctx, privKey, psk, ownNodeId, selfHashHex, version,
+		ctx, privKey, psk, ownNodeId,
 		authRepo, db, bootstrapNodes, metrics,
 	)
 	if err != nil {

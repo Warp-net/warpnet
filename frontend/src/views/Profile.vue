@@ -253,17 +253,29 @@ resulting from the use or misuse of this software.
               Tweets
             </button>
             <button
-              class="cursor-not-allowed flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              type="button"
+              disabled
+              title="Coming soon"
+              aria-label="Tweets & replies (coming soon)"
+              class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
             >
               Tweets & replies
             </button>
             <button
-              class="cursor-not-allowed flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              type="button"
+              disabled
+              title="Coming soon"
+              aria-label="Media (coming soon)"
+              class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
             >
               Media
             </button>
             <button
-              class="cursor-not-allowed flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              type="button"
+              disabled
+              title="Coming soon"
+              aria-label="Likes (coming soon)"
+              class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
             >
               Likes
             </button>

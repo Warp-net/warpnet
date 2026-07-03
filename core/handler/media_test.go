@@ -37,6 +37,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
@@ -233,4 +234,61 @@ func (s s) Scope() network.StreamScope {
 
 func (u u) Get(userId string) (user domain.User, err error) {
 	return domain.User{}, nil
+}
+
+type cachedMediaRepo struct {
+	cached database.Base64Image
+}
+
+func (c cachedMediaRepo) GetImage(userId, key string) (database.Base64Image, error) {
+	return c.cached, nil
+}
+
+func (c cachedMediaRepo) SetImage(userId string, img database.Base64Image) (database.ImageKey, error) {
+	return "", nil
+}
+
+func (c cachedMediaRepo) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+	return nil
+}
+
+type recordingStreamer struct {
+	streamed *bool
+}
+
+func (r recordingStreamer) GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+	*r.streamed = true
+	return json.Marshal(event.GetImageResponse{File: "from-gateway"})
+}
+
+func (r recordingStreamer) NodeInfo() warpnet.NodeInfo {
+	return warpnet.NodeInfo{OwnerId: "owner-id"}
+}
+
+type foreignUserRepo struct{}
+
+func (foreignUserRepo) Get(userId string) (domain.User, error) {
+	return domain.User{Id: userId, NodeId: "gateway-node", Network: "mastodon"}, nil
+}
+
+// A warm cache for a known foreign (e.g. Mastodon) user must be served from
+// disk without a gateway round-trip, so avatars survive node restarts.
+func TestGetImage_ServesForeignCacheWithoutGateway(t *testing.T) {
+	var streamed bool
+	h := StreamGetImageHandler(
+		recordingStreamer{streamed: &streamed},
+		cachedMediaRepo{cached: database.Base64Image("data:image/png;base64,CACHED")},
+		foreignUserRepo{},
+	)
+
+	input, err := json.Marshal(event.GetImageEvent{UserId: "warpnet@mastodon.social", Key: "https://mastodon.social/avatar.png"})
+	assert.NoError(t, err)
+
+	out, err := h(input, s{})
+	assert.NoError(t, err)
+
+	resp, ok := out.(event.GetImageResponse)
+	assert.True(t, ok)
+	assert.Equal(t, "data:image/png;base64,CACHED", resp.File)
+	assert.False(t, streamed, "warm foreign cache must not hit the gateway")
 }

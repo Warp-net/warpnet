@@ -29,11 +29,8 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/challenge"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
-	root "github.com/Warp-net/warpnet"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt"
@@ -64,21 +61,21 @@ type MemberNode struct {
 	node *node.WarpNode
 	opts []warpnet.WarpOption
 
-	discService                   DiscoveryHandler
-	mdnsService                   MDNSStarterCloser
-	pubsubService                 PubSubProvider
-	dHashTable                    DistributedHashTableCloser
-	nodeRepo                      NodeProvider
-	statsRepo                     StatsProvider
-	authRepo                      AuthProvider
-	userRepo                      UserProvider
-	deviceRepo                    DeviceProvider
-	followRepo                    FollowStorer
-	db                            Storer
-	statsDb                       StatsStorer
-	privKey                       ed25519.PrivateKey
-	ownerId, selfHashHex, network string
-	retrier                       retrier.Retrier
+	discService      DiscoveryHandler
+	mdnsService      MDNSStarterCloser
+	pubsubService    PubSubProvider
+	dHashTable       DistributedHashTableCloser
+	nodeRepo         NodeProvider
+	statsRepo        StatsProvider
+	authRepo         AuthProvider
+	userRepo         UserProvider
+	deviceRepo       DeviceProvider
+	followRepo       FollowStorer
+	db               Storer
+	statsDb          StatsStorer
+	privKey          ed25519.PrivateKey
+	ownerId, network string
+	retrier          retrier.Retrier
 }
 
 func NewMemberNode(
@@ -86,8 +83,6 @@ func NewMemberNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	selfHashHex string,
-	version *semver.Version,
 	authRepo AuthProvider,
 	db Storer,
 	bootstrapNodes []warpnet.WarpAddrInfo,
@@ -110,9 +105,7 @@ func NewMemberNode(
 
 	mastodon.SeedEntryUser(userRepo)
 
-	challenger := challenge.NewSpoofChallenger(ctx)
-
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, challenger, metrics)
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -166,9 +159,7 @@ func NewMemberNode(
 		deviceRepo:    deviceRepo,
 		authRepo:      authRepo,
 		db:            db,
-		privKey:       privKey,
 		ownerId:       owner.UserId,
-		selfHashHex:   selfHashHex,
 		network:       warpNetwork,
 	}
 
@@ -204,7 +195,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb, m.privKey)
+	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
 	for _, addr := range m.dHashTable.BootstrapNodes() {
 		m.SetMaxNodePriority(addr.ID)
@@ -258,7 +249,6 @@ func (m *MemberNode) Connect(p warpnet.WarpAddrInfo) error {
 func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	bi := m.node.BaseNodeInfo()
 	bi.OwnerId = m.ownerId
-	bi.Hash = m.selfHashHex
 	bi.Network = m.network
 	bi.Type = warpnet.MemberNode
 
@@ -371,7 +361,6 @@ func (m *MemberNode) setupHandlers(
 	followRepo FollowStorer,
 	db Storer,
 	statsDB StatsStorer,
-	privKey ed25519.PrivateKey,
 ) {
 	if m == nil {
 		panic("member: setup handlers: nil node")
@@ -392,7 +381,7 @@ func (m *MemberNode) setupHandlers(
 	}
 
 	hs := make([]warpnet.WarpStreamHandler, 0, 80)
-	hs = append(hs, m.adminHandlers(authRepo, privKey, db, r)...)
+	hs = append(hs, m.adminHandlers(authRepo, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
 	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
@@ -411,7 +400,6 @@ func (m *MemberNode) setupHandlers(
 //nolint:govet
 func (m *MemberNode) adminHandlers(
 	authRepo AuthProvider,
-	privKey ed25519.PrivateKey,
 	db Storer,
 	r *memberRepos,
 ) []warpnet.WarpStreamHandler {
@@ -419,10 +407,6 @@ func (m *MemberNode) adminHandlers(
 		{
 			event.PRIVATE_POST_PAIR,
 			handler.StreamNodesPairingHandler(authRepo, m.deviceRepo, m),
-		},
-		{
-			event.PUBLIC_POST_NODE_CHALLENGE,
-			handler.StreamChallengeHandler(root.GetCodeBase(), privKey),
 		},
 		{
 			event.PUBLIC_GET_INFO,
@@ -434,7 +418,7 @@ func (m *MemberNode) adminHandlers(
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
-			handler.StreamModerationResultHandler(r.tweetRepo, m.userRepo, r.timelineRepo),
+			handler.StreamModerationResultHandler(r.notificationRepo, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo),
 		},
 		{
 			event.PUBLIC_POST_REPORT,
@@ -526,6 +510,10 @@ func (m *MemberNode) engagementHandlers(
 		{
 			event.PUBLIC_GET_TWEET_RETWEETERS,
 			handler.StreamGetTweetRetweetersHandler(r.tweetRepo, userRepo, m),
+		},
+		{
+			event.PRIVATE_GET_LIKES,
+			handler.StreamGetLikesHandler(r.likeRepo),
 		},
 	}
 }

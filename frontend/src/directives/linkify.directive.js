@@ -30,7 +30,9 @@ const options = {
   formatHref: {
     hashtag: (href) =>
       `/hashtag?m=Latest&hash=${Date.now()}&q=${encodeURIComponent("#" + href.slice(1))}`,
-    mention: (href) => `/${href.slice(1)}`,
+    // Profiles are addressed by user_id while mentions carry a username,
+    // so resolve them through people search.
+    mention: (href) => `/search?q=${encodeURIComponent(href.slice(1))}&m=People`,
   },
   target: (href, type) =>
     type === "mention" || type === "hashtag" ? undefined : "_blank",
@@ -39,8 +41,28 @@ const options = {
 };
 
 export default {
-  mounted: function(el) {
+  mounted: function(el, binding) {
     let text = el.innerHTML;
     el.innerHTML = linkifyHtml(text, options);
+    // Route internal (mention/hashtag) links through the SPA router
+    // instead of a full page load, and keep the click from bubbling
+    // into parent handlers (e.g. the tweet body opening the tweet page).
+    el.__linkifyClick__ = (event) => {
+      const link = event.target.closest && event.target.closest("a");
+      if (!link || !el.contains(link)) return;
+      event.stopPropagation();
+      const href = link.getAttribute("href") || "";
+      if (href.startsWith("/") && binding.instance && binding.instance.$router) {
+        event.preventDefault();
+        binding.instance.$router.push(href);
+      }
+    };
+    el.addEventListener("click", el.__linkifyClick__);
+  },
+  unmounted: function(el) {
+    if (el.__linkifyClick__) {
+      el.removeEventListener("click", el.__linkifyClick__);
+      el.__linkifyClick__ = null;
+    }
   },
 };

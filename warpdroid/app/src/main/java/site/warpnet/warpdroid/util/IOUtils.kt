@@ -15,33 +15,13 @@
 
 package site.warpnet.warpdroid.util
 
-import android.content.ContentResolver
-import android.net.Uri
 import java.io.Closeable
-import java.io.File
 import java.io.IOException
-import okio.buffer
-import okio.sink
-import okio.source
 
 fun Closeable.closeQuietly() {
     try {
         close()
     } catch (e: IOException) {
         // intentionally unhandled
-    }
-}
-
-fun Uri.copyToFile(contentResolver: ContentResolver, file: File): Boolean {
-    return try {
-        val inputStream = contentResolver.openInputStream(this) ?: return false
-        inputStream.source().use { source ->
-            file.sink().buffer().use { bufferedSink ->
-                bufferedSink.writeAll(source)
-            }
-        }
-        true
-    } catch (e: IOException) {
-        false
     }
 }

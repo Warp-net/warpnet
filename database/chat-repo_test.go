@@ -190,3 +190,34 @@ func TestChatRepoSuite(t *testing.T) {
 
 	suite.Run(t, new(ChatRepoSuite))
 }
+
+func (s *ChatRepoSuite) TestListMessages_NewestFirst() {
+	ownerID := ulid.Make().String()
+	otherID := ulid.Make().String()
+
+	chat, err := s.repo.CreateChat(nil, ownerID, otherID)
+	s.NoError(err)
+	defer s.repo.DeleteChat(chat.Id)
+
+	older, err := s.repo.CreateMessage(domain.ChatMessage{
+		ChatId:    chat.Id,
+		Text:      "older",
+		CreatedAt: time.Now().Add(-2 * time.Second),
+	})
+	s.NoError(err)
+	newer, err := s.repo.CreateMessage(domain.ChatMessage{
+		ChatId:    chat.Id,
+		Text:      "newer",
+		CreatedAt: time.Now(),
+	})
+	s.NoError(err)
+
+	limit := uint64(10)
+	msgs, _, err := s.repo.ListMessages(chat.Id, &limit, nil)
+	s.NoError(err)
+	// The exact length also proves the fixed lookup keys written by
+	// CreateMessage are skipped by List.
+	s.Require().Len(msgs, 2)
+	s.Equal(newer.Id, msgs[0].Id)
+	s.Equal(older.Id, msgs[1].Id)
+}

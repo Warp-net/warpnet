@@ -159,6 +159,37 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 	}
 }
 
+// notifyReporter re-sends the verdict to the reporter's node on the same
+// route as the broadcast, but with ReporterID set so it notifies them.
+// Best-effort: a delivery failure must not abort moderation.
+func (m *Moderator) notifyReporter(
+	rep event.ReportEvent,
+	reason *string,
+	objectID *domain.ID,
+	targetUserID domain.ID,
+) {
+	if rep.ReporterNodeID == "" || rep.ReporterID == "" {
+		return
+	}
+	result := event.ModerationResultEvent{
+		Type:        rep.Type,
+		Result:      domain.FAIL,
+		Reason:      reason,
+		Model:       domain.LLAMAGuard3,
+		UserID:      targetUserID,
+		ObjectID:    objectID,
+		ModeratorID: m.node.ID().String(),
+		ReporterID:  rep.ReporterID,
+	}
+	if _, err := m.node.GenericStream(
+		rep.ReporterNodeID,
+		event.PUBLIC_POST_MODERATION_RESULT,
+		result,
+	); err != nil {
+		log.Warnf("moderator: notify reporter %s: %v", rep.ReporterNodeID, err)
+	}
+}
+
 func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 	if ev.ObjectID == nil || *ev.ObjectID == "" {
 		log.Warn("moderator: tweet report missing object_id")
@@ -214,6 +245,7 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
+	m.notifyReporter(ev, &reason, &tweet.Id, tweet.UserId)
 	return nil
 }
 
@@ -266,6 +298,7 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
+	m.notifyReporter(ev, &reason, nil, user.Id)
 	return nil
 }
 

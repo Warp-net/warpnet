@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	root "github.com/Warp-net/warpnet"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
@@ -63,14 +62,13 @@ type NodeServer interface {
 }
 
 type App struct {
-	ctx         context.Context
-	auth        AppAuthServicer
-	node        NodeServer
-	db          AppStorer
-	codeHashHex string
-	psk         security.PSK
-	readyChan   chan domain.AuthNodeInfo
-	mx          *sync.RWMutex
+	ctx       context.Context
+	auth      AppAuthServicer
+	node      NodeServer
+	db        AppStorer
+	psk       security.PSK
+	readyChan chan domain.AuthNodeInfo
+	mx        *sync.RWMutex
 
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
 	deepLink string
@@ -149,12 +147,6 @@ func (a *App) startup(ctx context.Context) {
 	a.mx = new(sync.RWMutex)
 	version := config.Config().Version
 	network := config.Config().Node.Network
-	codeHashHex, err := security.GetCodebaseHashHex(root.GetCodeBase())
-	if err != nil {
-		log.Errorf("failed to get codebase hash: %v \n", err)
-		return
-	}
-	a.codeHashHex = codeHashHex
 
 	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
 	if err != nil {
@@ -214,8 +206,6 @@ func (a *App) runNode(network string, psk security.PSK) {
 		a.auth.PrivateKey(),
 		psk,
 		ownNodeId,
-		a.codeHashHex,
-		config.Config().Version,
 		a.auth.Storage(),
 		a.db,
 		infos,

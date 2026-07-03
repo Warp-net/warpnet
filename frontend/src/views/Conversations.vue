@@ -115,6 +115,8 @@ export default {
       profileId: "",
       usersMap: new Map(),
       otherUser: undefined,
+      refreshTimer: null,
+      refreshInFlight: false,
     };
   },
   methods: {
@@ -178,7 +180,36 @@ export default {
         await this.loadChatUser(chat.other_user_id)
         await this.loadChatUser(chat.owner_id)
       }
-      this.chats = [...this.chats, ...chats];
+      const known = new Set(this.chats.map((c) => c.id));
+      this.chats = [...this.chats, ...chats.filter((c) => !known.has(c.id))];
+    },
+    // Poll-driven live updates (no server push on the bridge): re-fetch
+    // page 1 of the chat list and merge by id so new incoming chats and
+    // last-message previews appear without a manual page reload. The
+    // pagination cursor is saved/restored so loadMore isn't reset.
+    async refreshChats() {
+      if (this.refreshInFlight || this.loading) return;
+      this.refreshInFlight = true;
+      try {
+        const savedCursor = warpnetService.getCursor('chats');
+        const chats = await warpnetService.getChats(true);
+        warpnetService.setCursor('chats', savedCursor);
+        for (const chat of chats) {
+          if (!this.usersMap.has(chat.owner_id)) await this.loadChatUser(chat.owner_id);
+          if (!this.usersMap.has(chat.other_user_id)) await this.loadChatUser(chat.other_user_id);
+          if (chat.owner_id !== this.profileId) {
+            [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
+          }
+        }
+        if (chats.length > 0) {
+          const freshIds = new Set(chats.map((c) => c.id));
+          this.chats = [...chats, ...this.chats.filter((c) => !freshIds.has(c.id))];
+        }
+      } catch (err) {
+        console.error('Failed to refresh chats:', err);
+      } finally {
+        this.refreshInFlight = false;
+      }
     },
   },
 
@@ -199,6 +230,14 @@ export default {
       }
       this.chats = chats;
       this.loading = false;
+
+      this.refreshTimer = setInterval(() => this.refreshChats(), 3000);
+    },
+  beforeUnmount() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
     }
+  },
 };
 </script>

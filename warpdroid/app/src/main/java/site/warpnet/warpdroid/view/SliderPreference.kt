@@ -183,7 +183,6 @@ class SliderPreference @JvmOverloads constructor(
     }
 
     companion object {
-        private const val TAG = "SliderPreference"
         private const val DEFAULT_VALUE_FROM = 0F
         private const val DEFAULT_VALUE_TO = 1F
         private const val DEFAULT_VALUE = 0.5F

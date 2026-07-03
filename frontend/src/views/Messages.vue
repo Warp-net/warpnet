@@ -97,27 +97,39 @@ resulting from the use or misuse of this software.
         <button @click="gotoHome()" class="block md:hidden mr-2 focus:outline-none">
           <i class="fas fa-arrow-left text-blue"></i>
         </button>
-        <div class="mr-4">
-          <img
-              :src="getUser(active.other_user_id)?.avatar || '/default_profile.png'"
-              class="w-6 h-6 rounded-full object-cover bg-transparent"
-          />
-        </div>
-        <div class="flex flex-col">
-          <h1 class="font-bold">{{ getUser(active.other_user_id)?.username }}</h1>
-          <p class="text-xs text-dark">@{{ active.other_user_id }}</p>
-        </div>
+        <button type="button" @click="gotoProfile(active.other_user_id)" class="flex items-center text-left flat-btn" aria-label="View profile">
+          <div class="mr-4">
+            <img
+                :src="getUser(active.other_user_id)?.avatar || '/default_profile.png'"
+                class="w-6 h-6 rounded-full object-cover bg-transparent"
+            />
+          </div>
+          <div class="flex flex-col">
+            <h1 class="font-bold">{{ getUser(active.other_user_id)?.username }}</h1>
+            <p class="text-xs text-dark">@{{ active.other_user_id }}</p>
+          </div>
+        </button>
         <button type="button" @click="deleteCurrentChat" class="ml-auto rounded-full w-9 h-9 flex items-center justify-center hover:bg-red-100 flat-btn" aria-label="Delete chat">
           <i class="fas fa-trash text-xl text-red-500" aria-hidden="true"></i>
         </button>
       </div>
 
       <!-- Messages -->
-      <div class="flex-1 overflow-y-scroll px-5 pt-5 no-scrollbar" v-scroll:top="loadMore">
+      <div ref="messagesScroll" class="flex-1 overflow-y-scroll px-5 pt-5 no-scrollbar" v-scroll:top="loadMore">
         <div class="flex flex-col">
           <div v-for="message in messages" :key="message.id">
             <!-- Own message -->
-            <div v-if="message.sender_id === ownerProfile.user_id" class="flex justify-end mb-4">
+            <div v-if="message.sender_id === ownerProfile.user_id" class="group flex items-center justify-end mb-4">
+              <button
+                  v-if="message.id"
+                  type="button"
+                  @click="deleteMessage(message)"
+                  class="mr-2 w-7 h-7 rounded-full items-center justify-center hover:bg-red-100 hidden group-hover:flex flat-btn"
+                  aria-label="Delete message"
+                  title="Delete message"
+              >
+                <i class="fas fa-trash text-sm text-red-500" aria-hidden="true"></i>
+              </button>
               <div class="bg-blue text-white py-2 px-4 rounded-tl-3xl rounded-bl-3xl rounded-tr-xl">
                 <p v-if="message.text">{{ message.text }}</p>
                 <img v-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
@@ -128,7 +140,8 @@ resulting from the use or misuse of this software.
             <div v-else class="flex items-start mb-4">
               <img
                   :src="getUser(active.other_user_id)?.avatar || '/default_profile.png'"
-                  class="h-8 w-8 rounded-full mr-2 object-cover bg-transparent"
+                  class="h-8 w-8 rounded-full mr-2 object-cover bg-transparent cursor-pointer"
+                  @click="gotoProfile(active.other_user_id)"
               />
               <div class="bg-lighter text-black py-2 px-4 rounded-tr-3xl rounded-tl-xl rounded-br-3xl">
                 <p v-if="message.text">{{ message.text }}</p>
@@ -208,6 +221,8 @@ export default {
       imageAttachment: undefined,
       usersMap: new Map(),
       otherUser: undefined,
+      refreshTimer: null,
+      refreshInFlight: false,
     };
   },
   methods: {
@@ -234,6 +249,13 @@ export default {
     gotoHome() {
       this.$router.push({
         name: "Home",
+      });
+    },
+    gotoProfile(userId) {
+      if (!userId) return;
+      this.$router.push({
+        name: "Profile",
+        params: { id: userId },
       });
     },
     sendMessage() {
@@ -371,6 +393,15 @@ export default {
         console.error('Failed to delete chat:', err);
       }
     },
+    async deleteMessage(message) {
+      if (!this.active?.id || !message?.id) return;
+      try {
+        await warpnetService.deleteMessage(this.active.id, message.id);
+        this.messages = this.messages.filter((m) => m.id !== message.id);
+      } catch (err) {
+        console.error('Failed to delete message:', err);
+      }
+    },
     deselectAll() {
       this.active = undefined;
     },
@@ -387,13 +418,75 @@ export default {
       const olderMessages = await warpnetService.getDirectMessages(
           {chatId: this.active.id, cursorReset: false},
       )
-      await Promise.all(olderMessages.map(async (msg) => {
+      const known = new Set(this.messages.map((m) => m && m.id));
+      const fresh = olderMessages.filter((m) => m && m.id && !known.has(m.id));
+      await Promise.all(fresh.map(async (msg) => {
         if (msg.image_key) {
           msg.image = await warpnetService.getImage({userId: msg.sender_id, key: msg.image_key});
         }
       }));
-      this.messages = [...olderMessages, ...this.messages];
+      this.messages = [...fresh, ...this.messages];
       this.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    },
+    isNearBottom() {
+      const el = this.$refs.messagesScroll;
+      if (!el) return true;
+      return el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    },
+    // Poll-driven live updates: the node bridge is strictly
+    // request/response (no server push), so — like the 2s notification
+    // poll in service.js — the chat list and the active chat are
+    // re-fetched on an interval and new items merged in by id. The
+    // pagination cursors are saved and restored around the page-1
+    // fetches so scroll-back pagination isn't reset by the poll.
+    async refreshData() {
+      if (this.refreshInFlight || this.loading) return;
+      this.refreshInFlight = true;
+      try {
+        const savedChatsCursor = warpnetService.getCursor('chats');
+        const chats = await warpnetService.getChats(true);
+        warpnetService.setCursor('chats', savedChatsCursor);
+        for (const chat of chats) {
+          if (!this.usersMap.has(chat.owner_id)) await this.loadChatUser(chat.owner_id);
+          if (!this.usersMap.has(chat.other_user_id)) await this.loadChatUser(chat.other_user_id);
+          if (chat.owner_id !== this.ownerProfile.user_id) {
+            [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
+          }
+        }
+        if (chats.length > 0) {
+          const freshIds = new Set(chats.map((c) => c.id));
+          this.chats = [...chats, ...this.chats.filter((c) => !freshIds.has(c.id))];
+        }
+
+        const activeId = this.active?.id;
+        if (!activeId) return;
+        const savedMessagesCursor = warpnetService.getCursor('messages');
+        const page = await warpnetService.getDirectMessages(
+            {chatId: activeId, cursorReset: true},
+        );
+        warpnetService.setCursor('messages', savedMessagesCursor);
+        // The user may have switched chats while the fetch was in flight.
+        if (this.active?.id !== activeId) return;
+        const known = new Set(this.messages.map((m) => m && m.id));
+        const fresh = page.filter((m) => m && m.id && !known.has(m.id));
+        if (fresh.length === 0) return;
+        await Promise.all(fresh.map(async (msg) => {
+          if (msg.image_key) {
+            msg.image = await warpnetService.getImage({userId: msg.sender_id, key: msg.image_key});
+          }
+        }));
+        if (this.active?.id !== activeId) return;
+        const wasNearBottom = this.isNearBottom();
+        this.messages = [...this.messages, ...fresh]
+            .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        if (wasNearBottom) {
+          this.scrollToEnd();
+        }
+      } catch (err) {
+        console.error('Failed to refresh chats:', err);
+      } finally {
+        this.refreshInFlight = false;
+      }
     },
   },
   async created() {
@@ -401,6 +494,9 @@ export default {
     console.log("messages: route chat id:", this.$route.params.chatId)
 
     this.ownerProfile = warpnetService.getOwnerProfile()
+    // Started before the initial load (refreshData no-ops while loading)
+    // so a user with no chats yet still picks up an incoming chat live.
+    this.refreshTimer = setInterval(() => this.refreshData(), 3000);
     await this.loadChatUser(this.ownerProfile.user_id)
 
     const chats = await warpnetService.getChats(true)
@@ -428,6 +524,12 @@ export default {
     this.chats = chats;
     await this.selectChat(activeChat);
     this.loading = false;
+  },
+  beforeUnmount() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
   },
 };
 </script>

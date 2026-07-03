@@ -10,7 +10,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
@@ -29,7 +28,6 @@ import androidx.core.app.NotificationManagerCompat.NotificationWithIdAndTag
 import androidx.core.app.RemoteInput
 import androidx.core.app.TaskStackBuilder
 import androidx.core.content.ContextCompat
-import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -53,7 +51,6 @@ import site.warpnet.warpdroid.MainActivity.Companion.openNotificationIntent
 import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.ComposeOptions
-import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import site.warpnet.warpdroid.di.ApplicationScope
@@ -78,10 +75,8 @@ class NotificationHelper @Inject constructor(
     private val notificationManager: NotificationManager,
     private val accountManager: AccountManager,
     private val api: WarpnetApi,
-    private val preferences: SharedPreferences,
     @ApplicationContext private val context: Context,
-    @ApplicationScope private val applicationScope: CoroutineScope,
-    private val instanceInfoRepository: InstanceInfoRepository
+    @ApplicationScope private val applicationScope: CoroutineScope
 ) {
     private var workManager: WorkManager = WorkManager.getInstance(context)
 
@@ -509,8 +504,10 @@ class NotificationHelper @Inject constructor(
 
     private fun getNotificationBuilder(notification: Notification, account: AccountEntity, channelId: String): NotificationCompat.Builder {
         val notificationType = notification.type
-        val eventResultPendingIntent = if (notificationType == Notification.Type.ModerationWarning) {
-            val warning = notification.moderationWarning!!
+        // Warpnet moderation verdicts arrive as ModerationWarning without the
+        // Mastodon AccountWarning payload — fall through to the generic intent.
+        val warning = if (notificationType == Notification.Type.ModerationWarning) notification.moderationWarning else null
+        val eventResultPendingIntent = if (warning != null) {
             val intent = Intent(Intent.ACTION_VIEW, "https://${account.domain}/disputes/strikes/${warning.id}".toUri())
             PendingIntent.getActivity(context, account.id.toInt(), intent, pendingIntentFlags(false))
         } else {
@@ -581,7 +578,12 @@ class NotificationHelper @Inject constructor(
                 notification.status?.content?.parseAsWarpnetHtml()?.toString()
             }
             Notification.Type.SeveredRelationship -> return severedRelationShipText(context, notification.event!!, account.domain)
-            Notification.Type.ModerationWarning -> return context.getString(notification.moderationWarning!!.action.text)
+            Notification.Type.ModerationWarning -> {
+                // Warpnet verdicts carry the whole message in the pre-composed
+                // text (surfaced as account.name by the mapper).
+                val warning = notification.moderationWarning ?: return notification.account.name
+                return context.getString(warning.action.text)
+            }
             else -> return null
         }
     }
@@ -765,10 +767,6 @@ class NotificationHelper @Inject constructor(
             disablePullNotifications()
         }
     }
-
-    // Push notifications: Warpnet has no push gateway. Notifications
-    // arrive via the 2 s poll loop in [NotificationFetcher] only.
-    fun arePushNotificationsAvailable(): Boolean = false
 
     companion object {
         const val TAG = "NotificationHelper"

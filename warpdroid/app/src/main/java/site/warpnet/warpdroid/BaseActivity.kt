@@ -201,8 +201,6 @@ abstract class BaseActivity : AppCompatActivity() {
     override val defaultViewModelProviderFactory: Factory
         get() = viewModelProviderFactory ?: super.defaultViewModelProviderFactory
 
-    protected open fun requiresLogin(): Boolean = true
-
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == android.R.id.home) {
             onBackPressedDispatcher.onBackPressed()

@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 import {createRouter, createWebHistory, isNavigationFailure, NavigationFailureType} from 'vue-router';
 import Root from "../views/Root.vue";
 import AuthMiddleware from "./auth.guard";
+import {warpnetService} from "@/service/service";
 
 const routes = [
   {
@@ -74,6 +75,20 @@ const routes = [
     meta: { protected: true },
   },
   {
+    // Direct /messages URL: without this route the path would fall through
+    // to the /:id Profile catch-all and render an empty "Anonymous" profile.
+    // Redirect to the signed-in owner's chat list instead.
+    path: "/messages",
+    name: "MessagesEntry",
+    redirect: () => {
+      const owner = warpnetService.getOwnerProfile();
+      if (owner && owner.user_id) {
+        return { name: "Chats", params: { id: owner.user_id } };
+      }
+      return { name: "Root" };
+    },
+  },
+  {
     path: "/:id/chat/:chatId/messages",
     name: "Messages",
     // route level code-splitting
@@ -119,6 +134,13 @@ const routes = [
     name: "Bookmarks",
     component: () =>
       import(/* webpackChunkName: "bookmarks" */ "../views/Bookmarks.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/likes",
+    name: "Likes",
+    component: () =>
+      import(/* webpackChunkName: "likes" */ "../views/Likes.vue"),
     meta: { protected: true },
   },
   {

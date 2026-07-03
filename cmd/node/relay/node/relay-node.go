@@ -29,8 +29,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/challenge"
-
 	"github.com/Warp-net/warpnet/cmd/node/relay/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
@@ -77,7 +75,6 @@ type RelayNode struct {
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
-	selfHashHex       string
 }
 
 func NewRelayNode(
@@ -85,15 +82,13 @@ func NewRelayNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	selfHashHex string,
 	m MetricsOnlinePusher,
 ) (_ *RelayNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	challenger := challenge.NewSpoofChallenger(ctx)
 
-	discService := discovery.NewRelayDiscoveryService(ctx, challenger, m)
+	discService := discovery.NewRelayDiscoveryService(ctx, m)
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
@@ -146,7 +141,6 @@ func NewRelayNode(
 		dHashTable:        dHashTable,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
-		selfHashHex:       selfHashHex,
 		privKey:           privKey,
 	}
 
@@ -157,7 +151,6 @@ func (rn *RelayNode) NodeInfo() warpnet.NodeInfo {
 	bi := rn.node.BaseNodeInfo()
 	bi.OwnerId = "bootstrap" // relay wire marker so peers detecting relays by OwnerId (pre-Type) still skip challenging us
 	bi.Type = warpnet.RelayNode
-	bi.Hash = rn.selfHashHex
 	return bi
 }
 

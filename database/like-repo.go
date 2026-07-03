@@ -29,9 +29,12 @@ package database
 
 import (
 	"encoding/binary"
+	"time"
 
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,6 +42,7 @@ const (
 	LikeRepoName      = "/LIKES"
 	IncrSubNamespace  = "INCR"
 	LikerSubNamespace = "LIKER"
+	LikedSubNamespace = "LIKED" // per-user index of liked tweet refs
 )
 
 var ErrLikesNotFound = local_store.DBError("like not found")
@@ -231,4 +235,134 @@ func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ l
 		likers = append(likers, userId)
 	}
 	return likers, cur, nil
+}
+
+func (repo *LikeRepo) SetLiked(userId, tweetId, ownerUserId string) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	if tweetId == "" {
+		return local_store.DBError("empty tweet id")
+	}
+	if ownerUserId == "" {
+		return local_store.DBError("empty owner user id")
+	}
+
+	lt := domain.LikedTweet{
+		UserId:      userId,
+		TweetId:     tweetId,
+		OwnerUserId: ownerUserId,
+		CreatedAt:   time.Now(),
+	}
+
+	// Same fixed/sortable key pair as the chat message repo: the fixed key
+	// gives deterministic lookup for unlike and is skipped by iteration,
+	// the sortable key orders the list newest-liked-first.
+	fixedKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikedSubNamespace).
+		AddRootID(userId).
+		AddRange(local_store.FixedRangeKey).
+		AddParentId(tweetId).
+		Build()
+
+	sortableKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikedSubNamespace).
+		AddRootID(userId).
+		AddReversedTimestamp(lt.CreatedAt).
+		AddParentId(tweetId).
+		Build()
+
+	bt, err := json.Marshal(lt)
+	if err != nil {
+		return err
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if existing, err := txn.Get(fixedKey); err == nil && len(existing) != 0 {
+		return txn.Commit() // already indexed, no-op
+	}
+	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
+		return err
+	}
+	if err = txn.Set(sortableKey, bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+func (repo *LikeRepo) RemoveLiked(userId, tweetId string) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	if tweetId == "" {
+		return local_store.DBError("empty tweet id")
+	}
+
+	fixedKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikedSubNamespace).
+		AddRootID(userId).
+		AddRange(local_store.FixedRangeKey).
+		AddParentId(tweetId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	sortableKey, err := txn.Get(fixedKey)
+	if err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	if len(sortableKey) == 0 {
+		return txn.Commit() // not indexed, no-op
+	}
+	if err = txn.Delete(fixedKey); err != nil {
+		return err
+	}
+	if err = txn.Delete(local_store.DatabaseKey(sortableKey)); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+func (repo *LikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error) {
+	if userId == "" {
+		return nil, "", local_store.DBError("empty user id")
+	}
+
+	prefix := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikedSubNamespace).
+		AddRootID(userId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	items, cur, err := txn.List(prefix, limit, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	if err = txn.Commit(); err != nil {
+		return nil, "", err
+	}
+
+	liked := make([]domain.LikedTweet, 0, len(items))
+	for _, item := range items {
+		var lt domain.LikedTweet
+		if err := json.Unmarshal(item.Value, &lt); err != nil {
+			return nil, "", err
+		}
+		liked = append(liked, lt)
+	}
+	return liked, cur, nil
 }

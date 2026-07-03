@@ -159,6 +159,23 @@ resulting from the use or misuse of this software.
             Bookmarks
           </p>
         </button>
+        <button
+          @click="$router.push({ name: 'Likes' })"
+          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          aria-label="Likes"
+        >
+          <i
+            class="fa-heart"
+            :class="$route.name === 'Likes' ? 'text-2xl fas' : 'text-xl far'"
+            aria-hidden="true"
+          ></i>
+          <p
+            class="text-lg ml-4 text-left hidden xl:block"
+            :class="$route.name === 'Likes' ? 'font-bold' : ''"
+          >
+            Likes
+          </p>
+        </button>
 <!--        <button-->
 <!--          class="focus:outline-none hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"-->
 <!--        >-->
@@ -209,10 +226,11 @@ resulting from the use or misuse of this software.
         <i class="fas fa-plus xl:hidden"></i>
       </button>
     </div>
-    <div v-if="profile" class="xl:w-full relative mt-2 w-10 h-10">
+    <div v-if="profile" ref="accountMenu" class="xl:w-full relative mt-2 w-10 h-10">
       <button
         @click="dropdown = !dropdown"
         class="flex items-center w-full hover:bg-lightblue rounded-full"
+        :aria-expanded="dropdown"
       >
         <img
           :src="profile.avatar || '/default_profile.png'"
@@ -300,6 +318,21 @@ export default {
     } else {
       document.documentElement.classList.remove("dark");
     }
+    // Close the account dropdown on outside click / Escape.
+    this._onDocClick = (e) => {
+      if (!this.dropdown) return;
+      const menu = this.$refs.accountMenu;
+      if (menu && !menu.contains(e.target)) {
+        this.dropdown = false;
+      }
+    };
+    this._onDocKeyup = (e) => {
+      if (e.key === "Escape" && this.dropdown) {
+        this.dropdown = false;
+      }
+    };
+    document.addEventListener("click", this._onDocClick);
+    window.addEventListener("keyup", this._onDocKeyup);
   },
   methods: {
     async open(target) {
@@ -399,6 +432,14 @@ export default {
     if (this.unsubscribeNotifications) {
       this.unsubscribeNotifications();
       this.unsubscribeNotifications = null;
+    }
+    if (this._onDocClick) {
+      document.removeEventListener("click", this._onDocClick);
+      this._onDocClick = null;
+    }
+    if (this._onDocKeyup) {
+      window.removeEventListener("keyup", this._onDocKeyup);
+      this._onDocKeyup = null;
     }
   },
 };

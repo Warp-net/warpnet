@@ -37,6 +37,7 @@ export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
+export const PRIVATE_GET_LIKES = "/private/get/likes/0.0.0"
 export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
 export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
 export const PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
@@ -430,26 +431,93 @@ export const warpnetService = {
 
         const owner = this.getOwnerProfile()
 
-        const request = {
-            path: PRIVATE_GET_TIMELINE,
-            body: {
-                limit: defaultLimit,
-                cursor: cursor,
-                user_id: owner.user_id,
-            },
-        }
+        // A page whose tweets are all hidden by keyword filters must not
+        // look like the end of the timeline (an empty result stops the
+        // scroll-driven pagination), so fetch further pages — bounded —
+        // until something survives or the cursor runs out.
+        for (let page = 0; page < 5; page++) {
+            const request = {
+                path: PRIVATE_GET_TIMELINE,
+                body: {
+                    limit: defaultLimit,
+                    cursor: cursor,
+                    user_id: owner.user_id,
+                },
+            }
 
-        const timelineResp = await this.sendToNode(request);
-        if (!timelineResp) {
-            return []
-        }
+            const timelineResp = await this.sendToNode(request);
+            if (!timelineResp) {
+                return []
+            }
 
-        this.setCursor('timeline', timelineResp.cursor || 'end')
-        if (!timelineResp.tweets || timelineResp.tweets.length === 0) {
-            return []
-        }
+            cursor = timelineResp.cursor || 'end'
+            this.setCursor('timeline', cursor)
+            if (!timelineResp.tweets || timelineResp.tweets.length === 0) {
+                return []
+            }
 
-        return timelineResp.tweets;
+            const visible = await this.applyHomeFilters(timelineResp.tweets);
+            if (visible.length > 0 || cursor === endCursor) {
+                return visible;
+            }
+        }
+        return []
+    },
+
+    // applyHomeFilters drops tweets matching the owner's active keyword
+    // filters whose context covers the home timeline. Filters are stored
+    // on the node (Settings → Filters) but matching happens client-side.
+    // The owner's own tweets are exempt so a fresh post never looks like
+    // a silent failure.
+    async applyHomeFilters(tweets) {
+        if (!tweets || tweets.length === 0) return tweets;
+        let filters = [];
+        try {
+            let cursor = '';
+            for (let page = 0; page < 10; page++) {
+                const resp = await this.getFilters(cursor);
+                filters = filters.concat(resp?.filters || []);
+                cursor = resp?.cursor || '';
+                if (!cursor || cursor === endCursor || (resp?.filters || []).length === 0) break;
+            }
+        } catch (err) {
+            console.warn('failed to load filters for timeline:', err);
+            return tweets;
+        }
+        const now = Date.now();
+        const active = filters.filter(f => f
+            && f.action === 'hide'
+            && (!f.context || f.context.length === 0 || f.context.includes('home'))
+            && (!f.expires_at || new Date(f.expires_at).getTime() > now));
+        const rules = [];
+        for (const f of active) {
+            for (const kw of (f.keywords || [])) {
+                const word = (kw.keyword || '').trim().toLowerCase();
+                if (!word) continue;
+                rules.push({ word, whole: !!kw.whole_word });
+            }
+        }
+        if (rules.length === 0) return tweets;
+        const wordChar = /[\p{L}\p{N}_]/u;
+        const matchesWhole = (text, word) => {
+            let idx = text.indexOf(word);
+            while (idx !== -1) {
+                const before = idx > 0 ? text[idx - 1] : '';
+                const after = idx + word.length < text.length ? text[idx + word.length] : '';
+                if (!(before && wordChar.test(before)) && !(after && wordChar.test(after))) {
+                    return true;
+                }
+                idx = text.indexOf(word, idx + 1);
+            }
+            return false;
+        };
+        const hidden = (text) => {
+            const lower = (text || '').toLowerCase();
+            return rules.some(r => r.whole ? matchesWhole(lower, r.word) : lower.includes(r.word));
+        };
+        const owner = this.getOwnerProfile();
+        return tweets.filter(tw => tw
+            && ((owner && tw.user_id === owner.user_id) || !hidden(tw.text)));
     },
 
     async getNotifications(cursorReset) {
@@ -973,6 +1041,48 @@ export const warpnetService = {
                 return tweet ? { ...b, tweet } : null;
             } catch (e) {
                 console.warn('bookmark hydrate failed:', b, e);
+                return null;
+            }
+        }));
+        return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
+    },
+
+    async getLikes(cursorReset) {
+        let cursor = this.getCursor('likes')
+        if (cursorReset) {
+            cursor = ''
+        }
+        if (cursor === endCursor) {
+            return { items: [], cursor: endCursor };
+        }
+        const owner = this.getOwnerProfile()
+        if (!owner) return { items: [], cursor: endCursor };
+        const request = {
+            path: PRIVATE_GET_LIKES,
+            body: {
+                user_id: owner.user_id,
+                limit: defaultLimit,
+                cursor: cursor,
+            },
+        }
+        const resp = await this.sendToNode(request);
+        if (!resp) return { items: [], cursor: endCursor };
+        this.setCursor('likes', resp.cursor || 'end')
+
+        // Same reference-only wire shape as bookmarks: the backend returns
+        // the liked index entries (tweet_id + owner_user_id), each hydrated
+        // into the full Tweet so the view renders it like a timeline tweet.
+        const rawItems = resp.items || [];
+        const hydrated = await Promise.all(rawItems.map(async (b) => {
+            if (!b || !b.tweet_id) return null;
+            try {
+                const tweet = await this.getTweet({
+                    userId: b.owner_user_id || owner.user_id,
+                    tweetId: b.tweet_id,
+                });
+                return tweet ? { ...b, tweet } : null;
+            } catch (e) {
+                console.warn('like hydrate failed:', b, e);
                 return null;
             }
         }));
@@ -1580,6 +1690,18 @@ export const warpnetService = {
             path: PRIVATE_DELETE_CHAT,
             body: {
                 chat_id: chatId,
+            },
+        }
+
+        return await this.sendToNode(request);
+    },
+
+    async deleteMessage(chatId, messageId) {
+        const request = {
+            path: PRIVATE_DELETE_MESSAGE,
+            body: {
+                chat_id: chatId,
+                id: messageId,
             },
         }
 

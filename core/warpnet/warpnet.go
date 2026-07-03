@@ -236,7 +236,6 @@ type NodeInfo struct {
 	BootstrapPeers []WarpAddrInfo   `json:"bootstrap_peers"`
 	Reachability   WarpReachability `json:"reachability"`
 	Protocols      []WarpProtocolID `json:"protocols"`
-	Hash           string           `json:"hash"`
 	Network        string           `json:"network,omitempty"`
 }
 
@@ -252,7 +251,7 @@ func (ni NodeInfo) IsBusiness() bool {
 	return ni.Type == BusinessNode
 }
 
-type NodeStats struct {
+type NodeMetrics struct {
 	UserId          string          `json:"user_id"`
 	NodeID          WarpPeerID      `json:"node_id"`
 	Version         *semver.Version `json:"version"`

@@ -34,7 +34,27 @@ resulting from the use or misuse of this software.
             <i class="fas fa-arrow-left text-blue"></i>
           </button>
           <h1 class="text-xl font-bold">Notifications</h1>
-          <i class="fas fa-cog text-xl text-blue"></i>
+          <div ref="settingsMenu" class="relative">
+            <button
+              type="button"
+              @click="settingsOpen = !settingsOpen"
+              class="rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+              aria-label="Notification settings"
+              :aria-expanded="settingsOpen"
+            >
+              <i class="fas fa-cog text-xl text-blue" aria-hidden="true"></i>
+            </button>
+            <div
+              v-if="settingsOpen"
+              class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10"
+            >
+              <button
+                type="button"
+                @click="onMarkAllRead"
+                class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+              >Mark all as read</button>
+            </div>
+          </div>
         </div>
 
         <div class="flex flex-col">
@@ -218,6 +238,7 @@ export default {
       mode: this.$route.query.m || "All",
       overlayOpen: false,
       overlayNotificationId: '',
+      settingsOpen: false,
     };
   },
   computed: {
@@ -274,6 +295,10 @@ export default {
           .then(() => { n.is_read = true; })
           .catch(err => console.error('Failed to mark notification read:', err))
       ));
+    },
+    async onMarkAllRead() {
+      this.settingsOpen = false;
+      await this.markAllRead();
     },
     async hydrateRequests(ids) {
       return Promise.all(
@@ -338,6 +363,52 @@ export default {
       console.error('Failed to load notifications:', err);
     } finally {
       this.loading = false;
+    }
+
+    // Ride the service's 2s notification poll so new notifications show
+    // up while the page is open, instead of only after a manual reload.
+    // Items already marked read locally stay read even if a poll lands
+    // before the mark-read request settles on the node.
+    this._unsubscribeLive = warpnetService.subscribeNotifications((resp) => {
+      if (this.loading) return;
+      const incoming = (resp && resp.notifications) || [];
+      if (incoming.length === 0) return;
+      const readIds = new Set(
+        this.notifications.filter((n) => n && n.is_read).map((n) => n.id)
+      );
+      this.notifications = incoming.map((n) =>
+        n && readIds.has(n.id) ? { ...n, is_read: true } : n
+      );
+    });
+  },
+  mounted() {
+    this._onDocClick = (e) => {
+      if (!this.settingsOpen) return;
+      const menu = this.$refs.settingsMenu;
+      if (menu && !menu.contains(e.target)) {
+        this.settingsOpen = false;
+      }
+    };
+    this._onDocKeyup = (e) => {
+      if (e.key === "Escape" && this.settingsOpen) {
+        this.settingsOpen = false;
+      }
+    };
+    document.addEventListener("click", this._onDocClick);
+    window.addEventListener("keyup", this._onDocKeyup);
+  },
+  beforeUnmount() {
+    if (this._unsubscribeLive) {
+      this._unsubscribeLive();
+      this._unsubscribeLive = null;
+    }
+    if (this._onDocClick) {
+      document.removeEventListener("click", this._onDocClick);
+      this._onDocClick = null;
+    }
+    if (this._onDocKeyup) {
+      window.removeEventListener("keyup", this._onDocKeyup);
+      this._onDocKeyup = null;
     }
   },
 };

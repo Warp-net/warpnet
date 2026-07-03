@@ -69,3 +69,6 @@ frontend:
 aar:
 	cd warpdroid && make aar && cd -
 	go mod tidy && go mod vendor
+
+copy-gguf:
+	scp Llama-Guard-3-1B-Q4_K_M.gguf root@207.154.221.44:/root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf

@@ -40,5 +40,3 @@ fun Throwable.getErrorString(context: Context): String = getServerErrorMessage()
     is IOException -> context.getString(R.string.error_network)
     else -> context.getString(R.string.error_generic)
 }
-
-fun Throwable.isHttpNotFound(): Boolean = (this as? HttpException)?.code() == 404

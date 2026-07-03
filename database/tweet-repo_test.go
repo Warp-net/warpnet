@@ -36,6 +36,7 @@ import (
 
 	"go.uber.org/goleak"
 
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
@@ -571,6 +572,78 @@ func (s *TweetRepoTestSuite) TestRepliesCount() {
 	s.Equal(uint64(3), count)
 }
 
+// fakeTweetStats is an in-memory TweetStatsStorer used to assert that the
+// per-tweet counters consult the aggregated CRDT store, not only the local db.
+type fakeTweetStats struct {
+	mu   sync.Mutex
+	vals map[string]uint64
+}
+
+func newFakeTweetStats() *fakeTweetStats {
+	return &fakeTweetStats{vals: make(map[string]uint64)}
+}
+
+func (f *fakeTweetStats) GetAggregatedStat(key ds.Key) (uint64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.vals[key.String()], nil
+}
+
+func (f *fakeTweetStats) Increment(key ds.Key) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.vals[key.String()]++
+	return nil
+}
+
+func (f *fakeTweetStats) Decrement(key ds.Key) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.vals[key.String()] > 0 {
+		f.vals[key.String()]--
+	}
+	return nil
+}
+
+// TestRepliesCountReadsAggregatedStat guards the cross-stack reply counter:
+// RepliesCount must prefer the aggregated CRDT stat (like likes/retweets/views),
+// not only the local per-partition count. Otherwise the frontend reply counter
+// reads back stale/zero and stays hidden.
+func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
+	stats := newFakeTweetStats()
+	repo := NewTweetRepo(s.db, stats)
+
+	parentID := ulid.Make().String()
+	rootID := ulid.Make().String()
+
+	for i := 0; i < 3; i++ {
+		_, err := repo.AddReply(domain.Tweet{
+			Id:        ulid.Make().String(),
+			RootId:    rootID,
+			ParentId:  &parentID,
+			UserId:    "user123",
+			Text:      "reply",
+			CreatedAt: time.Now(),
+		})
+		s.Require().NoError(err)
+	}
+
+	// Simulate replies aggregated from other nodes via the CRDT that never
+	// touched this node's local counter.
+	countKey := tweetsCountKey(parentID).DatastoreKey()
+	s.Require().NoError(stats.Increment(countKey))
+	s.Require().NoError(stats.Increment(countKey))
+
+	// Local count is 3, aggregated CRDT count is 5: RepliesCount must report 5.
+	localCount, err := repo.TweetsCount(parentID)
+	s.Require().NoError(err)
+	s.Equal(uint64(3), localCount)
+
+	count, err := repo.RepliesCount(parentID)
+	s.Require().NoError(err)
+	s.Equal(uint64(5), count)
+}
+
 func (s *TweetRepoTestSuite) TestDeleteReply() {
 	parentID := ulid.Make().String()
 	rootID := ulid.Make().String()
@@ -630,4 +703,51 @@ func TestTweetRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	suite.Run(t, new(TweetRepoTestSuite))
+}
+
+func (s *TweetRepoTestSuite) TestList_NewestFirst() {
+	userId := ulid.Make().String()
+
+	older, err := s.repo.Create(userId, domain.Tweet{
+		UserId:    userId,
+		Text:      "older",
+		CreatedAt: time.Now().Add(-2 * time.Second),
+	})
+	s.Require().NoError(err)
+	newer, err := s.repo.Create(userId, domain.Tweet{UserId: userId, Text: "newer"})
+	s.Require().NoError(err)
+
+	limit := uint64(10)
+	tweets, _, err := s.repo.List(userId, &limit, nil)
+	s.Require().NoError(err)
+	// The exact length also proves the fixed lookup keys written by
+	// Create are skipped by List.
+	s.Require().Len(tweets, 2)
+	s.Equal(newer.Id, tweets[0].Id)
+	s.Equal(older.Id, tweets[1].Id)
+}
+
+func (s *TweetRepoTestSuite) TestRetweeters_Multiple() {
+	author := ulid.Make().String()
+	src, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: "source"})
+	s.Require().NoError(err)
+
+	retweeter1 := ulid.Make().String()
+	retweeter2 := ulid.Make().String()
+
+	rt1 := src
+	rt1.RetweetedBy = &retweeter1
+	_, err = s.repo.NewRetweet(rt1)
+	s.Require().NoError(err)
+
+	rt2 := src
+	rt2.RetweetedBy = &retweeter2
+	_, err = s.repo.NewRetweet(rt2)
+	s.Require().NoError(err)
+
+	limit := uint64(10)
+	retweeters, _, err := s.repo.Retweeters(src.Id, &limit, nil)
+	s.Require().NoError(err)
+	s.Require().Len(retweeters, 2)
+	s.ElementsMatch([]string{retweeter1, retweeter2}, retweeters)
 }

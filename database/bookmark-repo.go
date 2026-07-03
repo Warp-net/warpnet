@@ -31,24 +31,11 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 )
 
-const (
-	BookmarkRepoName = "/BOOKMARKS"
-	bookmarkListSub  = "LIST" // forward index: per-owner cursor of bookmarked tweet ids
-	bookmarkItemSub  = "ITEM" // payload: serialised Bookmark keyed by tweet id
-)
-
-// Bookmark is the local pin a user puts on someone's tweet. The owner id is
-// stored alongside so the timeline render can fetch the tweet without an
-// extra resolution round-trip.
-type Bookmark struct {
-	UserId      string    `json:"user_id"`
-	TweetId     string    `json:"tweet_id"`
-	OwnerUserId string    `json:"owner_user_id"`
-	CreatedAt   time.Time `json:"created_at"`
-}
+const BookmarkRepoName = "/BOOKMARKS"
 
 type BookmarkStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
@@ -73,25 +60,25 @@ func (repo *BookmarkRepo) Bookmark(userId, tweetId, ownerUserId string) error {
 		return local_store.DBError("empty owner user id")
 	}
 
-	bm := Bookmark{
+	bm := domain.Bookmark{
 		UserId:      userId,
 		TweetId:     tweetId,
 		OwnerUserId: ownerUserId,
 		CreatedAt:   time.Now(),
 	}
 
-	// list-key: ordered by creation time (reverse so newest comes first
-	// when iterating); item-key: stable lookup by tweet id for unbookmark.
-	listKey := local_store.NewPrefixBuilder(BookmarkRepoName).
-		AddSubPrefix(bookmarkListSub).
+	// Same fixed/sortable key pair as the chat message repo: the fixed key
+	// gives deterministic lookup for unbookmark and is skipped by
+	// iteration, the sortable key orders the list newest-first.
+	fixedKey := local_store.NewPrefixBuilder(BookmarkRepoName).
 		AddRootID(userId).
-		AddReversedTimestamp(bm.CreatedAt).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(tweetId).
 		Build()
 
-	itemKey := local_store.NewPrefixBuilder(BookmarkRepoName).
-		AddSubPrefix(bookmarkItemSub).
+	sortableKey := local_store.NewPrefixBuilder(BookmarkRepoName).
 		AddRootID(userId).
+		AddReversedTimestamp(bm.CreatedAt).
 		AddParentId(tweetId).
 		Build()
 
@@ -106,13 +93,13 @@ func (repo *BookmarkRepo) Bookmark(userId, tweetId, ownerUserId string) error {
 	}
 	defer txn.Rollback()
 
-	if existing, err := txn.Get(itemKey); err == nil && len(existing) != 0 {
+	if existing, err := txn.Get(fixedKey); err == nil && len(existing) != 0 {
 		return txn.Commit() // already bookmarked, no-op
 	}
-	if err = txn.Set(itemKey, []byte(listKey)); err != nil {
+	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
 		return err
 	}
-	if err = txn.Set(listKey, bt); err != nil {
+	if err = txn.Set(sortableKey, bt); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -126,9 +113,9 @@ func (repo *BookmarkRepo) Unbookmark(userId, tweetId string) error {
 		return local_store.DBError("empty tweet id")
 	}
 
-	itemKey := local_store.NewPrefixBuilder(BookmarkRepoName).
-		AddSubPrefix(bookmarkItemSub).
+	fixedKey := local_store.NewPrefixBuilder(BookmarkRepoName).
 		AddRootID(userId).
+		AddRange(local_store.FixedRangeKey).
 		AddParentId(tweetId).
 		Build()
 
@@ -138,31 +125,28 @@ func (repo *BookmarkRepo) Unbookmark(userId, tweetId string) error {
 	}
 	defer txn.Rollback()
 
-	listKeyBytes, err := txn.Get(itemKey)
-	if local_store.IsNotFoundError(err) {
-		return txn.Commit()
-	}
-	if err != nil {
+	sortableKey, err := txn.Get(fixedKey)
+	if err != nil && !local_store.IsNotFoundError(err) {
 		return err
 	}
-	if err = txn.Delete(itemKey); err != nil {
+	if len(sortableKey) == 0 {
+		return txn.Commit() // not bookmarked, no-op
+	}
+	if err = txn.Delete(fixedKey); err != nil {
 		return err
 	}
-	if len(listKeyBytes) != 0 {
-		if err = txn.Delete(local_store.DatabaseKey(listKeyBytes)); err != nil {
-			return err
-		}
+	if err = txn.Delete(local_store.DatabaseKey(sortableKey)); err != nil {
+		return err
 	}
 	return txn.Commit()
 }
 
-func (repo *BookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]Bookmark, string, error) {
+func (repo *BookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]domain.Bookmark, string, error) {
 	if userId == "" {
 		return nil, "", local_store.DBError("empty user id")
 	}
 
 	prefix := local_store.NewPrefixBuilder(BookmarkRepoName).
-		AddSubPrefix(bookmarkListSub).
 		AddRootID(userId).
 		Build()
 
@@ -180,9 +164,9 @@ func (repo *BookmarkRepo) List(userId string, limit *uint64, cursor *string) ([]
 		return nil, "", err
 	}
 
-	bms := make([]Bookmark, 0, len(items))
+	bms := make([]domain.Bookmark, 0, len(items))
 	for _, item := range items {
-		var bm Bookmark
+		var bm domain.Bookmark
 		if err := json.Unmarshal(item.Value, &bm); err != nil {
 			return nil, "", err
 		}

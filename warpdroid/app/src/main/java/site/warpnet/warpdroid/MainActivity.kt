@@ -690,6 +690,14 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                         startActivityWithSlideInAnimation(intent)
                     }
                 },
+                primaryDrawerItem {
+                    nameRes = R.string.title_likes
+                    iconRes = R.drawable.ic_star_24dp
+                    onClick = {
+                        val intent = TweetListActivity.newLikesIntent(context)
+                        startActivityWithSlideInAnimation(intent)
+                    }
+                },
                 DividerDrawerItem(),
                 secondaryDrawerItem {
                     nameRes = R.string.action_view_account_preferences

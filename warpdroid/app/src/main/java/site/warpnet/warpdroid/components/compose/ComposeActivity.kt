@@ -650,25 +650,6 @@ class ComposeActivity :
             addMediaBehavior.state != BottomSheetBehavior.STATE_HIDDEN
     }
 
-    private fun replaceTextAtCaret(text: CharSequence) {
-        // If you select "backward" in an editable, you get SelectionStart > SelectionEnd
-        val start = binding.composeEditField.selectionStart.coerceAtMost(
-            binding.composeEditField.selectionEnd
-        )
-        val end = binding.composeEditField.selectionStart.coerceAtLeast(
-            binding.composeEditField.selectionEnd
-        )
-        val textToInsert = if (start > 0 && !binding.composeEditField.text[start - 1].isWhitespace()) {
-            " $text"
-        } else {
-            text
-        }
-        binding.composeEditField.text.replace(start, end, textToInsert)
-
-        // Set the cursor after the inserted text
-        binding.composeEditField.setSelection(start + text.length)
-    }
-
     fun prependSelectedWordsWith(text: CharSequence) {
         // If you select "backward" in an editable, you get SelectionStart > SelectionEnd
         val start = binding.composeEditField.selectionStart.coerceAtMost(
