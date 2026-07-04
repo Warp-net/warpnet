@@ -8,6 +8,16 @@ name: Rebuild warpdroid AAR
 
 on:
   workflow_dispatch:
+  # Temporary automation for the log-sink branch: the Claude GitHub App
+  # cannot dispatch workflows (no actions:write), so trigger on pushes
+  # that change the binding source. The AAR commit made below uses
+  # GITHUB_TOKEN and therefore cannot re-trigger this workflow.
+  push:
+    branches:
+      - fix/go-node-log-sink-android
+    paths:
+      - "warpdroid/node/**"
+      - ".github/workflows/rebuild-aar.yml"
 
 permissions:
   contents: write
