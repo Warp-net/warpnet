@@ -8,14 +8,9 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.VIBRATE" /> <!-- For notifications -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Briar-style always-on push service that keeps the peer-to-peer
-         connection to the paired node alive to deliver notifications. -->
+    <!-- Always-on push service + restart on boot + wake lock. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <!-- Restart the push service after a reboot so notifications keep arriving
-         without opening the app first. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Partial wake lock so the push service keeps polling while the screen
-         is off. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission
         android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
@@ -175,8 +170,7 @@
             android:foregroundServiceType="shortService"
             android:exported="false" />
 
-        <!-- Briar-style push: keeps the libp2p connection to the paired node
-             alive in the background and polls for new notifications. -->
+        <!-- Always-on push service. -->
         <service
             android:name=".service.WarpnetNotificationService"
             android:foregroundServiceType="specialUse"

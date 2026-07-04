@@ -155,10 +155,7 @@ licensee {
     // QR scanner; allow the canonical URLs rather than fail the build.
     allowUrl('https://developer.android.com/studio/terms.html')
     allowUrl('https://developers.google.com/ml-kit/terms')
-    // Briar's dont-kill-me-lib is GPL-3.0. Its POM declares the non-SPDX
-    // name "GPL-v3.0", which licensee can't map to an SpdxId, so allow the
-    // specific artifact. Warpnet/Warpdroid is AGPL-3.0, so GPL-3.0 is
-    // compatible.
+    // GPL-3.0 (POM declares non-SPDX "GPL-v3.0"); compatible with the AGPL app.
     allowDependency('org.briarproject', 'dont-kill-me-lib', '0.2.8') {
         because 'GPL-3.0, compatible with the AGPL-3.0 app'
     }
@@ -224,9 +221,7 @@ dependencies {
 
     implementation libs.timber
 
-    // Briar's "don't kill me" library: detects OEM battery/app-killer
-    // settings (Doze, Huawei, Xiaomi) and provides the intents to fix them,
-    // so the push foreground service survives on aggressive OEM ROMs.
+    // Briar's dont-kill-me-lib: detect OEM app-killer settings and fix them.
     implementation libs.dontkillmelib
 
     implementation libs.touchimageview

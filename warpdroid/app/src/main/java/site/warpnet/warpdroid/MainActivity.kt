@@ -1056,12 +1056,8 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     override fun getActionButton() = binding.composeButton
 
-    /**
-     * Doze whitelisting isn't enough on aggressive OEM ROMs (MIUI, EMUI, …):
-     * their auto-start / protected-apps managers kill the push service anyway.
-     * Show the "Keep Warpnet running" screen once, and only when at least one
-     * such OEM setting actually needs attention.
-     */
+    // Doze whitelisting isn't enough on OEM ROMs (MIUI/EMUI): show the
+    // "Keep Warpnet running" screen once, only when an OEM setting needs it.
     private fun maybeShowDontKillMe() {
         if (preferences.getBoolean(PrefKeys.ASKED_DONT_KILL_ME, false)) {
             return

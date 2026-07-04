@@ -40,24 +40,9 @@ import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.db.AccountManager
 import timber.log.Timber
 
-/**
- * Briar-style push service: an ongoing foreground service that keeps the
- * embedded libp2p node connected to the paired fat node while the app is
- * backgrounded and delta-polls the fat node's push queue, posting local
- * Android notifications as new events arrive.
- *
- * Warpnet has no cloud push gateway (no FCM). The thin client is a
- * `NoListenAddrs` libp2p node, so the fat node can't open a stream back to
- * it — real-time delivery instead relies on this service holding the
- * connection open (mirroring how Briar keeps its transport stack alive) and
- * pulling [NotificationHelper]/[NotificationFetcher] on a short interval.
- *
- * The service is started from [NotificationHelper.enablePullNotifications]
- * (app start / notifications toggled on) and after a reboot by
- * [site.warpnet.warpdroid.receiver.BootReceiver]. START_STICKY plus the boot
- * receiver give Briar's "always running until the user turns it off"
- * behaviour.
- */
+// Briar-style push: keeps the libp2p node connected in the background and
+// delta-polls the fat node's push queue, posting local notifications. Warpnet
+// has no cloud push gateway (no FCM).
 @AndroidEntryPoint
 class WarpnetNotificationService : Service() {
 
@@ -99,26 +84,16 @@ class WarpnetNotificationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Set here too (not only in start()) so an OS-driven START_STICKY
-        // restart also marks the service as running.
-        isRunning = true
+        isRunning = true // also set here to cover OS-driven START_STICKY restarts
         startAsForeground()
         if (loopJob?.isActive != true) {
             loopJob = scope.launch { runLoop() }
         }
-        // Briar keeps the service alive until the user signs out; START_STICKY
-        // asks the OS to recreate it if it's killed for memory.
         return START_STICKY
     }
 
-    /**
-     * Hold a partial wake lock for the lifetime of the always-on push
-     * service. Without it the CPU can suspend while the screen is off, which
-     * pauses the poll loop's timer and the libp2p keep-alive, so notifications
-     * would only arrive when the device happens to wake for something else.
-     * Released in [onDestroy]; the app is expected to be battery-optimization
-     * exempt (requested in MainActivity) so this is allowed to run.
-     */
+    // Keeps the CPU awake while the screen is off so the poll loop and libp2p
+    // keep-alive don't stall. Released in onDestroy.
     @SuppressLint("WakelockTimeout")
     private fun acquireWakeLock() {
         if (wakeLock?.isHeld == true) return
@@ -153,16 +128,13 @@ class WarpnetNotificationService : Service() {
     }
 
     private suspend fun runLoop() {
-        // Make sure the per-account channels exist before the first fetch —
-        // on a cold boot MainActivity hasn't run, so channel creation (which
-        // filterNotification() gates on for API >= O) hasn't happened yet.
+        // On a cold boot MainActivity hasn't created the channels yet, and
+        // filterNotification() gates on them for API >= O.
         runCatching {
             accountManager.accounts.forEach { notificationHelper.createNotificationChannelsForAccount(it) }
         }
 
         ensureNodeUp()
-        // The monitor owns reconnect/backoff; starting it here keeps the link
-        // alive while the app is backgrounded and the service is holding it.
         runCatching { connectionMonitor.start() }
 
         while (scope.isActive) {
@@ -181,12 +153,8 @@ class WarpnetNotificationService : Service() {
         }
     }
 
-    /**
-     * Bring the embedded node up if it isn't already. On a warm start
-     * (app was open) the host is initialised and only needs a resume; on a
-     * cold start (reboot) it re-runs the silent auto-pair that
-     * PairingActivity uses on launch, using the keystore-backed QR payload.
-     */
+    // Warm start: just resume. Cold start (reboot): re-run the silent
+    // auto-pair PairingActivity uses, from the keystore-backed QR payload.
     private suspend fun ensureNodeUp() {
         when (warpnetClient.state.value) {
             is ConnectionState.Uninitialised -> coldBringUp()
@@ -207,9 +175,8 @@ class WarpnetNotificationService : Service() {
     }
 
     override fun onDestroy() {
-        // Don't clear isRunning here: a START_STICKY restart or user stop()
-        // owns that flag. Clearing it on every teardown would momentarily lie
-        // to WarpdroidApplication.onStop during an OS-driven restart.
+        // isRunning is owned by start()/stop(), not cleared here, so an
+        // OS-driven restart doesn't briefly report the service as stopped.
         scope.cancel()
         releaseWakeLock()
         super.onDestroy()
@@ -218,14 +185,10 @@ class WarpnetNotificationService : Service() {
     companion object {
         private const val TAG = "WarpnetNotifSvc"
         private const val WAKE_LOCK_TAG = "warpnet:push-service"
-
-        // Delta-poll cadence while the connection is held open. Short enough
-        // to feel like push, long enough not to hammer the radio.
         private const val POLL_INTERVAL_MS = 30_000L
 
-        // Reflects intent-to-run, toggled at the control points (start/stop)
-        // rather than in the async onCreate/onDestroy lifecycle, so
-        // WarpdroidApplication.onStop never races a not-yet-created service.
+        // Intent-to-run, toggled at the control points so onStop can't race a
+        // not-yet-created service.
         @Volatile
         var isRunning: Boolean = false
             private set

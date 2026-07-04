@@ -20,12 +20,8 @@ import site.warpnet.warpdroid.service.WarpnetNotificationService
 import site.warpnet.warpdroid.settings.PrefKeys
 import timber.log.Timber
 
-/**
- * Restarts the Briar-style push service after a reboot or an app update, so
- * notifications keep arriving without the user having to open the app first.
- * The service is only started when the device is already paired and the user
- * hasn't turned notifications off.
- */
+// Restarts the push service after a reboot / app update when paired and
+// notifications are enabled, so delivery resumes without opening the app.
 @AndroidEntryPoint
 class BootReceiver : BroadcastReceiver() {
 
@@ -43,8 +39,7 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        // loadRawQr touches the KeyStore + disk; keep the receiver alive while
-        // we check off the main thread, then start the foreground service.
+        // loadRawQr touches the KeyStore + disk; check off the main thread.
         val pending = goAsync()
         val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {

@@ -109,24 +109,16 @@ class NotificationHelper @Inject constructor(
     }
 
     suspend fun setupNotifications(activity: Activity) {
-        // Warpnet has no cloud push gateway (no FCM); notifications are
-        // delivered Briar-style by an always-on foreground service that keeps
-        // the connection to the paired node alive and polls for new events.
+        // No FCM; delivered by the always-on push service (Briar-style).
         enablePullNotifications()
     }
 
     fun enablePullNotifications() {
-        // Briar-style push: keep the libp2p connection alive in the background
-        // and deliver notifications in near-real time via a foreground service.
-        // This replaces the old ~15-minute periodic WorkManager poll (which
-        // couldn't run in the background anyway — the host is paused there and
-        // client.request() throws NotConnected). Cancel any leftover periodic
-        // work from a previous version so it doesn't run redundantly.
+        // The foreground service replaces the old periodic poll; drop any
+        // leftover periodic work from a previous version.
         workManager.cancelUniqueWork(NOTIFICATION_PULL_NAME)
         runCatching { WarpnetNotificationService.start(context) }
             .onFailure { Timber.tag(TAG).w(it, "could not start push service") }
-
-        Timber.tag(TAG).d("Enabled Briar-style push service.")
     }
 
     fun createNotificationChannelsForAccount(account: AccountEntity) {
@@ -474,11 +466,7 @@ class NotificationHelper @Inject constructor(
             .build()
     }
 
-    /**
-     * The persistent "Warpnet is running" notification shown while the
-     * Briar-style push service ([site.warpnet.warpdroid.service.WarpnetNotificationService])
-     * holds the connection open. Tapping it opens the app.
-     */
+    // Ongoing "Warpnet is running" notification for the push service.
     fun createSyncServiceNotification(): android.app.Notification {
         val contentIntent = PendingIntent.getActivity(
             context,

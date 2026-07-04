@@ -198,10 +198,8 @@ class WarpdroidApplication :
                 }
 
                 override fun onStop(owner: LifecycleOwner) {
-                    // Briar-style push: when the foreground push service is
-                    // running, keep the libp2p host connected in the background
-                    // so notifications keep arriving. Otherwise pause to let the
-                    // radio sleep.
+                    // Keep the host connected in the background while the push
+                    // service runs; otherwise pause to let the radio sleep.
                     if (WarpnetNotificationService.isRunning) {
                         Timber.tag(TAG).i("app backgrounded — push service active, keeping libp2p host alive")
                         return

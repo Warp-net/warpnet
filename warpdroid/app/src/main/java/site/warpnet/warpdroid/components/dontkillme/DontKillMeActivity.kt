@@ -23,19 +23,9 @@ import site.warpnet.warpdroid.R
 import site.warpnet.warpdroid.databinding.ActivityDontKillMeBinding
 import timber.log.Timber
 
-/**
- * "Keep Warpnet running" screen, in the spirit of Briar's don't-kill-me flow.
- *
- * Standard Doze battery-optimization exemption (handled separately in
- * [site.warpnet.warpdroid.MainActivity.requestIgnoreBatteryOptimizations]) is
- * not enough on aggressive OEM ROMs: MIUI, EMUI and friends kill the push
- * foreground service via their own auto-start / protected-apps managers. This
- * screen uses Briar's `dont-kill-me-lib` to detect exactly which OEM settings
- * are in the way and deep-links the user to each one.
- *
- * It is shown once (see MainActivity) and only when at least one OEM setting
- * actually needs attention ([isNeeded]).
- */
+// "Keep Warpnet running" screen: uses dont-kill-me-lib to detect OEM
+// app-killer settings (Huawei/Xiaomi) and deep-link the user to fix them.
+// Shown once, only when isNeeded().
 class DontKillMeActivity : AppCompatActivity() {
 
     private data class Step(
@@ -133,8 +123,7 @@ class DontKillMeActivity : AppCompatActivity() {
                 )
             }
             if (XiaomiUtils.xiaomiRecentAppsNeedsToBeShown()) {
-                // Locking the app in Recents is a manual gesture, not a settings
-                // screen — show instructions with no button.
+                // Manual gesture, no settings screen — instructions only.
                 add(Step(R.string.dont_kill_me_xiaomi_recents, null, emptyList()))
             }
             if (XiaomiUtils.xiaomiLockAppsNeedsToBeShown(context)) {
