@@ -28,15 +28,12 @@ import androidx.core.app.RemoteInput
 import androidx.core.app.TaskStackBuilder
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
-import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.Data
-import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OutOfQuotaPolicy
-import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
 import at.connyduck.calladapter.networkresult.fold
 import at.connyduck.calladapter.networkresult.onFailure
@@ -65,7 +62,6 @@ import site.warpnet.warpdroid.worker.NotificationWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.text.NumberFormat
 import java.util.concurrent.ExecutionException
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -122,30 +118,15 @@ class NotificationHelper @Inject constructor(
     fun enablePullNotifications() {
         // Briar-style push: keep the libp2p connection alive in the background
         // and deliver notifications in near-real time via a foreground service.
+        // This replaces the old ~15-minute periodic WorkManager poll (which
+        // couldn't run in the background anyway — the host is paused there and
+        // client.request() throws NotConnected). Cancel any leftover periodic
+        // work from a previous version so it doesn't run redundantly.
+        workManager.cancelUniqueWork(NOTIFICATION_PULL_NAME)
         runCatching { WarpnetNotificationService.start(context) }
             .onFailure { Timber.tag(TAG).w(it, "could not start push service") }
 
-        val workRequest: PeriodicWorkRequest = PeriodicWorkRequest.Builder(
-            NotificationWorker::class.java,
-            PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS,
-            TimeUnit.MILLISECONDS,
-        )
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .setRequiresBatteryNotLow(true)
-                    .build()
-            )
-            .setBackoffCriteria(
-                BackoffPolicy.LINEAR,
-                1L,
-                TimeUnit.MINUTES,
-            )
-            .build()
-
-        workManager.enqueueUniquePeriodicWork(NOTIFICATION_PULL_NAME, ExistingPeriodicWorkPolicy.UPDATE, workRequest)
-
-        Timber.tag(TAG).d("Enabled pull checks with ${PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS / 60000} minutes interval.")
+        Timber.tag(TAG).d("Enabled Briar-style push service.")
     }
 
     fun createNotificationChannelsForAccount(account: AccountEntity) {

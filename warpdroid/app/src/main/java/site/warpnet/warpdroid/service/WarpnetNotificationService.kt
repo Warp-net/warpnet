@@ -6,12 +6,14 @@
 
 package site.warpnet.warpdroid.service
 
+import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.squareup.moshi.Moshi
@@ -87,15 +89,19 @@ class WarpnetNotificationService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var loopJob: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        isRunning = true
+        acquireWakeLock()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Set here too (not only in start()) so an OS-driven START_STICKY
+        // restart also marks the service as running.
+        isRunning = true
         startAsForeground()
         if (loopJob?.isActive != true) {
             loopJob = scope.launch { runLoop() }
@@ -103,6 +109,32 @@ class WarpnetNotificationService : Service() {
         // Briar keeps the service alive until the user signs out; START_STICKY
         // asks the OS to recreate it if it's killed for memory.
         return START_STICKY
+    }
+
+    /**
+     * Hold a partial wake lock for the lifetime of the always-on push
+     * service. Without it the CPU can suspend while the screen is off, which
+     * pauses the poll loop's timer and the libp2p keep-alive, so notifications
+     * would only arrive when the device happens to wake for something else.
+     * Released in [onDestroy]; the app is expected to be battery-optimization
+     * exempt (requested in MainActivity) so this is allowed to run.
+     */
+    @SuppressLint("WakelockTimeout")
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        val lock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+        lock.setReferenceCounted(false)
+        runCatching { lock.acquire() }
+            .onFailure { Timber.tag(TAG).w(it, "could not acquire wake lock") }
+        wakeLock = lock
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { lock ->
+            if (lock.isHeld) runCatching { lock.release() }
+        }
+        wakeLock = null
     }
 
     private fun startAsForeground() {
@@ -175,28 +207,37 @@ class WarpnetNotificationService : Service() {
     }
 
     override fun onDestroy() {
-        isRunning = false
+        // Don't clear isRunning here: a START_STICKY restart or user stop()
+        // owns that flag. Clearing it on every teardown would momentarily lie
+        // to WarpdroidApplication.onStop during an OS-driven restart.
         scope.cancel()
+        releaseWakeLock()
         super.onDestroy()
     }
 
     companion object {
         private const val TAG = "WarpnetNotifSvc"
+        private const val WAKE_LOCK_TAG = "warpnet:push-service"
 
         // Delta-poll cadence while the connection is held open. Short enough
         // to feel like push, long enough not to hammer the radio.
         private const val POLL_INTERVAL_MS = 30_000L
 
+        // Reflects intent-to-run, toggled at the control points (start/stop)
+        // rather than in the async onCreate/onDestroy lifecycle, so
+        // WarpdroidApplication.onStop never races a not-yet-created service.
         @Volatile
         var isRunning: Boolean = false
             private set
 
         fun start(context: Context) {
+            isRunning = true
             val intent = Intent(context, WarpnetNotificationService::class.java)
             ContextCompat.startForegroundService(context, intent)
         }
 
         fun stop(context: Context) {
+            isRunning = false
             context.stopService(Intent(context, WarpnetNotificationService::class.java))
         }
     }

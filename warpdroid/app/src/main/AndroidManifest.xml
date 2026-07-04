@@ -14,6 +14,9 @@
     <!-- Restart the push service after a reboot so notifications keep arriving
          without opening the app first. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Partial wake lock so the push service keeps polling while the screen
+         is off. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission
         android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         tools:ignore="BatteryLife" />
