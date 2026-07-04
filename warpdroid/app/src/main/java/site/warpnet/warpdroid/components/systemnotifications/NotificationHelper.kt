@@ -18,7 +18,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
-import android.util.Log
 import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
 import androidx.core.app.ActivityCompat
@@ -69,6 +68,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
+import timber.log.Timber
 
 @Singleton
 class NotificationHelper @Inject constructor(
@@ -96,12 +96,12 @@ class NotificationHelper @Inject constructor(
             if (notificationManager.areNotificationsEnabled()) {
                 for (channel in notificationManager.notificationChannels) {
                     if (channel != null && channel.importance > NotificationManager.IMPORTANCE_NONE) {
-                        Log.d(TAG, "Notifications enabled for app by the system.")
+                        Timber.tag(TAG).d("Notifications enabled for app by the system.")
                         return true
                     }
                 }
             }
-            Log.d(TAG, "Notifications disabled for app by the system.")
+            Timber.tag(TAG).d("Notifications disabled for app by the system.")
 
             return false
         } else {
@@ -136,7 +136,7 @@ class NotificationHelper @Inject constructor(
 
         workManager.enqueueUniquePeriodicWork(NOTIFICATION_PULL_NAME, ExistingPeriodicWorkPolicy.UPDATE, workRequest)
 
-        Log.d(TAG, "Enabled pull checks with ${PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS / 60000} minutes interval.")
+        Timber.tag(TAG).d("Enabled pull checks with ${PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS / 60000} minutes interval.")
     }
 
     fun createNotificationChannelsForAccount(account: AccountEntity) {
@@ -246,7 +246,7 @@ class NotificationHelper @Inject constructor(
 
     fun disablePullNotifications() {
         workManager.cancelUniqueWork(NOTIFICATION_PULL_NAME)
-        Log.d(TAG, "Disabled pull checks.")
+        Timber.tag(TAG).d("Disabled pull checks.")
     }
 
     fun clearNotificationsForAccount(account: AccountEntity) {
@@ -365,10 +365,10 @@ class NotificationHelper @Inject constructor(
                     .submit()
                     .get()
             } catch (e: ExecutionException) {
-                Log.d(TAG, "Error loading account avatar", e)
+                Timber.tag(TAG).d(e, "Error loading account avatar")
                 BitmapFactory.decodeResource(context.resources, R.drawable.avatar_default)
             } catch (e: InterruptedException) {
-                Log.d(TAG, "Error loading account avatar", e)
+                Timber.tag(TAG).d(e, "Error loading account avatar")
                 BitmapFactory.decodeResource(context.resources, R.drawable.avatar_default)
             }
 

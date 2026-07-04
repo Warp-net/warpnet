@@ -17,13 +17,13 @@
 
 package site.warpnet.warpdroid.json
 
-import android.util.Log
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.JsonReader
 import com.squareup.moshi.JsonWriter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import java.lang.reflect.Type
+import timber.log.Timber
 
 /**
  * This adapter tries to parse the value using a delegated parser
@@ -37,7 +37,7 @@ class GuardedAdapter<T> private constructor(
         return try {
             reader.peekJson().use { delegate.fromJson(it) }
         } catch (e: Exception) {
-            Log.w("GuardedAdapter", "failed to read json", e)
+            Timber.tag("GuardedAdapter").w(e, "failed to read json")
             null
         } finally {
             reader.skipValue()

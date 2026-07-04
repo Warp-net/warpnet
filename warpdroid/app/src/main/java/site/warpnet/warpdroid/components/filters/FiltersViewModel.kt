@@ -1,6 +1,5 @@
 package site.warpnet.warpdroid.components.filters
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.fold
@@ -18,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @HiltViewModel
 class FiltersViewModel @Inject constructor(
@@ -60,7 +60,7 @@ class FiltersViewModel @Inject constructor(
                     )
                 },
                 { throwable ->
-                    Log.w(TAG, "failed loading filters", throwable)
+                    Timber.tag(TAG).w(throwable, "failed loading filters")
                     _state.update { it.copy(filters = emptyList(), loading = false, error = throwable) }
                 }
             )
@@ -83,7 +83,7 @@ class FiltersViewModel @Inject constructor(
                     eventHub.dispatch(FilterUpdatedEvent(filter.context))
                 },
                 { throwable ->
-                    Log.w(TAG, "failed to delete filter", throwable)
+                    Timber.tag(TAG).w(throwable, "failed to delete filter")
                     _state.update { it.copy(deletionError = filter) }
                 }
             )

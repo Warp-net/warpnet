@@ -20,7 +20,6 @@ import android.app.NotificationManager
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.StrictMode
-import android.util.Log
 import androidx.core.content.edit
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -215,7 +214,7 @@ class WarpdroidApplication :
             .build()
 
     private fun upgradeSharedPreferences(oldVersion: Int, newVersion: Int) {
-        Log.d(TAG, "Upgrading shared preferences: $oldVersion -> $newVersion")
+        Timber.tag(TAG).d("Upgrading shared preferences: $oldVersion -> $newVersion")
         preferences.edit {
             if (oldVersion < 2023022701) {
                 // These preferences are (now) handled in AccountPreferenceHandler. Remove them from shared for clarity.

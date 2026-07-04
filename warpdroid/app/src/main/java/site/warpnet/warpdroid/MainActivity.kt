@@ -34,7 +34,6 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.text.TextUtils
-import android.util.Log
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuInflater
@@ -127,6 +126,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.migration.OptionalInject
 import javax.inject.Inject
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @OptionalInject
 @AndroidEntryPoint
@@ -1072,7 +1072,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 ),
             )
         } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "No activity to handle battery optimization exemption request", e)
+            Timber.tag(TAG).w(e, "No activity to handle battery optimization exemption request")
         }
     }
 

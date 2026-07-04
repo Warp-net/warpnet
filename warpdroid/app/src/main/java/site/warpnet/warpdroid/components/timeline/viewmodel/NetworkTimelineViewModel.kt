@@ -16,7 +16,6 @@
 package site.warpnet.warpdroid.components.timeline.viewmodel
 
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.lifecycle.viewModelScope
 import androidx.paging.ExperimentalPagingApi
 import androidx.paging.Pager
@@ -51,6 +50,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import retrofit2.Response
+import timber.log.Timber
 
 /**
  * TimelineViewModel that caches all statuses in an in-memory list
@@ -265,7 +265,7 @@ class NetworkTimelineViewModel @Inject constructor(
     }
 
     private fun loadMoreFailed(placeholderId: String, e: Exception) {
-        Log.w("NetworkTimelineVM", "failed loading statuses", e)
+        Timber.tag("NetworkTimelineVM").w(e, "failed loading statuses")
 
         val index =
             statusData.indexOfFirst { it is TweetViewData.LoadMore && it.id == placeholderId }

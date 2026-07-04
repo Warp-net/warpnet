@@ -7,7 +7,6 @@ package site.warpnet.warpdroid.worker
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -27,6 +26,7 @@ import site.warpnet.transport.WarpnetException
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.pairing.PairingActivity
 import site.warpnet.warpdroid.components.pairing.isDurablePairRejection
+import timber.log.Timber
 
 /**
  * Periodically re-pings the fat node's /private/post/pair handler so the
@@ -52,17 +52,17 @@ class PairRefreshWorker @AssistedInject constructor(
             // App likely backgrounded; the host is paused and the next
             // foreground transition will redial. No point retrying with
             // backoff and burning the radio.
-            Log.d(TAG, "pair refresh skipped: not connected")
+            Timber.tag(TAG).d("pair refresh skipped: not connected")
             Result.success()
         } catch (e: WarpnetException.NotInitialised) {
-            Log.d(TAG, "pair refresh skipped: not initialised")
+            Timber.tag(TAG).d("pair refresh skipped: not initialised")
             Result.success()
         } catch (e: WarpnetException.ProtocolError) {
             if (!e.isDurablePairRejection()) {
-                Log.w(TAG, "pair refresh transient node error: code=${e.code} ${e.serverMessage}")
+                Timber.tag(TAG).w("pair refresh transient node error: code=${e.code} ${e.serverMessage}")
                 Result.retry()
             } else {
-                Log.w(TAG, "pair refresh rejected: code=${e.code} ${e.serverMessage}")
+                Timber.tag(TAG).w("pair refresh rejected: code=${e.code} ${e.serverMessage}")
                 withContext(Dispatchers.IO) { pairedNodeStore.clear() }
                 client.shutdown()
                 val intent = Intent(applicationContext, PairingActivity::class.java)
@@ -74,7 +74,7 @@ class PairRefreshWorker @AssistedInject constructor(
                 Result.success()
             }
         } catch (e: Exception) {
-            Log.w(TAG, "pair refresh failed", e)
+            Timber.tag(TAG).w(e, "pair refresh failed")
             Result.retry()
         }
     }

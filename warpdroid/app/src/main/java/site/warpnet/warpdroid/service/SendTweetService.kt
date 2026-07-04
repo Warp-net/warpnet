@@ -27,7 +27,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.Parcelable
-import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -58,6 +57,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
+import timber.log.Timber
 
 @AndroidEntryPoint
 class SendTweetService : Service() {
@@ -168,7 +168,7 @@ class SendTweetService : Service() {
                     when (val uploadState = mediaUploader.getMediaUploadState(mediaItem.localId)) {
                         is UploadEvent.FinishedEvent -> mediaItem.copy(id = uploadState.mediaId, processed = uploadState.processed)
                         is UploadEvent.ErrorEvent -> {
-                            Log.w(TAG, "failed uploading media", uploadState.error)
+                            Timber.tag(TAG).w(uploadState.error, "failed uploading media")
                             failSending(statusId)
                             stopSelfWhenDone()
                             return@launch
@@ -200,7 +200,7 @@ class SendTweetService : Service() {
                     mediaCheckRetries++
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "failed getting media status", e)
+                Timber.tag(TAG).w(e, "failed getting media status")
                 retrySending(statusId)
                 return@launch
             }
@@ -213,7 +213,7 @@ class SendTweetService : Service() {
                         warpnetApi.updateMedia(mediaItem.id!!, mediaItem.description, mediaItem.focus?.toWarpnetApiString())
                             .fold({
                             }, { throwable ->
-                                Log.w(TAG, "failed to update media on status send", throwable)
+                                Timber.tag(TAG).w(throwable, "failed to update media on status send")
                                 failOrRetry(throwable, statusId)
 
                                 return@launch
@@ -268,7 +268,7 @@ class SendTweetService : Service() {
 
                 notificationManager.cancel(statusId)
             }, { throwable ->
-                Log.w(TAG, "failed sending status", throwable)
+                Timber.tag(TAG).w(throwable, "failed sending status")
                 failOrRetry(throwable, statusId)
             })
             stopSelfWhenDone()
@@ -282,7 +282,7 @@ class SendTweetService : Service() {
     private suspend fun failOrRetry(throwable: Throwable, statusId: Int) {
         val statusToSend = statusesToSend[statusId] ?: return
         if (statusToSend.retries >= MAX_SEND_RETRIES) {
-            Log.w(TAG, "giving up on status $statusId after ${statusToSend.retries} attempts", throwable)
+            Timber.tag(TAG).w(throwable, "giving up on status $statusId after ${statusToSend.retries} attempts")
             failSending(statusId)
             return
         }

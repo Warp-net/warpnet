@@ -1,6 +1,5 @@
 package site.warpnet.warpdroid.components.account
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.fold
@@ -24,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @HiltViewModel
 class AccountViewModel @Inject constructor(
@@ -81,7 +81,7 @@ class AccountViewModel @Inject constructor(
                             _isRefreshing.value = false
                         },
                         { t ->
-                            Log.w(TAG, "failed obtaining account", t)
+                            Timber.tag(TAG).w(t, "failed obtaining account")
                             _accountData.value = Error(cause = t)
                             _isRefreshing.value = false
                         }
@@ -108,7 +108,7 @@ class AccountViewModel @Inject constructor(
                                 }
                         },
                         { t ->
-                            Log.w(TAG, "failed obtaining relationships", t)
+                            Timber.tag(TAG).w(t, "failed obtaining relationships")
                             _relationshipData.value = Error(cause = t)
                         }
                     )
@@ -160,11 +160,11 @@ class AccountViewModel @Inject constructor(
             reason = reason,
         ).fold(
             {
-                Log.d(TAG, "reported account ${account.id}")
+                Timber.tag(TAG).d("reported account ${account.id}")
                 true
             },
             { t ->
-                Log.w(TAG, "failed reporting account", t)
+                Timber.tag(TAG).w(t, "failed reporting account")
                 false
             },
         )
@@ -278,7 +278,7 @@ class AccountViewModel @Inject constructor(
                 }
             },
             { t ->
-                Log.w(TAG, "failed loading relationship", t)
+                Timber.tag(TAG).w(t, "failed loading relationship")
                 _relationshipData.value = Error(relation, cause = t)
             }
         )

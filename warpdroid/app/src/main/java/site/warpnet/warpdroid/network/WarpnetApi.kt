@@ -24,7 +24,6 @@
 package site.warpnet.warpdroid.network
 
 import android.net.Uri
-import android.util.Log
 import at.connyduck.calladapter.networkresult.NetworkResult
 import site.warpnet.warpdroid.components.filters.FilterExpiration
 import site.warpnet.warpdroid.db.AccountManager
@@ -55,6 +54,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.Response
+import timber.log.Timber
 
 @Singleton
 class WarpnetApi @Inject constructor(
@@ -563,7 +563,7 @@ class WarpnetApi @Inject constructor(
                 viewerId = active.accountId,
             )
         }.onFailure { e ->
-            Log.w(TAG, "recordView failed for $statusId", e)
+            Timber.tag(TAG).w(e, "recordView failed for $statusId")
         }
     }
 
@@ -631,7 +631,7 @@ class WarpnetApi @Inject constructor(
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {
-                Log.w(TAG, "accountVerifyCredentials: getAccount(${active.accountId}) failed, falling back to stub", t)
+                Timber.tag(TAG).w(t, "accountVerifyCredentials: getAccount(${active.accountId}) failed, falling back to stub")
             }
         }
         return NetworkResult.success(

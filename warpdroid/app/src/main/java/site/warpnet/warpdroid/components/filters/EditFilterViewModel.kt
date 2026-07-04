@@ -16,7 +16,6 @@
 package site.warpnet.warpdroid.components.filters
 
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.fold
@@ -35,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @HiltViewModel(assistedFactory = EditFilterViewModel.Factory::class)
 class EditFilterViewModel @AssistedInject constructor(
@@ -148,7 +148,7 @@ class EditFilterViewModel @AssistedInject constructor(
                         _state.value = State.Finished
                     },
                     { throwable ->
-                        Log.w(TAG, "failed deleting filter", throwable)
+                        Timber.tag(TAG).w(throwable, "failed deleting filter")
                         _state.value = State.DeletingFailed
                     }
                 )
@@ -184,7 +184,7 @@ class EditFilterViewModel @AssistedInject constructor(
                 }.none { it.isFailure }
             },
             { throwable ->
-                Log.w(TAG, "failed to create filter", throwable)
+                Timber.tag(TAG).w(throwable, "failed to create filter")
                 return false
             }
         )
@@ -221,7 +221,7 @@ class EditFilterViewModel @AssistedInject constructor(
                 return results.none { it.isFailure }
             },
             { throwable ->
-                Log.w(TAG, "failed to update filter", throwable)
+                Timber.tag(TAG).w(throwable, "failed to update filter")
                 return false
             }
         )

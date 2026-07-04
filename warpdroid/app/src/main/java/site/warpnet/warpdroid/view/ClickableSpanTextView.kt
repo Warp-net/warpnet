@@ -32,7 +32,6 @@ import android.text.Spanned
 import android.text.style.ClickableSpan
 import android.text.style.URLSpan
 import android.util.AttributeSet
-import android.util.Log
 import android.view.MotionEvent
 import android.view.MotionEvent.ACTION_CANCEL
 import android.view.MotionEvent.ACTION_DOWN
@@ -46,6 +45,7 @@ import site.warpnet.warpdroid.R
 import java.lang.Float.max
 import java.lang.Float.min
 import kotlin.math.abs
+import timber.log.Timber
 
 /**
  * Displays text to the user with optional [ClickableSpan]s. Extends the touchable area of the spans
@@ -240,7 +240,7 @@ class ClickableSpanTextView @JvmOverloads constructor(
                 for (entry in spanRects) {
                     if (!entry.key.contains(x, y)) continue
                     clickedSpan = entry.value
-                    Log.v(TAG, "span click: ${(clickedSpan as URLSpan).url}")
+                    Timber.tag(TAG).v("span click: ${(clickedSpan as URLSpan).url}")
                     return super.onTouchEvent(event)
                 }
 
@@ -255,16 +255,13 @@ class ClickableSpanTextView @JvmOverloads constructor(
                         activeEntry = entry
                         continue
                     }
-                    Log.v(
-                        TAG,
-                        "Overlap: ${(entry.value as URLSpan).url} ${(activeEntry.value as URLSpan).url}"
-                    )
+                    Timber.tag(TAG).v("Overlap: ${(entry.value as URLSpan).url} ${(activeEntry.value as URLSpan).url}")
                     if (isClickOnFirst(entry.key, activeEntry.key, x, y)) {
                         activeEntry = entry
                     }
                 }
                 clickedSpan = activeEntry?.value
-                clickedSpan?.let { Log.v(TAG, "padding click: ${(clickedSpan as URLSpan).url}") }
+                clickedSpan?.let { Timber.tag(TAG).v("padding click: ${(clickedSpan as URLSpan).url}") }
                 return super.onTouchEvent(event)
             }
             ACTION_UP -> {
@@ -362,15 +359,15 @@ class ClickableSpanTextView @JvmOverloads constructor(
      * @return true if the click was closer to the first rectangle than the second
      */
     private fun isClickOnFirst(first: RectF, second: RectF, x: Float, y: Float): Boolean {
-        Log.v(TAG, "first: $first second: $second click: $x $y")
+        Timber.tag(TAG).v("first: $first second: $second click: $x $y")
         val (firstDiff, secondDiff) = if (first.top == second.top) {
-            Log.v(TAG, "left/right overlap")
+            Timber.tag(TAG).v("left/right overlap")
             Pair(abs(first.centerX() - x), abs(second.centerX() - x))
         } else {
-            Log.v(TAG, "top/bottom overlap")
+            Timber.tag(TAG).v("top/bottom overlap")
             Pair(abs(first.centerY() - y), abs(second.centerY() - y))
         }
-        Log.d(TAG, "firstDiff: $firstDiff secondDiff: $secondDiff")
+        Timber.tag(TAG).d("firstDiff: $firstDiff secondDiff: $secondDiff")
         return firstDiff < secondDiff
     }
 

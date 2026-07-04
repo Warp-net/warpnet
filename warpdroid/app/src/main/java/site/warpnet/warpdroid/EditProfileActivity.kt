@@ -18,7 +18,6 @@ package site.warpnet.warpdroid
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -60,6 +59,7 @@ import site.warpnet.warpdroid.viewmodel.ProfileDataInUi
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @AndroidEntryPoint
 class EditProfileActivity : BaseActivity() {
@@ -369,7 +369,7 @@ class EditProfileActivity : BaseActivity() {
     }
 
     private fun onPickFailure(throwable: Throwable?) {
-        Log.w("EditProfileActivity", "failed to pick media", throwable)
+        Timber.tag("EditProfileActivity").w(throwable, "failed to pick media")
         Snackbar.make(
             binding.avatarButton,
             R.string.error_media_upload_sending,
