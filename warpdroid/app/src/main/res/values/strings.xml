@@ -423,6 +423,10 @@
     <string name="notification_report_description">Notifications about moderation reports</string>
     <string name="notification_listenable_worker_name">Background activity</string>
     <string name="notification_listenable_worker_description">Notifications when Warpnet is working in the background</string>
+    <string name="notification_sync_service_channel_name">Push service</string>
+    <string name="notification_sync_service_channel_description">Keeps the connection to your node alive so you receive notifications</string>
+    <string name="notification_sync_service_title">Warpnet is running</string>
+    <string name="notification_sync_service_text">Watching for new notifications</string>
     <string name="notification_unknown_name">Unknown</string>
     <string name="notification_unknown_description">Unknown notification type</string>
 

@@ -8,6 +8,12 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.VIBRATE" /> <!-- For notifications -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Briar-style always-on push service that keeps the peer-to-peer
+         connection to the paired node alive to deliver notifications. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Restart the push service after a reboot so notifications keep arriving
+         without opening the app first. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission
         android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         tools:ignore="BatteryLife" />
@@ -161,6 +167,27 @@
         <service android:name=".service.SendTweetService"
             android:foregroundServiceType="shortService"
             android:exported="false" />
+
+        <!-- Briar-style push: keeps the libp2p connection to the paired node
+             alive in the background and polls for new notifications. -->
+        <service
+            android:name=".service.WarpnetNotificationService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the peer-to-peer connection to the paired Warpnet node alive to deliver push notifications, as there is no cloud push gateway." />
+        </service>
+
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

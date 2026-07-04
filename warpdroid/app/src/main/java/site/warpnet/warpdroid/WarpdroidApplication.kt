@@ -28,6 +28,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
+import site.warpnet.warpdroid.service.WarpnetNotificationService
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.NEW_INSTALL_SCHEMA_VERSION
 import site.warpnet.warpdroid.settings.PrefKeys
@@ -197,6 +198,14 @@ class WarpdroidApplication :
                 }
 
                 override fun onStop(owner: LifecycleOwner) {
+                    // Briar-style push: when the foreground push service is
+                    // running, keep the libp2p host connected in the background
+                    // so notifications keep arriving. Otherwise pause to let the
+                    // radio sleep.
+                    if (WarpnetNotificationService.isRunning) {
+                        Timber.tag(TAG).i("app backgrounded — push service active, keeping libp2p host alive")
+                        return
+                    }
                     Timber.tag(TAG).i("app backgrounded — pausing libp2p host")
                     notificationHelper.stopOpportunisticRefresh()
                     transportScope.launch {

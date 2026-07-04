@@ -58,6 +58,7 @@ import site.warpnet.warpdroid.entity.RelationshipSeveranceEvent
 import site.warpnet.warpdroid.entity.visibleNotificationTypes
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.receiver.SendTweetBroadcastReceiver
+import site.warpnet.warpdroid.service.WarpnetNotificationService
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.unicodeWrap
 import site.warpnet.warpdroid.worker.NotificationWorker
@@ -87,6 +88,7 @@ class NotificationHelper @Inject constructor(
 
     init {
         createWorkerNotificationChannel()
+        createSyncServiceNotificationChannel()
     }
 
     fun areNotificationsEnabledBySystem(): Boolean {
@@ -111,11 +113,18 @@ class NotificationHelper @Inject constructor(
     }
 
     suspend fun setupNotifications(activity: Activity) {
-        // Warpnet uses pull-only notifications (no push gateway).
+        // Warpnet has no cloud push gateway (no FCM); notifications are
+        // delivered Briar-style by an always-on foreground service that keeps
+        // the connection to the paired node alive and polls for new events.
         enablePullNotifications()
     }
 
     fun enablePullNotifications() {
+        // Briar-style push: keep the libp2p connection alive in the background
+        // and deliver notifications in near-real time via a foreground service.
+        runCatching { WarpnetNotificationService.start(context) }
+            .onFailure { Timber.tag(TAG).w(it, "could not start push service") }
+
         val workRequest: PeriodicWorkRequest = PeriodicWorkRequest.Builder(
             NotificationWorker::class.java,
             PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS,
@@ -246,6 +255,7 @@ class NotificationHelper @Inject constructor(
 
     fun disablePullNotifications() {
         workManager.cancelUniqueWork(NOTIFICATION_PULL_NAME)
+        WarpnetNotificationService.stop(context)
         Timber.tag(TAG).d("Disabled pull checks.")
     }
 
@@ -483,6 +493,30 @@ class NotificationHelper @Inject constructor(
             .build()
     }
 
+    /**
+     * The persistent "Warpnet is running" notification shown while the
+     * Briar-style push service ([site.warpnet.warpdroid.service.WarpnetNotificationService])
+     * holds the connection open. Tapping it opens the app.
+     */
+    fun createSyncServiceNotification(): android.app.Notification {
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            pendingIntentFlags(false),
+        )
+        return NotificationCompat.Builder(context, CHANNEL_SYNC_SERVICE)
+            .setContentTitle(context.getString(R.string.notification_sync_service_title))
+            .setContentText(context.getString(R.string.notification_sync_service_text))
+            .setSmallIcon(R.drawable.warpdroid_notification_icon)
+            .setContentIntent(contentIntent)
+            .setColor(context.getColor(R.color.notification_color))
+            .setOngoing(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .build()
+    }
+
     private fun getChannelId(account: AccountEntity, type: Notification.Type): String? {
         return NotificationChannelData.entries.find { data ->
             data.notificationTypes.contains(type)
@@ -600,6 +634,24 @@ class NotificationHelper @Inject constructor(
         )
 
         channel.description = context.getString(R.string.notification_listenable_worker_description)
+        channel.enableLights(false)
+        channel.enableVibration(false)
+        channel.setShowBadge(false)
+
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    private fun createSyncServiceNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
+
+        val channel = NotificationChannel(
+            CHANNEL_SYNC_SERVICE,
+            context.getString(R.string.notification_sync_service_channel_name),
+            NotificationManager.IMPORTANCE_LOW,
+        )
+        channel.description = context.getString(R.string.notification_sync_service_channel_description)
         channel.enableLights(false)
         channel.enableVibration(false)
         channel.setShowBadge(false)
@@ -782,9 +834,11 @@ class NotificationHelper @Inject constructor(
         const val KEY_VISIBILITY: String = "KEY_VISIBILITY"
         const val NOTIFICATION_ID_FETCH_NOTIFICATION: Int = 0
         const val NOTIFICATION_ID_PRUNE_CACHE: Int = 1
+        const val NOTIFICATION_ID_SYNC_SERVICE: Int = 2
         const val REPLY_ACTION: String = "REPLY_ACTION"
 
         private const val CHANNEL_BACKGROUND_TASKS: String = "CHANNEL_BACKGROUND_TASKS"
+        private const val CHANNEL_SYNC_SERVICE: String = "CHANNEL_SYNC_SERVICE"
         private const val EXTRA_ACCOUNT_NAME = BuildConfig.APPLICATION_ID + ".notification.extra.account_name"
         private const val EXTRA_NOTIFICATION_TYPE = BuildConfig.APPLICATION_ID + ".notification.extra.notification_type"
         private const val GROUP_SUMMARY_TAG = BuildConfig.APPLICATION_ID + ".notification.group_summary"
