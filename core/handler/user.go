@@ -122,7 +122,7 @@ func StreamGetUserHandler(
 
 		otherUser, err := repo.Get(ev.UserId)
 		if err != nil {
-			log.Warnf("get user: other user: %v", err)
+			log.Warnf("get other user from db: %v - %s", err, ev.UserId)
 			otherUser = updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
 			if otherUser.Username == "" {
 				return nil, fmt.Errorf("get user: other user %w", err)
@@ -156,7 +156,7 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 		return user
 	}
 	if err != nil {
-		log.Errorf("stream: get other user: %v", err)
+		log.Errorf("get other user from stream: %v %s %s", err, user.Id, user.Username)
 		return user
 	}
 
@@ -165,7 +165,10 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 		if strings.Contains(possibleError.Message, "user not found") {
 			user.IsOffline = true
 		} else {
-			log.Errorf("stream: unmarshal other user error response: %v", possibleError)
+			log.Errorf(
+				"stream: unmarshal other user error response: %v %s %s",
+				possibleError, user.Id, user.Username,
+			)
 		}
 		return user
 	}
@@ -271,7 +274,7 @@ func refreshUsers(
 
 	var usersResp event.UsersResponse
 	if err := json.Unmarshal(usersDataResp, &usersResp); err != nil {
-		log.Errorf("ummarshal users response:%v %s", err, usersDataResp)
+		log.Errorf("ummarshal users response: %v %s", err, usersDataResp)
 		return
 	}
 
@@ -307,7 +310,7 @@ func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) w
 
 		updatedUser, err := userRepo.Update(owner.UserId, ev)
 		if err != nil {
-			log.Errorln("failed to update user data", err)
+			log.Errorln("failed to update profile data", err)
 			return nil, err
 		}
 		return updatedUser, nil
