@@ -19,6 +19,7 @@ require (
 	github.com/ipfs/go-datastore v0.9.1
 	github.com/ipfs/go-ds-crdt v0.6.9-0.20260313103731-d3eeb3bd5c12
 	github.com/ipfs/go-ipld-format v0.6.3
+	github.com/ipfs/go-log/v2 v2.9.1
 	github.com/json-iterator/go v1.1.12
 	github.com/libp2p/go-libp2p v0.48.0
 	github.com/libp2p/go-libp2p-kad-dht v0.39.0
@@ -118,7 +119,6 @@ require (
 	github.com/ipfs/go-dsqueue v0.2.0 // indirect
 	github.com/ipfs/go-ipfs-pq v0.0.4 // indirect
 	github.com/ipfs/go-ipld-legacy v0.2.2 // indirect
-	github.com/ipfs/go-log/v2 v2.9.1 // indirect
 	github.com/ipfs/go-metrics-interface v0.3.0 // indirect
 	github.com/ipfs/go-peertaskqueue v0.8.3 // indirect
 	github.com/ipld/go-codec-dagpb v1.7.0 // indirect
