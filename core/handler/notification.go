@@ -51,6 +51,10 @@ type NotifierMarker interface {
 	MarkRead(userId, notificationId string) error
 }
 
+type NotifierAllMarker interface {
+	MarkAllRead(userId string) error
+}
+
 type NotifierAuthStorer interface {
 	GetOwner() domain.Owner
 }
@@ -163,6 +167,24 @@ func StreamMarkNotificationReadHandler(
 		}
 		owner := authRepo.GetOwner()
 		if err := repo.MarkRead(owner.UserId, ev.NotificationId); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
+	}
+}
+
+// StreamMarkAllNotificationsReadHandler flips every unread notification for
+// the owner in one round-trip. The UI's "Mark all as read" (and the
+// open-the-notifications-view auto-read) used to page through
+// PRIVATE_GET_NOTIFICATIONS and post per-id reads, which only ever covered
+// the first page — unread items beyond it kept the badge alive forever.
+func StreamMarkAllNotificationsReadHandler(
+	repo NotifierAllMarker,
+	authRepo NotifierAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(_ []byte, s warpnet.WarpStream) (any, error) {
+		owner := authRepo.GetOwner()
+		if err := repo.MarkAllRead(owner.UserId); err != nil {
 			return nil, err
 		}
 		return event.Accepted, nil

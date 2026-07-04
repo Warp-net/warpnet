@@ -5,6 +5,10 @@ vi.mock('@/service/service', () => ({
   warpnetService: {
     getOwnerProfile: vi.fn(),
     getNotifications: vi.fn(),
+    getProfile: vi.fn(),
+    markNotificationRead: vi.fn(),
+    markAllNotificationsRead: vi.fn(),
+    subscribeNotifications: vi.fn(),
   },
 }));
 
@@ -48,6 +52,10 @@ beforeEach(() => {
     unread_count: 0,
     notifications: [],
   });
+  warpnetService.getProfile.mockResolvedValue({ user_id: 'alice', locked: false });
+  warpnetService.markNotificationRead.mockResolvedValue({});
+  warpnetService.markAllNotificationsRead.mockResolvedValue({});
+  warpnetService.subscribeNotifications.mockReturnValue(() => {});
 });
 
 describe('Notifications.vue', () => {
@@ -169,6 +177,39 @@ describe('Notifications.vue', () => {
 
     expect(await screen.findByText(/No mentions yet/i)).toBeInTheDocument();
     expect(screen.queryByText('bob liked your tweet')).not.toBeInTheDocument();
+  });
+
+  it('marks everything read on open with a single node-side call', async () => {
+    renderNotifications();
+    await screen.findByRole('heading', { name: 'Notifications' });
+
+    await waitFor(() => {
+      expect(warpnetService.markAllNotificationsRead).toHaveBeenCalled();
+    });
+    // The old per-item loop only covered the first page.
+    expect(warpnetService.markNotificationRead).not.toHaveBeenCalled();
+  });
+
+  it('the settings menu "Mark all as read" calls the node-side read-all', async () => {
+    renderNotifications();
+    await screen.findByRole('heading', { name: 'Notifications' });
+    // Let the on-open auto-read from created() settle before isolating
+    // the button's own call.
+    await waitFor(() => {
+      expect(warpnetService.markAllNotificationsRead).toHaveBeenCalled();
+    });
+    warpnetService.markAllNotificationsRead.mockClear();
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Notification settings' })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Mark all as read' })
+    );
+
+    await waitFor(() => {
+      expect(warpnetService.markAllNotificationsRead).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('still renders the header when the backend fails (error state)', async () => {

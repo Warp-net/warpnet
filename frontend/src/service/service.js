@@ -34,6 +34,7 @@ export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
 export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
+export const PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -1124,6 +1125,30 @@ export const warpnetService = {
             for (const cb of notificationSubscribers) {
                 cb(latestNotifications);
             }
+        }
+        return resp;
+    },
+
+    // markAllNotificationsRead flips every unread notification on the node
+    // in one request. Marking page-by-page from the client only ever
+    // covered the first page, so unread items beyond it kept the badge
+    // alive forever.
+    async markAllNotificationsRead() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_NOTIFICATIONS_READ,
+            body: {},
+        });
+
+        // Optimistic local update so the SideNav badge clears without
+        // waiting for the next poll.
+        latestNotifications = {
+            unread_count: 0,
+            notifications: latestNotifications.notifications.map(
+                n => n && !n.is_read ? { ...n, is_read: true } : n
+            ),
+        };
+        for (const cb of notificationSubscribers) {
+            cb(latestNotifications);
         }
         return resp;
     },

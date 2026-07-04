@@ -1054,6 +1054,7 @@ var protocolsWithoutResponseDTO = map[string]string{
 	"PRIVATE_POST_BOOKMARK":                 "ack-only: handler returns event.Accepted",
 	"PRIVATE_POST_UNBOOKMARK":               "ack-only: handler returns event.Accepted",
 	"PRIVATE_POST_NOTIFICATION_READ":        "ack-only: handler returns event.Accepted",
+	"PRIVATE_POST_NOTIFICATIONS_READ":       "ack-only: handler returns event.Accepted",
 	"PRIVATE_DELETE_CHAT":                   "ack-only: handler returns event.Accepted",
 	"PRIVATE_DELETE_MESSAGE":                "ack-only: handler returns event.Accepted",
 	"PRIVATE_DELETE_FILTER":                 "ack-only: handler returns event.Accepted",
