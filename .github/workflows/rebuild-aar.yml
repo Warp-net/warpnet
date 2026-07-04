@@ -1,0 +1,45 @@
+name: Rebuild warpdroid AAR
+
+# The gomobile-built warpnet.aar is committed to the repository and is NOT
+# rebuilt by CI (see warpdroid docs). This manually dispatched workflow
+# regenerates it from warpdroid/node and commits the result back to the
+# branch it was dispatched on, for contributors without a local Android
+# NDK + gomobile toolchain.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build AAR
+        working-directory: warpdroid/node
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          ./build-native.sh
+
+      - name: Commit regenerated AAR
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add warpdroid/warpnet-transport/libs/warpnet.aar warpdroid/warpnet-transport/libs/warpnet-sources.jar
+          if git diff --cached --quiet; then
+            echo "AAR unchanged, nothing to commit."
+            exit 0
+          fi
+          git commit -m "warpdroid: regenerate warpnet.aar"
+          git push

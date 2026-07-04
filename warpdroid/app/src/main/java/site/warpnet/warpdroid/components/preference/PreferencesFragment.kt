@@ -15,12 +15,14 @@
 
 package site.warpnet.warpdroid.components.preference
 
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.annotation.DrawableRes
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.components.logviewer.LogViewerActivity
 import site.warpnet.warpdroid.components.systemnotifications.NotificationChannelData
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.settings.AppTheme
@@ -295,6 +297,17 @@ class PreferencesFragment : BasePreferencesFragment() {
                     setTitle(R.string.pref_title_http_proxy_settings)
                     fragment = ProxyPreferencesFragment::class.qualifiedName
                     summaryProvider = ProxyPreferencesFragment.SummaryProvider
+                }
+            }
+
+            preferenceCategory(R.string.pref_title_developer_tools) {
+                preference {
+                    setTitle(R.string.pref_title_logs)
+                    icon = icon(R.drawable.ic_list_alt_24dp)
+                    setOnPreferenceClickListener {
+                        startActivity(Intent(requireContext(), LogViewerActivity::class.java))
+                        true
+                    }
                 }
             }
         }

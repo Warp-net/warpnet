@@ -215,6 +215,8 @@ dependencies {
 
     implementation libs.sparkbutton.compose
 
+    implementation libs.timber
+
     implementation libs.touchimageview
 
     implementation libs.bundles.material.drawer

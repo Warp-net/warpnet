@@ -46,6 +46,7 @@ class WarpnetClient(
     private val moshi: Moshi,
     private val signer: EnvelopeSigner,
     private val binding: WarpnetBinding = DefaultBinding,
+    private val nodeLogSink: NodeLogSink? = null,
 ) {
     private val mutex = Mutex()
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Uninitialised)
@@ -74,8 +75,21 @@ class WarpnetClient(
                 _state.value = ConnectionState.Failed(failure)
                 throw failure
             }
+            // Attach the log sink right after the host exists and before
+            // connect() so bootstrap/dial logs are already captured. With a
+            // stale warpnet.aar this is a no-op via the interface default.
+            nodeLogSink?.let(binding::setLogSink)
             _state.value = ConnectionState.Disconnected
         }
+    }
+
+    /**
+     * Set the minimum level ([NodeLogSink.LEVEL_DEBUG]..[NodeLogSink.LEVEL_ERROR])
+     * the Go node forwards to the registered [NodeLogSink]. Default on the Go
+     * side is info, so libp2p debug chatter doesn't flood the JNI boundary.
+     */
+    suspend fun setNodeLogMinLevel(level: Int) = withContext(Dispatchers.IO) {
+        binding.setLogSinkMinLevel(level)
     }
 
     /**
@@ -376,6 +390,21 @@ interface WarpnetBinding {
      * fresh when the fat node moves between networks.
      */
     fun refreshPeerAddrs(addrs: String): String
+
+    /**
+     * Register [sink] as an additional destination for the Go node's logs
+     * (see warpdroid/node/logsink.go). Logcat output is unaffected. The
+     * default is a no-op so fakes and an app compiled against an older
+     * warpnet.aar keep building; the real forwarding lives in
+     * [DefaultBinding].
+     */
+    fun setLogSink(sink: NodeLogSink?) {}
+
+    /**
+     * Minimum level (0=debug..3=error) the Go side forwards into the sink.
+     * Go defaults to info. No-op default for the same reason as [setLogSink].
+     */
+    fun setLogSinkMinLevel(level: Int) {}
 }
 
 /**
@@ -418,4 +447,19 @@ object DefaultBinding : WarpnetBinding {
 
     override fun refreshPeerAddrs(addrs: String): String =
         node.Node.refreshPeerAddrs(addrs)
+
+    override fun setLogSink(sink: NodeLogSink?) {
+        if (sink == null) {
+            node.Node.setLogSink(null)
+            return
+        }
+        // gomobile maps Go int to Java long and calls write() from Go
+        // goroutines; the Go side already recover()s a throwing sink.
+        node.Node.setLogSink { level, component, msg ->
+            sink.write(level.toInt(), component.orEmpty(), msg.orEmpty())
+        }
+    }
+
+    override fun setLogSinkMinLevel(level: Int) =
+        node.Node.setLogSinkMinLevel(level.toLong())
 }

@@ -48,7 +48,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.conscrypt.Conscrypt
 import site.warpnet.transport.WarpnetClient
+import site.warpnet.warpdroid.components.logviewer.LogBuffer
+import site.warpnet.warpdroid.components.logviewer.LogBufferTree
 import site.warpnet.warpdroid.worker.PairRefreshWorker
+import timber.log.Timber
 
 @HiltAndroidApp
 class WarpdroidApplication :
@@ -75,6 +78,9 @@ class WarpdroidApplication :
 
     @Inject
     lateinit var notificationHelper: NotificationHelper
+
+    @Inject
+    lateinit var logBuffer: LogBuffer
 
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -106,6 +112,14 @@ class WarpdroidApplication :
             )
         }
         super.onCreate()
+
+        // Mirror Kotlin-side Timber logs into the in-memory buffer behind
+        // Preferences → Developer tools → Logs; the Go node feeds the same
+        // buffer through the gomobile LogSink (see di/WarpnetModule).
+        Timber.plant(LogBufferTree(logBuffer))
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        }
 
         Security.insertProviderAt(Conscrypt.newProvider(), 1)
 
@@ -170,6 +184,7 @@ class WarpdroidApplication :
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
+                    Timber.tag(TAG).i("app foregrounded — resuming libp2p host")
                     transportScope.launch {
                         warpnetClient.resume()
                         notificationHelper.fetchNotificationsNow()
@@ -183,6 +198,7 @@ class WarpdroidApplication :
                 }
 
                 override fun onStop(owner: LifecycleOwner) {
+                    Timber.tag(TAG).i("app backgrounded — pausing libp2p host")
                     notificationHelper.stopOpportunisticRefresh()
                     transportScope.launch {
                         connectionMonitor.stop()

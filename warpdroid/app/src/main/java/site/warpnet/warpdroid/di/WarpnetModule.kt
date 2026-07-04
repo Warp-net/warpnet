@@ -6,6 +6,7 @@
 package site.warpnet.warpdroid.di
 
 import android.content.Context
+import site.warpnet.warpdroid.components.logviewer.LogBuffer
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Notification
@@ -61,8 +62,8 @@ object WarpnetModule {
 
     @Provides
     @Singleton
-    fun providesWarpnetClient(moshi: Moshi): WarpnetClient =
-        WarpnetTransport.createClient(moshi)
+    fun providesWarpnetClient(moshi: Moshi, logBuffer: LogBuffer): WarpnetClient =
+        WarpnetTransport.createClient(moshi, nodeLogSink = logBuffer.goSink)
 
     @Provides
     @Singleton
