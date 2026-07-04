@@ -423,6 +423,18 @@
     <string name="notification_report_description">Notifications about moderation reports</string>
     <string name="notification_listenable_worker_name">Background activity</string>
     <string name="notification_listenable_worker_description">Notifications when Warpnet is working in the background</string>
+    <string name="notification_sync_service_channel_name">Push service</string>
+    <string name="notification_sync_service_channel_description">Keeps the connection to your node alive so you receive notifications</string>
+    <string name="notification_sync_service_title">Warpnet is running</string>
+    <string name="notification_sync_service_text">Watching for new notifications</string>
+    <string name="dont_kill_me_title">Keep Warpnet running</string>
+    <string name="dont_kill_me_intro">Your device may stop Warpnet in the background, which prevents notifications from arriving. Apply the settings below so Warpnet can keep receiving messages.</string>
+    <string name="dont_kill_me_open_settings">Open settings</string>
+    <string name="dont_kill_me_done">Done</string>
+    <string name="dont_kill_me_huawei_protected">Huawei: add Warpnet to the list of protected apps so it isn\'t closed to save power.</string>
+    <string name="dont_kill_me_huawei_app_launch">Huawei: set Warpnet\'s app launch to “Manage manually” and allow auto-launch and running in the background.</string>
+    <string name="dont_kill_me_xiaomi_recents">Xiaomi / MIUI: open Recent apps, swipe down on Warpnet and tap the lock icon so it isn\'t cleared from memory.</string>
+    <string name="dont_kill_me_xiaomi_lock">Xiaomi / MIUI: enable autostart / “Lock apps” for Warpnet in Security settings.</string>
     <string name="notification_unknown_name">Unknown</string>
     <string name="notification_unknown_description">Unknown notification type</string>
 

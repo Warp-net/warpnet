@@ -61,6 +61,8 @@ object PrefKeys {
 
     const val ASKED_IGNORE_BATTERY_OPTIMIZATIONS = "askedIgnoreBatteryOptimizations"
 
+    const val ASKED_DONT_KILL_ME = "askedDontKillMe"
+
     const val APP_THEME = "appTheme"
     const val LANGUAGE = "language"
     const val STATUS_TEXT_SIZE = "statusTextSize"
