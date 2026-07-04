@@ -134,6 +134,7 @@
                 android:resource="@xml/searchable" />
         </activity>
         <activity android:name=".LicenseActivity" />
+        <activity android:name=".components.logviewer.LogViewerActivity" />
         <activity android:name=".components.filters.FiltersActivity" />
         <activity android:name="site.warpnet.warpdroid.components.filters.EditFilterActivity"
             android:windowSoftInputMode="adjustResize" />

@@ -101,7 +101,7 @@ func (c *clientNode) flushEvents() {
 	c.events = nil
 	c.eventsMu.Unlock()
 	for _, line := range events {
-		fmt.Println(line)
+		logf(LogLevelInfo, "%s", line)
 	}
 }
 
@@ -217,7 +217,7 @@ func newClient(
 
 	for _, addr := range bootstrapNodes {
 		if err := cn.connect(addr); err != nil {
-			fmt.Printf("failed to connect to bootstrap node %s: %v\n", addr, err)
+			logf(LogLevelWarn, "failed to connect to bootstrap node %s: %v", addr, err)
 			continue
 		}
 	}
@@ -346,13 +346,13 @@ func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
 
 func flush(rw *bufio.ReadWriter) {
 	if err := rw.Flush(); err != nil {
-		fmt.Printf("stream: close write: %s", err)
+		logf(LogLevelWarn, "stream: flush: %s", err)
 	}
 }
 
 func closeWrite(s network.Stream) {
 	if err := s.CloseWrite(); err != nil {
-		fmt.Printf("stream: close write: %s", err)
+		logf(LogLevelWarn, "stream: close write: %s", err)
 	}
 }
 
