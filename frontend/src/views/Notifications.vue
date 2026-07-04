@@ -306,6 +306,10 @@ export default {
       this.settingsOpen = false;
       await this.markAllRead();
     },
+    async onMarkAllRead() {
+      this.settingsOpen = false;
+      await this.markAllRead();
+    },
     async hydrateRequests(ids) {
       return Promise.all(
         (ids || []).map(async (id) => {

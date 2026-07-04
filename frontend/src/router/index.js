@@ -137,6 +137,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/likes",
+    name: "Likes",
+    component: () =>
+      import(/* webpackChunkName: "likes" */ "../views/Likes.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/settings",
     name: "Settings",
     component: () =>
