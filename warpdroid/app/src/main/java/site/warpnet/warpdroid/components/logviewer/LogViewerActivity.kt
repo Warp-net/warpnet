@@ -22,9 +22,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -161,7 +158,7 @@ private fun LogViewerScreen(
                 actions = {
                     IconButton(onClick = { autoscroll = !autoscroll }) {
                         Icon(
-                            Icons.Filled.KeyboardArrowDown,
+                            painterResource(R.drawable.ic_arrow_drop_down_24dp),
                             contentDescription = stringResource(R.string.log_autoscroll),
                             tint = if (autoscroll) {
                                 MaterialTheme.colorScheme.primary
@@ -171,7 +168,7 @@ private fun LogViewerScreen(
                         )
                     }
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = null)
+                        Icon(painterResource(R.drawable.ic_more_vert_24dp), contentDescription = null)
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(

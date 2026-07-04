@@ -448,18 +448,14 @@ object DefaultBinding : WarpnetBinding {
     override fun refreshPeerAddrs(addrs: String): String =
         node.Node.refreshPeerAddrs(addrs)
 
-    override fun setLogSink(sink: NodeLogSink?) {
-        if (sink == null) {
-            node.Node.setLogSink(null)
-            return
-        }
-        // gomobile maps Go int to Java long and calls write() from Go
-        // goroutines; the Go side already recover()s a throwing sink.
-        node.Node.setLogSink { level, component, msg ->
-            sink.write(level.toInt(), component.orEmpty(), msg.orEmpty())
-        }
-    }
-
-    override fun setLogSinkMinLevel(level: Int) =
-        node.Node.setLogSinkMinLevel(level.toLong())
+    // setLogSink / setLogSinkMinLevel intentionally keep the interface's
+    // no-op defaults: the committed warpnet.aar predates the Go-side
+    // LogSink API (same situation as connectedness() above). Once the
+    // binding is regenerated (warpdroid/node already exports LogSink,
+    // SetLogSink and SetLogSinkMinLevel), override them with
+    //   node.Node.setLogSink { level, component, msg ->
+    //       sink.write(level.toInt(), component.orEmpty(), msg.orEmpty())
+    //   }
+    // and node.Node.setLogSinkMinLevel(level.toLong()). Until then only
+    // Kotlin-side logs reach the Logs screen.
 }
