@@ -161,9 +161,12 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 
 // notifyReporter re-sends the verdict to the reporter's node on the same
 // route as the broadcast, but with ReporterID set so it notifies them.
-// Best-effort: a delivery failure must not abort moderation.
+// Unlike the followers broadcast (FAIL-only, shadow-ban), the reporter is
+// told about both outcomes — silence on an OK verdict reads as "the report
+// was lost". Best-effort: a delivery failure must not abort moderation.
 func (m *Moderator) notifyReporter(
 	rep event.ReportEvent,
+	verdict domain.ModerationResult,
 	reason *string,
 	objectID *domain.ID,
 	targetUserID domain.ID,
@@ -173,7 +176,7 @@ func (m *Moderator) notifyReporter(
 	}
 	result := event.ModerationResultEvent{
 		Type:        rep.Type,
-		Result:      domain.FAIL,
+		Result:      verdict,
 		Reason:      reason,
 		Model:       domain.LLAMAGuard3,
 		UserID:      targetUserID,
@@ -233,7 +236,9 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 	}
 	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
 
-	// Shadow-ban: only bad verdicts go on the wire.
+	m.notifyReporter(ev, domain.ModerationResult(ok), &reason, &tweet.Id, tweet.UserId)
+
+	// Shadow-ban: only bad verdicts go on the followers broadcast.
 	if ok {
 		return nil
 	}
@@ -245,7 +250,6 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
-	m.notifyReporter(ev, &reason, &tweet.Id, tweet.UserId)
 	return nil
 }
 
@@ -286,7 +290,9 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 	}
 	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
 
-	// Shadow-ban: only bad verdicts go on the wire.
+	m.notifyReporter(ev, domain.ModerationResult(ok), &reason, nil, user.Id)
+
+	// Shadow-ban: only bad verdicts go on the followers broadcast.
 	if ok {
 		return nil
 	}
@@ -298,7 +304,6 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 		Reason:      &reason,
 		TimeAt:      time.Now(),
 	})
-	m.notifyReporter(ev, &reason, nil, user.Id)
 	return nil
 }
 

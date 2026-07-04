@@ -99,6 +99,16 @@ func StreamModerationResultHandler(
 		// Before the switch, which early-returns for users not cached locally.
 		notifyReporter(notifier, authRepo, ev)
 
+		// An OK verdict only ever arrives on the reporter-bound delivery
+		// (the followers broadcast carries FAIL verdicts exclusively) and
+		// must not touch local state: without this guard the reporter's
+		// own copy of the reported tweet would get a moderation sidecar
+		// and fall out of their timeline even though the moderator
+		// cleared it.
+		if bool(ev.Result) {
+			return event.Accepted, nil
+		}
+
 		switch ev.Type {
 		case domain.ModerationTweetType:
 			if ev.ObjectID == nil {
@@ -192,6 +202,9 @@ func reportResultText(ev event.ModerationResultEvent) string {
 		subject = "tweet"
 	case domain.ModerationUserType:
 		subject = "profile"
+	}
+	if bool(ev.Result) {
+		return fmt.Sprintf("The %s you reported was reviewed: no violation found", subject)
 	}
 	if ev.Reason != nil && *ev.Reason != "" {
 		return fmt.Sprintf("The %s you reported was moderated: %s", subject, *ev.Reason)

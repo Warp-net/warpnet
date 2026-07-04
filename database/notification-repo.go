@@ -117,7 +117,40 @@ func (repo *NotificationsRepo) MarkRead(userId, notificationId string) error {
 	if err != nil {
 		return err
 	}
+	return repo.markKeyRead(key)
+}
 
+// MarkAllRead flips IsRead to true for every unread notification the user
+// has. Unread keys are collected in a read-only txn (no conflict tracking),
+// then each is flipped with the same targeted-write pattern MarkRead uses —
+// one small txn per key — so concurrent single MarkRead calls can't
+// commit-conflict a whole page. IsRead is monotonic, so racing writers
+// converge on the same state. Rows expired by TTL between the scan and the
+// write are skipped.
+func (repo *NotificationsRepo) MarkAllRead(userId string) error {
+	if userId == "" {
+		return local_store.DBError("missing user id")
+	}
+
+	keys, err := repo.findUnreadKeys(userId)
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if err := repo.markKeyRead(key); err != nil {
+			if local_store.IsNotFoundError(err) {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// markKeyRead sets IsRead on the row at key in a txn whose read and write
+// sets are both just {key}, keeping it disjoint from concurrent writers on
+// other keys (see MarkRead).
+func (repo *NotificationsRepo) markKeyRead(key local_store.DatabaseKey) error {
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
@@ -144,6 +177,46 @@ func (repo *NotificationsRepo) MarkRead(userId, notificationId string) error {
 		return err
 	}
 	return txn.Commit()
+}
+
+// findUnreadKeys walks the user's prefix in a read-only txn and returns the
+// storage keys of every unread notification.
+func (repo *NotificationsRepo) findUnreadKeys(userId string) ([]local_store.DatabaseKey, error) {
+	prefix := local_store.NewPrefixBuilder(NotificationsRepoName).
+		AddRootID(userId).
+		Build()
+
+	txn, err := repo.db.NewReadTxn()
+	if err != nil {
+		return nil, err
+	}
+	defer txn.Rollback()
+
+	var (
+		keys   []local_store.DatabaseKey
+		cursor string
+		page   = unreadCountPageSize
+	)
+	for {
+		items, next, lerr := txn.List(prefix, &page, &cursor)
+		if lerr != nil {
+			return nil, lerr
+		}
+		for _, item := range items {
+			var not domain.Notification
+			if uerr := json.Unmarshal(item.Value, &not); uerr != nil {
+				return nil, uerr
+			}
+			if !not.IsRead {
+				keys = append(keys, local_store.DatabaseKey(item.Key))
+			}
+		}
+		if next == "" || next == local_store.EndCursor || next == cursor || len(items) == 0 {
+			break
+		}
+		cursor = next
+	}
+	return keys, nil
 }
 
 // findNotificationKey scans the per-user prefix in a discardable txn and

@@ -577,6 +577,15 @@ class WarpnetRepository @Inject constructor(
         )
     }
 
+    /**
+     * Mark every notification as read on the fat node in one round-trip.
+     * The fat node resolves the recipient from the paired session; the
+     * request body is empty.
+     */
+    suspend fun markAllNotificationsRead() {
+        client.request(ProtocolIds.PRIVATE_POST_NOTIFICATIONS_READ, "{}")
+    }
+
     // -----------------------------------------------------------------
     // Filters (local keyword/regex hiding rules)
     // -----------------------------------------------------------------

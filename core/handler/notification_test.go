@@ -343,3 +343,105 @@ func TestStreamGetNotificationHandler(t *testing.T) {
 		}
 	})
 }
+
+type stubNotificationMarker struct {
+	markReadFn    func(userId, notificationId string) error
+	markAllReadFn func(userId string) error
+}
+
+func (s stubNotificationMarker) MarkRead(userId, notificationId string) error {
+	if s.markReadFn != nil {
+		return s.markReadFn(userId, notificationId)
+	}
+	return nil
+}
+
+func (s stubNotificationMarker) MarkAllRead(userId string) error {
+	if s.markAllReadFn != nil {
+		return s.markAllReadFn(userId)
+	}
+	return nil
+}
+
+func TestStreamMarkNotificationReadHandler(t *testing.T) {
+	owner := "owner-1"
+
+	t.Run("invalid payload", func(t *testing.T) {
+		h := StreamMarkNotificationReadHandler(stubNotificationMarker{}, stubAuth{owner: domain.Owner{UserId: owner}})
+		_, err := h([]byte("{"), nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("empty notification id", func(t *testing.T) {
+		h := StreamMarkNotificationReadHandler(stubNotificationMarker{}, stubAuth{owner: domain.Owner{UserId: owner}})
+		_, err := h(marshal(t, event.MarkNotificationReadEvent{}), nil)
+		if err == nil {
+			t.Fatal("expected error for empty notification id")
+		}
+	})
+
+	t.Run("repo error", func(t *testing.T) {
+		repoErr := errors.New("db failed")
+		h := StreamMarkNotificationReadHandler(stubNotificationMarker{markReadFn: func(userId, notificationId string) error {
+			return repoErr
+		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		_, err := h(marshal(t, event.MarkNotificationReadEvent{NotificationId: "n-1"}), nil)
+		if !errors.Is(err, repoErr) {
+			t.Fatalf("expected repo error: %v", err)
+		}
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		var capturedUser, capturedId string
+		h := StreamMarkNotificationReadHandler(stubNotificationMarker{markReadFn: func(userId, notificationId string) error {
+			capturedUser = userId
+			capturedId = notificationId
+			return nil
+		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		resp, err := h(marshal(t, event.MarkNotificationReadEvent{NotificationId: "n-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if capturedUser != owner || capturedId != "n-1" {
+			t.Fatalf("expected (%s, n-1), got (%s, %s)", owner, capturedUser, capturedId)
+		}
+	})
+}
+
+func TestStreamMarkAllNotificationsReadHandler(t *testing.T) {
+	owner := "owner-1"
+
+	t.Run("repo error", func(t *testing.T) {
+		repoErr := errors.New("db failed")
+		h := StreamMarkAllNotificationsReadHandler(stubNotificationMarker{markAllReadFn: func(userId string) error {
+			return repoErr
+		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		_, err := h([]byte("{}"), nil)
+		if !errors.Is(err, repoErr) {
+			t.Fatalf("expected repo error: %v", err)
+		}
+	})
+
+	t.Run("happy path resolves owner from auth", func(t *testing.T) {
+		var capturedUser string
+		h := StreamMarkAllNotificationsReadHandler(stubNotificationMarker{markAllReadFn: func(userId string) error {
+			capturedUser = userId
+			return nil
+		}}, stubAuth{owner: domain.Owner{UserId: owner}})
+		resp, err := h([]byte("{}"), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if capturedUser != owner {
+			t.Fatalf("expected owner %s, got %s", owner, capturedUser)
+		}
+	})
+}
