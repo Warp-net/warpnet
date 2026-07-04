@@ -18,7 +18,6 @@ package site.warpnet.warpdroid.viewmodel
 import android.app.Application
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -54,6 +53,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import timber.log.Timber
 
 private const val HEADER_FILE_NAME = "header.png"
 private const val AVATAR_FILE_NAME = "avatar.png"
@@ -184,7 +184,7 @@ class EditProfileViewModel @Inject constructor(
                     _saveData.value = Success()
                 },
                 { throwable ->
-                    Log.d(TAG, "failed updating profile", throwable)
+                    Timber.tag(TAG).d(throwable, "failed updating profile")
                     _saveData.value = Error(errorMessage = throwable.getServerErrorMessage())
                 }
             )

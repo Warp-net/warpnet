@@ -1,6 +1,5 @@
 package site.warpnet.warpdroid.components.systemnotifications
 
-import android.util.Log
 import androidx.annotation.WorkerThread
 import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.NewNotificationsEvent
@@ -10,6 +9,7 @@ import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.util.HttpHeaderLink
 import javax.inject.Inject
+import timber.log.Timber
 
 /** Models next/prev links from the "Links" header in an API response */
 data class Links(val next: String?, val prev: String?) {
@@ -61,7 +61,7 @@ class NotificationFetcher @Inject constructor(
 
                     notificationHelper.show(account, notifications)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error while fetching notifications", e)
+                    Timber.tag(TAG).e(e, "Error while fetching notifications")
                 }
             }
         }
@@ -81,7 +81,7 @@ class NotificationFetcher @Inject constructor(
             accountManager.updateAccount(account) { copy(notificationMarkerId = newCursor) }
         }
 
-        Log.d(TAG, "Got ${notifications.size} notifications for ${account.fullName}.")
+        Timber.tag(TAG).d("Got ${notifications.size} notifications for ${account.fullName}.")
         return notifications
     }
 

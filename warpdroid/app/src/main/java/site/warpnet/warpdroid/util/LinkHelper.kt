@@ -31,7 +31,6 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.ImageSpan
 import android.text.style.QuoteSpan
 import android.text.style.URLSpan
-import android.util.Log
 import android.view.MotionEvent
 import android.view.MotionEvent.ACTION_UP
 import android.view.View
@@ -51,6 +50,7 @@ import site.warpnet.warpdroid.interfaces.LinkListener
 import site.warpnet.warpdroid.settings.PrefKeys
 import java.net.URI
 import java.net.URISyntaxException
+import timber.log.Timber
 
 fun getDomain(urlString: String?): String {
     val host = urlString?.toUri()?.host
@@ -270,7 +270,7 @@ private fun openLinkInBrowser(uri: Uri?, context: Context) {
     try {
         context.startActivity(intent)
     } catch (e: ActivityNotFoundException) {
-        Log.w(TAG, "Activity was not found for intent, $intent", e)
+        Timber.tag(TAG).w(e, "Activity was not found for intent, $intent")
     }
 }
 
@@ -313,7 +313,7 @@ fun openLinkInCustomTab(uri: Uri, context: Context) {
     try {
         customTabsIntent.launchUrl(context, uri)
     } catch (e: ActivityNotFoundException) {
-        Log.w(TAG, "Activity was not found for intent $customTabsIntent", e)
+        Timber.tag(TAG).w(e, "Activity was not found for intent $customTabsIntent")
         openLinkInBrowser(uri, context)
     }
 }

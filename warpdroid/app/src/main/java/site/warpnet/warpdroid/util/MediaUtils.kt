@@ -22,13 +22,13 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import timber.log.Timber
 
 /**
  * Helper methods for obtaining and resizing media files
@@ -160,7 +160,7 @@ fun getImageOrientation(uri: Uri, contentResolver: ContentResolver): Int {
             inputStream.closeQuietly()
         }
     } catch (e: IOException) {
-        Log.w(TAG, e)
+        Timber.tag(TAG).w(e)
         return ExifInterface.ORIENTATION_UNDEFINED
     }
 }

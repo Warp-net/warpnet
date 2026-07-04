@@ -17,7 +17,6 @@ package site.warpnet.warpdroid.components.compose
 
 import android.net.Uri
 import android.os.Parcelable
-import android.util.Log
 import androidx.core.net.toUri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -58,6 +57,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.parcelize.Parcelize
+import timber.log.Timber
 
 @HiltViewModel(assistedFactory = ComposeViewModel.Factory::class)
 class ComposeViewModel @AssistedInject constructor(
@@ -486,7 +486,7 @@ class ComposeViewModel @AssistedInject constructor(
                     .fold({ accounts ->
                         accounts.map { AutocompleteResult.AccountResult(it) }
                     }, { e ->
-                        Log.e(TAG, "Autocomplete search for $token failed.", e)
+                        Timber.tag(TAG).e(e, "Autocomplete search for $token failed.")
                         emptyList()
                     })
             }
@@ -499,7 +499,7 @@ class ComposeViewModel @AssistedInject constructor(
                     .fold({ searchResult ->
                         searchResult.hashtags.map { AutocompleteResult.HashtagResult(it.name) }
                     }, { e ->
-                        Log.e(TAG, "Autocomplete search for $token failed.", e)
+                        Timber.tag(TAG).e(e, "Autocomplete search for $token failed.")
                         emptyList()
                     })
             }
@@ -507,7 +507,7 @@ class ComposeViewModel @AssistedInject constructor(
             ':' -> emptyList()
 
             else -> {
-                Log.w(TAG, "Unexpected autocompletion token: $token")
+                Timber.tag(TAG).w("Unexpected autocompletion token: $token")
                 emptyList()
             }
         }

@@ -53,6 +53,7 @@ import site.warpnet.transport.dto.ViewEvent
 import site.warpnet.transport.dto.ViewsCountResponse
 import site.warpnet.transport.dto.WarpnetTweet
 import site.warpnet.transport.dto.WarpnetUser
+import timber.log.Timber
 
 /**
  * The only entry point from view models into the Warpnet transport.
@@ -941,7 +942,7 @@ class WarpnetRepository @Inject constructor(
                     ),
                 ),
             )
-        }.onFailure { e -> android.util.Log.w(TAG, "bookmarkTweet($tweetId) failed", e) }
+        }.onFailure { e -> Timber.tag(TAG).w(e, "bookmarkTweet($tweetId) failed") }
     }
 
     /** Remove a previously-bookmarked tweet from the shelf. */
@@ -954,7 +955,7 @@ class WarpnetRepository @Inject constructor(
                     site.warpnet.transport.dto.UnbookmarkEvent(userId = userId, tweetId = tweetId),
                 ),
             )
-        }.onFailure { e -> android.util.Log.w(TAG, "unbookmarkTweet($tweetId) failed", e) }
+        }.onFailure { e -> Timber.tag(TAG).w(e, "unbookmarkTweet($tweetId) failed") }
     }
 
     /**
@@ -987,7 +988,7 @@ class WarpnetRepository @Inject constructor(
             }
             tweets to page.cursor
         }.getOrElse { e ->
-            android.util.Log.w(TAG, "getBookmarks($userId) failed", e)
+            Timber.tag(TAG).w(e, "getBookmarks($userId) failed")
             emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
         }
     }
@@ -1018,7 +1019,7 @@ class WarpnetRepository @Inject constructor(
             }
             tweets to page.cursor
         }.getOrElse { e ->
-            android.util.Log.w(TAG, "getLikes($userId) failed", e)
+            Timber.tag(TAG).w(e, "getLikes($userId) failed")
             emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
         }
     }

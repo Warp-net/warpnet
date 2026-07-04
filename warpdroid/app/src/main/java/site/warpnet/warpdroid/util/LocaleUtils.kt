@@ -15,11 +15,11 @@
 
 package site.warpnet.warpdroid.util
 
-import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import site.warpnet.warpdroid.db.entity.AccountEntity
 import java.util.Locale
+import timber.log.Timber
 
 private const val TAG: String = "LocaleUtils"
 
@@ -47,7 +47,7 @@ private fun ensureLanguagesAreFirst(locales: MutableList<Locale>, languages: Lis
                 // - Your per-account posting language is set to one android doesn't know (e.g. toki pona)
                 // - Replying to a post in a language android doesn't know
                 locales.add(0, Locale(language))
-                Log.w(TAG, "Attempting to use unknown language tag '$language'")
+                Timber.tag(TAG).w("Attempting to use unknown language tag '$language'")
                 continue
             }
         }

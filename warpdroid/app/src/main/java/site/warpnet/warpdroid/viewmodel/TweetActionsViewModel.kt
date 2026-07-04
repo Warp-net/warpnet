@@ -16,7 +16,6 @@
 package site.warpnet.warpdroid.viewmodel
 
 import android.os.SystemClock
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.fold
@@ -37,6 +36,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 abstract class TweetActionsViewModel(
     private val warpnetApi: WarpnetApi,
@@ -98,7 +98,7 @@ abstract class TweetActionsViewModel(
                     }
                 },
                 onFailure = { e ->
-                    Log.w(TAG, "Failed to retweet", e)
+                    Timber.tag(TAG).w(e, "Failed to retweet")
                 }
             )
         }
@@ -165,7 +165,7 @@ abstract class TweetActionsViewModel(
                     eventHub.dispatch(TweetChangedEvent(status))
                 },
                 onFailure = { e ->
-                    Log.w(TAG, "Failed to like", e)
+                    Timber.tag(TAG).w(e, "Failed to like")
                 }
             )
         }
@@ -182,7 +182,7 @@ abstract class TweetActionsViewModel(
                     eventHub.dispatch(TweetChangedEvent(status))
                 },
                 onFailure = { e ->
-                    Log.w(TAG, "Failed to bookmark", e)
+                    Timber.tag(TAG).w(e, "Failed to bookmark")
                 }
             )
         }
@@ -196,7 +196,7 @@ abstract class TweetActionsViewModel(
                         eventHub.dispatch(MuteEvent(accountId))
                     },
                     onFailure = { t ->
-                        Log.w(TAG, "Failed to mute account", t)
+                        Timber.tag(TAG).w(t, "Failed to mute account")
                     }
                 )
         }
@@ -210,7 +210,7 @@ abstract class TweetActionsViewModel(
                         eventHub.dispatch(BlockEvent(accountId))
                     },
                     onFailure = { t ->
-                        Log.w(TAG, "Failed to block account", t)
+                        Timber.tag(TAG).w(t, "Failed to block account")
                     }
                 )
         }
@@ -221,7 +221,7 @@ abstract class TweetActionsViewModel(
             warpnetApi.deleteStatus(statusId, deleteMedia = true)
                 .fold(
                     onSuccess = { eventHub.dispatch(TweetDeletedEvent(statusId)) },
-                    onFailure = { Log.w(TAG, "Failed to delete status", it) }
+                    onFailure = { Timber.tag(TAG).w(it, "Failed to delete status") }
                 )
         }
     }
@@ -235,7 +235,7 @@ abstract class TweetActionsViewModel(
             }.fold({ status ->
                 eventHub.dispatch(TweetChangedEvent(status))
             }, { e ->
-                Log.w(TAG, "Failed to change pin state", e)
+                Timber.tag(TAG).w(e, "Failed to change pin state")
                 val errorMessage = e.getServerErrorMessage()
                 if (errorMessage != null) {
                     errors.emit(SnackbarError.StringMessage(errorMessage))
@@ -267,7 +267,7 @@ abstract class TweetActionsViewModel(
                         _startComposing.emit(composeOptions)
                     },
                     onFailure = { e ->
-                        Log.w(TAG, "Failed to load status source", e)
+                        Timber.tag(TAG).w(e, "Failed to load status source")
                         errors.emit(SnackbarError.ResourceMessage(R.string.error_status_source_load))
                     }
                 )
@@ -299,7 +299,7 @@ abstract class TweetActionsViewModel(
                         _startComposing.emit(composeOptions)
                     },
                     onFailure = { e ->
-                        Log.w(TAG, "Failed to load status source", e)
+                        Timber.tag(TAG).w(e, "Failed to load status source")
                         errors.emit(SnackbarError.ResourceMessage(R.string.error_deleting_status))
                     }
                 )
@@ -315,7 +315,7 @@ abstract class TweetActionsViewModel(
                         eventHub.dispatch(TweetChangedEvent(status))
                     },
                     onFailure = { e ->
-                        Log.w(TAG, "Failed to remove quote from status", e)
+                        Timber.tag(TAG).w(e, "Failed to remove quote from status")
                         errors.emit(SnackbarError.ResourceMessage(R.string.error_status_source_load))
                     }
                 )

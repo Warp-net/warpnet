@@ -7,13 +7,13 @@ package site.warpnet.warpdroid.components.pairing
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
+import timber.log.Timber
 
 /**
  * Persists the raw QR pairing payload in Android Keystore-backed
@@ -62,17 +62,14 @@ class PairedNodeStore @Inject constructor(
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
-    }.onFailure { Log.w(TAG, "EncryptedSharedPreferences open failed", it) }
+    }.onFailure { Timber.tag(TAG).w(it, "EncryptedSharedPreferences open failed") }
         .getOrNull()
 
     fun load(): PairedNode? = ref.get()
 
     fun save(node: PairedNode, rawQrJson: String) {
-        Log.i(
-            TAG,
-            "save: pinnedPeer=${node.pinnedPeerId} userId=${node.userId} " +
-                "addresses (n=${node.addresses.size}): ${node.addresses}",
-        )
+        Timber.tag(TAG).i("save: pinnedPeer=${node.pinnedPeerId} userId=${node.userId} " +
+                "addresses (n=${node.addresses.size}): ${node.addresses}")
         ref.set(node)
         prefs?.edit()?.putString(KEY_RAW_QR, rawQrJson)?.apply()
     }
@@ -88,7 +85,7 @@ class PairedNodeStore @Inject constructor(
         val handle = prefs ?: return null
         return runCatching { handle.getString(KEY_RAW_QR, null) }
             .onFailure {
-                Log.w(TAG, "loadRawQr decrypt failed; clearing", it)
+                Timber.tag(TAG).w(it, "loadRawQr decrypt failed; clearing")
                 runCatching { handle.edit().remove(KEY_RAW_QR).apply() }
             }
             .getOrNull()

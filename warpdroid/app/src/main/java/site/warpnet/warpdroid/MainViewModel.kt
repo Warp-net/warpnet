@@ -15,7 +15,6 @@
 
 package site.warpnet.warpdroid
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.fold
@@ -41,6 +40,7 @@ import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import timber.log.Timber
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -94,7 +94,7 @@ class MainViewModel @Inject constructor(
                     shareShortcutHelper.updateShortcuts()
                 },
                 { throwable ->
-                    Log.e(TAG, "Failed to fetch user info.", throwable)
+                    Timber.tag(TAG).e(throwable, "Failed to fetch user info.")
 
                     if (throwable is HttpException && throwable.code() == 401) {
                         _unauthorized.value = true

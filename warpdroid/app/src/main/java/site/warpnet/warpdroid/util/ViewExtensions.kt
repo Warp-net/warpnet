@@ -17,7 +17,6 @@
 package site.warpnet.warpdroid.util
 
 import android.os.Build
-import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -33,6 +32,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import site.warpnet.warpdroid.R
+import timber.log.Timber
 
 fun View.show() {
     this.visibility = View.VISIBLE
@@ -76,7 +76,7 @@ fun ViewPager2.reduceSwipeSensitivity() {
         val scaleFactor = 2
         touchSlopField.set(recyclerView, touchSlop * scaleFactor)
     } catch (e: Exception) {
-        Log.w("reduceSwipeSensitivity", e)
+        Timber.tag("reduceSwipeSensitivity").w(e)
     }
 }
 

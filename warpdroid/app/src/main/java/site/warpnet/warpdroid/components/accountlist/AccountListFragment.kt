@@ -17,7 +17,6 @@ package site.warpnet.warpdroid.components.accountlist
 
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -58,6 +57,7 @@ import dagger.hilt.android.lifecycle.withCreationCallback
 import javax.inject.Inject
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @AndroidEntryPoint
 class AccountListFragment :
@@ -167,7 +167,7 @@ class AccountListFragment :
                 binding.messageView.show()
                 val errorState = loadState.refresh as LoadState.Error
                 binding.messageView.setup(errorState.error) { adapter.retry() }
-                Log.w(TAG, "error loading accounts", errorState.error)
+                Timber.tag(TAG).w(errorState.error, "error loading accounts")
             } else if (loadState.refresh is LoadState.NotLoading && adapter.itemCount == 0) {
                 binding.recyclerView.hide()
                 binding.messageView.show()

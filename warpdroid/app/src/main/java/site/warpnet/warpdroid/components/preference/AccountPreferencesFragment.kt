@@ -19,7 +19,6 @@ import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import at.connyduck.calladapter.networkresult.fold
@@ -52,6 +51,7 @@ import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @AndroidEntryPoint
 class AccountPreferencesFragment : BasePreferencesFragment() {
@@ -295,7 +295,7 @@ class AccountPreferencesFragment : BasePreferencesFragment() {
                         }
                     }
                 }, { t ->
-                    Log.e("AccountPreferences", "failed updating settings on server", t)
+                    Timber.tag("AccountPreferences").e(t, "failed updating settings on server")
                     showErrorSnackbar(visibility, sensitive)
                 })
         }

@@ -29,6 +29,7 @@ import site.warpnet.transport.ConnectionMonitor
 import site.warpnet.transport.Ed25519IdentityStore
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.WarpnetTransport
+import timber.log.Timber
 
 /**
  * DI wiring for the Warpnet transport + mapper stack. The previous Warpnet
@@ -99,10 +100,7 @@ object WarpnetModule {
             val candidates = pairedNodeStore.load()?.let { paired ->
                 paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
             } ?: emptyList()
-            android.util.Log.i(
-                "warpnet-dial",
-                "dial candidates (n=${candidates.size}): $candidates",
-            )
+            Timber.tag("warpnet-dial").i("dial candidates (n=${candidates.size}): $candidates")
             candidates
         },
     )

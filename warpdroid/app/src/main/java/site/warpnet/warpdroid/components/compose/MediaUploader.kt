@@ -21,7 +21,6 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever.METADATA_KEY_MIMETYPE
 import android.net.Uri
 import android.os.Environment
-import android.util.Log
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
@@ -60,6 +59,7 @@ import okio.buffer
 import okio.sink
 import okio.source
 import retrofit2.HttpException
+import timber.log.Timber
 
 sealed interface FinalUploadEvent
 
@@ -165,7 +165,7 @@ class MediaUploader @Inject constructor(
 
                     contentResolver.openInputStream(inUri)?.source().use { input ->
                         if (input == null) {
-                            Log.w(TAG, "Media input is null")
+                            Timber.tag(TAG).w("Media input is null")
                             uri = inUri
                             return@use
                         }
@@ -184,7 +184,7 @@ class MediaUploader @Inject constructor(
                 ContentResolver.SCHEME_FILE -> {
                     val path = uri.path
                     if (path == null) {
-                        Log.w(TAG, "empty uri path $uri")
+                        Timber.tag(TAG).w("empty uri path $uri")
                         throw CouldNotOpenFileException()
                     }
                     val inputFile = File(path)
@@ -205,16 +205,16 @@ class MediaUploader @Inject constructor(
                     mediaSize = getMediaSize(contentResolver, uri)
                 }
                 else -> {
-                    Log.w(TAG, "Unknown uri scheme $uri")
+                    Timber.tag(TAG).w("Unknown uri scheme $uri")
                     throw CouldNotOpenFileException()
                 }
             }
         } catch (e: IOException) {
-            Log.w(TAG, e)
+            Timber.tag(TAG).w(e)
             throw CouldNotOpenFileException()
         }
         if (mediaSize == MEDIA_SIZE_UNKNOWN) {
-            Log.w(TAG, "Could not determine file size of upload")
+            Timber.tag(TAG).w("Could not determine file size of upload")
             throw MediaTypeException()
         }
         if (mimeType != null) {
@@ -239,7 +239,7 @@ class MediaUploader @Inject constructor(
                 }
             }
         } else {
-            Log.w(TAG, "Could not determine mime type of upload")
+            Timber.tag(TAG).w("Could not determine mime type of upload")
             throw MediaTypeException()
         }
     }
