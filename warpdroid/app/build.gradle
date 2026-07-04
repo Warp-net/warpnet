@@ -217,6 +217,11 @@ dependencies {
 
     implementation libs.timber
 
+    // Briar's "don't kill me" library: detects OEM battery/app-killer
+    // settings (Doze, Huawei, Xiaomi) and provides the intents to fix them,
+    // so the push foreground service survives on aggressive OEM ROMs.
+    implementation libs.dontkillmelib
+
     implementation libs.touchimageview
 
     implementation libs.bundles.material.drawer

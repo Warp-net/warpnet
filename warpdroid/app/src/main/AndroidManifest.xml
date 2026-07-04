@@ -148,6 +148,10 @@
             android:name=".components.pairing.PairingActivity"
             android:exported="false"
             android:theme="@style/WarpdroidBaseTheme" />
+        <activity
+            android:name=".components.dontkillme.DontKillMeActivity"
+            android:exported="false"
+            android:theme="@style/WarpdroidBaseTheme" />
 
         <receiver
             android:name=".receiver.SendTweetBroadcastReceiver"
