@@ -174,17 +174,11 @@ class WarpnetNotificationService : Service() {
                     Timber.tag(TAG).w(it, "cold bring-up failed")
                     return
                 }
-                // A durable rejection ("token mismatch") means the fat node
-                // regenerated its session token — typically on restart — so our
-                // stored pairing no longer authorises this alias. init+connect
-                // already succeeded inside pair(), leaving the client Connected;
-                // without this the alias would keep riding the live signed link.
-                // Drop the pairing and force a fresh scan.
                 if (outcome is PairingOutcome.Rejected) {
                     Timber.tag(TAG).w(
-                        "cold bring-up rejected (code=${outcome.code} ${outcome.message}); forcing re-pair"
+                        "cold bring-up rejected (code=${outcome.code} ${outcome.message}); resetting pairing"
                     )
-                    forceRepair()
+                    resetPairing()
                 }
             }
             is ValidationResult.Invalid ->
@@ -192,9 +186,7 @@ class WarpnetNotificationService : Service() {
         }
     }
 
-    // Tear down a pairing the fat node no longer accepts and bounce the user
-    // to the QR scanner. Mirrors PairRefreshWorker's durable-rejection path.
-    private suspend fun forceRepair() {
+    private suspend fun resetPairing() {
         pairedNodeStore.clear()
         runCatching { warpnetClient.shutdown() }
         val intent = Intent(applicationContext, PairingActivity::class.java)
