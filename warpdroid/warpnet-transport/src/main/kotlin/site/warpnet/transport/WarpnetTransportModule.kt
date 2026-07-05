@@ -14,8 +14,14 @@ import kotlinx.coroutines.CoroutineScope
  * the module only has to know "call [createClient]" with a [Moshi] it owns.
  */
 object WarpnetTransport {
-    fun createClient(moshi: Moshi = Moshi.Builder().build()): WarpnetClient =
-        WarpnetClient(moshi = moshi, signer = BindingSigner(DefaultBinding))
+    fun createClient(
+        moshi: Moshi = Moshi.Builder().build(),
+        nodeLogSink: NodeLogSink? = null,
+    ): WarpnetClient = WarpnetClient(
+        moshi = moshi,
+        signer = BindingSigner(DefaultBinding),
+        nodeLogSink = nodeLogSink,
+    )
 
     /**
      * Build an [Ed25519IdentityStore]. The identity is derived deterministically

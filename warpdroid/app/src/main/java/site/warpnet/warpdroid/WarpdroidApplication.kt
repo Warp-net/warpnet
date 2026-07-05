@@ -20,7 +20,6 @@ import android.app.NotificationManager
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.StrictMode
-import android.util.Log
 import androidx.core.content.edit
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -29,6 +28,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
+import site.warpnet.warpdroid.service.WarpnetNotificationService
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.NEW_INSTALL_SCHEMA_VERSION
 import site.warpnet.warpdroid.settings.PrefKeys
@@ -48,7 +48,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.conscrypt.Conscrypt
 import site.warpnet.transport.WarpnetClient
+import site.warpnet.warpdroid.components.logviewer.LogBuffer
+import site.warpnet.warpdroid.components.logviewer.LogBufferTree
 import site.warpnet.warpdroid.worker.PairRefreshWorker
+import timber.log.Timber
 
 @HiltAndroidApp
 class WarpdroidApplication :
@@ -75,6 +78,9 @@ class WarpdroidApplication :
 
     @Inject
     lateinit var notificationHelper: NotificationHelper
+
+    @Inject
+    lateinit var logBuffer: LogBuffer
 
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -106,6 +112,14 @@ class WarpdroidApplication :
             )
         }
         super.onCreate()
+
+        // Mirror Kotlin-side Timber logs into the in-memory buffer behind
+        // Preferences → Developer tools → Logs; the Go node feeds the same
+        // buffer through the gomobile LogSink (see di/WarpnetModule).
+        Timber.plant(LogBufferTree(logBuffer))
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        }
 
         Security.insertProviderAt(Conscrypt.newProvider(), 1)
 
@@ -170,6 +184,7 @@ class WarpdroidApplication :
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
+                    Timber.tag(TAG).i("app foregrounded — resuming libp2p host")
                     transportScope.launch {
                         warpnetClient.resume()
                         notificationHelper.fetchNotificationsNow()
@@ -183,6 +198,13 @@ class WarpdroidApplication :
                 }
 
                 override fun onStop(owner: LifecycleOwner) {
+                    // Keep the host connected in the background while the push
+                    // service runs; otherwise pause to let the radio sleep.
+                    if (WarpnetNotificationService.isRunning) {
+                        Timber.tag(TAG).i("app backgrounded — push service active, keeping libp2p host alive")
+                        return
+                    }
+                    Timber.tag(TAG).i("app backgrounded — pausing libp2p host")
                     notificationHelper.stopOpportunisticRefresh()
                     transportScope.launch {
                         connectionMonitor.stop()
@@ -199,7 +221,7 @@ class WarpdroidApplication :
             .build()
 
     private fun upgradeSharedPreferences(oldVersion: Int, newVersion: Int) {
-        Log.d(TAG, "Upgrading shared preferences: $oldVersion -> $newVersion")
+        Timber.tag(TAG).d("Upgrading shared preferences: $oldVersion -> $newVersion")
         preferences.edit {
             if (oldVersion < 2023022701) {
                 // These preferences are (now) handled in AccountPreferenceHandler. Remove them from shared for clarity.

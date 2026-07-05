@@ -52,6 +52,7 @@ const iconByType = {
   retweet: 'fas fa-retweet text-green-500',
   follow: 'fas fa-user-plus text-blue',
   mention: 'fas fa-at text-blue',
+  moderation: 'fas fa-shield-alt text-blue',
 };
 
 export default {

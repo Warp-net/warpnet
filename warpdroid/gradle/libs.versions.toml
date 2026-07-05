@@ -49,7 +49,9 @@ okio = "3.16.4"
 retrofit = "3.0.0"
 robolectric = "4.16.1"
 sparkbutton-compose = "1.0.0"
+timber = "5.0.1"
 tink = "1.8.0"
+dontkillmelib = "0.2.8"
 touchimageview = "3.7.1"
 turbine = "1.2.1"
 unified-push-connector = "3.0.10"
@@ -146,6 +148,8 @@ retrofit-converter-moshi = { module = "com.squareup.retrofit2:converter-moshi", 
 retrofit-core = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 sparkbutton-compose = { module = "at.connyduck.sparkbutton:sparkbutton-compose", version.ref = "sparkbutton-compose" }
+timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
+dontkillmelib = { module = "org.briarproject:dont-kill-me-lib", version.ref = "dontkillmelib" }
 tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
 touchimageview = { module = "com.github.MikeOrtiz:TouchImageView", version.ref = "touchimageview" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }

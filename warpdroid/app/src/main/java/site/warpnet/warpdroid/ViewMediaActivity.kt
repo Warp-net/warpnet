@@ -28,7 +28,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.transition.Transition
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -66,6 +65,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 typealias ToolbarVisibilityListener = (isVisible: Boolean) -> Unit
 
@@ -265,7 +265,7 @@ class ViewMediaActivity :
     private fun shareMedia() {
         val directory = applicationContext.getExternalFilesDir("Warpdroid")
         if (directory == null || !(directory.exists())) {
-            Log.e(TAG, "Error obtaining directory to save temporary media.")
+            Timber.tag(TAG).e("Error obtaining directory to save temporary media.")
             return
         }
 
@@ -278,7 +278,7 @@ class ViewMediaActivity :
                 Attachment.Type.AUDIO,
                 Attachment.Type.VIDEO,
                 Attachment.Type.GIFV -> shareMediaFile(directory, attachment.url)
-                else -> Log.e(TAG, "Unknown media format for sharing.")
+                else -> Timber.tag(TAG).e("Unknown media format for sharing.")
             }
         }
     }
@@ -312,14 +312,14 @@ class ViewMediaActivity :
                     true
                 } catch (ioe: IOException) {
                     // FileNotFoundException is covered by IOException
-                    Log.e(TAG, "Error writing temporary media.")
+                    Timber.tag(TAG).e("Error writing temporary media.")
                     false
-                }.also { result -> Log.d(TAG, "Download image result: $result") }
+                }.also { result -> Timber.tag(TAG).d("Download image result: $result") }
             } catch (error: Throwable) {
                 if (error is CancellationException) {
                     throw error
                 }
-                Log.e(TAG, "Failed to download image", error)
+                Timber.tag(TAG).e(error, "Failed to download image")
                 false
             }
 

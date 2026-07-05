@@ -119,6 +119,102 @@ func (s *NotificationsRepoTestSuite) TestUnreadCount_MissingUserId() {
 	s.Require().Error(err)
 }
 
+func (s *NotificationsRepoTestSuite) TestMarkRead() {
+	userId := uuid.New().String()
+
+	s.Require().NoError(s.repo.Add(domain.Notification{
+		Type:   domain.NotificationLikeType,
+		Text:   "unread",
+		UserId: userId,
+	}))
+
+	nots, _, err := s.repo.List(userId, nil, nil)
+	s.Require().NoError(err)
+	s.Require().Len(nots, 1)
+	s.False(nots[0].IsRead)
+
+	s.Require().NoError(s.repo.MarkRead(userId, nots[0].Id))
+
+	got, err := s.repo.Get(userId, nots[0].Id)
+	s.Require().NoError(err)
+	s.True(got.IsRead)
+
+	count, err := s.repo.UnreadCount(userId)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+
+	// Marking an already-read notification is a no-op, not an error.
+	s.Require().NoError(s.repo.MarkRead(userId, nots[0].Id))
+}
+
+func (s *NotificationsRepoTestSuite) TestMarkRead_MissingIds() {
+	s.Require().Error(s.repo.MarkRead("", "some-id"))
+	s.Require().Error(s.repo.MarkRead(uuid.New().String(), ""))
+}
+
+func (s *NotificationsRepoTestSuite) TestMarkRead_NotFound() {
+	err := s.repo.MarkRead(uuid.New().String(), "missing-id")
+	s.Require().ErrorIs(err, ErrNotificationsNotFound)
+}
+
+func (s *NotificationsRepoTestSuite) TestMarkAllReadWalksAllPages() {
+	userId := uuid.New().String()
+
+	// Shrink the page size so the unread-key scan must paginate; this is
+	// the regression the endpoint exists for — "mark all" used to cover
+	// only the first page.
+	origPageSize := unreadCountPageSize
+	unreadCountPageSize = 3
+	defer func() { unreadCountPageSize = origPageSize }()
+
+	for i := 0; i < 8; i++ {
+		s.Require().NoError(s.repo.Add(domain.Notification{
+			Type:   domain.NotificationLikeType,
+			Text:   "unread",
+			UserId: userId,
+		}))
+	}
+
+	s.Require().NoError(s.repo.MarkAllRead(userId))
+
+	count, err := s.repo.UnreadCount(userId)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+
+	nots, _, err := s.repo.List(userId, nil, nil)
+	s.Require().NoError(err)
+	s.Require().Len(nots, 8)
+	for _, n := range nots {
+		s.True(n.IsRead)
+	}
+}
+
+func (s *NotificationsRepoTestSuite) TestMarkAllRead_MissingUserId() {
+	s.Require().Error(s.repo.MarkAllRead(""))
+}
+
+func (s *NotificationsRepoTestSuite) TestMarkAllRead_DoesNotTouchOtherUsers() {
+	userA := uuid.New().String()
+	userB := uuid.New().String()
+
+	s.Require().NoError(s.repo.Add(domain.Notification{
+		Type: domain.NotificationLikeType, Text: "a", UserId: userA,
+	}))
+	s.Require().NoError(s.repo.Add(domain.Notification{
+		Type: domain.NotificationLikeType, Text: "b", UserId: userB,
+	}))
+
+	s.Require().NoError(s.repo.MarkAllRead(userA))
+
+	countA, err := s.repo.UnreadCount(userA)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), countA)
+
+	countB, err := s.repo.UnreadCount(userB)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), countB)
+}
+
 func (s *NotificationsRepoTestSuite) TestUnreadCount_EmptyUser() {
 	count, err := s.repo.UnreadCount(uuid.New().String())
 	s.Require().NoError(err)

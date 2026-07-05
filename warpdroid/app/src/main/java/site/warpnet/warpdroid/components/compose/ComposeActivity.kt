@@ -29,7 +29,6 @@ import android.os.Parcelable
 import android.provider.MediaStore
 import android.text.Spanned
 import android.text.style.URLSpan
-import android.util.Log
 import android.view.KeyEvent
 import android.view.MenuItem
 import android.view.View
@@ -122,6 +121,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
+import timber.log.Timber
 
 @OptionalInject
 @AndroidEntryPoint
@@ -225,11 +225,11 @@ class ComposeActivity :
                 }
             }
             is EditImageResult.Error -> {
-                Log.w(TAG, "Edit image failed: " + result.exception)
+                Timber.tag(TAG).w("Edit image failed: " + result.exception)
                 displayTransientMessage(R.string.error_image_edit_failed)
             }
             is EditImageResult.Cancelled -> {
-                Log.w(TAG, "Edit image cancelled by user")
+                Timber.tag(TAG).w("Edit image cancelled by user")
             }
         }
         viewModel.cropImageItemOld = null
@@ -917,7 +917,7 @@ class ComposeActivity :
                     // quote-retweet path; the message describes the
                     // specific cause so surface it instead of the
                     // generic error toast.
-                    android.util.Log.w("ComposeActivity", "sendStatus failed", e)
+                    Timber.tag("ComposeActivity").w(e, "sendStatus failed")
                     displayTransientMessage(R.string.error_compose_quote_with_media)
                     enableButtons(true, viewModel.editing)
                 } catch (e: Exception) {
@@ -926,7 +926,7 @@ class ComposeActivity :
                     // screen and re-enable the button so they can retry
                     // instead of losing the draft to a silent fire-and-
                     // forget failure.
-                    android.util.Log.w("ComposeActivity", "sendStatus failed", e)
+                    Timber.tag("ComposeActivity").w(e, "sendStatus failed")
                     displayTransientMessage(R.string.error_generic)
                     enableButtons(true, viewModel.editing)
                 }

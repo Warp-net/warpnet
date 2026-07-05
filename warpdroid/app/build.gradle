@@ -155,6 +155,10 @@ licensee {
     // QR scanner; allow the canonical URLs rather than fail the build.
     allowUrl('https://developer.android.com/studio/terms.html')
     allowUrl('https://developers.google.com/ml-kit/terms')
+    // GPL-3.0 (POM declares non-SPDX "GPL-v3.0"); compatible with the AGPL app.
+    allowDependency('org.briarproject', 'dont-kill-me-lib', '0.2.8') {
+        because 'GPL-3.0, compatible with the AGPL-3.0 app'
+    }
 }
 
 // ML Kit's barcode scanner pulls the unified com.google.crypto.tink:tink
@@ -214,6 +218,11 @@ dependencies {
     ksp libs.androidx.hilt.compiler
 
     implementation libs.sparkbutton.compose
+
+    implementation libs.timber
+
+    // Briar's dont-kill-me-lib: detect OEM app-killer settings and fix them.
+    implementation libs.dontkillmelib
 
     implementation libs.touchimageview
 

@@ -6,6 +6,7 @@
 package site.warpnet.warpdroid.di
 
 import android.content.Context
+import site.warpnet.warpdroid.components.logviewer.LogBuffer
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.Notification
@@ -28,6 +29,7 @@ import site.warpnet.transport.ConnectionMonitor
 import site.warpnet.transport.Ed25519IdentityStore
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.transport.WarpnetTransport
+import timber.log.Timber
 
 /**
  * DI wiring for the Warpnet transport + mapper stack. The previous Warpnet
@@ -61,8 +63,8 @@ object WarpnetModule {
 
     @Provides
     @Singleton
-    fun providesWarpnetClient(moshi: Moshi): WarpnetClient =
-        WarpnetTransport.createClient(moshi)
+    fun providesWarpnetClient(moshi: Moshi, logBuffer: LogBuffer): WarpnetClient =
+        WarpnetTransport.createClient(moshi, nodeLogSink = logBuffer.goSink)
 
     @Provides
     @Singleton
@@ -98,10 +100,7 @@ object WarpnetModule {
             val candidates = pairedNodeStore.load()?.let { paired ->
                 paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
             } ?: emptyList()
-            android.util.Log.i(
-                "warpnet-dial",
-                "dial candidates (n=${candidates.size}): $candidates",
-            )
+            Timber.tag("warpnet-dial").i("dial candidates (n=${candidates.size}): $candidates")
             candidates
         },
     )

@@ -20,7 +20,6 @@ package site.warpnet.warpdroid.util
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
-import android.util.Log
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.app.Person
 import androidx.core.content.pm.ShortcutInfoCompat
@@ -39,6 +38,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 class ShareShortcutHelper @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -62,7 +62,7 @@ class ShareShortcutHelper @Inject constructor(
                         .submitAsync(innerSize, innerSize)
                 } catch (e: GlideException) {
                     // https://github.com/bumptech/glide/issues/4672 :/
-                    Log.w(TAG, "failed to load avatar ${account.profilePictureUrl}", e)
+                    Timber.tag(TAG).w(e, "failed to load avatar ${account.profilePictureUrl}")
                     AppCompatResources.getDrawable(context, R.drawable.avatar_default) ?: return@mapNotNull null
                 }
 

@@ -16,7 +16,6 @@
 package site.warpnet.warpdroid
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.annotation.RawRes
 import androidx.annotation.StringRes
@@ -65,6 +64,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okio.buffer
 import okio.source
+import timber.log.Timber
 
 @AndroidEntryPoint
 class LicenseActivity : BaseActivity() {
@@ -92,7 +92,7 @@ class LicenseActivity : BaseActivity() {
         try {
             resources.openRawResource(fileId).source().buffer().use { it.readUtf8() }
         } catch (e: IOException) {
-            Log.w("LicenseActivity", "failed loading file content", e)
+            Timber.tag("LicenseActivity").w(e, "failed loading file content")
             ""
         }
     }

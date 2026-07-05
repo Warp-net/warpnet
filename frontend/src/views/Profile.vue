@@ -248,7 +248,10 @@ resulting from the use or misuse of this software.
             class="flex flex-row justify-evenly mt-2"
           >
             <button
-              class="flex-grow text-dark font-bold border-b-2 border-blue p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              type="button"
+              @click="selectTab('tweets')"
+              class="flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              :class="activeTab === 'tweets' ? 'border-blue' : ''"
             >
               Tweets
             </button>
@@ -271,10 +274,20 @@ resulting from the use or misuse of this software.
               Media
             </button>
             <button
+              v-if="isSelf"
+              type="button"
+              @click="selectTab('likes')"
+              class="flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              :class="activeTab === 'likes' ? 'border-blue' : ''"
+            >
+              Likes
+            </button>
+            <button
+              v-else
               type="button"
               disabled
-              title="Coming soon"
-              aria-label="Likes (coming soon)"
+              title="Only your own likes are visible"
+              aria-label="Likes (own profile only)"
               class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
             >
               Likes
@@ -283,36 +296,53 @@ resulting from the use or misuse of this software.
         </div>
 
         <!-- tweets -->
-        <Loader :loading="loading" />
-        <div
-          v-if="!noUser && !loading && tweets.length === 0"
-          class="flex flex-col items-center justify-center w-full pt-10"
-        >
-          <p class="font-bold text-lg">
-            <span>{{ isSelf ? "You" : `${profile.username || "User"}` }}</span> haven't
-            tweeted yet
-          </p>
-          <p class="text-sm text-dark">
-            When
-            <span>{{ isSelf ? "you post" : `${profile.username || "user"} posts` }}</span>
-            a tweet, it'll show up here.
-          </p>
-          <button
-            v-if="isSelf"
-            class="text-white bg-blue rounded-full font-semibold mt-4 px-4 py-2 hover:bg-darkblue"
+        <template v-if="activeTab === 'tweets'">
+          <Loader :loading="loading" />
+          <div
+            v-if="!noUser && !loading && tweets.length === 0"
+            class="flex flex-col items-center justify-center w-full pt-10"
           >
-            <p class="hidden lg:block">Tweet now</p>
-            <i class="fas fa-plus lg:hidden"></i>
-          </button>
-        </div>
-        <div
-          v-if="isBlocked"
-          class="mx-5 my-4 p-4 border border-lighter rounded bg-lightest text-sm text-dark"
-        >
-          <p class="font-bold">You blocked @{{ profile.id }}.</p>
-          <p class="mt-1">Their tweets are hidden. Use the menu above to unblock if you change your mind.</p>
-        </div>
-        <Tweets v-if="!noUser && !isBlocked" :tweets="sortedTweets" />
+            <p class="font-bold text-lg">
+              <span>{{ isSelf ? "You" : `${profile.username || "User"}` }}</span> haven't
+              tweeted yet
+            </p>
+            <p class="text-sm text-dark">
+              When
+              <span>{{ isSelf ? "you post" : `${profile.username || "user"} posts` }}</span>
+              a tweet, it'll show up here.
+            </p>
+            <button
+              v-if="isSelf"
+              class="text-white bg-blue rounded-full font-semibold mt-4 px-4 py-2 hover:bg-darkblue"
+            >
+              <p class="hidden lg:block">Tweet now</p>
+              <i class="fas fa-plus lg:hidden"></i>
+            </button>
+          </div>
+          <div
+            v-if="isBlocked"
+            class="mx-5 my-4 p-4 border border-lighter rounded bg-lightest text-sm text-dark"
+          >
+            <p class="font-bold">You blocked @{{ profile.id }}.</p>
+            <p class="mt-1">Their tweets are hidden. Use the menu above to unblock if you change your mind.</p>
+          </div>
+          <Tweets v-if="!noUser && !isBlocked" :tweets="sortedTweets" />
+        </template>
+
+        <!-- likes -->
+        <template v-else-if="activeTab === 'likes'">
+          <Loader :loading="likesLoading" />
+          <div
+            v-if="!likesLoading && likes.length === 0"
+            class="flex flex-col items-center justify-center w-full pt-10 px-5"
+          >
+            <p class="font-bold text-lg">Nothing liked yet</p>
+            <p class="text-sm text-dark text-center">
+              Tweets you like will show up here so you can always find your way back to them.
+            </p>
+          </div>
+          <Tweets :tweets="likedTweets" />
+        </template>
       </div>
       <DefaultRightBar
           :profile="profile"
@@ -384,6 +414,10 @@ export default {
       showBlockConfirm: false,
       showReportDialog: false,
       showNetworkWarning: true,
+      activeTab: 'tweets',
+      likes: [],
+      likesLoading: false,
+      likesLoaded: false,
     };
   },
   computed: {
@@ -398,6 +432,9 @@ export default {
     // other profile field.
     isBusiness() {
       return this.profile && this.profile.role === "business";
+    },
+    likedTweets() {
+      return this.likes.map(l => l.tweet);
     },
   },
   methods: {
@@ -568,8 +605,29 @@ export default {
       }
     },
     async loadMore() {
+      if (this.activeTab === 'likes') {
+        if (this.likesLoading) return;
+        const resp = await warpnetService.getLikes(false);
+        const items = (resp?.items || []).filter(l => l.tweet && l.tweet.id);
+        this.likes = this.likes.concat(items);
+        return;
+      }
       const tweets = await warpnetService.getTweets({userId:this.profile.id, cursorReset:false});
       this.tweets = this.tweets.concat(tweets);
+    },
+    async selectTab(tab) {
+      this.activeTab = tab;
+      if (tab !== 'likes' || this.likesLoaded) return;
+      this.likesLoading = true;
+      try {
+        const resp = await warpnetService.getLikes(true);
+        this.likes = (resp?.items || []).filter(l => l.tweet && l.tweet.id);
+        this.likesLoaded = true;
+      } catch (err) {
+        console.error('Failed to load likes:', err);
+      } finally {
+        this.likesLoading = false;
+      }
     },
     enableMastodonMode() {
       const html = document.documentElement;

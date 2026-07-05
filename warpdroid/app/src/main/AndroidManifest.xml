@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.VIBRATE" /> <!-- For notifications -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Always-on push service + restart on boot + wake lock. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission
         android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         tools:ignore="BatteryLife" />
@@ -134,11 +138,16 @@
                 android:resource="@xml/searchable" />
         </activity>
         <activity android:name=".LicenseActivity" />
+        <activity android:name=".components.logviewer.LogViewerActivity" />
         <activity android:name=".components.filters.FiltersActivity" />
         <activity android:name="site.warpnet.warpdroid.components.filters.EditFilterActivity"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".components.pairing.PairingActivity"
+            android:exported="false"
+            android:theme="@style/WarpdroidBaseTheme" />
+        <activity
+            android:name=".components.dontkillme.DontKillMeActivity"
             android:exported="false"
             android:theme="@style/WarpdroidBaseTheme" />
 
@@ -160,6 +169,26 @@
         <service android:name=".service.SendTweetService"
             android:foregroundServiceType="shortService"
             android:exported="false" />
+
+        <!-- Always-on push service. -->
+        <service
+            android:name=".service.WarpnetNotificationService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the peer-to-peer connection to the paired Warpnet node alive to deliver push notifications, as there is no cloud push gateway." />
+        </service>
+
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

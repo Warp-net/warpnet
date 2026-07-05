@@ -15,7 +15,6 @@
 
 package site.warpnet.warpdroid.components.timeline.viewmodel
 
-import android.util.Log
 import androidx.paging.ExperimentalPagingApi
 import androidx.paging.LoadType
 import androidx.paging.PagingState
@@ -25,6 +24,7 @@ import site.warpnet.warpdroid.util.HttpHeaderLink
 import site.warpnet.warpdroid.util.toViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
 import retrofit2.HttpException
+import timber.log.Timber
 
 @OptIn(ExperimentalPagingApi::class)
 class NetworkTimelineRemoteMediator(
@@ -133,7 +133,7 @@ class NetworkTimelineRemoteMediator(
         } catch (e: Exception) {
             // Surface any load failure as a load error instead of rethrowing
             // unexpected exceptions, which would crash the whole app.
-            Log.w(TAG, "Failed to load timeline", e)
+            Timber.tag(TAG).w(e, "Failed to load timeline")
             return MediatorResult.Error(e)
         }
     }

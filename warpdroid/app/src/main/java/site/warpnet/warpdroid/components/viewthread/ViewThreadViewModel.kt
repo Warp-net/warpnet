@@ -15,7 +15,6 @@
 
 package site.warpnet.warpdroid.components.viewthread
 
-import android.util.Log
 import androidx.lifecycle.viewModelScope
 import at.connyduck.calladapter.networkresult.fold
 import at.connyduck.calladapter.networkresult.getOrElse
@@ -46,6 +45,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @HiltViewModel(assistedFactory = ViewThreadViewModel.Factory::class)
 class ViewThreadViewModel @AssistedInject constructor(
@@ -109,7 +109,7 @@ class ViewThreadViewModel @AssistedInject constructor(
             val contextCall = async { api.statusContext(threadId, authorId) }
 
             // Warpdroid: no local timeline cache — always load detailed status from network.
-            Log.d(TAG, "Loaded status from network")
+            Timber.tag(TAG).d("Loaded status from network")
             val result = api.status(threadId, authorId).getOrElse { exception ->
                 _uiState.value = ThreadUiState.Error(exception)
                 return@launch
@@ -152,7 +152,7 @@ class ViewThreadViewModel @AssistedInject constructor(
                     isloadingThread = false
                 )
             }, { throwable ->
-                Log.w(TAG, "Failed to load status context", throwable)
+                Timber.tag(TAG).w(throwable, "Failed to load status context")
                 errors.emit(
                     SnackbarError.ResourceMessage(
                         message = R.string.error_generic,

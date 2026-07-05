@@ -120,6 +120,10 @@ resulting from the use or misuse of this software.
                     v-if="notification.type === 'follow'"
                     class="pt-1 fas fa-user-plus text-blue"
                   ></i>
+                  <i
+                    v-if="notification.type === 'moderation'"
+                    class="pt-1 fas fa-shield-alt text-blue"
+                  ></i>
 
                   <img
                     :src="'/default_profile.png'"
@@ -288,13 +292,19 @@ export default {
       }
     },
     async markAllRead() {
-      const unread = this.notifications.filter(n => n && n.id && !n.is_read);
-      if (unread.length === 0) return;
-      await Promise.all(unread.map(n =>
-        warpnetService.markNotificationRead(n.id)
-          .then(() => { n.is_read = true; })
-          .catch(err => console.error('Failed to mark notification read:', err))
-      ));
+      // One node-side request covers every page — the per-item loop this
+      // replaces only marked the first page, so unread items beyond it
+      // kept the badge alive forever.
+      try {
+        await warpnetService.markAllNotificationsRead();
+        this.notifications.forEach(n => { if (n) n.is_read = true; });
+      } catch (err) {
+        console.error('Failed to mark all notifications read:', err);
+      }
+    },
+    async onMarkAllRead() {
+      this.settingsOpen = false;
+      await this.markAllRead();
     },
     async onMarkAllRead() {
       this.settingsOpen = false;

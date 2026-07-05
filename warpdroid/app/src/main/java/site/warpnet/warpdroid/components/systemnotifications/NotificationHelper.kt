@@ -18,7 +18,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
-import android.util.Log
 import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
 import androidx.core.app.ActivityCompat
@@ -29,15 +28,12 @@ import androidx.core.app.RemoteInput
 import androidx.core.app.TaskStackBuilder
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
-import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.Data
-import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OutOfQuotaPolicy
-import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
 import at.connyduck.calladapter.networkresult.fold
 import at.connyduck.calladapter.networkresult.onFailure
@@ -59,16 +55,17 @@ import site.warpnet.warpdroid.entity.RelationshipSeveranceEvent
 import site.warpnet.warpdroid.entity.visibleNotificationTypes
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.receiver.SendTweetBroadcastReceiver
+import site.warpnet.warpdroid.service.WarpnetNotificationService
 import site.warpnet.warpdroid.util.parseAsWarpnetHtml
 import site.warpnet.warpdroid.util.unicodeWrap
 import site.warpnet.warpdroid.worker.NotificationWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.text.NumberFormat
 import java.util.concurrent.ExecutionException
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
+import timber.log.Timber
 
 @Singleton
 class NotificationHelper @Inject constructor(
@@ -87,6 +84,7 @@ class NotificationHelper @Inject constructor(
 
     init {
         createWorkerNotificationChannel()
+        createSyncServiceNotificationChannel()
     }
 
     fun areNotificationsEnabledBySystem(): Boolean {
@@ -96,12 +94,12 @@ class NotificationHelper @Inject constructor(
             if (notificationManager.areNotificationsEnabled()) {
                 for (channel in notificationManager.notificationChannels) {
                     if (channel != null && channel.importance > NotificationManager.IMPORTANCE_NONE) {
-                        Log.d(TAG, "Notifications enabled for app by the system.")
+                        Timber.tag(TAG).d("Notifications enabled for app by the system.")
                         return true
                     }
                 }
             }
-            Log.d(TAG, "Notifications disabled for app by the system.")
+            Timber.tag(TAG).d("Notifications disabled for app by the system.")
 
             return false
         } else {
@@ -111,32 +109,16 @@ class NotificationHelper @Inject constructor(
     }
 
     suspend fun setupNotifications(activity: Activity) {
-        // Warpnet uses pull-only notifications (no push gateway).
+        // No FCM; delivered by the always-on push service (Briar-style).
         enablePullNotifications()
     }
 
     fun enablePullNotifications() {
-        val workRequest: PeriodicWorkRequest = PeriodicWorkRequest.Builder(
-            NotificationWorker::class.java,
-            PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS,
-            TimeUnit.MILLISECONDS,
-        )
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .setRequiresBatteryNotLow(true)
-                    .build()
-            )
-            .setBackoffCriteria(
-                BackoffPolicy.LINEAR,
-                1L,
-                TimeUnit.MINUTES,
-            )
-            .build()
-
-        workManager.enqueueUniquePeriodicWork(NOTIFICATION_PULL_NAME, ExistingPeriodicWorkPolicy.UPDATE, workRequest)
-
-        Log.d(TAG, "Enabled pull checks with ${PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS / 60000} minutes interval.")
+        // The foreground service replaces the old periodic poll; drop any
+        // leftover periodic work from a previous version.
+        workManager.cancelUniqueWork(NOTIFICATION_PULL_NAME)
+        runCatching { WarpnetNotificationService.start(context) }
+            .onFailure { Timber.tag(TAG).w(it, "could not start push service") }
     }
 
     fun createNotificationChannelsForAccount(account: AccountEntity) {
@@ -246,7 +228,8 @@ class NotificationHelper @Inject constructor(
 
     fun disablePullNotifications() {
         workManager.cancelUniqueWork(NOTIFICATION_PULL_NAME)
-        Log.d(TAG, "Disabled pull checks.")
+        WarpnetNotificationService.stop(context)
+        Timber.tag(TAG).d("Disabled pull checks.")
     }
 
     fun clearNotificationsForAccount(account: AccountEntity) {
@@ -365,10 +348,10 @@ class NotificationHelper @Inject constructor(
                     .submit()
                     .get()
             } catch (e: ExecutionException) {
-                Log.d(TAG, "Error loading account avatar", e)
+                Timber.tag(TAG).d(e, "Error loading account avatar")
                 BitmapFactory.decodeResource(context.resources, R.drawable.avatar_default)
             } catch (e: InterruptedException) {
-                Log.d(TAG, "Error loading account avatar", e)
+                Timber.tag(TAG).d(e, "Error loading account avatar")
                 BitmapFactory.decodeResource(context.resources, R.drawable.avatar_default)
             }
 
@@ -480,6 +463,26 @@ class NotificationHelper @Inject constructor(
             .setTicker(title)
             .setSmallIcon(R.drawable.warpdroid_notification_icon)
             .setOngoing(true)
+            .build()
+    }
+
+    // Ongoing "Warpnet is running" notification for the push service.
+    fun createSyncServiceNotification(): android.app.Notification {
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            pendingIntentFlags(false),
+        )
+        return NotificationCompat.Builder(context, CHANNEL_SYNC_SERVICE)
+            .setContentTitle(context.getString(R.string.notification_sync_service_title))
+            .setContentText(context.getString(R.string.notification_sync_service_text))
+            .setSmallIcon(R.drawable.warpdroid_notification_icon)
+            .setContentIntent(contentIntent)
+            .setColor(context.getColor(R.color.notification_color))
+            .setOngoing(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
     }
 
@@ -600,6 +603,24 @@ class NotificationHelper @Inject constructor(
         )
 
         channel.description = context.getString(R.string.notification_listenable_worker_description)
+        channel.enableLights(false)
+        channel.enableVibration(false)
+        channel.setShowBadge(false)
+
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    private fun createSyncServiceNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
+
+        val channel = NotificationChannel(
+            CHANNEL_SYNC_SERVICE,
+            context.getString(R.string.notification_sync_service_channel_name),
+            NotificationManager.IMPORTANCE_LOW,
+        )
+        channel.description = context.getString(R.string.notification_sync_service_channel_description)
         channel.enableLights(false)
         channel.enableVibration(false)
         channel.setShowBadge(false)
@@ -782,9 +803,11 @@ class NotificationHelper @Inject constructor(
         const val KEY_VISIBILITY: String = "KEY_VISIBILITY"
         const val NOTIFICATION_ID_FETCH_NOTIFICATION: Int = 0
         const val NOTIFICATION_ID_PRUNE_CACHE: Int = 1
+        const val NOTIFICATION_ID_SYNC_SERVICE: Int = 2
         const val REPLY_ACTION: String = "REPLY_ACTION"
 
         private const val CHANNEL_BACKGROUND_TASKS: String = "CHANNEL_BACKGROUND_TASKS"
+        private const val CHANNEL_SYNC_SERVICE: String = "CHANNEL_SYNC_SERVICE"
         private const val EXTRA_ACCOUNT_NAME = BuildConfig.APPLICATION_ID + ".notification.extra.account_name"
         private const val EXTRA_NOTIFICATION_TYPE = BuildConfig.APPLICATION_ID + ".notification.extra.notification_type"
         private const val GROUP_SUMMARY_TAG = BuildConfig.APPLICATION_ID + ".notification.group_summary"

@@ -19,7 +19,6 @@ import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
@@ -34,6 +33,7 @@ import site.warpnet.warpdroid.util.getSerializableExtraCompat
 import site.warpnet.warpdroid.util.randomAlphanumericString
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import timber.log.Timber
 
 @AndroidEntryPoint
 class SendTweetBroadcastReceiver : BroadcastReceiver() {
@@ -65,7 +65,7 @@ class SendTweetBroadcastReceiver : BroadcastReceiver() {
             val message = getReplyMessage(intent)
 
             if (account == null) {
-                Log.w(TAG, "Account \"$senderId\" not found in database. Aborting quick reply!")
+                Timber.tag(TAG).w("Account \"$senderId\" not found in database. Aborting quick reply!")
 
                 val notification = NotificationCompat.Builder(
                     context,

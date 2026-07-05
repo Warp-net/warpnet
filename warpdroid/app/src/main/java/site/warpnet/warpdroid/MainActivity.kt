@@ -34,7 +34,6 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.text.TextUtils
-import android.util.Log
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuInflater
@@ -84,6 +83,7 @@ import site.warpnet.warpdroid.components.chats.ChatsActivity
 import site.warpnet.warpdroid.components.notifications.NotificationsActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity
 import site.warpnet.warpdroid.components.compose.ComposeActivity.Companion.canHandleMimeType
+import site.warpnet.warpdroid.components.dontkillme.DontKillMeActivity
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
 import site.warpnet.warpdroid.components.preference.PreferencesActivity
 import site.warpnet.warpdroid.components.search.SearchActivity
@@ -127,6 +127,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.migration.OptionalInject
 import javax.inject.Inject
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @OptionalInject
 @AndroidEntryPoint
@@ -242,6 +243,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         }
 
         requestIgnoreBatteryOptimizations()
+        maybeShowDontKillMe()
 
         setContentView(binding.root)
 
@@ -1054,6 +1056,19 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     override fun getActionButton() = binding.composeButton
 
+    // Doze whitelisting isn't enough on OEM ROMs (MIUI/EMUI): show the
+    // "Keep Warpnet running" screen once, only when an OEM setting needs it.
+    private fun maybeShowDontKillMe() {
+        if (preferences.getBoolean(PrefKeys.ASKED_DONT_KILL_ME, false)) {
+            return
+        }
+        if (!DontKillMeActivity.isNeeded(this)) {
+            return
+        }
+        preferences.edit { putBoolean(PrefKeys.ASKED_DONT_KILL_ME, true) }
+        startActivity(Intent(this, DontKillMeActivity::class.java))
+    }
+
     @SuppressLint("BatteryLife")
     private fun requestIgnoreBatteryOptimizations() {
         val powerManager = getSystemService(PowerManager::class.java) ?: return
@@ -1072,7 +1087,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                 ),
             )
         } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "No activity to handle battery optimization exemption request", e)
+            Timber.tag(TAG).w(e, "No activity to handle battery optimization exemption request")
         }
     }
 

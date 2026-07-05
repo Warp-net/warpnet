@@ -65,11 +65,16 @@ class NotificationsViewModel @Inject constructor(
                         loading = false,
                     )
                 }
-                // Mark every loaded notification as read so the badge clears,
-                // mirroring the Vue Notifications view behaviour.
-                notifs.forEach { n ->
-                    runCatching { repo.markNotificationRead(n.id) }
-                }
+                // Mark everything read node-side so the badge clears —
+                // including unread items beyond the loaded page. Falls back
+                // to per-item marking when the paired node predates the
+                // read-all route.
+                runCatching { repo.markAllNotificationsRead() }
+                    .onFailure {
+                        notifs.forEach { n ->
+                            runCatching { repo.markNotificationRead(n.id) }
+                        }
+                    }
                 // The list is read now — retract anything still sitting in
                 // the system tray for this account.
                 accountManager.activeAccount?.let(notificationHelper::clearNotificationsForAccount)

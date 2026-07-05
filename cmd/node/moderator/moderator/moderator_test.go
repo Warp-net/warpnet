@@ -192,6 +192,64 @@ func TestHandleTweetReport_NotifiesReporter(t *testing.T) {
 	}
 }
 
+type recordingPublisher struct{ calls int }
+
+func (p *recordingPublisher) PublishUpdateToFollowers(_, _ string, _ any) error {
+	p.calls++
+	return nil
+}
+
+// An OK verdict is delivered to the reporter too (silence reads as "the
+// report was lost"), while the followers broadcast stays FAIL-only.
+func TestHandleTweetReport_NotifiesReporterOnOkVerdict(t *testing.T) {
+	withEngine(t, fixedEngine{ok: true})
+
+	var (
+		gotResult event.ModerationResultEvent
+		delivered int
+	)
+	node := stubModeratorNode{
+		streamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			if path == event.PUBLIC_GET_TWEET {
+				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
+			}
+			if path == event.PUBLIC_POST_MODERATION_RESULT {
+				delivered++
+				if r, ok := data.(event.ModerationResultEvent); ok {
+					gotResult = r
+				}
+			}
+			return []byte(event.Accepted), nil
+		},
+	}
+	pub := &recordingPublisher{}
+	m := &Moderator{
+		node:      node,
+		isolation: isolation.NewIsolationProtocol(pub),
+		isClosed:  new(atomic.Bool),
+	}
+
+	rep := tweetReport("tweet-1")
+	rep.ReporterID = "reporter-1"
+	rep.ReporterNodeID = "reporter-node-1"
+
+	if err := m.handleTweetReport(rep); err != nil {
+		t.Fatalf("handleTweetReport: %v", err)
+	}
+	if delivered != 1 {
+		t.Fatalf("expected exactly one reporter delivery, got %d", delivered)
+	}
+	if gotResult.Result != domain.OK {
+		t.Fatal("expected the OK verdict to be propagated to the reporter")
+	}
+	if gotResult.ReporterID != "reporter-1" {
+		t.Fatalf("expected reporter id propagated, got %q", gotResult.ReporterID)
+	}
+	if pub.calls != 0 {
+		t.Fatalf("an OK verdict must not be broadcast to followers, got %d publishes", pub.calls)
+	}
+}
+
 // No reporter identity (older client) -> moderated, but no reporter delivery.
 func TestHandleTweetReport_NoReporterNoDelivery(t *testing.T) {
 	withEngine(t, fixedEngine{ok: false, reason: "Hate"})

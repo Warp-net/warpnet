@@ -17,13 +17,13 @@
 
 package site.warpnet.warpdroid.json
 
-import android.util.Log
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.JsonReader
 import com.squareup.moshi.JsonWriter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import java.lang.reflect.Type
+import timber.log.Timber
 
 /**
  * This adapter tries to read a value as boolean or as a String that encodes a boolean.
@@ -43,7 +43,7 @@ class StringOrBooleanAdapter private constructor() : JsonAdapter<Boolean>() {
                 }
             }
         } catch (e: Exception) {
-            Log.w("StringOrBooleanAdapter", "failed to read json", e)
+            Timber.tag("StringOrBooleanAdapter").w(e, "failed to read json")
             false
         }
     }

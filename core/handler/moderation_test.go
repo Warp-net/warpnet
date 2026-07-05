@@ -274,7 +274,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			Type:     domain.ModerationTweetType,
 			ObjectID: &tweetId,
 			UserID:   owner,
-			Result:   domain.OK,
+			Result:   domain.FAIL,
 		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -287,6 +287,57 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 		if !timelineDeleted {
 			t.Fatal("expected timeline entry to be deleted")
+		}
+	})
+
+	// An OK verdict arrives only on the reporter-bound delivery. It must
+	// notify the reporter with the "no violation" wording and leave the
+	// local tweet and timeline untouched.
+	t.Run("reported tweet cleared - notifies reporter, no isolation", func(t *testing.T) {
+		var got domain.Notification
+		notified := false
+		tweetUpdated := false
+		timelineDeleted := false
+		h := mkHandler(
+			stubModerationNotifier{addFn: func(not domain.Notification) error {
+				notified = true
+				got = not
+				return nil
+			}},
+			stubModerationTweetUpdater{updateFn: func(tweet domain.Tweet) error {
+				tweetUpdated = true
+				return nil
+			}},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{deleteFn: func(userID, tweetID string) error {
+				timelineDeleted = true
+				return nil
+			}},
+		)
+		resp, err := h(marshal(t, event.ModerationResultEvent{
+			Type:       domain.ModerationTweetType,
+			ObjectID:   &tweetId,
+			UserID:     "offender",
+			Result:     domain.OK,
+			ReporterID: owner,
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if !notified {
+			t.Fatal("the reporter must be notified about the OK verdict")
+		}
+		if !strings.Contains(got.Text, "no violation") {
+			t.Fatalf("expected 'no violation' wording, got: %q", got.Text)
+		}
+		if tweetUpdated {
+			t.Fatal("an OK verdict must not update the local tweet")
+		}
+		if timelineDeleted {
+			t.Fatal("an OK verdict must not delete anything from the timeline")
 		}
 	})
 
