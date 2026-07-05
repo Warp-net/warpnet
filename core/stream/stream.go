@@ -43,7 +43,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/singleflight"
 )
+
+// sendTimeout bounds a single stream send. It matches the member node's retry
+// budget so a stalled peer is abandoned and retried (idempotently) instead of
+// holding the stream open far longer than the caller will wait.
+const sendTimeout = 10 * time.Second
+
+// ErrResponseRead marks a failure reading the response after the request was
+// already written to the peer. The peer may have processed it, so re-sending
+// would duplicate that work; callers treat it as non-retriable.
+const ErrResponseRead = warpnet.WarpError("stream: response read failed after request delivered")
 
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
@@ -56,6 +67,7 @@ type streamPool struct {
 	n            NodeStreamer
 	privKey      ed25519.PrivateKey
 	clientPeerID warpnet.WarpPeerID
+	sf           singleflight.Group
 }
 
 func NewStreamPool(
@@ -70,7 +82,7 @@ func NewStreamPool(
 	return &streamPool{ctx: ctx, n: n, privKey: privKey}, nil
 }
 
-func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
+func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte, msgID string) ([]byte, error) {
 	if p == nil {
 		return nil, warpnet.WarpError("nil stream pool")
 	}
@@ -78,22 +90,34 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 		return nil, p.ctx.Err()
 	}
 
-	// long-long wait in case of p2p-circuit stream
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
+	// Collapse concurrent identical in-flight requests to the same peer+route
+	// onto one stream: a fan-out that asks the same node for the same thing
+	// (many tweets' stats, avatars, overlapping timeline polls) sends it once and
+	// shares the response instead of opening a duplicate stream per caller. The
+	// key excludes msgID so callers with distinct ids still collapse.
+	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + string(data)
+	v, err, _ := p.sf.Do(key, func() (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+		defer cancel()
 
-	connectedness := p.n.Network().Connectedness(peerAddr.ID)
-	switch connectedness {
-	case network.Limited:
-		log.Debugf("stream: peer %s has limited connection", peerAddr.ID.String())
-		ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
-	default:
+		connectedness := p.n.Network().Connectedness(peerAddr.ID)
+		switch connectedness {
+		case network.Limited:
+			log.Debugf("stream: peer %s has limited connection", peerAddr.ID.String())
+			ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
+		default:
+		}
+		return p.send(ctx, peerAddr, r, data, msgID)
+	})
+	if err != nil {
+		return nil, err
 	}
-	return p.send(ctx, peerAddr, r, data)
+	bt, _ := v.([]byte)
+	return bt, nil
 }
 
 func (p *streamPool) send(
-	ctx context.Context, serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte,
+	ctx context.Context, serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte, msgID string,
 ) ([]byte, error) {
 	if p.n == nil || serverInfo.String() == "" || r == "" {
 		return nil, warpnet.WarpError("stream: parameters improperly configured")
@@ -121,10 +145,13 @@ func (p *streamPool) send(
 	}
 	defer closeStream(stream)
 
+	if msgID == "" {
+		msgID = uuid.New().String()
+	}
 	body := json.RawMessage(bodyBytes)
 	msg := event.Message{
 		Body:        body,
-		MessageId:   uuid.New().String(),
+		MessageId:   msgID,
 		NodeId:      p.n.ID().String(),
 		Destination: r.String(),
 		Timestamp:   time.Now(),
@@ -149,7 +176,7 @@ func (p *streamPool) send(
 	_, err = buf.ReadFrom(rw)
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
-		return nil, fmt.Errorf("stream: reading response from %s: %w", serverInfo.ID.String(), err)
+		return nil, fmt.Errorf("%w: from %s: %w", ErrResponseRead, serverInfo.ID.String(), err)
 	}
 
 	return buf.Bytes(), nil
