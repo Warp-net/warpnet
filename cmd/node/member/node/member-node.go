@@ -671,7 +671,7 @@ func (m *MemberNode) chatHandlers(
 		},
 		{
 			event.PUBLIC_POST_MESSAGE,
-			handler.StreamNewMessageHandler(r.chatRepo, userRepo, m),
+			handler.StreamNewMessageHandler(r.chatRepo, userRepo, r.notificationRepo, m),
 		},
 		{
 			event.PRIVATE_DELETE_MESSAGE,

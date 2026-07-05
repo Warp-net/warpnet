@@ -320,6 +320,7 @@ const (
 	NotificationLikeType       NotificationType = "like"
 	NotificationMentionType    NotificationType = "mention"
 	NotificationReplyType      NotificationType = "reply"
+	NotificationMessageType    NotificationType = "message"
 )
 
 type Notification struct {

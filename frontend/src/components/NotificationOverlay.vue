@@ -53,6 +53,7 @@ const iconByType = {
   follow: 'fas fa-user-plus text-blue',
   mention: 'fas fa-at text-blue',
   moderation: 'fas fa-shield-alt text-blue',
+  message: 'fas fa-envelope text-blue',
 };
 
 export default {
