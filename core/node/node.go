@@ -54,7 +54,7 @@ const (
 )
 
 type Streamer interface {
-	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte, msgID string) ([]byte, error)
+	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
 type BackoffEnabler interface {
@@ -391,14 +391,6 @@ func isBenignStreamCloseErr(err error) bool {
 const ErrSelfRequest = warpnet.WarpError("self request is not allowed")
 
 func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error) {
-	return n.StreamWithID(nodeId, path, data, "")
-}
-
-// StreamWithID is Stream with a caller-supplied idempotency id that is reused
-// across retries, so a retried request carries the same MessageId instead of a
-// fresh one. An empty msgID makes the stream layer generate one (the plain
-// Stream behaviour).
-func (n *WarpNode) StreamWithID(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data any, msgID string) (_ []byte, err error) {
 	if n == nil || n.streamer == nil {
 		return nil, warpnet.WarpError("node is not initialized")
 	}
@@ -419,7 +411,7 @@ func (n *WarpNode) StreamWithID(nodeId warpnet.WarpPeerID, path stream.WarpRoute
 		}
 	}
 
-	return n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt, msgID)
+	return n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
 }
 
 func (n *WarpNode) StopNode() {

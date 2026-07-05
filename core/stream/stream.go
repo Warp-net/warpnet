@@ -33,27 +33,36 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/singleflight"
 )
 
-// sendTimeout bounds a single stream send. It matches the member node's retry
-// budget so a stalled peer is abandoned and retried (idempotently) instead of
-// holding the stream open far longer than the caller will wait.
-const sendTimeout = 10 * time.Second
+const (
+	// sendTimeout bounds a single stream send, so a stalled peer is abandoned
+	// and retried instead of holding the stream open far longer than the caller
+	// will wait.
+	sendTimeout = 10 * time.Second
+	// retryBudget bounds all retries of one request together; it matches
+	// sendTimeout so the whole send+retry stays within a predictable window.
+	retryBudget    = 10 * time.Second
+	maxSendRetries = 5
+)
 
 // ErrResponseRead marks a failure reading the response after the request was
 // already written to the peer. The peer may have processed it, so re-sending
-// would duplicate that work; callers treat it as non-retriable.
+// would duplicate that work; it is treated as non-retriable.
 const ErrResponseRead = warpnet.WarpError("stream: response read failed after request delivered")
 
 type NodeStreamer interface {
@@ -68,6 +77,7 @@ type streamPool struct {
 	privKey      ed25519.PrivateKey
 	clientPeerID warpnet.WarpPeerID
 	sf           singleflight.Group
+	retrier      retrier.Retrier
 }
 
 func NewStreamPool(
@@ -79,10 +89,15 @@ func NewStreamPool(
 		return nil, err
 	}
 
-	return &streamPool{ctx: ctx, n: n, privKey: privKey}, nil
+	return &streamPool{
+		ctx:     ctx,
+		n:       n,
+		privKey: privKey,
+		retrier: retrier.New(time.Second, maxSendRetries, retrier.FixedBackoff),
+	}, nil
 }
 
-func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte, msgID string) ([]byte, error) {
+func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
 	if p == nil {
 		return nil, warpnet.WarpError("nil stream pool")
 	}
@@ -93,21 +108,12 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	// Collapse concurrent identical in-flight requests to the same peer+route
 	// onto one stream: a fan-out that asks the same node for the same thing
 	// (many tweets' stats, avatars, overlapping timeline polls) sends it once and
-	// shares the response instead of opening a duplicate stream per caller. The
-	// key excludes msgID so callers with distinct ids still collapse.
-	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + string(data)
+	// shares the response instead of opening a duplicate stream per caller. Key
+	// by a hash of the body, not the body itself, so a 1 MB payload never sits in
+	// the map.
+	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + hashBody(data)
 	v, err, _ := p.sf.Do(key, func() (any, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
-		defer cancel()
-
-		connectedness := p.n.Network().Connectedness(peerAddr.ID)
-		switch connectedness {
-		case network.Limited:
-			log.Debugf("stream: peer %s has limited connection", peerAddr.ID.String())
-			ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
-		default:
-		}
-		return p.send(ctx, peerAddr, r, data, msgID)
+		return p.sendWithRetry(peerAddr, r, data)
 	})
 	if err != nil {
 		return nil, err
@@ -116,8 +122,41 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	return bt, nil
 }
 
+// sendWithRetry sends the request and retries transient, not-yet-delivered
+// failures, reusing one message id across attempts so a retry is idempotent
+// rather than a fresh request. Offline (peer unreachable) and response-read
+// (peer may already have processed it) failures are not retried.
+func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte) ([]byte, error) {
+	msgID := ulid.Make().String()
+
+	bt, err := p.send(serverInfo, r, bodyBytes, msgID)
+	if err == nil || errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
+		return bt, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), retryBudget)
+	defer cancel()
+	_ = p.retrier.Try(ctx, func() error {
+		bt, err = p.send(serverInfo, r, bodyBytes, msgID)
+		if errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
+			return fmt.Errorf("%w: %w", err, retrier.ErrStopTrying) // delivered/unreachable: stop
+		}
+		return err
+	})
+	return bt, err
+}
+
+// hashBody is a fast, non-cryptographic fingerprint of the request body for the
+// singleflight key, so identical concurrent requests collapse without keeping
+// the (potentially large) body in the key.
+func hashBody(data []byte) string {
+	h := fnv.New64a()
+	_, _ = h.Write(data)
+	return strconv.FormatUint(h.Sum64(), 16)
+}
+
 func (p *streamPool) send(
-	ctx context.Context, serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte, msgID string,
+	serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte, msgID string,
 ) ([]byte, error) {
 	if p.n == nil || serverInfo.String() == "" || r == "" {
 		return nil, warpnet.WarpError("stream: parameters improperly configured")
@@ -133,6 +172,13 @@ func (p *streamPool) send(
 		return nil, err
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+	if netw := p.n.Network(); netw != nil && netw.Connectedness(serverInfo.ID) == network.Limited {
+		log.Debugf("stream: peer %s has limited connection", serverInfo.ID.String())
+		ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
+	}
+
 	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
 	// No known addresses (routing.ErrNotFound) or every dial failed
 	// (swarm.ErrAllDialsFailed) both mean the peer is unreachable — offline.
@@ -146,7 +192,7 @@ func (p *streamPool) send(
 	defer closeStream(stream)
 
 	if msgID == "" {
-		msgID = uuid.New().String()
+		msgID = ulid.Make().String()
 	}
 	body := json.RawMessage(bodyBytes)
 	msg := event.Message{

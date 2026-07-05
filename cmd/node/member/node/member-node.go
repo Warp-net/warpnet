@@ -29,7 +29,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"time"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -44,9 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
 )
@@ -76,7 +73,6 @@ type MemberNode struct {
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
 	ownerId, network string
-	retrier          retrier.Retrier
 }
 
 func NewMemberNode(
@@ -154,7 +150,6 @@ func NewMemberNode(
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
-		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		deviceRepo:    deviceRepo,
@@ -301,26 +296,10 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 		return nil, fmt.Errorf("member: stream: %w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
 	}
 
-	// One id for the initial send and every retry: a retried request reuses the
-	// same MessageId, so it is idempotent instead of looking like a new request.
-	msgID := uuid.New().String()
-
-	bt, err := m.node.StreamWithID(nodeId, path, data, msgID)
+	// Idempotent retry and in-flight de-duplication live in the stream layer.
+	bt, err := m.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		m.setUserOffline(nodeIdStr)
-		return bt, err
-	}
-
-	// Only retry when the request was not delivered. A response-read failure
-	// means the peer may have already processed it, so re-sending would duplicate
-	// the work (e.g. a duplicate upstream request at the ActivityPub gateway).
-	if err != nil && !errors.Is(err, stream.ErrResponseRead) {
-		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancelF()
-		_ = m.retrier.Try(ctx, func() error {
-			bt, err = m.node.StreamWithID(nodeId, path, data, msgID) // TODO dead letters queue
-			return err
-		})
 	}
 	return bt, err
 }
