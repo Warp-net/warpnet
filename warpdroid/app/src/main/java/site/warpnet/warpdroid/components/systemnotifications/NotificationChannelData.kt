@@ -18,6 +18,12 @@ enum class NotificationChannelData(
         R.string.notification_mention_descriptions,
     ),
 
+    MESSAGE(
+        listOf(Notification.Type.Message),
+        R.string.notification_message_name,
+        R.string.notification_message_description,
+    ),
+
     RETWEET(
         listOf(Notification.Type.Retweet),
         R.string.notification_retweet_name,
