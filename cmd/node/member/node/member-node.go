@@ -29,7 +29,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"time"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -44,7 +43,6 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
@@ -75,7 +73,6 @@ type MemberNode struct {
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
 	ownerId, network string
-	retrier          retrier.Retrier
 }
 
 func NewMemberNode(
@@ -153,7 +150,6 @@ func NewMemberNode(
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
-		retrier:       retrier.New(time.Second, 5, retrier.FixedBackoff),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		deviceRepo:    deviceRepo,
@@ -303,16 +299,6 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	bt, err := m.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		m.setUserOffline(nodeIdStr)
-		return bt, err
-	}
-
-	if err != nil {
-		ctx, cancelF := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancelF()
-		_ = m.retrier.Try(ctx, func() error {
-			bt, err = m.node.Stream(nodeId, path, data) // TODO dead letters queue
-			return err
-		})
 	}
 	return bt, err
 }
