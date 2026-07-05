@@ -33,7 +33,9 @@ import site.warpnet.transport.ConnectionMonitor
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.warpdroid.components.pairing.AuthNodeInfoValidator
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
+import site.warpnet.warpdroid.components.pairing.PairingActivity
 import site.warpnet.warpdroid.components.pairing.PairingCoordinator
+import site.warpnet.warpdroid.components.pairing.PairingOutcome
 import site.warpnet.warpdroid.components.pairing.ValidationResult
 import site.warpnet.warpdroid.components.systemnotifications.NotificationFetcher
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
@@ -166,12 +168,38 @@ class WarpnetNotificationService : Service() {
         val rawQr = runCatching { pairedNodeStore.loadRawQr() }.getOrNull() ?: return
         when (val result = validator.validate(rawQr)) {
             is ValidationResult.Valid -> {
-                runCatching { pairingCoordinator.pair(result.authNodeInfo, result.rawJson) }
-                    .onFailure { Timber.tag(TAG).w(it, "cold bring-up failed") }
+                val outcome = runCatching {
+                    pairingCoordinator.pair(result.authNodeInfo, result.rawJson)
+                }.getOrElse {
+                    Timber.tag(TAG).w(it, "cold bring-up failed")
+                    return
+                }
+                // A durable rejection ("token mismatch") means the fat node
+                // regenerated its session token — typically on restart — so our
+                // stored pairing no longer authorises this alias. init+connect
+                // already succeeded inside pair(), leaving the client Connected;
+                // without this the alias would keep riding the live signed link.
+                // Drop the pairing and force a fresh scan.
+                if (outcome is PairingOutcome.Rejected) {
+                    Timber.tag(TAG).w(
+                        "cold bring-up rejected (code=${outcome.code} ${outcome.message}); forcing re-pair"
+                    )
+                    forceRepair()
+                }
             }
             is ValidationResult.Invalid ->
                 Timber.tag(TAG).w("cold bring-up: stored pairing invalid: ${result.reason}")
         }
+    }
+
+    // Tear down a pairing the fat node no longer accepts and bounce the user
+    // to the QR scanner. Mirrors PairRefreshWorker's durable-rejection path.
+    private suspend fun forceRepair() {
+        pairedNodeStore.clear()
+        runCatching { warpnetClient.shutdown() }
+        val intent = Intent(applicationContext, PairingActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        applicationContext.startActivity(intent)
     }
 
     override fun onDestroy() {
