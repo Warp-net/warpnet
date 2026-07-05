@@ -160,29 +160,6 @@ resulting from the use or misuse of this software.
           </p>
         </button>
         <button
-          @click="$router.push({ name: 'Likes' })"
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
-          aria-label="Likes"
-        >
-          <i
-            class="fa-heart"
-            :class="$route.name === 'Likes' ? 'text-2xl fas' : 'text-xl far'"
-            aria-hidden="true"
-          ></i>
-          <p
-            class="text-lg ml-4 text-left hidden xl:block"
-            :class="$route.name === 'Likes' ? 'font-bold' : ''"
-          >
-            Likes
-          </p>
-        </button>
-<!--        <button-->
-<!--          class="focus:outline-none hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"-->
-<!--        >-->
-<!--          <i class="text-xl fas fa-clipboard-list" aria-hidden="true"></i>-->
-<!--          <p class="text-lg ml-4 text-left hidden xl:block">Lists</p>-->
-<!--        </button>-->
-        <button
           @click="open('Profile')"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Profile"
@@ -388,15 +365,6 @@ export default {
     console.log("loading component:", this.$options.name);
     this.profile = warpnetService.getOwnerProfile();
 
-    // Root.vue sets this flag right after a first-run signup. Open
-    // the QR pairing dialog so a brand-new user sees the visual
-    // explainer without having to dig through the side-nav dropdown.
-    //
-    // Done first and in its own try/catch so a later avatar /
-    // notifications failure can't suppress the onboarding — for a
-    // first-run user the pairing UI is the most important thing this
-    // mount is supposed to surface. Routed through signInByQR() so
-    // there's a single code path opening the modal.
     try {
       if (typeof sessionStorage !== "undefined" &&
           sessionStorage.getItem("warpnet:show-pairing-onboarding") === "1") {
