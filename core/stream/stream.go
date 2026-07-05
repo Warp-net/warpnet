@@ -50,19 +50,11 @@ import (
 )
 
 const (
-	// sendTimeout bounds a single stream send, so a stalled peer is abandoned
-	// and retried instead of holding the stream open far longer than the caller
-	// will wait.
-	sendTimeout = 10 * time.Second
-	// retryBudget bounds all retries of one request together; it matches
-	// sendTimeout so the whole send+retry stays within a predictable window.
+	sendTimeout    = 10 * time.Second
 	retryBudget    = 10 * time.Second
 	maxSendRetries = 5
 )
 
-// ErrResponseRead marks a failure reading the response after the request was
-// already written to the peer. The peer may have processed it, so re-sending
-// would duplicate that work; it is treated as non-retriable.
 const ErrResponseRead = warpnet.WarpError("stream: response read failed after request delivered")
 
 type NodeStreamer interface {
@@ -105,12 +97,6 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 		return nil, p.ctx.Err()
 	}
 
-	// Collapse concurrent identical in-flight requests to the same peer+route
-	// onto one stream: a fan-out that asks the same node for the same thing
-	// (many tweets' stats, avatars, overlapping timeline polls) sends it once and
-	// shares the response instead of opening a duplicate stream per caller. Key
-	// by a hash of the body, not the body itself, so a 1 MB payload never sits in
-	// the map.
 	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + hashBody(data)
 	v, err, _ := p.sf.Do(key, func() (any, error) {
 		return p.sendWithRetry(peerAddr, r, data)
@@ -122,10 +108,6 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	return bt, nil
 }
 
-// sendWithRetry sends the request and retries transient, not-yet-delivered
-// failures, reusing one message id across attempts so a retry is idempotent
-// rather than a fresh request. Offline (peer unreachable) and response-read
-// (peer may already have processed it) failures are not retried.
 func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte) ([]byte, error) {
 	msgID := ulid.Make().String()
 
@@ -139,16 +121,13 @@ func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute,
 	_ = p.retrier.Try(ctx, func() error {
 		bt, err = p.send(serverInfo, r, bodyBytes, msgID)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
-			return fmt.Errorf("%w: %w", err, retrier.ErrStopTrying) // delivered/unreachable: stop
+			return fmt.Errorf("%w: %w", err, retrier.ErrStopTrying)
 		}
 		return err
 	})
 	return bt, err
 }
 
-// hashBody is a fast, non-cryptographic fingerprint of the request body for the
-// singleflight key, so identical concurrent requests collapse without keeping
-// the (potentially large) body in the key.
 func hashBody(data []byte) string {
 	h := fnv.New64a()
 	_, _ = h.Write(data)
