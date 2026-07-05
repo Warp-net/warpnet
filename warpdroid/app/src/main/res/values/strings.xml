@@ -399,6 +399,8 @@
 
     <string name="notification_mention_name">New mentions</string>
     <string name="notification_mention_descriptions">Notifications about new mentions</string>
+    <string name="notification_message_name">Direct messages</string>
+    <string name="notification_message_description">Notifications when you receive a direct message</string>
     <string name="notification_follow_name">New followers</string>
     <string name="notification_follow_description">Notifications about new followers</string>
     <string name="notification_follow_request_name">Follow requests</string>

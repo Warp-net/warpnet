@@ -339,7 +339,10 @@ class NotificationHelper @Inject constructor(
             )
         }
 
-        if (body.type != Notification.Type.SeveredRelationship && body.type != Notification.Type.ModerationWarning) {
+        if (body.type != Notification.Type.SeveredRelationship &&
+            body.type != Notification.Type.ModerationWarning &&
+            body.type != Notification.Type.Message
+        ) {
             val accountAvatar = try {
                 Glide.with(context)
                     .asBitmap()
@@ -549,6 +552,9 @@ class NotificationHelper @Inject constructor(
         return when (notification.type) {
             Notification.Type.Mention -> context.getString(R.string.notification_mention_format, accountName)
             Notification.Type.Reply -> context.getString(R.string.notification_mention_format, accountName)
+            // The fat node pre-composes "<sender> sent you a message" into the
+            // notification text, surfaced by the mapper as account.name.
+            Notification.Type.Message -> accountName
             Notification.Type.Status -> context.getString(R.string.notification_subscription_format, accountName)
             Notification.Type.Follow -> context.getString(R.string.notification_follow_format, accountName)
             Notification.Type.FollowRequest -> context.getString(R.string.notification_follow_request_format, accountName)
