@@ -124,6 +124,10 @@ resulting from the use or misuse of this software.
                     v-if="notification.type === 'moderation'"
                     class="pt-1 fas fa-shield-alt text-blue"
                   ></i>
+                  <i
+                    v-if="notification.type === 'message'"
+                    class="pt-1 fas fa-envelope text-blue"
+                  ></i>
 
                   <img
                     :src="'/default_profile.png'"
