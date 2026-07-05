@@ -325,7 +325,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 
 	makeHandler := func(repo stubChatRepo, users stubUserRepo, streamer stubStreamer) warpnet.WarpHandlerFunc {
 		streamer.nodeInfo.OwnerId = owner
-		return StreamNewMessageHandler(repo, users, streamer)
+		return StreamNewMessageHandler(repo, users, stubModerationNotifier{}, streamer)
 	}
 
 	bad := []event.NewMessageEvent{{}, {ChatId: "abc", Text: "x", SenderId: owner, ReceiverId: receiver}, {ChatId: chatID, SenderId: owner, ReceiverId: receiver}}
@@ -394,6 +394,32 @@ func TestStreamNewMessageHandler(t *testing.T) {
 	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "incoming", SenderId: receiver, ReceiverId: owner}), nil)
 	if err != nil || resp.(event.NewMessageResponse).Text != "incoming" {
 		t.Fatalf("unexpected incoming result: %#v err=%v", resp, err)
+	}
+
+	// An incoming message from the other user notifies the owner.
+	var notified domain.Notification
+	streamer := stubStreamer{}
+	streamer.nodeInfo.OwnerId = owner
+	incomingHandler := StreamNewMessageHandler(
+		stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
+			return domain.Chat{}, database.ErrChatNotFound
+		}, createChatFn: func(chatId *string, ownerId, otherUserId string) (domain.Chat, error) {
+			return domain.Chat{Id: chatID, OwnerId: receiver, OtherUserId: owner}, nil
+		}},
+		stubUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, Username: "sender-name"}, nil
+		}},
+		stubModerationNotifier{addFn: func(not domain.Notification) error {
+			notified = not
+			return nil
+		}},
+		streamer,
+	)
+	if _, err := incomingHandler(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "hi", SenderId: receiver, ReceiverId: owner}), nil); err != nil {
+		t.Fatalf("unexpected incoming notification err: %v", err)
+	}
+	if notified.Type != domain.NotificationMessageType || notified.UserId != owner || notified.Text != "sender-name sent you a message" {
+		t.Fatalf("unexpected notification: %#v", notified)
 	}
 
 	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
