@@ -237,11 +237,17 @@ skill creates belongs in the repo.
   then `AttachNode`s it. Calling a route before that ⇒ `not attached server node`.
 - **`healthz`/`readyz` are liveness only** — both hard-coded to 200. Don't use them as a
   readiness gate; assert on an actual routed reply instead.
-- **Isolated environments won't peer.** Behind an egress proxy the node completes
-  `dht: bootstrap complete` but shows `network_state: Disconnected`, `peers_online: 0`.
-  That's expected and does **not** invalidate handler verification — self-stream routes
-  are answered locally by this node regardless of peer connectivity. Only cross-node
-  features (fetching another user's remote data) need real peers.
+- **This sandbox can't reach the real testnet — and no network policy fixes it.**
+  Outbound egress here is restricted to **TCP ports 80 and 443** (verified: any host on
+  :443 connects; :53, :22, and libp2p's `:4011/4022/4033` all fail; UDP/QUIC is blocked).
+  This is a *port* filter baked into the environment's proxy architecture, **not** the
+  host/domain allowlist you pick when creating the environment — even a "maximum
+  permissions" policy only widens *which HTTPS hosts* are reachable, it does not open raw
+  TCP/UDP ports. So a lone node completes `dht: bootstrap complete` against the external
+  testnet peers but stays `network_state: Disconnected`, `peers_online: 0`. That does
+  **not** invalidate single-node handler verification (self-stream routes are answered
+  locally regardless of peers). For anything cross-node, use the local topology below —
+  **loopback is not port-filtered**, so nodes peer freely on `127.0.0.1`.
 - **Metrics gateway** defaults to a hardcoded push address and may be unreachable in a
   sandbox; it fails soft and does not block the node. Ignore metrics errors in the log.
 - **Same creds ⇒ same node.** The deterministic key means re-running with the same
@@ -250,27 +256,73 @@ skill creates belongs in the repo.
 - **`is-first-run` flips lazily.** It's `db.IsFirstRun` queried per call; it reports
   `false` once the DB has been opened by a first login.
 
-## Two-node local topology (when you need real peer exchange)
+## Cross-node verification: local topology (bootstrap node + two peers)
 
-Some features (remote user fetch, follow across nodes, moderation handshake) only prove
-out with a second node to talk to. Run a **member node** and point the business node at
-it as a bootstrap peer, both on the same `--node.network=testnet` and the **same
-`version` file** (the PSK derives from `network + version`, so a version mismatch =
-different private network = they won't connect):
+Some features (remote user fetch, follow across nodes, moderation handshake, timeline
+fan-out) only prove out with a second node to talk to, and the real testnet is
+unreachable from this sandbox (see the egress gotcha above). **The standard way to verify
+them here is a fully local swarm on `127.0.0.1`: one dedicated bootstrap node plus the
+two app nodes that discover each other through it.** This is a verified, working setup —
+loopback isn't port-filtered, so the nodes peer freely.
+
+**The bootstrap node is the `relay` node** (`cmd/node/relay`) — a headless libp2p host
+that runs the DHT + pubsub discovery every other node bootstraps against. It marks itself
+`OwnerId=bootstrap`/`Type=RelayNode` so peers don't challenge it. Give it a **fixed
+`--node.seed`** so its ID (and therefore its bootstrap multiaddr) is deterministic across
+runs.
+
+**All nodes must share `--node.network` AND the same `version` file** — the PSK derives
+from `network + version` (`security.GeneratePSK`), so a version mismatch = a different
+private network = nothing connects. Build every binary from the same working tree.
 
 ```bash
-# member node on its own ports + db dir
-"$SB/member" --node.network=testnet --node.port=4101 --node.server.port=4998 \
-    --database.dir=storage-member --node.server.password='TestPass123!' &
-# read its /ip4/.../p2p/<id> from the login response or logs, then:
-"$SB/business" --node.network=testnet --node.port=4001 --node.server.port=4999 \
-    --node.bootstrap='/ip4/127.0.0.1/tcp/4101/p2p/<member-node-id>' \
-    --database.dir=storage-business --node.server.password='TestPass123!' &
+SB=<scratch>
+go build -mod=vendor -o "$SB/relay"    ./cmd/node/relay
+go build -mod=vendor -o "$SB/business" ./cmd/node/business
+
+# 1) bootstrap (relay) node — fixed seed → deterministic ID, TCP on --node.port
+"$SB/relay" --node.network=testnet --node.port=4000 \
+    --node.seed=warpnet-local-bootstrap-seed --logging.level=info > "$SB/relay.log" 2>&1 &
+sleep 5
+RELAY_ID=$(grep -oP 'RELAY NODE STARTED WITH ID \K[^ ]+' "$SB/relay.log" | head -1)
+BOOT="/ip4/127.0.0.1/tcp/4000/p2p/$RELAY_ID"
+
+# 2) two app nodes, each bootstrapping off the relay; distinct ports + db dirs
+"$SB/business" --node.network=testnet --node.server.password='TestPass123!' \
+    --node.port=4001 --node.server.port=4999 --database.dir=storage-a --node.bootstrap="$BOOT" &
+"$SB/business" --node.network=testnet --node.server.password='TestPass123!' \
+    --node.port=4002 --node.server.port=5000 --database.dir=storage-b --node.bootstrap="$BOOT" &
+
+# 3) log into BOTH over /ws — this boots each node's libp2p host (see the flow above)
+"$SB/wsprobe" ws://localhost:4999/ws demoA
+"$SB/wsprobe" ws://localhost:5000/ws demoB
 ```
 
-Give each node a distinct `--node.port`, `--node.server.port`, and `--database.dir`.
-Verify connectivity via the `peers_online` field in `/private/get/admin/stats/0.0.0`
-before asserting on any cross-node route.
+Each node needs a distinct `--node.port`, `--node.server.port`, and `--database.dir`.
+
+**Discovery through the relay is not instant — poll, don't assume.** In a proxied sandbox
+each node first connects to the relay on a DHT retry cycle (~60 s), then discovers the
+*other* node via the relay's routing table; full mutual discovery took **~2–3 minutes**
+in practice. Poll `peers_online` in `/private/get/admin/stats/0.0.0` until it reaches the
+expected count (**2** = the relay + the other app node) before asserting on any cross-node
+route. Verified end state:
+
+```
+node A stats → peers_online: 2   (connected to relay + node B)
+node B stats → peers_online: 2   (connected to relay + node A)
+node A log   → peer ...<B-id>  connectedness updated: Connected
+node B log   → peer ...<A-id>  connectedness updated: Connected
+```
+
+**Fast shortcut when you don't need a dedicated bootstrap.** If you just need two nodes
+talking, skip the relay and point node B's `--node.bootstrap` straight at node A's
+multiaddr (`/ip4/127.0.0.1/tcp/4001/p2p/<A-node-id>`, read from A's login reply). A direct
+dial connects in **seconds** (`peers_online: 1`), versus minutes for relay-mediated
+discovery. Use the relay topology only when the feature specifically needs a bootstrap/
+relay in the path (e.g. relay-tunneled connectivity, discovery via DHT).
+
+Teardown is the same as Step 7 — `pkill` the binaries, `rm -rf ~/.warpdata/testnet`, and
+remove the probe. Confirm `git status --porcelain` is clean.
 
 ## When this skill does NOT apply
 
@@ -280,5 +332,3 @@ before asserting on any cross-node route.
   you don't need a node.
 - **warpdroid/Vue UI-only changes** that don't cross the Warpnet protocol boundary → no
   node needed.
-</content>
-</invoke>
