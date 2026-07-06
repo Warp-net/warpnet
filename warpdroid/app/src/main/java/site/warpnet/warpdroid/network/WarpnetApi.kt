@@ -433,7 +433,7 @@ class WarpnetApi @Inject constructor(
         return result {
             TweetContext(
                 ancestors = warpnet.getAncestors(tweetId = statusId, userId = authorId),
-                descendants = warpnet.getReplies(rootId = statusId),
+                descendants = warpnet.getReplies(rootId = statusId, rootUserId = authorId),
             )
         }
     }

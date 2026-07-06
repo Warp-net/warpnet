@@ -43,6 +43,9 @@ data class Notification(
 
         object Reply : Type("reply")
 
+        /** Someone sent you a direct message */
+        object Message : Type("message")
+
         /** Someone retweeted one of your statuses */
         object Retweet : Type("retweet")
 
@@ -106,6 +109,7 @@ data class Notification(
 val visibleNotificationTypes = listOf(
     Type.Mention,
     Type.Reply,
+    Type.Message,
     Type.Retweet,
     Type.Like,
     Type.PleromaEmojiReaction,

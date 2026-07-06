@@ -235,7 +235,7 @@ const messageLimit = 5000
 const statusUndelivered = "undelivered"
 
 // StreamNewMessageHandler is for sending a new message
-func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer ChatStreamer) warpnet.WarpHandlerFunc {
+func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRepo ModerationNotifier, streamer ChatStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewMessageEvent
 		err := json.Unmarshal(buf, &ev)
@@ -298,6 +298,18 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, streamer
 		}
 		if isOwnerReceiver { // the other user sent a message
 			log.Infoln("received new message!")
+			notifyUsername := ev.SenderId
+			sender, senderErr := userRepo.Get(ev.SenderId)
+			if senderErr == nil {
+				notifyUsername = sender.Username
+			}
+			if err := notifyRepo.Add(domain.Notification{
+				Type:   domain.NotificationMessageType,
+				Text:   notifyUsername + " sent you a message",
+				UserId: ownerId,
+			}); err != nil {
+				log.Errorf("chat message: adding notification: %v", err)
+			}
 			return event.NewMessageResponse(msg), nil
 		}
 

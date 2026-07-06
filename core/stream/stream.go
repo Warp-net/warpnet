@@ -33,17 +33,29 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/singleflight"
 )
+
+const (
+	sendTimeout    = 10 * time.Second
+	retryBudget    = 10 * time.Second
+	maxSendRetries = 5
+)
+
+const ErrResponseRead = warpnet.WarpError("stream: response read failed after request delivered")
 
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
@@ -56,6 +68,8 @@ type streamPool struct {
 	n            NodeStreamer
 	privKey      ed25519.PrivateKey
 	clientPeerID warpnet.WarpPeerID
+	sf           singleflight.Group
+	retrier      retrier.Retrier
 }
 
 func NewStreamPool(
@@ -67,7 +81,12 @@ func NewStreamPool(
 		return nil, err
 	}
 
-	return &streamPool{ctx: ctx, n: n, privKey: privKey}, nil
+	return &streamPool{
+		ctx:     ctx,
+		n:       n,
+		privKey: privKey,
+		retrier: retrier.New(time.Second, maxSendRetries, retrier.FixedBackoff),
+	}, nil
 }
 
 func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
@@ -78,22 +97,45 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 		return nil, p.ctx.Err()
 	}
 
-	// long-long wait in case of p2p-circuit stream
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	connectedness := p.n.Network().Connectedness(peerAddr.ID)
-	switch connectedness {
-	case network.Limited:
-		log.Debugf("stream: peer %s has limited connection", peerAddr.ID.String())
-		ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
-	default:
+	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + hashBody(data)
+	v, err, _ := p.sf.Do(key, func() (any, error) {
+		return p.sendWithRetry(peerAddr, r, data)
+	})
+	if err != nil {
+		return nil, err
 	}
-	return p.send(ctx, peerAddr, r, data)
+	bt, _ := v.([]byte)
+	return bt, nil
+}
+
+func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte) ([]byte, error) {
+	msgID := ulid.Make().String()
+
+	bt, err := p.send(serverInfo, r, bodyBytes, msgID)
+	if err == nil || errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
+		return bt, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), retryBudget)
+	defer cancel()
+	_ = p.retrier.Try(ctx, func() error {
+		bt, err = p.send(serverInfo, r, bodyBytes, msgID)
+		if errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
+			return fmt.Errorf("%w: %w", err, retrier.ErrStopTrying)
+		}
+		return err
+	})
+	return bt, err
+}
+
+func hashBody(data []byte) string {
+	h := fnv.New64a()
+	_, _ = h.Write(data)
+	return strconv.FormatUint(h.Sum64(), 16)
 }
 
 func (p *streamPool) send(
-	ctx context.Context, serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte,
+	serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte, msgID string,
 ) ([]byte, error) {
 	if p.n == nil || serverInfo.String() == "" || r == "" {
 		return nil, warpnet.WarpError("stream: parameters improperly configured")
@@ -109,6 +151,13 @@ func (p *streamPool) send(
 		return nil, err
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+	if netw := p.n.Network(); netw != nil && netw.Connectedness(serverInfo.ID) == network.Limited {
+		log.Debugf("stream: peer %s has limited connection", serverInfo.ID.String())
+		ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
+	}
+
 	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
 	// No known addresses (routing.ErrNotFound) or every dial failed
 	// (swarm.ErrAllDialsFailed) both mean the peer is unreachable — offline.
@@ -121,10 +170,13 @@ func (p *streamPool) send(
 	}
 	defer closeStream(stream)
 
+	if msgID == "" {
+		msgID = ulid.Make().String()
+	}
 	body := json.RawMessage(bodyBytes)
 	msg := event.Message{
 		Body:        body,
-		MessageId:   uuid.New().String(),
+		MessageId:   msgID,
 		NodeId:      p.n.ID().String(),
 		Destination: r.String(),
 		Timestamp:   time.Now(),
@@ -149,7 +201,7 @@ func (p *streamPool) send(
 	_, err = buf.ReadFrom(rw)
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
-		return nil, fmt.Errorf("stream: reading response from %s: %w", serverInfo.ID.String(), err)
+		return nil, fmt.Errorf("%w: from %s: %w", ErrResponseRead, serverInfo.ID.String(), err)
 	}
 
 	return buf.Bytes(), nil

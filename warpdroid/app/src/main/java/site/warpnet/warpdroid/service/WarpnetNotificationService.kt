@@ -33,7 +33,9 @@ import site.warpnet.transport.ConnectionMonitor
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.warpdroid.components.pairing.AuthNodeInfoValidator
 import site.warpnet.warpdroid.components.pairing.PairedNodeStore
+import site.warpnet.warpdroid.components.pairing.PairingActivity
 import site.warpnet.warpdroid.components.pairing.PairingCoordinator
+import site.warpnet.warpdroid.components.pairing.PairingOutcome
 import site.warpnet.warpdroid.components.pairing.ValidationResult
 import site.warpnet.warpdroid.components.systemnotifications.NotificationFetcher
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
@@ -166,12 +168,30 @@ class WarpnetNotificationService : Service() {
         val rawQr = runCatching { pairedNodeStore.loadRawQr() }.getOrNull() ?: return
         when (val result = validator.validate(rawQr)) {
             is ValidationResult.Valid -> {
-                runCatching { pairingCoordinator.pair(result.authNodeInfo, result.rawJson) }
-                    .onFailure { Timber.tag(TAG).w(it, "cold bring-up failed") }
+                val outcome = runCatching {
+                    pairingCoordinator.pair(result.authNodeInfo, result.rawJson)
+                }.getOrElse {
+                    Timber.tag(TAG).w(it, "cold bring-up failed")
+                    return
+                }
+                if (outcome is PairingOutcome.Rejected) {
+                    Timber.tag(TAG).w(
+                        "cold bring-up rejected (code=${outcome.code} ${outcome.message}); resetting pairing"
+                    )
+                    resetPairing()
+                }
             }
             is ValidationResult.Invalid ->
                 Timber.tag(TAG).w("cold bring-up: stored pairing invalid: ${result.reason}")
         }
+    }
+
+    private suspend fun resetPairing() {
+        pairedNodeStore.clear()
+        runCatching { warpnetClient.shutdown() }
+        val intent = Intent(applicationContext, PairingActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        applicationContext.startActivity(intent)
     }
 
     override fun onDestroy() {

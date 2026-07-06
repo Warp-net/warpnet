@@ -41,7 +41,7 @@ func TestSend_UnreachablePeerReportedOffline(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &streamPool{ctx: context.Background(), n: &fakeNewStreamNode{err: tc.streamErr}}
-			_, err := p.send(context.Background(), serverInfo, WarpRoute("/test/route"), []byte("{}"))
+			_, err := p.send(serverInfo, WarpRoute("/test/route"), []byte("{}"), "")
 			assert.Equal(t, tc.offline, errors.Is(err, warpnet.ErrNodeIsOffline))
 		})
 	}

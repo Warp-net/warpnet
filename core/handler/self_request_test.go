@@ -180,7 +180,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 		repo := stubChatRepo{getChatFn: func(id string) (domain.Chat, error) {
 			return domain.Chat{Id: id, OwnerId: owner, OtherUserId: owner}, nil
 		}}
-		h := StreamNewMessageHandler(repo, ownerChatUserRepo, streamer)
+		h := StreamNewMessageHandler(repo, ownerChatUserRepo, stubModerationNotifier{}, streamer)
 		// chatId must contain ":" to satisfy the parameter validation.
 		if _, err := h(marshal(t, event.NewMessageEvent{ChatId: owner + ":" + owner, SenderId: owner, ReceiverId: owner, Text: "hi"}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)

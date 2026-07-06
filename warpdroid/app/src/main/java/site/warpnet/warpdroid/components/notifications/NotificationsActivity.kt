@@ -14,6 +14,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -198,15 +199,48 @@ class NotificationsActivity : BaseActivity() {
             onClick = onClick,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Per-type icon mirrors the Vue Notifications view so the kind
+                // of notification (like, follow, direct message, …) is visible
+                // at a glance instead of relying on the push alone.
+                Icon(
+                    painter = painterResource(notificationTypeIcon(n.type)),
+                    contentDescription = null,
+                    tint = colorScheme.primary,
+                    modifier = Modifier.padding(end = 12.dp),
+                )
                 // The backend pre-composes the actor + verb into [text]
                 // (e.g. "Echo liked your tweet"), surfaced via account.name.
                 Text(
                     text = n.account.name,
                     fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
+    }
+
+    @DrawableRes
+    private fun notificationTypeIcon(type: Notification.Type): Int = when (type) {
+        Notification.Type.Mention -> R.drawable.ic_email_alternate_24dp
+        Notification.Type.Reply -> R.drawable.ic_reply_24dp
+        Notification.Type.Message -> R.drawable.ic_mail_24dp
+        Notification.Type.Retweet -> R.drawable.ic_repeat_24dp
+        Notification.Type.Like,
+        Notification.Type.PleromaEmojiReaction -> R.drawable.ic_star_24dp_filled
+        Notification.Type.Follow,
+        Notification.Type.FollowRequest,
+        Notification.Type.SignUp -> R.drawable.ic_person_add_24dp_mirrored
+        Notification.Type.Status -> R.drawable.ic_notifications_active_24dp
+        Notification.Type.Update,
+        Notification.Type.QuotedUpdate -> R.drawable.ic_edit_24dp_filled
+        Notification.Type.Quote -> R.drawable.ic_format_quote_24dp_filled
+        Notification.Type.ModerationWarning -> R.drawable.ic_gavel_24dp
+        Notification.Type.SeveredRelationship -> R.drawable.ic_block_24dp
+        is Notification.Type.Unknown -> R.drawable.ic_notifications_24dp
     }
 
     @Composable
