@@ -56,6 +56,33 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("orders ulid ids first", func(t *testing.T) {
+		ulidID := "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		h := StreamGetWhoToFollowHandler(
+			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-owner", Username: "test"}},
+			stubUserFetcher{
+				whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
+					return []domain.User{
+						{Id: "plain-id", NodeId: "node-1", Network: warpnet.WarpnetName},
+						{Id: ulidID, NodeId: "node-2", Network: warpnet.WarpnetName},
+					}, "end", nil
+				},
+				getFn: func(userId string) (domain.User, error) {
+					return domain.User{Id: owner, Network: warpnet.WarpnetName}, nil
+				},
+			},
+			stubUserFollowsCounter{},
+		)
+		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.UsersResponse)
+		if len(r.Users) != 2 || r.Users[0].Id != ulidID {
+			t.Fatalf("expected ulid id first, got: %v", r.Users)
+		}
+	})
+
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {

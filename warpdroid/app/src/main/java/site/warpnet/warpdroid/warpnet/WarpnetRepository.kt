@@ -228,12 +228,15 @@ class WarpnetRepository @Inject constructor(
         return tweetStatsRespAdapter.fromJson(raw) ?: TweetStatsResponse(tweetId = tweetId)
     }
 
-    suspend fun getReplies(rootId: String, parentId: String = "", cursor: String = ""): List<Tweet> {
+    suspend fun getReplies(rootId: String, parentId: String = "", rootUserId: String = "", cursor: String = ""): List<Tweet> {
         // Replies are tweets with a parent: a rootId selects the thread branch
-        // of the tweets route, which returns a flat TweetsResponse.
+        // of the tweets route, which returns a flat TweetsResponse. rootUserId
+        // names the thread author so the fat node can forward the request to
+        // that author's home node (e.g. the ActivityPub gateway for a bridged
+        // Mastodon thread), whose replies are not stored locally.
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEETS,
-            getAllTweetsAdapter.toJson(GetAllTweetsEvent(rootId = rootId, parentId = parentId, cursor = cursor)),
+            getAllTweetsAdapter.toJson(GetAllTweetsEvent(rootId = rootId, parentId = parentId, rootUserId = rootUserId, cursor = cursor)),
         )
         val page = tweetsRespAdapter.fromJson(raw) ?: return emptyList()
         return hydrateTweets(page.tweets)
