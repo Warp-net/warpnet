@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rtcp
@@ -111,9 +111,9 @@ func (h Header) Marshal() ([]byte, error) {
 	if h.Count > 31 {
 		return nil, errInvalidHeader
 	}
-	rawPacket[0] |= h.Count << countShift
+	rawPacket[0] |= h.Count << countShift //nolint:gosec // rawPacket is created with length headerLength (4)
 
-	rawPacket[1] = uint8(h.Type)
+	rawPacket[1] = uint8(h.Type) //nolint:gosec // rawPacket is created with length headerLength (4)
 
 	binary.BigEndian.PutUint16(rawPacket[2:], h.Length)
 

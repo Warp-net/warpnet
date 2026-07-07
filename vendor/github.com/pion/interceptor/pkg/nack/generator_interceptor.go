@@ -1,10 +1,11 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package nack
 
 import (
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
 
@@ -29,13 +30,19 @@ func (g *GeneratorInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		receiveLogs:       map[uint32]*receiveLog{},
 		nackCountLogs:     map[uint32]map[uint16]uint16{},
 		close:             make(chan struct{}),
-		log:               logging.NewDefaultLoggerFactory().NewLogger("nack_generator"),
 	}
 
 	for _, opt := range g.opts {
 		if err := opt(generatorInterceptor); err != nil {
 			return nil, err
 		}
+	}
+
+	if generatorInterceptor.loggerFactory == nil {
+		generatorInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if generatorInterceptor.log == nil {
+		generatorInterceptor.log = generatorInterceptor.loggerFactory.NewLogger("nack_generator")
 	}
 
 	if _, err := newReceiveLog(generatorInterceptor.size); err != nil {
@@ -57,6 +64,7 @@ type GeneratorInterceptor struct {
 	wg                sync.WaitGroup
 	close             chan struct{}
 	log               logging.LeveledLogger
+	loggerFactory     logging.LoggerFactory
 	nackCountLogs     map[uint32]map[uint16]uint16
 
 	receiveLogs   map[uint32]*receiveLog
@@ -123,6 +131,8 @@ func (n *GeneratorInterceptor) BindRemoteStream(
 func (n *GeneratorInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
 	n.receiveLogsMu.Lock()
 	delete(n.receiveLogs, info.SSRC)
+	// the count logs must also be dropped for the specific SSRC.
+	delete(n.nackCountLogs, info.SSRC)
 	n.receiveLogsMu.Unlock()
 }
 
@@ -153,68 +163,71 @@ func (n *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 	for {
 		select {
 		case <-ticker.C:
-			func() {
-				n.receiveLogsMu.Lock()
-				defer n.receiveLogsMu.Unlock()
+			// save NACKs to send without holding the mutex during Write
+			var toSend []rtcp.Packet
 
-				for ssrc, receiveLog := range n.receiveLogs {
-					missing := receiveLog.missingSeqNumbers(n.skipLastN, missingPacketSeqNums)
+			n.receiveLogsMu.Lock()
+			for ssrc, receiveLog := range n.receiveLogs {
+				missing := receiveLog.missingSeqNumbers(n.skipLastN, missingPacketSeqNums)
 
-					if len(missing) == 0 || n.nackCountLogs[ssrc] == nil {
-						n.nackCountLogs[ssrc] = map[uint16]uint16{}
+				if len(missing) == 0 || n.nackCountLogs[ssrc] == nil {
+					n.nackCountLogs[ssrc] = map[uint16]uint16{}
+				}
+				if len(missing) == 0 {
+					continue
+				}
+
+				var nack *rtcp.TransportLayerNack
+
+				count := 0
+				if n.maxNacksPerPacket > 0 {
+					for _, missingSeq := range missing {
+						if n.nackCountLogs[ssrc][missingSeq] < n.maxNacksPerPacket {
+							filteredMissingPacket[count] = missingSeq
+							count++
+						}
+						n.nackCountLogs[ssrc][missingSeq]++
 					}
-					if len(missing) == 0 {
+
+					if count == 0 {
 						continue
 					}
 
-					nack := &rtcp.TransportLayerNack{} // nolint:ineffassign,wastedassign
-
-					c := 0 // nolint:varnamelen,
-					if n.maxNacksPerPacket > 0 {
-						for _, missingSeq := range missing {
-							if n.nackCountLogs[ssrc][missingSeq] < n.maxNacksPerPacket {
-								filteredMissingPacket[c] = missingSeq
-								c++
-							}
-							n.nackCountLogs[ssrc][missingSeq]++
-						}
-
-						if c == 0 {
-							continue
-						}
-
-						nack = &rtcp.TransportLayerNack{
-							SenderSSRC: senderSSRC,
-							MediaSSRC:  ssrc,
-							Nacks:      rtcp.NackPairsFromSequenceNumbers(filteredMissingPacket[:c]),
-						}
-					} else {
-						nack = &rtcp.TransportLayerNack{
-							SenderSSRC: senderSSRC,
-							MediaSSRC:  ssrc,
-							Nacks:      rtcp.NackPairsFromSequenceNumbers(missing),
-						}
+					nack = &rtcp.TransportLayerNack{
+						SenderSSRC: senderSSRC,
+						MediaSSRC:  ssrc,
+						Nacks:      rtcp.NackPairsFromSequenceNumbers(filteredMissingPacket[:count]),
 					}
-
-					for nackSeq := range n.nackCountLogs[ssrc] {
-						isMissing := false
-						for _, missingSeq := range missing {
-							if missingSeq == nackSeq {
-								isMissing = true
-
-								break
-							}
-						}
-						if !isMissing {
-							delete(n.nackCountLogs[ssrc], nackSeq)
-						}
-					}
-
-					if _, err := rtcpWriter.Write([]rtcp.Packet{nack}, interceptor.Attributes{}); err != nil {
-						n.log.Warnf("failed sending nack: %+v", err)
+				} else {
+					nack = &rtcp.TransportLayerNack{
+						SenderSSRC: senderSSRC,
+						MediaSSRC:  ssrc,
+						Nacks:      rtcp.NackPairsFromSequenceNumbers(missing),
 					}
 				}
-			}()
+
+				for nackSeq := range n.nackCountLogs[ssrc] {
+					if !slices.Contains(missing, nackSeq) {
+						delete(n.nackCountLogs[ssrc], nackSeq)
+					}
+				}
+
+				// clean up the count log for the ssrc if it's empty
+				if len(n.nackCountLogs[ssrc]) == 0 {
+					delete(n.nackCountLogs, ssrc)
+				}
+
+				toSend = append(toSend, nack)
+			}
+			n.receiveLogsMu.Unlock()
+
+			// send RTCP without holding receiveLogsMu
+			for _, pkt := range toSend {
+				if _, err := rtcpWriter.Write([]rtcp.Packet{pkt}, interceptor.Attributes{}); err != nil {
+					n.log.Warnf("failed sending nack: %+v", err)
+				}
+			}
+
 		case <-n.close:
 			return
 		}

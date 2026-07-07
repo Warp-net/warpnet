@@ -1,10 +1,10 @@
-//go:build (arm64 || arm) && linux && !js
-// +build arm64 arm
+//go:build (arm64 || arm || s390x) && linux && !js
+// +build arm64 arm s390x
 // +build linux
 // +build !js
 
 /*
- * SPDX-FileCopyrightText: © Hypermode Inc. <hello@hypermode.com>
+ * SPDX-FileCopyrightText: © 2017-2025 Istari Digital, Inc.
  * SPDX-License-Identifier: Apache-2.0
  */
 

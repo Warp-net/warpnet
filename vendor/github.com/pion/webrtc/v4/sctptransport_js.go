@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -29,4 +29,10 @@ func (r *SCTPTransport) Transport() *DTLSTransport {
 	return &DTLSTransport{
 		underlying: underlying,
 	}
+}
+
+// Metadata returns negotiated SCTP association metadata. The ok return value is
+// always false in the js/wasm build because browsers do not expose this metadata.
+func (r *SCTPTransport) Metadata() (SCTPTransportMetadata, bool) {
+	return SCTPTransportMetadata{}, false
 }

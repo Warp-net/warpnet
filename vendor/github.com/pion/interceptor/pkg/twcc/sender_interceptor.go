@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package twcc
@@ -24,7 +24,6 @@ var errClosed = errors.New("interceptor is closed")
 // NewInterceptor constructs a new SenderInterceptor.
 func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	senderInterceptor := &SenderInterceptor{
-		log:        logging.NewDefaultLoggerFactory().NewLogger("twcc_sender_interceptor"),
 		packetChan: make(chan packet),
 		close:      make(chan struct{}),
 		interval:   100 * time.Millisecond,
@@ -36,6 +35,13 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if senderInterceptor.loggerFactory == nil {
+		senderInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if senderInterceptor.log == nil {
+		senderInterceptor.log = senderInterceptor.loggerFactory.NewLogger("twcc_sender_interceptor")
 	}
 
 	return senderInterceptor, nil
@@ -51,7 +57,8 @@ func NewSenderInterceptor(opts ...Option) (*SenderInterceptorFactory, error) {
 type SenderInterceptor struct {
 	interceptor.NoOp
 
-	log logging.LeveledLogger
+	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
 
 	m     sync.Mutex
 	wg    sync.WaitGroup
@@ -72,6 +79,15 @@ type Option func(*SenderInterceptor) error
 func SendInterval(interval time.Duration) Option {
 	return func(s *SenderInterceptor) error {
 		s.interval = interval
+
+		return nil
+	}
+}
+
+// WithLoggerFactory sets the logger factory for the interceptor.
+func WithLoggerFactory(loggerFactory logging.LoggerFactory) Option {
+	return func(s *SenderInterceptor) error {
+		s.loggerFactory = loggerFactory
 
 		return nil
 	}

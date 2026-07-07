@@ -26,8 +26,6 @@ import (
 // is appropriate for all three curves, as per SP 800-90Ar1, Section 10.1 and SP
 // 800-57 Part 1 Rev. 5, Section 5.6.1.2.
 //
-// The output MAY CHANGE until this package reaches v1.0.0.
-//
 // [c2sp.org/det-keygen]: https://c2sp.org/det-keygen
 func RSA(bits int, secret []byte) (*rsa.PrivateKey, error) {
 	if len(secret) < 16 {
@@ -332,6 +330,7 @@ func isPrime(w []byte) bool {
 			// b was rejected.
 			continue
 		}
+		//lint:ignore S1002 the named constant is clearer than !result
 		if result == millerRabinCOMPOSITE {
 			return false
 		}

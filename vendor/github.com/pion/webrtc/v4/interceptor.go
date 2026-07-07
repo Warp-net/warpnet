@@ -1,12 +1,12 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package webrtc
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/pion/interceptor"
@@ -14,20 +14,51 @@ import (
 	"github.com/pion/interceptor/pkg/nack"
 	"github.com/pion/interceptor/pkg/report"
 	"github.com/pion/interceptor/pkg/rfc8888"
+	"github.com/pion/interceptor/pkg/stats"
 	"github.com/pion/interceptor/pkg/twcc"
 	"github.com/pion/rtp"
 	"github.com/pion/sdp/v3"
 )
 
 // RegisterDefaultInterceptors will register some useful interceptors.
-// If you want to customize which interceptors are loaded, you should copy the
-// code from this method and remove unwanted interceptors.
+// If you want to customize which interceptors are loaded, you should copy the code from this method and remove
+// unwanted interceptors. You can also use RegisterDefaultInterceptorsWithOptions to pass in options to modify behavior.
 func RegisterDefaultInterceptors(mediaEngine *MediaEngine, interceptorRegistry *interceptor.Registry) error {
-	if err := ConfigureNack(mediaEngine, interceptorRegistry); err != nil {
+	return RegisterDefaultInterceptorsWithOptions(mediaEngine, interceptorRegistry)
+}
+
+// RegisterDefaultInterceptorsWithOptions will register some useful interceptors with the provided options.
+// If you want to customize which interceptors are loaded, you should copy the code from this method and remove
+// unwanted interceptors, or pass in options to modify behavior.
+func RegisterDefaultInterceptorsWithOptions(mediaEngine *MediaEngine, interceptorRegistry *interceptor.Registry,
+	opts ...InterceptorOption,
+) error {
+	var options interceptorOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	if options.loggerFactory != nil {
+		// Set logger factory for all interceptors
+		options.nackGeneratorOptions = append(options.nackGeneratorOptions,
+			nack.WithGeneratorLoggerFactory(options.loggerFactory))
+		options.nackResponderOptions = append(options.nackResponderOptions,
+			nack.WithResponderLoggerFactory(options.loggerFactory))
+		options.reportReceiverOptions = append(options.reportReceiverOptions,
+			report.WithReceiverLoggerFactory(options.loggerFactory))
+		options.reportSenderOptions = append(options.reportSenderOptions,
+			report.WithSenderLoggerFactory(options.loggerFactory))
+		options.statsOptions = append(options.statsOptions, stats.WithLoggerFactory(options.loggerFactory))
+		options.twccOptions = append(options.twccOptions, twcc.WithLoggerFactory(options.loggerFactory))
+	}
+
+	if err := ConfigureNackWithOptions(mediaEngine, interceptorRegistry, options.nackGeneratorOptions,
+		options.nackResponderOptions...); err != nil {
 		return err
 	}
 
-	if err := ConfigureRTCPReports(interceptorRegistry); err != nil {
+	if err := ConfigureRTCPReportsWithOptions(interceptorRegistry, options.reportReceiverOptions,
+		options.reportSenderOptions...); err != nil {
 		return err
 	}
 
@@ -35,22 +66,73 @@ func RegisterDefaultInterceptors(mediaEngine *MediaEngine, interceptorRegistry *
 		return err
 	}
 
-	return ConfigureTWCCSender(mediaEngine, interceptorRegistry)
+	if err := ConfigureStatsInterceptorWithOptions(interceptorRegistry, options.statsOptions...); err != nil {
+		return err
+	}
+
+	return ConfigureTWCCSenderWithOptions(mediaEngine, interceptorRegistry, options.twccOptions...)
 }
+
+// ConfigureStatsInterceptor will setup everything necessary for generating RTP stream statistics.
+func ConfigureStatsInterceptor(interceptorRegistry *interceptor.Registry) error {
+	return ConfigureStatsInterceptorWithOptions(interceptorRegistry)
+}
+
+// ConfigureStatsInterceptorWithOptions will setup everything necessary for generating RTP stream statistics
+// with the provided options.
+func ConfigureStatsInterceptorWithOptions(interceptorRegistry *interceptor.Registry, opts ...stats.Option) error {
+	statsInterceptor, err := stats.NewInterceptor(opts...)
+	if err != nil {
+		return err
+	}
+	statsInterceptor.OnNewPeerConnection(func(id string, stats stats.Getter) {
+		statsGetter.Store(id, stats)
+	})
+	interceptorRegistry.Add(statsInterceptor)
+
+	return nil
+}
+
+// lookupStats returns the stats getter for a given peerconnection.statsId.
+func lookupStats(id string) (stats.Getter, bool) {
+	if value, exists := statsGetter.Load(id); exists {
+		if getter, ok := value.(stats.Getter); ok {
+			return getter, true
+		}
+	}
+
+	return nil, false
+}
+
+// cleanupStats removes the stats getter for a given peerconnection.statsId.
+func cleanupStats(id string) {
+	statsGetter.Delete(id)
+}
+
+// key: string (peerconnection.statsId), value: stats.Getter
+var statsGetter sync.Map // nolint:gochecknoglobals
 
 // ConfigureRTCPReports will setup everything necessary for generating Sender and Receiver Reports.
 func ConfigureRTCPReports(interceptorRegistry *interceptor.Registry) error {
-	reciver, err := report.NewReceiverInterceptor()
+	return ConfigureRTCPReportsWithOptions(interceptorRegistry, nil)
+}
+
+// ConfigureRTCPReportsWithOptions will setup everything necessary for generating Sender and Receiver Reports
+// with the provided options.
+func ConfigureRTCPReportsWithOptions(interceptorRegistry *interceptor.Registry, recvOpts []report.ReceiverOption,
+	sendOpts ...report.SenderOption,
+) error {
+	receiver, err := report.NewReceiverInterceptor(recvOpts...)
 	if err != nil {
 		return err
 	}
 
-	sender, err := report.NewSenderInterceptor()
+	sender, err := report.NewSenderInterceptor(sendOpts...)
 	if err != nil {
 		return err
 	}
 
-	interceptorRegistry.Add(reciver)
+	interceptorRegistry.Add(receiver)
 	interceptorRegistry.Add(sender)
 
 	return nil
@@ -58,12 +140,20 @@ func ConfigureRTCPReports(interceptorRegistry *interceptor.Registry) error {
 
 // ConfigureNack will setup everything necessary for handling generating/responding to nack messages.
 func ConfigureNack(mediaEngine *MediaEngine, interceptorRegistry *interceptor.Registry) error {
-	generator, err := nack.NewGeneratorInterceptor()
+	return ConfigureNackWithOptions(mediaEngine, interceptorRegistry, nil)
+}
+
+// ConfigureNackWithOptions will setup everything necessary for handling generating/responding to nack messages
+// with the provided options.
+func ConfigureNackWithOptions(mediaEngine *MediaEngine, interceptorRegistry *interceptor.Registry,
+	genOpts []nack.GeneratorOption, respOpts ...nack.ResponderOption,
+) error {
+	generator, err := nack.NewGeneratorInterceptor(genOpts...)
 	if err != nil {
 		return err
 	}
 
-	responder, err := nack.NewResponderInterceptor()
+	responder, err := nack.NewResponderInterceptor(respOpts...)
 	if err != nil {
 		return err
 	}
@@ -91,12 +181,12 @@ func ConfigureTWCCHeaderExtensionSender(mediaEngine *MediaEngine, interceptorReg
 		return err
 	}
 
-	i, err := twcc.NewHeaderExtensionInterceptor()
+	twccInterceptor, err := twcc.NewHeaderExtensionInterceptor()
 	if err != nil {
 		return err
 	}
 
-	interceptorRegistry.Add(i)
+	interceptorRegistry.Add(twccInterceptor)
 
 	return nil
 }
@@ -104,6 +194,14 @@ func ConfigureTWCCHeaderExtensionSender(mediaEngine *MediaEngine, interceptorReg
 // ConfigureTWCCSender will setup everything necessary for generating TWCC reports.
 // This must be called after registering codecs with the MediaEngine.
 func ConfigureTWCCSender(mediaEngine *MediaEngine, interceptorRegistry *interceptor.Registry) error {
+	return ConfigureTWCCSenderWithOptions(mediaEngine, interceptorRegistry)
+}
+
+// ConfigureTWCCSenderWithOptions will setup everything necessary for generating TWCC reports with the provided options.
+// This must be called after registering codecs with the MediaEngine.
+func ConfigureTWCCSenderWithOptions(mediaEngine *MediaEngine, interceptorRegistry *interceptor.Registry,
+	opts ...twcc.Option,
+) error {
 	mediaEngine.RegisterFeedback(RTCPFeedback{Type: TypeRTCPFBTransportCC}, RTPCodecTypeVideo)
 	if err := mediaEngine.RegisterHeaderExtension(
 		RTPHeaderExtensionCapability{URI: sdp.TransportCCURI}, RTPCodecTypeVideo,
@@ -118,7 +216,7 @@ func ConfigureTWCCSender(mediaEngine *MediaEngine, interceptorRegistry *intercep
 		return err
 	}
 
-	generator, err := twcc.NewSenderInterceptor()
+	generator, err := twcc.NewSenderInterceptor(opts...)
 	if err != nil {
 		return err
 	}
@@ -131,9 +229,17 @@ func ConfigureTWCCSender(mediaEngine *MediaEngine, interceptorRegistry *intercep
 // ConfigureCongestionControlFeedback registers congestion control feedback as
 // defined in RFC 8888 (https://datatracker.ietf.org/doc/rfc8888/)
 func ConfigureCongestionControlFeedback(mediaEngine *MediaEngine, interceptorRegistry *interceptor.Registry) error {
+	return ConfigureCongestionControlFeedbackWithOptions(mediaEngine, interceptorRegistry)
+}
+
+// ConfigureCongestionControlFeedbackWithOptions registers congestion control feedback as
+// defined in RFC 8888 (https://datatracker.ietf.org/doc/rfc8888/) with the provided options.
+func ConfigureCongestionControlFeedbackWithOptions(mediaEngine *MediaEngine, interceptorRegistry *interceptor.Registry,
+	opts ...rfc8888.Option,
+) error {
 	mediaEngine.RegisterFeedback(RTCPFeedback{Type: TypeRTCPFBACK, Parameter: "ccfb"}, RTPCodecTypeVideo)
 	mediaEngine.RegisterFeedback(RTCPFeedback{Type: TypeRTCPFBACK, Parameter: "ccfb"}, RTPCodecTypeAudio)
-	generator, err := rfc8888.NewSenderInterceptor()
+	generator, err := rfc8888.NewSenderInterceptor(opts...)
 	if err != nil {
 		return err
 	}
@@ -196,8 +302,10 @@ func ConfigureFlexFEC03(
 	return nil
 }
 
+// interceptorToTrackLocalWriter is an RTPWriter that holds a reference to interceptor.RTPWriter.
 type interceptorToTrackLocalWriter struct{ interceptor atomic.Value } // interceptor.RTPWriter }
 
+// WriteRTP writes an RTP packet using the underlying interceptor.RTPWriter.
 func (i *interceptorToTrackLocalWriter) WriteRTP(header *rtp.Header, payload []byte) (int, error) {
 	if writer, ok := i.interceptor.Load().(interceptor.RTPWriter); ok && writer != nil {
 		return writer.Write(header, payload, interceptor.Attributes{})
@@ -206,6 +314,7 @@ func (i *interceptorToTrackLocalWriter) WriteRTP(header *rtp.Header, payload []b
 	return 0, nil
 }
 
+// Write writes a raw RTP packet using the underlying interceptor.RTPWriter.
 func (i *interceptorToTrackLocalWriter) Write(b []byte) (int, error) {
 	packet := &rtp.Packet{}
 	if err := packet.Unmarshal(b); err != nil {

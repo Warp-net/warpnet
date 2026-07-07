@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -56,8 +56,8 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) { //nol
 			readStreams:         map[uint32]readStream{},
 			newStream:           make(chan readStream),
 			acceptStreamTimeout: config.AcceptStreamTimeout,
-			started:             make(chan interface{}),
-			closed:              make(chan interface{}),
+			started:             make(chan any),
+			closed:              make(chan any),
 			bufferFactory:       config.BufferFactory,
 			log:                 loggerFactory.NewLogger("srtp"),
 		},
@@ -133,8 +133,10 @@ func (s *SessionSRTP) write(b []byte) (int, error) {
 // either CTR or GCM.  If the buffer is too small, no harm, it will just
 // get expanded by growBuffer.
 var bufferpool = sync.Pool{ // nolint:gochecknoglobals
-	New: func() interface{} {
-		return make([]byte, 1492)
+	New: func() any {
+		buf := make([]byte, 1492)
+
+		return &buf
 	},
 }
 
@@ -147,10 +149,13 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	// small, allocate a new buffer itself.  In either case, it is
 	// safe to put the buffer back into the pool, but only after
 	// nextConn.Write has returned.
-	ibuf := bufferpool.Get()
-	defer bufferpool.Put(ibuf)
+	pbuf, ok := bufferpool.Get().(*[]byte)
+	if !ok {
+		return 0, errStartedChannelUsedIncorrectly
+	}
+	defer bufferpool.Put(pbuf)
 
-	buf := ibuf.([]byte)                                                      // nolint:forcetypeassert
+	buf := *pbuf
 	headerLen, marshalSize := rtp.HeaderAndPacketMarshalSize(header, payload) // nolint:staticcheck
 	if len(buf) < marshalSize+20 {
 		// The buffer is too small, so we need to allocate a new one. Add 20 bytes for auth tag like
@@ -184,6 +189,16 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return err
 	}
 
+	// Decrypt and authenticate the packet before using the SSRC from the header.
+	// The SSRC field is part of the unauthenticated RTP header, so it must not be
+	// used to allocate per-SSRC state (stream, replay detector, etc.) until after
+	// the auth tag has been verified. Doing so before authentication would allow an
+	// unauthenticated peer to exhaust memory by spoofing arbitrary SSRCs.
+	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
+	if err != nil {
+		return err
+	}
+
 	r, isNew := s.session.getOrCreateReadStream(header.SSRC, s, newReadStreamSRTP)
 	if r == nil {
 		return nil // Session has been closed
@@ -197,11 +212,6 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 	readStream, ok := r.(*ReadStreamSRTP)
 	if !ok {
 		return errFailedTypeAssertion
-	}
-
-	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
-	if err != nil {
-		return err
 	}
 
 	_, err = readStream.write(decrypted)

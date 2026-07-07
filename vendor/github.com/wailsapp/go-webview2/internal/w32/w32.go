@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	ole32              = windows.NewLazySystemDLL("ole32")
-	Ole32OleInitialize = ole32.NewProc("OleInitialize")
+	ole32               = windows.NewLazySystemDLL("ole32")
+	Ole32CoInitializeEx = ole32.NewProc("CoInitializeEx")
 
 	kernel32                   = windows.NewLazySystemDLL("kernel32")
 	Kernel32GetCurrentThreadID = kernel32.NewProc("GetCurrentThreadId")
@@ -46,6 +46,13 @@ var (
 const (
 	SystemMetricsCxIcon = 11
 	SystemMetricsCyIcon = 12
+)
+
+const (
+	COINIT_APARTMENTTHREADED = 0x2
+	COINIT_MULTITHREADED     = 0x0
+	COINIT_DISABLE_OLE1DDE   = 0x4
+	COINIT_SPEED_OVER_MEMORY = 0x8
 )
 
 const (

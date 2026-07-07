@@ -823,7 +823,7 @@ func (l *Loop) TurningAngle() float64 {
 		n--
 	}
 
-	const maxCurvature = 2*math.Pi - 4*dblEpsilon
+	const maxCurvature = 2*math.Pi - 4*machineEpsilon64
 
 	return math.Max(-maxCurvature, math.Min(maxCurvature, float64(dir)*float64(sum+compensation)))
 }
@@ -832,13 +832,13 @@ func (l *Loop) TurningAngle() float64 {
 // constant; it depends on the loop.
 func (l *Loop) turningAngleMaxError() float64 {
 	// The maximum error can be bounded as follows:
-	//   3.00 * dblEpsilon    for RobustCrossProd(b, a)
-	//   3.00 * dblEpsilon    for RobustCrossProd(c, b)
-	//   3.25 * dblEpsilon    for Angle()
-	//   2.00 * dblEpsilon    for each addition in the Kahan summation
+	//   3.00 * machineEpsilon64    for RobustCrossProd(b, a)
+	//   3.00 * machineEpsilon64    for RobustCrossProd(c, b)
+	//   3.25 * machineEpsilon64    for Angle()
+	//   2.00 * machineEpsilon64    for each addition in the Kahan summation
 	//   ------------------
-	//  11.25 * dblEpsilon
-	maxErrorPerVertex := 11.25 * dblEpsilon
+	//  11.25 * machineEpsilon64
+	maxErrorPerVertex := 11.25 * machineEpsilon64
 	return maxErrorPerVertex * float64(len(l.vertices))
 }
 
@@ -1324,12 +1324,12 @@ const (
 )
 
 func (l *Loop) xyzFaceSiTiVertices() []xyzFaceSiTi {
-	ret := make([]xyzFaceSiTi, len(l.vertices))
+	verts := make([]xyzFaceSiTi, len(l.vertices))
 	for i, v := range l.vertices {
-		ret[i].xyz = v
-		ret[i].face, ret[i].si, ret[i].ti, ret[i].level = xyzToFaceSiTi(v)
+		verts[i].xyz = v
+		verts[i].face, verts[i].si, verts[i].ti, verts[i].level = xyzToFaceSiTi(v)
 	}
-	return ret
+	return verts
 }
 
 func (l *Loop) encodeCompressed(e *encoder, snapLevel int, vertices []xyzFaceSiTi) {
@@ -1509,7 +1509,7 @@ func (l *loopCrosser) startEdge(aj int) {
 func (l *loopCrosser) edgeCrossesCell(bClipped *clippedShape) bool {
 	// Test the current edge of A against all edges of bClipped
 	bNumEdges := bClipped.numEdges()
-	for j := 0; j < bNumEdges; j++ {
+	for j := range bNumEdges {
 		bj := bClipped.edges[j]
 		if bj != l.bjPrev+1 {
 			l.crosser.RestartAt(l.b.Vertex(bj))

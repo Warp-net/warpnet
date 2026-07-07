@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -402,24 +402,31 @@ func (pc *PeerConnection) Close() (err error) {
 
 	// Release any handlers as required by the syscall/js API.
 	if pc.onSignalingStateChangeHandler != nil {
+		pc.underlying.Set("onsignalingstatechange", js.Null())
 		pc.onSignalingStateChangeHandler.Release()
 	}
 	if pc.onDataChannelHandler != nil {
+		pc.underlying.Set("ondatachannel", js.Null())
 		pc.onDataChannelHandler.Release()
 	}
 	if pc.onNegotiationNeededHandler != nil {
+		pc.underlying.Set("onnegotiationneeded", js.Null())
 		pc.onNegotiationNeededHandler.Release()
 	}
 	if pc.onConnectionStateChangeHandler != nil {
+		pc.underlying.Set("onconnectionstatechange", js.Null())
 		pc.onConnectionStateChangeHandler.Release()
 	}
 	if pc.onICEConnectionStateChangeHandler != nil {
+		pc.underlying.Set("oniceconnectionstatechange", js.Null())
 		pc.onICEConnectionStateChangeHandler.Release()
 	}
 	if pc.onICECandidateHandler != nil {
+		pc.underlying.Set("onicecandidate", js.Null())
 		pc.onICECandidateHandler.Release()
 	}
 	if pc.onICEGatheringStateChangeHandler != nil {
+		pc.underlying.Set("onicegatheringstatechange", js.Null())
 		pc.onICEGatheringStateChangeHandler.Release()
 	}
 
@@ -461,6 +468,21 @@ func (pc *PeerConnection) CurrentRemoteDescription() *SessionDescription {
 func (pc *PeerConnection) PendingRemoteDescription() *SessionDescription {
 	desc := pc.underlying.Get("pendingRemoteDescription")
 	return valueToSessionDescription(desc)
+}
+
+// CanTrickleICECandidates reports whether the remote endpoint indicated
+// support for receiving trickled ICE candidates.
+func (pc *PeerConnection) CanTrickleICECandidates() ICETrickleCapability {
+	val := pc.underlying.Get("canTrickleIceCandidates")
+	if val.IsNull() || val.IsUndefined() {
+		return ICETrickleCapabilityUnknown
+	}
+
+	if val.Bool() {
+		return ICETrickleCapabilitySupported
+	}
+
+	return ICETrickleCapabilityUnsupported
 }
 
 // SignalingState returns the signaling state of the PeerConnection instance.
@@ -546,12 +568,13 @@ func (pc *PeerConnection) SCTP() *SCTPTransport {
 // js.Undefined(), which will result in the default value being used.
 func configurationToValue(configuration Configuration) js.Value {
 	return js.ValueOf(map[string]any{
-		"iceServers":           iceServersToValue(configuration.ICEServers),
-		"iceTransportPolicy":   stringEnumToValueOrUndefined(configuration.ICETransportPolicy.String()),
-		"bundlePolicy":         stringEnumToValueOrUndefined(configuration.BundlePolicy.String()),
-		"rtcpMuxPolicy":        stringEnumToValueOrUndefined(configuration.RTCPMuxPolicy.String()),
-		"peerIdentity":         stringToValueOrUndefined(configuration.PeerIdentity),
-		"iceCandidatePoolSize": uint8ToValueOrUndefined(configuration.ICECandidatePoolSize),
+		"iceServers":                  iceServersToValue(configuration.ICEServers),
+		"iceTransportPolicy":          stringEnumToValueOrUndefined(configuration.ICETransportPolicy.String()),
+		"bundlePolicy":                stringEnumToValueOrUndefined(configuration.BundlePolicy.String()),
+		"rtcpMuxPolicy":               stringEnumToValueOrUndefined(configuration.RTCPMuxPolicy.String()),
+		"peerIdentity":                stringToValueOrUndefined(configuration.PeerIdentity),
+		"iceCandidatePoolSize":        uint8ToValueOrUndefined(configuration.ICECandidatePoolSize),
+		"alwaysNegotiateDataChannels": boolToValueOrUndefined(configuration.AlwaysNegotiateDataChannels),
 
 		// Note: Certificates are not currently supported.
 		// "certificates": configuration.Certificates,
@@ -601,12 +624,13 @@ func valueToConfiguration(configValue js.Value) Configuration {
 		return Configuration{}
 	}
 	return Configuration{
-		ICEServers:           valueToICEServers(configValue.Get("iceServers")),
-		ICETransportPolicy:   NewICETransportPolicy(valueToStringOrZero(configValue.Get("iceTransportPolicy"))),
-		BundlePolicy:         newBundlePolicy(valueToStringOrZero(configValue.Get("bundlePolicy"))),
-		RTCPMuxPolicy:        newRTCPMuxPolicy(valueToStringOrZero(configValue.Get("rtcpMuxPolicy"))),
-		PeerIdentity:         valueToStringOrZero(configValue.Get("peerIdentity")),
-		ICECandidatePoolSize: valueToUint8OrZero(configValue.Get("iceCandidatePoolSize")),
+		ICEServers:                  valueToICEServers(configValue.Get("iceServers")),
+		ICETransportPolicy:          NewICETransportPolicy(valueToStringOrZero(configValue.Get("iceTransportPolicy"))),
+		BundlePolicy:                newBundlePolicy(valueToStringOrZero(configValue.Get("bundlePolicy"))),
+		RTCPMuxPolicy:               newRTCPMuxPolicy(valueToStringOrZero(configValue.Get("rtcpMuxPolicy"))),
+		PeerIdentity:                valueToStringOrZero(configValue.Get("peerIdentity")),
+		ICECandidatePoolSize:        valueToUint8OrZero(configValue.Get("iceCandidatePoolSize")),
+		AlwaysNegotiateDataChannels: valueToBoolOrFalse(configValue.Get("alwaysNegotiateDataChannels")),
 
 		// Note: Certificates are not supported.
 		// Certificates []Certificate
@@ -714,6 +738,7 @@ func valueToSessionDescription(descValue js.Value) *SessionDescription {
 	if descValue.IsNull() || descValue.IsUndefined() {
 		return nil
 	}
+
 	return &SessionDescription{
 		Type: NewSDPType(descValue.Get("type").String()),
 		SDP:  descValue.Get("sdp").String(),

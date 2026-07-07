@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package taskloop implements a task loop to run
@@ -85,6 +85,8 @@ func (l *Loop) Run(ctx context.Context, t func(context.Context)) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-l.done:
+		return ErrClosed
 	case l.tasks <- task{t, done}:
 		<-done
 
@@ -116,6 +118,6 @@ func (l *Loop) Deadline() (deadline time.Time, ok bool) {
 }
 
 // Value is not supported for task loops.
-func (l *Loop) Value(interface{}) interface{} {
+func (l *Loop) Value(any) any {
 	return nil
 }

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -36,6 +36,10 @@ type Configuration struct {
 
 	// ICECandidatePoolSize describes the size of the prefetched ICE pool.
 	ICECandidatePoolSize uint8
+
+	// AlwaysNegotiateDataChannels specifies whether the application prefers
+	// to always negotiate data channels in the initial SDP offer.
+	AlwaysNegotiateDataChannels bool
 
 	Certificates []Certificate `json:"certificates,omitempty"`
 }

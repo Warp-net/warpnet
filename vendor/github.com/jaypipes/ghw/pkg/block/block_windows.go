@@ -9,8 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/StackExchange/wmi"
+	"github.com/yusufpapurcu/wmi"
 
+	"github.com/jaypipes/ghw/pkg/option"
 	"github.com/jaypipes/ghw/pkg/util"
 )
 
@@ -85,7 +86,7 @@ type win32LogicalDiskToPartition struct {
 	Dependent  *string
 }
 
-const wqlLogicalDisk = "SELECT Caption, CreationClassName, Description, DeviceID, FileSystem, FreeSpace, Name, Size, SystemName, VolumeSerialNumber  FROM Win32_LogicalDisk"
+const wqlLogicalDisk = "SELECT Caption, CreationClassName, Description, DeviceID, FileSystem, FreeSpace, Name, Size, SystemName, VolumeName, VolumeSerialNumber  FROM Win32_LogicalDisk"
 
 type win32LogicalDisk struct {
 	Caption            *string
@@ -97,6 +98,7 @@ type win32LogicalDisk struct {
 	Name               *string
 	Size               *uint64
 	SystemName         *string
+	VolumeName         *string
 	VolumeSerialNumber *string
 }
 
@@ -107,7 +109,7 @@ type win32PhysicalDisk struct {
 	MediaType physicalDiskMediaType
 }
 
-func (i *Info) load() error {
+func (i *Info) load(opts *option.Options) error {
 	win32DiskDriveDescriptions, err := getDiskDrives()
 	if err != nil {
 		return err
@@ -175,7 +177,7 @@ func (i *Info) load() error {
 							// Appending Partition
 							p := &Partition{
 								Disk:       disk,
-								Name:       strings.TrimSpace(*logicaldisk.Caption),
+								Name:       strings.TrimSpace(*logicaldisk.VolumeName),
 								Label:      strings.TrimSpace(*logicaldisk.Caption),
 								SizeBytes:  *logicaldisk.Size,
 								MountPoint: *logicaldisk.DeviceID,

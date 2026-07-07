@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package report
@@ -16,6 +16,15 @@ type ReceiverOption func(r *ReceiverInterceptor) error
 func ReceiverLog(log logging.LeveledLogger) ReceiverOption {
 	return func(r *ReceiverInterceptor) error {
 		r.log = log
+
+		return nil
+	}
+}
+
+// WithReceiverLoggerFactory sets a logger factory for the interceptor.
+func WithReceiverLoggerFactory(loggerFactory logging.LoggerFactory) ReceiverOption {
+	return func(r *ReceiverInterceptor) error {
+		r.loggerFactory = loggerFactory
 
 		return nil
 	}

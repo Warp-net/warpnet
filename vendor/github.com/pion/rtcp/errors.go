@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rtcp
@@ -13,6 +13,7 @@ var (
 	errBadFirstPacket           = errors.New("rtcp: first packet in compound must be SR or RR")
 	errMissingCNAME             = errors.New("rtcp: compound missing SourceDescription with CNAME")
 	errPacketBeforeCNAME        = errors.New("rtcp: feedback packet seen before CNAME")
+	errTooManySSRCs             = errors.New("rtcp: too many SSRCs")
 	errTooManyReports           = errors.New("rtcp: too many reports")
 	errTooManyChunks            = errors.New("rtcp: too many chunks")
 	errTooManySources           = errors.New("rtcp: too many sources")

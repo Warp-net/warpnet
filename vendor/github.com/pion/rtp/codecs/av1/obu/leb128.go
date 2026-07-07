@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package obu implements tools for working with the Open Bitstream Unit.
@@ -72,7 +72,7 @@ func ReadLeb128(in []byte) (uint, uint, error) {
 func WriteToLeb128(in uint) []byte {
 	b := make([]byte, 10)
 
-	for i := 0; i < len(b); i++ {
+	for i := range len(b) {
 		b[i] = byte(in & 0x7f)
 		in >>= 7
 		if in == 0 {

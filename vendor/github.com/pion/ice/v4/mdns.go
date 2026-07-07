@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pion/logging"
 	"github.com/pion/mdns/v2"
-	"github.com/pion/transport/v3"
+	"github.com/pion/transport/v4"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
@@ -44,6 +44,7 @@ func createMulticastDNS(
 	networkTypes []NetworkType,
 	interfaces []*transport.Interface,
 	includeLoopback bool,
+	localAddress net.IP,
 	mDNSMode MulticastDNSMode,
 	mDNSName string,
 	log logging.LeveledLogger,
@@ -125,6 +126,7 @@ func createMulticastDNS(
 		conn, err := mdns.Server(pktConnV4, pktConnV6, &mdns.Config{
 			Interfaces:      ifcs,
 			IncludeLoopback: includeLoopback,
+			LocalAddress:    localAddress,
 			LoggerFactory:   loggerFactory,
 		})
 
@@ -133,6 +135,7 @@ func createMulticastDNS(
 		conn, err := mdns.Server(pktConnV4, pktConnV6, &mdns.Config{
 			Interfaces:      ifcs,
 			IncludeLoopback: includeLoopback,
+			LocalAddress:    localAddress,
 			LocalNames:      []string{mDNSName},
 			LoggerFactory:   loggerFactory,
 		})

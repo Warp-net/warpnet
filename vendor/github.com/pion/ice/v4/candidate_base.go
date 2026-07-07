@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -32,8 +32,8 @@ type candidateBase struct {
 
 	resolvedAddr net.Addr
 
-	lastSent     atomic.Value
-	lastReceived atomic.Value
+	lastSent     atomic.Int64
+	lastReceived atomic.Int64
 	conn         net.PacketConn
 
 	currAgent *Agent
@@ -43,9 +43,25 @@ type candidateBase struct {
 	foundationOverride string
 	priorityOverride   uint32
 
-	remoteCandidateCaches map[AddrPort]Candidate
+	relayLocalPreference uint16
+
+	remoteCandidateCaches sync.Map // map[AddrPort]Candidate
 	isLocationTracked     bool
 	extensions            []CandidateExtension
+}
+
+// Save a time reference to calculate monotonic time for candidate last sent/received.
+// nolint: gochecknoglobals
+var timeRef = time.Now()
+
+// getMonoNanos returns the monotonic nanoseconds of a time t since timeRef.
+func getMonoNanos(t time.Time) int64 {
+	return t.Sub(timeRef).Nanoseconds()
+}
+
+// getMonoTime returns a time.Time based on monotonic nanos since timeRef.
+func getMonoTime(nanos int64) time.Time {
+	return timeRef.Add(time.Duration(nanos))
 }
 
 // Done implements context.Context.
@@ -69,8 +85,18 @@ func (c *candidateBase) Deadline() (deadline time.Time, ok bool) {
 }
 
 // Value implements context.Context.
-func (c *candidateBase) Value(interface{}) interface{} {
+func (c *candidateBase) Value(any) any {
 	return nil
+}
+
+// setWriteDeadline is used by upper layers to push write deadlines down to the
+// underlying packet connection.
+func (c *candidateBase) setWriteDeadline(t time.Time) error {
+	if c.conn == nil {
+		return nil
+	}
+
+	return c.conn.SetWriteDeadline(t)
 }
 
 // ID returns Candidate ID.
@@ -117,6 +143,10 @@ func (c *candidateBase) SetComponent(component uint16) {
 
 // LocalPreference returns the local preference for this candidate.
 func (c *candidateBase) LocalPreference() uint16 { //nolint:cyclop
+	if c.candidateType == CandidateTypeRelay {
+		return c.relayLocalPreference
+	}
+
 	if c.NetworkType().IsTCP() {
 		// RFC 6544, section 4.2
 		//
@@ -217,8 +247,10 @@ func (c *candidateBase) start(a *Agent, conn net.PacketConn, initializedCh <-cha
 }
 
 var bufferPool = sync.Pool{ // nolint:gochecknoglobals
-	New: func() interface{} {
-		return make([]byte, receiveMTU)
+	New: func() any {
+		buf := make([]byte, receiveMTU)
+
+		return &buf
 	},
 }
 
@@ -233,17 +265,17 @@ func (c *candidateBase) recvLoop(initializedCh <-chan struct{}) {
 		return
 	}
 
-	bufferPoolBuffer := bufferPool.Get()
-	defer bufferPool.Put(bufferPoolBuffer)
-	buf, ok := bufferPoolBuffer.([]byte)
+	bufPtr, ok := bufferPool.Get().(*[]byte)
 	if !ok {
 		return
 	}
+	defer bufferPool.Put(bufPtr)
+	buf := *bufPtr
 
 	for {
 		n, srcAddr, err := c.conn.ReadFrom(buf)
 		if err != nil {
-			if !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
+			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
 				agent.log.Warnf("Failed to read from candidate %s: %v", c, err)
 			}
 
@@ -255,8 +287,13 @@ func (c *candidateBase) recvLoop(initializedCh <-chan struct{}) {
 }
 
 func (c *candidateBase) validateSTUNTrafficCache(addr net.Addr) bool {
-	if candidate, ok := c.remoteCandidateCaches[toAddrPort(addr)]; ok {
-		candidate.seen(false)
+	if candidate, ok := c.remoteCandidateCaches.Load(toAddrPort(addr)); ok {
+		remoteCandidate, ok := candidate.(Candidate)
+		if !ok {
+			return false
+		}
+
+		remoteCandidate.seen(false)
 
 		return true
 	}
@@ -268,7 +305,18 @@ func (c *candidateBase) addRemoteCandidateCache(candidate Candidate, srcAddr net
 	if c.validateSTUNTrafficCache(srcAddr) {
 		return
 	}
-	c.remoteCandidateCaches[toAddrPort(srcAddr)] = candidate
+	c.remoteCandidateCaches.Store(toAddrPort(srcAddr), candidate)
+}
+
+func (c *candidateBase) replaceRemoteCandidateCacheValues(oldRemote, newRemote Candidate) {
+	c.remoteCandidateCaches.Range(func(key, value any) bool {
+		candidate, ok := value.(Candidate)
+		if ok && candidate == oldRemote {
+			c.remoteCandidateCaches.Store(key, newRemote)
+		}
+
+		return true
+	})
 }
 
 func (c *candidateBase) handleInboundPacket(buf []byte, srcAddr net.Addr) {
@@ -309,10 +357,18 @@ func (c *candidateBase) handleInboundPacket(buf []byte, srcAddr net.Addr) {
 	}
 
 	// Note: This will return packetio.ErrFull if the buffer ever manages to fill up.
-	if _, err := agent.buf.Write(buf); err != nil {
+	n, err := agent.buf.Write(buf)
+	if err != nil {
 		agent.log.Warnf("Failed to write packet: %s", err)
 
 		return
+	}
+
+	// Add received application bytes to the currently selected candidate pair.
+	if n > 0 {
+		if sp := agent.getSelectedPair(); sp != nil {
+			sp.UpdatePacketReceived(n)
+		}
 	}
 }
 
@@ -407,8 +463,9 @@ func (c *candidateBase) Priority() uint32 {
 		(1<<0)*uint32(256-c.Component())
 }
 
-// Equal is used to compare two candidateBases.
-func (c *candidateBase) Equal(other Candidate) bool {
+// transportAddressEqual checks if the transport address (IP, Port, NetworkType, TCPType) is equal to another
+// candidate.
+func (c *candidateBase) transportAddressEqual(other Candidate) bool {
 	if c.addr() != other.addr() {
 		if c.addr() == nil || other.addr() == nil {
 			return false
@@ -419,10 +476,15 @@ func (c *candidateBase) Equal(other Candidate) bool {
 	}
 
 	return c.NetworkType() == other.NetworkType() &&
-		c.Type() == other.Type() &&
 		c.Address() == other.Address() &&
 		c.Port() == other.Port() &&
-		c.TCPType() == other.TCPType() &&
+		c.TCPType() == other.TCPType()
+}
+
+// Equal is used to compare two candidateBases.
+func (c *candidateBase) Equal(other Candidate) bool {
+	return c.transportAddressEqual(other) &&
+		c.Type() == other.Type() &&
 		c.RelatedAddress().Equal(other.RelatedAddress())
 }
 
@@ -446,29 +508,29 @@ func (c *candidateBase) String() string {
 // LastReceived returns a time.Time indicating the last time
 // this candidate was received.
 func (c *candidateBase) LastReceived() time.Time {
-	if lastReceived, ok := c.lastReceived.Load().(time.Time); ok {
-		return lastReceived
+	if lastReceived := c.lastReceived.Load(); lastReceived != 0 {
+		return getMonoTime(lastReceived)
 	}
 
 	return time.Time{}
 }
 
 func (c *candidateBase) setLastReceived(t time.Time) {
-	c.lastReceived.Store(t)
+	c.lastReceived.Store(getMonoNanos(t))
 }
 
 // LastSent returns a time.Time indicating the last time
 // this candidate was sent.
 func (c *candidateBase) LastSent() time.Time {
-	if lastSent, ok := c.lastSent.Load().(time.Time); ok {
-		return lastSent
+	if lastSent := c.lastSent.Load(); lastSent != 0 {
+		return getMonoTime(lastSent)
 	}
 
 	return time.Time{}
 }
 
 func (c *candidateBase) setLastSent(t time.Time) {
-	c.lastSent.Store(t)
+	c.lastSent.Store(getMonoNanos(t))
 }
 
 func (c *candidateBase) seen(outbound bool) {
@@ -500,8 +562,8 @@ func (c *candidateBase) copy() (Candidate, error) {
 }
 
 func removeZoneIDFromAddress(addr string) string {
-	if i := strings.Index(addr, "%"); i != -1 {
-		return addr[:i]
+	if before, _, ok := strings.Cut(addr, "%"); ok {
+		return before
 	}
 
 	return addr
@@ -891,10 +953,10 @@ func readCandidateCharToken(raw string, start int, limit int) (string, int, erro
 			return "", 0, fmt.Errorf("token too long: %s expected 1x%d", raw[start:start+i], limit)
 		}
 
-		if !(char >= 'A' && char <= 'Z' ||
-			char >= 'a' && char <= 'z' ||
-			char >= '0' && char <= '9' ||
-			char == '+' || char == '/') {
+		if (char < 'A' || char > 'Z') &&
+			(char < 'a' || char > 'z') &&
+			(char < '0' || char > '9') &&
+			char != '+' && char != '/' {
 			return "", 0, fmt.Errorf("invalid ice-char token: %c", char) //nolint: err113 // handled by caller
 		}
 	}
@@ -928,7 +990,7 @@ func readCandidateDigitToken(raw string, start, limit int) (int, int, error) {
 			return 0, 0, fmt.Errorf("token too long: %s expected 1x%d", raw[start:start+i], limit)
 		}
 
-		if !(char >= '0' && char <= '9') {
+		if char < '0' || char > '9' {
 			return 0, 0, fmt.Errorf("invalid digit token: %c", char) //nolint: err113 // handled by caller
 		}
 
@@ -962,9 +1024,9 @@ func readCandidateByteString(raw string, start int) (string, int, error) {
 		}
 
 		// 1*(%x01-09/%x0B-0C/%x0E-FF)
-		if !(char >= 0x01 && char <= 0x09 ||
-			char >= 0x0B && char <= 0x0C ||
-			char >= 0x0E && char <= 0xFF) {
+		if (char < 0x01 || char > 0x09) &&
+			(char < 0x0B || char > 0x0C) &&
+			(char < 0x0E || char > 0xFF) {
 			return "", 0, fmt.Errorf("invalid byte-string character: %c", char) //nolint: err113 // handled by caller
 		}
 	}

@@ -1,8 +1,7 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package webrtc
 
@@ -88,7 +87,20 @@ func NewICETransport(gatherer *ICEGatherer, loggerFactory logging.LoggerFactory)
 }
 
 // Start incoming connectivity checks based on its configured role.
-func (t *ICETransport) Start(gatherer *ICEGatherer, params ICEParameters, role *ICERole) error { //nolint:cyclop
+func (t *ICETransport) Start(gatherer *ICEGatherer, params ICEParameters, role *ICERole) error {
+	return t.StartContext(context.Background(), gatherer, params, role)
+}
+
+// StartContext incoming connectivity checks based on its configured role.
+// If the context is canceled, the ICE transport will stop.
+//
+//nolint:cyclop
+func (t *ICETransport) StartContext(
+	ctx context.Context,
+	gatherer *ICEGatherer,
+	params ICEParameters,
+	role *ICERole,
+) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -135,7 +147,8 @@ func (t *ICETransport) Start(gatherer *ICEGatherer, params ICEParameters, role *
 	}
 	t.role = *role
 
-	ctx, ctxCancel := context.WithCancel(context.Background())
+	callerCtx := ctx
+	operationCtx, ctxCancel := context.WithCancel(callerCtx)
 	t.ctxCancel = ctxCancel
 
 	// Drop the lock here to allow ICE candidates to be
@@ -146,12 +159,12 @@ func (t *ICETransport) Start(gatherer *ICEGatherer, params ICEParameters, role *
 	var err error
 	switch *role {
 	case ICERoleControlling:
-		iceConn, err = agent.Dial(ctx,
+		iceConn, err = agent.Dial(operationCtx,
 			params.UsernameFragment,
 			params.Password)
 
 	case ICERoleControlled:
-		iceConn, err = agent.Accept(ctx,
+		iceConn, err = agent.Accept(operationCtx,
 			params.UsernameFragment,
 			params.Password)
 
@@ -162,6 +175,17 @@ func (t *ICETransport) Start(gatherer *ICEGatherer, params ICEParameters, role *
 	// Reacquire the lock to set the connection/mux
 	t.lock.Lock()
 	if err != nil {
+		if ctxErr := callerCtx.Err(); ctxErr != nil {
+			t.lock.Unlock()
+			_ = t.Stop()
+			t.lock.Lock()
+
+			return ctxErr
+		}
+
+		ctxCancel()
+		t.ctxCancel = nil
+
 		return err
 	}
 
@@ -403,24 +427,28 @@ func (t *ICETransport) ensureGatherer() error {
 	return nil
 }
 
-func (t *ICETransport) collectStats(collector *statsReportCollector) {
-	t.lock.Lock()
+// Stats reports the current statistics of the ICETransport.
+func (t *ICETransport) Stats() TransportStats {
+	t.lock.RLock()
 	conn := t.conn
-	t.lock.Unlock()
-
-	collector.Collecting()
+	t.lock.RUnlock()
 
 	stats := TransportStats{
 		Timestamp: statsTimestampFrom(time.Now()),
 		Type:      StatsTypeTransport,
 		ID:        "iceTransport",
 	}
-
 	if conn != nil {
 		stats.BytesSent = conn.BytesSent()
 		stats.BytesReceived = conn.BytesReceived()
 	}
 
+	return stats
+}
+
+func (t *ICETransport) collectStats(collector *statsReportCollector) {
+	collector.Collecting()
+	stats := t.Stats()
 	collector.Collect(stats.ID, stats)
 }
 

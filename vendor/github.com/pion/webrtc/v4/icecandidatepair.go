@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -17,6 +17,10 @@ func newICECandidatePairStatsID(localID, remoteID string) string {
 }
 
 func (p *ICECandidatePair) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+
 	return fmt.Sprintf("(local) %s <-> (remote) %s", p.Local, p.Remote)
 }
 

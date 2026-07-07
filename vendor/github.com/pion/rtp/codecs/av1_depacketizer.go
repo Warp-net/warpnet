@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package codecs
@@ -19,6 +19,20 @@ type AV1Depacketizer struct {
 	Z, Y, N bool
 
 	videoDepacketizer
+}
+
+func (d *AV1Depacketizer) appendOBUWithCalculatedSize(
+	buff []byte,
+	obuHeader *obu.Header,
+	obuBuffer []byte,
+	payloadOffset int,
+) []byte {
+	obuPayloadSize := len(obuBuffer) - payloadOffset
+	buff = append(buff, obuHeader.Marshal()...)
+	buff = append(buff, obu.WriteToLeb128(uint(obuPayloadSize))...) // nolint: gosec // G104
+	buff = append(buff, obuBuffer[payloadOffset:]...)
+
+	return buff
 }
 
 // Unmarshal parses an AV1 RTP payload into its constituent OBUs stream with obu_size_field,
@@ -63,9 +77,9 @@ func (d *AV1Depacketizer) Unmarshal(payload []byte) (buff []byte, err error) {
 		// (i.e., W = 1, 2 or 3) the last OBU element MUST NOT be preceded by a length field.
 		var lengthField, n int
 		if obuCount == 0 || !isLast {
-			obuSizeVal, nVal, err := obu.ReadLeb128(payload[offset:])
-			lengthField = int(obuSizeVal) //nolint:gosec // G115 false positive
-			n = int(nVal)                 //nolint:gosec // G115 false positive
+			obuSizeVal, nVal, err := obu.ReadLeb128(payload[offset:]) //nolint:gosec //guard from loop
+			lengthField = int(obuSizeVal)                             //nolint:gosec // G115 false positive
+			n = int(nVal)                                             //nolint:gosec // G115 false positive
 			if err != nil {
 				return nil, err
 			}
@@ -144,22 +158,17 @@ func (d *AV1Depacketizer) Unmarshal(payload []byte) (buff []byte, err error) {
 				return nil, err
 			}
 
-			// We validate the obu_size_field if it is present.
+			// Ignore obu_size_field if it is present and doesn't match the calculated size.
 			sizeFromOBUSize := obuHeader.Size() + int(obuSize) + int(n) //nolint:gosec
 			if lengthField != sizeFromOBUSize {
-				return nil, fmt.Errorf(
-					"%w: OBU size %d does not match calculated size %d",
-					errShortPacket, obuSize, sizeFromOBUSize,
-				)
+				payloadOffset := obuHeader.Size() + int(n) //nolint:gosec // n is small, LEB128.
+				buff = d.appendOBUWithCalculatedSize(buff, obuHeader, obuBuffer, payloadOffset)
+			} else {
+				buff = append(buff, obuBuffer...)
 			}
-
-			buff = append(buff, obuBuffer...)
 		} else {
 			obuHeader.HasSizeField = true
-			buff = append(buff, obuHeader.Marshal()...)
-			size := len(obuBuffer) - obuHeader.Size()
-			buff = append(buff, obu.WriteToLeb128(uint(size))...) // nolint: gosec // G104
-			buff = append(buff, obuBuffer[obuHeader.Size():]...)
+			buff = d.appendOBUWithCalculatedSize(buff, obuHeader, obuBuffer, obuHeader.Size())
 		}
 
 		if isLast {

@@ -1,8 +1,7 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package webrtc
 
@@ -328,16 +327,28 @@ func (m *MediaEngine) RegisterFeedback(feedback RTCPFeedback, typ RTPCodecType) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if typ == RTPCodecTypeVideo {
+	addUniqueFeedback := func(existing []RTCPFeedback) []RTCPFeedback {
+		for _, f := range existing {
+			if strings.EqualFold(f.Type, feedback.Type) && strings.EqualFold(f.Parameter, feedback.Parameter) {
+				return existing
+			}
+		}
+
+		return append(existing, feedback)
+	}
+
+	switch typ {
+	case RTPCodecTypeVideo:
 		for i, v := range m.videoCodecs {
-			v.RTCPFeedback = append(v.RTCPFeedback, feedback)
+			v.RTCPFeedback = addUniqueFeedback(v.RTCPFeedback)
 			m.videoCodecs[i] = v
 		}
-	} else if typ == RTPCodecTypeAudio {
+	case RTPCodecTypeAudio:
 		for i, v := range m.audioCodecs {
-			v.RTCPFeedback = append(v.RTCPFeedback, feedback)
+			v.RTCPFeedback = addUniqueFeedback(v.RTCPFeedback)
 			m.audioCodecs[i] = v
 		}
+	default:
 	}
 }
 
@@ -630,6 +641,23 @@ func (m *MediaEngine) updateFromRemoteDescription(desc sdp.SessionDescription) e
 			return err
 		}
 
+		addIfNew := func(existingCodecs []RTPCodecParameters, codec RTPCodecParameters) []RTPCodecParameters {
+			found := false
+			for _, existingCodec := range existingCodecs {
+				if existingCodec.PayloadType == codec.PayloadType {
+					found = true
+
+					break
+				}
+			}
+
+			if !found {
+				existingCodecs = append(existingCodecs, codec)
+			}
+
+			return existingCodecs
+		}
+
 		exactMatches := make([]RTPCodecParameters, 0, len(codecs))
 		partialMatches := make([]RTPCodecParameters, 0, len(codecs))
 
@@ -642,9 +670,24 @@ func (m *MediaEngine) updateFromRemoteDescription(desc sdp.SessionDescription) e
 			remoteCodec.RTCPFeedback = rtcpFeedbackIntersection(localCodec.RTCPFeedback, remoteCodec.RTCPFeedback)
 
 			if matchType == codecMatchExact {
-				exactMatches = append(exactMatches, remoteCodec)
+				exactMatches = addIfNew(exactMatches, remoteCodec)
 			} else if matchType == codecMatchPartial {
-				partialMatches = append(partialMatches, remoteCodec)
+				partialMatches = addIfNew(partialMatches, remoteCodec)
+			}
+		}
+		// second pass in case there were missed RTX codecs
+		for _, remoteCodec := range codecs {
+			localCodec, matchType, mErr := m.matchRemoteCodec(remoteCodec, typ, exactMatches, partialMatches)
+			if mErr != nil {
+				return mErr
+			}
+
+			remoteCodec.RTCPFeedback = rtcpFeedbackIntersection(localCodec.RTCPFeedback, remoteCodec.RTCPFeedback)
+
+			if matchType == codecMatchExact {
+				exactMatches = addIfNew(exactMatches, remoteCodec)
+			} else if matchType == codecMatchPartial {
+				partialMatches = addIfNew(partialMatches, remoteCodec)
 			}
 		}
 

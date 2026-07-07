@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rtcp
@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strings"
 )
 
 // PacketBitmap shouldn't be used like a normal integral,
@@ -131,7 +132,7 @@ func (p *TransportLayerNack) Unmarshal(rawPacket []byte) error {
 		return err
 	}
 
-	if len(rawPacket) < (headerLength + int(4*header.Length)) {
+	if len(rawPacket) < (headerLength + 4*int(header.Length)) {
 		return errPacketTooShort
 	}
 
@@ -140,13 +141,13 @@ func (p *TransportLayerNack) Unmarshal(rawPacket []byte) error {
 	}
 
 	// The FCI field MUST contain at least one and MAY contain more than one Generic NACK
-	if 4*header.Length <= nackOffset {
+	if 4*int(header.Length) <= nackOffset {
 		return errBadLength
 	}
 
 	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
 	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerLength+ssrcLength:])
-	for i := headerLength + nackOffset; i < (headerLength + int(header.Length*4)); i += 4 {
+	for i := headerLength + nackOffset; i < (headerLength + 4*int(header.Length)); i += 4 {
 		p.Nacks = append(p.Nacks, NackPair{
 			binary.BigEndian.Uint16(rawPacket[i:]),
 			PacketBitmap(binary.BigEndian.Uint16(rawPacket[i+2:])),
@@ -171,14 +172,15 @@ func (p *TransportLayerNack) Header() Header {
 }
 
 func (p TransportLayerNack) String() string {
-	out := fmt.Sprintf("TransportLayerNack from %x\n", p.SenderSSRC)
-	out += fmt.Sprintf("\tMedia Ssrc %x\n", p.MediaSSRC)
-	out += "\tID\tLostPackets\n"
+	var out strings.Builder
+	fmt.Fprintf(&out, "TransportLayerNack from %x\n", p.SenderSSRC)
+	fmt.Fprintf(&out, "\tMedia Ssrc %x\n", p.MediaSSRC)
+	out.WriteString("\tID\tLostPackets\n")
 	for _, i := range p.Nacks {
-		out += fmt.Sprintf("\t%d\t%b\n", i.PacketID, i.LostPackets)
+		fmt.Fprintf(&out, "\t%d\t%b\n", i.PacketID, i.LostPackets)
 	}
 
-	return out
+	return out.String()
 }
 
 // DestinationSSRC returns an array of SSRC values that this packet refers to.

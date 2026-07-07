@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package flexfec implements FlexFEC to recover missing RTP packets due to packet loss.
@@ -65,7 +65,7 @@ func (flex *FlexEncoder20) EncodeFec(mediaPackets []rtp.Packet, numFecPackets ui
 
 	// Generate FEC payloads
 	fecPackets := make([]rtp.Packet, numFecPackets)
-	for fecPacketIndex := uint32(0); fecPacketIndex < numFecPackets; fecPacketIndex++ {
+	for fecPacketIndex := range numFecPackets {
 		fecPackets[fecPacketIndex] = flex.encodeFlexFecPacket(fecPacketIndex, mediaPackets[0].SequenceNumber)
 	}
 
@@ -200,7 +200,7 @@ func (flex *FlexEncoder20) encodeFlexFecRepairPayload(mediaPackets *util.MediaPa
 			copy(flexFecPayloadTmp, flexFecPayload)
 			flexFecPayload = flexFecPayloadTmp
 		}
-		for byteIndex := 0; byteIndex < len(mediaPacketPayload); byteIndex++ {
+		for byteIndex := range mediaPacketPayload {
 			flexFecPayload[byteIndex] ^= mediaPacketPayload[byteIndex]
 		}
 	}

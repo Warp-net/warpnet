@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -43,6 +43,8 @@ const (
 	rtpPayloadTypeBitmask = 0x7F
 
 	incomingUnhandledRTPSsrc = "Incoming unhandled RTP ssrc(%d), OnTrack will not be fired. %v"
+
+	useReadSimulcast = "Use ReadSimulcast(rid) instead of Read() when multiple tracks are present"
 
 	generatedCertificateOrigin = "WebRTC"
 

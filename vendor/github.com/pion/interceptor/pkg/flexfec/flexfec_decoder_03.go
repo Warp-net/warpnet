@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package flexfec implements FlexFEC-03 to recover missing RTP packets due to packet loss.
@@ -35,9 +35,9 @@ type fecDecoder struct {
 	receivedFECPackets  []fecPacketState
 }
 
-func newFECDecoder(ssrc uint32, protectedStreamSSRC uint32) *fecDecoder {
+func newFECDecoder(ssrc uint32, protectedStreamSSRC uint32, loggerFactory logging.LoggerFactory) *fecDecoder {
 	return &fecDecoder{
-		logger:              logging.NewDefaultLoggerFactory().NewLogger("fec_decoder"),
+		logger:              loggerFactory.NewLogger("fec_decoder"),
 		ssrc:                ssrc,
 		protectedStreamSSRC: protectedStreamSSRC,
 		maxMediaPackets:     100,
@@ -80,6 +80,9 @@ func (d *fecDecoder) insertPacket(receivedPkt rtp.Packet) {
 				// No need to keep iterating, since |received_fec_packets_| is sorted.
 				break
 			}
+		}
+		if toRemove > 0 {
+			d.receivedFECPackets = d.receivedFECPackets[toRemove:]
 		}
 	}
 
@@ -260,7 +263,7 @@ func (d *fecDecoder) recoverPacket(fec *fecPacketState) (rtp.Packet, error) {
 				return rtp.Packet{}, fmt.Errorf("marshal received header: %w", err)
 			}
 			binary.BigEndian.PutUint16(receivedHeader[2:4], uint16(protectedPacket.packet.MarshalSize()-12)) //nolint:gosec
-			for i := 0; i < 8; i++ {
+			for i := range 8 {
 				headerRecovery[i] ^= receivedHeader[i]
 			}
 		} else {
@@ -283,7 +286,7 @@ func (d *fecDecoder) recoverPacket(fec *fecPacketState) (rtp.Packet, error) {
 			if err != nil {
 				return rtp.Packet{}, fmt.Errorf("marshal protected packet: %w", err)
 			}
-			for i := 0; i < minInt(int(payloadLength), len(packet)-12); i++ {
+			for i := 0; i < min(int(payloadLength), len(packet)-12); i++ {
 				payloadRecovery[i] ^= packet[12+i]
 			}
 		}
@@ -309,7 +312,7 @@ func (d *fecDecoder) discardOldRecoveredPackets() {
 
 func decodeMask(mask uint64, bitCount uint16, seqNumBase uint16) []uint16 {
 	res := make([]uint16, 0)
-	for i := uint16(0); i < bitCount; i++ {
+	for i := range bitCount {
 		if (mask>>(bitCount-1-i))&1 == 1 {
 			res = append(res, seqNumBase+i)
 		}
@@ -407,23 +410,7 @@ func parseFlexFEC03Header(data []byte) (flexFec, error) {
 }
 
 func seqDiff(a, b uint16) uint16 {
-	return minUInt16(a-b, b-a)
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-
-	return b
-}
-
-func minUInt16(a, b uint16) uint16 {
-	if a < b {
-		return a
-	}
-
-	return b
+	return min(a-b, b-a)
 }
 
 func abs(x int) int {

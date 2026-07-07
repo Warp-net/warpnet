@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -81,27 +81,55 @@ var (
 
 	// ErrUnsupportedNAT1To1IPCandidateType indicates that the specified NAT1To1IPCandidateType is
 	// unsupported.
-	ErrUnsupportedNAT1To1IPCandidateType = errors.New("unsupported 1:1 NAT IP candidate type")
+	//
+	// Deprecated: use ErrUnsupportedAddressRewriteCandidateType instead. May still be returned
+	// when configuring address rewrite rules while NAT1:1 compatibility remains.
+	ErrUnsupportedNAT1To1IPCandidateType = errors.New("unsupported address rewrite candidate type")
+	// ErrUnsupportedAddressRewriteCandidateType is an alias for ErrUnsupportedNAT1To1IPCandidateType.
+	ErrUnsupportedAddressRewriteCandidateType = ErrUnsupportedNAT1To1IPCandidateType
 
 	// ErrInvalidNAT1To1IPMapping indicates that the given 1:1 NAT IP mapping is invalid.
-	ErrInvalidNAT1To1IPMapping = errors.New("invalid 1:1 NAT IP mapping")
+	//
+	// Deprecated: use ErrInvalidAddressRewriteMapping instead. May still be returned by
+	// WithAddressRewriteRules while NAT1:1 compatibility remains.
+	ErrInvalidNAT1To1IPMapping = errors.New("invalid address rewrite mapping")
+	// ErrInvalidAddressRewriteMapping is an alias for ErrInvalidNAT1To1IPMapping.
+	ErrInvalidAddressRewriteMapping = ErrInvalidNAT1To1IPMapping
 
-	// ErrExternalMappedIPNotFound in NAT1To1IPMapping.
+	// ErrExternalMappedIPNotFound in address rewrite mapping.
+	//
+	// Kept for compatibility; current code paths treat "no externals" via match state and
+	// no longer return this error.
 	ErrExternalMappedIPNotFound = errors.New("external mapped IP not found")
 
 	// ErrMulticastDNSWithNAT1To1IPMapping indicates that the mDNS gathering cannot be used along
 	// with 1:1 NAT IP mapping for host candidate.
+	//
+	// Deprecated: use ErrMulticastDNSWithAddressRewrite instead. May still be returned by
+	// WithAddressRewriteRules while NAT1:1 compatibility remains.
 	ErrMulticastDNSWithNAT1To1IPMapping = errors.New(
-		"mDNS gathering cannot be used with 1:1 NAT IP mapping for host candidate",
+		"mDNS gathering cannot be used with address rewrite for host candidate",
 	)
+	// ErrMulticastDNSWithAddressRewrite is an alias for ErrMulticastDNSWithNAT1To1IPMapping.
+	ErrMulticastDNSWithAddressRewrite = ErrMulticastDNSWithNAT1To1IPMapping
 
 	// ErrIneffectiveNAT1To1IPMappingHost indicates that 1:1 NAT IP mapping for host candidate is
 	// requested, but the host candidate type is disabled.
-	ErrIneffectiveNAT1To1IPMappingHost = errors.New("1:1 NAT IP mapping for host candidate ineffective")
+	//
+	// Deprecated: use ErrIneffectiveAddressRewriteHost instead. May still be returned by
+	// WithAddressRewriteRules while NAT1:1 compatibility remains.
+	ErrIneffectiveNAT1To1IPMappingHost = errors.New("address rewrite for host candidate ineffective")
+	// ErrIneffectiveAddressRewriteHost is an alias for ErrIneffectiveNAT1To1IPMappingHost.
+	ErrIneffectiveAddressRewriteHost = ErrIneffectiveNAT1To1IPMappingHost
 
 	// ErrIneffectiveNAT1To1IPMappingSrflx indicates that 1:1 NAT IP mapping for srflx candidate is
 	// requested, but the srflx candidate type is disabled.
-	ErrIneffectiveNAT1To1IPMappingSrflx = errors.New("1:1 NAT IP mapping for srflx candidate ineffective")
+	//
+	// Deprecated: use ErrIneffectiveAddressRewriteSrflx instead. May still be returned by
+	// WithAddressRewriteRules while NAT1:1 compatibility remains.
+	ErrIneffectiveNAT1To1IPMappingSrflx = errors.New("address rewrite for srflx candidate ineffective")
+	// ErrIneffectiveAddressRewriteSrflx is an alias for ErrIneffectiveNAT1To1IPMappingSrflx.
+	ErrIneffectiveAddressRewriteSrflx = ErrIneffectiveNAT1To1IPMappingSrflx
 
 	// ErrInvalidMulticastDNSHostName indicates an invalid MulticastDNSHostName.
 	ErrInvalidMulticastDNSHostName = errors.New(
@@ -120,6 +148,30 @@ var (
 	// ErrDetermineNetworkType indicates that the NetworkType was not able to be parsed.
 	ErrDetermineNetworkType = errors.New("unable to determine networkType")
 
+	// ErrOnlyControllingAgentCanRenominate indicates that only controlling agent can renominate.
+	ErrOnlyControllingAgentCanRenominate = errors.New("only controlling agent can renominate")
+
+	// ErrRenominationNotEnabled indicates that renomination is not enabled.
+	ErrRenominationNotEnabled = errors.New("renomination is not enabled")
+
+	// ErrCandidatePairNotFound indicates that candidate pair was not found.
+	ErrCandidatePairNotFound = errors.New("candidate pair not found")
+
+	// ErrCandidatePairNotSucceeded indicates that candidate pair is not in succeeded state.
+	ErrCandidatePairNotSucceeded = errors.New("candidate pair not in succeeded state")
+
+	// ErrInvalidNominationAttribute indicates an invalid nomination attribute type was provided.
+	ErrInvalidNominationAttribute = errors.New("invalid nomination attribute type")
+
+	// ErrInvalidNominationValueGenerator indicates a nil nomination value generator was provided.
+	ErrInvalidNominationValueGenerator = errors.New("nomination value generator cannot be nil")
+
+	// ErrInvalidNetworkMonitorInterval indicates an invalid network monitor interval was provided.
+	ErrInvalidNetworkMonitorInterval = errors.New("network monitor interval must be greater than 0")
+
+	// ErrAgentOptionNotUpdatable indicates an option cannot be updated after construction.
+	ErrAgentOptionNotUpdatable = errors.New("option can only be set during agent construction")
+
 	errAttributeTooShortICECandidate = errors.New("attribute not long enough to be ICE candidate")
 	errClosingConnection             = errors.New("failed to close connection")
 	errConnectionAddrAlreadyExist    = errors.New("connection with same remote address already exists")
@@ -136,7 +188,6 @@ var (
 	errParseRelatedAddr              = errors.New("failed to parse related addresses")
 	errParseExtension                = errors.New("failed to parse extension")
 	errParseTCPType                  = errors.New("failed to parse TCP type")
-	errRead                          = errors.New("failed to read")
 	errUDPMuxDisabled                = errors.New("UDPMux is not enabled")
 	errUnknownRole                   = errors.New("unknown role")
 	errWrite                         = errors.New("failed to write")

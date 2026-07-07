@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package fmtp implements per codec parsing of fmtp lines
@@ -37,7 +37,7 @@ func defaultChannels(mimeType string) uint16 {
 func parseParameters(line string) map[string]string {
 	parameters := make(map[string]string)
 
-	for _, p := range strings.Split(line, ";") {
+	for p := range strings.SplitSeq(line, ";") {
 		pp := strings.SplitN(strings.TrimSpace(p), "=", 2)
 		key := strings.ToLower(pp[0])
 		var value string

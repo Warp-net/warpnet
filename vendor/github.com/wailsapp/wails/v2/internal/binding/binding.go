@@ -14,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v2/internal/typescriptify"
 
 	"github.com/leaanthony/slicer"
+
 	"github.com/wailsapp/wails/v2/internal/logger"
 )
 
@@ -58,7 +59,7 @@ func NewBindings(logger *logger.Logger, structPointersToBind []interface{}, exem
 	for _, ptr := range structPointersToBind {
 		err := result.Add(ptr)
 		if err != nil {
-			logger.Fatal("Error during binding: " + err.Error())
+			logger.Fatal("%s", "Error during binding: " + err.Error())
 		}
 	}
 
@@ -73,13 +74,7 @@ func (b *Bindings) Add(structPtr interface{}) error {
 	}
 
 	for _, method := range methods {
-		splitName := strings.Split(method.Name, ".")
-		packageName := splitName[0]
-		structName := splitName[1]
-		methodName := splitName[2]
-
-		// Add it as a regular method
-		b.db.AddMethod(packageName, structName, methodName, method)
+		b.db.AddMethod(method.Path.Package, method.Path.Struct, method.Path.Name, method)
 	}
 	return nil
 }
@@ -128,7 +123,15 @@ func (b *Bindings) GenerateModels() ([]byte, error) {
 		// if we have enums for this package, add them as well
 		var enums, enumsExist = b.enumsToGenerateTS[packageName]
 		if enumsExist {
-			for enumName, enum := range enums {
+			// Sort the enum names first to make the output deterministic
+			sortedEnumNames := make([]string, 0, len(enums))
+			for enumName := range enums {
+				sortedEnumNames = append(sortedEnumNames, enumName)
+			}
+			sort.Strings(sortedEnumNames)
+
+			for _, enumName := range sortedEnumNames {
+				enum := enums[enumName]
 				fqemumname := packageName + "." + enumName
 				if seen.Contains(fqemumname) {
 					continue
@@ -177,7 +180,7 @@ func (b *Bindings) GenerateModels() ([]byte, error) {
 	}
 
 	// Sort the package names first to make the output deterministic
-	sortedPackageNames := make([]string, 0)
+	sortedPackageNames := make([]string, 0, len(models))
 	for packageName := range models {
 		sortedPackageNames = append(sortedPackageNames, packageName)
 	}

@@ -1,8 +1,7 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package webrtc
 
@@ -470,6 +469,10 @@ func (r *RTPSender) ReadSimulcastRTCP(rid string) ([]rtcp.Packet, interceptor.At
 // SetReadDeadline sets the deadline for the Read operation.
 // Setting to zero means no deadline.
 func (r *RTPSender) SetReadDeadline(t time.Time) error {
+	if r.trackEncodings[0].srtpStream == nil {
+		return errRTPSenderSendNotCalled
+	}
+
 	return r.trackEncodings[0].srtpStream.SetReadDeadline(t)
 }
 
@@ -511,8 +514,8 @@ func (r *RTPSender) hasStopped() bool {
 // Set a SSRC for FEC and RTX if MediaEngine has them enabled
 // If the remote doesn't support FEC or RTX we disable locally.
 func (r *RTPSender) configureRTXAndFEC() {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	for _, trackEncoding := range r.trackEncodings {
 		if !r.api.mediaEngine.isRTXEnabled(r.kind, []RTPTransceiverDirection{RTPTransceiverDirectionSendonly}) {

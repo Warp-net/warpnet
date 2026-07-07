@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -41,6 +41,11 @@ var (
 
 	errZeroRocTransmitRate = errors.New("ROC transmit rate is zero")
 	errUnsupportedRccMode  = errors.New("unsupported RCC mode")
+
+	errUnsupportedHeaderExtension   = errors.New("unsupported header extension")
+	errHeaderLengthMismatch         = errors.New("header length mismatch")
+	errUnencryptedHeaderExtAndCSRCs = errors.New("unencrypted header extensions and CSRCs are not allowed")
+	errCryptexDisabled              = errors.New("cryptex is disabled")
 )
 
 type duplicatedError struct {

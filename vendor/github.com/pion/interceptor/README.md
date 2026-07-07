@@ -32,6 +32,8 @@ by anyone. With the following tenets in mind.
 * [NACK Generator/Responder](https://github.com/pion/interceptor/tree/master/pkg/nack)
 * [Sender and Receiver Reports](https://github.com/pion/interceptor/tree/master/pkg/report)
 * [Transport Wide Congestion Control Feedback](https://github.com/pion/interceptor/tree/master/pkg/twcc)
+* [RTCP Feedback for Congestion Control](https://github.com/pion/interceptor/tree/master/pkg/rfc8888) as defined by [RFC 8888](https://datatracker.ietf.org/doc/html/rfc8888).
+* [JitterBuffer](https://github.com/pion/interceptor/tree/master/pkg/jitterbuffer) Re-order packets and wait for arrival on the remote/inbound RTP path.
 * [Packet Dump](https://github.com/pion/interceptor/tree/master/pkg/packetdump)
 * [Google Congestion Control](https://github.com/pion/interceptor/tree/master/pkg/gcc)
 * [Stats](https://github.com/pion/interceptor/tree/master/pkg/stats) A [webrtc-stats](https://www.w3.org/TR/webrtc-stats/) compliant statistics generation
@@ -41,8 +43,6 @@ by anyone. With the following tenets in mind.
 ### Planned Interceptors
 * Bandwidth Estimation
   - [NADA](https://tools.ietf.org/html/rfc8698)
-* JitterBuffer, re-order packets and wait for arrival
-* [RTCP Feedback for Congestion Control](https://datatracker.ietf.org/doc/html/rfc8888) the standardized alternative to TWCC.
 
 ### Interceptor Public API
 The public interface is defined in [interceptor.go](https://github.com/pion/interceptor/blob/master/interceptor.go).
