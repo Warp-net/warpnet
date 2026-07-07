@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package flexfec
@@ -41,7 +41,7 @@ func NewCoverage(mediaPackets []rtp.Packet, numFecPackets uint32) *ProtectionCov
 
 	// We allocate the biggest array of bitmasks that respects the max constraints.
 	var packetMasks [MaxFecPackets]util.BitArray
-	for i := 0; i < int(MaxFecPackets); i++ {
+	for i := range int(MaxFecPackets) {
 		packetMasks[i] = util.BitArray{}
 	}
 
@@ -86,7 +86,7 @@ func (p *ProtectionCoverage) UpdateCoverage(mediaPackets []rtp.Packet, numFecPac
 	// In the packetMasks array, each FEC packet is represented by a single BitArray, each bit in a given BitArray
 	// corresponds to a specific Media packet.
 	// Ex: Row I, Col J is set to 1 -> FEC packet I will protect media packet J.
-	for fecPacketIndex := uint32(0); fecPacketIndex < numFecPackets; fecPacketIndex++ {
+	for fecPacketIndex := range numFecPackets {
 		// We use an interleaved method to determine coverage. Given N FEC packets, Media packet X will be
 		// covered by FEC packet X % N.
 		coveredMediaPacketIndex := fecPacketIndex
@@ -99,7 +99,7 @@ func (p *ProtectionCoverage) UpdateCoverage(mediaPackets []rtp.Packet, numFecPac
 
 // ResetCoverage clears the underlying map so that we can reuse it for new batches of RTP packets.
 func (p *ProtectionCoverage) resetCoverage() {
-	for i := uint32(0); i < MaxFecPackets; i++ {
+	for i := range MaxFecPackets {
 		p.packetMasks[i].Reset()
 	}
 }

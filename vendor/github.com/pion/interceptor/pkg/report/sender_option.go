@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package report
@@ -16,6 +16,15 @@ type SenderOption func(r *SenderInterceptor) error
 func SenderLog(log logging.LeveledLogger) SenderOption {
 	return func(r *SenderInterceptor) error {
 		r.log = log
+
+		return nil
+	}
+}
+
+// WithSenderLoggerFactory sets a logger factory for the interceptor.
+func WithSenderLoggerFactory(loggerFactory logging.LoggerFactory) SenderOption {
+	return func(r *SenderInterceptor) error {
+		r.loggerFactory = loggerFactory
 
 		return nil
 	}

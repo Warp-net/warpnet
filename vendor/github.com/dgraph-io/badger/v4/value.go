@@ -172,6 +172,24 @@ func (vlog *valueLog) rewrite(f *logFile) error {
 	vlog.filesLock.RUnlock()
 
 	vlog.opt.Infof("Rewriting fid: %d", f.fid)
+
+	// Announce that a GC rewrite is in flight and pin the discard threshold to the
+	// DB's current max committed version. While active, last-level compaction will
+	// not purge any version newer than this point (see levelsController.subcompact),
+	// so a tombstone for a key we are about to write back survives to shadow it,
+	// preventing the deleted key from being resurrected (#2286). GC is serialized by
+	// garbageCh (one rewrite at a time), so this per-DB state is not subject to
+	// concurrent rewrites; the clamp is released on every exit path.
+	//
+	// MaxVersion() (not orc.nextTs()) is used deliberately: in managed mode
+	// nextTxnTs is frozen at open time and does not track committed versions, so it
+	// would be the wrong basis. Any delete committed after the rewrite starts has a
+	// version greater than this (timestamps are monotonic), so its tombstone is
+	// protected.
+	vlog.db.gcDiscardTs.Store(vlog.db.MaxVersion())
+	vlog.db.gcActive.Store(true)
+	defer vlog.db.gcActive.Store(false)
+
 	wb := make([]*Entry, 0, 1000)
 	var size int64
 
@@ -181,6 +199,10 @@ func (vlog *valueLog) rewrite(f *logFile) error {
 		count++
 		if count%100000 == 0 {
 			vlog.opt.Debugf("Processing entry %d", count)
+		}
+
+		if isDeletedOrExpired(e.meta, e.ExpiresAt) {
+			return nil
 		}
 
 		vs, err := vlog.db.get(e.Key)
@@ -299,6 +321,12 @@ func (vlog *valueLog) rewrite(f *logFile) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// vlogGCPauseHook fires here in tests to inject a delete + compaction
+	// into the race window between Phase 1 (scan) and Phase 2 (write-back).
+	if vlog.db.vlogGCPauseHook != nil {
+		vlog.db.vlogGCPauseHook()
 	}
 
 	batchSize := 1024
@@ -540,6 +568,10 @@ func (vlog *valueLog) init(db *DB) {
 	}
 	vlog.dirPath = vlog.opt.ValueDir
 
+	if vlog.opt.ReadOnly {
+		return
+	}
+
 	vlog.garbageCh = make(chan struct{}, 1) // Only allow one GC at a time.
 	lf, err := InitDiscardStats(vlog.opt)
 	y.Check(err)
@@ -571,14 +603,17 @@ func (vlog *valueLog) open(db *DB) error {
 		lf, ok := vlog.filesMap[fid]
 		y.AssertTrue(ok)
 
-		// Just open in RDWR mode. This should not create a new log file.
 		lf.opt = vlog.opt
-		if err := lf.open(vlog.fpath(fid), os.O_RDWR,
+		flags := os.O_RDWR
+		if vlog.opt.ReadOnly {
+			flags = os.O_RDONLY
+		}
+		if err := lf.open(vlog.fpath(fid), flags,
 			2*vlog.opt.ValueLogFileSize); err != nil {
 			return y.Wrapf(err, "Open existing file: %q", lf.path)
 		}
 		// We shouldn't delete the maxFid file.
-		if lf.size.Load() == vlogHeaderSize && fid != vlog.maxFid {
+		if lf.size.Load() == vlogHeaderSize && fid != vlog.maxFid && !vlog.opt.ReadOnly {
 			vlog.opt.Infof("Deleting empty file: %s", lf.path)
 			if err := lf.Delete(); err != nil {
 				return y.Wrapf(err, "while trying to delete empty file: %s", lf.path)
@@ -1037,9 +1072,6 @@ func discardEntry(e Entry, vs y.ValueStruct, db *DB) bool {
 		// Version not found. Discard.
 		return true
 	}
-	if isDeletedOrExpired(vs.Meta, vs.ExpiresAt) {
-		return true
-	}
 	if (vs.Meta & bitValuePointer) == 0 {
 		// Key also stores the value in LSM. Discard.
 		return true
@@ -1092,7 +1124,7 @@ func (vlog *valueLog) runGC(discardRatio float64) error {
 }
 
 func (vlog *valueLog) updateDiscardStats(stats map[uint32]int64) {
-	if vlog.opt.InMemory {
+	if vlog.opt.InMemory || vlog.opt.ReadOnly {
 		return
 	}
 	for fid, discard := range stats {

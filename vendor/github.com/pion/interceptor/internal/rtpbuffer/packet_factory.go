@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rtpbuffer
@@ -30,12 +30,12 @@ type PacketFactoryCopy struct {
 func NewPacketFactoryCopy() *PacketFactoryCopy {
 	return &PacketFactoryCopy{
 		headerPool: &sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return &rtp.Header{}
 			},
 		},
 		payloadPool: &sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				buf := make([]byte, maxPayloadLen)
 
 				return &buf

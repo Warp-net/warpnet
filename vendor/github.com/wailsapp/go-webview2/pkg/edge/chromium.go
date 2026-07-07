@@ -82,7 +82,7 @@ type Chromium struct {
 	globalPermission *CoreWebView2PermissionState
 
 	// Callbacks
-	MessageCallback                          func(string)
+	MessageCallback                          func(message string, sender *ICoreWebView2, args *ICoreWebView2WebMessageReceivedEventArgs)
 	MessageWithAdditionalObjectsCallback     func(message string, sender *ICoreWebView2, args *ICoreWebView2WebMessageReceivedEventArgs)
 	WebResourceRequestedCallback             func(request *ICoreWebView2WebResourceRequest, args *ICoreWebView2WebResourceRequestedEventArgs)
 	NavigationCompletedCallback              func(sender *ICoreWebView2, args *ICoreWebView2NavigationCompletedEventArgs)
@@ -414,10 +414,10 @@ func (e *Chromium) MessageReceived(sender *ICoreWebView2, args *ICoreWebView2Web
 			defer obj.Release()
 			e.MessageWithAdditionalObjectsCallback(message, sender, args)
 		} else if e.MessageCallback != nil {
-			e.MessageCallback(message)
+			e.MessageCallback(message, sender, args)
 		}
 	} else if e.MessageCallback != nil {
-		e.MessageCallback(message)
+		e.MessageCallback(message, sender, args)
 	}
 
 	err = sender.PostWebMessageAsString(message)

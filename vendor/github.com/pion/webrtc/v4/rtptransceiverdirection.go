@@ -1,7 +1,9 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
+
+import "slices"
 
 // RTPTransceiverDirection indicates the direction of the RTPTransceiver.
 type RTPTransceiverDirection int
@@ -84,10 +86,8 @@ func haveRTPTransceiverDirectionIntersection(
 	needle []RTPTransceiverDirection,
 ) bool {
 	for _, n := range needle {
-		for _, h := range haystack {
-			if n == h {
-				return true
-			}
+		if slices.Contains(haystack, n) {
+			return true
 		}
 	}
 

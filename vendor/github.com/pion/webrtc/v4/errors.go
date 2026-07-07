@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -175,6 +175,9 @@ var (
 	// and the requested SSRC was ignored.
 	ErrSimulcastProbeOverflow = errors.New("simulcast probe limit has been reached, new SSRC has been discarded")
 
+	// ErrSDPUnmarshalling indicates that the SDP could not be unmarshalled.
+	ErrSDPUnmarshalling = errors.New("failed to unmarshal SDP")
+
 	errDetachNotEnabled                 = errors.New("enable detaching by calling webrtc.DetachDataChannels()")
 	errDetachBeforeOpened               = errors.New("datachannel not opened yet, try calling Detach from OnOpen")
 	errDtlsTransportNotStarted          = errors.New("the DTLS transport has not started yet")
@@ -196,6 +199,7 @@ var (
 	errICERoleUnknown              = errors.New("unknown ICE Role")
 	errICEProtocolUnknown          = errors.New("unknown protocol")
 	errICEGathererNotStarted       = errors.New("gatherer not started")
+	errAddressRewriteWithNAT1To1   = errors.New("address rewrite rules cannot be combined with NAT1To1IPs")
 
 	errNetworkTypeUnknown = errors.New("unknown network type")
 
@@ -231,6 +235,10 @@ var (
 	errPeerConnSetIdentityProviderNotImplemented = errors.New("TODO SetIdentityProvider")
 	errPeerConnWriteRTCPOpenWriteStream          = errors.New("WriteRTCP failed to open WriteStream")
 	errPeerConnTranscieverMidNil                 = errors.New("cannot find transceiver with mid")
+	errPeerConnEarlyMediaWithoutAnswer           = errors.New(
+		"cannot process early media without SDP answer," +
+			"use SettingEngine.SetHandleUndeclaredSSRCWithoutAnswer(true) to process without answer",
+	)
 
 	errRTPReceiverDTLSTransportNil            = errors.New("DTLSTransport must not be nil")
 	errRTPReceiverReceiveAlreadyCalled        = errors.New("Receive has already been called")
@@ -240,6 +248,7 @@ var (
 	errRTPSenderTrackNil             = errors.New("Track must not be nil")
 	errRTPSenderDTLSTransportNil     = errors.New("DTLSTransport must not be nil")
 	errRTPSenderSendAlreadyCalled    = errors.New("Send has already been called")
+	errRTPSenderSendNotCalled        = errors.New("Send has not been called")
 	errRTPSenderStopped              = errors.New("Sender has already been stopped")
 	errRTPSenderTrackRemoved         = errors.New("Sender Track has been removed or replaced to nil")
 	errRTPSenderRidNil               = errors.New("Sender cannot add encoding as rid is empty")
@@ -268,6 +277,8 @@ var (
 	errStatsICECandidateStateInvalid = errors.New(
 		"cannot convert to StatsICECandidatePairStateSucceeded invalid ice candidate state",
 	)
+
+	errICECandidatePoolSizeTooLarge = errors.New("ice candidate pool size greater than 1 is not supported")
 
 	errInvalidICECredentialTypeString = errors.New("invalid ICECredentialType")
 	errInvalidICEServer               = errors.New("invalid ICEServer")

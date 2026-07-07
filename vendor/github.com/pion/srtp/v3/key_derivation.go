@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -60,15 +60,15 @@ func generateCounter(
 	copy(counter[:], sessionSalt)
 
 	counter[4] ^= byte(ssrc >> 24)
-	counter[5] ^= byte(ssrc >> 16)
-	counter[6] ^= byte(ssrc >> 8)
-	counter[7] ^= byte(ssrc)
+	counter[5] ^= byte(ssrc >> 16) //nolint:gosec
+	counter[6] ^= byte(ssrc >> 8)  //nolint:gosec
+	counter[7] ^= byte(ssrc)       //nolint:gosec
 	counter[8] ^= byte(rolloverCounter >> 24)
-	counter[9] ^= byte(rolloverCounter >> 16)
-	counter[10] ^= byte(rolloverCounter >> 8)
-	counter[11] ^= byte(rolloverCounter)
+	counter[9] ^= byte(rolloverCounter >> 16) //nolint:gosec
+	counter[10] ^= byte(rolloverCounter >> 8) //nolint:gosec
+	counter[11] ^= byte(rolloverCounter)      //nolint:gosec
 	counter[12] ^= byte(sequenceNumber >> 8)
-	counter[13] ^= byte(sequenceNumber)
+	counter[13] ^= byte(sequenceNumber) //nolint:gosec
 
 	return counter
 }

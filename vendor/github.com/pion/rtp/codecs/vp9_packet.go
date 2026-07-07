@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package codecs
@@ -98,7 +98,7 @@ func (p *VP9Payloader) payloadFlexible(mtu uint16, payload []byte) [][]byte {
 		}
 
 		out[1] = byte(p.pictureID>>8) | 0x80
-		out[2] = byte(p.pictureID)
+		out[2] = byte(p.pictureID) //nolint:gosec
 
 		copy(out[headerSize:], payload[payloadDataIndex:payloadDataIndex+currentFragmentSize])
 		payloads = append(payloads, out)
@@ -169,7 +169,7 @@ func (p *VP9Payloader) payloadNonFlexible(mtu uint16, payload []byte) [][]byte {
 		}
 
 		out[1] = byte(p.pictureID>>8) | 0x80
-		out[2] = byte(p.pictureID)
+		out[2] = byte(p.pictureID) //nolint:gosec
 		off := 3
 
 		if !header.NonKeyFrame && payloadDataIndex == 0 {
@@ -452,8 +452,8 @@ func (p *VP9Packet) parseSSData(packet []byte, pos int) (int, error) { // nolint
 	p.NG = 0
 
 	if p.Y {
-		p.Width = make([]uint16, NS)
-		p.Height = make([]uint16, NS)
+		p.Width = resizeUint16Slice(p.Width, int(NS))
+		p.Height = resizeUint16Slice(p.Height, int(NS))
 		for i := 0; i < int(NS); i++ {
 			if len(packet) <= (pos + 3) {
 				return pos, errShortPacket
@@ -482,16 +482,21 @@ func (p *VP9Packet) parseSSData(packet []byte, pos int) (int, error) { // nolint
 
 		p.PGTID = append(p.PGTID, packet[pos]>>5)
 		p.PGU = append(p.PGU, packet[pos]&0x10 != 0)
-		R := (packet[pos] >> 2) & 0x3
+		reference := int((packet[pos] >> 2) & 0x3)
 		pos++
 
-		p.PGPDiff = append(p.PGPDiff, []uint8{})
+		if i >= cap(p.PGPDiff) {
+			p.PGPDiff = append(p.PGPDiff, []uint8{})
+		} else {
+			p.PGPDiff = p.PGPDiff[:i+1]
+			p.PGPDiff[i] = p.PGPDiff[i][:0]
+		}
 
-		if len(packet) <= (pos + int(R) - 1) {
+		if len(packet) <= (pos + reference - 1) {
 			return pos, errShortPacket
 		}
 
-		for j := 0; j < int(R); j++ {
+		for range reference {
 			p.PGPDiff[i] = append(p.PGPDiff[i], packet[pos])
 			pos++
 		}

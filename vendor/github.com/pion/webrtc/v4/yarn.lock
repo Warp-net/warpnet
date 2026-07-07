@@ -2,41 +2,41 @@
 # yarn lockfile v1
 
 
-"@roamhq/wrtc-darwin-arm64@0.9.0":
-  version "0.9.0"
-  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-darwin-arm64/-/wrtc-darwin-arm64-0.9.0.tgz#d3e304dd2d522953635bc372028abf81245e9ab6"
-  integrity sha512-bVbyI3Xm3ZlTPYnKz7gnLkxt1kZ8ZMW5QBwJpF/kS227O71pqUhicX/V5RRGqUmaER3JtXt0naR86ZPDfgTQBg==
+"@roamhq/wrtc-darwin-arm64@0.10.0":
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-darwin-arm64/-/wrtc-darwin-arm64-0.10.0.tgz#8fd9b6eb1c7189fa4f69becef7125d56c82398e4"
+  integrity sha512-vFdi79jWuPHcnUcnuOjTvyKtmY/RI2xRQo9Y6RsIjIlYePN/7LTy00c+Ivrz4prYAPbp0oHscl7PDV64VUqGTQ==
 
-"@roamhq/wrtc-darwin-x64@0.9.0":
-  version "0.9.0"
-  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-darwin-x64/-/wrtc-darwin-x64-0.9.0.tgz#d879be0fe15f1e3dc9dcd29fb11a7edd73766992"
-  integrity sha512-99FFbFcIIqRR+H4ylkQgbgM8L5dx72hP5/GeJHB2h2f62Mb51bi30KokyOeBKH3X5R8bNi8LKnf7tV8d4kaGlA==
+"@roamhq/wrtc-darwin-x64@0.10.0":
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-darwin-x64/-/wrtc-darwin-x64-0.10.0.tgz#c860caa6997552b7d7218635f9b587e6e3900f68"
+  integrity sha512-H6852g2xYCuaR+/TrthpdMafs4bMfAUEpvRDhsIguzrK7Dz+MKpNI8MkwdqJN8W65J+7w7k+YqXIkTHe7Fz/cg==
 
-"@roamhq/wrtc-linux-arm64@0.9.0":
-  version "0.9.0"
-  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-linux-arm64/-/wrtc-linux-arm64-0.9.0.tgz#8a335f36c19ebcdf053e939c5cbfc29f40fe0df4"
-  integrity sha512-JUtrPFGvp+/5YWz9L5eW9e4XPQ5lRFQR5/BlGQJQOutrkBYqvME8NvAHKhyNWm+b3Sgk0w6yZ1g1nSttPHFY6g==
+"@roamhq/wrtc-linux-arm64@0.10.0":
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-linux-arm64/-/wrtc-linux-arm64-0.10.0.tgz#088f411f1d33decf530d419e4f9dab997bcc3f18"
+  integrity sha512-fEuJbNjprxQG6QlFd2iqBW9x028RDSho6izVg7gyt8irdPiXWOxzOxNnYMs/B2fohBTd1wD4Qxfivl07/dCR8A==
 
-"@roamhq/wrtc-linux-x64@0.9.0":
-  version "0.9.0"
-  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-linux-x64/-/wrtc-linux-x64-0.9.0.tgz#9de97d48bb4443cc25bbd18c523f02a706d9045c"
-  integrity sha512-ve6pIqeadUn6Jypb73A76041zdvGg/Bl0JU+T2+K8Zjw4aASebBFF4NX213dAS5viWUcNULzKV/s2PcpLDCyXQ==
+"@roamhq/wrtc-linux-x64@0.10.0":
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-linux-x64/-/wrtc-linux-x64-0.10.0.tgz#709d91ee73b66c24825498a3c39fa18fc03dc0b0"
+  integrity sha512-H32lK2eFg3sVb/9nkHIX5HIisxFoS82Gpesuea+zqAyRpRzSd5NpFXx28bVy9wQyRrNtj8k0bTUgEzWRzSbYCA==
 
-"@roamhq/wrtc-win32-x64@0.9.0":
-  version "0.9.0"
-  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-win32-x64/-/wrtc-win32-x64-0.9.0.tgz#ad212e4305cc71084fab48d6d8c97a0e2360c813"
-  integrity sha512-QoVe5KKP1IjIRGDZfMUJV0OgTCK3noc79P2uuLeR5iJqf+bLcgyNr818ljB7frxPMSZNwWC5eVQTGmclrIIOIg==
+"@roamhq/wrtc-win32-x64@0.10.0":
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/@roamhq/wrtc-win32-x64/-/wrtc-win32-x64-0.10.0.tgz#ecc0f3dde8ecc8ed20263a315d385fea51af309f"
+  integrity sha512-wEVXMvLrBizdLyrd+Zc7zb7zpwUuHUBXwrdIvI69e3i/AA8YsVYI2xo/sxk6GoQ+o8a14ONc4SStDS35TCjg+w==
 
-"@roamhq/wrtc@^0.9.0":
-  version "0.9.0"
-  resolved "https://registry.yarnpkg.com/@roamhq/wrtc/-/wrtc-0.9.0.tgz#ef127439c16ef0723f234c56b06378c745fd6cc0"
-  integrity sha512-b61ld6g0hHDh/K1y0Lckxg5HBunaESNW6N23ewviW5IvwBfZiIYPUxQFWxqprMTr/6ODHmw5B2xvqvLyuAL5Xw==
+"@roamhq/wrtc@^0.10.0":
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/@roamhq/wrtc/-/wrtc-0.10.0.tgz#eecdfdad778e75b42c5e9f66584872c7dff4155f"
+  integrity sha512-yFqQQ0EV1ZUHaphh3tmjoxPi2wzhW2vjmzoAVNRRLUjXYd2e1nvwi9TKfE2w4WNvNws/hBkouvOt23Xo9FkXkQ==
   optionalDependencies:
-    "@roamhq/wrtc-darwin-arm64" "0.9.0"
-    "@roamhq/wrtc-darwin-x64" "0.9.0"
-    "@roamhq/wrtc-linux-arm64" "0.9.0"
-    "@roamhq/wrtc-linux-x64" "0.9.0"
-    "@roamhq/wrtc-win32-x64" "0.9.0"
+    "@roamhq/wrtc-darwin-arm64" "0.10.0"
+    "@roamhq/wrtc-darwin-x64" "0.10.0"
+    "@roamhq/wrtc-linux-arm64" "0.10.0"
+    "@roamhq/wrtc-linux-x64" "0.10.0"
+    "@roamhq/wrtc-win32-x64" "0.10.0"
     domexception "^4.0.0"
 
 ajv@^6.5.5:

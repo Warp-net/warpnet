@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package mux
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/ice/v4"
-	"github.com/pion/transport/v3/packetio"
+	"github.com/pion/transport/v4/packetio"
 )
 
 // Endpoint implements net.Conn. It is used to read muxed packets.
@@ -70,29 +70,34 @@ func (e *Endpoint) WriteTo(p []byte, _ net.Addr) (int, error) {
 	return e.Write(p)
 }
 
-// LocalAddr is a stub.
+// LocalAddr returns the local network address, if known.
 func (e *Endpoint) LocalAddr() net.Addr {
 	return e.mux.nextConn.LocalAddr()
 }
 
-// RemoteAddr is a stub.
+// RemoteAddr returns the remote network address, if known.
 func (e *Endpoint) RemoteAddr() net.Addr {
 	return e.mux.nextConn.RemoteAddr()
 }
 
-// SetDeadline is a stub.
-func (e *Endpoint) SetDeadline(time.Time) error {
-	return nil
+// SetDeadline sets the read and write deadlines on the shared underlying
+// connection. Because the connection is shared, this applies to all endpoints
+// on the mux. Per-endpoint read deadlines can be set with SetReadDeadline.
+func (e *Endpoint) SetDeadline(t time.Time) error {
+	return e.mux.nextConn.SetDeadline(t)
 }
 
-// SetReadDeadline is a stub.
-func (e *Endpoint) SetReadDeadline(time.Time) error {
-	return nil
+// SetReadDeadline sets the read deadline for this Endpoint's internal
+// packet buffer. This timeout applies only to reads from this Endpoint,
+// not to the shared underlying connection.
+func (e *Endpoint) SetReadDeadline(t time.Time) error {
+	return e.buffer.SetReadDeadline(t)
 }
 
-// SetWriteDeadline is a stub.
-func (e *Endpoint) SetWriteDeadline(time.Time) error {
-	return nil
+// SetWriteDeadline sets the write deadline on the shared underlying connection.
+// Because the connection is shared, this applies to all endpoints on the mux.
+func (e *Endpoint) SetWriteDeadline(t time.Time) error {
+	return e.mux.nextConn.SetWriteDeadline(t)
 }
 
 // SetOnClose is a user set callback that

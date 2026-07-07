@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -7,7 +7,7 @@ import (
 	"crypto/cipher"
 	"sync"
 
-	"github.com/pion/transport/v3/utils/xor"
+	"github.com/pion/transport/v4/utils/xor"
 )
 
 // incrementCTR increments a big-endian integer of arbitrary size.
@@ -20,16 +20,18 @@ func incrementCTR(ctr []byte) {
 	}
 }
 
+const xorBufferSize = 32
+
 var xorBufferPool = sync.Pool{ // nolint:gochecknoglobals
-	New: func() interface{} {
-		return make([]byte, 1500)
+	New: func() any {
+		return make([]byte, xorBufferSize)
 	},
 }
 
 // xorBytesCTR performs CTR encryption and decryption.
 // It is equivalent to cipher.NewCTR followed by XORKeyStream.
 func xorBytesCTR(block cipher.Block, iv []byte, dst, src []byte) error {
-	if len(iv) != block.BlockSize() {
+	if len(iv) != block.BlockSize() || (len(iv)+block.BlockSize()) > xorBufferSize {
 		return errBadIVLength
 	}
 

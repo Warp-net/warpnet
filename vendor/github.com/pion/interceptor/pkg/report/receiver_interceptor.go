@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package report
@@ -22,7 +22,6 @@ func (r *ReceiverInterceptorFactory) NewInterceptor(_ string) (interceptor.Inter
 	receiverInterceptor := &ReceiverInterceptor{
 		interval: 1 * time.Second,
 		now:      time.Now,
-		log:      logging.NewDefaultLoggerFactory().NewLogger("receiver_interceptor"),
 		close:    make(chan struct{}),
 	}
 
@@ -30,6 +29,13 @@ func (r *ReceiverInterceptorFactory) NewInterceptor(_ string) (interceptor.Inter
 		if err := opt(receiverInterceptor); err != nil {
 			return nil, err
 		}
+	}
+
+	if receiverInterceptor.loggerFactory == nil {
+		receiverInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if receiverInterceptor.log == nil {
+		receiverInterceptor.log = receiverInterceptor.loggerFactory.NewLogger("receiver_interceptor")
 	}
 
 	return receiverInterceptor, nil
@@ -43,13 +49,14 @@ func NewReceiverInterceptor(opts ...ReceiverOption) (*ReceiverInterceptorFactory
 // ReceiverInterceptor interceptor generates receiver reports.
 type ReceiverInterceptor struct {
 	interceptor.NoOp
-	interval time.Duration
-	now      func() time.Time
-	streams  sync.Map
-	log      logging.LeveledLogger
-	m        sync.Mutex
-	wg       sync.WaitGroup
-	close    chan struct{}
+	interval      time.Duration
+	now           func() time.Time
+	streams       sync.Map
+	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
+	m             sync.Mutex
+	wg            sync.WaitGroup
+	close         chan struct{}
 }
 
 func (r *ReceiverInterceptor) isClosed() bool {
@@ -100,7 +107,7 @@ func (r *ReceiverInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 		select {
 		case <-ticker.C:
 			now := r.now()
-			r.streams.Range(func(_, value interface{}) bool {
+			r.streams.Range(func(_, value any) bool {
 				if stream, ok := value.(*receiverStream); !ok {
 					r.log.Warnf("failed to cast ReceiverInterceptor stream")
 				} else if _, err := rtcpWriter.Write(

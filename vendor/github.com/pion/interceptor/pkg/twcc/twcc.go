@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package twcc provides interceptors to implement transport wide congestion control.
@@ -134,7 +134,7 @@ func (r *Recorder) maybeBuildFeedbackPacket(beginSeqNumInclusive, endSeqNumExclu
 			// It should be possible to add seq to this new packet.
 			// If the difference between seq and beginSeqNumInclusive is too large, discard
 			// reporting too old missing packets.
-			baseSequenceNumber := max64(beginSeqNumInclusive, seq-maxMissingSequenceNumbers)
+			baseSequenceNumber := max(beginSeqNumInclusive, seq-maxMissingSequenceNumbers)
 
 			// baseSequenceNumber is the expected first sequence number. This is known,
 			// but we may not have actually received it, so the base time should be the time
@@ -318,7 +318,7 @@ func (c *chunk) encode() rtcp.PacketStatusChunk {
 		}
 	}
 
-	minCap := minInt(maxTwoBitCap, len(c.deltas))
+	minCap := min(maxTwoBitCap, len(c.deltas))
 	svc := &rtcp.StatusVectorChunk{
 		SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
 		SymbolList: c.deltas[:minCap],
@@ -346,36 +346,4 @@ func (c *chunk) reset() {
 	c.deltas = []uint16{}
 	c.hasLargeDelta = false
 	c.hasDifferentTypes = false
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-
-	return b
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-
-	return b
-}
-
-func max64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-
-	return b
-}
-
-func min64(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-
-	return b
 }

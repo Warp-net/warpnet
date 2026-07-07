@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package twcc
@@ -104,13 +104,13 @@ func (m *packetArrivalTimeMap) EndSequenceNumber() int64 {
 }
 
 // FindNextAtOrAfter returns the sequence number and timestamp of the first received packet that has a sequence number
-// greator or equal to sequenceNumber.
+// greater or equal to sequenceNumber.
 func (m *packetArrivalTimeMap) FindNextAtOrAfter(sequenceNumber int64) (
-	foundSequenceNumber int64, arrivalTime int64, ok bool,
+	int64, int64, bool,
 ) {
-	for sequenceNumber = m.Clamp(sequenceNumber); sequenceNumber < m.endSequenceNumber; sequenceNumber++ {
-		if t := m.get(sequenceNumber); t >= 0 {
-			return sequenceNumber, t, true
+	for seq := m.Clamp(sequenceNumber); seq < m.endSequenceNumber; seq++ {
+		if arrivalTime := m.get(seq); arrivalTime >= 0 {
+			return seq, arrivalTime, true
 		}
 	}
 
@@ -136,7 +136,7 @@ func (m *packetArrivalTimeMap) EraseTo(sequenceNumber int64) {
 // RemoveOldPackets removes packets from the beginning of the map as long as they are before
 // sequenceNumber and with an age older than arrivalTimeLimit.
 func (m *packetArrivalTimeMap) RemoveOldPackets(sequenceNumber int64, arrivalTimeLimit int64) {
-	checkTo := min64(sequenceNumber, m.endSequenceNumber)
+	checkTo := min(sequenceNumber, m.endSequenceNumber)
 	for m.beginSequenceNumber < checkTo && m.get(m.beginSequenceNumber) <= arrivalTimeLimit {
 		m.beginSequenceNumber++
 	}
@@ -182,9 +182,9 @@ func (m *packetArrivalTimeMap) adjustToSize(newSize int) {
 		}
 		m.reallocate(newCapacity)
 	}
-	if m.capacity() > maxInt(minCapacity, newSize*4) {
+	if m.capacity() > max(minCapacity, newSize*4) {
 		newCapacity := m.capacity()
-		for newCapacity >= 2*maxInt(newSize, minCapacity) {
+		for newCapacity >= 2*max(newSize, minCapacity) {
 			newCapacity /= 2
 		}
 		m.reallocate(newCapacity)

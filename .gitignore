@@ -45,3 +45,11 @@ core/moderation
 !core/moderation/.git
 
 frontend/node_modules
+
+# Apple
+*.key
+*.csr
+*.cer
+*.crt
+*.p12
+*.p8

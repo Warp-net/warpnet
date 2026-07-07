@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -55,8 +55,8 @@ func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) { //n
 			readStreams:         map[uint32]readStream{},
 			newStream:           make(chan readStream),
 			acceptStreamTimeout: config.AcceptStreamTimeout,
-			started:             make(chan interface{}),
-			closed:              make(chan interface{}),
+			started:             make(chan any),
+			closed:              make(chan any),
 			bufferFactory:       config.BufferFactory,
 			log:                 loggerFactory.NewLogger("srtp"),
 		},
@@ -120,11 +120,14 @@ func (s *SessionSRTCP) write(buf []byte) (int, error) {
 		return 0, errStartedChannelUsedIncorrectly
 	}
 
-	ibuf := bufferpool.Get()
-	defer bufferpool.Put(ibuf)
+	pbuf, ok := bufferpool.Get().(*[]byte)
+	if !ok {
+		return 0, errStartedChannelUsedIncorrectly
+	}
+	defer bufferpool.Put(pbuf)
 
 	s.session.localContextMutex.Lock()
-	encrypted, err := s.localContext.EncryptRTCP(ibuf.([]byte), buf, nil) //nolint:forcetypeassert
+	encrypted, err := s.localContext.EncryptRTCP(*pbuf, buf, nil)
 	s.session.localContextMutex.Unlock()
 
 	if err != nil {

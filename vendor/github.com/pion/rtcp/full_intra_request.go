@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rtcp
@@ -6,6 +6,7 @@ package rtcp
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 )
 
 // A FIREntry is a (SSRC, seqno) pair, as carried by FullIntraRequest.
@@ -59,7 +60,7 @@ func (p *FullIntraRequest) Unmarshal(rawPacket []byte) error {
 		return err
 	}
 
-	if len(rawPacket) < (headerLength + int(4*header.Length)) {
+	if len(rawPacket) < (headerLength + 4*int(header.Length)) {
 		return errPacketTooShort
 	}
 
@@ -68,16 +69,17 @@ func (p *FullIntraRequest) Unmarshal(rawPacket []byte) error {
 	}
 
 	// The FCI field MUST contain one or more FIR entries
-	if 4*header.Length-firOffset <= 0 || (4*header.Length)%8 != 0 {
+	if 4*int(header.Length)-firOffset <= 0 || (4*int(header.Length))%8 != 0 {
 		return errBadLength
 	}
 
 	p.SenderSSRC = binary.BigEndian.Uint32(rawPacket[headerLength:])
 	p.MediaSSRC = binary.BigEndian.Uint32(rawPacket[headerLength+ssrcLength:])
-	for i := headerLength + firOffset; i < (headerLength + int(header.Length*4)); i += 8 {
+	for i := headerLength + firOffset; i < (headerLength + 4*int(header.Length)); i += 8 {
+		entry := rawPacket[i : i+8]
 		p.FIR = append(p.FIR, FIREntry{
-			binary.BigEndian.Uint32(rawPacket[i:]),
-			rawPacket[i+4],
+			binary.BigEndian.Uint32(entry),
+			entry[4],
 		})
 	}
 
@@ -99,13 +101,14 @@ func (p *FullIntraRequest) MarshalSize() int {
 }
 
 func (p *FullIntraRequest) String() string {
-	out := fmt.Sprintf("FullIntraRequest %x %x",
+	var out strings.Builder
+	fmt.Fprintf(&out, "FullIntraRequest %x %x",
 		p.SenderSSRC, p.MediaSSRC)
 	for _, e := range p.FIR {
-		out += fmt.Sprintf(" (%x %v)", e.SSRC, e.SequenceNumber)
+		fmt.Fprintf(&out, " (%x %v)", e.SSRC, e.SequenceNumber)
 	}
 
-	return out
+	return out.String()
 }
 
 // DestinationSSRC returns an array of SSRC values that this packet refers to.

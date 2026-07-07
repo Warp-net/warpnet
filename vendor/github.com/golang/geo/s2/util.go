@@ -14,7 +14,11 @@
 
 package s2
 
-import "github.com/golang/geo/s1"
+import (
+	"cmp"
+
+	"github.com/golang/geo/s1"
+)
 
 // roundAngle returns the value rounded to nearest as an int32.
 // This does not match C++ exactly for the case of x.5.
@@ -25,101 +29,7 @@ func roundAngle(val s1.Angle) int32 {
 	return int32(val + 0.5)
 }
 
-// minAngle returns the smallest of the given values.
-func minAngle(x s1.Angle, others ...s1.Angle) s1.Angle {
-	min := x
-	for _, y := range others {
-		if y < min {
-			min = y
-		}
-	}
-	return min
-}
-
-// maxAngle returns the largest of the given values.
-func maxAngle(x s1.Angle, others ...s1.Angle) s1.Angle {
-	max := x
-	for _, y := range others {
-		if y > max {
-			max = y
-		}
-	}
-	return max
-}
-
-// minChordAngle returns the smallest of the given values.
-func minChordAngle(x s1.ChordAngle, others ...s1.ChordAngle) s1.ChordAngle {
-	min := x
-	for _, y := range others {
-		if y < min {
-			min = y
-		}
-	}
-	return min
-}
-
-// maxChordAngle returns the largest of the given values.
-func maxChordAngle(x s1.ChordAngle, others ...s1.ChordAngle) s1.ChordAngle {
-	max := x
-	for _, y := range others {
-		if y > max {
-			max = y
-		}
-	}
-	return max
-}
-
-// minFloat64 returns the smallest of the given values.
-func minFloat64(x float64, others ...float64) float64 {
-	min := x
-	for _, y := range others {
-		if y < min {
-			min = y
-		}
-	}
-	return min
-}
-
-// maxFloat64 returns the largest of the given values.
-func maxFloat64(x float64, others ...float64) float64 {
-	max := x
-	for _, y := range others {
-		if y > max {
-			max = y
-		}
-	}
-	return max
-}
-
-// minInt returns the smallest of the given values.
-func minInt(x int, others ...int) int {
-	min := x
-	for _, y := range others {
-		if y < min {
-			min = y
-		}
-	}
-	return min
-}
-
-// maxInt returns the largest of the given values.
-func maxInt(x int, others ...int) int {
-	max := x
-	for _, y := range others {
-		if y > max {
-			max = y
-		}
-	}
-	return max
-}
-
-// clampInt returns the number closest to x within the range min..max.
-func clampInt(x, min, max int) int {
-	if x < min {
-		return min
-	}
-	if x > max {
-		return max
-	}
-	return x
+// clamp restricts a value to be within the range [lo, hi].
+func clamp[T cmp.Ordered](x, lo, hi T) T {
+	return min(max(x, lo), hi)
 }

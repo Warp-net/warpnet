@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package nack
@@ -23,7 +23,6 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 	responderInterceptor := &ResponderInterceptor{
 		streamsFilter: streamSupportNack,
 		size:          1024,
-		log:           logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
 		streams:       map[uint32]*localStream{},
 	}
 
@@ -33,6 +32,12 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		}
 	}
 
+	if responderInterceptor.loggerFactory == nil {
+		responderInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if responderInterceptor.log == nil {
+		responderInterceptor.log = responderInterceptor.loggerFactory.NewLogger("nack_responder")
+	}
 	if responderInterceptor.packetFactory == nil {
 		responderInterceptor.packetFactory = rtpbuffer.NewPacketFactoryCopy()
 	}
@@ -50,6 +55,7 @@ type ResponderInterceptor struct {
 	streamsFilter func(info *interceptor.StreamInfo) bool
 	size          uint16
 	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
 	packetFactory rtpbuffer.PacketFactory
 
 	streams   map[uint32]*localStream
@@ -126,10 +132,10 @@ func (n *ResponderInterceptor) BindLocalStream(
 			if err != nil {
 				return 0, err
 			}
-			stream.rtpBufferMutex.Lock()
-			defer stream.rtpBufferMutex.Unlock()
 
-			rtpBuffer.Add(pkt)
+			stream.rtpBufferMutex.Lock()
+			stream.rtpBuffer.Add(pkt)
+			stream.rtpBufferMutex.Unlock()
 
 			return writer.Write(header, payload, attributes)
 		},
@@ -139,8 +145,31 @@ func (n *ResponderInterceptor) BindLocalStream(
 // UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
 func (n *ResponderInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
 	n.streamsMu.Lock()
+	stream, ok := n.streams[info.SSRC]
 	delete(n.streams, info.SSRC)
 	n.streamsMu.Unlock()
+
+	if ok {
+		stream.rtpBufferMutex.Lock()
+		stream.rtpBuffer.Clear()
+		stream.rtpBufferMutex.Unlock()
+	}
+}
+
+// Close releases all resources held by the ResponderInterceptor.
+func (n *ResponderInterceptor) Close() error {
+	n.streamsMu.Lock()
+	streams := n.streams
+	n.streams = map[uint32]*localStream{}
+	n.streamsMu.Unlock()
+
+	for _, stream := range streams {
+		stream.rtpBufferMutex.Lock()
+		stream.rtpBuffer.Clear()
+		stream.rtpBufferMutex.Unlock()
+	}
+
+	return nil
 }
 
 func (n *ResponderInterceptor) resendPackets(nack *rtcp.TransportLayerNack) {
@@ -153,10 +182,13 @@ func (n *ResponderInterceptor) resendPackets(nack *rtcp.TransportLayerNack) {
 
 	for i := range nack.Nacks {
 		nack.Nacks[i].Range(func(seq uint16) bool {
+			// save the packet under the buffer lock
 			stream.rtpBufferMutex.Lock()
-			defer stream.rtpBufferMutex.Unlock()
+			p := stream.rtpBuffer.Get(seq)
+			stream.rtpBufferMutex.Unlock()
 
-			if p := stream.rtpBuffer.Get(seq); p != nil {
+			if p != nil {
+				// send without holding rtpBufferMutex
 				if _, err := stream.rtpWriter.Write(p.Header(), p.Payload(), interceptor.Attributes{}); err != nil {
 					n.log.Warnf("failed resending nacked packet: %+v", err)
 				}

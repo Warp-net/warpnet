@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package srtp implements Secure Real-time Transport Protocol
@@ -20,6 +20,7 @@ Simplified structure of SRTP Packets:
 - Auth Tag - used by non-AEAD profiles only. When RCC is used with AEAD profiles, the ROC is sent here.
 */
 
+// nolint:cyclop
 func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int) ([]byte, error) {
 	authTagLen, err := c.cipher.AuthTagRTPLen()
 	if err != nil {
@@ -39,7 +40,11 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		return nil, fmt.Errorf("%w: %d", errTooShortRTP, len(ciphertext))
 	}
 
-	ssrcState := c.getSRTPSSRCState(header.SSRC)
+	// The SSRC in the RTP header is unauthenticated at this point. getSRTPSSRCState is
+	// called in read-only mode (existingState tracks whether it was pre-existing) so that
+	// no new map entry is inserted until after the auth tag has been verified. The state
+	// is committed to the map by setSRTPSSRCState only after markAsValid() succeeds below.
+	ssrcState, existingState := c.getSRTPSSRCState(header.SSRC, false)
 
 	var roc uint32
 	var diff int64
@@ -55,11 +60,21 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		diff = int64(ssrcState.index) - int64(index) //nolint:gosec
 	}
 
+	// The replay check is intentionally performed before authentication.
+	// Rejecting already-seen sequence numbers here avoids the CPU cost of
+	// AES decryption and HMAC/GCM verification on flooded duplicate packets.
+	// Safety relies on the replay detector only committing the index as "seen"
+	// when markAsValid() is explicitly called after successful authentication.
 	markAsValid, ok := ssrcState.replayDetector.Check(index)
 	if !ok {
 		return nil, &duplicatedError{
 			Proto: "srtp", SSRC: header.SSRC, Index: uint32(header.SequenceNumber),
 		}
+	}
+
+	err = c.checkCryptex(header)
+	if err != nil {
+		return nil, err
 	}
 
 	cipher := c.cipher
@@ -72,7 +87,7 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		}
 	}
 
-	dst = growBufferSize(dst, len(ciphertext)-authTagLen-len(c.sendMKI))
+	dst = growBufferSize(dst, len(ciphertext)-authTagLen-mkiLen)
 
 	dst, err = cipher.decryptRTP(dst, ciphertext, header, headerLen, roc, hasRocInPacket)
 	if err != nil {
@@ -81,6 +96,10 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 
 	markAsValid()
 	ssrcState.updateRolloverCount(header.SequenceNumber, diff, hasRocInPacket, roc)
+
+	if !existingState {
+		c.setSRTPSSRCState(ssrcState)
+	}
 
 	return dst, nil
 }
@@ -121,8 +140,16 @@ func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) (
 // Similar to above but faster because it can avoid unmarshaling the header and marshaling the payload.
 func (c *Context) encryptRTP(dst []byte, header *rtp.Header, headerLen int, plaintext []byte,
 ) (ciphertext []byte, err error) {
-	s := c.getSRTPSSRCState(header.SSRC)
-	roc, diff, ovf := s.nextRolloverCount(header.SequenceNumber)
+	// RFC 9335, section 5.1: This mechanism [Cryptex] MUST NOT be used with header extensions other than
+	// the variety described in [RFC8285].
+	if c.cryptexMode != CryptexModeDisabled && header.Extension &&
+		header.ExtensionProfile != rtp.ExtensionProfileOneByte &&
+		header.ExtensionProfile != rtp.ExtensionProfileTwoByte {
+		return nil, errUnsupportedHeaderExtension
+	}
+
+	ssrcState, _ := c.getSRTPSSRCState(header.SSRC, true)
+	roc, diff, ovf := ssrcState.nextRolloverCount(header.SequenceNumber)
 	if ovf {
 		// ... when 2^48 SRTP packets or 2^31 SRTCP packets have been secured with the same key
 		// (whichever occurs before), the key management MUST be called to provide new master key(s)
@@ -130,12 +157,9 @@ func (c *Context) encryptRTP(dst []byte, header *rtp.Header, headerLen int, plai
 		// https://www.rfc-editor.org/rfc/rfc3711#section-9.2
 		return nil, errExceededMaxPackets
 	}
-	s.updateRolloverCount(header.SequenceNumber, diff, false, 0)
+	ssrcState.updateRolloverCount(header.SequenceNumber, diff, false, 0)
 
-	rocInPacket := false
-	if c.rccMode != RCCModeNone && header.SequenceNumber%c.rocTransmitRate == 0 {
-		rocInPacket = true
-	}
+	rocInPacket := c.rccMode != RCCModeNone && header.SequenceNumber%c.rocTransmitRate == 0
 
 	return c.cipher.encryptRTP(dst, header, headerLen, plaintext, roc, rocInPacket)
 }
@@ -156,4 +180,20 @@ func (c *Context) hasROCInPacket(header *rtp.Header, authTagLen int) (bool, int)
 	}
 
 	return hasRocInPacket, authTagLen
+}
+
+func (c *Context) checkCryptex(header *rtp.Header) error {
+	switch c.cryptexMode {
+	case CryptexModeDisabled:
+		if isCryptexPacket(header) {
+			return errCryptexDisabled
+		}
+	case CryptexModeRequired:
+		if (header.Extension || len(header.CSRC) > 0) && !isCryptexPacket(header) {
+			return errUnencryptedHeaderExtAndCSRCs
+		}
+	default:
+	}
+
+	return nil
 }

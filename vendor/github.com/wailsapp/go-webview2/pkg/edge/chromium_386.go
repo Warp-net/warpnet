@@ -5,6 +5,8 @@ package edge
 
 import (
 	"github.com/wailsapp/go-webview2/internal/w32"
+	"golang.org/x/sys/windows"
+	"unsafe"
 )
 
 func (e *Chromium) SetSize(bounds w32.Rect) {
@@ -12,8 +14,15 @@ func (e *Chromium) SetSize(bounds w32.Rect) {
 		return
 	}
 
-	err := e.controller.PutBounds(bounds)
-	if err != nil {
-		e.errorCallback(err)
+	hr, _, _ := e.controller.vtbl.PutBounds.Call(
+		uintptr(unsafe.Pointer(e.controller)),
+		uintptr(bounds.Left),
+		uintptr(bounds.Top),
+		uintptr(bounds.Right),
+		uintptr(bounds.Bottom),
+	)
+
+	if windows.Handle(hr) != windows.S_OK {
+		e.errorCallback(windows.Errno(hr))
 	}
 }

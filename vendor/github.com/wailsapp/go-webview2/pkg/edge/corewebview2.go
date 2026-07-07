@@ -18,7 +18,7 @@ import (
 func init() {
 	runtime.LockOSThread()
 
-	r, _, _ := w32.Ole32OleInitialize.Call(0)
+	r, _, _ := w32.Ole32CoInitializeEx.Call(0, uintptr(w32.COINIT_APARTMENTTHREADED))
 	if int(r) < 0 {
 		log.Printf("Warning: CoInitializeEx call failed: E=%08x", r)
 	}
@@ -321,6 +321,20 @@ func (i *ICoreWebView2) GetSettings() (*ICoreWebViewSettings, error) {
 		return nil, windows.Errno(hr)
 	}
 	return settings, nil
+}
+
+func (i *ICoreWebView2) GetSource() (string, error) {
+	var _source *uint16
+	hr, _, _ := i.vtbl.GetSource.Call(
+		uintptr(unsafe.Pointer(i)),
+		uintptr(unsafe.Pointer(&_source)),
+	)
+	if windows.Handle(hr) != windows.S_OK {
+		return "", windows.Errno(hr)
+	}
+	source := windows.UTF16PtrToString(_source)
+	windows.CoTaskMemFree(unsafe.Pointer(_source))
+	return source, nil
 }
 
 func (i *ICoreWebView2) GetContainsFullScreenElement() (bool, error) {

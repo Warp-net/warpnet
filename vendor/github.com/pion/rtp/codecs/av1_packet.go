@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package codecs
@@ -176,10 +176,7 @@ func (p *AV1Payloader) appendOBUPayload(
 
 	remaining := len(obuPayload)
 	// How much to write to the current packet.
-	toWrite := remaining
-	if toWrite >= freeSpace {
-		toWrite = freeSpace
-	}
+	toWrite := min(remaining, freeSpace)
 
 	// W: two bit field that describes the number of OBU elements in the packet.
 	// This field MUST be set equal to 0 or equal to the number of OBU elements contained in the packet.
@@ -227,10 +224,9 @@ func (p *AV1Payloader) appendOBUPayload(
 			payloads[currentPayload][0] |= av1ZMask
 		}
 
-		toWrite = remaining
-		if toWrite >= mtu-1 { // MTU - aggregation header
-			toWrite = mtu - 1
-		}
+		toWrite = min(remaining,
+			// MTU - aggregation header
+			mtu-1)
 
 		// Last OBU in the current packet, Or this whole packet is a fragment.
 		if isLast || remaining >= mtu-1 {
@@ -252,14 +248,14 @@ func (p *AV1Payloader) appendOBUPayload(
 
 // Measure the maximum write size for a payload with leb128 encoding added.
 func (p *AV1Payloader) computeWriteSize(wantToWrite, canWrite int) int {
-	leb128Size, isAtEge := p.leb128Size(wantToWrite)
+	leb128Size, isAtEdge := p.leb128Size(wantToWrite)
 	if canWrite >= wantToWrite+leb128Size {
 		return wantToWrite
 	}
 
 	// Handle edge case where subtracting one from the leb128 size
 	// results in a smaller leb128 size that can fit in the remaining space.
-	if isAtEge && canWrite >= wantToWrite+leb128Size-1 {
+	if isAtEdge && canWrite >= wantToWrite+leb128Size-1 {
 		return wantToWrite - 1
 	}
 
@@ -289,6 +285,7 @@ func (p *AV1Payloader) leb128Size(leb128 int) (size int, isAtEge bool) {
 * +-+-+-+-+-+-+-+-+
 **/
 // https://aomediacodec.github.io/av1-rtp-spec/#44-av1-aggregation-header
+//
 // Deprecated: Use AV1Depacketizer instead.
 type AV1Packet struct {
 	// Z: MUST be set to 1 if the first OBU element is an

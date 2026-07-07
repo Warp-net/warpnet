@@ -1,8 +1,7 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package webrtc
 
@@ -54,7 +53,8 @@ func NewAPI(options ...func(*API)) *API {
 
 	if api.interceptorRegistry == nil {
 		api.interceptorRegistry = &interceptor.Registry{}
-		err := RegisterDefaultInterceptors(api.mediaEngine, api.interceptorRegistry)
+		err := RegisterDefaultInterceptorsWithOptions(api.mediaEngine, api.interceptorRegistry,
+			WithInterceptorLoggerFactory(api.settingEngine.LoggerFactory))
 		if err != nil {
 			logger.Errorf("Failed to register default interceptors %s", err)
 		}

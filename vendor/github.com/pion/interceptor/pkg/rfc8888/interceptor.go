@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package rfc8888 provides an interceptor that generates congestion control
@@ -26,7 +26,6 @@ type SenderInterceptorFactory struct {
 func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	senderInterceptor := &SenderInterceptor{
 		NoOp:          interceptor.NoOp{},
-		log:           logging.NewDefaultLoggerFactory().NewLogger("rfc8888_interceptor"),
 		lock:          sync.Mutex{},
 		wg:            sync.WaitGroup{},
 		recorder:      NewRecorder(),
@@ -46,6 +45,13 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 		}
 	}
 
+	if senderInterceptor.loggerFactory == nil {
+		senderInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if senderInterceptor.log == nil {
+		senderInterceptor.log = senderInterceptor.loggerFactory.NewLogger("rfc8888_interceptor")
+	}
+
 	return senderInterceptor, nil
 }
 
@@ -58,6 +64,7 @@ func NewSenderInterceptor(opts ...Option) (*SenderInterceptorFactory, error) {
 type SenderInterceptor struct {
 	interceptor.NoOp
 	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
 	lock          sync.Mutex
 	wg            sync.WaitGroup
 	recorder      *Recorder

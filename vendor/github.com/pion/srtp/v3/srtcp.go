@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -47,8 +47,18 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	index := c.cipher.getRTCPIndex(encrypted)
 	ssrc := binary.BigEndian.Uint32(encrypted[4:])
 
-	s := c.getSRTCPSSRCState(ssrc)
-	markAsValid, ok := s.replayDetector.Check(uint64(index))
+	// The SSRC is read from the unauthenticated RTCP header at this point.
+	// getSRTCPSSRCState is called in read-only mode so that no new map entry is
+	// inserted until after the auth tag has been verified. The state is committed
+	// to the map by setSRTCPSSRCState only after markAsValid() succeeds below.
+	ssrcState, existingState := c.getSRTCPSSRCState(ssrc, false)
+
+	// The replay check is intentionally performed before authentication.
+	// Rejecting already-seen sequence numbers here avoids the CPU cost of
+	// AES decryption and HMAC/GCM verification on flooded duplicate packets.
+	// Safety relies on the replay detector only committing the index as "seen"
+	// when markAsValid() is explicitly called after successful authentication.
+	markAsValid, ok := ssrcState.replayDetector.Check(uint64(index))
 	if !ok {
 		return nil, &duplicatedError{Proto: "srtcp", SSRC: ssrc, Index: index}
 	}
@@ -69,6 +79,10 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	}
 
 	markAsValid()
+
+	if !existingState {
+		c.setSRTCPSSRCState(ssrcState)
+	}
 
 	return out, nil
 }
@@ -92,7 +106,7 @@ func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 	}
 
 	ssrc := binary.BigEndian.Uint32(decrypted[4:])
-	ssrcState := c.getSRTCPSSRCState(ssrc)
+	ssrcState, _ := c.getSRTCPSSRCState(ssrc, true)
 
 	if ssrcState.srtcpIndex >= maxSRTCPIndex {
 		// ... when 2^48 SRTP packets or 2^31 SRTCP packets have been secured with the same key

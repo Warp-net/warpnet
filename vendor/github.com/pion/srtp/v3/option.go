@@ -1,10 +1,10 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
 
 import (
-	"github.com/pion/transport/v3/replaydetector"
+	"github.com/pion/transport/v4/replaydetector"
 )
 
 // ContextOption represents option of Context using the functional options pattern.
@@ -169,6 +169,16 @@ func RolloverCounterCarryingTransform(mode RCCMode, rocTransmitRate uint16) Cont
 func SRTPAuthenticationTagLength(authTagRTPLen int) ContextOption { // nolint:revive
 	return func(c *Context) error {
 		c.authTagRTPLen = &authTagRTPLen
+
+		return nil
+	}
+}
+
+// Cryptex allows to enable Cryptex mechanism to completely encrypt RTP Header Extensions and Contributing
+// Sources, as defined in RFC 9335.
+func Cryptex(cryptexMode CryptexMode) ContextOption {
+	return func(c *Context) error {
+		c.cryptexMode = cryptexMode
 
 		return nil
 	}

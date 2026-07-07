@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -87,7 +87,7 @@ func (r *paramOutgoingResetRequest) unmarshal(raw []byte) (param, error) {
 
 	lim := (len(r.raw) - paramOutgoingResetRequestStreamIdentifiersOffset) / 2
 	r.streamIdentifiers = make([]uint16, lim)
-	for i := 0; i < lim; i++ {
+	for i := range lim {
 		r.streamIdentifiers[i] = binary.BigEndian.Uint16(r.raw[paramOutgoingResetRequestStreamIdentifiersOffset+2*i:])
 	}
 

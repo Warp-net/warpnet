@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rtcp
@@ -6,6 +6,7 @@ package rtcp
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 )
 
 // SDESType is the item type used in the RTCP SDES control packet.
@@ -313,14 +314,14 @@ func (s SourceDescriptionItem) Marshal() ([]byte, error) {
 
 	rawPacket := make([]byte, sdesTypeLen+sdesOctetCountLen)
 
-	rawPacket[sdesTypeOffset] = uint8(s.Type)
+	rawPacket[sdesTypeOffset] = uint8(s.Type) //nolint:gosec // rawPacket is created with length 2
 
 	txtBytes := []byte(s.Text)
 	octetCount := len(txtBytes)
 	if octetCount > sdesMaxOctetCount {
 		return nil, errSDESTextTooLong
 	}
-	rawPacket[sdesOctetCountOffset] = uint8(octetCount)
+	rawPacket[sdesOctetCountOffset] = uint8(octetCount) //nolint:gosec // rawPacket is created with length 2
 
 	rawPacket = append(rawPacket, txtBytes...) //nolint:makezero
 
@@ -365,10 +366,11 @@ func (s *SourceDescription) DestinationSSRC() []uint32 {
 }
 
 func (s *SourceDescription) String() string {
-	out := "Source Description:\n"
+	var out strings.Builder
+	out.WriteString("Source Description:\n")
 	for _, c := range s.Chunks {
-		out += fmt.Sprintf("\t%x: %s\n", c.Source, c.Items)
+		fmt.Fprintf(&out, "\t%x: %s\n", c.Source, c.Items)
 	}
 
-	return out
+	return out.String()
 }

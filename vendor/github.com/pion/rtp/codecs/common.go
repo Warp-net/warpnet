@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package codecs
@@ -37,4 +37,15 @@ func (d *videoDepacketizer) IsPartitionTail(marker bool, _ []byte) bool {
 // enabling SetZeroAllocation gives you higher performance at a reduced feature set.
 func (d *videoDepacketizer) SetZeroAllocation(zeroAllocation bool) {
 	d.zeroAllocation = zeroAllocation
+}
+
+// resizeUint16Slice resizes the provided slice to the desired size, or
+// allocates a new slice if needed. The contents are unspecified; the
+// caller must overwrite every element.
+func resizeUint16Slice(s []uint16, desiredSize int) []uint16 {
+	if cap(s) >= desiredSize {
+		return s[:desiredSize]
+	}
+
+	return make([]uint16, desiredSize)
 }
