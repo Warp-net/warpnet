@@ -1,9 +1,10 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/v3/packetio"
+	"github.com/pion/transport/v4/packetio"
 )
 
 type bufferedConn struct {
@@ -91,6 +92,9 @@ type tcpPacketConn struct {
 	closedChan chan struct{}
 	closeOnce  sync.Once
 	aliveTimer *time.Timer
+
+	// refs counts outstanding sharedPacketConn wrappers handed out by the mux.
+	refs atomic.Int32
 }
 
 type streamingPacket struct {
@@ -190,7 +194,7 @@ func (t *tcpPacketConn) startReading(conn net.Conn) {
 			t.params.Logger.Warnf("Failed to read streaming packet: %s", err)
 			last := t.removeConn(conn)
 			// Only propagate connection closure errors if no other open connection exists.
-			if last || !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
+			if last || (!errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed)) {
 				t.handleRecv(streamingPacket{nil, conn.RemoteAddr(), err})
 			}
 
@@ -229,12 +233,21 @@ func (t *tcpPacketConn) isClosed() bool {
 	}
 }
 
-// WriteTo is for passive and s-o candidates.
-func (t *tcpPacketConn) ReadFrom(b []byte) (n int, rAddr net.Addr, err error) {
-	pkt, ok := <-t.recvChan
+// ReadFrom is for passive and s-o candidates.
+func (t *tcpPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	return t.readFromContext(context.Background(), b)
+}
 
-	if !ok {
-		return 0, nil, io.ErrClosedPipe
+func (t *tcpPacketConn) readFromContext(ctx context.Context, b []byte) (int, net.Addr, error) {
+	var pkt streamingPacket
+	var ok bool
+	select {
+	case pkt, ok = <-t.recvChan:
+		if !ok {
+			return 0, nil, io.ErrClosedPipe
+		}
+	case <-ctx.Done():
+		return 0, nil, ctx.Err()
 	}
 
 	if pkt.Err != nil {
@@ -245,10 +258,10 @@ func (t *tcpPacketConn) ReadFrom(b []byte) (n int, rAddr net.Addr, err error) {
 		return 0, pkt.RAddr, io.ErrShortBuffer
 	}
 
-	n = len(pkt.Data)
+	n := len(pkt.Data)
 	copy(b, pkt.Data[:n])
 
-	return n, pkt.RAddr, err
+	return n, pkt.RAddr, nil
 }
 
 // WriteTo is for active and s-o candidates.
@@ -284,6 +297,11 @@ func (t *tcpPacketConn) removeConn(conn net.Conn) bool {
 
 	t.closeAndLogError(conn)
 
+	// wait for some time to flush pending writes
+	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	// read deadline as well just in case
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
 	delete(t.conns, conn.RemoteAddr().String())
 
 	return len(t.conns) == 0
@@ -303,6 +321,12 @@ func (t *tcpPacketConn) Close() error {
 
 	for _, conn := range t.conns {
 		t.closeAndLogError(conn)
+
+		// wait for some time to flush pending writes
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		// read deadline as well just in case
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
 		delete(t.conns, conn.RemoteAddr().String())
 	}
 
@@ -321,16 +345,46 @@ func (t *tcpPacketConn) LocalAddr() net.Addr {
 	return t.params.LocalAddr
 }
 
-func (t *tcpPacketConn) SetDeadline(time.Time) error {
-	return nil
+func (t *tcpPacketConn) SetDeadline(d time.Time) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var err error
+	for _, conn := range t.conns {
+		if setErr := conn.SetDeadline(d); err == nil && setErr != nil {
+			err = setErr
+		}
+	}
+
+	return err
 }
 
-func (t *tcpPacketConn) SetReadDeadline(time.Time) error {
-	return nil
+func (t *tcpPacketConn) SetReadDeadline(d time.Time) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var err error
+	for _, conn := range t.conns {
+		if setErr := conn.SetReadDeadline(d); err == nil && setErr != nil {
+			err = setErr
+		}
+	}
+
+	return err
 }
 
-func (t *tcpPacketConn) SetWriteDeadline(time.Time) error {
-	return nil
+func (t *tcpPacketConn) SetWriteDeadline(d time.Time) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var err error
+	for _, conn := range t.conns {
+		if setErr := conn.SetWriteDeadline(d); err == nil && setErr != nil {
+			err = setErr
+		}
+	}
+
+	return err
 }
 
 func (t *tcpPacketConn) CloseChannel() <-chan struct{} {

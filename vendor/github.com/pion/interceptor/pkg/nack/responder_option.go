@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package nack
@@ -26,6 +26,15 @@ func ResponderSize(size uint16) ResponderOption {
 func ResponderLog(log logging.LeveledLogger) ResponderOption {
 	return func(r *ResponderInterceptor) error {
 		r.log = log
+
+		return nil
+	}
+}
+
+// WithResponderLoggerFactory sets a logger factory for the interceptor.
+func WithResponderLoggerFactory(loggerFactory logging.LoggerFactory) ResponderOption {
+	return func(r *ResponderInterceptor) error {
+		r.loggerFactory = loggerFactory
 
 		return nil
 	}

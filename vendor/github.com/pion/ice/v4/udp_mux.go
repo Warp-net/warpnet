@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -14,8 +14,8 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
-	"github.com/pion/transport/v3"
-	"github.com/pion/transport/v3/stdnet"
+	"github.com/pion/transport/v4"
+	"github.com/pion/transport/v4/stdnet"
 )
 
 // UDPMux allows multiple connections to go over a single UDP port.
@@ -95,12 +95,13 @@ func NewUDPMuxDefault(params UDPMuxParams) *UDPMuxDefault { //nolint:cyclop
 
 			_, addrs, err := localInterfaces(params.Net, nil, nil, networks, true)
 			if err == nil {
-				for _, addr := range addrs {
-					localAddrsForUnspecified = append(localAddrsForUnspecified, &net.UDPAddr{
-						IP:   addr.AsSlice(),
+				localAddrsForUnspecified = make([]net.Addr, len(addrs))
+				for i, addr := range addrs {
+					localAddrsForUnspecified[i] = &net.UDPAddr{
+						IP:   addr.addr.AsSlice(),
 						Port: udpAddr.Port,
-						Zone: addr.Zone(),
-					})
+						Zone: addr.addr.Zone(),
+					}
 				}
 			} else {
 				params.Logger.Errorf("Failed to get local interfaces for unspecified addr: %v", err)
@@ -116,7 +117,7 @@ func NewUDPMuxDefault(params UDPMuxParams) *UDPMuxDefault { //nolint:cyclop
 		connsIPv6:  make(map[string]*udpMuxedConn),
 		closedChan: make(chan struct{}, 1),
 		pool: &sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				// Big enough buffer to fit both packet and address
 				return newBufferHolder(receiveMTU)
 			},
@@ -144,7 +145,9 @@ func (m *UDPMuxDefault) GetListenAddresses() []net.Addr {
 }
 
 // GetConn returns a PacketConn given the connection's ufrag and network address.
-// creates the connection if an existing one can't be found.
+// creates the connection if an existing one can't be found. The returned conn
+// is a refcounted — repeat calls return connection with increased refcount, so
+// the connection's Close method should be called for each GetConn call to avoid leaks.
 func (m *UDPMuxDefault) GetConn(ufrag string, addr net.Addr) (net.PacketConn, error) {
 	// don't check addr for mux using unspecified address
 	if len(m.localAddrsForUnspecified) == 0 && m.params.UDPConnString != addr.String() {
@@ -162,23 +165,22 @@ func (m *UDPMuxDefault) GetConn(ufrag string, addr net.Addr) (net.PacketConn, er
 		return nil, io.ErrClosedPipe
 	}
 
-	if conn, ok := m.getConn(ufrag, isIPv6); ok {
-		return conn, nil
+	muxedConn, ok := m.getConn(ufrag, isIPv6)
+	if !ok {
+		muxedConn = m.createMuxedConn(ufrag)
+		go func() {
+			<-muxedConn.CloseChannel()
+			m.RemoveConnByUfrag(ufrag)
+		}()
+
+		if isIPv6 {
+			m.connsIPv6[ufrag] = muxedConn
+		} else {
+			m.connsIPv4[ufrag] = muxedConn
+		}
 	}
 
-	c := m.createMuxedConn(ufrag)
-	go func() {
-		<-c.CloseChannel()
-		m.RemoveConnByUfrag(ufrag)
-	}()
-
-	if isIPv6 {
-		m.connsIPv6[ufrag] = c
-	} else {
-		m.connsIPv4[ufrag] = c
-	}
-
-	return c, nil
+	return newSharedPacketConn(muxedConn, &muxedConn.refs), nil
 }
 
 // RemoveConnByUfrag stops and removes the muxed packet connection.

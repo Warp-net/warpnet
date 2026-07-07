@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -7,9 +7,15 @@ import (
 	"net"
 	"net/netip"
 
+	"github.com/pion/ice/v4/internal/netutil"
 	"github.com/pion/logging"
-	"github.com/pion/transport/v3"
+	"github.com/pion/transport/v4"
 )
+
+type ifaceAddr struct {
+	addr  netip.Addr
+	iface string
+}
 
 // The conditions of invalidation written below are defined in
 // https://tools.ietf.org/html/rfc8445#section-5.1.1.1
@@ -29,7 +35,7 @@ func isSupportedIPv6Partial(ip net.IP) bool {
 }
 
 func isZeros(ip net.IP) bool {
-	for i := 0; i < len(ip); i++ {
+	for i := range ip {
 		if ip[i] != 0 {
 			return false
 		}
@@ -45,8 +51,8 @@ func localInterfaces(
 	ipFilter func(net.IP) (keep bool),
 	networkTypes []NetworkType,
 	includeLoopback bool,
-) ([]*transport.Interface, []netip.Addr, error) {
-	ipAddrs := []netip.Addr{}
+) ([]*transport.Interface, []ifaceAddr, error) {
+	ipAddrs := []ifaceAddr{}
 	ifaces, err := n.Interfaces()
 	if err != nil {
 		return nil, ipAddrs, err
@@ -108,7 +114,7 @@ func localInterfaces(
 			}
 
 			atLeastOneAddr = true
-			ipAddrs = append(ipAddrs, ipAddr)
+			ipAddrs = append(ipAddrs, ifaceAddr{addr: ipAddr, iface: iface.Name})
 		}
 
 		if atLeastOneAddr {
@@ -158,6 +164,9 @@ func listenUDPInPortRange(
 			return c, e //nolint:nilerr
 		}
 		log.Debugf("Failed to listen %s: %v", lAddr.String(), e)
+		if netutil.IsAddrUnavailable(e) {
+			return nil, e
+		}
 		portCurrent++
 		if portCurrent > portMax {
 			portCurrent = portMin

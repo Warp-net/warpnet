@@ -63,7 +63,8 @@ func NewWindow(frontendOptions *options.App, debug bool, devtools bool) *Window 
 	singleInstanceEnabled := bool2Cint(frontendOptions.SingleInstanceLock != nil)
 
 	var fullSizeContent, hideTitleBar, zoomable, hideTitle, useToolbar, webviewIsTransparent C.int
-	var titlebarAppearsTransparent, hideToolbarSeparator, windowIsTranslucent C.int
+	var titlebarAppearsTransparent, hideToolbarSeparator, windowIsTranslucent, contentProtection C.int
+	var disableEscapeExitsFullscreen C.int
 	var appearance, title *C.char
 	var preferences C.struct_Preferences
 
@@ -111,20 +112,27 @@ func NewWindow(frontendOptions *options.App, debug bool, devtools bool) *Window 
 			if mac.Preferences.FullscreenEnabled.IsSet() {
 				preferences.fullscreenEnabled = bool2CboolPtr(mac.Preferences.FullscreenEnabled.Get())
 			}
+
+			if mac.Preferences.ApplicationNameForUserAgent != "" {
+				preferences.applicationNameForUserAgent = c.String(mac.Preferences.ApplicationNameForUserAgent)
+			}
 		}
 
 		zoomable = bool2Cint(!frontendOptions.Mac.DisableZoom)
 
 		windowIsTranslucent = bool2Cint(mac.WindowIsTranslucent)
 		webviewIsTransparent = bool2Cint(mac.WebviewIsTransparent)
+		contentProtection = bool2Cint(mac.ContentProtection)
+		disableEscapeExitsFullscreen = bool2Cint(mac.DisableEscapeExitsFullscreen)
 
 		appearance = c.String(string(mac.Appearance))
 	}
 	var context *C.WailsContext = C.Create(title, width, height, frameless, resizable, zoomable, fullscreen, fullSizeContent,
 		hideTitleBar, titlebarAppearsTransparent, hideTitle, useToolbar, hideToolbarSeparator, webviewIsTransparent,
-		alwaysOnTop, hideWindowOnClose, appearance, windowIsTranslucent, devtoolsEnabled, defaultContextMenuEnabled,
+		alwaysOnTop, hideWindowOnClose, appearance, windowIsTranslucent, contentProtection, devtoolsEnabled, defaultContextMenuEnabled,
 		windowStartState, startsHidden, minWidth, minHeight, maxWidth, maxHeight, enableFraudulentWebsiteWarnings,
 		preferences, singleInstanceEnabled, singleInstanceUniqueId, enableDragAndDrop, disableWebViewDragAndDrop,
+		disableEscapeExitsFullscreen,
 	)
 
 	// Create menu

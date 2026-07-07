@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -178,6 +178,31 @@ type statsReportCollector struct {
 	mux             sync.Mutex
 }
 
+// SCTPTransportPartialReliabilityMode indicates the negotiated SCTP partial reliability mode.
+type SCTPTransportPartialReliabilityMode string
+
+// SCTPTransportPartialReliabilityMode values.
+const (
+	SCTPTransportPartialReliabilityModeNone        SCTPTransportPartialReliabilityMode = "none"
+	SCTPTransportPartialReliabilityModeForwardTSN  SCTPTransportPartialReliabilityMode = "forward-tsn"
+	SCTPTransportPartialReliabilityModeIForwardTSN SCTPTransportPartialReliabilityMode = "i-forward-tsn"
+)
+
+// SCTPTransportMetadata describes negotiated SCTP transport capabilities.
+type SCTPTransportMetadata struct {
+	// MessageInterleavingEnabled indicates whether RFC 8260 user message interleaving was negotiated.
+	MessageInterleavingEnabled bool `json:"messageInterleavingEnabled"`
+
+	// PartialReliabilityMode indicates which FORWARD-TSN variant is active.
+	PartialReliabilityMode SCTPTransportPartialReliabilityMode `json:"partialReliabilityMode"`
+
+	// ZeroChecksumSendingEnabled indicates whether outgoing packets use zero checksum.
+	ZeroChecksumSendingEnabled bool `json:"zeroChecksumSendingEnabled"`
+
+	// ZeroChecksumReceivingEnabled indicates whether incoming packets may use zero checksum.
+	ZeroChecksumReceivingEnabled bool `json:"zeroChecksumReceivingEnabled"`
+}
+
 func newStatsReportCollector() *statsReportCollector {
 	return &statsReportCollector{report: make(StatsReport)}
 }
@@ -280,6 +305,10 @@ type InboundRTPStreamStats struct {
 	// Mid represents a mid value of RTPTransceiver owning this stream, if that value is not
 	// null. Otherwise, this member is not present.
 	Mid string `json:"mid"`
+
+	// Rid only exists if a rid has been set for this RTP stream.
+	// Must not exist for audio.
+	Rid string `json:"rid,omitempty"`
 
 	// Timestamp is the timestamp associated with this object.
 	Timestamp StatsTimestamp `json:"timestamp"`
@@ -1326,7 +1355,7 @@ type AudioPlayoutStats struct {
 	// SynthesizedSamplesDuration is measured in seconds and is incremented each time an audio sample is synthesized by
 	// this playout path. This metric can be used together with totalSamplesDuration to calculate the percentage of played
 	// out media being synthesized. If the playout path is unable to produce audio samples on time for device playout,
-	// samples are synthesized to be playout out instead. Synthesization typically only happens if the pipeline is
+	// samples are synthesized to be played out instead. Synthesization typically only happens if the pipeline is
 	// underperforming. Samples synthesized by the RTCInboundRtpStreamStats are not counted for here, but in
 	// InboundRtpStreamStats.concealedSamples.
 	SynthesizedSamplesDuration float64 `json:"synthesizedSamplesDuration"`
@@ -1746,7 +1775,7 @@ type AudioReceiverStats struct {
 	// 0 represents silence, and 0.5 represents approximately 6 dBSPL change in
 	// the sound pressure level from 0 dBov.
 	//
-	// If the track is sourced from an Receiver, does no audio processing, has a
+	// If the track is sourced from a Receiver, does no audio processing, has a
 	// constant level, and has a volume setting of 1.0, the audio level is expected
 	// to be the same as the audio level of the source SSRC, while if the volume setting
 	// is 0.5, the AudioLevel is expected to be half that value.
@@ -1871,11 +1900,11 @@ type VideoReceiverStats struct {
 	FramesReceived uint32 `json:"framesReceived"`
 
 	// KeyFramesReceived represents the total number of complete key frames received
-	// for this MediaStreamTrack, such as Infra-frames in VP8 [RFC6386] or I-frames
+	// for this MediaStreamTrack, such as Intra-frames in VP8 [RFC6386] or I-frames
 	// in H.264 [RFC6184]. This is a subset of framesReceived. `framesReceived - keyFramesReceived`
 	// gives you the number of delta frames received. This metric is incremented when
 	// the complete key frame is received. It is not incremented if a partial key
-	// frames is received and sent for decoding, i.e., the frame could not be recovered
+	// frame is received and sent for decoding, i.e., the frame could not be recovered
 	// via retransmission or FEC.
 	KeyFramesReceived uint32 `json:"keyFramesReceived"`
 
@@ -1982,7 +2011,7 @@ type TransportStats struct {
 	// Present only if DTLS is negotiated.
 	LocalCertificateID string `json:"localCertificateId"`
 
-	// LocalCertificateID is the ID of the CertificateStats for the remote certificate.
+	// RemoteCertificateID is the ID of the CertificateStats for the remote certificate.
 	// Present only if DTLS is negotiated.
 	RemoteCertificateID string `json:"remoteCertificateId"`
 
@@ -2247,7 +2276,7 @@ type ICECandidatePairStats struct {
 	// STUN binding response expired.
 	ConsentExpiredTimestamp StatsTimestamp `json:"consentExpiredTimestamp"`
 
-	// PacketsDiscardedOnSend retpresents the total number of packets for this candidate pair
+	// PacketsDiscardedOnSend represents the total number of packets for this candidate pair
 	// that have been discarded due to socket errors, i.e. a socket error occurred
 	// when handing the packets to the socket. This might happen due to various reasons,
 	// including full buffer or no available memory.
@@ -2321,8 +2350,8 @@ type ICECandidateStats struct {
 	// Priority is the "Priority" field of the ICECandidate.
 	Priority int32 `json:"priority"`
 
-	// URL is the URL of the TURN or STUN server indicated in the that translated
-	// this IP address. It is the URL address surfaced in an PeerConnectionICEEvent.
+	// URL of the TURN or STUN server that produced this candidate
+	// It is the URL address surfaced in an PeerConnectionICEEvent.
 	URL string `json:"url"`
 
 	// RelayProtocol is the protocol used by the endpoint to communicate with the
@@ -2424,6 +2453,9 @@ type SCTPTransportStats struct {
 
 	// UNACKData is the number of unacknowledged DATA chunks, corresponding to sstat_unackdata defined in [RFC6458].
 	UNACKData uint32 `json:"unackData"`
+
+	// Metadata contains negotiated SCTP association metadata.
+	Metadata *SCTPTransportMetadata `json:"metadata,omitempty"`
 
 	// BytesSent represents the total number of bytes sent on this SCTPTransport
 	BytesSent uint64 `json:"bytesSent"`

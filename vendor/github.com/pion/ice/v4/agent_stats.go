@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -15,20 +15,20 @@ func (a *Agent) GetCandidatePairsStats() []CandidatePairStats {
 		result := make([]CandidatePairStats, 0, len(a.checklist))
 		for _, cp := range a.checklist {
 			stat := CandidatePairStats{
-				Timestamp:         time.Now(),
-				LocalCandidateID:  cp.Local.ID(),
-				RemoteCandidateID: cp.Remote.ID(),
-				State:             cp.state,
-				Nominated:         cp.nominated,
-				// PacketsSent uint32
-				// PacketsReceived uint32
-				// BytesSent uint64
-				// BytesReceived uint64
-				// LastPacketSentTimestamp time.Time
-				// LastPacketReceivedTimestamp time.Time
+				Timestamp:                     time.Now(),
+				LocalCandidateID:              cp.Local.ID(),
+				RemoteCandidateID:             cp.Remote.ID(),
+				State:                         cp.state,
+				Nominated:                     cp.nominated,
+				PacketsSent:                   cp.PacketsSent(),
+				PacketsReceived:               cp.PacketsReceived(),
+				BytesSent:                     cp.BytesSent(),
+				BytesReceived:                 cp.BytesReceived(),
+				LastPacketSentTimestamp:       cp.LastPacketSentAt(),
+				LastPacketReceivedTimestamp:   cp.LastPacketReceivedAt(),
 				FirstRequestTimestamp:         cp.FirstRequestSentAt(),
 				LastRequestTimestamp:          cp.LastRequestSentAt(),
-				FirstResponseTimestamp:        cp.FirstReponseReceivedAt(),
+				FirstResponseTimestamp:        cp.FirstResponseReceivedAt(),
 				LastResponseTimestamp:         cp.LastResponseReceivedAt(),
 				FirstRequestReceivedTimestamp: cp.FirstRequestReceivedAt(),
 				LastRequestReceivedTimestamp:  cp.LastRequestReceivedAt(),
@@ -73,17 +73,17 @@ func (a *Agent) GetSelectedCandidatePairStats() (CandidatePairStats, bool) {
 
 		isAvailable = true
 		res = CandidatePairStats{
-			Timestamp:         time.Now(),
-			LocalCandidateID:  sp.Local.ID(),
-			RemoteCandidateID: sp.Remote.ID(),
-			State:             sp.state,
-			Nominated:         sp.nominated,
-			// PacketsSent uint32
-			// PacketsReceived uint32
-			// BytesSent uint64
-			// BytesReceived uint64
-			// LastPacketSentTimestamp time.Time
-			// LastPacketReceivedTimestamp time.Time
+			Timestamp:                   time.Now(),
+			LocalCandidateID:            sp.Local.ID(),
+			RemoteCandidateID:           sp.Remote.ID(),
+			State:                       sp.state,
+			Nominated:                   sp.nominated,
+			PacketsSent:                 sp.PacketsSent(),
+			PacketsReceived:             sp.PacketsReceived(),
+			BytesSent:                   sp.BytesSent(),
+			BytesReceived:               sp.BytesReceived(),
+			LastPacketSentTimestamp:     sp.LastPacketSentAt(),
+			LastPacketReceivedTimestamp: sp.LastPacketReceivedAt(),
 			// FirstRequestTimestamp time.Time
 			// LastRequestTimestamp time.Time
 			// LastResponseTimestamp time.Time
@@ -113,17 +113,36 @@ func (a *Agent) GetSelectedCandidatePairStats() (CandidatePairStats, bool) {
 
 // GetLocalCandidatesStats returns a list of local candidates stats.
 func (a *Agent) GetLocalCandidatesStats() []CandidateStats {
+	return a.getCandidatesStats(true)
+}
+
+// GetRemoteCandidatesStats returns a list of remote candidates stats.
+func (a *Agent) GetRemoteCandidatesStats() []CandidateStats {
+	return a.getCandidatesStats(false)
+}
+
+// getCandidatesStats returns a list of candidates stats.
+func (a *Agent) getCandidatesStats(isLocal bool) []CandidateStats {
 	var res []CandidateStats
 	err := a.loop.Run(a.loop, func(_ context.Context) {
-		result := make([]CandidateStats, 0, len(a.localCandidates))
-		for networkType, localCandidates := range a.localCandidates {
-			for _, cand := range localCandidates {
+		var candidateMap map[NetworkType][]Candidate
+		if isLocal {
+			candidateMap = a.localCandidates
+		} else {
+			candidateMap = a.remoteCandidates
+		}
+
+		result := make([]CandidateStats, 0, len(candidateMap))
+		for networkType, candidate := range candidateMap {
+			for _, cand := range candidate {
 				relayProtocol := ""
-				if cand.Type() == CandidateTypeRelay {
+
+				if isLocal && cand.Type() == CandidateTypeRelay {
 					if cRelay, ok := cand.(*CandidateRelay); ok {
 						relayProtocol = cRelay.RelayProtocol()
 					}
 				}
+
 				stat := CandidateStats{
 					Timestamp:     time.Now(),
 					ID:            cand.ID(),
@@ -134,39 +153,6 @@ func (a *Agent) GetLocalCandidatesStats() []CandidateStats {
 					Priority:      cand.Priority(),
 					// URL string
 					RelayProtocol: relayProtocol,
-					// Deleted bool
-				}
-				result = append(result, stat)
-			}
-		}
-		res = result
-	})
-	if err != nil {
-		a.log.Errorf("Failed to get candidate pair stats: %v", err)
-
-		return []CandidateStats{}
-	}
-
-	return res
-}
-
-// GetRemoteCandidatesStats returns a list of remote candidates stats.
-func (a *Agent) GetRemoteCandidatesStats() []CandidateStats {
-	var res []CandidateStats
-	err := a.loop.Run(a.loop, func(_ context.Context) {
-		result := make([]CandidateStats, 0, len(a.remoteCandidates))
-		for networkType, remoteCandidates := range a.remoteCandidates {
-			for _, c := range remoteCandidates {
-				stat := CandidateStats{
-					Timestamp:     time.Now(),
-					ID:            c.ID(),
-					NetworkType:   networkType,
-					IP:            c.Address(),
-					Port:          c.Port(),
-					CandidateType: c.Type(),
-					Priority:      c.Priority(),
-					// URL string
-					RelayProtocol: "",
 				}
 				result = append(result, stat)
 			}

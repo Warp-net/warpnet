@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/v3/packetio"
+	"github.com/pion/transport/v4/packetio"
 )
 
 type streamSession interface {
@@ -28,8 +28,8 @@ type session struct {
 	newStream           chan readStream
 	acceptStreamTimeout time.Time
 
-	started chan interface{}
-	closed  chan interface{}
+	started chan any
+	closed  chan any
 
 	readStreamsClosed bool
 	readStreams       map[uint32]readStream

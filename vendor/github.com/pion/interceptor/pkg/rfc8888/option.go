@@ -1,9 +1,13 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rfc8888
 
-import "time"
+import (
+	"time"
+
+	"github.com/pion/logging"
+)
 
 // An Option is a function that can be used to configure a SenderInterceptor.
 type Option func(*SenderInterceptor) error
@@ -30,6 +34,15 @@ func SenderNow(f func() time.Time) Option {
 func SendInterval(interval time.Duration) Option {
 	return func(s *SenderInterceptor) error {
 		s.interval = interval
+
+		return nil
+	}
+}
+
+// WithLoggerFactory sets the logger factory for the interceptor.
+func WithLoggerFactory(loggerFactory logging.LoggerFactory) Option {
+	return func(i *SenderInterceptor) error {
+		i.loggerFactory = loggerFactory
 
 		return nil
 	}

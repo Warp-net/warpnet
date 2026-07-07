@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
-// Conn represents a mDNS Server
+// Conn represents a mDNS Server.
 type Conn struct {
 	mu   sync.RWMutex
 	name string
@@ -37,7 +38,7 @@ type Conn struct {
 	queries       []*query
 	ifaces        map[int]netInterface
 
-	closed chan interface{}
+	closed chan any
 }
 
 type query struct {
@@ -65,10 +66,13 @@ const (
 )
 
 var (
-	errNoPositiveMTUFound = errors.New("no positive MTU found")
-	errNoPacketConn       = errors.New("must supply at least a multicast IPv4 or IPv6 PacketConn")
-	errNoUsableInterfaces = errors.New("no usable interfaces found for mDNS")
-	errFailedToClose      = errors.New("failed to close mDNS Conn")
+	errNoPositiveMTUFound                 = errors.New("no positive MTU found")
+	errNoPacketConn                       = errors.New("must supply at least a multicast IPv4 or IPv6 PacketConn")
+	errNoUsableInterfaces                 = errors.New("no usable interfaces found for mDNS")
+	errFailedToClose                      = errors.New("failed to close mDNS Conn")
+	errFailedToDecodeAddrFromAResource    = errors.New("failed to decode netip.Addr from A type Resource")
+	errFailedToDecodeAddrFromAAAAResource = errors.New("failed to decode netip.Addr from AAAA type Resource")
+	errUnhandledAnswerHeaderType          = errors.New("header for Answer had unhandled type")
 )
 
 type netInterface struct {
@@ -86,7 +90,7 @@ type netInterface struct {
 // sent if an ipv4.PacketConn is also provided. In the future, we may
 // add a QueryAddr method that allows specifying this more clearly.
 //
-//nolint:gocognit
+//nolint:gocognit,gocyclo,cyclop,maintidx
 func Server(
 	multicastPktConnV4 *ipv4.PacketConn,
 	multicastPktConnV6 *ipv6.PacketConn,
@@ -101,14 +105,14 @@ func Server(
 	}
 	log := loggerFactory.NewLogger("mdns")
 
-	c := &Conn{
+	conn := &Conn{
 		queryInterval: defaultQueryInterval,
 		log:           log,
-		closed:        make(chan interface{}),
+		closed:        make(chan any),
 	}
-	c.name = config.Name
-	if c.name == "" {
-		c.name = fmt.Sprintf("%p", &c)
+	conn.name = config.Name
+	if conn.name == "" {
+		conn.name = fmt.Sprintf("%p", &conn)
 	}
 
 	if multicastPktConnV4 == nil && multicastPktConnV6 == nil {
@@ -133,7 +137,10 @@ func Server(
 
 		unicastConnV4, err := net.ListenUDP("udp4", addr4)
 		if err != nil {
-			log.Warnf("[%s] failed to listen on unicast IPv4 %s: %s; will not be able to receive unicast responses on IPv4", c.name, addr4, err)
+			log.Warnf(
+				"[%s] failed to listen on unicast IPv4 %s: %s; will not be able to receive unicast responses on IPv4",
+				conn.name, addr4, err,
+			)
 		} else {
 			unicastPktConnV4 = ipv4.NewPacketConn(unicastConnV4)
 		}
@@ -148,18 +155,21 @@ func Server(
 
 		unicastConnV6, err := net.ListenUDP("udp6", addr6)
 		if err != nil {
-			log.Warnf("[%s] failed to listen on unicast IPv6 %s: %s; will not be able to receive unicast responses on IPv6", c.name, addr6, err)
+			log.Warnf(
+				"[%s] failed to listen on unicast IPv6 %s: %s; will not be able to receive unicast responses on IPv6",
+				conn.name, addr6, err,
+			)
 		} else {
 			unicastPktConnV6 = ipv6.NewPacketConn(unicastConnV6)
 		}
 	}
 
-	mutlicastGroup4 := net.IPv4(224, 0, 0, 251)
-	multicastGroupAddr4 := &net.UDPAddr{IP: mutlicastGroup4}
+	multicastGroup4 := net.IPv4(224, 0, 0, 251)
+	multicastGroupAddr4 := &net.UDPAddr{IP: multicastGroup4}
 
 	// FF02::FB
-	mutlicastGroup6 := net.IP{0xff, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xfb}
-	multicastGroupAddr6 := &net.UDPAddr{IP: mutlicastGroup6}
+	multicastGroup6 := net.IP{0xff, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xfb}
+	multicastGroupAddr6 := &net.UDPAddr{IP: multicastGroup6}
 
 	inboundBufferSize := 0
 	joinErrCount := 0
@@ -209,7 +219,7 @@ func Server(
 			}
 			ifcIPAddrs = append(ifcIPAddrs, ipAddr)
 		}
-		if !(supportsV4 || supportsV6) {
+		if !supportsV4 && !supportsV6 {
 			continue
 		}
 
@@ -226,6 +236,7 @@ func Server(
 		}
 		if !atLeastOneJoin {
 			joinErrCount++
+
 			continue
 		}
 
@@ -268,73 +279,98 @@ func Server(
 		localNames = append(localNames, l+".")
 	}
 
-	c.dstAddr4 = dstAddr4
-	c.dstAddr6 = dstAddr6
-	c.localNames = localNames
-	c.ifaces = ifacesToUse
+	conn.dstAddr4 = dstAddr4
+	conn.dstAddr6 = dstAddr6
+	conn.localNames = localNames
+	conn.ifaces = ifacesToUse
 
 	if config.QueryInterval != 0 {
-		c.queryInterval = config.QueryInterval
+		conn.queryInterval = config.QueryInterval
 	}
 
 	if multicastPktConnV4 != nil {
 		if err := multicastPktConnV4.SetControlMessage(ipv4.FlagInterface, true); err != nil {
-			c.log.Warnf("[%s] failed to SetControlMessage(ipv4.FlagInterface) on multicast IPv4 PacketConn %v", c.name, err)
+			conn.log.Warnf(
+				"[%s] failed to SetControlMessage(ipv4.FlagInterface) on multicast IPv4 PacketConn %v",
+				conn.name, err,
+			)
 		}
 		if err := multicastPktConnV4.SetControlMessage(ipv4.FlagDst, true); err != nil {
-			c.log.Warnf("[%s] failed to SetControlMessage(ipv4.FlagDst) on multicast IPv4 PacketConn %v", c.name, err)
+			conn.log.Warnf("[%s] failed to SetControlMessage(ipv4.FlagDst) on multicast IPv4 PacketConn %v", conn.name, err)
 		}
-		c.multicastPktConnV4 = ipPacketConn4{c.name, multicastPktConnV4, log}
+		conn.multicastPktConnV4 = ipPacketConn4{conn.name, multicastPktConnV4, log}
 	}
 	if multicastPktConnV6 != nil {
 		if err := multicastPktConnV6.SetControlMessage(ipv6.FlagInterface, true); err != nil {
-			c.log.Warnf("[%s] failed to SetControlMessage(ipv6.FlagInterface) on multicast IPv6 PacketConn %v", c.name, err)
+			conn.log.Warnf(
+				"[%s] failed to SetControlMessage(ipv6.FlagInterface) on multicast IPv6 PacketConn %v",
+				conn.name, err,
+			)
 		}
 		if err := multicastPktConnV6.SetControlMessage(ipv6.FlagDst, true); err != nil {
-			c.log.Warnf("[%s] failed to SetControlMessage(ipv6.FlagInterface) on multicast IPv6 PacketConn %v", c.name, err)
+			conn.log.Warnf(
+				"[%s] failed to SetControlMessage(ipv6.FlagInterface) on multicast IPv6 PacketConn %v",
+				conn.name, err,
+			)
 		}
-		c.multicastPktConnV6 = ipPacketConn6{c.name, multicastPktConnV6, log}
+		conn.multicastPktConnV6 = ipPacketConn6{conn.name, multicastPktConnV6, log}
 	}
 	if unicastPktConnV4 != nil {
 		if err := unicastPktConnV4.SetControlMessage(ipv4.FlagInterface, true); err != nil {
-			c.log.Warnf("[%s] failed to SetControlMessage(ipv4.FlagInterface) on unicast IPv4 PacketConn %v", c.name, err)
+			conn.log.Warnf("[%s] failed to SetControlMessage(ipv4.FlagInterface) on unicast IPv4 PacketConn %v", conn.name, err)
 		}
 		if err := unicastPktConnV4.SetControlMessage(ipv4.FlagDst, true); err != nil {
-			c.log.Warnf("[%s] failed to SetControlMessage(ipv4.FlagInterface) on unicast IPv4 PacketConn %v", c.name, err)
+			conn.log.Warnf("[%s] failed to SetControlMessage(ipv4.FlagInterface) on unicast IPv4 PacketConn %v", conn.name, err)
 		}
-		c.unicastPktConnV4 = ipPacketConn4{c.name, unicastPktConnV4, log}
+		conn.unicastPktConnV4 = ipPacketConn4{conn.name, unicastPktConnV4, log}
 	}
 	if unicastPktConnV6 != nil {
 		if err := unicastPktConnV6.SetControlMessage(ipv6.FlagInterface, true); err != nil {
-			c.log.Warnf("[%s] failed to SetControlMessage(ipv6.FlagInterface) on unicast IPv6 PacketConn %v", c.name, err)
+			conn.log.Warnf("[%s] failed to SetControlMessage(ipv6.FlagInterface) on unicast IPv6 PacketConn %v", conn.name, err)
 		}
 		if err := unicastPktConnV6.SetControlMessage(ipv6.FlagDst, true); err != nil {
-			c.log.Warnf("[%s] failed to SetControlMessage(ipv6.FlagInterface) on unicast IPv6 PacketConn %v", c.name, err)
+			conn.log.Warnf("[%s] failed to SetControlMessage(ipv6.FlagInterface) on unicast IPv6 PacketConn %v", conn.name, err)
 		}
-		c.unicastPktConnV6 = ipPacketConn6{c.name, unicastPktConnV6, log}
+		conn.unicastPktConnV6 = ipPacketConn6{conn.name, unicastPktConnV6, log}
 	}
 
-	if config.IncludeLoopback {
+	if config.IncludeLoopback { //nolint:nestif
 		// this is an efficient way for us to send ourselves a message faster instead of it going
 		// further out into the network stack.
 		if multicastPktConnV4 != nil {
 			if err := multicastPktConnV4.SetMulticastLoopback(true); err != nil {
-				c.log.Warnf("[%s] failed to SetMulticastLoopback(true) on multicast IPv4 PacketConn %v; this may cause inefficient network path c.name,communications", c.name, err)
+				conn.log.Warnf(
+					//nolint:lll
+					"[%s] failed to SetMulticastLoopback(true) on multicast IPv4 PacketConn %v; this may cause inefficient network path c.name,communications",
+					conn.name, err,
+				)
 			}
 		}
 		if multicastPktConnV6 != nil {
 			if err := multicastPktConnV6.SetMulticastLoopback(true); err != nil {
-				c.log.Warnf("[%s] failed to SetMulticastLoopback(true) on multicast IPv6 PacketConn %v; this may cause inefficient network path c.name,communications", c.name, err)
+				conn.log.Warnf(
+					//nolint:lll
+					"[%s] failed to SetMulticastLoopback(true) on multicast IPv6 PacketConn %v; this may cause inefficient network path c.name,communications",
+					conn.name, err,
+				)
 			}
 		}
 		if unicastPktConnV4 != nil {
 			if err := unicastPktConnV4.SetMulticastLoopback(true); err != nil {
-				c.log.Warnf("[%s] failed to SetMulticastLoopback(true) on unicast IPv4 PacketConn %v; this may cause inefficient network path c.name,communications", c.name, err)
+				conn.log.Warnf(
+					//nolint:lll
+					"[%s] failed to SetMulticastLoopback(true) on unicast IPv4 PacketConn %v; this may cause inefficient network path c.name,communications",
+					conn.name, err,
+				)
 			}
 		}
 		if unicastPktConnV6 != nil {
 			if err := unicastPktConnV6.SetMulticastLoopback(true); err != nil {
-				c.log.Warnf("[%s] failed to SetMulticastLoopback(true) on unicast IPv6 PacketConn %v; this may cause inefficient network path c.name,communications", c.name, err)
+				conn.log.Warnf(
+					//nolint:lll
+					"[%s] failed to SetMulticastLoopback(true) on unicast IPv6 PacketConn %v; this may cause inefficient network path c.name,communications",
+					conn.name, err,
+				)
 			}
 		}
 	}
@@ -344,13 +380,14 @@ func Server(
 	// physical interface, less the space required for the IP header (20
 	// bytes for IPv4; 40 bytes for IPv6) and the UDP header (8 bytes).
 	started := make(chan struct{})
-	go c.start(started, inboundBufferSize-20-8, config)
+	go conn.start(started, inboundBufferSize-20-8, config)
 	<-started
-	return c, nil
+
+	return conn, nil
 }
 
-// Close closes the mDNS Conn
-func (c *Conn) Close() error {
+// Close closes the mDNS Conn.
+func (c *Conn) Close() error { //nolint:cyclop
 	select {
 	case <-c.closed:
 		return nil
@@ -385,6 +422,7 @@ func (c *Conn) Close() error {
 
 	if len(errs) == 0 {
 		<-c.closed
+
 		return nil
 	}
 
@@ -392,6 +430,7 @@ func (c *Conn) Close() error {
 	for _, err := range errs {
 		rtrn = fmt.Errorf("%w\n%w", err, rtrn)
 	}
+
 	return rtrn
 }
 
@@ -404,6 +443,7 @@ func (c *Conn) Query(ctx context.Context, name string) (dnsmessage.ResourceHeade
 	if err != nil {
 		return header, nil, err
 	}
+
 	return header, &net.IPAddr{
 		IP:   addr.AsSlice(),
 		Zone: addr.Zone(),
@@ -411,7 +451,7 @@ func (c *Conn) Query(ctx context.Context, name string) (dnsmessage.ResourceHeade
 }
 
 // QueryAddr sends mDNS Queries for the following name until
-// either the Context is canceled/expires or we get a result
+// either the Context is canceled/expires or we get a result.
 func (c *Conn) QueryAddr(ctx context.Context, name string) (dnsmessage.ResourceHeader, netip.Addr, error) {
 	select {
 	case <-c.closed:
@@ -469,7 +509,7 @@ func (err ipToBytesError) Error() string {
 	return fmt.Sprintf("ip (%s) is not %s", err.addr, err.expectedType)
 }
 
-// assumes ipv4-to-ipv6 mapping has been checked
+// assumes ipv4-to-ipv6 mapping has been checked.
 func ipv4ToBytes(ipAddr netip.Addr) ([4]byte, error) {
 	if !ipAddr.Is4() {
 		return [4]byte{}, ipToBytesError{ipAddr, "IPv4"}
@@ -483,10 +523,11 @@ func ipv4ToBytes(ipAddr netip.Addr) ([4]byte, error) {
 	// net.IPs are stored in big endian / network byte order
 	var out [4]byte
 	copy(out[:], md)
+
 	return out, nil
 }
 
-// assumes ipv4-to-ipv6 mapping has been checked
+// assumes ipv4-to-ipv6 mapping has been checked.
 func ipv6ToBytes(ipAddr netip.Addr) ([16]byte, error) {
 	if !ipAddr.Is6() {
 		return [16]byte{}, ipToBytesError{ipAddr, "IPv6"}
@@ -499,6 +540,7 @@ func ipv6ToBytes(ipAddr netip.Addr) ([16]byte, error) {
 	// net.IPs are stored in big endian / network byte order
 	var out [16]byte
 	copy(out[:], md)
+
 	return out, nil
 }
 
@@ -511,7 +553,7 @@ func (err ipToAddrError) Error() string {
 }
 
 func interfaceForRemote(remote string) (*netip.Addr, error) {
-	conn, err := net.Dial("udp", remote)
+	conn, err := net.Dial("udp", remote) //nolint: noctx
 	if err != nil {
 		return nil, err
 	}
@@ -530,6 +572,7 @@ func interfaceForRemote(remote string) (*netip.Addr, error) {
 		return nil, ipToAddrError{localAddr.IP}
 	}
 	ipAddr = addrWithOptionalZone(ipAddr, localAddr.Zone)
+
 	return &ipAddr, nil
 }
 
@@ -544,6 +587,7 @@ func (c *Conn) sendQuestion(name string) {
 	packedName, err := dnsmessage.NewName(name)
 	if err != nil {
 		c.log.Warnf("[%s] failed to construct mDNS packet %v", c.name, err)
+
 		return
 	}
 
@@ -587,13 +631,14 @@ func (c *Conn) sendQuestion(name string) {
 	rawQuery, err := msg.Pack()
 	if err != nil {
 		c.log.Warnf("[%s] failed to construct mDNS packet %v", c.name, err)
+
 		return
 	}
 
 	c.writeToSocket(-1, rawQuery, false, false, writeTypeQuestion, nil)
 }
 
-//nolint:gocognit
+//nolint:gocognit,gocyclo,cyclop
 func (c *Conn) writeToSocket(
 	ifIndex int,
 	b []byte,
@@ -603,7 +648,7 @@ func (c *Conn) writeToSocket(
 	unicastDst *net.UDPAddr,
 ) {
 	var dst4, dst6 net.Addr
-	if wType == writeTypeAnswer {
+	if wType == writeTypeAnswer { //nolint:nestif
 		if unicastDst == nil {
 			dst4 = c.dstAddr4
 			dst6 = c.dstAddr6
@@ -616,20 +661,23 @@ func (c *Conn) writeToSocket(
 		}
 	}
 
-	if ifIndex != -1 {
+	if ifIndex != -1 { //nolint:nestif
 		if wType == writeTypeQuestion {
 			c.log.Errorf("[%s] Unexpected question using specific interface index %d; dropping question", c.name, ifIndex)
+
 			return
 		}
 
 		ifc, ok := c.ifaces[ifIndex]
 		if !ok {
 			c.log.Warnf("[%s] no interface for %d", c.name, ifIndex)
+
 			return
 		}
 		if hasLoopbackData && ifc.Flags&net.FlagLoopback == 0 {
 			// avoid accidentally tricking the destination that itself is the same as us
 			c.log.Debugf("[%s] interface is not loopback %d", c.name, ifIndex)
+
 			return
 		}
 
@@ -656,10 +704,11 @@ func (c *Conn) writeToSocket(
 		ifc := c.ifaces[ifcIdx]
 		if hasLoopbackData {
 			c.log.Debugf("[%s] Refusing to send loopback data with non-specific interface", c.name)
+
 			continue
 		}
 
-		if wType == writeTypeQuestion {
+		if wType == writeTypeQuestion { //nolint:nestif
 			// we'll write via unicast if we can in case the responder chooses to respond to the address the request
 			// came from (i.e. not respecting unicast-response bit). If we were to use the multicast packet
 			// conn here, we'd be writing from a specific multicast address which won't be able to receive unicast
@@ -710,8 +759,10 @@ func (c *Conn) writeToSocket(
 	}
 }
 
-func createAnswer(id uint16, name string, addr netip.Addr) (dnsmessage.Message, error) {
-	packedName, err := dnsmessage.NewName(name)
+func createAnswer(id uint16, question dnsmessage.Question, addr netip.Addr,
+	isUnicast bool,
+) (dnsmessage.Message, error) {
+	packedName, err := dnsmessage.NewName(question.Name.String())
 	if err != nil {
 		return dnsmessage.Message{}, err
 	}
@@ -731,6 +782,11 @@ func createAnswer(id uint16, name string, addr netip.Addr) (dnsmessage.Message, 
 				},
 			},
 		},
+	}
+
+	// include question in answer if specified for this answer (such as unicast: Spec 6.7.)
+	if isUnicast {
+		msg.Questions = []dnsmessage.Question{question}
 	}
 
 	if addr.Is4() {
@@ -757,16 +813,20 @@ func createAnswer(id uint16, name string, addr netip.Addr) (dnsmessage.Message, 
 	return msg, nil
 }
 
-func (c *Conn) sendAnswer(queryID uint16, name string, ifIndex int, result netip.Addr, dst *net.UDPAddr) {
-	answer, err := createAnswer(queryID, name, result)
+func (c *Conn) sendAnswer(queryID uint16, question dnsmessage.Question, ifIndex int, result netip.Addr,
+	dst *net.UDPAddr, isUnicast bool,
+) {
+	answer, err := createAnswer(queryID, question, result, isUnicast)
 	if err != nil {
 		c.log.Warnf("[%s] failed to create mDNS answer %v", c.name, err)
+
 		return
 	}
 
 	rawAnswer, err := answer.Pack()
 	if err != nil {
 		c.log.Warnf("[%s] failed to construct mDNS packet %v", c.name, err)
+
 		return
 	}
 
@@ -802,6 +862,7 @@ func (c ipPacketConn4) ReadFrom(b []byte) (n int, cm *ipControlMessage, src net.
 	if err != nil || cm4 == nil {
 		return n, nil, src, err
 	}
+
 	return n, &ipControlMessage{IfIndex: cm4.IfIndex, Dst: cm4.Dst}, src, err
 }
 
@@ -814,8 +875,10 @@ func (c ipPacketConn4) WriteTo(b []byte, via *net.Interface, cm *ipControlMessag
 	}
 	if err := c.conn.SetMulticastInterface(via); err != nil {
 		c.log.Warnf("[%s] failed to set multicast interface for %d: %v", c.name, via.Index, err)
+
 		return 0, err
 	}
+
 	return c.conn.WriteTo(b, cm4, dst)
 }
 
@@ -834,6 +897,7 @@ func (c ipPacketConn6) ReadFrom(b []byte) (n int, cm *ipControlMessage, src net.
 	if err != nil || cm6 == nil {
 		return n, nil, src, err
 	}
+
 	return n, &ipControlMessage{IfIndex: cm6.IfIndex, Dst: cm6.Dst}, src, err
 }
 
@@ -846,8 +910,10 @@ func (c ipPacketConn6) WriteTo(b []byte, via *net.Interface, cm *ipControlMessag
 	}
 	if err := c.conn.SetMulticastInterface(via); err != nil {
 		c.log.Warnf("[%s] failed to set multicast interface for %d: %v", c.name, via.Index, err)
+
 		return 0, err
 	}
+
 	return c.conn.WriteTo(b, cm6, dst)
 }
 
@@ -855,9 +921,9 @@ func (c ipPacketConn6) Close() error {
 	return c.conn.Close()
 }
 
-func (c *Conn) readLoop(name string, pktConn ipPacketConn, inboundBufferSize int, config *Config) { //nolint:gocognit
+//nolint:gocognit,gocyclo,cyclop,maintidx
+func (c *Conn) readLoop(name string, pktConn ipPacketConn, inboundBufferSize int, config *Config) {
 	b := make([]byte, inboundBufferSize)
-	p := dnsmessage.Parser{}
 
 	for {
 		n, cm, src, err := pktConn.ReadFrom(b)
@@ -866,6 +932,7 @@ func (c *Conn) readLoop(name string, pktConn ipPacketConn, inboundBufferSize int
 				return
 			}
 			c.log.Warnf("[%s] failed to ReadFrom %q %v", c.name, src, err)
+
 			continue
 		}
 		c.log.Debugf("[%s] got read on %s from %s", c.name, name, src)
@@ -881,230 +948,243 @@ func (c *Conn) readLoop(name string, pktConn ipPacketConn, inboundBufferSize int
 		srcAddr, ok := src.(*net.UDPAddr)
 		if !ok {
 			c.log.Warnf("[%s] expected source address %s to be UDP but got %", c.name, src, src)
+
 			continue
 		}
 
 		func() {
-			header, err := p.Start(b[:n])
+			var msg dnsmessage.Message
+			err := msg.Unpack(b[:n])
 			if err != nil {
 				c.log.Warnf("[%s] failed to parse mDNS packet %v", c.name, err)
+
 				return
 			}
 
-			for i := 0; i <= maxMessageRecords; i++ {
-				q, err := p.Question()
-				if errors.Is(err, dnsmessage.ErrSectionDone) {
-					break
-				} else if err != nil {
-					c.log.Warnf("[%s] failed to parse mDNS packet %v", c.name, err)
-					return
-				}
+			// Questions are often echoed with answers, therefore
+			// If we have more questions than answers it is a question we might need to respond to
+			if len(msg.Questions) > len(msg.Answers) { //nolint:nestif
+				for _, question := range msg.Questions {
+					if question.Type != dnsmessage.TypeA && question.Type != dnsmessage.TypeAAAA {
+						continue
+					}
 
-				if q.Type != dnsmessage.TypeA && q.Type != dnsmessage.TypeAAAA {
-					continue
-				}
+					// https://datatracker.ietf.org/doc/html/rfc6762#section-6
+					// The destination UDP port in all Multicast DNS responses MUST be 5353,
+					// and the destination address MUST be the mDNS IPv4 link-local
+					// multicast address 224.0.0.251 or its IPv6 equivalent FF02::FB, except
+					// when generating a reply to a query that explicitly requested a
+					// unicast response
+					isQU := (question.Class & (1 << 15)) != 0 // via the unicast-response bit
+					isLegacy := srcAddr.Port != 5353          // by virtue of being a legacy query (Section 6.7)
+					isDirect := len(pktDst) != 0 &&
+						!pktDst.Equal(c.dstAddr4.IP) &&
+						!pktDst.Equal(c.dstAddr6.IP) // by virtue of being a direct unicast query
+					shouldReplyUnicast := isQU || isLegacy || isDirect
+					var dst *net.UDPAddr
+					if shouldReplyUnicast {
+						dst = srcAddr
+					}
 
-				// https://datatracker.ietf.org/doc/html/rfc6762#section-6
-				// The destination UDP port in all Multicast DNS responses MUST be 5353,
-				// and the destination address MUST be the mDNS IPv4 link-local
-				// multicast address 224.0.0.251 or its IPv6 equivalent FF02::FB, except
-				// when generating a reply to a query that explicitly requested a
-				// unicast response
-				shouldUnicastResponse := (q.Class&(1<<15)) != 0 || // via the unicast-response bit
-					srcAddr.Port != 5353 || // by virtue of being a legacy query (Section 6.7), or
-					(len(pktDst) != 0 && !(pktDst.Equal(c.dstAddr4.IP) || // by virtue of being a direct unicast query
-						pktDst.Equal(c.dstAddr6.IP)))
-				var dst *net.UDPAddr
-				if shouldUnicastResponse {
-					dst = srcAddr
-				}
+					queryWantsV4 := question.Type == dnsmessage.TypeA
 
-				queryWantsV4 := q.Type == dnsmessage.TypeA
-
-				for _, localName := range c.localNames {
-					if localName == q.Name.String() {
-						var localAddress *netip.Addr
-						if config.LocalAddress != nil {
-							// this means the LocalAddress does not support link-local since
-							// we have no zone to set here.
-							ipAddr, ok := netip.AddrFromSlice(config.LocalAddress)
-							if !ok {
-								c.log.Warnf("[%s] failed to convert config.LocalAddress '%s' to netip.Addr", c.name, config.LocalAddress)
-								continue
-							}
-							if c.multicastPktConnV4 != nil {
-								// don't want mapping since we also support IPv4/A
-								ipAddr = ipAddr.Unmap()
-							}
-							localAddress = &ipAddr
-						} else {
-							// prefer the address of the interface if we know its index, but otherwise
-							// derive it from the address we read from. We do this because even if
-							// multicast loopback is in use or we send from a loopback interface,
-							// there are still cases where the IP packet will contain the wrong
-							// source IP (e.g. a LAN interface).
-							// For example, we can have a packet that has:
-							// Source: 192.168.65.3
-							// Destination: 224.0.0.251
-							// Interface Index: 1
-							// Interface Addresses @ 1: [127.0.0.1/8 ::1/128]
-							if ifIndex != -1 {
-								ifc, ok := c.ifaces[ifIndex]
+					for _, localName := range c.localNames {
+						if strings.EqualFold(localName, question.Name.String()) { //nolint:nestif
+							var localAddress *netip.Addr
+							if config.LocalAddress != nil {
+								// this means the LocalAddress does not support link-local since
+								// we have no zone to set here.
+								ipAddr, ok := netip.AddrFromSlice(config.LocalAddress)
 								if !ok {
-									c.log.Warnf("[%s] no interface for %d", c.name, ifIndex)
-									return
-								}
-								var selectedAddrs []netip.Addr
-								for _, addr := range ifc.ipAddrs {
-									addrCopy := addr
+									c.log.Warnf("[%s] failed to convert config.LocalAddress '%s' to netip.Addr", c.name, config.LocalAddress)
 
-									// match up respective IP types based on question
-									if queryWantsV4 {
-										if addrCopy.Is4In6() {
-											// we may allow 4-in-6, but the question wants an A record
-											addrCopy = addrCopy.Unmap()
-										}
-										if !addrCopy.Is4() {
-											continue
-										}
-									} else { // queryWantsV6
-										if !addrCopy.Is6() {
-											continue
-										}
-										if !isSupportedIPv6(addrCopy, c.multicastPktConnV4 == nil) {
-											c.log.Debugf("[%s] interface %d address not a supported IPv6 address %s", c.name, ifIndex, &addrCopy)
-											continue
-										}
-									}
-
-									selectedAddrs = append(selectedAddrs, addrCopy)
+									continue
 								}
-								if len(selectedAddrs) == 0 {
-									c.log.Debugf("[%s] failed to find suitable IP for interface %d; deriving address from source address c.name,instead", c.name, ifIndex)
-								} else {
-									// choose the best match
-									var choice *netip.Addr
-									for _, option := range selectedAddrs {
-										optCopy := option
-										if option.Is4() {
-											// select first
-											choice = &optCopy
-											break
-										}
-										// we're okay with 4In6 for now but ideally we get a an actual IPv6.
-										// Maybe in the future we never want this but it does look like Docker
-										// can route IPv4 over IPv6.
-										if choice == nil {
-											choice = &optCopy
-										} else if !optCopy.Is4In6() {
-											choice = &optCopy
-										}
-										if !optCopy.Is4In6() {
-											break
-										}
-										// otherwise keep searching for an actual IPv6
+								if c.multicastPktConnV4 != nil {
+									// don't want mapping since we also support IPv4/A
+									ipAddr = ipAddr.Unmap()
+								}
+								localAddress = &ipAddr
+							} else {
+								// prefer the address of the interface if we know its index, but otherwise
+								// derive it from the address we read from. We do this because even if
+								// multicast loopback is in use or we send from a loopback interface,
+								// there are still cases where the IP packet will contain the wrong
+								// source IP (e.g. a LAN interface).
+								// For example, we can have a packet that has:
+								// Source: 192.168.65.3
+								// Destination: 224.0.0.251
+								// Interface Index: 1
+								// Interface Addresses @ 1: [127.0.0.1/8 ::1/128]
+								if ifIndex != -1 {
+									ifc, ok := c.ifaces[ifIndex]
+									if !ok {
+										c.log.Warnf("[%s] no interface for %d", c.name, ifIndex)
+
+										return
 									}
-									localAddress = choice
+									var selectedAddrs []netip.Addr
+									for _, addr := range ifc.ipAddrs {
+										addrCopy := addr
+
+										// match up respective IP types based on question
+										if queryWantsV4 {
+											if addrCopy.Is4In6() {
+												// we may allow 4-in-6, but the question wants an A record
+												addrCopy = addrCopy.Unmap()
+											}
+											if !addrCopy.Is4() {
+												continue
+											}
+										} else { // queryWantsV6
+											if !addrCopy.Is6() {
+												continue
+											}
+											if !isSupportedIPv6(addrCopy, c.multicastPktConnV4 == nil) {
+												c.log.Debugf("[%s] interface %d address not a supported IPv6 address %s", c.name, ifIndex, &addrCopy)
+
+												continue
+											}
+										}
+
+										selectedAddrs = append(selectedAddrs, addrCopy)
+									}
+									if len(selectedAddrs) == 0 {
+										c.log.Debugf(
+											"[%s] failed to find suitable IP for interface %d; deriving address from source address c.name,instead",
+											c.name, ifIndex,
+										)
+									} else {
+										// choose the best match
+										var choice *netip.Addr
+										for _, option := range selectedAddrs {
+											optCopy := option
+											if option.Is4() {
+												// select first
+												choice = &optCopy
+
+												break
+											}
+											// we're okay with 4In6 for now but ideally we get a an actual IPv6.
+											// Maybe in the future we never want this but it does look like Docker
+											// can route IPv4 over IPv6.
+											if choice == nil || !optCopy.Is4In6() {
+												choice = &optCopy
+											}
+											if !optCopy.Is4In6() {
+												break
+											}
+											// otherwise keep searching for an actual IPv6
+										}
+										localAddress = choice
+									}
+								}
+								if ifIndex == -1 || localAddress == nil {
+									localAddress, err = interfaceForRemote(src.String())
+									if err != nil {
+										c.log.Warnf("[%s] failed to get local interface to communicate with %s: %v", c.name, src.String(), err)
+
+										continue
+									}
 								}
 							}
-							if ifIndex == -1 || localAddress == nil {
-								localAddress, err = interfaceForRemote(src.String())
-								if err != nil {
-									c.log.Warnf("[%s] failed to get local interface to communicate with %s: %v", c.name, src.String(), err)
+							if queryWantsV4 {
+								if !localAddress.Is4() {
+									c.log.Debugf(
+										"[%s] have IPv6 address %s to respond with but question is for A not c.name,AAAA",
+										c.name, localAddress,
+									)
+
+									continue
+								}
+							} else {
+								if !localAddress.Is6() {
+									c.log.Debugf(
+										"[%s] have IPv4 address %s to respond with but question is for AAAA not c.name,A",
+										c.name, localAddress,
+									)
+
+									continue
+								}
+								if !isSupportedIPv6(*localAddress, c.multicastPktConnV4 == nil) {
+									c.log.Debugf("[%s] got local interface address but not a supported IPv6 address %v", c.name, localAddress)
+
 									continue
 								}
 							}
-						}
-						if queryWantsV4 {
-							if !localAddress.Is4() {
-								c.log.Debugf("[%s] have IPv6 address %s to respond with but question is for A not c.name,AAAA", c.name, localAddress)
+
+							if dst != nil && len(dst.IP) == net.IPv4len &&
+								localAddress.Is6() &&
+								localAddress.Zone() != "" &&
+								(localAddress.IsLinkLocalUnicast() || localAddress.IsLinkLocalMulticast()) {
+								// This case happens when multicast v4 picks up an AAAA question that has a zone
+								// in the address. Since we cannot send this zone over DNS (it's meaningless),
+								// the other side can only infer this via the response interface on the other
+								// side (some IPv6 interface).
+								c.log.Debugf("[%s] refusing to send link-local address %s to an IPv4 destination %s", c.name, localAddress, dst)
+
 								continue
 							}
-						} else {
-							if !localAddress.Is6() {
-								c.log.Debugf("[%s] have IPv4 address %s to respond with but question is for AAAA not c.name,A", c.name, localAddress)
-								continue
-							}
-							if !isSupportedIPv6(*localAddress, c.multicastPktConnV4 == nil) {
-								c.log.Debugf("[%s] got local interface address but not a supported IPv6 address %v", c.name, localAddress)
-								continue
-							}
-						}
-
-						if dst != nil && len(dst.IP) == net.IPv4len &&
-							localAddress.Is6() &&
-							localAddress.Zone() != "" &&
-							(localAddress.IsLinkLocalUnicast() || localAddress.IsLinkLocalMulticast()) {
-							// This case happens when multicast v4 picks up an AAAA question that has a zone
-							// in the address. Since we cannot send this zone over DNS (it's meaningless),
-							// the other side can only infer this via the response interface on the other
-							// side (some IPv6 interface).
-							c.log.Debugf("[%s] refusing to send link-local address %s to an IPv4 destination %s", c.name, localAddress, dst)
-							continue
-						}
-						c.log.Debugf("[%s] sending response for %s on ifc %d of %s to %s", c.name, q.Name, ifIndex, *localAddress, dst)
-						c.sendAnswer(header.ID, q.Name.String(), ifIndex, *localAddress, dst)
-					}
-				}
-			}
-
-			for i := 0; i <= maxMessageRecords; i++ {
-				a, err := p.AnswerHeader()
-				if errors.Is(err, dnsmessage.ErrSectionDone) {
-					return
-				}
-				if err != nil {
-					c.log.Warnf("[%s] failed to parse mDNS packet %v", c.name, err)
-					return
-				}
-
-				if a.Type != dnsmessage.TypeA && a.Type != dnsmessage.TypeAAAA {
-					continue
-				}
-
-				c.mu.Lock()
-				queries := make([]*query, len(c.queries))
-				copy(queries, c.queries)
-				c.mu.Unlock()
-
-				var answered []*query
-				for _, query := range queries {
-					queryCopy := query
-					if queryCopy.nameWithSuffix == a.Name.String() {
-						addr, err := addrFromAnswerHeader(a, p)
-						if err != nil {
-							c.log.Warnf("[%s] failed to parse mDNS answer %v", c.name, err)
-							return
-						}
-
-						resultAddr := *addr
-						// DNS records don't contain IPv6 zones.
-						// We're trusting that since we're on the same link, that we will only
-						// be sent link-local addresses from that source's interface's address.
-						// If it's not present, we're out of luck since we cannot rely on the
-						// interface zone to be the same as the source's.
-						resultAddr = addrWithOptionalZone(resultAddr, srcAddr.Zone)
-
-						select {
-						case queryCopy.queryResultChan <- queryResult{a, resultAddr}:
-							answered = append(answered, queryCopy)
-						default:
+							c.log.Debugf(
+								"[%s] sending response for %s on ifc %d of %s to %s",
+								c.name, question.Name, ifIndex, *localAddress, dst,
+							)
+							c.sendAnswer(msg.Header.ID, question, ifIndex, *localAddress, dst, shouldReplyUnicast)
 						}
 					}
 				}
+			} else {
+				for _, answer := range msg.Answers {
+					if answer.Header.Type != dnsmessage.TypeA && answer.Header.Type != dnsmessage.TypeAAAA {
+						continue
+					}
 
-				c.mu.Lock()
-				for queryIdx := len(c.queries) - 1; queryIdx >= 0; queryIdx-- {
-					for answerIdx := len(answered) - 1; answerIdx >= 0; answerIdx-- {
-						if c.queries[queryIdx] == answered[answerIdx] {
-							c.queries = append(c.queries[:queryIdx], c.queries[queryIdx+1:]...)
-							answered = append(answered[:answerIdx], answered[answerIdx+1:]...)
-							queryIdx--
-							break
+					c.mu.Lock()
+					queries := make([]*query, len(c.queries))
+					copy(queries, c.queries)
+					c.mu.Unlock()
+
+					var answered []*query
+					for _, query := range queries {
+						queryCopy := query
+						if strings.EqualFold(queryCopy.nameWithSuffix, answer.Header.Name.String()) {
+							addr, err := addrFromAnswer(answer)
+							if err != nil {
+								c.log.Warnf("[%s] failed to parse mDNS answer %v", c.name, err)
+
+								return
+							}
+
+							resultAddr := *addr
+							// DNS records don't contain IPv6 zones.
+							// We're trusting that since we're on the same link, that we will only
+							// be sent link-local addresses from that source's interface's address.
+							// If it's not present, we're out of luck since we cannot rely on the
+							// interface zone to be the same as the source's.
+							resultAddr = addrWithOptionalZone(resultAddr, srcAddr.Zone)
+
+							select {
+							case queryCopy.queryResultChan <- queryResult{answer.Header, resultAddr}:
+								answered = append(answered, queryCopy)
+							default:
+							}
 						}
 					}
+
+					c.mu.Lock()
+					for queryIdx := len(c.queries) - 1; queryIdx >= 0; queryIdx-- {
+						for answerIdx := len(answered) - 1; answerIdx >= 0; answerIdx-- {
+							if c.queries[queryIdx] == answered[answerIdx] {
+								c.queries = append(c.queries[:queryIdx], c.queries[queryIdx+1:]...)
+								answered = append(answered[:answerIdx], answered[answerIdx+1:]...)
+								queryIdx--
+
+								break
+							}
+						}
+					}
+					c.mu.Unlock()
 				}
-				c.mu.Unlock()
 			}
 		}()
 	}
@@ -1170,31 +1250,31 @@ func (c *Conn) start(started chan<- struct{}, inboundBufferSize int, config *Con
 	}
 }
 
-func addrFromAnswerHeader(a dnsmessage.ResourceHeader, p dnsmessage.Parser) (addr *netip.Addr, err error) {
-	if a.Type == dnsmessage.TypeA {
-		resource, err := p.AResource()
-		if err != nil {
-			return nil, err
-		}
-		ipAddr, ok := netip.AddrFromSlice(resource.A[:])
-		if !ok {
-			return nil, fmt.Errorf("failed to convert A record: %w", ipToAddrError{resource.A[:]})
-		}
-		ipAddr = ipAddr.Unmap() // do not want 4-in-6
-		addr = &ipAddr
-	} else {
-		resource, err := p.AAAAResource()
-		if err != nil {
-			return nil, err
-		}
-		ipAddr, ok := netip.AddrFromSlice(resource.AAAA[:])
-		if !ok {
-			return nil, fmt.Errorf("failed to convert AAAA record: %w", ipToAddrError{resource.AAAA[:]})
-		}
-		addr = &ipAddr
-	}
+func addrFromAnswer(answer dnsmessage.Resource) (*netip.Addr, error) {
+	switch answer.Header.Type {
+	case dnsmessage.TypeA:
+		if a, ok := answer.Body.(*dnsmessage.AResource); ok {
+			addr, ok := netip.AddrFromSlice(a.A[:])
+			if ok {
+				addr = addr.Unmap() // do not want 4-in-6
 
-	return
+				return &addr, nil
+			}
+		}
+
+		return nil, errFailedToDecodeAddrFromAResource
+	case dnsmessage.TypeAAAA:
+		if a, ok := answer.Body.(*dnsmessage.AAAAResource); ok {
+			addr, ok := netip.AddrFromSlice(a.AAAA[:])
+			if ok {
+				return &addr, nil
+			}
+		}
+
+		return nil, errFailedToDecodeAddrFromAAAAResource
+	default:
+		return nil, errUnhandledAnswerHeaderType
+	}
 }
 
 func isSupportedIPv6(addr netip.Addr, ipv6Only bool) bool {
@@ -1206,6 +1286,7 @@ func isSupportedIPv6(addr netip.Addr, ipv6Only bool) bool {
 	if !ipv6Only && addr.Is4In6() {
 		return false
 	}
+
 	return true
 }
 
@@ -1216,5 +1297,6 @@ func addrWithOptionalZone(addr netip.Addr, zone string) netip.Addr {
 	if addr.Is6() && (addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast()) {
 		return addr.WithZone(zone)
 	}
+
 	return addr
 }

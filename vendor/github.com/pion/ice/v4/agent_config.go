@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -9,7 +9,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
-	"github.com/pion/transport/v3"
+	"github.com/pion/transport/v4"
 	"golang.org/x/net/proxy"
 )
 
@@ -38,6 +38,9 @@ const (
 	// defaultRelayAcceptanceMinWait is the wait time before nominating a relay candidate.
 	defaultRelayAcceptanceMinWait = 2000 * time.Millisecond
 
+	// defaultRelayOnlyAcceptanceMinWait is the wait time before nominating with a relay only candidate.
+	defaultRelayOnlyAcceptanceMinWait = time.Duration(0)
+
 	// defaultSTUNGatherTimeout is the wait time for STUN responses.
 	defaultSTUNGatherTimeout = 5 * time.Second
 
@@ -59,8 +62,18 @@ func defaultCandidateTypes() []CandidateType {
 	return []CandidateType{CandidateTypeHost, CandidateTypeServerReflexive, CandidateTypeRelay}
 }
 
+func defaultRelayAcceptanceMinWaitFor(candidateTypes []CandidateType) time.Duration {
+	if len(candidateTypes) == 1 && candidateTypes[0] == CandidateTypeRelay {
+		return defaultRelayOnlyAcceptanceMinWait
+	}
+
+	return defaultRelayAcceptanceMinWait
+}
+
 // AgentConfig collects the arguments to ice.Agent construction into
 // a single structure, for future-proofness of the interface.
+//
+// Deprecated: use NewAgentWithOptions instead.
 type AgentConfig struct {
 	Urls []*stun.URI
 
@@ -99,9 +112,23 @@ type AgentConfig struct {
 	// connecting state.
 	CheckInterval *time.Duration
 
-	// NetworkTypes is an optional configuration for disabling or enabling
-	// support for specific network types.
+	// NetworkTypes controls the candidate network types exposed in ICE candidates
+	// and used for pairing.
+	//
+	// This is independent from the TURN client-to-server transport configured via
+	// WithTURNTransportProtocols. Supported values are the NetworkType variants
+	// (NetworkTypeUDP4, NetworkTypeUDP6, NetworkTypeTCP4, NetworkTypeTCP6).
+	// When empty, all candidate network types are enabled by default.
 	NetworkTypes []NetworkType
+
+	// turnTransportProtocols restricts protocols used internally by this agent when connecting
+	// to TURN servers (the TURN client <-> TURN server transport).
+	//
+	// This is independent from NetworkTypes, which controls candidate network types
+	// exposed in ICE and used for pairing. Configure this via
+	// WithTURNTransportProtocols. Supported values are the NetworkType variants
+	// (NetworkTypeUDP4, NetworkTypeUDP6, NetworkTypeTCP4, NetworkTypeTCP6).
+	turnTransportProtocols []NetworkType
 
 	// CandidateTypes is an optional configuration for disabling or enabling
 	// support for specific candidate types.
@@ -123,12 +150,18 @@ type AgentConfig struct {
 	// If CandidateTypeServerReflexive, it will insert a srflx candidate (as if it was derived
 	// from a STUN server) with its port number being the one for the actual host candidate.
 	// Other values will result in an error.
+	//
+	// Deprecated: use WithAddressRewriteRules with an explicit host or srflx rule instead.
+	// This field will be removed in a future major release.
 	NAT1To1IPCandidateType CandidateType
 
 	// NAT1To1IPs contains a list of public IP addresses that are to be used as a host
 	// candidate or srflx candidate. This is used typically for servers that are behind
 	// 1:1 D-NAT (e.g. AWS EC2 instances) and to eliminate the need of server reflexive
 	// candidate gathering.
+	//
+	// Deprecated: use WithAddressRewriteRules with an explicit host or srflx rule instead.
+	// This field will be removed in a future major release.
 	NAT1To1IPs []string
 
 	// HostAcceptanceMinWait specify a minimum wait time before selecting host candidates
@@ -153,6 +186,10 @@ type AgentConfig struct {
 	// IPFilter is a function that you can use in order to whitelist or blacklist
 	// the ips which are used to gather ICE candidates.
 	IPFilter func(net.IP) (keep bool)
+
+	// RemoteIPFilter is a function that you can use in order to whitelist or blacklist
+	// remote candidate IP addresses before they are added to the agent.
+	RemoteIPFilter func(net.IP) (keep bool)
 
 	// InsecureSkipVerify controls if self-signed certificates are accepted when connecting
 	// to TURN servers via TLS or DTLS
@@ -236,7 +273,7 @@ func (config *AgentConfig) initWithDefaults(agent *Agent) { //nolint:cyclop
 	}
 
 	if config.RelayAcceptanceMinWait == nil {
-		agent.relayAcceptanceMinWait = defaultRelayAcceptanceMinWait
+		agent.relayAcceptanceMinWait = defaultRelayAcceptanceMinWaitFor(config.CandidateTypes)
 	} else {
 		agent.relayAcceptanceMinWait = *config.RelayAcceptanceMinWait
 	}
@@ -282,45 +319,4 @@ func (config *AgentConfig) initWithDefaults(agent *Agent) { //nolint:cyclop
 	} else {
 		agent.candidateTypes = config.CandidateTypes
 	}
-}
-
-func (config *AgentConfig) initExtIPMapping(agent *Agent) error { //nolint:cyclop
-	var err error
-	agent.extIPMapper, err = newExternalIPMapper(config.NAT1To1IPCandidateType, config.NAT1To1IPs)
-	if err != nil {
-		return err
-	}
-	if agent.extIPMapper == nil {
-		return nil // This may happen when config.NAT1To1IPs is an empty array
-	}
-	if agent.extIPMapper.candidateType == CandidateTypeHost { //nolint:nestif
-		if agent.mDNSMode == MulticastDNSModeQueryAndGather {
-			return ErrMulticastDNSWithNAT1To1IPMapping
-		}
-		candiHostEnabled := false
-		for _, candiType := range agent.candidateTypes {
-			if candiType == CandidateTypeHost {
-				candiHostEnabled = true
-
-				break
-			}
-		}
-		if !candiHostEnabled {
-			return ErrIneffectiveNAT1To1IPMappingHost
-		}
-	} else if agent.extIPMapper.candidateType == CandidateTypeServerReflexive {
-		candiSrflxEnabled := false
-		for _, candiType := range agent.candidateTypes {
-			if candiType == CandidateTypeServerReflexive {
-				candiSrflxEnabled = true
-
-				break
-			}
-		}
-		if !candiSrflxEnabled {
-			return ErrIneffectiveNAT1To1IPMappingSrflx
-		}
-	}
-
-	return nil
 }

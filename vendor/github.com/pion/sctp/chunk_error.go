@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp // nolint:dupl
@@ -6,6 +6,7 @@ package sctp // nolint:dupl
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 /*
@@ -57,11 +58,7 @@ func (a *chunkError) unmarshal(raw []byte) error {
 	}
 
 	offset := chunkHeaderSize
-	for {
-		if len(raw)-offset < 4 {
-			break
-		}
-
+	for len(raw)-offset >= 4 {
 		e, err := buildErrorCause(raw[offset:])
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrBuildErrorChunkFailed, err) //nolint:errorlint
@@ -95,11 +92,12 @@ func (a *chunkError) check() (abort bool, err error) {
 
 // String makes chunkError printable.
 func (a *chunkError) String() string {
-	res := a.chunkHeader.String()
+	var res strings.Builder
+	res.WriteString(a.chunkHeader.String())
 
 	for _, cause := range a.errorCauses {
-		res += fmt.Sprintf("\n - %s", cause)
+		fmt.Fprintf(&res, "\n - %s", cause)
 	}
 
-	return res
+	return res.String()
 }

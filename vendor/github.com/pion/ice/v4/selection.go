@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -34,13 +34,13 @@ func (s *controllingSelector) Start() {
 func (s *controllingSelector) isNominatable(c Candidate) bool {
 	switch {
 	case c.Type() == CandidateTypeHost:
-		return time.Since(s.startTime).Nanoseconds() > s.agent.hostAcceptanceMinWait.Nanoseconds()
+		return time.Since(s.startTime).Nanoseconds() >= s.agent.hostAcceptanceMinWait.Nanoseconds()
 	case c.Type() == CandidateTypeServerReflexive:
-		return time.Since(s.startTime).Nanoseconds() > s.agent.srflxAcceptanceMinWait.Nanoseconds()
+		return time.Since(s.startTime).Nanoseconds() >= s.agent.srflxAcceptanceMinWait.Nanoseconds()
 	case c.Type() == CandidateTypePeerReflexive:
-		return time.Since(s.startTime).Nanoseconds() > s.agent.prflxAcceptanceMinWait.Nanoseconds()
+		return time.Since(s.startTime).Nanoseconds() >= s.agent.prflxAcceptanceMinWait.Nanoseconds()
 	case c.Type() == CandidateTypeRelay:
-		return time.Since(s.startTime).Nanoseconds() > s.agent.relayAcceptanceMinWait.Nanoseconds()
+		return time.Since(s.startTime).Nanoseconds() >= s.agent.relayAcceptanceMinWait.Nanoseconds()
 	}
 
 	s.log.Errorf("Invalid candidate type: %s", c.Type())
@@ -54,6 +54,14 @@ func (s *controllingSelector) ContactCandidates() {
 		if s.agent.validateSelectedPair() {
 			s.log.Trace("Checking keepalive")
 			s.agent.checkKeepalive()
+
+			// If automatic renomination is enabled, continuously ping all candidate pairs
+			// to keep them tested with fresh RTT measurements for switching decisions
+			if s.agent.automaticRenomination && s.agent.enableRenomination {
+				s.agent.keepAliveCandidatesForRenomination()
+			}
+
+			s.checkForAutomaticRenomination()
 		}
 	case s.nominatedPair != nil:
 		s.nominatePair(s.nominatedPair)
@@ -76,16 +84,20 @@ func (s *controllingSelector) nominatePair(pair *CandidatePair) {
 	// order to nominate a candidate pair (Section 8.1.1).  The controlled
 	// agent MUST NOT include the USE-CANDIDATE attribute in a Binding
 	// request.
-	msg, err := stun.Build(stun.BindingRequest, stun.TransactionID,
-		stun.NewUsername(s.agent.remoteUfrag+":"+s.agent.localUfrag),
+	attributes := []stun.Setter{
+		stun.BindingRequest,
+		stun.TransactionID,
+		stun.NewUsername(s.agent.remoteUfrag + ":" + s.agent.localUfrag),
 		UseCandidate(),
 		AttrControlling(s.agent.tieBreaker),
 		PriorityAttr(pair.Local.Priority()),
+	}
+	attributes = append(attributes,
 		stun.NewShortTermIntegrity(s.agent.remotePwd),
-		stun.Fingerprint,
-	)
+		stun.Fingerprint)
+	msg, err := stun.Build(attributes...)
 	if err != nil {
-		s.log.Error(err.Error())
+		s.log.Errorf("failed to build binding request for nomination: %w", err)
 
 		return
 	}
@@ -132,7 +144,7 @@ func (s *controllingSelector) HandleBindingRequest(message *stun.Message, local,
 func (s *controllingSelector) HandleSuccessResponse(m *stun.Message, local, remote Candidate, remoteAddr net.Addr) {
 	ok, pendingRequest, rtt := s.agent.handleInboundBindingSuccess(m.TransactionID)
 	if !ok {
-		s.log.Warnf("Discard message from (%s), unknown TransactionID 0x%x", remote, m.TransactionID)
+		s.log.Warnf("Discard success response from (%s), unknown TransactionID 0x%x", remote, m.TransactionID)
 
 		return
 	}
@@ -163,23 +175,40 @@ func (s *controllingSelector) HandleSuccessResponse(m *stun.Message, local, remo
 
 	pair.state = CandidatePairStateSucceeded
 	s.log.Tracef("Found valid candidate pair: %s", pair)
-	if pendingRequest.isUseCandidate && s.agent.getSelectedPair() == nil {
-		s.agent.setSelectedPair(pair)
+
+	// Handle nomination/renomination
+	if pendingRequest.isUseCandidate {
+		selectedPair := s.agent.getSelectedPair()
+
+		// If this is a renomination request (has nomination value), always update the selected pair
+		// If it's a standard nomination (no value), only set if no pair is selected yet
+		if pendingRequest.nominationValue != nil {
+			s.log.Infof("Renomination success response received for pair %s (nomination value: %d), switching to this pair",
+				pair, *pendingRequest.nominationValue)
+			s.agent.setSelectedPair(pair)
+		} else if selectedPair == nil {
+			s.agent.setSelectedPair(pair)
+		}
 	}
 
 	pair.UpdateRoundTripTime(rtt)
 }
 
 func (s *controllingSelector) PingCandidate(local, remote Candidate) {
-	msg, err := stun.Build(stun.BindingRequest, stun.TransactionID,
-		stun.NewUsername(s.agent.remoteUfrag+":"+s.agent.localUfrag),
+	attributes := []stun.Setter{
+		stun.BindingRequest,
+		stun.TransactionID,
+		stun.NewUsername(s.agent.remoteUfrag + ":" + s.agent.localUfrag),
 		AttrControlling(s.agent.tieBreaker),
 		PriorityAttr(local.Priority()),
+	}
+	attributes = append(attributes,
 		stun.NewShortTermIntegrity(s.agent.remotePwd),
-		stun.Fingerprint,
-	)
+		stun.Fingerprint)
+
+	msg, err := stun.Build(attributes...)
 	if err != nil {
-		s.log.Error(err.Error())
+		s.log.Errorf("failed to build binding request for ping (controlling): %w", err)
 
 		return
 	}
@@ -187,12 +216,123 @@ func (s *controllingSelector) PingCandidate(local, remote Candidate) {
 	s.agent.sendBindingRequest(msg, local, remote)
 }
 
+// checkForAutomaticRenomination evaluates if automatic renomination should occur.
+// This is called periodically when the agent is in connected state and automatic
+// renomination is enabled.
+func (s *controllingSelector) checkForAutomaticRenomination() {
+	if !s.agent.automaticRenomination || !s.agent.enableRenomination {
+		s.log.Tracef("Automatic renomination check skipped: automaticRenomination=%v, enableRenomination=%v",
+			s.agent.automaticRenomination, s.agent.enableRenomination)
+
+		return
+	}
+
+	timeSinceStart := time.Since(s.startTime)
+	if timeSinceStart < s.agent.renominationInterval {
+		s.log.Tracef("Automatic renomination check skipped: not enough time since start (%v < %v)",
+			timeSinceStart, s.agent.renominationInterval)
+
+		return
+	}
+
+	if !s.agent.lastRenominationTime.IsZero() {
+		timeSinceLastRenomination := time.Since(s.agent.lastRenominationTime)
+		if timeSinceLastRenomination < s.agent.renominationInterval {
+			s.log.Tracef("Automatic renomination check skipped: too soon since last renomination (%v < %v)",
+				timeSinceLastRenomination, s.agent.renominationInterval)
+
+			return
+		}
+	}
+
+	currentPair := s.agent.getSelectedPair()
+	if currentPair == nil {
+		s.log.Tracef("Automatic renomination check skipped: no current selected pair")
+
+		return
+	}
+
+	bestPair := s.agent.findBestCandidatePair()
+	if bestPair == nil {
+		s.log.Tracef("Automatic renomination check skipped: no best pair found")
+
+		return
+	}
+
+	s.log.Debugf("Evaluating automatic renomination: current=%s (RTT=%.2fms), best=%s (RTT=%.2fms)",
+		currentPair, currentPair.CurrentRoundTripTime()*1000,
+		bestPair, bestPair.CurrentRoundTripTime()*1000)
+
+	if s.agent.shouldRenominate(currentPair, bestPair) {
+		s.log.Infof("Automatic renomination triggered: switching from %s to %s",
+			currentPair, bestPair)
+
+		// Update last renomination time to prevent rapid renominations
+		s.agent.lastRenominationTime = time.Now()
+
+		if err := s.agent.RenominateCandidate(bestPair.Local, bestPair.Remote); err != nil {
+			s.log.Errorf("Failed to trigger automatic renomination: %v", err)
+		}
+	} else {
+		s.log.Debugf("Automatic renomination not warranted")
+	}
+}
+
 type controlledSelector struct {
-	agent *Agent
-	log   logging.LeveledLogger
+	agent          *Agent
+	log            logging.LeveledLogger
+	lastNomination *uint32 // For renomination: tracks highest nomination value seen
 }
 
 func (s *controlledSelector) Start() {
+	s.lastNomination = nil
+}
+
+// shouldAcceptNomination checks if a nomination should be accepted based on renomination rules.
+func (s *controlledSelector) shouldAcceptNomination(nominationValue *uint32) bool {
+	// If no nomination value, accept normally (standard ICE nomination)
+	if nominationValue == nil {
+		return true
+	}
+
+	// If nomination value is present, controlling side is using renomination
+	// Apply "last nomination wins" rule
+
+	if s.lastNomination == nil || *nominationValue > *s.lastNomination {
+		s.lastNomination = nominationValue
+		s.log.Tracef("Accepting nomination with value %d", *nominationValue)
+
+		return true
+	}
+
+	s.log.Tracef("Rejecting nomination value %d (current is %d)", *nominationValue, *s.lastNomination)
+
+	return false
+}
+
+// shouldSwitchSelectedPair determines if we should switch to a new nominated pair.
+// Returns true if the switch should occur, false otherwise.
+func (s *controlledSelector) shouldSwitchSelectedPair(pair, selectedPair *CandidatePair, nominationValue *uint32) bool {
+	switch {
+	case selectedPair == nil:
+		// No current selection, accept the nomination
+		return true
+	case selectedPair == pair:
+		// Same pair, no change needed
+		return false
+	case nominationValue != nil:
+		// Renomination is in use (nomination value present)
+		// Accept the switch based on nomination value alone, not priority
+		// The shouldAcceptNomination check already validated this is a valid renomination
+		s.log.Debugf("Accepting renomination to pair %s (nomination value: %d)", pair, *nominationValue)
+
+		return true
+	}
+
+	// Standard ICE nomination without renomination - apply priority rules
+	// Only switch if we don't check priority, OR new pair has strictly higher priority
+	return !s.agent.needsToCheckPriorityOnNominated() ||
+		selectedPair.priority() < pair.priority()
 }
 
 func (s *controlledSelector) ContactCandidates() {
@@ -207,15 +347,20 @@ func (s *controlledSelector) ContactCandidates() {
 }
 
 func (s *controlledSelector) PingCandidate(local, remote Candidate) {
-	msg, err := stun.Build(stun.BindingRequest, stun.TransactionID,
-		stun.NewUsername(s.agent.remoteUfrag+":"+s.agent.localUfrag),
+	attributes := []stun.Setter{
+		stun.BindingRequest,
+		stun.TransactionID,
+		stun.NewUsername(s.agent.remoteUfrag + ":" + s.agent.localUfrag),
 		AttrControlled(s.agent.tieBreaker),
 		PriorityAttr(local.Priority()),
+	}
+	attributes = append(attributes,
 		stun.NewShortTermIntegrity(s.agent.remotePwd),
-		stun.Fingerprint,
-	)
+		stun.Fingerprint)
+
+	msg, err := stun.Build(attributes...)
 	if err != nil {
-		s.log.Error(err.Error())
+		s.log.Errorf("failed to build binding request for ping (controlled): %w", err)
 
 		return
 	}
@@ -285,8 +430,24 @@ func (s *controlledSelector) HandleBindingRequest(message *stun.Message, local, 
 	}
 	pair.UpdateRequestReceived()
 
-	if message.Contains(stun.AttrUseCandidate) { //nolint:nestif
+	if message.Contains(stun.AttrUseCandidate) || message.Contains(s.agent.nominationAttribute) { //nolint:nestif
 		// https://tools.ietf.org/html/rfc8445#section-7.3.1.5
+
+		// Check for renomination attribute
+		var nominationValue *uint32
+		var nomination NominationAttribute
+		if err := nomination.GetFromWithType(message, s.agent.nominationAttribute); err == nil {
+			nominationValue = &nomination.Value
+			s.log.Tracef("Received nomination with value %d", nomination.Value)
+		}
+
+		// Check if we should accept this nomination based on renomination rules
+		if !s.shouldAcceptNomination(nominationValue) {
+			s.log.Tracef("Rejecting nomination request due to renomination rules")
+			s.agent.sendBindingSuccess(message, local, remote)
+
+			return
+		}
 
 		if pair.state == CandidatePairStateSucceeded {
 			// If the state of this pair is Succeeded, it means that the check
@@ -294,12 +455,10 @@ func (s *controlledSelector) HandleBindingRequest(message *stun.Message, local, 
 			// generated a valid pair (Section 7.2.5.3.2).  The agent sets the
 			// nominated flag value of the valid pair to true.
 			selectedPair := s.agent.getSelectedPair()
-			if selectedPair == nil ||
-				(selectedPair != pair &&
-					(!s.agent.needsToCheckPriorityOnNominated() ||
-						selectedPair.priority() <= pair.priority())) {
+			if s.shouldSwitchSelectedPair(pair, selectedPair, nominationValue) {
+				s.log.Tracef("Accepting nomination for pair %s", pair)
 				s.agent.setSelectedPair(pair)
-			} else if selectedPair != pair {
+			} else {
 				s.log.Tracef("Ignore nominate new pair %s, already nominated pair %s", pair, selectedPair)
 			}
 		} else {
@@ -316,7 +475,15 @@ func (s *controlledSelector) HandleBindingRequest(message *stun.Message, local, 
 	}
 
 	s.agent.sendBindingSuccess(message, local, remote)
-	s.PingCandidate(local, remote)
+
+	// Only send a triggered check during ICE checking phase (RFC 8445 §7.3.1.4).
+	// Once the pair is established (succeeded + selected), sending a triggered check
+	// on every inbound request creates a ping-pong busy loop: the remote side responds
+	// and sends its own request, which triggers another check here, repeating at 1/RTT.
+	// After connection, consent freshness is maintained by checkKeepalive() on a timer.
+	if pair.state != CandidatePairStateSucceeded || s.agent.getSelectedPair() == nil {
+		s.PingCandidate(local, remote)
+	}
 
 	if s.agent.userBindingRequestHandler != nil {
 		if shouldSwitch := s.agent.userBindingRequestHandler(message, local, remote, pair); shouldSwitch {

@@ -93,6 +93,14 @@ type DB struct {
 	mt  *memTable   // Our latest (actively written) in-memory table
 	imm []*memTable // Add here only AFTER pushing to flushChan.
 
+	// flushCond signals the (serial) write path that the flush goroutine has made
+	// progress, i.e. it has removed a memtable from imm and there may now be room
+	// in flushChan. Its Locker is db.lock (write lock), the same lock that guards
+	// imm and that ensureRoomForWrite holds, so the room check and the wait are
+	// entered atomically. This replaces the 10ms busy-sleep that previously
+	// polled flushChan from writeRequests.
+	flushCond *sync.Cond
+
 	// Initialized via openMemTables.
 	nextMemFid int
 
@@ -106,6 +114,16 @@ type DB struct {
 
 	blockWrites atomic.Int32
 	isClosed    atomic.Uint32
+
+	// gcActive is set while a vlog GC rewrite (scan + write-back) is in flight,
+	// and gcDiscardTs records the DB's max version captured at its start. While
+	// active, last-level compaction clamps its discard threshold to gcDiscardTs
+	// (see levelsController.subcompact) so it will not purge any version newer than
+	// the rewrite's start — in particular a tombstone for a key the rewrite is
+	// about to write back. That tombstone survives to shadow the write-back, so a
+	// key deleted mid-GC is not resurrected (#2286). Released when GC finishes.
+	gcActive    atomic.Bool
+	gcDiscardTs atomic.Uint64
 
 	orc              *oracle
 	bannedNamespaces *lockedKeys
@@ -245,6 +263,7 @@ func Open(opt Options) (*DB, error) {
 		threshold:        initVlogThreshold(&opt),
 	}
 
+	db.flushCond = sync.NewCond(&db.lock)
 	db.syncChan = opt.syncChan
 
 	// Cleanup all the goroutines started by badger in case of an error.
@@ -378,7 +397,7 @@ func Open(opt Options) (*DB, error) {
 	db.closers.writes = z.NewCloser(1)
 	go db.doWrites(db.closers.writes)
 
-	if !db.opt.InMemory {
+	if !db.opt.InMemory && !db.opt.ReadOnly {
 		db.closers.valueGC = z.NewCloser(1)
 		go db.vlog.waitOnGC(db.closers.valueGC)
 	}
@@ -535,10 +554,27 @@ func (db *DB) close() (err error) {
 	db.opt.Debugf("Closing database")
 	db.opt.Infof("Lifetime L0 stalled for: %s\n", time.Duration(db.lc.l0stallsMs.Load()))
 
+	// Set blockWrites/isClosed and wake any writer parked in ensureRoomForWrite's
+	// flushCond.Wait ATOMICALLY under db.lock. ensureRoomForWrite checks
+	// blockWrites and calls flushCond.Wait while holding db.lock, so we must hold
+	// the same lock here; otherwise the wakeup can be lost in this interleaving:
+	// the writer reads blockWrites==0, then we Store(1)+Broadcast (writer not yet
+	// enqueued in Wait, so the Broadcast is lost), then the writer Waits forever
+	// and closers.writes.SignalAndWait below hangs (stopMemoryFlush, which would
+	// unstall the flush goroutine, is only reached later). Holding db.lock
+	// serializes the two: either the writer sees blockWrites==1 and returns
+	// errNoRoom without waiting, or it is already in Wait (which released db.lock)
+	// and the Broadcast reaches it. Either way the write goroutine can finish so
+	// SignalAndWait completes.
+	db.lock.Lock()
 	db.blockWrites.Store(1)
 	db.isClosed.Store(1)
+	if db.flushCond != nil {
+		db.flushCond.Broadcast()
+	}
+	db.lock.Unlock()
 
-	if !db.opt.InMemory {
+	if db.closers.valueGC != nil {
 		// Stop value GC first.
 		db.closers.valueGC.SignalAndWait()
 	}
@@ -671,6 +707,11 @@ const (
 // Sync syncs database content to disk. This function provides
 // more control to user to sync data whenever required.
 func (db *DB) Sync() error {
+	if db.opt.InMemory || db.opt.ReadOnly {
+		// InMemory and read-only modes do not use WAL/vlog files, so Sync is a no-op.
+		return nil
+	}
+
 	/**
 	Make an attempt to sync both the logs, the active memtable's WAL and the vLog (1847).
 	Cases:
@@ -850,19 +891,12 @@ func (db *DB) writeRequests(reqs []*request) error {
 			continue
 		}
 		count += len(b.Entries)
-		var i uint64
-		var err error
-		for err = db.ensureRoomForWrite(); err == errNoRoom; err = db.ensureRoomForWrite() {
-			i++
-			if i%100 == 0 {
-				db.opt.Debugf("Making room for writes")
-			}
-			// We need to poll a bit because both hasRoomForWrite and the flusher need access to s.imm.
-			// When flushChan is full and you are blocked there, and the flusher is trying to update s.imm,
-			// you will get a deadlock.
-			time.Sleep(10 * time.Millisecond)
-		}
-		if err != nil {
+		// ensureRoomForWrite now blocks internally on db.flushCond until flushChan
+		// has room (or the DB is closing), so we no longer busy-poll with a sleep
+		// here. It returns errNoRoom only when the DB is shutting down, in which
+		// case we surface the error instead of writing to a memtable being torn
+		// down.
+		if err := db.ensureRoomForWrite(); err != nil {
 			done(err)
 			return y.Wrap(err, "writeRequests")
 		}
@@ -1006,7 +1040,8 @@ func (db *DB) batchSetAsync(entries []*Entry, f func(error)) error {
 
 var errNoRoom = errors.New("No room for write")
 
-// ensureRoomForWrite is always called serially.
+// ensureRoomForWrite is always called serially. It blocks (without busy-polling)
+// until the current memtable can be flushed, i.e. until flushChan has room.
 func (db *DB) ensureRoomForWrite() error {
 	var err error
 	db.lock.Lock()
@@ -1017,21 +1052,34 @@ func (db *DB) ensureRoomForWrite() error {
 		return nil
 	}
 
-	select {
-	case db.flushChan <- db.mt:
-		db.opt.Debugf("Flushing memtable, mt.size=%d size of flushChan: %d\n",
-			db.mt.sl.MemSize(), len(db.flushChan))
-		// We manage to push this task. Let's modify imm.
-		db.imm = append(db.imm, db.mt)
-		db.mt, err = db.newMemTable()
-		if err != nil {
-			return y.Wrapf(err, "cannot create new mem table")
+	for {
+		select {
+		case db.flushChan <- db.mt:
+			db.opt.Debugf("Flushing memtable, mt.size=%d size of flushChan: %d\n",
+				db.mt.sl.MemSize(), len(db.flushChan))
+			// We manage to push this task. Let's modify imm.
+			db.imm = append(db.imm, db.mt)
+			db.mt, err = db.newMemTable()
+			if err != nil {
+				return y.Wrapf(err, "cannot create new mem table")
+			}
+			// New memtable is empty. We certainly have room.
+			return nil
+		default:
+			// flushChan is full. Rather than busy-sleep, wait to be signalled when
+			// the flush goroutine drains a memtable from imm (which frees a slot in
+			// flushChan). flushCond.Wait atomically releases db.lock (allowing the
+			// flusher to update imm and push) and re-acquires it on wake; we then
+			// re-attempt the non-blocking push in this loop. We must bail out if the
+			// DB is closing so that Close's closers.writes.SignalAndWait() (which
+			// waits for the write goroutine) cannot hang here. errNoRoom is kept as
+			// the close-time sentinel so the caller's loop terminates and surfaces
+			// the failure rather than writing to a memtable that is being torn down.
+			if db.blockWrites.Load() == 1 || db.IsClosed() {
+				return errNoRoom
+			}
+			db.flushCond.Wait()
 		}
-		// New memtable is empty. We certainly have room.
-		return nil
-	default:
-		// We need to do this to unlock and allow the flusher to modify imm.
-		return errNoRoom
 	}
 }
 
@@ -1122,6 +1170,11 @@ func (db *DB) flushMemtable(lc *z.Closer) {
 			mt.DecrRef() // Return memory.
 			// unlock
 			db.lock.Unlock()
+			// A memtable has been flushed and removed from imm; a slot in flushChan
+			// is now free. Wake any writer blocked in ensureRoomForWrite so it can
+			// retry its non-blocking push. Broadcasting after unlock is safe because
+			// the waiter re-checks (re-attempts the push) under db.lock in a loop.
+			db.flushCond.Broadcast()
 			break
 		}
 	}
@@ -1229,6 +1282,9 @@ func (db *DB) updateSize(lc *z.Closer) {
 func (db *DB) RunValueLogGC(discardRatio float64) error {
 	if db.opt.InMemory {
 		return ErrGCInMemoryMode
+	}
+	if db.opt.ReadOnly {
+		return ErrGCInReadOnlyMode
 	}
 	if discardRatio >= 1.0 || discardRatio <= 0.0 {
 		return ErrInvalidRequest
@@ -1349,6 +1405,9 @@ func (seq *Sequence) updateLease() error {
 func (db *DB) GetSequence(key []byte, bandwidth uint64) (*Sequence, error) {
 	if db.opt.managedTxns {
 		panic("Cannot use GetSequence with managedDB=true.")
+	}
+	if db.opt.ReadOnly {
+		panic("Cannot use GetSequence in read-only mode.")
 	}
 
 	switch {
@@ -1518,9 +1577,31 @@ func (db *DB) MaxBatchSize() int64 {
 	return db.opt.maxBatchSize
 }
 
+// flushStopped reports whether the memtable flush goroutine has been signalled to
+// stop. It is used by addLevel0Table to break out of the L0 stall wait during
+// shutdown, including the Open-error cleanup path where db.isClosed may be unset.
+func (db *DB) flushStopped() bool {
+	if db.closers.memtable == nil {
+		return false
+	}
+	select {
+	case <-db.closers.memtable.HasBeenClosed():
+		return true
+	default:
+		return false
+	}
+}
+
 func (db *DB) stopMemoryFlush() {
 	// Stop memtable flushes.
 	if db.closers.memtable != nil {
+		// Signal the flush goroutine's closer first so flushStopped() observes the
+		// stop, then wake any flush goroutine stalled in addLevel0Table's cond.Wait
+		// (which is not watching the closer channel) so it force-adds its table and
+		// returns. Closing flushChan makes the goroutine's `range` loop terminate
+		// once it is no longer blocked in addLevel0Table.
+		db.closers.memtable.Signal()
+		db.lc.levels[0].signalL0Drained()
 		close(db.flushChan)
 		db.closers.memtable.SignalAndWait()
 	}
@@ -1558,6 +1639,9 @@ func (db *DB) startMemoryFlush() {
 // stopped. Ideally, no writes are going on during Flatten. Otherwise, it would create competition
 // between flattening the tree and new tables being created at level zero.
 func (db *DB) Flatten(workers int) error {
+	if db.opt.ReadOnly {
+		panic("Cannot flatten in read-only mode.")
+	}
 
 	db.stopCompactions()
 	defer db.startCompactions()
@@ -1845,6 +1929,9 @@ func (db *DB) isBanned(key []byte) error {
 func (db *DB) BanNamespace(ns uint64) error {
 	if db.opt.NamespaceOffset < 0 {
 		return ErrNamespaceMode
+	}
+	if db.opt.ReadOnly {
+		panic("Cannot ban namespace in read-only mode.")
 	}
 	db.opt.Infof("Banning namespace: %d", ns)
 	// First set the banned namespaces in DB and then update the in-memory structure.

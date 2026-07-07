@@ -276,7 +276,7 @@ func (ci CellID) AllNeighbors(level int) []CellID {
 		return nil
 	}
 
-	var neighbors []CellID
+	var neighbors = make([]CellID, 0, (4<<(level-ci.Level()))+4)
 
 	face, i, j, _ := ci.faceIJOrientation()
 
@@ -374,8 +374,8 @@ func CellIDFromString(s string) CellID {
 
 // Point returns the center of the s2 cell on the sphere as a Point.
 // The maximum directional error in Point (compared to the exact
-// mathematical result) is 1.5 * dblEpsilon radians, and the maximum length
-// error is 2 * dblEpsilon (the same as Normalize).
+// mathematical result) is 1.5 * machineEpsilon64 radians, and the maximum length
+// error is 2 * machineEpsilon64 (the same as Normalize).
 func (ci CellID) Point() Point { return Point{ci.rawPoint().Normalize()} }
 
 // LatLng returns the center of the s2 cell on the sphere as a LatLng.
@@ -601,8 +601,8 @@ func cellIDFromFaceIJWrap(f, i, j int) CellID {
 	// Convert i and j to the coordinates of a leaf cell just beyond the
 	// boundary of this face.  This prevents 32-bit overflow in the case
 	// of finding the neighbors of a face cell.
-	i = clampInt(i, -1, MaxSize)
-	j = clampInt(j, -1, MaxSize)
+	i = clamp(i, -1, MaxSize)
+	j = clamp(j, -1, MaxSize)
 
 	// We want to wrap these coordinates onto the appropriate adjacent face.
 	// The easiest way to do this is to convert the (i,j) coordinates to (x,y,z)

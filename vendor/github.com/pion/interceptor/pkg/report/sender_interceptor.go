@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package report
@@ -29,7 +29,6 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 		newTicker: func(d time.Duration) Ticker {
 			return &timeTicker{time.NewTicker(d)}
 		},
-		log:   logging.NewDefaultLoggerFactory().NewLogger("sender_interceptor"),
 		close: make(chan struct{}),
 	}
 
@@ -37,6 +36,13 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 		if err := opt(senderInterceptor); err != nil {
 			return nil, err
 		}
+	}
+
+	if senderInterceptor.loggerFactory == nil {
+		senderInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if senderInterceptor.log == nil {
+		senderInterceptor.log = senderInterceptor.loggerFactory.NewLogger("sender_interceptor")
 	}
 
 	return senderInterceptor, nil
@@ -50,15 +56,16 @@ func NewSenderInterceptor(opts ...SenderOption) (*SenderInterceptorFactory, erro
 // SenderInterceptor interceptor generates sender reports.
 type SenderInterceptor struct {
 	interceptor.NoOp
-	interval  time.Duration
-	now       func() time.Time
-	newTicker TickerFactory
-	streams   sync.Map
-	log       logging.LeveledLogger
-	m         sync.Mutex
-	wg        sync.WaitGroup
-	close     chan struct{}
-	started   chan struct{}
+	interval      time.Duration
+	now           func() time.Time
+	newTicker     TickerFactory
+	streams       sync.Map
+	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
+	m             sync.Mutex
+	wg            sync.WaitGroup
+	close         chan struct{}
+	started       chan struct{}
 
 	useLatestPacket bool
 }
@@ -116,7 +123,7 @@ func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 		select {
 		case <-ticker.Ch():
 			now := s.now()
-			s.streams.Range(func(_, value interface{}) bool {
+			s.streams.Range(func(_, value any) bool {
 				if stream, ok := value.(*senderStream); !ok {
 					s.log.Warnf("failed to cast SenderInterceptor stream")
 				} else if _, err := rtcpWriter.Write(

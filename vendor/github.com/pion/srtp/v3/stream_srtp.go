@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -6,11 +6,12 @@ package srtp
 import (
 	"errors"
 	"io"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/v3/packetio"
+	"github.com/pion/transport/v4/packetio"
 )
 
 // Limit the buffer size to 1MB.
@@ -26,7 +27,8 @@ type ReadStreamSRTP struct {
 	ssrc     uint32
 	isInited bool
 
-	buffer io.ReadWriteCloser
+	buffer        io.ReadWriteCloser
+	peekedPackets [][]byte
 }
 
 // Used by getOrCreateReadStream.
@@ -74,8 +76,31 @@ func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
 	return n, err
 }
 
+// Peek reads and decrypts full RTP packet from the nextConn.
+// It is then buffered so that a call to `Read` will return it.
+func (r *ReadStreamSRTP) Peek(buf []byte) (n int, err error) {
+	n, err = r.buffer.Read(buf)
+	if err == nil {
+		r.peekedPackets = append(r.peekedPackets, slices.Clone(buf[:n]))
+	}
+
+	return
+}
+
 // Read reads and decrypts full RTP packet from the nextConn.
 func (r *ReadStreamSRTP) Read(buf []byte) (int, error) {
+	if len(r.peekedPackets) != 0 {
+		if len(r.peekedPackets[0]) > len(buf) {
+			return 0, io.ErrShortBuffer
+		}
+
+		n := len(r.peekedPackets[0])
+		copy(buf, r.peekedPackets[0])
+		r.peekedPackets = r.peekedPackets[1:]
+
+		return n, nil
+	}
+
 	return r.buffer.Read(buf)
 }
 

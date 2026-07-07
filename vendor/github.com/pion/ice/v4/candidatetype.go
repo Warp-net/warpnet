@@ -1,7 +1,9 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
+
+import "slices"
 
 // CandidateType represents the type of candidate.
 type CandidateType byte
@@ -58,11 +60,6 @@ func containsCandidateType(candidateType CandidateType, candidateTypeList []Cand
 	if candidateTypeList == nil {
 		return false
 	}
-	for _, ct := range candidateTypeList {
-		if ct == candidateType {
-			return true
-		}
-	}
 
-	return false
+	return slices.Contains(candidateTypeList, candidateType)
 }

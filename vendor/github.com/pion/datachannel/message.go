@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package datachannel
@@ -7,17 +7,17 @@ import (
 	"fmt"
 )
 
-// message is a parsed DataChannel message
+// message is a parsed DataChannel message.
 type message interface {
 	Marshal() ([]byte, error)
 	Unmarshal([]byte) error
 	String() string
 }
 
-// messageType is the first byte in a DataChannel message that specifies type
+// messageType is the first byte in a DataChannel message that specifies type.
 type messageType byte
 
-// DataChannel Message Types
+// DataChannel Message Types.
 const (
 	dataChannelAck  messageType = 0x02
 	dataChannelOpen messageType = 0x03
@@ -34,7 +34,7 @@ func (t messageType) String() string {
 	}
 }
 
-// parse accepts raw input and returns a DataChannel message
+// parse accepts raw input and returns a DataChannel message.
 func parse(raw []byte) (message, error) {
 	if len(raw) == 0 {
 		return nil, ErrDataChannelMessageTooShort
@@ -58,7 +58,7 @@ func parse(raw []byte) (message, error) {
 }
 
 // parseExpectDataChannelOpen parses a DataChannelOpen message
-// or throws an error
+// or throws an error.
 func parseExpectDataChannelOpen(raw []byte) (*channelOpen, error) {
 	if len(raw) == 0 {
 		return nil, ErrDataChannelMessageTooShort

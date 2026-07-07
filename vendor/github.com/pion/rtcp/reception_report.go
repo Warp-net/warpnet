@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rtcp
@@ -78,9 +78,9 @@ func (r ReceptionReport) Marshal() ([]byte, error) {
 		return nil, errInvalidTotalLost
 	}
 	tlBytes := rawPacket[totalLostOffset:]
-	tlBytes[0] = byte(r.TotalLost >> 16)
-	tlBytes[1] = byte(r.TotalLost >> 8)
-	tlBytes[2] = byte(r.TotalLost)
+	tlBytes[0] = byte(r.TotalLost >> 16) //nolint:gosec // rawPacket is created with length receptionReportLength (24)
+	tlBytes[1] = byte(r.TotalLost >> 8)  //nolint:gosec // rawPacket is created with length receptionReportLength (24)
+	tlBytes[2] = byte(r.TotalLost)       //nolint:gosec // rawPacket is created with length receptionReportLength (24)
 
 	binary.BigEndian.PutUint32(rawPacket[lastSeqOffset:], r.LastSequenceNumber)
 	binary.BigEndian.PutUint32(rawPacket[jitterOffset:], r.Jitter)

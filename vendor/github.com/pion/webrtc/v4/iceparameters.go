@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -7,6 +7,6 @@ package webrtc
 // and password and other ICE-related parameters.
 type ICEParameters struct {
 	UsernameFragment string `json:"usernameFragment"`
-	Password         string `json:"password"`
+	Password         string `json:"password"` //nolint:gosec // not a secret.
 	ICELite          bool   `json:"iceLite"`
 }

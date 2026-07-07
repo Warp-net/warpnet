@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package ice ...
@@ -60,7 +60,6 @@ func NewCandidatePeerReflexive(config *CandidatePeerReflexiveConfig) (*Candidate
 				Address: config.RelAddr,
 				Port:    config.RelPort,
 			},
-			remoteCandidateCaches: map[AddrPort]Candidate{},
 		},
 	}, nil
 }

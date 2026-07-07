@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rfc8888
@@ -49,17 +49,9 @@ func (r *Recorder) BuildReport(now time.Time, maxSize int) *rtcp.CCFeedbackRepor
 	}
 
 	maxReportBlocks := (maxSize - 12 - (8 * len(r.streams))) / 2
-	var maxReportBlocksPerStream int
-	if len(r.streams) > 1 {
-		maxReportBlocksPerStream = maxReportBlocks / (len(r.streams) - 1)
-	} else {
-		maxReportBlocksPerStream = maxReportBlocks
-	}
+	maxReportBlocksPerStream := maxReportBlocks / len(r.streams)
 
-	for i, log := range r.streams {
-		if len(r.streams) > 1 && int(i) == len(r.streams)-1 {
-			maxReportBlocksPerStream = maxReportBlocks % len(r.streams)
-		}
+	for _, log := range r.streams {
 		block := log.metricsAfter(now, int64(maxReportBlocksPerStream))
 		report.ReportBlocks = append(report.ReportBlocks, block)
 	}

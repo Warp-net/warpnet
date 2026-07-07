@@ -430,7 +430,7 @@ func (p *Polygon) initEdgesAndIndex() {
 
 // FullPolygon returns a special "full" polygon.
 func FullPolygon() *Polygon {
-	ret := &Polygon{
+	p := &Polygon{
 		loops: []*Loop{
 			FullLoop(),
 		},
@@ -438,8 +438,8 @@ func FullPolygon() *Polygon {
 		bound:          FullRect(),
 		subregionBound: FullRect(),
 	}
-	ret.initEdgesAndIndex()
-	return ret
+	p.initEdgesAndIndex()
+	return p
 }
 
 // Validate checks whether this is a valid polygon,
@@ -773,7 +773,7 @@ func (p *Polygon) Chain(chainID int) Chain {
 		return Chain{p.cumulativeEdges[chainID], len(p.Loop(chainID).vertices)}
 	}
 	e := 0
-	for j := 0; j < chainID; j++ {
+	for j := range chainID {
 		e += len(p.Loop(j).vertices)
 	}
 
@@ -1107,7 +1107,7 @@ func (p *Polygon) encodeLossless(e *encoder) {
 }
 
 func (p *Polygon) encodeCompressed(e *encoder, snapLevel int, vertices []xyzFaceSiTi) {
-	e.writeUint8(uint8(encodingCompressedVersion))
+	e.writeUint8(uint8(encodingPolygonCompressedVersion))
 	e.writeUint8(uint8(snapLevel))
 	e.writeUvarint(uint64(len(p.loops)))
 
@@ -1136,7 +1136,7 @@ func (p *Polygon) Decode(r io.Reader) error {
 	switch version {
 	case encodingVersion:
 		dec = p.decode
-	case encodingCompressedVersion:
+	case encodingPolygonCompressedVersion:
 		dec = p.decodeCompressed
 	default:
 		return fmt.Errorf("unsupported version %d", version)
@@ -1189,9 +1189,10 @@ func (p *Polygon) decodeCompressed(d *decoder) {
 	}
 	// Polygons with no loops are explicitly allowed here: a newly created
 	// polygon has zero loops and such polygons encode and decode properly.
-	nloops := int(d.readUvarint())
+	nloops := d.readUvarint()
 	if nloops > maxEncodedLoops {
 		d.err = fmt.Errorf("too many loops (%d; max is %d)", nloops, maxEncodedLoops)
+		return
 	}
 	p.loops = make([]*Loop, nloops)
 	for i := range p.loops {

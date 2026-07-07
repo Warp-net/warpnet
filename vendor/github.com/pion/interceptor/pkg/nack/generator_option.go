@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package nack
@@ -48,6 +48,15 @@ func GeneratorMaxNacksPerPacket(maxNacks uint16) GeneratorOption {
 func GeneratorLog(log logging.LeveledLogger) GeneratorOption {
 	return func(r *GeneratorInterceptor) error {
 		r.log = log
+
+		return nil
+	}
+}
+
+// WithGeneratorLoggerFactory sets a logger factory for the interceptor.
+func WithGeneratorLoggerFactory(loggerFactory logging.LoggerFactory) GeneratorOption {
+	return func(r *GeneratorInterceptor) error {
+		r.loggerFactory = loggerFactory
 
 		return nil
 	}
