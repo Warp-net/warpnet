@@ -1,0 +1,185 @@
+name: Release macOS (signed)
+
+# Builds, signs and notarizes the macOS desktop client when a GitHub
+# Release is published, then attaches the signed .dmg and a zipped,
+# notarized .app to that Release.
+#
+# macOS binaries need CGO + the macOS SDK (WKWebView is linked at build
+# time), so cross-compiling from Linux is impossible: this job must run
+# on a real macOS runner. The dev build uses `-tags webkit2_41`, which
+# selects WebKit2GTK on Linux; on macOS Wails links WKWebView instead, so
+# no webkit build tag is passed here.
+on:
+  release:
+    types: [published]
+
+env:
+  GO_VERSION: "1.26.0"
+  WAILS_VERSION: "v2.10.2"
+  CGO_ENABLED: "1"
+  RELEASE_TAG: ${{ github.event.release.tag_name }}
+  TEAM_ID: "RU3XJK8SUN"
+  APP_PATH: cmd/node/member/build/bin/warpnet.app
+
+jobs:
+  release-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Verify macOS runner
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcodebuild -version
+          xcrun --find notarytool
+
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, fetch-tags: true }
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Import Developer ID certificate into temporary keychain
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+
+          echo "$APPLE_CERT_P12" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERT_PATH" -P "$APPLE_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+
+          # Let codesign use the private key non-interactively.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add the temp keychain to the search list, keeping the defaults.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | sed 's/"//g')
+
+          rm -f "$CERT_PATH"
+
+          # Resolve the full "Developer ID Application: … (TEAM_ID)" name.
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep "Developer ID Application" | grep "$TEAM_ID" \
+            | head -1 | sed -E 's/.*"(.*)"/\1/')
+          if [ -z "$IDENTITY" ]; then
+            echo "FATAL: no Developer ID Application identity for team $TEAM_ID" >&2
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH" >&2 || true
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Build .app (Wails, darwin/arm64)
+        working-directory: cmd/node/member
+        run: wails build -clean -platform darwin/arm64 -m -nosyncgomod
+
+      - name: Sign .app with hardened runtime
+        run: |
+          set -euo pipefail
+          ENTITLEMENTS="$RUNNER_TEMP/entitlements.plist"
+          cat > "$ENTITLEMENTS" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>com.apple.security.cs.allow-jit</key>
+              <true/>
+              <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+              <true/>
+              <key>com.apple.security.cs.disable-library-validation</key>
+              <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          codesign --force --deep --timestamp --options runtime \
+            --entitlements "$ENTITLEMENTS" \
+            --sign "$SIGN_IDENTITY" \
+            "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Build .dmg from signed .app
+        run: |
+          set -euo pipefail
+          DMG="warpnet_${RELEASE_TAG}_darwin_arm64.dmg"
+          STAGING="$RUNNER_TEMP/dmg-staging"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          cp -R "$APP_PATH" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create -volname "Warpnet" -srcfolder "$STAGING" \
+            -ov -format UDZO "$DMG"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+
+      - name: Sign .dmg
+        run: |
+          set -euo pipefail
+          codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
+
+      - name: Notarize .dmg
+        env:
+          APPLE_NOTARY_KEY_P8: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          KEY_PATH="$RUNNER_TEMP/notary_key.p8"
+          echo "$APPLE_NOTARY_KEY_P8" | base64 --decode > "$KEY_PATH"
+          xcrun notarytool submit "$DMG" \
+            --key "$KEY_PATH" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --wait
+          rm -f "$KEY_PATH"
+
+      - name: Staple notarization ticket
+        run: xcrun stapler staple "$DMG"
+
+      - name: Verify signature and notarization
+        run: |
+          set -euo pipefail
+          spctl -a -t open --context context:primary-signature -v "$DMG"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Zip notarized .app
+        run: |
+          set -euo pipefail
+          APP_ZIP="warpnet_${RELEASE_TAG}_darwin_arm64_app.zip"
+          ditto -c -k --keepParent "$APP_PATH" "$APP_ZIP"
+          echo "APP_ZIP=$APP_ZIP" >> "$GITHUB_ENV"
+
+      - name: Publish macOS artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            ${{ env.DMG }}
+            ${{ env.APP_ZIP }}
+
+      - name: Clean up keychain and secrets
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/certificate.p12" \
+                "$RUNNER_TEMP/notary_key.p8" \
+                "$RUNNER_TEMP/entitlements.plist" || true
