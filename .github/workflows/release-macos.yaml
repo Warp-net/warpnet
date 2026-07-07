@@ -9,15 +9,26 @@ name: Release macOS (signed)
 # on a real macOS runner. The dev build uses `-tags webkit2_41`, which
 # selects WebKit2GTK on Linux; on macOS Wails links WKWebView instead, so
 # no webkit build tag is passed here.
+#
+# Releases published by the automatic GITHUB_TOKEN do not trigger the
+# `release` event (GitHub blocks that to avoid recursion), so a manual
+# `workflow_dispatch` with a tag input is offered as well; it attaches
+# its artifacts to the already-published release for that tag.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag of the published release to sign (e.g. v1.0.0)"
+        required: true
+        type: string
 
 env:
   GO_VERSION: "1.26.0"
   WAILS_VERSION: "v2.10.2"
   CGO_ENABLED: "1"
-  RELEASE_TAG: ${{ github.event.release.tag_name }}
+  RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
   APP_PATH: cmd/node/member/build/bin/warpnet.app
 
 jobs:
@@ -35,7 +46,10 @@ jobs:
           xcrun --find notarytool
 
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0, fetch-tags: true }
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/setup-go@v5
         with:
