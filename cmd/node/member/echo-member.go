@@ -181,7 +181,6 @@ func main() {
 	echoFollowRepo := database.NewFollowRepo(db)
 	echoTweetRepo := database.NewTweetRepo(db, nil)
 	eBot := newEchoBot(echoNode, db, echoFollowRepo, echoTweetRepo)
-	go runOwnActivity(ctx, eBot, echoNode)
 	go runOwnTweets(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)
 
@@ -299,55 +298,6 @@ func (e *echoBot) evictIfNeeded() {
 
 func (e *echoBot) ownerID() string {
 	return e.node.NodeInfo().OwnerId
-}
-
-func (e *echoBot) handleTweet(msg []byte, requesterNodeID string) {
-	var tw event.NewTweetEvent
-	if err := json.Unmarshal(msg, &tw); err != nil {
-		log.Warnf("echo: parse tweet event: %v", err)
-		return
-	}
-	if tw.UserId == "" || tw.Id == "" {
-		return
-	}
-	if tw.UserId == e.ownerID() {
-		return
-	}
-	if requesterNodeID == "" {
-		return
-	}
-
-	// A reply is a tweet with a parent: echo replies to it instead of
-	// liking/retweeting a top-level tweet.
-	if tw.IsReply() {
-		if tw.RootId == "" {
-			return
-		}
-		if strings.EqualFold(tw.Username, "Echo") || strings.HasPrefix(tw.Text, echoReplyPrefix) {
-			return
-		}
-		if e.wasSeen("reply", tw.Id) {
-			return
-		}
-		if err := e.replyToReply(tw, requesterNodeID); err != nil {
-			log.Warnf("echo: auto-reply-reply failed: %v", err)
-		}
-		return
-	}
-
-	if e.wasSeen("tweet", tw.Id) {
-		return
-	}
-
-	if err := e.likeTweet(tw, requesterNodeID); err != nil {
-		log.Warnf("echo: auto-like failed: %v", err)
-	}
-	if err := e.retweet(tw, requesterNodeID); err != nil {
-		log.Warnf("echo: auto-retweet failed: %v", err)
-	}
-	if err := e.replyToTweet(tw, requesterNodeID); err != nil {
-		log.Warnf("echo: auto-reply-tweet failed: %v", err)
-	}
 }
 
 func (e *echoBot) handleFollow(msg []byte, requesterNodeID string) {
@@ -532,7 +482,6 @@ func setupHandlers(echo *echoBot, node *member.MemberNode) {
 			{
 				event.PRIVATE_POST_TWEET,
 				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleTweet(msg, requesterNodeID(s))
 					return event.Accepted, nil
 				},
 			},
@@ -552,76 +501,6 @@ func setupHandlers(echo *echoBot, node *member.MemberNode) {
 			},
 		}...,
 	)
-}
-
-func runOwnActivity(ctx context.Context, echo *echoBot, node *member.MemberNode) {
-	if node == nil {
-		log.Fatalf("echo: nil node")
-	}
-
-	ticker := time.NewTicker(time.Second * 5)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		if ctx.Err() != nil {
-			return
-		}
-		if node == nil || node.Node() == nil {
-			continue
-		}
-		peers := node.Node().Peerstore().PeersWithAddrs()
-		if len(peers) == 0 {
-			log.Warn("echo: peers are not found")
-			continue
-		}
-		for _, peer := range peers {
-			if ctx.Err() != nil {
-				return
-			}
-			if node == nil || peer == node.NodeInfo().ID {
-				continue
-			}
-
-			infoResp, err := node.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
-			if err != nil {
-				if strings.Contains(err.Error(), "protocols not supported") {
-					continue
-				}
-				log.Errorf("echo: no info response from new peer %s, %v", peer.String(), err)
-				continue
-			}
-			if len(infoResp) == 0 {
-				log.Errorf("echo: no info response from new peer %s", peer.String())
-				continue
-			}
-
-			var info warpnet.NodeInfo
-			err = json.Unmarshal(infoResp, &info)
-			if err != nil {
-				log.Errorf("echo: failed to unmarshal info from new peer: %s %v", infoResp, err)
-				continue
-			}
-			if info.IsModerator() || info.IsRelay() {
-				continue
-			}
-			if info.OwnerId == "" {
-				log.Errorf("echo: node info %s has no owner", peer.String())
-				continue
-			}
-			log.Infof("echo: checking peer: %s, owner: %s", peer.String(), info.OwnerId)
-
-			tweets, err := getTweets(node, peer, info.OwnerId)
-			if err != nil {
-				log.Errorf("echo: get tweets %s: %v", peer.String(), err)
-				continue
-			}
-
-			for _, tweet := range tweets {
-				bt, _ := json.Marshal(tweet)
-				echo.handleTweet(bt, peer.String())
-			}
-		}
-	}
 }
 
 func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
@@ -690,35 +569,6 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 	}
 	log.Infof("echo: own tweet id=%s peers=%d sent=%d skipped=%d", tweetID, len(peers), sent, skipped)
 	return tweetID
-}
-
-const tweetsLimit uint64 = 20
-
-func getTweets(node *member.MemberNode, peerID warpnet.WarpPeerID, userID string) ([]domain.Tweet, error) {
-	data, err := node.GenericStream(
-		peerID.String(),
-		event.PUBLIC_GET_TWEETS,
-		event.GetAllTweetsEvent{
-			Limit:  func(l uint64) *uint64 { return &l }(tweetsLimit),
-			UserId: userID,
-			Cursor: nil,
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("echo: get tweets: %w", err)
-	}
-	if len(data) == 0 {
-		return []domain.Tweet{}, nil
-	}
-
-	var tweetsResp event.TweetsResponse
-	if err := json.Unmarshal(data, &tweetsResp); err != nil {
-		return nil, fmt.Errorf("echo: failed to unmarshal tweets from new peer: %s %w", string(data), err)
-	}
-
-	log.Infof("echo: peers %s, got tweets: %d", peerID.String(), len(tweetsResp.Tweets))
-	return tweetsResp.Tweets, nil
-
 }
 
 func requesterNodeID(s warpnet.WarpStream) string {
