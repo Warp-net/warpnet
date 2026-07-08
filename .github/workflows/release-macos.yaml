@@ -132,7 +132,7 @@ jobs:
       - name: Build .dmg from signed .app
         run: |
           set -euo pipefail
-          DMG="warpnet_${RELEASE_TAG}_darwin_arm64.dmg"
+          DMG="warpnet_darwin_arm64.dmg"
           STAGING="$RUNNER_TEMP/dmg-staging"
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
@@ -175,7 +175,7 @@ jobs:
       - name: Zip notarized .app
         run: |
           set -euo pipefail
-          APP_ZIP="warpnet_${RELEASE_TAG}_darwin_arm64_app.zip"
+          APP_ZIP="warpnet_darwin_arm64_app.zip"
           ditto -c -k --keepParent "$APP_PATH" "$APP_ZIP"
           echo "APP_ZIP=$APP_ZIP" >> "$GITHUB_ENV"
 
