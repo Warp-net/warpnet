@@ -71,32 +71,32 @@ jobs:
         run: |
           mkdir -p out/linux_amd64
           mv cmd/node/member/build/bin/* out/linux_amd64/warpnet
-          tar -C out/linux_amd64 -czf warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz .
-          shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz > warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
+          tar -C out/linux_amd64 -czf warpnet_linux_amd64.tar.gz .
+          shasum -a 256 warpnet_linux_amd64.tar.gz > warpnet_linux_amd64_checksums.txt
 
       - name: Package Relay + checksum (Linux AMD64)
         if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/amd64' }}
         run: |
           mkdir -p out/relay_linux_amd64
           mv cmd/node/relay/relay out/relay_linux_amd64/relay
-          tar -C out/relay_linux_amd64 -czf relay_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz .
-          shasum -a 256 relay_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz > relay_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
+          tar -C out/relay_linux_amd64 -czf relay_linux_amd64.tar.gz .
+          shasum -a 256 relay_linux_amd64.tar.gz > relay_linux_amd64_checksums.txt
 
       - name: Package + checksum (Linux ARM64)
         if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/arm64' }}
         run: |
           mkdir -p out/linux_arm64
           mv cmd/node/member/build/bin/* out/linux_arm64/warpnet
-          tar -C out/linux_arm64 -czf warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz .
-          shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz > warpnet_${{ env.RELEASE_TAG }}_linux_arm64_checksums.txt
+          tar -C out/linux_arm64 -czf warpnet_linux_arm64.tar.gz .
+          shasum -a 256 warpnet_linux_arm64.tar.gz > warpnet_linux_arm64_checksums.txt
 
       - name: Package + checksum (macOS)
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
           mkdir -p out/darwin
           mv cmd/node/member/build/bin/* out/darwin/warpnet
-          tar -C out/darwin -czf warpnet_${{ env.RELEASE_TAG }}_darwin.tar.gz .
-          shasum -a 256 warpnet_${{ env.RELEASE_TAG }}_darwin.tar.gz > warpnet_${{ env.RELEASE_TAG }}_darwin_checksums.txt
+          tar -C out/darwin -czf warpnet_darwin.tar.gz .
+          shasum -a 256 warpnet_darwin.tar.gz > warpnet_darwin_checksums.txt
 
       - name: Package + checksum (Windows)
         if: ${{ matrix.os == 'windows-latest' }}
@@ -104,8 +104,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path out\windows_amd64 | Out-Null
           Move-Item cmd\node\member\build\bin\* out\windows_amd64\warpnet.exe
-          Compress-Archive -Path out\windows_amd64\* -DestinationPath "warpnet_${{ env.RELEASE_TAG }}_windows_amd64.zip" -Force
-          (Get-FileHash "warpnet_${{ env.RELEASE_TAG }}_windows_amd64.zip" -Algorithm SHA256).Hash + "  warpnet_${{ env.RELEASE_TAG }}_windows_amd64.zip" | Out-File -Encoding ASCII "warpnet_${{ env.RELEASE_TAG }}_windows_amd64_checksums.txt"
+          Compress-Archive -Path out\windows_amd64\* -DestinationPath "warpnet_windows_amd64.zip" -Force
+          (Get-FileHash "warpnet_windows_amd64.zip" -Algorithm SHA256).Hash + "  warpnet_windows_amd64.zip" | Out-File -Encoding ASCII "warpnet_windows_amd64_checksums.txt"
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -116,16 +116,16 @@ jobs:
           name: ${{ env.RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
-            relay_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz
-            relay_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
-            warpnet_${{ env.RELEASE_TAG }}_linux_amd64.tar.gz
-            warpnet_${{ env.RELEASE_TAG }}_linux_amd64_checksums.txt
-            warpnet_${{ env.RELEASE_TAG }}_linux_arm64.tar.gz
-            warpnet_${{ env.RELEASE_TAG }}_linux_arm64_checksums.txt
-            warpnet_${{ env.RELEASE_TAG }}_darwin.tar.gz
-            warpnet_${{ env.RELEASE_TAG }}_darwin_checksums.txt
-            warpnet_${{ env.RELEASE_TAG }}_windows_amd64.zip
-            warpnet_${{ env.RELEASE_TAG }}_windows_amd64_checksums.txt
+            relay_linux_amd64.tar.gz
+            relay_linux_amd64_checksums.txt
+            warpnet_linux_amd64.tar.gz
+            warpnet_linux_amd64_checksums.txt
+            warpnet_linux_arm64.tar.gz
+            warpnet_linux_arm64_checksums.txt
+            warpnet_darwin.tar.gz
+            warpnet_darwin_checksums.txt
+            warpnet_windows_amd64.zip
+            warpnet_windows_amd64_checksums.txt
 
   # APK release runs in parallel with the desktop matrix. Same tag
   # input — both jobs attach their artifacts to the same GitHub
@@ -182,9 +182,9 @@ jobs:
             ls -la app/build/outputs/apk/debug/ >&2 || true
             exit 1
           fi
-          dst=warpdroid_${RELEASE_TAG}.apk
+          dst=warpdroid.apk
           cp "$src" "$dst"
-          shasum -a 256 "$dst" > "warpdroid_${RELEASE_TAG}_checksums.txt"
+          shasum -a 256 "$dst" > "warpdroid_checksums.txt"
 
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -195,5 +195,5 @@ jobs:
           name: ${{ env.RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
-            warpdroid/warpdroid_${{ env.RELEASE_TAG }}.apk
-            warpdroid/warpdroid_${{ env.RELEASE_TAG }}_checksums.txt
+            warpdroid/warpdroid.apk
+            warpdroid/warpdroid_checksums.txt
