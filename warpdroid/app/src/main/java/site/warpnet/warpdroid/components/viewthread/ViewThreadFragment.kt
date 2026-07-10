@@ -470,11 +470,11 @@ class ViewThreadFragment :
     ) {
         if (retweet && visibility == null) {
             confirmRetweet(preferences) { visibility ->
-                viewModel.retweet(viewData.id, true, visibility)
+                viewModel.retweet(viewData.actionable, true, visibility)
                 state?.animate()
             }
         } else {
-            viewModel.retweet(viewData.id, retweet, visibility ?: Tweet.Visibility.PUBLIC)
+            viewModel.retweet(viewData.actionable, retweet, visibility ?: Tweet.Visibility.PUBLIC)
             if (retweet) {
                 state?.animate()
             }

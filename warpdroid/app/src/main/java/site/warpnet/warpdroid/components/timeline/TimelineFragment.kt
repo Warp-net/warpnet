@@ -626,11 +626,11 @@ class TimelineFragment :
     ) {
         if (retweet && visibility == null) {
             confirmRetweet(preferences) { visibility ->
-                viewModel.retweet(viewData.actionableId, retweet, visibility)
+                viewModel.retweet(viewData.actionable, retweet, visibility)
                 state?.animate()
             }
         } else {
-            viewModel.retweet(viewData.actionableId, retweet, visibility ?: Tweet.Visibility.PUBLIC)
+            viewModel.retweet(viewData.actionable, retweet, visibility ?: Tweet.Visibility.PUBLIC)
             if (retweet) {
                 state?.animate()
             }

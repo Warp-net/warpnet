@@ -11,6 +11,7 @@
 package site.warpnet.warpdroid.components.instanceinfo
 
 import site.warpnet.transport.WarpnetLimits
+import site.warpnet.warpdroid.BuildConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -35,7 +36,9 @@ class InstanceInfoRepository @Inject constructor() {
         maxFields = DEFAULT_MAX_ACCOUNT_FIELDS,
         maxFieldNameLength = null,
         maxFieldValueLength = null,
-        version = null,
+        // Warpnet has no per-instance version probe; surface the client build
+        // so the About screen shows a real value instead of "Version: null".
+        version = BuildConfig.VERSION_NAME,
         warpnetApiVersion = null,
         vapidKey = null,
     )

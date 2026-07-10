@@ -5,6 +5,7 @@
  */
 package site.warpnet.warpdroid.warpnet
 
+import site.warpnet.warpdroid.entity.AccountSource
 import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
@@ -43,6 +44,10 @@ object WarpnetMapper {
         displayName = username,
         createdAt = parseDate(createdAt),
         note = bio,
+        // Warpnet bios are plain text, so mirror [note] into [source.note];
+        // Edit Profile prefills its Bio field from source.note (the editable
+        // plaintext), which would otherwise be null and silently blank it.
+        source = AccountSource(note = bio),
         url = "$FAKE_BASE_URL/users/$id",
         avatar = warpnetImageUrl(id, avatarKey),
         header = warpnetImageUrl(id, backgroundImageKey),
