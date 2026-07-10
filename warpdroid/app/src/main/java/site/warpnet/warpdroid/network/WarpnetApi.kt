@@ -497,6 +497,8 @@ class WarpnetApi @Inject constructor(
         statusId: String,
         visibility: String?,
         sourceAuthorId: String? = null,
+        sourceText: String? = null,
+        sourceUsername: String? = null,
         comment: String? = null,
     ): NetworkResult<Tweet> {
         val active = accountManager.activeAccount ?: return stubFailure("retweetStatus")
@@ -509,6 +511,8 @@ class WarpnetApi @Inject constructor(
                 retweeterId = active.accountId,
                 retweeterUsername = retweeterName,
                 sourceAuthorId = sourceAuthorId,
+                sourceText = sourceText.orEmpty(),
+                sourceUsername = sourceUsername.orEmpty(),
                 comment = comment,
             )
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
@@ -899,7 +903,27 @@ class WarpnetApi @Inject constructor(
         limit: Int? = null,
         offset: Int? = null,
         following: Boolean? = null,
-    ): NetworkResult<SearchResult> = stubFailure("search")
+    ): NetworkResult<SearchResult> {
+        val trimmed = query?.trim().orEmpty()
+        // Warpnet only exposes server-side user search (PUBLIC_GET_USERS_SEARCH);
+        // statuses and hashtags have no backend equivalent yet, so those tabs
+        // stay empty rather than erroring. searchAccounts returns one
+        // cursor-paged block, so only the first page (offset 0) is filled and
+        // later offsets end pagination to avoid re-emitting the same hits.
+        // "accounts" mirrors SearchType.User.apiParameter (kept a literal to
+        // avoid the network layer depending on the search UI component).
+        val wantsAccounts = type == null || type == "accounts"
+        if (trimmed.isBlank() || !wantsAccounts || (offset ?: 0) > 0) {
+            return NetworkResult.success(SearchResult(emptyList(), emptyList(), emptyList()))
+        }
+        return result {
+            val (hits, _) = warpnet.searchAccounts(
+                query = trimmed,
+                limit = (limit ?: 40).coerceAtLeast(1),
+            )
+            SearchResult(accounts = hits, statuses = emptyList(), hashtags = emptyList())
+        }
+    }
 
     // ---------------------------------------------------------------
     // quotes — backend route was folded into retweet-with-comment;

@@ -467,6 +467,12 @@ class WarpnetRepository @Inject constructor(
         retweeterId: String,
         retweeterUsername: String,
         sourceAuthorId: String? = null,
+        // A plain retweet echoes the source tweet, so the wire copy has to
+        // carry the source's body and author display name — the same fields
+        // the Vue frontend forwards from the tweet it already holds. Empty
+        // for quotes (which carry the retweeter's own commentary instead).
+        sourceText: String = "",
+        sourceUsername: String = "",
         comment: String? = null,
     ): Long {
         val isQuote = !comment.isNullOrBlank() && !sourceAuthorId.isNullOrBlank()
@@ -485,9 +491,9 @@ class WarpnetRepository @Inject constructor(
             WarpnetTweet(
                 id = tweetId,
                 rootId = "",
-                text = "",
+                text = sourceText,
                 userId = sourceAuthorId ?: retweeterId,
-                username = retweeterUsername,
+                username = sourceUsername.ifBlank { retweeterUsername },
                 retweetedBy = retweeterId,
             )
         }
