@@ -1,1 +1,0 @@
-Sociālā tīkla Mastodon klients, kas atbalsta vairākus kontus

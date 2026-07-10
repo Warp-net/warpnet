@@ -1,0 +1,75 @@
+# F-Droid build recipe for the Warpnet Android client (warpdroid).
+#
+# This is a REVIEWED IN-REPO COPY of the metadata that must be submitted to the
+# fdroiddata repository as `metadata/site.warpnet.warpdroid.yml`. Keeping a copy
+# here lets the build recipe be reviewed and evolve alongside the source. It is
+# not consumed by any build in this repo.
+#
+# The two things that make this app non-trivial for F-Droid:
+#   1. The native libp2p library (warpnet.aar) is NOT committed; it is built
+#      from source at warpdroid/node via gomobile during the build.
+#   2. Building it needs the Go toolchain (see the repo go.mod `go` directive)
+#      plus an Android NDK. gomobile/gobind are pinned via `tool` directives in
+#      the repo go.mod and built from vendor/.
+
+Categories:
+  - Internet
+License: AGPL-3.0-or-later
+AuthorName: Vadim Filin
+AuthorEmail: github.com.mecdy@passmail.net
+SourceCode: https://github.com/Warp-net/warpnet
+IssueTracker: https://github.com/Warp-net/warpnet/issues
+Website: https://github.com/Warp-net/warpnet
+
+RepoType: git
+Repo: https://github.com/Warp-net/warpnet.git
+
+Builds:
+  - versionName: 0.7.454
+    # arm64-v8a split (base*10 + 3). The other splits publish as
+    # armeabi-v7a=704541, x86_64=704542 (see app/build.gradle ABI offsets).
+    versionCode: 704543
+    commit: v0.7.454
+    subdir: warpdroid/app
+    # Pin the NDK gomobile links against.
+    ndk: r27c
+    # F-Droid's buildserver Go may be too old; install the version the module
+    # requires (keep in sync with the repo go.mod `go` directive).
+    sudo:
+      - curl -o /tmp/go.tgz -L https://go.dev/dl/go1.26.3.linux-amd64.tar.gz
+      - echo "  /tmp/go.tgz" | sha256sum -c -  # fill in the pinned checksum
+      - rm -rf /opt/go && tar -C /opt -xzf /tmp/go.tgz
+    prebuild:
+      # 1) Build the gomobile native library (.aar) from warpdroid/node.
+      #    build-native.sh builds the pinned gomobile/gobind from vendor and runs
+      #    `gomobile bind` in -mod=readonly (pinned to go.sum, reproducible).
+      #    It needs the Go module cache; populate it with `go mod download`.
+      #    gomobile packages the .aar against the SDK platform matching its
+      #    -androidapi (21); fdroidserver only auto-installs the compileSdk
+      #    platform, so install android-21 explicitly. Verified in the F-Droid
+      #    buildserver image: the gomobile bind + .aar packaging succeeds.
+      - export PATH=/opt/go/bin:$PATH
+      - export ANDROID_NDK_HOME=$$NDK$$
+      - $$SDK$$/cmdline-tools/latest/bin/sdkmanager "platforms;android-21"
+      - (cd ../../ && /opt/go/bin/go mod download)
+      - (cd ../node && bash build-native.sh)
+    gradle:
+      - yes
+
+# The .aar is a build artifact; it is not committed. These `rm` entries are a
+# safety net in case a future checkout carries one.
+    rm:
+      - warpdroid/warpnet-transport/libs/warpnet.aar
+      - warpdroid/warpnet-transport/libs/warpnet-sources.jar
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+CurrentVersion: 0.7.454
+CurrentVersionCode: 704543
+
+# Reproducible builds (enabled from the first release so the signing key is never
+# swapped later). The developer publishes signed release APKs built with the same
+# sources; F-Droid verifies a byte-for-byte match and then ships the developer
+# signature. Fill in the SHA-256 of the release signing certificate:
+#   apksigner verify --print-certs <app>-release.apk | grep SHA-256
+# AllowedAPKSigningKeys: <sha256-of-release-cert>

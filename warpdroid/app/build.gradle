@@ -8,7 +8,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.licensee)
-    alias(libs.plugins.play.publisher)
 }
 
 apply from: 'getGitSha.gradle'
@@ -34,6 +33,29 @@ final def CUSTOM_INSTANCE = ""
 // Link shown on the About screen.
 final def SUPPORT_ACCOUNT_URL = "https://github.com/Warp-net/warpdroid"
 
+// The Android version is derived from the monorepo `version` file at the repo
+// root so the client stays in lockstep with the node/backend release. It is
+// strict MAJOR.MINOR.PATCH semver (also load-bearing for the Go PSK
+// derivation), e.g. "0.7.454". versionName is the string verbatim; versionCode
+// is a monotonic integer with a decimal place reserved for a per-ABI offset
+// (see applicationVariants below), which F-Droid requires to be unique per APK.
+final def warpnetVersion = rootProject.file("../version").text.trim()
+final def warpnetVersionParts = warpnetVersion.tokenize('.')
+final def warpnetBaseVersionCode =
+    warpnetVersionParts[0].toInteger() * 1_000_000 +
+    warpnetVersionParts[1].toInteger() * 10_000 +
+    warpnetVersionParts[2].toInteger()
+// ABI offset (0..9) folded into the low digit of the published versionCode so
+// each split APK carries a distinct, still-monotonic code.
+final def warpnetAbiVersionOffsets = ['armeabi-v7a': 1, 'x86_64': 2, 'arm64-v8a': 3]
+
+// Release signing is driven entirely by environment variables so no keystore or
+// secret ever lives in the repo. When they are absent (F-Droid's own build, or
+// an unconfigured dev machine) the release APK is left unsigned — F-Droid signs
+// it, and for reproducible builds the developer's CI signs with these same env
+// vars off CI secrets. See docs in warpdroid/fdroid/.
+final def warpnetKeystore = System.getenv("WARPDROID_KEYSTORE")
+
 android {
     compileSdk = 36
     namespace = APP_NAMESPACE
@@ -41,8 +63,10 @@ android {
         applicationId = APP_ID
         minSdk = 24
         targetSdk = 36
-        versionCode = 142
-        versionName = "32.2"
+        // Base code; the published per-ABI code is baseVersionCode*10 + offset,
+        // applied in applicationVariants below.
+        versionCode = warpnetBaseVersionCode * 10
+        versionName = warpnetVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 
@@ -52,11 +76,26 @@ android {
         buildConfigField("String", "CUSTOM_INSTANCE", "\"$CUSTOM_INSTANCE\"")
         buildConfigField("String", "SUPPORT_ACCOUNT_URL", "\"$SUPPORT_ACCOUNT_URL\"")
     }
+    signingConfigs {
+        if (warpnetKeystore) {
+            release {
+                storeFile file(warpnetKeystore)
+                storePassword System.getenv("WARPDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("WARPDROID_KEY_ALIAS")
+                keyPassword System.getenv("WARPDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         debug {
             isDefault true
         }
         release {
+            // Only sign when a keystore is provided via env; otherwise leave the
+            // APK unsigned for F-Droid to sign (see signingConfigs above).
+            if (warpnetKeystore) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled true
             shrinkResources true
             proguardFiles 'proguard-rules.pro'
@@ -126,7 +165,11 @@ android {
             // Splits produce one APK per ABI per variant; include the ABI filter
             // in the name so the outputs don't collide on the same path.
             def abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
-            outputFileName = "Warpdroid_${variant.versionName}_${variant.versionCode}_${gitSha}_" +
+            // Give each ABI split a unique, monotonic versionCode so F-Droid
+            // (and Play) can publish them side by side.
+            def abiOffset = warpnetAbiVersionOffsets.getOrDefault(abi, 0)
+            output.versionCodeOverride = warpnetBaseVersionCode * 10 + abiOffset
+            outputFileName = "Warpdroid_${variant.versionName}_${output.versionCode}_${gitSha}_" +
                 "${buildType.name}_${abi}.apk"
         }
     }
@@ -148,22 +191,15 @@ licensee {
     allow(SpdxId.MIT)
     allow(SpdxId.BSD_3_Clause)
     allowUrl('https://github.com/AOMediaCodec/libavif/blob/master/LICENSE')
-    // Google Play Services (play-services-base/basement/tasks, odml-image)
-    // publish under the Android SDK Terms of Service rather than an SPDX
-    // license. ML Kit artifacts (barcode-scanning and its transitives)
-    // publish under the ML Kit Terms. Both are required for the on-device
-    // QR scanner; allow the canonical URLs rather than fail the build.
-    allowUrl('https://developer.android.com/studio/terms.html')
-    allowUrl('https://developers.google.com/ml-kit/terms')
     // GPL-3.0 (POM declares non-SPDX "GPL-v3.0"); compatible with the AGPL app.
     allowDependency('org.briarproject', 'dont-kill-me-lib', '0.2.8') {
         because 'GPL-3.0, compatible with the AGPL-3.0 app'
     }
 }
 
-// ML Kit's barcode scanner pulls the unified com.google.crypto.tink:tink
-// JVM artifact (1.17.0), which fully overlaps with the legacy
-// com.google.crypto.tink:tink-android (1.8.0) that androidx.security-crypto
+// UnifiedPush (org.unifiedpush.android:connector) pulls the unified
+// com.google.crypto.tink:tink JVM artifact, which fully overlaps with the
+// legacy com.google.crypto.tink:tink-android (1.8.0) that androidx.security-crypto
 // 1.1.0 requires. Only tink-android ships the Android-Keystore integration
 // (AndroidKeysetManager) used by EncryptedSharedPreferences, so keep it and
 // globally drop the unified JVM copy to avoid "Duplicate class" R8 errors.
@@ -181,12 +217,12 @@ dependencies {
 
     implementation libs.bundles.androidx
 
-    // QR pairing: CameraX preview + on-device ML Kit barcode scanner so the
-    // app degrades to a manual flow rather than hard-failing on devices
-    // without Play Services. The pairing payload is gzip + Base45 — gzip
+    // QR pairing: CameraX preview + the fully FOSS ZXing core decoder (no
+    // Google Play Services / ML Kit), so the app is F-Droid-buildable and the
+    // scanner works on any device. The pairing payload is gzip + Base45 — gzip
     // is decoded via the JDK's java.util.zip.GZIPInputStream, no extra dep.
     implementation libs.bundles.camerax
-    implementation libs.mlkit.barcode.scanning
+    implementation libs.zxing.core
     // Hardware-backed EncryptedSharedPreferences for the persisted
     // Identity + pinned fat-node peer ID.
     implementation libs.androidx.security.crypto

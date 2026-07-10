@@ -12,3 +12,7 @@ build
 .idea
 node/vendor
 warpnet-transport/libs/warpnet
+# The gomobile output is a build artifact, not a source. F-Droid forbids
+# committed binaries; it is rebuilt from warpdroid/node via `buildWarpnetAar`.
+warpnet-transport/libs/warpnet.aar
+warpnet-transport/libs/warpnet-sources.jar

@@ -1,27 +1,62 @@
 #!/bin/bash
-# Build script for WarpNet Android native library
+# Build script for the WarpNet Android native library (gomobile).
+#
+# Produces warpnet.aar (+ warpnet-sources.jar) from the in-repo Go sources and
+# installs them into ../warpnet-transport/libs/. F-Droid builds the native
+# library from source with this script; the .aar is never committed.
+#
+# Requirements (provided by F-Droid's buildserver / CI):
+#   - Go (see the monorepo go.mod `go` directive)
+#   - Android NDK, located via $ANDROID_NDK_HOME (or $ANDROID_HOME/ndk/<ver>)
+# gomobile/gobind are pinned by the monorepo go.mod (`tool` directives) and built
+# from vendor/, so there is no `go install @latest`.
+#
+# The `gomobile bind` step itself runs in module mode (`-mod=readonly`), NOT
+# vendor mode: gomobile internally runs `go list -m all` / `go mod tidy`, which
+# cannot operate against a vendor/ directory. readonly keeps the build pinned to
+# go.sum (reproducible) and pulls the module sources from the Go module cache
+# (populate it with `go mod download` when building without network).
 
-set -e
+set -euo pipefail
 
-echo "Building WarpNet native library for Android..."
 if ! command -v go >/dev/null 2>&1; then
-    echo "Error: Go is not installed."
-    echo "Install Go from https://go.dev/dl/"
+    echo "Error: Go is not installed. See https://go.dev/dl/"
     exit 1
 fi
 
-echo "Installing gomobile..."
-go install golang.org/x/mobile/cmd/gomobile@latest
-go install golang.org/x/mobile/cmd/gobind@latest
+# Resolve paths relative to this script so it works from any working directory.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIBS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)/warpnet-transport/libs"
 
-echo "Initializing gomobile..."
-gomobile init
+# Build the pinned gomobile + gobind from vendor (offline) and put them on PATH
+# so `gomobile bind` can locate gobind.
+TOOLBIN="$(mktemp -d)"
+trap 'rm -rf "${TOOLBIN}"' EXIT
+echo "Building pinned gomobile/gobind from vendor..."
+GOFLAGS="-mod=vendor" go build -o "${TOOLBIN}/gomobile" golang.org/x/mobile/cmd/gomobile
+GOFLAGS="-mod=vendor" go build -o "${TOOLBIN}/gobind" golang.org/x/mobile/cmd/gobind
+export PATH="${TOOLBIN}:${PATH}"
 
-echo "Building Android library..."
-GOFLAGS=-mod=mod gomobile bind -ldflags="-checklinkname=0 -s -w" -trimpath -tags mobile -v -androidapi 21 -target=android/arm64,android/amd64 -o warpnet.aar .
-rm -rf ../warpnet-transport/libs/warpnet
-rm -f ../warpnet-transport/libs/warpnet.aar
-mv warpnet.aar ../warpnet-transport/libs/warpnet.aar
-mv warpnet-sources.jar ../warpnet-transport/libs/warpnet-sources.jar
+cd "${SCRIPT_DIR}"
 
-echo "Build complete! Library created at warpnet-transport/libs/warpnet.aar"
+# Every ABI in the app's Gradle abi split must ship the native library:
+#   android/arm64 -> arm64-v8a
+#   android/arm   -> armeabi-v7a
+#   android/amd64 -> x86_64
+echo "Building Android library (arm64-v8a, armeabi-v7a, x86_64)..."
+GOFLAGS="-mod=readonly" gomobile bind \
+    -ldflags="-checklinkname=0 -s -w" \
+    -trimpath \
+    -tags mobile \
+    -v \
+    -androidapi 21 \
+    -target=android/arm64,android/arm,android/amd64 \
+    -o warpnet.aar .
+
+mkdir -p "${LIBS_DIR}"
+rm -rf "${LIBS_DIR}/warpnet"
+rm -f "${LIBS_DIR}/warpnet.aar" "${LIBS_DIR}/warpnet-sources.jar"
+mv warpnet.aar "${LIBS_DIR}/warpnet.aar"
+mv warpnet-sources.jar "${LIBS_DIR}/warpnet-sources.jar"
+
+echo "Build complete: ${LIBS_DIR}/warpnet.aar"
