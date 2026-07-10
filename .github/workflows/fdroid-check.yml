@@ -124,11 +124,3 @@ jobs:
       - name: F-Droid clean-room release build
         working-directory: warpdroid
         run: ./gradlew :app:assembleRelease --stacktrace
-
-      - name: Upload release APKs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: warpdroid-fdroid-apks
-          path: warpdroid/app/build/outputs/apk/release/*.apk
-          if-no-files-found: ignore
