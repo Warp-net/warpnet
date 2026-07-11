@@ -77,13 +77,14 @@ android {
         buildConfigField("String", "SUPPORT_ACCOUNT_URL", "\"$SUPPORT_ACCOUNT_URL\"")
     }
     signingConfigs {
-        if (warpnetKeystore) {
-            release {
-                storeFile file(warpnetKeystore)
-                storePassword System.getenv("WARPDROID_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("WARPDROID_KEY_ALIAS")
-                keyPassword System.getenv("WARPDROID_KEY_PASSWORD")
-            }
+        release {
+            storeFile file(warpnetKeystore)
+            storePassword System.getenv("WARPDROID_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("WARPDROID_KEY_ALIAS")
+            keyPassword System.getenv("WARPDROID_KEY_PASSWORD")
+            enableV1Signing false
+            enableV2Signing true
+            enableV3Signing true
         }
     }
     buildTypes {
@@ -91,11 +92,8 @@ android {
             isDefault true
         }
         release {
-            // Only sign when a keystore is provided via env; otherwise leave the
-            // APK unsigned for F-Droid to sign (see signingConfigs above).
-            if (warpnetKeystore) {
-                signingConfig signingConfigs.release
-            }
+            signingConfig signingConfigs.release
+
             minifyEnabled true
             shrinkResources true
             proguardFiles 'proguard-rules.pro'

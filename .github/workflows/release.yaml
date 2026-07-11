@@ -181,19 +181,14 @@ jobs:
           (cd "$GITHUB_WORKSPACE" && go mod download)
           bash build-native.sh
 
-      # Reproducible release builds are dev-signed. The keystore is provided as a
-      # base64 secret; when it is absent the APK is built unsigned (F-Droid signs
-      # its own copy) so the job still succeeds without secrets configured.
       - name: Decode release keystore (if configured)
         id: keystore
         env:
           WARPDROID_KEYSTORE_BASE64: ${{ secrets.WARPDROID_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
-          if [ -n "${WARPDROID_KEYSTORE_BASE64:-}" ]; then
-            echo "$WARPDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/warpdroid.keystore"
-            echo "path=$RUNNER_TEMP/warpdroid.keystore" >> "$GITHUB_OUTPUT"
-          fi
+          echo "$WARPDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/warpdroid.keystore"
+          echo "path=$RUNNER_TEMP/warpdroid.keystore" >> "$GITHUB_OUTPUT"
 
       - name: Assemble release APK
         working-directory: warpdroid

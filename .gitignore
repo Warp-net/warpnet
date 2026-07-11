@@ -46,21 +46,14 @@ core/moderation
 
 frontend/node_modules
 
-# Apple
-*.key
-*.csr
-*.cer
-*.crt
-*.p12
-*.p8
-
 # scripts
 *.py
 
-# Apple
+# Secrets
 *.key
 *.csr
 *.cer
 *.crt
 *.p12
 *.p8
+*.keystore
