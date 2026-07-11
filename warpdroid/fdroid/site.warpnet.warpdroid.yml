@@ -67,9 +67,3 @@ UpdateCheckMode: Tags ^v[0-9.]+$
 CurrentVersion: 0.7.454
 CurrentVersionCode: 704543
 
-# Reproducible builds (enabled from the first release so the signing key is never
-# swapped later). The developer publishes signed release APKs built with the same
-# sources; F-Droid verifies a byte-for-byte match and then ships the developer
-# signature. Fill in the SHA-256 of the release signing certificate:
-#   apksigner verify --print-certs <app>-release.apk | grep SHA-256
-# AllowedAPKSigningKeys: <sha256-of-release-cert>
