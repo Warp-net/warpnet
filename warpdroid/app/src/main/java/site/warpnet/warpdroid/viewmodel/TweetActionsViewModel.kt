@@ -81,12 +81,22 @@ abstract class TweetActionsViewModel(
         }
     }
 
-    fun retweet(statusId: String, retweet: Boolean, visibility: Tweet.Visibility = Tweet.Visibility.PUBLIC) {
+    fun retweet(source: Tweet, retweet: Boolean, visibility: Tweet.Visibility = Tweet.Visibility.PUBLIC) {
         viewModelScope.launch {
             if (retweet) {
-                warpnetApi.retweetStatus(statusId, visibility.stringValue)
+                // Forward the source tweet's body and author so the retweet
+                // isn't stored as an empty post — same fields the Vue frontend
+                // sends from the tweet object it already holds.
+                warpnetApi.retweetStatus(
+                    statusId = source.id,
+                    visibility = visibility.stringValue,
+                    sourceAuthorId = source.account.id,
+                    sourceText = source.content,
+                    sourceUsername = source.account.displayName?.ifBlank { source.account.username }
+                        ?: source.account.username,
+                )
             } else {
-                warpnetApi.unretweetStatus(statusId)
+                warpnetApi.unretweetStatus(source.id)
             }.fold(
                 onSuccess = { status ->
                     if (status.retweet != null) {

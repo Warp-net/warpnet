@@ -1,5 +1,0 @@
-Tusky 32.2
-
-- Pequenas melloras na estabilidade e arranxos
-
-Mira todos os cambios en https://codeberg.org/tusky/Tusky/src/branch/develop/CHANGELOG.md

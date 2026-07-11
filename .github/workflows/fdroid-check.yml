@@ -1,0 +1,126 @@
+name: F-Droid build & license check
+
+# Verifies that warpdroid still satisfies F-Droid's rules:
+#   1. no prebuilt binaries committed to the tree,
+#   2. the native libp2p library (warpnet.aar) builds from source via gomobile,
+#   3. all dependency licenses are FOSS (Licensee) and no Google Play Services /
+#      ML Kit / Firebase sneak in,
+#   4. the release APKs actually build in F-Droid's own clean-room environment.
+#
+# The job runs INSIDE F-Droid's buildserver image so the check matches the
+# environment F-Droid uses. That image ships an empty SDK (fdroidserver installs
+# components per build), so we install NDK + platforms + build-tools ourselves —
+# mirroring the fdroiddata recipe at warpdroid/fdroid/site.warpnet.warpdroid.yml.
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'warpdroid/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor/golang.org/x/mobile/**'
+      - '.github/workflows/fdroid-check.yml'
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: fdroid-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fdroid:
+    runs-on: ubuntu-latest
+    container:
+      image: registry.gitlab.com/fdroid/fdroidserver:buildserver
+      options: --user root
+    env:
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      # NDK r27c — keep in sync with the `ndk:` field in the fdroiddata recipe.
+      NDK_VERSION: "27.2.12479018"
+    steps:
+      - uses: actions/checkout@v4
+
+      # F-Droid forbids prebuilt binaries in the source tree; the gomobile .aar
+      # must be rebuilt from source, not committed. (gradle-wrapper.jar is the
+      # one sanctioned exception.)
+      - name: Assert no committed binaries
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          bad=$(git ls-files -- 'warpdroid/**/*.aar' 'warpdroid/**/*.jar' 'warpdroid/**/*.so' \
+                | grep -v 'gradle/wrapper/gradle-wrapper.jar' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Prebuilt binaries must not be committed (F-Droid rule):"
+            echo "$bad"
+            exit 1
+          fi
+          echo "OK: no committed binaries."
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install SDK components (NDK, platforms, build-tools)
+        run: |
+          set -euo pipefail
+          yes 2>/dev/null | sdkmanager --licenses >/dev/null 2>&1 || true
+          # android-21 is required by `gomobile bind` (its -androidapi) to package
+          # the .aar; android-36/build-tools 36 are for the Gradle release build.
+          sdkmanager --install \
+            "ndk;${NDK_VERSION}" \
+            "platforms;android-21" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      # services.gradle.org intermittently 504s; seed the wrapper cache with a
+      # retrying curl (same workaround as the other warpdroid workflows).
+      - name: Pre-fetch Gradle distribution
+        run: |
+          set -euo pipefail
+          cache_dir="$HOME/.gradle/wrapper/dists/gradle-9.0.0-bin/d6wjpkvcgsg3oed0qlfss3wgl"
+          mkdir -p "$cache_dir"
+          if [ ! -s "$cache_dir/gradle-9.0.0-bin.zip" ]; then
+            curl --fail --location --show-error \
+              --retry 8 --retry-all-errors --retry-delay 15 \
+              --connect-timeout 30 --max-time 300 \
+              -o "$cache_dir/gradle-9.0.0-bin.zip" \
+              https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
+          fi
+
+      - name: Build native library from source (gomobile)
+        working-directory: warpdroid/node
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          # Populate the Go module cache so build-native.sh's -mod=readonly bind
+          # resolves offline-pinned sources.
+          (cd "$GITHUB_WORKSPACE" && go mod download)
+          bash build-native.sh
+          test -f ../warpnet-transport/libs/warpnet.aar
+
+      - name: License check (Licensee)
+        working-directory: warpdroid
+        run: ./gradlew :app:licenseeAndroidRelease --stacktrace
+
+      - name: Assert no proprietary dependencies
+        working-directory: warpdroid
+        run: |
+          set -euo pipefail
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath \
+            -q --console=plain > deps.txt
+          if grep -iE 'com\.google\.android\.gms|com\.google\.mlkit|com\.google\.firebase|play-services' deps.txt; then
+            echo "::error::Proprietary Google dependency found in the release classpath"
+            exit 1
+          fi
+          echo "OK: no proprietary dependencies."
+
+      - name: F-Droid clean-room release build
+        working-directory: warpdroid
+        run: ./gradlew :app:assembleRelease --stacktrace

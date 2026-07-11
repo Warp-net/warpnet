@@ -166,9 +166,43 @@ jobs:
             -o "$cache_dir/gradle-9.0.0-bin.zip" \
             https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
 
-      - name: Assemble debug APK
+      # The gomobile native library (warpnet.aar) is not committed; build it
+      # from warpdroid/node before Gradle runs.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Warpnet native library (gomobile)
+        working-directory: warpdroid/node
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          (cd "$GITHUB_WORKSPACE" && go mod download)
+          bash build-native.sh
+
+      # Reproducible release builds are dev-signed. The keystore is provided as a
+      # base64 secret; when it is absent the APK is built unsigned (F-Droid signs
+      # its own copy) so the job still succeeds without secrets configured.
+      - name: Decode release keystore (if configured)
+        id: keystore
+        env:
+          WARPDROID_KEYSTORE_BASE64: ${{ secrets.WARPDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "${WARPDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "$WARPDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/warpdroid.keystore"
+            echo "path=$RUNNER_TEMP/warpdroid.keystore" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Assemble release APK
         working-directory: warpdroid
-        run: ./gradlew :app:assembleDebug --stacktrace
+        env:
+          WARPDROID_KEYSTORE: ${{ steps.keystore.outputs.path }}
+          WARPDROID_KEYSTORE_PASSWORD: ${{ secrets.WARPDROID_KEYSTORE_PASSWORD }}
+          WARPDROID_KEY_ALIAS: ${{ secrets.WARPDROID_KEY_ALIAS }}
+          WARPDROID_KEY_PASSWORD: ${{ secrets.WARPDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Locate APK + checksum
         working-directory: warpdroid
@@ -176,10 +210,10 @@ jobs:
           set -euo pipefail
           # splits.abi produces one APK per ABI; ship arm64-v8a
           # (~99% of modern Android devices) as the release artifact.
-          src=$(find app/build/outputs/apk/debug -name '*_arm64-v8a.apk' -type f | head -1)
+          src=$(find app/build/outputs/apk/release -name '*_arm64-v8a.apk' -type f | head -1)
           if [ -z "$src" ]; then
             echo "FATAL: no arm64-v8a APK produced" >&2
-            ls -la app/build/outputs/apk/debug/ >&2 || true
+            ls -la app/build/outputs/apk/release/ >&2 || true
             exit 1
           fi
           dst=warpdroid.apk

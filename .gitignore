@@ -53,3 +53,14 @@ frontend/node_modules
 *.crt
 *.p12
 *.p8
+
+# scripts
+*.py
+
+# Apple
+*.key
+*.csr
+*.cer
+*.crt
+*.p12
+*.p8

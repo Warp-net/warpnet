@@ -75,3 +75,7 @@
 -dontwarn androidx.window.extensions.core.util.function.Consumer
 -dontwarn androidx.window.extensions.core.util.function.Function
 -dontwarn androidx.window.extensions.core.util.function.Predicate
+
+## ZXing QR decoder (com.google.zxing:core) — used by the pairing scanner.
+-keep class com.google.zxing.** { *; }
+-dontwarn com.google.zxing.**

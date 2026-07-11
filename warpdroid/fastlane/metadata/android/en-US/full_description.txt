@@ -1,12 +1,15 @@
-Tusky is a lightweight client for Mastodon, a free and open-source social network server.
+Warpnet is the Android client for Warpnet, a fully decentralized, peer-to-peer social network with no central servers.
 
+Instead of signing in to a cloud account, the app pairs with your own Warpnet node — the desktop/server application you run yourself — by scanning a QR code. From then on the phone talks to your node directly over an encrypted libp2p connection.
+
+• Truly decentralized — no company, no central server, no account to sign up for
+• Pairs with your self-hosted Warpnet node via a QR code
+• Direct end-to-end peer-to-peer connection (libp2p)
+• Push notifications without any cloud gateway — no Firebase, no Google Cloud Messaging; a lightweight always-on connection to your node delivers them
+• No Google Play Services, no proprietary dependencies — 100% free and open-source software
+• Dark and light themes
 • Material Design
-• Most Mastodon APIs implemented
-• Multi-Account support
-• Dark and light theme with the possibility to auto-switch based on the time of day
-• Drafts - compose toots and save them for later
-• Choose between different emoji styles 
-• Optimized for all screen sizes
-• Completely open-source - no non-free dependencies like Google services
 
-To learn more about Mastodon, visit https://joinmastodon.org/
+Warpnet is free software released under the GNU Affero General Public License v3 (AGPL-3.0-or-later). The Android client is derived from Tusky.
+
+Source code and more information: https://github.com/Warp-net/warpnet

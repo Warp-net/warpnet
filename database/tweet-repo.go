@@ -79,19 +79,12 @@ type TweetStatsStorer interface {
 	Decrement(key ds.Key) error
 }
 
-// viewLockShards is the number of stripes in the per-tweet RecordView
-// lock pool. Sized so timeline-scrolling workloads see negligible
-// contention without holding one mutex per tweet ever observed.
 const viewLockShards = 64
 
 type TweetRepo struct {
 	db      TweetsStorer
 	statsDb TweetStatsStorer
-	// viewLocks is a sharded mutex pool keyed by hash(tweetId). It
-	// serializes concurrent RecordView calls on the same counter so
-	// they don't collide on Badger's optimistic transactions and lose
-	// updates, while still allowing different tweets to proceed in
-	// parallel.
+
 	viewLocks [viewLockShards]sync.Mutex
 }
 
@@ -223,9 +216,6 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	return txn.Commit()
 }
 
-// Pin / Unpin flip the Pinned flag on the tweet record. Pin must be a no-op
-// after the first call to keep the storage write idempotent; the caller is
-// responsible for ensuring userId is the tweet author (handler-side check).
 func (repo *TweetRepo) Pin(userId, tweetId string) (domain.Tweet, error) {
 	return repo.setPinned(userId, tweetId, true)
 }
@@ -234,10 +224,6 @@ func (repo *TweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
 	return repo.setPinned(userId, tweetId, false)
 }
 
-// AppendEdit records an immutable edit revision for a tweet. Revisions
-// are append-only — never updated, never deleted (except via the tweet's
-// own delete handler, which removes the tweet from List* but leaves the
-// revisions in place for audit).
 func (repo *TweetRepo) AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error) {
 	if edit.OriginalTweetId == "" {
 		return domain.TweetEdit{}, local.DBError("empty tweet id")
@@ -499,22 +485,6 @@ func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]dom
 
 // ====================== REPLIES (thread) ====================
 
-// A reply IS a tweet. It is stored with the same /TWEETS keys as any tweet,
-// just partitioned by its ParentId (the tweet it replies to) instead of by
-// the author. So the reply methods are thin wrappers over the tweet storage:
-//
-//	AddReply     -> storeTweet(parentId, ...)  (keeps RootId; Create would not)
-//	GetReply     -> Get(parentId, replyId)
-//	DeleteReply  -> delete under parentId, returning the body for propagation
-//	GetReplies   -> List(parentId)
-//	RepliesCount -> TweetsCount(parentId)
-//
-// "Replies to tweet X" is then List(X): the same scan as a user's tweets,
-// since X's partition holds exactly the replies to X. RootId stays on the
-// record for client-side threading but is not part of any key.
-
-// AddReply stores a reply under its parent's partition and bumps the parent's
-// count. Unlike Create it does not rewrite RootId, so the thread root is kept.
 func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	if reply.UserId == "" && reply.Text == "" {
 		return reply, local.DBError("empty reply")
@@ -554,8 +524,6 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	return reply, nil
 }
 
-// GetReply fetches a reply by its parent + id — the tweet Get under the parent
-// partition.
 func (repo *TweetRepo) GetReply(parentID, replyID string) (domain.Tweet, error) {
 	if parentID == "" || replyID == "" {
 		return domain.Tweet{}, local.DBError("parentID and replyID cannot be empty")
@@ -563,9 +531,6 @@ func (repo *TweetRepo) GetReply(parentID, replyID string) (domain.Tweet, error) 
 	return repo.Get(parentID, replyID)
 }
 
-// RepliesCount is the count of tweets under the tweet's partition, i.e. its
-// direct replies. Like likes/retweets/views it prefers the aggregated CRDT
-// counter (maintained by AddReply under the same key) over the local count.
 func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
@@ -580,9 +545,6 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	return repo.TweetsCount(tweetId)
 }
 
-// DeleteReply removes a reply (the tweet delete under the parent partition)
-// and returns the deleted reply so the caller can propagate the deletion
-// without a second read.
 func (repo *TweetRepo) DeleteReply(parentID, replyID string) (domain.Tweet, error) {
 	var reply domain.Tweet
 	if parentID == "" || replyID == "" {
@@ -868,8 +830,6 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	_, err = txn.Get(viewerKey)
 	switch {
 	case err == nil:
-		// This viewer has already been counted for this tweet — drop
-		// the read-only txn and report the current canonical count.
 		if err := txn.Commit(); err != nil {
 			return 0, err
 		}
@@ -895,10 +855,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 			log.Warnf("view: stats db increment: %v", err)
 		}
 	}
-	// Prefer the CRDT-aggregated total when it reflects this write,
-	// but fall back to the just-incremented local counter if the
-	// CRDT replication failed or hasn't caught up yet — otherwise the
-	// caller could see a count smaller than the value we just wrote.
+
 	if crdtCount, err := repo.GetViewsCount(tweetId); err == nil && crdtCount > localCount {
 		return crdtCount, nil
 	}
