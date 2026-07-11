@@ -55,4 +55,15 @@ if [ -d "$CHANGELOGS" ]; then
     git add "$CHANGELOGS"
 fi
 
+# Publish the F-Droid base versionCode so fdroiddata's UpdateCheckMode: HTTP can
+# read it (raw file on this branch). fdroid applies the recipe's VercodeOperation
+# (+1/+2/+3) to turn this base into the three per-ABI codes. base = the same
+# major*1000000 + minor*10000 + patch, then *10 (no ABI offset).
+FDROID_VERSIONCODE="warpdroid/fdroid/versionCode"
+if [ -f "$FDROID_VERSIONCODE" ]; then
+    NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
+    echo "$NEW_BASE" > "$FDROID_VERSIONCODE"
+    git add "$FDROID_VERSIONCODE"
+fi
+
 
