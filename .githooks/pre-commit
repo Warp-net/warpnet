@@ -36,4 +36,23 @@ sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VE
 
 git add "$CONFIG" "$SNAPCRAFT"
 
+# Keep the warpdroid F-Droid fastlane changelog filenames in sync with the new
+# versionCode. The published versionCode mirrors warpdroid/app/build.gradle:
+#   base = major*1000000 + minor*10000 + patch, then *10 + ABI offset
+#   (armeabi-v7a=1, x86_64=2, arm64-v8a=3, ascending).
+CHANGELOGS="warpdroid/fastlane/metadata/android/en-US/changelogs"
+if [ -d "$CHANGELOGS" ]; then
+    NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
+    OFFSET=1
+    for OLD in $(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V); do
+        NEW="$CHANGELOGS/$((NEW_BASE + OFFSET)).txt"
+        if [ "$OLD" != "$NEW" ]; then
+            mv -f "$OLD" "$NEW"
+            echo "Changelog: $(basename "$OLD") -> $(basename "$NEW")"
+        fi
+        OFFSET=$((OFFSET + 1))
+    done
+    git add "$CHANGELOGS"
+fi
+
 
