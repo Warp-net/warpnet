@@ -77,14 +77,16 @@ android {
         buildConfigField("String", "SUPPORT_ACCOUNT_URL", "\"$SUPPORT_ACCOUNT_URL\"")
     }
     signingConfigs {
-        release {
-            storeFile file(warpnetKeystore)
-            storePassword System.getenv("WARPDROID_KEYSTORE_PASSWORD")
-            keyAlias System.getenv("WARPDROID_KEY_ALIAS")
-            keyPassword System.getenv("WARPDROID_KEY_PASSWORD")
-            enableV1Signing false
-            enableV2Signing true
-            enableV3Signing true
+        if (warpnetKeystore) {
+            release {
+                storeFile file(warpnetKeystore)
+                storePassword System.getenv("WARPDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("WARPDROID_KEY_ALIAS")
+                keyPassword System.getenv("WARPDROID_KEY_PASSWORD")
+                enableV1Signing false
+                enableV2Signing true
+                enableV3Signing true
+            }
         }
     }
     buildTypes {
