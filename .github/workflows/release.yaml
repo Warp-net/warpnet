@@ -215,6 +215,22 @@ jobs:
           cp "$src" "$dst"
           shasum -a 256 "$dst" > "warpdroid_checksums.txt"
 
+      - name: Verify APK signature
+        working-directory: warpdroid
+        env:
+          EXPECTED_SHA256: "eabdd61e5bcbd6615a3f54977c06646c0f5422d845d37c818286b7d34285dfec"
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --min-sdk-version 24 warpdroid.apk
+          GOT=$("$APKSIGNER" verify --print-certs warpdroid.apk \
+            | grep -m1 'SHA-256 digest' | awk '{print $NF}')
+          if [ "$GOT" != "$EXPECTED_SHA256" ]; then
+            echo "::error::APK signed by wrong key. got=$GOT want=$EXPECTED_SHA256" >&2
+            exit 1
+          fi
+          echo "OK: signed by expected key."
+
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2
         env:
