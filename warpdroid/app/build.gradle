@@ -94,8 +94,9 @@ android {
             isDefault true
         }
         release {
-            signingConfig signingConfigs.release
-
+            if (warpnetKeystore) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled true
             shrinkResources true
             proguardFiles 'proguard-rules.pro'
