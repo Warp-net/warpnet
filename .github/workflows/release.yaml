@@ -181,19 +181,14 @@ jobs:
           (cd "$GITHUB_WORKSPACE" && go mod download)
           bash build-native.sh
 
-      # Reproducible release builds are dev-signed. The keystore is provided as a
-      # base64 secret; when it is absent the APK is built unsigned (F-Droid signs
-      # its own copy) so the job still succeeds without secrets configured.
       - name: Decode release keystore (if configured)
         id: keystore
         env:
           WARPDROID_KEYSTORE_BASE64: ${{ secrets.WARPDROID_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
-          if [ -n "${WARPDROID_KEYSTORE_BASE64:-}" ]; then
-            echo "$WARPDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/warpdroid.keystore"
-            echo "path=$RUNNER_TEMP/warpdroid.keystore" >> "$GITHUB_OUTPUT"
-          fi
+          echo "$WARPDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/warpdroid.keystore"
+          echo "path=$RUNNER_TEMP/warpdroid.keystore" >> "$GITHUB_OUTPUT"
 
       - name: Assemble release APK
         working-directory: warpdroid
@@ -219,6 +214,22 @@ jobs:
           dst=warpdroid.apk
           cp "$src" "$dst"
           shasum -a 256 "$dst" > "warpdroid_checksums.txt"
+
+      - name: Verify APK signature
+        working-directory: warpdroid
+        env:
+          EXPECTED_SHA256: "eabdd61e5bcbd6615a3f54977c06646c0f5422d845d37c818286b7d34285dfec"
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --min-sdk-version 24 warpdroid.apk
+          GOT=$("$APKSIGNER" verify --print-certs warpdroid.apk \
+            | grep -m1 'SHA-256 digest' | awk '{print $NF}')
+          if [ "$GOT" != "$EXPECTED_SHA256" ]; then
+            echo "::error::APK signed by wrong key. got=$GOT want=$EXPECTED_SHA256" >&2
+            exit 1
+          fi
+          echo "OK: signed by expected key."
 
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2

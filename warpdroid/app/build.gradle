@@ -83,6 +83,9 @@ android {
                 storePassword System.getenv("WARPDROID_KEYSTORE_PASSWORD")
                 keyAlias System.getenv("WARPDROID_KEY_ALIAS")
                 keyPassword System.getenv("WARPDROID_KEY_PASSWORD")
+                enableV1Signing false
+                enableV2Signing true
+                enableV3Signing true
             }
         }
     }
@@ -91,8 +94,6 @@ android {
             isDefault true
         }
         release {
-            // Only sign when a keystore is provided via env; otherwise leave the
-            // APK unsigned for F-Droid to sign (see signingConfigs above).
             if (warpnetKeystore) {
                 signingConfig signingConfigs.release
             }

@@ -46,9 +46,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # F-Droid forbids prebuilt binaries in the source tree; the gomobile .aar
-      # must be rebuilt from source, not committed. (gradle-wrapper.jar is the
-      # one sanctioned exception.)
       - name: Assert no committed binaries
         run: |
           set -euo pipefail
