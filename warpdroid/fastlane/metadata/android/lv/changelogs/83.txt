@@ -1,3 +1,0 @@
-Tusky v15.1
-
-Šajā laidienā ir novērsta nobrukšanas problēma, kas radās, ja ievadīja attēla parakstu

@@ -5,14 +5,15 @@
  */
 package site.warpnet.warpdroid.components.pairing
 
-import android.annotation.SuppressLint
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import com.google.mlkit.vision.barcode.BarcodeScanner
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.NotFoundException
+import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.common.HybridBinarizer
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -20,53 +21,73 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [onResult] once. Subsequent frames are discarded so the UI can transition
  * to the confirmation screen without fighting a scanner that keeps re-firing.
  *
- * Uses the on-device ML Kit model (`com.google.mlkit:barcode-scanning`)
- * rather than the Play Services variant so the scanner works on phones
- * without Google Play Services.
+ * Uses the fully FOSS ZXing core decoder (`com.google.zxing:core`) rather than
+ * ML Kit / Google Play Services, so the app stays F-Droid-buildable and the
+ * scanner works on any device.
  */
 class QrCodeAnalyzer(
     private val onResult: (String) -> Unit,
 ) : ImageAnalysis.Analyzer {
 
-    private val scanner: BarcodeScanner = BarcodeScanning.getClient(
-        BarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-            .build(),
-    )
+    private val reader = MultiFormatReader().apply {
+        setHints(
+            mapOf(
+                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+            ),
+        )
+    }
     private val fired = AtomicBoolean(false)
 
-    // Gate so only one ML Kit decode is in flight at a time. Without this,
-    // a fast camera feed can queue many scanner.process() Tasks in parallel
-    // even though we only need one successful result.
-    private val processing = AtomicBoolean(false)
-
-    @SuppressLint("UnsafeOptInUsageError")
     override fun analyze(image: ImageProxy) {
-        if (fired.get() || !processing.compareAndSet(false, true)) {
+        if (fired.get()) {
             image.close()
             return
         }
-        val media = image.image
-        if (media == null) {
-            processing.set(false)
+        try {
+            val payload = decode(image)
+            if (!payload.isNullOrBlank() && fired.compareAndSet(false, true)) {
+                onResult(payload)
+            }
+        } finally {
             image.close()
-            return
         }
-        val input = InputImage.fromMediaImage(media, image.imageInfo.rotationDegrees)
-        scanner.process(input)
-            .addOnSuccessListener { barcodes ->
-                val payload = barcodes.firstNotNullOfOrNull { it.rawValue }
-                if (!payload.isNullOrBlank() && fired.compareAndSet(false, true)) {
-                    onResult(payload)
-                }
-            }
-            .addOnCompleteListener {
-                processing.set(false)
-                image.close()
-            }
+    }
+
+    /**
+     * Decode the Y (luminance) plane of the CameraX frame with ZXing. CameraX
+     * delivers YUV_420_888; the first plane is full-resolution luminance, which
+     * is all a QR decode needs. Returns null when no code is present in-frame.
+     */
+    private fun decode(image: ImageProxy): String? {
+        val plane = image.planes.firstOrNull() ?: return null
+        val buffer = plane.buffer
+        val data = ByteArray(buffer.remaining())
+        buffer.get(data)
+
+        val rowStride = plane.rowStride
+        val width = image.width
+        val height = image.height
+        val source = PlanarYUVLuminanceSource(
+            data,
+            rowStride,
+            height,
+            0,
+            0,
+            width,
+            height,
+            false,
+        )
+        val bitmap = BinaryBitmap(HybridBinarizer(source))
+        return try {
+            reader.decodeWithState(bitmap).text
+        } catch (e: NotFoundException) {
+            null
+        } finally {
+            reader.reset()
+        }
     }
 
     fun close() {
-        scanner.close()
+        // ZXing MultiFormatReader holds no native resources; nothing to release.
     }
 }

@@ -1,1 +1,1 @@
-A multi account client for the social network Mastodon
+Decentralized P2P social client that pairs with your own Warpnet node

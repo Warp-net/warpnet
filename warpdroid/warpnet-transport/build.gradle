@@ -28,40 +28,50 @@ android {
     }
 }
 
-// warpnet.aar is this module's only native dependency and is vendored in
-// libs/. buildWarpnetAar regenerates it from a sibling android-binding
-// checkout via gomobile; there is no checksum pinning.
+// warpnet.aar is this module's only native dependency. It is NOT committed to
+// the repo (F-Droid forbids prebuilt binaries); buildWarpnetAar regenerates it
+// from the in-repo gomobile source at warpdroid/node via build-native.sh, which
+// places the .aar + sources jar directly into libs/. A clean checkout (F-Droid,
+// fresh CI) therefore builds the native library from source.
 
 ext {
     warpnetAarFile = file("libs/warpnet.aar")
+    // Defaults to the in-repo gomobile source; overridable for out-of-tree checkouts.
     warpnetBindingDir = providers
         .environmentVariable("WARPNET_ANDROID_BINDING_DIR")
-        .orElse(file("${rootDir}/../android-binding").absolutePath)
+        .orElse(file("${projectDir}/../node").absolutePath)
         .get()
 }
 
 tasks.register("buildWarpnetAar", Exec) {
     group = "warpnet"
-    description = "Rebuilds warpnet.aar from a sibling android-binding checkout via gomobile."
+    description = "Rebuilds warpnet.aar from the in-repo warpdroid/node gomobile source."
     def bindingDir = file(warpnetBindingDir)
     workingDir = bindingDir
     commandLine "bash", "build-native.sh"
     doFirst {
-        if (!bindingDir.exists()) {
+        if (!file("${bindingDir}/build-native.sh").exists()) {
             throw new GradleException(
-                "Warpnet binding source not found at ${bindingDir}. Clone " +
-                "https://github.com/Warp-net/android-binding next to this repo " +
-                "or set WARPNET_ANDROID_BINDING_DIR."
+                "Warpnet gomobile source not found at ${bindingDir}. Expected " +
+                "warpdroid/node/build-native.sh, or set WARPNET_ANDROID_BINDING_DIR."
             )
         }
     }
     doLast {
-        copy {
-            from bindingDir
-            include "warpnet.aar", "warpnet-sources.jar"
-            into warpnetAarFile.parentFile
+        if (!warpnetAarFile.exists()) {
+            throw new GradleException(
+                "buildWarpnetAar ran but ${warpnetAarFile} was not produced. " +
+                "Check the gomobile/NDK toolchain in build-native.sh."
+            )
         }
     }
+}
+
+// On a clean checkout the .aar is absent, so build it from source before this
+// module compiles. When it is already present (incremental dev builds) skip the
+// expensive gomobile step and reuse the cached artifact.
+if (!warpnetAarFile.exists()) {
+    tasks.named("preBuild").configure { dependsOn("buildWarpnetAar") }
 }
 
 dependencies {
