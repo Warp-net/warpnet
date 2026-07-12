@@ -206,6 +206,11 @@ licensee {
 // globally drop the unified JVM copy to avoid "Duplicate class" R8 errors.
 configurations.configureEach {
     exclude group: "com.google.crypto.tink", module: "tink"
+    // io.opencensus (opencensus-api / opencensus-proto) is a tracing library that
+    // F-Droid flags as a Tracker anti-feature. It is only an optional transitive
+    // dependency (gRPC's census instrumentation hooks) and is not used at runtime
+    // here, so drop the whole group.
+    exclude group: "io.opencensus"
 }
 
 // library versions are in PROJECT_ROOT/gradle/libs.versions.toml

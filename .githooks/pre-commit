@@ -40,7 +40,7 @@ git add "$CONFIG" "$SNAPCRAFT"
 # versionCode. The published versionCode mirrors warpdroid/app/build.gradle:
 #   base = major*1000000 + minor*10000 + patch, then *10 + ABI offset
 #   (armeabi-v7a=1, x86_64=2, arm64-v8a=3, ascending).
-CHANGELOGS="warpdroid/fastlane/metadata/android/en-US/changelogs"
+CHANGELOGS="fastlane/metadata/android/en-US/changelogs"
 if [ -d "$CHANGELOGS" ]; then
     NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
     OFFSET=1
