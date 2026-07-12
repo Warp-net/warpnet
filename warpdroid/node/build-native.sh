@@ -9,7 +9,8 @@
 #   - Go (see the monorepo go.mod `go` directive)
 #   - Android NDK, located via $ANDROID_NDK_HOME (or $ANDROID_HOME/ndk/<ver>)
 # gomobile/gobind are pinned by the monorepo go.mod (`tool` directives) and built
-# from vendor/, so there is no `go install @latest`.
+# with `-mod=mod` from the Go module cache/proxy (NOT from vendor/), so F-Droid
+# does not need the vendored tree and there is no `go install @latest`.
 #
 # The `gomobile bind` step itself runs in module mode (`-mod=readonly`), NOT
 # vendor mode: gomobile internally runs `go list -m all` / `go mod tidy`, which
@@ -28,13 +29,13 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIBS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)/warpnet-transport/libs"
 
-# Build the pinned gomobile + gobind from vendor (offline) and put them on PATH
-# so `gomobile bind` can locate gobind.
+# Build the pinned gomobile + gobind (from the module cache/proxy, not vendor/)
+# and put them on PATH so `gomobile bind` can locate gobind.
 TOOLBIN="$(mktemp -d)"
 trap 'rm -rf "${TOOLBIN}"' EXIT
-echo "Building pinned gomobile/gobind from vendor..."
-GOFLAGS="-mod=vendor" go build -o "${TOOLBIN}/gomobile" golang.org/x/mobile/cmd/gomobile
-GOFLAGS="-mod=vendor" go build -o "${TOOLBIN}/gobind" golang.org/x/mobile/cmd/gobind
+echo "Building pinned gomobile/gobind..."
+GOFLAGS="-mod=mod" go build -o "${TOOLBIN}/gomobile" golang.org/x/mobile/cmd/gomobile
+GOFLAGS="-mod=mod" go build -o "${TOOLBIN}/gobind" golang.org/x/mobile/cmd/gobind
 export PATH="${TOOLBIN}:${PATH}"
 
 cd "${SCRIPT_DIR}"
