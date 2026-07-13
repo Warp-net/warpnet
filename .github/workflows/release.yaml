@@ -203,11 +203,10 @@ jobs:
         working-directory: warpdroid
         run: |
           set -euo pipefail
-          # splits.abi produces one APK per ABI; ship arm64-v8a
-          # (~99% of modern Android devices) as the release artifact.
-          src=$(find app/build/outputs/apk/release -name '*_arm64-v8a.apk' -type f | head -1)
+          # Single arm64-v8a APK (no ABI split); ship it as the release artifact.
+          src=$(find app/build/outputs/apk/release -name 'Warpdroid_*_release.apk' -type f | head -1)
           if [ -z "$src" ]; then
-            echo "FATAL: no arm64-v8a APK produced" >&2
+            echo "FATAL: no release APK produced" >&2
             ls -la app/build/outputs/apk/release/ >&2 || true
             exit 1
           fi
