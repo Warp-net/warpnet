@@ -1,5 +1,0 @@
-First release of the Warpnet Android client on F-Droid.
-
-Pair your phone with your own self-hosted Warpnet node by scanning a QR code, then browse and post over a direct peer-to-peer connection. No cloud account, no Google Play Services, and push notifications without any cloud gateway.
-
-Fully free software (AGPL-3.0). QR scanning now uses the FOSS ZXing decoder.

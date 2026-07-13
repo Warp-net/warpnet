@@ -36,29 +36,27 @@ sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VE
 
 git add "$CONFIG" "$SNAPCRAFT"
 
-# Keep the warpdroid F-Droid fastlane changelog filenames in sync with the new
-# versionCode. The published versionCode mirrors warpdroid/app/build.gradle:
-#   base = major*1000000 + minor*10000 + patch, then *10 + ABI offset
-#   (armeabi-v7a=1, x86_64=2, arm64-v8a=3, ascending).
+# Keep the warpdroid F-Droid fastlane changelog in sync with the new versionCode.
+# Single-APK model: F-Droid expects exactly one changelog file named
+# <versionCode>.txt, where versionCode mirrors warpdroid/app/build.gradle:
+#   base = major*1000000 + minor*10000 + patch, then *10 (no ABI offset).
+# Carry the most recent note forward to the new name and delete any others.
 CHANGELOGS="fastlane/metadata/android/en-US/changelogs"
 if [ -d "$CHANGELOGS" ]; then
     NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
-    OFFSET=1
-    for OLD in $(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V); do
-        NEW="$CHANGELOGS/$((NEW_BASE + OFFSET)).txt"
-        if [ "$OLD" != "$NEW" ]; then
-            mv -f "$OLD" "$NEW"
-            echo "Changelog: $(basename "$OLD") -> $(basename "$NEW")"
-        fi
-        OFFSET=$((OFFSET + 1))
-    done
-    git add "$CHANGELOGS"
+    NEW="$CHANGELOGS/$NEW_BASE.txt"
+    LATEST=$(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V | tail -1)
+    if [ -n "$LATEST" ] && [ "$LATEST" != "$NEW" ]; then
+        mv -f "$LATEST" "$NEW"
+        echo "Changelog: $(basename "$LATEST") -> $(basename "$NEW")"
+    fi
+    find "$CHANGELOGS" -maxdepth 1 -name '*.txt' ! -name "$NEW_BASE.txt" -exec rm -f {} +
+    git add -A "$CHANGELOGS"
 fi
 
-# Publish the F-Droid base versionCode so fdroiddata's UpdateCheckMode: HTTP can
-# read it (raw file on this branch). fdroid applies the recipe's VercodeOperation
-# (+1/+2/+3) to turn this base into the three per-ABI codes. base = the same
-# major*1000000 + minor*10000 + patch, then *10 (no ABI offset).
+# Publish the F-Droid versionCode so fdroiddata's UpdateCheckMode: Tags can read
+# warpdroid/fdroid/versionCode at the tag. Single APK, no VercodeOperation:
+# code = major*1000000 + minor*10000 + patch, then *10 (no ABI offset).
 FDROID_VERSIONCODE="warpdroid/fdroid/versionCode"
 if [ -f "$FDROID_VERSIONCODE" ]; then
     NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
