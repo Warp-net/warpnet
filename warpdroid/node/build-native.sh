@@ -40,18 +40,16 @@ export PATH="${TOOLBIN}:${PATH}"
 
 cd "${SCRIPT_DIR}"
 
-# Every ABI in the app's Gradle abi split must ship the native library:
-#   android/arm64 -> arm64-v8a
-#   android/arm   -> armeabi-v7a
-#   android/amd64 -> x86_64
-echo "Building Android library (arm64-v8a, armeabi-v7a, x86_64)..."
+# The app ships a single arm64-v8a APK, so build only the arm64 library
+# (android/arm64 -> arm64-v8a).
+echo "Building Android library (arm64-v8a)..."
 GOFLAGS="-mod=readonly" gomobile bind \
     -ldflags="-checklinkname=0 -s -w" \
     -trimpath \
     -tags mobile \
     -v \
     -androidapi 21 \
-    -target=android/arm64,android/arm,android/amd64 \
+    -target=android/arm64 \
     -o warpnet.aar .
 
 mkdir -p "${LIBS_DIR}"
