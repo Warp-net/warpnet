@@ -63,12 +63,18 @@ android {
         applicationId = APP_ID
         minSdk = 24
         targetSdk = 36
-        // Base code; the published per-ABI code is baseVersionCode*10 + offset,
-        // applied in applicationVariants below.
+        // Published versionCode is baseVersionCode*10 (single APK, no ABI offset).
         versionCode = warpnetBaseVersionCode * 10
         versionName = warpnetVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+
+        // Single-APK build: ship one arm64-v8a APK so F-Droid can publish a
+        // single reproducible binary. Only the 64-bit ARM gomobile library is
+        // packaged.
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
 
         resValue "string", "app_name", APP_NAME
 
@@ -147,31 +153,18 @@ android {
         }
     }
 
-    // Warpnet ships a Go runtime (via gomobile) for libp2p. Keep only the
-    // ABIs realistic phones actually use so the APK doesn't grow needlessly.
-    splits {
-        abi {
-            enable true
-            reset()
-            include 'arm64-v8a', 'armeabi-v7a', 'x86_64'
-            universalApk false
-        }
-    }
+    // No ABI split: exactly one APK is produced, containing only the arm64-v8a
+    // native library (see defaultConfig.ndk.abiFilters above).
     dependenciesInfo {
         includeInApk false
         includeInBundle false
     }
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
-            // Splits produce one APK per ABI per variant; include the ABI filter
-            // in the name so the outputs don't collide on the same path.
-            def abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
-            // Give each ABI split a unique, monotonic versionCode so F-Droid
-            // (and Play) can publish them side by side.
-            def abiOffset = warpnetAbiVersionOffsets.getOrDefault(abi, 0)
-            output.versionCodeOverride = warpnetBaseVersionCode * 10 + abiOffset
+            // One APK per variant (no ABI split); embed versionCode + git sha in
+            // the name for traceability.
             outputFileName = "Warpdroid_${variant.versionName}_${output.versionCode}_${gitSha}_" +
-                "${buildType.name}_${abi}.apk"
+                "${buildType.name}.apk"
         }
     }
 }
