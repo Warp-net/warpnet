@@ -43,8 +43,14 @@ cd "${SCRIPT_DIR}"
 # The app ships a single arm64-v8a APK, so build only the arm64 library
 # (android/arm64 -> arm64-v8a).
 echo "Building Android library (arm64-v8a)..."
+# Reproducible build: -s -w drop the Go symbol table/DWARF, -trimpath removes
+# source path prefixes, and -extldflags=-Wl,--build-id=none stops the NDK linker
+# from stamping libgojni.so with a .note.gnu.build-id (a hash of the pre-strip
+# content, which embeds env-specific build paths and would survive stripping).
+# Together with the app module's ndkVersion pin (so AGP strips the .so) this makes
+# libgojni.so byte-identical across build environments.
 GOFLAGS="-mod=readonly" gomobile bind \
-    -ldflags="-checklinkname=0 -s -w" \
+    -ldflags="-checklinkname=0 -s -w -extldflags=-Wl,--build-id=none" \
     -trimpath \
     -tags mobile \
     -v \

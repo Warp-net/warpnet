@@ -55,6 +55,13 @@ final def warpnetKeystore = System.getenv("WARPDROID_KEYSTORE")
 
 android {
     compileSdk = 36
+    // Pin the NDK to r27c (matches the F-Droid recipe `ndk: r27c` and the release
+    // CI). Without this AGP defaults to a different NDK revision, so the
+    // stripReleaseDebugSymbols task can't find a matching NDK and ships
+    // libgojni.so UNSTRIPPED — which then embeds the absolute build path and
+    // breaks the reproducible-build byte comparison. Stripping makes the gomobile
+    // library reproducible across build environments.
+    ndkVersion = "27.2.12479018"
     namespace = APP_NAMESPACE
     defaultConfig {
         applicationId = APP_ID
