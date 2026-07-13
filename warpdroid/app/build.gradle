@@ -45,9 +45,6 @@ final def warpnetBaseVersionCode =
     warpnetVersionParts[0].toInteger() * 1_000_000 +
     warpnetVersionParts[1].toInteger() * 10_000 +
     warpnetVersionParts[2].toInteger()
-// ABI offset (0..9) folded into the low digit of the published versionCode so
-// each split APK carries a distinct, still-monotonic code.
-final def warpnetAbiVersionOffsets = ['armeabi-v7a': 1, 'x86_64': 2, 'arm64-v8a': 3]
 
 // Release signing is driven entirely by environment variables so no keystore or
 // secret ever lives in the repo. When they are absent (F-Droid's own build, or
