@@ -180,8 +180,15 @@ jobs:
       - name: Install NDK r27c (match F-Droid recipe)
         run: |
           set -euo pipefail
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" >/dev/null
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          NDK_DIR="$ANDROID_SDK_ROOT/ndk/27.2.12479018"
+          # `yes | sdkmanager` breaks under pipefail (SIGPIPE when sdkmanager
+          # closes stdin). Accept licenses in a guarded step, then install without
+          # a pipe. Licenses are usually pre-accepted on the runner anyway.
+          "$SDKMANAGER" --licenses >/dev/null 2>&1 <<< "$(printf 'y\n%.0s' {1..50})" || true
+          "$SDKMANAGER" "ndk;27.2.12479018"
+          test -d "$NDK_DIR"
+          echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
 
       - name: Build Warpnet native library (gomobile)
         working-directory: warpdroid/node
