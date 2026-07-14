@@ -20,6 +20,15 @@
 
 set -euo pipefail
 
+# Pin the toolchain: never let GOTOOLCHAIN=auto silently upgrade to a newer Go than
+# the one the build is supposed to use. F-Droid builds Go from the `go@goX.Y.Z`
+# srclib with GOTOOLCHAIN=local; this makes the release CI behave identically so both
+# use the SAME Go version (a version mismatch would make libgojni.so differ and break
+# the reproducible-build comparison). The active `go` must satisfy go.mod's directive;
+# if a dependency ever requires a newer Go, bump BOTH this build's Go and the recipe's
+# `go@go...` srclib together.
+export GOTOOLCHAIN=local
+
 if ! command -v go >/dev/null 2>&1; then
     echo "Error: Go is not installed. See https://go.dev/dl/"
     exit 1
@@ -43,14 +52,21 @@ cd "${SCRIPT_DIR}"
 # The app ships a single arm64-v8a APK, so build only the arm64 library
 # (android/arm64 -> arm64-v8a).
 echo "Building Android library (arm64-v8a)..."
-# Reproducible build: -s -w drop the Go symbol table/DWARF, -trimpath removes
-# source path prefixes, and -extldflags=-Wl,--build-id=none stops the NDK linker
-# from stamping libgojni.so with a .note.gnu.build-id (a hash of the pre-strip
-# content, which embeds env-specific build paths and would survive stripping).
-# Together with the app module's ndkVersion pin (so AGP strips the .so) this makes
-# libgojni.so byte-identical across build environments.
-GOFLAGS="-mod=readonly" gomobile bind \
-    -ldflags="-checklinkname=0 -s -w -extldflags=-Wl,--build-id=none" \
+# Reproducible build:
+#   -s -w                     drop the Go symbol table + DWARF
+#   -buildid=                 clear the Go build ID (.note.go.buildid), a hash of
+#                             build inputs that otherwise varies per environment
+#   -extldflags=-Wl,--build-id=none  stop the NDK linker adding a .note.gnu.build-id
+#   -trimpath                 trim dependency/stdlib source paths
+#   GOFLAGS=-buildvcs=false   drop VCS stamping from .go.buildinfo
+# NOTE: gomobile ignores -trimpath for the MAIN module, so it still embeds the
+# checkout path in .go.buildinfo. That is handled by building at the same absolute
+# path F-Droid uses (/home/vagrant/build/<appid>) — see release.yaml and
+# https://f-droid.org/docs/Reproducible_Builds/ . Together with the app module's
+# ndkVersion pin (so AGP strips the .so) this makes libgojni.so byte-identical
+# across build environments.
+GOFLAGS="-mod=readonly -buildvcs=false" gomobile bind \
+    -ldflags="-checklinkname=0 -s -w -buildid= -extldflags=-Wl,--build-id=none" \
     -trimpath \
     -tags mobile \
     -v \
