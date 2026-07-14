@@ -2,10 +2,6 @@
 
 set -euo pipefail
 
-if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
-    exit 0
-fi
-
 echo "Pre-commit hook started..."
 
 CONFIG="version"
@@ -16,52 +12,54 @@ if [ ! -f "$CONFIG" ]; then
     exit 1
 fi
 
-if [ ! -f "$SNAPCRAFT" ]; then
-    echo "Snapcraft file not found: $SNAPCRAFT"
-    exit 1
-fi
-
 CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG")
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
 
-echo "CURRENT_VERSION=$CURRENT_VERSION"
-echo "PATCH=$PATCH"
+# Bump the patch version on every commit EXCEPT on main: releases are cut from
+# main, so we must not keep bumping there. On main the version is left as-is, but
+# the derived files below are STILL re-synced so they can never drift out of step
+# with the version file (this is what previously caused versionCode/changelog to
+# lag one release behind when the version was updated on main).
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+    if [ ! -f "$SNAPCRAFT" ]; then
+        echo "Snapcraft file not found: $SNAPCRAFT"
+        exit 1
+    fi
+    PATCH=$((PATCH + 1))
+    NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+    sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
+    sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VERSION}/" "$SNAPCRAFT"
+    git add "$CONFIG" "$SNAPCRAFT"
+    echo "Version bumped: $CURRENT_VERSION -> $NEW_VERSION"
+fi
 
-PATCH=$((PATCH + 1))
-NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+# MAJOR/MINOR/PATCH now hold the EFFECTIVE version (bumped off main, unchanged on
+# main). The published F-Droid versionCode mirrors warpdroid/app/build.gradle:
+#   base = major*1000000 + minor*10000 + patch, then *10 (single APK, no ABI offset).
+BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
 
-
-sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
-sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VERSION}/" "$SNAPCRAFT"
-
-git add "$CONFIG" "$SNAPCRAFT"
-
-# Keep the warpdroid F-Droid fastlane changelog in sync with the new versionCode.
-# Single-APK model: F-Droid expects exactly one changelog file named
-# <versionCode>.txt, where versionCode mirrors warpdroid/app/build.gradle:
-#   base = major*1000000 + minor*10000 + patch, then *10 (no ABI offset).
-# Carry the most recent note forward to the new name and delete any others.
+# Keep the warpdroid F-Droid fastlane changelog in sync: exactly ONE file named
+# <versionCode>.txt. Carry the most recent note forward to the new name and drop
+# any others.
 CHANGELOGS="fastlane/metadata/android/en-US/changelogs"
 if [ -d "$CHANGELOGS" ]; then
-    NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
-    NEW="$CHANGELOGS/$NEW_BASE.txt"
+    NEW="$CHANGELOGS/$BASE.txt"
     LATEST=$(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V | tail -1)
     if [ -n "$LATEST" ] && [ "$LATEST" != "$NEW" ]; then
         mv -f "$LATEST" "$NEW"
         echo "Changelog: $(basename "$LATEST") -> $(basename "$NEW")"
     fi
-    find "$CHANGELOGS" -maxdepth 1 -name '*.txt' ! -name "$NEW_BASE.txt" -exec rm -f {} +
+    find "$CHANGELOGS" -maxdepth 1 -name '*.txt' ! -name "$BASE.txt" -exec rm -f {} +
     git add -A "$CHANGELOGS"
 fi
 
 # Publish the F-Droid versionCode so fdroiddata's UpdateCheckMode: Tags can read
-# warpdroid/fdroid/versionCode at the tag. Single APK, no VercodeOperation:
-# code = major*1000000 + minor*10000 + patch, then *10 (no ABI offset).
+# warpdroid/fdroid/versionCode at the tag.
 FDROID_VERSIONCODE="warpdroid/fdroid/versionCode"
 if [ -f "$FDROID_VERSIONCODE" ]; then
-    NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
-    echo "$NEW_BASE" > "$FDROID_VERSIONCODE"
-    git add "$FDROID_VERSIONCODE"
+    if [ "$(cat "$FDROID_VERSIONCODE")" != "$BASE" ]; then
+        echo "$BASE" > "$FDROID_VERSIONCODE"
+        git add "$FDROID_VERSIONCODE"
+        echo "versionCode synced -> $BASE"
+    fi
 fi
-
-
