@@ -115,7 +115,13 @@ func NewMemberNode(
 		owner.UserId,
 	)
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, notifyRepo, owner.UserId, metrics)
+	// Wrap userRepo so caching a genuinely new remote user (via discovery or
+	// the user-list sync handler — both funnel through UserRepo.Create) also
+	// records a "new user discovered" notification for the owner. Seeding
+	// above uses the raw repo, so the mastodon gateway user never notifies.
+	notifyingUsers := newNotifyingUserRepo(userRepo, notifyRepo, owner.UserId)
+
+	discService := discovery.NewDiscoveryService(ctx, notifyingUsers, nodeRepo, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -163,7 +169,7 @@ func NewMemberNode(
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
-		userRepo:      userRepo,
+		userRepo:      notifyingUsers,
 		followRepo:    followRepo,
 		deviceRepo:    deviceRepo,
 		authRepo:      authRepo,
