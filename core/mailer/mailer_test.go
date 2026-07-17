@@ -19,18 +19,6 @@ func (f *fakeStore) Add(not domain.Notification) error {
 	f.added = append(f.added, not)
 	return f.err
 }
-func (f *fakeStore) MarkRead(string, string) error { return nil }
-func (f *fakeStore) MarkAllRead(string) error      { return nil }
-func (f *fakeStore) Get(string, string) (domain.Notification, error) {
-	return domain.Notification{}, nil
-}
-func (f *fakeStore) List(string, *uint64, *string) ([]domain.Notification, string, error) {
-	return nil, "", nil
-}
-func (f *fakeStore) ReverseList(string, *string, *uint64) ([]domain.Notification, string, error) {
-	return nil, "", nil
-}
-func (f *fakeStore) UnreadCount(string) (uint64, error) { return 0, nil }
 
 type fakeSettings struct {
 	cfg domain.NotificationSettings
@@ -81,7 +69,7 @@ func TestNotifyingRepo_Add_EmailsWhenEnabled(t *testing.T) {
 		Recipient:    "a@b.c",
 		Types:        map[domain.NotificationType]bool{domain.NotificationNewUserType: true},
 	}}
-	r := NewNotifyingRepo(store, settings, sender, "owner-1")
+	r := NewNotifyingRepo(store, settings, sender)
 
 	if err := r.Add(domain.Notification{Type: domain.NotificationNewUserType, UserId: "owner-1", Text: "bob joined"}); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -103,7 +91,7 @@ func TestNotifyingRepo_Add_NoEmailWhenTypeDisabled(t *testing.T) {
 		Recipient:    "a@b.c",
 		Types:        map[domain.NotificationType]bool{domain.NotificationNewUserType: true},
 	}}
-	r := NewNotifyingRepo(store, settings, sender, "owner-1")
+	r := NewNotifyingRepo(store, settings, sender)
 
 	// Like type not enabled in the Types map -> no email.
 	if err := r.Add(domain.Notification{Type: domain.NotificationLikeType, UserId: "owner-1"}); err != nil {
@@ -120,7 +108,7 @@ func TestNotifyingRepo_Add_NoEmailWhenDisabled(t *testing.T) {
 	store := &fakeStore{}
 	sender := newFakeSender()
 	settings := fakeSettings{cfg: domain.NotificationSettings{EmailEnabled: false, Recipient: "a@b.c"}}
-	r := NewNotifyingRepo(store, settings, sender, "owner-1")
+	r := NewNotifyingRepo(store, settings, sender)
 
 	if err := r.Add(domain.Notification{Type: domain.NotificationNewUserType, UserId: "owner-1"}); err != nil {
 		t.Fatalf("Add: %v", err)

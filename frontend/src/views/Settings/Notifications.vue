@@ -67,15 +67,6 @@
             <input type="checkbox" v-model="settings.smtp_use_tls" class="mr-2" />
             <span class="font-bold">Use implicit TLS (port 465)</span>
           </label>
-          <button
-            type="button"
-            @click="test"
-            :disabled="testing"
-            class="text-blue border border-blue rounded-full font-semibold px-4 py-1 hover:bg-lightblue disabled:opacity-50"
-          >
-            {{ testing ? 'Sending…' : 'Send test email' }}
-          </button>
-          <p v-if="testMessage" class="text-sm text-dark">{{ testMessage }}</p>
         </fieldset>
 
         <fieldset class="border border-lighter rounded p-4 space-y-2">
@@ -115,9 +106,7 @@ export default {
     return {
       loading: true,
       saving: false,
-      testing: false,
       savedMessage: '',
-      testMessage: '',
       ownerProfile: {},
       types: [
         { key: 'follow', label: 'New followers' },
@@ -153,19 +142,6 @@ export default {
         this.savedMessage = 'Failed to save';
       } finally {
         this.saving = false;
-      }
-    },
-    async test() {
-      this.testing = true;
-      this.testMessage = '';
-      try {
-        await warpnetService.sendTestEmail(this.settings);
-        this.testMessage = 'Test email sent';
-      } catch (err) {
-        console.error('Failed to send test email:', err);
-        this.testMessage = 'Failed to send test email';
-      } finally {
-        this.testing = false;
       }
     },
   },

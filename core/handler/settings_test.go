@@ -28,17 +28,6 @@ func (s stubSettingsRepo) SetNotificationSettings(userId string, ns domain.Notif
 	return nil
 }
 
-type stubMailer struct {
-	sendFn func(cfg domain.NotificationSettings, subject, body string) error
-}
-
-func (s stubMailer) Send(cfg domain.NotificationSettings, subject, body string) error {
-	if s.sendFn != nil {
-		return s.sendFn(cfg, subject, body)
-	}
-	return nil
-}
-
 func TestStreamGetNotificationSettingsHandler(t *testing.T) {
 	owner := "owner-1"
 
@@ -108,58 +97,18 @@ func TestStreamUpdateNotificationSettingsHandler(t *testing.T) {
 		if !saved.EmailEnabled || saved.Recipient != "x@y.z" {
 			t.Fatalf("unexpected saved: %+v", saved)
 		}
-		out := resp.(event.GetNotificationSettingsResponse)
-		if out.Recipient != "x@y.z" {
-			t.Fatalf("expected echoed settings, got %+v", out)
-		}
-	})
-}
-
-func TestStreamTestEmailHandler(t *testing.T) {
-	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamTestEmailHandler(stubMailer{})
-		if _, err := h([]byte("{"), nil); err == nil {
-			t.Fatal("expected error")
+		if resp.(event.GetNotificationSettingsResponse).Recipient != "x@y.z" {
+			t.Fatalf("expected echoed settings, got %+v", resp)
 		}
 	})
 
-	t.Run("empty recipient", func(t *testing.T) {
-		h := StreamTestEmailHandler(stubMailer{})
-		if _, err := h(marshal(t, event.TestEmailEvent{SMTPHost: "h"}), nil); err == nil {
-			t.Fatal("expected empty-recipient error")
-		}
-	})
-
-	t.Run("empty smtp host", func(t *testing.T) {
-		h := StreamTestEmailHandler(stubMailer{})
-		if _, err := h(marshal(t, event.TestEmailEvent{Recipient: "a@b.c"}), nil); err == nil {
-			t.Fatal("expected empty-host error")
-		}
-	})
-
-	t.Run("sender error surfaces", func(t *testing.T) {
-		sendErr := errors.New("smtp down")
-		h := StreamTestEmailHandler(stubMailer{sendFn: func(domain.NotificationSettings, string, string) error { return sendErr }})
-		if _, err := h(marshal(t, event.TestEmailEvent{Recipient: "a@b.c", SMTPHost: "h"}), nil); !errors.Is(err, sendErr) {
-			t.Fatalf("expected sender error, got %v", err)
-		}
-	})
-
-	t.Run("happy path", func(t *testing.T) {
-		var called bool
-		h := StreamTestEmailHandler(stubMailer{sendFn: func(domain.NotificationSettings, string, string) error {
-			called = true
-			return nil
-		}})
-		resp, err := h(marshal(t, event.TestEmailEvent{Recipient: "a@b.c", SMTPHost: "h"}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if !called {
-			t.Fatal("expected sender to be called")
-		}
-		if resp != event.Accepted {
-			t.Fatalf("expected Accepted, got %v", resp)
+	t.Run("repo error surfaces", func(t *testing.T) {
+		repoErr := errors.New("db failed")
+		h := StreamUpdateNotificationSettingsHandler(stubSettingsRepo{
+			setFn: func(string, domain.NotificationSettings) error { return repoErr },
+		}, stubAuth{owner: domain.Owner{UserId: owner}})
+		if _, err := h(marshal(t, event.UpdateNotificationSettingsEvent{}), nil); !errors.Is(err, repoErr) {
+			t.Fatalf("expected repo error, got %v", err)
 		}
 	})
 }

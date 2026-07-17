@@ -45,11 +45,6 @@ type SettingsAuthStorer interface {
 	GetOwner() domain.Owner
 }
 
-// SettingsMailer sends a single email using caller-supplied SMTP settings.
-type SettingsMailer interface {
-	Send(cfg domain.NotificationSettings, subject, body string) error
-}
-
 func StreamGetNotificationSettingsHandler(
 	repo SettingsStorer,
 	authRepo SettingsAuthStorer,
@@ -81,24 +76,5 @@ func StreamUpdateNotificationSettingsHandler(
 			return nil, err
 		}
 		return event.GetNotificationSettingsResponse(ev), nil
-	}
-}
-
-func StreamTestEmailHandler(sender SettingsMailer) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.TestEmailEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.Recipient == "" {
-			return nil, warpnet.WarpError("test email: empty recipient")
-		}
-		if ev.SMTPHost == "" {
-			return nil, warpnet.WarpError("test email: empty smtp host")
-		}
-		if err := sender.Send(ev, "Warpnet: test email", "This is a test email from Warpnet. Your email notifications are configured correctly."); err != nil {
-			return nil, err
-		}
-		return event.Accepted, nil
 	}
 }

@@ -46,18 +46,10 @@ var (
 	ErrEmptyRecipient = errors.New("mailer: empty recipient")
 )
 
-// NotificationStore is the full notification-repo surface the decorator
-// passes through. Add is overridden by NotifyingRepo; every other method
-// is inherited unchanged so the wrapper is a drop-in replacement for the
-// concrete repo in both reader and writer handlers.
-type NotificationStore interface {
+// Notifier stores a notification. It is the single method NotifyingRepo
+// decorates, and the one it exposes.
+type Notifier interface {
 	Add(not domain.Notification) error
-	MarkRead(userId, notificationId string) error
-	MarkAllRead(userId string) error
-	Get(userId, notificationId string) (domain.Notification, error)
-	List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
-	ReverseList(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error)
-	UnreadCount(userId string) (uint64, error)
 }
 
 // SettingsProvider resolves a user's notification settings.
@@ -70,37 +62,25 @@ type Sender interface {
 	Send(cfg domain.NotificationSettings, subject, body string) error
 }
 
-// NotifyingRepo decorates a NotificationStore so that every stored
-// notification is also, best-effort and asynchronously, mirrored to the
-// owner's email channel when their settings opt in for that type.
+// NotifyingRepo decorates a Notifier so that a stored notification is also,
+// best-effort and asynchronously, mirrored to the owner's email when their
+// settings opt in for that notification type.
 type NotifyingRepo struct {
-	NotificationStore
-
-	settings    SettingsProvider
-	sender      Sender
-	ownerUserId string
+	inner    Notifier
+	settings SettingsProvider
+	sender   Sender
 }
 
-func NewNotifyingRepo(
-	store NotificationStore,
-	settings SettingsProvider,
-	sender Sender,
-	ownerUserId string,
-) *NotifyingRepo {
-	return &NotifyingRepo{
-		NotificationStore: store,
-		settings:          settings,
-		sender:            sender,
-		ownerUserId:       ownerUserId,
-	}
+func NewNotifyingRepo(inner Notifier, settings SettingsProvider, sender Sender) *NotifyingRepo {
+	return &NotifyingRepo{inner: inner, settings: settings, sender: sender}
 }
 
-// Add persists the notification and, on success, fires an email in the
+// Add stores the notification and, on success, fires an email in the
 // background. Email delivery never blocks the caller and its failures are
 // logged, not returned — mirroring the best-effort contract the in-app
 // notification path already follows.
 func (r *NotifyingRepo) Add(not domain.Notification) error {
-	if err := r.NotificationStore.Add(not); err != nil {
+	if err := r.inner.Add(not); err != nil {
 		return err
 	}
 	go r.dispatchEmail(not)
@@ -113,29 +93,18 @@ func (r *NotifyingRepo) dispatchEmail(not domain.Notification) {
 			log.Errorf("mailer: dispatch panic: %v", rec)
 		}
 	}()
-	if r.settings == nil || r.sender == nil {
+	if not.UserId == "" {
 		return
 	}
-
-	userId := not.UserId
-	if userId == "" {
-		userId = r.ownerUserId
-	}
-
-	cfg, err := r.settings.GetNotificationSettings(userId)
+	cfg, err := r.settings.GetNotificationSettings(not.UserId)
 	if err != nil {
 		log.Warnf("mailer: load settings: %v", err)
 		return
 	}
-	if !cfg.EmailEnabled || cfg.Recipient == "" {
+	if !cfg.EmailEnabled || cfg.Recipient == "" || !cfg.Types[not.Type] {
 		return
 	}
-	if !cfg.Types[not.Type] {
-		return
-	}
-
-	subject := "Warpnet: " + not.Type.String()
-	if err := r.sender.Send(cfg, subject, not.Text); err != nil {
+	if err := r.sender.Send(cfg, "Warpnet: "+not.Type.String(), not.Text); err != nil {
 		log.Warnf("mailer: send email: %v", err)
 	}
 }

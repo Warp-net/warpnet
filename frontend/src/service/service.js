@@ -37,7 +37,6 @@ export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0
 export const PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
 export const PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/settings/0.0.0"
 export const PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
-export const PRIVATE_POST_NOTIFICATION_TEST_EMAIL = "/private/post/notification/test/email/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -799,13 +798,6 @@ export const warpnetService = {
     async updateNotificationSettings(settings) {
         return await this.sendToNode({
             path: PRIVATE_POST_NOTIFICATION_SETTINGS,
-            body: this.notificationSettingsBody(settings),
-        });
-    },
-
-    async sendTestEmail(settings) {
-        return await this.sendToNode({
-            path: PRIVATE_POST_NOTIFICATION_TEST_EMAIL,
             body: this.notificationSettingsBody(settings),
         });
     },
