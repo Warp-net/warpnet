@@ -70,9 +70,6 @@ type MemberNode struct {
 	userRepo         UserProvider
 	deviceRepo       DeviceProvider
 	followRepo       FollowStorer
-	settingsRepo     *database.SettingsRepo
-	notifyRepo       *mailer.NotifyingRepo
-	emailSender      *mailer.SMTPMailer
 	db               Storer
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
@@ -106,20 +103,11 @@ func NewMemberNode(
 
 	mastodon.SeedEntryUser(userRepo)
 
-	settingsRepo := database.NewSettingsRepo(db)
-	emailSender := mailer.NewSMTPMailer()
-	notifyRepo := mailer.NewNotifyingRepo(
-		database.NewNotificationsRepo(db),
-		settingsRepo,
-		emailSender,
-		owner.UserId,
-	)
-
 	// Wrap userRepo so caching a genuinely new remote user (via discovery or
 	// the user-list sync handler — both funnel through UserRepo.Create) also
 	// records a "new user discovered" notification for the owner. Seeding
 	// above uses the raw repo, so the mastodon gateway user never notifies.
-	notifyingUsers := newNotifyingUserRepo(userRepo, notifyRepo, owner.UserId)
+	notifyingUsers := newNotifyingUserRepo(userRepo, newNotifyRepo(db, owner.UserId), owner.UserId)
 
 	discService := discovery.NewDiscoveryService(ctx, notifyingUsers, nodeRepo, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
@@ -173,9 +161,6 @@ func NewMemberNode(
 		followRepo:    followRepo,
 		deviceRepo:    deviceRepo,
 		authRepo:      authRepo,
-		settingsRepo:  settingsRepo,
-		notifyRepo:    notifyRepo,
-		emailSender:   emailSender,
 		db:            db,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
@@ -356,11 +341,24 @@ type memberRepos struct {
 	chatRepo         *database.ChatRepo
 	mediaRepo        *database.MediaRepo
 	notificationRepo *mailer.NotifyingRepo
+	settingsRepo     *database.SettingsRepo
 	bookmarkRepo     *database.BookmarkRepo
 	blocksRepo       *database.BlocksRepo
 	mutesRepo        *database.MutesRepo
 	subsRepo         *database.SubscriptionsRepo
 	filterRepo       *database.FilterRepo
+}
+
+// newNotifyRepo builds a notification repo that also mirrors each notification
+// to the owner's email when their settings opt in. Stateless — safe to build
+// per use site.
+func newNotifyRepo(db Storer, ownerUserId string) *mailer.NotifyingRepo {
+	return mailer.NewNotifyingRepo(
+		database.NewNotificationsRepo(db),
+		database.NewSettingsRepo(db),
+		mailer.NewSMTPMailer(),
+		ownerUserId,
+	)
 }
 
 func (m *MemberNode) setupHandlers(
@@ -380,7 +378,8 @@ func (m *MemberNode) setupHandlers(
 		likeRepo:         database.NewLikeRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
-		notificationRepo: m.notifyRepo,
+		notificationRepo: newNotifyRepo(db, m.ownerId),
+		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),
 		blocksRepo:       database.NewBlocksRepo(db),
 		mutesRepo:        database.NewMutesRepo(db),
@@ -399,7 +398,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.chatHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.mediaHandlers(userRepo, r)...)
 	hs = append(hs, m.notificationHandlers(authRepo, r)...)
-	hs = append(hs, m.settingsHandlers(authRepo)...)
+	hs = append(hs, m.settingsHandlers(authRepo, r)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
 
@@ -621,19 +620,19 @@ func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler 
 }
 
 //nolint:govet
-func (m *MemberNode) settingsHandlers(authRepo AuthProvider) []warpnet.WarpStreamHandler {
+func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_GET_NOTIFICATION_SETTINGS,
-			handler.StreamGetNotificationSettingsHandler(m.settingsRepo, authRepo),
+			handler.StreamGetNotificationSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
 			event.PRIVATE_POST_NOTIFICATION_SETTINGS,
-			handler.StreamUpdateNotificationSettingsHandler(m.settingsRepo, authRepo),
+			handler.StreamUpdateNotificationSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
 			event.PRIVATE_POST_NOTIFICATION_TEST_EMAIL,
-			handler.StreamTestEmailHandler(m.emailSender),
+			handler.StreamTestEmailHandler(mailer.NewSMTPMailer()),
 		},
 	}
 }
