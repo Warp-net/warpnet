@@ -28,15 +28,22 @@ resulting from the use or misuse of this software.
 package mailer
 
 import (
+	"context"
 	"crypto/tls"
-	"fmt"
+	"errors"
 	"net"
 	"net/smtp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
+)
+
+var (
+	ErrEmptySMTPHost  = errors.New("mailer: empty smtp host")
+	ErrEmptyRecipient = errors.New("mailer: empty recipient")
 )
 
 // NotificationStore is the full notification-repo surface the decorator
@@ -68,6 +75,7 @@ type Sender interface {
 // owner's email channel when their settings opt in for that type.
 type NotifyingRepo struct {
 	NotificationStore
+
 	settings    SettingsProvider
 	sender      Sender
 	ownerUserId string
@@ -141,10 +149,10 @@ func NewSMTPMailer() *SMTPMailer {
 
 func (m *SMTPMailer) Send(cfg domain.NotificationSettings, subject, body string) error {
 	if cfg.SMTPHost == "" {
-		return fmt.Errorf("mailer: empty smtp host")
+		return ErrEmptySMTPHost
 	}
 	if cfg.Recipient == "" {
-		return fmt.Errorf("mailer: empty recipient")
+		return ErrEmptyRecipient
 	}
 	port := cfg.SMTPPort
 	if port == 0 {
@@ -172,7 +180,11 @@ func (m *SMTPMailer) Send(cfg domain.NotificationSettings, subject, body string)
 }
 
 func sendImplicitTLS(addr, host string, auth smtp.Auth, from, to string, msg []byte) error {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: host}) //nolint:gosec
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	d := tls.Dialer{Config: &tls.Config{ServerName: host}} //nolint:gosec
+	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return err
 	}
@@ -180,7 +192,7 @@ func sendImplicitTLS(addr, host string, auth smtp.Auth, from, to string, msg []b
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if auth != nil {
 		if err := c.Auth(auth); err != nil {
 			return err
