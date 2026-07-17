@@ -36,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/mailer"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
@@ -69,6 +70,9 @@ type MemberNode struct {
 	userRepo         UserProvider
 	deviceRepo       DeviceProvider
 	followRepo       FollowStorer
+	settingsRepo     *database.SettingsRepo
+	notifyRepo       *mailer.NotifyingRepo
+	emailSender      *mailer.SMTPMailer
 	db               Storer
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
@@ -102,7 +106,16 @@ func NewMemberNode(
 
 	mastodon.SeedEntryUser(userRepo)
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
+	settingsRepo := database.NewSettingsRepo(db)
+	emailSender := mailer.NewSMTPMailer()
+	notifyRepo := mailer.NewNotifyingRepo(
+		database.NewNotificationsRepo(db),
+		settingsRepo,
+		emailSender,
+		owner.UserId,
+	)
+
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, notifyRepo, owner.UserId, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -154,6 +167,9 @@ func NewMemberNode(
 		followRepo:    followRepo,
 		deviceRepo:    deviceRepo,
 		authRepo:      authRepo,
+		settingsRepo:  settingsRepo,
+		notifyRepo:    notifyRepo,
+		emailSender:   emailSender,
 		db:            db,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
@@ -333,7 +349,7 @@ type memberRepos struct {
 	likeRepo         *database.LikeRepo
 	chatRepo         *database.ChatRepo
 	mediaRepo        *database.MediaRepo
-	notificationRepo *database.NotificationsRepo
+	notificationRepo *mailer.NotifyingRepo
 	bookmarkRepo     *database.BookmarkRepo
 	blocksRepo       *database.BlocksRepo
 	mutesRepo        *database.MutesRepo
@@ -358,7 +374,7 @@ func (m *MemberNode) setupHandlers(
 		likeRepo:         database.NewLikeRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
-		notificationRepo: database.NewNotificationsRepo(db),
+		notificationRepo: m.notifyRepo,
 		bookmarkRepo:     database.NewBookmarkRepo(db),
 		blocksRepo:       database.NewBlocksRepo(db),
 		mutesRepo:        database.NewMutesRepo(db),
@@ -377,6 +393,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.chatHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.mediaHandlers(userRepo, r)...)
 	hs = append(hs, m.notificationHandlers(authRepo, r)...)
+	hs = append(hs, m.settingsHandlers(authRepo)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
 
@@ -593,6 +610,24 @@ func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler 
 		{
 			event.PRIVATE_DELETE_FILTER_KEYWORD,
 			handler.StreamDeleteFilterKeywordHandler(r.filterRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) settingsHandlers(authRepo AuthProvider) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_NOTIFICATION_SETTINGS,
+			handler.StreamGetNotificationSettingsHandler(m.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_NOTIFICATION_SETTINGS,
+			handler.StreamUpdateNotificationSettingsHandler(m.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_NOTIFICATION_TEST_EMAIL,
+			handler.StreamTestEmailHandler(m.emailSender),
 		},
 	}
 }

@@ -179,6 +179,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/settings/notifications",
+    name: "SettingsNotifications",
+    component: () =>
+      import(/* webpackChunkName: "settings-notifications" */ "../views/Settings/Notifications.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/who-to-follow",
     name: "WhoToFollow",
     component: () =>

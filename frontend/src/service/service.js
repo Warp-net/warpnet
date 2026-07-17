@@ -35,6 +35,9 @@ export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
 export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
 export const PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
+export const PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/settings/0.0.0"
+export const PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
+export const PRIVATE_POST_NOTIFICATION_TEST_EMAIL = "/private/post/notification/test/email/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -768,6 +771,42 @@ export const warpnetService = {
                 user_id: owner.user_id,
                 filter_id: filterId,
             },
+        });
+    },
+
+    async getNotificationSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_NOTIFICATION_SETTINGS,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    notificationSettingsBody(settings) {
+        return {
+            email_enabled: !!settings.email_enabled,
+            recipient: settings.recipient || '',
+            smtp_host: settings.smtp_host || '',
+            smtp_port: Number(settings.smtp_port) || 0,
+            smtp_username: settings.smtp_username || '',
+            smtp_password: settings.smtp_password || '',
+            smtp_from: settings.smtp_from || '',
+            smtp_use_tls: !!settings.smtp_use_tls,
+            types: settings.types || {},
+        };
+    },
+
+    async updateNotificationSettings(settings) {
+        return await this.sendToNode({
+            path: PRIVATE_POST_NOTIFICATION_SETTINGS,
+            body: this.notificationSettingsBody(settings),
+        });
+    },
+
+    async sendTestEmail(settings) {
+        return await this.sendToNode({
+            path: PRIVATE_POST_NOTIFICATION_TEST_EMAIL,
+            body: this.notificationSettingsBody(settings),
         });
     },
 

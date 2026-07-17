@@ -511,6 +511,21 @@ type MarkNotificationReadEvent struct {
 	NotificationId domain.ID `json:"notification_id"`
 }
 
+// GetNotificationSettingsEvent defines model for GetNotificationSettingsEvent.
+// The owner is resolved server-side, so the request carries no fields.
+type GetNotificationSettingsEvent struct{}
+
+// GetNotificationSettingsResponse defines model for GetNotificationSettingsResponse.
+type GetNotificationSettingsResponse = domain.NotificationSettings
+
+// UpdateNotificationSettingsEvent defines model for UpdateNotificationSettingsEvent.
+type UpdateNotificationSettingsEvent = domain.NotificationSettings
+
+// TestEmailEvent defines model for TestEmailEvent.
+// Carries the settings being edited so the user can verify SMTP config
+// before saving it.
+type TestEmailEvent = domain.NotificationSettings
+
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
 	UserId      domain.ID `json:"user_id"`

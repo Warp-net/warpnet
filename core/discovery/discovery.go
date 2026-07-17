@@ -76,6 +76,12 @@ type MetricsOnlineDiscoverer interface {
 	PushStatusOffline(nodeId string)
 }
 
+// DiscoveryNotifier records a notification for the local node owner. It is
+// optional (nil on relay/moderator nodes).
+type DiscoveryNotifier interface {
+	Add(not domain.Notification) error
+}
+
 type discoverySource string
 
 const (
@@ -97,6 +103,9 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 
+	notifyRepo  DiscoveryNotifier
+	ownerUserId string
+
 	ownId   warpnet.WarpPeerID
 	limiter *leakyBucketRateLimiter
 
@@ -115,6 +124,8 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
+	notifyRepo DiscoveryNotifier,
+	ownerUserId string,
 	m MetricsOnlineDiscoverer,
 ) *discoveryService {
 	capacity := 32
@@ -125,6 +136,8 @@ func NewDiscoveryService(
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
+		notifyRepo:      notifyRepo,
+		ownerUserId:     ownerUserId,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
@@ -344,6 +357,28 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		newUser.RoundTripTime,
 		peer.Source,
 	)
+
+	s.notifyNewUser(newUser)
+}
+
+// notifyNewUser records a "new user discovered" notification for the local
+// owner. Best-effort: a nil notifier (relay/moderator) or a store error must
+// not interrupt discovery.
+func (s *discoveryService) notifyNewUser(u domain.User) {
+	if s.notifyRepo == nil || s.ownerUserId == "" {
+		return
+	}
+	name := u.Username
+	if name == "" {
+		name = u.Id
+	}
+	if err := s.notifyRepo.Add(domain.Notification{
+		Type:   domain.NotificationNewUserType,
+		Text:   name + " joined Warpnet",
+		UserId: s.ownerUserId,
+	}); err != nil {
+		log.Warnf("discovery: notify new user: %v", err)
+	}
 }
 
 func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
