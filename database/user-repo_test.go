@@ -78,6 +78,49 @@ func (s *UserRepoTestSuite) TestCreateAndGetUser() {
 	s.Equal(user.Username, fetched.Username)
 }
 
+type stubNewUserNotifier struct {
+	added []domain.Notification
+}
+
+func (s *stubNewUserNotifier) Add(n domain.Notification) error {
+	s.added = append(s.added, n)
+	return nil
+}
+
+func (s *UserRepoTestSuite) TestNotifiesOnNewUser() {
+	notifier := &stubNewUserNotifier{}
+	repo := NewUserRepoNotifying(s.db, notifier, "owner-notify")
+
+	_, err := repo.Create(domain.User{Id: "newbie-1", Username: "newbie"})
+	s.Require().NoError(err)
+	s.Require().Len(notifier.added, 1)
+	s.Equal(domain.NotificationNewUserType, notifier.added[0].Type)
+	s.Equal("owner-notify", notifier.added[0].UserId)
+	s.Equal("newbie joined Warpnet", notifier.added[0].Text)
+
+	// A duplicate must not notify.
+	_, err = repo.Create(domain.User{Id: "newbie-1", Username: "newbie"})
+	s.Require().ErrorIs(err, ErrUserAlreadyExists)
+	s.Len(notifier.added, 1)
+
+	// The owner's own record must not notify.
+	_, err = repo.Create(domain.User{Id: "owner-notify", Username: "me"})
+	s.Require().NoError(err)
+	s.Len(notifier.added, 1)
+
+	// Username-less user falls back to id in the text.
+	_, err = repo.Create(domain.User{Id: "newbie-2"})
+	s.Require().NoError(err)
+	s.Require().Len(notifier.added, 2)
+	s.Equal("newbie-2 joined Warpnet", notifier.added[1].Text)
+}
+
+func (s *UserRepoTestSuite) TestPlainRepoDoesNotNotify() {
+	// A plain repo has a nil notifier: Create must not panic.
+	_, err := NewUserRepo(s.db).Create(domain.User{Id: "plain-user", Username: "plain"})
+	s.Require().NoError(err)
+}
+
 func (s *UserRepoTestSuite) TestUpdateUser() {
 	user := domain.User{
 		Id:        "user2",

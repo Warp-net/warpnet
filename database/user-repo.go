@@ -62,12 +62,28 @@ type UserStorer interface {
 	Delete(key local_store.DatabaseKey) error
 }
 
+// NewUserNotifier records a "new user discovered" notification for the local
+// owner when a previously-unknown user is first stored.
+type NewUserNotifier interface {
+	Add(not domain.Notification) error
+}
+
 type UserRepo struct {
 	db UserStorer
+
+	notifier    NewUserNotifier
+	ownerUserId string
 }
 
 func NewUserRepo(db UserStorer) *UserRepo {
 	return &UserRepo{db: db}
+}
+
+// NewUserRepoNotifying returns a UserRepo that, on first storing a genuinely
+// new (non-owner) user, records a "new user discovered" notification for the
+// owner via notifier.
+func NewUserRepoNotifying(db UserStorer, notifier NewUserNotifier, ownerUserId string) *UserRepo {
+	return &UserRepo{db: db, notifier: notifier, ownerUserId: ownerUserId}
 }
 
 // Create adds a new user to the database
@@ -137,7 +153,31 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 	if err = txn.SetWithTTL(sortableKey, data, ttl); err != nil {
 		return user, err
 	}
-	return user, txn.Commit()
+	if err = txn.Commit(); err != nil {
+		return user, err
+	}
+	repo.notifyNewUser(user)
+	return user, nil
+}
+
+// notifyNewUser records a "new user discovered" notification for the owner.
+// No-op on a plain repo (nil notifier) or for the owner's own record.
+// Best-effort: a store error is logged, not returned.
+func (repo *UserRepo) notifyNewUser(user domain.User) {
+	if repo.notifier == nil || user.Id == repo.ownerUserId {
+		return
+	}
+	name := user.Username
+	if name == "" {
+		name = user.Id
+	}
+	if err := repo.notifier.Add(domain.Notification{
+		Type:   domain.NotificationNewUserType,
+		Text:   name + " joined Warpnet",
+		UserId: repo.ownerUserId,
+	}); err != nil {
+		log.Warnf("user repo: notify new user: %v", err)
+	}
 }
 
 func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, error) {

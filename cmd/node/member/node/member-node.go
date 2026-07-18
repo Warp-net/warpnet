@@ -39,6 +39,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
+	"github.com/Warp-net/warpnet/core/notifications"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -69,6 +70,7 @@ type MemberNode struct {
 	userRepo         UserProvider
 	deviceRepo       DeviceProvider
 	followRepo       FollowStorer
+	notifier         notifications.Notifier
 	db               Storer
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
@@ -95,12 +97,18 @@ func NewMemberNode(
 	}
 
 	statsRepo := database.NewStatsRepo(db)
-	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	deviceRepo := database.NewDevicesRepo(db)
 	owner := authRepo.GetOwner()
 
-	mastodon.SeedEntryUser(userRepo)
+	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
+	mastodon.SeedEntryUser(database.NewUserRepo(db))
+
+	notifier := notifications.New(
+		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),
+		notifications.NewEmailChannel(database.NewSettingsRepo(db), notifications.NewSMTPMailer()),
+	)
+	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
@@ -154,6 +162,7 @@ func NewMemberNode(
 		followRepo:    followRepo,
 		deviceRepo:    deviceRepo,
 		authRepo:      authRepo,
+		notifier:      notifier,
 		db:            db,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
@@ -334,6 +343,7 @@ type memberRepos struct {
 	chatRepo         *database.ChatRepo
 	mediaRepo        *database.MediaRepo
 	notificationRepo *database.NotificationsRepo
+	settingsRepo     *database.SettingsRepo
 	bookmarkRepo     *database.BookmarkRepo
 	blocksRepo       *database.BlocksRepo
 	mutesRepo        *database.MutesRepo
@@ -359,6 +369,7 @@ func (m *MemberNode) setupHandlers(
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
+		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),
 		blocksRepo:       database.NewBlocksRepo(db),
 		mutesRepo:        database.NewMutesRepo(db),
@@ -370,13 +381,14 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.adminHandlers(authRepo, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
-	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
+	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo)...)
 	hs = append(hs, m.followRequestHandlers(followRepo)...)
 	hs = append(hs, m.filterHandlers(r)...)
 	hs = append(hs, m.userHandlers(authRepo, userRepo, followRepo, r)...)
 	hs = append(hs, m.chatHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.mediaHandlers(userRepo, r)...)
 	hs = append(hs, m.notificationHandlers(authRepo, r)...)
+	hs = append(hs, m.settingsHandlers(authRepo, r)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
 
@@ -404,7 +416,7 @@ func (m *MemberNode) adminHandlers(
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
-			handler.StreamModerationResultHandler(r.notificationRepo, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo),
+			handler.StreamModerationResultHandler(m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo),
 		},
 		{
 			event.PUBLIC_POST_REPORT,
@@ -426,7 +438,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_TWEET,
-			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, r.notificationRepo, m),
+			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.notifier, m),
 		},
 		{
 			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
@@ -462,7 +474,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_RETWEET,
-			handler.StreamNewReTweetHandler(userRepo, r.tweetRepo, r.timelineRepo, r.notificationRepo, m),
+			handler.StreamNewReTweetHandler(userRepo, r.tweetRepo, r.timelineRepo, m.notifier, m),
 		},
 		{
 			event.PUBLIC_POST_UNRETWEET,
@@ -479,7 +491,7 @@ func (m *MemberNode) engagementHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PUBLIC_POST_LIKE,
-			handler.StreamLikeHandler(r.likeRepo, userRepo, r.notificationRepo, m),
+			handler.StreamLikeHandler(r.likeRepo, userRepo, m.notifier, m),
 		},
 		{
 			event.PUBLIC_POST_UNLIKE,
@@ -509,12 +521,11 @@ func (m *MemberNode) followHandlers(
 	authRepo AuthProvider,
 	userRepo UserProvider,
 	followRepo FollowStorer,
-	r *memberRepos,
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PUBLIC_POST_FOLLOW,
-			handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, r.notificationRepo, m),
+			handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m.notifier, m),
 		},
 		{
 			event.PUBLIC_POST_IS_FOLLOWING,
@@ -598,6 +609,20 @@ func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler 
 }
 
 //nolint:govet
+func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_NOTIFICATION_SETTINGS,
+			handler.StreamGetNotificationSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_NOTIFICATION_SETTINGS,
+			handler.StreamUpdateNotificationSettingsHandler(r.settingsRepo, authRepo),
+		},
+	}
+}
+
+//nolint:govet
 func (m *MemberNode) userHandlers(
 	authRepo AuthProvider,
 	userRepo UserProvider,
@@ -657,7 +682,7 @@ func (m *MemberNode) chatHandlers(
 		},
 		{
 			event.PUBLIC_POST_MESSAGE,
-			handler.StreamNewMessageHandler(r.chatRepo, userRepo, r.notificationRepo, m),
+			handler.StreamNewMessageHandler(r.chatRepo, userRepo, m.notifier, m),
 		},
 		{
 			event.PRIVATE_DELETE_MESSAGE,

@@ -321,6 +321,7 @@ const (
 	NotificationMentionType    NotificationType = "mention"
 	NotificationReplyType      NotificationType = "reply"
 	NotificationMessageType    NotificationType = "message"
+	NotificationNewUserType    NotificationType = "new_user"
 )
 
 type Notification struct {
@@ -330,6 +331,25 @@ type Notification struct {
 	UserId    string           `json:"user_id"`
 	IsRead    bool             `json:"is_read"`
 	CreatedAt time.Time        `json:"created_at"`
+}
+
+// NotificationSettings holds a user's per-node notification preferences,
+// including the email channel. SMTP credentials are the user's own
+// (bring-your-own): the node connects to them to relay email. The whole
+// local store is encrypted at rest, so the SMTP password lives here in
+// plaintext form only inside the encrypted DB.
+type NotificationSettings struct {
+	EmailEnabled bool   `json:"email_enabled"`
+	Recipient    string `json:"recipient"`
+	SMTPHost     string `json:"smtp_host"`
+	SMTPPort     int    `json:"smtp_port"`
+	SMTPUsername string `json:"smtp_username"`
+	SMTPPassword string `json:"smtp_password"`
+	SMTPFrom     string `json:"smtp_from"`
+	SMTPUseTLS   bool   `json:"smtp_use_tls"`
+	// Types is the per-notification-type email toggle. A type absent from
+	// the map (or false) means "do not email for this type".
+	Types map[NotificationType]bool `json:"types"`
 }
 
 type ModerationResult bool
