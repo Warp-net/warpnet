@@ -1,5 +1,5 @@
 //nolint:all
-package mailer
+package notifications
 
 import (
 	"errors"

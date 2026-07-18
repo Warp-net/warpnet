@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package mailer
+package notifications
 
 import (
 	"context"
@@ -45,8 +45,8 @@ var (
 	ErrEmptyRecipient = errors.New("mailer: empty recipient")
 )
 
-// SMTPMailer sends email over the user's own SMTP server. It implements
-// notifications.Sender.
+// SMTPMailer sends email over the user's own SMTP server. It is the default
+// Sender used by EmailChannel.
 type SMTPMailer struct{}
 
 func NewSMTPMailer() *SMTPMailer {

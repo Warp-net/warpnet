@@ -36,7 +36,6 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
-	"github.com/Warp-net/warpnet/core/mailer"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
@@ -107,7 +106,7 @@ func NewMemberNode(
 
 	notifier := notifications.New(
 		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),
-		notifications.NewEmailChannel(database.NewSettingsRepo(db), mailer.NewSMTPMailer()),
+		notifications.NewEmailChannel(database.NewSettingsRepo(db), notifications.NewSMTPMailer()),
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
