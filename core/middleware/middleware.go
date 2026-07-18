@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/docker/go-units"
 )
@@ -45,7 +47,13 @@ const (
 	ErrUnknownClientPeer middlewareError = `["middleware: auth: unknown client peer"]`
 	ErrStreamReadError   middlewareError = `["middleware: stream: reading failed"]`
 	ErrInternalNodeError middlewareError = `["middleware: internal node error"]`
+	ErrStaleMessage      middlewareError = `["middleware: auth: stale or replayed message"]`
 )
+
+// messageFreshnessWindow bounds how far an inbound message's signed timestamp
+// may drift from local time. It caps the window in which a captured message can
+// be replayed while tolerating normal clock skew between peers.
+const messageFreshnessWindow = 5 * time.Minute
 
 const (
 	MaxLimit = units.MiB * 5 // TODO size limit???
@@ -58,12 +66,14 @@ const (
 )
 
 type WarpMiddleware struct {
-	idempotency *idempotencyCache
+	idempotency     *idempotencyCache
+	freshnessWindow time.Duration
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	wm := &WarpMiddleware{
-		idempotency: newIdempotencyCache(idempotencyTTL),
+		idempotency:     newIdempotencyCache(idempotencyTTL),
+		freshnessWindow: messageFreshnessWindow,
 	}
 	return wm
 }

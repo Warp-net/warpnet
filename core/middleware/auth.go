@@ -30,6 +30,7 @@ package middleware
 import (
 	"errors"
 	"io"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -90,10 +91,31 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
+		// Verify over the body plus the timestamp exactly as it appears on the
+		// wire (not the re-marshalled time.Time), so the check is byte-identical
+		// across Go and the mobile client regardless of RFC3339 formatting.
+		var rawTS struct {
+			Timestamp string `json:"timestamp"`
+		}
+		_ = json.Unmarshal(data, &rawTS)
+		signingInput := make([]byte, 0, len(msg.Body)+len(rawTS.Timestamp))
+		signingInput = append(signingInput, msg.Body...)
+		signingInput = append(signingInput, rawTS.Timestamp...)
+
 		pubKey := warpnet.FromIDToPubKey(remotePeer)
-		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
+		if err := security.VerifySignature(pubKey, signingInput, msg.Signature); err != nil {
 			log.Errorf("middleware: auth: signature invalid: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
+
+		// Freshness gate, only for genuinely remote peers. Loopback self-streams
+		// (the local frontend/bridge path and gossip re-injection) carry a local
+		// timestamp and must not be rejected for age.
+		if remotePeer != s.Conn().LocalPeer() && !p.isFresh(msg.Timestamp) {
+			log.Errorf("middleware: auth: %s: stale/replayed message from %s ts=%s",
+				route, remotePeer, msg.Timestamp)
+			_, _ = s.Write(ErrStaleMessage.Bytes())
 			return
 		}
 
@@ -105,4 +127,21 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			MessageId:  string(msg.MessageId),
 		})
 	}
+}
+
+// isFresh reports whether ts is within the configured freshness window of now,
+// in either direction (covers both stale replays and future-dated clocks).
+func (p *WarpMiddleware) isFresh(ts time.Time) bool {
+	if ts.IsZero() {
+		return false
+	}
+	window := p.freshnessWindow
+	if window <= 0 {
+		window = messageFreshnessWindow
+	}
+	skew := time.Since(ts)
+	if skew < 0 {
+		skew = -skew
+	}
+	return skew <= window
 }

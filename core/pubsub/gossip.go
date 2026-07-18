@@ -391,7 +391,8 @@ func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 		if msg.Timestamp.IsZero() {
 			msg.Timestamp = time.Now()
 		}
-		msg.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(g.privKey, msg.Body))
+		msg.Timestamp = msg.Timestamp.UTC()
+		msg.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(g.privKey, msg.SigningBytes()))
 
 		data, err := json.Marshal(msg)
 		if err != nil {
