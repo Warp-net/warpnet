@@ -40,6 +40,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
+	"github.com/Warp-net/warpnet/core/notifications"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -70,7 +71,7 @@ type MemberNode struct {
 	userRepo         UserProvider
 	deviceRepo       DeviceProvider
 	followRepo       FollowStorer
-	notifier         mailer.Notifier
+	notifier         notifications.Notifier
 	db               Storer
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
@@ -104,10 +105,9 @@ func NewMemberNode(
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	mastodon.SeedEntryUser(database.NewUserRepo(db))
 
-	notifier := mailer.NewNotifyingRepo(
-		database.NewNotificationsRepo(db),
-		database.NewSettingsRepo(db),
-		mailer.NewSMTPMailer(),
+	notifier := notifications.New(
+		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),
+		notifications.NewEmailChannel(database.NewSettingsRepo(db), mailer.NewSMTPMailer()),
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 

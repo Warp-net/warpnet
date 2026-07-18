@@ -38,7 +38,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/domain"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -46,70 +45,8 @@ var (
 	ErrEmptyRecipient = errors.New("mailer: empty recipient")
 )
 
-// Notifier stores a notification. It is the single method NotifyingRepo
-// decorates, and the one it exposes.
-type Notifier interface {
-	Add(not domain.Notification) error
-}
-
-// SettingsProvider resolves a user's notification settings.
-type SettingsProvider interface {
-	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
-}
-
-// Sender delivers a single email using the caller-supplied SMTP settings.
-type Sender interface {
-	Send(cfg domain.NotificationSettings, subject, body string) error
-}
-
-// NotifyingRepo decorates a Notifier so that a stored notification is also,
-// best-effort and asynchronously, mirrored to the owner's email when their
-// settings opt in for that notification type.
-type NotifyingRepo struct {
-	inner    Notifier
-	settings SettingsProvider
-	sender   Sender
-}
-
-func NewNotifyingRepo(inner Notifier, settings SettingsProvider, sender Sender) *NotifyingRepo {
-	return &NotifyingRepo{inner: inner, settings: settings, sender: sender}
-}
-
-// Add stores the notification and, on success, fires an email in the
-// background. Email delivery never blocks the caller and its failures are
-// logged, not returned — mirroring the best-effort contract the in-app
-// notification path already follows.
-func (r *NotifyingRepo) Add(not domain.Notification) error {
-	if err := r.inner.Add(not); err != nil {
-		return err
-	}
-	go r.dispatchEmail(not)
-	return nil
-}
-
-func (r *NotifyingRepo) dispatchEmail(not domain.Notification) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			log.Errorf("mailer: dispatch panic: %v", rec)
-		}
-	}()
-	if not.UserId == "" {
-		return
-	}
-	cfg, err := r.settings.GetNotificationSettings(not.UserId)
-	if err != nil {
-		log.Warnf("mailer: load settings: %v", err)
-		return
-	}
-	if !cfg.EmailEnabled || cfg.Recipient == "" || !cfg.Types[not.Type] {
-		return
-	}
-	if err := r.sender.Send(cfg, "Warpnet: "+not.Type.String(), not.Text); err != nil {
-		log.Warnf("mailer: send email: %v", err)
-	}
-}
-
-// SMTPMailer sends email over the user's own SMTP server.
+// SMTPMailer sends email over the user's own SMTP server. It implements
+// notifications.Sender.
 type SMTPMailer struct{}
 
 func NewSMTPMailer() *SMTPMailer {
