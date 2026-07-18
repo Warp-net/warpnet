@@ -345,7 +345,6 @@ type NotificationSettings struct {
 	SMTPPort     int    `json:"smtp_port"`
 	SMTPUsername string `json:"smtp_username"`
 	SMTPPassword string `json:"smtp_password"`
-	SMTPFrom     string `json:"smtp_from"`
 	SMTPUseTLS   bool   `json:"smtp_use_tls"`
 	// Types is the per-notification-type email toggle. A type absent from
 	// the map (or false) means "do not email for this type".

@@ -47,7 +47,6 @@ func (s *SettingsRepoTestSuite) TestSetGet() {
 		SMTPPort:     587,
 		SMTPUsername: "user",
 		SMTPPassword: "secret",
-		SMTPFrom:     "me@example.com",
 		SMTPUseTLS:   false,
 		Types: map[domain.NotificationType]bool{
 			domain.NotificationNewUserType: true,
