@@ -131,8 +131,10 @@ func StreamCreateChatHandler(
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
 
+		// A non-zero Code marks a real error; the "Accepted" ack and normal
+		// responses carry Code 0 and must not be treated as failures.
 		var possibleError event.ResponseError
-		if _ = json.Unmarshal(otherChatData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(otherChatData, &possibleError); possibleError.Code != 0 {
 			log.Errorf("create chat: unmarshal other reply response: %s", possibleError.Message)
 		}
 
@@ -343,8 +345,10 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return event.NewMessageResponse(msg), nil
 		}
 
+		// A non-zero Code marks a real error; the "Accepted" ack and the
+		// echoed message response carry Code 0 and mean delivered.
 		var possibleError event.ResponseError
-		if _ = json.Unmarshal(otherMsgData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(otherMsgData, &possibleError); possibleError.Code != 0 {
 			log.Errorf("unmarshal other message error response: %s", possibleError.Message)
 			msg.Status = statusUndelivered
 		}
