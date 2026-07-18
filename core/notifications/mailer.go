@@ -45,6 +45,9 @@ var (
 	ErrEmptyRecipient = errors.New("mailer: empty recipient")
 )
 
+// fromAddress is the fixed visible sender of every Warpnet email.
+const fromAddress = "noreply@warpnet.site"
+
 // SMTPMailer sends email over the user's own SMTP server. It is the default
 // Sender used by EmailChannel.
 type SMTPMailer struct{}
@@ -64,9 +67,11 @@ func (m *SMTPMailer) Send(cfg domain.NotificationSettings, subject, body string)
 	if port == 0 {
 		port = 587
 	}
-	from := cfg.SMTPFrom
-	if from == "" {
-		from = cfg.SMTPUsername
+	// Envelope sender is the authenticated account — providers reject a
+	// mismatched MAIL FROM. The visible From header is always fromAddress.
+	envelopeFrom := cfg.SMTPUsername
+	if envelopeFrom == "" {
+		envelopeFrom = fromAddress
 	}
 	addr := net.JoinHostPort(cfg.SMTPHost, strconv.Itoa(port))
 
@@ -74,15 +79,15 @@ func (m *SMTPMailer) Send(cfg domain.NotificationSettings, subject, body string)
 	if cfg.SMTPUsername != "" {
 		auth = smtp.PlainAuth("", cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPHost)
 	}
-	msg := buildMessage(from, cfg.Recipient, subject, body)
+	msg := buildMessage(fromAddress, cfg.Recipient, subject, body)
 
 	// Implicit TLS (typically port 465) needs a TLS connection up front.
 	// Otherwise smtp.SendMail negotiates STARTTLS opportunistically
 	// (typically port 587 / 25).
 	if cfg.SMTPUseTLS {
-		return sendImplicitTLS(addr, cfg.SMTPHost, auth, from, cfg.Recipient, msg)
+		return sendImplicitTLS(addr, cfg.SMTPHost, auth, envelopeFrom, cfg.Recipient, msg)
 	}
-	return smtp.SendMail(addr, auth, from, []string{cfg.Recipient}, msg)
+	return smtp.SendMail(addr, auth, envelopeFrom, []string{cfg.Recipient}, msg)
 }
 
 func sendImplicitTLS(addr, host string, auth smtp.Auth, from, to string, msg []byte) error {
