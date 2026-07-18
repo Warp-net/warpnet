@@ -58,15 +58,11 @@
             <input type="password" v-model="settings.smtp_password" autocomplete="new-password"
                    class="mt-1 w-full rounded border border-lighter bg-white p-2" />
           </label>
-          <label class="block">
-            <span class="font-bold">From address</span>
-            <input type="email" v-model="settings.smtp_from" placeholder="you@example.com"
-                   class="mt-1 w-full rounded border border-lighter bg-white p-2" />
-          </label>
           <label class="flex items-center">
             <input type="checkbox" v-model="settings.smtp_use_tls" class="mr-2" />
             <span class="font-bold">Use implicit TLS (port 465)</span>
           </label>
+          <p class="text-sm text-dark">Emails are sent from noreply@warpnet.site.</p>
         </fieldset>
 
         <fieldset class="border border-lighter rounded p-4 space-y-2">
@@ -124,7 +120,6 @@ export default {
         smtp_port: 587,
         smtp_username: '',
         smtp_password: '',
-        smtp_from: '',
         smtp_use_tls: false,
         types: {},
       },
@@ -136,10 +131,10 @@ export default {
       this.savedMessage = '';
       try {
         await warpnetService.updateNotificationSettings(this.settings);
-        this.savedMessage = 'Saved';
+        this.savedMessage = 'Settings saved';
       } catch (err) {
         console.error('Failed to save notification settings:', err);
-        this.savedMessage = 'Failed to save';
+        this.savedMessage = err?.message || 'Failed to save';
       } finally {
         this.saving = false;
       }
@@ -157,7 +152,6 @@ export default {
           smtp_port: saved.smtp_port || 587,
           smtp_username: saved.smtp_username || '',
           smtp_password: saved.smtp_password || '',
-          smtp_from: saved.smtp_from || '',
           smtp_use_tls: !!saved.smtp_use_tls,
           types: saved.types || {},
         };
