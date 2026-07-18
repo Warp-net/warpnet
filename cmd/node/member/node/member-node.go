@@ -381,7 +381,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.adminHandlers(authRepo, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
-	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
+	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo)...)
 	hs = append(hs, m.followRequestHandlers(followRepo)...)
 	hs = append(hs, m.filterHandlers(r)...)
 	hs = append(hs, m.userHandlers(authRepo, userRepo, followRepo, r)...)
@@ -521,7 +521,6 @@ func (m *MemberNode) followHandlers(
 	authRepo AuthProvider,
 	userRepo UserProvider,
 	followRepo FollowStorer,
-	r *memberRepos,
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
