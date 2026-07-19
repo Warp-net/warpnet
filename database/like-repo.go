@@ -61,10 +61,14 @@ type LikeStatsStorer interface {
 type LikeRepo struct {
 	db      LikeStorer
 	statsDb LikeStatsStorer
+	// ownerID is this node's user. The CRDT-replicated counter is bumped only
+	// for this user's own actions, so a like observed on both the liker's node
+	// and the tweet author's node is counted once network-wide.
+	ownerID string
 }
 
-func NewLikeRepo(db LikeStorer, statsDb LikeStatsStorer) *LikeRepo {
-	return &LikeRepo{db: db, statsDb: statsDb}
+func NewLikeRepo(db LikeStorer, statsDb LikeStatsStorer, ownerID string) *LikeRepo {
+	return &LikeRepo{db: db, statsDb: statsDb, ownerID: ownerID}
 }
 
 func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error) {
@@ -109,7 +113,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 	if err = txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb == nil {
+	if repo.statsDb == nil || userId != repo.ownerID {
 		return likesCount, nil
 	}
 	if err := repo.statsDb.Increment(likeKey.DatastoreKey()); err != nil {
@@ -162,7 +166,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 	if err := txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb == nil {
+	if repo.statsDb == nil || userId != repo.ownerID {
 		return likesCount, nil
 	}
 

@@ -84,12 +84,16 @@ const viewLockShards = 64
 type TweetRepo struct {
 	db      TweetsStorer
 	statsDb TweetStatsStorer
+	// ownerID is this node's user. The CRDT-replicated reply/retweet counters
+	// are bumped only for this user's own actions, so an event stored on both
+	// the actor's node and the tweet author's node is counted once network-wide.
+	ownerID string
 
 	viewLocks [viewLockShards]sync.Mutex
 }
 
-func NewTweetRepo(db TweetsStorer, statsDb TweetStatsStorer) *TweetRepo {
-	return &TweetRepo{db: db, statsDb: statsDb}
+func NewTweetRepo(db TweetsStorer, statsDb TweetStatsStorer, ownerID string) *TweetRepo {
+	return &TweetRepo{db: db, statsDb: statsDb, ownerID: ownerID}
 }
 
 func (repo *TweetRepo) viewLock(tweetId string) *sync.Mutex {
@@ -516,7 +520,7 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	if err := txn.Commit(); err != nil {
 		return reply, err
 	}
-	if repo.statsDb != nil {
+	if repo.statsDb != nil && reply.UserId == repo.ownerID {
 		if err := repo.statsDb.Increment(countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db increment: %v", err)
 		}
@@ -571,7 +575,7 @@ func (repo *TweetRepo) DeleteReply(parentID, replyID string) (domain.Tweet, erro
 	if err := txn.Commit(); err != nil {
 		return reply, err
 	}
-	if repo.statsDb != nil {
+	if repo.statsDb != nil && reply.UserId == repo.ownerID {
 		if err := repo.statsDb.Decrement(countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db decrement: %v", err)
 		}
@@ -662,7 +666,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	if err := txn.Commit(); err != nil {
 		return newTweet, err
 	}
-	if repo.statsDb == nil {
+	if repo.statsDb == nil || *tweet.RetweetedBy != repo.ownerID {
 		return newTweet, nil
 	}
 	if err := repo.statsDb.Increment(retweetCountKey.DatastoreKey()); err != nil {
@@ -716,7 +720,7 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	if err := txn.Commit(); err != nil {
 		return err
 	}
-	if repo.statsDb == nil {
+	if repo.statsDb == nil || retweetedByUserID != repo.ownerID {
 		return nil
 	}
 	if err := repo.statsDb.Decrement(retweetCountKey.DatastoreKey()); err != nil {

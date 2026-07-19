@@ -57,7 +57,7 @@ func (s *TweetRepoTestSuite) SetupSuite() {
 	auth := NewAuthRepo(s.db, "test")
 	s.Require().NoError(auth.Authenticate("test", "test"))
 
-	s.repo = NewTweetRepo(s.db, nil)
+	s.repo = NewTweetRepo(s.db, nil, "")
 }
 
 func (s *TweetRepoTestSuite) TearDownSuite() {
@@ -611,7 +611,9 @@ func (f *fakeTweetStats) Decrement(key ds.Key) error {
 // reads back stale/zero and stays hidden.
 func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
 	stats := newFakeTweetStats()
-	repo := NewTweetRepo(s.db, stats)
+	// ownerID == the replier: the shared (CRDT) counter is bumped only for this
+	// node's own user's replies, so this exercises the counted single-node case.
+	repo := NewTweetRepo(s.db, stats, "user123")
 
 	parentID := ulid.Make().String()
 	rootID := ulid.Make().String()

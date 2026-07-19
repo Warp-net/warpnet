@@ -55,7 +55,7 @@ func (s *LikeRepoTestSuite) SetupSuite() {
 	err = authRepo.Authenticate("test", "test")
 	s.Require().NoError(err)
 
-	s.repo = NewLikeRepo(s.db, nil)
+	s.repo = NewLikeRepo(s.db, nil, "")
 }
 
 func (s *LikeRepoTestSuite) TearDownSuite() {
