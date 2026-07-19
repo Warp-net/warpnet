@@ -74,13 +74,9 @@ func Stream(protocolID string, data string) string {
 }
 
 // Sign returns the base64-encoded Ed25519 signature of the given signing input
-// (the envelope body followed by the timestamp as decimal Unix nanoseconds)
-// computed with the libp2p identity key passed to Initialize. The Kotlin
-// envelope signer uses
-// this so the desktop's auth middleware verifies the signature against the
-// same peer ID it sees on the libp2p stream. Returns an empty string if the
-// client is not initialized; signing errors are returned with an "error: "
-// prefix to keep the gomobile signature simple.
+// (body followed by the timestamp as decimal Unix nanoseconds), computed with
+// the libp2p identity key from Initialize. Returns "" if uninitialized, or an
+// "error: "-prefixed string on failure, to keep the gomobile signature simple.
 func Sign(body string) string {
 	if clientInstance == nil {
 		return ""

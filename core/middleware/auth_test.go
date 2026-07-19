@@ -31,8 +31,7 @@ func TestIsFresh(t *testing.T) {
 	}
 }
 
-// TestIsFresh_DefaultsWindow ensures a zero-valued freshnessWindow falls back
-// to the package default rather than rejecting everything.
+// A zero freshnessWindow must fall back to the package default.
 func TestIsFresh_DefaultsWindow(t *testing.T) {
 	p := &WarpMiddleware{}
 	if !p.isFresh(time.Now()) {

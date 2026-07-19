@@ -98,9 +98,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		// Freshness gate, only for genuinely remote peers. Loopback self-streams
-		// (the local frontend/bridge path and gossip re-injection) carry a local
-		// timestamp and must not be rejected for age.
+		// Freshness gate for remote peers only; loopback self-streams are exempt.
 		if remotePeer != s.Conn().LocalPeer() && !p.isFresh(msg.Timestamp) {
 			log.Errorf("middleware: auth: %s: stale/replayed message from %s ts=%s",
 				route, remotePeer, msg.Timestamp)
@@ -118,8 +116,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 	}
 }
 
-// isFresh reports whether ts is within the configured freshness window of now,
-// in either direction (covers both stale replays and future-dated clocks).
+// isFresh reports whether ts is within the freshness window of now, either way.
 func (p *WarpMiddleware) isFresh(ts time.Time) bool {
 	if ts.IsZero() {
 		return false

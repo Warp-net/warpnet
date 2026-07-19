@@ -50,9 +50,7 @@ const (
 	ErrStaleMessage      middlewareError = `["middleware: auth: stale or replayed message"]`
 )
 
-// messageFreshnessWindow bounds how far an inbound message's signed timestamp
-// may drift from local time. It caps the window in which a captured message can
-// be replayed while tolerating normal clock skew between peers.
+// messageFreshnessWindow caps how far a signed timestamp may drift from now.
 const messageFreshnessWindow = 5 * time.Minute
 
 const (

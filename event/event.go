@@ -285,14 +285,8 @@ type Message struct {
 	Signature   string          `json:"signature"`
 }
 
-// SigningBytes returns the bytes an ed25519 signature must cover: the raw body
-// followed by the timestamp as decimal Unix nanoseconds. Binding the timestamp
-// into the signature lets the receiver reject replays by freshness; signing the
-// body alone would leave the timestamp malleable. Using the numeric instant
-// (not its RFC3339 rendering) keeps the bytes identical across Go and the mobile
-// client regardless of timestamp formatting, and lets the receiver reuse the
-// already-parsed Timestamp instead of re-scanning the payload. Senders must set
-// Timestamp before calling this.
+// SigningBytes returns the bytes an ed25519 signature covers: the raw body plus
+// the timestamp as decimal Unix nanoseconds. Senders must set Timestamp first.
 func (m Message) SigningBytes() []byte {
 	ts := strconv.FormatInt(m.Timestamp.UnixNano(), 10)
 	buf := make([]byte, 0, len(m.Body)+len(ts))

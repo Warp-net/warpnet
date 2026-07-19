@@ -13,10 +13,7 @@ import (
 	"github.com/Warp-net/warpnet/security"
 )
 
-// TestMessage_SigningBytes_JSONRoundTrip guards the core contract: the signing
-// bytes must survive a marshal→unmarshal round-trip unchanged, so a receiver
-// computes the same bytes the sender signed. UnixNano is stable because
-// RFC3339Nano preserves nanosecond precision on the wire.
+// SigningBytes must survive a JSON round-trip unchanged.
 func TestMessage_SigningBytes_JSONRoundTrip(t *testing.T) {
 	msg := event.Message{
 		Body:      json.RawMessage(`{"hello":"world"}`),
@@ -38,9 +35,7 @@ func TestMessage_SigningBytes_JSONRoundTrip(t *testing.T) {
 	}
 }
 
-// TestMessage_SignatureBindsTimestamp proves the timestamp is covered by the
-// signature: refreshing a captured message's timestamp (the replay move) must
-// invalidate it.
+// Tampering with the timestamp must invalidate the signature.
 func TestMessage_SignatureBindsTimestamp(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
