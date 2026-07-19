@@ -11,7 +11,7 @@ services:
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet1
-      - NODE_METRICS_GATEWAY=130.94.88.38:4091
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
 
   warpnet22:
     container_name: warpnet-testnet-2
@@ -25,7 +25,7 @@ services:
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet2
-      - NODE_METRICS_GATEWAY=130.94.88.38:4091
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
 
   warpnet33:
     container_name: warpnet-testnet-3
@@ -39,7 +39,7 @@ services:
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet3
-      - NODE_METRICS_GATEWAY=130.94.88.38:4091
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
 
   warpnet-moderator-testnet:
     container_name: moderator-testnet
@@ -53,7 +53,7 @@ services:
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
       - NODE_SEED=warpnet-moderator-testnet
-      - NODE_METRICS_GATEWAY=130.94.88.38:4091
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
     volumes:
       - /root/.warpdata:/root/.warpdata:rw
 
@@ -70,8 +70,31 @@ services:
       - LOGGING_FORMAT=json
       - NODE_SERVER_PORT=4999
       - NODE_SERVER_PASSWORD=${NODE_SERVER_PASSWORD}
-      - NODE_METRICS_GATEWAY=130.94.88.38:4091
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
     volumes:
       - /root/.warpdata-vadim:/root/.warpdata:rw
+
+  push-gateway:
+    container_name: push-gateway-testnet
+    image: prom/pushgateway:latest
+    network_mode: host
+    command:
+      - "--web.listen-address=:4091"
+    restart: always
+
+  echo:
+    container_name: echo-testnet
+    image: ghcr.io/warp-net/warpnet-echo:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4066
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - NODE_SEED=echo-testnet
+    volumes:
+      - ${HOME}/warpnet-data/testnet/echo:/root/.warpdata/testnet/storage
 
 

@@ -45,6 +45,14 @@ var (
 	ErrEmptyRecipient = errors.New("mailer: empty recipient")
 )
 
+// fromAddress is the fixed visible sender of every Warpnet email.
+const fromAddress = "noreply@warpnet.site"
+
+// smtpTimeout bounds the whole SMTP exchange (connect + conversation) so an
+// unreachable or filtered SMTP host fails fast instead of blocking a
+// dispatch goroutine on the OS default connect timeout (~2 min).
+const smtpTimeout = 15 * time.Second
+
 // SMTPMailer sends email over the user's own SMTP server. It is the default
 // Sender used by EmailChannel.
 type SMTPMailer struct{}
@@ -64,9 +72,11 @@ func (m *SMTPMailer) Send(cfg domain.NotificationSettings, subject, body string)
 	if port == 0 {
 		port = 587
 	}
-	from := cfg.SMTPFrom
-	if from == "" {
-		from = cfg.SMTPUsername
+	// Envelope sender is the authenticated account — providers reject a
+	// mismatched MAIL FROM. The visible From header is always fromAddress.
+	envelopeFrom := cfg.SMTPUsername
+	if envelopeFrom == "" {
+		envelopeFrom = fromAddress
 	}
 	addr := net.JoinHostPort(cfg.SMTPHost, strconv.Itoa(port))
 
@@ -74,34 +84,53 @@ func (m *SMTPMailer) Send(cfg domain.NotificationSettings, subject, body string)
 	if cfg.SMTPUsername != "" {
 		auth = smtp.PlainAuth("", cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPHost)
 	}
-	msg := buildMessage(from, cfg.Recipient, subject, body)
+	msg := buildMessage(fromAddress, cfg.Recipient, subject, body)
 
-	// Implicit TLS (typically port 465) needs a TLS connection up front.
-	// Otherwise smtp.SendMail negotiates STARTTLS opportunistically
-	// (typically port 587 / 25).
-	if cfg.SMTPUseTLS {
-		return sendImplicitTLS(addr, cfg.SMTPHost, auth, from, cfg.Recipient, msg)
-	}
-	return smtp.SendMail(addr, auth, from, []string{cfg.Recipient}, msg)
+	return send(cfg.SMTPUseTLS, addr, cfg.SMTPHost, auth, envelopeFrom, cfg.Recipient, msg)
 }
 
-func sendImplicitTLS(addr, host string, auth smtp.Auth, from, to string, msg []byte) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// send delivers one message with a bounded timeout. Implicit TLS (typically
+// port 465) connects over TLS up front; otherwise STARTTLS is negotiated when
+// the server offers it (typically port 587 / 25).
+func send(useTLS bool, addr, host string, auth smtp.Auth, from, to string, msg []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), smtpTimeout)
 	defer cancel()
 
-	d := tls.Dialer{Config: &tls.Config{ServerName: host}} //nolint:gosec
-	conn, err := d.DialContext(ctx, "tcp", addr)
+	tlsCfg := &tls.Config{ServerName: host} //nolint:gosec
+
+	var (
+		conn net.Conn
+		err  error
+	)
+	if useTLS {
+		conn, err = (&tls.Dialer{Config: tlsCfg}).DialContext(ctx, "tcp", addr)
+	} else {
+		conn, err = (&net.Dialer{}).DialContext(ctx, "tcp", addr)
+	}
 	if err != nil {
 		return err
 	}
+	// Bound the whole conversation, not just the dial.
+	_ = conn.SetDeadline(time.Now().Add(smtpTimeout))
+
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = c.Close() }()
+
+	if !useTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			if err := c.StartTLS(tlsCfg); err != nil {
+				return err
+			}
+		}
+	}
 	if auth != nil {
-		if err := c.Auth(auth); err != nil {
-			return err
+		if ok, _ := c.Extension("AUTH"); ok {
+			if err := c.Auth(auth); err != nil {
+				return err
+			}
 		}
 	}
 	if err := c.Mail(from); err != nil {

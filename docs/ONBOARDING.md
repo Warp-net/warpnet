@@ -824,7 +824,7 @@ names are the flag uppercased with dots → underscores (`node.port` → `NODE_P
 | `--node.host.v6` | `NODE_HOST_V6` | `::` | IPv6 bind address. |
 | `--node.bootstrap` | `NODE_BOOTSTRAP` | *(empty)* | Extra bootstrap multiaddrs, comma-separated. The built-in nodes for the chosen network are appended automatically. |
 | `--node.print-psk` | `NODE_PRINT_PSK` | `false` | Print the network PSK on startup (handy for relays/moderators). |
-| `--node.metrics.gateway` | `NODE_METRICS_GATEWAY` | `130.94.88.38:4091` | Prometheus push-gateway address. |
+| `--node.metrics.gateway` | `NODE_METRICS_GATEWAY` | `207.154.221.44:4091` | Prometheus push-gateway address. |
 | `--node.moderator.modelpath` | `NODE_MODERATOR_MODELPATH` | `…/Llama-Guard-3-1B.Q8_0.gguf` | Path to the GGUF model (moderator role). |
 | `--node.server.port` | `NODE_SERVER_PORT` | `4999` | Dashboard HTTP/WS port (business role). |
 | `--node.server.password` | `NODE_SERVER_PASSWORD` | *(empty)* | Pre-shared secret that encrypts dashboard WS traffic (business role — required). |
@@ -833,7 +833,7 @@ names are the flag uppercased with dots → underscores (`node.port` → `NODE_P
 | `--database.dir` | `DATABASE_DIR` | `storage` | Subdirectory under `~/.warpdata/<network>/`. |
 
 Built-in bootstrap nodes: **mainnet** uses `207.154.221.44:4001/4002/4003` +
-`130.94.88.38:4011`; **testnet** uses `207.154.221.44:4011/4022/4033`.
+`207.154.221.44:4011`; **testnet** uses `207.154.221.44:4011/4022/4033`.
 
 ```bash
 LOGGING_LEVEL=debug ./build/bin/warpnet --node.network testnet   # verbose logs

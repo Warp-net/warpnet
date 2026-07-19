@@ -789,17 +789,23 @@ export const warpnetService = {
             smtp_port: Number(settings.smtp_port) || 0,
             smtp_username: settings.smtp_username || '',
             smtp_password: settings.smtp_password || '',
-            smtp_from: settings.smtp_from || '',
             smtp_use_tls: !!settings.smtp_use_tls,
             types: settings.types || {},
         };
     },
 
+    // updateNotificationSettings persists the settings and confirms the node
+    // stored them: it throws on an error response or if the node did not echo
+    // the saved settings back, so the caller can report real success/failure.
     async updateNotificationSettings(settings) {
-        return await this.sendToNode({
+        const resp = await this.sendToNode({
             path: PRIVATE_POST_NOTIFICATION_SETTINGS,
             body: this.notificationSettingsBody(settings),
         });
+        if (!resp || resp.code || !('email_enabled' in resp)) {
+            throw new Error(resp?.message || 'Failed to save notification settings');
+        }
+        return resp;
     },
 
     async addFilterKeyword(filterId, keyword, wholeWord) {
