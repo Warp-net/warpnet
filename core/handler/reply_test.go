@@ -290,6 +290,44 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("merges local and remote replies for a bridged thread", func(t *testing.T) {
+		// A remote-rooted (bridged) thread: local holds this node's own replies,
+		// the root author's home node holds the Fediverse participants' replies.
+		// Both must show, and a local reply must not duplicate its federated copy.
+		local := []domain.Tweet{
+			{Id: "L1", Text: "my fresh reply"},   // not yet mirrored remotely
+			{Id: "L2", Text: "already federated"}, // came back as a bridged status
+		}
+		remote := event.TweetsResponse{Tweets: []domain.Tweet{
+			{Id: "m1", Text: "mastodon reply"},
+			{Id: "https://gw.example/users/u/statuses/L2?parent=x", Text: "already federated"},
+		}}
+		userRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		}}
+		streamer := stubStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+			return marshal(t, remote), nil
+		}}
+		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
+			return local, "", nil
+		}}, userRepo, streamer)
+		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, RootUserId: "author-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.TweetsResponse)
+		ids := map[string]bool{}
+		for _, tw := range r.Tweets {
+			ids[tw.Id] = true
+		}
+		if len(r.Tweets) != 3 || !ids["m1"] || !ids["L1"] {
+			t.Fatalf("expected remote m1 + bridged L2 + local L1, got %+v", r.Tweets)
+		}
+		if ids["L2"] {
+			t.Fatalf("local L2 should be deduped against its bridged copy, got %+v", r.Tweets)
+		}
+	})
+
 	t.Run("forwards to root author's home node when no local replies", func(t *testing.T) {
 		// With an empty local store the handler resolves the root author's home
 		// node (foreign, e.g. a bridged post) and returns that node's replies.

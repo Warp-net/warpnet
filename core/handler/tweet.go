@@ -490,16 +490,64 @@ func getThreadReplies(
 	if err != nil {
 		return nil, err
 	}
-	if len(replies) == 0 {
-		if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
-			return resp, nil
-		}
+	// A thread rooted on a remote/bridged tweet keeps its full reply set on the
+	// root author's home node (e.g. the Fediverse via the gateway); this node
+	// only holds its own replies. Merge both so a freshly posted local reply and
+	// the remote participants' replies both show — the old "local else remote"
+	// hid every remote reply as soon as one local reply existed.
+	if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
+		return event.TweetsResponse{
+			Cursor: resp.Cursor,
+			Tweets: mergeReplies(resp.Tweets, replies),
+			UserId: parentId,
+		}, nil
 	}
 	return event.TweetsResponse{
 		Cursor: cursor,
 		Tweets: replies,
 		UserId: parentId,
 	}, nil
+}
+
+// mergeReplies returns the remote (authoritative) replies followed by local
+// replies not already present remotely. A local reply is deduped by id, or when
+// a remote reply carries it in a bridged status url (.../statuses/{id}) — how a
+// local reply reappears once it federates back through the gateway.
+func mergeReplies(remote, local []domain.Tweet) []domain.Tweet {
+	if len(local) == 0 {
+		return remote
+	}
+	seen := make(map[string]struct{}, len(remote))
+	for _, r := range remote {
+		seen[r.Id] = struct{}{}
+	}
+	out := make([]domain.Tweet, 0, len(remote)+len(local))
+	out = append(out, remote...)
+	for _, l := range local {
+		if l.Id == "" {
+			continue
+		}
+		if _, dup := seen[l.Id]; dup {
+			continue
+		}
+		if remoteContainsReply(remote, l.Id) {
+			continue
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
+// remoteContainsReply reports whether a remote reply is the bridged copy of the
+// local reply id (its status url ends in .../statuses/{id}).
+func remoteContainsReply(remote []domain.Tweet, id string) bool {
+	needle := "/statuses/" + id
+	for _, r := range remote {
+		if strings.Contains(r.Id, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 // forwardThreadReplies asks the root tweet author's home node for the thread's
