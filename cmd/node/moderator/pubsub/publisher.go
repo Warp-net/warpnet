@@ -115,7 +115,7 @@ func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) e
 			log.Warnf("pubsub: reports: dropping message: cannot derive pubkey from %s", msg.NodeId)
 			return nil
 		}
-		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
+		if err := security.VerifySignature(pubKey, msg.SigningBytes(), msg.Signature); err != nil {
 			log.Warnf("pubsub: reports: dropping message from %s: signature invalid: %v", msg.NodeId, err)
 			return nil
 		}

@@ -101,7 +101,7 @@ func (b *BusinessNode) trackPublicReachability(ctx context.Context) {
 			switch b.NodeInfo().Reachability {
 			case warpnet.ReachabilityPrivate:
 				streak++
-				log.Warnf("business: reachability reported private (%d/%d)", streak, privateStreak)
+				//log.Warnf("business: reachability reported private (%d/%d)", streak, privateStreak)
 				if streak >= privateStreak {
 					// Used to panic here; relay-only periods happen, so just escalate.
 					// log.Errorf("business: node is privately reachable (behind NAT) — a business node must have a publicly addressable IP")
