@@ -33,7 +33,6 @@ import (
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/security"
-	log "github.com/sirupsen/logrus"
 )
 
 type BusinessNode struct {
