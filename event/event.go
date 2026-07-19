@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package event
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/Warp-net/warpnet/domain"
@@ -285,23 +286,19 @@ type Message struct {
 }
 
 // SigningBytes returns the bytes an ed25519 signature must cover: the raw body
-// followed by the wire form of the timestamp. Binding the timestamp into the
-// signature is what lets the receiver reject replays by freshness — signing the
-// body alone would leave the timestamp malleable and the freshness check
-// bypassable. Senders must set Timestamp before calling this.
+// followed by the timestamp as decimal Unix nanoseconds. Binding the timestamp
+// into the signature lets the receiver reject replays by freshness; signing the
+// body alone would leave the timestamp malleable. Using the numeric instant
+// (not its RFC3339 rendering) keeps the bytes identical across Go and the mobile
+// client regardless of timestamp formatting, and lets the receiver reuse the
+// already-parsed Timestamp instead of re-scanning the payload. Senders must set
+// Timestamp before calling this.
 func (m Message) SigningBytes() []byte {
-	ts := CanonicalTimestamp(m.Timestamp)
+	ts := strconv.FormatInt(m.Timestamp.UnixNano(), 10)
 	buf := make([]byte, 0, len(m.Body)+len(ts))
 	buf = append(buf, m.Body...)
 	buf = append(buf, ts...)
 	return buf
-}
-
-// CanonicalTimestamp renders t exactly as the standard-library-compatible JSON
-// marshaller encodes a time.Time (RFC3339Nano, UTC), so a Go sender's signed
-// timestamp string is byte-identical to what lands on the wire.
-func CanonicalTimestamp(t time.Time) string {
-	return t.UTC().Format(time.RFC3339Nano)
 }
 
 // MessageBody defines model for Message.Body.

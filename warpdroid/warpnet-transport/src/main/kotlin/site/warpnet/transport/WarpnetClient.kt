@@ -142,13 +142,15 @@ class WarpnetClient(
                 throw WarpnetException.NotConnected()
             }
 
-            val timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+            val instant = Instant.now()
+            val timestamp = DateTimeFormatter.ISO_INSTANT.format(instant)
+            val epochNanos = instant.epochSecond * 1_000_000_000L + instant.nano
             val envelope = WarpnetEnvelope.unsigned(
                 body = rawAuthNodeInfoJson,
                 nodeId = signer.peerId,
                 path = ProtocolIds.PRIVATE_POST_PAIR,
                 timestamp = timestamp,
-            ).copy(signature = signer.sign(rawAuthNodeInfoJson + timestamp))
+            ).copy(signature = signer.sign(rawAuthNodeInfoJson + epochNanos))
 
             val requestJson = buildEnvelopeJson(envelope)
             val raw = binding.stream(ProtocolIds.PRIVATE_POST_PAIR, requestJson)
@@ -211,13 +213,15 @@ class WarpnetClient(
             // Rebuild + re-sign the envelope each attempt so the
             // timestamp matches the wire and the signature stays valid
             // against the freshly-sent body.
-            val timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+            val instant = Instant.now()
+            val timestamp = DateTimeFormatter.ISO_INSTANT.format(instant)
+            val epochNanos = instant.epochSecond * 1_000_000_000L + instant.nano
             val envelope = WarpnetEnvelope.unsigned(
                 body = bodyJson,
                 nodeId = signer.peerId,
                 path = protocolId,
                 timestamp = timestamp,
-            ).copy(signature = signer.sign(bodyJson + timestamp))
+            ).copy(signature = signer.sign(bodyJson + epochNanos))
 
             val requestJson = buildEnvelopeJson(envelope)
             val raw = binding.stream(protocolId, requestJson)

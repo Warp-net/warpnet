@@ -91,19 +91,8 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		// Verify over the body plus the timestamp exactly as it appears on the
-		// wire (not the re-marshalled time.Time), so the check is byte-identical
-		// across Go and the mobile client regardless of RFC3339 formatting.
-		var rawTS struct {
-			Timestamp string `json:"timestamp"`
-		}
-		_ = json.Unmarshal(data, &rawTS)
-		signingInput := make([]byte, 0, len(msg.Body)+len(rawTS.Timestamp))
-		signingInput = append(signingInput, msg.Body...)
-		signingInput = append(signingInput, rawTS.Timestamp...)
-
 		pubKey := warpnet.FromIDToPubKey(remotePeer)
-		if err := security.VerifySignature(pubKey, signingInput, msg.Signature); err != nil {
+		if err := security.VerifySignature(pubKey, msg.SigningBytes(), msg.Signature); err != nil {
 			log.Errorf("middleware: auth: signature invalid: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return

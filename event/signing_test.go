@@ -13,10 +13,11 @@ import (
 	"github.com/Warp-net/warpnet/security"
 )
 
-// TestMessage_SigningBytes_WireRoundTrip guards the cross-language contract:
-// the bytes a Go sender signs must equal what a receiver reconstructs from the
-// raw wire body + timestamp string, or signatures would not verify.
-func TestMessage_SigningBytes_WireRoundTrip(t *testing.T) {
+// TestMessage_SigningBytes_JSONRoundTrip guards the core contract: the signing
+// bytes must survive a marshal→unmarshal round-trip unchanged, so a receiver
+// computes the same bytes the sender signed. UnixNano is stable because
+// RFC3339Nano preserves nanosecond precision on the wire.
+func TestMessage_SigningBytes_JSONRoundTrip(t *testing.T) {
 	msg := event.Message{
 		Body:      json.RawMessage(`{"hello":"world"}`),
 		Timestamp: time.Now().UTC(),
@@ -27,17 +28,13 @@ func TestMessage_SigningBytes_WireRoundTrip(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	var wire struct {
-		Body      json.RawMessage `json:"body"`
-		Timestamp string          `json:"timestamp"`
-	}
-	if err := json.Unmarshal(data, &wire); err != nil {
+	var got event.Message
+	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	reconstructed := append(append([]byte{}, wire.Body...), wire.Timestamp...)
-	if string(reconstructed) != string(msg.SigningBytes()) {
-		t.Fatalf("signing bytes mismatch:\n sender = %q\n wire   = %q", msg.SigningBytes(), reconstructed)
+	if string(got.SigningBytes()) != string(msg.SigningBytes()) {
+		t.Fatalf("signing bytes changed across JSON round-trip:\n before = %q\n after  = %q", msg.SigningBytes(), got.SigningBytes())
 	}
 }
 
