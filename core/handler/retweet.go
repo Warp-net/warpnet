@@ -59,6 +59,8 @@ type ReTweetsStorer interface {
 	UnRetweet(retweetedByUserID, tweetId string) error
 	RetweetsCount(tweetId string) (uint64, error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
+	IncrSharedRetweetsCount(tweetId string) error
+	DecrSharedRetweetsCount(tweetId string) error
 }
 
 type RetweetTimelineUpdater interface {
@@ -160,6 +162,14 @@ func StreamNewReTweetHandler(
 			return nil, err
 		}
 
+		// The source tweet's node has now stored (and counted) the forwarded
+		// retweet and owns the network-wide retweets counter. Revert the CRDT
+		// bump NewRetweet made here so one retweet isn't counted on both nodes.
+		// NewRetweet keys the counter by the source id it received (retweetEvent.Id).
+		if derr := tweetRepo.DecrSharedRetweetsCount(retweetEvent.Id); derr != nil {
+			log.Errorf("retweet handler: revert shared retweets count: %v", derr)
+		}
+
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(retweetDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other retweet error response: %s", possibleError.Message)
@@ -230,6 +240,13 @@ func StreamUnretweetHandler(
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		// Mirror StreamNewReTweetHandler: the source tweet's node owns the
+		// network-wide retweets counter and has applied the unretweet, so revert
+		// the CRDT decrement UnRetweet made here to keep the count single-owned.
+		if ierr := tweetRepo.IncrSharedRetweetsCount(ev.TweetId); ierr != nil {
+			log.Errorf("unretweet handler: revert shared retweets count: %v", ierr)
 		}
 
 		var possibleError event.ResponseError

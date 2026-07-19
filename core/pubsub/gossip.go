@@ -456,7 +456,20 @@ func (g *Gossip) SelfPublish(data []byte) error {
 		return nil
 	}
 
-	_, err := g.node.SelfStream(route, data)
+	// The message was signed by the originating peer, but it now re-enters our
+	// own pipeline over a loopback self-stream whose auth middleware verifies
+	// the signature against THIS node's key. Re-sign with our key so the
+	// forwarded update passes auth; the author stays identified by the body.
+	simulatedStreamMessage.Signature = base64.StdEncoding.EncodeToString(
+		ed25519.Sign(g.privKey, simulatedStreamMessage.SigningBytes()),
+	)
+	data, err := json.Marshal(simulatedStreamMessage)
+	if err != nil {
+		log.Errorf("gossip: failed to re-sign user update message: %v", err)
+		return err
+	}
+
+	_, err = g.node.SelfStream(route, data)
 	return err
 }
 

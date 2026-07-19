@@ -644,6 +644,37 @@ func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
 	s.Equal(uint64(5), count)
 }
 
+// TestRetweetsCountSingleNodeOwnership guards against the cross-node
+// double-count: a retweet of a remote tweet is stored (and counted) on both the
+// retweeter's node and the source author's node. The retweeter's node must
+// revert its own CRDT bump after forwarding, so a single retweet counts once
+// network-wide, not twice.
+func (s *TweetRepoTestSuite) TestRetweetsCountSingleNodeOwnership() {
+	stats := newFakeTweetStats()
+	repo := NewTweetRepo(s.db, stats)
+	sourceTweetId := ulid.Make().String()
+	retweeter := "retweeter"
+
+	// Retweeter's node stores + counts the retweet via the shared CRDT counter.
+	_, err := repo.NewRetweet(domain.Tweet{
+		Id:          sourceTweetId,
+		UserId:      "author",
+		RetweetedBy: &retweeter,
+		Text:        "rt",
+		CreatedAt:   time.Now(),
+	})
+	s.Require().NoError(err)
+	// ...then reverts once the retweet has been forwarded to the author's node.
+	s.Require().NoError(repo.DecrSharedRetweetsCount(sourceTweetId))
+
+	// Source author's node counts the forwarded retweet.
+	s.Require().NoError(repo.IncrSharedRetweetsCount(sourceTweetId))
+
+	count, err := repo.RetweetsCount(sourceTweetId)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
 func (s *TweetRepoTestSuite) TestDeleteReply() {
 	parentID := ulid.Make().String()
 	rootID := ulid.Make().String()

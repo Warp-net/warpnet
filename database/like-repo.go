@@ -173,6 +173,35 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 	return likesCount, nil
 }
 
+// IncrSharedLikesCount and DecrSharedLikesCount adjust only the
+// CRDT-replicated likes counter for a tweet, leaving the local per-tweet
+// count untouched. The like handlers use them to keep the network-wide
+// counter owned by a single node: a like on a remote tweet is stored (and
+// counted) both on the liker's node and on the author's node, so the liker's
+// node reverts its own CRDT bump once the author's node has taken ownership —
+// otherwise one like is counted twice.
+func (repo *LikeRepo) IncrSharedLikesCount(tweetId string) error {
+	if repo.statsDb == nil {
+		return nil
+	}
+	likeKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(IncrSubNamespace).
+		AddRootID(tweetId).
+		Build()
+	return repo.statsDb.Increment(likeKey.DatastoreKey())
+}
+
+func (repo *LikeRepo) DecrSharedLikesCount(tweetId string) error {
+	if repo.statsDb == nil {
+		return nil
+	}
+	likeKey := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(IncrSubNamespace).
+		AddRootID(tweetId).
+		Build()
+	return repo.statsDb.Decrement(likeKey.DatastoreKey())
+}
+
 func (repo *LikeRepo) LikesCount(tweetId string) (likesNum uint64, err error) {
 	if tweetId == "" {
 		return 0, local_store.DBError("empty tweet id")

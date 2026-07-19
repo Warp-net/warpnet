@@ -143,6 +143,29 @@ func (s *LikeRepoTestSuite) TestLikers_Empty() {
 	s.Equal(cur, "end")
 }
 
+// TestLikesCountSingleNodeOwnership guards against the cross-node double-count:
+// a like on a remote tweet is stored (and counted) on both the liker's node and
+// the author's node. The liker's node must revert its own CRDT bump after
+// forwarding, so a single like counts once network-wide, not twice.
+func (s *LikeRepoTestSuite) TestLikesCountSingleNodeOwnership() {
+	stats := newFakeTweetStats()
+	repo := NewLikeRepo(s.db, stats)
+	tweetId := ulid.Make().String()
+
+	// Liker's node stores + counts the like via the shared CRDT counter.
+	_, err := repo.Like(tweetId, "liker")
+	s.Require().NoError(err)
+	// ...then reverts once the like has been forwarded to the author's node.
+	s.Require().NoError(repo.DecrSharedLikesCount(tweetId))
+
+	// Author's node counts the forwarded like (its CRDT sub-counter merges in).
+	s.Require().NoError(repo.IncrSharedLikesCount(tweetId))
+
+	count, err := repo.LikesCount(tweetId)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
 func TestLikeRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
