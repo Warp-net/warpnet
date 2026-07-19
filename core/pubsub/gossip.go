@@ -456,7 +456,16 @@ func (g *Gossip) SelfPublish(data []byte) error {
 		return nil
 	}
 
-	_, err := g.node.SelfStream(route, data)
+	simulatedStreamMessage.Signature = base64.StdEncoding.EncodeToString(
+		ed25519.Sign(g.privKey, simulatedStreamMessage.SigningBytes()),
+	)
+	data, err := json.Marshal(simulatedStreamMessage)
+	if err != nil {
+		log.Errorf("gossip: failed to re-sign user update message: %v", err)
+		return err
+	}
+
+	_, err = g.node.SelfStream(route, data)
 	return err
 }
 
