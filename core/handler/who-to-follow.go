@@ -8,7 +8,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -90,7 +89,7 @@ func StreamGetWhoToFollowHandler(
 
 		// show users with a ULID id first
 		sort.SliceStable(whotofollow, func(i, j int) bool {
-			return isULID(whotofollow[i].Id) && !isULID(whotofollow[j].Id)
+			return warpnet.IsULID(whotofollow[i].Id) && !warpnet.IsULID(whotofollow[j].Id)
 		})
 
 		return event.UsersResponse{
@@ -98,9 +97,4 @@ func StreamGetWhoToFollowHandler(
 			Users:  whotofollow,
 		}, nil
 	}
-}
-
-func isULID(id string) bool {
-	_, err := ulid.ParseStrict(id)
-	return err == nil
 }

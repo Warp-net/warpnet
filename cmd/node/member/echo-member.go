@@ -69,7 +69,7 @@ const (
 	seenTTL           = 999 * time.Minute
 	pruneInterval     = 999 * time.Minute
 	maxSeenKeys       = 10_000
-	ownTweetInterval  = 5 * time.Minute
+	ownTweetInterval  = 24 * time.Hour
 	ownTweetFallback  = "echo: hello from the warpnet — random Chuck quote API was unavailable"
 	ownTweetCharLimit = 4096
 )
