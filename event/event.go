@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package event
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/Warp-net/warpnet/domain"
@@ -282,6 +283,16 @@ type Message struct {
 	Timestamp   time.Time       `json:"timestamp"`
 	Version     string          `json:"version"`
 	Signature   string          `json:"signature"`
+}
+
+// SigningBytes returns the bytes an ed25519 signature covers: the raw body plus
+// the timestamp as decimal Unix nanoseconds. Senders must set Timestamp first.
+func (m Message) SigningBytes() []byte {
+	ts := strconv.FormatInt(m.Timestamp.UnixNano(), 10)
+	buf := make([]byte, 0, len(m.Body)+len(ts))
+	buf = append(buf, m.Body...)
+	buf = append(buf, ts...)
+	return buf
 }
 
 // MessageBody defines model for Message.Body.

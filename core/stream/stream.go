@@ -179,10 +179,10 @@ func (p *streamPool) send(
 		MessageId:   msgID,
 		NodeId:      p.n.ID().String(),
 		Destination: r.String(),
-		Timestamp:   time.Now(),
+		Timestamp:   time.Now().UTC(),
 		Version:     "0.0.0", // TODO event message version
-		Signature:   security.Sign(p.privKey, body),
 	}
+	msg.Signature = security.Sign(p.privKey, msg.SigningBytes())
 	data, _ := json.Marshal(msg)
 
 	var rw = bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))

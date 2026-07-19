@@ -17,9 +17,9 @@ package site.warpnet.transport
  */
 interface EnvelopeSigner {
     /**
-     * Sign the raw body bytes and return a base64-encoded Ed25519 signature,
-     * or throw [WarpnetException.SigningUnavailable] if the current binding
-     * cannot produce a verifying signature.
+     * Sign the signing input — raw body bytes followed by the timestamp as
+     * decimal Unix nanoseconds — and return a base64-encoded Ed25519 signature,
+     * or throw [WarpnetException.SigningUnavailable] if the binding cannot sign.
      */
     fun sign(bodyJson: String): String
 

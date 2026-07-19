@@ -240,7 +240,11 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 	if n == nil {
 		return newErrorResp("not attached server node")
 	}
-	req.Signature = security.Sign(b.auth.PrivateKey(), req.Body)
+	if req.Timestamp.IsZero() {
+		req.Timestamp = time.Now()
+	}
+	req.Timestamp = req.Timestamp.UTC()
+	req.Signature = security.Sign(b.auth.PrivateKey(), req.SigningBytes())
 	respData, err := n.SelfStream(stream.WarpRoute(req.Destination), req)
 	if err != nil {
 		return newErrorResp(err.Error())

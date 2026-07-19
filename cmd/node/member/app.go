@@ -325,20 +325,23 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		nodeId := a.node.NodeInfo().ID.String()
 		response.NodeId = nodeId
 		ts, _ := time.Parse(time.RFC3339, request.Timestamp)
+		if ts.IsZero() {
+			ts = time.Now()
+		}
 		body := jsoniter.RawMessage(request.Body)
-		signature := security.Sign(a.auth.PrivateKey(), body)
+		msg := event.Message{
+			Body:        body,
+			MessageId:   request.MessageId,
+			NodeId:      request.NodeId,
+			Destination: request.Path,
+			Timestamp:   ts.UTC(),
+			Version:     request.Version,
+		}
+		msg.Signature = security.Sign(a.auth.PrivateKey(), msg.SigningBytes())
 
 		respData, err := a.node.SelfStream(
 			stream.WarpRoute(request.Path),
-			event.Message{
-				Body:        body,
-				MessageId:   request.MessageId,
-				NodeId:      request.NodeId,
-				Destination: request.Path,
-				Timestamp:   ts,
-				Version:     request.Version,
-				Signature:   signature,
-			},
+			msg,
 		)
 		if err != nil {
 			log.Errorf("send stream: %v \n", err)

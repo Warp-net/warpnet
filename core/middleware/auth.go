@@ -30,6 +30,7 @@ package middleware
 import (
 	"errors"
 	"io"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -91,9 +92,17 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		}
 
 		pubKey := warpnet.FromIDToPubKey(remotePeer)
-		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
+		if err := security.VerifySignature(pubKey, msg.SigningBytes(), msg.Signature); err != nil {
 			log.Errorf("middleware: auth: signature invalid: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
+
+		// Freshness gate for remote peers only; loopback self-streams are exempt.
+		if remotePeer != s.Conn().LocalPeer() && !p.isFresh(msg.Timestamp) {
+			log.Errorf("middleware: auth: %s: stale/replayed message from %s ts=%s",
+				route, remotePeer, msg.Timestamp)
+			_, _ = s.Write(ErrStaleMessage.Bytes())
 			return
 		}
 
@@ -105,4 +114,20 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			MessageId:  string(msg.MessageId),
 		})
 	}
+}
+
+// isFresh reports whether ts is within the freshness window of now, either way.
+func (p *WarpMiddleware) isFresh(ts time.Time) bool {
+	if ts.IsZero() {
+		return false
+	}
+	window := p.freshnessWindow
+	if window <= 0 {
+		window = messageFreshnessWindow
+	}
+	skew := time.Since(ts)
+	if skew < 0 {
+		skew = -skew
+	}
+	return skew <= window
 }
