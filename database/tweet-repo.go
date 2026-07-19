@@ -545,6 +545,27 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	return repo.TweetsCount(tweetId)
 }
 
+// IncrSharedRepliesCount and DecrSharedRepliesCount adjust only the
+// CRDT-replicated reply counter for a tweet, leaving the local per-partition
+// count untouched. The reply handlers use them to keep the network-wide
+// counter owned by a single node: a reply to a remote tweet is stored (and
+// counted) both on the replier's node and on the parent author's node, so the
+// node that merely forwards the reply reverts its own CRDT bump once the
+// parent's node has taken ownership — otherwise one reply is counted twice.
+func (repo *TweetRepo) IncrSharedRepliesCount(tweetId string) error {
+	if repo.statsDb == nil {
+		return nil
+	}
+	return repo.statsDb.Increment(tweetsCountKey(tweetId).DatastoreKey())
+}
+
+func (repo *TweetRepo) DecrSharedRepliesCount(tweetId string) error {
+	if repo.statsDb == nil {
+		return nil
+	}
+	return repo.statsDb.Decrement(tweetsCountKey(tweetId).DatastoreKey())
+}
+
 func (repo *TweetRepo) DeleteReply(parentID, replyID string) (domain.Tweet, error) {
 	var reply domain.Tweet
 	if parentID == "" || replyID == "" {
@@ -723,6 +744,35 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 		log.Warnf("retweet: stats db decrement: %v", err)
 	}
 	return nil
+}
+
+// IncrSharedRetweetsCount and DecrSharedRetweetsCount adjust only the
+// CRDT-replicated retweets counter for a tweet, leaving the local count
+// untouched. The retweet handlers use them to keep the network-wide counter
+// owned by a single node: a retweet of a remote tweet is stored (and counted)
+// both on the retweeter's node and on the source author's node, so the
+// retweeter's node reverts its own CRDT bump once the author's node has taken
+// ownership — otherwise one retweet is counted twice.
+func (repo *TweetRepo) IncrSharedRetweetsCount(tweetId string) error {
+	if repo.statsDb == nil {
+		return nil
+	}
+	retweetCountKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(reTweetsCountSubspace).
+		AddRootID(tweetId).
+		Build()
+	return repo.statsDb.Increment(retweetCountKey.DatastoreKey())
+}
+
+func (repo *TweetRepo) DecrSharedRetweetsCount(tweetId string) error {
+	if repo.statsDb == nil {
+		return nil
+	}
+	retweetCountKey := local.NewPrefixBuilder(TweetsNamespace).
+		AddSubPrefix(reTweetsCountSubspace).
+		AddRootID(tweetId).
+		Build()
+	return repo.statsDb.Decrement(retweetCountKey.DatastoreKey())
 }
 
 func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {

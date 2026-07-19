@@ -84,6 +84,8 @@ type TweetsStorer interface {
 	GetReply(parentID, replyID string) (domain.Tweet, error)
 	DeleteReply(parentID, replyID string) (domain.Tweet, error)
 	GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
+	IncrSharedRepliesCount(tweetId string) error
+	DecrSharedRepliesCount(tweetId string) error
 }
 
 type TimelineUpdater interface {
@@ -266,6 +268,13 @@ func handleNewReply(
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// The parent tweet's node has now stored (and counted) the forwarded reply
+	// and owns the network-wide reply counter. Revert the CRDT bump AddReply
+	// made here so a single reply isn't counted on both nodes.
+	if derr := replyRepo.DecrSharedRepliesCount(parentId); derr != nil {
+		log.Errorf("reply handler: revert shared replies count: %v", derr)
 	}
 
 	var possibleError event.ResponseError
@@ -637,6 +646,13 @@ func deleteReply(
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// Mirror handleNewReply: the parent's node owns the network-wide reply
+	// counter and has applied the deletion, so revert the CRDT decrement
+	// DeleteReply made here to keep the count owned by a single node.
+	if ierr := repo.IncrSharedRepliesCount(parentId); ierr != nil {
+		log.Errorf("delete reply handler: revert shared replies count: %v", ierr)
 	}
 
 	var possibleError event.ResponseError

@@ -65,6 +65,8 @@ func (s stubLikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]dom
 	}
 	return nil, "", nil
 }
+func (s stubLikeRepo) IncrSharedLikesCount(string) error { return nil }
+func (s stubLikeRepo) DecrSharedLikesCount(string) error { return nil }
 
 type stubLikeUserRepo struct {
 	getBatchFn func(userIds ...string) ([]domain.User, error)

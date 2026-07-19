@@ -64,6 +64,8 @@ type LikesStorer interface {
 	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
 	SetLiked(userId, tweetId, ownerUserId string) error
 	RemoveLiked(userId, tweetId string) error
+	IncrSharedLikesCount(tweetId string) error
+	DecrSharedLikesCount(tweetId string) error
 }
 
 func StreamLikeHandler(
@@ -151,6 +153,13 @@ func StreamLikeHandler(
 			return nil, err
 		}
 
+		// The liked tweet's node has now stored (and counted) the forwarded
+		// like and owns the network-wide likes counter. Revert the CRDT bump
+		// repo.Like made here so a single like isn't counted on both nodes.
+		if derr := repo.DecrSharedLikesCount(tweetId); derr != nil {
+			log.Errorf("like handler: revert shared likes count: %v", derr)
+		}
+
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(likeDataResp, &possibleError); possibleError.Message != "" {
 			log.Errorf("unmarshal other like error response: %s", possibleError.Message)
@@ -222,6 +231,13 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		// Mirror StreamLikeHandler: the liked tweet's node owns the network-wide
+		// likes counter and has applied the unlike, so revert the CRDT
+		// decrement repo.Unlike made here to keep the count owned by one node.
+		if ierr := repo.IncrSharedLikesCount(tweetId); ierr != nil {
+			log.Errorf("unlike handler: revert shared likes count: %v", ierr)
 		}
 
 		var possibleError event.ResponseError

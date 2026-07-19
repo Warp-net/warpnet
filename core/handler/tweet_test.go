@@ -128,6 +128,8 @@ func (s stubTweetRepo) DeleteReply(rootID, replyID string) (domain.Tweet, error)
 	}
 	return domain.Tweet{Id: replyID, RootId: rootID}, nil
 }
+func (s stubTweetRepo) IncrSharedRepliesCount(string) error { return nil }
+func (s stubTweetRepo) DecrSharedRepliesCount(string) error { return nil }
 func (s stubTweetRepo) GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 	if s.repliesFn != nil {
 		return s.repliesFn(parentID, limit, cursor)
@@ -909,6 +911,9 @@ func (m *mockTweetsStorer) GetReplies(p string, l *uint64, c *string) ([]domain.
     if m.GetRepliesFunc != nil { return m.GetRepliesFunc(p, l, c) }
     return nil, "", nil
 }
+
+func (m *mockTweetsStorer) IncrSharedRepliesCount(string) error { return nil }
+func (m *mockTweetsStorer) DecrSharedRepliesCount(string) error { return nil }
 
 func (m *mockTweetsStorer) Update(t domain.Tweet) error {
     if m.UpdateFunc != nil { return m.UpdateFunc(t) }

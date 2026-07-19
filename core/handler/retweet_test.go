@@ -70,6 +70,8 @@ func (s stubReTweetRepo) Retweeters(tweetId string, limit *uint64, cursor *strin
 	}
 	return nil, "", nil
 }
+func (s stubReTweetRepo) IncrSharedRetweetsCount(string) error { return nil }
+func (s stubReTweetRepo) DecrSharedRetweetsCount(string) error { return nil }
 
 type stubTimelineRepo struct {
 	addFn func(userId string, tweet domain.Tweet) error
