@@ -67,7 +67,12 @@ func NewLikeRepo(db LikeStorer, statsDb LikeStatsStorer) *LikeRepo {
 	return &LikeRepo{db: db, statsDb: statsDb}
 }
 
-func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error) {
+// isTransitive tells whether this action should propagate to the network-wide
+// (CRDT) counter, which is replicated ("transits") across nodes. The caller
+// (handler) sets it true only on the acting user's own node, so an action
+// observed on more than one node is counted once. The local per-node counter
+// is always updated (it backs the read-time fallback).
+func (repo *LikeRepo) Like(tweetId, userId string, isTransitive bool) (likesCount uint64, err error) {
 	if tweetId == "" {
 		return 0, local_store.DBError("empty tweet id")
 	}
@@ -109,7 +114,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 	if err = txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb == nil {
+	if repo.statsDb == nil || !isTransitive {
 		return likesCount, nil
 	}
 	if err := repo.statsDb.Increment(likeKey.DatastoreKey()); err != nil {
@@ -118,7 +123,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 	return likesCount, nil
 }
 
-func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err error) {
+func (repo *LikeRepo) Unlike(tweetId, userId string, isTransitive bool) (likesCount uint64, err error) {
 	if tweetId == "" {
 		return 0, local_store.DBError("empty tweet id")
 	}
@@ -162,7 +167,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 	if err := txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb == nil {
+	if repo.statsDb == nil || !isTransitive {
 		return likesCount, nil
 	}
 
