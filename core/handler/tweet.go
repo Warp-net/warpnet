@@ -73,16 +73,16 @@ type TweetsStorer interface {
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
-	UnRetweet(retweetedByUserID, tweetId string) error
+	UnRetweet(retweetedByUserID, tweetId string, recordSharedCount bool) error
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
 	Update(tweet domain.Tweet) error
 	Pin(userId, tweetId string) (domain.Tweet, error)
 	Unpin(userId, tweetId string) (domain.Tweet, error)
 	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
-	AddReply(reply domain.Tweet) (domain.Tweet, error)
+	AddReply(reply domain.Tweet, recordSharedCount bool) (domain.Tweet, error)
 	GetReply(parentID, replyID string) (domain.Tweet, error)
-	DeleteReply(parentID, replyID string) (domain.Tweet, error)
+	DeleteReply(parentID, replyID string, recordSharedCount bool) (domain.Tweet, error)
 	GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 }
 
@@ -197,6 +197,10 @@ func handleNewReply(
 	parentId := strings.TrimPrefix(*ev.ParentId, domain.RetweetPrefix)
 	id := strings.TrimPrefix(ev.Id, domain.RetweetPrefix)
 
+	ownNodeInfo := streamer.NodeInfo()
+	// The network-wide (CRDT) reply counter is bumped only on the replier's
+	// own node, so a reply stored on both the replier's and the parent
+	// author's node is counted once.
 	reply, err := replyRepo.AddReply(domain.Tweet{
 		CreatedAt:    ev.CreatedAt,
 		Id:           id,
@@ -207,7 +211,7 @@ func handleNewReply(
 		UserId:       ev.UserId,
 		Username:     ev.Username,
 		ImageKeys:    ev.ImageKeys,
-	})
+	}, ev.UserId == ownNodeInfo.OwnerId)
 	if err != nil {
 		log.Errorf("reply handler failed: %v", err)
 		return nil, err
@@ -226,7 +230,6 @@ func handleNewReply(
 		return nil, err
 	}
 
-	ownNodeInfo := streamer.NodeInfo()
 	isOwnTweetReply := parentUserId == ownNodeInfo.OwnerId
 	if isOwnTweetReply {
 		if ev.UserId != ownNodeInfo.OwnerId {
@@ -525,8 +528,8 @@ func forwardThreadReplies(userRepo TweetUserFetcher, streamer TweetStreamer, ev 
 }
 
 type LikeTweetStorer interface {
-	Like(tweetId, userId string) (likesNum uint64, err error)
-	Unlike(tweetId, userId string) (likesNum uint64, err error)
+	Like(tweetId, userId string, recordSharedCount bool) (likesNum uint64, err error)
+	Unlike(tweetId, userId string, recordSharedCount bool) (likesNum uint64, err error)
 	LikesCount(tweetId string) (likesNum uint64, err error)
 	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
 }
@@ -560,13 +563,16 @@ func StreamDeleteTweetHandler(
 			return deleteReply(ev, repo, userRepo, streamer)
 		}
 
-		if _, err := likeRepo.Unlike(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
+		// Deleting an own tweet only cleans up local state here; the shared
+		// (CRDT) like/retweet counts are owned by the actors' own nodes, so
+		// this node must not adjust them (recordSharedCount=false).
+		if _, err := likeRepo.Unlike(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix), false); err != nil {
 			log.Errorf("delete tweet: unliking tweet: %v", err)
 		}
 
 		t, _ := repo.Get(ev.UserId, domain.RetweetPrefix+ev.TweetId)
 		if t.RetweetedBy != nil {
-			_ = repo.UnRetweet(*t.RetweetedBy, t.Id)
+			_ = repo.UnRetweet(*t.RetweetedBy, t.Id, false)
 		}
 
 		if err := repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
@@ -604,7 +610,9 @@ func deleteReply(
 	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
 	id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
-	reply, err := repo.DeleteReply(parentId, id)
+	// Mirror handleNewReply: only the replier's own node adjusts the
+	// network-wide (CRDT) counter.
+	reply, err := repo.DeleteReply(parentId, id, ev.UserId == streamer.NodeInfo().OwnerId)
 	if err != nil {
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
@@ -649,8 +657,8 @@ func deleteReply(
 
 type RetweetsTweetStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
-	NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error)
-	UnRetweet(retweetedByUserID, tweetId string) error
+	NewRetweet(tweet domain.Tweet, recordSharedCount bool) (_ domain.Tweet, err error)
+	UnRetweet(retweetedByUserID, tweetId string, recordSharedCount bool) error
 	RetweetsCount(tweetId string) (uint64, error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 }
@@ -887,7 +895,9 @@ func cancelRetweetsForEditedTweet(repo TweetsStorer, tweetId string) {
 			return
 		}
 		for _, retweeterId := range retweeters {
-			if err := repo.UnRetweet(retweeterId, tweetId); err != nil {
+			// Local cleanup on the edited tweet's own node; the retweeters'
+			// shared (CRDT) counts live on their nodes, so don't touch them.
+			if err := repo.UnRetweet(retweeterId, tweetId, false); err != nil {
 				log.Warnf("edit tweet: cancel retweet by %s of %s: %v", retweeterId, tweetId, err)
 			}
 		}

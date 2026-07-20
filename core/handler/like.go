@@ -58,8 +58,8 @@ type LikeStreamer interface {
 }
 
 type LikesStorer interface {
-	Like(tweetId, userId string) (likesNum uint64, err error)
-	Unlike(tweetId, userId string) (likesNum uint64, err error)
+	Like(tweetId, userId string, recordSharedCount bool) (likesNum uint64, err error)
+	Unlike(tweetId, userId string, recordSharedCount bool) (likesNum uint64, err error)
 	LikesCount(tweetId string) (likesNum uint64, err error)
 	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
 	SetLiked(userId, tweetId, ownerUserId string) error
@@ -89,7 +89,11 @@ func StreamLikeHandler(
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
-		num, err := repo.Like(tweetId, ev.OwnerId) // store my like
+		ownNodeInfo := streamer.NodeInfo()
+		// The network-wide (CRDT) like counter is bumped only on the liker's
+		// own node, so a like observed on both the liker's and the author's
+		// node is counted once.
+		num, err := repo.Like(tweetId, ev.OwnerId, ev.OwnerId == ownNodeInfo.OwnerId) // store my like
 		if err != nil {
 			log.Errorf("like handler failed: %v", err)
 			return nil, err
@@ -99,7 +103,6 @@ func StreamLikeHandler(
 		if err := repo.SetLiked(ev.OwnerId, tweetId, ev.UserId); err != nil {
 			log.Warnf("like handler: liked index: %v", err)
 		}
-		ownNodeInfo := streamer.NodeInfo()
 
 		isOwnTweetLike := ev.OwnerId == ev.UserId
 		if isOwnTweetLike { // own tweet like
@@ -176,7 +179,10 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
-		num, err := repo.Unlike(tweetId, ev.OwnerId)
+		ownNodeInfo := streamer.NodeInfo()
+		// Mirror the like path: only the unliker's own node adjusts the
+		// network-wide (CRDT) counter.
+		num, err := repo.Unlike(tweetId, ev.OwnerId, ev.OwnerId == ownNodeInfo.OwnerId)
 		if err != nil {
 			log.Errorf("unlike handler failed: %v", err)
 			return nil, err
@@ -185,7 +191,6 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 			log.Warnf("unlike handler: liked index: %v", err)
 		}
 
-		ownNodeInfo := streamer.NodeInfo()
 		isOwnTweetDislike := ev.OwnerId == ev.UserId
 		if isOwnTweetDislike { // own tweet like
 			return event.LikesCountResponse{Count: num}, nil

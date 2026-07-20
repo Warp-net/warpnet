@@ -61,17 +61,17 @@ type LikeStatsStorer interface {
 type LikeRepo struct {
 	db      LikeStorer
 	statsDb LikeStatsStorer
-	// ownerID is this node's user. The CRDT-replicated counter is bumped only
-	// for this user's own actions, so a like observed on both the liker's node
-	// and the tweet author's node is counted once network-wide.
-	ownerID string
 }
 
-func NewLikeRepo(db LikeStorer, statsDb LikeStatsStorer, ownerID string) *LikeRepo {
-	return &LikeRepo{db: db, statsDb: statsDb, ownerID: ownerID}
+func NewLikeRepo(db LikeStorer, statsDb LikeStatsStorer) *LikeRepo {
+	return &LikeRepo{db: db, statsDb: statsDb}
 }
 
-func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error) {
+// recordSharedCount tells whether this node should bump the network-wide
+// (CRDT) counter for this action. The caller (handler) decides — typically
+// true only on the acting user's own node — so an event observed on more than
+// one node is counted once. The local per-node counter is always updated.
+func (repo *LikeRepo) Like(tweetId, userId string, recordSharedCount bool) (likesCount uint64, err error) {
 	if tweetId == "" {
 		return 0, local_store.DBError("empty tweet id")
 	}
@@ -113,7 +113,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 	if err = txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb == nil || userId != repo.ownerID {
+	if repo.statsDb == nil || !recordSharedCount {
 		return likesCount, nil
 	}
 	if err := repo.statsDb.Increment(likeKey.DatastoreKey()); err != nil {
@@ -122,7 +122,7 @@ func (repo *LikeRepo) Like(tweetId, userId string) (likesCount uint64, err error
 	return likesCount, nil
 }
 
-func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err error) {
+func (repo *LikeRepo) Unlike(tweetId, userId string, recordSharedCount bool) (likesCount uint64, err error) {
 	if tweetId == "" {
 		return 0, local_store.DBError("empty tweet id")
 	}
@@ -166,7 +166,7 @@ func (repo *LikeRepo) Unlike(tweetId, userId string) (likesCount uint64, err err
 	if err := txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb == nil || userId != repo.ownerID {
+	if repo.statsDb == nil || !recordSharedCount {
 		return likesCount, nil
 	}
 

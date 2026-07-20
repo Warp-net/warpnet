@@ -362,11 +362,10 @@ func (m *MemberNode) setupHandlers(
 		panic("member: setup handlers: nil node")
 	}
 
-	ownerID := authRepo.GetOwner().UserId
 	r := &memberRepos{
 		timelineRepo:     database.NewTimelineRepo(db),
-		tweetRepo:        database.NewTweetRepo(db, statsDB, ownerID),
-		likeRepo:         database.NewLikeRepo(db, statsDB, ownerID),
+		tweetRepo:        database.NewTweetRepo(db, statsDB),
+		likeRepo:         database.NewLikeRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),

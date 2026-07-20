@@ -55,8 +55,8 @@ type OwnerReTweetStorer interface {
 
 type ReTweetsStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
-	NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error)
-	UnRetweet(retweetedByUserID, tweetId string) error
+	NewRetweet(tweet domain.Tweet, recordSharedCount bool) (_ domain.Tweet, err error)
+	UnRetweet(retweetedByUserID, tweetId string, recordSharedCount bool) error
 	RetweetsCount(tweetId string) (uint64, error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 }
@@ -85,7 +85,14 @@ func StreamNewReTweetHandler(
 			return nil, warpnet.WarpError("empty retweet id")
 		}
 
-		retweet, err := tweetRepo.NewRetweet(retweetEvent)
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
+		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
+
+		// The network-wide (CRDT) retweet counter is bumped only on the
+		// retweeter's own node, so a retweet stored on both the retweeter's and
+		// the source author's node is counted once.
+		retweet, err := tweetRepo.NewRetweet(retweetEvent, isOwnerRetweeter)
 		if err != nil {
 			log.Errorf("retweet handler failed: %v", err)
 			return nil, err
@@ -103,9 +110,6 @@ func StreamNewReTweetHandler(
 			sourceAuthorId = *retweetEvent.QuotedUserId
 		}
 
-		ownNodeInfo := streamer.NodeInfo()
-		ownerId := ownNodeInfo.OwnerId
-		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
 		if isOwnerRetweeter {
 			// owner retweeted it
 			if err = timelineRepo.AddTweetToTimeline(ownerId, retweet); err != nil {
@@ -194,14 +198,16 @@ func StreamUnretweetHandler(
 		if err != nil {
 			return nil, err
 		}
-		err = tweetRepo.UnRetweet(retweetedBy, ev.TweetId)
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
+		// Mirror the retweet path: only the retweeter's own node adjusts the
+		// network-wide (CRDT) counter.
+		err = tweetRepo.UnRetweet(retweetedBy, ev.TweetId, retweetedBy == ownerId)
 		if err != nil {
 			log.Errorf("unretweet handler failed: %v", err)
 			return nil, err
 		}
 
-		ownNodeInfo := streamer.NodeInfo()
-		ownerId := ownNodeInfo.OwnerId
 		isOwnTweetUnretweet := tweet.UserId == ownerId
 		if isOwnTweetUnretweet {
 			// tweet belongs to owner, unretweet themself

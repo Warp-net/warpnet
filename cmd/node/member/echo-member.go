@@ -179,7 +179,7 @@ func main() {
 
 	readyChan <- authInfo
 	echoFollowRepo := database.NewFollowRepo(db)
-	echoTweetRepo := database.NewTweetRepo(db, nil, "")
+	echoTweetRepo := database.NewTweetRepo(db, nil)
 	eBot := newEchoBot(echoNode, db, echoFollowRepo, echoTweetRepo)
 	go runOwnTweets(ctx, eBot, echoNode)
 	setupHandlers(eBot, echoNode)

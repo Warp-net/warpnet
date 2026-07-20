@@ -46,13 +46,13 @@ func (s stubReTweetRepo) Get(userID, tweetID string) (domain.Tweet, error) {
 	}
 	return domain.Tweet{Id: tweetID, UserId: userID}, nil
 }
-func (s stubReTweetRepo) NewRetweet(tweet domain.Tweet) (domain.Tweet, error) {
+func (s stubReTweetRepo) NewRetweet(tweet domain.Tweet, _ bool) (domain.Tweet, error) {
 	if s.newRetweetFn != nil {
 		return s.newRetweetFn(tweet)
 	}
 	return tweet, nil
 }
-func (s stubReTweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
+func (s stubReTweetRepo) UnRetweet(retweetedByUserID, tweetId string, _ bool) error {
 	if s.unRetweetFn != nil {
 		return s.unRetweetFn(retweetedByUserID, tweetId)
 	}

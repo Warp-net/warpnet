@@ -23,13 +23,13 @@ type stubLikeRepo struct {
 	likedFn       func(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error)
 }
 
-func (s stubLikeRepo) Like(tweetId, userId string) (uint64, error) {
+func (s stubLikeRepo) Like(tweetId, userId string, _ bool) (uint64, error) {
 	if s.likeFn != nil {
 		return s.likeFn(tweetId, userId)
 	}
 	return 1, nil
 }
-func (s stubLikeRepo) Unlike(tweetId, userId string) (uint64, error) {
+func (s stubLikeRepo) Unlike(tweetId, userId string, _ bool) (uint64, error) {
 	if s.unlikeFn != nil {
 		return s.unlikeFn(tweetId, userId)
 	}
