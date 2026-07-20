@@ -67,12 +67,12 @@ func (s *LikeRepoTestSuite) TestLikeAndUnlike() {
 	tweetId := ulid.Make().String()
 
 	// Like
-	likes, err := s.repo.Like(tweetId, userId)
+	likes, err := s.repo.Like(tweetId, userId, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
 	// Like again (should not increment)
-	likes, err = s.repo.Like(tweetId, userId)
+	likes, err = s.repo.Like(tweetId, userId, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
@@ -90,12 +90,12 @@ func (s *LikeRepoTestSuite) TestLikeAndUnlike() {
 	s.Equal(userId, likers[0])
 
 	// Unlike
-	likes, err = s.repo.Unlike(tweetId, userId)
+	likes, err = s.repo.Unlike(tweetId, userId, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(0), likes)
 
 	// Unlike again (should not fail)
-	likes, err = s.repo.Unlike(tweetId, userId)
+	likes, err = s.repo.Unlike(tweetId, userId, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(0), likes)
 
@@ -109,16 +109,16 @@ func (s *LikeRepoTestSuite) TestLike_InvalidParams() {
 	tweetId := ulid.Make().String()
 	userId := ulid.Make().String()
 
-	_, err := s.repo.Like("", userId)
+	_, err := s.repo.Like("", userId, true)
 	s.Error(err)
 
-	_, err = s.repo.Like(tweetId, "")
+	_, err = s.repo.Like(tweetId, "", true)
 	s.Error(err)
 
-	_, err = s.repo.Unlike("", userId)
+	_, err = s.repo.Unlike("", userId, true)
 	s.Error(err)
 
-	_, err = s.repo.Unlike(tweetId, "")
+	_, err = s.repo.Unlike(tweetId, "", true)
 	s.Error(err)
 
 	_, err = s.repo.LikesCount("")
@@ -222,9 +222,9 @@ func (s *LikeRepoTestSuite) TestLikers_Multiple() {
 	user1 := ulid.Make().String()
 	user2 := ulid.Make().String()
 
-	_, err := s.repo.Like(tweetId, user1)
+	_, err := s.repo.Like(tweetId, user1, true)
 	s.Require().NoError(err)
-	_, err = s.repo.Like(tweetId, user2)
+	_, err = s.repo.Like(tweetId, user2, true)
 	s.Require().NoError(err)
 
 	limit := uint64(10)

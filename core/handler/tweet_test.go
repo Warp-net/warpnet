@@ -82,7 +82,7 @@ func (s stubTweetRepo) Delete(userID, tweetID string) error {
 	}
 	return nil
 }
-func (s stubTweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
+func (s stubTweetRepo) UnRetweet(retweetedByUserID, tweetId string, _ bool) error {
 	if s.unRetweetFn != nil {
 		return s.unRetweetFn(retweetedByUserID, tweetId)
 	}
@@ -107,7 +107,7 @@ func (s stubTweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
 func (s stubTweetRepo) AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error) {
 	return edit, nil
 }
-func (s stubTweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
+func (s stubTweetRepo) AddReply(reply domain.Tweet, _ bool) (domain.Tweet, error) {
 	if s.addReplyFn != nil {
 		return s.addReplyFn(reply)
 	}
@@ -122,7 +122,7 @@ func (s stubTweetRepo) GetReply(rootID, replyID string) (domain.Tweet, error) {
 	}
 	return domain.Tweet{Id: replyID, RootId: rootID}, nil
 }
-func (s stubTweetRepo) DeleteReply(rootID, replyID string) (domain.Tweet, error) {
+func (s stubTweetRepo) DeleteReply(rootID, replyID string, _ bool) (domain.Tweet, error) {
 	if s.deleteReplyFn != nil {
 		return s.deleteReplyFn(rootID, replyID)
 	}
@@ -172,13 +172,13 @@ type stubTweetLikeRepo struct {
 	likersFn     func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
-func (s stubTweetLikeRepo) Like(tweetId, userId string) (uint64, error) {
+func (s stubTweetLikeRepo) Like(tweetId, userId string, _ bool) (uint64, error) {
 	if s.likeFn != nil {
 		return s.likeFn(tweetId, userId)
 	}
 	return 0, nil
 }
-func (s stubTweetLikeRepo) Unlike(tweetId, userId string) (uint64, error) {
+func (s stubTweetLikeRepo) Unlike(tweetId, userId string, _ bool) (uint64, error) {
 	if s.unlikeFn != nil {
 		return s.unlikeFn(tweetId, userId)
 	}
@@ -211,13 +211,13 @@ func (s stubTweetRetweetRepo) Get(userID, tweetID string) (domain.Tweet, error) 
 	}
 	return domain.Tweet{Id: tweetID, UserId: userID}, nil
 }
-func (s stubTweetRetweetRepo) NewRetweet(tweet domain.Tweet) (domain.Tweet, error) {
+func (s stubTweetRetweetRepo) NewRetweet(tweet domain.Tweet, _ bool) (domain.Tweet, error) {
 	if s.newRetweetFn != nil {
 		return s.newRetweetFn(tweet)
 	}
 	return tweet, nil
 }
-func (s stubTweetRetweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
+func (s stubTweetRetweetRepo) UnRetweet(retweetedByUserID, tweetId string, _ bool) error {
 	if s.unRetweetFn != nil {
 		return s.unRetweetFn(retweetedByUserID, tweetId)
 	}
@@ -890,7 +890,7 @@ func (m *mockTweetsStorer) Delete(u, id string) error {
     return nil
 }
 
-func (m *mockTweetsStorer) AddReply(t domain.Tweet) (domain.Tweet, error) {
+func (m *mockTweetsStorer) AddReply(t domain.Tweet, _ bool) (domain.Tweet, error) {
     if m.AddReplyFunc != nil { return m.AddReplyFunc(t) }
     return t, nil
 }
@@ -900,7 +900,7 @@ func (m *mockTweetsStorer) GetReply(p, id string) (domain.Tweet, error) {
     return domain.Tweet{}, errNotFound
 }
 
-func (m *mockTweetsStorer) DeleteReply(p, id string) (domain.Tweet, error) {
+func (m *mockTweetsStorer) DeleteReply(p, id string, _ bool) (domain.Tweet, error) {
     if m.DeleteReplyFunc != nil { return m.DeleteReplyFunc(p, id) }
     return domain.Tweet{ParentId: &p}, nil
 }
@@ -935,7 +935,7 @@ func (m *mockTweetsStorer) Retweeters(id string, l *uint64, c *string) ([]string
     return nil, "", nil
 }
 
-func (m *mockTweetsStorer) UnRetweet(u, id string) error {
+func (m *mockTweetsStorer) UnRetweet(u, id string, _ bool) error {
     if m.UnRetweetFunc != nil { return m.UnRetweetFunc(u, id) }
     return nil
 }
@@ -1020,11 +1020,11 @@ type mockLikeStorer struct {
     LikesCountFunc func(string) (uint64, error)
     LikersFunc     func(string, *uint64, *string) ([]string, string, error)
 }
-func (m *mockLikeStorer) Like(tweetId, userId string) (uint64, error) {
+func (m *mockLikeStorer) Like(tweetId, userId string, _ bool) (uint64, error) {
     if m.LikeFunc != nil { return m.LikeFunc(tweetId, userId) }
     return 0, nil
 }
-func (m *mockLikeStorer) Unlike(tweetId, userId string) (uint64, error) {
+func (m *mockLikeStorer) Unlike(tweetId, userId string, _ bool) (uint64, error) {
     if m.UnlikeFunc != nil { return m.UnlikeFunc(tweetId, userId) }
     return 0, nil
 }

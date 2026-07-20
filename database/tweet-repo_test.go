@@ -103,7 +103,7 @@ func (s *TweetRepoTestSuite) TestCreateTweetAndReply() {
 		Text:     "a reply",
 		RootId:   tweet.Id,
 		ParentId: &tweet.Id,
-	})
+	}, true)
 	s.Require().NoError(err)
 	s.True(reply.IsReply())
 	s.NotEmpty(reply.Id)
@@ -132,7 +132,7 @@ func (s *TweetRepoTestSuite) TestCreateTweetAndReply() {
 	s.Equal(uint64(1), count)
 
 	// Deleting the reply removes it from the thread and decrements the count.
-	_, err = s.repo.DeleteReply(tweet.Id, reply.Id)
+	_, err = s.repo.DeleteReply(tweet.Id, reply.Id, true)
 	s.Require().NoError(err)
 	_, err = s.repo.GetReply(tweet.Id, reply.Id)
 	s.Error(err)
@@ -154,12 +154,12 @@ func (s *TweetRepoTestSuite) TestThreadNesting() {
 
 	r1, err := s.repo.AddReply(domain.Tweet{
 		UserId: replier, Text: "lvl1", RootId: root.Id, ParentId: &root.Id,
-	})
+	}, true)
 	s.Require().NoError(err)
 
 	r2, err := s.repo.AddReply(domain.Tweet{
 		UserId: replier, Text: "lvl2", RootId: root.Id, ParentId: &r1.Id,
-	})
+	}, true)
 	s.Require().NoError(err)
 
 	// RootId is preserved through the chain (not rewritten to the reply id).
@@ -208,7 +208,7 @@ func (s *TweetRepoTestSuite) TestThreadNesting() {
 	s.Len(replierList, 0)
 
 	// Deleting the mid-level reply clears its parent's scan and count.
-	_, err = s.repo.DeleteReply(root.Id, r1.Id)
+	_, err = s.repo.DeleteReply(root.Id, r1.Id, true)
 	s.Require().NoError(err)
 	lvl1, _, err = s.repo.GetReplies(root.Id, &limit, nil)
 	s.Require().NoError(err)
@@ -239,7 +239,7 @@ func (s *TweetRepoTestSuite) TestThreadNestingDeep() {
 			Text:     "lvl" + strconv.Itoa(i),
 			RootId:   root.Id,
 			ParentId: &parentID,
-		})
+		}, true)
 		s.Require().NoError(err)
 		chain = append(chain, r)
 	}
@@ -287,7 +287,7 @@ func (s *TweetRepoTestSuite) TestThreadNestingDeep() {
 	// Deleting a mid-chain reply clears its parent's scan/count; deeper
 	// replies remain stored under their own parents.
 	mid := depth / 2
-	_, err = s.repo.DeleteReply(chain[mid-1].Id, chain[mid].Id)
+	_, err = s.repo.DeleteReply(chain[mid-1].Id, chain[mid].Id, true)
 	s.Require().NoError(err)
 	gone, _, err := s.repo.GetReplies(chain[mid-1].Id, &limit, nil)
 	s.Require().NoError(err)
@@ -405,7 +405,7 @@ func (s *TweetRepoTestSuite) TestRetweetAndRetweeters() {
 	retweeted.RetweetedBy = &retweeter
 	retweeted.UserId = retweeter
 
-	_, err = s.repo.NewRetweet(retweeted)
+	_, err = s.repo.NewRetweet(retweeted, true)
 	s.Require().NoError(err)
 
 	count, err := s.repo.RetweetsCount(original.Id)
@@ -431,10 +431,10 @@ func (s *TweetRepoTestSuite) TestUnRetweet() {
 	retweet := original
 	retweet.RetweetedBy = &retweeterId
 
-	created, err := s.repo.NewRetweet(retweet)
+	created, err := s.repo.NewRetweet(retweet, true)
 	s.Require().NoError(err)
 
-	err = s.repo.UnRetweet(retweeterId, created.Id)
+	err = s.repo.UnRetweet(retweeterId, created.Id, true)
 	s.Require().NoError(err)
 
 	count, err := s.repo.RetweetsCount(original.Id)
@@ -540,7 +540,7 @@ func (s *TweetRepoTestSuite) TestAddAndGetReply() {
 		CreatedAt: time.Now(),
 	}
 
-	saved, err := s.repo.AddReply(reply)
+	saved, err := s.repo.AddReply(reply, true)
 	s.Require().NoError(err)
 	s.NotEmpty(saved.Id)
 
@@ -563,7 +563,7 @@ func (s *TweetRepoTestSuite) TestRepliesCount() {
 			Text:      "reply",
 			CreatedAt: time.Now(),
 		}
-		_, err := s.repo.AddReply(reply)
+		_, err := s.repo.AddReply(reply, true)
 		s.Require().NoError(err)
 	}
 
@@ -624,7 +624,7 @@ func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
 			UserId:    "user123",
 			Text:      "reply",
 			CreatedAt: time.Now(),
-		})
+		}, true)
 		s.Require().NoError(err)
 	}
 
@@ -658,10 +658,10 @@ func (s *TweetRepoTestSuite) TestDeleteReply() {
 		CreatedAt: time.Now(),
 	}
 
-	_, err := s.repo.AddReply(reply)
+	_, err := s.repo.AddReply(reply, true)
 	s.Require().NoError(err)
 
-	deleted, err := s.repo.DeleteReply(parentID, replyID)
+	deleted, err := s.repo.DeleteReply(parentID, replyID, true)
 	s.Require().NoError(err)
 	s.Equal(replyID, deleted.Id)
 	s.Require().NotNil(deleted.ParentId)
@@ -684,7 +684,7 @@ func (s *TweetRepoTestSuite) TestGetReplies() {
 			Text:      "child",
 			CreatedAt: time.Now().Add(time.Duration(i) * time.Second),
 		}
-		_, err := s.repo.AddReply(reply)
+		_, err := s.repo.AddReply(reply, true)
 		s.Require().NoError(err)
 	}
 
@@ -737,12 +737,12 @@ func (s *TweetRepoTestSuite) TestRetweeters_Multiple() {
 
 	rt1 := src
 	rt1.RetweetedBy = &retweeter1
-	_, err = s.repo.NewRetweet(rt1)
+	_, err = s.repo.NewRetweet(rt1, true)
 	s.Require().NoError(err)
 
 	rt2 := src
 	rt2.RetweetedBy = &retweeter2
-	_, err = s.repo.NewRetweet(rt2)
+	_, err = s.repo.NewRetweet(rt2, true)
 	s.Require().NoError(err)
 
 	limit := uint64(10)

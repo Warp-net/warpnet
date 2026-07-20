@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Re-entry guard: the tag pushes below invoke `git push` again, which would
+# otherwise re-trigger this hook (this recursion previously spawned runaway
+# hook/`git push codeberg` processes that hung for hours).
+if [ -n "$WARPNET_PREPUSH" ]; then
+    exit 0
+fi
+export WARPNET_PREPUSH=1
+
 if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
     exit 0
 fi
@@ -13,30 +21,24 @@ if [ ! -f "$FILE" ]; then
     exit 1
 fi
 
-# CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z\.-]+)?' "$FILE")
 CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$FILE")
+TAG="v$CURRENT_VERSION"
 
-git tag -a "v$CURRENT_VERSION" -m "Release version $CURRENT_VERSION"
-
-echo "Version updated to $CURRENT_VERSION and tagged as v$CURRENT_VERSION."
-
-while read local_ref local_sha remote_ref remote_sha; do
-    if [[ "$remote_ref" == "refs/tags/"* ]]; then
-        TAG_NAME=$(basename "$remote_ref")
-
-        if [[ "$TAG_NAME" == "v$CURRENT_VERSION" ]]; then
-            echo "Pushing existing tag v$CURRENT_VERSION..."
-            exit 0
-        fi
-    fi
-done
-
-if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
-    echo "Pushing tag v$CURRENT_VERSION ..."
-    git push origin "v$CURRENT_VERSION"
-    git push codeberg "v$CURRENT_VERSION" || true
-    exit 0
+# Create the release tag once; re-running on the same version is a no-op.
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+    echo "Tag $TAG already exists."
 else
-    echo "Tag v$CURRENT_VERSION does not exist locally. Skipping."
-    exit 1
+    git tag -a "$TAG" -m "Release version $CURRENT_VERSION"
+    echo "Tagged $TAG."
 fi
+
+# Best-effort mirror of the tag to both remotes. Each push is bounded by a
+# timeout so an unreachable/slow remote (e.g. codeberg) can never block or
+# hang the push, and --no-verify keeps the inner pushes from re-triggering
+# this hook.
+timeout --kill-after=5 20 git push --no-verify origin "$TAG" \
+    || echo "warn: pushing $TAG to origin failed or timed out (continuing)"
+timeout --kill-after=5 20 git push --no-verify codeberg "$TAG" \
+    || echo "warn: pushing $TAG to codeberg failed or timed out (continuing)"
+
+exit 0
