@@ -589,6 +589,21 @@ A non-empty `key1` in the image reply and a returned user with `avatar_key` set 
 avatar is live. Open `http://localhost:4999` in the session browser and log in as
 `Claude` / `Claude1234$` to see it.
 
+**ALWAYS open a fresh browser tab after every container rebuild / restart / recreate —
+never reuse the same tab across a node restart.** The Vue frontend's transport is a
+module-level singleton (`socket`, `aesKey`, a `pending` map of per-request promises +
+timers) with auto-reconnect (`frontend/src/lib/transport.js`). Restart the node under a
+long-lived tab a few times and that singleton wedges: a half-dead WebSocket plus pending
+promises that never resolve. The tell is nasty and easy to misdiagnose — `is-first-run`
+still works (it's a cleartext control frame), but **login hangs before it ever transmits
+the frame** (hook `WebSocket.prototype.send` and you'll see *zero* frames), with **no
+console error and no `authenticating user` line in the node logs**. Do **not** conclude
+"the browser login / `/ws` AES is broken" — it isn't: a plaintext `ws://…/ws` probe (or an
+AES probe using `security.AESCodec` with `AESKeyFromPassword(NODE_SERVER_PASSWORD)`)
+authenticates instantly, proving the node is healthy. The fix is simply a new tab / fresh
+browser context, which resets the singleton. Reopen the tab whenever the node behaves as
+"logged out" or calls return empty/`Anonymous` after a restart.
+
 ### 4. Always triage notifications — never skip them
 
 **Obligation: on every session where you drive the node, open the Notifications tab,
