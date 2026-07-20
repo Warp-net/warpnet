@@ -58,8 +58,8 @@ type LikeStreamer interface {
 }
 
 type LikesStorer interface {
-	Like(tweetId, userId string, recordSharedCount bool) (likesNum uint64, err error)
-	Unlike(tweetId, userId string, recordSharedCount bool) (likesNum uint64, err error)
+	Like(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
+	Unlike(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
 	LikesCount(tweetId string) (likesNum uint64, err error)
 	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
 	SetLiked(userId, tweetId, ownerUserId string) error

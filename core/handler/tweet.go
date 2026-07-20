@@ -73,16 +73,16 @@ type TweetsStorer interface {
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
-	UnRetweet(retweetedByUserID, tweetId string, recordSharedCount bool) error
+	UnRetweet(retweetedByUserID, tweetId string, isTransitive bool) error
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
 	Update(tweet domain.Tweet) error
 	Pin(userId, tweetId string) (domain.Tweet, error)
 	Unpin(userId, tweetId string) (domain.Tweet, error)
 	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
-	AddReply(reply domain.Tweet, recordSharedCount bool) (domain.Tweet, error)
+	AddReply(reply domain.Tweet, isTransitive bool) (domain.Tweet, error)
 	GetReply(parentID, replyID string) (domain.Tweet, error)
-	DeleteReply(parentID, replyID string, recordSharedCount bool) (domain.Tweet, error)
+	DeleteReply(parentID, replyID string, isTransitive bool) (domain.Tweet, error)
 	GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 }
 
@@ -528,8 +528,8 @@ func forwardThreadReplies(userRepo TweetUserFetcher, streamer TweetStreamer, ev 
 }
 
 type LikeTweetStorer interface {
-	Like(tweetId, userId string, recordSharedCount bool) (likesNum uint64, err error)
-	Unlike(tweetId, userId string, recordSharedCount bool) (likesNum uint64, err error)
+	Like(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
+	Unlike(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
 	LikesCount(tweetId string) (likesNum uint64, err error)
 	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
 }
@@ -565,7 +565,7 @@ func StreamDeleteTweetHandler(
 
 		// Deleting an own tweet only cleans up local state here; the shared
 		// (CRDT) like/retweet counts are owned by the actors' own nodes, so
-		// this node must not adjust them (recordSharedCount=false).
+		// this node must not adjust them (isTransitive=false).
 		if _, err := likeRepo.Unlike(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix), false); err != nil {
 			log.Errorf("delete tweet: unliking tweet: %v", err)
 		}
@@ -657,8 +657,8 @@ func deleteReply(
 
 type RetweetsTweetStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
-	NewRetweet(tweet domain.Tweet, recordSharedCount bool) (_ domain.Tweet, err error)
-	UnRetweet(retweetedByUserID, tweetId string, recordSharedCount bool) error
+	NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error)
+	UnRetweet(retweetedByUserID, tweetId string, isTransitive bool) error
 	RetweetsCount(tweetId string) (uint64, error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 }

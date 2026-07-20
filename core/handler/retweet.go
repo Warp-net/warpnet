@@ -55,8 +55,8 @@ type OwnerReTweetStorer interface {
 
 type ReTweetsStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
-	NewRetweet(tweet domain.Tweet, recordSharedCount bool) (_ domain.Tweet, err error)
-	UnRetweet(retweetedByUserID, tweetId string, recordSharedCount bool) error
+	NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error)
+	UnRetweet(retweetedByUserID, tweetId string, isTransitive bool) error
 	RetweetsCount(tweetId string) (uint64, error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 }
