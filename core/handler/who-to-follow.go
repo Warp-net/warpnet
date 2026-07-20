@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"sort"
-
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
