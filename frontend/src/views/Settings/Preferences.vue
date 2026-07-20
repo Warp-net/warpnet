@@ -100,10 +100,11 @@ export default {
     this.ownerProfile = warpnetService.getOwnerProfile();
     try {
       const profile = await warpnetService.getProfile(this.ownerProfile?.user_id);
-      if (profile?.source) {
-        this.prefs.privacy = profile.source.privacy || 'public';
-        this.prefs.sensitive = !!profile.source.sensitive;
-        this.prefs.language = profile.source.language || 'en';
+      const meta = profile?.metadata;
+      if (meta) {
+        this.prefs.privacy = meta.privacy || 'public';
+        this.prefs.sensitive = meta.sensitive === 'true';
+        this.prefs.language = meta.language || 'en';
       }
     } catch (err) {
       console.error('Failed to load preferences:', err);

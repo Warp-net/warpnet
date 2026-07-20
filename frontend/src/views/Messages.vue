@@ -109,7 +109,7 @@ resulting from the use or misuse of this software.
             <p class="text-xs text-dark">@{{ active.other_user_id }}</p>
           </div>
         </button>
-        <button type="button" @click="deleteCurrentChat" class="ml-auto rounded-full w-9 h-9 flex items-center justify-center hover:bg-red-100 flat-btn" aria-label="Delete chat">
+        <button type="button" @click="askDeleteChat" class="ml-auto rounded-full w-9 h-9 flex items-center justify-center hover:bg-red-100 flat-btn" aria-label="Delete chat">
           <i class="fas fa-trash text-xl text-red-500" aria-hidden="true"></i>
         </button>
       </div>
@@ -194,6 +194,16 @@ resulting from the use or misuse of this software.
         v-model:showNewMessageModal="showNewMessageModal"
         @selected="selected"
     />
+
+    <ConfirmDialog
+      :show="showDeleteChatConfirm"
+      title="Delete chat"
+      message="Delete this conversation? This removes it from your device and can't be undone."
+      confirm-label="Delete"
+      :destructive="true"
+      @cancel="showDeleteChatConfirm = false"
+      @confirm="deleteCurrentChat"
+    />
   </div>
 </template>
 
@@ -208,11 +218,13 @@ export default {
     SideNav: defineAsyncComponent(() => import('@/components/SideNav.vue')),
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     NewMessageOverlay: defineAsyncComponent(() => import('@/components/NewMessageOverlay.vue')),
+    ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
   },
   data() {
     return {
       loading: true,
       showNewMessageModal: false,
+      showDeleteChatConfirm: false,
       chats: [],
       messages: [],
       ownerProfile: undefined,
@@ -381,7 +393,12 @@ export default {
       this.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       this.scrollToEnd();
     },
+    askDeleteChat() {
+      if (!this.active || !this.active.id) return;
+      this.showDeleteChatConfirm = true;
+    },
     async deleteCurrentChat() {
+      this.showDeleteChatConfirm = false;
       if (!this.active || !this.active.id) return;
       try {
         const deletedId = this.active.id;

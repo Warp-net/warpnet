@@ -106,6 +106,9 @@ const stateMap = new Map();
 // tab or reloading the page restores the session instead of bouncing to the
 // sign-up screen.
 const OWNER_STORAGE = "warpnet.owner";
+// sessionStorage key for the pairing QR; ephemeral (per-tab) so it survives a
+// reload without persisting the pairing secret to disk. Cleared on logout.
+const QR_STORAGE = "warpnet.qr";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
 
@@ -155,11 +158,22 @@ export const warpnetService = {
     setQR(qrData) {
         const key = `QR`;
         stateMap.set(key, qrData)
+        // The QR is only built once, during signInUser(). A full page reload
+        // restores the session from localStorage without re-running login, so
+        // the in-memory copy is lost and "Pair your phone" shows no code.
+        // Mirror it into sessionStorage (per-tab, cleared on tab close) so it
+        // survives reloads without persisting the pairing secret to disk.
+        try { sessionStorage.setItem(QR_STORAGE, qrData) } catch (e) {}
     },
 
     getQR() {
         const key = `QR`;
-        return stateMap.get(key) || ""
+        let qr = stateMap.get(key)
+        if (!qr) {
+            try { qr = sessionStorage.getItem(QR_STORAGE) || "" } catch (e) { qr = "" }
+            if (qr) stateMap.set(key, qr)
+        }
+        return qr || ""
     },
 
     setCursor(key, cursor) {
@@ -280,6 +294,7 @@ export const warpnetService = {
         stopRefreshNotifications()
         stateMap.clear()
         try { localStorage.removeItem(OWNER_STORAGE) } catch (e) {}
+        try { sessionStorage.removeItem(QR_STORAGE) } catch (e) {}
         try {
             localStorage.removeItem(`first_run_seen`)
         } catch (e) {}
@@ -1881,6 +1896,25 @@ export const warpnetService = {
         }
 
         return await this.sendToNode(request);
+    },
+
+    // updateAccountSource persists the account preferences (default post
+    // visibility, sensitive-media default, default language) into the owner's
+    // user metadata via the profile-update route. The node merges the metadata
+    // map key-by-key, so this doesn't clobber the rest of the profile.
+    async updateAccountSource(prefs) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        return await this.sendToNode({
+            path: PRIVATE_POST_USER,
+            body: {
+                metadata: {
+                    privacy: prefs.privacy || 'public',
+                    sensitive: prefs.sensitive ? 'true' : 'false',
+                    language: prefs.language || 'en',
+                },
+            },
+        });
     },
 
     async getNodeInfo(){
