@@ -288,7 +288,10 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
-		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+		log.Errorf(
+			"discovery: source '%s': request node %s info: %s",
+			peer.Source, pi.ID.String(), err.Error(),
+		)
 		return
 	}
 
