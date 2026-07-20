@@ -32,7 +32,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"github.com/oklog/ulid/v2"
 	"io"
 	gonet "net"
 	"runtime"
@@ -499,9 +498,4 @@ func NewBlockService(bs blockstore.Blockstore, ex exchange.Interface, opts ...bl
 
 func NewDAGService(bs blockservice.BlockService) format.DAGService {
 	return merkledag.NewDAGService(bs)
-}
-
-func IsULID(id string) bool {
-	_, err := ulid.ParseStrict(id)
-	return err == nil
 }

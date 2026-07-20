@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"github.com/oklog/ulid/v2"
 	"math"
 	"strconv"
 	"strings"
@@ -454,40 +455,51 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 		AddRootID("None").
 		Build()
 
+	want := uint64(20)
+	if limit != nil && *limit > 0 {
+		want = *limit
+	}
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return nil, "", err
 	}
 	defer txn.Rollback()
 
-	// Pass the caller's limit straight through. If the page yields
-	// fewer matches than `limit` (or zero), the caller resumes from
-	// the returned cursor — substring search is unavoidably linear in
-	// the scanned window, so we cap the window to what the caller
-	// asked for instead of doing a 4x overscan.
-	items, cur, err := txn.List(prefix, limit, cursor)
-	if err != nil {
-		return nil, "", err
-	}
-	if err = txn.Commit(); err != nil {
-		return nil, "", err
+	scanPage := want * 4
+
+	hits := make([]domain.User, 0, want)
+	pageCursor := ""
+	if cursor != nil {
+		pageCursor = *cursor
 	}
 
-	hits := make([]domain.User, 0, len(items))
-	for _, item := range items {
-		var u domain.User
-		if err := json.Unmarshal(item.Value, &u); err != nil {
+	for {
+		c := pageCursor
+		items, next, err := txn.List(prefix, &scanPage, &c)
+		if err != nil {
 			return nil, "", err
 		}
-		if !matchesUserQuery(u, q) {
-			continue
+
+		for _, item := range items {
+			var u domain.User
+			if err := json.Unmarshal(item.Value, &u); err != nil {
+				return nil, "", err
+			}
+			if !matchesUserQuery(u, q) {
+				continue
+			}
+			hits = append(hits, u)
+			if uint64(len(hits)) >= want {
+				return hits, next, nil
+			}
 		}
-		hits = append(hits, u)
-		if limit != nil && uint64(len(hits)) >= *limit {
-			break
+
+		if next == local_store.EndCursor || next == "" || len(items) == 0 {
+			return hits, local_store.EndCursor, nil
 		}
+		pageCursor = next
 	}
-	return hits, cur, nil
 }
 
 func matchesUserQuery(u domain.User, q string) bool {
@@ -507,31 +519,79 @@ func matchesUserQuery(u domain.User, q string) bool {
 }
 
 func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
-	users, cur, err := repo.List(limit, cursor)
+	want := uint64(20)
+	if limit != nil && *limit > 0 {
+		want = *limit
+	}
+
+	prefix := local_store.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace).
+		AddRootID("None").
+		Build()
+
+	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return users, "", err
+		return nil, "", err
+	}
+	defer txn.Rollback()
+
+	// maxScan bounds the work under a large Mastodon flood; scanPage is the
+	// per-iteration window handed to the underlying list.
+	const maxScan = 5000
+	scanPage := uint64(200)
+
+	native := make([]domain.User, 0, want)
+	other := make([]domain.User, 0, want)
+	pageCursor := ""
+	if cursor != nil {
+		pageCursor = *cursor
+	}
+	scanned := 0
+
+	for uint64(len(native)) < want && scanned < maxScan {
+		c := pageCursor
+		items, next, err := txn.List(prefix, &scanPage, &c)
+		if err != nil {
+			return nil, "", err
+		}
+
+		for _, item := range items {
+			scanned++
+			var u domain.User
+			if err := json.Unmarshal(item.Value, &u); err != nil {
+				return nil, "", err
+			}
+			if u.IsOffline {
+				continue
+			}
+			// Warpnet-native peers (ULID id) come first; everyone else fills the
+			// remaining slots. No avatar or tweet gating — a freshly joined
+			// account (no picture, no posts yet) is still a valid recommendation.
+			if isULID(u.Id) {
+				native = append(native, u)
+				continue
+			}
+			if uint64(len(other)) < want {
+				other = append(other, u)
+			}
+		}
+
+		if next == local_store.EndCursor || next == "" || len(items) == 0 {
+			break
+		}
+		pageCursor = next
 	}
 
-	if limit != nil && uint64(len(users)) < *limit { // too small amount - no need to filter
-		return users, cur, nil
-	}
-
-	recommended := make([]domain.User, 0, len(users))
-	for _, u := range users {
-		if u.IsOffline {
-			continue
+	// Native peers first, then fill remaining slots with the rest.
+	recommended := native
+	for _, u := range other {
+		if uint64(len(recommended)) >= want {
+			break
 		}
-		if u.AvatarKey == "" || strings.Contains(strings.ToLower(u.AvatarKey), "missing") {
-			continue
-		}
-		if u.TweetsCount == 0 {
-			continue
-		}
-
 		recommended = append(recommended, u)
 	}
 
-	return recommended, cur, nil
+	return recommended, local_store.EndCursor, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
@@ -580,4 +640,9 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 	}
 
 	return users, txn.Commit()
+}
+
+func isULID(id string) bool {
+	_, err := ulid.ParseStrict(id)
+	return err == nil
 }

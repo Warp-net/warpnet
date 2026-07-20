@@ -193,9 +193,6 @@ func StreamSearchUsersHandler(userRepo UserFetcher) warpnet.WarpHandlerFunc {
 		if err != nil {
 			return nil, err
 		}
-		sort.SliceStable(users, func(i, j int) bool {
-			return warpnet.IsULID(users[i].Id) && !warpnet.IsULID(users[j].Id)
-		})
 
 		return event.SearchUsersResponse{Cursor: cur, Users: users}, nil
 	}

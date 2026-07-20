@@ -87,11 +87,6 @@ func StreamGetWhoToFollowHandler(
 			whotofollow = append(whotofollow, user)
 		}
 
-		// show users with a ULID id first
-		sort.SliceStable(whotofollow, func(i, j int) bool {
-			return warpnet.IsULID(whotofollow[i].Id) && !warpnet.IsULID(whotofollow[j].Id)
-		})
-
 		return event.UsersResponse{
 			Cursor: cursor,
 			Users:  whotofollow,

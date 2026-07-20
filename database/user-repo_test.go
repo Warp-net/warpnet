@@ -29,6 +29,8 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -234,6 +236,86 @@ func (s *UserRepoTestSuite) TestSearch_CaseInsensitive() {
 func (s *UserRepoTestSuite) TestSearch_EmptyQuery() {
 	_, _, err := s.repo.Search("", nil, nil)
 	s.Error(err)
+}
+
+// TestSearch_FindsUserBeyondFirstPage guards the regression where Search
+// only scanned a single `limit`-sized page: a discovered user that sorts
+// after that page (many non-matching users ahead of it) became invisible to
+// search and the new-message picker. Search must scan the whole prefix.
+func (s *UserRepoTestSuite) TestSearch_FindsUserBeyondFirstPage() {
+	// Enough non-matching users to push the target well past a 20-wide page.
+	for i := 0; i < 40; i++ {
+		_, err := s.repo.Create(domain.User{
+			Id:       fmt.Sprintf("beyond-noise-%03d", i),
+			Username: fmt.Sprintf("beyondnoise%03d", i),
+		})
+		s.Require().NoError(err)
+	}
+	// Id sorts last within the shared RTT range, so it lands after the noise.
+	_, err := s.repo.Create(domain.User{Id: "zzzz-beyond-target", Username: "beyondtargetuser"})
+	s.Require().NoError(err)
+
+	limit := uint64(20)
+	hits, _, err := s.repo.Search("beyondtargetuser", &limit, nil)
+	s.Require().NoError(err)
+
+	found := false
+	for _, u := range hits {
+		if u.Id == "zzzz-beyond-target" {
+			found = true
+			break
+		}
+	}
+	s.True(found, "Search must scan past the first page to find a discovered user")
+}
+
+// TestWhoToFollow_SurfacesBuriedNativePeer guards two regressions at once:
+//   - a warpnet-native (ULID) peer that sorts behind a wall of other accounts
+//     (as Mastodon accounts do in production) must still be recommended, not
+//     dropped because it fell outside the first page;
+//   - a peer with an avatar but no tweets yet must not be filtered out.
+func (s *UserRepoTestSuite) TestWhoToFollow_SurfacesBuriedNativePeer() {
+	// 30 non-native users (no avatar, no tweets) whose ids sort BEFORE the
+	// native ULID ("0000-*" < "01ARZ..."), pushing the native past a single
+	// 20-wide page. None are gated out for missing avatar/tweets.
+	for i := 0; i < 30; i++ {
+		_, err := s.repo.Create(domain.User{
+			Id:       fmt.Sprintf("0000-wtf-noise-%03d", i),
+			Username: fmt.Sprintf("wtfnoise%03d", i),
+		})
+		s.Require().NoError(err)
+	}
+	// Native peer with an avatar but zero tweets.
+	const nativeID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	_, err := s.repo.Create(domain.User{
+		Id:          nativeID,
+		Username:    "freshpeer",
+		AvatarKey:   "image/jpeg,BBBB",
+		TweetsCount: 0,
+	})
+	s.Require().NoError(err)
+
+	// Native peer with neither avatar nor tweets — a just-joined peer must
+	// still be recommendable (warpnet peers aren't gated on avatar).
+	const barePeerID = "01ARZ3NDEKTSV4RRFFQ69G5FB0"
+	_, err = s.repo.Create(domain.User{Id: barePeerID, Username: "barepeer"})
+	s.Require().NoError(err)
+
+	limit := uint64(20)
+	recs, _, err := s.repo.WhoToFollow(&limit, nil)
+	s.Require().NoError(err)
+
+	got := map[string]bool{}
+	nonNativeNoAvatar := false
+	for _, u := range recs {
+		got[u.Id] = true
+		if strings.HasPrefix(u.Id, "0000-wtf-noise-") {
+			nonNativeNoAvatar = true
+		}
+	}
+	s.True(got[nativeID], "WhoToFollow must surface a native peer past the first page with no tweets")
+	s.True(got[barePeerID], "WhoToFollow must surface a native peer with no avatar and no tweets")
+	s.True(nonNativeNoAvatar, "WhoToFollow must not gate non-native users on missing avatar/tweets")
 }
 
 func TestUserRepoTestSuite(t *testing.T) {
