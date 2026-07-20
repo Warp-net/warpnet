@@ -114,6 +114,11 @@ let latestNotifications = { unread_count: 0, notifications: [] };
 // renders without hitting the node per row.
 const blockedIdsCache = new Set();
 let blockedCachePrimed = false;
+// Same lazy in-memory mirror for the mute list, so isUserMuted() can
+// answer synchronously and the profile / who-to-follow menus can reflect
+// the muted state without a per-row roundtrip.
+const mutedIdsCache = new Set();
+let mutedCachePrimed = false;
 const defaultLimit = 20
 const endCursor = "end"
 
@@ -662,25 +667,66 @@ export const warpnetService = {
     async muteUser(targetUserId) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
-        return await this.sendToNode({
+        const resp = await this.sendToNode({
             path: PRIVATE_POST_MUTE,
             body: {
                 muter_id: owner.user_id,
                 mutee_id: targetUserId,
             },
         });
+        // Mirror the write so isUserMuted() reports the new state at once.
+        mutedIdsCache.add(targetUserId);
+        return resp;
     },
 
     async unmuteUser(targetUserId) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
-        return await this.sendToNode({
+        const resp = await this.sendToNode({
             path: PRIVATE_POST_UNMUTE,
             body: {
                 muter_id: owner.user_id,
                 mutee_id: targetUserId,
             },
         });
+        mutedIdsCache.delete(targetUserId);
+        return resp;
+    },
+
+    // isUserMuted answers from the local cache, priming it once from the
+    // node on first call (mirrors isUserBlocked).
+    async isUserMuted(targetUserId) {
+        if (!targetUserId) return false;
+        await this.ensureMutedCache();
+        return mutedIdsCache.has(targetUserId);
+    },
+
+    async ensureMutedCache() {
+        if (mutedCachePrimed) return;
+        const owner = this.getOwnerProfile()
+        if (!owner) { mutedCachePrimed = true; return; }
+        let cursor = '';
+        const seen = new Set();
+        try {
+            while (true) {
+                const resp = await this.sendToNode({
+                    path: PRIVATE_GET_MUTES,
+                    body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+                });
+                const ids = resp?.ids || [];
+                for (const id of ids) seen.add(id);
+                const next = resp?.cursor || '';
+                if (!next || next === endCursor || ids.length === 0) break;
+                if (next === cursor) break;
+                cursor = next;
+            }
+        } catch (err) {
+            console.warn('failed to prime muted-users cache:', err);
+        }
+        for (const id of mutedIdsCache) seen.add(id);
+        mutedIdsCache.clear();
+        for (const id of seen) mutedIdsCache.add(id);
+        mutedCachePrimed = true;
     },
 
     async getMutes(cursorReset) {
@@ -699,6 +745,9 @@ export const warpnetService = {
         });
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
+        // Reflect this page into the local cache.
+        for (const id of (resp.ids || [])) mutedIdsCache.add(id);
+        if ((resp.cursor || endCursor) === endCursor) mutedCachePrimed = true;
         return resp;
     },
 

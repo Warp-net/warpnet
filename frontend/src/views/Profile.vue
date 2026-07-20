@@ -129,7 +129,7 @@ resulting from the use or misuse of this software.
                 <i class="fas fa-ellipsis-h"></i>
               </button>
               <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white rounded-md shadow-lg py-1 z-10">
-                <button type="button" @click="muteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Mute @{{ profile.id }}</button>
+                <button type="button" @click="toggleMuteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">{{ isMuted ? `Unmute @${profile.id}` : `Mute @${profile.id}` }}</button>
                 <button
                   type="button"
                   @click="askBlockToggle"
@@ -411,6 +411,7 @@ export default {
       subscribed: false,
       profileMenuOpen: false,
       isBlocked: false,
+      isMuted: false,
       showBlockConfirm: false,
       showReportDialog: false,
       showNetworkWarning: true,
@@ -534,12 +535,20 @@ export default {
         console.error(`failed to toggle subscribe [${this.profile.id}]`, err);
       }
     },
-    async muteFromProfile() {
+    async toggleMuteFromProfile() {
       this.profileMenuOpen = false;
+      const target = this.profile?.id;
+      if (!target) return;
       try {
-        await warpnetService.muteUser(this.profile.id);
+        if (this.isMuted) {
+          await warpnetService.unmuteUser(target);
+          this.isMuted = false;
+        } else {
+          await warpnetService.muteUser(target);
+          this.isMuted = true;
+        }
       } catch (err) {
-        console.error(`failed to mute [${this.profile.id}]`, err);
+        console.error(`failed to toggle mute on [${target}]`, err);
       }
     },
     openReport() {
@@ -602,6 +611,12 @@ export default {
       } catch (err) {
         console.warn(`failed to read block state for [${target}]:`, err);
         this.isBlocked = false;
+      }
+      try {
+        this.isMuted = await warpnetService.isUserMuted(target);
+      } catch (err) {
+        console.warn(`failed to read mute state for [${target}]:`, err);
+        this.isMuted = false;
       }
     },
     async loadMore() {
@@ -699,6 +714,20 @@ export default {
 
       const followerStatus = await warpnetService.isFollower(p.id);
       this.followerStatus.set(p.id, followerStatus);
+    }
+
+    // The viewed profile is not necessarily part of this.users (that list
+    // holds related/suggested users), so resolve its own follow state
+    // explicitly — otherwise the header button always renders "Follow"
+    // even when the owner already follows this user. Self profiles show
+    // "Edit profile" instead of the follow button, so skip them.
+    if (!this.isSelf && this.profile?.id) {
+      const [selfFollowing, selfFollower] = await Promise.all([
+        warpnetService.isFollowing(this.profile.id),
+        warpnetService.isFollower(this.profile.id),
+      ]);
+      this.followingStatus.set(this.profile.id, selfFollowing);
+      this.followerStatus.set(this.profile.id, selfFollower);
     }
   },
 };
