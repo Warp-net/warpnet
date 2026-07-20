@@ -31,6 +31,10 @@ Symptom: client shows blank / zero-value data while the same node serves the
 
 Frontend-only symptoms — blank rows/fields that are a client-parse issue, missing avatars, UI jank, battery drain, a stale committed `.aar`, or the dashboard behaving "logged out" after a restart — are not this skill: use `warpnet-debug-frontend`.
 
+## Cross-layer bugs — pull in `warpnet-debug-frontend` too
+
+Most Warpnet bugs are cross-stack: the symptom surfaces in a client but the cause is one layer away — or the reverse. Do not assume a bug is purely server-side. **The moment a bug touches the wire (a blank/zero-value row, a field that never populates, a payload that "parses to nothing"), load `warpnet-debug-frontend` as well and work the two skills together.** Use this skill to pin the ground truth — what the handler's `return` actually emits, `test/api_sync_test.go`, the JSON bytes on the wire — and the frontend skill to pin the parse/render — the client DTO keys, Moshi / `JSON.parse` zero-values. The bug is wherever the two disagree. When you can't cleanly localize which side owns it, run both in sequence: confirm the server emits the field, then confirm the client reads it.
+
 ## § Yamux config for relay-tunneled traffic
 
 **Symptom.** `network: event: peer ...UVdLFy connectedness updated: Limited → NotConnected → Limited` cycle every ~25-30 seconds in the fat-node logs. The cycle period matches yamux's `KeepAliveInterval`.

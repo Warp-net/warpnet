@@ -43,6 +43,10 @@ Symptom: a request failed — is it safe to retry?
 
 Backend-cause symptoms — `"Transaction Conflict. Please retry"` in node logs, the connection flapping every ~30s, `"context deadline exceeded"` on a specific server RPC — are not this skill: use `warpnet-debug-backend`.
 
+## Cross-layer bugs — pull in `warpnet-debug-backend` too
+
+Most Warpnet bugs are cross-stack: the symptom is in the UI but the cause is one layer down — or the reverse. A blank row is only a *client* bug if the node actually emits the field, so don't stop at the DTO. **The moment a bug touches the wire, load `warpnet-debug-backend` as well and work the two skills together.** Use that skill to pin the ground truth — stand up a node, read the handler's actual `return`, `test/api_sync_test.go`, log the JSON bytes — and this skill to pin the parse/render — the client DTO, Glide, the transport singleton. The bug is wherever the two disagree. When you can't cleanly localize which side owns it, run both in sequence: confirm the server emits the field, then confirm the client reads it.
+
 ## § Silent zero-value DTO parsing
 
 **Symptom.** Client shows empty lists or rows with blank fields, but the desktop Vue UI on the same node shows the data correctly. No error in logs.
