@@ -57,6 +57,12 @@ type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
 }
 
+type OfflineOutbox interface {
+	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte)
+	NotifyOnline(nodeIdStr string)
+	Close()
+}
+
 type BackoffEnabler interface {
 	IsBackoffEnabled(id warpnet.WarpPeerID) bool
 	Reset(id warpnet.WarpPeerID)
@@ -73,6 +79,7 @@ type WarpNode struct {
 	node     warpnet.P2PNode
 	relay    warpnet.WarpRelayCloser
 	streamer Streamer
+	outbox   OfflineOutbox
 	backoff  BackoffEnabler
 
 	isClosed *atomic.Bool
@@ -181,6 +188,15 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	return nil
 }
 
+func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
+	if n == nil || store == nil {
+		return
+	}
+	outbox := stream.NewOutbox(n.ctx, store)
+	outbox.Run(n.streamer)
+	n.outbox = outbox
+}
+
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 	logMw := n.mw.LoggingMiddleware
 	authMw := n.mw.AuthMiddleware
@@ -234,6 +250,11 @@ func (n *WarpNode) trackIncomingEvents() {
 					pid[len(pid)-6:],
 					typedEvent.Connectedness.String(),
 				)
+				isOnline := typedEvent.Connectedness == warpnet.Connected ||
+					typedEvent.Connectedness == warpnet.Limited
+				if n.outbox != nil && isOnline {
+					n.outbox.NotifyOnline(pid)
+				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
 				addrs := n.node.Peerstore().Addrs(pid)
@@ -411,7 +432,11 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		}
 	}
 
-	return n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
+	resp, err := n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
+	if n.outbox != nil && errors.Is(err, warpnet.ErrNodeIsOffline) {
+		n.outbox.Enqueue(nodeId.String(), path, bt)
+	}
+	return resp, err
 }
 
 func (n *WarpNode) StopNode() {
@@ -423,6 +448,10 @@ func (n *WarpNode) StopNode() {
 	}()
 	if n == nil || n.node == nil {
 		return
+	}
+
+	if n.outbox != nil {
+		n.outbox.Close()
 	}
 
 	if n.eventsSub != nil {
