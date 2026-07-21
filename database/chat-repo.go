@@ -281,6 +281,23 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 	}
 	defer txn.Rollback()
 
+	existingSortable, err := txn.Get(fixedKey)
+	if err != nil && !local_store.IsNotFoundError(err) {
+		return msg, err
+	}
+	if len(existingSortable) > 0 {
+		bt, getErr := txn.Get(local_store.DatabaseKey(existingSortable))
+		if getErr != nil && !local_store.IsNotFoundError(getErr) {
+			return msg, getErr
+		}
+		var existing domain.ChatMessage
+		if getErr == nil {
+			if unmErr := json.Unmarshal(bt, &existing); unmErr == nil {
+				return existing, txn.Commit()
+			}
+		}
+	}
+
 	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
 		return msg, err
 	}

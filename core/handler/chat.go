@@ -282,6 +282,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 
 		now := time.Now()
 		msg := domain.ChatMessage{
+			Id:         ev.Id,
 			ChatId:     ev.ChatId,
 			SenderId:   ev.SenderId,
 			ReceiverId: ev.ReceiverId,
@@ -332,6 +333,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			otherUser.NodeId,
 			event.PUBLIC_POST_MESSAGE,
 			event.NewMessageEvent(domain.ChatMessage{
+				Id:         msg.Id,
 				ChatId:     ev.ChatId,
 				SenderId:   ownerId,
 				ReceiverId: ev.ReceiverId,
