@@ -125,18 +125,18 @@ func NewMemberNode(
 		return nil, err
 	}
 
-	// Fan the discovery-topic signal out to the offline retry service: a peer
-	// that announces itself on the discovery topic is (back) online, so flush
-	// anything queued for it. Discovery handling itself is unchanged.
-	discoveryFanout := func(info warpnet.WarpAddrInfo) {
-		discService.DiscoveryHandlerPubSub(info)
-		retryService.NotifyOnline(info.ID.String())
-	}
-
 	pubSubHandlers := memberPubSub.PrefollowHandlers(followingIds...)
 	pubSubHandlers = append(
 		pubSubHandlers,
-		memberPubSub.NewRelayDiscoveryTopicHandler(discoveryFanout),
+		memberPubSub.NewRelayDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
+	)
+	// Independent second handler on the same discovery topic: when a peer
+	// announces itself (i.e. is back online) the retry service flushes anything
+	// queued for it. The pubsub layer dispatches the topic to every handler, so
+	// discovery stays untouched.
+	pubSubHandlers = append(
+		pubSubHandlers,
+		memberPubSub.NewRelayDiscoveryTopicHandler(retryService.NotifyOnlinePeer),
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 

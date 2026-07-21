@@ -116,6 +116,13 @@ func (s *RetryService) Enqueue(destNodeId, route string, payload []byte) error {
 	return nil
 }
 
+// NotifyOnlinePeer matches the discovery.DiscoveryHandler signature so the
+// retry service can be registered as an independent handler on the pubsub
+// discovery topic (alongside, and without coupling to, the discovery service).
+func (s *RetryService) NotifyOnlinePeer(info warpnet.WarpAddrInfo) {
+	s.NotifyOnline(info.ID.String())
+}
+
 // NotifyOnline is the pubsub-discovery hook: it is called for every peer seen
 // on the discovery topic. It is O(1) and does no I/O when the node has nothing
 // queued, so it is cheap to call on every gossip announcement.
