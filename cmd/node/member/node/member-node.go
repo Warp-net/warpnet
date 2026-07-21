@@ -180,6 +180,8 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start node: %w", err)
 	}
 
+	m.node.SetOutbox(database.NewOutboxRepo(m.db))
+
 	m.pubsubService.Run(m)
 	if err := m.discService.Run(m); err != nil {
 		return err
