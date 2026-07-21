@@ -40,10 +40,12 @@ import (
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
+	"github.com/Warp-net/warpnet/core/outbox"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
@@ -73,6 +75,7 @@ type MemberNode struct {
 	notifier         notifications.Notifier
 	db               Storer
 	statsDb          StatsStorer
+	retryService     MessageRetrier
 	privKey          ed25519.PrivateKey
 	ownerId, network string
 }
@@ -113,6 +116,9 @@ func NewMemberNode(
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
+	outboxRepo := database.NewOutboxRepo(db)
+	retryService := outbox.NewRetryService(ctx, outboxRepo)
+
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
 	if err != nil {
 		return nil, err
@@ -122,6 +128,14 @@ func NewMemberNode(
 	pubSubHandlers = append(
 		pubSubHandlers,
 		memberPubSub.NewRelayDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
+	)
+	// Independent second handler on the same discovery topic: when a peer
+	// announces itself (i.e. is back online) the retry service flushes anything
+	// queued for it. The pubsub layer dispatches the topic to every handler, so
+	// discovery stays untouched.
+	pubSubHandlers = append(
+		pubSubHandlers,
+		memberPubSub.NewRelayDiscoveryTopicHandler(retryService.NotifyOnlinePeer),
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
 
@@ -164,6 +178,7 @@ func NewMemberNode(
 		authRepo:      authRepo,
 		notifier:      notifier,
 		db:            db,
+		retryService:  retryService,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 	}
@@ -179,6 +194,8 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to start node: %w", err)
 	}
+
+	m.retryService.SetSender(m.node)
 
 	m.pubsubService.Run(m)
 	if err := m.discService.Run(m); err != nil {
@@ -201,6 +218,10 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
+
+	// Replay anything queued while offline for peers that may already be online
+	// (they won't re-announce on the discovery topic for a while).
+	m.retryService.FlushAllOnStart()
 
 	for _, addr := range m.dHashTable.BootstrapNodes() {
 		m.SetMaxNodePriority(addr.ID)
@@ -308,8 +329,30 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	bt, err := m.node.Stream(nodeId, path, data)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		m.setUserOffline(nodeIdStr)
+		m.enqueueOffline(nodeIdStr, path, data)
 	}
 	return bt, err
+}
+
+// enqueueOffline persists a write request that couldn't be delivered because
+// the destination was offline, for later replay by the retry service. Reads
+// (GET routes) carry no state and are never queued.
+func (m *MemberNode) enqueueOffline(nodeIdStr string, path stream.WarpRoute, data any) {
+	if m.retryService == nil || path.IsGet() {
+		return
+	}
+	payload, ok := data.([]byte)
+	if !ok {
+		var err error
+		payload, err = json.Marshal(data)
+		if err != nil {
+			log.Warnf("member: outbox: marshal %s payload: %v", path, err)
+			return
+		}
+	}
+	if err := m.retryService.Enqueue(nodeIdStr, string(path), payload); err != nil {
+		log.Warnf("member: outbox: enqueue for %s: %v", nodeIdStr, err)
+	}
 }
 
 func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
@@ -854,6 +897,9 @@ func (m *MemberNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
 func (m *MemberNode) Stop() {
 	if m == nil {
 		return
+	}
+	if m.retryService != nil {
+		m.retryService.Close()
 	}
 	if m.discService != nil {
 		m.discService.Close()

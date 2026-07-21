@@ -78,9 +78,13 @@ type Gossip struct {
 	subs             []*pubsub.Subscription
 	relayCancelFuncs map[string]pubsub.RelayCancelFunc
 	topics           map[string]*pubsub.Topic
-	handlersMap      map[string]topicHandler
-	isRunning        *atomic.Bool
-	privKey          ed25519.PrivateKey
+	// handlersMap holds every handler registered for a topic. A topic may have
+	// more than one handler (e.g. discovery + offline-retry both watch the
+	// discovery topic); each received message is dispatched to all of them.
+	// A topic present with no non-nil handler falls back to SelfPublish.
+	handlersMap map[string][]topicHandler
+	isRunning   *atomic.Bool
+	privKey     ed25519.PrivateKey
 }
 
 type TopicHandler struct {
@@ -92,9 +96,16 @@ func NewGossip(
 	ctx context.Context,
 	handlers ...TopicHandler,
 ) *Gossip {
-	handlersMap := make(map[string]topicHandler)
+	handlersMap := make(map[string][]topicHandler)
 	for _, h := range handlers {
-		handlersMap[h.TopicName] = h.Handler
+		// Record the topic even for a nil handler so Run still subscribes to it
+		// (nil handler => default SelfPublish dispatch).
+		if _, ok := handlersMap[h.TopicName]; !ok {
+			handlersMap[h.TopicName] = nil
+		}
+		if h.Handler != nil {
+			handlersMap[h.TopicName] = append(handlersMap[h.TopicName], h.Handler)
+		}
 	}
 
 	return &Gossip{
@@ -124,16 +135,19 @@ func (g *Gossip) Run(node GossipNodeConnector) (err error) {
 		return fmt.Errorf("gossip: failed to run: %w", err)
 	}
 
-	handlers := make([]TopicHandler, 0, len(g.handlersMap))
-	for name, h := range g.handlersMap {
-		handlers = append(handlers, TopicHandler{
-			TopicName: name,
-			Handler:   h,
-		})
+	// Handlers were already registered in NewGossip; here we only need to join
+	// and subscribe to each distinct topic once.
+	g.mx.RLock()
+	topicNames := make([]string, 0, len(g.handlersMap))
+	for name := range g.handlersMap {
+		topicNames = append(topicNames, name)
 	}
+	g.mx.RUnlock()
 
-	if err := g.Subscribe(handlers...); err != nil {
-		return fmt.Errorf("gossip: presubscribe: %w", err)
+	for _, name := range topicNames {
+		if err := g.joinTopic(name); err != nil {
+			return fmt.Errorf("gossip: presubscribe: %w", err)
+		}
 	}
 
 	go func() {
@@ -186,22 +200,27 @@ func (g *Gossip) runListener() error {
 
 			log.Debugf("gossip: received message: %s", string(msg.Data))
 
+			topicName := strings.TrimSpace(*msg.Topic)
 			g.mx.RLock()
-			handlerF, ok := g.handlersMap[strings.TrimSpace(*msg.Topic)]
+			handlers := g.handlersMap[topicName]
 			g.mx.RUnlock()
-			if !ok || handlerF == nil {
-				// default behavior
+			if len(handlers) == 0 {
+				// default behavior: no registered handler for this topic
 				if err := g.SelfPublish(msg.Data); err != nil {
 					log.Errorf("gossip: self stream: %v", err)
 				}
 				continue
 			}
-			if err := handlerF(msg.Data); err != nil {
-				log.Errorf(
-					"gossip: failed to handle peer %s message from topic %s: %v",
-					msg.ReceivedFrom.String(), *msg.Topic, err,
-				)
-				continue
+			for _, handlerF := range handlers {
+				if handlerF == nil {
+					continue
+				}
+				if err := handlerF(msg.Data); err != nil {
+					log.Errorf(
+						"gossip: failed to handle peer %s message from topic %s: %v",
+						msg.ReceivedFrom.String(), *msg.Topic, err,
+					)
+				}
 			}
 		}
 	}
@@ -247,21 +266,41 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 	if g == nil || !g.isRunning.Load() {
 		return ErrPubsubNotInit
 	}
-	g.mx.Lock()
-	defer g.mx.Unlock()
-
 	if topicName == "" {
 		return ErrPubsubEmptyTopic
 	}
 
-	topic, ok := g.topics[topicName]
-	if !ok {
-		topic, err = g.pubsub.Join(topicName)
-		if err != nil {
-			return err
-		}
-		g.topics[topicName] = topic
+	if err := g.joinTopic(topicName); err != nil {
+		return err
 	}
+
+	g.mx.Lock()
+	defer g.mx.Unlock()
+	if _, ok := g.handlersMap[topicName]; !ok {
+		g.handlersMap[topicName] = nil
+	}
+	if h != nil {
+		g.handlersMap[topicName] = append(g.handlersMap[topicName], h)
+	}
+	return nil
+}
+
+// joinTopic joins, relays and subscribes to a topic exactly once. Repeated
+// calls for the same topic are a no-op, so several handlers can share a single
+// subscription.
+func (g *Gossip) joinTopic(topicName string) (err error) {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	if _, ok := g.topics[topicName]; ok {
+		return nil
+	}
+
+	topic, err := g.pubsub.Join(topicName)
+	if err != nil {
+		return err
+	}
+	g.topics[topicName] = topic
 
 	relayCancel, err := topic.Relay()
 	if err != nil {
@@ -277,8 +316,6 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 
 	g.relayCancelFuncs[topicName] = relayCancel
 	g.subs = append(g.subs, sub)
-	g.handlersMap[topicName] = h
-
 	return nil
 }
 

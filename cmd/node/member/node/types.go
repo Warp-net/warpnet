@@ -31,6 +31,7 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
+	"github.com/Warp-net/warpnet/core/outbox"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
@@ -50,6 +51,13 @@ type DiscoveryHandler interface {
 
 type MDNSStarterCloser interface {
 	Start(n mdns.NodeConnector)
+	Close()
+}
+
+type MessageRetrier interface {
+	Enqueue(destNodeId, route string, payload []byte) error
+	SetSender(sender outbox.Sender)
+	FlushAllOnStart()
 	Close()
 }
 
