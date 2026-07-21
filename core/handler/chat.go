@@ -282,6 +282,9 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 
 		now := time.Now()
 		msg := domain.ChatMessage{
+			// Carry the sender's stable id so an offline redelivery is deduped
+			// by the receiver's idempotent CreateMessage instead of duplicated.
+			Id:         ev.Id,
 			ChatId:     ev.ChatId,
 			SenderId:   ev.SenderId,
 			ReceiverId: ev.ReceiverId,
@@ -332,6 +335,8 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			otherUser.NodeId,
 			event.PUBLIC_POST_MESSAGE,
 			event.NewMessageEvent(domain.ChatMessage{
+				// Stable id lets the receiver dedupe an offline redelivery.
+				Id:         msg.Id,
 				ChatId:     ev.ChatId,
 				SenderId:   ownerId,
 				ReceiverId: ev.ReceiverId,

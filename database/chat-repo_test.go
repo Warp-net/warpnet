@@ -135,6 +135,32 @@ func (s *ChatRepoSuite) TestCreateAndGetMessage() {
 	s.Equal(msg.Text, got.Text)
 }
 
+func (s *ChatRepoSuite) TestCreateMessageIdempotent() {
+	ownerID := testUserID
+	otherID := ulid.Make().String()
+
+	chat, err := s.repo.CreateChat(nil, ownerID, otherID)
+	s.NoError(err)
+	defer s.repo.DeleteChat(chat.Id)
+
+	id := ulid.Make().String()
+	first, err := s.repo.CreateMessage(domain.ChatMessage{Id: id, ChatId: chat.Id, Text: "hi"})
+	s.NoError(err)
+	s.Equal(id, first.Id)
+
+	// Redelivery of the same (chatId, id) must not create a second message and
+	// must return the originally stored copy.
+	second, err := s.repo.CreateMessage(domain.ChatMessage{Id: id, ChatId: chat.Id, Text: "changed"})
+	s.NoError(err)
+	s.Equal(id, second.Id)
+	s.Equal("hi", second.Text)
+
+	limit := uint64(100)
+	msgs, _, err := s.repo.ListMessages(chat.Id, &limit, nil)
+	s.NoError(err)
+	s.Len(msgs, 1)
+}
+
 func (s *ChatRepoSuite) TestListMessages() {
 	ownerID := testUserID
 	otherID := ulid.Make().String()

@@ -90,6 +90,13 @@ func NewStreamPool(
 }
 
 func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
+	return p.SendWithID(peerAddr, r, data, "")
+}
+
+// SendWithID behaves like Send but pins the envelope message id instead of
+// minting a fresh one. Redelivery from the offline outbox reuses the original
+// id so the receiver's idempotency layer dedupes the replay.
+func (p *streamPool) SendWithID(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte, msgID string) ([]byte, error) {
 	if p == nil {
 		return nil, warpnet.WarpError("nil stream pool")
 	}
@@ -99,7 +106,7 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 
 	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + hashBody(data)
 	v, err, _ := p.sf.Do(key, func() (any, error) {
-		return p.sendWithRetry(peerAddr, r, data)
+		return p.sendWithRetry(peerAddr, r, data, msgID)
 	})
 	if err != nil {
 		return nil, err
@@ -108,8 +115,10 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	return bt, nil
 }
 
-func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte) ([]byte, error) {
-	msgID := ulid.Make().String()
+func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte, msgID string) ([]byte, error) {
+	if msgID == "" {
+		msgID = ulid.Make().String()
+	}
 
 	bt, err := p.send(serverInfo, r, bodyBytes, msgID)
 	if err == nil || errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
