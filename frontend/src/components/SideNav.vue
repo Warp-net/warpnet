@@ -286,6 +286,7 @@ export default {
       qrModalOpen: false,
       qrCode: "",
       unsubscribeNotifications: null,
+      unsubscribeOwner: null,
     };
   },
   mounted() {
@@ -363,7 +364,26 @@ export default {
   },
   async created() {
     console.log("loading component:", this.$options.name);
-    this.profile = warpnetService.getOwnerProfile();
+    // Copy the owner object: the raw one lives in the service's non-reactive
+    // stateMap and is shared; rendering it directly means profile edits that
+    // touch that object bypass this component's reactivity.
+    this.profile = { ...warpnetService.getOwnerProfile() };
+
+    // Re-render on profile edits (username/avatar). setOwnerProfile notifies
+    // subscribers; without this the sidebar keeps the pre-edit name/avatar
+    // until the next route change.
+    this.unsubscribeOwner = warpnetService.subscribeOwner(async (owner) => {
+      if (!owner) return;
+      const prevAvatarKey = this.profile?.avatar_key;
+      this.profile = { ...this.profile, ...owner };
+      if (owner.avatar_key && owner.avatar_key !== prevAvatarKey) {
+        try {
+          this.profile.avatar = await warpnetService.getImage({userId: this.profile.user_id, key: owner.avatar_key});
+        } catch (e) {
+          console.warn("sidenav: failed to refresh avatar:", e);
+        }
+      }
+    });
 
     try {
       if (typeof sessionStorage !== "undefined" &&
@@ -400,6 +420,10 @@ export default {
     if (this.unsubscribeNotifications) {
       this.unsubscribeNotifications();
       this.unsubscribeNotifications = null;
+    }
+    if (this.unsubscribeOwner) {
+      this.unsubscribeOwner();
+      this.unsubscribeOwner = null;
     }
     if (this._onDocClick) {
       document.removeEventListener("click", this._onDocClick);

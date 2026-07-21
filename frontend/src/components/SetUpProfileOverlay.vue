@@ -129,6 +129,16 @@ export default {
       this.profile = await warpnetService.editMyProfile(p);
       this.newImage = await warpnetService.getImage({userId:this.profile.id, key:p.avatar_key})
       this.profile.avatar = this.newImage;
+      // Notify owner subscribers (SideNav) so the new avatar shows without
+      // a route change — mirrors EditProfileOverlay.
+      const existingOwner = warpnetService.getOwnerProfile();
+      if (existingOwner) {
+        warpnetService.setOwnerProfile({
+          ...existingOwner,
+          username: this.profile.username || existingOwner.username,
+          avatar_key: p.avatar_key || "",
+        });
+      }
       this.$emit("close");
     },
   },

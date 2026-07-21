@@ -26,7 +26,10 @@ resulting from the use or misuse of this software.
     <div class="p-3">
       <p class="text-lg font-bold">Who to follow</p>
     </div>
-    <div v-if="profile" v-for="profile in profiles" :key="profile.id" class="w-full flex hover:bg-lighter p-3 border-t border-lighter">
+    <!-- No v-if here: on one element Vue 3 evaluates v-if BEFORE v-for, so
+         "profile" resolved to the component prop, not the loop item — the
+         whole list was gated on an unrelated prop. -->
+    <div v-for="profile in profiles" :key="profile.id" class="w-full flex hover:bg-lighter p-3 border-t border-lighter">
       <img 
         @click="pushToProfilePage(profile.id)" 
         :src="profile.avatar || '/default_profile.png'"

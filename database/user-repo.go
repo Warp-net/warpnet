@@ -29,6 +29,7 @@ package database
 
 import (
 	"github.com/oklog/ulid/v2"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -256,15 +257,12 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 			existingUser.Moderation.Strikes += newUser.Moderation.Strikes
 		}
 	}
-	// Merge metadata key-by-key so a partial update (e.g. account preferences)
-	// adds/overwrites only the keys it carries and preserves the rest.
+
 	if len(newUser.Metadata) > 0 {
 		if existingUser.Metadata == nil {
 			existingUser.Metadata = make(map[string]string, len(newUser.Metadata))
 		}
-		for k, v := range newUser.Metadata {
-			existingUser.Metadata[k] = v
-		}
+		maps.Copy(existingUser.Metadata, newUser.Metadata)
 	}
 	existingUser.RoundTripTime = newUser.RoundTripTime
 	existingUser.IsOffline = newUser.IsOffline

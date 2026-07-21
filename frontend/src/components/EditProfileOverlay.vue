@@ -234,7 +234,14 @@ export default {
       this.profile = await warpnetService.editMyProfile(p);
       const existingOwner = warpnetService.getOwnerProfile();
       if (existingOwner) {
-        Object.assign(existingOwner, this.profile);
+        // Route the merge through setOwnerProfile: Object.assign on the raw
+        // stateMap object bypasses Vue's proxies, so subscribers (SideNav)
+        // never re-render and localStorage keeps the stale owner.
+        warpnetService.setOwnerProfile({
+          ...existingOwner,
+          username: this.profile.username || existingOwner.username,
+          avatar_key: this.profile.avatar_key || "",
+        });
       }
 
       this.background_image = await warpnetService.getImage({userId:this.profile.user_id, key:this.profile.background_image_key});

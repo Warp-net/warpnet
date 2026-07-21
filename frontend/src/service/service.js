@@ -111,6 +111,11 @@ const OWNER_STORAGE = "warpnet.owner";
 const QR_STORAGE = "warpnet.qr";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
+// Subscribers to owner-profile changes (username/avatar edits). The owner
+// object lives in the non-reactive stateMap, so components that render it
+// (SideNav) must be notified explicitly — mutating the raw object bypasses
+// Vue's proxies and nothing re-renders.
+const ownerSubscribers = new Set();
 
 // In-memory mirror of the local block list, populated lazily so
 // the UI can call isUserBlocked() synchronously across tweet
@@ -190,6 +195,20 @@ export const warpnetService = {
         const key = `owner`;
         stateMap.set(key, owner)
         try { localStorage.setItem(OWNER_STORAGE, JSON.stringify(owner)) } catch (e) {}
+        for (const cb of ownerSubscribers) {
+            cb(owner);
+        }
+    },
+
+    // subscribeOwner mirrors subscribeNotifications: the callback fires with
+    // the current owner immediately and again on every setOwnerProfile.
+    // Returns an unsubscribe function.
+    subscribeOwner(callback) {
+        ownerSubscribers.add(callback);
+        callback(this.getOwnerProfile());
+        return () => {
+            ownerSubscribers.delete(callback);
+        };
     },
 
     getOwnerProfile() {
