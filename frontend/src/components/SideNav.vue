@@ -438,10 +438,7 @@ export default {
       this.newNotifications = Math.max(0, (resp.unread_count || 0) - unreadMessages);
     });
 
-    const resp = await warpnetService.getNotifications(true)
-    if (resp) {
-      this.newNotifications = resp.unread_count;
-    }
+    await warpnetService.getNotifications(true)
   },
   beforeUnmount() {
     if (this.unsubscribeNotifications) {
