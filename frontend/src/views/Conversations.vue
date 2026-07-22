@@ -197,6 +197,7 @@ export default {
       if (this.refreshInFlight || this.loading) return;
       this.refreshInFlight = true;
       try {
+        warpnetService.markMessageNotificationsRead().catch(() => {});
         const savedCursor = warpnetService.getCursor('chats');
         const chats = await warpnetService.getChats(true);
         warpnetService.setCursor('chats', savedCursor);
@@ -222,6 +223,7 @@ export default {
   async created() {
       console.log("loading component:", this.$options.name);
       this.profileId = this.$route.params.id
+      warpnetService.markMessageNotificationsRead().catch(() => {});
       await this.loadChatUser(this.profileId)
 
       const chats = await warpnetService.getChats(true);
