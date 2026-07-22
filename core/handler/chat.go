@@ -307,9 +307,10 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 				notifyUsername = sender.Username
 			}
 			if err := notifyRepo.Add(domain.Notification{
-				Type:   domain.NotificationMessageType,
-				Text:   notifyUsername + " sent you a message",
-				UserId: ownerId,
+				Type:    domain.NotificationMessageType,
+				Text:    notifyUsername + " sent you a message",
+				UserId:  ownerId,
+				ActorId: ev.SenderId,
 			}); err != nil {
 				log.Errorf("chat message: adding notification: %v", err)
 			}

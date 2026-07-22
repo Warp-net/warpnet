@@ -132,7 +132,7 @@ resulting from the use or misuse of this software.
                   ></i>
 
                   <img
-                    :src="'/default_profile.png'"
+                    :src="avatarFor(notification)"
                     class="h-8 w-8 ml-2 rounded-full flex-none"
                   />
                 </div>
@@ -166,7 +166,7 @@ resulting from the use or misuse of this software.
               <div class="w-full">
                 <div class="flex flex-row mr-2 md:mr-4 pt-1 text-2xl">
                   <img
-                    :src="'/default_profile.png'"
+                    :src="avatarFor(notification)"
                     class="h-8 w-8 ml-2 rounded-full flex-none"
                   />
                 </div>
@@ -252,6 +252,7 @@ export default {
       overlayOpen: false,
       overlayNotificationId: '',
       settingsOpen: false,
+      actorAvatars: {},
     };
   },
   computed: {
@@ -317,6 +318,25 @@ export default {
       this.settingsOpen = false;
       await this.markAllRead();
     },
+    avatarFor(n) {
+      return (n && n.actor_id && this.actorAvatars[n.actor_id]) || '/default_profile.png';
+    },
+    // hydrateAvatars fetches the real avatar for each notification actor
+    // (actor_id) once, cached by actor id so re-polls don't refetch.
+    async hydrateAvatars(list) {
+      const ids = [...new Set((list || [])
+        .map(n => n && n.actor_id)
+        .filter(id => id && !this.actorAvatars[id]))];
+      await Promise.all(ids.map(async (id) => {
+        try {
+          const p = await warpnetService.getProfile(id);
+          if (p && p.avatar_key) {
+            const img = await warpnetService.getImage({ userId: id, key: p.avatar_key });
+            if (img) this.actorAvatars[id] = img;
+          }
+        } catch (e) { /* keep placeholder */ }
+      }));
+    },
     async hydrateRequests(ids) {
       return Promise.all(
         (ids || []).map(async (id) => {
@@ -375,6 +395,7 @@ export default {
       const resp = await warpnetService.getNotifications(true);
       if (resp && resp.notifications) {
         this.notifications = resp.notifications;
+        this.hydrateAvatars(this.notifications);
       }
       // Don't bulk-mark-read just for opening the view — that erased the
       // unread state before the user looked at anything. Items are marked
@@ -403,6 +424,7 @@ export default {
       this.notifications = incoming.map((n) =>
         n && readIds.has(n.id) ? { ...n, is_read: true } : n
       );
+      this.hydrateAvatars(this.notifications);
     });
   },
   mounted() {

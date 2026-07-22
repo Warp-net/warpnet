@@ -130,9 +130,10 @@ func StreamNewReTweetHandler(
 					notifyText = notifyUsername + " quoted your tweet"
 				}
 				if err := notifyRepo.Add(domain.Notification{
-					Type:   domain.NotificationRetweetType,
-					Text:   notifyText,
-					UserId: ownerId,
+					Type:    domain.NotificationRetweetType,
+					Text:    notifyText,
+					UserId:  ownerId,
+					ActorId: *retweetEvent.RetweetedBy,
 				}); err != nil {
 					log.Errorf("retweet handler: adding notification: %v", err)
 				}

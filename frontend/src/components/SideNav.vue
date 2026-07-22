@@ -304,6 +304,16 @@ export default {
       unsubscribeOwner: null,
     };
   },
+  watch: {
+    // Entering the messages section clears the DM badge and marks the message
+    // notifications read so it stays cleared after leaving.
+    $route(to) {
+      if (to && (to.name === 'Chats' || to.name === 'Messages')) {
+        this.newMessages = 0;
+        warpnetService.markMessageNotificationsRead().catch(() => {});
+      }
+    },
+  },
   mounted() {
     const theme = localStorage.getItem("theme");
     if (theme === "dark" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
@@ -367,6 +377,15 @@ export default {
     async closeQR() {
       this.qrModalOpen = false
     },
+    // countUnreadMessages derives the live DM badge from unread message-type
+    // notifications (an incoming DM already raises one). Zero while the
+    // messages section is open — the $route watcher clears them there.
+    countUnreadMessages(resp) {
+      const name = this.$route && this.$route.name;
+      if (name === 'Chats' || name === 'Messages') return 0;
+      const items = (resp && resp.notifications) || [];
+      return items.filter(n => n && n.type === 'message' && !n.is_read).length;
+    },
     async signOut() {
       this.dropdown = false;
       try {
@@ -424,6 +443,7 @@ export default {
 
     this.unsubscribeNotifications = warpnetService.subscribeNotifications((resp) => {
       this.newNotifications = resp.unread_count || 0;
+      this.newMessages = this.countUnreadMessages(resp);
     });
 
     const resp = await warpnetService.getNotifications(true)

@@ -174,9 +174,10 @@ func (repo *UserRepo) notifyNewUser(user domain.User) {
 		name = user.Id
 	}
 	if err := repo.notifier.Add(domain.Notification{
-		Type:   domain.NotificationNewUserType,
-		Text:   name + " joined Warpnet",
-		UserId: repo.ownerUserId,
+		Type:    domain.NotificationNewUserType,
+		Text:    name + " joined Warpnet",
+		UserId:  repo.ownerUserId,
+		ActorId: user.Id,
 	}); err != nil {
 		log.Warnf("user repo: notify new user: %v", err)
 	}

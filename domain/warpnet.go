@@ -280,8 +280,12 @@ type User struct {
 	FollowersCount     int64      `json:"followers_count"`
 	Id                 string     `json:"id"`
 	IsOffline          bool       `json:"isOffline"`
-	NodeId             string     `json:"node_id"`
-	Network            string     `json:"network"`
+	// LastSeen is the last time this user was observed online. Stamped when a
+	// profile refresh reaches them online and left untouched while offline, so
+	// it reads as "last seen at X". Nil until first observed.
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	NodeId   string     `json:"node_id"`
+	Network  string     `json:"network"`
 	// Role mirrors NodeInfo.Role: "" for a regular user, "business" for a
 	// business account. Stamped from the node's NodeInfo when the user is
 	// cached (discovery) so clients can badge business accounts.
@@ -325,12 +329,18 @@ const (
 )
 
 type Notification struct {
-	Type      NotificationType `json:"type"`
-	Id        string           `json:"id"`
-	Text      string           `json:"text"`
-	UserId    string           `json:"user_id"`
-	IsRead    bool             `json:"is_read"`
-	CreatedAt time.Time        `json:"created_at"`
+	Type NotificationType `json:"type"`
+	Id   string           `json:"id"`
+	Text string           `json:"text"`
+	// UserId is the recipient (owner) the notification is stored for.
+	UserId string `json:"user_id"`
+	// ActorId is the user who triggered the notification (liker, follower,
+	// retweeter, replier, sender, joined user). Empty for system
+	// notifications (e.g. moderation). Clients hydrate the actor's avatar
+	// from it. Distinct from UserId, which is the recipient.
+	ActorId   string    `json:"actor_id,omitempty"`
+	IsRead    bool      `json:"is_read"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // NotificationSettings holds a user's per-node notification preferences,
