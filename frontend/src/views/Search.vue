@@ -64,7 +64,18 @@ resulting from the use or misuse of this software.
         <Loader :loading="loading" />
 
         <div
-          v-if="!loading && results.length === 0 && submitted"
+          v-if="!loading && searchError && submitted"
+          class="flex flex-col items-center justify-center w-full pt-10"
+        >
+          <div class="w-3/5 text-center">
+            <p class="font-bold text-lg">Search failed</p>
+            <p class="text-sm text-dark mb-3">Couldn't reach your node. Check your connection and try again.</p>
+            <button @click="submit()" class="text-white bg-blue rounded-full font-semibold px-4 py-2 hover:bg-darkblue">Retry</button>
+          </div>
+        </div>
+
+        <div
+          v-else-if="!loading && results.length === 0 && submitted"
           class="flex flex-col items-center justify-center w-full pt-10"
         >
           <div class="w-3/5">
@@ -107,13 +118,18 @@ export default {
       mode: this.$route.query.m || "People",
       results: [],
       cursor: '',
+      searchError: false,
     };
   },
   methods: {
     gotoHome() {
-      this.$router.push({
-        name: "Home",
-      });
+      // Prefer real history so "back" returns where the user came from
+      // (e.g. a deep link or a profile), falling back to Home.
+      if (window.history.length > 1) {
+        this.$router.back();
+      } else {
+        this.$router.push({ name: "Home" });
+      }
     },
     async submit(m = this.mode) {
       this.mode = m;
@@ -129,6 +145,7 @@ export default {
         return;
       }
       this.loading = true;
+      this.searchError = false;
       try {
         const resp = await warpnetService.searchUsers(this.query, reset ? '' : this.cursor);
         const users = resp?.users || [];
@@ -144,6 +161,8 @@ export default {
         this.cursor = resp?.cursor || 'end';
       } catch (err) {
         console.error('Search failed:', err);
+        // Distinguish a failed request from a genuine empty result.
+        this.searchError = true;
       } finally {
         this.loading = false;
       }

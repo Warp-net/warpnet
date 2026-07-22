@@ -31,7 +31,7 @@ resulting from the use or misuse of this software.
     ></div>
 
     <div
-      class="modal-main bg-white mx-auto rounded-lg z-50 overflow-y-auto w-full sm:w-3/5 md:w-2/5 max-h-full"
+      class="modal-main bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card mx-auto rounded-lg z-50 overflow-y-auto w-full sm:w-3/5 md:w-2/5 max-h-full"
     >
       <div class="pl-1 pr-4 py-1 h-16 border-b-2 border-lightblue">
         <div class="flex flex-row mt-1 ml-4 items-center">
@@ -83,9 +83,11 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {dismissable} from "@/lib/modal.mixin";
 
 export default {
   name: "NewMessageOverlay",
+  mixins: [dismissable({ handler: "onEscape" })],
   components: {
     ResultsNewMessage: defineAsyncComponent(() => import('./ResultsNewMessage.vue')),
     Loader: defineAsyncComponent(() => import('./Loader.vue')),
@@ -132,6 +134,9 @@ export default {
       console.log('selected new msg overlay user', JSON.stringify(user))
       this.$emit('selected', user);
     },
+    onEscape() {
+      this.$emit('update:showNewMessageModal', false);
+    },
   },
   async created() {
     console.log("loading component:", this.$options.name);
@@ -150,15 +155,6 @@ export default {
     }
     this.browseUsers = this.users.slice();
     this.loading = false;
-  },
-  beforeUnmount() {
-    window.removeEventListener("keydown", this.handleEscape);
-  },
-  mounted() {
-    window.addEventListener("keyup", this.handleEscape);
-  },
-  unmounted() {
-    window.removeEventListener("keyup", this.handleEscape);
   },
 };
 </script>

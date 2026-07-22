@@ -42,17 +42,20 @@ resulting from the use or misuse of this software.
       </div>
       <button
         v-if="!isFollowing(profile.id)"
-        @click="follow(profile.id)" 
-        class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2"
+        @click="follow(profile.id)"
+        :disabled="isPending(profile.id)"
+        class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2 disabled:opacity-50"
       >
         Follow
       </button>
       <button
           v-if="isFollowing(profile.id)"
           @click="unfollow(profile.id)"
-          class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2"
+          :disabled="isPending(profile.id)"
+          class="ml-auto text-sm font-bold px-4 py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
       >
-        Unfollow
+        <span class="group-hover:hidden">Following</span>
+        <span class="hidden group-hover:inline">Unfollow</span>
       </button>
     </div>
     <button
@@ -67,6 +70,7 @@ resulting from the use or misuse of this software.
 
 <script>
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: 'WhoToFollow',
@@ -75,11 +79,12 @@ export default {
     return {
       profiles: [],
       followingStatus: new Map(),
+      pending: new Set(),
     };
   },
   methods: {
     async pushToProfilePage(profileId) {
-      this.$router.push({ 
+      this.$router.push({
         name: "Profile",
         params: {
           id: profileId
@@ -89,13 +94,36 @@ export default {
     isFollowing(profileId) {
       return this.followingStatus.get(profileId) || false
     },
+    isPending(profileId) {
+      return this.pending.has(profileId);
+    },
     async follow(profileId) {
-      await warpnetService.followUser(profileId);
-      this.followingStatus.set(profileId, true)
+      if (this.pending.has(profileId)) return;
+      this.pending.add(profileId);
+      this.followingStatus.set(profileId, true); // optimistic
+      try {
+        await warpnetService.followUser(profileId);
+      } catch (err) {
+        console.error('Failed to follow:', err);
+        this.followingStatus.set(profileId, false); // rollback
+        toast.error(err?.message || "Couldn't follow this user. Please try again.");
+      } finally {
+        this.pending.delete(profileId);
+      }
     },
     async unfollow(profileId) {
-      await warpnetService.unfollowUser(profileId);
-      this.followingStatus.set(profileId, false)
+      if (this.pending.has(profileId)) return;
+      this.pending.add(profileId);
+      this.followingStatus.set(profileId, false); // optimistic
+      try {
+        await warpnetService.unfollowUser(profileId);
+      } catch (err) {
+        console.error('Failed to unfollow:', err);
+        this.followingStatus.set(profileId, true); // rollback
+        toast.error(err?.message || "Couldn't unfollow this user. Please try again.");
+      } finally {
+        this.pending.delete(profileId);
+      }
     },
     async loadAvatars(profiles) {
       await Promise.all(

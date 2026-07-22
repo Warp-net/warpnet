@@ -27,7 +27,7 @@ resulting from the use or misuse of this software.
     <div class="flex container h-screen w-full">
       <SideNav />
 
-      <div class="w-full h-full overflow-y-scroll no-scrollbar">
+      <div class="w-full h-full overflow-y-scroll no-scrollbar" v-scroll:bottom="loadMore">
         <!-- Top navigation -->
         <div class="px-5 pt-3 flex items-center">
           <button
@@ -59,7 +59,14 @@ resulting from the use or misuse of this software.
         </div>
 
         <Loader :loading="loading" />
-        <Users :users="profiles" :loading="loading" />
+        <div
+          v-if="!loading && profiles.length === 0"
+          class="flex flex-col items-center justify-center w-full pt-10 px-6 text-center"
+        >
+          <p class="font-bold text-lg">Not following anyone yet</p>
+          <p class="text-sm text-dark">When {{ profile?.username || 'this user' }} follows someone, they'll show up here.</p>
+        </div>
+        <Users v-if="profiles.length" :users="profiles" :loading="loading" />
       </div>
 
       <div

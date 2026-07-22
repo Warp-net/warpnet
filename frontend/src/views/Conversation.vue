@@ -83,6 +83,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: 'Chat',
@@ -127,17 +128,20 @@ export default {
     async sendMessage() {
       if (!this.newMessage.trim()) return;
 
+      const text = this.newMessage;
       try {
-        const message = await warpnetService.sendDirectMessage( {
+        await warpnetService.sendDirectMessage({
           chatId: this.chatId,
           receiverId: this.otherUser.id,
-          text: this.newMessage,
+          text,
         });
-        this.messages.push(message);
+        // Don't push the raw send result (it can be empty and render a blank
+        // bubble); clear the input and let the poll surface the stored message.
         this.newMessage = '';
         this.scrollToBottom();
       } catch (error) {
         console.error('Error sending message:', error);
+        toast.error(error?.message || "Couldn't send the message. Please try again.");
       }
     },
 

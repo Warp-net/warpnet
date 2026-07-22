@@ -27,12 +27,12 @@ resulting from the use or misuse of this software.
   >
     <div
       class="absolute w-full h-full bg-gray-900 opacity-50"
-      @click.prevent="this.$emit('close')"
+      @click.prevent="requestClose"
     ></div>
 
     <div
-      class="modal-main bg-white mx-auto rounded-lg z-50 overflow-y-auto no-scrollbar"
-      style="height:85%; width:40%"
+      class="modal-main bg-white mx-auto rounded-lg z-50 overflow-y-auto no-scrollbar w-full max-w-lg"
+      style="height:85%"
       role="dialog"
       aria-modal="true"
       aria-label="Edit profile"
@@ -40,14 +40,17 @@ resulting from the use or misuse of this software.
       <div class="pl-1 pr-4 py-1 h-16 border-b-2 border-lightblue">
         <button
           @click="saveProfile"
+          :disabled="saving"
           class="rounded-full bg-blue font-bold text-white mt-2 p-1 px-4 relative right-0 float-right focus:outline-none hover:bg-darkblue"
+          :class="saving ? 'opacity-60 cursor-default' : ''"
         >
-          Save
+          <span v-if="!saving">Save</span>
+          <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Saving…</span>
         </button>
         <div class="flex flex-row mt-1 ml-4 items-center">
           <button
             type="button"
-            @click="this.$emit('close')"
+            @click="requestClose"
             class="rounded-full bg-white p-2 px-3 hover:bg-lightblue mr-6 flex items-center justify-center"
             aria-label="Close"
           >
@@ -166,6 +169,17 @@ resulting from the use or misuse of this software.
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      :show="showDiscardConfirm"
+      title="Discard changes?"
+      message="You have unsaved changes. If you leave now they'll be lost."
+      confirm-label="Discard"
+      cancel-label="Keep editing"
+      :destructive="true"
+      @confirm="showDiscardConfirm = false; $emit('close')"
+      @cancel="showDiscardConfirm = false"
+    />
   </div>
 </template>
 <style scoped>
@@ -185,12 +199,17 @@ textarea {
 
 <script>
 import moment from "moment";
+import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
-  name: "EditProfileOverlay", 
+  name: "EditProfileOverlay",
+  components: {
+    ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
+  },
   props: {
-    showEditProfileModal: Boolean 
+    showEditProfileModal: Boolean
   },
   data() {
     return {
@@ -201,13 +220,40 @@ export default {
       bio: undefined,
       website: undefined,
       birthdate: undefined,
+      saving: false,
+      showDiscardConfirm: false,
+      // Snapshot of the loaded values so we can detect unsaved edits.
+      initial: {},
     };
+  },
+  computed: {
+    isDirty() {
+      const i = this.initial;
+      return (
+        this.username !== i.username ||
+        this.bio !== i.bio ||
+        this.website !== i.website ||
+        this.birthdate !== i.birthdate ||
+        this.avatar !== i.avatar ||
+        this.background_image !== i.background_image
+      );
+    },
   },
   methods: {
     handleKeyup(event) {
       if (event.key === "Escape") {
-        this.$emit("close");
+        this.requestClose();
       }
+    },
+    // requestClose guards against silently discarding edits: it only closes
+    // straight away when nothing changed.
+    requestClose() {
+      if (this.saving) return;
+      if (this.isDirty) {
+        this.showDiscardConfirm = true;
+        return;
+      }
+      this.$emit("close");
     },
     openFileInput(ref) {
       this.$refs[ref].click();
@@ -217,37 +263,50 @@ export default {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => this[prop] = reader.result;
-      reader.onerror = (error) => console.error("Error reading file:", error);
+      reader.onerror = (error) => {
+        console.error("Error reading file:", error);
+        toast.error("Couldn't read the selected image. Please try another file.");
+      };
     },
     async saveProfile() {
-      const p = {
-        username: this.username,
-        avatar_key: "",
-        background_image_key: "",
-        bio: this.bio,
-        website: this.website,
-        birthdate: this.birthdate ? moment(this.birthdate, "YYYY-MM-DD").format("YYYY-MM-DD") : null,
-      };
-      p.avatar_key = await warpnetService.uploadImage(this.avatar)
-      p.background_image_key = await warpnetService.uploadImage(this.background_image)
+      if (this.saving) return;
+      this.saving = true;
+      try {
+        const p = {
+          username: this.username,
+          avatar_key: "",
+          background_image_key: "",
+          bio: this.bio,
+          website: this.website,
+          birthdate: this.birthdate ? moment(this.birthdate, "YYYY-MM-DD").format("YYYY-MM-DD") : null,
+        };
+        p.avatar_key = await warpnetService.uploadImage(this.avatar)
+        p.background_image_key = await warpnetService.uploadImage(this.background_image)
 
-      this.profile = await warpnetService.editMyProfile(p);
-      const existingOwner = warpnetService.getOwnerProfile();
-      if (existingOwner) {
-        // Route the merge through setOwnerProfile: Object.assign on the raw
-        // stateMap object bypasses Vue's proxies, so subscribers (SideNav)
-        // never re-render and localStorage keeps the stale owner.
-        warpnetService.setOwnerProfile({
-          ...existingOwner,
-          username: this.profile.username || existingOwner.username,
-          avatar_key: this.profile.avatar_key || "",
-        });
+        this.profile = await warpnetService.editMyProfile(p);
+        const existingOwner = warpnetService.getOwnerProfile();
+        if (existingOwner) {
+          // Route the merge through setOwnerProfile: Object.assign on the raw
+          // stateMap object bypasses Vue's proxies, so subscribers (SideNav)
+          // never re-render and localStorage keeps the stale owner.
+          warpnetService.setOwnerProfile({
+            ...existingOwner,
+            username: this.profile.username || existingOwner.username,
+            avatar_key: this.profile.avatar_key || "",
+          });
+        }
+
+        this.background_image = await warpnetService.getImage({userId:this.profile.user_id, key:this.profile.background_image_key});
+        this.avatar = await warpnetService.getImage({userId:this.profile.user_id, key:this.profile.avatar_key})
+
+        toast.success("Profile updated.");
+        this.$emit("close");
+      } catch (err) {
+        console.error("Failed to save profile:", err);
+        toast.error(err?.message || "Couldn't save your profile. Please try again.");
+      } finally {
+        this.saving = false;
       }
-
-      this.background_image = await warpnetService.getImage({userId:this.profile.user_id, key:this.profile.background_image_key});
-      this.avatar = await warpnetService.getImage({userId:this.profile.user_id, key:this.profile.avatar_key})
-
-      this.$emit("close");
     },
   },
   mounted() {
@@ -277,6 +336,16 @@ export default {
     this.bio = this.profile.bio;
     this.website = this.profile.website;
     this.birthdate = this.profile.birthdate;
+    // Capture the loaded state so isDirty can tell real edits from a
+    // straight open-and-close.
+    this.initial = {
+      username: this.username,
+      bio: this.bio,
+      website: this.website,
+      birthdate: this.birthdate,
+      avatar: this.avatar,
+      background_image: this.background_image,
+    };
   },
 };
 </script>

@@ -49,7 +49,10 @@
         >
           {{ saving ? 'Saving…' : 'Save' }}
         </button>
-        <p v-if="savedMessage" class="text-sm text-dark">{{ savedMessage }}</p>
+        <p v-if="savedMessage" class="text-sm font-medium" :class="saveError ? 'text-red-600' : 'text-green-700'">
+          <i :class="saveError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle'" aria-hidden="true"></i>
+          {{ savedMessage }}
+        </p>
       </form>
     </div>
     <DefaultRightBar :profile="ownerProfile" />
@@ -59,6 +62,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "SettingsPreferences",
@@ -72,6 +76,7 @@ export default {
       loading: true,
       saving: false,
       savedMessage: '',
+      saveError: false,
       ownerProfile: {},
       prefs: { privacy: 'public', sensitive: false, language: 'en' },
     };
@@ -80,21 +85,24 @@ export default {
     async save() {
       this.saving = true;
       this.savedMessage = '';
+      this.saveError = false;
       try {
-        if (typeof warpnetService.updateAccountSource === 'function') {
-          await warpnetService.updateAccountSource(this.prefs);
-        } else {
-          // Backend endpoint not wired yet — preserve UI flow without a service stub
-          await new Promise(r => setTimeout(r, 200));
-        }
+        await warpnetService.updateAccountSource(this.prefs);
         this.savedMessage = 'Saved';
       } catch (err) {
         console.error('Failed to save preferences:', err);
         this.savedMessage = 'Failed to save';
+        this.saveError = true;
+        toast.error(err?.message || 'Failed to save preferences. Please try again.');
       } finally {
         this.saving = false;
+        if (this._savedTimer) clearTimeout(this._savedTimer);
+        this._savedTimer = setTimeout(() => { this.savedMessage = ''; }, 3000);
       }
     },
+  },
+  beforeUnmount() {
+    if (this._savedTimer) clearTimeout(this._savedTimer);
   },
   async created() {
     this.ownerProfile = warpnetService.getOwnerProfile();

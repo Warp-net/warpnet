@@ -52,9 +52,12 @@
 
 <script>
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
+import {dismissable} from "@/lib/modal.mixin";
 
 export default {
   name: "QuoteOverlay",
+  mixins: [dismissable("close")],
   props: {
     show: { type: Boolean, default: false },
     tweet: { type: Object, required: true },
@@ -83,9 +86,11 @@ export default {
           comment: body,
         });
         this.$emit('posted', result);
+        toast.success('Quote posted.');
         this.$emit('close');
       } catch (err) {
         console.error('Failed to retweet with comment:', err);
+        toast.error(err?.message || "Couldn't post your quote. Please try again.");
       } finally {
         this.saving = false;
       }

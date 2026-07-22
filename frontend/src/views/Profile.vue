@@ -121,14 +121,14 @@ resulting from the use or misuse of this software.
 
             <div v-if="!noUser && !isSelf && !loading" class="relative">
               <button
-                @click="profileMenuOpen = !profileMenuOpen"
+                @click.stop="profileMenuOpen = !profileMenuOpen"
                 class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 text-blue font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border border-blue mb-2 hover:bg-lightblue"
                 :aria-expanded="profileMenuOpen"
                 aria-label="More options"
               >
                 <i class="fas fa-ellipsis-h"></i>
               </button>
-              <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+              <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10">
                 <button type="button" @click="toggleMuteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">{{ isMuted ? `Unmute @${profile.id}` : `Mute @${profile.id}` }}</button>
                 <button
                   type="button"
@@ -205,11 +205,11 @@ resulting from the use or misuse of this software.
                   {{ profile.website.replace(/^https?:\/\//, '') }}
                 </a>
               </div>
-              <div v-if="joinedDate()" class="flex flex-row mr-4">
+              <div v-if="joinedDate(profile.created_at)" class="flex flex-row mr-4">
                 <i
                   class="far fa-calendar-alt text-dark align-text-bottom pt-1 mr-2"
                 ></i>
-                <p class="text-dark">Joined {{ joinedDate() }}</p>
+                <p class="text-dark">Joined {{ joinedDate(profile.created_at) }}</p>
               </div>
             </div>
             <div v-if="!noUser && !loading" class="flex flex-row mt-1">
@@ -294,7 +294,7 @@ resulting from the use or misuse of this software.
             class="flex flex-col items-center justify-center w-full pt-10"
           >
             <p class="font-bold text-lg">
-              <span>{{ isSelf ? "You" : `${profile.username || "User"}` }}</span> haven't
+              <span>{{ isSelf ? "You haven't" : `${profile.username || "User"} hasn't` }}</span>
               tweeted yet
             </p>
             <p class="text-sm text-dark">
@@ -304,6 +304,7 @@ resulting from the use or misuse of this software.
             </p>
             <button
               v-if="isSelf"
+              @click="tweetNow()"
               class="text-white bg-blue rounded-full font-semibold mt-4 px-4 py-2 hover:bg-darkblue"
             >
               <p class="hidden lg:block">Tweet now</p>
@@ -369,6 +370,7 @@ resulting from the use or misuse of this software.
 import moment from "moment";
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "Profile",
@@ -389,6 +391,7 @@ export default {
       showEditProfileModal: false,
       isSelf: false,
       followingLabel: "Following",
+      followPending: false,
       loading: true,
       noUser: false,
       ownerProfile: {},
@@ -433,7 +436,14 @@ export default {
       return profileId === this.ownerProfile.user_id;
     },
     joinedDate(createdAt) {
-      return moment(createdAt).format("MMMM YYYY");
+      // Guard against a missing/invalid timestamp — moment(undefined) would
+      // otherwise return "now" and every profile would read "Joined <today>".
+      if (!createdAt) return "";
+      const m = moment(createdAt);
+      return m.isValid() ? m.format("MMMM YYYY") : "";
+    },
+    tweetNow() {
+      this.$router.push({ name: "Home", query: { compose: 1 } });
     },
     gotoHome() {
       this.$router.push({
@@ -461,6 +471,7 @@ export default {
         });
       } catch (err) {
         console.error(`sendMessage failed for ${this.profile.id}:`, err);
+        toast.error(err?.message || "Couldn't open a chat with this user.");
       }
     },
     isFollower() {
@@ -510,22 +521,32 @@ export default {
       }
     },
     async follow() {
+      if (this.followPending) return;
+      this.followPending = true;
+      this.followingStatus.set(this.profile.id, true); // optimistic
       try {
         await warpnetService.followUser(this.profile.id);
       } catch (err) {
         console.error(`failed to follow [${this.profile.id}]`, err);
-        return
+        this.followingStatus.set(this.profile.id, false); // rollback
+        toast.error(err?.message || "Couldn't follow this user. Please try again.");
+      } finally {
+        this.followPending = false;
       }
-      this.followingStatus.set(this.profile.id, true)
     },
     async unfollow() {
+      if (this.followPending) return;
+      this.followPending = true;
+      this.followingStatus.set(this.profile.id, false); // optimistic
       try {
         await warpnetService.unfollowUser(this.profile.id);
       } catch (err) {
         console.error(`failed to unfollow [${this.profile.id}]`, err);
-        return
+        this.followingStatus.set(this.profile.id, true); // rollback
+        toast.error(err?.message || "Couldn't unfollow this user. Please try again.");
+      } finally {
+        this.followPending = false;
       }
-      this.followingStatus.set(this.profile.id, false)
     },
     async toggleMuteFromProfile() {
       this.profileMenuOpen = false;
@@ -541,6 +562,7 @@ export default {
         }
       } catch (err) {
         console.error(`failed to toggle mute on [${target}]`, err);
+        toast.error(err?.message || "Couldn't update mute. Please try again.");
       }
     },
     openReport() {
@@ -560,8 +582,10 @@ export default {
           targetNodeId: this.profile.node_id || '',
           reason,
         });
+        toast.success("Report sent to moderators.");
       } catch (err) {
         console.error(`failed to report [${this.profile.id}]`, err);
+        toast.error(err?.message || "Couldn't send the report. Please try again.");
       } finally {
         this.showReportDialog = false;
       }
@@ -593,6 +617,7 @@ export default {
         }
       } catch (err) {
         console.error(`failed to toggle block on [${target}]`, err);
+        toast.error(err?.message || "Couldn't update block. Please try again.");
       }
     },
     async loadProfileBlockState() {
@@ -636,6 +661,9 @@ export default {
         this.likesLoading = false;
       }
     },
+    closeProfileMenu() {
+      this.profileMenuOpen = false;
+    },
     enableMastodonMode() {
       const html = document.documentElement;
       html.classList.add("mastodon");
@@ -647,6 +675,25 @@ export default {
         html.classList.remove("mastodon");
         localStorage.setItem("theme", "light");
       }
+    }
+  },
+  watch: {
+    profileMenuOpen(open) {
+      if (open) {
+        this._menuOutsideHandler = () => this.closeProfileMenu();
+        setTimeout(() => {
+          if (this._menuOutsideHandler) document.addEventListener("click", this._menuOutsideHandler);
+        }, 0);
+      } else if (this._menuOutsideHandler) {
+        document.removeEventListener("click", this._menuOutsideHandler);
+        this._menuOutsideHandler = null;
+      }
+    },
+  },
+  beforeUnmount() {
+    if (this._menuOutsideHandler) {
+      document.removeEventListener("click", this._menuOutsideHandler);
+      this._menuOutsideHandler = null;
     }
   },
   async created() {

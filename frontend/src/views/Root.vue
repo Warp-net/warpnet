@@ -49,8 +49,13 @@ resulting from the use or misuse of this software.
     <div class="flex w-full md:w-1/2 h-full">
       <div class="flex items-center justify-center w-full h-full">
         <div class="w-full md:w-1/2 flex flex-col font-bold p-5 md:p-0">
-          <p class="text-3xl mb-12">
+          <p class="text-3xl mb-4">
             Dive deep into the Warp and see what happens...
+          </p>
+          <p class="text-base font-normal text-dark mb-12">
+            Warpnet is a decentralized, peer-to-peer social network. Your account and
+            data live locally on your device — there's no central server and no
+            password recovery, so keep your device and password safe.
           </p>
           <p>Join Warpnet today.</p>
           <button v-if="isFirstRun === true"
@@ -60,6 +65,21 @@ resulting from the use or misuse of this software.
             Sign up
           </button>
           <LogInComponent v-else-if="isFirstRun === false"></LogInComponent>
+          <!-- first-run probe failed (node unreachable): offer a retry rather
+               than silently showing login with no sign-up path -->
+          <div v-else-if="firstRunError" class="mt-4">
+            <p class="text-red-600 text-sm font-medium mb-2" role="alert">
+              Couldn't reach your Warpnet node. Make sure it's running.
+            </p>
+            <button
+              @click.prevent="resolveFirstRun"
+              class="rounded-full bg-blue font-bold text-white p-3 px-6 hover:bg-darkblue"
+            >Try again</button>
+          </div>
+          <!-- still resolving first-run state -->
+          <div v-else class="mt-4 text-dark">
+            <i class="fas fa-circle-notch fa-spin mr-2" aria-hidden="true"></i>Loading…
+          </div>
         </div>
       </div>
     </div>
@@ -76,6 +96,9 @@ resulting from the use or misuse of this software.
 
       <div
         class="modal-main bg-white w-11/12 max-w-md mx-auto rounded-lg z-50 overflow-y-auto max-h-full"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create your account"
       >
         <div v-if="showModal === 'step1'">
           <div class="pl-1 pr-4 py-1 h-12">
@@ -104,6 +127,7 @@ resulting from the use or misuse of this software.
                 class="w-full bg-lightblue text-lg"
                 type="text"
                 autocomplete="username"
+                @keydown.enter="setSignUpStep('step2')"
               />
             </div>
           </div>
@@ -114,13 +138,15 @@ resulting from the use or misuse of this software.
             <button
               @click="setSignUpStep('step1')"
               class="absolute rounded-full p-2 pl-3 hover:bg-lightblue"
+              aria-label="Back"
             >
               <i class="fas fa-arrow-left text-blue"></i>
             </button>
             <button
-              v-if="userResponsibility && localStorageLoss && futureAds"
               @click="setSignUpStep('step3')"
+              :disabled="!(userResponsibility && localStorageLoss && futureAds)"
               class="rounded-full bg-blue font-bold text-white mt-2 p-1 pl-3 pr-3 relative right-0 float-right hover:bg-darkblue"
+              :class="!(userResponsibility && localStorageLoss && futureAds) ? 'opacity-50 cursor-not-allowed' : ''"
             >
               Next
             </button>
@@ -132,37 +158,38 @@ resulting from the use or misuse of this software.
             <div class="flex justify-between items-center pb-4">
               <p class="text-2xl font-bold">Important information</p>
             </div>
-            <p class="text-sm text-dark mb-4">Step 2 of 4</p>
+            <p class="text-sm text-dark mb-1">Step 2 of 4</p>
+            <p class="text-sm text-dark mb-4">Please acknowledge all three to continue.</p>
 
             <div class="mt-5 mb-8">
               <p class="font-bold text-xl mb-1">User Responsibility</p>
-              <div class="flex justify-between items-top">
-                <p>
+              <label class="flex justify-between items-top cursor-pointer">
+                <span>
                   I acknowledge that I am solely responsible for the content I upload to WarpNet.
-                </p>
+                </span>
                 <input class="mt-2 ml-4 mr-4" type="checkbox" v-model="userResponsibility" />
-              </div>
+              </label>
             </div>
 
             <div class="mt-5 mb-8">
-              <p class="font-bold text-xl mb-1">Local Storage Disclaimer</p>
-              <div class="flex justify-between items-top">
-                <p>
+              <p class="font-bold text-xl mb-1 text-red-700">Local Storage Disclaimer</p>
+              <label class="flex justify-between items-top cursor-pointer">
+                <span>
                   I understand that all my data is stored locally on my device, and if I lose access to this device,
                   my WarpNet account will be permanently lost.
-                </p>
+                </span>
                 <input class="mt-2 ml-4 mr-4" type="checkbox" v-model="localStorageLoss" />
-              </div>
+              </label>
             </div>
 
             <div class="mt-5 mb-5">
               <p class="font-bold text-xl mb-1">Future Advertising</p>
-              <div class="flex justify-between items-top">
-                <p>
+              <label class="flex justify-between items-top cursor-pointer">
+                <span>
                   I understand that WarpNet may introduce sponsored content or advertisements in the future.
-                </p>
+                </span>
                 <input class="mt-2 ml-4 mr-4" type="checkbox" v-model="futureAds" />
-              </div>
+              </label>
             </div>
           </div>
         </div>
@@ -172,14 +199,15 @@ resulting from the use or misuse of this software.
             <button
               @click="setSignUpStep('step2')"
               class="absolute rounded-full p-2 pl-3 hover:bg-lightblue"
+              aria-label="Back"
             >
               <i class="fas fa-arrow-left text-blue"></i>
             </button>
             <button
               @click="setSignUpStep('step4')"
               class="rounded-full bg-blue font-bold text-white mt-2 p-1 pl-3 pr-3 relative right-0 float-right hover:bg-darkblue"
-              :class="!isPasswordPairValid ? 'opacity-50 cursor-not-allowed' : ''"
-              :disabled="!isPasswordPairValid"
+              :class="!(isPasswordPairValid && isPasswordStrong) ? 'opacity-50 cursor-not-allowed' : ''"
+              :disabled="!(isPasswordPairValid && isPasswordStrong)"
             >
               Next
             </button>
@@ -226,10 +254,13 @@ resulting from the use or misuse of this software.
             <PasswordRules :password="password" />
 
             <button
+              type="button"
               @click="revealPassword = !revealPassword"
-              class="text-blue pl-2"
+              class="text-blue pl-2 mt-2"
+              :aria-pressed="revealPassword"
             >
-              Reveal password
+              <i :class="revealPassword ? 'fas fa-eye-slash' : 'fas fa-eye'" aria-hidden="true"></i>
+              {{ revealPassword ? "Hide password" : "Reveal password" }}
             </button>
           </div>
         </div>
@@ -239,6 +270,7 @@ resulting from the use or misuse of this software.
             <button
               @click="setSignUpStep('step3')"
               class="absolute rounded-full p-2 pl-3 hover:bg-lightblue"
+              aria-label="Back"
             >
               <i class="fas fa-arrow-left text-blue"></i>
             </button>
@@ -253,8 +285,9 @@ resulting from the use or misuse of this software.
 
             <p>
               By signing up, you agree to our
-              <a href="https://github.com/Warp-net/docs/blob/main/legal/T%26C.md" class="text-blue">Terms</a>,
-              <a href="https://github.com/Warp-net/docs/blob/main/legal/PRIVACY-POLICY.md" class="text-blue">Privacy Policy</a> and
+              <a href="https://github.com/Warp-net/docs/blob/main/legal/T%26C.md" target="_blank" rel="noopener" class="text-blue">Terms</a>
+              and
+              <a href="https://github.com/Warp-net/docs/blob/main/legal/PRIVACY-POLICY.md" target="_blank" rel="noopener" class="text-blue">Privacy Policy</a>.
             </p>
             <button
               v-if="!isLoading"
@@ -280,6 +313,7 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
+import {isPasswordStrong} from "@/lib/password";
 export default {
   name: "Root",
   components: {
@@ -301,6 +335,7 @@ export default {
       futureAds: false,
       localStorageLoss: false,
       signUpError: "",
+      firstRunError: false,
     };
   },
   computed: {
@@ -311,17 +346,29 @@ export default {
         this.password === this.passwordConfirm
       );
     },
+    // Mirror the backend password policy so step 3 can't advance a password
+    // the node will later reject on the final step.
+    isPasswordStrong() {
+      return isPasswordStrong(this.password);
+    },
   },
   async mounted() {
-    try {
-      this.isFirstRun = await warpnetService.isFirstRun();
-    } catch (err) {
-      console.error("failed to determine first-run state:", err);
-      this.isFirstRun = false;
-    }
-    console.log("Is first run:", this.isFirstRun);
+    await this.resolveFirstRun();
   },
   methods: {
+    async resolveFirstRun() {
+      this.firstRunError = false;
+      this.isFirstRun = null;
+      try {
+        this.isFirstRun = await warpnetService.isFirstRun();
+      } catch (err) {
+        // Don't silently fall back to the login screen — a brand-new user
+        // would then have no path to sign up. Surface a retry instead.
+        console.error("failed to determine first-run state:", err);
+        this.firstRunError = true;
+      }
+      console.log("Is first run:", this.isFirstRun);
+    },
     async signMeUp() {
       try {
         this.isLoading = true;
@@ -375,7 +422,7 @@ export default {
           }
           break;
         case "step4":
-          if (!this.isPasswordPairValid) {
+          if (!this.isPasswordPairValid || !this.isPasswordStrong) {
             return;
           }
           break;

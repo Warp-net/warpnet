@@ -36,6 +36,10 @@ resulting from the use or misuse of this software.
       <i class="fa fa-home text-xl" aria-hidden="true"></i>
       <span class="text-xs mt-0.5">Home</span>
     </button>
+    <button @click="$router.push({ name: 'Search' })" :class="$route.name === 'Search' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 flat-btn" aria-label="Search">
+      <i class="fas fa-search text-xl" aria-hidden="true"></i>
+      <span class="text-xs mt-0.5">Search</span>
+    </button>
     <button @click="open('Notifications')" :class="$route.name === 'Notifications' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 relative flat-btn" aria-label="Notifications">
       <i class="fa-bell text-xl" :class="$route.name === 'Notifications' ? 'fas' : 'far'" aria-hidden="true"></i>
       <span v-if="newNotifications > 0" class="absolute -top-0.5 right-0 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-blue text-white">{{ newNotifications }}</span>
@@ -86,12 +90,23 @@ resulting from the use or misuse of this software.
             Home
           </p>
         </button>
-<!--        <button-->
-<!--          class="focus:outline-none hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"-->
-<!--        >-->
-<!--          <i class="fas fa-hashtag" aria-hidden="true"></i>-->
-<!--          <p class="text-lg ml-4 text-left hidden xl:block">Explore</p>-->
-<!--        </button>-->
+        <button
+          @click="$router.push({ name: 'Search' })"
+          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          aria-label="Search"
+        >
+          <i
+            class="fas fa-search"
+            :class="$route.name === 'Search' ? 'text-2xl' : 'text-xl'"
+            aria-hidden="true"
+          ></i>
+          <p
+            class="text-lg ml-4 text-left hidden xl:block"
+            :class="$route.name === 'Search' ? 'font-bold' : ''"
+          >
+            Search
+          </p>
+        </button>
         <button
           @click="open('Notifications')"
           class="relative hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
@@ -225,7 +240,7 @@ resulting from the use or misuse of this software.
       </button>
       <div
         v-if="dropdown"
-        class="absolute bottom-0 left-0 w-80 rounded-lg shadow-md border-lightest bg-white mb-16"
+        class="absolute bottom-0 left-0 w-80 rounded-lg shadow-md border-lightest bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card mb-16"
       >
         <button
           @click="dropdown = false"

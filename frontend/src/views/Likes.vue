@@ -8,7 +8,7 @@
     >
       <div class="px-5 py-3 border-b border-lighter flex items-center">
         <button
-          @click="$router.push({ name: 'Home' })"
+          @click="goBack()"
           class="rounded-full md:pr-2 focus:outline-none hover:bg-lightblue"
           aria-label="Back"
         >
@@ -58,6 +58,10 @@ export default {
     };
   },
   methods: {
+    goBack() {
+      if (window.history.length > 1) this.$router.back();
+      else this.$router.push({ name: "Home" });
+    },
     async loadMore() {
       if (this.done || this.loading) return;
       const resp = await warpnetService.getLikes(false);

@@ -64,10 +64,10 @@ resulting from the use or misuse of this software.
           <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
         </span>
         <div class="relative ml-auto">
-          <button type="button" @click.stop="showDropdown = !showDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
+          <button type="button" @click.stop="toggleDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
             <i class="fas fa-angle-down text-sm text-dark" aria-hidden="true"></i>
           </button>
-          <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white rounded-md shadow-lg py-1 z-10">
+          <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10">
             <button type="button" @click.stop="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
               {{ bookmarked ? 'Remove bookmark' : 'Bookmark' }}
             </button>
@@ -86,6 +86,16 @@ resulting from the use or misuse of this software.
           title="Report tweet"
           @submit="submitReport"
           @cancel="showReportDialog = false"
+        />
+        <ConfirmDialog
+          :show="showDeleteConfirm"
+          title="Delete tweet?"
+          message="This tweet will be permanently deleted. This can't be undone."
+          confirm-label="Delete"
+          cancel-label="Cancel"
+          :destructive="true"
+          @confirm="doDelete"
+          @cancel="showDeleteConfirm = false"
         />
       </div>
       <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2" v-linkify>
@@ -144,13 +154,15 @@ resulting from the use or misuse of this software.
       </div>
       <div class="flex w-full mt-1">
         <div class="flex items-center text-sm text-dark w-1/4">
-          <span
-            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center"
-            aria-label="Replies"
-            title="Replies"
+          <button
+            @click.stop="replyToTweet()"
+            type="button"
+            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-blue-100 transition-colors flat-btn"
+            aria-label="Reply"
+            title="Reply"
           >
             <i class="far fa-comment" aria-hidden="true"></i>
-          </span>
+          </button>
           <p v-if="getRepliesCount(tweet.id) > 0">{{ getRepliesCount(tweet.id) || '?' }}</p>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
@@ -170,7 +182,7 @@ resulting from the use or misuse of this software.
             </button>
             <div
               v-if="showRetweetMenu"
-              class="absolute left-0 mt-2 w-40 bg-white rounded-md shadow-lg py-1 z-10"
+              class="absolute left-0 mt-2 w-40 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10"
             >
               <button
                 type="button"
@@ -216,7 +228,7 @@ resulting from the use or misuse of this software.
           >
             <i class="far fa-eye" aria-hidden="true"></i>
           </span>
-          <p>{{ getViewsCount(tweet.id) }}</p>
+          <p v-if="getViewsCount(tweet.id) > 0">{{ getViewsCount(tweet.id) }}</p>
         </div>
       </div>
     </div>
@@ -259,6 +271,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "Tweet",
@@ -270,6 +283,7 @@ export default {
     EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
     QuoteOverlay: defineAsyncComponent(() => import('./QuoteOverlay.vue')),
     ReportDialog: defineAsyncComponent(() => import('./ReportDialog.vue')),
+    ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
   },
   data() {
     return {
@@ -281,6 +295,7 @@ export default {
       showQuoteOverlay: false,
       showDropdown: false,
       showReportDialog: false,
+      showDeleteConfirm: false,
       showRetweetMenu: false,
       quotedSourceText: '',
       quotedSourceUsername: '',
@@ -340,11 +355,40 @@ export default {
     },
     onBodyClick() {
       if (this.showDropdown || this.showRetweetMenu) {
-        this.showDropdown = false;
-        this.showRetweetMenu = false;
+        this.closeMenus();
         return;
       }
       this.openTweetPage();
+    },
+    toggleDropdown() {
+      this.showDropdown = !this.showDropdown;
+      this.showRetweetMenu = false;
+      this.syncOutsideClose();
+    },
+    closeMenus() {
+      this.showDropdown = false;
+      this.showRetweetMenu = false;
+      this.teardownOutsideClose();
+    },
+    // Close any open dropdown when the user clicks anywhere else on the page,
+    // matching standard menu behaviour. Deferred registration keeps the
+    // opening click from immediately closing the menu.
+    syncOutsideClose() {
+      const anyOpen = this.showDropdown || this.showRetweetMenu;
+      if (anyOpen && !this._docClickHandler) {
+        this._docClickHandler = () => this.closeMenus();
+        setTimeout(() => {
+          if (this._docClickHandler) document.addEventListener("click", this._docClickHandler);
+        }, 0);
+      } else if (!anyOpen) {
+        this.teardownOutsideClose();
+      }
+    },
+    teardownOutsideClose() {
+      if (this._docClickHandler) {
+        document.removeEventListener("click", this._docClickHandler);
+        this._docClickHandler = null;
+      }
     },
     // Retweet button drives a small popover that offers a plain
     // retweet vs. a quote retweet. When the user already retweeted
@@ -357,6 +401,7 @@ export default {
         return;
       }
       this.showRetweetMenu = !this.showRetweetMenu;
+      this.syncOutsideClose();
     },
     async plainRetweet() {
       this.showRetweetMenu = false;
@@ -376,6 +421,7 @@ export default {
         }
       } catch (err) {
         console.error(`failed to toggle bookmark on [${this.tweet.id}]`, err);
+        toast.error(err?.message || "Couldn't update bookmark. Please try again.");
       }
     },
     async togglePin() {
@@ -390,6 +436,7 @@ export default {
         }
       } catch (err) {
         console.error(`failed to toggle pin on [${this.tweet.id}]`, err);
+        toast.error(err?.message || "Couldn't update pin. Please try again.");
       }
     },
     openEdit() {
@@ -507,14 +554,22 @@ export default {
           targetNodeId: profile?.node_id || '',
           reason,
         });
+        toast.success("Report sent to moderators.");
       } catch (err) {
         console.error('Failed to send report:', err);
+        toast.error(err?.message || "Couldn't send the report. Please try again.");
       } finally {
         this.showReportDialog = false;
       }
     },
-    async deleteTweet() {
+    // deleteTweet opens the confirmation; doDelete performs the irreversible
+    // delete only after the user confirms.
+    deleteTweet() {
       this.showDropdown = false;
+      this.showDeleteConfirm = true;
+    },
+    async doDelete() {
+      this.showDeleteConfirm = false;
       try {
         if (!this.tweet.parent_id || this.tweet.parent_id === '') {
           await warpnetService.deleteTweet({
@@ -530,8 +585,10 @@ export default {
           });
         }
         this.deleted = true;
+        toast.success("Tweet deleted.");
       } catch (err) {
         console.error('Failed to delete tweet:', err);
+        toast.error(err?.message || "Couldn't delete the tweet. Please try again.");
       }
     },
     replyToTweet() {
@@ -561,6 +618,10 @@ export default {
         }
       } catch (err) {
         console.error(`failed to retweet/unretweet tweet [${this.tweet.id}]`, err);
+        // Roll optimistic state back to what it was before this attempt.
+        this.retweeted = alreadyRetweeted;
+        this.tweet.retweeted_by = alreadyRetweeted ? owner.user_id : null;
+        toast.error(err?.message || "Couldn't update retweet. Please try again.");
       }
       try {
         await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
@@ -584,6 +645,7 @@ export default {
         }
       } catch (err) {
         console.error(`failed to like/unlike tweet [${this.tweet.id}]`, err);
+        toast.error(err?.message || "Couldn't update like. Please try again.");
         await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
         return;
       }
@@ -784,6 +846,7 @@ export default {
       clearTimeout(this._statsRetryTimer);
       this._statsRetryTimer = null;
     }
+    this.teardownOutsideClose();
   },
 };
 </script>

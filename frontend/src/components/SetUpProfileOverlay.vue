@@ -30,8 +30,8 @@ resulting from the use or misuse of this software.
       @click.prevent="this.$emit('close')"
     ></div>
     <div
-      class="modal-main bg-white mx-auto rounded-lg z-50 overflow-y-auto"
-      style="height:80%; width:40%"
+      class="modal-main bg-white mx-auto rounded-lg z-50 overflow-y-auto w-full max-w-md"
+      style="height:80%"
       role="dialog"
       aria-modal="true"
       aria-label="Set up profile picture"
@@ -47,9 +47,12 @@ resulting from the use or misuse of this software.
         <button
           v-if="newImage !== null && newImage !== '/default_profile.png'"
           @click="finishSetUpProfile"
+          :disabled="saving"
           class="rounded-full bg-blue font-bold text-white mt-2 p-1 px-4 relative right-0 float-right focus:outline-none hover:bg-darkblue"
+          :class="saving ? 'opacity-60 cursor-default' : ''"
         >
-          Save
+          <span v-if="!saving">Save</span>
+          <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Saving…</span>
         </button>
         <i
           class="relative fab text-blue text-2xl mt-2 mb-8"
@@ -98,6 +101,7 @@ resulting from the use or misuse of this software.
 
 <script>
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "SetUpProfileOverlay",
@@ -106,41 +110,76 @@ export default {
     return {
       newImage: "/default_profile.png",
       profile: {},
+      saving: false,
     };
   },
   methods: {
+    handleKeyup(event) {
+      if (event.key === "Escape" && !this.saving) {
+        this.$emit("close");
+      }
+    },
     openFileInput() {
       this.$refs.fileInput.click();
     },
     async fileChange() {
       const file = this.$refs.fileInput.files[0];
+      if (!file) return;
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => this.newImage = reader.result;
-      reader.onerror = (error) => console.error("Error reading file:", error);
+      reader.onerror = (error) => {
+        console.error("Error reading file:", error);
+        toast.error("Couldn't read the selected image. Please try another file.");
+      };
     },
     async finishSetUpProfile() {
-      const p = {
-        username: this.profile.username,
-        avatar_key: "",
-      };
+      if (this.saving) return;
+      this.saving = true;
+      try {
+        const p = {
+          username: this.profile.username,
+          avatar_key: "",
+        };
 
-      p.avatar_key = await warpnetService.uploadImage(this.newImage)
-      this.profile = await warpnetService.editMyProfile(p);
-      this.newImage = await warpnetService.getImage({userId:this.profile.id, key:p.avatar_key})
-      this.profile.avatar = this.newImage;
-      // Notify owner subscribers (SideNav) so the new avatar shows without
-      // a route change — mirrors EditProfileOverlay.
-      const existingOwner = warpnetService.getOwnerProfile();
-      if (existingOwner) {
-        warpnetService.setOwnerProfile({
-          ...existingOwner,
-          username: this.profile.username || existingOwner.username,
-          avatar_key: p.avatar_key || "",
-        });
+        p.avatar_key = await warpnetService.uploadImage(this.newImage)
+        this.profile = await warpnetService.editMyProfile(p);
+        const uid = this.profile.user_id || this.profile.id;
+        this.newImage = await warpnetService.getImage({userId: uid, key: p.avatar_key})
+        this.profile.avatar = this.newImage;
+        // Notify owner subscribers (SideNav) so the new avatar shows without
+        // a route change — mirrors EditProfileOverlay.
+        const existingOwner = warpnetService.getOwnerProfile();
+        if (existingOwner) {
+          warpnetService.setOwnerProfile({
+            ...existingOwner,
+            username: this.profile.username || existingOwner.username,
+            avatar_key: p.avatar_key || "",
+          });
+        }
+        toast.success("Profile picture saved.");
+        this.$emit("close");
+      } catch (err) {
+        console.error("Failed to save profile picture:", err);
+        toast.error(err?.message || "Couldn't save your picture. Please try again.");
+      } finally {
+        this.saving = false;
       }
-      this.$emit("close");
     },
+  },
+  mounted() {
+    window.addEventListener("keyup", this.handleKeyup);
+  },
+  beforeUnmount() {
+    window.removeEventListener("keyup", this.handleKeyup);
+  },
+  created() {
+    // The username must ride along with the avatar save, so seed profile from
+    // the current owner — otherwise editMyProfile would send a blank username.
+    const owner = warpnetService.getOwnerProfile();
+    if (owner) {
+      this.profile = { ...owner };
+    }
   },
 };
 </script>

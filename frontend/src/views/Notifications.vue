@@ -46,7 +46,7 @@ resulting from the use or misuse of this software.
             </button>
             <div
               v-if="settingsOpen"
-              class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10"
+              class="absolute right-0 mt-2 w-48 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10"
             >
               <button
                 type="button"
@@ -85,9 +85,10 @@ resulting from the use or misuse of this software.
         </div>
 
         <!-- notifications -->
+        <Loader :loading="loading" />
         <div v-if="mode === 'All'">
           <div
-            v-if="notifications.length === 0"
+            v-if="!loading && notifications.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10"
           >
             <div class="w-1/2 flex flex-col items-center justify-center">
@@ -100,6 +101,7 @@ resulting from the use or misuse of this software.
             <button
               type="button"
               class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
+              :class="notification.is_read ? '' : 'bg-lightblue'"
               @click="openNotification(notification)"
             >
               <div class="w-full">
@@ -155,17 +157,18 @@ resulting from the use or misuse of this software.
             </div>
           </div>
           <div v-for="notification in mentions" :key="notification.id">
-            <div
-              class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
+            <button
+              type="button"
+              class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
+              :class="notification.is_read ? '' : 'bg-lightblue'"
+              @click="openNotification(notification)"
             >
               <div class="w-full">
                 <div class="flex flex-row mr-2 md:mr-4 pt-1 text-2xl">
-                  <a :href="`#/${notification.user_id}`">
-                    <img
-                      :src="'/default_profile.png'"
-                      class="h-8 w-8 ml-2 rounded-full flex-none"
-                    />
-                  </a>
+                  <img
+                    :src="'/default_profile.png'"
+                    class="h-8 w-8 ml-2 rounded-full flex-none"
+                  />
                 </div>
                 <div class="flex items-center w-full">
                   <p class="font-sm">{{ notification.text }}</p>
@@ -174,7 +177,7 @@ resulting from the use or misuse of this software.
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
         <div v-if="mode === 'Requests' && locked">
@@ -228,12 +231,14 @@ import {defineAsyncComponent} from "vue";
 import SideNav from "../components/SideNav.vue";
 import DefaultRightBar from "../components/DefaultRightBar.vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "Notifications",
   components: {
     SideNav,
     DefaultRightBar,
+    Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     NotificationOverlay: defineAsyncComponent(() => import('@/components/NotificationOverlay.vue')),
   },
   data() {
@@ -258,9 +263,11 @@ export default {
   },
   methods: {
     gotoHome() {
-      this.$router.push({
-        name: "Home",
-      });
+      if (window.history.length > 1) {
+        this.$router.back();
+      } else {
+        this.$router.push({ name: "Home" });
+      }
     },
     submit(m = this.mode) {
       this.mode = m;
@@ -310,10 +317,6 @@ export default {
       this.settingsOpen = false;
       await this.markAllRead();
     },
-    async onMarkAllRead() {
-      this.settingsOpen = false;
-      await this.markAllRead();
-    },
     async hydrateRequests(ids) {
       return Promise.all(
         (ids || []).map(async (id) => {
@@ -341,13 +344,19 @@ export default {
       try {
         await warpnetService.authorizeFollowRequest(id);
         this.followRequests = this.followRequests.filter(r => r.id !== id);
-      } catch (err) { console.error('Failed to authorize', err); }
+      } catch (err) {
+        console.error('Failed to authorize', err);
+        toast.error(err?.message || "Couldn't authorize the request. Please try again.");
+      }
     },
     async rejectRequest(id) {
       try {
         await warpnetService.rejectFollowRequest(id);
         this.followRequests = this.followRequests.filter(r => r.id !== id);
-      } catch (err) { console.error('Failed to reject', err); }
+      } catch (err) {
+        console.error('Failed to reject', err);
+        toast.error(err?.message || "Couldn't reject the request. Please try again.");
+      }
     },
   },
   async created() {
@@ -367,9 +376,10 @@ export default {
       if (resp && resp.notifications) {
         this.notifications = resp.notifications;
       }
-      // Visiting the Notifications view counts as "the user saw them".
-      // Mark every unread item read so the SideNav badge clears.
-      await this.markAllRead();
+      // Don't bulk-mark-read just for opening the view — that erased the
+      // unread state before the user looked at anything. Items are marked
+      // read when opened (openNotification), or all at once via the
+      // "Mark all as read" menu.
       if (this.locked) {
         await this.loadFollowRequests();
       }

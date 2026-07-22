@@ -42,7 +42,7 @@
         </button>
         <button
           @click="unblock(user.id)"
-          class="ml-auto text-white bg-blue font-bold px-3 py-1 rounded-full hover:bg-red-700"
+          class="ml-auto text-blue border border-blue font-bold px-3 py-1 rounded-full hover:bg-lightblue"
         >
           Unblock
         </button>
@@ -55,6 +55,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "SettingsBlocks",
@@ -101,6 +102,7 @@ export default {
         this.blockedUsers = this.blockedUsers.filter(u => u.id !== id);
       } catch (err) {
         console.error('Failed to unblock', id, err);
+        toast.error(err?.message || "Couldn't unblock this user. Please try again.");
       }
     },
   },

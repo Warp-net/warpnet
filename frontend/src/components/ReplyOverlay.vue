@@ -32,8 +32,7 @@ resulting from the use or misuse of this software.
     ></div>
 
     <div
-      class="modal-main bg-white mx-auto rounded-lg z-0 overflow-y-auto"
-      style="width:40%"
+      class="modal-main bg-white mx-auto rounded-lg z-0 overflow-y-auto w-full max-w-lg"
       role="dialog"
       aria-modal="true"
       aria-label="Reply to tweet"
@@ -67,9 +66,9 @@ resulting from the use or misuse of this software.
 
           <div class="w-full">
             <div class="flex items-center w-full">
-              <p class="font-semibold">{{ tweet.user_id }}</p>
+              <p class="font-semibold">{{ tweet.username || 'Anonymous' }}</p>
               <p class="text-sm text-dark ml-2">
-                @{{ tweet.username }}
+                @{{ tweet.user_id }}
               </p>
               <p class="text-sm text-dark ml-2">·</p>
               <p class="text-sm text-dark ml-2">
@@ -98,22 +97,27 @@ resulting from the use or misuse of this software.
               <textarea
                 id="reply-textarea"
                 v-model="text"
+                maxlength="280"
                 placeholder="Tweet your reply"
                 class="w-full focus:outline-none mt-3 pb-3"
               ></textarea>
-              <div>
-                <i class="text-lg text-blue mr-4 far fa-image cursor-pointer"></i>
-                <i class="text-lg text-blue mr-4 fas fa-film cursor-not-allowed"></i>
-                <i class="text-lg text-blue mr-4 far fa-chart-bar cursor-not-allowed"></i>
-                <i class="text-lg text-blue mr-4 far fa-smile cursor-not-allowed"></i>
+              <div class="flex items-center">
+                <i class="text-lg text-light mr-4 fas fa-film cursor-not-allowed" aria-hidden="true"></i>
+                <i class="text-lg text-light mr-4 far fa-chart-bar cursor-not-allowed" aria-hidden="true"></i>
+                <i class="text-lg text-light mr-4 far fa-smile cursor-not-allowed" aria-hidden="true"></i>
+                <span
+                  class="ml-auto text-xs"
+                  :class="text.length >= 280 ? 'text-red-600 font-semibold' : (text.length >= 260 ? 'text-yellow-600' : 'text-dark')"
+                >{{ text.length }} / 280</span>
               </div>
               <button
                 type="submit"
                 class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full absolute bottom-0 right-0"
-                :class="{'opacity-50 cursor-not-allowed': !text}"
-                :disabled="!text"
+                :class="{'opacity-50 cursor-not-allowed': !text.trim() || sending}"
+                :disabled="!text.trim() || sending"
               >
-                Reply
+                <span v-if="!sending">Reply</span>
+                <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Replying…</span>
               </button>
             </form>
           </div>
@@ -129,9 +133,12 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
+import {dismissable} from "@/lib/modal.mixin";
 
 export default {
   name: "ReplyOverlay",
+  mixins: [dismissable("close")],
   components: {
     Tweets: defineAsyncComponent(() => import('@/components/Tweets.vue'))
   },
@@ -140,22 +147,29 @@ export default {
     return {
       text: "",
       replies: [],
+      sending: false,
     };
   },
   methods: {
     async sendReply() {
-      await warpnetService.replyTweet({
-        rootId: this.tweet.root_id || this.tweet.id,
-        parentId: this.tweet.id,
-        parentUserId: this.tweet.user_id,
-        text: this.text
-      });
-      this.$emit('replied');
-      this.$emit('close');
+      if (this.sending || !this.text.trim()) return;
+      this.sending = true;
+      try {
+        await warpnetService.replyTweet({
+          rootId: this.tweet.root_id || this.tweet.id,
+          parentId: this.tweet.id,
+          parentUserId: this.tweet.user_id,
+          text: this.text
+        });
+        this.$emit('replied');
+        this.$emit('close');
+      } catch (err) {
+        console.error('Failed to send reply:', err);
+        toast.error(err?.message || "Couldn't post your reply. Please try again.");
+      } finally {
+        this.sending = false;
+      }
     },
-  },
-  beforeUnmount() {
-    window.removeEventListener("keydown", this.handleEscape);
   },
   async created() {
     console.log("loading component:", this.$options.name);

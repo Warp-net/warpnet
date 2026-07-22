@@ -95,6 +95,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "SettingsFilters",
@@ -126,13 +127,19 @@ export default {
         await warpnetService.createFilter({ title: this.newTitle.trim(), context: ['home'], action: 'hide' });
         this.newTitle = '';
         await this.reload();
-      } catch (err) { console.error('Failed to create filter', err); }
+      } catch (err) {
+        console.error('Failed to create filter', err);
+        toast.error(err?.message || "Couldn't create the filter. Please try again.");
+      }
     },
     async deleteFilter(id) {
       try {
         await warpnetService.deleteFilter(id);
         this.filters = this.filters.filter(f => f.id !== id);
-      } catch (err) { console.error('Failed to delete filter', err); }
+      } catch (err) {
+        console.error('Failed to delete filter', err);
+        toast.error(err?.message || "Couldn't delete the filter. Please try again.");
+      }
     },
     async addKeyword(f) {
       const word = (this.keywordDrafts[f.id] || '').trim();
@@ -141,25 +148,39 @@ export default {
         await warpnetService.addFilterKeyword(f.id, word);
         this.keywordDrafts[f.id] = '';
         await this.reload();
-      } catch (err) { console.error('Failed to add keyword', err); }
+      } catch (err) {
+        console.error('Failed to add keyword', err);
+        toast.error(err?.message || "Couldn't add the keyword. Please try again.");
+      }
     },
     async removeKeyword(filterId, keywordId) {
       try {
         await warpnetService.deleteFilterKeyword(keywordId);
         await this.reload();
-      } catch (err) { console.error('Failed to remove keyword', err); }
+      } catch (err) {
+        console.error('Failed to remove keyword', err);
+        toast.error(err?.message || "Couldn't remove the keyword. Please try again.");
+      }
     },
     async renameFilter(f) {
       if (!f.title || !f.title.trim()) return;
       try {
         await warpnetService.updateFilter({ id: f.id, title: f.title.trim(), context: f.context, action: f.action });
-      } catch (err) { console.error('Failed to rename filter', err); }
+        toast.success('Filter saved.');
+      } catch (err) {
+        console.error('Failed to rename filter', err);
+        toast.error(err?.message || "Couldn't save the filter. Please try again.");
+      }
     },
     async renameKeyword(filterId, kw) {
       if (!kw.keyword || !kw.keyword.trim()) return;
       try {
         await warpnetService.updateFilterKeyword(kw.id, kw.keyword.trim(), kw.whole_word || false);
-      } catch (err) { console.error('Failed to rename keyword', err); }
+        toast.success('Keyword saved.');
+      } catch (err) {
+        console.error('Failed to rename keyword', err);
+        toast.error(err?.message || "Couldn't save the keyword. Please try again.");
+      }
     },
   },
   async created() {

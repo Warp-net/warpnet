@@ -53,14 +53,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    // Hashtag links (#tag) resolve into the working Search screen, carrying
+    // the query. The standalone Hashtag view was a never-completing shell
+    // (empty submit/loadMore, loading stuck true), so unify rather than ship
+    // a dead-end screen.
     path: "/hashtag",
     name: "Hashtag",
-    // route level code-splitting
-    // this generates a separate chunk (about.[hash].js) for this route
-    // which is lazy-loaded when the route is visited.
-    component: () =>
-      import(/* webpackChunkName: "hashtag" */ "../views/Hashtag.vue"),
-    meta: { protected: true },
+    redirect: (to) => ({ name: "Search", query: { q: to.query.q } }),
   },
   {
     path: "/notifications",

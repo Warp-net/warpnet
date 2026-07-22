@@ -22,7 +22,8 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div v-if="loading" class="flex items-center justify-center">
+  <div v-if="loading" class="flex items-center justify-center" role="status" aria-label="Loading">
+    <span class="sr-only">Loading…</span>
     <svg
       version="1.1"
       xmlns="http://www.w3.org/2000/svg"

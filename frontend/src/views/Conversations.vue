@@ -42,11 +42,13 @@ resulting from the use or misuse of this software.
         <Loader :loading="loading" />
         <div v-if="!loading">
           <div v-if="chats.length === 0" class="flex flex-col items-center justify-center w-full pt-10">
-            <div class="w-1/2 flex flex-col items-center justify-center">
-              <p class="font-bold text-lg">No chats yet</p>
-              <p class="text-sm text-dark">
-                Wait until someone starts a chat here.
-              </p>
+            <div class="w-3/4 flex flex-col items-center justify-center text-center">
+              <p class="font-bold text-lg">No messages yet</p>
+              <p class="text-sm text-dark">Start a conversation with someone you follow.</p>
+              <button
+                @click="newMessage()"
+                class="mt-4 h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
+              >New Message</button>
             </div>
           </div>
           <div v-for="chat in chats" :key="chat.id">
@@ -67,7 +69,7 @@ resulting from the use or misuse of this software.
                         @{{ chat.other_user_id }}
                       </p>
                       <p class="text-sm text-dark ml-auto">
-                        {{ $filters.timeago(chat.lastModified) }}
+                        {{ $filters.timeago(chat.updated_at) }}
                       </p>
                     </div>
                     <p class="pb-2 truncate" v-linkify>{{ chat.last_message || "" }}</p>
@@ -80,9 +82,13 @@ resulting from the use or misuse of this software.
       </div>
 
       <div class="w-full border-l border-r border-lighter h-screen flex items-center justify-center">
-        <div class="text-center">
-          <h2 class="text-2xl font-bold mb-4">Select a chat</h2>
-          <p class="text-gray-600">Choose a chat from the list to start chatting</p>
+        <div class="text-center px-6">
+          <h2 class="text-2xl font-bold mb-2">Your messages</h2>
+          <p class="text-dark mb-4">Choose a chat from the list, or start a new conversation.</p>
+          <button
+            @click="newMessage()"
+            class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
+          >New Message</button>
         </div>
       </div>
 

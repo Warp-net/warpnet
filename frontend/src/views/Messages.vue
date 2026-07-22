@@ -121,20 +121,23 @@ resulting from the use or misuse of this software.
             <!-- Own message -->
             <div v-if="message.sender_id === ownerProfile.user_id" class="group flex items-center justify-end mb-4">
               <button
-                  v-if="message.id"
+                  v-if="message.id && !message.pending"
                   type="button"
-                  @click="deleteMessage(message)"
+                  @click="askDeleteMessage(message)"
                   class="mr-2 w-7 h-7 rounded-full items-center justify-center hover:bg-red-100 hidden group-hover:flex flat-btn"
                   aria-label="Delete message"
                   title="Delete message"
               >
                 <i class="fas fa-trash text-sm text-red-500" aria-hidden="true"></i>
               </button>
-              <div class="bg-blue text-white py-2 px-4 rounded-tl-3xl rounded-bl-3xl rounded-tr-xl">
+              <div class="text-white py-2 px-4 rounded-tl-3xl rounded-bl-3xl rounded-tr-xl" :class="message.pending ? 'bg-blue opacity-70' : 'bg-blue'">
                 <p v-if="message.text">{{ message.text }}</p>
                 <img v-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
               </div>
-              <p class="text-xs text-dark ml-2">{{ $filters.time(message.created_at) }}</p>
+              <p class="text-xs text-dark ml-2">
+                <span v-if="message.pending"><i class="fas fa-clock" aria-hidden="true"></i> Sending…</span>
+                <span v-else>{{ $filters.time(message.created_at) }}</span>
+              </p>
             </div>
             <!-- Incoming message -->
             <div v-else class="flex items-start mb-4">
@@ -176,12 +179,12 @@ resulting from the use or misuse of this software.
           />
           <button
               @click="sendMessage"
-              :disabled="!text.length && !imageAttachment"
+              :disabled="sending || (!text.length && !imageAttachment)"
               class="ml-4 w-9 h-9 rounded-full flex items-center justify-center"
-              :class="(!text.length && !imageAttachment) ? 'opacity-50 cursor-default' : 'hover:bg-lightblue'"
+              :class="(sending || (!text.length && !imageAttachment)) ? 'opacity-50 cursor-default' : 'hover:bg-lightblue'"
               aria-label="Send message"
           >
-            <i class="fas fa-arrow-right text-blue text-xl" aria-hidden="true"></i>
+            <i class="text-blue text-xl" :class="sending ? 'fas fa-circle-notch fa-spin' : 'fas fa-arrow-right'" aria-hidden="true"></i>
           </button>
         </div>
       </div>
@@ -204,6 +207,16 @@ resulting from the use or misuse of this software.
       @cancel="showDeleteChatConfirm = false"
       @confirm="deleteCurrentChat"
     />
+
+    <ConfirmDialog
+      :show="showDeleteMessageConfirm"
+      title="Delete message"
+      message="Delete this message? This can't be undone."
+      confirm-label="Delete"
+      :destructive="true"
+      @cancel="showDeleteMessageConfirm = false; messagePendingDelete = null"
+      @confirm="deleteMessage"
+    />
   </div>
 </template>
 
@@ -211,6 +224,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "Messages",
@@ -225,6 +239,10 @@ export default {
       loading: true,
       showNewMessageModal: false,
       showDeleteChatConfirm: false,
+      showDeleteMessageConfirm: false,
+      messagePendingDelete: null,
+      sending: false,
+      tmpSeq: 0,
       chats: [],
       messages: [],
       ownerProfile: undefined,
@@ -270,27 +288,48 @@ export default {
         params: { id: userId },
       });
     },
-    sendMessage() {
-      if (!this.active.other_user_id || (this.text.length === 0 && !this.imageAttachment)) return;
+    async sendMessage() {
+      if (this.sending) return;
+      if (!this.active?.other_user_id || (this.text.length === 0 && !this.imageAttachment)) return;
 
-      // Capture the input into locals and clear the form right away.
-      // The user can keep typing / send another message while the
-      // network round-trip below runs in the background — no more
-      // "input frozen until the message reappears in the chat".
       const sentText = this.text;
       const sentImage = this.imageAttachment;
-      this.text = '';
-      this.imageAttachment = undefined;
-      if (this.$refs.messageImageInput) {
-        this.$refs.messageImageInput.value = '';
-      }
 
-      // Fire-and-forget. Errors are logged; failed sends do not block
-      // the next attempt because nothing in the UI is gating on this
-      // promise's resolution.
-      this.deliverMessage(sentText, sentImage).catch((err) => {
+      // Optimistic bubble with a temp id and a "Sending…" status, so the
+      // message shows immediately instead of vanishing until the refetch.
+      const tempId = `pending-${++this.tmpSeq}`;
+      this.messages = [...this.messages, {
+        id: tempId,
+        pending: true,
+        sender_id: this.ownerProfile.user_id,
+        text: sentText,
+        image: sentImage || undefined,
+        created_at: new Date().toISOString(),
+      }];
+      this.scrollToEnd();
+
+      this.sending = true;
+      try {
+        await this.deliverMessage(sentText, sentImage);
+        // The local node accepted the message (queued to its outbox and
+        // re-sent when the recipient comes online), so it's safe to clear
+        // the composer now.
+        this.text = '';
+        this.imageAttachment = undefined;
+        if (this.$refs.messageImageInput) {
+          this.$refs.messageImageInput.value = '';
+        }
+      } catch (err) {
+        // The local node itself rejected the send — nothing was queued.
+        // Drop the optimistic bubble and keep the text so the user can retry.
         console.error('Failed to send message:', err);
-      });
+        this.messages = this.messages.filter((m) => m.id !== tempId);
+        this.text = sentText;
+        this.imageAttachment = sentImage;
+        toast.error(err?.message || "Couldn't send the message. Please try again.");
+      } finally {
+        this.sending = false;
+      }
     },
     async deliverMessage(sentText, sentImage) {
       if (!this.active.id) {
@@ -323,16 +362,23 @@ export default {
         imageKey: imageKey,
       });
 
-      await this.selectChat(this.active);
+      // Past this point the message is safely queued on the node. Refreshing
+      // the thread / preview is best-effort — a failure here must not be
+      // reported as a send failure (which would wrongly restore the composer).
+      try {
+        await this.selectChat(this.active);
 
-      const chatIndex = this.chats.findIndex((c) => c.id === this.active.id);
-      if (chatIndex !== -1) {
-        const preview = sentText || (imageKey ? '[image]' : this.chats[chatIndex].last_message);
-        this.chats.splice(chatIndex, 1, {
-          ...this.chats[chatIndex],
-          last_message: preview,
-          updated_at: new Date().toISOString(),
-        });
+        const chatIndex = this.chats.findIndex((c) => c.id === this.active.id);
+        if (chatIndex !== -1) {
+          const preview = sentText || (imageKey ? '[image]' : this.chats[chatIndex].last_message);
+          this.chats.splice(chatIndex, 1, {
+            ...this.chats[chatIndex],
+            last_message: preview,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.warn('post-send refresh failed (message was sent):', err);
       }
     },
     scrollToEnd() {
@@ -408,15 +454,25 @@ export default {
         this.active = undefined;
       } catch (err) {
         console.error('Failed to delete chat:', err);
+        toast.error(err?.message || "Couldn't delete the chat. Please try again.");
       }
     },
-    async deleteMessage(message) {
+    askDeleteMessage(message) {
+      if (!this.active?.id || !message?.id) return;
+      this.messagePendingDelete = message;
+      this.showDeleteMessageConfirm = true;
+    },
+    async deleteMessage() {
+      this.showDeleteMessageConfirm = false;
+      const message = this.messagePendingDelete;
+      this.messagePendingDelete = null;
       if (!this.active?.id || !message?.id) return;
       try {
         await warpnetService.deleteMessage(this.active.id, message.id);
         this.messages = this.messages.filter((m) => m.id !== message.id);
       } catch (err) {
         console.error('Failed to delete message:', err);
+        toast.error(err?.message || "Couldn't delete the message. Please try again.");
       }
     },
     deselectAll() {

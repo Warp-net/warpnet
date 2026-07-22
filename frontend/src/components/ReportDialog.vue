@@ -22,7 +22,7 @@
           </legend>
           <label
             v-for="category in categories"
-            :key="category"
+            :key="category.label"
             class="flex items-center gap-2 py-1 text-sm cursor-pointer"
           >
             <input
@@ -31,9 +31,20 @@
               v-model="selected"
               class="text-red-600 focus:ring-red-500"
             />
-            <span>{{ category }}</span>
+            <span>{{ category.label }}</span>
           </label>
         </fieldset>
+        <div class="mt-3">
+          <label :for="detailsId" class="block text-sm font-medium mb-1">Tell us more (optional)</label>
+          <textarea
+            :id="detailsId"
+            v-model="details"
+            rows="2"
+            maxlength="500"
+            placeholder="Add any details that will help moderators."
+            class="w-full rounded border border-lighter bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+          ></textarea>
+        </div>
       </div>
       <div class="flex justify-end gap-2 px-5 py-3 border-t border-lighter">
         <button
@@ -51,20 +62,20 @@
 </template>
 
 <script>
-// Violation categories mirror the active Llama Guard hazard classes the
-// moderation engine reports (see the `moderation` repo, prompt.go —
-// llamaGuardCategories). Keeping the labels identical means a user's
-// report speaks the same language as the automated verdict.
+// User-facing report reasons in everyday language, each mapped to the Llama
+// Guard hazard class the moderation engine speaks (see the `moderation` repo,
+// prompt.go — llamaGuardCategories). The label is what the reporter reads; the
+// `value` is what rides the wire so moderators still get the standardized class.
 const REPORT_CATEGORIES = [
-  "Violent Crimes",
-  "Non-Violent Crimes",
-  "Sex Crimes",
-  "Child Exploitation",
-  "Privacy",
-  "Indiscriminate Weapons",
-  "Hate",
-  "Self-Harm",
-  "Code Interpreter Abuse",
+  { label: "Spam or scam", value: "Non-Violent Crimes" },
+  { label: "Harassment or bullying", value: "Hate" },
+  { label: "Hate speech", value: "Hate" },
+  { label: "Violence or threats", value: "Violent Crimes" },
+  { label: "Sexual content", value: "Sex Crimes" },
+  { label: "Child safety", value: "Child Exploitation" },
+  { label: "Self-harm or suicide", value: "Self-Harm" },
+  { label: "Privacy violation", value: "Privacy" },
+  { label: "Dangerous or weapons", value: "Indiscriminate Weapons" },
 ];
 
 export default {
@@ -81,17 +92,22 @@ export default {
     const uid = Math.random().toString(36).slice(2, 8);
     return {
       selected: [],
+      details: "",
       submitting: false,
       categories: REPORT_CATEGORIES,
       titleId: `report-dialog-title-${uid}`,
       descId: `report-dialog-desc-${uid}`,
+      detailsId: `report-dialog-details-${uid}`,
     };
   },
   computed: {
-    // The wire reason is the comma-joined list of selected categories,
-    // so moderators see the standardized labels.
+    // The wire reason is the comma-joined list of the selected classes
+    // (deduped — several friendly labels can map to the same class) with any
+    // free-text detail appended, so moderators still see standardized labels.
     composedReason() {
-      return this.selected.join(", ");
+      const classes = [...new Set(this.selected.map((c) => c.value).filter(Boolean))];
+      const detail = this.details.trim();
+      return detail ? `${classes.join(", ")} — ${detail}` : classes.join(", ");
     },
     canSubmit() {
       return !this.submitting && this.selected.length > 0;
@@ -101,6 +117,7 @@ export default {
     show(val) {
       if (val) {
         this.selected = [];
+        this.details = "";
         this.submitting = false;
       }
     },

@@ -42,7 +42,7 @@
         </button>
         <button
           @click="unmute(user.id)"
-          class="ml-auto text-white bg-blue font-bold px-3 py-1 rounded-full hover:bg-red-700"
+          class="ml-auto text-blue border border-blue font-bold px-3 py-1 rounded-full hover:bg-lightblue"
         >
           Unmute
         </button>
@@ -55,6 +55,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "SettingsMutes",
@@ -100,6 +101,7 @@ export default {
         this.mutedUsers = this.mutedUsers.filter(u => u.id !== id);
       } catch (err) {
         console.error('Failed to unmute', id, err);
+        toast.error(err?.message || "Couldn't unmute this user. Please try again.");
       }
     },
   },

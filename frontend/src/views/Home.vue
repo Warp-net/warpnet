@@ -65,7 +65,10 @@ resulting from the use or misuse of this software.
             placeholder="What's happening?"
             class="w-full focus:outline-none mt-3 pb-3"
           ></textarea>
-          <div class="text-right text-xs text-dark">{{ tweet.text.length }} / 280</div>
+          <div
+            class="text-right text-xs"
+            :class="tweet.text.length >= 280 ? 'text-red-600 font-semibold' : (tweet.text.length >= 260 ? 'text-yellow-600' : 'text-dark')"
+          >{{ tweet.text.length }} / 280</div>
           <div v-if="imageAttachments.length > 0" class="flex flex-wrap gap-2 mt-2 mb-2">
             <div v-for="(img, index) in imageAttachments" :key="img" class="relative inline-block">
               <img
@@ -127,10 +130,12 @@ resulting from the use or misuse of this software.
               @click="addNewTweet"
               type="button"
               class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
-              :class="(tweet.text.trim() && pendingReads === 0) ? '' : 'opacity-50 cursor-not-allowed'"
-              :disabled="!tweet.text.trim() || pendingReads > 0"
+              :class="(tweet.text.trim() && pendingReads === 0 && !posting) ? '' : 'opacity-50 cursor-not-allowed'"
+              :disabled="!tweet.text.trim() || pendingReads > 0 || posting"
+              :title="pendingReads > 0 ? 'Uploading image…' : ''"
             >
-              Tweet
+              <span v-if="!posting">Tweet</span>
+              <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Posting…</span>
             </button>
           </div>
         </div>
@@ -156,19 +161,18 @@ resulting from the use or misuse of this software.
         </button>
       </div>
       <Tweets :tweets="timeline" />
+      <div v-if="loadingMore" class="py-4 flex justify-center text-dark" role="status" aria-label="Loading more">
+        <i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i>
+      </div>
+      <div v-else-if="endOfFeed && timeline.length > 0" class="py-4 text-center text-sm text-dark">
+        You're all caught up.
+      </div>
     </div>
     <InfoOverlay
         :visible="showInfo"
         :content="infoContent"
         :position="infoPosition"
     />
-    <!-- Toast notifications -->
-    <div v-if="toastMessage" class="toast-container">
-      <div :class="['toast', toastType === 'error' ? 'toast-error' : 'toast-success']" role="alert">
-        <i :class="toastType === 'error' ? 'fas fa-exclamation-circle' : 'fas fa-check-circle'" aria-hidden="true"></i>
-        {{ toastMessage }}
-      </div>
-    </div>
     <!-- default right bar -->
     <DefaultRightBar
         :profile="profile"
@@ -194,6 +198,7 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "Home",
@@ -217,16 +222,16 @@ export default {
       showImportModal: false,
       timeline: [],
       showInfo: false,
-      infoContent: '',
+      infoContent: {},
       infoPosition: { top: '0px', left: '0px' },
       imageAttachments: [],
       imageKeys: [],
       pendingReads: 0,
       altModalIndex: -1,
       videoAttachment: undefined,
-      toastMessage: '',
-      toastType: 'error',
-      toastTimeoutId: null,
+      posting: false,
+      loadingMore: false,
+      endOfFeed: false,
     };
   },
   methods: {
@@ -271,14 +276,14 @@ export default {
               if (key) this.imageKeys[slot] = key;
             } catch (err) {
               console.error('Failed to upload image:', err);
-              this.showToast('Failed to upload image. Please try again.', 'error');
+              toast.error('Failed to upload image. Please try again.');
             }
           }
           this.pendingReads--;
         };
         reader.onerror = (error) => {
           console.error("Error reading file", error);
-          this.showToast('Error reading file. Please try again.', 'error');
+          toast.error('Error reading file. Please try again.');
           this.pendingReads--;
         };
       }
@@ -291,9 +296,10 @@ export default {
       this.altModalIndex = index;
     },
     async addNewTweet() {
-      if (!this.tweet.text.trim()) return;
+      if (this.posting || !this.tweet.text.trim()) return;
       const draftText = this.tweet.text;
       const draftImages = this.imageAttachments;
+      this.posting = true;
       try {
         // Use pre-uploaded keys when available (fresh attachments). Fall
         // back to a bulk upload for any slots that haven't been uploaded
@@ -309,19 +315,34 @@ export default {
         this.tweet.text = "";
         this.imageAttachments = [];
         this.imageKeys = [];
+        this.endOfFeed = false;
 
         this.timeline = await warpnetService.getMyTimeline(true);
       } catch (err) {
         console.error('Failed to post tweet:', err);
-        this.showToast('Failed to post tweet. Please try again.', 'error');
+        toast.error('Failed to post tweet. Please try again.');
+      } finally {
+        this.posting = false;
       }
     },
     async loadMore() {
-      const timeline = await warpnetService.getMyTimeline(false);
-      const known = new Set(this.timeline.map((t) => t && t.id));
-      this.timeline = this.timeline.concat(
-        timeline.filter((t) => t && t.id && !known.has(t.id))
-      );
+      if (this.loadingMore || this.endOfFeed) return;
+      this.loadingMore = true;
+      try {
+        const timeline = await warpnetService.getMyTimeline(false);
+        const known = new Set(this.timeline.map((t) => t && t.id));
+        const fresh = timeline.filter((t) => t && t.id && !known.has(t.id));
+        if (fresh.length === 0) {
+          this.endOfFeed = true;
+        } else {
+          this.timeline = this.timeline.concat(fresh);
+        }
+      } catch (err) {
+        console.error('Failed to load more tweets:', err);
+        toast.error(err?.message || "Couldn't load more tweets.");
+      } finally {
+        this.loadingMore = false;
+      }
     },
     // Poll-driven live updates (no server push on the bridge): re-fetch
     // the first timeline page and prepend unseen tweets so new posts
@@ -364,18 +385,9 @@ export default {
     async getInfo() {
       return await warpnetService.getNodeInfo();
     },
-    showToast(message, type = 'error') {
-      if (this.toastTimeoutId) clearTimeout(this.toastTimeoutId);
-      this.toastMessage = message;
-      this.toastType = type;
-      this.toastTimeoutId = setTimeout(() => {
-        this.toastMessage = '';
-        this.toastTimeoutId = null;
-      }, 4000);
-    },
     onTweetsImported(result) {
       const n = (result && result.imported_tweets) || 0;
-      this.showToast(`Imported ${n} tweet${n === 1 ? '' : 's'}. View them on your profile.`, 'success');
+      toast.success(`Imported ${n} tweet${n === 1 ? '' : 's'}. View them on your profile.`);
     },
     async consumeDeepLink() {
       // No URL router for profiles — route through Search.
@@ -433,10 +445,6 @@ export default {
     if (this._timelineTimer) {
       clearInterval(this._timelineTimer);
       this._timelineTimer = null;
-    }
-    if (this.toastTimeoutId) {
-      clearTimeout(this.toastTimeoutId);
-      this.toastTimeoutId = null;
     }
     if (this._deepLinkFocusHandler) {
       window.removeEventListener("focus", this._deepLinkFocusHandler);

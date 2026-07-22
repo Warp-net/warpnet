@@ -6,7 +6,7 @@
     @click.self.stop="$emit('close')"
     @click.stop
   >
-    <div class="bg-white rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
+    <div class="bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
       <div class="px-5 py-3 border-b border-lighter flex items-center">
         <h2 class="font-bold text-lg">Notification</h2>
         <button
@@ -45,6 +45,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {dismissable} from "@/lib/modal.mixin";
 
 const iconByType = {
   reply: 'fas fa-comment text-blue',
@@ -58,6 +59,7 @@ const iconByType = {
 
 export default {
   name: "NotificationOverlay",
+  mixins: [dismissable("close")],
   components: {
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
   },

@@ -23,7 +23,26 @@ resulting from the use or misuse of this software.
 -->
 <template>
   <div id="app" class="w-full h-full">
+    <!-- Global node-connection banner: for a P2P app the local node can drop,
+         so the user must always be able to see it and recover. -->
+    <div
+      v-if="connection.status !== 'online'"
+      class="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-3 px-4 py-2 text-sm font-medium text-white"
+      :class="connection.status === 'connecting' ? 'bg-dark' : 'bg-red-600'"
+      role="status"
+      aria-live="polite"
+    >
+      <span v-if="connection.status === 'connecting'">
+        <i class="fas fa-circle-notch fa-spin mr-2" aria-hidden="true"></i>Connecting to your Warpnet node…
+      </span>
+      <template v-else>
+        <span><i class="fas fa-plug mr-2" aria-hidden="true"></i>Your Warpnet node is unreachable.</span>
+        <button type="button" class="underline font-semibold flat-btn" @click="reconnect">Reconnect</button>
+      </template>
+    </div>
+
     <router-view :key="$route.fullPath" />
+    <ToastHost />
   </div>
 </template>
 
@@ -31,12 +50,25 @@ resulting from the use or misuse of this software.
 import {EventsOff, EventsOn} from "@/lib/transport";
 import {parseDeepLink} from "@/lib/deeplink";
 import {warpnetService} from "@/service/service";
+import {connection} from "@/lib/connection";
+import ToastHost from "@/components/ToastHost.vue";
 
 const DEEP_LINK_EVENT = "deeplink:open";
 const LOG = "[warpnet-deeplink]";
 
 export default {
   name: "App",
+  components: { ToastHost },
+  data() {
+    return { connection };
+  },
+  methods: {
+    // A dropped WebSocket may leave the transport singleton (socket, aesKey,
+    // pending map) wedged; a full reload is the reliable, documented reset.
+    reconnect() {
+      window.location.reload();
+    },
+  },
   mounted() {
     // Hot-path: Go side fires "deeplink:open" when a second
     // process or macOS OnUrlOpen hands a warpnet:// URL to the

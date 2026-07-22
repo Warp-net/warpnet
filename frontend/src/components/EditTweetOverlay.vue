@@ -44,9 +44,12 @@
 
 <script>
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
+import {dismissable} from "@/lib/modal.mixin";
 
 export default {
   name: "EditTweetOverlay",
+  mixins: [dismissable("close")],
   props: {
     show: { type: Boolean, default: false },
     tweet: { type: Object, required: true },
@@ -71,9 +74,11 @@ export default {
       try {
         const updated = await warpnetService.editTweet(this.tweet.id, newText);
         this.$emit('saved', updated || { ...this.tweet, text: newText });
+        toast.success('Tweet updated.');
         this.$emit('close');
       } catch (err) {
         console.error('Failed to edit tweet:', err);
+        toast.error(err?.message || "Couldn't save your changes. Please try again.");
       } finally {
         this.saving = false;
       }

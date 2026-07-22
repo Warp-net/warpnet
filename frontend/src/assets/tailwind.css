@@ -208,6 +208,16 @@ button.rounded-full > i.fa {
   color: #86efac;
   border-color: #166534;
 }
+.toast-info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+.dark .toast-info {
+  background: #0b1f3a;
+  color: #93c5fd;
+  border-color: #1e40af;
+}
 
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(1rem); }

@@ -49,7 +49,10 @@ export default {
   name: 'InfoOverlay',
   props: {
     visible: Boolean,
-    content: String,
+    // content is a key/value map (node info), iterated in the template — it is
+    // not a String. Declaring it as an Object stops Vue's dev-mode prop warning
+    // and documents the real shape.
+    content: { type: Object, default: () => ({}) },
     position: Object,
   },
 };
