@@ -172,9 +172,22 @@ export default {
       await this.runSearch(false);
     },
   },
+  watch: {
+    // Debounced live search: run automatically a short beat after the user
+    // stops typing, so results appear without needing to discover Enter.
+    query() {
+      if (this._debounce) clearTimeout(this._debounce);
+      const q = (this.query || '').trim();
+      if (q.length < 2) return;
+      this._debounce = setTimeout(() => this.submit(), 400);
+    },
+  },
   async created() {
     console.log("loading component:", this.$options.name);
     if (this.query) await this.submit();
+  },
+  beforeUnmount() {
+    if (this._debounce) clearTimeout(this._debounce);
   },
 };
 </script>

@@ -80,7 +80,10 @@
         >
           {{ saving ? 'Saving…' : 'Save' }}
         </button>
-        <p v-if="savedMessage" class="text-sm text-dark">{{ savedMessage }}</p>
+        <p v-if="savedMessage" class="text-sm font-medium" :class="saveError ? 'text-red-600' : 'text-green-700'">
+          <i :class="saveError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle'" aria-hidden="true"></i>
+          {{ savedMessage }}
+        </p>
       </form>
     </div>
     <DefaultRightBar :profile="ownerProfile" />
@@ -90,6 +93,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "SettingsNotifications",
@@ -103,6 +107,7 @@ export default {
       loading: true,
       saving: false,
       savedMessage: '',
+      saveError: false,
       ownerProfile: {},
       types: [
         { key: 'follow', label: 'New followers' },
@@ -129,16 +134,24 @@ export default {
     async save() {
       this.saving = true;
       this.savedMessage = '';
+      this.saveError = false;
       try {
         await warpnetService.updateNotificationSettings(this.settings);
         this.savedMessage = 'Settings saved';
       } catch (err) {
         console.error('Failed to save notification settings:', err);
-        this.savedMessage = err?.message || 'Failed to save';
+        this.savedMessage = 'Failed to save';
+        this.saveError = true;
+        toast.error(err?.message || 'Failed to save notification settings.');
       } finally {
         this.saving = false;
+        if (this._savedTimer) clearTimeout(this._savedTimer);
+        this._savedTimer = setTimeout(() => { this.savedMessage = ''; }, 3000);
       }
     },
+  },
+  beforeUnmount() {
+    if (this._savedTimer) clearTimeout(this._savedTimer);
   },
   async created() {
     this.ownerProfile = warpnetService.getOwnerProfile();
