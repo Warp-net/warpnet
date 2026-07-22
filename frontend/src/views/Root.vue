@@ -46,16 +46,15 @@ resulting from the use or misuse of this software.
     </div>
 
     <!-- right side -->
-    <div class="flex w-full md:w-1/2 h-full">
-      <div class="flex items-center justify-center w-full h-full">
-        <div class="w-full md:w-1/2 flex flex-col font-bold p-5 md:p-0">
-          <p class="text-3xl mb-4">
+    <div class="flex w-full md:w-1/2 h-full overflow-y-auto">
+      <div class="flex w-full min-h-full py-8">
+        <div class="w-full md:w-1/2 flex flex-col font-bold p-5 md:p-0 m-auto">
+          <p class="text-2xl md:text-3xl mb-3">
             Dive deep into the Warp and see what happens...
           </p>
-          <p class="text-base font-normal text-dark mb-12">
-            Warpnet is a decentralized, peer-to-peer social network. Your account and
-            data live locally on your device — there's no central server and no
-            password recovery, so keep your device and password safe.
+          <p class="text-sm font-normal text-dark mb-6">
+            A decentralized, peer-to-peer network. Your account lives locally on
+            this device — no central server, no password recovery.
           </p>
           <p>Join Warpnet today.</p>
           <button v-if="isFirstRun === true"
