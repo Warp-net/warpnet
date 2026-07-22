@@ -29,6 +29,7 @@ package handler
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -109,6 +110,10 @@ func StreamNewReTweetHandler(
 		if isQuote && retweetEvent.QuotedUserId != nil && *retweetEvent.QuotedUserId != "" {
 			sourceAuthorId = *retweetEvent.QuotedUserId
 		}
+		sourceTweetId := strings.TrimPrefix(retweetEvent.Id, domain.RetweetPrefix)
+		if isQuote {
+			sourceTweetId = *retweetEvent.QuotedTweetId
+		}
 
 		if isOwnerRetweeter {
 			// owner retweeted it
@@ -130,10 +135,11 @@ func StreamNewReTweetHandler(
 					notifyText = notifyUsername + " quoted your tweet"
 				}
 				if err := notifyRepo.Add(domain.Notification{
-					Type:    domain.NotificationRetweetType,
-					Text:    notifyText,
-					UserId:  ownerId,
-					ActorId: *retweetEvent.RetweetedBy,
+					Type:        domain.NotificationRetweetType,
+					Text:        notifyText,
+					RecepientId: ownerId,
+					ActorId:     *retweetEvent.RetweetedBy,
+					TweetId:     sourceTweetId,
 				}); err != nil {
 					log.Errorf("retweet handler: adding notification: %v", err)
 				}

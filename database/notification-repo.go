@@ -56,7 +56,7 @@ func NewNotificationsRepo(db NotificationsStorer) *NotificationsRepo {
 }
 
 func (repo *NotificationsRepo) Add(not domain.Notification) error {
-	if not.UserId == "" {
+	if not.RecepientId == "" {
 		return local_store.DBError("missing user id")
 	}
 
@@ -68,7 +68,7 @@ func (repo *NotificationsRepo) Add(not domain.Notification) error {
 	}
 
 	notKey := local_store.NewPrefixBuilder(NotificationsRepoName).
-		AddRootID(not.UserId).
+		AddRootID(not.RecepientId).
 		AddReversedTimestamp(not.CreatedAt).
 		AddParentId(not.Type.String()).
 		AddId(not.Id).

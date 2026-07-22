@@ -170,8 +170,8 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		if !notified {
 			t.Fatal("the reporter must be notified")
 		}
-		if got.UserId != owner {
-			t.Fatalf("notification must target the reporter, got %q", got.UserId)
+		if got.RecepientId != owner {
+			t.Fatalf("notification must target the reporter, got %q", got.RecepientId)
 		}
 		if got.Type != domain.NotificationModerationType {
 			t.Fatalf("expected moderation notification, got %q", got.Type)

@@ -112,8 +112,8 @@ func TestStreamNewReplyHandler(t *testing.T) {
 			if not.Type != domain.NotificationReplyType {
 				t.Fatalf("expected reply type, got: %v", not.Type)
 			}
-			if not.UserId != parentUser {
-				t.Fatalf("expected notification for parent user, got: %v", not.UserId)
+			if not.RecepientId != parentUser {
+				t.Fatalf("expected notification for parent user, got: %v", not.RecepientId)
 			}
 			return nil
 		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: parentUser, ID: nodeID}})

@@ -66,7 +66,7 @@ func TestService_AddFansOutAndJoinsErrors(t *testing.T) {
 	ok := &fakeStore{}
 	svc := New(NewStoreChannel(store), NewStoreChannel(ok))
 
-	err := svc.Add(domain.Notification{Type: domain.NotificationFollowType, UserId: "u"})
+	err := svc.Add(domain.Notification{Type: domain.NotificationFollowType, RecepientId: "u"})
 	if err == nil {
 		t.Fatal("expected joined error from failing channel")
 	}
@@ -78,7 +78,7 @@ func TestService_AddFansOutAndJoinsErrors(t *testing.T) {
 func TestStoreChannel_Persists(t *testing.T) {
 	store := &fakeStore{}
 	svc := New(NewStoreChannel(store))
-	if err := svc.Add(domain.Notification{Type: domain.NotificationLikeType, UserId: "u"}); err != nil {
+	if err := svc.Add(domain.Notification{Type: domain.NotificationLikeType, RecepientId: "u"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	if len(store.added) != 1 {
@@ -95,7 +95,7 @@ func TestEmailChannel_SendsWhenOptedIn(t *testing.T) {
 	}}
 	svc := New(NewEmailChannel(settings, sender))
 
-	if err := svc.Add(domain.Notification{Type: domain.NotificationNewUserType, UserId: "u"}); err != nil {
+	if err := svc.Add(domain.Notification{Type: domain.NotificationNewUserType, RecepientId: "u"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	sender.waitSend(t)
@@ -114,7 +114,7 @@ func TestEmailChannel_SkipsWhenNotOptedIn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			sender := newFakeSender()
 			svc := New(NewEmailChannel(fakeSettings{cfg: cfg}, sender))
-			if err := svc.Add(domain.Notification{Type: domain.NotificationLikeType, UserId: "u"}); err != nil {
+			if err := svc.Add(domain.Notification{Type: domain.NotificationLikeType, RecepientId: "u"}); err != nil {
 				t.Fatalf("add: %v", err)
 			}
 			time.Sleep(100 * time.Millisecond)

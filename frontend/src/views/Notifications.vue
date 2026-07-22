@@ -321,8 +321,6 @@ export default {
     avatarFor(n) {
       return (n && n.actor_id && this.actorAvatars[n.actor_id]) || '/default_profile.png';
     },
-    // hydrateAvatars fetches the real avatar for each notification actor
-    // (actor_id) once, cached by actor id so re-polls don't refetch.
     async hydrateAvatars(list) {
       const ids = [...new Set((list || [])
         .map(n => n && n.actor_id)
@@ -334,7 +332,7 @@ export default {
             const img = await warpnetService.getImage({ userId: id, key: p.avatar_key });
             if (img) this.actorAvatars[id] = img;
           }
-        } catch (e) { /* keep placeholder */ }
+        } catch (e) {}
       }));
     },
     async hydrateRequests(ids) {
@@ -394,7 +392,7 @@ export default {
       }
       const resp = await warpnetService.getNotifications(true);
       if (resp && resp.notifications) {
-        this.notifications = resp.notifications;
+        this.notifications = resp.notifications.filter((n) => n && n.type !== 'message');
         this.hydrateAvatars(this.notifications);
       }
       // Don't bulk-mark-read just for opening the view — that erased the
@@ -416,7 +414,7 @@ export default {
     // before the mark-read request settles on the node.
     this._unsubscribeLive = warpnetService.subscribeNotifications((resp) => {
       if (this.loading) return;
-      const incoming = (resp && resp.notifications) || [];
+      const incoming = ((resp && resp.notifications) || []).filter((n) => n && n.type !== 'message');
       if (incoming.length === 0) return;
       const readIds = new Set(
         this.notifications.filter((n) => n && n.is_read).map((n) => n.id)

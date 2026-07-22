@@ -430,8 +430,6 @@ export default {
     likedTweets() {
       return this.likes.map(l => l.tweet);
     },
-    // Relative "last seen" text for the presence badge. Empty when we have no
-    // observation (shows plain "Offline") or for our own profile.
     lastSeenText() {
       if (this.isSelf || !this.profile || !this.profile.last_seen) return "";
       const m = moment(this.profile.last_seen);

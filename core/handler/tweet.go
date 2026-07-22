@@ -234,10 +234,11 @@ func handleNewReply(
 	if isOwnTweetReply {
 		if ev.UserId != ownNodeInfo.OwnerId {
 			if err := notifyRepo.Add(domain.Notification{
-				Type:    domain.NotificationReplyType,
-				Text:    ev.Username + " replied to your tweet",
-				UserId:  parentUserId,
-				ActorId: ev.UserId,
+				Type:        domain.NotificationReplyType,
+				Text:        ev.Username + " replied to your tweet",
+				RecepientId: parentUserId,
+				ActorId:     ev.UserId,
+				TweetId:     parentId,
 			}); err != nil {
 				log.Errorf("reply handler: adding notification: %v", err)
 			}

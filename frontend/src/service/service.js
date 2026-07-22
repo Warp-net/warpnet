@@ -127,13 +127,7 @@ let blockedCachePrimed = false;
 // the muted state without a per-row roundtrip.
 const mutedIdsCache = new Set();
 let mutedCachePrimed = false;
-// In-memory, per-session record of when each other user was last observed
-// online (userId -> epoch ms). Fed as profiles/users load with isOffline
-// false; merged with the backend's persisted last_seen at read time.
 const lastSeenCache = new Map();
-// In-memory mirror of the owner's bookmarked tweet ids, primed lazily from the
-// bookmark index so TweetBlock can hydrate the bookmark toggle without a
-// per-row node call. Kept in sync by bookmarkTweet / unbookmarkTweet.
 const bookmarkedIdsCache = new Set();
 let bookmarkedCachePrimed = false;
 let bookmarksPrimePromise = null;
@@ -342,11 +336,6 @@ export const warpnetService = {
         return this.trackLastSeen(user);
     },
 
-    // trackLastSeen keeps an in-memory, per-session record of when another user
-    // was last observed online (userId -> epoch ms) and folds it together with
-    // the backend's persisted last_seen so the profile shows the freshest
-    // observation. Observer-relative and in-memory by design — not self
-    // reported. No-op for the owner's own record.
     trackLastSeen(user) {
         if (!user || !user.id) return user;
         const owner = this.getOwnerProfile();
@@ -1205,10 +1194,6 @@ export const warpnetService = {
         return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
     },
 
-    // primeBookmarks loads the owner's bookmark index (ids only, no per-tweet
-    // hydration) once into bookmarkedIdsCache. Concurrent callers share one
-    // in-flight fetch, so a timeline full of TweetBlocks priming at once
-    // triggers a single walk.
     async primeBookmarks() {
         if (bookmarkedCachePrimed) return;
         if (bookmarksPrimePromise) return bookmarksPrimePromise;
@@ -1240,9 +1225,6 @@ export const warpnetService = {
         }
     },
 
-    // hasBookmark reports whether the owner has bookmarked tweetId, priming the
-    // in-memory index on first use so the bookmark toggle hydrates correctly
-    // when a tweet renders.
     async hasBookmark(tweetId) {
         if (!tweetId) return false;
         if (!bookmarkedCachePrimed) await this.primeBookmarks();
@@ -1354,9 +1336,6 @@ export const warpnetService = {
         return resp;
     },
 
-    // markMessageNotificationsRead marks every unread "message"-type
-    // notification read. The live DM badge is derived from these, so opening
-    // the messages section calls this to clear it. Best-effort per item.
     async markMessageNotificationsRead() {
         const items = (latestNotifications.notifications || [])
             .filter(n => n && n.type === 'message' && !n.is_read);

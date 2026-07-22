@@ -176,10 +176,6 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 	if err = json.Unmarshal(otherUserData, &user); err != nil {
 		log.Errorf("stream: get other user: response unmarshal: %v %s", err, otherUserData)
 	}
-	// The stream reached the peer, so we just saw them online now. Stamp our
-	// own observation (never trust a self-reported value from the wire) and
-	// leave it untouched on the offline paths above, so it reads as the last
-	// time this node saw the user.
 	now := time.Now().UTC()
 	user.LastSeen = &now
 	user.IsOffline = false
