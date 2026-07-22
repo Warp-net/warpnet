@@ -127,6 +127,10 @@ let blockedCachePrimed = false;
 // the muted state without a per-row roundtrip.
 const mutedIdsCache = new Set();
 let mutedCachePrimed = false;
+const lastSeenCache = new Map();
+const bookmarkedIdsCache = new Set();
+let bookmarkedCachePrimed = false;
+let bookmarksPrimePromise = null;
 const defaultLimit = 20
 const endCursor = "end"
 
@@ -328,7 +332,24 @@ export const warpnetService = {
             },
         }
 
-        return await this.sendToNode(request);
+        const user = await this.sendToNode(request);
+        return this.trackLastSeen(user);
+    },
+
+    trackLastSeen(user) {
+        if (!user || !user.id) return user;
+        const owner = this.getOwnerProfile();
+        if (owner && user.id === owner.user_id) return user;
+        if (!user.isOffline) {
+            lastSeenCache.set(user.id, Date.now());
+        }
+        const mem = lastSeenCache.get(user.id) || 0;
+        const be = user.last_seen ? Date.parse(user.last_seen) : 0;
+        const freshest = Math.max(mem, be || 0);
+        if (freshest > 0) {
+            user.last_seen = new Date(freshest).toISOString();
+        }
+        return user;
     },
 
     async getUsers({profileId, cursorReset}) {
@@ -359,6 +380,7 @@ export const warpnetService = {
         }
 
         usersResp.users = usersResp.users.filter(user => user.id !== profileId);
+        usersResp.users.forEach(u => this.trackLastSeen(u));
 
         return usersResp.users;
     },
@@ -1110,7 +1132,9 @@ export const warpnetService = {
                 owner_user_id: ownerUserId,
             },
         }
-        return await this.sendToNode(request);
+        const resp = await this.sendToNode(request);
+        bookmarkedIdsCache.add(tweetId);
+        return resp;
     },
 
     async unbookmarkTweet(tweetId) {
@@ -1123,7 +1147,9 @@ export const warpnetService = {
                 tweet_id: tweetId,
             },
         }
-        return await this.sendToNode(request);
+        const resp = await this.sendToNode(request);
+        bookmarkedIdsCache.delete(tweetId);
+        return resp;
     },
 
     async getBookmarks(cursorReset) {
@@ -1166,6 +1192,43 @@ export const warpnetService = {
             }
         }));
         return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
+    },
+
+    async primeBookmarks() {
+        if (bookmarkedCachePrimed) return;
+        if (bookmarksPrimePromise) return bookmarksPrimePromise;
+        const owner = this.getOwnerProfile();
+        if (!owner) return;
+        bookmarksPrimePromise = (async () => {
+            let cursor = '';
+            for (;;) {
+                const resp = await this.sendToNode({
+                    path: PRIVATE_GET_BOOKMARKS,
+                    body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+                });
+                const items = (resp && resp.items) || [];
+                for (const b of items) {
+                    if (b && b.tweet_id) bookmarkedIdsCache.add(b.tweet_id);
+                }
+                const next = (resp && resp.cursor) || 'end';
+                if (!items.length || next === 'end' || next === cursor) break;
+                cursor = next;
+            }
+            bookmarkedCachePrimed = true;
+        })();
+        try {
+            await bookmarksPrimePromise;
+        } catch (e) {
+            console.warn('failed to prime bookmarks:', e);
+        } finally {
+            bookmarksPrimePromise = null;
+        }
+    },
+
+    async hasBookmark(tweetId) {
+        if (!tweetId) return false;
+        if (!bookmarkedCachePrimed) await this.primeBookmarks();
+        return bookmarkedIdsCache.has(tweetId);
     },
 
     async getLikes(cursorReset) {
@@ -1271,6 +1334,12 @@ export const warpnetService = {
             cb(latestNotifications);
         }
         return resp;
+    },
+
+    async markMessageNotificationsRead() {
+        const items = (latestNotifications.notifications || [])
+            .filter(n => n && n.type === 'message' && !n.is_read);
+        await Promise.all(items.map(n => this.markNotificationRead(n.id).catch(() => {})));
     },
 
     subscribeNotifications(callback) {

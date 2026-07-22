@@ -418,7 +418,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 	if _, err := incomingHandler(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "hi", SenderId: receiver, ReceiverId: owner}), nil); err != nil {
 		t.Fatalf("unexpected incoming notification err: %v", err)
 	}
-	if notified.Type != domain.NotificationMessageType || notified.UserId != owner || notified.Text != "sender-name sent you a message" {
+	if notified.Type != domain.NotificationMessageType || notified.RecepientId != owner || notified.Text != "sender-name sent you a message" {
 		t.Fatalf("unexpected notification: %#v", notified)
 	}
 

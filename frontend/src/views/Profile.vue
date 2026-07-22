@@ -181,7 +181,7 @@ resulting from the use or misuse of this software.
               <span
                   v-if="profile.isOffline"
                   class="text-sm font-medium bg-red-900 py-1 px-1 mx-2 rounded text-white align-middle"
-              >Offline</span>
+              >{{ lastSeenText ? `Last seen ${lastSeenText}` : 'Offline' }}</span>
               <span
                   v-if="isBusiness"
                   class="text-sm font-medium bg-blue py-1 px-1 mx-2 rounded text-white align-middle"
@@ -429,6 +429,11 @@ export default {
     },
     likedTweets() {
       return this.likes.map(l => l.tweet);
+    },
+    lastSeenText() {
+      if (this.isSelf || !this.profile || !this.profile.last_seen) return "";
+      const m = moment(this.profile.last_seen);
+      return m.isValid() ? m.fromNow() : "";
     },
   },
   methods: {

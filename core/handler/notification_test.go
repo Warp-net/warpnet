@@ -82,9 +82,9 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 	t.Run("counts unread correctly and sorts unread first", func(t *testing.T) {
 		now := time.Now()
 		nots := []domain.Notification{
-			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: now.Add(-3 * time.Second)},
-			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: now.Add(-2 * time.Second)},
-			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, UserId: owner, CreatedAt: now.Add(-1 * time.Second)},
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, RecepientId: owner, CreatedAt: now.Add(-3 * time.Second)},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, RecepientId: owner, CreatedAt: now.Add(-2 * time.Second)},
+			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, RecepientId: owner, CreatedAt: now.Add(-1 * time.Second)},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
 			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
@@ -126,8 +126,8 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 
 	t.Run("all unread", func(t *testing.T) {
 		nots := []domain.Notification{
-			{Id: "1", Type: domain.NotificationLikeType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
-			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: false, RecepientId: owner, CreatedAt: time.Now()},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, RecepientId: owner, CreatedAt: time.Now()},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
 			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
@@ -147,8 +147,8 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 
 	t.Run("all read", func(t *testing.T) {
 		nots := []domain.Notification{
-			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
-			{Id: "2", Type: domain.NotificationReplyType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, RecepientId: owner, CreatedAt: time.Now()},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: true, RecepientId: owner, CreatedAt: time.Now()},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
 			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
@@ -172,8 +172,8 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		// carry 17, not 1. This is the bug behind the flickering
 		// "N unread" badge.
 		page := []domain.Notification{
-			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
-			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: true, RecepientId: owner, CreatedAt: time.Now()},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, RecepientId: owner, CreatedAt: time.Now()},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
 			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
@@ -197,10 +197,10 @@ func TestStreamGetNotificationsHandler(t *testing.T) {
 		// badge to 0 on every transient db hiccup. Page-local count
 		// is wrong globally but still > 0 when there's unread work.
 		page := []domain.Notification{
-			{Id: "1", Type: domain.NotificationLikeType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
-			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
-			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
-			{Id: "4", Type: domain.NotificationLikeType, IsRead: true, UserId: owner, CreatedAt: time.Now()},
+			{Id: "1", Type: domain.NotificationLikeType, IsRead: false, RecepientId: owner, CreatedAt: time.Now()},
+			{Id: "2", Type: domain.NotificationReplyType, IsRead: false, RecepientId: owner, CreatedAt: time.Now()},
+			{Id: "3", Type: domain.NotificationFollowType, IsRead: false, RecepientId: owner, CreatedAt: time.Now()},
+			{Id: "4", Type: domain.NotificationLikeType, IsRead: true, RecepientId: owner, CreatedAt: time.Now()},
 		}
 		h := StreamGetNotificationsHandler(stubNotificationRepo{
 			listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error) {
@@ -255,7 +255,7 @@ func TestStreamGetPushesHandler(t *testing.T) {
 				called = true
 				capturedCursor = cursor
 				return []domain.Notification{
-					{Id: "1", Type: domain.NotificationLikeType, IsRead: false, UserId: owner, CreatedAt: time.Now()},
+					{Id: "1", Type: domain.NotificationLikeType, IsRead: false, RecepientId: owner, CreatedAt: time.Now()},
 				}, "cur-key", nil
 			},
 			unreadCountFn: func(userId string) (uint64, error) { return 1, nil },
@@ -314,12 +314,12 @@ func TestStreamGetNotificationHandler(t *testing.T) {
 
 	t.Run("happy path", func(t *testing.T) {
 		not := domain.Notification{
-			Id:        "n-42",
-			Type:      domain.NotificationLikeType,
-			Text:      "someone liked your tweet",
-			UserId:    owner,
-			IsRead:    false,
-			CreatedAt: time.Now(),
+			Id:          "n-42",
+			Type:        domain.NotificationLikeType,
+			Text:        "someone liked your tweet",
+			RecepientId: owner,
+			IsRead:      false,
+			CreatedAt:   time.Now(),
 		}
 		var capturedUser, capturedId string
 		h := StreamGetNotificationHandler(stubNotificationRepo{getFn: func(userId, notificationId string) (domain.Notification, error) {

@@ -324,12 +324,14 @@ export default {
       if (!owner) {
         this.liked = false;
         this.retweeted = false;
+        this.bookmarked = false;
         return;
       }
 
       this.liked = await warpnetService.hasLiker(this.tweet.id, owner.user_id);
       this.retweeted = this.tweet.retweeted_by === owner.user_id
         || await warpnetService.hasRetweeter(this.tweet.id, owner.user_id);
+      this.bookmarked = await warpnetService.hasBookmark(this.tweet.id);
     },
     gotoProfile(tweetUserId) {
       this.$router.push({

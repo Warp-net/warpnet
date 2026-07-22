@@ -117,9 +117,11 @@ func StreamLikeHandler(
 				notifyUsername = liker.Username
 			}
 			if err := notifyRepo.Add(domain.Notification{
-				Type:   domain.NotificationLikeType,
-				Text:   notifyUsername + " liked your tweet",
-				UserId: ev.UserId,
+				Type:        domain.NotificationLikeType,
+				Text:        notifyUsername + " liked your tweet",
+				RecepientId: ev.UserId,
+				ActorId:     ev.OwnerId,
+				TweetId:     tweetId,
 			}); err != nil {
 				log.Errorf("like handler: adding notification: %v", err)
 			}

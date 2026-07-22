@@ -97,7 +97,7 @@ func (s *UserRepoTestSuite) TestNotifiesOnNewUser() {
 	s.Require().NoError(err)
 	s.Require().Len(notifier.added, 1)
 	s.Equal(domain.NotificationNewUserType, notifier.added[0].Type)
-	s.Equal("owner-notify", notifier.added[0].UserId)
+	s.Equal("owner-notify", notifier.added[0].RecepientId)
 	s.Equal("newbie joined Warpnet", notifier.added[0].Text)
 
 	// A duplicate must not notify.

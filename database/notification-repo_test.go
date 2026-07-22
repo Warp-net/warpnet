@@ -40,25 +40,25 @@ func (s *NotificationsRepoTestSuite) TestAddAndListNotifications() {
 	userId := uuid.New().String()
 
 	not1 := domain.Notification{
-		Type:      domain.NotificationLikeType,
-		Text:      "someone liked your tweet",
-		UserId:    userId,
-		IsRead:    false,
-		CreatedAt: time.Now().Add(-2 * time.Second),
+		Type:        domain.NotificationLikeType,
+		Text:        "someone liked your tweet",
+		RecepientId: userId,
+		IsRead:      false,
+		CreatedAt:   time.Now().Add(-2 * time.Second),
 	}
 	not2 := domain.Notification{
-		Type:      domain.NotificationReplyType,
-		Text:      "someone replied to your tweet",
-		UserId:    userId,
-		IsRead:    false,
-		CreatedAt: time.Now().Add(-1 * time.Second),
+		Type:        domain.NotificationReplyType,
+		Text:        "someone replied to your tweet",
+		RecepientId: userId,
+		IsRead:      false,
+		CreatedAt:   time.Now().Add(-1 * time.Second),
 	}
 	not3 := domain.Notification{
-		Type:      domain.NotificationFollowType,
-		Text:      "someone followed you",
-		UserId:    userId,
-		IsRead:    true,
-		CreatedAt: time.Now(),
+		Type:        domain.NotificationFollowType,
+		Text:        "someone followed you",
+		RecepientId: userId,
+		IsRead:      true,
+		CreatedAt:   time.Now(),
 	}
 
 	err := s.repo.Add(not1)
@@ -94,18 +94,18 @@ func (s *NotificationsRepoTestSuite) TestUnreadCountWalksAllPages() {
 
 	for i := 0; i < 7; i++ {
 		s.Require().NoError(s.repo.Add(domain.Notification{
-			Type:   domain.NotificationLikeType,
-			Text:   "unread",
-			UserId: userId,
-			IsRead: false,
+			Type:        domain.NotificationLikeType,
+			Text:        "unread",
+			RecepientId: userId,
+			IsRead:      false,
 		}))
 	}
 	for i := 0; i < 3; i++ {
 		s.Require().NoError(s.repo.Add(domain.Notification{
-			Type:   domain.NotificationReplyType,
-			Text:   "read",
-			UserId: userId,
-			IsRead: true,
+			Type:        domain.NotificationReplyType,
+			Text:        "read",
+			RecepientId: userId,
+			IsRead:      true,
 		}))
 	}
 
@@ -123,9 +123,9 @@ func (s *NotificationsRepoTestSuite) TestMarkRead() {
 	userId := uuid.New().String()
 
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type:   domain.NotificationLikeType,
-		Text:   "unread",
-		UserId: userId,
+		Type:        domain.NotificationLikeType,
+		Text:        "unread",
+		RecepientId: userId,
 	}))
 
 	nots, _, err := s.repo.List(userId, nil, nil)
@@ -169,9 +169,9 @@ func (s *NotificationsRepoTestSuite) TestMarkAllReadWalksAllPages() {
 
 	for i := 0; i < 8; i++ {
 		s.Require().NoError(s.repo.Add(domain.Notification{
-			Type:   domain.NotificationLikeType,
-			Text:   "unread",
-			UserId: userId,
+			Type:        domain.NotificationLikeType,
+			Text:        "unread",
+			RecepientId: userId,
 		}))
 	}
 
@@ -198,10 +198,10 @@ func (s *NotificationsRepoTestSuite) TestMarkAllRead_DoesNotTouchOtherUsers() {
 	userB := uuid.New().String()
 
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type: domain.NotificationLikeType, Text: "a", UserId: userA,
+		Type: domain.NotificationLikeType, Text: "a", RecepientId: userA,
 	}))
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type: domain.NotificationLikeType, Text: "b", UserId: userB,
+		Type: domain.NotificationLikeType, Text: "b", RecepientId: userB,
 	}))
 
 	s.Require().NoError(s.repo.MarkAllRead(userA))
@@ -249,9 +249,9 @@ func (s *NotificationsRepoTestSuite) TestListNotifications_Empty() {
 func (s *NotificationsRepoTestSuite) TestAddNotification_AutoGeneratesIdAndTime() {
 	userId := uuid.New().String()
 	not := domain.Notification{
-		Type:   domain.NotificationRetweetType,
-		Text:   "retweeted",
-		UserId: userId,
+		Type:        domain.NotificationRetweetType,
+		Text:        "retweeted",
+		RecepientId: userId,
 	}
 
 	err := s.repo.Add(not)
@@ -279,10 +279,10 @@ func (s *NotificationsRepoTestSuite) TestAddMultipleNotificationTypes() {
 
 	for i, notType := range types {
 		not := domain.Notification{
-			Type:      notType,
-			Text:      "notification " + notType.String(),
-			UserId:    userId,
-			CreatedAt: time.Now().Add(-time.Duration(len(types)-i) * time.Second),
+			Type:        notType,
+			Text:        "notification " + notType.String(),
+			RecepientId: userId,
+			CreatedAt:   time.Now().Add(-time.Duration(len(types)-i) * time.Second),
 		}
 		err := s.repo.Add(not)
 		s.Require().NoError(err)
@@ -299,10 +299,10 @@ func (s *NotificationsRepoTestSuite) TestListNotifications_Pagination() {
 
 	for i := 0; i < 5; i++ {
 		not := domain.Notification{
-			Type:      domain.NotificationLikeType,
-			Text:      "notification",
-			UserId:    userId,
-			CreatedAt: time.Now().Add(-time.Duration(5-i) * time.Second),
+			Type:        domain.NotificationLikeType,
+			Text:        "notification",
+			RecepientId: userId,
+			CreatedAt:   time.Now().Add(-time.Duration(5-i) * time.Second),
 		}
 		err := s.repo.Add(not)
 		s.Require().NoError(err)
@@ -323,11 +323,11 @@ func (s *NotificationsRepoTestSuite) TestListNotifications_Pagination() {
 func (s *NotificationsRepoTestSuite) TestGetNotification() {
 	userId := uuid.New().String()
 	not := domain.Notification{
-		Id:        uuid.New().String(),
-		Type:      domain.NotificationLikeType,
-		Text:      "liked",
-		UserId:    userId,
-		CreatedAt: time.Now(),
+		Id:          uuid.New().String(),
+		Type:        domain.NotificationLikeType,
+		Text:        "liked",
+		RecepientId: userId,
+		CreatedAt:   time.Now(),
 	}
 	err := s.repo.Add(not)
 	s.Require().NoError(err)
@@ -361,16 +361,16 @@ func (s *NotificationsRepoTestSuite) TestNotificationsIsolatedByUser() {
 	userId2 := uuid.New().String()
 
 	err := s.repo.Add(domain.Notification{
-		Type:   domain.NotificationLikeType,
-		Text:   "for user1",
-		UserId: userId1,
+		Type:        domain.NotificationLikeType,
+		Text:        "for user1",
+		RecepientId: userId1,
 	})
 	s.Require().NoError(err)
 
 	err = s.repo.Add(domain.Notification{
-		Type:   domain.NotificationReplyType,
-		Text:   "for user2",
-		UserId: userId2,
+		Type:        domain.NotificationReplyType,
+		Text:        "for user2",
+		RecepientId: userId2,
 	})
 	s.Require().NoError(err)
 
@@ -391,11 +391,11 @@ func (s *NotificationsRepoTestSuite) TestReverseList_ReturnsOnlyNewerThanCursor(
 	base := time.Now()
 	for i := 0; i < 3; i++ {
 		s.Require().NoError(s.repo.Add(domain.Notification{
-			Id:        uuid.New().String(),
-			Type:      domain.NotificationLikeType,
-			Text:      "n",
-			UserId:    userId,
-			CreatedAt: base.Add(time.Duration(i) * time.Second),
+			Id:          uuid.New().String(),
+			Type:        domain.NotificationLikeType,
+			Text:        "n",
+			RecepientId: userId,
+			CreatedAt:   base.Add(time.Duration(i) * time.Second),
 		}))
 	}
 
@@ -405,11 +405,11 @@ func (s *NotificationsRepoTestSuite) TestReverseList_ReturnsOnlyNewerThanCursor(
 	s.Require().NotEmpty(cursor)
 
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Id:        uuid.New().String(),
-		Type:      domain.NotificationReplyType,
-		Text:      "newer",
-		UserId:    userId,
-		CreatedAt: base.Add(10 * time.Second),
+		Id:          uuid.New().String(),
+		Type:        domain.NotificationReplyType,
+		Text:        "newer",
+		RecepientId: userId,
+		CreatedAt:   base.Add(10 * time.Second),
 	}))
 
 	newer, _, err := s.repo.ReverseList(userId, &cursor, nil)
@@ -434,10 +434,10 @@ func (s *NotificationsRepoTestSuite) TestReverseList_NewerThanCursor() {
 	userId := uuid.New().String()
 
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type:      domain.NotificationLikeType,
-		Text:      "first",
-		UserId:    userId,
-		CreatedAt: time.Now().Add(-2 * time.Second),
+		Type:        domain.NotificationLikeType,
+		Text:        "first",
+		RecepientId: userId,
+		CreatedAt:   time.Now().Add(-2 * time.Second),
 	}))
 
 	limit := uint64(10)
@@ -447,10 +447,10 @@ func (s *NotificationsRepoTestSuite) TestReverseList_NewerThanCursor() {
 	s.NotEmpty(cursor)
 
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type:      domain.NotificationReplyType,
-		Text:      "second",
-		UserId:    userId,
-		CreatedAt: time.Now(),
+		Type:        domain.NotificationReplyType,
+		Text:        "second",
+		RecepientId: userId,
+		CreatedAt:   time.Now(),
 	}))
 
 	// Only the notification newer than the cursor comes back.

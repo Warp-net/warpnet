@@ -280,6 +280,7 @@ type User struct {
 	FollowersCount     int64      `json:"followers_count"`
 	Id                 string     `json:"id"`
 	IsOffline          bool       `json:"isOffline"`
+	LastSeen           *time.Time `json:"last_seen,omitempty"`
 	NodeId             string     `json:"node_id"`
 	Network            string     `json:"network"`
 	// Role mirrors NodeInfo.Role: "" for a regular user, "business" for a
@@ -325,12 +326,14 @@ const (
 )
 
 type Notification struct {
-	Type      NotificationType `json:"type"`
-	Id        string           `json:"id"`
-	Text      string           `json:"text"`
-	UserId    string           `json:"user_id"`
-	IsRead    bool             `json:"is_read"`
-	CreatedAt time.Time        `json:"created_at"`
+	Type        NotificationType `json:"type"`
+	Id          string           `json:"id"`
+	Text        string           `json:"text"`
+	RecepientId string           `json:"user_id"`
+	ActorId     string           `json:"actor_id,omitempty"`
+	TweetId     string           `json:"tweet_id,omitempty"`
+	IsRead      bool             `json:"is_read"`
+	CreatedAt   time.Time        `json:"created_at"`
 }
 
 // NotificationSettings holds a user's per-node notification preferences,

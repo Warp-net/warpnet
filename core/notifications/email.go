@@ -65,10 +65,10 @@ func (c *EmailChannel) deliver(n domain.Notification) {
 			log.Errorf("notifications: email dispatch panic: %v", r)
 		}
 	}()
-	if n.UserId == "" {
+	if n.RecepientId == "" {
 		return
 	}
-	cfg, err := c.settings.GetNotificationSettings(n.UserId)
+	cfg, err := c.settings.GetNotificationSettings(n.RecepientId)
 	if err != nil {
 		log.Warnf("notifications: load settings: %v", err)
 		return

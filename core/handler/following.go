@@ -120,9 +120,10 @@ func StreamFollowHandler(
 					notifyUsername = followerUser.Username
 				}
 				if notifyErr := notifyRepo.Add(domain.Notification{
-					Type:   domain.NotificationFollowType,
-					Text:   notifyUsername + " started following you",
-					UserId: ownerUserId,
+					Type:        domain.NotificationFollowType,
+					Text:        notifyUsername + " started following you",
+					RecepientId: ownerUserId,
+					ActorId:     ev.FollowerId,
 				}); notifyErr != nil {
 					log.Errorf("follow handler: adding notification: %v", notifyErr)
 				}

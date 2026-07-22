@@ -304,6 +304,14 @@ export default {
       unsubscribeOwner: null,
     };
   },
+  watch: {
+    $route(to) {
+      if (to && (to.name === 'Chats' || to.name === 'Messages')) {
+        this.newMessages = 0;
+        warpnetService.markMessageNotificationsRead().catch(() => {});
+      }
+    },
+  },
   mounted() {
     const theme = localStorage.getItem("theme");
     if (theme === "dark" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
@@ -423,7 +431,11 @@ export default {
     }
 
     this.unsubscribeNotifications = warpnetService.subscribeNotifications((resp) => {
-      this.newNotifications = resp.unread_count || 0;
+      const items = (resp && resp.notifications) || [];
+      const unreadMessages = items.filter((n) => n && n.type === 'message' && !n.is_read).length;
+      const onMessages = this.$route && (this.$route.name === 'Chats' || this.$route.name === 'Messages');
+      this.newMessages = onMessages ? 0 : unreadMessages;
+      this.newNotifications = Math.max(0, (resp.unread_count || 0) - unreadMessages);
     });
 
     const resp = await warpnetService.getNotifications(true)

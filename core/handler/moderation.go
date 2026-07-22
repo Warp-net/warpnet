@@ -187,9 +187,9 @@ func notifyReporter(notifier ModerationNotifier, authRepo NotifierAuthStorer, ev
 		return
 	}
 	if err := notifier.Add(domain.Notification{
-		Type:   domain.NotificationModerationType,
-		Text:   reportResultText(ev),
-		UserId: owner.UserId,
+		Type:        domain.NotificationModerationType,
+		Text:        reportResultText(ev),
+		RecepientId: owner.UserId,
 	}); err != nil {
 		log.Errorf("moderation: notify reporter: %v", err)
 	}
