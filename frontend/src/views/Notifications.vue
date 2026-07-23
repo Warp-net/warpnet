@@ -101,7 +101,7 @@ resulting from the use or misuse of this software.
             <button
               type="button"
               class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
-              :class="notification.is_read ? '' : 'bg-lightblue'"
+              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground mastodon:bg-mastodon-foreground'"
               @click="openNotification(notification)"
             >
               <div class="w-full">
@@ -137,7 +137,7 @@ resulting from the use or misuse of this software.
                   />
                 </div>
                 <div class="flex items-center w-full">
-                  <p class="font-sm">{{ notification.text }}</p>
+                  <p class="text-sm">{{ notification.text }}</p>
                   <p class="text-sm text-dark ml-auto">
                     {{ $filters.timeago(notification.created_at) }}
                   </p>
@@ -160,7 +160,7 @@ resulting from the use or misuse of this software.
             <button
               type="button"
               class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
-              :class="notification.is_read ? '' : 'bg-lightblue'"
+              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground mastodon:bg-mastodon-foreground'"
               @click="openNotification(notification)"
             >
               <div class="w-full">
@@ -171,7 +171,7 @@ resulting from the use or misuse of this software.
                   />
                 </div>
                 <div class="flex items-center w-full">
-                  <p class="font-sm">{{ notification.text }}</p>
+                  <p class="text-sm">{{ notification.text }}</p>
                   <p class="text-sm text-dark ml-auto">
                     {{ $filters.timeago(notification.created_at) }}
                   </p>
@@ -395,10 +395,7 @@ export default {
         this.notifications = resp.notifications.filter((n) => n && n.type !== 'message');
         this.hydrateAvatars(this.notifications);
       }
-      // Don't bulk-mark-read just for opening the view — that erased the
-      // unread state before the user looked at anything. Items are marked
-      // read when opened (openNotification), or all at once via the
-      // "Mark all as read" menu.
+      warpnetService.markAllNotificationsRead().catch(() => {});
       if (this.locked) {
         await this.loadFollowRequests();
       }
