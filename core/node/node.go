@@ -55,6 +55,8 @@ const (
 
 type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
+	SetStreamable(id warpnet.WarpPeerID)
+	SetUnstreamable(id warpnet.WarpPeerID)
 }
 
 type OfflineOutbox interface {
@@ -252,8 +254,11 @@ func (n *WarpNode) trackIncomingEvents() {
 				)
 				isOnline := typedEvent.Connectedness == warpnet.Connected ||
 					typedEvent.Connectedness == warpnet.Limited
-				if n.outbox != nil && isOnline {
-					n.outbox.NotifyOnline(pid)
+				if isOnline {
+					n.streamer.SetStreamable(typedEvent.Peer)
+					if n.outbox != nil {
+						n.outbox.NotifyOnline(pid)
+					}
 				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
