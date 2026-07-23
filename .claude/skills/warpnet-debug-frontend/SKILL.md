@@ -320,6 +320,24 @@ browser context, which resets the singleton. Reopen the tab whenever the node be
 
 Stand up a business node per the `warpnet-debug-backend` skill (Docker on testnet), then walk the UI as a real user. The obligations below apply on every session where you drive the node.
 
+### 0. Verify the visual interface with screenshots — only screenshots
+
+**Anything about how the UI *looks* — is the text readable, is contrast adequate, did the
+element actually render, is the layout right, did the badge appear/clear — MUST be
+confirmed by taking a real screenshot (`computer{action:"screenshot"}`, or `zoom` on a
+region) and looking at the rendered pixels.** Reading the DOM (`read_page`,
+`get_page_text`, or `javascript_tool` pulling `innerText` / `getComputedStyle`) only proves
+the *data* is present in the tree — it does **not** prove the pixels are visible or legible.
+A notification row whose text parses perfectly can still be light-pink-on-light-pink and
+completely unreadable; that exact bug reached the user because the screen was declared
+"renders correctly" from DOM text while screenshots were skipped.
+
+If a screenshot times out (the dashboard's 2–3 s notification/chat poll loops can make the
+renderer briefly unresponsive), do **not** fall back to DOM inspection and call it verified
+— retry, wait a beat, `zoom` into the specific region, or resize the viewport, until you
+have actually looked at a rendered image. "I read it from the DOM" and "the screenshot
+wouldn't load" are never a passed visual check.
+
 ### 4. Always triage notifications — never skip them
 
 **Obligation: on every session where you drive the node, open the Notifications tab,
