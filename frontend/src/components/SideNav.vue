@@ -87,23 +87,6 @@ resulting from the use or misuse of this software.
           </p>
         </button>
         <button
-          @click="$router.push({ name: 'Search' })"
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
-          aria-label="Search"
-        >
-          <i
-            class="fas fa-search"
-            :class="$route.name === 'Search' ? 'text-2xl' : 'text-xl'"
-            aria-hidden="true"
-          ></i>
-          <p
-            class="text-lg ml-4 text-left hidden xl:block"
-            :class="$route.name === 'Search' ? 'font-bold' : ''"
-          >
-            Search
-          </p>
-        </button>
-        <button
           @click="open('Notifications')"
           class="relative hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Notifications"
