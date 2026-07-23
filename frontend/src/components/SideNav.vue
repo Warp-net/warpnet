@@ -36,10 +36,6 @@ resulting from the use or misuse of this software.
       <i class="fa fa-home text-xl" aria-hidden="true"></i>
       <span class="text-xs mt-0.5">Home</span>
     </button>
-    <button @click="$router.push({ name: 'Search' })" :class="$route.name === 'Search' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 flat-btn" aria-label="Search">
-      <i class="fas fa-search text-xl" aria-hidden="true"></i>
-      <span class="text-xs mt-0.5">Search</span>
-    </button>
     <button @click="open('Notifications')" :class="$route.name === 'Notifications' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 relative flat-btn" aria-label="Notifications">
       <i class="fa-bell text-xl" :class="$route.name === 'Notifications' ? 'fas' : 'far'" aria-hidden="true"></i>
       <span v-if="newNotifications > 0" class="absolute -top-0.5 right-0 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-blue text-white">{{ newNotifications }}</span>
