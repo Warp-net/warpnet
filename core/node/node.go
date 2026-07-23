@@ -259,6 +259,8 @@ func (n *WarpNode) trackIncomingEvents() {
 					if n.outbox != nil {
 						n.outbox.NotifyOnline(pid)
 					}
+				} else {
+					n.streamer.SetUnstreamable(typedEvent.Peer)
 				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
