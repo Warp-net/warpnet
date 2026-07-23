@@ -43,6 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
@@ -53,6 +54,12 @@ const (
 	sendTimeout    = 10 * time.Second
 	retryBudget    = 10 * time.Second
 	maxSendRetries = 5
+
+	// offlineCacheTTL is how long a peer stays short-circuited as offline
+	// before Send probes it again (half-open backstop when no reconnect
+	// event arrives). offlineCacheSize bounds the number of tracked peers.
+	offlineCacheTTL  = 30 * time.Second
+	offlineCacheSize = 1024
 )
 
 const ErrResponseRead = warpnet.WarpError("stream: response read failed after request delivered")
@@ -70,6 +77,7 @@ type streamPool struct {
 	clientPeerID warpnet.WarpPeerID
 	sf           singleflight.Group
 	retrier      retrier.Retrier
+	offline      *expirable.LRU[string, struct{}]
 }
 
 func NewStreamPool(
@@ -86,6 +94,7 @@ func NewStreamPool(
 		n:       n,
 		privKey: privKey,
 		retrier: retrier.New(time.Second, maxSendRetries, retrier.FixedBackoff),
+		offline: expirable.NewLRU[string, struct{}](offlineCacheSize, nil, offlineCacheTTL),
 	}, nil
 }
 
@@ -97,15 +106,52 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 		return nil, p.ctx.Err()
 	}
 
+	// Short-circuit peers already known to be offline: skip the dial and its
+	// sendTimeout wait until the peer is seen online again (a successful send
+	// or a reconnect via SetOnline) or the cached mark expires.
+	if p.isOffline(peerAddr.ID) {
+		return nil, warpnet.ErrNodeIsOffline
+	}
+
 	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + hashBody(data)
 	v, err, _ := p.sf.Do(key, func() (any, error) {
 		return p.sendWithRetry(peerAddr, r, data)
 	})
+	switch {
+	case errors.Is(err, warpnet.ErrNodeIsOffline):
+		p.markOffline(peerAddr.ID)
+	case err == nil, errors.Is(err, ErrResponseRead):
+		// ErrResponseRead means the request reached the peer, so it is online.
+		p.SetOnline(peerAddr.ID)
+	}
 	if err != nil {
 		return nil, err
 	}
 	bt, _ := v.([]byte)
 	return bt, nil
+}
+
+func (p *streamPool) markOffline(id warpnet.WarpPeerID) {
+	if p == nil || p.offline == nil {
+		return
+	}
+	p.offline.Add(id.String(), struct{}{})
+}
+
+// SetOnline clears any cached offline mark so the next Send dials the peer
+// again instead of short-circuiting. Called when the peer is seen to reconnect.
+func (p *streamPool) SetOnline(id warpnet.WarpPeerID) {
+	if p == nil || p.offline == nil {
+		return
+	}
+	p.offline.Remove(id.String())
+}
+
+func (p *streamPool) isOffline(id warpnet.WarpPeerID) bool {
+	if p == nil || p.offline == nil {
+		return false
+	}
+	return p.offline.Contains(id.String())
 }
 
 func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte) ([]byte, error) {
@@ -159,9 +205,11 @@ func (p *streamPool) send(
 	}
 
 	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
-	// No known addresses (routing.ErrNotFound) or every dial failed
-	// (swarm.ErrAllDialsFailed) both mean the peer is unreachable — offline.
-	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) {
+	// No known addresses (routing.ErrNotFound), every dial failed
+	// (swarm.ErrAllDialsFailed), or the dial hanging past sendTimeout
+	// (context.DeadlineExceeded) all mean the peer is unreachable — offline.
+	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) ||
+		errors.Is(err, context.DeadlineExceeded) {
 		return nil, warpnet.ErrNodeIsOffline
 	}
 	if err != nil {
