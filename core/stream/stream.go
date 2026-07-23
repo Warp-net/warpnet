@@ -71,13 +71,13 @@ type NodeStreamer interface {
 }
 
 type streamPool struct {
-	ctx          context.Context
-	n            NodeStreamer
-	privKey      ed25519.PrivateKey
-	clientPeerID warpnet.WarpPeerID
-	sf           singleflight.Group
-	retrier      retrier.Retrier
-	offline      *expirable.LRU[string, struct{}]
+	ctx               context.Context
+	n                 NodeStreamer
+	privKey           ed25519.PrivateKey
+	clientPeerID      warpnet.WarpPeerID
+	sf                singleflight.Group
+	retrier           retrier.Retrier
+	unstreamablePeers *expirable.LRU[string, struct{}]
 }
 
 func NewStreamPool(
@@ -90,11 +90,11 @@ func NewStreamPool(
 	}
 
 	return &streamPool{
-		ctx:     ctx,
-		n:       n,
-		privKey: privKey,
-		retrier: retrier.New(time.Second, maxSendRetries, retrier.FixedBackoff),
-		offline: expirable.NewLRU[string, struct{}](offlineCacheSize, nil, offlineCacheTTL),
+		ctx:               ctx,
+		n:                 n,
+		privKey:           privKey,
+		retrier:           retrier.New(time.Second, maxSendRetries, retrier.FixedBackoff),
+		unstreamablePeers: expirable.NewLRU[string, struct{}](offlineCacheSize, nil, offlineCacheTTL),
 	}, nil
 }
 
@@ -106,10 +106,10 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 		return nil, p.ctx.Err()
 	}
 
-	// Short-circuit peers already known to be offline: skip the dial and its
-	// sendTimeout wait until the peer is seen online again (a successful send
-	// or a reconnect via SetOnline) or the cached mark expires.
-	if p.isOffline(peerAddr.ID) {
+	// Short-circuit peers already known to be unstreamable: skip the dial and
+	// its sendTimeout wait until the peer is seen streamable again (a
+	// successful send or a reconnect via SetStreamable) or the mark expires.
+	if p.isUnstreamable(peerAddr.ID) {
 		return nil, warpnet.ErrNodeIsOffline
 	}
 
@@ -119,10 +119,10 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	})
 	switch {
 	case errors.Is(err, warpnet.ErrNodeIsOffline):
-		p.markOffline(peerAddr.ID)
+		p.SetUnstreamable(peerAddr.ID)
 	case err == nil, errors.Is(err, ErrResponseRead):
-		// ErrResponseRead means the request reached the peer, so it is online.
-		p.SetOnline(peerAddr.ID)
+		// ErrResponseRead means the request reached the peer, so it is streamable.
+		p.SetStreamable(peerAddr.ID)
 	}
 	if err != nil {
 		return nil, err
@@ -131,27 +131,30 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	return bt, nil
 }
 
-func (p *streamPool) markOffline(id warpnet.WarpPeerID) {
-	if p == nil || p.offline == nil {
+// SetUnstreamable marks the peer as unstreamable so Send short-circuits to
+// ErrNodeIsOffline instead of dialing, until it is seen streamable again or the
+// cached mark expires.
+func (p *streamPool) SetUnstreamable(id warpnet.WarpPeerID) {
+	if p == nil || p.unstreamablePeers == nil {
 		return
 	}
-	p.offline.Add(id.String(), struct{}{})
+	p.unstreamablePeers.Add(id.String(), struct{}{})
 }
 
-// SetOnline clears any cached offline mark so the next Send dials the peer
-// again instead of short-circuiting. Called when the peer is seen to reconnect.
-func (p *streamPool) SetOnline(id warpnet.WarpPeerID) {
-	if p == nil || p.offline == nil {
+// SetStreamable clears any cached unstreamable mark so the next Send dials the
+// peer again instead of short-circuiting. Called when the peer is seen to reconnect.
+func (p *streamPool) SetStreamable(id warpnet.WarpPeerID) {
+	if p == nil || p.unstreamablePeers == nil {
 		return
 	}
-	p.offline.Remove(id.String())
+	p.unstreamablePeers.Remove(id.String())
 }
 
-func (p *streamPool) isOffline(id warpnet.WarpPeerID) bool {
-	if p == nil || p.offline == nil {
+func (p *streamPool) isUnstreamable(id warpnet.WarpPeerID) bool {
+	if p == nil || p.unstreamablePeers == nil {
 		return false
 	}
-	return p.offline.Contains(id.String())
+	return p.unstreamablePeers.Contains(id.String())
 }
 
 func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte) ([]byte, error) {
