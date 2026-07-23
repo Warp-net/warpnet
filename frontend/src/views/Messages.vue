@@ -382,15 +382,13 @@ export default {
       }
     },
     scrollToEnd() {
+      const pin = () => {
+        const el = this.$refs.messagesScroll;
+        if (el) el.scrollTop = el.scrollHeight;
+      };
       this.$nextTick(() => {
-        const el = this.$refs.scrollToMe;
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth" });
-        }
-        if (!this.$refs.input) {
-          return
-        }
-        setTimeout(() => this.$refs.input.focus(), 500);
+        pin();
+        setTimeout(pin, 100);
       });
     },
     async selected(user) {
@@ -516,6 +514,7 @@ export default {
       if (this.refreshInFlight || this.loading) return;
       this.refreshInFlight = true;
       try {
+        warpnetService.markMessageNotificationsRead().catch(() => {});
         const savedChatsCursor = warpnetService.getCursor('chats');
         const chats = await warpnetService.getChats(true);
         warpnetService.setCursor('chats', savedChatsCursor);
@@ -567,6 +566,7 @@ export default {
     console.log("messages: route chat id:", this.$route.params.chatId)
 
     this.ownerProfile = warpnetService.getOwnerProfile()
+    warpnetService.markMessageNotificationsRead().catch(() => {});
     // Started before the initial load (refreshData no-ops while loading)
     // so a user with no chats yet still picks up an incoming chat live.
     this.refreshTimer = setInterval(() => this.refreshData(), 3000);
@@ -597,6 +597,7 @@ export default {
     this.chats = chats;
     await this.selectChat(activeChat);
     this.loading = false;
+    this.scrollToEnd();
   },
   beforeUnmount() {
     if (this.refreshTimer) {
