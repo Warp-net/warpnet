@@ -11,6 +11,7 @@ First find and read the relevant codebase, then act.
 Always start to explore the codebase from the files:
   - cmd/node/member/main.go
   - cmd/node/member/app.go
+Prefer Serena's symbolic tools (`find_symbol`, `find_referencing_symbols`, `replace_symbol_body`, backed by `gopls`) over text search for Go code. If they seem unavailable (e.g. after `/compact`), ask to "read Serena's initial instructions". Setup: `docs/SERENA.md`.
 
 ## Build Artifacts
 - Read `vendor`, `dist` directory only if you need context of a code dependency
